@@ -20,8 +20,12 @@ import {
   createCustomerCommand,
   readCustomerCreateReceiptCommand,
   updateCustomerCommand,
+  saveCustomerAgreementCommand,
+  revokeCustomerAgreementCommand,
   readCustomerAddress,
   type CreateCustomerInput,
+  type RevokeCustomerAgreementInput,
+  type SaveCustomerAgreementInput,
   type UpdateCustomerInput,
 } from "@/modules/customers/server-public";
 
@@ -95,6 +99,28 @@ export async function updateCustomerAction(input: UpdateCustomerInput) {
   const result=await updateCustomerCommand(customerContext(authorization.data),input);
   if(result.code!=="OK")return result;
   revalidatePath("/customers"); revalidatePath(`/customers/${input.customerId}`);
+  return result;
+}
+export async function saveCustomerAgreementAction(input: SaveCustomerAgreementInput) {
+  const authorization=await customerAuthorization();
+  if(!authorization?.ok)return {code:"UNAVAILABLE" as const,message:"Absprache konnte nicht sicher gespeichert werden. Code: CUSTOMER_AUTHORIZATION_UNAVAILABLE."};
+  const result=await saveCustomerAgreementCommand(customerContext(authorization.data),input);
+  if(result.code!=="OK")return result;
+  revalidatePath("/customers");
+  revalidatePath(`/customers/${result.agreement.customerId}`);
+  if(result.agreement.orderId)revalidatePath(`/orders/${result.agreement.orderId}`);
+  revalidatePath("/");
+  return result;
+}
+export async function revokeCustomerAgreementAction(input: RevokeCustomerAgreementInput) {
+  const authorization=await customerAuthorization();
+  if(!authorization?.ok)return {code:"UNAVAILABLE" as const,message:"Absprache konnte nicht sicher widerrufen werden. Code: CUSTOMER_AUTHORIZATION_UNAVAILABLE."};
+  const result=await revokeCustomerAgreementCommand(customerContext(authorization.data),input);
+  if(result.code!=="OK")return result;
+  revalidatePath("/customers");
+  revalidatePath(`/customers/${result.agreement.customerId}`);
+  if(result.agreement.orderId)revalidatePath(`/orders/${result.agreement.orderId}`);
+  revalidatePath("/");
   return result;
 }
 

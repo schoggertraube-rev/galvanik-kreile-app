@@ -144,6 +144,40 @@ describe("Orders V1.1 one-surface truth", () => {
     expect(screen.getByRole("dialog", { name: "Zahlung bestätigen" })).toBeInTheDocument();
   });
 
+  it("keeps a shipment bookable when payment and the existing goods-out contract allow it", async () => {
+    const onRecordGoodsOut = vi.fn().mockResolvedValue(false);
+    const shippingCard: OrderCardModel = {
+      ...card,
+      station: "fertig",
+      handoverMode: "shipping",
+      payment: {
+        kind: "available",
+        value: {
+          mode: "vorkasse",
+          invoiceState: "issued",
+          status: "bezahlt",
+          openAmountCents: 0,
+          goodsOutAllowed: true,
+          paymentEvent: null,
+          goodsOut: null,
+        },
+      },
+    };
+
+    render(<OrderCardView actions={{
+      ...actions,
+      goodsOut: { visible: true, enabled: true, reason: null },
+      onRecordGoodsOut,
+    }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card: shippingCard }} />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Ware raus" }).at(-1)!);
+    const ship = screen.getByRole("button", { name: "Versendet" });
+    expect(ship).toBeEnabled();
+    expect(screen.queryByText("Sendungsnummer fehlt")).toBeNull();
+    fireEvent.click(ship);
+    await waitFor(() => expect(onRecordGoodsOut).toHaveBeenCalledWith("versand", undefined));
+  });
+
   it("shows the confirmed invoice receipt where the invoice was issued", () => {
     render(<OrderCardView actions={{
       ...actions,

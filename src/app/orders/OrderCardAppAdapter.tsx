@@ -23,6 +23,10 @@ import {
   getOrderPaymentStateAction,
 } from "@/app/actions/payments.actions";
 import {
+  revokeCustomerAgreementAction,
+  saveCustomerAgreementAction,
+} from "@/app/actions/customers.actions";
+import {
   finalizeGalvanikHandoffAttachmentAction,
   getGalvanikHandoffAttachmentOriginalAction,
   getGalvanikHandoffAttachmentsAction,
@@ -43,10 +47,14 @@ import type {
 import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 import type { OrderPaymentState } from "@/lib/server/paymentContract";
 import {
+  CustomerAgreementDialog,
+  goodsOutAgreementReceiptText,
   OrderCardView,
   OrderStationAttachmentPanel,
   type OrderCardActionFeedback,
   type OrderCardActionPorts,
+  type OrderCardGoodsOutAgreement,
+  type CustomerAgreementRecord,
   type OrderCardModel,
   type OrderCardPaymentContext,
   type OrderCardState,
@@ -205,6 +213,9 @@ function mapCard(
     })),
     frozenAt: card.freeze?.frozenAt ?? null,
     totalAmountCents: card.freeze?.totalAmountCents ?? null,
+    agreement: card.agreement,
+    agreementHint: card.agreementHint,
+    handoverMode: card.handoverMode,
     payment,
     catalog,
   };
@@ -231,13 +242,18 @@ export function OrderCardAppAdapter({
   const router = useRouter();
   const storeCustomer = useOverlayStore((s) => s.openCustomer);
   const storeClose = useOverlayStore((s) => s.pop);
-  const { canAction, hasPermission } = usePermissions();
+  const { canAction, hasArea, hasPermission } = usePermissions();
   const [state, setState] = useState<OrderCardState>({ kind: "loading" });
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [feedback, setFeedback] = useState<OrderCardActionFeedback>({
     kind: "idle",
     message: "",
   });
+  const [agreementDialog, setAgreementDialog] = useState<{
+    mode: "new" | "edit" | "revoke";
+    agreement: CustomerAgreementRecord | null;
+  } | null>(null);
+  const [agreementMessage, setAgreementMessage] = useState<string | null>(null);
   const requests = useRef<Record<string, string>>({});
   const load = useCallback(
     async (preserve = false): Promise<Snapshot | null> => {
@@ -589,8 +605,11 @@ export function OrderCardAppAdapter({
     [fail, load, snapshot, success],
   );
   const onRecordGoodsOut = useCallback(
-    async (mode: "versand" | "abholung") => {
-      if (!snapshot) return;
+    async (
+      mode: "versand" | "abholung",
+      agreement?: OrderCardGoodsOutAgreement,
+    ): Promise<boolean> => {
+      if (!snapshot) return false;
       setFeedback({
         kind: "submitting",
         message: "Warenausgang wird sicher gebucht.",
@@ -601,10 +620,20 @@ export function OrderCardAppAdapter({
         expectedVersion: snapshot.card.version,
         mode,
         clientEventId,
+        ...(agreement ? {
+          agreement: {
+            id: agreement.id,
+            type: agreement.type,
+            version: agreement.version,
+          },
+        } : {}),
       });
       if (result.code !== "OK") {
         await fail(result);
-        return;
+        if (agreement && result.code === "VALIDATION_ERROR" && result.message === "Zahlung fehlt.") {
+          await load(true);
+        }
+        return false;
       }
       const fresh = await load(true);
       if (
@@ -617,7 +646,7 @@ export function OrderCardAppAdapter({
           message:
             "Der Warenausgang konnte nicht sicher bestätigt werden. Bitte den Auftragsstand neu laden.",
         });
-        return;
+        return false;
       }
       success(
         "goods-out",
@@ -627,8 +656,11 @@ export function OrderCardAppAdapter({
           eventId: result.receipt.eventId,
           receiptId: `goods-out://${orderId}/${result.receipt.orderVersion}`,
         },
-        "Warenausgang wurde sicher bestätigt.",
+        `${snapshot.card.orderNumber} übergeben · ${agreement
+          ? goodsOutAgreementReceiptText(agreement, mode)
+          : mode === "versand" ? "Versendet" : "Abholung bestätigt"}`,
       );
+      return true;
     },
     [fail, load, orderId, snapshot, success],
   );
@@ -703,6 +735,10 @@ export function OrderCardAppAdapter({
     const editContent = canAction("editOrderContent");
     const canConfirmPayment = canAction("confirmPayment");
     const canPhoto = hasPermission("perm_op_photos");
+    const canManageAgreement = hasArea("geld");
+    const orderAgreement = card?.agreement && card.agreement.orderId === card.id
+      ? card.agreement
+      : null;
     const invoiceAfter =
       payment?.mode === "rechnung" &&
       payment.invoiceState === "not_issued" &&
@@ -715,10 +751,6 @@ export function OrderCardAppAdapter({
     const paymentReady =
       payment?.invoiceState === "issued" &&
       Boolean(payment.payment && payment.payment.openAmountCents > 0);
-    const goodsGate =
-      payment?.mode === "rechnung" ||
-      payment?.mode === "abholung" ||
-      payment?.payment?.status === "bezahlt";
     return {
       content: availability(Boolean(card), editContent && !card?.freeze, !editContent ? "Ihre Rolle darf Auftragsinhalte nicht ändern." : card?.freeze ? "Der Auftrag ist bereits fertig gemeldet." : null),
       itemStatus: availability(Boolean(card), canPhoto && !card?.freeze, !canPhoto ? "Ihre Rolle darf den Teilstatus nicht ändern." : card?.freeze ? "Der Auftrag ist bereits fertig gemeldet." : null),
@@ -760,13 +792,32 @@ export function OrderCardAppAdapter({
       ),
       goodsOut: availability(
         card?.station === "fertig",
-        goods && Boolean(goodsGate),
+        goods,
         !goods
           ? "Ihre Rolle darf keinen Warenausgang buchen."
-          : !goodsGate
-            ? "Der Zahlungsstand erlaubt den Warenausgang noch nicht."
-            : null,
+          : null,
       ),
+      agreement: card && canManageAgreement
+        ? {
+            ...availability(true, true),
+            onCreate: () => {
+              setAgreementMessage(null);
+              setAgreementDialog({ mode: "new", agreement: null });
+            },
+            onEdit: orderAgreement
+              ? () => {
+                  setAgreementMessage(null);
+                  setAgreementDialog({ mode: "edit", agreement: orderAgreement });
+                }
+              : undefined,
+            onRevoke: orderAgreement
+              ? () => {
+                  setAgreementMessage(null);
+                  setAgreementDialog({ mode: "revoke", agreement: orderAgreement });
+                }
+              : undefined,
+          }
+        : undefined,
       feedback,
       onSaveContent,
       onToggleItemFinished,
@@ -800,12 +851,13 @@ export function OrderCardAppAdapter({
     onToggleItemFinished,
     orderId,
     canAction,
+    hasArea,
     hasPermission,
     snapshot,
   ]);
   const close =
     onClose ?? (fallbackHref ? () => router.replace(fallbackHref) : storeClose);
-  return (
+  return <>
     <OrderCardView
       state={state}
       actions={actions}
@@ -823,8 +875,27 @@ export function OrderCardAppAdapter({
         ) : null
       }
       documentsPanel={state.kind === "data" ? <><div id={`order-documents-${state.card.id}`}><DomainAttachmentPanel targetType="ORDER" targetId={state.card.id} /></div><div id={`order-communication-${state.card.id}`}><CommunicationPanel targetType="ORDER" targetId={state.card.id} /></div></> : null}
+      agreementMessage={agreementMessage}
       onOpenCustomer={onOpenCustomer ?? storeCustomer}
       onClose={close}
     />
-  );
+    {agreementDialog && state.kind === "data" ? <CustomerAgreementDialog
+      target={{
+        customerId: state.card.customerId,
+        customerNumber: snapshot?.card.customerNumber ?? null,
+        customerName: state.card.customerName,
+        order: { id: state.card.id, orderNumber: state.card.orderNumber },
+      }}
+      mode={agreementDialog.mode}
+      agreement={agreementDialog.agreement}
+      onSave={saveCustomerAgreementAction}
+      onRevoke={revokeCustomerAgreementAction}
+      onClose={() => setAgreementDialog(null)}
+      onMessage={setAgreementMessage}
+      onReload={async () => {
+        const fresh = await load(true);
+        if (!fresh) throw new Error("ORDER_CARD_AGREEMENT_RELOAD_FAILED");
+      }}
+    /> : null}
+  </>;
 }

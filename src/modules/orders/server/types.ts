@@ -1,3 +1,49 @@
+import type { CustomerAgreementRecord } from "@/modules/customers/public";
+
+export type OrderCardGoodsOutMode = "versand" | "abholung";
+export type OrderCardGoodsOutAgreement = Pick<
+  CustomerAgreementRecord,
+  "id" | "type" | "targetDays" | "version"
+>;
+
+function berlinCollectionMonth() {
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+}
+
+/**
+ * The goods-out wording is shared by the 10.1 surface and its confirmed
+ * receipt.  It derives solely from the typed agreement returned by the
+ * canonical order-card reader; it never infers a payment arrangement.
+ */
+export function goodsOutAgreementButtonText(
+  agreement: OrderCardGoodsOutAgreement,
+  mode: OrderCardGoodsOutMode,
+) {
+  const prefix = mode === "versand" ? "Versendet" : "Übergeben";
+  if (agreement.type === "sammelrechnung") {
+    return `${prefix} · Sammelrechnung ${berlinCollectionMonth()}`;
+  }
+  if (agreement.type === "zahlungsziel") {
+    return agreement.targetDays === null
+      ? `${prefix} · Rechnung folgt · Zahlungsziel fehlt`
+      : `${prefix} · Rechnung folgt · Ziel ${agreement.targetDays} Tage`;
+  }
+  return `${prefix} · Rechnung folgt`;
+}
+
+export function goodsOutAgreementReceiptText(
+  agreement: OrderCardGoodsOutAgreement,
+  mode: OrderCardGoodsOutMode,
+) {
+  return goodsOutAgreementButtonText(agreement, mode)
+    .replace(/^Übergeben · /, "")
+    .replace(/^Versendet · /, "Versendet · ");
+}
+
 export type OrdersListItem = {
   id: string;
   orderNumber: string;
@@ -78,6 +124,11 @@ export type OrderCardActionAvailability = {
   enabled: boolean;
   reason: string | null;
 };
+export type OrderCardAgreementPorts = OrderCardActionAvailability & {
+  onCreate: () => void;
+  onEdit?: () => void;
+  onRevoke?: () => void;
+};
 export type OrderCardActionPorts = {
   dueDate?: OrderCardActionAvailability;
   content?: OrderCardActionAvailability;
@@ -90,6 +141,7 @@ export type OrderCardActionPorts = {
   invoice: OrderCardActionAvailability;
   payment: OrderCardActionAvailability;
   goodsOut: OrderCardActionAvailability;
+  agreement?: OrderCardAgreementPorts;
   feedback: OrderCardActionFeedback;
   onSaveContent?: (input: {
     note: string | null;
@@ -121,7 +173,10 @@ export type OrderCardActionPorts = {
   onConfirmPayment: (
     method: "bar" | "ueberweisung" | "karte",
   ) => Promise<boolean>;
-  onRecordGoodsOut: (mode: "versand" | "abholung") => void | Promise<void>;
+  onRecordGoodsOut: (
+    mode: OrderCardGoodsOutMode,
+    agreement?: OrderCardGoodsOutAgreement,
+  ) => Promise<boolean>;
   onReload: () => void | Promise<void>;
 };
 export type OrderCardModel = {
@@ -150,6 +205,14 @@ export type OrderCardModel = {
   evidence: OrderCardEvidence[];
   frozenAt: string | null;
   totalAmountCents: number | null;
+  agreement?: CustomerAgreementRecord | null;
+  agreementHint?: {
+    label: string;
+    type: CustomerAgreementRecord["type"];
+    state: "expired" | "revoked";
+    date: string;
+  } | null;
+  handoverMode?: "pickup" | "shipping" | null;
   payment: OrderCardPaymentContext;
   catalog?: Array<{
     id: string;

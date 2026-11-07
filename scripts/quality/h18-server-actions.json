@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "e4b6bf111864518b17133f92b0d6cbf31ef610f91fa859abf1e67b60329838fa",
+  "inventorySha256": "35d1a6f83ddf538e19f8bdac3d8b3e2a88620d062b167672eeeea770a5622eb1",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -119,6 +119,12 @@
     ],
     "src/app/actions/customers.actions.ts#updateCustomerAction": [
       "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/customers.actions.ts#saveCustomerAgreementAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/customers.actions.ts#revokeCustomerAgreementAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#createOrderIntakeAction": [

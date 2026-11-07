@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { readEffectiveCustomerAgreement } from "@/lib/server/effectiveCustomerAgreementRead";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import {
   PAYMENT_CONTRACT_VERSION,
@@ -20,6 +21,7 @@ import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 const EVENT_TYPE_V1 = "ORDER_PICKED_UP_V1" as const;
 const EVENT_TYPE_V2 = "ORDER_PICKED_UP_V2" as const;
+const EVENT_TYPE_V3 = "ORDER_PICKED_UP_V3" as const;
 const SOURCE_STATION = ORDER_LIFECYCLE_STATUS.FERTIG;
 const TARGET_STATION = ORDER_LIFECYCLE_STATUS.ABGEHOLT;
 const GOODS_OUT_MODES = ["versand", "abholung"] as const;
@@ -27,11 +29,18 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 
 export type GoodsOutMode = (typeof GOODS_OUT_MODES)[number];
 
+export type GoodsOutAgreement = {
+  id: string;
+  version: number;
+  type: "ausgabe_ohne_zahlung" | "sammelrechnung" | "zahlungsziel";
+};
+
 export type RecordGoodsOutInput = {
   orderId: string;
   mode: GoodsOutMode;
   expectedVersion: number;
   clientEventId: string;
+  agreement?: GoodsOutAgreement;
 };
 
 type GoodsOutReceiptBase = {
@@ -61,7 +70,13 @@ export type GoodsOutReceiptV2 = GoodsOutReceiptBase & {
   invoiceState: "not_issued";
 };
 
-export type GoodsOutReceipt = GoodsOutReceiptV1 | GoodsOutReceiptV2;
+export type GoodsOutReceiptV3 = GoodsOutReceiptBase & {
+  eventSchemaVersion: 3;
+  agreement: GoodsOutAgreement;
+  settlement: "invoice" | "collection";
+};
+
+export type GoodsOutReceipt = GoodsOutReceiptV1 | GoodsOutReceiptV2 | GoodsOutReceiptV3;
 
 export type RecordGoodsOutResult =
   | { code: "OK"; receipt: GoodsOutReceipt; replayed: boolean }
@@ -101,6 +116,14 @@ type LockedItem = {
   current_station_id: string | null;
 };
 
+type InvoiceCollectionRow = {
+  id: string;
+  tenant_id: string;
+  customer_id: string;
+  ziel_tage: number | string;
+  status: string;
+};
+
 type GoodsOutEventRow = {
   event_id: string;
   tenant_id: string | null;
@@ -122,6 +145,24 @@ function isGoodsOutMode(value: unknown): value is GoodsOutMode {
   return GOODS_OUT_MODES.includes(value as GoodsOutMode);
 }
 
+function isGoodsOutAgreement(value: unknown): value is GoodsOutAgreement {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const agreement = value as Record<string, unknown>;
+  const keys = Object.keys(agreement).sort();
+  return keys.length === 3
+    && keys[0] === "id"
+    && keys[1] === "type"
+    && keys[2] === "version"
+    && typeof agreement.id === "string"
+    && UUID_PATTERN.test(agreement.id)
+    && typeof agreement.version === "number"
+    && Number.isSafeInteger(agreement.version)
+    && agreement.version > 0
+    && (agreement.type === "ausgabe_ohne_zahlung"
+      || agreement.type === "sammelrechnung"
+      || agreement.type === "zahlungsziel");
+}
+
 function toNonNegativeInteger(value: unknown): number | null {
   if (typeof value !== "number" && typeof value !== "string") return null;
   if (typeof value === "string" && (value.length === 0 || value.trim() !== value)) return null;
@@ -139,9 +180,13 @@ function isValidInput(input: unknown): input is RecordGoodsOutInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const value = input as Record<string, unknown>;
   const expectedKeys = ["clientEventId", "expectedVersion", "mode", "orderId"];
+  const expectedWithAgreement = ["agreement", ...expectedKeys].sort();
   const actualKeys = Object.keys(value).sort();
-  return actualKeys.length === expectedKeys.length
-    && actualKeys.every((key, index) => key === expectedKeys[index])
+  const hasAgreement = actualKeys.length === expectedWithAgreement.length
+    && actualKeys.every((key, index) => key === expectedWithAgreement[index]);
+  return ((actualKeys.length === expectedKeys.length
+      && actualKeys.every((key, index) => key === expectedKeys[index]))
+      || hasAgreement)
     && typeof value.orderId === "string"
     && value.orderId.trim() === value.orderId
     && value.orderId.length > 0
@@ -151,7 +196,8 @@ function isValidInput(input: unknown): input is RecordGoodsOutInput {
     && Number.isSafeInteger(value.expectedVersion)
     && value.expectedVersion > 0
     && typeof value.clientEventId === "string"
-    && UUID_PATTERN.test(value.clientEventId);
+    && UUID_PATTERN.test(value.clientEventId)
+    && (!hasAgreement || isGoodsOutAgreement(value.agreement));
 }
 
 function readDiagnostic(error: unknown, key: "message" | "details" | "hint"): string | null {
@@ -253,13 +299,13 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
   const eventSchemaVersion = toNonNegativeInteger(row.event_schema_version);
   const occurredAt = toIso(row.occurred_at);
   if (
-    (row.event_type !== EVENT_TYPE_V1 && row.event_type !== EVENT_TYPE_V2)
+    (row.event_type !== EVENT_TYPE_V1 && row.event_type !== EVENT_TYPE_V2 && row.event_type !== EVENT_TYPE_V3)
     || row.tenant_id !== tenantId
     || row.status !== "success"
     || row.from_station !== SOURCE_STATION
     || row.station !== TARGET_STATION
     || eventSchemaVersion === null
-    || (row.event_type === EVENT_TYPE_V1 ? eventSchemaVersion !== 1 : eventSchemaVersion !== 2)
+    || (row.event_type === EVENT_TYPE_V1 ? eventSchemaVersion !== 1 : row.event_type === EVENT_TYPE_V2 ? eventSchemaVersion !== 2 : eventSchemaVersion !== 3)
     || eventVersion === null
     || orderVersion === null
     || orderVersion !== eventVersion
@@ -307,6 +353,37 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
     return { ...base, eventSchemaVersion: 2, paymentMode: "rechnung", invoiceState: "not_issued" };
   }
 
+  if (row.event_type === EVENT_TYPE_V3) {
+    const expectedKeys = [
+      "agreementId", "agreementType", "agreementVersion", "gateAllowed", "mode",
+      "orderId", "orderVersion", "paymentMode", "settlement",
+    ];
+    const agreementVersion = toNonNegativeInteger(payload.agreementVersion);
+    const agreementType = payload.agreementType;
+    const settlement = payload.settlement;
+    if (
+      actualKeys.length !== expectedKeys.length
+      || !actualKeys.every((key, index) => key === expectedKeys[index])
+      || typeof payload.agreementId !== "string"
+      || !UUID_PATTERN.test(payload.agreementId)
+      || agreementVersion === null
+      || agreementVersion < 1
+      || (agreementType !== "ausgabe_ohne_zahlung" && agreementType !== "sammelrechnung" && agreementType !== "zahlungsziel")
+      || (settlement !== "invoice" && settlement !== "collection")
+      || (agreementType === "sammelrechnung") !== (settlement === "collection")
+    ) throw new Error("GOODS_OUT_RECEIPT_INVALID");
+    return {
+      ...base,
+      eventSchemaVersion: 3,
+      agreement: {
+        id: payload.agreementId,
+        version: agreementVersion,
+        type: agreementType,
+      },
+      settlement,
+    };
+  }
+
   const expectedKeys = [
     "gateAllowed", "mode", "openAmountCents", "orderId", "orderVersion",
     "paymentMode", "paymentStatus",
@@ -333,11 +410,18 @@ function receiptMatchesIntent(
   input: RecordGoodsOutInput,
   actorId: string,
 ): boolean {
+  const receiptAgreement = receipt.eventSchemaVersion === 3 ? receipt.agreement : undefined;
   return receipt.orderId === input.orderId
     && receipt.mode === input.mode
     && receipt.expectedVersion === input.expectedVersion
     && receipt.clientEventId === input.clientEventId
-    && receipt.actorId === actorId;
+    && receipt.actorId === actorId
+    && (input.agreement === undefined
+      ? receiptAgreement === undefined
+      : receiptAgreement !== undefined
+        && receiptAgreement.id === input.agreement.id
+        && receiptAgreement.version === input.agreement.version
+        && receiptAgreement.type === input.agreement.type);
 }
 
 function orderMatchesReceipt(order: LockedOrder, receipt: GoodsOutReceipt, tenantId: string): boolean {
@@ -358,6 +442,94 @@ function paymentAuthorization(authorization: AuthorizationSnapshot): Authorizati
     ...authorization,
     permissions: [...new Set([...authorization.permissions, "perm_view_prices" as const])],
   };
+}
+
+type BerlinMonthRow = { monat: string };
+type CollectionLinkRow = { collection_id: string };
+
+async function attachOpenInvoiceCollection(
+  tx: PrivilegedTenantTransaction,
+  input: {
+    tenantId: string;
+    customerId: string;
+    orderId: string;
+    actorId: string;
+    targetDays: number;
+  },
+): Promise<void> {
+  const monthRows = await tx.execute<BerlinMonthRow>(sql`
+    SELECT to_char(
+      date_trunc('month', timezone('Europe/Berlin', clock_timestamp())),
+      'YYYY-MM-DD'
+    ) AS monat
+  `);
+  const month = monthRows[0]?.monat;
+  if (monthRows.length !== 1 || typeof month !== "string" || !/^\d{4}-\d{2}-01$/.test(month)) {
+    throw new Error("GOODS_OUT_COLLECTION_MONTH_INVALID");
+  }
+  await tx.execute(sql`
+    SELECT pg_advisory_xact_lock(
+      hashtextextended(
+        'abs:invoice-collection:' || ${input.tenantId} || ':' || ${input.customerId} || ':' || ${month},
+        0
+      )
+    )
+  `);
+  let collections = await tx.execute<InvoiceCollectionRow>(sql`
+    SELECT id::text, tenant_id, customer_id, ziel_tage, status
+    FROM public.invoice_collections
+    WHERE tenant_id = ${input.tenantId}
+      AND customer_id = ${input.customerId}
+      AND monat = ${month}::date
+    FOR UPDATE
+  `);
+  if (collections.length === 0) {
+    collections = await tx.execute<InvoiceCollectionRow>(sql`
+      INSERT INTO public.invoice_collections (
+        tenant_id, customer_id, monat, ziel_tage, status, created_by
+      ) VALUES (
+        ${input.tenantId}, ${input.customerId}, ${month}::date, ${input.targetDays}, 'offen', ${input.actorId}::uuid
+      )
+      RETURNING id::text, tenant_id, customer_id, ziel_tage, status
+    `);
+  }
+  const collection = collections[0];
+  if (
+    collections.length !== 1
+    || !collection
+    || collection.tenant_id !== input.tenantId
+    || collection.customer_id !== input.customerId
+    || toNonNegativeInteger(collection.ziel_tage) !== input.targetDays
+    || collection.status !== "offen"
+    || !UUID_PATTERN.test(collection.id)
+  ) {
+    throw new Error("GOODS_OUT_COLLECTION_INVALID");
+  }
+
+  const linked = await tx.execute<CollectionLinkRow>(sql`
+    INSERT INTO public.invoice_collection_orders (collection_id, tenant_id, order_id)
+    VALUES (${collection.id}::uuid, ${input.tenantId}, ${input.orderId})
+    ON CONFLICT (order_id) DO NOTHING
+    RETURNING collection_id::text
+  `);
+  if (linked.length === 0) {
+    const existingLinks = await tx.execute<CollectionLinkRow>(sql`
+      SELECT collection_id::text
+      FROM public.invoice_collection_orders
+      WHERE tenant_id = ${input.tenantId}
+        AND order_id = ${input.orderId}
+      LIMIT 2
+      FOR UPDATE
+    `);
+    if (
+      existingLinks.length !== 1
+      || existingLinks[0]?.collection_id !== collection.id
+    ) {
+      throw new Error("GOODS_OUT_COLLECTION_ORDER_ALREADY_LINKED");
+    }
+  } else if (linked.length !== 1 || linked[0]?.collection_id !== collection.id) {
+    throw new Error("GOODS_OUT_COLLECTION_LINK_INVALID");
+  }
 }
 
 export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResult> {
@@ -399,7 +571,11 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
         if (
           existingEvents.length !== 1
           || !existingEvents[0]
-          || (existingEvents[0].event_type !== EVENT_TYPE_V1 && existingEvents[0].event_type !== EVENT_TYPE_V2)
+          || (
+            existingEvents[0].event_type !== EVENT_TYPE_V1
+            && existingEvents[0].event_type !== EVENT_TYPE_V2
+            && existingEvents[0].event_type !== EVENT_TYPE_V3
+          )
         ) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
@@ -435,7 +611,28 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
         return { code: "VALIDATION_ERROR", message: "Auftragsvertrag ist nicht verfügbar." };
       }
 
-      if(order.ausgabe_frei!==true)return {code:"CONFLICT",message:"Ausgabe ist noch nicht freigegeben. Zahlung oder Abschluss fehlt."};
+      const agreement = input.agreement === undefined
+        ? null
+        : await readEffectiveCustomerAgreement(tx, {
+            tenantId,
+            customerId: order.customer_id,
+            orderId: order.id,
+            lock: true,
+          });
+      if (
+        input.agreement !== undefined
+        && (
+          agreement === null
+          || agreement.id !== input.agreement.id
+          || agreement.version !== input.agreement.version
+          || agreement.type !== input.agreement.type
+        )
+      ) {
+        return { code: "VALIDATION_ERROR", message: "Zahlung fehlt." };
+      }
+      if (order.ausgabe_frei !== true && agreement === null) {
+        return { code: "CONFLICT", message: "Ausgabe ist noch nicht freigegeben. Zahlung oder Abschluss fehlt." };
+      }
 
       const invoices = await readActiveInvoice(tx, tenantId, order.id);
       if (invoices.length > 1) {
@@ -444,7 +641,26 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
       const invoice = invoices[0];
       const invoiceNotIssued = invoices.length === 0;
       let summary: ReturnType<typeof mapPaymentSummaryRow> | null = null;
-      if (invoiceNotIssued) {
+      if (agreement?.type === "sammelrechnung") {
+        if (!invoiceNotIssued) {
+          return { code: "CONFLICT", message: "Sammelrechnung darf keine Einzelrechnung enthalten." };
+        }
+        if (agreement.targetDays === null) {
+          throw new Error("GOODS_OUT_COLLECTION_TERMS_INVALID");
+        }
+      } else if (agreement !== null) {
+        if (
+          invoiceNotIssued
+          || !invoice
+          || invoice.tenant_id !== tenantId
+          || invoice.order_id !== order.id
+          || invoice.status !== "issued"
+          || toNonNegativeInteger(invoice.contract_version) !== 1
+          || toNonNegativeInteger(invoice.payment_contract_version) !== PAYMENT_CONTRACT_VERSION
+        ) {
+          return { code: "VALIDATION_ERROR", message: "Rechnung fehlt." };
+        }
+      } else if (invoiceNotIssued) {
         if (order.payment_mode !== "rechnung") {
           return { code: "CONFLICT", message: "Warenausgang erfordert eine gültige Rechnung." };
         }
@@ -484,6 +700,16 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
         return { code: "VALIDATION_ERROR", message: "Auftragsteile sind nicht ausgabefähig." };
       }
 
+      if (agreement?.type === "sammelrechnung") {
+        await attachOpenInvoiceCollection(tx, {
+          tenantId,
+          customerId: order.customer_id,
+          orderId: order.id,
+          actorId,
+          targetDays: agreement.targetDays!,
+        });
+      }
+
       const nextVersion = input.expectedVersion + 1;
       const updatedOrders = await tx.execute<{ id: string; version: number | string }>(sql`
         UPDATE public.orders
@@ -520,9 +746,23 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
       }
 
       const correlationId = randomUUID();
-      const eventType = invoiceNotIssued ? EVENT_TYPE_V2 : EVENT_TYPE_V1;
-      const eventSchemaVersion = invoiceNotIssued ? 2 : 1;
-      const payload = invoiceNotIssued ? {
+      const eventType = agreement === null
+        ? invoiceNotIssued ? EVENT_TYPE_V2 : EVENT_TYPE_V1
+        : EVENT_TYPE_V3;
+      const eventSchemaVersion = agreement === null
+        ? invoiceNotIssued ? 2 : 1
+        : 3;
+      const payload = agreement !== null ? {
+        orderId: order.id,
+        mode: input.mode,
+        orderVersion: nextVersion,
+        paymentMode: order.payment_mode,
+        agreementId: agreement.id,
+        agreementType: agreement.type,
+        agreementVersion: agreement.version,
+        settlement: agreement.type === "sammelrechnung" ? "collection" as const : "invoice" as const,
+        gateAllowed: true,
+      } : invoiceNotIssued ? {
         orderId: order.id,
         mode: input.mode,
         orderVersion: nextVersion,

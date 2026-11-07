@@ -8,12 +8,17 @@
     "@/modules/orders/public#ORDER_LIFECYCLE_STATUS_SEQUENCE",
     "@/modules/orders/public#OrderAccountingStatus",
     "@/modules/orders/public#OrderCardActionFeedback",
+    "@/modules/orders/public#OrderCardAgreementPorts",
     "@/modules/orders/public#OrderCardActionPorts",
+    "@/modules/orders/public#OrderCardGoodsOutAgreement",
+    "@/modules/orders/public#OrderCardGoodsOutMode",
     "@/modules/orders/public#OrderCardModel",
     "@/modules/orders/public#OrderCardPayment",
     "@/modules/orders/public#OrderCardPaymentContext",
     "@/modules/orders/public#OrderCardState",
     "@/modules/orders/public#OrderCardView",
+    "@/modules/orders/public#CustomerAgreementDialog",
+    "@/modules/orders/public#CustomerAgreementRecord",
     "@/modules/orders/public#OrderLifecycleStatus",
     "@/modules/orders/public#OrderQueueRow",
     "@/modules/orders/public#OrderQueueRowModel",
@@ -25,6 +30,8 @@
     "@/modules/orders/public#OrdersHomeSource",
     "@/modules/orders/public#Urgency",
     "@/modules/orders/public#buildOrdersHomeProjection",
+    "@/modules/orders/public#goodsOutAgreementButtonText",
+    "@/modules/orders/public#goodsOutAgreementReceiptText",
     "@/modules/orders/public#getUrgency",
     "@/modules/orders/public#isOrderLifecycleStatus"
   ],
@@ -35,5 +42,5 @@
   "storagePurposes": [],
   "events": { "emits": [], "consumes": [] },
   "config": {},
-  "dependencies": []
+  "dependencies": ["customers"]
 }

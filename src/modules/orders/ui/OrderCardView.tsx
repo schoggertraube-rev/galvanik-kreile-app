@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
-import type { OrderCardActionPorts, OrderCardEvidence, OrderCardState } from "../server/types";
+import {
+  goodsOutAgreementButtonText,
+  type OrderCardActionPorts,
+  type OrderCardEvidence,
+  type OrderCardGoodsOutMode,
+  type OrderCardState,
+} from "../server/types";
 import {
   Button,
   Chip,
@@ -102,6 +108,25 @@ function paymentMethodLabel(method: "bar" | "ueberweisung" | "karte"): string {
   return "Karte";
 }
 
+type OrderCardData = Extract<OrderCardState, { kind: "data" }>["card"];
+
+function agreementHintText(
+  hint: NonNullable<OrderCardData["agreementHint"]>,
+) {
+  const date = hint.state === "revoked"
+    ? formatMoment(hint.date)
+    : dueLabel(hint.date);
+  return hint.state === "revoked"
+    ? `Absprache ${hint.label} widerrufen am ${date}`
+    : `Absprache ${hint.label} abgelaufen am ${date}`;
+}
+
+function goodsOutMode(card: OrderCardData): OrderCardGoodsOutMode | null {
+  if (card.handoverMode === "shipping") return "versand";
+  if (card.handoverMode === "pickup") return "abholung";
+  return null;
+}
+
 const EVIDENCE_SOURCE_LABEL: Record<OrderCardEvidence["source"], string> = {
   ORDER_STATION_ATTACHMENT: "Werkstattfoto",
   ORDER_INTAKE_ATTACHMENT: "Eingangsfoto",
@@ -124,6 +149,7 @@ export function OrderCardView({
   actions,
   attachmentPanel,
   documentsPanel,
+  agreementMessage,
   onOpenCustomer,
   onClose,
 }: {
@@ -131,6 +157,7 @@ export function OrderCardView({
   actions: OrderCardActionPorts;
   attachmentPanel?: ReactNode;
   documentsPanel?: ReactNode;
+  agreementMessage?: string | null;
   onOpenCustomer: (id: string) => void;
   onClose: () => void;
 }) {
@@ -142,6 +169,7 @@ export function OrderCardView({
   const [itemOpen, setItemOpen] = useState<string | "new" | null>(null);
   const [invoicePriceOpen, setInvoicePriceOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [goodsOutOpen, setGoodsOutOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [dismissedInvoiceReceiptId, setDismissedInvoiceReceiptId] = useState<string | null>(null);
 
@@ -184,6 +212,13 @@ export function OrderCardView({
     vatRateBasisPoints: item.vatRateBasisPoints ?? null,
   }));
   const unavailable = (reason: string | null | undefined) => setNotice(reason ?? "Diese Aktion ist derzeit nicht verfügbar.");
+  const openGoodsOut = () => {
+    if (!actions.goodsOut.enabled) {
+      unavailable(actions.goodsOut.reason);
+      return;
+    }
+    setGoodsOutOpen(true);
+  };
   const requestInvoice = () => {
     if (missingInvoicePrices.length > 0) setInvoicePriceOpen(true);
     else void actions.onIssueInvoice();
@@ -198,7 +233,7 @@ export function OrderCardView({
     if (station === "fertig" && actions.freeze.enabled) void actions.onFreeze();
     if (station === "zahlung" && actions.invoice.enabled) requestInvoice();
     else if (station === "zahlung" && actions.payment.enabled) setPaymentOpen(true);
-    if (station === "abgeholt" && actions.goodsOut.enabled) void actions.onRecordGoodsOut("abholung");
+    if (station === "abgeholt" && actions.goodsOut.enabled) openGoodsOut();
   };
 
   const next = actions.handoff.visible
@@ -210,7 +245,7 @@ export function OrderCardView({
         : actions.payment.visible
           ? { title: "Zahlungseingang bestätigen", text: "Zahlung", icon: "card" as IconName, enabled: actions.payment.enabled, onClick: () => setPaymentOpen(true) }
           : actions.goodsOut.visible
-            ? { title: actions.goodsOut.enabled ? "Warenausgang prüfen" : "Warenausgang wartet auf Freigabe", text: "Ware raus", icon: "truck" as IconName, enabled: actions.goodsOut.enabled, onClick: () => void actions.onRecordGoodsOut("abholung") }
+            ? { title: actions.goodsOut.enabled ? "Warenausgang prüfen" : "Warenausgang wartet auf Freigabe", text: "Ware raus", icon: "truck" as IconName, enabled: actions.goodsOut.enabled, onClick: openGoodsOut }
             : null;
 
   const quickActions: SchnellAktion[] = [];
@@ -219,7 +254,7 @@ export function OrderCardView({
   if (actions.invoice.visible && actions.invoice.enabled) quickActions.push({ key: "invoice", text: "Rechnung", icon: "receipt", onClick: requestInvoice });
   if (payment?.invoiceState === "issued" && payment.invoiceId) quickActions.push({ key: "invoice-pdf", text: "PDF öffnen", icon: "file", onClick: openInvoicePdf });
   if (actions.payment.visible && actions.payment.enabled) quickActions.push({ key: "payment", text: "Zahlung", icon: "card", onClick: () => setPaymentOpen(true) });
-  if (actions.goodsOut.visible && actions.goodsOut.enabled) quickActions.push({ key: "goods", text: "Ware raus", icon: "truck", primaer: true, onClick: () => void actions.onRecordGoodsOut("abholung") });
+  if (actions.goodsOut.visible && actions.goodsOut.enabled) quickActions.push({ key: "goods", text: "Ware raus", icon: "truck", primaer: true, onClick: openGoodsOut });
   quickActions.push(
     { key: "status-mail", text: "Status-Mail", icon: "mail", onClick: () => actions.onOpenStatusMail ? actions.onOpenStatusMail() : unavailable("Status-Mail ist derzeit nicht verfügbar.") },
     { key: "call", text: "Anrufen", icon: "phone", onClick: () => actions.contact?.enabled && actions.onCallCustomer ? actions.onCallCustomer() : unavailable(actions.contact?.reason) },
@@ -269,6 +304,17 @@ export function OrderCardView({
       {card.evidence.length ? <div className="kr-docs">{card.evidence.map((entry) => <span className="kr-doc" key={entry.key}>{evidenceLabel(entry)}</span>)}</div> : <Zustand art="leer" text="Noch keine Dokumente oder Fotos vorhanden." />}
       {documentsPanel}
     </KartenBlock>
+    {actions.agreement?.visible ? <KartenBlock label="Zahlungsabsprache">
+      {card.agreement ? <div data-spec-id="auftrag.absprache-zeile" className="kr-stapel">
+        <strong>Zahlungsabsprache · {card.agreement.label} · {card.agreement.orderId === card.id ? "gilt für diesen Auftrag" : "gilt für ganzen Kunden"}</strong>
+      </div> : <Zustand art="leer" text="Keine Zahlungsabsprache für diesen Auftrag festgelegt." />}
+      <div className="kr-schnellleiste">
+        <Button data-spec-id="auftrag.absprache" art="sekundaer" icon="receipt" text="Absprache nur für diesen Auftrag" disabled={!actions.agreement.enabled} onClick={actions.agreement.onCreate} />
+        {actions.agreement.onEdit ? <Button data-spec-id="auftrag.absprache-aendern" art="sekundaer" icon="edit" text="Absprache ändern" disabled={!actions.agreement.enabled} onClick={actions.agreement.onEdit} /> : null}
+        {actions.agreement.onRevoke ? <Button data-spec-id="auftrag.absprache-widerrufen" art="leise" icon="x" text="Absprache widerrufen" disabled={!actions.agreement.enabled} onClick={actions.agreement.onRevoke} /> : null}
+      </div>
+      {agreementMessage ? <Hinweis ton="ok">{agreementMessage}</Hinweis> : null}
+    </KartenBlock> : null}
     {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment ? paymentModeLabel(payment.mode) : "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.invoiceNumber ?? payment.status ?? "ausgestellt" : "noch nicht ausgestellt" }, { k: payment?.status === "bezahlt" ? "Bezahlt" : payment?.status === "teilbezahlt" ? "Noch offen" : "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} />{payment?.invoiceState === "issued" && payment.invoiceId ? <Button art="sekundaer" icon="file" text="Rechnungs-PDF öffnen" onClick={openInvoicePdf} /> : null}</KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
     {actions.freeze.visible && !actions.freeze.enabled && actions.freeze.reason?.includes("Stundensatz") ? <Hinweis ton="warn">{actions.freeze.reason} <a href={`/settings?returnTo=${encodeURIComponent(`/orders/${card.id}`)}#extra-work-rate`}>Stundensatz jetzt einrichten</a>.</Hinweis> : null}
     {actions.feedback.kind !== "idle" ? actions.feedback.kind === "submitting" ? <Zustand art="laedt" text={actions.feedback.message} /> : <Hinweis ton={actions.feedback.kind === "success" ? "ok" : "warn"}>{actions.feedback.message}{actions.feedback.kind === "conflict" ? <Button art="sekundaer" icon="refresh" text="Neu laden" onClick={() => void actions.onReload()} /> : null}</Hinweis> : null}
@@ -294,6 +340,16 @@ export function OrderCardView({
     >
       <Hinweis ton="ok">Die Rechnung ist gespeichert und in der Auftragskarte nachgelesen.</Hinweis>
     </Dialog> : null}
+    {goodsOutOpen ? <GoodsOutDialog
+      card={card}
+      actions={actions}
+      onClose={() => setGoodsOutOpen(false)}
+      onOpenCustomer={() => onOpenCustomer(card.customerId)}
+      onComplete={() => {
+        setGoodsOutOpen(false);
+        onClose();
+      }}
+    /> : null}
     {paymentOpen ? <Dialog titel="Zahlung bestätigen" icon="card" groesse="schmal" onSchliessen={() => setPaymentOpen(false)} meldung={actions.feedback.kind === "error" || actions.feedback.kind === "conflict" ? { text: actions.feedback.message, ton: "fehler" } : null} fuss={<><Button text="Abbrechen" disabled={actions.feedback.kind === "submitting"} onClick={() => setPaymentOpen(false)} /><Button art="primaer" icon="check" text="Zahlung bestätigen" disabled={!paymentMethod || actions.feedback.kind === "submitting"} onClick={async () => { if (!paymentMethod) return; const confirmed = await actions.onConfirmPayment(paymentMethod); if (confirmed) { setPaymentOpen(false); setPaymentMethod(""); } }} /></>}><Segment label="Zahlart" wert={paymentMethod} onWert={setPaymentMethod} optionen={[{ wert: "bar", text: "Bar" }, { wert: "ueberweisung", text: "Überweisung" }, { wert: "karte", text: "Karte" }]} />{actions.feedback.kind === "submitting" ? <Zustand art="laedt" text={actions.feedback.message} /> : null}</Dialog> : null}
     {invoicePriceOpen ? <Dialog titel="Preise für die Rechnung" icon="receipt" groesse="schmal" onSchliessen={() => setInvoicePriceOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const prices = missingInvoicePrices.map((item) => ({ itemId: item.id, unitPriceCents: Math.round(Number(form.get(`price-${item.id}`)) * 100) })); if (prices.some((price) => !Number.isSafeInteger(price.unitPriceCents) || price.unitPriceCents < 1)) return; void actions.onIssueInvoice(prices); setInvoicePriceOpen(false); }}>{missingInvoicePrices.map((item) => <Feld key={item.id} label={`${item.name} · Einzelpreis netto`}><Eingabe name={`price-${item.id}`} type="number" min="0.01" step="0.01" inputMode="decimal" required /></Feld>)}<Hinweis>Die Preise werden am Auftrag gespeichert und direkt in die unveränderliche Rechnung übernommen.</Hinweis><Button art="primaer" icon="receipt" text="Preise speichern & Rechnung ausstellen" type="submit" /></form></Dialog> : null}
     {dueOpen ? <Dialog titel="Liefertermin ändern" icon="calendar" groesse="schmal" onSchliessen={() => setDueOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void actions.onChangeDueDate?.(String(form.get("dueDate") ?? ""), String(form.get("reason") ?? "")); setDueOpen(false); }}><Feld label="Neuer Liefertermin"><Eingabe type="date" name="dueDate" defaultValue={card.dueAt?.slice(0, 10) ?? ""} required /></Feld><Feld label="Grund der Änderung"><Textfeld name="reason" minLength={3} maxLength={500} required /></Feld><Button art="primaer" icon="calendar" text="Termin mit Grund speichern" type="submit" /></form></Dialog> : null}
@@ -301,6 +357,122 @@ export function OrderCardView({
     {itemOpen ? <OrderItemDialog card={card} itemId={itemOpen} onClose={() => setItemOpen(null)} onSave={(items) => { void actions.onSaveContent?.({ note: card.note, items }); setItemOpen(null); }} /> : null}
     {moreOpen ? <Dialog titel="Mehr zum Auftrag" icon="more" groesse="schmal" onSchliessen={() => setMoreOpen(false)}><div className="kr-stapel"><Button art="sekundaer" icon="file" text="KV anlegen" onClick={() => { actions.onOpenQuote?.(); setMoreOpen(false); }} /><Button art="sekundaer" icon="copy" text="Duplizieren" onClick={() => { void actions.onDuplicate?.(); setMoreOpen(false); }} /><Button art="sekundaer" icon="upload" text="Dokument hinzufügen" onClick={() => { actions.onOpenDocument?.(); setMoreOpen(false); }} /></div></Dialog> : null}
   </>;
+}
+
+function GoodsOutDialog({
+  card,
+  actions,
+  onClose,
+  onOpenCustomer,
+  onComplete,
+}: {
+  card: OrderCardData;
+  actions: OrderCardActionPorts;
+  onClose: () => void;
+  onOpenCustomer: () => void;
+  onComplete: () => void;
+}) {
+  const mode = goodsOutMode(card);
+  const agreement = card.agreement ?? null;
+  const payment = card.payment.kind === "available" ? card.payment.value : null;
+  const busy = actions.feedback.kind === "submitting";
+  const failure = actions.feedback.kind === "error" || actions.feedback.kind === "conflict"
+    ? actions.feedback.message
+    : null;
+  const paymentAtPickup = mode === "abholung"
+    && payment?.mode === "abholung"
+    && payment.invoiceState === "issued"
+    && actions.payment.enabled;
+  const paymentAllowsGoodsOut = payment?.goodsOutAllowed === true;
+  const agreementSpecId = agreement?.type === "sammelrechnung"
+    ? "rauspruefen.uebergeben-sammelrechnung"
+    : agreement?.type === "zahlungsziel"
+      ? "rauspruefen.uebergeben-zahlungsziel"
+      : "rauspruefen.uebergeben-rechnung-folgt";
+  const agreementButton = agreement && mode
+    ? goodsOutAgreementButtonText(agreement, mode)
+    : null;
+  const inactiveText = card.agreementHint ? agreementHintText(card.agreementHint) : null;
+
+  const record = async () => {
+    if (!mode) return;
+    const completed = await actions.onRecordGoodsOut(mode, agreement ?? undefined);
+    if (completed) onComplete();
+  };
+  const confirmAndRecord = async (method: "bar" | "karte") => {
+    if (!mode) return;
+    const paid = await actions.onConfirmPayment(method);
+    if (!paid) return;
+    const completed = await actions.onRecordGoodsOut(mode);
+    if (completed) onComplete();
+  };
+  const genericButton = mode === "versand" ? "Versendet" : "Übergeben";
+  const agreementValid = Boolean(agreement && agreementButton);
+  const noPaymentPath = !agreementValid && !paymentAllowsGoodsOut && !paymentAtPickup;
+
+  return <Dialog
+    titel="Warenausgang"
+    icon="truck"
+    groesse="breit"
+    onSchliessen={onClose}
+    meldung={failure ? { text: failure, ton: "fehler" } : null}
+    fuss={<>
+      <Button text="Abbrechen" disabled={busy} onClick={onClose} />
+      {paymentAtPickup ? <>
+        <Button art="primaer" icon="card" text="Bar bezahlt · übergeben" disabled={busy} onClick={() => void confirmAndRecord("bar")} />
+        <Button art="primaer" icon="card" text="Karte bezahlt · übergeben" disabled={busy} onClick={() => void confirmAndRecord("karte")} />
+      </> : null}
+      {agreementValid ? <Button
+        data-spec-id={agreementSpecId}
+        art={paymentAtPickup ? "sekundaer" : "primaer"}
+        icon="truck"
+        text={agreementButton ?? ""}
+        disabled={busy || mode === null}
+        onClick={() => void record()}
+      /> : null}
+      {!agreementValid && paymentAllowsGoodsOut && mode ? <Button
+        art="primaer"
+        icon="truck"
+        text={genericButton}
+        disabled={busy}
+        onClick={() => void record()}
+      /> : null}
+    </>}
+  >
+    <div data-spec-id="rauspruefen" className="kr-stapel">
+      <div data-spec-id="rauspruefen.kopf" className="kr-stapel">
+        <Fakten zeilen={[
+          { k: "Auftrag", v: card.orderNumber },
+          { k: "Kunde", v: card.customerName },
+        ]} />
+        <div className="kr-schnellleiste">
+          <Button art="sekundaer" icon="file" text="Auftrag ansehen" disabled={busy} onClick={onClose} />
+          <Button art="sekundaer" icon="user" text="Kunde ansehen" disabled={busy} onClick={onOpenCustomer} />
+        </div>
+      </div>
+      <div data-spec-id="rauspruefen.zahlung" className="kr-stapel">
+        {agreement ? <Hinweis ton="warn">
+          <span data-spec-id="rauspruefen.absprache-kasten">
+            Zahlungsabsprache · {agreement.label} · gilt für {agreement.orderId === card.id ? "diesen Auftrag" : "den ganzen Kunden"} · bis {agreement.validUntil ? dueLabel(agreement.validUntil) : "auf Widerruf"}
+          </span>
+          <br />
+          angelegt {formatMoment(agreement.createdAt)} von {agreement.createdBy ?? "Login fehlt"} · Grund {agreement.reason}
+        </Hinweis> : null}
+        {inactiveText ? <Hinweis ton="warn"><span data-spec-id="rauspruefen.absprache-hinweis">{inactiveText}</span></Hinweis> : null}
+        {noPaymentPath ? <Hinweis ton="warn">Zahlung fehlt</Hinweis> : null}
+        {mode === null ? <Hinweis ton="warn">Übergabeweg fehlt</Hinweis> : null}
+        {noPaymentPath && actions.agreement?.visible ? <Button
+          data-spec-id="rauspruefen.absprache-festlegen"
+          art="sekundaer"
+          icon="receipt"
+          text="Absprache festlegen"
+          disabled={!actions.agreement.enabled || busy}
+          onClick={actions.agreement.onCreate}
+        /> : null}
+      </div>
+      {busy ? <Zustand art="laedt" text={actions.feedback.message} /> : null}
+    </div>
+  </Dialog>;
 }
 
 function OrderItemDialog({ card, itemId, onClose, onSave }: { card: Extract<OrderCardState, { kind: "data" }>["card"]; itemId: string | "new"; onClose: () => void; onSave: (items: NonNullable<Parameters<NonNullable<OrderCardActionPorts["onSaveContent"]>>[0]>["items"]) => void }) {

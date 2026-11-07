@@ -99,6 +99,54 @@ export const generatedFlowRuntime = {
       "table": "supplier_invoice",
       "columns": {},
       "transforms": {}
+    },
+    "invoices": {
+      "table": "invoices",
+      "columns": {
+        "auftrag": "order_id",
+        "kunde": "customer_id",
+        "faellig": "due_date"
+      },
+      "transforms": {}
+    },
+    "customer_agreements": {
+      "table": "customer_agreements",
+      "columns": {
+        "kunde": "customer_id"
+      },
+      "transforms": {}
+    },
+    "invoice_collections": {
+      "table": "invoice_collections",
+      "columns": {
+        "kunde": "customer_id"
+      },
+      "transforms": {}
+    },
+    "invoice_collection_orders": {
+      "table": "invoice_collection_orders",
+      "columns": {
+        "id": "order_id"
+      },
+      "transforms": {}
+    },
+    "order_intake_receipts": {
+      "schema": "private",
+      "table": "order_intake_receipts",
+      "columns": {},
+      "transforms": {}
+    },
+    "order_freezes": {
+      "schema": "private",
+      "table": "order_freezes",
+      "columns": {},
+      "transforms": {}
+    },
+    "extra_work_hourly_rates": {
+      "schema": "private",
+      "table": "extra_work_hourly_rates",
+      "columns": {},
+      "transforms": {}
     }
   },
   "fixtureSql": {

@@ -10,6 +10,12 @@ import type {
   OrderTaskAssignmentState,
 } from "@/lib/server/orderTaskAssignmentRead";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import type { CustomerAgreementRecord } from "@/modules/customers/public";
+import {
+  readEffectiveCustomerAgreement,
+  readInactiveCustomerAgreementHint,
+  type InactiveCustomerAgreementHint,
+} from "@/lib/server/effectiveCustomerAgreementRead";
 
 const MAX_ID_LENGTH = 128;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -61,6 +67,7 @@ export type LiveOrderCard = {
   dueAt: string | null;
   intakeAt: string;
   intakeSource?: OrderIntakeSource | null;
+  handoverMode: "pickup" | "shipping" | null;
   assignment: OrderTaskAssignmentState | null;
   assignmentOptions: OrderTaskAssigneeOption[];
   dueDateChanges: Array<{
@@ -80,6 +87,8 @@ export type LiveOrderCard = {
     lineCount: number;
     frozenAt: string;
   };
+  agreement: CustomerAgreementRecord | null;
+  agreementHint: InactiveCustomerAgreementHint | null;
 };
 
 export type ExtraWorkMasterData = {
@@ -124,6 +133,7 @@ type QueueRow = {
   created_at: Date | string;
   tenant_integrity_ok: boolean;
   intake_source: OrderIntakeSource | null;
+  handover_mode: "pickup" | "shipping" | null;
 };
 
 type IntakeRow = {
@@ -521,7 +531,9 @@ export async function readLiveOrderCard(
                title, task, station, current_station, current_station_id, status,
                intake_date, due_date::date::text AS due_date, created_at, tenant_integrity_ok,
                (SELECT source.intake_source FROM public.orders source
-                WHERE source.id = queue.id AND source.tenant_id = queue.tenant_id) AS intake_source
+                WHERE source.id = queue.id AND source.tenant_id = queue.tenant_id) AS intake_source,
+               (SELECT source.handover_mode FROM public.orders source
+                WHERE source.id = queue.id AND source.tenant_id = queue.tenant_id) AS handover_mode
         FROM private.v_operational_station_queue_v1 queue
         WHERE id = ${input.orderId}
         LIMIT 2
@@ -540,6 +552,9 @@ export async function readLiveOrderCard(
         || queue.customer_name.trim().length === 0
         || !Number.isSafeInteger(queue.version)
         || queue.version < 1
+        || (queue.handover_mode !== null
+          && queue.handover_mode !== "pickup"
+          && queue.handover_mode !== "shipping")
       ) throw new Error("ORDER_CARD_QUEUE_INVALID");
 
       const intakeRows = await tx.execute<IntakeRow>(sql`
@@ -616,6 +631,22 @@ export async function readLiveOrderCard(
         LIMIT 2
       `);
       if (customerRows.length !== 1 || !customerRows[0]) throw new Error("ORDER_CARD_CUSTOMER_INVALID");
+
+      // The valid typed agreement is operational state, not a money amount:
+      // 10.1 must still be able to offer the goods-out route to users without
+      // the `geld` area. Money-specific controls remain gated in the adapter.
+      const agreement = await readEffectiveCustomerAgreement(tx, {
+        tenantId: authorization.tenantId,
+        customerId: queue.customer_id,
+        orderId: queue.id,
+      });
+      const agreementHint = agreement === null
+        ? await readInactiveCustomerAgreementHint(tx, {
+            tenantId: authorization.tenantId,
+            customerId: queue.customer_id,
+            orderId: queue.id,
+          })
+        : null;
 
       const assignmentRows = await tx.execute<AssignmentRow>(sql`
         SELECT id::text AS id, tenant_id, order_id,
@@ -738,12 +769,15 @@ export async function readLiveOrderCard(
         dueAt: toNullableIso(queue.due_date),
         intakeAt: toIso(queue.intake_date ?? queue.created_at),
         intakeSource: queue.intake_source,
+        handoverMode: queue.handover_mode,
         assignment,
         assignmentOptions,
         dueDateChanges,
         items: canReadMoney ? items : items.map((item) => ({ ...item, unitPriceCents: null, vatRateBasisPoints: null,
           extraWork: item.extraWork.map((line) => ({ ...line, hourlyRateCents: null, amountCents: null })) })),
         freeze: canReadMoney || !mappedFreeze ? mappedFreeze : { ...mappedFreeze, hourlyRateCents: null, totalAmountCents: null },
+        agreement,
+        agreementHint,
       } satisfies LiveOrderCard;
     });
     return data === null

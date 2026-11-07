@@ -4,11 +4,17 @@ import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
-import type {CustomerStoredProfile} from "@/modules/customers/public";
+import {
+  CUSTOMER_AGREEMENT_TYPES,
+  customerContactLabel,
+  type CustomerAgreementSummary,
+  type CustomerAgreementType,
+  type CustomerStoredProfile,
+} from "@/modules/customers/public";
 import type {PrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
-import { customerContactLabel } from "@/modules/customers/public";
 
 const MAX_ID_LENGTH = 128;
+const AGREEMENT_TYPES = new Set<string>(CUSTOMER_AGREEMENT_TYPES);
 
 export type CustomerSummaryOrder = {
   id: string;
@@ -47,6 +53,8 @@ export type CustomerSummary = CustomerStoredProfile & {
   wareImHaus: boolean;
   invoiceRevenueCents: number;
   invoiceOpenCents: number;
+  agreements: CustomerAgreementSummary[];
+  agreementSlotsAvailable: number;
   orders: CustomerSummaryOrder[];
 };
 
@@ -87,6 +95,27 @@ type SummaryRow = {
   invoice_open_cents: number | string;
   orders: unknown;
   integrity_ok: boolean;
+};
+
+type AgreementSummaryRow = {
+  id: string;
+  customer_id: string;
+  order_id: string | null;
+  position: number;
+  bezeichnung: string;
+  wert: string | null;
+  typ: string | null;
+  ziel_tage: number | null;
+  geld: boolean;
+  hinweis: boolean;
+  gueltig_bis: Date | string | null;
+  grund: string | null;
+  version: number;
+  widerrufen_am: Date | string | null;
+  widerruf_grund: string | null;
+  created_at: Date | string;
+  created_by_name: string | null;
+  widerrufen_von_name: string | null;
 };
 
 function validId(value: unknown): value is string {
@@ -154,7 +183,115 @@ function mapTags(value: unknown): string[] {
   return tags;
 }
 
-function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot, profile: CustomerStoredProfile): CustomerSummary {
+function personName(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string" || value.trim() !== value || value.length < 1 || value.length > 200) {
+    throw new Error("CUSTOMER_SUMMARY_AGREEMENT_LOGIN_INVALID");
+  }
+  return value;
+}
+
+function mapAgreement(row: AgreementSummaryRow): CustomerAgreementSummary {
+  const type = row.typ === null ? null : AGREEMENT_TYPES.has(row.typ) ? row.typ as CustomerAgreementType : undefined;
+  const validUntil = row.gueltig_bis === null ? null : nullableIso(row.gueltig_bis)?.slice(0, 10) ?? null;
+  const revokedAt = nullableIso(row.widerrufen_am);
+  if (
+    !validId(row.id)
+    || !validId(row.customer_id)
+    || (row.order_id !== null && !validId(row.order_id))
+    || !Number.isInteger(row.position)
+    || row.position < 1
+    || row.position > 20
+    || typeof row.bezeichnung !== "string"
+    || row.bezeichnung.trim() !== row.bezeichnung
+    || row.bezeichnung.length < 1
+    || row.bezeichnung.length > 400
+    || (row.wert !== null && (typeof row.wert !== "string" || row.wert.trim() !== row.wert || row.wert.length > 200))
+    || type === undefined
+    || !Number.isInteger(row.version)
+    || row.version < 1
+    || typeof row.geld !== "boolean"
+    || typeof row.hinweis !== "boolean"
+    || (row.ziel_tage !== null && (!Number.isInteger(row.ziel_tage) || row.ziel_tage < 1 || row.ziel_tage > 120))
+    || (type !== null && ["sammelrechnung", "zahlungsziel"].includes(type) !== (row.ziel_tage !== null))
+    || (row.gueltig_bis !== null && !validUntil)
+  ) throw new Error("CUSTOMER_SUMMARY_AGREEMENT_INVALID");
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    orderId: row.order_id,
+    position: row.position,
+    label: row.bezeichnung,
+    value: row.wert,
+    type,
+    targetDays: row.ziel_tage,
+    money: row.geld,
+    notice: row.hinweis,
+    validUntil,
+    reason: row.grund,
+    version: row.version,
+    revokedAt,
+    revokedBy: personName(row.widerrufen_von_name),
+    revokeReason: row.widerruf_grund,
+    createdAt: toIso(row.created_at),
+    createdBy: personName(row.created_by_name),
+  };
+}
+
+async function readCustomerAgreements(
+  tx: PrivilegedTenantTransaction,
+  tenantId: string,
+  customerId: string,
+  includeMoney: boolean,
+): Promise<CustomerAgreementSummary[]> {
+  const rows = await tx.execute<AgreementSummaryRow>(sql`
+    SELECT agreement.id::text, agreement.customer_id, agreement.order_id, agreement.position,
+      agreement.bezeichnung, agreement.wert, agreement.typ, agreement.ziel_tage, agreement.geld, agreement.hinweis,
+      agreement.gueltig_bis, agreement.grund, agreement.version, agreement.widerrufen_am,
+      agreement.widerruf_grund, agreement.created_at,
+      creator.full_name AS created_by_name, revoker.full_name AS widerrufen_von_name
+    FROM public.customer_agreements agreement
+    LEFT JOIN public.app_users creator
+      ON creator.tenant_id = agreement.tenant_id AND creator.id = agreement.created_by
+    LEFT JOIN public.app_users revoker
+      ON revoker.tenant_id = agreement.tenant_id AND revoker.id = agreement.widerrufen_von
+    WHERE agreement.tenant_id = ${tenantId}
+      AND agreement.customer_id = ${customerId}
+      AND agreement.order_id IS NULL
+      AND (${includeMoney} OR NOT agreement.geld)
+    ORDER BY agreement.position ASC, agreement.created_at ASC, agreement.id
+  `);
+  return rows.map(mapAgreement);
+}
+
+async function readCustomerAgreementSlots(
+  tx: PrivilegedTenantTransaction,
+  tenantId: string,
+  customerId: string,
+): Promise<number> {
+  const rows = await tx.execute<{ count: number | string }>(sql`
+    SELECT count(*)::integer AS count
+    FROM public.customer_agreements agreement
+    WHERE agreement.tenant_id = ${tenantId}
+      AND agreement.customer_id = ${customerId}
+      AND agreement.order_id IS NULL
+      AND agreement.typ IS NULL
+      AND agreement.widerrufen_am IS NULL
+  `);
+  const count = Number(rows[0]?.count);
+  if (rows.length !== 1 || !Number.isSafeInteger(count) || count < 0 || count > 20) {
+    throw new Error("CUSTOMER_SUMMARY_AGREEMENT_CAPACITY_INVALID");
+  }
+  return 20 - count;
+}
+
+function mapSummary(
+  row: SummaryRow,
+  authorization: AuthorizationSnapshot,
+  profile: CustomerStoredProfile,
+  agreements: CustomerAgreementSummary[],
+  agreementSlotsAvailable: number,
+): CustomerSummary {
   const orders = mapOrders(row.orders);
   const invoiceRevenueCents = Number(row.invoice_revenue_cents);
   const invoiceOpenCents = Number(row.invoice_open_cents);
@@ -203,6 +340,8 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot, profi
     wareImHaus: row.ware_im_haus,
     invoiceRevenueCents,
     invoiceOpenCents,
+    agreements,
+    agreementSlotsAvailable,
     orders,
   };
 }
@@ -241,9 +380,16 @@ export async function readCustomerSummary(
       `);
       if (rows.length > 1) throw new Error("CUSTOMER_SUMMARY_AMBIGUOUS");
       if(!rows[0])return null;
-      const profile=await readCustomerProfile(tx,authorization.tenantId,input.customerId);
+       const profile=await readCustomerProfile(tx,authorization.tenantId,input.customerId);
       if(!profile)throw new Error("CUSTOMER_PROFILE_UNAVAILABLE");
-      return mapSummary(rows[0],authorization,profile);
+       const agreements = await readCustomerAgreements(
+         tx,
+         authorization.tenantId,
+         input.customerId,
+         hasAuthorizationArea(authorization, "geld"),
+       );
+       const agreementSlotsAvailable = await readCustomerAgreementSlots(tx, authorization.tenantId, input.customerId);
+       return mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable);
     });
     return data
       ? { code: "OK", data }
