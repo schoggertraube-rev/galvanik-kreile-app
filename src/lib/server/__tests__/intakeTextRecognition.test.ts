@@ -50,5 +50,7 @@ describe("recognizeIntakeText", () => {
     expect(result.fields).toEqual(expect.arrayContaining([expect.objectContaining({ field: "dueDate", value: "2026-11-04" })]));
     expect(recognizeIntakeText("Mail vom 01.11.: Bitte bearbeiten.", new Date("2026-11-02T00:00:00.000Z")).fields).not.toEqual(expect.arrayContaining([expect.objectContaining({ field: "dueDate" })]));
     expect(recognizeIntakeText("Nicht bis 12.11., sondern bis 13.11.", new Date("2026-11-02T00:00:00.000Z")).fields).toEqual(expect.arrayContaining([expect.objectContaining({ field: "dueDate", value: "2026-11-13" })]));
+    expect(recognizeIntakeText("Bitte bearbeiten.\nMit freundlichen Grüßen\nIm Urlaub bis 12.11.", new Date("2026-11-02T00:00:00.000Z")).fields).not.toEqual(expect.arrayContaining([expect.objectContaining({ field: "dueDate" })]));
+    expect(recognizeIntakeText("Bitte bis 02.11. liefern", new Date("2026-11-02T15:00:00.000Z")).fields).toEqual(expect.arrayContaining([expect.objectContaining({ field: "dueDate", value: "2026-11-02" })]));
   });
 });

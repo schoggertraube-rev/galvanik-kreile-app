@@ -46,7 +46,8 @@ function nextDate(day: number, month: number, year: number | null, today: Date):
   const fullYear = year === null ? today.getUTCFullYear() : year < 100 ? 2000 + year : year;
   let candidate = new Date(Date.UTC(fullYear, month - 1, day));
   if (candidate.getUTCDate() !== day || candidate.getUTCMonth() !== month - 1) return null;
-  if (year === null && candidate < today) candidate = new Date(Date.UTC(fullYear + 1, month - 1, day));
+  const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  if (year === null && candidate < todayStart) candidate = new Date(Date.UTC(fullYear + 1, month - 1, day));
   return candidate.toISOString().slice(0, 10);
 }
 
@@ -71,7 +72,8 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
   }
   const companyLine = lines.find((line) => /\b(?:GmbH|UG|AG|KG|OHG|GbR|e\.\s*K\.|e\.\s*V\.)\b/i.test(line));
   if (companyLine) addField("companyName", companyLine.slice(0, 160), `Text Zeile ${lines.indexOf(companyLine) + 1}`);
-  const corrected = normalized.replace(/\b(?:nicht|kein(?:e|en)?)\s+[^,;\n]{1,80}?,\s*(?:nur|sondern)\s+/gi, "");
+  const requestText = normalized.split(/\r?\n(?:--\s*|mit freundlichen gr[üu][ßs]en\b)/i, 1)[0]!;
+  const corrected = requestText.replace(/\b(?:nicht|kein(?:e|en)?)\s+[^,;\n]{1,80}?,\s*(?:nur|sondern)\s+/gi, "");
   // Ein Mail- oder Signaturdatum ist kein Lieferwunsch; nur ausdrücklich eingeleitete Termine übernehmen.
   const dateMatch = corrected.match(/\b(?:bis|zum)\s+(\d{1,2})\.(\d{1,2})\.(?:(\d{2,4}))?/i);
   if (dateMatch) {
