@@ -68,4 +68,11 @@ describe("recognizeIntakeText", () => {
     expect(recognizeIntakeText("Bitte bis 02.11. liefern", new Date("2026-11-02T15:00:00.000Z")).fields).toEqual(expect.arrayContaining([expect.objectContaining({ field: "dueDate", value: "2026-11-02" })]));
     expect(recognizeIntakeText("Lieferung nächste Woche Freitag", new Date("2026-11-02T00:00:00.000Z")).fields).toEqual(expect.arrayContaining([expect.objectContaining({ field: "dueDate", value: "2026-11-13" })]));
   });
+
+  it("verwendet für relative Termine den Kalendertag in Berlin", () => {
+    const lateUtc = new Date("2026-11-01T23:30:00.000Z");
+    expect(recognizeIntakeText("Lieferung bis Sonntag", lateUtc).fields).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "dueDate", value: "2026-11-08" }),
+    ]));
+  });
 });

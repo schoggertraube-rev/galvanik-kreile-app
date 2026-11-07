@@ -1,4 +1,5 @@
 import "server-only";
+import { berlinCalendarDay } from "@/lib/domain/workingDays";
 
 export type IntakeTextRecognitionField = {
   field: "companyName" | "email" | "phone" | "zipCode" | "city" | "dueDate";
@@ -57,6 +58,7 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
   const normalized = text.trim();
   if (!normalized) return { fields: [], positions: [] };
   const fields: IntakeTextRecognitionField[] = [];
+  const berlinToday = new Date(`${berlinCalendarDay(today)}T00:00:00.000Z`);
   const addField = (field: IntakeTextRecognitionField["field"], value: string, source: string) => {
     if (!fields.some((entry) => entry.field === field)) fields.push({ field, value, source });
   };
@@ -78,13 +80,13 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
   // Ein Mail- oder Signaturdatum ist kein Lieferwunsch; nur ausdrücklich eingeleitete Termine übernehmen.
   const dateMatch = corrected.match(/\b(?:bis|zum)\s+(\d{1,2})\.(\d{1,2})\.(?:(\d{2,4}))?/i);
   if (dateMatch) {
-    const value = nextDate(Number(dateMatch[1]), Number(dateMatch[2]), dateMatch[3] ? Number(dateMatch[3]) : null, today);
+    const value = nextDate(Number(dateMatch[1]), Number(dateMatch[2]), dateMatch[3] ? Number(dateMatch[3]) : null, berlinToday);
     if (value) addField("dueDate", value, "Text");
   } else {
     const weekdayMatch = corrected.match(/(?:\bbis\s+|\b(?:bis\s+)?nächste\s+woche\s+)(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)\b/i);
     if (weekdayMatch) {
       const target = WEEKDAYS[weekdayMatch[1]!.toLowerCase()]!;
-      const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+      const date = new Date(berlinToday);
       const delta = /nächste\s+woche/i.test(weekdayMatch[0])
         ? ((8 - date.getUTCDay()) % 7 || 7) + (target + 6) % 7
         : (target - date.getUTCDay() + 7) % 7;
