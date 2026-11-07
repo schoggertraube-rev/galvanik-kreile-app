@@ -625,7 +625,8 @@
         "updateOrderDb",
         "getRiskOrders",
         "transitionOrderProcess",
-        "createOrderFromScan"
+        "createOrderFromScan",
+        "recordOrderLabelPrintAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Order lifecycle action group. F1.2 transition and correction are released with real E2E evidence. F1.3 extra-work, live-card, shared task assignment, finish/freeze and append-only freeze-correction actions passed the real local DB/Auth/Storage/browser E2E on 2026-08-21; exact-SHA CI and independent review remain pending. getRiskOrders returns NOT_AVAILABLE and transitionOrderProcess remains under F0-W2C quarantine.",

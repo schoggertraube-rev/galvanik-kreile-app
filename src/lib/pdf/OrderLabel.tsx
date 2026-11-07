@@ -1,221 +1,122 @@
-import React from "react";
-import { Page, Text, View, Document, StyleSheet, Image as PdfImage } from "@react-pdf/renderer";
-import type { Order } from "@/lib/repositories/ordersRepository";
-import { getUrgency } from "@/modules/orders/public";
-import { format } from "date-fns";
+import "server-only";
 
-// Create styles
+import { Document, Image as PdfImage, Page, StyleSheet, Text, View, type DocumentProps } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+const MM = 72 / 25.4;
+const LABEL_WIDTH = 62 * MM;
+const LABEL_HEIGHT = 40 * MM;
+
 const styles = StyleSheet.create({
   page: {
-    flexDirection: "column",
-    backgroundColor: "#FFFFFF",
-    padding: 15,
+    width: LABEL_WIDTH,
+    height: LABEL_HEIGHT,
+    padding: 2.5 * MM,
+    flexDirection: "row",
     fontFamily: "Helvetica",
+    color: "#182033",
   },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#000000",
-    paddingBottom: 5,
-    marginBottom: 10,
+  qrColumn: {
+    width: 27 * MM,
+    paddingRight: 2 * MM,
   },
-  headerText: {
-    fontSize: 10,
-    fontWeight: "bold",
-    letterSpacing: 1,
+  qr: {
+    width: 25 * MM,
+    height: 25 * MM,
   },
-  orderInfoBox: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#000000",
-    borderBottomStyle: "dashed",
-    paddingBottom: 10,
-    marginBottom: 10,
-    alignItems: "center",
+  qrCaption: {
+    marginTop: 1.25 * MM,
+    fontSize: 5.6,
+    lineHeight: 1.05,
   },
-  orderNumberLabel: {
-    fontSize: 9,
-    color: "#666666",
-    marginBottom: 2,
+  details: {
+    flex: 1,
+    paddingTop: 0.25 * MM,
   },
-  orderNumber: {
-    fontSize: 32,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  orderTask: {
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  gridRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    borderBottomWidth: 1,
-    borderBottomColor: "#000000",
-    paddingBottom: 8,
-    marginBottom: 10,
-  },
-  colHalf: {
-    width: "50%",
-    marginBottom: 8,
-  },
-  colFull: {
-    width: "100%",
+  field: {
+    marginBottom: 1.1 * MM,
   },
   label: {
-    fontSize: 8,
-    color: "#666666",
-    fontWeight: "bold",
+    fontSize: 5.4,
+    lineHeight: 1,
+    color: "#526078",
     textTransform: "uppercase",
-    marginBottom: 2,
   },
   value: {
-    fontSize: 10,
-    fontWeight: "bold",
+    marginTop: 0.35 * MM,
+    fontSize: 7.2,
+    lineHeight: 1.08,
+    fontFamily: "Helvetica-Bold",
   },
-  urgencyCritical: {
-    fontSize: 10,
-    fontWeight: "bold",
-    color: "#DC2626", // Red
+  orderNumber: {
+    marginTop: 0.35 * MM,
+    fontSize: 8.4,
+    lineHeight: 1,
+    fontFamily: "Helvetica-Bold",
   },
-  urgencyWarning: {
-    fontSize: 10,
-    fontWeight: "bold",
-    color: "#D97706", // Orange
-  },
-  partRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEEEEE",
-    paddingVertical: 3,
-  },
-  partText: {
-    fontSize: 9,
-    fontWeight: "bold",
-  },
-  partSurface: {
-    fontSize: 7,
-    backgroundColor: "#EEEEEE",
-    padding: 2,
-    borderRadius: 2,
-  },
-  footer: {
-    flexDirection: "column",
-    alignItems: "center",
-    marginTop: "auto",
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#000000",
-  },
-  qrCode: {
-    width: 60,
-    height: 60,
-    marginBottom: 2,
-  },
-  qrText: {
-    fontSize: 7,
-    fontWeight: "bold",
-    fontFamily: "Courier",
-  },
-  stationText: {
-    fontSize: 8,
-    color: "#666666",
-    fontWeight: "bold",
-    textTransform: "uppercase",
-    marginTop: 5,
-  }
 });
 
-import type { CompanySettings } from "@/lib/repositories/companySettingsRepository";
+export type OrderLabelData = {
+  orderNumber: string;
+  customerName: string | null;
+  partSummary: string | null;
+  dueDate: string | null;
+  intakeDate: string | null;
+  qrCodeDataUrl: string;
+};
 
-interface OrderLabelData {
-  order: Order;
-  customerName: string;
-  qrCodeBase64: string;
+function labelText(value: string | null | undefined): string {
+  return typeof value === "string" && value.trim() ? value.trim() : "fehlt";
 }
 
-interface OrderLabelProps {
-  data: OrderLabelData[];
-  settings: CompanySettings;
+function dateText(value: string | null): string {
+  if (typeof value !== "string") return "fehlt";
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
+  if (!match) return "fehlt";
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "fehlt";
+  return `${dayText}.${monthText}.${yearText}`;
 }
 
-export const OrderLabelDocument = ({ data, settings }: OrderLabelProps) => {
+export function OrderLabelDocument({ data }: { data: OrderLabelData }) {
   return (
-    <Document>
-      {data.map(({ order, customerName, qrCodeBase64 }, index) => {
-        const urgency = getUrgency(order.dueDate);
-        const urgencyStyle = urgency === "kritisch" ? styles.urgencyCritical : urgency === "gefaehrdet" ? styles.urgencyWarning : styles.value;
-        
-        const formatStoredDate = (value: Date | string | null | undefined) => {
-          if (!value || (typeof value === "string" && !value.trim())) return "Nicht erfasst";
-          const date = new Date(value);
-          return Number.isNaN(date.getTime()) ? "Nicht erfasst" : format(date, "dd.MM.yyyy");
-        };
-        const createdDate = formatStoredDate(order.intakeDate);
-        const dueDate = formatStoredDate(order.dueDate);
-
-        return (
-          <Page key={order.id || index} size="A6" style={styles.page}>
-            {/* Header */}
-            <View style={styles.headerRow}>
-              <Text style={styles.headerText}>{settings.companyName.toUpperCase()}</Text>
-              <Text style={{ fontSize: 8 }}>A6 ETIKETT</Text>
-            </View>
-
-            {/* Order Number & Task */}
-            <View style={styles.orderInfoBox}>
-              <Text style={styles.orderNumberLabel}>AUFTRAGSNUMMER</Text>
-              <Text style={styles.orderNumber}>{order.orderNumber}</Text>
-              <Text style={styles.orderTask}>{order.task || order.title}</Text>
-            </View>
-
-            {/* Details Grid */}
-            <View style={styles.gridRow}>
-              <View style={styles.colHalf}>
-                <Text style={styles.label}>KUNDE</Text>
-                <Text style={styles.value}>{customerName}</Text>
-              </View>
-              <View style={styles.colHalf}>
-                <Text style={styles.label}>EINGANGSDATUM</Text>
-                <Text style={styles.value}>{createdDate}</Text>
-              </View>
-              
-              <View style={styles.colHalf}>
-                <Text style={styles.label}>ZIELDATUM</Text>
-                <Text style={urgencyStyle}>{dueDate}</Text>
-              </View>
-
-              <View style={styles.colFull}>
-                <Text style={styles.label}>BAUTEILE</Text>
-                <View>
-                  {order.parts?.slice(0, 6).map((p: Record<string, unknown>, i: number) => (
-                    <View key={i} style={styles.partRow}>
-                      <Text style={styles.partText}>{String(p.quantity ?? "")}x {String(p.name ?? "")}</Text>
-                      {Boolean(p.surfaceRequested) && <Text style={styles.partSurface}>{String(p.surfaceRequested)}</Text>}
-                    </View>
-                  ))}
-                  {(order.parts?.length || 0) > 6 && (
-                    <Text style={{ fontSize: 7, fontStyle: "italic", color: "#666", marginTop: 2 }}>+ weitere Positionen...</Text>
-                  )}
-                </View>
-              </View>
-            </View>
-
-            {/* Footer (QR Code) */}
-            <View style={styles.footer}>
-              {qrCodeBase64 ? (
-                <View style={{ alignItems: "center" }}>
-                  <PdfImage src={qrCodeBase64} style={styles.qrCode} />
-                  <Text style={styles.qrText}>{order.orderNumber}</Text>
-                </View>
-              ) : null}
-              <Text style={styles.stationText}>Nächste Station: WARENEINGANG</Text>
-            </View>
-          </Page>
-        );
-      })}
+    <Document title={`Laufzettel ${labelText(data.orderNumber)}`}>
+      <Page size={[LABEL_WIDTH, LABEL_HEIGHT]} style={styles.page}>
+        <View style={styles.qrColumn}>
+          <PdfImage src={data.qrCodeDataUrl} style={styles.qr} />
+          <Text style={styles.qrCaption}>{`KREILE:${labelText(data.orderNumber)}`}</Text>
+        </View>
+        <View style={styles.details}>
+          <View style={styles.field}>
+            <Text style={styles.label}>Auftrag</Text>
+            <Text style={styles.orderNumber}>{labelText(data.orderNumber)}</Text>
+          </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Kunde</Text>
+            <Text style={styles.value}>{labelText(data.customerName)}</Text>
+          </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Anzahl Teile</Text>
+            <Text style={styles.value}>{labelText(data.partSummary)}</Text>
+          </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Liefertermin</Text>
+            <Text style={styles.value}>{dateText(data.dueDate)}</Text>
+          </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Eingangsdatum</Text>
+            <Text style={styles.value}>{dateText(data.intakeDate)}</Text>
+          </View>
+        </View>
+      </Page>
     </Document>
   );
-};
+}
+
+export function createOrderLabelPdfDocument(data: OrderLabelData): ReactElement<DocumentProps> {
+  return <OrderLabelDocument data={data} />;
+}

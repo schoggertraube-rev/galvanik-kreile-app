@@ -7,6 +7,7 @@ import {
   setInvoiceItemPricesAction,
 } from "@/app/actions/invoices.actions";
 import { recordGoodsOutAction } from "@/app/actions/goodsOut.actions";
+import { generateOrderLabel } from "@/app/actions/pdf.actions";
 import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
 import {
   changeOrderContentAction,
@@ -16,6 +17,7 @@ import {
   getLiveOrderCardAction,
   getOrderFrozenReceiptAction,
   setOrderItemFinishedAction,
+  recordOrderLabelPrintAction,
   transitionWareneingangToGalvanikAction,
 } from "@/app/actions/orders.actions";
 import {
@@ -182,6 +184,7 @@ function mapCard(
     intakeAt: card.intakeAt,
     assignedTo: card.assignment?.assignedToName ?? null,
     dueDateChanges: card.dueDateChanges,
+    labelPrints: card.labelPrints,
     items: card.items.map((item) => ({
       id: item.id,
       position: item.position,
@@ -228,6 +231,42 @@ function availability(
   return { visible, enabled, reason };
 }
 
+async function openOrderLabelPrintWindow(
+  orderId: string,
+  target: Window | null,
+  onAfterPrint: () => void,
+): Promise<void> {
+  if (!target) throw new Error("LABEL_PRINT_WINDOW_BLOCKED");
+  target.opener = null;
+  target.document.title = "Laufzettel.pdf";
+  target.document.body.replaceChildren();
+  target.document.body.style.margin = "0";
+  const base64 = await generateOrderLabel(orderId);
+  if (!base64) throw new Error("LABEL_PDF_EMPTY");
+  const frame = target.document.createElement("iframe");
+  frame.title = "Laufzettel";
+  frame.style.border = "0";
+  frame.style.width = "100%";
+  frame.style.height = "100vh";
+  const loaded = new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error("LABEL_PDF_LOAD_TIMEOUT")), 10_000);
+    frame.addEventListener("load", () => {
+      window.clearTimeout(timeout);
+      resolve();
+    }, { once: true });
+    frame.addEventListener("error", () => {
+      window.clearTimeout(timeout);
+      reject(new Error("LABEL_PDF_LOAD_FAILED"));
+    }, { once: true });
+  });
+  frame.src = `data:application/pdf;base64,${base64}`;
+  target.document.body.append(frame);
+  await loaded;
+  target.addEventListener("afterprint", onAfterPrint, { once: true });
+  target.focus();
+  target.print();
+}
+
 export function OrderCardAppAdapter({
   orderId,
   onOpenCustomer,
@@ -255,6 +294,7 @@ export function OrderCardAppAdapter({
   } | null>(null);
   const [agreementMessage, setAgreementMessage] = useState<string | null>(null);
   const requests = useRef<Record<string, string>>({});
+  const labelPrintInFlight = useRef(false);
   const load = useCallback(
     async (preserve = false): Promise<Snapshot | null> => {
       if (!preserve) setState({ kind: "loading" });
@@ -337,7 +377,7 @@ export function OrderCardAppAdapter({
   const success = useCallback(
     (
       kind:
-        "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate",
+        "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate" | "label",
       receipt: {
         actorId: string;
         occurredAt: string;
@@ -437,6 +477,68 @@ export function OrderCardAppAdapter({
       },
       "Übergabe an die Galvanik bestätigt.",
     );
+  }, [fail, load, orderId, snapshot, success]);
+  const onPrintLabel = useCallback(async () => {
+    if (!snapshot || labelPrintInFlight.current) return;
+    labelPrintInFlight.current = true;
+    const target = window.open("", "_blank");
+    if (!target) {
+      labelPrintInFlight.current = false;
+      setFeedback({ kind: "error", message: "Laufzettel nicht erzeugt · Erneut. Fehlercode: LABEL_PRINT_WINDOW_BLOCKED." });
+      return;
+    }
+    const clientEventId = (requests.current.label ??= crypto.randomUUID());
+    setFeedback({ kind: "submitting", message: "Laufzettel wird gedruckt." });
+    const onAfterPrint = () => {
+      void (async () => {
+        try {
+          const result = await recordOrderLabelPrintAction({ orderId, clientEventId });
+          if (result.code !== "OK") {
+            await fail(result);
+            return;
+          }
+          const fresh = await load(true);
+          if (!fresh?.card.labelPrints.some((entry) => entry.eventId === result.receipt.eventId)) {
+            setFeedback({ kind: "error", message: "Laufzettel: Druck aufgerufen, aber der Verlauf konnte nicht sicher nachgelesen werden." });
+            return;
+          }
+          success(
+            "label",
+            {
+              actorId: result.receipt.actorId,
+              occurredAt: result.receipt.occurredAt,
+              eventId: result.receipt.eventId,
+              receiptId: `label://${orderId}/${result.receipt.eventId}`,
+            },
+            "Laufzettel: Druck aufgerufen",
+          );
+        } catch (error) {
+          console.error("[ORDER_LABEL_PRINT_AFTERPRINT_FAILED]", {
+            orderId,
+            code: error instanceof Error ? error.message : "ORDER_LABEL_PRINT_AFTERPRINT_FAILED",
+          });
+          setFeedback({ kind: "error", message: "Laufzettel: Druck aufgerufen, aber der Verlauf konnte nicht gespeichert werden." });
+        } finally {
+          labelPrintInFlight.current = false;
+          target.close();
+        }
+      })();
+    };
+    try {
+      await openOrderLabelPrintWindow(orderId, target, onAfterPrint);
+    } catch (error) {
+      console.error("[ORDER_LABEL_PRINT_OPEN_FAILED]", {
+        orderId,
+        code: error instanceof Error ? error.message : "ORDER_LABEL_PRINT_OPEN_FAILED",
+      });
+      delete requests.current.label;
+      labelPrintInFlight.current = false;
+      target.close();
+      setFeedback({
+        kind: "error",
+        message: `Laufzettel nicht erzeugt · Erneut. Fehlercode: ${error instanceof Error ? error.message : "LABEL_PRINT_FAILED"}.`,
+      });
+    }
   }, [fail, load, orderId, snapshot, success]);
   const onFreeze = useCallback(async () => {
     if (!snapshot) return;
@@ -731,6 +833,7 @@ export function OrderCardAppAdapter({
     const operate = hasPermission("perm_op_status");
     const finance = hasPermission("perm_view_prices");
     const goods = operate;
+    const label = operate;
     const editDueDate = operate;
     const editContent = canAction("editOrderContent");
     const canConfirmPayment = canAction("confirmPayment");
@@ -818,6 +921,15 @@ export function OrderCardAppAdapter({
               : undefined,
           }
         : undefined,
+      label: availability(
+        Boolean(card) && card?.station !== "abgeholt" && card?.status !== "abgeschlossen",
+        label && feedback.kind !== "submitting",
+        !label
+          ? "Ihre Rolle darf keinen Laufzettel drucken."
+          : card?.station === "abgeholt" || card?.status === "abgeschlossen"
+            ? "Der Auftrag ist bereits abgeschlossen."
+            : null,
+      ),
       feedback,
       onSaveContent,
       onToggleItemFinished,
@@ -833,6 +945,7 @@ export function OrderCardAppAdapter({
       onIssueInvoice,
       onConfirmPayment,
       onRecordGoodsOut,
+      onPrintLabel,
       onReload: async () => {
         await load();
       },
@@ -846,6 +959,7 @@ export function OrderCardAppAdapter({
     onFreeze,
     onHandoff,
     onIssueInvoice,
+    onPrintLabel,
     onRecordGoodsOut,
     onSaveContent,
     onToggleItemFinished,

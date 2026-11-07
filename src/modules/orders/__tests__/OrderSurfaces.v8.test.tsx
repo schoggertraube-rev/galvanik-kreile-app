@@ -10,6 +10,7 @@ const actions: OrderCardActionPorts = {
   invoice: { visible: false, enabled: false, reason: null },
   payment: { visible: false, enabled: false, reason: null },
   goodsOut: { visible: false, enabled: false, reason: null },
+  label: { visible: false, enabled: false, reason: null },
   feedback: { kind: "idle", message: "" },
   onChangeDueDate: vi.fn(),
   onHandoff: vi.fn(),
@@ -17,6 +18,7 @@ const actions: OrderCardActionPorts = {
   onIssueInvoice: vi.fn(),
   onConfirmPayment: vi.fn(),
   onRecordGoodsOut: vi.fn(),
+  onPrintLabel: vi.fn(),
   onReload: vi.fn(),
 };
 
@@ -34,6 +36,7 @@ const card: OrderCardModel = {
   intakeAt: "2026-09-16T08:00:00.000Z",
   assignedTo: null,
   dueDateChanges: [{ eventId: "event-1", changedTo: "2026-09-20", reason: "Kundenwunsch", changedAt: "2026-09-17T09:00:00.000Z", changedBy: "Rolf Kreile", aggregateVersion: 2 }],
+  labelPrints: [],
   items: [{ id: "item-1", position: 1, name: "Haltewinkel", quantity: 2, material: "Stahl", surface: "Blau verzinken", extraWork: [] }],
   evidence: [],
   frozenAt: null,
@@ -95,6 +98,25 @@ describe("Orders V1.1 one-surface truth", () => {
     fireEvent.change(reason, { target: { value: "Material verspätet" } });
     fireEvent.submit(screen.getByRole("button", { name: "Termin mit Grund speichern" }).closest("form")!);
     expect(onChangeDueDate).toHaveBeenCalledWith("2026-09-24", "Material verspätet");
+  });
+
+  it("offers the persisted label reprint through the correct device action and history", () => {
+    const onPrintLabel = vi.fn();
+    render(<OrderCardView actions={{
+      ...actions,
+      label: { visible: true, enabled: true, reason: null },
+      onPrintLabel,
+    }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{
+      kind: "data",
+      card: {
+        ...card,
+        labelPrints: [{ eventId: "label-event-1", occurredAt: "2026-09-18T09:30:00.000Z" }],
+      },
+    }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Laufzettel drucken" }));
+    expect(onPrintLabel).toHaveBeenCalledOnce();
+    expect(screen.getByText("Laufzettel gedruckt")).toBeInTheDocument();
   });
 
   it("requires an explicit payment method before confirming money received", async () => {

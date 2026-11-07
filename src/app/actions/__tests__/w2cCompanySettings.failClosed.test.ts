@@ -4,6 +4,7 @@ import ts from "typescript";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CompanySettingsForm } from "@/components/admin/CompanySettingsForm";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 const readDenial = "NOT_AVAILABLE: Firmendaten-Anzeige benötigt einen tenant- und capability-geprüften W3-Read-Vertrag.";
 const writeDenial = "NOT_AVAILABLE: Sichere Firmendatenänderung benötigt den W3-Command-Vertrag.";
@@ -15,10 +16,13 @@ const {
   mockSelect,
   mockEq,
   mockSingle,
-  mockOrdersGetAll,
-  mockCustomersGetAll,
+  mockResolveAuthorization,
+  mockHasAuthorizationArea,
+  mockWithPrivilegedTenantTransaction,
+  mockExecute,
   mockQrToDataUrl,
-  mockRenderToStream,
+  mockRenderToBuffer,
+  mockCreateOrderLabelPdfDocument,
   mockDate,
 } = vi.hoisted(() => {
   const mockSingle = vi.fn();
@@ -34,10 +38,13 @@ const {
     mockSelect,
     mockEq,
     mockSingle,
-    mockOrdersGetAll: vi.fn(),
-    mockCustomersGetAll: vi.fn(),
+    mockResolveAuthorization: vi.fn(),
+    mockHasAuthorizationArea: vi.fn(),
+    mockWithPrivilegedTenantTransaction: vi.fn(),
+    mockExecute: vi.fn(),
     mockQrToDataUrl: vi.fn(),
-    mockRenderToStream: vi.fn(),
+    mockRenderToBuffer: vi.fn(),
+    mockCreateOrderLabelPdfDocument: vi.fn(),
     mockDate: vi.fn(),
   };
 });
@@ -49,14 +56,18 @@ vi.mock("@/lib/offline/OfflineManager", () => ({
   OfflineManager: { isOffline: mockIsOffline },
 }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: mockCreateClient }));
-vi.mock("@/lib/repositories/ordersRepository", () => ({
-  ordersRepository: { getAll: mockOrdersGetAll },
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization: mockResolveAuthorization,
+  hasAuthorizationArea: mockHasAuthorizationArea,
 }));
-vi.mock("@/lib/repositories/customersRepository", () => ({
-  customersRepository: { getAll: mockCustomersGetAll },
+vi.mock("@/lib/server/privilegedDb", () => ({
+  withPrivilegedTenantTransaction: mockWithPrivilegedTenantTransaction,
+}));
+vi.mock("@/lib/pdf/OrderLabel", () => ({
+  createOrderLabelPdfDocument: mockCreateOrderLabelPdfDocument,
 }));
 vi.mock("qrcode", () => ({ default: { toDataURL: mockQrToDataUrl } }));
-vi.mock("@react-pdf/renderer", () => ({ renderToStream: mockRenderToStream }));
+vi.mock("@react-pdf/renderer", () => ({ renderToBuffer: mockRenderToBuffer }));
 
 const sourceFile = (source: string, fileName: string) =>
   ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
@@ -74,11 +85,11 @@ function getSettingsMethod(source: ts.SourceFile): ts.MethodDeclaration {
   let method: ts.MethodDeclaration | undefined;
   const visit = (node: ts.Node) => {
     if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === "companySettingsRepository" &&
-      node.initializer &&
-      ts.isObjectLiteralExpression(node.initializer)
+      ts.isVariableDeclaration(node)
+      && ts.isIdentifier(node.name)
+      && node.name.text === "companySettingsRepository"
+      && node.initializer
+      && ts.isObjectLiteralExpression(node.initializer)
     ) {
       method = node.initializer.properties.find(
         (property): property is ts.MethodDeclaration =>
@@ -106,14 +117,8 @@ function expectExactDenial(functionLike: ts.FunctionLikeDeclaration, denial: str
 function expectNoRuntimePortImports(source: ts.SourceFile, moduleNames: string[]) {
   const importedModules: string[] = [];
   const visit = (node: ts.Node) => {
-    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-      importedModules.push(node.moduleSpecifier.text);
-    }
-    if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      ts.isStringLiteral(node.arguments[0])
-    ) {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) importedModules.push(node.moduleSpecifier.text);
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && ts.isStringLiteral(node.arguments[0])) {
       importedModules.push(node.arguments[0].text);
     }
     ts.forEachChild(node, visit);
@@ -135,12 +140,28 @@ function expectNoPortNodes(functionLike: ts.FunctionLikeDeclaration, identifiers
   expect(foundIdentifiers).toEqual([]);
 }
 
+const authorized = {
+  userId: "11111111-1111-4111-8111-111111111111",
+  tenantId: KREILE_TENANT_SLUG,
+  displayName: "Rolf",
+  role: "meister",
+  areas: ["eingang"],
+  permissions: [],
+  active: true,
+} as const;
+
 describe("W2C company settings read containment", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAdminOrDeveloper.mockResolvedValue(undefined);
     mockIsOffline.mockReturnValue(false);
     mockSingle.mockResolvedValue({ data: null, error: null });
+    mockResolveAuthorization.mockResolvedValue({ ok: true, data: authorized });
+    mockHasAuthorizationArea.mockReturnValue(true);
+    mockWithPrivilegedTenantTransaction.mockImplementation(async (_authorization: unknown, work: (tx: { execute: typeof mockExecute }) => Promise<unknown>) => work({ execute: mockExecute }));
+    mockQrToDataUrl.mockResolvedValue("data:image/png;base64,qr");
+    mockCreateOrderLabelPdfDocument.mockReturnValue({ type: "label" });
+    mockRenderToBuffer.mockResolvedValue(Buffer.from("%PDF-label"));
   });
 
   afterEach(() => {
@@ -179,19 +200,61 @@ describe("W2C company settings read containment", () => {
     expect(mockDate).not.toHaveBeenCalled();
   });
 
-  it("denies both PDF entry points before every PDF and repository port", async () => {
+  it("rejects label generation before every data and PDF port without a login", async () => {
+    mockResolveAuthorization.mockResolvedValue({ ok: false, reason: "NO_SESSION", message: "Nicht angemeldet" });
+    const { generateOrderLabel } = await import("@/app/actions/pdf.actions");
+
+    await expect(generateOrderLabel("order-1")).rejects.toThrow("LABEL_UNAUTHENTICATED");
+
+    expect(mockWithPrivilegedTenantTransaction).not.toHaveBeenCalled();
+    expect(mockExecute).not.toHaveBeenCalled();
+    expect(mockQrToDataUrl).not.toHaveBeenCalled();
+    expect(mockRenderToBuffer).not.toHaveBeenCalled();
+  });
+
+  it("rejects label generation before every data and PDF port without an allowed area", async () => {
+    mockHasAuthorizationArea.mockReturnValue(false);
+    const { generateOrderLabel } = await import("@/app/actions/pdf.actions");
+
+    await expect(generateOrderLabel("order-1")).rejects.toThrow("LABEL_FORBIDDEN");
+
+    expect(mockWithPrivilegedTenantTransaction).not.toHaveBeenCalled();
+    expect(mockExecute).not.toHaveBeenCalled();
+    expect(mockQrToDataUrl).not.toHaveBeenCalled();
+    expect(mockRenderToBuffer).not.toHaveBeenCalled();
+  });
+
+  it("renders exactly one authorized label from one tenant-bound source query", async () => {
+    mockExecute.mockResolvedValue([{
+      id: "order-1",
+      order_number: "A-2026-0001",
+      customer_name: "Kreile Kunde",
+      due_date: "2026-11-08",
+      intake_date: "2026-11-06",
+      positions: [{ quantity: "2", unit: "stueck" }],
+    }]);
+    const { generateOrderLabel } = await import("@/app/actions/pdf.actions");
+
+    await expect(generateOrderLabel("order-1")).resolves.toBe(Buffer.from("%PDF-label").toString("base64"));
+
+    expect(mockWithPrivilegedTenantTransaction).toHaveBeenCalledTimes(1);
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+    expect(mockQrToDataUrl).toHaveBeenCalledWith("KREILE:A-2026-0001", expect.objectContaining({ margin: 0 }));
+    expect(mockCreateOrderLabelPdfDocument).toHaveBeenCalledWith(expect.objectContaining({
+      orderNumber: "A-2026-0001",
+      partSummary: "2 Stück",
+    }));
+    expect(mockRenderToBuffer).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the delivery note and company-settings reader fail-closed", async () => {
     const { companySettingsRepository } = await import("@/lib/repositories/companySettingsRepository");
     const companySettingsGetSettings = vi.spyOn(companySettingsRepository, "getSettings");
-    const { generateDeliveryNote, generateOrderLabel } = await import("@/app/actions/pdf.actions");
+    const { generateDeliveryNote } = await import("@/app/actions/pdf.actions");
 
-    await expect(generateOrderLabel(["order-1", "order-2"])).rejects.toThrow(readDenial);
     await expect(generateDeliveryNote("order-3")).rejects.toThrow(readDenial);
 
-    expect(mockOrdersGetAll).not.toHaveBeenCalled();
-    expect(mockCustomersGetAll).not.toHaveBeenCalled();
     expect(companySettingsGetSettings).not.toHaveBeenCalled();
-    expect(mockQrToDataUrl).not.toHaveBeenCalled();
-    expect(mockRenderToStream).not.toHaveBeenCalled();
   });
 
   it("keeps the static header logo without a company-settings action", async () => {
@@ -216,7 +279,7 @@ describe("W2C company settings read containment", () => {
     }
   });
 
-  it("proves source-level denial structure without runtime read or PDF ports", async () => {
+  it("proves the delivery note stays denied and the label stays tenant-authorized", async () => {
     const [repositorySource, pdfSource] = await Promise.all([
       readFile("src/lib/repositories/companySettingsRepository.ts", "utf8"),
       readFile("src/app/actions/pdf.actions.ts", "utf8"),
@@ -224,23 +287,16 @@ describe("W2C company settings read containment", () => {
     const repository = sourceFile(repositorySource, "companySettingsRepository.ts");
     const pdf = sourceFile(pdfSource, "pdf.actions.ts");
     const getSettings = getSettingsMethod(repository);
-    const orderLabel = functionDeclaration(pdf, "generateOrderLabel");
     const deliveryNote = functionDeclaration(pdf, "generateDeliveryNote");
 
     expectExactDenial(getSettings, readDenial, 1);
-    expectExactDenial(orderLabel, readDenial, 2);
     expectExactDenial(deliveryNote, readDenial, 2);
     expectNoRuntimePortImports(repository, ["@/lib/offline/OfflineManager", "@/lib/supabase/client"]);
-    expectNoRuntimePortImports(pdf, [
-      "@/lib/repositories/ordersRepository",
-      "@/lib/repositories/customersRepository",
-      "@/lib/repositories/companySettingsRepository",
-      "qrcode",
-      "@react-pdf/renderer",
-    ]);
     expectNoPortNodes(getSettings, ["OfflineManager", "createClient", "from", "select", "eq", "single"]);
-    expectNoPortNodes(orderLabel, ["ordersRepository", "customersRepository", "companySettingsRepository", "QRCode", "renderToStream"]);
-    expectNoPortNodes(deliveryNote, ["ordersRepository", "customersRepository", "companySettingsRepository", "QRCode", "renderToStream"]);
+    expect(pdfSource).toContain("resolveAuthorization");
+    expect(pdfSource).toContain("hasAuthorizationArea");
+    expect(pdfSource).toContain("withPrivilegedTenantTransaction");
+    expect(pdfSource).toContain("orders.tenant_id");
   });
 
   it("retains write denials without calling their repository port", async () => {

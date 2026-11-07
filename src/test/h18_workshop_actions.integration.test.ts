@@ -159,6 +159,7 @@ describe("H18 workshop Server Actions against the real replay database", () => {
     const itemId = order.items[0]?.id;
     if (!itemId) throw new Error("H18_WORKSHOP_ITEM_MISSING");
     const paymentClientEventId = randomUUID();
+    const labelPrintClientEventId = randomUUID();
     const stationForwardClientEventId = randomUUID();
     const stationCorrectionClientEventId = randomUUID();
     const stationForwardAgainClientEventId = randomUUID();
@@ -167,6 +168,7 @@ describe("H18 workshop Server Actions against the real replay database", () => {
     const {
       correctGalvanikToWareneingangAction,
       getLiveOrderCardAction,
+      recordOrderLabelPrintAction,
       setOrderItemFinishedAction,
       transitionWareneingangToGalvanikAction,
     } = await import("@/app/actions/orders.actions");
@@ -189,6 +191,40 @@ describe("H18 workshop Server Actions against the real replay database", () => {
     expect(paymentRow).toEqual({ payment_mode: "rechnung", payment_mode_version: 1, event_type: "PAYMENT_MODE_SET_V1" });
     const paymentView = await withSession(fixture, () => getLiveOrderCardAction({ orderId: order.orderId }));
     expect(paymentView).toMatchObject({ code: "OK", data: { card: { id: order.orderId } } });
+
+    const label = await withSession(fixture, () => recordOrderLabelPrintAction({
+      orderId: order.orderId,
+      clientEventId: labelPrintClientEventId,
+    }));
+    expect(label.code).toBe("OK");
+    if (label.code !== "OK") throw new Error(`H18_LABEL_PRINT_FAILED:${label.code}:${label.message}`);
+    const [labelRow] = await sql<{
+      order_id: string;
+      event_type: string;
+      description: string;
+      aggregate_version: number;
+    }[]>`
+      SELECT order_id, event_type, description, aggregate_version
+      FROM public.events
+      WHERE tenant_id=${KREILE_TENANT_SLUG}
+        AND client_event_id=${labelPrintClientEventId}::uuid
+    `;
+    expect(labelRow).toEqual({
+      order_id: order.orderId,
+      event_type: "laufzettel_gedruckt",
+      description: "Laufzettel gedruckt",
+      aggregate_version: 1,
+    });
+    const labelReplay = await withSession(fixture, () => recordOrderLabelPrintAction({
+      orderId: order.orderId,
+      clientEventId: labelPrintClientEventId,
+    }));
+    expect(labelReplay).toMatchObject({ code: "OK", replayed: true, receipt: { eventId: label.receipt.eventId } });
+    const labelView = await withSession(fixture, () => getLiveOrderCardAction({ orderId: order.orderId }));
+    expect(labelView).toMatchObject({
+      code: "OK",
+      data: { card: { labelPrints: [expect.objectContaining({ eventId: label.receipt.eventId })] } },
+    });
 
     const firstForward = await withSession(fixture, () => transitionWareneingangToGalvanikAction({
       orderId: order.orderId,

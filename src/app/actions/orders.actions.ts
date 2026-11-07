@@ -10,10 +10,13 @@ import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import {
   transitionWareneingangToGalvanik,
   correctGalvanikToWareneingang,
+  recordOrderLabelPrint,
   type OrderStationCommandInput,
   type OrderStationCommandResult,
   type OrderStationCorrectionCommandInput,
   type OrderStationCorrectionCommandResult,
+  type OrderLabelPrintCommandInput,
+  type OrderLabelPrintCommandResult,
 } from "@/lib/server/commands/orderStationCommand";
 import type {
   ConfigureExtraWorkCatalogInput,
@@ -84,6 +87,13 @@ export async function correctGalvanikToWareneingangAction(
   input: OrderStationCorrectionCommandInput,
 ): Promise<OrderStationCorrectionCommandResult> {
   return correctGalvanikToWareneingang(input);
+}
+
+/** Records the existing order timeline event after the browser print dialog closed. */
+export async function recordOrderLabelPrintAction(
+  input: OrderLabelPrintCommandInput,
+): Promise<OrderLabelPrintCommandResult> {
+  return recordOrderLabelPrint(input);
 }
 
 export async function changeOrderItemExtraWorkAction(
