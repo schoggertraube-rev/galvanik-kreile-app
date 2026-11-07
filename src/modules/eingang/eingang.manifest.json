@@ -141,7 +141,8 @@
     "@/modules/eingang/public#AssignmentPorts",
     "@/modules/eingang/server-public#importIntakeGraphMail",
     "@/modules/eingang/server-public#linkImportedMail",
-    "@/modules/eingang/server-public#readLinkedIntakeMails"
+    "@/modules/eingang/server-public#readLinkedIntakeMails",
+    "@/modules/eingang/server-public#readIntakeMailImportReceipt"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"

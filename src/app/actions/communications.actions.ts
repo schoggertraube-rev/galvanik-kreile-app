@@ -12,7 +12,7 @@ import {
 } from "@/lib/server/communicationPort";
 import { readMicrosoftGraphConfigurationStatus } from "@/lib/server/microsoftGraph";
 import { readQuoteAction, readQuotePdfAction } from "@/app/actions/quotes.actions";
-import {linkImportedMail,readLinkedIntakeMails} from '@/modules/eingang/server-public';
+import {linkImportedMail,readLinkedIntakeMails,readIntakeMailImportReceipt} from '@/modules/eingang/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
@@ -52,7 +52,7 @@ export async function attachOutlookMailAction(input: TargetInput & { graphMessag
   if(imported.code!=='OK')return imported;
   const linked=await linkImportedMail(authorizationResult.data,{itemId:imported.itemId,targetType:input.targetType,targetId:input.targetId},readCommunicationTargetInTransaction,readCustomerProfile);
   if(linked.code!=='OK')return linked;
-  const correspondence=await attachInboxMessage(authorizationResult.data,input);
+  const correspondence=await attachInboxMessage(authorizationResult.data,input,imported.message);
   return correspondence.code==='OK'?{...correspondence,data:{...correspondence.data,attachmentsImported:imported.originalCount,attachmentsSkipped:imported.filteredAttachments}}:correspondence;
 }
 
@@ -97,14 +97,18 @@ async function importIntakeMessage(auth:Parameters<typeof importIntakeGraphMail>
  const [mime,files]=await Promise.all([readMicrosoftGraphMime(mail.id),readMicrosoftGraphAttachments(mail.id)]);
  if(mime.code!=='OK')return mime;
  if(files.code!=='OK')return files;
- const result=await importIntakeGraphMail(auth,mail,[{key:'mime',name:'Original.eml',mime:'message/rfc822',bytes:mime.data},...files.data.attachments.map(file=>({key:file.id,name:file.filename,mime:file.contentType,bytes:file.bytes}))],readCommunicationImportContext);
- return result.code==='OK'?{...result,originalCount:files.data.attachments.length,filteredAttachments:files.data.skipped}:result;
+ const result=await importIntakeGraphMail(auth,mail,[{key:'mime',name:'Original.eml',mime:'message/rfc822',bytes:mime.data},...files.data.attachments.map(file=>({key:file.id,name:file.filename,mime:file.contentType,bytes:file.bytes}))],readCommunicationImportContext,files.data.skipped);
+ if(result.code!=='OK')return result;
+ const saved=await readIntakeMailImportReceipt(auth,{itemId:result.itemId});
+ return saved.code==='OK'?{...saved,replayed:result.replayed}:saved;
 }
 export async function importOutlookMailAction(graphMessageId:string){
  const authorization=await resolveAuthorization();
  if(!authorization.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung nicht verfügbar.'};
  if(!hasAuthorizationArea(authorization.data,'eingang')||!hasAuthorizationArea(authorization.data,'mails'))return {code:'FORBIDDEN' as const,message:'Mail-Import benötigt Eingang und Mails.'};
  if(typeof graphMessageId!=='string'||!graphMessageId||graphMessageId.length>1024)return {code:'VALIDATION_ERROR' as const,message:'Mailkennung ungültig.'};
+ const saved=await readIntakeMailImportReceipt(authorization.data,{graphMessageId});
+ if(saved.code!=='NOT_FOUND')return saved;
  const mail=await readMicrosoftGraphMessage(graphMessageId);
  if(mail.code!=='OK')return mail;
  return importIntakeMessage(authorization.data,mail.data);

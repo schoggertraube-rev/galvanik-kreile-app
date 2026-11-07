@@ -179,6 +179,10 @@ it('imports one MIME + inline/non-inline originals via the real UI action, rerea
  expect(await withSession(full,()=>attachOutlookMailAction({targetType:'ORDER',targetId:order.receipt.orderId,graphMessageId:graphId}))).toMatchObject({code:'CONFLICT'});
  expect((await sql`SELECT kunde_id,vorgang_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${row.id}::uuid`)[0]).toMatchObject({kunde_id:movedCustomerId,vorgang_id:null});
  offline=true;
+ const callsBeforeCached=providerCalls;
+ expect(await withSession(full,()=>importOutlookMailAction(graphId))).toMatchObject({code:'OK',itemId:row.id,replayed:true});
+ expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:movedCustomerId,graphMessageId:graphId}))).toMatchObject({code:'OK'});
+ expect(providerCalls).toBe(callsBeforeCached);
  const retained=await withSession(full,()=>getOpenIntakeMailsAction());expect(retained).toMatchObject({code:'OK',notice:expect.any(String)});if(retained.code==='OK')expect(retained.mails.some(mail=>mail.id===row.id)).toBe(false);
  expect(await withSession(full,()=>listOutlookInboxAction({targetType:'CUSTOMER',targetId:movedCustomerId}))).toMatchObject({code:'OK',data:[expect.objectContaining({id:graphId})]});
 });

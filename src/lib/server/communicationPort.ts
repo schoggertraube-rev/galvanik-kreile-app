@@ -7,7 +7,6 @@ import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } fro
 import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphConfigurationStatus,
-  readMicrosoftGraphMessage,
   sendMicrosoftGraphMail,
   type GraphInboxMessage,
   type GraphMailAttachment,
@@ -150,6 +149,7 @@ export async function readLinkedCommunicationMessages(
 export async function attachInboxMessage(
   auth: AuthorizationSnapshot,
   input: { targetType: TargetType; targetId: string; graphMessageId: string },
+  persistedMessage:GraphInboxMessage,
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || typeof input.graphMessageId !== "string" || input.graphMessageId.length < 1 || input.graphMessageId.length > 1024) {
     return { code: "VALIDATION_ERROR", message: "Mail oder Zuordnung ist ungültig." };
@@ -160,8 +160,7 @@ export async function attachInboxMessage(
     return null;
   });
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
-  const graph = await readMicrosoftGraphMessage(input.graphMessageId);
-  if (graph.code !== "OK") return graph;
+  const graph = {code:'OK' as const,data:persistedMessage};
   const source = `MS_GRAPH_IN:${graph.data.id}`;
   try {
     const stored = await withPrivilegedTenantTransaction(auth, async (tx) => {
