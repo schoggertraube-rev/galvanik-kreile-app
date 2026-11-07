@@ -48,6 +48,13 @@ Sichtlauf und die CI-Prüfungen des PR-Kopfs stehen noch aus.
   Ablaufbereiche erweitert: Eingang, Kundenanlage und -bearbeitung, Ware,
   Mail-Eingang, Eingangsrechnung, Original, Nachrichten, Anliegenwahl und
   Entwurf. Ihr vollständiger Lauf am endgültigen Kopf steht noch aus.
+- Der vorgezogene Sichtlauf auf dem produktidentischen Stand `27e7d6ba`
+  ergab 2 grüne, 103 gelbe und 15 rote Seiten-/Gerätekombinationen. Gelbe
+  Fälle umfassen nicht hinterlegte echte Routen. Unter den roten Befunden sind
+  doppelte Beispiel- und zustandsabhängige Sollwerte (P107), aber auch echte
+  Abweichungen. Die überlagernden Prüflistentexte und die fehlende Aktion
+  „Kunde anlegen“ bei vorhandenen Kunden wurden gezielt korrigiert; der
+  erneute Sichtlauf auf dem endgültigen Kopf bleibt Pflicht.
 - Der bisherige CI-Lauf auf `e57f8b5a` meldete E01 und im vollständigen
   Replay den bereits früher beobachteten Tablet-Navigationsfehler nach
   `/settings`. Für den neuen Kopf sind beide Prüfungen erneut offen. Die

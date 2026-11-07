@@ -2642,7 +2642,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   {requiredIntakeChecks.map((entry) => <button className={`ev-pl-z ev-pl-z--${entry.complete ? "gruen" : entry.pending ? "navy" : "warn"}`} data-spec-id={`eingang.pruefliste.${entry.id}`} type="button" key={entry.id} data-state={entry.complete ? "ok" : entry.decision?"entscheiden":entry.pending ? "pending" : "open"} onClick={() => jumpToIntakeCheck(entry)}>
                     <Icon name={entry.complete ? "check" : "alert"} />
                     <span><strong>{entry.label}</strong><small>{entry.detail}</small></span>
-                    <Chip text={entry.complete ? "ok" : entry.decision ? `${entry.label} klären` : entry.pending ? `${entry.label} bestätigen` : `${entry.label} ${["bezeichnung","menge","preis"].includes(entry.id) ? "eintragen" : entry.id === "geprueft" ? "bestätigen" : "wählen"}`} ton={entry.complete ? "ok" : "warn"} />
+                    {entry.complete ? <Chip text="ok" ton="ok" /> : null}
                   </button>)}
                 </div>
                 {intakeChecklist.some((entry) => entry.warning) ? <div>

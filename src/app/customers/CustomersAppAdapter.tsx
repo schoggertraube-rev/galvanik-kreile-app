@@ -6,7 +6,7 @@ import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { CustomerListItem, CustomersViewState } from "@/modules/customers/public";
-import { Kundenzeile, SeitenKopf, SuchFeld, Zustand } from "@/ui/kr";
+import { Button, Kundenzeile, SeitenKopf, SuchFeld, Zustand } from "@/ui/kr";
 
 function normalize(value: string) {
   return value.trim().toLocaleLowerCase("de-DE");
@@ -107,7 +107,7 @@ export function CustomersAppAdapter() {
   </section>;
 
   return <section data-testid="customers-v11">
-    <SeitenKopf titel="Kunden & Kontakt" />
+    <SeitenKopf titel="Kunden & Kontakt" werkzeug={createAction ? <Button art="primaer" icon={createAction.icon} text={createAction.text} onClick={createAction.onClick} /> : undefined} />
     <div className="kr-stapel">
       <SuchFeld wert={query} onWert={setQuery} platzhalter="Name, Ort, Auftrag oder Stichwort" />
       {customers.length ? <div className="kr-stapel" style={{ gap: 8 }}>
@@ -119,7 +119,7 @@ export function CustomersAppAdapter() {
           karte
           onOeffnen={() => openCustomer(customer.id)}
         />)}
-      </div> : <Zustand art="leer" text={`Kein Kunde für „${query}“.`} aktion={createAction} />}
+      </div> : <Zustand art="leer" text={`Kein Kunde für „${query}“.`} />}
     </div>
   </section>;
 }

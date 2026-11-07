@@ -305,7 +305,9 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     for (const id of ["kunde", "art", "terminstatus", "eingangsart", "einheit"]) {
       expect(document.querySelector(`[data-spec-id="eingang.pruefliste.${id}"]`)).toHaveAttribute("data-state", "open");
     }
-    expect(document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]')).toHaveTextContent("Kunde wählen");
+    const customerCheck = document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]');
+    expect(customerCheck).toHaveTextContent("Kunde wählen");
+    expect(within(customerCheck as HTMLElement).getAllByText("Kunde wählen")).toHaveLength(1);
     expect(document.querySelector('[data-spec-id="eingang.pruefliste.einheit"]')).toHaveTextContent("Einheit wählen");
 
     await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
