@@ -85,7 +85,7 @@ export function CommunicationPanel({ targetType, targetId }: Target) {
     const result = await attachOutlookMailAction({ targetType, targetId, graphMessageId: mail.id });
     setBusyId(null);
     setFeedback(result.code === "OK"
-      ? ["Mail ist am Vorgang abgelegt.", result.data.attachmentsImported ? `${result.data.attachmentsImported} Anhang/Anhänge wurden privat gespeichert.` : "", result.data.attachmentsSkipped ? `${result.data.attachmentsSkipped} nicht unterstützte/inline Anhänge wurden nicht übernommen.` : "", result.data.attachmentWarning ?? ""].filter(Boolean).join(" ")
+      ? ["Mail ist am Vorgang abgelegt.", result.data.attachmentsImported ? `${result.data.attachmentsImported} Anhang/Anhänge wurden privat gespeichert.` : "", result.data.attachmentsSkipped ? `${result.data.attachmentsSkipped} Signatur- oder nicht einzeln unterstützte Anhänge bleiben im Mail-Original.` : "", result.data.attachmentWarning ?? ""].filter(Boolean).join(" ")
       : result.message);
   };
   const captureMail=async(mail:InboxMessage,intent:'CUSTOMER'|'QUOTE')=>{

@@ -156,6 +156,7 @@ it('imports one MIME + inline/non-inline originals via the real UI action, rerea
  const beforeScans=await sql`SELECT count(*)::integer AS n FROM public.scan_uploads`;
  const attached=await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:customerId,graphMessageId:graphId}));
  expect(attached.code,attached.code==='OK'?'OK':attached.message).toBe('OK');
+ expect(attached).toMatchObject({code:'OK',data:{attachmentsImported:2,attachmentsSkipped:1}});
  expect(await withSession(full,()=>listOutlookInboxAction({targetType:'CUSTOMER',targetId:customerId}))).toMatchObject({code:'OK',data:[expect.objectContaining({id:graphId})]});
  expect((await sql`SELECT kunde_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${row.id}::uuid`)[0].kunde_id).toBe(customerId);
  expect((await sql`SELECT art FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${row.id}::uuid AND art='zugeordnet'`).length).toBe(1);

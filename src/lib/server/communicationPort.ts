@@ -150,7 +150,6 @@ export async function readLinkedCommunicationMessages(
 export async function attachInboxMessage(
   auth: AuthorizationSnapshot,
   input: { targetType: TargetType; targetId: string; graphMessageId: string },
-  securedOriginalCount=0,
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || typeof input.graphMessageId !== "string" || input.graphMessageId.length < 1 || input.graphMessageId.length > 1024) {
     return { code: "VALIDATION_ERROR", message: "Mail oder Zuordnung ist ungültig." };
@@ -197,7 +196,7 @@ export async function attachInboxMessage(
       return { code: "OK" as const, data: { threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(threads[0].created_at), replayed: false } };
     });
     if (stored.code !== "OK") return stored;
-    return {code:'OK',data:{...stored.data,attachmentsImported:securedOriginalCount,attachmentsSkipped:0}};
+    return stored;
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_ATTACH_FAILED", error);
     return { code: "UNAVAILABLE", message: "Die Mail konnte nicht sicher am Vorgang abgelegt werden." };

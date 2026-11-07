@@ -52,7 +52,8 @@ export async function attachOutlookMailAction(input: TargetInput & { graphMessag
   if(imported.code!=='OK')return imported;
   const linked=await linkImportedMail(authorizationResult.data,{itemId:imported.itemId,targetType:input.targetType,targetId:input.targetId},readCommunicationTargetInTransaction,readCustomerProfile);
   if(linked.code!=='OK')return linked;
-  return attachInboxMessage(authorizationResult.data,input,imported.originalCount);
+  const correspondence=await attachInboxMessage(authorizationResult.data,input);
+  return correspondence.code==='OK'?{...correspondence,data:{...correspondence.data,attachmentsImported:imported.originalCount,attachmentsSkipped:imported.filteredAttachments}}:correspondence;
 }
 
 export async function sendCustomerMailAction(input: TargetInput & {
@@ -97,7 +98,7 @@ async function importIntakeMessage(auth:Parameters<typeof importIntakeGraphMail>
  if(mime.code!=='OK')return mime;
  if(files.code!=='OK')return files;
  const result=await importIntakeGraphMail(auth,mail,[{key:'mime',name:'Original.eml',mime:'message/rfc822',bytes:mime.data},...files.data.attachments.map(file=>({key:file.id,name:file.filename,mime:file.contentType,bytes:file.bytes}))],readCommunicationImportContext);
- return result.code==='OK'?{...result,originalCount:files.data.attachments.length}:result;
+ return result.code==='OK'?{...result,originalCount:files.data.attachments.length,filteredAttachments:files.data.skipped}:result;
 }
 export async function importOutlookMailAction(graphMessageId:string){
  const authorization=await resolveAuthorization();
