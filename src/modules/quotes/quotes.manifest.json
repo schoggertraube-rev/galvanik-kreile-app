@@ -35,7 +35,9 @@
     "@/modules/quotes/server-public#readQuoteCreateReceiptCommand",
     "@/modules/quotes/server-public#readQuoteUpdateReceiptCommand",
     "@/modules/quotes/server-public#readQuoteConversionReceiptCommand",
-    "@/modules/quotes/server-public#updateQuoteCommand"
+    "@/modules/quotes/server-public#updateQuoteCommand",
+    "@/modules/quotes/server-public#changeQuoteLifecycleCommand",
+    "@/modules/quotes/server-public#QuoteLifecycleInput"
   ],
   "capabilities": [
     "quotes:create",
@@ -72,7 +74,8 @@
     "emits": [
       "QUOTE_AWARDED_V1",
       "QUOTE_CREATED_V1",
-      "QUOTE_UPDATED_V1"
+      "QUOTE_UPDATED_V1",
+      "QUOTE_LIFECYCLE_V04"
     ],
     "consumes": [
       "ORDER_INTAKE_CREATED_V1"

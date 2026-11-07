@@ -29,6 +29,12 @@ const TERM_STATUS_VALUES = ["wunsch", "bestaetigt", "verschoben"] as const;
 const INTAKE_SOURCE_VALUES = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"] as const;
 
 type QuoteRow = {
+  fassung?:number;
+  derived_status?:string;
+  gesendet_fassung?:number|null; gesendet_am?:Date|string|null; gesendet_kanal?:string|null;
+  zugesagt_fassung?:number|null; zugesagt_am?:Date|string|null; zusage_nachweis?:string|null;
+  abgesagt_am?:Date|string|null; absage_grund?:string|null; nachfass_am?:Date|string|null;
+  quelle_intake_item_id?:string|null; quelle_nachricht_id?:string|null; sonderwuensche?:string|null;
   quote_id: string;
   tenant_id: string;
   quote_number: string;
@@ -256,6 +262,15 @@ function parsePositions(value: unknown): QuotePosition[] | null {
 }
 
 function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
+  let lifecycle:QuoteReadback['lifecycle'];
+  if (row.fassung!==undefined) {
+    if (!Number.isSafeInteger(row.fassung)||row.fassung<1||!['entwurf','versendet','geaendert_seit_versand','zugesagt','umgewandelt','abgesagt','abgelaufen'].includes(row.derived_status??'')) return null;
+    for (const value of [row.gesendet_fassung,row.zugesagt_fassung]) if (value!==null&&(!Number.isSafeInteger(value)||Number(value)<1||Number(value)>row.fassung)) return null;
+    for (const value of [row.gesendet_am,row.zugesagt_am,row.abgesagt_am]) if (value!==null&&(!value||!iso(value))) return null;
+    if (![null,'mail','druck'].includes(row.gesendet_kanal===undefined?'missing':row.gesendet_kanal)||[row.quelle_intake_item_id,row.quelle_nachricht_id].some(value=>value!==null&&(typeof value!=='string'||!UUID_PATTERN.test(value)))) return null;
+    if ((row.gesendet_fassung===null)!==(row.gesendet_am===null)||(row.gesendet_fassung===null)!==(row.gesendet_kanal===null)||(row.zugesagt_fassung===null)!==(row.zugesagt_am===null)||(row.zugesagt_fassung===null)!==(row.zusage_nachweis===null)) return null;
+    lifecycle={edition:row.fassung,stage:row.derived_status as NonNullable<QuoteReadback['lifecycle']>['stage'],sentEdition:row.gesendet_fassung!,sentAt:iso(row.gesendet_am!),sentChannel:row.gesendet_kanal as 'mail'|'druck'|null,acceptedEdition:row.zugesagt_fassung!,acceptedAt:iso(row.zugesagt_am!),acceptanceEvidence:row.zusage_nachweis!,declinedAt:iso(row.abgesagt_am!),declineReason:row.absage_grund!,followupAt:row.nachfass_am===null?null:row.nachfass_am instanceof Date?row.nachfass_am.toISOString().slice(0,10):String(row.nachfass_am).slice(0,10),sourceItemId:row.quelle_intake_item_id!,sourceMessageId:row.quelle_nachricht_id!,specialRequests:row.sonderwuensche!};
+  }
   const positions = parsePositions(row.positions);
   const createdAt = iso(row.created_at);
   const updatedAt = iso(row.updated_at);
@@ -274,7 +289,7 @@ function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
     || !["draft", "converted"].includes(row.status) || !Number.isSafeInteger(row.version) || row.version < 1
     || row.currency !== "EUR" || !UUID_PATTERN.test(row.created_by)) return null;
   return {
-    quoteId: row.quote_id, quoteNumber: row.quote_number, customerId: row.customer_id,
+    ...(lifecycle?{lifecycle}:{}),quoteId: row.quote_id, quoteNumber: row.quote_number, customerId: row.customer_id,
     customerNumber: row.customer_number, customerDisplayName: row.customer_display_name,
     status: row.status as QuoteReadback["status"], version: row.version, currency: "EUR",
     dueDate, validUntil, termStatus: row.intake_term_status as QuoteReadback["termStatus"],
@@ -293,7 +308,7 @@ function diagnostic(error: unknown, key: "message" | "details" | "hint"): string
   return /\b(?:select|insert|update|delete)\b|params:/i.test(value) ? "DATABASE_OPERATION_FAILED" : value.replace(/\s+/g, " ").slice(0, 500);
 }
 
-async function readQuote(tx: PrivilegedTenantTransaction, tenantId: string, quoteId: string): Promise<QuoteReadback | null> {
+export async function readQuote(tx: PrivilegedTenantTransaction, tenantId: string, quoteId: string): Promise<QuoteReadback | null> {
   const rows = await tx.execute<QuoteRow>(sql`SELECT * FROM private.v_quotes_v1 WHERE quote_id = ${quoteId}::uuid LIMIT 2`);
   if (rows.length === 0) return null;
   if (rows.length !== 1 || !rows[0]) throw new Error("QUOTE_READBACK_AMBIGUOUS");

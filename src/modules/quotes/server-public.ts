@@ -9,6 +9,8 @@ export {
   readQuoteConversionReceiptCommand,
 } from "./server/quoteCommands";
 export { listOpenQuotesCommand, readQuoteCommand } from "./server/quoteReads";
+export { changeQuoteLifecycleCommand } from './server/quoteLifecycle';
+export type { QuoteLifecycleInput } from './server/quoteLifecycle';
 export type {
   ConvertQuoteInput,
   CreateQuoteInput,

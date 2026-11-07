@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "246b5a79c82324114744e7b5485edaae5e36f17f8e8f25b381be58b26a9ea049",
+  "inventorySha256": "8efcc0ed98b5bd980939fc64a10c806c3501575f73158584998d6901c25d6775",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -42,10 +42,12 @@
       "src/test/h18_quote_actions.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#createQuoteAction": [
-      "src/test/h18_quote_actions.integration.test.ts"
+      "src/test/h18_quote_actions.integration.test.ts",
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#updateQuoteAction": [
-      "src/test/h18_quote_actions.integration.test.ts"
+      "src/test/h18_quote_actions.integration.test.ts",
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#changeOrderPromisedDueDateAction": [
       "src/test/h18_settings_actions.integration.test.ts"
@@ -204,6 +206,9 @@
     ],
     "src/app/actions/eingang.actions.ts#createIntakeContinuationAction": [
       "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#changeQuoteLifecycleAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

@@ -59,6 +59,13 @@ export type QuotePosition = QuotePositionInput & {
 };
 
 export type QuoteReadback = {
+  lifecycle?: {
+    edition:number; stage:'entwurf'|'versendet'|'geaendert_seit_versand'|'zugesagt'|'umgewandelt'|'abgesagt'|'abgelaufen';
+    sentEdition:number|null; sentAt:string|null; sentChannel:'mail'|'druck'|null;
+    acceptedEdition:number|null; acceptedAt:string|null; acceptanceEvidence:string|null;
+    declinedAt:string|null; declineReason:string|null; followupAt:string|null;
+    sourceItemId:string|null; sourceMessageId:string|null; specialRequests:string|null;
+  };
   quoteId: string;
   quoteNumber: string;
   customerId: string;

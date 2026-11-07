@@ -15,6 +15,8 @@ import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
 import { readCompanyDocumentSettings } from "@/modules/fundament/server-public";
 import {
   createQuoteCommand,
+  changeQuoteLifecycleCommand,
+  type QuoteLifecycleInput,
   listOpenQuotesCommand,
   prepareQuoteConversionCommand,
   readQuoteCommand,
@@ -49,6 +51,24 @@ function authorizationFailure(result: Awaited<ReturnType<typeof resolveAuthoriza
   return result.reason === "AUTHORIZATION_UNAVAILABLE"
     ? { code: "UNAVAILABLE" as const, message: "KV-Funktion ist derzeit nicht verfügbar." }
     : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+}
+
+export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput) {
+  try {
+    const auth=await resolveAuthorization();
+    const failure=authorizationFailure(auth);
+    if (failure||!auth.ok) return failure!;
+    const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input);
+    if (result.code==='OK') {
+      revalidatePath('/');
+      revalidatePath('/customers');
+      revalidatePath(`/customers/${result.quote.customerId}`);
+    }
+    return result;
+  } catch (error) {
+    console.error('[QUOTE_LIFECYCLE_ACTION_FAILED]',error instanceof Error?error.name:'UnknownError');
+    return {code:'UNAVAILABLE' as const,message:'KV-Entscheidung konnte nicht sicher bestätigt werden.'};
+  }
 }
 
 export async function createQuoteAction(input: CreateQuoteInput) {

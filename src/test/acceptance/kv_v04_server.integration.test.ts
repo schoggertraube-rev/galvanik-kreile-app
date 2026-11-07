@@ -133,3 +133,28 @@ describe('KV V04 exact line contract through real Actions, DB, events and view',
   expect(await withSession(fixture,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:2,totalNetCents:1001}});
  });
 });
+
+it('KV-04/05 records sent edition, acceptance evidence, changes and decline through the real lifecycle Action',async()=>{
+ const fixture=await createFixture();
+ const {createQuoteAction,readQuoteAction,updateQuoteAction,changeQuoteLifecycleAction}=await import('@/app/actions/quotes.actions');
+ const position={name:'TEST Editionsteil',quantity:3,material:'Stahl',surfaceRequested:'verchromen',unitPriceCents:333,lineTotalCents:1000};
+ const create=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST edition',positions:[position]}));
+ if(create.code!=='OK')throw Error('KV_CREATE:'+create.code);
+ const quoteId=create.quote.quoteId;
+ const sent={action:'sent' as const,channel:'druck' as const,evidence:'TEST Ausdruck persönlich übergeben',quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1};
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction(sent))).toMatchObject({code:'OK',quote:{version:2,lifecycle:{edition:1,sentEdition:1,sentChannel:'druck',stage:'versendet'}}});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction(sent))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({...sent,evidence:'TEST anders'}))).toMatchObject({code:'CONFLICT'});
+ const accepted={action:'accept' as const,evidence:'TEST telefonisch aktuelle Fassung bestätigt',quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1};
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction(accepted))).toMatchObject({code:'OK',quote:{version:3,lifecycle:{stage:'zugesagt',acceptedEdition:1,acceptanceEvidence:accepted.evidence}}});
+ const [proof]=await sql`SELECT q.fassung,q.gesendet_fassung,q.zugesagt_fassung,q.zusage_nachweis,e.event_type FROM private.quotes q JOIN public.events e ON e.tenant_id=q.tenant_id AND e.client_event_id=${accepted.clientEventId}::uuid WHERE q.tenant_id=${KREILE_TENANT_SLUG} AND q.id=${quoteId}::uuid`;
+ expect(proof).toMatchObject({fassung:1,gesendet_fassung:1,zugesagt_fassung:1,zusage_nachweis:accepted.evidence,event_type:'QUOTE_LIFECYCLE_V04'});
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:3,lifecycle:{stage:'zugesagt'}}});
+ expect(await withSession(fixture,()=>updateQuoteAction({quoteId,clientEventId:randomUUID(),expectedVersion:3,dueDate:'2027-04-21',note:'TEST changed edition',positions:[{...position,lineTotalCents:1100}]}))).toMatchObject({code:'OK',quote:{version:4,lifecycle:{edition:2,acceptedEdition:1,stage:'geaendert_seit_versand'}}});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({...accepted,clientEventId:randomUUID(),expectedVersion:4}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:4,totalNetCents:1100,lifecycle:{edition:2,stage:'geaendert_seit_versand'}}});
+ const rejected={action:'reject' as const,reason:'TEST Kunde hat Projekt abgesagt',quoteId,clientEventId:randomUUID(),expectedVersion:4,edition:2};
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction(rejected))).toMatchObject({code:'OK',quote:{version:5,lifecycle:{stage:'abgesagt',declineReason:rejected.reason}}});
+ expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${rejected.clientEventId}::uuid AND event_type='QUOTE_LIFECYCLE_V04'`)[0].n).toBe(1);
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:5,lifecycle:{stage:'abgesagt'}}});
+});
