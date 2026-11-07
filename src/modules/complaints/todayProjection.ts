@@ -14,11 +14,11 @@ export function complaintAttention(rows:readonly Complaint[],areas:readonly Acce
     if(row.stand==='aufgenommen'&&areas.includes('entscheiden'))add('reklamation_entscheiden',`Reklamation ${order} · ${defect} · Ergebnis festlegen`,`${customer} · ${defect} · ${age}`,'decision','Ergebnis festlegen');
     if(row.stand==='massnahme_gutschrift'&&areas.includes('geld'))add('reklamation_gutschrift',`Gutschrift ${row.gutschriftBetrag?new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(Number(row.gutschriftBetrag)):'Betrag fehlt'} · ${customer}`,`Reklamation ${order}`,'decision','Gutschrift erteilen');
     if(row.stand==='kunde_informieren'&&areas.includes('kunden'))add('reklamation_informieren',`Reklamation ${order} · Kunde informieren`,`${customer} · ${row.bewertung??'Bewertung fehlt'}`,'warning','Kunde informieren');
-    if(row.stand==='massnahme_nacharbeit'&&areas.includes('entscheiden'))add('reklamation_laeuft',overdue?`Reklamation ${order} seit ${days} Tagen offen`:`Reklamation ${order} · Nacharbeit läuft`,`${customer} · ${defect} · ${age} · ${row.reworkNumber??'Nacharbeitsnummer fehlt'} ${row.reworkStation??'Station fehlt'}`,overdue?'conflict':'warning','Öffnen');
     if(row.stand==='massnahme_nacharbeit'&&row.reworkGoods==='erwartet'&&row.reworkGoodsSince&&row.nacharbeitAuftragId&&areas.includes('kunden')){
       const waiting=workingDaysBetween(berlinCalendarDay(new Date(row.reworkGoodsSince)),today);
-      if(waiting!==null&&waiting>=10)add('nacharbeit_ware_fehlt',`Nacharbeit · Ware fehlt seit ${waiting} Tagen`,`Reklamation ${row.nummer??'Nummer fehlt'} · ${customer}`,'warning','Kunde erinnern',{screen:'mail',arg:row.nacharbeitAuftragId+'#auftragsbestaetigung'});
+      if(waiting!==null&&waiting>=10){add('nacharbeit_ware_fehlt',`Nacharbeit · Ware fehlt seit ${waiting} Tagen`,`Reklamation ${row.nummer??'Nummer fehlt'} · ${customer}`,'warning','Kunde erinnern',{screen:'mail',arg:row.nacharbeitAuftragId+'#auftragsbestaetigung'});continue;}
     }
+    if(row.stand==='massnahme_nacharbeit'&&areas.includes('entscheiden'))add('reklamation_laeuft',overdue?`Reklamation ${order} seit ${days} Tagen offen`:`Reklamation ${order} · Nacharbeit läuft`,`${customer} · ${defect} · ${age} · ${row.reworkNumber??'Nacharbeitsnummer fehlt'} ${row.reworkStation??'Station fehlt'}`,overdue?'conflict':'warning','Öffnen');
   }
   return items;
 }
