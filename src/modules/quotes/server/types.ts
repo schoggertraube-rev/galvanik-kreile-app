@@ -67,6 +67,7 @@ export type QuoteReadback = {
     sentEdition:number|null; sentAt:string|null; sentChannel:'mail'|'druck'|null;
     acceptedEdition:number|null; acceptedAt:string|null; acceptanceEvidence:string|null;
     conditional?:{edition:number;recordedAt:string;reason:string}|null;
+    goods?:Array<{id:string;orderId:string|null;edition:number;location:string;blocked:boolean;version:number}>;
     declinedAt:string|null; declineReason:string|null; followupAt:string|null;
     sourceItemId:string|null; sourceMessageId:string|null; specialRequests:string|null;deliveryWeeks:number|null;
   };

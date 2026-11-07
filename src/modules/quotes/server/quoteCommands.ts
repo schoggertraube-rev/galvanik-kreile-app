@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import {readQuoteGoodsSummaries} from "@/lib/server/quoteGoodsContextPort";
 import { sql } from "drizzle-orm";
 import { normaliseOrderPositionSurface, orderPositionSurfaceLabel, orderPositionUnitLabel, orderPositionQuantityError, orderPositionPriceError } from "@/lib/orderPositionContract";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -323,6 +324,7 @@ export async function readQuote(tx: PrivilegedTenantTransaction, tenantId: strin
   if (rows.length !== 1 || !rows[0]) throw new Error("QUOTE_READBACK_AMBIGUOUS");
   const quote = quoteFromRow(rows[0], tenantId);
   if (!quote) throw new Error("QUOTE_READBACK_INVALID");
+  if(quote.lifecycle)quote.lifecycle.goods=await readQuoteGoodsSummaries(tx,tenantId,quoteId);
   return quote;
 }
 
@@ -330,8 +332,8 @@ export type QuoteSourceBinding=(tx:PrivilegedTenantTransaction,input:{source:Non
 class QuoteSourceFailure extends Error {constructor(readonly result:Exclude<CreateQuoteResult,{code:'OK'}>){super(result.message);}}
 export async function createQuoteCommand(authorization: QuoteCommandContext, input: unknown,bindSource?:QuoteSourceBinding): Promise<CreateQuoteResult> {
   const normalized = normalizeCreate(input);
-  if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollstÃƒÂ¤ndig oder ungÃƒÂ¼ltig." };
-  if (!authorization.capabilities.canCreateQuote) return { code: "FORBIDDEN", message: "KVs dÃƒÂ¼rfen mit dieser Rolle nicht angelegt werden." };
+  if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollständig oder ungültig." };
+  if (!authorization.capabilities.canCreateQuote) return { code: "FORBIDDEN", message: "KVs dürfen mit dieser Rolle nicht angelegt werden." };
   const intentSha256 = hashQuoteWriteIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
@@ -346,13 +348,13 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
       const outcome = result.length === 1 ? result[0] : null;
       if (!outcome || outcome.result_code !== "OK" || !outcome.result_quote_id || !UUID_PATTERN.test(outcome.result_quote_id)) {
         if (outcome?.result_code === "CONFLICT" || outcome?.result_code === "NOT_FOUND" || outcome?.result_code === "VALIDATION_ERROR") {
-          return { code: outcome.result_code, message: outcome.result_code === "CONFLICT" ? "Anfragekennung wurde bereits anders verwendet." : outcome.result_code === "NOT_FOUND" ? "Kunde ist nicht verfÃƒÂ¼gbar." : "KV-Daten sind ungÃƒÂ¼ltig." };
+          return { code: outcome.result_code, message: outcome.result_code === "CONFLICT" ? "Anfragekennung wurde bereits anders verwendet." : outcome.result_code === "NOT_FOUND" ? "Kunde ist nicht verfügbar." : "KV-Daten sind ungültig." };
         }
         throw new Error("QUOTE_CREATE_RESULT_INVALID");
       }
       if (!outcome.replayed) {
         if (normalized.source) {
-          if (!bindSource) throw new QuoteSourceFailure({code:'UNAVAILABLE',message:'QuellverknÃƒÂ¼pfung ist nicht verfÃƒÂ¼gbar. Nichts gespeichert.'});
+          if (!bindSource) throw new QuoteSourceFailure({code:'UNAVAILABLE',message:'Quellverknüpfung ist nicht verfügbar. Nichts gespeichert.'});
           const failure=await bindSource(tx,{source:normalized.source,quoteId:outcome.result_quote_id,customerId:normalized.customerId,clientEventId:normalized.clientEventId});
           if (failure) throw new QuoteSourceFailure(failure);
         }
@@ -386,12 +388,12 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
 }
 
 export async function readQuoteCommand(authorization: QuoteCommandContext, input: { quoteId: string }): Promise<ReadQuoteResult> {
-  if (!plainObject(input) || !exactKeys(input, ["quoteId"]) || typeof input.quoteId !== "string" || !UUID_PATTERN.test(input.quoteId)) return { code: "VALIDATION_ERROR", message: "KV-Kennung ist ungÃƒÂ¼ltig." };
+  if (!plainObject(input) || !exactKeys(input, ["quoteId"]) || typeof input.quoteId !== "string" || !UUID_PATTERN.test(input.quoteId)) return { code: "VALIDATION_ERROR", message: "KV-Kennung ist ungültig." };
   if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht gelesen werden." };
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const quote = await readQuote(tx, authorization.tenantId, input.quoteId);
-      return quote ? { code: "OK", quote } : { code: "NOT_FOUND", message: "KV ist nicht verfÃƒÂ¼gbar." };
+      return quote ? { code: "OK", quote } : { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
     });
   } catch (error) {
     console.error("quote_read_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
@@ -401,7 +403,7 @@ export async function readQuoteCommand(authorization: QuoteCommandContext, input
 
 /** Lists only the caller's tenant-bound draft aggregates. */
 export async function listOpenQuotesCommand(authorization: QuoteCommandContext): Promise<ListOpenQuotesResult> {
-  if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Offene KVs dÃƒÂ¼rfen mit dieser Rolle nicht gelesen werden." };
+  if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Offene KVs dürfen mit dieser Rolle nicht gelesen werden." };
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<QuoteRow>(sql`SELECT * FROM private.v_open_quotes_v1 ORDER BY updated_at DESC, quote_number ASC LIMIT 100`);
@@ -417,8 +419,8 @@ export async function listOpenQuotesCommand(authorization: QuoteCommandContext):
 
 export async function updateQuoteCommand(authorization: QuoteCommandContext, input: unknown): Promise<UpdateQuoteResult> {
   const normalized = normalizeUpdate(input);
-  if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollstÃƒÂ¤ndig oder ungÃƒÂ¼ltig." };
-  if (!authorization.capabilities.canUpdateQuote) return { code: "FORBIDDEN", message: "KVs dÃƒÂ¼rfen mit dieser Rolle nicht bearbeitet werden." };
+  if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollständig oder ungültig." };
+  if (!authorization.capabilities.canUpdateQuote) return { code: "FORBIDDEN", message: "KVs dürfen mit dieser Rolle nicht bearbeitet werden." };
   const intentSha256 = hashQuoteWriteIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
@@ -432,7 +434,7 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
       const outcome = result.length === 1 ? result[0] : null;
       if (!outcome || outcome.result_code !== "OK" || outcome.result_quote_id !== normalized.quoteId) {
         if (outcome?.result_code === "CONFLICT" || outcome?.result_code === "NOT_FOUND" || outcome?.result_code === "VALIDATION_ERROR") {
-          return { code: outcome.result_code, message: outcome.result_code === "CONFLICT" ? "Der KV wurde zwischenzeitlich geÃƒÂ¤ndert oder diese Kennung anders verwendet." : outcome.result_code === "NOT_FOUND" ? "KV ist nicht verfÃƒÂ¼gbar." : "KV-Daten sind ungÃƒÂ¼ltig." };
+          return { code: outcome.result_code, message: outcome.result_code === "CONFLICT" ? "Der KV wurde zwischenzeitlich geändert oder diese Kennung anders verwendet." : outcome.result_code === "NOT_FOUND" ? "KV ist nicht verfügbar." : "KV-Daten sind ungültig." };
         }
         throw new Error("QUOTE_UPDATE_RESULT_INVALID");
       }
@@ -467,7 +469,7 @@ export async function readQuoteCreateReceiptCommand(
   input: unknown,
 ): Promise<ReadQuoteCreateReceiptResult> {
   const normalized = normalizeCreate(input);
-  if (!normalized) return { code: "VALIDATION_ERROR", message: "Die gespeicherte KV-Anfrage kann nicht sicher geprÃƒÂ¼ft werden." };
+  if (!normalized) return { code: "VALIDATION_ERROR", message: "Die gespeicherte KV-Anfrage kann nicht sicher geprüft werden." };
   if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Der gespeicherte KV-Stand darf mit dieser Rolle nicht gelesen werden." };
   const intentSha256 = hashQuoteWriteIntent(normalized);
   try {
@@ -507,7 +509,7 @@ export async function readQuoteUpdateReceiptCommand(
   input: unknown,
 ): Promise<ReadQuoteUpdateReceiptResult> {
   const normalized = normalizeUpdate(input);
-  if (!normalized) return { code: "VALIDATION_ERROR", message: "Die gespeicherte KV-Ãƒâ€žnderung kann nicht sicher geprÃƒÂ¼ft werden." };
+  if (!normalized) return { code: "VALIDATION_ERROR", message: "Die gespeicherte KV-Änderung kann nicht sicher geprüft werden." };
   if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Der gespeicherte KV-Stand darf mit dieser Rolle nicht gelesen werden." };
   const intentSha256 = hashQuoteWriteIntent(normalized);
   try {
@@ -517,7 +519,7 @@ export async function readQuoteUpdateReceiptCommand(
         WHERE quote_id = ${normalized.quoteId}::uuid AND actor_id = ${authorization.userId}::uuid
           AND client_event_id = ${normalized.clientEventId}::uuid LIMIT 2
       `);
-      if (rows.length === 0) return { code: "NOT_FOUND", message: "Zu dieser Ãƒâ€žnderung wurde noch kein sicherer KV-Stand gefunden." };
+      if (rows.length === 0) return { code: "NOT_FOUND", message: "Zu dieser Änderung wurde noch kein sicherer KV-Stand gefunden." };
       const receipt = rows.length === 1 ? rows[0] : null;
       const recordedAt = receipt ? iso(receipt.recorded_at) : null;
       if (!receipt || receipt.integrity_ok !== true || receipt.tenant_id !== authorization.tenantId
@@ -542,13 +544,13 @@ export async function readQuoteUpdateReceiptCommand(
 
 export async function prepareQuoteConversionCommand(authorization: QuoteCommandContext, input: unknown): Promise<PrepareQuoteConversionResult> {
   const normalized = normalizeConvert(input);
-  if (!normalized) return { code: "VALIDATION_ERROR", message: "Beauftragungsdaten sind ungÃƒÂ¼ltig." };
+  if (!normalized) return { code: "VALIDATION_ERROR", message: "Beauftragungsdaten sind ungültig." };
   if (!authorization.capabilities.canConvertQuote) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht beauftragt werden." };
   const intentSha256 = hashIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
-      if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfÃƒÂ¼gbar." };
+      if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
       const sourceOrderInput: Omit<QuoteOrderInput, "handoverMode" | "paymentMode"> = {
         // A released quote has not passed the goods inspection in 3.7.
         geprueft: false,
@@ -584,7 +586,7 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       const result = rows.length === 1 ? rows[0] : null;
       if (!result || result.result_code !== "OK") {
         if (result?.result_code === "CONFLICT" || result?.result_code === "NOT_FOUND" || result?.result_code === "VALIDATION_ERROR") {
-          return { code: result.result_code, message: result.result_code === "CONFLICT" ? "KV wurde bereits beauftragt oder zwischenzeitlich geÃƒÂ¤ndert." : result.result_code === "NOT_FOUND" ? "KV ist nicht verfÃƒÂ¼gbar." : "Beauftragungsdaten sind ungÃƒÂ¼ltig." };
+          return { code: result.result_code, message: result.result_code === "CONFLICT" ? "KV wurde bereits beauftragt oder zwischenzeitlich geändert." : result.result_code === "NOT_FOUND" ? "KV ist nicht verfügbar." : "Beauftragungsdaten sind ungültig." };
         }
         throw new Error("QUOTE_CONVERSION_PLAN_INVALID");
       }
@@ -622,7 +624,7 @@ export async function readQuoteConversionReceiptCommand(
   input: { quoteId: string; clientEventId: string },
 ): Promise<ReadQuoteConversionReceiptResult> {
   if (!plainObject(input) || !exactKeys(input, ["clientEventId", "quoteId"]) || typeof input.quoteId !== "string" || !UUID_PATTERN.test(input.quoteId)
-    || typeof input.clientEventId !== "string" || !UUID_PATTERN.test(input.clientEventId)) return { code: "VALIDATION_ERROR", message: "Receipt-Kennung ist ungÃƒÂ¼ltig." };
+    || typeof input.clientEventId !== "string" || !UUID_PATTERN.test(input.clientEventId)) return { code: "VALIDATION_ERROR", message: "Receipt-Kennung ist ungültig." };
   if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Beauftragungsbeleg darf mit dieser Rolle nicht gelesen werden." };
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
@@ -634,7 +636,7 @@ export async function readQuoteConversionReceiptCommand(
       const row = rows.length === 1 ? rows[0] : null;
       const recordedAt = row ? iso(row.recorded_at) : null;
       const quote = await readQuote(tx, authorization.tenantId, input.quoteId);
-      if (!row) return { code: "NOT_FOUND", message: "Beauftragungsbeleg ist nicht verfÃƒÂ¼gbar." };
+      if (!row) return { code: "NOT_FOUND", message: "Beauftragungsbeleg ist nicht verfügbar." };
       if (!quote || row.integrity_ok !== true || row.tenant_id !== authorization.tenantId || row.quote_version !== quote.version
         || row.quote_id !== quote.quoteId || row.order_id !== quote.linkedOrderId || !recordedAt) throw new Error("QUOTE_CONVERSION_RECEIPT_INVALID");
       const receipt: QuoteConversionReceipt = {

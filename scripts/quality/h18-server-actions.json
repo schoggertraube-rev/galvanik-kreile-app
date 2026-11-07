@@ -172,7 +172,8 @@
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#saveGoodsReceiptAction": [
-      "src/test/h18_customer_actions.integration.test.ts"
+      "src/test/h18_customer_actions.integration.test.ts",
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#openIntakeOriginalAction": [
       "src/test/h18_customer_actions.integration.test.ts"

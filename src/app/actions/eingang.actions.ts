@@ -63,6 +63,7 @@ export async function confirmIntakeOriginalAction(input:unknown){return confirmI
 
 export async function getGoodsReceiptsAction(orderId:string){return readGoodsReceipts(orderId);}
 export async function saveGoodsReceiptAction(input:unknown):Promise<GoodsReceiptResult>{
+ if(input&&typeof input==='object'&&'quoteId'in input)return saveGoodsReceipt(input,goodsEffects);
  const parsed=parseGoodsReceiptInput(input);if(!parsed)return {code:"VALIDATION_ERROR",message:"Warenprüfung ist unvollständig oder ungültig."};
  if(parsed.command!=="galvanik")return saveGoodsReceipt(parsed,goodsEffects);
  const binding=createGoodsReceiptStationBinding(parsed,goodsEffects);

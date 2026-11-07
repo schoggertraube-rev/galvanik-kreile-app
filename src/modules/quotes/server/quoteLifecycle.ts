@@ -47,13 +47,13 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
         return {code:'OK',quote,eventId:prior[0].id,replayed:true};
       }
       const locked=await tx.execute(sql`SELECT id FROM private.quotes WHERE tenant_id=${auth.tenantId} AND id=${input.quoteId}::uuid FOR UPDATE`);
-      if (locked.length!==1) return {code:'NOT_FOUND',message:'KV ist nicht verfÃƒÂ¼gbar.'};
+      if (locked.length!==1) return {code:'NOT_FOUND',message:'KV ist nicht verfügbar.'};
       const quote=await readQuote(tx,auth.tenantId,input.quoteId);
       if (!quote?.lifecycle) throw Error('QUOTE_LIFECYCLE_READBACK_INVALID');
       const life=quote.lifecycle;
-      if (quote.version!==input.expectedVersion||life.edition!==input.edition||quote.linkedOrderId||life.declinedAt) return {code:'CONFLICT',message:'KV wurde geÃƒÂ¤ndert, abgesagt oder bereits umgewandelt. Aktuelle Fassung neu lesen.'};
+      if (quote.version!==input.expectedVersion||life.edition!==input.edition||quote.linkedOrderId||life.declinedAt) return {code:'CONFLICT',message:'KV wurde geändert, abgesagt oder bereits umgewandelt. Aktuelle Fassung neu lesen.'};
       if (life.stage==='abgelaufen'&&input.action!=='reject') return {code:'VALIDATION_ERROR',message:'KV ist abgelaufen. Vor einer Zusage die aktuelle Fassung erneuern.'};
-      if ((input.action==='accept'||input.action==='conditional')&&life.sentEdition!==life.edition) return {code:'VALIDATION_ERROR',message:'Zusage gilt nur fÃƒÂ¼r die aktuelle versendete Fassung. Aktuellen KV senden.'};
+      if ((input.action==='accept'||input.action==='conditional')&&life.sentEdition!==life.edition) return {code:'VALIDATION_ERROR',message:'Zusage gilt nur für die aktuelle versendete Fassung. Aktuellen KV senden.'};
       if (input.action==='accept'&&life.conditional?.edition===life.edition) return {code:'VALIDATION_ERROR',message:'Zusage mit Vorbehalt erfordert eine geänderte, neu versendete Fassung.'};
       if (!await quoteJournalActorIsActive(tx,auth)) return {code:'FORBIDDEN',message:'Login ist nicht mehr aktiv.'};
       const version=quote.version+1,eventId=randomUUID();
@@ -68,13 +68,13 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
             ? sql`zugesagt_fassung=NULL,zugesagt_am=NULL,zusage_nachweis=NULL,vorbehalt_fassung=fassung,vorbehalt_am=statement_timestamp(),vorbehalt_grund=${input.evidence},nachfass_am=NULL`
           : sql`abgesagt_am=statement_timestamp(),absage_grund=${input.reason},nachfass_am=NULL`;
       await tx.execute(sql`UPDATE private.quotes SET ${mutation},version=${version},updated_by=${auth.userId}::uuid,updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${input.quoteId}::uuid`);
-      await appendQuoteJournal(tx,auth,{id:eventId,type:'QUOTE_LIFECYCLE_V04',clientEventId:input.clientEventId,correlationId:randomUUID(),version,description:input.action==='sent'?'KV-Versand ausdrÃƒÂ¼cklich vermerkt':input.action==='accept'?'KV-Zusage vermerkt':input.action==='conditional'?'KV-Vorbehalt vermerkt Â· neue Fassung erforderlich':'KV-Absage vermerkt',payload:{quoteId:input.quoteId,intent,action:input.action,edition:life.edition,before:life,proof:input.action==='reject'?input.reason:input.evidence,manual:input.action==='sent'}});
+      await appendQuoteJournal(tx,auth,{id:eventId,type:'QUOTE_LIFECYCLE_V04',clientEventId:input.clientEventId,correlationId:randomUUID(),version,description:input.action==='sent'?'KV-Versand ausdrücklich vermerkt':input.action==='accept'?'KV-Zusage vermerkt':input.action==='conditional'?'KV-Vorbehalt vermerkt · neue Fassung erforderlich':'KV-Absage vermerkt',payload:{quoteId:input.quoteId,intent,action:input.action,edition:life.edition,before:life,proof:input.action==='reject'?input.reason:input.evidence,manual:input.action==='sent'}});
       const result=await readQuote(tx,auth.tenantId,input.quoteId);
       if (!result?.lifecycle||result.version!==version) throw Error('QUOTE_LIFECYCLE_WRITE_READBACK_INVALID');
       return {code:'OK',quote:result,eventId,replayed:false};
     });
   } catch (error) {
     console.error('[QUOTE_LIFECYCLE_FAILED]',error instanceof Error?error.name:'UnknownError');
-    return {code:'UNAVAILABLE',message:'KV-Entscheidung konnte nicht sicher bestÃƒÂ¤tigt werden. Eingaben und Kennung behalten.'};
+    return {code:'UNAVAILABLE',message:'KV-Entscheidung konnte nicht sicher bestätigt werden. Eingaben und Kennung behalten.'};
   }
 }

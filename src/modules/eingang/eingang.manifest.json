@@ -155,11 +155,13 @@
     "20261104091240_ein4_rechte.sql",
     "20261104100455_ein5_eingangsrechnungen.sql",
     "20261105095422_ein2_erwartete_ware.sql",
-    "20261105224000_ein2_entwurf_version.sql"
+    "20261105224000_ein2_entwurf_version.sql",
+    "20261107213000_kv_v04_goods_reference.sql"
   ],
   "viewsFunctions": [
     "public.v_intake_expected_goods_v1",
-    "private.v_intake_message_contexts_v1"
+    "private.v_intake_message_contexts_v1",
+    "public.v_quote_goods_receipt_v1"
   ],
   "ownsTables": [
     "public.intake_event",

@@ -8,6 +8,8 @@ import {orderPositionQuantityError} from "@/lib/orderPositionContract";
 import {goodsReceiptGaps,goodsReceiptWare,parseGoodsReceiptInput,type GoodsReceiptInput,type GoodsReceiptRecord,type GoodsReceiptFailure,type GoodsReceiptReadResult} from "../goodsReceiptContract";
 import {bindIntakeOriginalToOrder} from "./intakeOrderBinding";
 
+import {saveQuoteGoodsReceipt} from './quoteGoodsReceipt';
+
 type ReceiptRow=GoodsReceiptRecord;
 type Failure=GoodsReceiptFailure;
 export type GoodsReceiptResult={code:"OK";receipt:ReceiptRow;replayed:boolean}|Failure;
@@ -98,6 +100,7 @@ async function write(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,p
 }
 
 export async function saveGoodsReceipt(input:unknown,deps:GoodsReceiptDependencies={}):Promise<GoodsReceiptResult>{
+ if(input&&typeof input==='object'&&'quoteId'in input)return saveQuoteGoodsReceipt(input);
  const parsed=parseGoodsReceiptInput(input);if(!parsed||parsed.command==='galvanik')return {code:'VALIDATION_ERROR',message:'Warenprüfung ist ungültig.'};
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED',message:auth.message};
  if(!hasAuthorizationArea(auth.data,'eingang'))return {code:'FORBIDDEN',message:'Warenannahme erfordert Eingang.'};
