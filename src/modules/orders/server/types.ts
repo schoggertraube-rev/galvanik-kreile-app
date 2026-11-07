@@ -85,7 +85,7 @@ export type OrderCardEvidence = {
   itemIds: string[];
 };
 export type OrderCardPayment = {
-  mode: "vorkasse" | "abholung" | "rechnung";
+  mode: "vorkasse" | "abholung" | "rechnung" | "keiner";
   invoiceState: "not_issued" | "issued";
   invoiceId?: string | null;
   invoiceNumber?: string | null;

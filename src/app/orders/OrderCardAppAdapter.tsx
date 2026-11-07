@@ -800,6 +800,10 @@ export function OrderCardAppAdapter({
       setFeedback({ kind: "error", message: "Duplizieren benötigt einen bestätigten Liefertermin." });
       return;
     }
+    if (snapshot.payment?.mode === "keiner") {
+      setFeedback({ kind: "error", message: "Nacharbeit wird aus der Reklamation angelegt." });
+      return;
+    }
     const items = snapshot.card.items.map((item) => ({ catalogServiceId: item.catalogServiceId ?? null, name: item.name, quantity: item.quantity, material: item.material, surfaceRequested: item.surfaceRequested, unit: item.unit ?? null, unitPriceCents: item.unitPriceCents ?? null, vatRateBasisPoints: item.vatRateBasisPoints ?? null }));
     setFeedback({ kind: "submitting", message: "Auftrag wird als neuer Eingang dupliziert." });
     const clientEventId = (requests.current.duplicate ??= crypto.randomUUID());

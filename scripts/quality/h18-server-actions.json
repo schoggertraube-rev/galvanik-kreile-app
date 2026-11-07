@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "5d12c6206e733db4023ef699399ba9ac2ffb0d732ab111ade3744f52d171d69f",
+  "inventorySha256": "877b0d2ce87124d8f89ac8626680f7b1dbbab3bf277990d2afb73edbd3d225dc",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -31,6 +31,9 @@
     "src/app/actions/customers.actions.ts#createCustomerAction": [
       "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",
       "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/complaints.actions.ts#nacharbeitAnlegenAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/goodsOut.actions.ts#recordGoodsOutAction": [
       "src/test/h18_workshop_actions.integration.test.ts"

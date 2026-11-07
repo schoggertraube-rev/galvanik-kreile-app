@@ -33,14 +33,15 @@
     "@/modules/orders/public#goodsOutAgreementButtonText",
     "@/modules/orders/public#goodsOutAgreementReceiptText",
     "@/modules/orders/public#getUrgency",
-    "@/modules/orders/public#isOrderLifecycleStatus"
+    "@/modules/orders/public#isOrderLifecycleStatus",
+    "@/modules/orders/server-public#nacharbeitAnlegen"
   ],
   "capabilities": [],
-  "migrations": [],
+  "migrations": ["20261106020000_ein4b_nacharbeit.sql"],
   "viewsFunctions": [],
-  "ownsTables": [],
+  "ownsTables": ["public.orders", "public.items", "public.events"],
   "storagePurposes": [],
   "events": { "emits": [], "consumes": [] },
   "config": {},
-  "dependencies": ["customers"]
+  "dependencies": ["customers", "complaints"]
 }

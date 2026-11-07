@@ -10,8 +10,8 @@
     "@/modules/complaints/server-public#readComplaints"
   ],
   "capabilities": ["reklamation:lesen"],
-  "migrations": ["20261104012000_ein4_nachrichten.sql"],
-  "viewsFunctions": [],
+  "migrations": ["20261104012000_ein4_nachrichten.sql", "20261106020000_ein4b_nacharbeit.sql"],
+  "viewsFunctions": ["public.v_complaint_rework_context_v1"],
   "ownsTables": ["public.complaints"],
   "storagePurposes": [],
   "events": {"emits": [], "consumes": []},
