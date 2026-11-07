@@ -45,8 +45,9 @@ describe('4.8 real component interactions (isolated TEST ports; server effects h
     vi.mocked(ports.write).mockResolvedValue({code:'UNAVAILABLE',message:'TEST Offline'});
     const save=await screen.findByRole('button',{name:'Reklamation aufnehmen'});
     fireEvent.click(screen.getByRole('checkbox'));fireEvent.change(screen.getByRole('combobox'),{target:{value:'Blasen'}});fireEvent.click(save);
-    expect(await screen.findByText(/Nicht gespeichert · alle Eingaben sind noch da · TEST Offline/)).toBeInTheDocument();
+    expect(await screen.findByText(/Speicherergebnis unklar · alle Eingaben sind noch da · TEST Offline/)).toBeInTheDocument();
     const first=vi.mocked(ports.write).mock.calls[0][0];
+    expect(screen.getByRole('spinbutton')).toBeDisabled();
     fireEvent.click(screen.getAllByRole('button',{name:'Erneut'})[0]);
     await waitFor(()=>expect(ports.write).toHaveBeenCalledTimes(2));
     expect(vi.mocked(ports.write).mock.calls[1][0]).toEqual(first);

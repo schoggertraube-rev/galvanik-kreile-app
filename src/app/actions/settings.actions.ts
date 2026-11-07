@@ -38,6 +38,18 @@ async function settingsContext() {
   };
 }
 
+export async function readEmailTemplatesAction(){
+ noStore();const resolved=await settingsContext();
+ if(!resolved)return {code:'UNAUTHENTICATED' as const,message:'Sitzung fehlt.'};
+ const {readStoredEmailTemplates}=await import('@/lib/server/commands/emailTemplateCommand');
+ return readStoredEmailTemplates(resolved.authorization);
+}
+export async function saveEmailTemplateAction(input:unknown){
+ const resolved=await settingsContext();if(!resolved)return {code:'UNAUTHENTICATED' as const,message:'Sitzung fehlt.'};
+ const {saveStoredEmailTemplate}=await import('@/lib/server/commands/emailTemplateCommand');
+ return saveStoredEmailTemplate(resolved.authorization,input);
+}
+
 async function refreshSettingsSession(authorization: {
   userId: string;
   tenantId: string;

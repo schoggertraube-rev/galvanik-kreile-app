@@ -1,4 +1,5 @@
 import type { AccessArea } from '@/lib/auth/authorizationContract';
+import type {ComponentType} from 'react';
 import type { Complaint } from './contract';
 import type { ComplaintCommand, ComplaintWriteResult } from './writeContract';
 
@@ -8,6 +9,7 @@ export type ComplaintDialogData = {
   source:{ id:string; number:string; customerName:string; items:Array<{id:string;name:string;quantity:number;unit:string|null}> };
   initial:{description:string;defect:string;photoIds:string[];intakeItemId:string|null;intakeVersion:number|null};
   suggestedDate:string|null;
+  resultMail?:{subject:string;body:string}|null;
   rework:{station:string;goods:string|null}|null;
 };
 export type ComplaintPorts = {
@@ -19,6 +21,7 @@ export type ComplaintPorts = {
   openPhoto:(photoId:string,sourceItemId:string|null,orderId:string)=>Promise<void>;
   addPhoto:(orderId:string,file:File)=>Promise<{code:'OK';id:string}|{code:string;message:string}>;
   sendResult:(input:{complaintId:string;version:number;clientKey:string;subject:string;body:string})=>Promise<ComplaintWriteResult>;
+  ResultMail?:ComponentType<{orderId:string;subject:string;body:string;onSubject:(value:string)=>void;onBody:(value:string)=>void;onSend:()=>void;busy:boolean}>;
 };
 export const COMPLAINT_CHANGED_EVENT='kreile:complaint-changed';
 export const COMPLAINT_STATE_LABELS={aufgenommen:'aufgenommen · Meister entscheidet',massnahme_nacharbeit:'Nacharbeit läuft',massnahme_gutschrift:'Gutschrift offen',kunde_informieren:'Kunde informieren',abgeschlossen:'abgeschlossen'} as const;

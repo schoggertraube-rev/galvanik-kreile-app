@@ -14,6 +14,7 @@ import {getGoodsReceiptsAction,saveGoodsReceiptAction,openIntakeOriginalAction,c
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
 import { getIntakeCatalogAction } from "@/app/actions/catalog.actions";
+import {CommunicationPanel} from "@/components/communication/CommunicationPanel";
 import {getOpenIntakeMailsAction,saveIntakeProspectAction} from "@/app/actions/eingang.actions";
 import { getOrderRegisterDb, getLiveOrderCardAction } from "@/app/actions/orders.actions";
 import {
@@ -66,7 +67,7 @@ export function GlobalCreateAppAdapter() {
     return null;
   });
   const { canAction, hasArea, name, role, areas } = usePermissions();
-  const complaintPorts=useMemo<ComplaintPorts>(()=>({areas,read:getComplaintDialogAction,write:reklamationAusfuehrenAction,rework:nacharbeitAnlegenAction,sendResult:sendeReklamationErgebnisAction,openOrder,
+  const complaintPorts=useMemo<ComplaintPorts>(()=>({areas,read:getComplaintDialogAction,write:reklamationAusfuehrenAction,rework:nacharbeitAnlegenAction,sendResult:sendeReklamationErgebnisAction,openOrder,ResultMail:input=><CommunicationPanel targetType="ORDER" targetId={input.orderId} composer={input}/>,
     addPhoto:async(orderId,file)=>({code:'OK',id:await uploadDomainAttachment('ORDER',orderId,file)}),
     openPhoto:async(photoId,_sourceItemId,orderId)=>{
       const rows=await getDomainAttachmentsAction({targetType:'ORDER',targetId:orderId});

@@ -27,6 +27,7 @@ import { Dialog, DialogAktionsmeldung, type DialogMeldung } from "@/ui/kr/Dialog
 import { Toast } from "@/ui/kr/Toast";
 import styles from "./settings.module.css";
 import { ShippingSettingsEditor } from "./ShippingSettingsEditor";
+import { EmailTemplatesEditor } from './EmailTemplatesEditor';
 
 type Tab = "company" | "catalog" | "users";
 type Result = { code: string; message?: string };
@@ -370,6 +371,7 @@ export function SettingsAdminClient({
       <h3>Nummernkreise (systemverwaltet)</h3><dl className={styles.ranges}>{initialSnapshot.numberRanges.map((range) => <div key={range.label}><dt>{range.label}</dt><dd>{range.pattern}</dd></div>)}</dl>
     </section> : null}
 
+    {canManageCompany?<div hidden={tab!=="company"}><EmailTemplatesEditor /></div>:null}
     {canManageCompany && tab === "catalog" ? <section><h2>Leistungskatalog</h2><div className={styles.grid}>
       <label>Bezeichnung<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
       <label>Oberfläche<input value={draft.surface} onChange={(event) => setDraft({ ...draft, surface: event.target.value })} /></label>

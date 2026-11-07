@@ -4,6 +4,7 @@ import {readComplaints,executeComplaint,readComplaintOrderSource} from "@/module
 import {recordIntakeComplaintEffect} from "@/modules/eingang/server-public";
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {sendCommunicationMail} from '@/lib/server/communicationPort';
+import {readComplaintResultMail} from '@/lib/server/commands/emailTemplateCommand';
 import {COMPLAINT_DEFECTS,type ComplaintWriteResult,type ComplaintRequest,type ComplaintDialogData} from '@/modules/complaints/public';
 import {readIntakeCapture} from '@/modules/eingang/server-public';
 import {readIntakeSuggestions} from '@/lib/server/intakeSuggestions';
@@ -51,6 +52,12 @@ export async function getComplaintDialogAction(request:ComplaintRequest):Promise
    try{const suggestions=await readIntakeSuggestions(authorization.data,{customerId:source.customerId,kind:'ORDER',wishDate:null,handoverMode:source.handoverMode,positions:source.items.map(item=>({key:item.id,catalogServiceId:item.catalogServiceId,name:item.name,quantity:item.quantity,surfaceRequested:item.surfaceRequested,unit:item.unit,unitPriceCents:null}))});suggestedDate=suggestions.term?.achievableDate??null;}
    catch(error){console.error('[COMPLAINT_TERM_SUGGESTION_FAILED]',error instanceof Error?error.message:error);}
   }
-  return {code:'OK',data:{complaint,source:{id:source.id,number:source.number,customerName:source.customerName,items:source.items.map(item=>({id:item.id,name:item.name,quantity:item.quantity,unit:item.unit}))},initial,suggestedDate,rework:complaint?.nacharbeitAuftragId&&complaint.reworkStation?{station:complaint.reworkStation,goods:complaint.reworkGoods??null}:null}};
+  let resultMail:ComplaintDialogData['resultMail']=null;
+  const resultLabel=complaint?.bewertung==='abgelehnt'?'abgelehnt':complaint?.massnahme==='gutschrift'?'Gutschrift':complaint?.massnahme==='nacharbeit'?'Nacharbeit':null;
+  if(complaint?.stand==='kunde_informieren'&&complaint.nummer&&resultLabel){
+   try{resultMail=await readComplaintResultMail(authorization.data,{'Kunde':source.customerName,'RK-Nummer':complaint.nummer,Ergebnis:resultLabel,'Begründung':complaint.begruendung??''});}
+   catch(error){console.error('[COMPLAINT_RESULT_TEMPLATE_FAILED]',error);}
+  }
+  return {code:'OK',data:{complaint,source:{id:source.id,number:source.number,customerName:source.customerName,items:source.items.map(item=>({id:item.id,name:item.name,quantity:item.quantity,unit:item.unit}))},initial,suggestedDate,resultMail,rework:complaint?.nacharbeitAuftragId&&complaint.reworkStation?{station:complaint.reworkStation,goods:complaint.reworkGoods??null}:null}};
  }catch(error){console.error('[COMPLAINT_DIALOG_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Reklamation konnte nicht geladen werden. Code: COMPLAINT_DIALOG_READ_FAILED.'};}
 }

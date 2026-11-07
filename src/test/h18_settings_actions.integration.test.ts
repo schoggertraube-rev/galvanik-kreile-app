@@ -902,3 +902,24 @@ describe("H18 settings Server Actions against the real replay database", () => {
     expect(after.items).toContainEqual(expect.objectContaining({ key: item.key, snoozedUntil: saved.data.reminderUntil }));
   }, 30_000);
 });
+
+it('4c persists editable email_templates through the real settings action, event, replay and reread',async()=>{
+ const fixture=await createFixture('TEST-mail-template'),id=randomUUID();
+ await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) VALUES(${KREILE_TENANT_SLUG},${fixture.actorId}::uuid,'einstellungen',${fixture.actorId}::uuid)`;
+ await sql`INSERT INTO public.email_templates(id,tenant_id,template_key,name,subject_template,body_html_template,body_text_template) VALUES(${id}::uuid,${KREILE_TENANT_SLUG},${'TEST-'+id+':reklamation_ergebnis'},'TEST Reklamation Ergebnis','TEST alt','TEST alt','TEST alt')`;
+ const {readEmailTemplatesAction,saveEmailTemplateAction}=await import('@/app/actions/settings.actions');
+ const read=await withSession(fixture,()=>readEmailTemplatesAction());
+ expect(read.code).toBe('OK');if(read.code!=='OK')throw Error(read.message);
+ const template=read.templates.find(row=>row.id===id);expect(template).toBeDefined();if(!template)throw Error('TEST_TEMPLATE_MISSING');
+ const input={id,clientKey:randomUUID(),updatedAt:template.updatedAt,subject:'TEST {RK-Nummer}',body:'TEST {Kunde}: {Ergebnis} {Begründung} <sicher>'};
+ const result=await withSession(fixture,()=>saveEmailTemplateAction(input));
+ expect(result).toMatchObject({code:'OK',template:{id,subject:input.subject,body:input.body},replayed:false});
+ const [row]=await sql`SELECT template.subject_template,template.body_text_template,template.body_html_template,event.payload,event.user_id::text FROM public.email_templates template JOIN public.events event ON event.tenant_id=template.tenant_id AND event.client_event_id=${input.clientKey}::uuid WHERE template.tenant_id=${KREILE_TENANT_SLUG} AND template.id=${id}::uuid`;
+ expect(row).toMatchObject({subject_template:input.subject,body_text_template:input.body,user_id:fixture.actorId,payload:{templateId:id,after:{body:input.body}}});
+ expect(row.body_html_template).toContain('&lt;sicher&gt;');
+ expect(await withSession(fixture,()=>saveEmailTemplateAction(input))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(fixture,()=>saveEmailTemplateAction({...input,body:'TEST anderer Inhalt'}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(fixture,()=>readEmailTemplatesAction())).toMatchObject({code:'OK',templates:expect.arrayContaining([expect.objectContaining({id,body:input.body})])});
+ const denied=await createFixture('TEST-mail-denied');
+ expect(await withSession(denied,()=>saveEmailTemplateAction(input))).toMatchObject({code:'FORBIDDEN'});
+});
