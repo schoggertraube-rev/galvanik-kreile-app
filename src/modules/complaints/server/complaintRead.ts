@@ -13,8 +13,12 @@ export async function readComplaints(input:unknown=undefined):Promise<ComplaintR
   const auth=result.data;if(!(['auftraege','entscheiden','geld','kunden'] as const).some(area=>hasAuthorizationArea(auth,area)))return {code:'FORBIDDEN',message:'Reklamationen sind für diesen Login nicht freigegeben.'};
   const value=filter as ComplaintFilter;
   return await withPrivilegedTenantTransaction(auth,async tx=>{
+   const money=hasAuthorizationArea(auth,'geld');
    const complaints=await tx.execute<Complaint>(sql`SELECT id,customer_id AS "customerId",order_id AS "orderId",intake_item_id::text AS "itemId",item_id AS "legacyPositionId",reason,
-    station_id AS "stationId",description,photo_ids AS "photoIds",created_at::text AS "createdAt",resolved_at::text AS "resolvedAt",resolution,status
+    station_id AS "stationId",description,photo_ids AS "photoIds",created_at::text AS "createdAt",resolved_at::text AS "resolvedAt",resolution,status,
+    nummer,stand,bewertung,massnahme,nacharbeit_auftrag_id AS "nacharbeitAuftragId",version,teile,mangel,ware_zurueck AS "wareZurueck",begruendung,
+    CASE WHEN ${money} THEN gutschrift_betrag::text END AS "gutschriftBetrag",CASE WHEN ${money} THEN gutschrift_nr END AS "gutschriftNr",
+    abschluss_art AS "abschlussArt",abschluss_notiz AS "abschlussNotiz"
     FROM public.complaints WHERE tenant_id=${auth.tenantId} AND ${value.customerId?sql`customer_id=${value.customerId}`:sql`true`} AND ${value.orderId?sql`order_id=${value.orderId}`:sql`true`}
     ORDER BY created_at DESC,id DESC`);
    return {code:'OK' as const,complaints:[...complaints]};
