@@ -2307,17 +2307,18 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <section className="ev-kf-pl">
                   <b>Prüfliste</b><small>Pflicht</small>
                   {[
-                    {id:"kundentyp",label:"Firma oder Privat",value:customerType === "business" ? "Firma" : customerType === "privat" ? "Privat" : customerType === "lieferant" ? "Lieferant" : "",target:"kundentyp",origin:customerOrigins.customerType},
-                    {id:"name",label:"Name / Firma",value:customerName,target:customerType === "privat" ? "nachname" : "name",origin:customerType === "privat" ? customerOrigins.lastName : customerOrigins.companyName,invalid:customerReadiness.fehlt.includes("Name")},
-                    {id:"telefon",label:"Telefon",value:customerDraft.phone,target:"telefon",origin:customerOrigins.phone,invalid:customerReadiness.fehlt.includes("Telefon")},
+                    ...(!supplierCustomerMode ? [{id:"kundentyp",label:"Firma oder Privat",value:customerType === "business" ? "Firma" : customerType === "privat" ? "Privat" : "",target:"kundentyp",origin:customerOrigins.customerType}] : []),
+                    {id:"name",label:supplierCustomerMode ? "Firmenname" : "Name / Firma",value:customerName,target:customerType === "privat" ? "nachname" : "name",origin:customerType === "privat" ? customerOrigins.lastName : customerOrigins.companyName,invalid:customerReadiness.fehlt.includes("Name")},
+                    ...(!supplierCustomerMode ? [{id:"telefon",label:"Telefon",value:customerDraft.phone,target:"telefon",origin:customerOrigins.phone,invalid:customerReadiness.fehlt.includes("Telefon")}] : []),
                   ].map(customerChecklistRow)}
-                  <small>Für Aufträge nötig</small>
+                  {!supplierCustomerMode ? <><small>Für Aufträge nötig</small>
                   {[
+                    ...(customerType === "business" ? [{id:"person",label:"Ansprechpartner",value:customerDraft.lastName,target:"nachname",origin:customerOrigins.lastName,invalid:customerReadiness.fehlt.includes("Ansprechpartner")}] : customerType === "privat" ? [{id:"person",label:"Vorname",value:customerDraft.firstName,target:"vorname",origin:customerOrigins.firstName,invalid:customerReadiness.fehlt.includes("Vorname")}] : []),
                     {id:"email",label:"E-Mail",value:customerDraft.email,target:"email",origin:customerOrigins.email,invalid:customerReadiness.fehlt.includes("E-Mail")},
                     {id:"anschrift",label:"Anschrift",value:customerReadiness.fehlt.includes("Anschrift") || customerAddress?.blocked ? "" : "vollständig",target:addressTarget,instruction:customerAddress?.blocked ? "Anschrift mit den Vorschlägen abgleichen" : undefined},
                     ...(ports.canManageMoney?[{id:"zahlungsbedingung",label:"Zahlungsbedingung",value:customerDraft.paymentPreference ? customerPaymentLabel(customerDraft.paymentPreference) : "",target:"zahlungsbedingung",origin:customerOrigins.paymentPreference,invalid:customerReadiness.fehlt.includes("Zahlungsbedingung")}]:[]),
-                  ].map(customerChecklistRow)}
-                  <small className="ev-kf-pl-i" data-spec-id="kundeneu.pruefliste.info">Kundennummer wird beim Speichern vergeben</small>
+                  ].map(customerChecklistRow)}</> : null}
+                  <small className="ev-kf-pl-i" data-spec-id="kundeneu.pruefliste.info">{supplierCustomerMode ? "Kundentyp Lieferant · " : ""}Kundennummer wird beim Speichern vergeben</small>
                   <small className="ev-kf-pl-i">{customerReadiness.text}</small>
                 </section>
               </PruefRail>

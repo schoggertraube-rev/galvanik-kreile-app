@@ -1299,11 +1299,22 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.getByLabelText("Firmenname")).toHaveFocus();
     fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Muster" } });
     expect(within(dialog).getByRole("button", { name: /Name \/ Firma SYNTHETISCH Muster · vorhanden/ })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Ansprechpartner eintragen/ }));
+    expect(screen.getByLabelText("Nachname")).toHaveFocus();
     fireEvent.click(within(dialog).getByRole("button", { name: /Anschrift eintragen/ }));
     expect(screen.getByLabelText("Straße")).toHaveFocus();
     fireEvent.change(screen.getByLabelText("Straße"), { target: { value: "Testweg" } });
     fireEvent.click(within(dialog).getByRole("button", { name: /Anschrift eintragen/ }));
     expect(screen.getByLabelText("Nr.")).toHaveFocus();
+  });
+
+  it("fordert für einen Privatkunden den Vornamen statt eines Ansprechpartners", async () => {
+    render(<GlobalCreateFlow ports={ports()} />);
+    await openIntent("CUSTOMER");
+    fireEvent.click(screen.getByRole("button", { name: "Privat" }));
+    fireEvent.click(screen.getByRole("button", { name: /Vorname eintragen/ }));
+    expect(screen.getByLabelText("Vorname")).toHaveFocus();
+    expect(screen.queryByRole("button", { name: /Ansprechpartner eintragen/ })).not.toBeInTheDocument();
   });
 
   it("keeps the draft visible for validation and conflict responses without false success", async () => {
