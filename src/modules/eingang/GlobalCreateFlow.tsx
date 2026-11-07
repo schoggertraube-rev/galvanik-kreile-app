@@ -1202,6 +1202,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   async function createContinuationDraft() {
     if (draftWorking.current || busy || !remainingRecognizedPositions) return;
+    if (intakeRecognitionText !== lastRecognizedText) { setFeedback({kind:"validation",message:"Der Text wurde nach der Erkennung geändert · ursprünglichen Text wiederherstellen oder Erfassung neu beginnen."}); return; }
     if (!ports.createContinuation || !ports.getCapture || !ports.drafts) { setFeedback({kind:"error",message:"Fortsetzung ist nicht verfügbar · Original und Eingaben bleiben erhalten. Code: INTAKE_CONTINUATION_PORT_MISSING."}); return; }
     if (overflowPositions.length !== remainingRecognizedPositions || overflowPositions.length > 20) { setFeedback({kind:"validation",message:"Mehr als 20 weitere Positionen · bitte den Rest in höchstens 20 Positionen je Beleg aufteilen."}); return; }
     draftWorking.current=true;setBusy(true);setFeedback(null);

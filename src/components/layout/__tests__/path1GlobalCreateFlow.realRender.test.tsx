@@ -1554,6 +1554,22 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(api.createDirectIntake).not.toHaveBeenCalled();
   });
 
+  it("P101 übernimmt keinen Rest zu einem nachträglich geänderten Originaltext",async()=>{
+    const positions=Array.from({length:23},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
+    const createContinuation=vi.fn();
+    const api=ports({createContinuation,recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions:positions.slice(0,20),overflowPositions:positions.slice(20),totalPositions:23}})});
+    render(<GlobalCreateFlow ports={api}/>);openFlow();
+    const text=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH 23 Positionen'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    const button=await screen.findByRole('button',{name:'Rest als zweiten Beleg anlegen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH geänderter Originaltext'}});
+    fireEvent.click(button);
+    expect(await screen.findByText(/Der Text wurde nach der Erkennung geändert/)).toBeInTheDocument();
+    expect(text).toHaveValue('SYNTHETISCH geänderter Originaltext');
+    expect(createContinuation).not.toHaveBeenCalled();
+  });
+
   it("P101 sichert die weiteren Positionen und öffnet sie ohne den ersten Entwurf zu verlieren",async()=>{
     const positions=Array.from({length:23},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
     let input:Parameters<NonNullable<GlobalCreatePorts["createContinuation"]>>[0]|null=null;
