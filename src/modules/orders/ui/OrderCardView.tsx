@@ -150,6 +150,8 @@ export function OrderCardView({
   actions,
   attachmentPanel,
   documentsPanel,
+  photoPanel,
+  initialPhotosOpen=false,
   agreementMessage,
   onOpenCustomer,
   onClose,
@@ -158,12 +160,15 @@ export function OrderCardView({
   actions: OrderCardActionPorts;
   attachmentPanel?: ReactNode;
   documentsPanel?: ReactNode;
+  photoPanel?:ReactNode;
+  initialPhotosOpen?:boolean;
   agreementMessage?: string | null;
   onOpenCustomer: (id: string) => void;
   onClose: () => void;
 }) {
   const device = useSyncExternalStore(subscribeDevice, readDevice, () => "desktop" as const);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [photosOpen,setPhotosOpen]=useState(initialPhotosOpen);
   const [paymentMethod, setPaymentMethod] = useState<"" | "bar" | "ueberweisung" | "karte">("");
   const [dueOpen, setDueOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -305,7 +310,7 @@ export function OrderCardView({
     <KartenBlock label="Notizen" rechts={<Button art="leise" icon={card.note ? "edit" : "plus"} text="Notiz" disabled={!contentEnabled} onClick={() => contentEnabled ? setNoteOpen(true) : unavailable(actions.content?.reason)} />}><Notiz text={card.note ?? "Keine Auftragsnotiz hinterlegt."} bezug={<Chip text="Auftrag" ton="info" />} autor={card.assignedTo ?? "Nicht zugewiesen"} /></KartenBlock>
     <KartenBlock label="Fotos & Dokumente">
       {card.evidence.length ? <div className="kr-docs">{card.evidence.map((entry) => <span className="kr-doc" key={entry.key}>{evidenceLabel(entry)}</span>)}</div> : <Zustand art="leer" text="Noch keine Dokumente oder Fotos vorhanden." />}
-      {documentsPanel}
+      {!photosOpen?photoPanel:null}{documentsPanel}
     </KartenBlock>
     {actions.agreement?.visible ? <KartenBlock label="Zahlungsabsprache">
       {card.agreement ? <div data-spec-id="auftrag.absprache-zeile" className="kr-stapel">
@@ -331,6 +336,7 @@ export function OrderCardView({
     <Seitenblatt titel={`Auftragskarte ${card.orderNumber}`} onSchliessen={onClose}>
       <div data-spec-id="auftrag" style={{ display: "contents" }}>
         <Karte kopf={head} kette={chain} haupt={main} rail={rail} fuss={footer} />
+        {photosOpen&&photoPanel?<Dialog titel="Fotos & Dokumente" icon="camera" groesse="breit" onSchliessen={()=>setPhotosOpen(false)} vorSchliessen={()=>!document.querySelector('[data-r53-photo-layer] [data-domain-uploading="true"]')}><div data-r53-photo-layer>{photoPanel}</div></Dialog>:null}
       </div>
     </Seitenblatt>
     {invoiceSuccess ? <Dialog

@@ -6,32 +6,19 @@ import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { CustomerListItem, CustomersViewState } from "@/modules/customers/public";
-import { Button, Kundenzeile, SeitenKopf, SuchFeld, Zustand } from "@/ui/kr";
+import { Button, Kundenzeile, SeitenKopf, SuchFeld, Zustand,Hinweis } from "@/ui/kr";
 
 function normalize(value: string) {
   return value.trim().toLocaleLowerCase("de-DE");
 }
 
 function matchesFilter(customer: CustomerListItem, query: string) {
-  return normalize([customer.customerNumber, customer.name, customer.type, customer.city ?? ""].join(" ")).includes(normalize(query));
+  return normalize([customer.customerNumber, customer.name, customer.type, customer.city ?? "",customer.contactPerson??'',customer.email??'',...(customer.hints?.map(hint=>hint.text)??[])].join(" ")).includes(normalize(query));
 }
 
 function customerNumberLabel(customerNumber: string) {
   const value = customerNumber.trim();
   return /^(?:[0-9a-f]{8}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.test(value) ? null : value || null;
-}
-
-function customerTypeLabel(type: string) {
-  const labels: Record<string, string> = {
-    private: "Privatkunde",
-    privat: "Privatkunde",
-    business: "Gewerbekunde",
-    institution: "Institution",
-    Privatkunde: "Privatkunde",
-    Geschäftskunde: "Gewerbekunde",
-    Institution: "Institution",
-  };
-  return labels[type] ?? null;
 }
 
 function initials(name: string) {
@@ -71,9 +58,11 @@ export function CustomersAppAdapter() {
             type: customer.type,
             city: customer.city ?? null,
             activeOrderCount: customer.activeOrderCount,
+            activeQuoteCount:customer.activeQuoteCount,contactPerson:customer.contactPerson,email:customer.email,hints:customer.hints,complete:customer.complete,
           })),
         });
-      } catch {
+      } catch(error) {
+        console.error('[CUSTOMER_LIST_READ_FAILED]',error);
         if (active) setState({ kind: "error", message: "Kundenstamm konnte nicht sicher geladen werden." });
       }
     };
@@ -111,14 +100,14 @@ export function CustomersAppAdapter() {
     <div className="kr-stapel">
       <SuchFeld wert={query} onWert={setQuery} platzhalter="Name, Ort, Auftrag oder Stichwort" />
       {customers.length ? <div className="kr-stapel" style={{ gap: 8 }}>
-        {customers.map((customer) => <Kundenzeile
-          key={customer.id}
+        {customers.map((customer) => <div key={customer.id} className="kr-stapel" style={{gap:4}} data-customer-id={customer.id}><Kundenzeile
           kuerzel={initials(customer.name)}
           name={customer.name}
-          meta={[customer.city ?? customerNumberLabel(customer.customerNumber) ?? customerTypeLabel(customer.type), `${customer.activeOrderCount} ${customer.activeOrderCount === 1 ? "aktiver Auftrag" : "aktive Aufträge"}`].filter(Boolean).join(" · ")}
+          meta={[customerNumberLabel(customer.customerNumber),customer.contactPerson,customer.city, `${customer.activeOrderCount} ${customer.activeOrderCount === 1 ? "aktiver Auftrag" : "aktive Aufträge"}`,customer.activeQuoteCount!==undefined?`${customer.activeQuoteCount} KV`:null].filter(Boolean).join(" · ")}
+          hinweis={Boolean(customer.hints?.length)}
           karte
           onOeffnen={() => openCustomer(customer.id)}
-        />)}
+        />{customer.hints?.length?<Hinweis ton="warn"><span aria-label="Kundenhinweise">{customer.hints.map((hint,index)=><span key={hint.kind+':'+index} style={hint.urgent?{color:'var(--ral)'}:undefined}>{index?' · ':''}{hint.text}</span>)}</span></Hinweis>:null}</div>)}
       </div> : <Zustand art="leer" text={`Kein Kunde für „${query}“.`} />}
     </div>
   </section>;

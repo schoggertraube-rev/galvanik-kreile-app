@@ -5,6 +5,7 @@ import { OrdersAppAdapter } from "@/app/orders/OrdersAppAdapter";
 const ports = vi.hoisted(() => ({
   getOrdersDb: vi.fn(),
   openOrder: vi.fn(),
+  openCustomer:vi.fn(),
   create: vi.fn(),
 }));
 
@@ -14,7 +15,7 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({ loading: false, hasPermission: () => true }),
 }));
 vi.mock("@/lib/overlayStore", () => ({
-  useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder }) => unknown) => selector({ openOrder: ports.openOrder }),
+  useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder;openCustomer:typeof ports.openCustomer }) => unknown) => selector({ openOrder: ports.openOrder,openCustomer:ports.openCustomer }),
 }));
 
 const order = {
@@ -49,6 +50,16 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("OrdersAppAdapter V1.1", () => {
+  it('groups by stored customer ID and routes row actions to that exact order and customer',async()=>{
+    ports.getOrdersDb.mockResolvedValue({ok:true,data:[order,{...order,id:'order-2',orderNumber:'A-2026-0002'},{...order,id:'order-3',orderNumber:'A-2026-0003',customerId:'customer-2',customerName:'Sabrina Schmidt'}]});
+    render(<OrdersAppAdapter/>);
+    await screen.findByText('A-2026-0002');
+    expect(screen.getAllByRole('region',{name:/Aufträge ·/})).toHaveLength(2);
+    const row=within(screen.getByRole('group',{name:'Auftrag A-2026-0002'}));
+    fireEvent.click(row.getByRole('button',{name:'Kundenkarte'}));expect(ports.openCustomer).toHaveBeenCalledWith('customer-1');
+    fireEvent.click(row.getByRole('button',{name:'Foto'}));expect(ports.openOrder).toHaveBeenCalledWith('order-2','photos');
+    fireEvent.click(row.getByRole('button',{name:'Öffnen'}));expect(ports.openOrder).toHaveBeenCalledWith('order-2');
+  });
   it("renders the real list through V1.1 controls and opens the existing order", async () => {
     render(<OrdersAppAdapter />);
 

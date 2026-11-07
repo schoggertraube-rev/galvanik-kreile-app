@@ -2,6 +2,9 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import {hasAuthorizationArea} from '@/lib/server/authorization';
+import {evaluateOrderPriority} from '@/lib/priority';
+import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 import {
@@ -16,6 +19,48 @@ import type {PrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
 const MAX_ID_LENGTH = 128;
 const AGREEMENT_TYPES = new Set<string>(CUSTOMER_AGREEMENT_TYPES);
 
+/** One batched projection for the list and card; hidden money/mail reasons never leave this port. */
+export async function readCustomerListSignals(auth:AuthorizationSnapshot,customerIds:readonly string[]):Promise<Map<string,CustomerListSignals>> {
+  if(!hasAuthorizationArea(auth,'kunden'))throw Error('CUSTOMER_SIGNALS_FORBIDDEN');
+  if(!customerIds.length)return new Map();
+  if(customerIds.some(id=>typeof id!=='string'||!id||id.length>128))throw Error('CUSTOMER_SIGNALS_IDS_INVALID');
+  const money=hasAuthorizationArea(auth,'geld'),mails=hasAuthorizationArea(auth,'mails'),intake=hasAuthorizationArea(auth,'eingang');
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;active_orders:number;active_quotes:number;overdue:number;unassigned:number;open_messages:number;agreements:Array<{text:string}>;complaints:Array<{text:string}>;tasks:Array<{text:string}>;deadlines:Array<{number:string|null;dueDate:string|null;risk:string|null;status:string|null}>}>(sql`
+    SELECT customer.id,
+      (SELECT count(*)::integer FROM private.v_operational_station_queue_v1 queue JOIN public.orders order_source ON order_source.tenant_id=queue.tenant_id AND order_source.id=queue.id WHERE queue.tenant_id=customer.tenant_id AND queue.customer_id=customer.id
+        AND queue.station NOT IN ('abgeholt','versendet','raus','storniert') AND order_source.ware<>'storniert') AS active_orders,
+      (SELECT count(*)::integer FROM private.v_open_quotes_v1 quote WHERE quote.tenant_id=customer.tenant_id AND quote.customer_id=customer.id) AS active_quotes,
+      (SELECT count(*)::integer FROM public.invoices invoice WHERE ${money} AND invoice.tenant_id=customer.tenant_id AND invoice.customer_id=customer.id
+        AND invoice.status='issued' AND invoice.payment_status IN ('offen','teilbezahlt') AND invoice.payment_open_amount_cents>0 AND invoice.due_date<(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date) AS overdue,
+      (SELECT count(*)::integer FROM public.intake_item source WHERE source.tenant_id=customer.tenant_id AND source.richtung IN ('rein','intern') AND source.einsatz='offen' AND source.aussortiert IS NULL AND source.zuordnung='offen'
+        AND (${mails} OR source.kanal<>'mail' AND ${intake} AND source.erstellt_von=${auth.userId}::uuid)
+        AND (source.kunde_id=customer.id OR source.kunde_id IS NULL AND customer.email IS NOT NULL AND lower(btrim(source.absender_adresse))=lower(btrim(customer.email)))) AS unassigned,
+      (SELECT count(*)::integer FROM public.intake_item source WHERE source.tenant_id=customer.tenant_id AND source.richtung IN ('rein','intern') AND source.einsatz='offen' AND source.aussortiert IS NULL AND source.zuordnung<>'offen' AND source.kunde_id=customer.id
+        AND (${mails} OR source.kanal<>'mail' AND ${intake} AND source.erstellt_von=${auth.userId}::uuid)) AS open_messages,
+      (SELECT coalesce(jsonb_agg(jsonb_build_object('text',agreement.bezeichnung||': '||agreement.wert) ORDER BY agreement.position,agreement.id),'[]'::jsonb)
+        FROM public.customer_agreements agreement WHERE agreement.tenant_id=customer.tenant_id AND agreement.customer_id=customer.id AND agreement.order_id IS NULL
+          AND agreement.hinweis AND agreement.widerrufen_am IS NULL AND (agreement.gueltig_bis IS NULL OR agreement.gueltig_bis>=(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date) AND (${money} OR NOT agreement.geld)) AS agreements,
+      (SELECT coalesce(jsonb_agg(jsonb_build_object('text','Reklamation '||coalesce(orders.order_number,'Auftragsnummer fehlt')||' · '||coalesce(complaint.stand,'Stand fehlt')) ORDER BY complaint.created_at),'[]'::jsonb)
+        FROM public.complaints complaint JOIN public.orders orders ON orders.tenant_id=complaint.tenant_id AND orders.id=complaint.order_id
+        WHERE complaint.tenant_id=customer.tenant_id AND complaint.customer_id=customer.id AND complaint.stand IS DISTINCT FROM 'abgeschlossen') AS complaints,
+      (SELECT coalesce(jsonb_agg(jsonb_build_object('text',task.titel||' · fällig '||to_char(task.faellig_am,'DD.MM.YYYY')) ORDER BY task.faellig_am,task.id),'[]'::jsonb)
+        FROM public.tasks task WHERE task.tenant_id=customer.tenant_id AND task.bezug_typ='kunde' AND task.bezug_id=customer.id AND task.status='offen'
+          AND (task.erstellt_von=${auth.userId}::uuid OR task.fuer_login=${auth.userId}::uuid OR task.fuer_bereich=ANY(ARRAY[${sql.join((auth.areas??[]).map(area=>sql`${area}`),sql`, `)}]::text[]))) AS tasks,
+      (SELECT coalesce(jsonb_agg(jsonb_build_object('number',queue.order_number,'dueDate',queue.due_date::date::text,'risk',queue.risk,'status',queue.status) ORDER BY queue.due_date,queue.id),'[]'::jsonb)
+        FROM private.v_operational_station_queue_v1 queue WHERE queue.tenant_id=customer.tenant_id AND queue.customer_id=customer.id AND queue.station IN ('angenommen','galvanik','fertig')) AS deadlines
+    FROM public.customers customer WHERE customer.tenant_id=${auth.tenantId} AND customer.id IN (${sql.join(customerIds.map(id=>sql`${id}`),sql`, `)})
+  `));
+  return new Map(rows.map(row=>{
+    const hints:CustomerHint[]=[];
+    if(row.overdue)hints.push({kind:'payment',text:`${row.overdue} ${row.overdue===1?'Rechnung':'Rechnungen'} überfällig`,urgent:true});
+    for(const order of row.deadlines){const priority=evaluateOrderPriority({dueDate:order.dueDate,risk:order.risk??undefined,isBlocked:order.status==='blocked'});if(priority.risk==='red'||priority.risk==='blocked')hints.push({kind:'deadline',text:`Termin ${order.number??'Auftragsnummer fehlt'} in Gefahr`,urgent:true});}
+    if(row.unassigned)hints.push({kind:'message',text:`${row.unassigned} ${row.unassigned===1?'Nachricht':'Nachrichten'} zuordnen`,urgent:false});
+    if(row.open_messages)hints.push({kind:'message',text:`${row.open_messages} ${row.open_messages===1?'Nachricht':'Nachrichten'} offen`,urgent:false});
+    hints.push(...row.agreements.map(value=>({kind:'agreement' as const,text:value.text,urgent:false})),...row.complaints.map(value=>({kind:'complaint' as const,text:value.text,urgent:true})),...row.tasks.map(value=>({kind:'task' as const,text:value.text,urgent:false})));
+    return [row.id,{activeOrderCount:row.active_orders,activeQuoteCount:row.active_quotes,hints}];
+  }));
+}
+
 export type CustomerSummaryOrder = {
   id: string;
   orderNumber: string;
@@ -27,6 +72,7 @@ export type CustomerSummaryOrder = {
 };
 
 export type CustomerSummary = CustomerStoredProfile & {
+  hints?:CustomerHint[];
   id: string;
   customerNumber: string | null;
   name: string;
@@ -391,6 +437,7 @@ export async function readCustomerSummary(
        const agreementSlotsAvailable = await readCustomerAgreementSlots(tx, authorization.tenantId, input.customerId);
        return mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable);
     });
+    if(data){const signals=await readCustomerListSignals(authorization,[input.customerId]);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;}
     return data
       ? { code: "OK", data }
       : { code: "NOT_FOUND", message: "Kunde nicht verfügbar." };

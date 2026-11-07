@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor,within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { OrderCardView, type OrderCardActionPorts, type OrderCardModel } from "../public";
 
@@ -46,6 +46,22 @@ const card: OrderCardModel = {
 };
 
 describe("Orders V1.1 one-surface truth", () => {
+  it('R53 opens exactly one existing photo panel and protects an unfinished upload from closing',async()=>{
+    vi.stubGlobal('matchMedia',()=>({matches:true}));
+    try {
+    const onClose=vi.fn();
+    const panel=(busy:boolean)=><section aria-label="TEST Upload" data-domain-uploading={busy?'true':undefined}><input type="file" aria-label="TEST Foto"/></section>;
+    const view=render(<OrderCardView state={{kind:'data',card}} actions={actions} photoPanel={panel(true)} initialPhotosOpen onOpenCustomer={vi.fn()} onClose={onClose}/>);
+    const dialog=screen.getByRole('dialog',{name:'Fotos & Dokumente'});
+    expect(screen.getAllByLabelText('TEST Foto')).toHaveLength(1);
+    fireEvent.click(within(dialog).getByRole('button',{name:'Schließen'}));
+    expect(screen.getByRole('dialog',{name:'Fotos & Dokumente'})).toBeInTheDocument();
+    view.rerender(<OrderCardView state={{kind:'data',card}} actions={actions} photoPanel={panel(false)} initialPhotosOpen onOpenCustomer={vi.fn()} onClose={onClose}/>);
+    fireEvent.click(within(dialog).getByRole('button',{name:'Schließen'}));
+    await waitFor(()=>expect(screen.queryByRole('dialog',{name:'Fotos & Dokumente'})).not.toBeInTheDocument());
+    expect(screen.getAllByLabelText('TEST Foto')).toHaveLength(1);expect(onClose).not.toHaveBeenCalled();
+    }finally{vi.unstubAllGlobals();}
+  });
   it("shows each stored unit and makes a missing unit visible", () => {
     const items = [
       { ...card.items[0], id: "synthetic-kg", name: "SYNTHETISCH Gewicht", quantity: 2.5, unit: "kg" },

@@ -14,6 +14,7 @@ import {
   Terminuebersicht,
   Terminzeile,
   Zustand,
+  Button,
 } from "@/ui/kr";
 
 const KEY = "path1.orders.filter";
@@ -27,6 +28,7 @@ type OrdersState =
 
 type OrderListRow =
   & Pick<OrdersListItem, "id" | "orderNumber" | "station" | "status" | "risk">
+  & Pick<OrderResponse,'customerId'>
   & Pick<
     OrderResponse,
     | "customerName"
@@ -48,6 +50,7 @@ function normalized(value: string): string {
 function toOrderListRow(order: OrderResponse): OrderListRow {
   return {
     id: order.id,
+    customerId:order.customerId,
     orderNumber: order.orderNumber,
     station: order.station,
     status: order.status,
@@ -158,8 +161,8 @@ function dueOrdersFor(orders: readonly OrderListRow[], date: Date): OrderListRow
   return orders.filter((order) => dateKey(calendarDate(order.dueDate) ?? new Date(0)) === key);
 }
 
-function OrderRow({ order, onOpen }: { order: OrderListRow; onOpen: (id: string) => void }) {
-  return <Auftragszeile
+function OrderRow({ order, onOpen,onCustomer,onPhoto }: { order: OrderListRow; onOpen: (id: string) => void;onCustomer?:()=>void;onPhoto?:()=>void }) {
+  return <div className="kr-stapel" style={{gap:4}} role="group" aria-label={'Auftrag '+order.orderNumber}><Auftragszeile
     id={order.orderNumber}
     kundeKurz={order.customerName ?? "Kunde nicht hinterlegt"}
     titel={orderSubject(order)}
@@ -168,11 +171,12 @@ function OrderRow({ order, onOpen }: { order: OrderListRow; onOpen: (id: string)
     status={{ text: order.cardReadErrorCode ?? (order.dueValue || order.statusText), ton: rowTone(order) }}
     karte
     onOeffnen={() => onOpen(order.id)}
-  />;
+  /><div style={{display:'flex',gap:8,flexWrap:'wrap',justifyContent:'flex-end'}}>{onCustomer?<Button icon="users" text="Kundenkarte" onClick={onCustomer}/>:null}{onPhoto?<Button icon="camera" text="Foto" onClick={onPhoto}/>:null}<Button icon="open" art="primaer" text="Öffnen" onClick={()=>onOpen(order.id)}/></div></div>;
 }
 
 export function OrdersAppAdapter() {
   const openOrder = useOverlayStore((state) => state.openOrder);
+  const openCustomer=useOverlayStore(state=>state.openCustomer);
   const { hasPermission, loading: permissionsLoading } = usePermissions();
   const [state, setState] = useState<OrdersState>({ kind: "loading" });
   const [query, setQuery] = useState("");
@@ -298,7 +302,7 @@ export function OrdersAppAdapter() {
           onWert={setFilter}
         />
       </div>
-      {orders.length ? <div className="kr-stapel" style={{ gap: 8 }}>{orders.map((order) => <OrderRow key={order.id} order={order} onOpen={openOrder} />)}</div> : <Zustand art="leer" text={query ? `Kein Auftrag für „${query}“.` : "Keine Aufträge in dieser Auswahl."} aktion={canCreateOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} />}
+      {orders.length ? <div className="kr-stapel" style={{ gap: 16 }}>{[...orders.reduce((groups,order)=>{const group=groups.get(order.customerId)??[];group.push(order);groups.set(order.customerId,group);return groups;},new Map<string,OrderListRow[]>())].map(([customerId,group])=><section key={customerId} className="kr-stapel" aria-label={'Aufträge · '+(group[0].customerName??'Kundenname fehlt')}><h2>{group[0].customerName??'Kundenname fehlt'}</h2>{group.map(order=><OrderRow key={order.id} order={order} onOpen={openOrder} onCustomer={hasPermission('perm_view_customers')?()=>openCustomer(order.customerId):undefined} onPhoto={hasPermission('perm_op_photos')?()=>openOrder(order.id,'photos'):undefined}/>)}</section>)}</div> : <Zustand art="leer" text={query ? `Kein Auftrag für „${query}“.` : "Keine Aufträge in dieser Auswahl."} aktion={canCreateOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} />}
     </div> : null}
     {view === "woche" ? <div className="kr-stapel"><Terminuebersicht ansicht="woche" tage={weekDays} /></div> : null}
     {view === "monat" ? <div className="kr-stapel">
