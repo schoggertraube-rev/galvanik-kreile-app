@@ -21,6 +21,7 @@ import {
   checkTaB2k4ScopeForTest,
   checkTaB2k4BaselineChangeForTest,
   checkB3ScopeForTest,
+  checkGovernanceRestartScopeForTest,
   checkB2iParserChangesForTest,
   checkTaB2fBaselineChangeForTest,
   runSelftest,
@@ -44,6 +45,32 @@ const b2AnchorMission = {
 const b2cAnchorMission = {
   ...b2AnchorMission,
 };
+
+describe("#189 one-time planning authority migration", () => {
+  const context = { branch: "codex/bauregeln-neustart", baseSha: "7101a7fc2169aa5c30819485ccc791c50fe2670c" };
+  it("accepts only bound active sources, additive planning storage and named control files", () => {
+    expect(checkGovernanceRestartScopeForTest({ ...context, entries: [
+      { status: "M", path: "AGENTS.md" }, { status: "A", path: "_review/BAUREGELN.md" },
+      { status: "A", path: "_review/WARTESCHLANGE.md" }, { status: "A", path: "_review/SEITENHOHEIT.md" },
+      { status: "A", path: "_review/archiv/legacy.md" }, { status: "A", path: "_review/lieferung_V44_verworfen/a.html" },
+      { status: "A", path: "_review/quellen/vorschau_module/KV/index.html" }, { status: "A", path: "_review/pakete/AP-KV-V04.md" },
+      { status: "D", path: "_review/AKTUELLE_ANWEISUNG.md" },
+      { status: "M", path: "scripts/quality/check-authoritative-sources.mjs" },
+    ] })).toEqual([]);
+  });
+  it("rejects product, unrelated controls, endversion, BAULOG and later edits to planning storage", () => {
+    for (const file of ["src/app/page.tsx", "quality/eslint-baseline.json", ".github/workflows/quality.yml", "docs/project/endversion/codex/BAUPLAN.json", "_review/BAULOG.md", "_review/_endversion_tmp/a", "_review/quellen/../BAULOG.md"]) {
+      expect(checkGovernanceRestartScopeForTest({ ...context, entries: [{ status: "A", path: file }] })).toContain(`NEUSTART_SCOPE:${file}`);
+    }
+    expect(checkGovernanceRestartScopeForTest({ ...context, entries: [{ status: "M", path: "_review/archiv/legacy.md" }] })).toContain("NEUSTART_PLANNING_NOT_ADDITIVE:_review/archiv/legacy.md");
+    expect(checkGovernanceRestartScopeForTest({ ...context, entries: [{ status: "M", path: "_review/AKTUELLE_ANWEISUNG.md" }] })).toContain("NEUSTART_LEGACY_NOT_ARCHIVED:_review/AKTUELLE_ANWEISUNG.md");
+  });
+  it("rejects another branch or base while ordinary B3 planning protection stays strict", () => {
+    expect(checkGovernanceRestartScopeForTest({ ...context, entries: [], branch: "codex/other" })).toContain("NEUSTART_BRANCH_INVALID:codex/other");
+    expect(checkGovernanceRestartScopeForTest({ ...context, entries: [], baseSha: "changed" })).toContain("NEUSTART_BASE_INVALID:changed");
+    expect(checkB3ScopeForTest({ entries: [{ status: "A", path: "_review/BAUREGELN.md" }] })).toContain("B3_BOUND_SOURCE_PROTECTED:_review/BAUREGELN.md");
+  });
+});
 
 describe("TA-B3 protected sources", () => {
   it("permits product, workflow, checker and new migration paths without branch rules", () => {

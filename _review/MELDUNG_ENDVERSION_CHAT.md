@@ -2,6 +2,70 @@
 
 Laufendes Protokoll (neueste oben). Der Endversion-Chat pflegt spec.json und erzeugt daraus `docs/project/endversion/codex/BAUPLAN.json`. Er schreibt nicht in den App-Code.
 
+## 07.11. 17:40 · Endversion → PL · V45 · Mini-Module V04 eingebunden (U-244) · AP-EIN-2b · AP-NACHR-V04 · AP-WERK-V04 · AP-KV · spec 52da4e19a1c9
+
+Stand: spec **52da4e19a1c9** · Bauplan `codex/BAUPLAN.next.json` Datei 666710a733da (ohne `bauplan.erzeugt`: 84b950890a4f) · css 5191D03B · Sichtvertrag B95588F7 · pruefe_sicht.cjs cdec8b69b6c4 (unverändert) · routen.beispiel.json a0e36f9d04e5 · Referenz 0704F084 · `ui/v04/KENNUNGEN.json` 17f9707eb8c3 · `ui/beispiel_reklamation.json` 334856443c5e · 195 Prüfbilder. Archiv V45. Nummer V44 war schon vergeben (Ideenabgleich, 14:13) – diese Lieferung ist **V45** (Hinweis 15:45).
+
+**(a) Status**
+- Auftrag `_review/AUFTRAG_ENDVERSION_V04_VERNETZUNG_2026-11-07.md` §0–§9 vollständig umgesetzt. Bau-Abschnitte baureif (9): neu **AP-WERK-V04 Werkstatt-Übersicht** und **AP-KV KV-Fassung & Zusage**; Teil 2b `rein` = **AP-EIN-2b** und **AP-NACHR-V04** als `F1 Neuer Eingang.v04` (Seiten rein, nachrichten). `paket_folge`: AP-EIN-2b, AP-NACHR-V04, AP-WERK-V04, AP-KV „bereit“; **AP-F1 Belege & Zeit** „stufe offen“ (Owner-Frage F1, vollständig spezifiziert, nicht bauen); **3.7 Lagerort** vorgemerkt.
+- PL 13:00/14:00: RT04-11…15 klicken jetzt „Angaben erkennen“ (`eingang.angaben-erkennen`); Reklamation/Nacharbeit: TEST-Datensatz + Routen-Vorschlag `ui/beispiel_reklamation.json` (MACHTWORT F2/G).
+- Gegenprüfung (unabhängiger Agent, Auszug + Sichtvertrag + V04-Quelle + Code main 323b919): R1 10 blockierend → R2 **0 blockierend**; wichtige/kleine Punkte eingearbeitet (`gegenpruefung` in den drei Abschnitten, Befunde im Archiv).
+
+**(b) Lösung im Kontext**
+- **Optik exakt V04** (U-244): Sichtvertrag für `rein` (alle Modi + `rein#kv`, `rein#reklamation`), `nachrichten#anliegen`, `nachrichten#erledigt`, `werkstatt` direkt aus der V04-Quelle (`quelle: "V04 …"`), Texte wörtlich, Daten als Platzhalter. Stil **eingebunden**: Abschnitt `v04:U-244 (.v04)` in `endversion_design.css` (alle V04-Regeln unter `.v04`). Vorschau-Gerüst (Beispiele, Testfälle, Teststand, Testkarten, Testversand) entfällt.
+- **Eingang (3.0)**: rotes Plus → „Hey {vorname}, was kann ich für dich tun?“ (Fenstername „Neuer Eingang“); Sprechen (gesperrt bis F2) · Foto · Datei · **Aus Mail** · Neu; **grünes Begleitfeld = U-243-Ergebniskarte** (eine Karte; Vorschaubild, Felder antippbar, Treffer mit Grund, Richtung, ein Hauptknopf je Lage, Etwas anderes, Weitere Seite, Gelesener Text, Später zuordnen); „Reklamation am Auftrag aufnehmen“ → 4.8 aufnehmen (keine Sofort-Nacharbeit); KV aus Eingang schreibt `vorgang_art kv` (KV-Zweig im Erfassungsbefehl als Bau-Lücke benannt).
+- **Nachrichten**: Reiter „Mailansicht | Anliegen“; 5 Kategorien = Zuordnung der 20 Anliegen-Arten (`screens[nachrichten].v04.kategorien`), Filter wie Mailansicht, Antwort mit `conversation_id`/`intake_item_id`, „Nur Info“ erst mit Fachvorgang oder „Kein Vorgang nötig“ (Grund), „Kein Geschäftsvorgang“ = 3.4 Modus kein, „Wieder öffnen“.
+- **Werkstatt**: V04-Kacheln, Filter Alle · Wartet bei Annahme · In Galvanik · Fertig im Haus · Übergeben (ersetzen die Gruppen, Vorrang festgelegt), ein nächster Schritt je Kachel, Karten = Endversion-Karten; Projektion mit Quelle je Feld (`v04.projektion.quellen`).
+- **Kreislauf**: Reklamation Weg K4 „Als berechneten Auftrag aufnehmen“ (`bezug_reklamation`); KV = `private.quotes` mit Revision, Stand abgeleitet, Versand/Zusage/Absage/Nachfass additiv (`prozesse.kv.ap_kv`); Aktionsvertrag + Aktionen-Tabelle §3 (`verhalten_appweit.v04.aktionen`), 14 Korrekturen §5, Datenbedarf §6 (`v04.datenbedarf`, nur additiv).
+- **Unverändert**: alle anderen AP-EIN-Seiten, Karten, Dialoge 3.x/4.x, Der Tag (nur Anschluss), AP-ABS, AP-SITZ. Änderungsliste V44 → V45: `paket_folge["V45-Änderungsliste"]`; Klick-Ledger +2 (Werkstatt/3.0 laufen über die V04-Fläche).
+- AP-ABS-b und Teil 6b bleiben vorgemerkt (V04 hatte Vorrang, nächste reguläre Lieferung).
+
+**(c) Belegwege**
+- Testfälle: `rein` EIN-V04-01…10 · `nachrichten` NACH-V04-01…07 + KL-05…KL-10 · `reklamation` KL-01…KL-04, KL-10b · neu `werkstatt` WERK-V04-01…04 (KL = Auftrag §8 K1–K10, je mit `dann.db`). RT04 angeglichen.
+- Gates grün: Was-ist-neu, Stand, UI 195 (0 gelb), Seiten 84×2, V04-Gate (15 Zustände × 3 Größen, 19 Brückenklicks), Selbsttest 195/195, Musterdaten, Klick 1404, Floskel, Testmodell, Baureife 9.
+
+**(d) Owner-Entscheidungen**
+- Keine neue. Offen bleiben **F1** (Belege & Zeit) und **F2** (Sprechen: Datenschutz/Anbieter) – Klärung durch PL; bis dahin stufe offen.
+- Owner-Haken `werkstatt` auf U-244 gesetzt (`meta.owner_haken.protokoll`) – nur widersprechen, falls nicht gewollt.
+
+## 07.11. 15:45 · Endversion → PL · Auftrag V04-Vernetzung angenommen · wird V45
+
+- Euer Auftrag 15:20 (U-244) überschneidet sich mit **V44, geliefert 14:13** (Eintrag unten: 3.0 neu nach U-243, AP-SITZ, Ideenabgleich). Die Nummer V44 ist damit vergeben (Stand-Gate: eine Nummer je Stand). Die V04-Lieferung kommt als **V45 bis Mo 09.11. 12:00**, eine SHA.
+- Inhalt V45 wie Auftrag: V04-Optik exakt für Eingang (rotes Plus), Nachrichten (+ Reiter „Anliegen“), Werkstatt-Übersicht; `screens[rein].u243` aus V44 geht darin auf (grünes Begleitfeld = Ergebniskarte, keine zweite). AP-SITZ aus V44 bleibt unverändert gültig.
+- Bitte V44 nicht separat binden, wenn V45 bis Montag kommt – oder AP-SITZ allein vorziehen; beides ist mit V45 verträglich. Keine Owner-Frage offen.
+
+## 07.11. 14:13 · Endversion → PL · V44 · 3.0 neu (U-243) + AP-SITZ bereit + Ideenabgleich · spec 814aeb7b5a21
+
+Stand: spec **814aeb7b5a21** · Bauplan `codex/BAUPLAN.next.json` Datei efcbe57d4af2 (ohne `bauplan.erzeugt`: f0c4b2d79d3d) · css 2364863D · Sichtvertrag 46BE8ACA · pruefe_sicht.cjs cdec8b69b6c4 (unverändert) · routen.beispiel.json e66478f73f8b · Referenz 331DF374 · 180 Prüfbilder. Archiv V44. MACHTWORT 07.11. gelesen und eingehalten (keine Rückfrage, Technisches selbst entschieden).
+
+**(a) Status**
+- Abschnitt 6 · U-243 „3.0 neu“ inkl. Modus „Aus Mail“ (P100): bestätigt, vollständig → **Teil 2b `rein` kann starten** (Abschnitt F1, `screens[rein].u243` = eine Quelle, Bauregel „Rang wie paket“).
+- Abschnitt 3 · Fundament N12 + N10/N11: bestätigt → **neues Paket AP-SITZ „bereit“** (Abschnitt „AP-SITZ Sitzung & Fassung“, bau-frei, Owner-Haken M7, Gegenprüfung ok).
+- Abschnitt 2: Zusätze in Picker, Der Tag R36, 8.11, AP-PROT, AP-OCR, AP-DK unter `paket_folge.<AP>.ideenabgleich` (IDs, Vorgabe, Testfälle) – Status bleibt „vorgemerkt“; N09/UX21 in `verhalten_appweit.texte_konkret`.
+- Abschnitt 1: `paket_folge.ideenspeicher` (abgedeckt · später · nicht übernehmen) + Hinweis X01 (Mollie-Tap nur Android, nicht iPad).
+- PL-Angleiche 05./06.11.: 5.4 Hauptaktion (leer gesperrt „Typ wählen“, #widerruf `absprache.widerrufen`, Widerruf zeigt nur Grund), AB02 zeitpunktfest, D06 Fixture + Erwartung, L03 Station `angenommen`/Ereignisstation `wareneingang`, AP-ABS-Texte (Tabelle `customer_agreements` neu). **AP-ABS-b** und **Teil 6b** als „vorgemerkt“ eingetragen; vollständig mit der AP-KV-Lieferung.
+
+**(b) Lösung im Kontext**
+- **3.0 vor der Aufnahme:** Tablet/Handy Sucher bleibt sofort aktiv (App-QR live), darunter groß „Foto aufnehmen“, daneben „Datei wählen“ und „Aus Mail“ (Recht mails), Notiz klein „oder Notiz schreiben“, kein Ziehen-Text; PC Feld für Notiz + Ablage, „Datei wählen“, „Fotos vom Handy“, „Aus Mail“. Fuß nur „Schließen“.
+- **Ergebniskarte:** Kopf in Worten (`kopf_je_art`), Vorschaubild → 3.9, Felder je Art antippbar/korrigierbar (`eingang.vorschlag_korrigieren`, Herkunft hand, Lernprotokoll), „unsicher“ nur bei Stufe unsicher, Treffer mit Grund, Richtung Etikett aus 8.1 (Wareneingang/Versand), **genau ein Hauptknopf je Lage** mit `recht`/`ohne_recht` (`u243.hauptknopf.lagen`), daneben „Anderer Kunde/Vorgang“ + „Etwas anderes ▾“ (Was-ist-das-Kacheln + Kontakt), „Weitere Seite“ (sofort gelesen, Seitenstreifen mit Entfernen), „Später zuordnen“ klein, „Gelesener Text“ eingeklappt. Weiterverarbeitung: alle Felder + Foto in den Zielweg, kein zweites Hochladen.
+- **Fehler** je Ursache in Worten ohne Code (`u243.fehler.zuordnung`), „Erneut lesen“ / „Selbst eintragen“ / „Neues Foto“; 60 s = nicht erreichbar.
+- **Aus Mail:** communication_threads (30 Tage, ohne Junk), ein Eingang je Nachricht (vollständige MIME, Anhänge, eingebettete Bilder > 10 KB als Foto-Kandidaten), dieselbe Ergebniskarte; schon erfasste Nachricht öffnet ihren Eingang.
+- **AP-SITZ:** Abmeldung nach {n} (Standard 60) Minuten ohne Eingabe je Gerät (`sitzung.eingabe`, `ende_um` aus der Antwort, Einstellung 8.5 `company_settings.abmeldung_minuten`), Abmelde-Sicherung als Entwurf (3, 3.1; 24-h-Ausnahme nur für `entwurf.speichern` herkunft abmeldung), Anmeldeseite Modus „abgemeldet“ ohne Inhalte, „Weiter mit {titel}“ einmal auf Der Tag. M7 „Neuere Fassung“: **kein Autosave** (X12 bleibt), Versionsprüfung bei jedem Entwurf-Speichern, 30-s-Nachladen nur mit Entwurf-ID; 5.2 ohne Entwurf („Nicht gespeichert“).
+- **Kennungen** bleiben, wo das Ziel gleich ist (`rein.wem-gehoert` heißt jetzt „Anderer Kunde/Vorgang“, als Hauptknopf „Kunde/Vorgang wählen“). **Entfallen mit Ersatz** (Änderungslisten `screens[rein].u243.aenderungsliste`, `paket_folge.AP-SITZ.aenderungsliste`, `paket_folge.angleich_pl.aenderungsliste`; 2 Klick-Ledger-Einträge): „Fertig · lesen“, Reihe „Andere Art“, Name „Wem gehört das?“ in 3.0, Nebenknopf „Auftrag erfassen“ bei genau einem erwarteten Auftrag (→ Etwas anderes › Auftrag oder KV).
+- **Unverändert:** alle anderen AP-EIN-Seiten (Runde 53), AP-ABS (V43) bis auf die Angleiche, Login per Code, X12-Datenmodell.
+
+**(c) Belegwege**
+- Testfälle `testmodell.seiten.rein` U243-01 … U243-12 (+ F05, F08, U241-01 angepasst) und `testmodell.seiten.fassung` SITZ-01 … SITZ-09 (Abmeldung, Eingabe zählt, zweites Gerät, Weiter mit, fremder Login, Nachladen still, M7 beide Wahlen, Einstellung 8.5). Neue Konventionen: Schritte `uhr_vorstellen`, `nachladen`, `zweites_geraet`/`erstes_geraet`, `anmelden`; `erkennung_fixtures`, `geraete`, `db_zeitpunkt`.
+- Sichtvertrag + Prüfbilder neu: `rein#etikett`, `rein#lesefehler`, `rein#mail`, `login`, `login#abgemeldet`, `fassung` je Desktop/Tablet/Handy (18 neu, gesamt 180); alle 3.0-Bilder neu.
+- Gegenprüfung (unabhängiger Agent, nur Bauplan-Auszug + Sichtvertrag): Runde 1 – 6 blockierend / 16 wichtig / 8 klein, eingearbeitet; Runde 2 – 0 blockierend, 4 wichtig + 8 klein, eingearbeitet.
+- Gates grün: Was-ist-neu, Stand, UI 180 (0 gelb), Seiten 74×2, Selbsttest 180/180, Musterdaten, Klick 1394 (2 Ledger), Floskel, Testmodell, Baureife 7 Abschnitte (neu: AP-SITZ).
+
+**(d) Owner-Entscheidungen**
+- Keine offen. Owner-Haken M7 auf Owner-Auftrag 05.11. gesetzt (`meta.owner_haken.protokoll`) – nur widersprechen, falls nicht gewollt.
+- Hinweis PL: `docs/project/endversion/ui/` im Arbeitsbaum ist ab jetzt V44 (ungebunden). Für die offenen V43-PRs (#185/#186/#183) gelten bis zur Bindung die V43-Hashes 338AEEE0 / 0E1049FD (Archiv V43).
+
+Nächstes Paket: AP-KV (vollständig, mit AP-ABS-b und Teil 6b), sobald AP-ABS gebunden ist.
+
 ## 05.11. 15:30 · Endversion → PL · AP-ABS bereit · Paketfolge vollständig · V43 · spec b6132498f47a
 
 Stand: spec **b6132498f47a** · Bauplan `codex/BAUPLAN.next.json` 9491009f79e3 (neuer Abschnitt „AP-ABS Absprachen“, bau-frei, Gegenprüfung ok) · css 338AEEE0 · Sichtvertrag 0E1049FD · pruefe_sicht.cjs cdec8b69b6c4 (unverändert) · routen.beispiel.json 1f6a8c3a2c05. Archiv V43. Keine AP-EIN-Seite geändert (Regel 0.2).
