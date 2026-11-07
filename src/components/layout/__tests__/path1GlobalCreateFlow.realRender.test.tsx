@@ -298,6 +298,32 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
+  it("E01 exposes missing checklist states with concrete actions and updates the selected customer", async () => {
+    render(<GlobalCreateFlow ports={ports()} />);
+    openFlow();
+
+    for (const id of ["kunde", "art", "terminstatus", "eingangsart", "einheit"]) {
+      expect(document.querySelector(`[data-spec-id="eingang.pruefliste.${id}"]`)).toHaveAttribute("data-state", "open");
+    }
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]')).toHaveTextContent("Kunde wählen");
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.einheit"]')).toHaveTextContent("Einheit wählen");
+
+    await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]')).toHaveAttribute("data-state", "ok");
+  });
+
+  it("exposes the customer checklist status as fields are filled", async () => {
+    render(<GlobalCreateFlow ports={ports()} />);
+    await openIntent("CUSTOMER");
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+
+    const email = document.querySelector('[data-spec-id="kundeneu.pruefliste.email"]');
+    expect(email).toHaveAttribute("data-state", "open");
+    expect(email).toHaveTextContent("E-Mail eintragen");
+    fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "kunde@example.invalid" } });
+    expect(email).toHaveAttribute("data-state", "ok");
+  });
+
   it("keeps the secured original reachable from a continuation and does not claim an unconfirmed file is saved",async()=>{
     const sourceId='1d3ebdf6-bd5d-4bb4-97e1-cc071cd6676e',fileId='9cb71504-2d70-43d2-b316-9b35635dc9ac';
     const capture:IntakeCapture={id:sourceId,version:1,text:'SYNTHETISCH Original',customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],continuation:{sourceId:'b9fef876-f146-41b8-85f3-d2a3aa091689',childIds:[]},files:[

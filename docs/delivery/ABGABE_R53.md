@@ -16,8 +16,9 @@ Sichtlauf und die CI-Prüfungen des PR-Kopfs stehen noch aus.
 ## Nachweise und offene Punkte
 
 - #183 ist mit `323b919f` gemergt; der Reparaturzweig wurde darauf rebasiert.
-  Geprüfter lokaler Produktstand: `8ffc576149b75ae81b4242006cd6dd3e3d303d3c`.
-  Ein PR-Kopf und eine READY-Preview dafür stehen noch aus.
+  Der aktuelle Kandidat steht in [PR #188](https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/188).
+  Exakter Kopf-SHA und zugehörige READY-Preview werden in dessen Beschreibung
+  nach dem Git-Push nachgetragen.
 - Echte Serveraktionen gegen die lokale Replay-Datenbank und den lokalen
   Storage: **3/3** Fortsetzungsfälle bestanden. Geprüft sind drei aufeinander
   folgende Belege, dieselbe Originaldatei ohne Kopie, Zuordnung zum Auftrag,
@@ -37,6 +38,16 @@ Sichtlauf und die CI-Prüfungen des PR-Kopfs stehen noch aus.
 - Typprüfung, H18-Inventar, Modulgrenzen und No-Fake-Prüfung bestanden am
   rebasierten Produktstand. Der gebundene Sichtvergleich sowie die vollständigen
   CI-Checks am endgültigen PR-Kopf bleiben offen.
+- E01: Die Prüfmaschine liest den tatsächlichen Status der sichtbaren
+  Prüflistenzeile, während die Anzeige gemäß U-242 eine konkrete Handlung
+  wie „Kunde wählen“ statt des isolierten Wortes „fehlt“ nennt. Der
+  generierte Akzeptanzfall bleibt unverändert; zwei realRender-Fälle prüfen
+  leere und ausgefüllte Kundenangaben sowie den Zustandswechsel.
+- Der bisherige CI-Lauf auf `e57f8b5a` meldete E01 und im vollständigen
+  Replay den bereits früher beobachteten Tablet-Navigationsfehler nach
+  `/settings`. Für den neuen Kopf sind beide Prüfungen erneut offen. Die
+  fremden, noch ungebundenen Endversion-Dateien im lokalen Arbeitsbaum
+  verfälschen dort die Quellen-Bindungsprüfung; sie sind nicht Teil des PRs.
 - RT04-11/12/14/15 sind nach P103 als `Endversion-Angleich Testmodell RT04`
   eingeordnet; ihre Assertions wurden nicht verändert.
 

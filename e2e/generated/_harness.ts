@@ -1470,7 +1470,22 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
     case "anzahl": await expect(locator).toHaveCount(Number(value)); break;
     case "anzahl_min": await expect.poll(() => locator.count()).toBeGreaterThanOrEqual(Number(value)); break;
     case "anzahl_max": await expect.poll(() => locator.count()).toBeLessThanOrEqual(Number(value)); break;
-    case "status": await expect(locator).toContainText(String(value), { ignoreCase: true }); break;
+    case "status": {
+      // Runde 53 replaces generic status words with actionable labels. The
+      // checklist exposes the same status separately from its visible text.
+      const checklistStates: Record<string, string> = {
+        fehlt: "open", ok: "ok", "prüfen": "pending", entscheiden: "entscheiden",
+      };
+      const checklist = /^(eingang|kundeneu)\.pruefliste\./.test(expectation.id);
+      const expectedState = checklistStates[String(value).toLowerCase()];
+      if (checklist && expectedState) {
+        await expect(locator).toBeVisible();
+        await expect(locator).toHaveAttribute("data-state", expectedState);
+      } else {
+        await expect(locator).toContainText(String(value), { ignoreCase: true });
+      }
+      break;
+    }
     default: throw new Error(`FLOW_EXPECTATION_UNSUPPORTED:${expectation.erwartung}`);
   }
 }
