@@ -1,4 +1,5 @@
 import "server-only";
+import { berlinCalendarDay } from "@/lib/domain/workingDays";
 
 export type IntakeTextRecognitionField = {
   field: "companyName" | "email" | "phone" | "zipCode" | "city" | "dueDate";
@@ -11,6 +12,7 @@ export type IntakeTextRecognitionPosition = {
   quantity: string;
   unit: "Stück" | "kg";
   surfaceRequested: string;
+  surfaceRecognized?: boolean;
   executionRequested: "hochglanz" | "glaenzend" | "matt" | "gelb_passiviert" | "blau_passiviert" | "offen";
   source: string;
 };
@@ -18,6 +20,8 @@ export type IntakeTextRecognitionPosition = {
 export type IntakeTextRecognition = {
   fields: IntakeTextRecognitionField[];
   positions: IntakeTextRecognitionPosition[];
+  totalPositions?: number;
+  overflowPositions?: IntakeTextRecognitionPosition[];
 };
 
 const SURFACES: Array<{ pattern: RegExp; surface: string }> = [
@@ -35,11 +39,19 @@ const EXECUTIONS: Array<{ pattern: RegExp; execution: IntakeTextRecognitionPosit
   { pattern: /\bblau(?:\s+passiviert)?\b/i, execution: "blau_passiviert" },
 ];
 
+const NUMBER_WORDS: Record<string, string> = {
+  eins: "1", ein: "1", eine: "1", zwei: "2", drei: "3", vier: "4", fünf: "5", sechs: "6",
+  sieben: "7", acht: "8", neun: "9", zehn: "10", elf: "11", zwölf: "12", zwanzig: "20",
+  dreißig: "30", hundert: "100", "ein dutzend": "12", "ein paar": "", einige: "",
+};
+const WEEKDAYS: Record<string, number> = { sonntag: 0, montag: 1, dienstag: 2, mittwoch: 3, donnerstag: 4, freitag: 5, samstag: 6 };
+
 function nextDate(day: number, month: number, year: number | null, today: Date): string | null {
   const fullYear = year === null ? today.getUTCFullYear() : year < 100 ? 2000 + year : year;
   let candidate = new Date(Date.UTC(fullYear, month - 1, day));
   if (candidate.getUTCDate() !== day || candidate.getUTCMonth() !== month - 1) return null;
-  if (year === null && candidate < today) candidate = new Date(Date.UTC(fullYear + 1, month - 1, day));
+  const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  if (year === null && candidate < todayStart) candidate = new Date(Date.UTC(fullYear + 1, month - 1, day));
   return candidate.toISOString().slice(0, 10);
 }
 
@@ -48,6 +60,7 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
   const normalized = text.trim();
   if (!normalized) return { fields: [], positions: [] };
   const fields: IntakeTextRecognitionField[] = [];
+  const berlinToday = new Date(`${berlinCalendarDay(today)}T00:00:00.000Z`);
   const addField = (field: IntakeTextRecognitionField["field"], value: string, source: string) => {
     if (!fields.some((entry) => entry.field === field)) fields.push({ field, value, source });
   };
@@ -64,30 +77,46 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
   }
   const companyLine = lines.find((line) => /\b(?:GmbH|UG|AG|KG|OHG|GbR|e\.\s*K\.|e\.\s*V\.)\b/i.test(line));
   if (companyLine) addField("companyName", companyLine.slice(0, 160), `Text Zeile ${lines.indexOf(companyLine) + 1}`);
-  const dateMatch = normalized.match(/(?:\bbis\s+)?\b(\d{1,2})\.(\d{1,2})\.(?:(\d{2,4}))?/i);
+  const requestText = normalized.split(/\r?\n(?:--\s*|mit freundlichen gr[üu][ßs]en\b)/i, 1)[0]!;
+  const corrected = requestText.replace(/\b(?:nicht|kein(?:e|en)?)\s+[^,;\n]{1,80}?,\s*(?:nur|sondern)\s+/gi, "");
+  // Ein Mail- oder Signaturdatum ist kein Lieferwunsch; nur ausdrücklich eingeleitete Termine übernehmen.
+  const dateMatch = corrected.match(/\b(?:bis|zum)\s+(\d{1,2})\.(\d{1,2})\.(?:(\d{2,4}))?/i);
   if (dateMatch) {
-    const value = nextDate(Number(dateMatch[1]), Number(dateMatch[2]), dateMatch[3] ? Number(dateMatch[3]) : null, today);
+    const value = nextDate(Number(dateMatch[1]), Number(dateMatch[2]), dateMatch[3] ? Number(dateMatch[3]) : null, berlinToday);
     if (value) addField("dueDate", value, "Text");
+  } else {
+    const weekdayMatch = corrected.match(/(?:\bbis\s+|\b(?:bis\s+)?nächste\s+woche\s+)(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)\b/i);
+    if (weekdayMatch) {
+      const target = WEEKDAYS[weekdayMatch[1]!.toLowerCase()]!;
+      const date = new Date(berlinToday);
+      const delta = /nächste\s+woche/i.test(weekdayMatch[0])
+        ? ((8 - date.getUTCDay()) % 7 || 7) + (target + 6) % 7
+        : (target - date.getUTCDay() + 7) % 7;
+      date.setUTCDate(date.getUTCDate() + delta);
+      addField("dueDate", date.toISOString().slice(0, 10), "Text");
+    }
   }
 
-  const positions = normalized.split(/\r?\n|;|,(?=\s*\d)|\s+und\s+/i).flatMap((part, index) => {
-    const quantityMatch = part.trim().match(/^(\d+(?:[.,]\d+)?)\s*(kg|Stück|Stk\.?|St\.?|x)\s+(.+)$/i);
+  const positions = corrected.split(/\r?\n|;|,(?=\s*\d)|\s+und\s+/i).flatMap((part, index) => {
+    const quantityMatch = part.trim().replace(/^bitte\s+/i, "").match(/^(\d+(?:[.,]\d+)?|ein dutzend|ein paar|eins|ein|eine|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf|zwanzig|dreißig|hundert|einige)\s*(kg|Stück|Stk\.?|St\.?|Teile|x)\b\s*(.*)$/i);
     if (!quantityMatch) return [];
     const surface = SURFACES.find((entry) => entry.pattern.test(part));
     const execution = EXECUTIONS.find((entry) => entry.pattern.test(part));
     let name = quantityMatch[3]!.trim();
     for (const entry of [...SURFACES, ...EXECUTIONS]) name = name.replace(entry.pattern, " ");
     name = name.replace(/\s+/g, " ").replace(/^[,.-]+|[,.-]+$/g, "").trim();
+    if (!name && /^teile$/i.test(quantityMatch[2]!)) name = "Teile";
     if (name.length < 2) return [];
     return [{
       name,
-      quantity: quantityMatch[1]!.replace(",", "."),
+      quantity: NUMBER_WORDS[quantityMatch[1]!.toLowerCase()] ?? quantityMatch[1]!.replace(",", "."),
       unit: /^kg$/i.test(quantityMatch[2]!) ? "kg" as const : "Stück" as const,
       surfaceRequested: surface?.surface ?? "noch zu klären",
+      surfaceRecognized: Boolean(surface),
       executionRequested: execution?.execution ?? "offen",
       source: `Text Abschnitt ${index + 1}`,
     }];
-  }).slice(0, 20);
+  });
 
-  return { fields, positions };
+  return { fields, positions: positions.slice(0, 20), ...(positions.length > 20 ? { totalPositions: positions.length, overflowPositions: positions.slice(20) } : {}) };
 }

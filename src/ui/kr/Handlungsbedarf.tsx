@@ -28,7 +28,7 @@ export interface HandlungsEintragProps {
   /** ISO-Termin für die stabile Sortierung innerhalb einer Dringlichkeitsart. */
   termin?: string;
 }
-const LABEL: Record<HandlungsArt, [string, 'rot' | 'warn' | 'info']> = { konflikt: ['Konflikt', 'rot'], warnung: ['Warnung', 'warn'], entscheidung: ['Entscheidung', 'info'] };
+const LABEL: Record<HandlungsArt, [string, 'rot' | 'warn' | 'info']> = { konflikt: ['blockiert', 'rot'], warnung: ['wird knapp', 'warn'], entscheidung: ['wartet auf dich', 'info'] };
 /** Max. 2 Zeilen: Titel + 1 Meta · Aktion rechts · keine Erklärzeile */
 export function HandlungsEintrag(p: HandlungsEintragProps) {
   const handy = p.geraet === 'handy';
@@ -61,7 +61,7 @@ export function HandlungsEintrag(p: HandlungsEintragProps) {
             : <Button data-spec-id={aktionen[0].specId} art={aktionen[0].art ?? 'erledigen'} icon={aktionen[0].icon} text={handy ? aktionen[0].kurz ?? aktionen[0].text : aktionen[0].text} onClick={aktionen[0].onClick} />}
           {spaeter && <Button art="leise" icon={spaeter.icon} text={spaeter.text} onClick={spaeter.onClick} />}
           {/* Owner 2026-09-27: keine Auswahl im Fokus – weitere Aktionen hinter „Weitere“ (onWeitere öffnet Menü) */}
-          {andere.length > 0 && <Button art="leise" icon="more" text="Weitere" onClick={p.onWeitere} />}
+          {andere.length > 0 && <Button art="leise" icon="more" text="Weitere Aktionen" onClick={p.onWeitere} />}
         </>) : (<>
           {(handy ? aktionen.slice(0, 1) : aktionen).map((a, n) => (
             a.specId === 'hbmehr.auftrag-offnen'
@@ -103,9 +103,9 @@ export function HandlungsListe({ eintraege: roh, geraet, label, zustand = 'daten
   const sicht = max && eintraege.length > max ? eintraege.filter((e, n) => e.art === 'konflikt' || n < max) : eintraege;
   const rest = eintraege.filter(e => !sicht.includes(e));
   return (
-    <section className="kr-hb" aria-label="Handlungsbedarf">
+    <section className="kr-hb" aria-label="Offene Aufgaben">
       {label && <h2 className="kr-hb-label"><Icon name="clock" />{label}</h2>}
-      <MitZustand zustand={zustand} texte={{ titel: 'Handlungsbedarf', leerText: 'Nichts Dringendes.', ...texte }}>
+      <MitZustand zustand={zustand} texte={{ titel: 'Offene Aufgaben', leerText: 'Keine offenen Aufgaben.', ...texte }}>
         {sicht.map(({ key, ...e }) => <HandlungsEintrag key={key} {...e} geraet={geraet} />)}
         {rest.length > 0 && (<>
           <div className={offen ? 'kr-klapp kr-klapp--offen' : 'kr-klapp'} aria-hidden={!offen}><div>{rest.map(({ key, ...e }) => <HandlungsEintrag key={key} {...e} geraet={geraet} />)}</div></div>

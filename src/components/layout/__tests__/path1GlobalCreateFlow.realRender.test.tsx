@@ -5,7 +5,7 @@ import {
   type GlobalCreatePorts,
   type GlobalCreateIntent,
 } from "@/components/layout/GlobalCreateFlow";
-import {IntakeMessageDialogs,type IntakeCapture} from '@/modules/eingang/public';
+import {IntakeMessageDialogs,type IntakeCapture,type IntakeDraftPorts} from '@/modules/eingang/public';
 
 const CUSTOMER_ID = "72d8c6c6-397c-4a9c-b464-d2e5595eb42a";
 const QUOTE_ID = "1c32e174-8494-46f0-9f5f-1a45f2a60bd1";
@@ -298,6 +298,72 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
+  it("E01 exposes missing checklist states with concrete actions and updates the selected customer", async () => {
+    render(<GlobalCreateFlow ports={ports()} />);
+    openFlow();
+
+    for (const id of ["kunde", "art", "terminstatus", "eingangsart", "einheit"]) {
+      expect(document.querySelector(`[data-spec-id="eingang.pruefliste.${id}"]`)).toHaveAttribute("data-state", "open");
+    }
+    const customerCheck = document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]');
+    expect(customerCheck).toHaveTextContent("Kunde wählen");
+    expect(within(customerCheck as HTMLElement).getAllByText("Kunde wählen")).toHaveLength(1);
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.einheit"]')).toHaveTextContent("Einheit wählen");
+
+    await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]')).toHaveAttribute("data-state", "ok");
+  });
+
+  it("exposes the customer checklist status as fields are filled", async () => {
+    render(<GlobalCreateFlow ports={ports()} />);
+    await openIntent("CUSTOMER");
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+
+    const email = document.querySelector('[data-spec-id="kundeneu.pruefliste.email"]');
+    expect(email).toHaveAttribute("data-state", "open");
+    expect(email).toHaveTextContent("E-Mail eintragen");
+    fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "kunde@example.invalid" } });
+    expect(email).toHaveAttribute("data-state", "ok");
+  });
+
+  it("K26 marks an address needing correction as pending and keeps it unsaved", async () => {
+    const api = ports({
+      checkCustomerAddress: vi.fn().mockResolvedValue({ code: "OK", data: {
+        kind: "review", message: "PLZ 12345 gehört zu Teststadt – nicht zu Falschort",
+        status: null, blocked: true, suggestions: [{ zipCode: "12345", city: "Teststadt", street: "Testweg" }],
+      } }),
+    });
+    render(<GlobalCreateFlow ports={api} />);
+    await openIntent("CUSTOMER");
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+    fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH K26" } });
+    fillRequiredCustomerAddress();
+    fireEvent.change(screen.getByLabelText("Ort"), { target: { value: "Falschort" } });
+
+    const address = document.querySelector('[data-spec-id="kundeneu.pruefliste.anschrift"]');
+    await waitFor(() => expect(address).toHaveAttribute("data-state", "pending"));
+    expect(address).toHaveTextContent("Anschrift mit den Vorschlägen abgleichen");
+    fireEvent.click(screen.getByRole("button", { name: "Kunde speichern" }));
+    expect(api.createCustomer).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Ort")).toHaveValue("Falschort");
+  });
+
+  it("keeps the secured original reachable from a continuation and does not claim an unconfirmed file is saved",async()=>{
+    const sourceId='1d3ebdf6-bd5d-4bb4-97e1-cc071cd6676e',fileId='9cb71504-2d70-43d2-b316-9b35635dc9ac';
+    const capture:IntakeCapture={id:sourceId,version:1,text:'SYNTHETISCH Original',customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],continuation:{sourceId:'b9fef876-f146-41b8-85f3-d2a3aa091689',childIds:[]},files:[
+      {id:fileId,name:'SYNTHETISCH Beleg.pdf',mime:'application/pdf',bytes:24,readable:true,status:'fertig',secured:true},
+      {id:'4a047452-75ab-4bac-8520-c17af67cb1d5',name:'SYNTHETISCH offen.pdf',mime:'application/pdf',bytes:24,readable:true,status:'wartet',secured:false},
+    ]};
+    const openCaptureObject=vi.fn().mockReturnValueOnce(true).mockReturnValueOnce(false);
+    const api=ports({getCapture:vi.fn().mockResolvedValue({code:'OK',capture}),openCaptureObject});
+    render(<GlobalCreateFlow ports={api}/>);
+    await act(async()=>{window.dispatchEvent(new CustomEvent('path1:global-create-open',{detail:{intent:'DIRECT_INTAKE',prefill:{sourceItemId:sourceId,intakeKind:'auftrag'}}}));});
+    const open=await screen.findByRole('button',{name:'SYNTHETISCH Beleg.pdf · Original öffnen'});
+    expect(screen.getByText('SYNTHETISCH offen.pdf · Original noch nicht bestätigt')).toBeInTheDocument();
+    fireEvent.click(open);expect(openCaptureObject).toHaveBeenCalledWith('original',`${sourceId}#${fileId}`);
+    fireEvent.click(open);expect(await screen.findByText(/Original konnte nicht geöffnet werden/)).toBeInTheDocument();
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
   it("P44: selects an actual intake mail through 3.4 and returns to the same capture without losing manual entries",async()=>{
     const value=ports({canReadMails:true});
     const mailId='22fe6577-b527-4dce-aacd-b0546cf30918';
@@ -955,6 +1021,82 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(recognizeIntakeText).toHaveBeenCalledWith(expect.stringContaining("gregor laucht"));
   });
 
+  it("zeigt eine nicht erkannte Oberfläche als offen statt als erkannt", async () => {
+    const recognizeIntakeText = vi.fn<GlobalCreatePorts["recognizeIntakeText"]>().mockResolvedValue({
+      code: "OK", data: { fields: [], positions: [{ name: "Halter", quantity: "2", unit: "Stück", surfaceRequested: "noch zu klären", surfaceRecognized: false, executionRequested: "offen", source: "Text Abschnitt 1" }] },
+    });
+    render(<GlobalCreateFlow ports={ports({ recognizeIntakeText })} />);
+    openFlow();
+    fireEvent.change(screen.getByRole("textbox", { name: "Schnell erfassen" }), { target: { value: "2 Stück Halter" } });
+    fireEvent.click(screen.getByRole("button", { name: "Angaben erkennen" }));
+    await waitFor(() => expect(screen.getByLabelText("Teil / Leistung")).toHaveValue("Halter"));
+    expect(screen.getByRole("combobox", { name: "Oberfläche" })).toHaveValue("offen");
+    expect(screen.queryByText(/Oberfläche noch zu klären · erkannt/)).not.toBeInTheDocument();
+  });
+
+  it.each(["text","position"] as const)("verwirft überholte Erkennung nach neuer %s-Eingabe",async changed=>{
+    let resolveRecognition!:(value:Awaited<ReturnType<GlobalCreatePorts["recognizeIntakeText"]>>)=>void;
+    const recognizeIntakeText=vi.fn<GlobalCreatePorts["recognizeIntakeText"]>(()=>new Promise(resolve=>{resolveRecognition=resolve;}));
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText})}/>);openFlow();
+    const text=await screen.findByRole("textbox",{name:"Schnell erfassen"});
+    fireEvent.change(text,{target:{value:"2 Stück alter Halter verzinken"}});
+    fireEvent.click(screen.getByRole("button",{name:"Angaben erkennen"}));
+    await waitFor(()=>expect(recognizeIntakeText).toHaveBeenCalledTimes(1));
+    if(changed==="text")fireEvent.change(text,{target:{value:"3 Stück neue Mutter vernickeln"}});
+    else fireEvent.change(screen.getByLabelText("Teil / Leistung"),{target:{value:"SYNTHETISCH manuell"}});
+    await act(async()=>resolveRecognition({code:"OK",data:{fields:[],positions:[{name:"SYNTHETISCH alter Halter",quantity:"2",unit:"Stück",surfaceRequested:"Verzinken",executionRequested:"offen",source:"Text"}]}}));
+    expect(screen.queryByDisplayValue("SYNTHETISCH alter Halter")).not.toBeInTheDocument();
+    if(changed==="text")expect(text).toHaveValue("3 Stück neue Mutter vernickeln");
+    else expect(screen.getByLabelText("Teil / Leistung")).toHaveValue("SYNTHETISCH manuell");
+  });
+
+  it("bricht eine laufende Erkennung ab und übernimmt die späte Antwort nicht",async()=>{
+    let resolveRecognition!:(value:Awaited<ReturnType<GlobalCreatePorts["recognizeIntakeText"]>>)=>void;
+    const recognizeIntakeText=vi.fn<GlobalCreatePorts["recognizeIntakeText"]>(()=>new Promise(resolve=>{resolveRecognition=resolve;}));
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText})}/>);openFlow();
+    const text=await screen.findByRole("textbox",{name:"Schnell erfassen"});
+    fireEvent.change(text,{target:{value:"2 Stück Halter verzinken"}});
+    fireEvent.click(screen.getByRole("button",{name:"Angaben erkennen"}));
+    await waitFor(()=>expect(recognizeIntakeText).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button",{name:"Erkennung abbrechen"}));
+    expect(screen.getByRole("button",{name:"Angaben erkennen"})).toBeEnabled();
+    await act(async()=>resolveRecognition({code:"OK",data:{fields:[],positions:[{name:"SYNTHETISCH abgebrochen",quantity:"2",unit:"Stück",surfaceRequested:"Verzinken",executionRequested:"offen",source:"Text"}]}}));
+    expect(screen.queryByDisplayValue("SYNTHETISCH abgebrochen")).not.toBeInTheDocument();
+    expect(text).toHaveValue("2 Stück Halter verzinken");
+  });
+
+  it("löst eine hängende Erkennung nach 60 Sekunden und behält die Eingaben",async()=>{
+    const recognizeIntakeText=vi.fn<GlobalCreatePorts["recognizeIntakeText"]>(()=>new Promise(()=>{}));
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText})}/>);openFlow();
+    const text=await screen.findByRole("textbox",{name:"Schnell erfassen"});
+    fireEvent.change(text,{target:{value:"2 Stück Halter verzinken"}});
+    vi.useFakeTimers();
+    try{
+      await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"Angaben erkennen"}));await Promise.resolve();await Promise.resolve();});
+      expect(recognizeIntakeText).toHaveBeenCalledTimes(1);
+      await act(async()=>{await vi.advanceTimersByTimeAsync(60_000);});
+      expect(screen.getByText(/Erkennung dauert zu lange/)).toBeInTheDocument();
+      expect(text).toHaveValue("2 Stück Halter verzinken");
+      expect(screen.getByRole("button",{name:"Angaben erkennen"})).toBeEnabled();
+    }finally{vi.useRealTimers();}
+  });
+
+  it("verwirft überholte Angaben auch während der Bestandssuche",async()=>{
+    let resolveSearch!:(value:Awaited<ReturnType<GlobalCreatePorts["searchIntakeCustomers"]>>)=>void;
+    let firstSearch=true;
+    const searchIntakeCustomers=vi.fn<GlobalCreatePorts["searchIntakeCustomers"]>(()=>{if(firstSearch){firstSearch=false;return new Promise(resolve=>{resolveSearch=resolve;});}return Promise.resolve({code:"OK",customers:[]});});
+    const recognizeIntakeText=vi.fn<GlobalCreatePorts["recognizeIntakeText"]>().mockResolvedValue({code:"OK",data:{fields:[{field:"email",value:"synthetic@example.invalid",source:"Text"}],positions:[{name:"SYNTHETISCH alt",quantity:"2",unit:"Stück",surfaceRequested:"Verzinken",executionRequested:"offen",source:"Text"}]}});
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText,searchIntakeCustomers})}/>);openFlow();
+    fireEvent.change(await screen.findByRole("textbox",{name:"Schnell erfassen"}),{target:{value:"synthetic@example.invalid 2 Stück alt"}});
+    fireEvent.click(screen.getByRole("button",{name:"Angaben erkennen"}));
+    await waitFor(()=>expect(searchIntakeCustomers).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("Teil / Leistung"),{target:{value:"SYNTHETISCH neu"}});
+    await act(async()=>resolveSearch({code:"OK",customers:[]}));
+    await waitFor(()=>expect(screen.getByRole("button",{name:"Angaben erkennen"})).toBeEnabled());
+    expect(screen.getByLabelText("Teil / Leistung")).toHaveValue("SYNTHETISCH neu");
+    expect(screen.queryByDisplayValue("SYNTHETISCH alt")).not.toBeInTheDocument();
+  });
+
   it("uses a name-only quick capture as the customer search and offers the matching customer", async () => {
     const customer = {
       id: CUSTOMER_ID,
@@ -1288,6 +1430,35 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.createQuote).not.toHaveBeenCalled();
   });
 
+  it("führt aus der Kunden-Prüfliste zu den konkret offenen Feldern", async () => {
+    render(<GlobalCreateFlow ports={ports()} />);
+    await openIntent("CUSTOMER");
+    const dialog = screen.getByRole("dialog", { name: /Kunde anlegen/ });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Firma oder Privat wählen/ }));
+    expect(within(screen.getByRole("group", { name: "Kundentyp" })).getByRole("button", { name: "Firma" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Name \/ Firma eintragen/ }));
+    expect(screen.getByLabelText("Firmenname")).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Muster" } });
+    expect(within(dialog).getByRole("button", { name: /Name \/ Firma SYNTHETISCH Muster · vorhanden/ })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Ansprechpartner eintragen/ }));
+    expect(screen.getByLabelText("Nachname")).toHaveFocus();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Anschrift eintragen/ }));
+    expect(screen.getByLabelText("Straße")).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("Straße"), { target: { value: "Testweg" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Anschrift eintragen/ }));
+    expect(screen.getByLabelText("Nr.")).toHaveFocus();
+  });
+
+  it("fordert für einen Privatkunden den Vornamen statt eines Ansprechpartners", async () => {
+    render(<GlobalCreateFlow ports={ports()} />);
+    await openIntent("CUSTOMER");
+    fireEvent.click(screen.getByRole("button", { name: "Privat" }));
+    fireEvent.click(screen.getByRole("button", { name: /Vorname eintragen/ }));
+    expect(screen.getByLabelText("Vorname")).toHaveFocus();
+    expect(screen.queryByRole("button", { name: /Ansprechpartner eintragen/ })).not.toBeInTheDocument();
+  });
+
   it("keeps the draft visible for validation and conflict responses without false success", async () => {
     const createCustomer = vi.fn<GlobalCreatePorts["createCustomer"]>().mockResolvedValue({
       code: "VALIDATION_ERROR",
@@ -1356,6 +1527,101 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(vi.mocked(api.createDirectIntake).mock.calls[0]?.[0]).toMatchObject({items:[{name:'SYNTHETISCH Anderes Teil',quantity:1.25,unit:'kg',unitPriceCents:3740,vatRateBasisPoints:1900}]});
   });
 
+  it('U242 explains the actual quantity problem alongside the unit price',async()=>{
+    const api=ports();render(<GlobalCreateFlow ports={api}/>);openFlow();await fillDirectIntakeForExistingCustomer();
+    fireEvent.change(screen.getByLabelText('Preis netto je Einheit'),{target:{value:'37,40'}});
+    fireEvent.change(screen.getByRole('combobox',{name:'Einheit'}),{target:{value:'stueck'}});
+    fireEvent.change(screen.getByRole('spinbutton',{name:'Menge'}),{target:{value:'1.25'}});
+    expect(screen.getByText('Menge 1–99 999 (ganze Zahl)',{selector:'small'})).toBeInTheDocument();
+    expect(screen.queryByText('Menge prüfen')).not.toBeInTheDocument();
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it('replaces untouched recognized positions on a second recognition and keeps the manually edited one',async()=>{
+    const line=(name:string,quantity:string,source:string)=>({name,quantity,source,unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const});
+    const recognizeIntakeText=vi.fn().mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH A','1','Text Abschnitt 1'),line('SYNTHETISCH B','2','Text Abschnitt 2')]}})
+      .mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH A','3','Text Abschnitt 1'),line('SYNTHETISCH B','4','Text Abschnitt 2')]}});
+    const api=ports({recognizeIntakeText});render(<GlobalCreateFlow ports={api}/>);openFlow();
+    const text=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH Ausgangstext'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(2));
+    fireEvent.change(screen.getAllByRole('spinbutton',{name:'Menge'})[0],{target:{value:'9'}});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH geänderter Text'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})[1]).toHaveValue(4));
+    expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(2);
+    expect(screen.getAllByRole('spinbutton',{name:'Menge'})[0]).toHaveValue(9);
+    expect(screen.getAllByLabelText('Teil / Leistung').map(input=>(input as HTMLInputElement).value)).toEqual(['SYNTHETISCH A','SYNTHETISCH B']);
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it('does not replace a manually edited position when the new text cannot be matched safely',async()=>{
+    const line=(name:string)=>({name,quantity:'1',source:'Text Abschnitt 1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const});
+    const recognizeIntakeText=vi.fn().mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH A')]}})
+      .mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH anderes Teil')]}});
+    const api=ports({recognizeIntakeText});render(<GlobalCreateFlow ports={api}/>);openFlow();
+    const text=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH Ausgangstext'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await screen.findByDisplayValue('SYNTHETISCH A');
+    fireEvent.change(screen.getByRole('spinbutton',{name:'Menge'}),{target:{value:'9'}});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH anderer Text'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    expect(await screen.findByText(/Position 1 wurde von Hand geändert und passt nicht eindeutig/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SYNTHETISCH A')).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton',{name:'Menge'})).toHaveValue(9);
+    expect(screen.queryByDisplayValue('SYNTHETISCH anderes Teil')).not.toBeInTheDocument();
+  });
+
+  it('retains confirmed positions and marks them confirmed after recognizing the changed text',async()=>{
+    const line=(quantity:string)=>({name:'SYNTHETISCH A',quantity,source:'Text Abschnitt 1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const});
+    const recognizeIntakeText=vi.fn().mockResolvedValueOnce({code:'OK',data:{fields:[{field:'dueDate',value:'2026-12-01',source:'Text Abschnitt 1'}],positions:[line('1')]}})
+      .mockResolvedValueOnce({code:'OK',data:{fields:[{field:'dueDate',value:'2026-12-02',source:'Text Abschnitt 1'}],positions:[line('4')]}});
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText})}/>);openFlow();
+    const text=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH Ausgangstext'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await screen.findByDisplayValue('SYNTHETISCH A');
+    fireEvent.click(screen.getByRole('button',{name:'Alles bestätigen'}));
+    fireEvent.change(text,{target:{value:'SYNTHETISCH geänderter Text'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(recognizeIntakeText).toHaveBeenCalledTimes(2));
+    await waitFor(()=>expect(screen.queryByRole('button',{name:'Angaben erkennen'})).not.toBeInTheDocument());
+    await waitFor(()=>expect(screen.getByRole('spinbutton',{name:'Menge'})).toHaveValue(1));
+    expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(1);
+    expect(screen.getByLabelText('Liefertermin')).toHaveValue('2026-12-01');
+    expect(document.querySelector('[data-spec-id="eingang.menge.herkunft"]')).toHaveTextContent('bestätigt');
+  });
+
+  it('keeps a manually edited position after saving, reopening and recognizing the draft again',async()=>{
+    const line=(name:string,quantity:string,source:string)=>({name,quantity,source,unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const});
+    const recognizeIntakeText=vi.fn().mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH A','1','Text Abschnitt 1'),line('SYNTHETISCH B','2','Text Abschnitt 2')]}})
+      .mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH A','3','Text Abschnitt 1'),line('SYNTHETISCH B','4','Text Abschnitt 2')]}});
+    const saved=new Map<string,{id:string;art:'eingang';payload:Record<string,unknown>;zuletzt_feld:null;version:number;updated_at:string}>();
+    const drafts={readDrafts:vi.fn(async()=>({code:'OK' as const,drafts:[...saved.values()]})),
+      saveDraft:vi.fn(async(value:Parameters<IntakeDraftPorts['saveDraft']>[0])=>{
+        const row={id:value.id,art:'eingang' as const,payload:value.payload,zuletzt_feld:null,version:0,updated_at:'2026-11-07T06:00:00Z'};
+        saved.set(row.id,row);return {code:'OK' as const,drafts:[row]};
+      }),discardDraft:vi.fn()};
+    let capture:IntakeCapture|null=null;
+    const saveCaptureNote:NonNullable<GlobalCreatePorts['saveCaptureNote']>=async value=>{
+      capture={id:value.itemId,version:1,text:value.text,customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],files:[]};
+      return {code:'OK',capture};
+    };
+    const getCapture:NonNullable<GlobalCreatePorts['getCapture']>=async id=>capture?.id===id?{code:'OK',capture}:{code:'NOT_FOUND',message:'Eingang fehlt'};
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText,drafts,saveCaptureNote,getCapture})}/>);openFlow();
+    const text=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH Ausgangstext'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(2));
+    fireEvent.change(screen.getAllByRole('spinbutton',{name:'Menge'})[0],{target:{value:'9'}});
+    fireEvent.click(screen.getByRole('button',{name:'Abbrechen'}));
+    fireEvent.click(within(await screen.findByRole('dialog',{name:'Änderungen nicht gespeichert'})).getByRole('button',{name:'Als Entwurf ablegen'}));
+    await waitFor(()=>expect(saved.size).toBe(1));
+    const id=[...saved.keys()][0]!;
+    await act(async()=>{window.dispatchEvent(new CustomEvent('path1:global-create-open',{detail:{intent:'DIRECT_INTAKE',draftId:id}}));});
+    const restored=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    expect(restored).toHaveValue('SYNTHETISCH Ausgangstext');
+    fireEvent.change(restored,{target:{value:'SYNTHETISCH geänderter Text'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})[1]).toHaveValue(4));
+    expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(2);
+    expect(screen.getAllByRole('spinbutton',{name:'Menge'})[0]).toHaveValue(9);
+  });
+
   it("E40 shows a non-blocking photo warning only when goods are present", () => {
     render(<GlobalCreateFlow ports={ports()} />);
     openFlow();
@@ -1367,7 +1633,8 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.change(source, { target: { value: "persoenlich" } });
     expect(document.querySelector('[data-spec-id="eingang.telefonnotiz"]')).not.toBeInTheDocument();
     expect(document.querySelector('[data-spec-id="eingang.pruefliste.eingangsfoto"]')).toHaveTextContent("fehlt · sperrt nicht");
-    expect(document.querySelector('[data-spec-id="eingang.pruefliste.geprueft"]')).toHaveTextContent("fehlt");
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.geprueft"]')).toHaveTextContent("Ware gemeinsam prüfen");
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.geprueft"]')).toHaveAttribute("data-state", "open");
   });
 
   it.each([undefined,0])("P67 resumes legacy draft version %s without inventing required values or writing",async(version)=>{
@@ -1470,6 +1737,125 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(document.querySelector('[data-spec-id="eingang.pruefliste.oberflaeche"]')).toHaveAttribute('data-state','pending');
   });
 
+  it("weist bei unbestimmter erkannter Menge auf die erforderliche Eingabe hin",async()=>{
+    const api=ports({recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions:[{
+      name:'Teile',quantity:'',unit:'Stück',surfaceRequested:'Verzinken',executionRequested:'offen',source:'Text',
+    }]}})});
+    render(<GlobalCreateFlow ports={api}/>);openFlow();
+    fireEvent.change(await screen.findByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'Ein paar Teile verzinken'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(document.querySelector('[data-spec-id="eingang.pruefliste.menge"]')).toHaveTextContent('Menge eintragen'));
+    expect(document.querySelector('[data-spec-id="eingang.menge.herkunft"]')).not.toBeInTheDocument();
+    expect(screen.getByRole('spinbutton',{name:'Menge'})).toHaveValue(null);
+  });
+
+  it("öffnet bei einer ergänzten erkannten Position das richtige Mengenfeld",async()=>{
+    const api=ports({recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions:[{
+      name:'SYNTHETISCH zweites Teil',quantity:'3',unit:'Stück',surfaceRequested:'Verzinken',executionRequested:'offen',source:'Text',
+    }]}})});
+    render(<GlobalCreateFlow ports={api}/>);openFlow();
+    fireEvent.change(await screen.findByLabelText('Teil / Leistung'),{target:{value:'Synthetischer Flansch'}});
+    fireEvent.change(screen.getByRole('spinbutton',{name:'Menge'}),{target:{value:'1'}});
+    fireEvent.change(screen.getByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'3 Stück zweites Teil verzinken'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(2));
+    const check=document.querySelector('[data-spec-id="eingang.pruefliste.menge"]');
+    expect(check).toHaveTextContent('Menge 3 · erkannt, bestätigen');
+    fireEvent.click(check!);
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})[1]).toHaveFocus());
+  });
+
+  it("weist auf nicht übernommene Positionen hin und verhindert eine unvollständige Buchung",async()=>{
+    const positions=Array.from({length:20},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
+    const api=ports({recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions,totalPositions:23}})});
+    render(<GlobalCreateFlow ports={api}/>);openFlow();
+    fireEvent.change(await screen.findByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'SYNTHETISCH 23 Positionen'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    expect(await screen.findByText(/3 weitere Positionen/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Wareneingang buchen'}));
+    expect(await screen.findByText(/Nicht alle Positionen sind übernommen/)).toBeInTheDocument();
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it("P101 übernimmt keinen Rest zu einem nachträglich geänderten Originaltext",async()=>{
+    const positions=Array.from({length:23},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
+    const createContinuation=vi.fn();
+    const api=ports({createContinuation,recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions:positions.slice(0,20),overflowPositions:positions.slice(20),totalPositions:23}})});
+    render(<GlobalCreateFlow ports={api}/>);openFlow();
+    const text=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH 23 Positionen'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    const button=await screen.findByRole('button',{name:'Rest als zweiten Beleg anlegen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH geänderter Originaltext'}});
+    fireEvent.click(button);
+    expect(await screen.findByText(/Der Text wurde nach der Erkennung geändert/)).toBeInTheDocument();
+    expect(text).toHaveValue('SYNTHETISCH geänderter Originaltext');
+    expect(createContinuation).not.toHaveBeenCalled();
+  });
+
+  it("P101 sichert die weiteren Positionen und öffnet sie ohne den ersten Entwurf zu verlieren",async()=>{
+    const positions=Array.from({length:23},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
+    let input:Parameters<NonNullable<GlobalCreatePorts["createContinuation"]>>[0]|null=null;
+    const createContinuation=vi.fn<NonNullable<GlobalCreatePorts["createContinuation"]>>(async value=>{input=value;return {code:'OK',childId:value.childId,draftId:value.draftId,replayed:false};});
+    const readDrafts=vi.fn(async()=>({code:'OK' as const,drafts:input?[{id:input.draftId,art:'eingang' as const,payload:input.payload,zuletzt_feld:null,version:0,updated_at:'2026-11-07T06:00:00Z'}]:[]}));
+    const saveDraft=vi.fn(async(value:Parameters<IntakeDraftPorts["saveDraft"]>[0])=>({code:'OK' as const,drafts:[{id:value.id,art:'eingang' as const,payload:value.payload,zuletzt_feld:null,version:value.expectedVersion===null?0:value.expectedVersion+1,updated_at:'2026-11-07T06:00:00Z'}]}));
+    const getCapture=vi.fn(async(id:string)=>input&&id===input.childId?{code:'OK' as const,capture:{id,version:1,text:String(input.payload.text),customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],files:[],continuation:{sourceId:input.parentId,childIds:[]}}}:{code:'NOT_FOUND' as const,message:'Eingang fehlt'});
+    const api=ports({createContinuation,getCapture,drafts:{readDrafts,saveDraft,discardDraft:vi.fn()},recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions:positions.slice(0,20),overflowPositions:positions.slice(20),totalPositions:23}})});
+    render(<GlobalCreateFlow ports={api}/>);openFlow();
+    fireEvent.change(await screen.findByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'SYNTHETISCH 23 Positionen'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Rest als zweiten Beleg anlegen'}));
+    const open=await screen.findByRole('button',{name:'Beleg 2 öffnen'});
+    expect(createContinuation).toHaveBeenCalledTimes(1);
+    const sent=createContinuation.mock.calls[0]?.[0];
+    expect(sent?.payload.items).toHaveLength(3);
+    expect(sent?.payload.documents).toEqual([sent?.childId]);
+    fireEvent.click(open);
+    await waitFor(()=>expect(saveDraft).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Beleg 2\/2 · Fortsetzung von Eingang/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SYNTHETISCH Teil 21')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SYNTHETISCH Teil 23')).toBeInTheDocument();
+  });
+
+  it("P102 verteilt 43 Positionen auf eine fortsetzbare Kette von drei Belegen",async()=>{
+    const positions=Array.from({length:43},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
+    const inputs:Array<Parameters<NonNullable<GlobalCreatePorts["createContinuation"]>>[0]>=[];
+    const saved=new Map<string,{id:string;art:'eingang';payload:Record<string,unknown>;zuletzt_feld:null;version:number;updated_at:string}>();
+    const createContinuation=vi.fn<NonNullable<GlobalCreatePorts["createContinuation"]>>(async value=>{
+      inputs.push(value);saved.set(value.draftId,{id:value.draftId,art:'eingang',payload:value.payload,zuletzt_feld:null,version:0,updated_at:'2026-11-07T06:00:00Z'});
+      return {code:'OK',childId:value.childId,draftId:value.draftId,replayed:false};
+    });
+    const readDrafts=vi.fn(async()=>({code:'OK' as const,drafts:[...saved.values()]}));
+    const saveDraft=vi.fn(async(value:Parameters<IntakeDraftPorts["saveDraft"]>[0])=>{
+      const row={id:value.id,art:'eingang' as const,payload:value.payload,zuletzt_feld:null,version:value.expectedVersion===null?0:value.expectedVersion+1,updated_at:'2026-11-07T06:00:00Z'};
+      saved.set(row.id,row);return {code:'OK' as const,drafts:[...saved.values()]};
+    });
+    const getCapture=vi.fn(async(id:string)=>{
+      const item=inputs.find(value=>value.childId===id);
+      return item?{code:'OK' as const,capture:{id,version:1,text:String(item.payload.text),customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],files:[],continuation:{sourceId:item.parentId,textSourceId:item.textSourceId,childIds:inputs.filter(value=>value.parentId===id).map(value=>value.childId)}}}:{code:'NOT_FOUND' as const,message:'Eingang fehlt'};
+    });
+    const api=ports({createContinuation,getCapture,drafts:{readDrafts,saveDraft,discardDraft:vi.fn()},recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions:positions.slice(0,20),overflowPositions:positions.slice(20),totalPositions:43}})});
+    render(<GlobalCreateFlow ports={api}/>);openFlow();
+    fireEvent.change(await screen.findByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'SYNTHETISCH 43 Positionen'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Rest als zweiten Beleg anlegen'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Beleg 2 öffnen'}));
+    expect(await screen.findByText(/Beleg 2\/3 · Fortsetzung/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SYNTHETISCH Teil 21')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Rest als Beleg 3 anlegen'}));
+    expect(await screen.findByRole('button',{name:'Beleg 3 öffnen'})).toBeInTheDocument();
+    expect(inputs).toHaveLength(2);expect(inputs[0]?.payload.items).toHaveLength(20);expect(inputs[1]?.payload.items).toHaveLength(3);
+    expect(inputs[1]?.parentId).toBe(inputs[0]?.childId);expect(inputs[1]?.textSourceId).toBe(inputs[0]?.textSourceId);
+    fireEvent.click(screen.getByRole('button',{name:'Beleg 3 öffnen'}));
+    expect(await screen.findByText(/Beleg 3\/3 · Fortsetzung/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SYNTHETISCH Teil 43')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'SYNTHETISCH geänderter Text'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    expect(await screen.findByText(/Originaltext ist bereits auf Belege aufgeteilt/)).toBeInTheDocument();
+    expect(api.recognizeIntakeText).toHaveBeenCalledTimes(1);
+    expect(screen.getByDisplayValue('SYNTHETISCH Teil 43')).toBeInTheDocument();
+  });
+
   it("E22 visibly adjusts a selected pickup payment to advance payment when handover changes to shipping",async()=>{
     const api=ports();render(<GlobalCreateFlow ports={api}/>);openFlow();await fillDirectIntakeForExistingCustomer();
     fireEvent.change(screen.getByRole('combobox',{name:'Zahlungsmodus'}),{target:{value:'abholung'}});
@@ -1490,10 +1876,39 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole('button',{name:'Jetzt ergänzen'}));
     const field=document.querySelector('[data-spec-id="eingang.zahlungsbedingung"]');
     await waitFor(()=>expect(field).toHaveFocus());
-    expect(document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]')).toHaveTextContent('fehlt: Zahlungsbedingung');
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]')).toHaveTextContent('Zahlungsbedingung wählen');
     fireEvent.change(field!,{target:{value:'bar'}});
     expect(screen.getByRole('combobox',{name:'Zahlungsmodus'})).toHaveValue('abholung');
     expect(api.createCustomer).not.toHaveBeenCalled();expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it("E26 treats an unapproved legacy invoice preference as missing", async () => {
+    const api = ports(), listed = await api.listCustomers();
+    if (listed.code !== "OK") throw Error("CUSTOMER_FIXTURE_REQUIRED");
+    api.searchIntakeCustomers = vi.fn().mockResolvedValue({ code: "OK", customers: listed.customers.map(customer => ({
+      ...customer, paymentPreference: "rechnung", invoiceTermsEnabled: false,
+    })) });
+    render(<GlobalCreateFlow ports={api} />); openFlow();
+    await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
+    fireEvent.click(screen.getByRole("button", { name: "Abholung" }));
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]')).toHaveTextContent("Zahlungsbedingung wählen");
+    const mode = screen.getByRole("combobox", { name: "Zahlungsmodus" });
+    expect(mode).toHaveValue("");
+    expect(within(mode).getByRole("option", { name: /Rechnung auf Ziel/ })).toBeDisabled();
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it("E46 keeps the order unsaved and focuses the missing unit", async () => {
+    const api = ports();
+    render(<GlobalCreateFlow ports={api} />); openFlow();
+    await fillDirectIntakeForExistingCustomer();
+    const unit = screen.getByRole("combobox", { name: "Einheit" });
+    fireEvent.change(unit, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
+    expect(await screen.findByText("Noch offen: Einheit")).toBeInTheDocument();
+    await waitFor(() => expect(unit).toHaveFocus());
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.einheit"]')).toHaveTextContent("Einheit wählen · Position 1");
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
   });
 
   it("moves focus into the dialog and closes the non-persistent intake with Escape", async () => {

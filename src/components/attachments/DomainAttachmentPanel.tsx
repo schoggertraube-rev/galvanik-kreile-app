@@ -11,12 +11,13 @@ import {
   reserveDomainAttachmentAction,
 } from "@/app/actions/domainAttachments.actions";
 import { requestGlobalCreate } from "@/components/layout/globalCreateRequest";
+import { openIntakeOriginalAction } from "@/app/actions/eingang.actions";
 import styles from "./DomainAttachmentPanel.module.css";
 
 const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 const MAX_BYTES = 20 * 1024 * 1024;
 
-type Attachment = { attachmentId: string; mimeType: string | null; fileBytes: number | null; recordedAt: string };
+type Attachment = { attachmentId: string; mimeType: string | null; fileBytes: number | null; recordedAt: string; intakeOriginal?:true; intakeItemId?:string; intakeName?:string; intakePart?:number; intakeTotal?:number; intakeSecured?:boolean };
 type Analysis = Extract<Awaited<ReturnType<typeof analyzeDomainAttachmentAction>>, { code: "OK" }>["data"];
 
 async function sha256(bytes: Uint8Array): Promise<string> {
@@ -100,12 +101,16 @@ export function DomainAttachmentPanel({ targetType, targetId }: { targetType: "C
     }
   };
 
-  const open = async (attachmentId: string) => {
-    const result = await getDomainAttachmentOriginalAction({ attachmentId });
+  const open = async (item: Attachment) => {
+    const result = item.intakeOriginal
+      ? await openIntakeOriginalAction({fileId:item.attachmentId,orderId:targetId,clientEventId:crypto.randomUUID()})
+      : await getDomainAttachmentOriginalAction({ attachmentId:item.attachmentId });
     if (result.code !== "OK") { setState("error"); setMessage(result.message); return; }
     const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     try {
-      const url = new URL(result.data.downloadUrl);
+      const downloadUrl='original' in result?result.original.downloadUrl:result.data.downloadUrl;
+      if(!downloadUrl)throw new Error("Original ist nicht zum Öffnen freigegeben.");
+      const url = new URL(downloadUrl);
       if (!baseUrl || url.origin !== new URL(baseUrl).origin || !url.pathname.includes("/storage/v1/object/sign/scans/")) throw new Error();
       window.open(url.toString(), "_blank", "noopener,noreferrer");
     } catch {
@@ -145,10 +150,10 @@ export function DomainAttachmentPanel({ targetType, targetId }: { targetType: "C
     {state === "loading" || state === "uploading" ? <p className={styles.status} role="status"><Loader2 />{message || "Dokumente werden geladen …"}</p> : null}
     {state === "error" || (message && state === "ready") ? <p className={styles.error} role="alert">{message}</p> : null}
     {state === "ready" && items.length === 0 ? <p className={styles.empty}>Noch keine Fotos oder Dokumente hinterlegt.</p> : null}
-    {items.length ? <ol>{items.map((item) => <li key={item.attachmentId} className={styles.documentItem}>
+    {items.length ? <ol>{items.map((item) => <li key={`${item.intakeItemId??'scan'}:${item.attachmentId}`} className={styles.documentItem}>
       <span className={styles.icon}>{item.mimeType === "application/pdf" ? <FileText /> : <ImageIcon />}</span>
-      <span><strong>{item.mimeType === "application/pdf" ? "PDF-Dokument" : "Foto"}</strong><small>{sizeLabel(item.fileBytes)} · {new Date(item.recordedAt).toLocaleString("de-DE")}</small></span>
-      <div className={styles.documentActions}><button type="button" onClick={() => void open(item.attachmentId)}>Öffnen</button><button type="button" disabled={azure !== "ready" || analyzing === item.attachmentId} onClick={() => void analyze(item.attachmentId)}>{analyzing === item.attachmentId ? <Loader2 className={styles.spin} /> : <FileSearch />}Auslesen</button></div>
+      <span><strong>{item.intakeName??(item.mimeType === "application/pdf" ? "PDF-Dokument" : "Foto")}</strong><small>{item.intakeOriginal?`Aus Eingang · Beleg ${item.intakePart}/${item.intakeTotal} · `:''}{sizeLabel(item.fileBytes)} · {new Date(item.recordedAt).toLocaleString("de-DE")}</small>{item.intakeOriginal&&!item.intakeSecured?<small>Original ist noch nicht sicher gespeichert.</small>:null}</span>
+      <div className={styles.documentActions}><button type="button" disabled={item.intakeOriginal&&!item.intakeSecured} onClick={() => void open(item)}>Öffnen</button>{!item.intakeOriginal?<button type="button" disabled={azure !== "ready" || analyzing === item.attachmentId} onClick={() => void analyze(item.attachmentId)}>{analyzing === item.attachmentId ? <Loader2 className={styles.spin} /> : <FileSearch />}Auslesen</button>:null}</div>
       {analysis[item.attachmentId] ? <div className={styles.suggestions}><strong>Vorschläge aus dem Dokument</strong>{analysis[item.attachmentId].suggestions.length ? <>{analysis[item.attachmentId].suggestions.map((suggestion, index) => <label key={`${suggestion.field}:${index}`}><input type="checkbox" checked={Boolean(selected[`${item.attachmentId}:${index}`])} onChange={(event) => setSelected((current) => ({ ...current, [`${item.attachmentId}:${index}`]: event.target.checked }))} /><span><b>{suggestion.label}</b><em>{suggestion.value}</em><small>Seite {suggestion.source.page} · Sicherheit {Math.round(suggestion.confidence * 100)} %</small></span></label>)}<button type="button" onClick={() => openQuoteReview(item.attachmentId)}><Check />Ausgewählte Werte in KV prüfen</button></> : <p>Azure hat keine belastbaren Schlüsselfelder vorgeschlagen.</p>}</div> : null}
     </li>)}</ol> : null}
     {azure === "in-klärung" ? <p className={styles.empty}>Dokument lesen · In Klärung</p> : null}

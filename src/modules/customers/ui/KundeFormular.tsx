@@ -209,7 +209,7 @@ export function KundeFormular({
       {value.customerType ? <>
         {section(3, "Anschrift", address)}
         {section(4, isSupplier ? "Lieferant" : "Zahlung", payment)}
-        {section(5, "Weitere Angaben", more)}
+        {section(5, "Ansprechpartner, Website, Notiz", more)}
       </> : null}
     </> : <FormRaster>{customerType}{person}{contact}{address}{payment}{more}</FormRaster>}
     {defaults}

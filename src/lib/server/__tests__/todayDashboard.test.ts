@@ -28,7 +28,7 @@ describe("classifyOrderForToday", () => {
     expect(deriveOrderGuidance(order({ station: "galvanik", status: "galvanik" }), TODAY)).toMatchObject({ reason: "due_today", primaryActionLabel: "Fertig melden" });
     expect(deriveOrderGuidance(order({ dueDate: "2026-10-27T00:00:00.000Z" }), TODAY)).toMatchObject({ reason: "finished_overdue", primaryActionLabel: "Ware raus" });
     expect(deriveOrderGuidance(order({ dueDate: "2026-10-30T00:00:00.000Z", station: "wareneingang", status: "angenommen", risk: "yellow" }), TODAY)).toMatchObject({ reason: "tight_schedule", primaryActionLabel: "Kunde vorwarnen" });
-    expect(deriveOrderGuidance(order({ dueDate: "2026-10-30T00:00:00.000Z", station: "galvanik", status: "galvanik", risk: "blocked" }), TODAY)).toMatchObject({ reason: "reported_risk", primaryActionLabel: "Problem lösen" });
+    expect(deriveOrderGuidance(order({ dueDate: "2026-10-30T00:00:00.000Z", station: "galvanik", status: "galvanik", risk: "blocked" }), TODAY)).toMatchObject({ reason: "reported_risk", primaryActionLabel: "Auftrag öffnen · Risiko gemeldet" });
   });
 
   it("excludes collected, shipped, completed, and future healthy orders", () => {

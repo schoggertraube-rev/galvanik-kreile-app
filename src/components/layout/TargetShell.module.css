@@ -97,3 +97,5 @@
 .f1MailActions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .f1MailActions select { min-block-size: 3rem; padding-inline: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--navy-800); }
 @media (max-width: 760px) { .f1DocumentGrid { grid-template-columns: 1fr; } .f1Camera { min-block-size: 18rem; } }
+
+.customerChecklistRow{width:100%;min-height:48px;padding:4px 0;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.customerChecklistRow:focus-visible{outline:2px solid var(--navy-400);outline-offset:2px}

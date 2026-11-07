@@ -46,6 +46,16 @@ const card: OrderCardModel = {
 };
 
 describe("Orders V1.1 one-surface truth", () => {
+  it("shows each stored unit and makes a missing unit visible", () => {
+    const items = [
+      { ...card.items[0], id: "synthetic-kg", name: "SYNTHETISCH Gewicht", quantity: 2.5, unit: "kg" },
+      { ...card.items[0], id: "synthetic-missing", position: 2, name: "SYNTHETISCH ohne Einheit", unit: null },
+    ];
+    render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card: { ...card, items } }} />);
+    expect(screen.getByText(/2\.5 kg/)).toBeInTheDocument();
+    expect(screen.getByText(/Einheit fehlt/)).toBeInTheDocument();
+    expect(screen.queryByText(/2\.5 Stück/)).not.toBeInTheDocument();
+  });
   it("renders the complete V1.1 card and customer cross-link", () => {
     const openCustomer = vi.fn();
     render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={openCustomer} state={{ kind: "data", card }} />);

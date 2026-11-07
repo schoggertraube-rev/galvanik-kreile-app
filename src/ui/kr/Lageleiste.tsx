@@ -10,7 +10,7 @@ export interface LageleisteProps {
   /** Firmengesundheit (USP): Termintreue · Liquidität 30 Tage (OE-2609-21/23). Werkstatt: nur Termintreue, nie Geld. */
   gesund: GesundAnzeige[];
 }
-const ARTEN: Array<[HandlungsArt, string, string, 'rot' | 'info' | 'warn']> = [['konflikt', 'Konflikt', 'Konflikte', 'rot'], ['warnung', 'Warnung', 'Warnungen', 'warn'], ['entscheidung', 'Entscheidung', 'Entscheidungen', 'info']];
+const ARTEN: Array<[HandlungsArt, string, string, 'rot' | 'info' | 'warn']> = [['konflikt', 'blockiert', 'blockiert', 'rot'], ['warnung', 'wird knapp', 'werden knapp', 'warn'], ['entscheidung', 'wartet auf dich', 'warten auf dich', 'info']];
 /** „30 Tage“ entfällt auf dem Handy (CSS .kr-gesund-z) */
 const kurz = (t: string) => t.includes(' 30 Tage') ? <>{t.replace(' 30 Tage', '')}<span className="kr-gesund-z"> 30 Tage</span></> : t;
 /** Arten ohne offenen Punkt werden nicht gezeigt. Erste Zeile jeder Startseite: Kontrolle (Filter über den Handlungsbedarf) + Gesundheit der Firma */

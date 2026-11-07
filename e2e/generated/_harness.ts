@@ -7,6 +7,7 @@ import { createPinLoginHandle } from "../../src/lib/server/pinLoginHandle";
 import { berlinCalendarDay, isWorkingDay, plusWorkingDays, previousWorkingDay } from "../../src/lib/domain/workingDays";
 import { generatedFlowRuntime } from "./_model";
 import { localReplayStorageEnvironment } from "../../src/test/localReplayStorage";
+import { retryFixtureResetDeadlock } from "./_fixtureReset";
 
 export type FlowExpectation = {
   id?: string;
@@ -201,10 +202,10 @@ async function resetGeneratedDomain() {
   if (protectedRows.length) throw new Error("FLOW_REPLAY_CLEANUP_SCOPE_INVALID");
   // Fixture cleanup only, on the guarded local replay connection. Append-only
   // tables may be reset here; real app connections retain every trigger.
-  await sql.begin(async (cleanup) => {
+  await retryFixtureResetDeadlock(() => sql.begin(async (cleanup) => {
     await cleanup.unsafe("SET LOCAL session_replication_role = replica");
     await cleanup.unsafe(`TRUNCATE TABLE ${targets} CASCADE`);
-  });
+  }));
   await sql`DELETE FROM public.company_settings WHERE tenant_id = ${TENANT}`;
   for (const row of baselineSettings) await upsertFixture("company_settings", row);
 }
@@ -1470,7 +1471,22 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
     case "anzahl": await expect(locator).toHaveCount(Number(value)); break;
     case "anzahl_min": await expect.poll(() => locator.count()).toBeGreaterThanOrEqual(Number(value)); break;
     case "anzahl_max": await expect.poll(() => locator.count()).toBeLessThanOrEqual(Number(value)); break;
-    case "status": await expect(locator).toContainText(String(value), { ignoreCase: true }); break;
+    case "status": {
+      // Runde 53 replaces generic status words with actionable labels. The
+      // checklist exposes the same status separately from its visible text.
+      const checklistStates: Record<string, string> = {
+        fehlt: "open", ok: "ok", "prüfen": "pending", entscheiden: "entscheiden",
+      };
+      const checklist = /^(eingang|kundeneu)\.pruefliste\./.test(expectation.id);
+      const expectedState = checklistStates[String(value).toLowerCase()];
+      if (checklist && expectedState) {
+        await expect(locator).toBeVisible();
+        await expect(locator).toHaveAttribute("data-state", expectedState);
+      } else {
+        await expect(locator).toContainText(String(value), { ignoreCase: true });
+      }
+      break;
+    }
     default: throw new Error(`FLOW_EXPECTATION_UNSUPPORTED:${expectation.erwartung}`);
   }
 }

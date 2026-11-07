@@ -6,12 +6,14 @@ import { CustomersAppAdapter } from "@/app/customers/CustomersAppAdapter";
 const ports = vi.hoisted(() => ({
   getCustomersDb: vi.fn(),
   openCustomer: vi.fn(),
+  requestGlobalCreate: vi.fn(),
+  canAction: vi.fn(),
 }));
 
 vi.mock("@/app/actions/customers.actions", () => ({ getCustomersDb: ports.getCustomersDb }));
-vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: vi.fn() }));
+vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestGlobalCreate }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
-  usePermissions: () => ({ canAction: () => false, loading: false }),
+  usePermissions: () => ({ canAction: ports.canAction, loading: false }),
 }));
 vi.mock("@/lib/overlayStore", () => ({
   useOverlayStore: (selector: (state: { openCustomer: typeof ports.openCustomer }) => unknown) =>
@@ -29,6 +31,7 @@ const customer = (overrides: Partial<Customer> = {}): Customer => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  ports.canAction.mockReturnValue(false);
 });
 
 afterEach(() => cleanup());
@@ -80,5 +83,18 @@ describe("CustomersAppAdapter", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Kreile Fahrzeugtechnik/ }));
 
     expect(ports.openCustomer).toHaveBeenCalledWith(selected.id);
+  });
+
+  it("keeps customer creation available with existing customers and after filtering", async () => {
+    ports.canAction.mockReturnValue(true);
+    ports.getCustomersDb.mockResolvedValue({ ok: true, data: [{ ...customer(), activeOrderCount: 1 }] });
+    render(<CustomersAppAdapter />);
+
+    await screen.findByText("Kreile Fahrzeugtechnik");
+    fireEvent.click(screen.getByRole("button", { name: "Kunde anlegen" }));
+    expect(ports.requestGlobalCreate).toHaveBeenCalledWith("CUSTOMER");
+
+    fireEvent.change(screen.getByPlaceholderText("Name, Ort, Auftrag oder Stichwort"), { target: { value: "nicht vorhanden" } });
+    expect(screen.getAllByRole("button", { name: "Kunde anlegen" })).toHaveLength(1);
   });
 });

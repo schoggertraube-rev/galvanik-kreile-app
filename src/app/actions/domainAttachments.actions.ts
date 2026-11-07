@@ -6,6 +6,7 @@ import { attachIntakeDraftAttachment, finalizeDomainAttachment, getDomainAttachm
 import { readEvidenceRecordsByTarget } from "@/lib/server/evidenceRead";
 import { analyzeDomainAttachment } from "@/lib/server/documentIntelligencePort";
 import { readAzureDocumentIntelligenceStatus } from "@/lib/server/azureDocumentIntelligence";
+import { readOrderIntakeOriginals } from "@/modules/eingang/server-public";
 
 async function authorization() {
   try {
@@ -38,14 +39,17 @@ export async function getDomainAttachmentsAction(input: { targetType: "CUSTOMER"
   if (!auth.ok) return { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   const result = await readEvidenceRecordsByTarget(auth.data, input);
   if (result.code !== "OK") return result;
+  const originals=input.targetType==='ORDER'?await readOrderIntakeOriginals(input.targetId):null;
+  if(originals&&originals.code!=='OK')return originals;
   return {
     code: "OK" as const,
-    data: result.data.filter((record) => record.source === "LEGACY_SCAN_UPLOAD" && record.original.state === "LEGACY_RECORDED").map((record) => ({
+    data: [...result.data.filter((record) => record.source === "LEGACY_SCAN_UPLOAD" && record.original.state === "LEGACY_RECORDED").map((record) => ({
       attachmentId: record.sourceId,
       mimeType: record.original.mimeType,
       fileBytes: record.original.sizeBytes,
       recordedAt: record.recordedAt,
-    })),
+    })),...(originals?.code==='OK'?originals.originals.map(original=>({attachmentId:original.id,mimeType:original.mime,fileBytes:original.bytes,
+      recordedAt:original.at,intakeOriginal:true as const,intakeItemId:original.itemId,intakeName:original.name,intakePart:original.part,intakeTotal:original.total,intakeSecured:original.secured})):[])],
   };
 }
 

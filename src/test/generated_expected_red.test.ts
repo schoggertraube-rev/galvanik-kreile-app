@@ -22,4 +22,16 @@ describe("generated flow expected failures", () => {
       .rejects.toThrow("must fail");
     expect(warn).not.toHaveBeenCalled();
   });
+
+  it("only accepts the named text discrepancy and lets unrelated failures through", async () => {
+    const specific = { ...red, erwarteterWert: "old text", tatsaechlicherWertEnthaelt: "new action" };
+    const warn = vi.fn();
+    const named = Object.assign(new Error("text mismatch"), { matcherResult: { expected: "old text", actual: "new action · detail" } });
+    await runWithExpectedRed("T04", specific, async () => { throw named; }, warn);
+    expect(warn).toHaveBeenCalledOnce();
+    await expect(runWithExpectedRed("T04", specific, async () => { throw new Error("database unavailable"); }, warn))
+      .rejects.toThrow("database unavailable");
+    const other = Object.assign(new Error("text mismatch"), { matcherResult: { expected: "old text", actual: "wrong action" } });
+    await expect(runWithExpectedRed("T04", specific, async () => { throw other; }, warn)).rejects.toThrow("text mismatch");
+  });
 });

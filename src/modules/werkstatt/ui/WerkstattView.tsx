@@ -382,7 +382,7 @@ export function WerkstattView({
   ).length;
 
   const heldList = (
-    <section className="kr-hb" aria-label="Handlungsbedarf">
+    <section className="kr-hb" aria-label="Offene Aufgaben">
       <h2 className="kr-hb-label">Heute sichern</h2>
       <div data-testid="werkstatt-held-list">
         {held.length === 0 ? (

@@ -18,11 +18,16 @@ export async function readIntakeMessages(filter:unknown='offen'):Promise<IntakeM
     :filter==='aussortiert'?sql`candidate.aussortiert IS NOT NULL`
     :sql`candidate.einsatz='offen' OR candidate.erstellt_am>=statement_timestamp()-interval '90 days'`;
    const messages=await tx.execute<IntakeMessage>(sql`SELECT source.id::text,source.version,source.kanal AS channel,source.richtung AS direction,
-    source.zuordnung AS assignment,source.einsatz AS usage,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",source.gruppe_adresse AS "groupAddress",source.betreff AS subject,source.text,
+    source.zuordnung AS assignment,source.einsatz AS usage,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",source.gruppe_adresse AS "groupAddress",source.betreff AS subject,
+    coalesce(source.text,(SELECT original.nachher->>'text' FROM public.intake_event created JOIN public.intake_event original
+      ON original.tenant_id=created.tenant_id AND original.item_id::text=created.nachher->>'textSourceId' AND original.id::text=created.nachher->>'originalTextEventId'
+      WHERE source.fortsetzung_von IS NOT NULL AND created.tenant_id=source.tenant_id AND created.item_id=source.id AND created.art='angelegt' ORDER BY created.zeit,created.id LIMIT 1)) AS text,
     coalesce(source.empfangen_am,source.erstellt_am)::text AS at,source.kunde_id AS "customerId",context.customer_name AS "customerName",context.customer_type AS "customerType",
     source.vorgang_id AS "orderId",source.vorgang_art AS "orderKind",context.order_number AS "orderNumber",context.order_station AS "orderStation",context.goods,
     source.anliegen AS concerns,source.anliegen_offen AS "openConcerns",source.aussortiert AS "discardReason",source.erstellt_von::text AS "createdBy",
-    ARRAY(SELECT file.id::text FROM public.intake_file file WHERE file.tenant_id=source.tenant_id AND file.item_id=source.id ORDER BY file.reihenfolge,file.id) AS "fileIds"
+    ARRAY(SELECT file.id::text FROM public.intake_file file WHERE file.tenant_id=source.tenant_id AND (file.item_id=source.id OR EXISTS(
+      SELECT 1 FROM public.intake_event created WHERE source.fortsetzung_von IS NOT NULL AND created.tenant_id=source.tenant_id
+        AND created.item_id=source.id AND created.art='angelegt' AND jsonb_exists(created.nachher->'originalFileIds',file.id::text))) ORDER BY file.reihenfolge,file.id) AS "fileIds"
     FROM public.intake_item source LEFT JOIN private.v_intake_message_contexts_v1 context ON context.tenant_id=source.tenant_id AND context.item_id=source.id
     WHERE source.tenant_id=${auth.tenantId} AND ${filter==='aussortiert'?sql`source.aussortiert IS NOT NULL`:sql`source.aussortiert IS NULL`}
     AND (source.einsatz='offen' OR source.erstellt_am>=statement_timestamp()-interval '90 days')

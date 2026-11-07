@@ -6,6 +6,7 @@ export type IntakeConcern = { id: string; label: string };
 export type IntakeCapture = {
   id: string; version: number; text: string | null; customerId: string | null;
   orderId: string | null; assignment: string; usage: string; concerns: string[];
+  continuation?: { sourceId: string | null; childIds: string[]; textSourceId?: string | null };
   dismissedConcerns?: string[];
   openConcerns?: string[];
   recognition?: { kind: CaptureKind; text: string; source?: "hand" };

@@ -10,9 +10,9 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { FormEvent, KeyboardEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { kundeVollstaendigkeit, CUSTOMER_FIELD_LABELS, KundeFormular, EMPTY_CUSTOMER_FORM, customerDisplayName, customerFieldError, kundeValidierung, type CustomerFormValue, type CreateCustomerInput, type CustomerAddressInput, type CustomerAddressResult, type CustomerComparisonValue } from "@/modules/customers/public";
+import { kundeVollstaendigkeit, customerPaymentLabel, CUSTOMER_FIELD_LABELS, KundeFormular, EMPTY_CUSTOMER_FORM, customerDisplayName, customerFieldError, kundeValidierung, type CustomerFormValue, type CreateCustomerInput, type CustomerAddressInput, type CustomerAddressResult, type CustomerComparisonValue } from "@/modules/customers/public";
 import type { CatalogServiceChoice } from "@/modules/katalog/public";
 import {
   intakePaymentContract,
@@ -202,6 +202,7 @@ export type GlobalCreatePorts = {
   } } | Failure>;
   saveProspect?:(input:IntakeProspectInput)=>Promise<IntakeProspectResult>;
   drafts?: IntakeDraftPorts;
+  createContinuation?: (input:{parentId:string;parentVersion:number;textSourceId:string;childId:string;draftId:string;clientEventId:string;fileId:string|null;payload:Record<string,unknown>})=>Promise<{code:"OK";childId:string;draftId:string;replayed:boolean}|{code:"UNAUTHENTICATED"|"FORBIDDEN"|"VALIDATION_ERROR"|"NOT_FOUND"|"CONFLICT"|"UNAVAILABLE";message:string}>;
   discardCapture?: (input:{itemId:string;version:number;clientEventId:string})=>Promise<IntakeCaptureResult>;
   canCreateCustomer: boolean;
   canReadCustomers?:boolean;
@@ -260,6 +261,10 @@ export type GlobalCreatePorts = {
 
 type Step = "choose" | "customer" | "customer-saved" | "customer-picker" | "quote-list" | "quote" | "quote-saved" | "order-saved" | "direct-intake" | "denied";
 type Feedback = { kind: "validation" | "conflict" | "denied" | "error" | "unclear" | "save-failed"; message: string; requestId?: string };
+const canonicalDraftPayload = (value: unknown) => JSON.stringify(value, (_key, entry: unknown) =>
+  entry && typeof entry === "object" && !Array.isArray(entry)
+    ? Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left.localeCompare(right)))
+    : entry);
 type OpenQuotesState =
   | { kind: "idle" | "loading" | "empty" }
   | { kind: "data"; quotes: QuoteReadback[] }
@@ -276,7 +281,7 @@ type PositionDraft = {
   unitPriceCents: number | null;
 };
 type IntakeExecution = "hochglanz" | "glaenzend" | "matt" | "gelb_passiviert" | "blau_passiviert" | "offen";
-type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; surfaceTouched:boolean; executionRequested:IntakeExecution; unit:string|null; unitPriceCents:number|null; priceText?:string; vatRateBasisPoints:0|700|1900|null };
+type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; surfaceTouched:boolean; executionRequested:IntakeExecution; unit:string|null; unitPriceCents:number|null; priceText?:string; vatRateBasisPoints:0|700|1900|null; recognitionOrigin?:{source:string;name:string;edited:boolean} };
 type IntakeSuggestionState = { kind: "idle" | "loading" | "error" } | { kind: "data"; data: IntakeSuggestions; loading: boolean };
 type IntakeTermChoice = IntakeTermSelection;
 type IntakeChecklistEntry = {
@@ -531,12 +536,20 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [intakeWishDateOrigin, setIntakeWishDateOrigin] = useState<"empty" | "recognized" | "manual">("empty");
   const [directConfirmedDate, setDirectConfirmedDate] = useState("");
   const [directNote, setDirectNote] = useState("");
-  const [intakeRecognitionText, setIntakeRecognitionText] = useState("");
+  const [intakeRecognitionText, setIntakeRecognitionTextState] = useState("");
+  const intakeRecognitionGeneration=useRef(0),intakeRecognitionRun=useRef(0),intakeRecognitionAbort=useRef<AbortController|null>(null);
+  const setIntakeRecognitionText=useCallback((value:SetStateAction<string>)=>{intakeRecognitionGeneration.current+=1;intakeRecognitionAbort.current?.abort();setIntakeRecognitionTextState(value);},[]);
   const [intakeDismissedConcerns, setIntakeDismissedConcerns] = useState<string[]>([]);
   const intakeConcerns = recognizeNoteConcerns(intakeRecognitionText).filter(concern => !intakeDismissedConcerns.includes(concern.id));
   const [lastRecognizedText, setLastRecognizedText] = useState("");
+  const [intakeRecognitionTracked,setIntakeRecognitionTracked]=useState(true);
   const [recognitionBusy, setRecognitionBusy] = useState(false);
-  const [recognitionMarkers, setRecognitionMarkers] = useState<Array<{ key: string; label: string; value: string; source: string }>>([]);
+  const [remainingRecognizedPositions, setRemainingRecognizedPositions] = useState(0);
+  const [overflowPositions,setOverflowPositions]=useState<IntakeTextRecognition["positions"]>([]);
+  const [continuationIndex,setContinuationIndex]=useState(1),[continuationTotal,setContinuationTotal]=useState(1);
+  const [continuation,setContinuation]=useState<{childId:string;draftId:string|null;count:number|null;orderId?:string|null}|null>(null);
+  const continuationRequest=useRef<Parameters<NonNullable<GlobalCreatePorts["createContinuation"]>>[0]|null>(null);
+  const [recognitionMarkers, setRecognitionMarkers] = useState<Array<{ key: string; label: string; value: string; source: string; confirmed?:boolean }>>([]);
   const [recognitionConfirmed, setRecognitionConfirmed] = useState(false);
   const [intakeSuggestionState, setIntakeSuggestionState] = useState<IntakeSuggestionState>({ kind: "idle" });
   const [intakeProcessingWeeks,setIntakeProcessingWeeks]=useState<1|2|3|5|null>(null);
@@ -908,9 +921,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("quote");
       return;
     }
-    setIntakeChecked(false);setActiveDraft(null);draftOperation.current=null;
+    setIntakeChecked(false);setActiveDraft(null);draftOperation.current=null;setOverflowPositions([]);setRemainingRecognizedPositions(0);setContinuation(null);setContinuationIndex(1);setContinuationTotal(1);continuationRequest.current=null;
     const initial:IntakeComparison={text:sourceCapture?captureRecognitionText(sourceCapture):"",customerId:"",query:"",items:[newIntakePosition()],kind:fromCustomerCard?"auftrag":"",date:"",confirmed:"",term:"",handover:"",payment:"",source:"",note:"",documents:sourceCapture?[sourceCapture.id]:[]};
-    setDirectItems(initial.items);setDirectWishDate("");setDirectConfirmedDate("");setDirectNote("");setIntakeRecognitionText(initial.text);setLastRecognizedText("");setRecognitionMarkers([]);setRecognitionConfirmed(false);setIntakeSuggestionState({kind:"idle"});setIntakeTermChoice(null);
+    setDirectItems(initial.items);setDirectWishDate("");setDirectConfirmedDate("");setDirectNote("");setIntakeRecognitionText(initial.text);setLastRecognizedText("");setIntakeRecognitionTracked(true);setRecognitionMarkers([]);setRecognitionConfirmed(false);setIntakeSuggestionState({kind:"idle"});setIntakeTermChoice(null);
     setCaptureInIntake(false);setIntakeSourceCaptures(sourceCapture?[sourceCapture]:[]);
     setDirectCustomerMode("NONE");
     setDirectCustomerId("");
@@ -1077,7 +1090,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setIntakeRecognitionText("");
     setLastRecognizedText("");
     setRecognitionBusy(false);
-    setRecognitionMarkers([]);
+    setRemainingRecognizedPositions(0);setOverflowPositions([]);setContinuation(null);continuationRequest.current=null;
+    setRecognitionMarkers([]);setIntakeRecognitionTracked(true);
     setRecognitionConfirmed(false);
     setIntakeHandover("");
     setIntakeKind("");
@@ -1093,6 +1107,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const saveIntakeDraft = async () => {
     if(draftWorking.current||directIntakeInFlight.current)return;
+    if(remainingRecognizedPositions){setFeedback({kind:"error",message:"Nicht alle Positionen sind übernommen. Das Original bleibt erhalten; die Aufteilung ist noch nicht bestätigt."});return;}
     if(!ports.drafts){setFeedback({kind:"error",message:"Entwurf nicht gespeichert · alle Eingaben sind noch da. Code: INTAKE_DRAFT_PORT_UNAVAILABLE."});return;}
     draftWorking.current=true;setBusy(true);setFeedback(null);
     const id=activeDraft?.id??intakeClientKey;
@@ -1146,12 +1161,25 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       }));
       if(saved.customerMode==="NEW"&&saved.customerFields){setDirectCustomerMode("NEW");setDirectCustomer(saved.customerFields);}
       if(saved.customerMode==="EXISTING"&&saved.customerFields)setDirectCustomer(current=>({...current,...Object.fromEntries(Object.entries(saved.customerFields).filter(([key,value])=>key in current&&!current[key as keyof CustomerFormValue]&&value))}));
+      const childId=captures.flatMap(capture=>capture.continuation?.childIds??[])[0];
+      setContinuation(null);continuationRequest.current=null;
+      if(childId){
+        const child=await ports.getCapture?.(childId);
+        if(!child||child.code!=="OK")throw Error("INTAKE_CONTINUATION_READBACK_FAILED");
+        const nextDraft=result.drafts.find(value=>value.payload.clientKey===childId);
+        setContinuation({childId,draftId:nextDraft?.id??null,count:Array.isArray(nextDraft?.payload.items)?nextDraft.payload.items.length:null,orderId:child.capture.orderId});
+      }
+      const savedOverflow=Array.isArray(saved.overflowPositions)?saved.overflowPositions:[];
+      setContinuationIndex(Number.isSafeInteger(saved.continuationIndex)&&saved.continuationIndex>0?saved.continuationIndex:1);
+      setContinuationTotal(Number.isSafeInteger(saved.continuationTotal)&&saved.continuationTotal>0?saved.continuationTotal:1);
+      setOverflowPositions(childId?[]:savedOverflow);
+      setRemainingRecognizedPositions(childId?0:typeof saved.remainingRecognizedPositions==="number"?saved.remainingRecognizedPositions:savedOverflow.length);
       setActiveDraft(draft);setIntakeClientKey(saved.clientKey);setIntakeCustomerQuery(saved.query);setIntakeRecognitionText(saved.text);
       setIntakeDismissedConcerns(saved.dismissedConcerns??captures.find(capture=>capture.id===saved.clientKey)?.dismissedConcerns??[]);
       setDirectItems(saved.items);setIntakeKind(saved.kind);setDirectWishDate(saved.date);setDirectConfirmedDate(saved.confirmed);
       setIntakeTermStatus(saved.term);setIntakeHandover(saved.handover);setIntakePaymentMode(saved.payment);setIntakeSource(saved.source);setDirectNote(saved.note);
       setIntakeChecked(saved.geprueft);setIntakeSourceCaptures(captures);setRecognitionMarkers(saved.recognitionMarkers);setRecognitionConfirmed(saved.recognitionConfirmed);
-      setLastRecognizedText(saved.lastRecognizedText);setIntakeWishDateOrigin(saved.intakeWishDateOrigin);setIntakeHandoverOrigin(saved.intakeHandoverOrigin);
+      setLastRecognizedText(saved.lastRecognizedText);setIntakeRecognitionTracked(saved.recognitionTracked===true||!saved.lastRecognizedText);setIntakeWishDateOrigin(saved.intakeWishDateOrigin);setIntakeHandoverOrigin(saved.intakeHandoverOrigin);
       setIntakePaymentOrigin(saved.intakePaymentOrigin);setIntakeOrigin(saved.intakeOrigin);setIntakeSourceOrigin(saved.intakeSourceOrigin??null);setIntakeTermChoice(saved.intakeTermChoice);setIntakeProcessingWeeks(saved.intakeProcessingWeeks??null);setIntakeTermOrigin(saved.intakeTermOrigin??null);setIntakeTermExpired(saved.intakeTermExpired??false);
       setIntakeBaseline(intakeComparison(saved));
       if(draft.zuletzt_feld)requestAnimationFrame(()=>requestAnimationFrame(()=>{
@@ -1162,21 +1190,89 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   };
   function draftPayload(){return {version:1,customerMode:directCustomerMode,customerFields:directCustomer,customerName:directCustomerId?customerDisplayName(directCustomer):"",clientKey:intakeClientKey,customerId:directCustomerId,query:intakeCustomerQuery,text:intakeRecognitionText,items:directItems,kind:intakeKind,
     date:directWishDate,confirmed:directConfirmedDate,term:intakeTermStatus,handover:intakeHandover,payment:intakePaymentMode,source:intakeSource,note:directNote,
-    geprueft:intakeChecked,dismissedConcerns:intakeDismissedConcerns,documents:intakeSourceCaptures.map(capture=>capture.id),recognitionMarkers,recognitionConfirmed,lastRecognizedText,
+    geprueft:intakeChecked,dismissedConcerns:intakeDismissedConcerns,documents:intakeSourceCaptures.map(capture=>capture.id),recognitionMarkers,recognitionConfirmed,lastRecognizedText,recognitionTracked:intakeRecognitionTracked,remainingRecognizedPositions,overflowPositions,continuationIndex,continuationTotal,
     intakeWishDateOrigin,intakeHandoverOrigin,intakePaymentOrigin,intakeOrigin,intakeSourceOrigin,intakeTermChoice,intakeProcessingWeeks,intakeTermOrigin,intakeTermExpired};}
 
-  async function saveIntakeTextOriginal():Promise<IntakeCapture[]>{
+  async function saveIntakeTextOriginal(shouldUpdateState?:()=>boolean):Promise<IntakeCapture[]>{
     if(!intakeRecognitionText.trim())return intakeSourceCaptures;
     // Unchanged source text is already an original; never manufacture a copied note.
-    if(intakeSourceCaptures.some(value=>value.id!==intakeClientKey&&value.text?.trim()===intakeRecognitionText.trim()))return intakeSourceCaptures;
+    if(intakeSourceCaptures.some(value=>value.id!==intakeClientKey&&value.text===intakeRecognitionText))return intakeSourceCaptures;
     const selectedConcerns=intakeConcerns.map(value=>value.id);
-    if(intakeSourceCaptures.some(value=>value.id===intakeClientKey&&value.text===intakeRecognitionText.trim()
-      &&JSON.stringify(value.concerns)===JSON.stringify(selectedConcerns)))return intakeSourceCaptures;
+    if(intakeSourceCaptures.some(value=>value.id===intakeClientKey&&value.text===intakeRecognitionText
+      &&(value.continuation?.sourceId || JSON.stringify(value.concerns)===JSON.stringify(selectedConcerns))))return intakeSourceCaptures;
     if(!ports.saveCaptureNote)throw Error("INTAKE_ORIGINAL_WRITE_PORT_UNAVAILABLE");
     const saved=await ports.saveCaptureNote({itemId:intakeClientKey,textstand:intakeTextStand.current,text:intakeRecognitionText,concerns:selectedConcerns});
     if(saved.code!=="OK")throw Error(saved.message);
     const sources=[...intakeSourceCaptures.filter(value=>value.id!==saved.capture.id),saved.capture];
-    setIntakeSourceCaptures(sources);return sources;
+    if(!shouldUpdateState||shouldUpdateState())setIntakeSourceCaptures(sources);return sources;
+  }
+
+  async function createContinuationDraft() {
+    if (draftWorking.current || busy || !remainingRecognizedPositions) return;
+    if (intakeRecognitionText !== lastRecognizedText) { setFeedback({kind:"validation",message:"Der Text wurde nach der Erkennung geändert · ursprünglichen Text wiederherstellen oder Erfassung neu beginnen."}); return; }
+    if (!ports.createContinuation || !ports.getCapture || !ports.drafts) { setFeedback({kind:"error",message:"Fortsetzung ist nicht verfügbar · Original und Eingaben bleiben erhalten. Code: INTAKE_CONTINUATION_PORT_MISSING."}); return; }
+    if (overflowPositions.length !== remainingRecognizedPositions) { setFeedback({kind:"validation",message:"Nicht alle erkannten Positionen sind verfügbar · Original und Eingaben bleiben erhalten."}); return; }
+    draftWorking.current=true;setBusy(true);setFeedback(null);
+    try {
+      if (!continuationRequest.current) {
+        const sources=await saveIntakeTextOriginal();
+        const parentDraftId=activeDraft?.id??intakeClientKey;
+        const parentPayload={...draftPayload(),documents:sources.map(source=>source.id)};
+        const parentSaved=await ports.drafts.saveDraft({id:parentDraftId,clientEventId:draftOperation.current??=crypto.randomUUID(),art:"eingang",payload:parentPayload,lastField:null,expectedVersion:activeDraft?.version??null});
+        if(parentSaved.code!=="OK"){setFeedback({kind:"error",message:parentSaved.message});return;}
+        const parentDraft=parentSaved.drafts.find(value=>value.id===parentDraftId);
+        if(!parentDraft||canonicalDraftPayload(parentDraft.payload)!==canonicalDraftPayload(parentPayload))throw Error("INTAKE_CONTINUATION_PARENT_DRAFT_MISSING");
+        setActiveDraft(parentDraft);draftOperation.current=null;
+        const textSource=sources.find(source=>source.text===intakeRecognitionText);
+        const parent=sources.find(source=>source.id===intakeClientKey&&source.continuation?.sourceId)
+          ??sources.find(source=>source.files.some(file=>file.secured))??textSource;
+        const textSourceId=parent?.continuation?.textSourceId??textSource?.id;
+        if(!textSourceId||!parent) throw Error("INTAKE_CONTINUATION_SOURCE_MISSING");
+        const childId=crypto.randomUUID(),draftId=crypto.randomUUID(),clientEventId=crypto.randomUUID();
+        const nextPositions=overflowPositions.slice(0,20),laterPositions=overflowPositions.slice(20);
+        const items=nextPositions.map(position=>{
+          const unit=normaliseOrderPositionUnit(position.unit),surface=position.surfaceRequested?normaliseOrderPositionSurface(position.surfaceRequested):"";
+          if(!unit||surface===null)throw Error("INTAKE_CONTINUATION_POSITION_INVALID");
+          return {...newIntakePosition(),catalogServiceId:FREE_TEXT_SERVICE,name:position.name,quantity:position.quantity,surfaceRequested:surface,surfaceTouched:false,executionRequested:position.executionRequested,unit};
+        });
+        const markers=nextPositions.flatMap((position,index)=>[
+          {key:`position-${index}-name`,label:`Position ${index+1}`,value:position.name,source:position.source},
+          ...(position.quantity?[{key:`position-${index}-quantity`,label:"Menge",value:position.quantity,source:position.source}]:[]),
+          {key:`position-${index}-unit`,label:"Einheit",value:position.unit,source:position.source},
+          ...(position.surfaceRequested && position.surfaceRecognized!==false?[{key:`position-${index}-surface`,label:"Oberfläche",value:position.surfaceRequested,source:position.source}]:[]),
+        ]);
+        const payload={...draftPayload(),clientKey:childId,items,documents:[childId],geprueft:false,recognitionMarkers:markers,recognitionConfirmed:false,remainingRecognizedPositions:laterPositions.length,overflowPositions:laterPositions,continuationIndex:continuationIndex+1,continuationTotal};
+        continuationRequest.current={parentId:parent.id,parentVersion:parent.version,textSourceId,childId,draftId,clientEventId,fileId:parent.files.find(file=>file.secured)?.id??null,payload};
+      }
+      const result=await ports.createContinuation(continuationRequest.current);
+      if(result.code!=="OK"){setFeedback({kind:"error",message:result.message});return;}
+      const [captured,drafts]=await Promise.all([ports.getCapture(result.childId),ports.drafts.readDrafts()]);
+      const draft=drafts.code==="OK"?drafts.drafts.find(value=>value.id===result.draftId):null;
+      if(captured.code!=="OK"||captured.capture.continuation?.sourceId!==continuationRequest.current.parentId||!draft||canonicalDraftPayload(draft.payload)!==canonicalDraftPayload(continuationRequest.current.payload))
+        throw Error("INTAKE_CONTINUATION_READBACK_FAILED");
+      setContinuation({childId:result.childId,draftId:result.draftId,count:overflowPositions.length});setRemainingRecognizedPositions(0);setOverflowPositions([]);
+      window.dispatchEvent(new Event("kreile:intake-drafts-changed"));
+    } catch(error) {console.error("[INTAKE_CONTINUATION_CLIENT_FAILED]",error);setFeedback({kind:"error",message:"Fortsetzung nicht sicher gelesen · Original und Eingaben bleiben erhalten. Erneut versuchen. Code: INTAKE_CONTINUATION_CLIENT_FAILED."});}
+    finally {draftWorking.current=false;setBusy(false);}
+  }
+
+  async function openContinuationDraft() {
+    if(!continuation||!ports.drafts||draftWorking.current||busy)return;
+    if(!continuation.draftId&&!continuation.orderId){setFeedback({kind:"error",message:`Beleg ${continuationIndex+1} ist vorhanden, aber sein Entwurf ist nicht verfügbar. Code: INTAKE_CONTINUATION_DRAFT_MISSING.`});return;}
+    const nextDraftId=continuation.draftId,nextOrderId=continuation.orderId;
+    draftWorking.current=true;setBusy(true);setFeedback(null);
+    try {
+      const sources=await saveIntakeTextOriginal(),parentDraftId=activeDraft?.id??intakeClientKey;
+      const parentPayload={...draftPayload(),documents:sources.map(value=>value.id)};
+      const saved=await ports.drafts.saveDraft({id:parentDraftId,clientEventId:draftOperation.current??=crypto.randomUUID(),art:"eingang",payload:parentPayload,lastField:null,expectedVersion:activeDraft?.version??null});
+      if(saved.code!=="OK"){setFeedback({kind:"error",message:saved.message});return;}
+      const parentDraft=saved.drafts.find(value=>value.id===parentDraftId);
+      if(!parentDraft||canonicalDraftPayload(parentDraft.payload)!==canonicalDraftPayload(parentPayload))throw Error("INTAKE_CONTINUATION_PARENT_READBACK_FAILED");
+      draftOperation.current=null;window.dispatchEvent(new Event("kreile:intake-drafts-changed"));
+      if(nextOrderId)ports.openOrder(nextOrderId);
+      else if(nextDraftId)await restoreIntakeDraft(nextDraftId);
+    } catch(error){console.error("[INTAKE_CONTINUATION_OPEN_FAILED]",error);setFeedback({kind:"error",message:`Beleg ${continuationIndex+1} konnte nicht geöffnet werden · Entwürfe bleiben erhalten. Code: INTAKE_CONTINUATION_OPEN_FAILED.`});}
+    finally {draftWorking.current=false;setBusy(false);}
   }
 
   const openWithIntent = (request: GlobalCreateIntent | GlobalCreateRequest) => {
@@ -1366,9 +1462,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setFeedback({kind:"validation",message:invalid[0]==="customerType"?"Noch offen: Firma oder Privat":invalid[1]});
       const root=document.querySelector<HTMLElement>(`[data-spec-id="kundeneu.${ids[invalid[0]]??invalid[0]}"]`);(root?.matches("input,textarea,select,button")?root:root?.querySelector<HTMLElement>("input,textarea,select,button"))?.focus();return;
     }
-    if(customerAddress?.blocked){setFeedback({kind:"validation",message:"Adresse prüfen"});document.querySelector<HTMLElement>('[data-spec-id="kundeneu.adresse"]')?.focus();return;}
+    if(customerAddress?.blocked){setFeedback({kind:"validation",message:customerAddress.message});document.querySelector<HTMLElement>('[data-spec-id="kundeneu.adresse"]')?.focus();return;}
     if (customerDuplicateOpen) {
-      setFeedback({ kind: "validation", message: "Bitte zuerst entscheiden, ob der ähnliche Kunde bereits vorhanden ist." });
+      setFeedback({ kind: "validation", message: "Vorhandenen Kunden öffnen oder „Ist ein anderer Kunde“ wählen." });
       document.querySelector<HTMLElement>('[data-spec-id="kundeneu.dublette"]')?.focus();
       return;
     }
@@ -1645,9 +1741,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const index = directItems.findIndex(item => item.key === key);
     setRecognitionMarkers(current => current.filter(marker => marker.key !== `position-${index}-${field}`));
   };
-  const updateDirectItem = (key: string, field: keyof Omit<IntakePositionDraft, "key" | "surfaceTouched">, value: string) => {
+  const markPositionEdited = (item:IntakePositionDraft):IntakePositionDraft => item.recognitionOrigin
+    ? {...item,recognitionOrigin:{...item.recognitionOrigin,edited:true}} : item;
+  const updateDirectItem = (key: string, field: keyof Omit<IntakePositionDraft, "key" | "surfaceTouched" | "recognitionOrigin">, value: string) => {
     confirmRecognizedPositionField(key, field);
-    setDirectItems((current) => current.map((item) => item.key === key ? { ...item, [field]: value } : item));
+    setDirectItems((current) => current.map((item) => item.key === key ? { ...markPositionEdited(item), [field]: value } : item));
   };
 
   const setDirectPositionName = (key: string, name: string) => {
@@ -1656,11 +1754,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const service = matches.length === 1 ? matches[0] : null;
     setDirectItems((current) => current.map((item) => {
       if (item.key !== key) return item;
-      if (!service) return { ...item, catalogServiceId: FREE_TEXT_SERVICE, name, unit: null, unitPriceCents: item.priceText===undefined?null:item.unitPriceCents, vatRateBasisPoints: item.priceText===undefined||item.unitPriceCents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS };
+      if (!service) return { ...markPositionEdited(item), catalogServiceId: FREE_TEXT_SERVICE, name, unit: null, unitPriceCents: item.priceText===undefined?null:item.unitPriceCents, vatRateBasisPoints: item.priceText===undefined||item.unitPriceCents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS };
       const surfaceRequested = item.surfaceTouched ? item.surfaceRequested : service.surface;
       const catalogMatchesSurface = surfaceRequested === service.surface;
       return {
-        ...item,
+        ...markPositionEdited(item),
         catalogServiceId: catalogMatchesSurface ? service.id : FREE_TEXT_SERVICE,
         name: service.name,
         surfaceRequested,
@@ -1677,8 +1775,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if (item.key !== key) return item;
       const service = catalogServices.find((candidate) => candidate.id === item.catalogServiceId);
       return service?.surface === surfaceRequested
-        ? { ...item, surfaceRequested, surfaceTouched: true }
-        : { ...item, catalogServiceId: FREE_TEXT_SERVICE, surfaceRequested, surfaceTouched: true, unitPriceCents: item.priceText===undefined?null:item.unitPriceCents, vatRateBasisPoints: item.priceText===undefined||item.unitPriceCents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS };
+        ? { ...markPositionEdited(item), surfaceRequested, surfaceTouched: true }
+        : { ...markPositionEdited(item), catalogServiceId: FREE_TEXT_SERVICE, surfaceRequested, surfaceTouched: true, unitPriceCents: item.priceText===undefined?null:item.unitPriceCents, vatRateBasisPoints: item.priceText===undefined||item.unitPriceCents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS };
     }));
   };
 
@@ -1687,9 +1785,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectItems((current) => current.map((item) => {
       if (item.key !== key) return item;
       const service = catalogServices.find((candidate) => candidate.id === item.catalogServiceId);
-      if (!service || service.unit === unit) return { ...item, unit: unit || null };
+      if (!service || service.unit === unit) return { ...markPositionEdited(item), unit: unit || null };
       return {
-        ...item,
+        ...markPositionEdited(item),
         catalogServiceId: FREE_TEXT_SERVICE,
         unit: unit || null,
         unitPriceCents: item.priceText===undefined?null:item.unitPriceCents,
@@ -1720,17 +1818,66 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const recognizeDirectIntakeText = async () => {
     if (!intakeRecognitionText.trim()) return;
+    if(continuation||intakeSourceCaptures.some(capture=>capture.continuation?.sourceId)){
+      setFeedback({kind:"validation",message:"Der Originaltext ist bereits auf Belege aufgeteilt · bitte die Positionen in diesem Beleg direkt bearbeiten."});return;
+    }
+    if(lastRecognizedText&&!intakeRecognitionTracked){
+      setFeedback({kind:"validation",message:"Älterer Entwurf · bestehende Positionen bleiben erhalten. Bitte Änderungen an den Positionen direkt eintragen."});return;
+    }
+    if (remainingRecognizedPositions) { setFeedback({kind:"validation",message:"Nicht alle Positionen sind übernommen. Das Original bleibt erhalten; die Aufteilung ist noch nicht bestätigt."}); return; }
+    const generation=intakeRecognitionGeneration.current,run=++intakeRecognitionRun.current,controller=new AbortController();
+    let timedOut=false;
+    const timeout=setTimeout(()=>{timedOut=true;controller.abort();},60_000);
+    intakeRecognitionAbort.current=controller;
+    const isCurrent=()=>!controller.signal.aborted&&generation===intakeRecognitionGeneration.current&&run===intakeRecognitionRun.current;
+    const beforeDeadline=async<T,>(operation:Promise<T>):Promise<T>=>{
+      let onAbort:(()=>void)|undefined;
+      try{return await Promise.race([operation,new Promise<never>((_,reject)=>{
+        onAbort=()=>reject(Error("INTAKE_RECOGNITION_ABORTED"));
+        if(controller.signal.aborted)onAbort();else controller.signal.addEventListener("abort",onAbort,{once:true});
+      })]);}finally{if(onAbort)controller.signal.removeEventListener("abort",onAbort);}
+    };
     setRecognitionBusy(true);
     setFeedback(null);
     try {
-      await saveIntakeTextOriginal();
-      const result = await ports.recognizeIntakeText(intakeRecognitionText);
+      await beforeDeadline(saveIntakeTextOriginal(isCurrent));
+      if(!isCurrent())return;
+      const result = await beforeDeadline(ports.recognizeIntakeText(intakeRecognitionText));
+      if(!isCurrent())return;
       if (result.code !== "OK") {
         setFeedback({ kind: "error", message: "Erkennung nicht möglich · bitte von Hand ausfüllen" });
         return;
       }
       const values = Object.fromEntries(result.data.fields.map((field) => [field.field, field.value]));
-      const recognizedCustomers = await findRecognizedCustomers(intakeRecognitionText, ports.searchIntakeCustomers, { phone: values.phone, email: values.email });
+      const recognizedCustomers = await beforeDeadline(findRecognizedCustomers(intakeRecognitionText, ports.searchIntakeCustomers, { phone: values.phone, email: values.email }));
+      if(!isCurrent())return;
+      const allPositions = [...result.data.positions,...(result.data.overflowPositions??[])];
+      const candidates=allPositions.map(position=>{
+        const unit=normaliseOrderPositionUnit(position.unit),surface=position.surfaceRequested?normaliseOrderPositionSurface(position.surfaceRequested):"";
+        if(!unit||surface===null)throw Error("INTAKE_RECOGNITION_POSITION_INVALID");
+        return {position,item:{...newIntakePosition(),catalogServiceId:FREE_TEXT_SERVICE,name:position.name,quantity:position.quantity,surfaceRequested:surface,surfaceTouched:false,executionRequested:position.executionRequested,unit,
+          recognitionOrigin:{source:position.source,name:position.name,edited:false}} satisfies IntakePositionDraft};
+      });
+      const existing=directItems.length===1&&!directItems[0]?.name.trim()?[]:directItems;
+      const used=new Set<number>();
+      const rows:Array<{item:IntakePositionDraft;position?:IntakeTextRecognition["positions"][number];oldIndex?:number}>=[];
+      for(const [oldIndex,item] of existing.entries()){
+        const origin=item.recognitionOrigin;
+        if(!origin){rows.push({item,oldIndex});continue;}
+        const match=candidates.findIndex((candidate,index)=>!used.has(index)&&candidate.position.source===origin.source);
+        if(origin.edited){
+          if(match>=0&&candidates[match]!.position.name.localeCompare(origin.name,"de-DE",{sensitivity:"base"})!==0){
+            setFeedback({kind:"validation",message:`Position ${oldIndex+1} wurde von Hand geändert und passt nicht eindeutig zum neuen Text · bitte die Position direkt abgleichen.`});return;
+          }
+          if(match>=0)used.add(match);
+          rows.push({item,oldIndex});continue;
+        }
+        if(match>=0){used.add(match);rows.push(candidates[match]!);}
+      }
+      for(const [index,candidate] of candidates.entries())if(!used.has(index))rows.push(candidate);
+      const displayed=rows.slice(0,20),overflow=rows.slice(20).flatMap(row=>row.position?[row.position]:[]);
+      const unavailable=Math.max(0,(result.data.totalPositions??allPositions.length)-allPositions.length);
+      setRemainingRecognizedPositions(0);
       if (recognizedCustomers.code !== "OK") {
         setIntakeCustomerResults([]);
         setIntakeCustomerSearchState("error");
@@ -1754,51 +1901,39 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           setIntakeCustomerSearchState("idle");
         }
       }
-      if (values.dueDate && !directWishDate) {
+      if (values.dueDate && (!directWishDate||intakeWishDateOrigin==="recognized")) {
         setDirectWishDate(values.dueDate);
         setDirectConfirmedDate(values.dueDate);
         setIntakeWishDateOrigin("recognized");
         setIntakeTermStatus((current) => current || "wish");
       }
-      if (result.data.positions.length > 0) {
-        const recognized = result.data.positions.map((position) => {
-          const unit = normaliseOrderPositionUnit(position.unit);
-          const surface = normaliseOrderPositionSurface(position.surfaceRequested);
-          if (!unit || !surface) throw new Error("INTAKE_RECOGNITION_POSITION_INVALID");
-          return ({
-          ...newIntakePosition(),
-          catalogServiceId: FREE_TEXT_SERVICE,
-          name: position.name,
-          quantity: position.quantity,
-          surfaceRequested: surface,
-          surfaceTouched: false,
-          executionRequested: position.executionRequested,
-          unit,
-        }); });
-        setDirectItems((current) => {
-          const existing = current.length === 1 && !current[0]?.name.trim() ? [] : current;
-          return [...existing, ...recognized].slice(0, 20);
-        });
-      }
+      setContinuationIndex(1);setContinuationTotal(Math.max(1,Math.ceil((rows.length+unavailable)/20)));
+      setOverflowPositions(overflow);setRemainingRecognizedPositions(overflow.length+unavailable);
+      setDirectItems(displayed.length?displayed.map(row=>row.item):[newIntakePosition()]);
       const labels: Record<string, string> = { dueDate: "Liefertermin" };
       setRecognitionMarkers([
-        ...result.data.fields.filter((field) => field.field === "dueDate").map((field) => ({ key: field.field, label: labels[field.field] ?? field.field, value: field.value, source: field.source })),
-        ...result.data.positions.flatMap((position, index) => [
-          { key: `position-${index}-name`, label: `Position ${index + 1}`, value: position.name, source: position.source },
-          { key: `position-${index}-quantity`, label: "Menge", value: String(position.quantity), source: position.source },
-          { key: `position-${index}-unit`, label: "Einheit", value: position.unit, source: position.source },
-          { key: `position-${index}-surface`, label: "Oberfläche", value: position.surfaceRequested, source: position.source },
-        ]),
+        ...result.data.fields.filter((field) => field.field === "dueDate"&&(!directWishDate||intakeWishDateOrigin==="recognized")).map((field) => ({ key: field.field, label: labels[field.field] ?? field.field, value: field.value, source: field.source })),
+        ...displayed.flatMap((row,index)=>row.position?[
+          { key:`position-${index}-name`,label:`Position ${index+1}`,value:row.position.name,source:row.position.source },
+          ...(row.position.quantity?[{key:`position-${index}-quantity`,label:"Menge",value:String(row.position.quantity),source:row.position.source}]:[]),
+          {key:`position-${index}-unit`,label:"Einheit",value:row.position.unit,source:row.position.source},
+          ...(row.position.surfaceRequested&&row.position.surfaceRecognized!==false?[{key:`position-${index}-surface`,label:"Oberfläche",value:row.position.surfaceRequested,source:row.position.source}]:[]),
+        ]:row.oldIndex===undefined?[]:recognitionMarkers.filter(marker=>marker.key.startsWith(`position-${row.oldIndex}-`)).map(marker=>({...marker,confirmed:recognitionConfirmed||marker.confirmed,key:marker.key.replace(`position-${row.oldIndex}-`,`position-${index}-`),label:marker.key.endsWith('-name')?`Position ${index+1}`:marker.label}))),
       ]);
       setLastRecognizedText(intakeRecognitionText);
       setRecognitionConfirmed(false);
       setIntakeSuggestionState({ kind: "idle" });
       setIntakeTermChoice(null);
     } catch (error) {
+      if(error instanceof Error&&error.message==="INTAKE_RECOGNITION_ABORTED"){
+        if(timedOut&&generation===intakeRecognitionGeneration.current&&run===intakeRecognitionRun.current)setFeedback({kind:"error",message:"Erkennung dauert zu lange · Eingaben bleiben erhalten. Code: INTAKE_RECOGNITION_TIMEOUT."});
+        return;
+      }
       console.error("[INTAKE_RECOGNITION_FAILED]", { name: error instanceof Error ? error.name : "UnknownError" });
-      setFeedback({ kind: "error", message: "Erkennung nicht möglich · bitte von Hand ausfüllen. Code: INTAKE_RECOGNITION_FAILED." });
+      if(isCurrent())setFeedback({ kind: "error", message: "Erkennung nicht möglich · bitte von Hand ausfüllen. Code: INTAKE_RECOGNITION_FAILED." });
     } finally {
-      setRecognitionBusy(false);
+      clearTimeout(timeout);
+      if(run===intakeRecognitionRun.current){intakeRecognitionAbort.current=null;setRecognitionBusy(false);}
     }
   };
 
@@ -1810,11 +1945,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     && intakeQuantityError(item) === null;
 
   const customerIssue = (() => {
-    if(directCustomerMode==="NEW"&&!directCustomer.customerType)return {detail:"Firma oder Privat fehlt",target:"eingang.kundentyp"};
-    if (directCustomerMode === "NONE") return { detail: "fehlt", target: "eingang.kundensuche" };
-    if(directCustomerMode==="NEW"&&intakeCustomerResults.length)return {detail:"Ähnlicher Kunde vorhanden · entscheiden",target:"eingang.dublette"};
+    if(directCustomerMode==="NEW"&&!directCustomer.customerType)return {detail:"Firma oder Privat wählen",target:"eingang.kundentyp"};
+    if (directCustomerMode === "NONE") return { detail: "Kunde wählen", target: "eingang.kundensuche" };
+    if(directCustomerMode==="NEW"&&intakeCustomerResults.length)return {detail:"Ähnlicher Kunde vorhanden · Auswahl bestätigen",target:"eingang.dublette"};
     const firstIssue = directCustomerReadiness.issues[0];
-    if (firstIssue) return { detail: firstIssue.field === "paymentPreference" ? "fehlt: Zahlungsbedingung" : firstIssue.message, target: "eingang."+(({companyName:"name",firstName:"vorname",lastName:"nachname",phone:"telefon",street:"strasse",houseNumber:"hausnummer",zipCode:"plz",city:"ort",country:"land",paymentPreference:"zahlungsbedingung"} as Record<string,string>)[firstIssue.field]??firstIssue.field) };
+    if (firstIssue) return { detail: firstIssue.field === "paymentPreference" ? "Zahlungsbedingung wählen" : firstIssue.message, target: "eingang."+(({companyName:"name",firstName:"vorname",lastName:"nachname",phone:"telefon",street:"strasse",houseNumber:"hausnummer",zipCode:"plz",city:"ort",country:"land",paymentPreference:"zahlungsbedingung"} as Record<string,string>)[firstIssue.field]??firstIssue.field) };
     return null;
   })();
   const firstMissingName = directItems.findIndex((item) => item.name.trim().length < 2 || (!item.catalogServiceId && item.name.trim().length >= 2));
@@ -1822,25 +1957,26 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const firstMissingUnit = directItems.findIndex((item) => !item.unit);
   const firstMissingSurface = directItems.findIndex((item) => item.surfaceRequested.trim().length < 2);
   const firstInvalidPrice = ports.canManageMoney?directItems.findIndex(item=>intakePriceError(item,intakeKind==='kv')!==null):-1;
-  const pendingPositionField = (field: string) => !recognitionConfirmed && recognitionMarkers.some(marker => marker.key.startsWith("position-") && marker.key.endsWith("-" + field));
-  const hasPendingRecognizedDueDate = !recognitionConfirmed && recognitionMarkers.some((marker) => marker.key === "dueDate");
+  const pendingPositionField = (field: string) => !recognitionConfirmed && recognitionMarkers.some(marker => !marker.confirmed && marker.key.startsWith("position-") && marker.key.endsWith("-" + field));
+  const pendingPositionIndex = (field: string) => Number(recognitionMarkers.find(marker=>!marker.confirmed&&marker.key.startsWith("position-")&&marker.key.endsWith("-"+field))?.key.match(/^position-(\d+)-/)?.[1] ?? 0);
+  const hasPendingRecognizedDueDate = !recognitionConfirmed && recognitionMarkers.some((marker) => !marker.confirmed && marker.key === "dueDate");
   const currentTerm=intakeSuggestionState.kind==="data"?intakeSuggestionState.data.term:null;
   const termNeedsDecision=intakeTermExpired||!intakeTermChoice&&Boolean(currentTerm?.unavailableReason||currentTerm?.rating==="nicht_machbar"||currentTerm?.rating==="unmoeglich");
   const intakeChecklist: IntakeChecklistEntry[] = [
     { id: "kunde", decision:directCustomerMode==="NEW"&&intakeCustomerResults.length>0,label: "Kunde", detail: customerIssue?.detail ?? "vollständig", complete: customerIssue === null, step: 1, target: customerIssue?.target ?? "eingang.kundensuche" },
-    { id: "bezeichnung", label: "Teil / Leistung", detail: firstMissingName >= 0 ? `Position ${firstMissingName + 1} fehlt` : pendingPositionField("name") ? "erkannt · bitte bestätigen" : `${directItems.length} Position${directItems.length === 1 ? "" : "en"}`, complete: firstMissingName < 0 && !pendingPositionField("name"), pending: firstMissingName < 0 && pendingPositionField("name"), step: 2, target: "eingang.bezeichnung", targetIndex: Math.max(firstMissingName, 0) },
-    { id: "menge", label: "Menge", detail: firstMissingQuantity >= 0 ? `Position ${firstMissingQuantity + 1} fehlt` : pendingPositionField("quantity") ? "erkannt · bitte bestätigen" : "vollständig", complete: firstMissingQuantity < 0 && !pendingPositionField("quantity"), pending: firstMissingQuantity < 0 && pendingPositionField("quantity"), step: 2, target: "eingang.menge", targetIndex: Math.max(firstMissingQuantity, 0) },
-    { id: "einheit", label: "Einheit", detail: firstMissingUnit >= 0 ? `Position ${firstMissingUnit + 1} fehlt` : pendingPositionField("unit") ? "erkannt · bitte bestätigen" : "vollständig", complete: firstMissingUnit < 0 && !pendingPositionField("unit"), pending: firstMissingUnit < 0 && pendingPositionField("unit"), step: 2, target: "eingang.einheit", targetIndex: Math.max(firstMissingUnit, 0) },
-    { id: "oberflaeche", label: "Oberfläche", detail: firstMissingSurface >= 0 ? `Position ${firstMissingSurface + 1} fehlt` : pendingPositionField("surface") ? "erkannt · bitte bestätigen" : "vollständig", complete: firstMissingSurface < 0 && !pendingPositionField("surface"), pending: firstMissingSurface < 0 && pendingPositionField("surface"), step: 2, target: "eingang.oberflaeche", targetIndex: Math.max(firstMissingSurface, 0) },
+    { id: "bezeichnung", label: "Teil / Leistung", detail: firstMissingName >= 0 ? `Teil / Leistung eintragen · Position ${firstMissingName + 1}` : pendingPositionField("name") ? `Teil / Leistung ${recognitionMarkers.find(marker=>marker.key.endsWith("-name"))?.value ?? ""} · erkannt, bestätigen` : `${directItems.length} Position${directItems.length === 1 ? "" : "en"}`, complete: firstMissingName < 0 && !pendingPositionField("name"), pending: firstMissingName < 0 && pendingPositionField("name"), step: 2, target: "eingang.bezeichnung", targetIndex: firstMissingName >= 0 ? firstMissingName : pendingPositionIndex("name") },
+    { id: "menge", label: "Menge", detail: firstMissingQuantity >= 0 ? `Menge eintragen · Position ${firstMissingQuantity + 1}` : pendingPositionField("quantity") ? `Menge ${recognitionMarkers.find(marker=>marker.key.endsWith("-quantity"))?.value ?? ""} · erkannt, bestätigen` : "vollständig", complete: firstMissingQuantity < 0 && !pendingPositionField("quantity"), pending: firstMissingQuantity < 0 && pendingPositionField("quantity"), step: 2, target: "eingang.menge", targetIndex: firstMissingQuantity >= 0 ? firstMissingQuantity : pendingPositionIndex("quantity") },
+    { id: "einheit", label: "Einheit", detail: firstMissingUnit >= 0 ? `Einheit wählen · Position ${firstMissingUnit + 1}` : pendingPositionField("unit") ? `Einheit ${recognitionMarkers.find(marker=>marker.key.endsWith("-unit"))?.value ?? ""} · erkannt, bestätigen` : "vollständig", complete: firstMissingUnit < 0 && !pendingPositionField("unit"), pending: firstMissingUnit < 0 && pendingPositionField("unit"), step: 2, target: "eingang.einheit", targetIndex: firstMissingUnit >= 0 ? firstMissingUnit : pendingPositionIndex("unit") },
+    { id: "oberflaeche", label: "Oberfläche", detail: firstMissingSurface >= 0 ? `Oberfläche wählen · Position ${firstMissingSurface + 1}` : pendingPositionField("surface") ? `Oberfläche ${recognitionMarkers.find(marker=>marker.key.endsWith("-surface"))?.value ?? ""} · erkannt, bestätigen` : "vollständig", complete: firstMissingSurface < 0 && !pendingPositionField("surface"), pending: firstMissingSurface < 0 && pendingPositionField("surface"), step: 2, target: "eingang.oberflaeche", targetIndex: firstMissingSurface >= 0 ? firstMissingSurface : pendingPositionIndex("surface") },
     ...(ports.canManageMoney&&(intakeKind==='kv'||firstInvalidPrice>=0)?[{id:'preis',label:'Preis',detail:firstInvalidPrice>=0?intakePriceError(directItems[firstInvalidPrice],intakeKind==='kv')!:'vollständig',complete:firstInvalidPrice<0,step:2 as const,target:'eingang.preis',targetIndex:Math.max(firstInvalidPrice,0)}]:[]),
-    ...(ports.canManageMoney ? [{ id: "art", label: "Art", detail: intakeKind === "auftrag" ? "Auftrag" : "fehlt", complete: intakeKind === "auftrag", step: 3 as const, target: "eingang.art" }] : []),
-    { id: "liefertermin", decision:termNeedsDecision,label: "Liefertermin", detail: termNeedsDecision?intakeTermExpired?"Termin nicht mehr leistbar – neu wählen":"Wunsch zu knapp · entscheiden":directWishDate ? hasPendingRecognizedDueDate ? "erkannt · bitte bestätigen" : directWishDate : "fehlt", complete: isValidDateInput(directWishDate) && !isPastDateInput(directWishDate) && !hasPendingRecognizedDueDate&&!termNeedsDecision, pending: Boolean(directWishDate) && hasPendingRecognizedDueDate, step: 3, target: "eingang.liefertermin" },
-    { id: "terminstatus", label: "Terminstatus", detail: intakeTermStatus === "wish" ? hasPendingRecognizedDueDate ? "erkannt · bitte bestätigen" : "Wunsch" : intakeTermStatus === "confirmed" ? "bestätigt" : intakeTermStatus === "counter"?"Gegenvorschlag":"fehlt", complete: Boolean(intakeTermStatus) && !hasPendingRecognizedDueDate, pending: Boolean(intakeTermStatus) && hasPendingRecognizedDueDate, step: 3, target: "eingang.terminstatus" },
-    { id: "eingangsart", label: "Eingangsart", detail: intakeSource === "persoenlich" ? "persönlich angeliefert" : intakeSource === "versand" ? "Versand eingegangen" : intakeSource === "abholung_firma" ? "Abholung durch Firma" : intakeSource === "anfrage_mail" ? "Anfrage per Mail" : intakeSource === "anfrage_telefon" ? "Anfrage per Telefon" : "fehlt", complete: Boolean(intakeSource), step: 3, target: "eingang.eingangsart" },
-    { id: "uebergabe", label: "Übergabe", detail: intakeHandover === "PICKUP" ? "Abholung" : intakeHandover === "SHIPPING" ? "Versand" : "fehlt", complete: Boolean(intakeHandover), step: 3, target: "eingang.uebergabe" },
-    ...(intakeHasGoods ? [{id:"geprueft",label:"Gemeinsam geprüft",detail:intakeChecked?"geprüft":"fehlt",complete:intakeChecked,step:3 as const,target:"eingang.geprueft"}] : []),
-    ...(intakeHasGoods && !intakeSourceCaptures.some(capture=>capture.files.some(file=>file.captureOrigin==="warenfoto")) ? [{id:"eingangsfoto",label:"Eingangsfoto",detail:"fehlt · sperrt nicht",complete:false,warning:true,step:3 as const,target:"eingang.eingangsfoto-aufnehmen"}] : []),
-    ...(ports.canManageMoney ? [{ id: "zahlungsmodus", label: "Zahlungsmodus", detail: intakePaymentMode === "abholung" ? "Bar oder Karte bei Abholung" : intakePaymentMode === "rechnung" ? "Rechnung auf Ziel" : intakePaymentMode === "vorkasse" ? "Vorkasse" : "fehlt", complete: Boolean(intakePaymentMode), step: 3 as const, target: "eingang.zahlungsmodus" }] : []),
+    ...(ports.canManageMoney ? [{ id: "art", label: "Art", detail: intakeKind === "auftrag" ? "Auftrag" : "Art wählen", complete: intakeKind === "auftrag", step: 3 as const, target: "eingang.art" }] : []),
+    { id: "liefertermin", decision:termNeedsDecision,label: "Liefertermin", detail: termNeedsDecision?intakeTermExpired?"Termin nicht mehr leistbar · Termin wählen":"Termin wählen · Wunsch zu knapp":directWishDate ? hasPendingRecognizedDueDate ? `Liefertermin ${directWishDate} · erkannt, bestätigen` : directWishDate : "Termin wählen", complete: isValidDateInput(directWishDate) && !isPastDateInput(directWishDate) && !hasPendingRecognizedDueDate&&!termNeedsDecision, pending: Boolean(directWishDate) && hasPendingRecognizedDueDate, step: 3, target: "eingang.liefertermin" },
+    { id: "terminstatus", label: "Terminstatus", detail: intakeTermStatus === "wish" ? hasPendingRecognizedDueDate ? "Terminstatus Wunsch · erkannt, bestätigen" : "Wunsch" : intakeTermStatus === "confirmed" ? "bestätigt" : intakeTermStatus === "counter"?"Gegenvorschlag":"Terminstatus wählen", complete: Boolean(intakeTermStatus) && !hasPendingRecognizedDueDate, pending: Boolean(intakeTermStatus) && hasPendingRecognizedDueDate, step: 3, target: "eingang.terminstatus" },
+    { id: "eingangsart", label: "Eingangsart", detail: intakeSource === "persoenlich" ? "persönlich angeliefert" : intakeSource === "versand" ? "Versand eingegangen" : intakeSource === "abholung_firma" ? "Abholung durch Firma" : intakeSource === "anfrage_mail" ? "Anfrage per Mail" : intakeSource === "anfrage_telefon" ? "Anfrage per Telefon" : "Eingangsart wählen", complete: Boolean(intakeSource), step: 3, target: "eingang.eingangsart" },
+    { id: "uebergabe", label: "Übergabe", detail: intakeHandover === "PICKUP" ? "Abholung" : intakeHandover === "SHIPPING" ? "Versand" : "Übergabe wählen", complete: Boolean(intakeHandover), step: 3, target: "eingang.uebergabe" },
+    ...(intakeHasGoods ? [{id:"geprueft",label:"Gemeinsam geprüft",detail:intakeChecked?"Ware gemeinsam geprüft":"Ware gemeinsam prüfen",complete:intakeChecked,step:3 as const,target:"eingang.geprueft"}] : []),
+    ...(intakeHasGoods && !intakeSourceCaptures.some(capture=>capture.files.some(file=>file.captureOrigin==="warenfoto")) ? [{id:"eingangsfoto",label:"Eingangsfoto",detail:"Eingangsfoto fehlt · sperrt nicht",complete:false,warning:true,step:3 as const,target:"eingang.eingangsfoto-aufnehmen"}] : []),
+    ...(ports.canManageMoney ? [{ id: "zahlungsmodus", label: "Zahlungsmodus", detail: intakePaymentMode === "abholung" ? "Bar oder Karte bei Abholung" : intakePaymentMode === "rechnung" ? "Rechnung auf Ziel" : intakePaymentMode === "vorkasse" ? "Vorkasse" : "Zahlungsmodus wählen", complete: Boolean(intakePaymentMode), step: 3 as const, target: "eingang.zahlungsmodus" }] : []),
   ];
   const requiredIntakeChecks = intakeChecklist.filter((entry) => !entry.warning);
   const completedIntakeChecks = requiredIntakeChecks.filter((entry) => entry.complete).length;
@@ -1909,7 +2045,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setFeedback(null);setIntakeToast('Mail übernommen · Eingaben bleiben erhalten');
     };
     window.addEventListener(INTAKE_MAIL_ADOPT_EVENT,adopt);return()=>window.removeEventListener(INTAKE_MAIL_ADOPT_EVENT,adopt);
-  },[open,step,customerChoices,selectIntakeCustomer]);
+  },[open,step,customerChoices,selectIntakeCustomer,setIntakeRecognitionText]);
 
   useEffect(() => {
     if (!intakeCustomerOverlayId) return;
@@ -2142,6 +2278,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const submitIntakePage = async (event: FormEvent) => {
     event.preventDefault();
     if (directIntakeInFlight.current) return;
+    if (remainingRecognizedPositions) { setFeedback({kind:"validation",message:"Nicht alle Positionen sind übernommen. Das Original bleibt erhalten; die Aufteilung ist noch nicht bestätigt."}); return; }
     const firstOpen = requiredIntakeChecks.find((entry) => !entry.complete);
     if (firstOpen) {
       setFeedback({ kind: "validation", message: `Noch offen: ${firstOpen.label}` });
@@ -2220,6 +2357,18 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         navigate("customer");setCustomerSource(source?{itemId:source.id,version:source.version}:null);if(source){setIntakeSourceCaptures([source]);setCustomerRecognitionText(captureRecognitionText(source));}
       }} />) : null}
       {open && step === "customer" ? (() => {
+        const focusCustomerField = (id: string) => {
+          const target = document.querySelector<HTMLElement>(`[data-spec-id="kundeneu.${id}"]`)
+            ?? document.querySelector<HTMLElement>('[data-spec-id="kundeneu.kundentyp"]');
+          (target?.matches("input,select,textarea,button") ? target : target?.querySelector<HTMLElement>("input,select,textarea,button"))?.focus();
+        };
+        const customerChecklistRow = (row: { id: string; label: string; value: string; target: string; origin?: string; invalid?: boolean; instruction?: string }) => {
+          const pending = row.origin?.startsWith("erkannt") && row.value && !row.invalid;
+          const complete = Boolean(row.value) && !row.invalid && !pending;
+          const text = pending ? `${row.label} ${row.value} · erkannt, bestätigen` : complete ? `${row.label} ${row.value} · vorhanden` : row.instruction ?? `${row.label} ${row.id === "kundentyp" || row.id === "zahlungsbedingung" ? "wählen" : "eintragen"}`;
+          return <button type="button" className={`ev-kf-pl-z ${styles.customerChecklistRow}`} key={row.id} data-spec-id={`kundeneu.pruefliste.${row.id}`} data-state={complete ? "ok" : pending || row.instruction ? "pending" : "open"} onClick={() => focusCustomerField(row.target)}><Chip text={pending ? "erkannt" : complete ? "ok" : "offen"} ton={complete ? "ok" : "warn"}/><span>{text}</span></button>;
+        };
+        const addressTarget = ({ street:"strasse", houseNumber:"hausnummer", zipCode:"plz", city:"ort", country:"land" } as const)[customerReadiness.felder.find((field): field is "street" | "houseNumber" | "zipCode" | "city" | "country" => ["street", "houseNumber", "zipCode", "city", "country"].includes(field)) ?? "street"];
         const customerDialog = <KrDialog
           key="customer"
           titel="Kunde anlegen"
@@ -2283,10 +2432,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 {customerAddress ? <div className="ev-kf-adrz" role="status">{customerAddress.message}</div> : null}
                 <section className="ev-kf-pl">
                   <b>Prüfliste</b><small>Pflicht</small>
-                  {[{id:"kundentyp",label:"Firma oder Privat",value:customerType},{id:"name",label:"Name / Firma",value:customerName},{id:"telefon",label:"Telefon",value:customerDraft.phone}].map(row=><div className="ev-kf-pl-z" key={row.id} data-spec-id={"kundeneu.pruefliste."+row.id}><Chip text={row.value ? "ok" : "fehlt"} ton={row.value ? "ok" : "warn"}/>{row.label}</div>)}
-                  <small>Für Aufträge nötig</small>
-                  {[{id:"email",label:"E-Mail",value:customerDraft.email},{id:"anschrift",label:"Anschrift",value:customerAddress?.blocked?"prüfen":customerReadiness.fehlt.includes("Anschrift")?"":"OK"},...(ports.canManageMoney?[{id:"zahlungsbedingung",label:"Zahlungsbedingung",value:customerDraft.paymentPreference}]:[])].map(row=><div className="ev-kf-pl-z" key={row.id} data-spec-id={"kundeneu.pruefliste."+row.id}><Chip text={row.value === "prüfen" ? "prüfen" : row.value ? "ok" : "fehlt"} ton={row.value && row.value!=="prüfen" ? "ok" : "warn"}/>{row.label}</div>)}
-                  <small className="ev-kf-pl-i" data-spec-id="kundeneu.pruefliste.info">Kundennummer wird beim Speichern vergeben</small>
+                  {[
+                    ...(!supplierCustomerMode ? [{id:"kundentyp",label:"Firma oder Privat",value:customerType === "business" ? "Firma" : customerType === "privat" ? "Privat" : "",target:"kundentyp",origin:customerOrigins.customerType}] : []),
+                    {id:"name",label:supplierCustomerMode ? "Firmenname" : "Name / Firma",value:customerName,target:customerType === "privat" ? "nachname" : "name",origin:customerType === "privat" ? customerOrigins.lastName : customerOrigins.companyName,invalid:customerReadiness.fehlt.includes("Name")},
+                    ...(!supplierCustomerMode ? [{id:"telefon",label:"Telefon",value:customerDraft.phone,target:"telefon",origin:customerOrigins.phone,invalid:customerReadiness.fehlt.includes("Telefon")}] : []),
+                  ].map(customerChecklistRow)}
+                  {!supplierCustomerMode ? <><small>Für Aufträge nötig</small>
+                  {[
+                    ...(customerType === "business" ? [{id:"person",label:"Ansprechpartner",value:customerDraft.lastName,target:"nachname",origin:customerOrigins.lastName,invalid:customerReadiness.fehlt.includes("Ansprechpartner")}] : customerType === "privat" ? [{id:"person",label:"Vorname",value:customerDraft.firstName,target:"vorname",origin:customerOrigins.firstName,invalid:customerReadiness.fehlt.includes("Vorname")}] : []),
+                    {id:"email",label:"E-Mail",value:customerDraft.email,target:"email",origin:customerOrigins.email,invalid:customerReadiness.fehlt.includes("E-Mail")},
+                    {id:"anschrift",label:"Anschrift",value:customerReadiness.fehlt.includes("Anschrift") || customerAddress?.blocked ? "" : "vollständig",target:addressTarget,instruction:customerAddress?.blocked ? "Anschrift mit den Vorschlägen abgleichen" : undefined},
+                    ...(ports.canManageMoney?[{id:"zahlungsbedingung",label:"Zahlungsbedingung",value:customerDraft.paymentPreference ? customerPaymentLabel(customerDraft.paymentPreference) : "",target:"zahlungsbedingung",origin:customerOrigins.paymentPreference,invalid:customerReadiness.fehlt.includes("Zahlungsbedingung")}]:[]),
+                  ].map(customerChecklistRow)}</> : null}
+                  <small className="ev-kf-pl-i" data-spec-id="kundeneu.pruefliste.info">{supplierCustomerMode ? "Kundentyp Lieferant · " : ""}Kundennummer wird beim Speichern vergeben</small>
                   <small className="ev-kf-pl-i">{customerReadiness.text}</small>
                 </section>
               </PruefRail>
@@ -2310,7 +2468,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           onSchliessen={closeNow}
           fuss={<><KrButton data-spec-id="eingang.abbrechen" text="Abbrechen" onClick={requestClose} /><KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={busy ? lastIntakeAction==='prospect'?"Wird gespeichert …":"Wird gebucht …" : "Wareneingang buchen"} disabled={busy} /></>}
         >
-          <form data-spec-id="eingang" id="kr-neuer-eingang" className="kr-stapel" noValidate onSubmit={(event) => void submitIntakePage(event)}>
+          <form data-spec-id="eingang" id="kr-neuer-eingang" className="kr-stapel" noValidate onSubmit={(event) => void submitIntakePage(event)}
+            onChangeCapture={()=>{if(recognitionBusy){intakeRecognitionGeneration.current+=1;intakeRecognitionAbort.current?.abort();}}}
+            onClickCapture={event=>{if(recognitionBusy&&(event.target as Element).closest("button")){intakeRecognitionGeneration.current+=1;intakeRecognitionAbort.current?.abort();}}}>
               {ports.resumeQuoteId ? <Hinweis><KrButton art="sekundaer" icon="arrow" text="Gespeicherten KV fortsetzen" disabled={busy} onClick={() => void resumeQuote()} /></Hinweis> : null}
               <div className="ev-werkbank"><div className="kr-stapel">
               <section className="ev-erfassen" aria-labelledby="quick-capture-title">
@@ -2318,6 +2478,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <div className="ev-erf-text"><Textfeld data-spec-id="eingang.erfassen-text" aria-label="Schnell erfassen" rows={3} maxLength={6000} value={intakeRecognitionText} onChange={(event) => { if(event.target.value.trim()!==intakeRecognitionText.trim())setIntakeDismissedConcerns([]);intakeTextStand.current=crypto.randomUUID();setIntakeRecognitionText(event.target.value); setRecognitionConfirmed(false); }} placeholder="Schreib oder füge Angaben ein …" /></div>
                 <div className="ev-erf-werkzeuge">
                   {(!lastRecognizedText || intakeRecognitionText !== lastRecognizedText) ? <KrButton data-spec-id="eingang.angaben-erkennen" art={intakeRecognitionText.trim() ? "primaer" : "sekundaer"} text={recognitionBusy ? "Angaben werden erkannt …" : "Angaben erkennen"} disabled={recognitionBusy || !intakeRecognitionText.trim()} onClick={() => void recognizeDirectIntakeText()} /> : null}
+                  {recognitionBusy ? <KrButton data-spec-id="eingang.erkennung-abbrechen" text="Erkennung abbrechen" onClick={()=>{intakeRecognitionGeneration.current+=1;intakeRecognitionRun.current+=1;intakeRecognitionAbort.current?.abort();intakeRecognitionAbort.current=null;setRecognitionBusy(false);}} /> : null}
                 </div>
                 <div className="ev-erf-werkzeuge">
                   <KrButton data-spec-id="eingang.aufnehmen" icon="camera" text="Aufnehmen" onClick={()=>setCaptureInIntake("eingang")} />
@@ -2327,15 +2488,23 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     if(window.dispatchEvent(request))setFeedback({kind:'validation',message:'Mail-Auswahl noch nicht verfügbar · Fehlercode: INTAKE_MAIL_SELECTION_NOT_CONNECTED.'});
                   }}/>:null}
                 </div>
-                {intakeSourceCaptures.length?<div data-spec-id="eingang.dokument" className="kr-stapel"><strong>Originale dieser Erfassung</strong>{intakeSourceCaptures.flatMap(value=>value.files).map(file=><span key={file.id}>{file.name} · Original gesichert</span>)}</div>:null}
+                {intakeSourceCaptures.length?<div data-spec-id="eingang.dokument" className="kr-stapel"><strong>Originale dieser Erfassung</strong>{intakeSourceCaptures.flatMap(value=>value.files.map(file=>({captureId:value.id,file}))).map(({captureId,file})=>file.secured?<KrButton key={`${captureId}:${file.id}`} text={`${file.name} · Original öffnen`} onClick={()=>{if(!ports.openCaptureObject?.("original",`${captureId}#${file.id}`))setFeedback({kind:"error",message:"Original konnte nicht geöffnet werden · Code: INTAKE_ORIGINAL_TARGET_NOT_MOUNTED."});}}/>:<span key={`${captureId}:${file.id}`}>{file.name} · Original noch nicht bestätigt</span>)}</div>:null}
                 {intakeConcerns.length ? <div className="ev-erk-chips" aria-label="Erkannte Anliegen">{intakeConcerns.map(concern=><span className="ev-erk-chip" key={concern.id} data-spec-id={"eingang.anliegen."+concern.id}>
                   {concern.label} · Vorschlag<KrButton art="leise" icon="x" text="" aria-label={concern.label+" abwählen"} data-spec-id={"eingang.anliegen."+concern.id+".abwaehlen"} onClick={()=>{intakeTextStand.current=crypto.randomUUID();setIntakeDismissedConcerns(previous=>[...previous,concern.id]);}}/>
                 </span>)}</div>:null}
                 {recognitionBusy ? <Hinweis>Angaben werden erkannt … Das Formular bleibt bedienbar.</Hinweis> : null}
+                {remainingRecognizedPositions ? <Hinweis ton="warn">{directItems.length+remainingRecognizedPositions} Positionen erkannt · {directItems.length} übernommen · {remainingRecognizedPositions} weitere Positionen<KrButton text={continuationIndex===1?"Rest als zweiten Beleg anlegen":`Rest als Beleg ${continuationIndex+1} anlegen`} onClick={()=>void createContinuationDraft()} disabled={busy}/></Hinweis> : null}
+                {continuation ? <Hinweis>{continuation.count??"Weitere"} Positionen · Beleg {continuationIndex+1} gesichert <KrButton text={continuation.orderId?`Auftrag von Beleg ${continuationIndex+1} öffnen`:`Beleg ${continuationIndex+1} öffnen`} onClick={()=>void openContinuationDraft()} disabled={busy}/></Hinweis> : null}
+                {intakeSourceCaptures.find(capture=>capture.continuation?.sourceId) ? <Hinweis>Beleg {continuationIndex}/{continuationTotal} · Fortsetzung von Eingang {intakeSourceCaptures.find(capture=>capture.continuation?.sourceId)?.continuation?.sourceId}</Hinweis> : null}
                   {recognitionMarkers.length > 0 ? <div className={`ev-erkannt${recognitionConfirmed ? " ev-erkannt--ok" : ""}`} aria-live="polite">
                     <div className="ev-erkannt-kopf"><b>{recognitionConfirmed ? `${recognitionMarkers.length} Angaben bestätigt` : `${recognitionMarkers.length} Angaben erkannt und vorausgefüllt`}</b>
-                      {!recognitionConfirmed ? <KrButton data-spec-id="eingang.alles-bestaetigen" className="kr-btn--ton-blau" icon="check" text="Alles bestätigen" onClick={() => setRecognitionConfirmed(true)} /> : null}
-                    </div><div className="ev-erk-chips">{recognitionMarkers.map((marker) => <span className="ev-erk-chip" key={marker.key} data-spec-id={marker.key.includes("quantity") ? "eingang.menge.herkunft" : undefined}>{marker.label}<b>{marker.value}</b> · {recognitionConfirmed ? "bestätigt" : `erkannt · ${marker.source}`}</span>)}</div>
+                      {!recognitionConfirmed ? <KrButton data-spec-id="eingang.alles-bestaetigen" className="kr-btn--ton-blau" icon="check" text="Alles bestätigen" onClick={() => {
+                        setDirectItems(current=>current.map((item,index)=>recognitionMarkers.some(marker=>marker.key.startsWith(`position-${index}-`))?markPositionEdited(item):item));
+                        if(recognitionMarkers.some(marker=>marker.key==="dueDate"))setIntakeWishDateOrigin("manual");
+                        setRecognitionMarkers(current=>current.map(marker=>({...marker,confirmed:true})));
+                        setRecognitionConfirmed(true);
+                      }} /> : null}
+                    </div><div className="ev-erk-chips">{recognitionMarkers.map((marker) => <span className="ev-erk-chip" key={marker.key} data-spec-id={marker.key.includes("quantity") ? "eingang.menge.herkunft" : undefined}>{marker.label}<b>{marker.value}</b> · {recognitionConfirmed||marker.confirmed ? "bestätigt" : `erkannt · ${marker.source}`}</span>)}</div>
                   </div> : null}
               </section>
               <datalist id="kr-service-catalog">{catalogServices.map((service) => <option key={service.id} value={service.name}>{service.surface}</option>)}</datalist>
@@ -2402,9 +2571,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     {ports.canManageMoney?<Feld label="Preis netto je Einheit"><>
                       <Eingabe aria-label="Preis netto je Einheit" data-spec-id="eingang.preis" inputMode="decimal" aria-invalid={intakePriceError(item,intakeKind==='kv')!==null} value={item.priceText??(item.unitPriceCents===null?'':(item.unitPriceCents/100).toFixed(2).replace('.',','))} onChange={event=>{
                         const text=event.target.value.trim(),cents=/^\d+(?:[.,]\d{1,2})?$/.test(text)?Math.round(Number(text.replace(',','.'))*100):null;
-                        setDirectItems(current=>current.map(line=>line.key===item.key?{...line,priceText:event.target.value,unitPriceCents:cents,vatRateBasisPoints:line.catalogServiceId===FREE_TEXT_SERVICE?cents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS:line.vatRateBasisPoints}:line));
+                        setDirectItems(current=>current.map(line=>line.key===item.key?{...markPositionEdited(line),priceText:event.target.value,unitPriceCents:cents,vatRateBasisPoints:line.catalogServiceId===FREE_TEXT_SERVICE?cents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS:line.vatRateBasisPoints}:line));
                       }}/>
-                      {intakePriceError(item,intakeKind==='kv')?<span className="kr-feld-fehler" data-spec-id="eingang.preis.fehler">{intakePriceError(item,intakeKind==='kv')}</span>:<small>{item.unitPriceCents===null?'Preis fehlt':intakeQuantityError(item)?'Menge prüfen':`= ${euro(Math.round(Number(item.quantity.replace(',','.'))*item.unitPriceCents))} netto`}</small>}
+                      {intakePriceError(item,intakeKind==='kv')?<span className="kr-feld-fehler" data-spec-id="eingang.preis.fehler">{intakePriceError(item,intakeKind==='kv')}</span>:<small>{item.unitPriceCents===null?'Preis fehlt':intakeQuantityError(item)??`= ${euro(Math.round(Number(item.quantity.replace(',','.'))*item.unitPriceCents))} netto`}</small>}
                     </></Feld>:null}
                     {directItems.length > 1 ? <KrButton data-spec-id="eingang.position-entfernen" art="sekundaer" icon="x" label="Position entfernen" onClick={() => { setDirectItems((current) => current.filter((entry) => entry.key !== item.key)); }} /> : null}
                   </div>)}
@@ -2473,7 +2642,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   {requiredIntakeChecks.map((entry) => <button className={`ev-pl-z ev-pl-z--${entry.complete ? "gruen" : entry.pending ? "navy" : "warn"}`} data-spec-id={`eingang.pruefliste.${entry.id}`} type="button" key={entry.id} data-state={entry.complete ? "ok" : entry.decision?"entscheiden":entry.pending ? "pending" : "open"} onClick={() => jumpToIntakeCheck(entry)}>
                     <Icon name={entry.complete ? "check" : "alert"} />
                     <span><strong>{entry.label}</strong><small>{entry.detail}</small></span>
-                    <Chip text={entry.complete ? "ok" : entry.decision?"entscheiden":entry.pending ? "prüfen" : "fehlt"} ton={entry.complete ? "ok" : "warn"} />
+                    {entry.complete ? <Chip text="ok" ton="ok" /> : null}
                   </button>)}
                 </div>
                 {intakeChecklist.some((entry) => entry.warning) ? <div>
@@ -2487,7 +2656,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
               </aside></PruefRail></div>
 
               {feedback && !intakeClosePrompt ? <>
-                <div data-spec-id={feedback.kind === "save-failed" ? "eingang.zustand.fehler" : undefined}><Hinweis ton={feedback.kind === "validation" ? "warn" : undefined}><span><strong>{feedback.kind === "save-failed" ? "Speichern fehlgeschlagen · alle Eingaben sind noch da" : feedback.kind === "unclear" ? "Ausgang ungeklärt" : "Eingabe prüfen"}</strong><br />{feedback.message}</span></Hinweis></div>
+                <div data-spec-id={feedback.kind === "save-failed" ? "eingang.zustand.fehler" : undefined}><Hinweis ton={feedback.kind === "validation" ? "warn" : undefined}><span><strong>{feedback.kind === "save-failed" ? "Speichern fehlgeschlagen · alle Eingaben sind noch da" : feedback.kind === "unclear" ? "Ausgang ungeklärt" : "Vorgang nicht abgeschlossen"}</strong><br />{feedback.message}</span></Hinweis></div>
                 {feedback.kind === "save-failed" ? <KrButton data-spec-id="eingang.erneut-buchen" art="primaer" text={busy ? lastIntakeAction==='prospect'?"Wird gespeichert …":"Wird gebucht …" : lastIntakeAction==='prospect'?'Erneut speichern':"Erneut buchen"} onClick={() => lastIntakeAction==='prospect'?void saveProspect():void submitDirectIntake({ preventDefault() {} } as FormEvent)} disabled={busy} /> : null}
                 {feedback.kind === "unclear" ? <div className="kr-stapel">
                   <KrButton art="sekundaer" text="Status mit gleicher Kennung prüfen" onClick={() => void checkUnclearStatus()} disabled={busy} />
