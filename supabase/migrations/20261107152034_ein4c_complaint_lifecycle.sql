@@ -189,4 +189,3 @@ $fn$;
 
 REVOKE ALL ON FUNCTION private.apply_complaint_rework_decision_v1() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.apply_complaint_rework_decision_v1() TO service_role;
-
