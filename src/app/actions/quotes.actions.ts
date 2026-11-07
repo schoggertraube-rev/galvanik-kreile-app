@@ -318,7 +318,7 @@ export async function readQuotePdfAction(input: { quoteId: string }) {
       customer: customerResult.data,
       quote: quoteResult.quote,
     }));
-    return { code: "OK" as const, pdf, quoteNumber: quoteResult.quote.quoteNumber };
+    return { code: "OK" as const, pdf, quoteNumber: quoteResult.quote.quoteNumber,document:{id:quoteResult.quote.quoteId,customerId:quoteResult.quote.customerId,linkedOrderId:quoteResult.quote.linkedOrderId,version:quoteResult.quote.version,edition:quoteResult.quote.lifecycle?.edition??null} };
   } catch {
     return { code: "UNAVAILABLE" as const, message: "KV-PDF konnte nicht sicher erstellt werden." };
   }

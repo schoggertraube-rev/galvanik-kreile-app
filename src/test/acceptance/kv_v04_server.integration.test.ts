@@ -493,3 +493,42 @@ it('KV-02 prepares an existing TEST mail original with its file and active custo
  expect((await sql`SELECT source.vorgang_id,file.item_id::text FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${KREILE_TENANT_SLUG} AND file.id=${fileId}::uuid`)[0]).toEqual({vorgang_id:quote.quote.quoteId,item_id:itemId});
  expect((await sql`SELECT count(*)::int n FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND graph_message_id=${'TEST-kv-mail-'+itemId}`)[0].n).toBe(1);
 });
+
+
+it('KV-04 sends the real current PDF through the existing mail Action and marks only its persisted receipt, with no duplicate on retry',async()=>{
+ const fixture=await createFixture();
+ await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) VALUES(${KREILE_TENANT_SLUG},${fixture.actorId}::uuid,'mails',${fixture.actorId}::uuid)`;
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST KV PDF' WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ await sql`UPDATE public.company_settings SET company_name='TEST KV PDF',street='Pruefstrasse 18',zip='70173',city='Stuttgart',country='Deutschland',iban='DE02120300000000202051',bic='BYLADEM1001',bank_name='TEST Bank',tax_id='DE999999999',invoice_vat_rate_basis_points=1900,invoice_payment_term_days=14,kv_nachfass_tage=5 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {createQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const quote=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST PDF current edition',positions:[{name:'TEST Halter',quantity:3,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]}));
+ if(quote.code!=='OK')throw Error('TEST_MAIL_QUOTE:'+quote.code);
+ const envNames=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const;
+ const previous=new Map(envNames.map(key=>[key,process.env[key]]));
+ for(const key of envNames)process.env[key]=key==='MS_GRAPH_MAILBOX'?'test-kv@fixture.invalid':'TEST-kv-provider-only';
+ const deliveries:Record<string,unknown>[]=[];
+ vi.stubGlobal('fetch',vi.fn(async(url:string|URL,init?:RequestInit)=>{
+  if(String(url).startsWith('https://login.microsoftonline.com/'))return Response.json({access_token:'TEST-kv-provider-token-'+('x'.repeat(32))});
+  if(String(url).startsWith('https://graph.microsoft.com/')&&String(url).endsWith('/sendMail')){deliveries.push(JSON.parse(String(init?.body)));return new Response('',{status:202});}
+  throw Error('TEST_EXTERNAL_NETWORK_DENIED');
+ }));
+ try{
+  const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+  const input={targetType:'CUSTOMER' as const,targetId:fixture.customerId,clientRequestId:randomUUID(),subject:'TEST KV verbindliche Fassung',body:'TEST Bitte aktuelle Fassung prüfen.',attachment:{kind:'QUOTE' as const,documentId:quote.quote.quoteId}};
+  const sent=await withSession(fixture,()=>sendCustomerMailAction(input));
+  expect(sent).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('TEST_SEND:'+sent.code);
+  expect(deliveries).toHaveLength(1);
+  const payload=deliveries[0] as {message:{attachments:Array<{name:string;contentBytes:string}>}};
+  expect(payload.message.attachments).toHaveLength(1);
+  expect(Buffer.from(payload.message.attachments[0].contentBytes,'base64').subarray(0,4).toString()).toBe('%PDF');
+  const events=await sql`SELECT event_type,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND (correlation_id=${input.clientRequestId}::uuid OR client_event_id=${input.clientRequestId}::uuid) ORDER BY created_at`;
+  expect(events.map(event=>event.event_type)).toEqual(['COMMUNICATION_DOCUMENT_PREPARED_V1','COMMUNICATION_DOCUMENT_SENT_V1','QUOTE_LIFECYCLE_V04']);
+  expect(events[0].payload.document).toMatchObject({id:quote.quote.quoteId,edition:1,version:1,sha256:expect.stringMatching(/^[0-9a-f]{64}$/)});
+  expect(await withSession(fixture,()=>readQuoteAction({quoteId:quote.quote.quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{sentEdition:1,sentChannel:'mail',stage:'versendet'}}});
+  expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK',data:{replayed:true}});
+  expect(deliveries).toHaveLength(1);
+  expect(await withSession(fixture,()=>sendCustomerMailAction({...input,body:'TEST anderer Inhalt bei gleicher Kennung'}))).toMatchObject({code:'CONFLICT'});
+  expect(deliveries).toHaveLength(1);
+  expect((await sql`SELECT count(*)::int n FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`)[0].n).toBe(1);
+ }finally{vi.unstubAllGlobals();for(const key of envNames){const value=previous.get(key);if(value===undefined)delete process.env[key];else process.env[key]=value;}}
+});

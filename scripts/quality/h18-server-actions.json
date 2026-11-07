@@ -250,6 +250,9 @@
     ],
     "src/app/actions/quotes.actions.ts#prepareQuoteFromIntakeAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/communications.actions.ts#sendCustomerMailAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ]
   },
   "writeActionOverrides": {
@@ -265,7 +268,6 @@
     "src/app/actions/auth.ts#logout": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/baths.actions.ts#createBathMeasurementDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/baths.actions.ts#updateBathDb": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/communications.actions.ts#sendCustomerMailAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/company.actions.ts#updateCompanySettings": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#createCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#updateCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",

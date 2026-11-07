@@ -68,6 +68,24 @@ describe("CommunicationPanel order assignment", () => {
   });
 });
 
+it('locks duplicate submits, preserves an unclear mail intent and retries with the exact same key and body',async()=>{
+ cleanup();actions.getStatus.mockResolvedValue({code:'OK'});actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});actions.listGlobal.mockResolvedValue({code:'OK',data:[]});
+ actions.send.mockRejectedValueOnce(new Error('TEST interrupted response')).mockResolvedValueOnce({code:'OK',data:{},notice:'TEST Mail gesendet · KV-Stand bitte prüfen'});
+ render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer"/>);
+ const send=await screen.findByRole('button',{name:'Versenden'});
+ fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:'TEST KV'}});
+ fireEvent.change(screen.getByRole('textbox',{name:'Nachricht'}),{target:{value:'TEST Originaltext'}});
+ const form=send.closest('form')!;fireEvent.submit(form);fireEvent.submit(form);
+ const retry=await screen.findByRole('button',{name:'Mit gleicher Kennung erneut versuchen'});
+ expect(actions.send).toHaveBeenCalledTimes(1);
+ expect(screen.getByRole('textbox',{name:'Nachricht'})).toBeDisabled();
+ expect(screen.getByRole('textbox',{name:'Nachricht'})).toHaveValue('TEST Originaltext');
+ const original=actions.send.mock.calls[0][0];fireEvent.click(retry);
+ await screen.findByText('TEST Mail gesendet · KV-Stand bitte prüfen');
+ expect(actions.send.mock.calls[1][0]).toEqual(original);
+ expect(screen.getByRole('textbox',{name:'Nachricht'})).toHaveValue('');
+});
+
 it('starts capture only with a secured canonical mail source and keeps a failed import on screen',async()=>{
  cleanup();actions.getStatus.mockResolvedValue({code:'OK'});actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});
  actions.listGlobal.mockResolvedValue({code:'OK',data:[{id:'TEST-mail',subject:'TEST Mail',body:'TEST Auftrag',preview:'TEST Auftrag',senderName:'TEST Kunde',senderAddress:'test@example.invalid',receivedAt:'2026-11-07T10:00:00Z',hasAttachments:true}]});
