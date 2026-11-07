@@ -110,7 +110,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
    <Button art="leise" text="Positionen ins Lager übernehmen · Stufe 3" disabled/>
   </div>
   {missingSupplier?<Hinweis ton="warn">Lieferant fehlt · Rechnung kann erst nach Ergänzung bezahlt werden</Hinweis>:null}
-  {uncertain>0?<div data-spec-id="rechnungein.zustand.teilweise"><Hinweis ton="warn">{uncertain} Felder unsicher · am Original prüfen</Hinweis><Button data-spec-id="rechnungein.geprueft" text="Geprüft" onClick={()=>setUncertain(0)}/></div>:null}
+  {uncertain>0?<div data-spec-id="rechnungein.zustand.teilweise"><Hinweis ton="warn">{uncertain} Felder unsicher · mit dem Original vergleichen</Hinweis><Button data-spec-id="rechnungein.geprueft" text="Geprüft" onClick={()=>setUncertain(0)}/></div>:null}
   {view.duplicate&&!duplicate?<div data-spec-id="rechnungein.dublette-hinweis"><Hinweis ton="warn">Rechnung {fields.nummer} von {selected?.name??'Lieferant fehlt'} gibt es schon ({view.duplicate.internalNumber})</Hinweis></div>:null}
   {duplicate?<div data-spec-id="rechnungein.zustand.dublette"><Hinweis ton="warn">Rechnung {duplicate.number} von {selected?.name??'Lieferant fehlt'} gibt es schon ({duplicate.internalNumber})</Hinweis>
    {!duplicate.exact?<Feld label="Grund für die zweite Erfassung" fehler={errors.duplicateReason}><Eingabe data-spec-id="rechnungein.dublette_grund" maxLength={200} value={duplicateReason} onChange={event=>setDuplicateReason(event.target.value)}/></Feld>:null}</div>:null}
