@@ -8,6 +8,7 @@ import { readLiveOrderCard } from "@/lib/server/orderCardRead";
 import { recognizeNoteConcerns, type IntakeCapture, type IntakeCaptureResult, type IntakeContext, type IntakeNoteInput, type IntakeCaptureKindInput } from "../captureContract";
 import { CAPTURE_KINDS, captureRecognition } from "../captureRecognition";
 import { intakeInvoiceReviewRequired } from "../intakeLifecycleContract";
+import { mayUseContinuationSources } from "./intakeContinuationAccess";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type Row = { id: string; kanal:string; version: number; text: string | null; fortsetzung_von:string|null; kunde_id: string | null; vorgang_id: string | null; vorgang_art?:string|null; zuordnung: string; einsatz: string; anliegen: string[]; anliegen_abgewaehlt:string[];anliegen_offen?:string[] };
@@ -33,6 +34,7 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
     const row = rows[0];
     if(invoiceOnly&&(!hasAuthorizationArea(auth,'geld')||!row.anliegen.includes('rechnung')&&row.vorgang_art!=='rechnung'))return failure('FORBIDDEN','Rechnungsbezug für den Beleg fehlt.');
     if(!invoiceOnly&&!mayAccessCaptureContent(auth,row.kanal))return failure('FORBIDDEN','Mail-Inhalte benötigen das Recht Mails.');
+    if(row.fortsetzung_von&&!await mayUseContinuationSources(tx,auth,itemId))return failure("FORBIDDEN","Original der Fortsetzung ist für diesen Login nicht freigegeben.");
     if (ctx?.customerId && row.kunde_id !== ctx.customerId || ctx?.orderId && row.vorgang_id !== ctx.orderId) return failure("FORBIDDEN", "Eingang gehört nicht zu diesem Kontext.");
     const files = await tx.execute<{ id: string; name: string; mime: string; bytes: string; readable: boolean; status: string; secured: boolean; errorCode:string|null; captureOrigin:"warenfoto"|"dokument" }>(sql`
       SELECT file.id::text,file.dateiname AS name,file.mime,file.bytes::text,file.lesbar AS readable,file.erkennung_status AS status,file.aufnahme_herkunft AS "captureOrigin",

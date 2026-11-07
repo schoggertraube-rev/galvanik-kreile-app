@@ -821,8 +821,12 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
   expect(original.code).toBe("OK");if(original.code!=="OK")throw Error("P101_ORIGINAL_REQUIRED");
   const payload={clientKey:childId,text,documents:[childId],items:[{key:randomUUID(),name:"SYNTHETISCH Position 21",quantity:"1"}]};
   const input={parentId,parentVersion:original.capture.version,textSourceId:parentId,childId,draftId,clientEventId,fileId:null,payload};
+  const other=await createFixture("werkstatt",["eingang"]);
+  expect(await withSession(other,()=>createIntakeContinuationAction(input))).toMatchObject({code:"FORBIDDEN"});
+  expect(await sql`SELECT id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${childId}::uuid`).toHaveLength(0);
   expect(await withSession(actor,()=>createIntakeContinuationAction(input))).toMatchObject({code:"OK",childId,draftId,replayed:false});
   expect(await withSession(actor,()=>createIntakeContinuationAction(input))).toMatchObject({code:"OK",childId,draftId,replayed:true});
+  expect(await withSession(other,()=>createIntakeContinuationAction(input))).toMatchObject({code:"FORBIDDEN"});
   const anotherId=randomUUID();
   expect(await withSession(actor,()=>createIntakeContinuationAction({...input,childId:anotherId,draftId:randomUUID(),clientEventId:randomUUID(),payload:{...payload,clientKey:anotherId,documents:[anotherId]}}))).toMatchObject({code:"CONFLICT"});
   const [row]=await sql`SELECT fortsetzung_von::text,file_id::text,text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${childId}::uuid`;
@@ -830,6 +834,7 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
   expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${childId}::uuid AND art='angelegt' AND befehl_id=${clientEventId}::uuid`).toHaveLength(1);
   expect(await withSession(actor,()=>getIntakeDraftsAction())).toMatchObject({code:"OK",drafts:[{id:draftId,payload}]});
   expect(await withSession(actor,()=>getIntakeCaptureAction(childId))).toMatchObject({code:"OK",capture:{id:childId,text,continuation:{sourceId:parentId}}});
+  expect(await withSession(other,()=>getIntakeCaptureAction(childId))).toMatchObject({code:"FORBIDDEN"});
   expect(await withSession(actor,()=>getIntakeCaptureAction(parentId))).toMatchObject({code:"OK",capture:{continuation:{childIds:[childId]}}});
   expect(await withSession(actor,()=>createIntakeContinuationAction({...input,payload:{...payload,text:"SYNTHETISCH verändert"}}))).toMatchObject({code:"CONFLICT"});
   const {erfasseAuftragAusEingangAction}=await import("@/app/actions/eingang.actions");

@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { readIntakeDraftEvent, appendIntakeDraftEvent } from "@/lib/server/intakeDraftEvents";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { mayUseContinuationSources } from "./intakeContinuationAccess";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type DraftRow = { id: string; art: "eingang" | "kunde" | null; payload: Record<string, unknown>; zuletzt_feld: string | null; version: number; updated_at: string };
@@ -122,24 +123,27 @@ export async function createIntakeContinuation(input: unknown) {
   try {
     return await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-continuation:'||${auth.tenantId}||':'||${value.childId},0))`);
-      const prior = await tx.execute<{ intent:string; draftId:string }>(sql`SELECT nachher->>'intent' AS intent,nachher->>'draftId' AS "draftId" FROM public.intake_event
+      const prior = await tx.execute<{ intent:string; draftId:string; actor:string }>(sql`SELECT nachher->>'intent' AS intent,nachher->>'draftId' AS "draftId",von AS actor FROM public.intake_event
         WHERE tenant_id=${auth.tenantId} AND item_id=${value.childId}::uuid AND art='angelegt' AND befehl_id=${value.clientEventId}::uuid`);
-      if (prior.length) return prior.length === 1 && prior[0]!.intent === intent && prior[0]!.draftId === value.draftId
-        ? { code:"OK" as const, childId:value.childId, draftId:value.draftId, replayed:true }
-        : { code:"CONFLICT" as const, message:"Diese Fortsetzung wurde bereits anders verwendet." };
-      const parents = await tx.execute<{kanal:string; version:number; text:string|null}>(sql`SELECT kanal,version,text FROM public.intake_item
+      if (prior.length) {
+        if(prior[0]!.actor!==auth.userId||!await mayUseContinuationSources(tx,auth,value.childId))return {code:"FORBIDDEN" as const,message:"Fortsetzung ist für diesen Login nicht freigegeben."};
+        return prior.length === 1 && prior[0]!.intent === intent && prior[0]!.draftId === value.draftId
+          ? { code:"OK" as const, childId:value.childId, draftId:value.draftId, replayed:true }
+          : { code:"CONFLICT" as const, message:"Diese Fortsetzung wurde bereits anders verwendet." };
+      }
+      const parents = await tx.execute<{kanal:string; version:number; text:string|null; erstellt_von:string}>(sql`SELECT kanal,version,text,erstellt_von::text FROM public.intake_item
         WHERE tenant_id=${auth.tenantId} AND id=${value.parentId}::uuid FOR UPDATE`);
       const parent = parents[0];
       if (!parent) return { code:"NOT_FOUND" as const, message:"Der ursprüngliche Eingang wurde nicht gefunden." };
-      if (parent.kanal === "mail" && !hasAuthorizationArea(auth,"mails")) return { code:"FORBIDDEN" as const, message:"Mail-Inhalte benötigen das Recht Mails." };
+      if ((parent.kanal === "mail" || parent.erstellt_von !== auth.userId) && !hasAuthorizationArea(auth,"mails")) return { code:"FORBIDDEN" as const, message:"Original eines anderen Logins benötigt das Recht Mails." };
       if (parent.version !== value.parentVersion) return { code:"CONFLICT" as const, message:"Das Original wurde geändert · bitte erneut laden." };
       const siblings=await tx.execute(sql`SELECT id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND fortsetzung_von=${value.parentId}::uuid LIMIT 1`);
       if(siblings.length)return {code:"CONFLICT" as const,message:"Eine Fortsetzung ist bereits vorhanden · ursprünglichen Eingang erneut öffnen."};
-      const textSources = await tx.execute<{kanal:string; text:string|null}>(sql`SELECT kanal,text FROM public.intake_item
+      const textSources = await tx.execute<{kanal:string; text:string|null; erstellt_von:string}>(sql`SELECT kanal,text,erstellt_von::text FROM public.intake_item
         WHERE tenant_id=${auth.tenantId} AND id=${value.textSourceId}::uuid FOR SHARE`);
       const textSource = textSources[0];
       if (!textSource || textSource.text !== value.payload.text) return { code:"CONFLICT" as const, message:"Der Originaltext wurde geändert · bitte erneut laden." };
-      if (textSource.kanal === "mail" && !hasAuthorizationArea(auth,"mails")) return { code:"FORBIDDEN" as const, message:"Mail-Inhalte benötigen das Recht Mails." };
+      if ((textSource.kanal === "mail" || textSource.erstellt_von !== auth.userId) && !hasAuthorizationArea(auth,"mails")) return { code:"FORBIDDEN" as const, message:"Originaltext eines anderen Logins benötigt das Recht Mails." };
       const files = await tx.execute<{id:string;secured:boolean}>(sql`SELECT file.id::text,EXISTS(
         SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id
           AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text) AS secured
