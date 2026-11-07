@@ -42,7 +42,7 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
         (SELECT event.nachher->>'code' FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id
           AND event.art='erkannt' AND event.nachher->>'fileId'=file.id::text ORDER BY event.zeit DESC,event.id DESC LIMIT 1) AS "errorCode"
       FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND (file.item_id=${itemId}::uuid OR (
-        file.item_id=${row.fortsetzung_von}::uuid AND EXISTS(SELECT 1 FROM public.intake_event created
+        EXISTS(SELECT 1 FROM public.intake_event created
           WHERE created.tenant_id=${auth.tenantId} AND created.item_id=${itemId}::uuid AND created.art='angelegt'
             AND jsonb_exists(created.nachher->'originalFileIds',file.id::text))))
       AND (${!invoiceOnly} OR file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml') ORDER BY file.reihenfolge,file.id`);
@@ -51,14 +51,14 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
       FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid AND (${!invoiceOnly} OR feld LIKE 'rechnung.%') ORDER BY id`);
     const contentAllowed=!invoiceOnly&&(row.kanal!=='mail'||hasAuthorizationArea(auth,'mails'));
     const continuations = await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND fortsetzung_von=${itemId}::uuid ORDER BY erstellt_am,id`);
-    const sourceText = row.fortsetzung_von ? await tx.execute<{text:string|null}>(sql`SELECT original.nachher->>'text' AS text
+    const sourceText = row.fortsetzung_von ? await tx.execute<{text:string|null;source_id:string}>(sql`SELECT original.nachher->>'text' AS text,created.nachher->>'textSourceId' AS source_id
       FROM public.intake_event created JOIN public.intake_event original ON original.tenant_id=created.tenant_id
         AND original.item_id::text=created.nachher->>'textSourceId' AND original.id::text=created.nachher->>'originalTextEventId'
       WHERE created.tenant_id=${auth.tenantId} AND created.item_id=${itemId}::uuid AND created.art='angelegt'
       ORDER BY created.zeit,created.id LIMIT 1`) : [];
     if(row.fortsetzung_von && !sourceText.length) return failure("UNAVAILABLE", "Original der Fortsetzung nicht nachweisbar · Code: INTAKE_CONTINUATION_ORIGINAL_MISSING.");
     const capture: IntakeCapture = { id: row.id, version: row.version, text: contentAllowed?(row.fortsetzung_von?row.text??sourceText[0]?.text??null:row.text):null, customerId: row.kunde_id,
-      continuation:{sourceId:row.fortsetzung_von,childIds:continuations.map(value=>value.id)},
+      continuation:{sourceId:row.fortsetzung_von,childIds:continuations.map(value=>value.id),textSourceId:contentAllowed?sourceText[0]?.source_id??null:null},
       orderId: invoiceOnly?null:row.vorgang_id, assignment: row.zuordnung, usage: row.einsatz, concerns: invoiceOnly?row.anliegen.filter(value=>value==='rechnung'):contentAllowed?row.anliegen:[],dismissedConcerns:contentAllowed?row.anliegen_abgewaehlt:[],openConcerns:contentAllowed?row.anliegen_offen:[],
       files: files.map(file => ({ ...file, bytes: Number(file.bytes) })),suggestions:contentAllowed||invoiceOnly?suggestions:[] };
     capture.recognition = invoiceOnly ? { kind: "rechnung", text: "" } : captureRecognition(capture);

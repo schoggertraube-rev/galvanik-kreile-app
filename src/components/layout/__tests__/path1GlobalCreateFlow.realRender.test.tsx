@@ -1656,6 +1656,45 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.getByDisplayValue('SYNTHETISCH Teil 23')).toBeInTheDocument();
   });
 
+  it("P102 verteilt 43 Positionen auf eine fortsetzbare Kette von drei Belegen",async()=>{
+    const positions=Array.from({length:43},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
+    const inputs:Array<Parameters<NonNullable<GlobalCreatePorts["createContinuation"]>>[0]>=[];
+    const saved=new Map<string,{id:string;art:'eingang';payload:Record<string,unknown>;zuletzt_feld:null;version:number;updated_at:string}>();
+    const createContinuation=vi.fn<NonNullable<GlobalCreatePorts["createContinuation"]>>(async value=>{
+      inputs.push(value);saved.set(value.draftId,{id:value.draftId,art:'eingang',payload:value.payload,zuletzt_feld:null,version:0,updated_at:'2026-11-07T06:00:00Z'});
+      return {code:'OK',childId:value.childId,draftId:value.draftId,replayed:false};
+    });
+    const readDrafts=vi.fn(async()=>({code:'OK' as const,drafts:[...saved.values()]}));
+    const saveDraft=vi.fn(async(value:Parameters<IntakeDraftPorts["saveDraft"]>[0])=>{
+      const row={id:value.id,art:'eingang' as const,payload:value.payload,zuletzt_feld:null,version:value.expectedVersion===null?0:value.expectedVersion+1,updated_at:'2026-11-07T06:00:00Z'};
+      saved.set(row.id,row);return {code:'OK' as const,drafts:[...saved.values()]};
+    });
+    const getCapture=vi.fn(async(id:string)=>{
+      const item=inputs.find(value=>value.childId===id);
+      return item?{code:'OK' as const,capture:{id,version:1,text:String(item.payload.text),customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],files:[],continuation:{sourceId:item.parentId,textSourceId:item.textSourceId,childIds:inputs.filter(value=>value.parentId===id).map(value=>value.childId)}}}:{code:'NOT_FOUND' as const,message:'Eingang fehlt'};
+    });
+    const api=ports({createContinuation,getCapture,drafts:{readDrafts,saveDraft,discardDraft:vi.fn()},recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions:positions.slice(0,20),overflowPositions:positions.slice(20),totalPositions:43}})});
+    render(<GlobalCreateFlow ports={api}/>);openFlow();
+    fireEvent.change(await screen.findByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'SYNTHETISCH 43 Positionen'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Rest als zweiten Beleg anlegen'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Beleg 2 öffnen'}));
+    expect(await screen.findByText(/Beleg 2\/3 · Fortsetzung/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SYNTHETISCH Teil 21')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Rest als Beleg 3 anlegen'}));
+    expect(await screen.findByRole('button',{name:'Beleg 3 öffnen'})).toBeInTheDocument();
+    expect(inputs).toHaveLength(2);expect(inputs[0]?.payload.items).toHaveLength(20);expect(inputs[1]?.payload.items).toHaveLength(3);
+    expect(inputs[1]?.parentId).toBe(inputs[0]?.childId);expect(inputs[1]?.textSourceId).toBe(inputs[0]?.textSourceId);
+    fireEvent.click(screen.getByRole('button',{name:'Beleg 3 öffnen'}));
+    expect(await screen.findByText(/Beleg 3\/3 · Fortsetzung/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SYNTHETISCH Teil 43')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'SYNTHETISCH geänderter Text'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    expect(await screen.findByText(/Originaltext ist bereits auf Belege aufgeteilt/)).toBeInTheDocument();
+    expect(api.recognizeIntakeText).toHaveBeenCalledTimes(1);
+    expect(screen.getByDisplayValue('SYNTHETISCH Teil 43')).toBeInTheDocument();
+  });
+
   it("E22 visibly adjusts a selected pickup payment to advance payment when handover changes to shipping",async()=>{
     const api=ports();render(<GlobalCreateFlow ports={api}/>);openFlow();await fillDirectIntakeForExistingCustomer();
     fireEvent.change(screen.getByRole('combobox',{name:'Zahlungsmodus'}),{target:{value:'abholung'}});

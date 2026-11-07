@@ -545,6 +545,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [recognitionBusy, setRecognitionBusy] = useState(false);
   const [remainingRecognizedPositions, setRemainingRecognizedPositions] = useState(0);
   const [overflowPositions,setOverflowPositions]=useState<IntakeTextRecognition["positions"]>([]);
+  const [continuationIndex,setContinuationIndex]=useState(1),[continuationTotal,setContinuationTotal]=useState(1);
   const [continuation,setContinuation]=useState<{childId:string;draftId:string|null;count:number|null;orderId?:string|null}|null>(null);
   const continuationRequest=useRef<Parameters<NonNullable<GlobalCreatePorts["createContinuation"]>>[0]|null>(null);
   const [recognitionMarkers, setRecognitionMarkers] = useState<Array<{ key: string; label: string; value: string; source: string }>>([]);
@@ -919,7 +920,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("quote");
       return;
     }
-    setIntakeChecked(false);setActiveDraft(null);draftOperation.current=null;setOverflowPositions([]);setRemainingRecognizedPositions(0);setContinuation(null);continuationRequest.current=null;
+    setIntakeChecked(false);setActiveDraft(null);draftOperation.current=null;setOverflowPositions([]);setRemainingRecognizedPositions(0);setContinuation(null);setContinuationIndex(1);setContinuationTotal(1);continuationRequest.current=null;
     const initial:IntakeComparison={text:sourceCapture?captureRecognitionText(sourceCapture):"",customerId:"",query:"",items:[newIntakePosition()],kind:fromCustomerCard?"auftrag":"",date:"",confirmed:"",term:"",handover:"",payment:"",source:"",note:"",documents:sourceCapture?[sourceCapture.id]:[]};
     setDirectItems(initial.items);setDirectWishDate("");setDirectConfirmedDate("");setDirectNote("");setIntakeRecognitionText(initial.text);setLastRecognizedText("");setRecognitionMarkers([]);setRecognitionConfirmed(false);setIntakeSuggestionState({kind:"idle"});setIntakeTermChoice(null);
     setCaptureInIntake(false);setIntakeSourceCaptures(sourceCapture?[sourceCapture]:[]);
@@ -1160,6 +1161,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if(saved.customerMode==="NEW"&&saved.customerFields){setDirectCustomerMode("NEW");setDirectCustomer(saved.customerFields);}
       if(saved.customerMode==="EXISTING"&&saved.customerFields)setDirectCustomer(current=>({...current,...Object.fromEntries(Object.entries(saved.customerFields).filter(([key,value])=>key in current&&!current[key as keyof CustomerFormValue]&&value))}));
       const childId=captures.flatMap(capture=>capture.continuation?.childIds??[])[0];
+      setContinuation(null);continuationRequest.current=null;
       if(childId){
         const child=await ports.getCapture?.(childId);
         if(!child||child.code!=="OK")throw Error("INTAKE_CONTINUATION_READBACK_FAILED");
@@ -1167,6 +1169,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         setContinuation({childId,draftId:nextDraft?.id??null,count:Array.isArray(nextDraft?.payload.items)?nextDraft.payload.items.length:null,orderId:child.capture.orderId});
       }
       const savedOverflow=Array.isArray(saved.overflowPositions)?saved.overflowPositions:[];
+      setContinuationIndex(Number.isSafeInteger(saved.continuationIndex)&&saved.continuationIndex>0?saved.continuationIndex:1);
+      setContinuationTotal(Number.isSafeInteger(saved.continuationTotal)&&saved.continuationTotal>0?saved.continuationTotal:1);
       setOverflowPositions(childId?[]:savedOverflow);
       setRemainingRecognizedPositions(childId?0:typeof saved.remainingRecognizedPositions==="number"?saved.remainingRecognizedPositions:savedOverflow.length);
       setActiveDraft(draft);setIntakeClientKey(saved.clientKey);setIntakeCustomerQuery(saved.query);setIntakeRecognitionText(saved.text);
@@ -1185,7 +1189,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   };
   function draftPayload(){return {version:1,customerMode:directCustomerMode,customerFields:directCustomer,customerName:directCustomerId?customerDisplayName(directCustomer):"",clientKey:intakeClientKey,customerId:directCustomerId,query:intakeCustomerQuery,text:intakeRecognitionText,items:directItems,kind:intakeKind,
     date:directWishDate,confirmed:directConfirmedDate,term:intakeTermStatus,handover:intakeHandover,payment:intakePaymentMode,source:intakeSource,note:directNote,
-    geprueft:intakeChecked,dismissedConcerns:intakeDismissedConcerns,documents:intakeSourceCaptures.map(capture=>capture.id),recognitionMarkers,recognitionConfirmed,lastRecognizedText,remainingRecognizedPositions,overflowPositions,
+    geprueft:intakeChecked,dismissedConcerns:intakeDismissedConcerns,documents:intakeSourceCaptures.map(capture=>capture.id),recognitionMarkers,recognitionConfirmed,lastRecognizedText,remainingRecognizedPositions,overflowPositions,continuationIndex,continuationTotal,
     intakeWishDateOrigin,intakeHandoverOrigin,intakePaymentOrigin,intakeOrigin,intakeSourceOrigin,intakeTermChoice,intakeProcessingWeeks,intakeTermOrigin,intakeTermExpired};}
 
   async function saveIntakeTextOriginal(shouldUpdateState?:()=>boolean):Promise<IntakeCapture[]>{
@@ -1206,7 +1210,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     if (draftWorking.current || busy || !remainingRecognizedPositions) return;
     if (intakeRecognitionText !== lastRecognizedText) { setFeedback({kind:"validation",message:"Der Text wurde nach der Erkennung geändert · ursprünglichen Text wiederherstellen oder Erfassung neu beginnen."}); return; }
     if (!ports.createContinuation || !ports.getCapture || !ports.drafts) { setFeedback({kind:"error",message:"Fortsetzung ist nicht verfügbar · Original und Eingaben bleiben erhalten. Code: INTAKE_CONTINUATION_PORT_MISSING."}); return; }
-    if (overflowPositions.length !== remainingRecognizedPositions || overflowPositions.length > 20) { setFeedback({kind:"validation",message:"Mehr als 20 weitere Positionen · bitte den Rest in höchstens 20 Positionen je Beleg aufteilen."}); return; }
+    if (overflowPositions.length !== remainingRecognizedPositions) { setFeedback({kind:"validation",message:"Nicht alle erkannten Positionen sind verfügbar · Original und Eingaben bleiben erhalten."}); return; }
     draftWorking.current=true;setBusy(true);setFeedback(null);
     try {
       if (!continuationRequest.current) {
@@ -1219,22 +1223,25 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         if(!parentDraft||canonicalDraftPayload(parentDraft.payload)!==canonicalDraftPayload(parentPayload))throw Error("INTAKE_CONTINUATION_PARENT_DRAFT_MISSING");
         setActiveDraft(parentDraft);draftOperation.current=null;
         const textSource=sources.find(source=>source.text===intakeRecognitionText);
-        const parent=sources.find(source=>source.files.some(file=>file.secured))??textSource;
-        if(!textSource||!parent) throw Error("INTAKE_CONTINUATION_SOURCE_MISSING");
+        const parent=sources.find(source=>source.id===intakeClientKey&&source.continuation?.sourceId)
+          ??sources.find(source=>source.files.some(file=>file.secured))??textSource;
+        const textSourceId=parent?.continuation?.textSourceId??textSource?.id;
+        if(!textSourceId||!parent) throw Error("INTAKE_CONTINUATION_SOURCE_MISSING");
         const childId=crypto.randomUUID(),draftId=crypto.randomUUID(),clientEventId=crypto.randomUUID();
-        const items=overflowPositions.map(position=>{
+        const nextPositions=overflowPositions.slice(0,20),laterPositions=overflowPositions.slice(20);
+        const items=nextPositions.map(position=>{
           const unit=normaliseOrderPositionUnit(position.unit),surface=position.surfaceRequested?normaliseOrderPositionSurface(position.surfaceRequested):"";
           if(!unit||surface===null)throw Error("INTAKE_CONTINUATION_POSITION_INVALID");
           return {...newIntakePosition(),catalogServiceId:FREE_TEXT_SERVICE,name:position.name,quantity:position.quantity,surfaceRequested:surface,surfaceTouched:false,executionRequested:position.executionRequested,unit};
         });
-        const markers=overflowPositions.flatMap((position,index)=>[
+        const markers=nextPositions.flatMap((position,index)=>[
           {key:`position-${index}-name`,label:`Position ${index+1}`,value:position.name,source:position.source},
           ...(position.quantity?[{key:`position-${index}-quantity`,label:"Menge",value:position.quantity,source:position.source}]:[]),
           {key:`position-${index}-unit`,label:"Einheit",value:position.unit,source:position.source},
           ...(position.surfaceRequested && position.surfaceRecognized!==false?[{key:`position-${index}-surface`,label:"Oberfläche",value:position.surfaceRequested,source:position.source}]:[]),
         ]);
-        const payload={...draftPayload(),clientKey:childId,items,documents:[childId],geprueft:false,recognitionMarkers:markers,recognitionConfirmed:false,remainingRecognizedPositions:0,overflowPositions:[]};
-        continuationRequest.current={parentId:parent.id,parentVersion:parent.version,textSourceId:textSource.id,childId,draftId,clientEventId,fileId:parent.files.find(file=>file.secured)?.id??null,payload};
+        const payload={...draftPayload(),clientKey:childId,items,documents:[childId],geprueft:false,recognitionMarkers:markers,recognitionConfirmed:false,remainingRecognizedPositions:laterPositions.length,overflowPositions:laterPositions,continuationIndex:continuationIndex+1,continuationTotal};
+        continuationRequest.current={parentId:parent.id,parentVersion:parent.version,textSourceId,childId,draftId,clientEventId,fileId:parent.files.find(file=>file.secured)?.id??null,payload};
       }
       const result=await ports.createContinuation(continuationRequest.current);
       if(result.code!=="OK"){setFeedback({kind:"error",message:result.message});return;}
@@ -1250,7 +1257,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   async function openContinuationDraft() {
     if(!continuation||!ports.drafts||draftWorking.current||busy)return;
-    if(!continuation.draftId&&!continuation.orderId){setFeedback({kind:"error",message:"Beleg 2 ist vorhanden, aber sein Entwurf ist nicht verfügbar. Code: INTAKE_CONTINUATION_DRAFT_MISSING."});return;}
+    if(!continuation.draftId&&!continuation.orderId){setFeedback({kind:"error",message:`Beleg ${continuationIndex+1} ist vorhanden, aber sein Entwurf ist nicht verfügbar. Code: INTAKE_CONTINUATION_DRAFT_MISSING.`});return;}
     const nextDraftId=continuation.draftId,nextOrderId=continuation.orderId;
     draftWorking.current=true;setBusy(true);setFeedback(null);
     try {
@@ -1263,7 +1270,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       draftOperation.current=null;window.dispatchEvent(new Event("kreile:intake-drafts-changed"));
       if(nextOrderId)ports.openOrder(nextOrderId);
       else if(nextDraftId)await restoreIntakeDraft(nextDraftId);
-    } catch(error){console.error("[INTAKE_CONTINUATION_OPEN_FAILED]",error);setFeedback({kind:"error",message:"Beleg 2 konnte nicht geöffnet werden · beide Entwürfe bleiben erhalten. Code: INTAKE_CONTINUATION_OPEN_FAILED."});}
+    } catch(error){console.error("[INTAKE_CONTINUATION_OPEN_FAILED]",error);setFeedback({kind:"error",message:`Beleg ${continuationIndex+1} konnte nicht geöffnet werden · Entwürfe bleiben erhalten. Code: INTAKE_CONTINUATION_OPEN_FAILED.`});}
     finally {draftWorking.current=false;setBusy(false);}
   }
 
@@ -1808,6 +1815,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const recognizeDirectIntakeText = async () => {
     if (!intakeRecognitionText.trim()) return;
+    if(continuation||intakeSourceCaptures.some(capture=>capture.continuation?.sourceId)){
+      setFeedback({kind:"validation",message:"Der Originaltext ist bereits auf Belege aufgeteilt · bitte die Positionen in diesem Beleg direkt bearbeiten."});return;
+    }
     if (remainingRecognizedPositions) { setFeedback({kind:"validation",message:"Nicht alle Positionen sind übernommen. Das Original bleibt erhalten; die Aufteilung ist noch nicht bestätigt."}); return; }
     const generation=intakeRecognitionGeneration.current,run=++intakeRecognitionRun.current,controller=new AbortController();
     let timedOut=false;
@@ -1884,6 +1894,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           unit,
         }); });
         const existing = directItems.length === 1 && !directItems[0]?.name.trim() ? [] : directItems;
+        setContinuationIndex(1);setContinuationTotal(Math.max(1,Math.ceil((existing.length+(result.data.totalPositions??allPositions.length))/20)));
         adoptedOffset = existing.length;
         const available = Math.max(0, 20 - existing.length);
         adoptedPositions = allPositions.slice(0, available);
@@ -2474,9 +2485,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   {concern.label} · Vorschlag<KrButton art="leise" icon="x" text="" aria-label={concern.label+" abwählen"} data-spec-id={"eingang.anliegen."+concern.id+".abwaehlen"} onClick={()=>{intakeTextStand.current=crypto.randomUUID();setIntakeDismissedConcerns(previous=>[...previous,concern.id]);}}/>
                 </span>)}</div>:null}
                 {recognitionBusy ? <Hinweis>Angaben werden erkannt … Das Formular bleibt bedienbar.</Hinweis> : null}
-                {remainingRecognizedPositions ? <Hinweis ton="warn">{directItems.length+remainingRecognizedPositions} Positionen erkannt · {directItems.length} übernommen · {remainingRecognizedPositions} weitere Positionen<KrButton text="Rest als zweiten Beleg anlegen" onClick={()=>void createContinuationDraft()} disabled={busy}/></Hinweis> : null}
-                {continuation ? <Hinweis>{continuation.count??"Weitere"} Positionen · Beleg 2 gesichert <KrButton text={continuation.orderId?"Auftrag von Beleg 2 öffnen":"Beleg 2 öffnen"} onClick={()=>void openContinuationDraft()} disabled={busy}/></Hinweis> : null}
-                {intakeSourceCaptures.find(capture=>capture.continuation?.sourceId) ? <Hinweis>Beleg 2/2 · Fortsetzung von Eingang {intakeSourceCaptures.find(capture=>capture.continuation?.sourceId)?.continuation?.sourceId}</Hinweis> : null}
+                {remainingRecognizedPositions ? <Hinweis ton="warn">{directItems.length+remainingRecognizedPositions} Positionen erkannt · {directItems.length} übernommen · {remainingRecognizedPositions} weitere Positionen<KrButton text={continuationIndex===1?"Rest als zweiten Beleg anlegen":`Rest als Beleg ${continuationIndex+1} anlegen`} onClick={()=>void createContinuationDraft()} disabled={busy}/></Hinweis> : null}
+                {continuation ? <Hinweis>{continuation.count??"Weitere"} Positionen · Beleg {continuationIndex+1} gesichert <KrButton text={continuation.orderId?`Auftrag von Beleg ${continuationIndex+1} öffnen`:`Beleg ${continuationIndex+1} öffnen`} onClick={()=>void openContinuationDraft()} disabled={busy}/></Hinweis> : null}
+                {intakeSourceCaptures.find(capture=>capture.continuation?.sourceId) ? <Hinweis>Beleg {continuationIndex}/{continuationTotal} · Fortsetzung von Eingang {intakeSourceCaptures.find(capture=>capture.continuation?.sourceId)?.continuation?.sourceId}</Hinweis> : null}
                   {recognitionMarkers.length > 0 ? <div className={`ev-erkannt${recognitionConfirmed ? " ev-erkannt--ok" : ""}`} aria-live="polite">
                     <div className="ev-erkannt-kopf"><b>{recognitionConfirmed ? `${recognitionMarkers.length} Angaben bestätigt` : `${recognitionMarkers.length} Angaben erkannt und vorausgefüllt`}</b>
                       {!recognitionConfirmed ? <KrButton data-spec-id="eingang.alles-bestaetigen" className="kr-btn--ton-blau" icon="check" text="Alles bestätigen" onClick={() => setRecognitionConfirmed(true)} /> : null}

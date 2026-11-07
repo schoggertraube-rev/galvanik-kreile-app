@@ -882,6 +882,12 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
   expect(await sql`SELECT item_id::text FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fileId}::uuid`).toEqual([{item_id:parentId}]);
   expect(await sql`SELECT file_id::text,fortsetzung_von::text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${childId}::uuid`).toEqual([{file_id:fileId,fortsetzung_von:parentId}]);
   expect(await sql`SELECT id FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${childId}::uuid`).toHaveLength(0);
+  const thirdId=randomUUID(),thirdDraftId=randomUUID();
+  const thirdPayload={clientKey:thirdId,text,documents:[thirdId],items:[{key:randomUUID(),name:"SYNTHETISCH Position 41",quantity:"1"}]};
+  expect(await withSession(actor,()=>createIntakeContinuationAction({parentId:childId,parentVersion:1,textSourceId,childId:thirdId,draftId:thirdDraftId,clientEventId:randomUUID(),fileId,payload:thirdPayload}))).toMatchObject({code:"OK",replayed:false});
+  expect(await withSession(actor,()=>getIntakeCaptureAction(thirdId))).toMatchObject({code:"OK",capture:{text,files:[{id:fileId,secured:true}],continuation:{sourceId:childId,textSourceId}}});
+  expect(await sql`SELECT file_id::text,fortsetzung_von::text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${thirdId}::uuid`).toEqual([{file_id:fileId,fortsetzung_von:childId}]);
+  expect(await sql`SELECT id FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id IN (${childId}::uuid,${thirdId}::uuid)`).toHaveLength(0);
  }));
 
  it("P66 keeps the newer draft when an older browser session saves later",async()=>{

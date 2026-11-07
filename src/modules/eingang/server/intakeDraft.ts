@@ -131,11 +131,12 @@ export async function createIntakeContinuation(input: unknown) {
           ? { code:"OK" as const, childId:value.childId, draftId:value.draftId, replayed:true }
           : { code:"CONFLICT" as const, message:"Diese Fortsetzung wurde bereits anders verwendet." };
       }
-      const parents = await tx.execute<{kanal:string; version:number; text:string|null; erstellt_von:string}>(sql`SELECT kanal,version,text,erstellt_von::text FROM public.intake_item
+      const parents = await tx.execute<{kanal:string; version:number; text:string|null; erstellt_von:string;fortsetzung_von:string|null}>(sql`SELECT kanal,version,text,erstellt_von::text,fortsetzung_von::text FROM public.intake_item
         WHERE tenant_id=${auth.tenantId} AND id=${value.parentId}::uuid FOR UPDATE`);
       const parent = parents[0];
       if (!parent) return { code:"NOT_FOUND" as const, message:"Der ursprüngliche Eingang wurde nicht gefunden." };
       if ((parent.kanal === "mail" || parent.erstellt_von !== auth.userId) && !hasAuthorizationArea(auth,"mails")) return { code:"FORBIDDEN" as const, message:"Original eines anderen Logins benötigt das Recht Mails." };
+      if(parent.fortsetzung_von&&!await mayUseContinuationSources(tx,auth,value.parentId))return {code:"FORBIDDEN" as const,message:"Original der Fortsetzung ist für diesen Login nicht freigegeben."};
       if (parent.version !== value.parentVersion) return { code:"CONFLICT" as const, message:"Das Original wurde geändert · bitte erneut laden." };
       const siblings=await tx.execute(sql`SELECT id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND fortsetzung_von=${value.parentId}::uuid LIMIT 1`);
       if(siblings.length)return {code:"CONFLICT" as const,message:"Eine Fortsetzung ist bereits vorhanden · ursprünglichen Eingang erneut öffnen."};
@@ -147,7 +148,10 @@ export async function createIntakeContinuation(input: unknown) {
       const files = await tx.execute<{id:string;secured:boolean}>(sql`SELECT file.id::text,EXISTS(
         SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id
           AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text) AS secured
-        FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${value.parentId}::uuid ORDER BY file.reihenfolge,file.id`);
+        FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND (file.item_id=${value.parentId}::uuid OR EXISTS(
+          SELECT 1 FROM public.intake_event parent_event WHERE parent_event.tenant_id=file.tenant_id
+            AND parent_event.item_id=${value.parentId}::uuid AND parent_event.art='angelegt'
+            AND jsonb_exists(parent_event.nachher->'originalFileIds',file.id::text))) ORDER BY file.reihenfolge,file.id`);
       if(files.some(file=>!file.secured))return {code:"CONFLICT" as const,message:"Ein Original ist noch nicht sicher gespeichert · bitte erneut versuchen."};
       if(files.length && !value.fileId || value.fileId && !files.some(file=>file.id===value.fileId))
         return {code:"VALIDATION_ERROR" as const,message:"Das Original gehört nicht zum ursprünglichen Eingang."};
