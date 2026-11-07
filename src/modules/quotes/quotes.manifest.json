@@ -48,7 +48,8 @@
   "migrations": [
     "20260914110000_path1_quote_persistence_contract.sql",
     "20260916090000_path1_quote_product_lifecycle.sql",
-    "20261107193000_kv_v04_content_editions.sql"
+    "20261107193000_kv_v04_content_editions.sql",
+    "20261107211500_kv_v04_conditional_acceptance.sql"
   ],
   "viewsFunctions": [
     "private.create_quote_v1",
