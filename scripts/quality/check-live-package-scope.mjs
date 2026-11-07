@@ -1566,6 +1566,36 @@ function checkClosure(root, baseSha, files, mission) {
   return errors;
 }
 
+const GOVERNANCE_RESTART_BRANCH = "codex/bauregeln-neustart";
+const GOVERNANCE_RESTART_BASE = "d447404c84dc8f3be729d19530d8e66f1d5097c8";
+const GOVERNANCE_RESTART_FILES = new Set([
+  "AGENTS.md", ".gitattributes", "scripts/quality/check-authoritative-sources.mjs",
+  "quality/authoritative-sources.json", ".github/workflows/eslint-ratchet.yml",
+  "scripts/quality/check-live-package-scope.mjs", "src/test/live_package_scope.test.ts",
+  "src/test/authority_gate.test.ts", "docs/delivery/ABGABE_NEUSTART.md",
+  "docs/evidence/live-line/neustart/TRUST_ANCHOR.json",
+  ...["BAUREGELN.md", "WARTESCHLANGE.md", "SEITENHOHEIT.md", "OWNER_ENTSCHEIDUNGEN.md",
+    "MELDUNG_ENDVERSION_CHAT.md", "MELDUNG_PLANUNGSCHAT.md",
+    "AUFTRAG_ENDVERSION_SA_2026-11-07_IDEENABGLEICH.md", "AUFTRAG_ENDVERSION_V04_VERNETZUNG_2026-11-07.md",
+    "AKTUELLE_ANWEISUNG.md", "KLAERUNG_A_EINGANG_GESAMTKONZEPT.md", "KLAERUNG_STAND.md", "ORIENTIERUNG_KLAERUNG.md"].map((name) => `_review/${name}`),
+]);
+
+/** One Owner/PL-authorized planning migration (#189), never a product exemption. */
+export function checkGovernanceRestartScopeForTest({ entries, branch, baseSha }) {
+  const errors = [];
+  // The exact one-time Main merge must pass the same narrow path/base checks.
+  if (branch !== GOVERNANCE_RESTART_BRANCH && branch !== "main") errors.push(`NEUSTART_BRANCH_INVALID:${branch}`);
+  if (baseSha !== GOVERNANCE_RESTART_BASE) errors.push(`NEUSTART_BASE_INVALID:${baseSha}`);
+  for (const { path: rel, status } of entries) {
+    const planning = /^_review\/(?:archiv|quellen|pakete)\//.test(rel)
+      || /^_review\/lieferung_[^/]+\//.test(rel);
+    if ((!GOVERNANCE_RESTART_FILES.has(rel) && !planning) || rel.includes("..") || rel.includes("\\")) errors.push(`NEUSTART_SCOPE:${rel}`);
+    if (planning && status !== "A") errors.push(`NEUSTART_PLANNING_NOT_ADDITIVE:${rel}`);
+    if (["_review/AKTUELLE_ANWEISUNG.md", "_review/KLAERUNG_A_EINGANG_GESAMTKONZEPT.md", "_review/KLAERUNG_STAND.md", "_review/ORIENTIERUNG_KLAERUNG.md"].includes(rel) && status !== "D") errors.push(`NEUSTART_LEGACY_NOT_ARCHIVED:${rel}`);
+  }
+  return errors;
+}
+
 export function checkB3ScopeForTest({ entries }) {
   const errors = [];
   for (const { path: rel, status } of entries) {
@@ -1585,6 +1615,7 @@ export function checkLivePackageScope({ root, base, head, branch }) {
       const [status, rel] = line.split("\t");
       return { status: status.slice(0, 1), path: posix(rel) };
     }) : [];
+    if (branch === GOVERNANCE_RESTART_BRANCH || (branch === "main" && resolved(root, base) === GOVERNANCE_RESTART_BASE && files.includes("_review/BAUREGELN.md"))) return checkGovernanceRestartScopeForTest({ entries, branch, baseSha: resolved(root, base) });
     return checkB3ScopeForTest({ entries });
   }
   if (branch === "main") return [];

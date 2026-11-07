@@ -1,0 +1,68 @@
+{
+ "datei": "ui/endversion_design.css",
+ "sha256": "5191D03B4C2A5D06280AB5182E43AD0C22FBA124C82C31F6781BD164D7C8F8FD",
+ "bytes": 241905,
+ "quellen": [
+  {
+   "quelle": "tokens.css",
+   "bytes_roh": 2307,
+   "bytes_buendel": 2307,
+   "entfernte_vorschau_regeln": 0
+  },
+  {
+   "quelle": "komponenten.css",
+   "bytes_roh": 57524,
+   "bytes_buendel": 57524,
+   "entfernte_vorschau_regeln": 0
+  },
+  {
+   "quelle": "groessen_v8.css",
+   "bytes_roh": 2756,
+   "bytes_buendel": 2756,
+   "entfernte_vorschau_regeln": 0
+  },
+  {
+   "quelle": "ui_ergaenzung.css",
+   "bytes_roh": 66140,
+   "bytes_buendel": 66140,
+   "entfernte_vorschau_regeln": 0
+  },
+  {
+   "quelle": "inline:f9-suche",
+   "bytes_roh": 10933,
+   "bytes_buendel": 10070,
+   "entfernte_vorschau_regeln": 10
+  },
+  {
+   "quelle": "inline:f1-handy",
+   "bytes_roh": 2143,
+   "bytes_buendel": 2090,
+   "entfernte_vorschau_regeln": 1
+  },
+  {
+   "quelle": "inline:ohne-id",
+   "bytes_roh": 3395,
+   "bytes_buendel": 1664,
+   "entfernte_vorschau_regeln": 23
+  },
+  {
+   "quelle": "inline:auftragsweg",
+   "bytes_roh": 54308,
+   "bytes_buendel": 53159,
+   "entfernte_vorschau_regeln": 17
+  },
+  {
+   "quelle": "inline:vorschau-neu",
+   "bytes_roh": 7651,
+   "bytes_buendel": 6683,
+   "entfernte_vorschau_regeln": 11
+  },
+  {
+   "quelle": "v04:U-244 (.v04)",
+   "bytes_roh": 39044,
+   "bytes_buendel": 39044,
+   "entfernte_vorschau_regeln": 0
+  }
+ ],
+ "musterdaten_treffer": 0
+}

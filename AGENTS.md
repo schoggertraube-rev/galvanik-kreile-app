@@ -6,6 +6,7 @@ Arbeitsort ist ausschließlich dieses Repository `02_app`. Codex ist der einzige
 
 1. Vor jeder Arbeit `_review/BAUREGELN.md` lesen.
 2. Danach `_review/WARTESCHLANGE.md` und ausschließlich das jeweilige Paket im Bauplan lesen.
+   Die Quelle je Seite bestimmt `_review/SEITENHOHEIT.md`.
 3. BAUREGELN bestimmen Ablauf, Quellen, Prüfungen, Branches und Abgabe. Die Warteschlange bestimmt die Priorität.
 4. Fortschritt ausschließlich als eine Zeile je Commit oder Entscheidung in `_review/BAULOG.md` festhalten.
 5. `_review/archiv/` und frühere Steuerungen sind historischer Nachweis und kein Bauauftrag.

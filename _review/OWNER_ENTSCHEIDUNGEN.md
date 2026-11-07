@@ -272,3 +272,9 @@ Neueste vom Owner freigegebene Version (27.09.2026, `_DESIGN_VERBINDLICH/FREIGAB
 
 ## U-243 (05.11. 17:50, Owner direkt) – Aufnahme-Ergebnis neu
 Darstellung und Weiterverarbeitung nach Foto/Datei in `rein` sind unzureichend und werden neu geplant: Ergebniskarte (Vorschaubild, Art, erkannte Felder, Treffer mit Grund, genau ein konkreter Hauptknopf, Rohtext eingeklappt, Fehler in Worten). Planung Endversion am Samstag 07.11. (AUFTRAG_ENDVERSION_SA Abschnitt 6), Reparatur danach als Teil 2b. Bis dahin keine Unterbrechung der laufenden Arbeit.
+
+## U-244 (07.11.2026, Owner direkt an den Planungschat) – Mini-Module V04 „Vernetzt für dich“
+- Quelle `_review/quellen/minimodule_v04/`. Die Optik der Module bleibt exakt; angepasst werden nur Logik und Anschluss an die bestehende App.
+- V04 ersetzt die erste Ansicht und Bedienwege von Eingang (rotes Plus), Werkstatt-Übersicht und ergänzt Nachrichten um den Reiter „Anliegen“ (Mailansicht bleibt). Karten, Der Tag (nur Anschluss) und übrige Dialoge bleiben.
+- Kreislauf ist entscheidend: Reklamation/KV per Mail oder Eingang kommt sicher zum Ziel – Ablehnung oder Nacharbeitsauftrag zurück in die Galvanik, belegter Abschluss.
+- Umsetzung: `_review/AUFTRAG_ENDVERSION_V04_VERNETZUNG_2026-11-07.md`. Owner-Autorisierung: Siglinder.
