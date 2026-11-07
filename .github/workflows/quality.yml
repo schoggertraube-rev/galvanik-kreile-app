@@ -787,7 +787,7 @@ jobs:
               -e A3_EVIDENCE_OUTPUT_DIR \
               mcr.microsoft.com/playwright:v1.60.0-jammy npx playwright test "$@"
           }
-          run_browser e2e/path1-v5-shell-smoke.real.spec.ts --project=Tablet --workers=1
+          run_browser e2e/path1-v5-shell-smoke.real.spec.ts --project=Tablet --workers=1 --trace=retain-on-failure
           mapfile -t live_specs < <(node scripts/quality/select-live-regression-specs.mjs --list)
           if [ "${#live_specs[@]}" -eq 0 ]; then
             echo "No locally replayable live-line BUILD specs have been merged yet."
