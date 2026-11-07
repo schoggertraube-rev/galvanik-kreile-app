@@ -1461,6 +1461,16 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(vi.mocked(api.createDirectIntake).mock.calls[0]?.[0]).toMatchObject({items:[{name:'SYNTHETISCH Anderes Teil',quantity:1.25,unit:'kg',unitPriceCents:3740,vatRateBasisPoints:1900}]});
   });
 
+  it('U242 explains the actual quantity problem alongside the unit price',async()=>{
+    const api=ports();render(<GlobalCreateFlow ports={api}/>);openFlow();await fillDirectIntakeForExistingCustomer();
+    fireEvent.change(screen.getByLabelText('Preis netto je Einheit'),{target:{value:'37,40'}});
+    fireEvent.change(screen.getByRole('combobox',{name:'Einheit'}),{target:{value:'stueck'}});
+    fireEvent.change(screen.getByRole('spinbutton',{name:'Menge'}),{target:{value:'1.25'}});
+    expect(screen.getByText('Menge 1–99 999 (ganze Zahl)',{selector:'small'})).toBeInTheDocument();
+    expect(screen.queryByText('Menge prüfen')).not.toBeInTheDocument();
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
+
   it("E40 shows a non-blocking photo warning only when goods are present", () => {
     render(<GlobalCreateFlow ports={ports()} />);
     openFlow();

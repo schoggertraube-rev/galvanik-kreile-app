@@ -1461,9 +1461,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setFeedback({kind:"validation",message:invalid[0]==="customerType"?"Noch offen: Firma oder Privat":invalid[1]});
       const root=document.querySelector<HTMLElement>(`[data-spec-id="kundeneu.${ids[invalid[0]]??invalid[0]}"]`);(root?.matches("input,textarea,select,button")?root:root?.querySelector<HTMLElement>("input,textarea,select,button"))?.focus();return;
     }
-    if(customerAddress?.blocked){setFeedback({kind:"validation",message:"Adresse prüfen"});document.querySelector<HTMLElement>('[data-spec-id="kundeneu.adresse"]')?.focus();return;}
+    if(customerAddress?.blocked){setFeedback({kind:"validation",message:customerAddress.message});document.querySelector<HTMLElement>('[data-spec-id="kundeneu.adresse"]')?.focus();return;}
     if (customerDuplicateOpen) {
-      setFeedback({ kind: "validation", message: "Bitte zuerst entscheiden, ob der ähnliche Kunde bereits vorhanden ist." });
+      setFeedback({ kind: "validation", message: "Vorhandenen Kunden öffnen oder „Ist ein anderer Kunde“ wählen." });
       document.querySelector<HTMLElement>('[data-spec-id="kundeneu.dublette"]')?.focus();
       return;
     }
@@ -2560,7 +2560,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                         const text=event.target.value.trim(),cents=/^\d+(?:[.,]\d{1,2})?$/.test(text)?Math.round(Number(text.replace(',','.'))*100):null;
                         setDirectItems(current=>current.map(line=>line.key===item.key?{...line,priceText:event.target.value,unitPriceCents:cents,vatRateBasisPoints:line.catalogServiceId===FREE_TEXT_SERVICE?cents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS:line.vatRateBasisPoints}:line));
                       }}/>
-                      {intakePriceError(item,intakeKind==='kv')?<span className="kr-feld-fehler" data-spec-id="eingang.preis.fehler">{intakePriceError(item,intakeKind==='kv')}</span>:<small>{item.unitPriceCents===null?'Preis fehlt':intakeQuantityError(item)?'Menge prüfen':`= ${euro(Math.round(Number(item.quantity.replace(',','.'))*item.unitPriceCents))} netto`}</small>}
+                      {intakePriceError(item,intakeKind==='kv')?<span className="kr-feld-fehler" data-spec-id="eingang.preis.fehler">{intakePriceError(item,intakeKind==='kv')}</span>:<small>{item.unitPriceCents===null?'Preis fehlt':intakeQuantityError(item)??`= ${euro(Math.round(Number(item.quantity.replace(',','.'))*item.unitPriceCents))} netto`}</small>}
                     </></Feld>:null}
                     {directItems.length > 1 ? <KrButton data-spec-id="eingang.position-entfernen" art="sekundaer" icon="x" label="Position entfernen" onClick={() => { setDirectItems((current) => current.filter((entry) => entry.key !== item.key)); }} /> : null}
                   </div>)}
@@ -2643,7 +2643,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
               </aside></PruefRail></div>
 
               {feedback && !intakeClosePrompt ? <>
-                <div data-spec-id={feedback.kind === "save-failed" ? "eingang.zustand.fehler" : undefined}><Hinweis ton={feedback.kind === "validation" ? "warn" : undefined}><span><strong>{feedback.kind === "save-failed" ? "Speichern fehlgeschlagen · alle Eingaben sind noch da" : feedback.kind === "unclear" ? "Ausgang ungeklärt" : "Eingabe prüfen"}</strong><br />{feedback.message}</span></Hinweis></div>
+                <div data-spec-id={feedback.kind === "save-failed" ? "eingang.zustand.fehler" : undefined}><Hinweis ton={feedback.kind === "validation" ? "warn" : undefined}><span><strong>{feedback.kind === "save-failed" ? "Speichern fehlgeschlagen · alle Eingaben sind noch da" : feedback.kind === "unclear" ? "Ausgang ungeklärt" : "Vorgang nicht abgeschlossen"}</strong><br />{feedback.message}</span></Hinweis></div>
                 {feedback.kind === "save-failed" ? <KrButton data-spec-id="eingang.erneut-buchen" art="primaer" text={busy ? lastIntakeAction==='prospect'?"Wird gespeichert …":"Wird gebucht …" : lastIntakeAction==='prospect'?'Erneut speichern':"Erneut buchen"} onClick={() => lastIntakeAction==='prospect'?void saveProspect():void submitDirectIntake({ preventDefault() {} } as FormEvent)} disabled={busy} /> : null}
                 {feedback.kind === "unclear" ? <div className="kr-stapel">
                   <KrButton art="sekundaer" text="Status mit gleicher Kennung prüfen" onClick={() => void checkUnclearStatus()} disabled={busy} />
