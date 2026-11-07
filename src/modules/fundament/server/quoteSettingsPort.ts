@@ -3,6 +3,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {SystemSettingsContext,CompanyDocumentContext} from './systemSettingsPort';
+import {readQuoteJournal,appendQuoteJournal,readQuoteCurrentRate} from '@/lib/server/quoteJournalPort';
 
 export type QuoteCalculationSettings={
   hourlyRateCents:number|null;setupCents:number|null;materialCents:number|null;
@@ -13,9 +14,7 @@ export async function readQuoteSettingsInTransaction(tx:PrivilegedTenantTransact
     FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC,id LIMIT 2`);
   if (!rows.length) return null;
   if (rows.length!==1||!Number.isFinite(Date.parse(rows[0].updatedAt))) throw Error('QUOTE_SETTINGS_AMBIGUOUS');
-  const rates=await tx.execute<{hourlyRateCents:number;integrity_ok:boolean}>(sql`SELECT hourly_rate_cents::float8 AS "hourlyRateCents",integrity_ok FROM private.v_extra_work_current_rate_v1 WHERE tenant_id=${tenantId} LIMIT 2`);
-  if (rates.length>1||rates.some(rate=>rate.integrity_ok!==true||!Number.isSafeInteger(rate.hourlyRateCents)||rate.hourlyRateCents<1)) throw Error('QUOTE_RATE_INVALID');
-  const settings={...rows[0],hourlyRateCents:rates[0]?.hourlyRateCents??null};
+  const settings={...rows[0],hourlyRateCents:await readQuoteCurrentRate(tx,tenantId)};
   for (const key of ['setupCents','materialCents','followupDays','validityDays'] as const) {
     const value=settings[key];
     if (value!==null&&(!Number.isSafeInteger(value)||value<0||key.endsWith('Days')&&value<1)) throw Error('QUOTE_SETTINGS_INVALID');
@@ -46,8 +45,9 @@ export async function saveQuoteSettings(context:SystemSettingsContext,input:unkn
   try {
     return await withPrivilegedTenantTransaction(context,async tx=>{
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('quote-settings:'||${context.tenantId},0))`);
-      const events=await tx.execute<{event_type:string;payload:{intent:string;after:QuoteCalculationSettings}}>(sql`SELECT event_type,payload FROM public.events WHERE tenant_id=${context.tenantId} AND user_id=${context.actorId}::uuid AND client_event_id=${value.clientEventId}::uuid`);
-      if (events.length) return events.length===1&&events[0].event_type==='QUOTE_SETTINGS_UPDATED_V04'&&events[0].payload.intent===intent
+      const actor={tenantId:context.tenantId,userId:context.actorId};
+      const events=await readQuoteJournal<{intent:string;after:QuoteCalculationSettings}>(tx,actor,value.clientEventId);
+      if (events.length) return events.length===1&&events[0].eventType==='QUOTE_SETTINGS_UPDATED_V04'&&events[0].payload.intent===intent
         ?{code:'OK' as const,settings:events[0].payload.after,replayed:true}:{code:'CONFLICT' as const,message:'Diese Speicherkennung wurde bereits anders verwendet.'};
       const before=await readQuoteSettingsInTransaction(tx,context.tenantId);
       if (!before) return {code:'NOT_FOUND' as const,message:'Firmendaten müssen zuerst angelegt werden.'};
@@ -57,8 +57,7 @@ export async function saveQuoteSettings(context:SystemSettingsContext,input:unkn
       if (changed.length!==1) throw Error('QUOTE_SETTINGS_WRITE_CONFLICT');
       const after=await readQuoteSettingsInTransaction(tx,context.tenantId);
       if (!after) throw Error('QUOTE_SETTINGS_READBACK_MISSING');
-      await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,user_id,client_event_id,event_schema_version,correlation_id,status,description,payload)
-        VALUES(${randomUUID()},${context.tenantId},'QUOTE_SETTINGS_UPDATED_V04',${context.actorId}::uuid,${value.clientEventId}::uuid,1,${randomUUID()}::uuid,'success','KV-Ansätze geändert',${JSON.stringify({intent,before,after})}::jsonb)`);
+      await appendQuoteJournal(tx,actor,{id:randomUUID(),type:'QUOTE_SETTINGS_UPDATED_V04',clientEventId:value.clientEventId,correlationId:randomUUID(),version:null,description:'KV-Ansätze geändert',payload:{intent,before,after}});
       return {code:'OK' as const,settings:after,replayed:false};
     });
   } catch (error) {
