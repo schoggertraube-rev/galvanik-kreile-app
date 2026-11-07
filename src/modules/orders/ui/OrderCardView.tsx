@@ -152,6 +152,7 @@ export function OrderCardView({
   documentsPanel,
   photoPanel,
   initialPhotosOpen=false,
+  complaintsPanel,
   agreementMessage,
   onOpenCustomer,
   onClose,
@@ -162,6 +163,7 @@ export function OrderCardView({
   documentsPanel?: ReactNode;
   photoPanel?:ReactNode;
   initialPhotosOpen?:boolean;
+  complaintsPanel?: ReactNode;
   agreementMessage?: string | null;
   onOpenCustomer: (id: string) => void;
   onClose: () => void;
@@ -301,6 +303,7 @@ export function OrderCardView({
   </>;
 
   const main = <>
+    {complaintsPanel}
     {next ? <KartenBlock><NaechsteAktion titel={next.title} aktionen={<Button art={actions.freeze.visible ? "erledigen" : "primaer"} icon={next.icon} text={next.text} disabled={!next.enabled} onClick={next.onClick} />} /></KartenBlock> : null}
     <KartenBlock label="Teile" rechts={<Button art="leise" icon="plus" text="Teil hinzufügen" disabled={!contentEnabled || card.items.length >= 20} onClick={() => contentEnabled ? setItemOpen("new") : unavailable(actions.content?.reason)} />}>
       <div className="kr-teile">{card.items.map((item) => <Teil key={item.id} nr={`Pos. ${item.position}`} name={item.name} meta={`${item.surface} · ${item.quantity} ${item.unit ?? "Einheit fehlt"} · ${item.material ?? "Material nicht hinterlegt"}${item.extraWork.length ? ` · ${item.extraWork.length} Mehrarbeit` : ""}`} fertig={Boolean(item.finished) || current >= 2} fotoFehlt={!card.evidence.some((entry) => entry.itemIds.includes(item.id))} geraet={device} onFoto={() => actions.photo?.enabled && actions.onOpenPhoto ? actions.onOpenPhoto() : unavailable(actions.photo?.reason)} aktionen={<><Button art={item.finished ? "erledigen" : "sekundaer"} icon="check" text={device === "handy" ? undefined : "fertig"} label={`Teil ${item.finished ? "wieder öffnen" : "fertig melden"}`} disabled={!actions.onToggleItemFinished || !actions.itemStatus?.enabled || current >= 2} onClick={() => void actions.onToggleItemFinished?.(item.id, !item.finished)} /><Button art="sekundaer" icon="edit" label="Teil bearbeiten" disabled={!contentEnabled} onClick={() => contentEnabled ? setItemOpen(item.id) : unavailable(actions.content?.reason)} /></>} />)}</div>
@@ -364,7 +367,7 @@ export function OrderCardView({
     {dueOpen ? <Dialog titel="Liefertermin ändern" icon="calendar" groesse="schmal" onSchliessen={() => setDueOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void actions.onChangeDueDate?.(String(form.get("dueDate") ?? ""), String(form.get("reason") ?? "")); setDueOpen(false); }}><Feld label="Neuer Liefertermin"><Eingabe type="date" name="dueDate" defaultValue={card.dueAt?.slice(0, 10) ?? ""} required /></Feld><Feld label="Grund der Änderung"><Textfeld name="reason" minLength={3} maxLength={500} required /></Feld><Button art="primaer" icon="calendar" text="Termin mit Grund speichern" type="submit" /></form></Dialog> : null}
     {noteOpen ? <Dialog titel="Auftragsnotiz bearbeiten" icon="edit" groesse="schmal" onSchliessen={() => setNoteOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const value = String(form.get("note") ?? "").trim(); void actions.onSaveContent?.({ note: value || null, items: contentItems }); setNoteOpen(false); }}><Feld label="Notiz"><Textfeld name="note" defaultValue={card.note ?? ""} maxLength={2000} /></Feld><Button art="primaer" icon="check" text="Notiz speichern" type="submit" /></form></Dialog> : null}
     {itemOpen ? <OrderItemDialog card={card} itemId={itemOpen} onClose={() => setItemOpen(null)} onSave={(items) => { void actions.onSaveContent?.({ note: card.note, items }); setItemOpen(null); }} /> : null}
-    {moreOpen ? <Dialog titel="Mehr zum Auftrag" icon="more" groesse="schmal" onSchliessen={() => setMoreOpen(false)}><div className="kr-stapel">{device !== "desktop" && actions.label.visible ? <Button art="sekundaer" icon="file" text="Laufzettel drucken" disabled={!actions.label.enabled} onClick={() => { void actions.onPrintLabel(); setMoreOpen(false); }} /> : null}<Button art="sekundaer" icon="file" text="KV anlegen" onClick={() => { actions.onOpenQuote?.(); setMoreOpen(false); }} /><Button art="sekundaer" icon="copy" text="Duplizieren" onClick={() => { void actions.onDuplicate?.(); setMoreOpen(false); }} /><Button art="sekundaer" icon="upload" text="Dokument hinzufügen" onClick={() => { actions.onOpenDocument?.(); setMoreOpen(false); }} /></div></Dialog> : null}
+    {moreOpen ? <Dialog titel="Mehr zum Auftrag" icon="more" groesse="schmal" onSchliessen={() => setMoreOpen(false)}><div className="kr-stapel">{device !== "desktop" && actions.label.visible ? <Button art="sekundaer" icon="file" text="Laufzettel drucken" disabled={!actions.label.enabled} onClick={() => { void actions.onPrintLabel(); setMoreOpen(false); }} /> : null}<Button art="sekundaer" icon="file" text="KV anlegen" onClick={() => { actions.onOpenQuote?.(); setMoreOpen(false); }} /><Button art="sekundaer" icon="copy" text="Duplizieren" onClick={() => { void actions.onDuplicate?.(); setMoreOpen(false); }} /><Button art="sekundaer" icon="upload" text="Dokument hinzufügen" onClick={() => { actions.onOpenDocument?.(); setMoreOpen(false); }} />{actions.onRecordComplaint?<Button data-spec-id="auftrag.reklamation" art="sekundaer" icon="alert" text="Reklamation" onClick={()=>{setMoreOpen(false);actions.onRecordComplaint?.();}}/>:null}</div></Dialog> : null}
   </>;
 }
 

@@ -5,6 +5,7 @@ export {readIntakeMessages} from './server/intakeMessages';
 export {readIntakeAssignment,assignIntakeCustomer,setIntakeNoBusiness,createCustomerForIntake} from './server/intakeAssignment';
 export {selectIntakeConcern,finishIntakeUse,reopenIntake} from './server/intakeLifecycle';
 export {recordIntakeTaskEffect} from './server/intakeTaskEffect';
+export {recordIntakeComplaintEffect} from './server/intakeComplaintEffect';
 export {saveIntakeProspect} from './server/intakeProspect';
 export {readOpenIntakeMails,readLinkedIntakeMails} from "./server/intakeMailRead";
 export {importIntakeGraphMail,linkImportedMail,readIntakeMailImportReceipt} from './server/intakeMailImport';

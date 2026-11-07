@@ -1,0 +1,22 @@
+import {cleanup,fireEvent,render,screen} from '@testing-library/react';
+import {afterEach,expect,it,vi} from 'vitest';
+const api=vi.hoisted(()=>({getMicrosoftGraphStatusAction:vi.fn(),listOutlookInboxAction:vi.fn(),attachOutlookMailAction:vi.fn(),sendCustomerMailAction:vi.fn()}));
+vi.mock('@/app/actions/communications.actions',()=>api);
+vi.mock('@/app/actions/quotes.actions',()=>({listOpenQuotesAction:vi.fn()}));
+vi.mock('@/components/layout/GlobalCreateFlow',()=>({requestGlobalCreate:vi.fn()}));
+import {CommunicationPanel} from '../CommunicationPanel';
+afterEach(cleanup);
+it('uses the existing composer for the prefilled complaint without another inbox or send path',()=>{
+ const composer={subject:'TEST RK-01 Ergebnis',body:'TEST Kundin · Gutschrift',onSubject:vi.fn(),onBody:vi.fn(),onSend:vi.fn(),busy:false};
+ render(<CommunicationPanel targetType="ORDER" targetId="TEST-order" composer={composer}/>);
+ expect(screen.getByRole('textbox',{name:'Betreff'})).toHaveValue(composer.subject);
+ expect(screen.getByRole('textbox',{name:'Nachricht'})).toHaveValue(composer.body);
+ fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:'TEST überarbeitet'}});
+ expect(composer.onSubject).toHaveBeenCalledWith('TEST überarbeitet');
+ fireEvent.submit(screen.getByRole('textbox',{name:'Betreff'}).closest('form')!);
+ expect(composer.onSend).toHaveBeenCalledTimes(1);
+ expect(api.getMicrosoftGraphStatusAction).not.toHaveBeenCalled();
+ expect(api.listOutlookInboxAction).not.toHaveBeenCalled();
+ expect(api.sendCustomerMailAction).not.toHaveBeenCalled();
+ expect(screen.queryByRole('button',{name:'Versenden'})).not.toBeInTheDocument();
+});

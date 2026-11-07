@@ -164,6 +164,7 @@ export type OrderCardActionPorts = {
   onOpenPhoto?: () => void;
   onOpenDocument?: () => void;
   onOpenQuote?: () => void;
+  onRecordComplaint?: () => void;
   onDuplicate?: () => void | Promise<void>;
   onChangeDueDate?: (dueDate: string, reason: string) => void | Promise<void>;
   onHandoff: () => void | Promise<void>;

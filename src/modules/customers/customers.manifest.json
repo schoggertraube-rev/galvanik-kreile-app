@@ -79,7 +79,8 @@
     "@/modules/customers/server-public#updateCustomerInTransaction",
     "@/modules/customers/public#CustomerUpdateCommandResult",
     "@/modules/customers/public#CustomerHint",
-    "@/modules/customers/public#CustomerListSignals"
+    "@/modules/customers/public#CustomerListSignals",
+    "@/modules/customers/public#ComplaintPanel"
   ],
   "capabilities": [
     "customers:create"
@@ -129,5 +130,7 @@
     "consumes": []
   },
   "config": {},
-  "dependencies": []
+  "dependencies": [
+    "complaints"
+  ]
 }

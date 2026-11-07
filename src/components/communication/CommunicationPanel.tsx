@@ -15,6 +15,7 @@ import type { QuoteReadback } from "@/modules/quotes/public";
 import styles from "./CommunicationPanel.module.css";
 
 type Target = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
+type Composer={subject:string;body:string;onSubject:(value:string)=>void;onBody:(value:string)=>void;onSend:()=>void;busy:boolean};
 type InboxMessage = {
   id: string;
   subject: string;
@@ -26,7 +27,7 @@ type InboxMessage = {
   hasAttachments: boolean | null;
 };
 
-export function CommunicationPanel({ targetType, targetId }: Target) {
+export function CommunicationPanel({ targetType, targetId,composer }: Target & {composer?:Composer}) {
   const [state, setState] = useState<"loading" | "ready" | "in-klärung" | "error">("loading");
   const [message, setMessage] = useState("");
   const [inbox, setInbox] = useState<InboxMessage[]>([]);
@@ -40,6 +41,7 @@ export function CommunicationPanel({ targetType, targetId }: Target) {
     : quote.linkedOrderId === targetId), [quotes, targetId, targetType]);
 
   useEffect(() => {
+    if(composer)return;
     let active = true;
     const load = async () => {
       const status = await getMicrosoftGraphStatusAction();
@@ -70,14 +72,15 @@ export function CommunicationPanel({ targetType, targetId }: Target) {
       setQuotes(quoteResult.code === "OK" ? quoteResult.quotes : []);
       setState("ready");
     };
-    void load().catch(() => {
+    void load().catch((error) => {
+      console.error("[COMMUNICATION_PANEL_READ_FAILED]",error);
       if (active) {
         setState("error");
         setMessage("E-Mail-Funktionen konnten nicht sicher geladen werden.");
       }
     });
     return () => { active = false; };
-  }, [targetId, targetType]);
+  }, [targetId, targetType,composer]);
 
   const attach = async (mail: InboxMessage) => {
     setBusyId(mail.id);
@@ -99,14 +102,10 @@ export function CommunicationPanel({ targetType, targetId }: Target) {
     finally{setBusyId(null);}
   };
 
-  if (state === "loading") return <section className={styles.panel} aria-busy="true"><Loader2 className={styles.spin} /><span>E-Mail-Verbindung wird geprüft.</span></section>;
-  if (state !== "ready") return <section className={styles.panel} role={state === "error" ? "alert" : "status"}><header><AtSign /><div><small>E-Mail</small><h3>{state === "in-klärung" ? "In Klärung" : "Nicht verfügbar"}</h3></div></header><p>{message}</p></section>;
-
-  return (
-    <section className={styles.panel}>
-      <header><AtSign /><div><small>Microsoft 365</small><h3>E-Mail am Vorgang</h3></div></header>
+  const composeForm=(
       <form className={styles.compose} onSubmit={async (event) => {
         event.preventDefault();
+        if(composer){composer.onSend();return;}
         const formElement = event.currentTarget;
         const form = new FormData(formElement);
         setSendBusy(true);
@@ -124,11 +123,21 @@ export function CommunicationPanel({ targetType, targetId }: Target) {
         setFeedback(result.code === "OK" ? "E-Mail wurde versendet und am Vorgang gespeichert." : result.message);
         if (result.code === "OK") formElement.reset();
       }}>
-        <label>Betreff<input name="subject" required maxLength={500} /></label>
-        <label>Nachricht<textarea name="body" required maxLength={20_000} /></label>
-        <label>PDF-Anhang<select name="quoteId" defaultValue=""><option value="">Ohne Anhang</option>{matchingQuotes.map((quote) => <option key={quote.quoteId} value={quote.quoteId}>KV {quote.quoteNumber}</option>)}</select></label>
-        <button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}Versenden</button>
+        <label>Betreff<input name="subject" required maxLength={500} value={composer?.subject} disabled={composer?.busy} onChange={composer?event=>composer.onSubject(event.target.value):undefined} /></label>
+        <label>Nachricht<textarea name="body" required maxLength={20_000} value={composer?.body} disabled={composer?.busy} onChange={composer?event=>composer.onBody(event.target.value):undefined} /></label>
+        {!composer?<label>PDF-Anhang<select name="quoteId" defaultValue=""><option value="">Ohne Anhang</option>{matchingQuotes.map((quote) => <option key={quote.quoteId} value={quote.quoteId}>KV {quote.quoteNumber}</option>)}</select></label>:null}
+        {!composer?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}Versenden</button>:null}
       </form>
+  );
+  if(composer)return <section className={styles.panel}>{composeForm}</section>;
+
+  if (state === "loading") return <section className={styles.panel} aria-busy="true"><Loader2 className={styles.spin} /><span>E-Mail-Verbindung wird geprüft.</span></section>;
+  if (state !== "ready") return <section className={styles.panel} role={state === "error" ? "alert" : "status"}><header><AtSign /><div><small>E-Mail</small><h3>{state === "in-klärung" ? "In Klärung" : "Nicht verfügbar"}</h3></div></header><p>{message}</p></section>;
+
+  return (
+    <section className={styles.panel}>
+      <header><AtSign /><div><small>Microsoft 365</small><h3>E-Mail am Vorgang</h3></div></header>
+      {composeForm}
       <div className={styles.inboxHead}><Inbox /><div><small>{targetType === "ORDER" ? "Auftrag" : "Posteingang"}</small><h3>{targetType === "ORDER" ? "Zugeordnete Outlook-Mails" : "Letzte Outlook-Mails"}</h3></div></div>
       {targetType === "ORDER" ? inbox.length === 0 ? <p className={styles.empty}>Diesem Auftrag sind keine Mails zugeordnet.</p> : (
         <ol className={styles.inbox}>

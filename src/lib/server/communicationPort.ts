@@ -3,7 +3,8 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import {hasAuthorizationArea} from '@/lib/server/authorization';
+import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphConfigurationStatus,
@@ -204,15 +205,24 @@ export async function attachInboxMessage(
 
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; complaintResult?:{complaintId:string;version:number} },
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || !/^[0-9a-f-]{36}$/i.test(input.clientRequestId) || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
   }
-  if (!canWrite(auth)) return { code: "FORBIDDEN", message: "E-Mails dürfen für diese Rolle nicht versendet werden." };
-  if (readMicrosoftGraphConfigurationStatus().code !== "READY") {
-    return { code: "IN_KLAERUNG", message: "Microsoft 365 ist noch nicht für die Preview verbunden." };
-  }
+  // The bound 4.8 result mail requires Kunden. It grants no inbox or arbitrary
+  // mail access: target, state and version are read from the complaint itself.
+  if(input.complaintResult){
+    if(!hasAuthorizationArea(auth,'kunden')||input.targetType!=='ORDER')return {code:'FORBIDDEN',message:'Kunde informieren erfordert Kunden.'};
+    const context=await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`SELECT complaint_id FROM public.v_complaint_rework_context_v1 complaint WHERE tenant_id=${auth.tenantId} AND complaint_id=${input.complaintResult!.complaintId} AND source_order_id=${input.targetId} AND (
+      version=${input.complaintResult!.version} AND stand='kunde_informieren' OR EXISTS(
+        SELECT 1 FROM public.communication_threads thread JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id
+        WHERE thread.tenant_id=${auth.tenantId} AND thread.source='MS_GRAPH_OUT:'||${input.clientRequestId} AND thread.status='sent' AND thread.order_id=complaint.source_order_id AND thread.customer_id=complaint.customer_id
+        AND message.direction='outgoing' AND message.channel='email' AND message.summary=${'Reklamation '+input.complaintResult!.complaintId+' · Ergebnis'}))`)).catch(error=>{logCommunicationFailure('COMPLAINT_MAIL_CONTEXT_FAILED',error);return null;});
+    if(!context)return {code:'UNAVAILABLE',message:'Reklamationsstand konnte nicht geprüft werden.'};
+    if(context.length!==1)return {code:'CONFLICT',message:'Die Reklamation wurde inzwischen geändert.'};
+  } else if (!canWrite(auth)) return { code: "FORBIDDEN", message: "E-Mails dürfen für diese Rolle nicht versendet werden." };
+  if(!input.complaintResult&&readMicrosoftGraphConfigurationStatus().code!=='READY')return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
   const target = await resolveTarget(auth, input.targetType, input.targetId).catch((error) => {
     logCommunicationFailure("COMMUNICATION_TARGET_READ_FAILED", error);
     return null;
@@ -232,8 +242,15 @@ export async function sendCommunicationMail(
       if (existing[0]) {
         if (existing[0].customer_id !== target.customerId || existing[0].order_id !== target.orderId) throw new Error("COMMUNICATION_TARGET_MISMATCH");
         if (existing[0].status !== "sent") throw new Error("COMMUNICATION_OUTCOME_UNCLEAR");
+        if(input.complaintResult){
+          const confirmed=await tx.execute(sql`SELECT message.id FROM public.communication_messages message JOIN public.communication_threads thread ON thread.tenant_id=message.tenant_id AND thread.id=message.thread_id
+            WHERE message.tenant_id=${auth.tenantId} AND message.thread_id=${existing[0].id} AND message.direction='outgoing' AND message.channel='email'
+            AND message.summary=${'Reklamation '+input.complaintResult.complaintId+' · Ergebnis'} AND message.body=${input.body.trim()} AND thread.subject=${input.subject.trim()}`);
+          if(confirmed.length!==1)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
+        }
         return { threadId: existing[0].id, recordedAt: iso(existing[0].created_at), replay: { threadId: existing[0].id, messageId: null, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(existing[0].created_at), replayed: true } };
       }
+      if(readMicrosoftGraphConfigurationStatus().code!=='READY')throw Error('COMMUNICATION_NOT_CONFIGURED');
       const threadId = randomUUID();
       const rows = await tx.execute<ThreadRow>(sql`
         INSERT INTO public.communication_threads (id, tenant_id, customer_id, order_id, source, subject, status, priority, category, created_by)
@@ -245,6 +262,7 @@ export async function sendCommunicationMail(
     });
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_SEND_PREPARE_FAILED", error);
+    if(error instanceof Error&&error.message==='COMMUNICATION_NOT_CONFIGURED')return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
     return { code: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "CONFLICT" : "UNAVAILABLE", message: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "Der Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; zuerst im Outlook-Ausgang prüfen." : "Der Mailversand konnte nicht sicher vorbereitet werden." };
   }
   if (pending.replay) return { code: "OK", data: pending.replay };
@@ -269,7 +287,7 @@ export async function sendCommunicationMail(
       if (updated.length !== 1) throw new Error("COMMUNICATION_THREAD_FINALIZE_FAILED");
       const messages = await tx.execute<{ id: string }>(sql`
         INSERT INTO public.communication_messages (id, tenant_id, thread_id, direction, channel, body, summary, created_by)
-        VALUES (${messageId}, ${auth.tenantId}, ${pending.threadId}, 'outgoing', 'email', ${input.body.trim()}, ${input.attachment ? `Anhang: ${input.attachment.filename}` : 'Ohne Anhang'}, ${auth.userId}) RETURNING id
+        VALUES (${messageId}, ${auth.tenantId}, ${pending.threadId}, 'outgoing', 'email', ${input.body.trim()}, ${input.complaintResult?'Reklamation '+input.complaintResult.complaintId+' · Ergebnis':input.attachment ? `Anhang: ${input.attachment.filename}` : 'Ohne Anhang'}, ${auth.userId}) RETURNING id
       `);
       if (messages.length !== 1 || messages[0]?.id !== messageId) throw new Error("COMMUNICATION_MESSAGE_INSERT_FAILED");
     });

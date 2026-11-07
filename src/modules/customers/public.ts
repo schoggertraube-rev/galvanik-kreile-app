@@ -43,3 +43,5 @@ export type {
   CustomerListItem,
   CustomersViewState,
 } from "./server/types";
+
+export {ComplaintPanel} from '@/modules/complaints/public';
