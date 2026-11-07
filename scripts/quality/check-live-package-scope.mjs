@@ -1567,7 +1567,7 @@ function checkClosure(root, baseSha, files, mission) {
 }
 
 const GOVERNANCE_RESTART_BRANCH = "codex/bauregeln-neustart";
-const GOVERNANCE_RESTART_BASE = "d447404c84dc8f3be729d19530d8e66f1d5097c8";
+const GOVERNANCE_RESTART_BASE = "7101a7fc2169aa5c30819485ccc791c50fe2670c";
 const GOVERNANCE_RESTART_FILES = new Set([
   "AGENTS.md", ".gitattributes", "scripts/quality/check-authoritative-sources.mjs",
   "quality/authoritative-sources.json", ".github/workflows/eslint-ratchet.yml",

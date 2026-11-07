@@ -14,6 +14,8 @@ import {getGoodsReceiptsAction,saveGoodsReceiptAction,openIntakeOriginalAction,c
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
 import { getIntakeCatalogAction } from "@/app/actions/catalog.actions";
+import {getComplaintOrderChoicesAction} from '@/app/actions/complaints.actions';
+import {CommunicationPanel} from "@/components/communication/CommunicationPanel";
 import {getOpenIntakeMailsAction,saveIntakeProspectAction} from "@/app/actions/eingang.actions";
 import { getOrderRegisterDb, getLiveOrderCardAction } from "@/app/actions/orders.actions";
 import {
@@ -35,6 +37,10 @@ import {
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { isAppRole } from "@/lib/auth/authorizationContract";
 import { useOverlayStore } from "@/lib/overlayStore";
+import {ComplaintDialogs,type ComplaintPorts} from '@/modules/eingang/public';
+import {getComplaintDialogAction,reklamationAusfuehrenAction,nacharbeitAnlegenAction,sendeReklamationErgebnisAction} from '@/app/actions/complaints.actions';
+import {uploadDomainAttachment} from '@/components/attachments/DomainAttachmentPanel';
+import {getDomainAttachmentOriginalAction,getDomainAttachmentsAction} from '@/app/actions/domainAttachments.actions';
 
 type ChoiceSource={contactPerson?:string|null;id:string;customerNumber?:string|null;name:string;customerType:string;companyName?:string|null;salutation?:"frau"|"herr"|"ohne"|null;firstName?:string|null;lastName?:string|null;contactRole?:string|null;email?:string|null;phone?:string|null;street?:string|null;houseNumber?:string|null;zipCode?:string|null;city?:string|null;country?:string|null;paymentPreference?:string|null;vatId?:string|null;handoverPreference?:"pickup"|"shipping"|null;autoInfo?:boolean;vorrang?:boolean;invoiceTermsEnabled?:boolean;invoiceTermDays?:number|null;duplicateMatch?:{kind:"exact"|"possible";by:string}|null};
 function customerChoice(source:ChoiceSource):GlobalCreateCustomerChoice {
@@ -61,7 +67,20 @@ export function GlobalCreateAppAdapter() {
     }
     return null;
   });
-  const { canAction, hasArea, name, role } = usePermissions();
+  const { canAction, hasArea, name, role, areas } = usePermissions();
+  const complaintPorts=useMemo<ComplaintPorts>(()=>({areas,read:getComplaintDialogAction,listDeliveredOrders:getComplaintOrderChoicesAction,write:reklamationAusfuehrenAction,rework:nacharbeitAnlegenAction,sendResult:sendeReklamationErgebnisAction,openOrder,ResultMail:input=><CommunicationPanel targetType="ORDER" targetId={input.orderId} composer={input}/>,
+    addPhoto:async(orderId,file)=>({code:'OK',id:await uploadDomainAttachment('ORDER',orderId,file)}),
+    openPhoto:async(photoId,_sourceItemId,orderId)=>{
+      const rows=await getDomainAttachmentsAction({targetType:'ORDER',targetId:orderId});
+      if(rows.code!=='OK')throw Error(rows.message);
+      const original=rows.data.find(row=>row.attachmentId===photoId);if(!original)throw Error('Foto ist nicht verfügbar.');
+      const result=('intakeOriginal'in original&&original.intakeOriginal)?await openIntakeOriginalAction({fileId:photoId,orderId,clientEventId:crypto.randomUUID()}):await getDomainAttachmentOriginalAction({attachmentId:photoId});
+      if(result.code!=='OK')throw Error(result.message);
+      const url='original'in result?result.original.downloadUrl:result.data.downloadUrl;
+      if(!url)throw Error('Original ist nicht freigegeben.');
+      window.open(url,'_blank','noopener,noreferrer');
+    },
+  }),[areas,openOrder]);
   const taskCanManageMoney=hasArea('geld');
   const invoicePorts=useMemo<InvoicePorts>(()=>({read:getIncomingInvoiceAction,save:saveIncomingInvoiceAction,status:changeIncomingInvoiceStatusAction,clarify:clarifyIncomingInvoiceAction,searchSuppliers:searchInvoiceSuppliersAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,
     openOriginal:(itemId,fileId)=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'original',arg:itemId+'#'+fileId}})),
@@ -130,7 +149,7 @@ export function GlobalCreateAppAdapter() {
   if (!role || !isAppRole(role)) return null;
 
   return (
-    <><IncomingInvoiceDialogs ports={invoicePorts} allowed={hasArea('geld')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs ports={objectPorts} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('geld')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
+    <><ComplaintDialogs ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs ports={invoicePorts} allowed={hasArea('geld')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs ports={objectPorts} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('geld')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
       ports={{
         readIntakeOrderSource: async (orderId) => {
           const result = await getLiveOrderCardAction({ orderId });

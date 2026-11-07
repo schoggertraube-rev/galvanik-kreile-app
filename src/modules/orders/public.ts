@@ -38,3 +38,5 @@ export {
   goodsOutAgreementButtonText,
   goodsOutAgreementReceiptText,
 } from "./server/types";
+
+export {ComplaintPanel} from '@/modules/complaints/public';

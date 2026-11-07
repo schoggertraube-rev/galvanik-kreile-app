@@ -313,3 +313,15 @@ describe("Orders V1.1 one-surface truth", () => {
     expect(screen.queryByRole("dialog", { name: /Auftragskarte A-/ })).not.toBeInTheDocument();
   });
 });
+
+it('opens complaint recording from the existing More menu for an eligible delivered order',async()=>{
+ vi.stubGlobal('matchMedia',()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn()}));
+ try{
+  const record=vi.fn();
+  render(<OrderCardView state={{kind:'data',card:{...card,station:'abgeholt',status:'abgeholt'}}} actions={{...actions,onRecordComplaint:record}} onOpenCustomer={vi.fn()} onClose={vi.fn()}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Mehr'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Reklamation'}));
+  expect(record).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('dialog',{name:'Mehr'})).not.toBeInTheDocument();
+ }finally{vi.unstubAllGlobals();}
+});

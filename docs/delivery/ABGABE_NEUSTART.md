@@ -1,6 +1,6 @@
 # Quellen-Neuordnung #189
 
-Einmaliger Governance-Anker auf `codex/bauregeln-neustart`, Basis `d447404c84dc8f3be729d19530d8e66f1d5097c8`. Kein Produktcode und keine Migration.
+Einmaliger Governance-Anker auf `codex/bauregeln-neustart`, Basis `7101a7fc2169aa5c30819485ccc791c50fe2670c`. Kein Produktcode und keine Migration.
 
 Aktive Steuerung: genau BAUREGELN, WARTESCHLANGE und SEITENHOHEIT unter `_review/`. AGENTS verweist darauf. Die frühere Warteschlange und die drei alten Klärungseinstiege liegen im gelieferten Archiv; kein ausführbarer Alt-Stummel bleibt.
 

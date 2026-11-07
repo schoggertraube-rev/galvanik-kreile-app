@@ -47,7 +47,7 @@ const b2cAnchorMission = {
 };
 
 describe("#189 one-time planning authority migration", () => {
-  const context = { branch: "codex/bauregeln-neustart", baseSha: "d447404c84dc8f3be729d19530d8e66f1d5097c8" };
+  const context = { branch: "codex/bauregeln-neustart", baseSha: "7101a7fc2169aa5c30819485ccc791c50fe2670c" };
   it("accepts only bound active sources, additive planning storage and named control files", () => {
     expect(checkGovernanceRestartScopeForTest({ ...context, entries: [
       { status: "M", path: "AGENTS.md" }, { status: "A", path: "_review/BAUREGELN.md" },
