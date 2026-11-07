@@ -1503,7 +1503,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const positions=Array.from({length:23},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
     const saveDraft=vi.fn().mockResolvedValueOnce({code:'UNAVAILABLE',message:'Speicher nicht erreichbar.'}).mockResolvedValueOnce({code:'OK',drafts:[]})
       .mockImplementationOnce(async input=>({code:'OK',drafts:[{id:input.id,art:'eingang',payload:{...input.payload,source:'abweichend'}}]}))
-      .mockImplementationOnce(async input=>({code:'OK',drafts:[{id:input.id,art:'eingang',payload:input.payload}]}));
+      .mockImplementationOnce(async input=>({code:'OK',drafts:[{id:input.id,art:'eingang',payload:Object.fromEntries(Object.entries(input.payload).reverse())}]}));
     const drafts={saveDraft,readDrafts:vi.fn().mockResolvedValue({code:'OK',drafts:[]}),discardDraft:vi.fn()};
     const api=ports({drafts,recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions}})});
     render(<GlobalCreateFlow ports={api}/>);openFlow();
