@@ -50,7 +50,26 @@ export async function getIntakeTaskAction(input:TaskOpenRequest){return readTask
 import {readOpenIntakeMails} from '@/modules/eingang/server-public';
 import {saveIntakeProspect} from '@/modules/eingang/server-public';
 export async function saveIntakeProspectAction(input:unknown){return saveIntakeProspect(input,createCustomerInTransaction,readCustomerProfile);}
-export async function getOpenIntakeMailsAction(){return readOpenIntakeMails();}
+export async function getOpenIntakeMailsAction(){const notice=await syncIntakeMailbox();const result=await readOpenIntakeMails();return result.code==='OK'?{...result,...(notice?{notice}:{})}:result;}
+import {importIntakeGraphMail} from '@/modules/eingang/server-public';
+import {listMicrosoftGraphInbox,readMicrosoftGraphAttachments,readMicrosoftGraphMime} from '@/lib/server/microsoftGraph';
+async function syncIntakeMailbox():Promise<string|null>{
+ const authorization=await resolveAuthorization();
+ if(!authorization.ok||!hasAuthorizationArea(authorization.data,'eingang')||!hasAuthorizationArea(authorization.data,'mails'))return null;
+ try{
+  const inbox=await listMicrosoftGraphInbox();
+  if(inbox.code!=='OK')return inbox.message;
+  for(const mail of inbox.data){
+   // Graph's flag excludes inline-only images; inspect attachments independently.
+   const [mime,files]=await Promise.all([readMicrosoftGraphMime(mail.id),readMicrosoftGraphAttachments(mail.id)]);
+   if(mime.code!=='OK')return mime.message;
+   if(files.code!=='OK')return files.message;
+   const imported=await importIntakeGraphMail(authorization.data,mail,[{key:'mime',name:'Original.eml',mime:'message/rfc822',bytes:mime.data},...files.data.attachments.map(file=>({key:file.id,name:file.filename,mime:file.contentType,bytes:file.bytes}))]);
+   if(imported.code!=='OK')return imported.message;
+  }
+  return null;
+ }catch(error){console.error('[INTAKE_MAIL_SYNC_FAILED]',error);return 'Neue Mails momentan nicht abrufbar · bereits gesicherte Eingänge bleiben verfügbar.';}
+}
 import { processIntakeDeviceRequest, discardIntakeCapture, chooseIntakeCaptureKind } from "@/modules/eingang/server-public";
 export async function chooseIntakeCaptureKindAction(input: unknown) { return chooseIntakeCaptureKind(input); }
 import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation } from "@/modules/eingang/server-public";

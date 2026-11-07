@@ -204,6 +204,9 @@
     ],
     "src/app/actions/eingang.actions.ts#createIntakeContinuationAction": [
       "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#getOpenIntakeMailsAction": [
+      "src/test/acceptance/ein34_mail_import.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

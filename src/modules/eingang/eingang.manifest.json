@@ -138,7 +138,8 @@
     "@/modules/eingang/server-public#assignIntakeCustomer",
     "@/modules/eingang/server-public#setIntakeNoBusiness",
     "@/modules/eingang/server-public#createCustomerForIntake",
-    "@/modules/eingang/public#AssignmentPorts"
+    "@/modules/eingang/public#AssignmentPorts",
+    "@/modules/eingang/server-public#importIntakeGraphMail"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"

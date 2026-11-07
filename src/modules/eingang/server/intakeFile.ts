@@ -47,7 +47,7 @@ export async function prepareIntakeFile(input: unknown): Promise<IntakeFileGrant
           (${auth.tenantId},${input.itemId}::uuid,'angelegt',${input.itemId}::uuid,${auth.userId},${JSON.stringify({ kanal: input.mime.startsWith("image/") ? "foto" : "datei" })}::jsonb)`);
       }
       await tx.execute(sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,aufgenommen_auf,reihenfolge,lesbar,erkennung_status,geoeffnet,aufnahme_herkunft)
-        SELECT ${input.fileId}::uuid,${auth.tenantId},${input.itemId}::uuid,${input.fileId},${input.mime.startsWith("image/") ? "foto" : input.mime === "application/pdf" ? "pdf" : input.mime.includes("xml") ? "xml" : "anhang"},
+        SELECT ${input.fileId}::uuid,${auth.tenantId},${input.itemId}::uuid,${input.fileId},${input.mime === "message/rfc822" ? "mime" : input.mime.startsWith("image/") ? "foto" : input.mime === "application/pdf" ? "pdf" : input.mime.includes("xml") ? "xml" : "anhang"},
           ${input.name},${input.mime},${input.bytes},${input.sha256},${auth.tenantId + "/" + input.sha256},statement_timestamp(),${auth.userId}::uuid,${input.deviceId ?? null},
           coalesce(max(reihenfolge),0)+1,false,'wartet',false,${input.captureOrigin ?? "dokument"} FROM public.intake_file WHERE tenant_id=${auth.tenantId} AND item_id=${input.itemId}::uuid
         ON CONFLICT (tenant_id,client_key) DO NOTHING`);
@@ -69,7 +69,7 @@ export async function prepareIntakeFile(input: unknown): Promise<IntakeFileGrant
     return { code: "UNAVAILABLE", message: "Datei ist noch nicht vollständig gesichert. Eingaben bleiben erhalten. Fehlercode: INTAKE_FILE_PREPARE_FAILED." };
   }
 }
-export async function finishIntakeFile(fileId: string, retryKey?: string): Promise<IntakeCaptureResult> {
+export async function finishIntakeFile(fileId: string, retryKey?: string, originalOnly=false): Promise<IntakeCaptureResult> {
   if (!UUID.test(fileId)) return { code: "VALIDATION_ERROR", message: "Ungültige Dateikennung." };
   const auth = await fileAuthorization();
   if ("code" in auth) return auth;
@@ -101,6 +101,15 @@ export async function finishIntakeFile(fileId: string, retryKey?: string): Promi
     if (stored.error || !stored.data) throw new Error("INTAKE_FILE_UPLOAD_INCOMPLETE");
     const bytes = new Uint8Array(await stored.data.arrayBuffer());
     if (bytes.byteLength !== Number(file.bytes) || createHash("sha256").update(bytes).digest("hex") !== file.sha256) throw new Error("INTAKE_FILE_ORIGINAL_HASH_MISMATCH");
+    if(originalOnly){
+      await withPrivilegedTenantTransaction(auth,async tx=>{
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
+        await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+        SELECT ${auth.tenantId},${file.item_id}::uuid,'original_gespeichert',${fileId}::uuid,${auth.userId},${JSON.stringify({fileId,sha256:file.sha256,bytes:bytes.byteLength})}::jsonb
+        WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='original_gespeichert' AND befehl_id=${fileId}::uuid)`);
+      });
+      return snapshot();
+    }
     // The original is secured before recognition. A provider failure cannot undo this event.
     const claimed = await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
