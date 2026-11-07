@@ -49,7 +49,8 @@
     "20260914110000_path1_quote_persistence_contract.sql",
     "20260916090000_path1_quote_product_lifecycle.sql",
     "20261107193000_kv_v04_content_editions.sql",
-    "20261107211500_kv_v04_conditional_acceptance.sql"
+    "20261107211500_kv_v04_conditional_acceptance.sql",
+    "20261107214500_kv_v04_independent_metadata.sql"
   ],
   "viewsFunctions": [
     "private.create_quote_v1",
@@ -76,7 +77,8 @@
       "QUOTE_AWARDED_V1",
       "QUOTE_CREATED_V1",
       "QUOTE_UPDATED_V1",
-      "QUOTE_LIFECYCLE_V04"
+      "QUOTE_LIFECYCLE_V04",
+      "QUOTE_CALCULATION_V04"
     ],
     "consumes": [
       "ORDER_INTAKE_CREATED_V1"

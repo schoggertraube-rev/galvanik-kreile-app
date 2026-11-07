@@ -326,3 +326,40 @@ it('KV-06 books new goods and order atomically only after current acceptance, in
  expect((await sql`SELECT count(*)::int n FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid`)[0].n).toBe(1);
  expect((await sql`SELECT count(*)::int n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(1);
 });
+
+
+it('KV-03 snapshots explicit configured calculations, preserves sent prices and versions a changed basis with equal total',async()=>{
+ const fixture=await createFixture();
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,kv_ruest_cents,kv_material_cents,kv_nachfass_tage,kv_gueltigkeit_tage,updated_at) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST KV configured calculation',100,200,5,30,statement_timestamp() WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ await sql`INSERT INTO private.extra_work_hourly_rates(id,tenant_id,hourly_rate_cents,version,created_by) SELECT ${randomUUID()}::uuid,${KREILE_TENANT_SLUG},7500,1,${fixture.actorId}::uuid WHERE NOT EXISTS(SELECT 1 FROM private.extra_work_hourly_rates WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ const {readQuoteDefaultsAction,createQuoteAction,readQuoteAction,updateQuoteAction,changeQuoteLifecycleAction}=await import('@/app/actions/quotes.actions');
+ const {setExtraWorkHourlyRateAction}=await import('@/app/actions/orders.actions');
+ const defaults=await withSession(fixture,()=>readQuoteDefaultsAction());
+ expect(defaults).toMatchObject({code:'OK',settings:{hourlyRateCents:7500,setupCents:100,materialCents:200}});
+ if(defaults.code!=='OK')throw Error('TEST_CALC_DEFAULTS');
+ const calculation={hours:'8',hourlyRateCents:defaults.settings.hourlyRateCents,setupCents:defaults.settings.setupCents,materialCents:defaults.settings.materialCents};
+ const input={clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',validUntil:'2027-05-20',note:'TEST calculated quote',positions:[{name:'TEST Halter kalkuliert',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:15075}],calculation};
+ const created=await withSession(fixture,()=>createQuoteAction(input));
+ expect(created).toMatchObject({code:'OK',quote:{totalNetCents:60300,validUntil:input.validUntil,intakeSource:null,termStatus:null,lifecycle:{calculation:{hourlyRateCents:7500,setupCents:100,materialCents:200}}}});
+ if(created.code!=='OK')throw Error('TEST_CALC_CREATE:'+created.code+':'+created.message);
+ const quoteId=created.quote.quoteId;
+ expect((await sql`SELECT kalk_stunden::text,stundensatz_cents::text,ruest_cents::text,material_cents::text,total_net_cents::text FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0]).toMatchObject({kalk_stunden:'8.0000',stundensatz_cents:'7500',ruest_cents:'100',material_cents:'200',total_net_cents:'60300'});
+ expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='QUOTE_CALCULATION_V04' AND payload->>'requestKey'=${input.clientEventId}`)[0].n).toBe(1);
+ expect(await withSession(fixture,()=>createQuoteAction(input))).toMatchObject({code:'OK',replayed:true});
+ expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='QUOTE_CALCULATION_V04' AND payload->>'requestKey'=${input.clientEventId}`)[0].n).toBe(1);
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'sent',quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck',evidence:'TEST Kalkulation gedruckt'}))).toMatchObject({code:'OK'});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST aktuelle Kalkulation angenommen'}))).toMatchObject({code:'OK'});
+ const [rate]=await sql`SELECT version FROM private.extra_work_hourly_rates WHERE tenant_id=${KREILE_TENANT_SLUG} ORDER BY version DESC LIMIT 1`;
+ expect(await withSession(fixture,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:rate.version,hourlyRateCents:8000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(fixture,()=>readQuoteDefaultsAction())).toMatchObject({code:'OK',settings:{hourlyRateCents:8000}});
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{totalNetCents:60300,lifecycle:{calculation:{hourlyRateCents:7500},stage:'zugesagt'}}});
+ expect(await withSession(fixture,()=>createQuoteAction({...input,clientEventId:randomUUID(),positions:[{...input.positions[0],unitPriceCents:16075}],calculation:{...calculation,hourlyRateCents:8000}}))).toMatchObject({code:'OK',quote:{totalNetCents:64300,lifecycle:{calculation:{hourlyRateCents:8000}}}});
+ const edit={quoteId,clientEventId:randomUUID(),expectedVersion:3,dueDate:input.dueDate,note:input.note,positions:input.positions,calculation:{...calculation,hours:'4',hourlyRateCents:15000}};
+ expect(await withSession(fixture,()=>updateQuoteAction(edit))).toMatchObject({code:'OK',quote:{version:4,totalNetCents:60300,lifecycle:{edition:2,acceptedEdition:1,stage:'geaendert_seit_versand',calculation:{hourlyRateCents:15000}}}});
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:4,lifecycle:{edition:2}}});
+ expect((await sql`SELECT payload->'after'->>'hours' AS hours,payload->>'edition' AS edition FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='QUOTE_CALCULATION_V04' AND payload->>'requestKey'=${edit.clientEventId}`)[0]).toMatchObject({hours:'4',edition:'2'});
+ expect(await withSession(fixture,()=>updateQuoteAction(edit))).toMatchObject({code:'OK',replayed:true});
+ expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='QUOTE_CALCULATION_V04' AND payload->>'requestKey'=${edit.clientEventId}`)[0].n).toBe(1);
+ expect(await withSession(fixture,()=>createQuoteAction({...input,clientEventId:randomUUID(),calculation:{...calculation,hourlyRateCents:null}}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(fixture,()=>createQuoteAction({...input,clientEventId:randomUUID(),calculation:{...calculation,hours:'9'}}))).toMatchObject({code:'VALIDATION_ERROR'});
+});

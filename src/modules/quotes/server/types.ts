@@ -1,3 +1,4 @@
+import type {QuoteCalculation} from "../quoteCalculation";
 export type QuoteCommandCapabilities = {
   canCreateQuote: boolean;
   canReadQuote: boolean;
@@ -30,6 +31,7 @@ export type CreateQuoteInput = {
   validUntil?: string | null;
   termStatus?: "wunsch" | "bestaetigt" | "verschoben" | "gegenvorschlag" | null;
   intakeSource?: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
+  calculation?:QuoteCalculation;
   source?: {itemId:string;version:number;message:boolean};
   specialRequests?:string|null;
   deliveryWeeks?:number|null;
@@ -48,6 +50,7 @@ export type ConvertQuoteInput = {
 };
 
 export type UpdateQuoteInput = {
+  calculation?:QuoteCalculation;
   quoteId: string;
   clientEventId: string;
   expectedVersion: number;
@@ -68,6 +71,7 @@ export type QuoteReadback = {
     sentEdition:number|null; sentAt:string|null; sentChannel:'mail'|'druck'|null;
     acceptedEdition:number|null; acceptedAt:string|null; acceptanceEvidence:string|null;
     conditional?:{edition:number;recordedAt:string;reason:string}|null;
+    calculation?:QuoteCalculation|null;
     goods?:Array<{id:string;orderId:string|null;edition:number;location:string;blocked:boolean;version:number}>;
     declinedAt:string|null; declineReason:string|null; followupAt:string|null;
     sourceItemId:string|null; sourceMessageId:string|null; specialRequests:string|null;deliveryWeeks:number|null;

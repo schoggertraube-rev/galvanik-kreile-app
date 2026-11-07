@@ -1,6 +1,8 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHash,randomUUID } from "node:crypto";
+import {calculateQuote,type QuoteCalculation} from "../quoteCalculation";
+import {appendQuoteJournal} from "@/lib/server/quoteJournalPort";
 import {readQuoteGoodsSummaries} from "@/lib/server/quoteGoodsContextPort";
 import { sql } from "drizzle-orm";
 import { normaliseOrderPositionSurface, orderPositionSurfaceLabel, orderPositionUnitLabel, orderPositionQuantityError, orderPositionPriceError } from "@/lib/orderPositionContract";
@@ -26,11 +28,12 @@ import type {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const TERM_STATUS_VALUES = ["wunsch", "bestaetigt", "verschoben"] as const;
+const TERM_STATUS_VALUES = ["wunsch", "bestaetigt", "verschoben", "gegenvorschlag"] as const;
 const INTAKE_SOURCE_VALUES = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"] as const;
 
 type QuoteRow = {
   fassung?:number;
+  kalk_stunden?:string|number|null;stundensatz_cents?:string|number|null;ruest_cents?:string|number|null;material_cents?:string|number|null;
   vorbehalt_fassung?:number|null;vorbehalt_am?:Date|string|null;vorbehalt_grund?:string|null;
   derived_status?:string;
   gesendet_fassung?:number|null; gesendet_am?:Date|string|null; gesendet_kanal?:string|null;
@@ -124,12 +127,20 @@ function validDate(value: unknown): value is string {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
+function normalizeCalculation(raw:unknown,positions:CreateQuoteInput['positions']):QuoteCalculation|null{
+ if(!plainObject(raw)||!exactKeys(raw,['hours','hourlyRateCents','setupCents','materialCents']))return null;
+ const value=raw as QuoteCalculation,result=calculateQuote(value);
+ if(result.code!=='OK'||positions.reduce((sum,row)=>sum+(row.lineTotalCents??row.quantity*row.unitPriceCents),0)!==result.totalNetCents)return null;
+ const [whole,fraction='']=value.hours.trim().replace(',','.').split('.'),digits=fraction.replace(/0+$/u,'');
+ return {...value,hours:BigInt(whole).toString()+(digits?'.'+digits:'')};
+}
+
 function normalizeCreate(value: unknown): CreateQuoteInput | null {
   if (!plainObject(value)) return null;
   const hasIntakeMetadata = Object.hasOwn(value, "validUntil") || Object.hasOwn(value, "termStatus") || Object.hasOwn(value, "intakeSource");
   if (!exactKeys(value, ["clientEventId", "customerId", "dueDate", "note", "positions",
-    ...(hasIntakeMetadata ? ["validUntil", "termStatus", "intakeSource"] : []),
-    ...['source','specialRequests','deliveryWeeks'].filter(key=>Object.hasOwn(value,key))])) return null;
+    ...["validUntil", "termStatus", "intakeSource"].filter(key=>Object.hasOwn(value,key)),
+    ...['source','specialRequests','deliveryWeeks','calculation'].filter(key=>Object.hasOwn(value,key))])) return null;
   if (Object.hasOwn(value,'source')&&(!plainObject(value.source)||!exactKeys(value.source,['itemId','version','message'])||typeof value.source.itemId!=='string'||!UUID_PATTERN.test(value.source.itemId)||!Number.isSafeInteger(value.source.version)||Number(value.source.version)<1||typeof value.source.message!=='boolean')) return null;
   if (Object.hasOwn(value,'specialRequests')&&value.specialRequests!==null&&(typeof value.specialRequests!=='string'||value.specialRequests.trim().length<1||value.specialRequests.length>4000)) return null;
   if (Object.hasOwn(value,'deliveryWeeks')&&value.deliveryWeeks!==null&&(!Number.isSafeInteger(value.deliveryWeeks)||Number(value.deliveryWeeks)<1||Number(value.deliveryWeeks)>104)) return null;
@@ -137,9 +148,9 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
   const customerId = text(value.customerId, 1, 128);
   const note = optionalText(value.note, 2000);
   if (!customerId || !validDate(value.dueDate) || note === undefined || !Array.isArray(value.positions) || value.positions.length < 1 || value.positions.length > 20) return null;
-  if (hasIntakeMetadata && (!validDate(value.validUntil)
-    || !TERM_STATUS_VALUES.includes(value.termStatus as typeof TERM_STATUS_VALUES[number])
-    || !INTAKE_SOURCE_VALUES.includes(value.intakeSource as typeof INTAKE_SOURCE_VALUES[number]))) return null;
+  if (value.validUntil!==undefined&&value.validUntil!==null&&!validDate(value.validUntil)
+    ||value.termStatus!==undefined&&value.termStatus!==null&&!TERM_STATUS_VALUES.includes(value.termStatus as typeof TERM_STATUS_VALUES[number])
+    ||value.intakeSource!==undefined&&value.intakeSource!==null&&!INTAKE_SOURCE_VALUES.includes(value.intakeSource as typeof INTAKE_SOURCE_VALUES[number])) return null;
   const positions = [];
   for (const candidate of value.positions) {
     if (!plainObject(candidate) || !exactKeys(candidate, ["material", "name", "quantity", "surfaceRequested", "unitPriceCents", ...(Object.hasOwn(candidate,"lineTotalCents")?["lineTotalCents"]:[])])) return null;
@@ -152,12 +163,15 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
     if (Object.hasOwn(candidate,"lineTotalCents") && (typeof candidate.lineTotalCents!=="number" || !Number.isSafeInteger(candidate.lineTotalCents) || candidate.lineTotalCents<0 || candidate.lineTotalCents>999999999999)) return null;
     positions.push({ name, quantity: candidate.quantity, material, surfaceRequested, unitPriceCents: candidate.unitPriceCents, ...(Object.hasOwn(candidate,"lineTotalCents")?{lineTotalCents:candidate.lineTotalCents as number}:{}) });
   }
+  const calculation=Object.hasOwn(value,'calculation')?normalizeCalculation(value.calculation,positions):undefined;
+  if(calculation===null)return null;
   return {
     clientEventId: value.clientEventId, customerId, dueDate: value.dueDate, note, positions,
+    ...(calculation?{calculation}:{}),
     ...(hasIntakeMetadata ? {
-      validUntil: value.validUntil as string,
-      termStatus: value.termStatus as typeof TERM_STATUS_VALUES[number],
-      intakeSource: value.intakeSource as typeof INTAKE_SOURCE_VALUES[number],
+      validUntil: value.validUntil===undefined?null:value.validUntil as string|null,
+      termStatus: value.termStatus===undefined?null:value.termStatus as typeof TERM_STATUS_VALUES[number]|null,
+      intakeSource: value.intakeSource===undefined?null:value.intakeSource as typeof INTAKE_SOURCE_VALUES[number]|null,
     } : {}),
     ...(Object.hasOwn(value,'source')?{source:value.source as CreateQuoteInput['source']}:{}),
     ...(Object.hasOwn(value,'specialRequests')?{specialRequests:typeof value.specialRequests==='string'?value.specialRequests.trim():null}:{}),
@@ -180,13 +194,14 @@ function normalizeConvert(value: unknown): ConvertQuoteInput | null {
 }
 
 function normalizeUpdate(value: unknown): UpdateQuoteInput | null {
-  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "dueDate", "expectedVersion", "note", "positions", "quoteId"])) return null;
+  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "dueDate", "expectedVersion", "note", "positions", "quoteId",...(Object.hasOwn(value,"calculation")?["calculation"]:[])])) return null;
   if (typeof value.quoteId !== "string" || !UUID_PATTERN.test(value.quoteId)
     || typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)
     || typeof value.expectedVersion !== "number" || !Number.isSafeInteger(value.expectedVersion) || value.expectedVersion < 1) return null;
   const created = normalizeCreate({
     clientEventId: value.clientEventId,
     customerId: "placeholder",
+    ...(Object.hasOwn(value,"calculation")?{calculation:value.calculation}:{}),
     dueDate: value.dueDate,
     note: value.note,
     positions: value.positions,
@@ -199,6 +214,7 @@ function normalizeUpdate(value: unknown): UpdateQuoteInput | null {
     dueDate: created.dueDate,
     note: created.note,
     positions: created.positions,
+    ...(created.calculation?{calculation:created.calculation}:{}),
   };
 }
 
@@ -280,7 +296,9 @@ function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
     if (![null,'mail','druck'].includes(row.gesendet_kanal===undefined?'missing':row.gesendet_kanal)||[row.quelle_intake_item_id,row.quelle_nachricht_id].some(value=>value!==null&&(typeof value!=='string'||!UUID_PATTERN.test(value)))) return null;
     if ((row.gesendet_fassung===null)!==(row.gesendet_am===null)||(row.gesendet_fassung===null)!==(row.gesendet_kanal===null)||(row.zugesagt_fassung===null)!==(row.zugesagt_am===null)||(row.zugesagt_fassung===null)!==(row.zusage_nachweis===null)) return null;
     if (row.vorbehalt_fassung!==undefined&&row.vorbehalt_fassung!==null&&(!Number.isSafeInteger(row.vorbehalt_fassung)||row.vorbehalt_fassung<1||row.vorbehalt_fassung>row.fassung||!iso(row.vorbehalt_am??null)||!row.vorbehalt_grund?.trim()||row.zugesagt_fassung===row.vorbehalt_fassung)) return null;
-    lifecycle={edition:row.fassung,stage:row.derived_status as NonNullable<QuoteReadback['lifecycle']>['stage'],sentEdition:row.gesendet_fassung!,sentAt:iso(row.gesendet_am!),sentChannel:row.gesendet_kanal as 'mail'|'druck'|null,acceptedEdition:row.zugesagt_fassung!,acceptedAt:iso(row.zugesagt_am!),acceptanceEvidence:row.zusage_nachweis!,conditional:row.vorbehalt_fassung?{edition:row.vorbehalt_fassung,recordedAt:iso(row.vorbehalt_am!)!,reason:row.vorbehalt_grund!}:null,declinedAt:iso(row.abgesagt_am!),declineReason:row.absage_grund!,followupAt:row.nachfass_am===null?null:row.nachfass_am instanceof Date?row.nachfass_am.toISOString().slice(0,10):String(row.nachfass_am).slice(0,10),sourceItemId:row.quelle_intake_item_id!,sourceMessageId:row.quelle_nachricht_id!,specialRequests:row.sonderwuensche!,deliveryWeeks:row.lieferzeit_wochen!};
+    let calculation:QuoteCalculation|null=null;
+    if(row.kalk_stunden!==null&&row.kalk_stunden!==undefined){calculation={hours:String(row.kalk_stunden),hourlyRateCents:row.stundensatz_cents==null?null:Number(row.stundensatz_cents),setupCents:row.ruest_cents==null?null:Number(row.ruest_cents),materialCents:row.material_cents==null?null:Number(row.material_cents)};const amount=calculateQuote(calculation);if(amount.code!=='OK'||amount.totalNetCents!==Number(row.total_net_cents))return null;}
+    lifecycle={calculation,edition:row.fassung,stage:row.derived_status as NonNullable<QuoteReadback['lifecycle']>['stage'],sentEdition:row.gesendet_fassung!,sentAt:iso(row.gesendet_am!),sentChannel:row.gesendet_kanal as 'mail'|'druck'|null,acceptedEdition:row.zugesagt_fassung!,acceptedAt:iso(row.zugesagt_am!),acceptanceEvidence:row.zusage_nachweis!,conditional:row.vorbehalt_fassung?{edition:row.vorbehalt_fassung,recordedAt:iso(row.vorbehalt_am!)!,reason:row.vorbehalt_grund!}:null,declinedAt:iso(row.abgesagt_am!),declineReason:row.absage_grund!,followupAt:row.nachfass_am===null?null:row.nachfass_am instanceof Date?row.nachfass_am.toISOString().slice(0,10):String(row.nachfass_am).slice(0,10),sourceItemId:row.quelle_intake_item_id!,sourceMessageId:row.quelle_nachricht_id!,specialRequests:row.sonderwuensche!,deliveryWeeks:row.lieferzeit_wochen!};
   }
   const positions = parsePositions(row.positions);
   const createdAt = iso(row.created_at);
@@ -361,6 +379,7 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
         }
         if (normalized.source||Object.hasOwn(normalized,'specialRequests')||Object.hasOwn(normalized,'deliveryWeeks')) await tx.execute(sql`UPDATE private.quotes SET quelle_intake_item_id=${normalized.source?.itemId??null}::uuid,quelle_nachricht_id=${normalized.source?.message?normalized.source.itemId:null}::uuid,sonderwuensche=${normalized.specialRequests??null},lieferzeit_wochen=${normalized.deliveryWeeks??null} WHERE tenant_id=${authorization.tenantId} AND id=${outcome.result_quote_id}::uuid`);
       }
+      if(!outcome.replayed&&normalized.calculation)await writeCalculationSnapshot(tx,authorization,outcome.result_quote_id,normalized.clientEventId,normalized.calculation,null);
       const quote = await readQuote(tx, authorization.tenantId, outcome.result_quote_id);
       const receipts = await tx.execute<CreateReceiptRow>(sql`
         SELECT * FROM private.v_quote_create_receipts_v1
@@ -425,6 +444,7 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
   const intentSha256 = hashQuoteWriteIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      const calculationBefore=normalized.calculation?await readCalculationSnapshot(tx,authorization.tenantId,normalized.quoteId):null;
       const result = await tx.execute<{ result_code: string; result_quote_id: string | null; replayed: boolean }>(sql`
         SELECT * FROM private.update_quote_v1(
           ${authorization.tenantId}, ${authorization.userId}::uuid, ${normalized.clientEventId}::uuid,
@@ -439,6 +459,7 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
         }
         throw new Error("QUOTE_UPDATE_RESULT_INVALID");
       }
+      if(!outcome.replayed&&normalized.calculation)await writeCalculationSnapshot(tx,authorization,normalized.quoteId,normalized.clientEventId,normalized.calculation,calculationBefore);
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       const rows = await tx.execute<UpdateReceiptRow>(sql`
         SELECT * FROM private.v_quote_update_receipts_v1
@@ -662,4 +683,17 @@ export async function readQuoteConversionReceiptCommand(
     console.error("quote_conversion_receipt_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
     return { code: "UNAVAILABLE", message: "Beauftragungsbeleg konnte nicht sicher gelesen werden." };
   }
+}
+
+
+type CalculationSnapshot={hours:string|null;hourlyRateCents:number|null;setupCents:number|null;materialCents:number|null;edition:number;sentEdition:number|null};
+async function readCalculationSnapshot(tx:PrivilegedTenantTransaction,tenantId:string,quoteId:string):Promise<CalculationSnapshot|null>{
+ const rows=await tx.execute<CalculationSnapshot>(sql`SELECT kalk_stunden::text AS hours,stundensatz_cents::float8 AS "hourlyRateCents",ruest_cents::float8 AS "setupCents",material_cents::float8 AS "materialCents",fassung AS edition,gesendet_fassung AS "sentEdition" FROM private.quotes WHERE tenant_id=${tenantId} AND id=${quoteId}::uuid FOR UPDATE`);
+ return rows.length===1?rows[0]:null;
+}
+async function writeCalculationSnapshot(tx:PrivilegedTenantTransaction,auth:QuoteCommandContext,quoteId:string,requestKey:string,calculation:QuoteCalculation,before:CalculationSnapshot|null){
+ const changed=before!==null&&(before.hours===null||Number(before.hours)!==Number(calculation.hours)||before.hourlyRateCents!==calculation.hourlyRateCents||before.setupCents!==calculation.setupCents||before.materialCents!==calculation.materialCents);
+ const rows=await tx.execute<{edition:number;version:number}>(sql`UPDATE private.quotes SET kalk_stunden=${calculation.hours}::numeric,stundensatz_cents=${calculation.hourlyRateCents},ruest_cents=${calculation.setupCents},material_cents=${calculation.materialCents},fassung=CASE WHEN ${changed&&before?.sentEdition!==null} AND fassung=${before?.edition??null} THEN fassung+1 ELSE fassung END WHERE tenant_id=${auth.tenantId} AND id=${quoteId}::uuid RETURNING fassung AS edition,version`);
+ if(rows.length!==1)throw Error('QUOTE_CALCULATION_WRITE_FAILED');
+ await appendQuoteJournal(tx,auth,{id:randomUUID(),type:'QUOTE_CALCULATION_V04',clientEventId:randomUUID(),correlationId:randomUUID(),version:rows[0].version,description:'KV-Kalkulation in derselben Speicherung gesichert',payload:{quoteId,requestKey,edition:rows[0].edition,before,after:calculation}});
 }
