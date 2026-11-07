@@ -1,7 +1,7 @@
 {
   "moduleId": "complaints",
   "version": "1.0.0",
-  "owner": "AP-EIN Teil 4 â€“ Reklamation",
+  "owner": "AP-EIN Teil 4 – Reklamation",
   "publicExports": [
     "@/modules/complaints/public#Complaint",
     "@/modules/complaints/public#ComplaintFilter",

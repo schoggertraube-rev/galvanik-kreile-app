@@ -21,6 +21,9 @@ if (parsed.protocol !== "postgresql:" || parsed.hostname !== "127.0.0.1" || pars
 }
 if (process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("H18_WORKSHOP_LOCAL_REPLAY_REQUIRED: service role must be unset");
 
+const reminderTenant=vi.hoisted(()=>`test-cr-${crypto.randomUUID()}`);
+vi.mock('@/lib/tenant',async original=>({...await original<typeof import('@/lib/tenant')>(),KREILE_TENANT_SLUG:reminderTenant}));
+
 const sql = postgres(DATABASE_URL, { max: 2, prepare: false });
 const originalSecret = process.env.APP_SESSION_SECRET;
 process.env.APP_SESSION_SECRET = "h18-workshop-actions-local-only";
@@ -162,6 +165,7 @@ afterAll(async()=>{vi.restoreAllMocks();await sql.end({timeout:1});if(originalSe
 
 it('sends a reminder through the real Action, DB receipt and shared view; only Microsoft is a TEST boundary',async()=>{
  const fixture=await createFixture(),sender=await createFixture(['kunden']);
+ await sql`INSERT INTO public.email_templates(tenant_id,template_key,name,subject_template,body_html_template,body_text_template,variables) VALUES(${KREILE_TENANT_SLUG},${KREILE_TENANT_SLUG+':nacharbeit_begleitschein'},'TEST Nacharbeit Begleitschein','TEST Nacharbeit {Auftragsnummer}','<p>TEST {Kunde} · {RK-Nummer}</p>','TEST {Kunde} · {RK-Nummer}', '["Kunde","Auftragsnummer","RK-Nummer"]'::jsonb)`;
  const source=await createOrder(fixture,'TEST-REMINDER','rechnung');
  const complaint=await createReworkComplaint(fixture,source);
  const {nacharbeitAnlegenAction,sendeNacharbeitBegleitscheinAction,getByOrder,getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
@@ -188,7 +192,7 @@ it('sends a reminder through the real Action, DB receipt and shared view; only M
   });
   const sent=await withSession(sender,()=>sendeNacharbeitBegleitscheinAction(input));expect(sent).toMatchObject({code:'OK'});
   const [stored]=await sql`SELECT thread.status,thread.order_id,message.summary,message.body FROM public.communication_threads thread JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.source=${'MS_GRAPH_OUT:'+input.clientKey}`;
-  expect(stored).toMatchObject({status:'sent',order_id:work.receipt.orderId,summary:'Reklamation '+complaint.complaintId+' Â· Begleitschein',body:input.body});
+  expect(stored).toMatchObject({status:'sent',order_id:work.receipt.orderId,summary:'Reklamation '+complaint.complaintId+' · Begleitschein',body:input.body});
   expect(await withSession(sender,()=>getByOrder(source.orderId))).toMatchObject({code:'OK',complaints:[expect.objectContaining({id:complaint.complaintId,stand:'massnahme_nacharbeit',goodsReminderSentAt:expect.any(String)})]});
   expect(await withSession(sender,()=>sendeNacharbeitBegleitscheinAction(input))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
   expect(await withSession(sender,()=>sendeNacharbeitBegleitscheinAction({...input,body:input.body+' TEST changed'}))).not.toMatchObject({code:'OK'});
