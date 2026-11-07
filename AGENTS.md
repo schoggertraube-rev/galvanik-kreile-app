@@ -10,6 +10,8 @@ Arbeitsort ist ausschließlich dieses Repository `02_app`. Codex ist der einzige
 4. Fortschritt ausschließlich als eine Zeile je Commit oder Entscheidung in `_review/BAULOG.md` festhalten.
 5. `_review/archiv/` und frühere Steuerungen sind historischer Nachweis und kein Bauauftrag.
 
+Der frühere Plan `docs/delivery/KREILE_VERKAUFSSTUFE_1.md` bleibt ausschließlich historischer Nachweis; ausführbar sind die oben genannten BAUREGELN und die Warteschlange.
+
 ## Arbeitsgrenzen
 
 - Keine zusätzlichen Clones, Worktrees oder Writer; fremde Änderungen bewahren.
