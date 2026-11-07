@@ -1470,6 +1470,18 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(document.querySelector('[data-spec-id="eingang.pruefliste.oberflaeche"]')).toHaveAttribute('data-state','pending');
   });
 
+  it("weist bei unbestimmter erkannter Menge auf die erforderliche Eingabe hin",async()=>{
+    const api=ports({recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions:[{
+      name:'Teile',quantity:'',unit:'Stück',surfaceRequested:'Verzinken',executionRequested:'offen',source:'Text',
+    }]}})});
+    render(<GlobalCreateFlow ports={api}/>);openFlow();
+    fireEvent.change(await screen.findByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'Ein paar Teile verzinken'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(document.querySelector('[data-spec-id="eingang.pruefliste.menge"]')).toHaveTextContent('Menge eintragen'));
+    expect(document.querySelector('[data-spec-id="eingang.menge.herkunft"]')).not.toBeInTheDocument();
+    expect(screen.getByRole('spinbutton',{name:'Menge'})).toHaveValue(null);
+  });
+
   it("E22 visibly adjusts a selected pickup payment to advance payment when handover changes to shipping",async()=>{
     const api=ports();render(<GlobalCreateFlow ports={api}/>);openFlow();await fillDirectIntakeForExistingCustomer();
     fireEvent.change(screen.getByRole('combobox',{name:'Zahlungsmodus'}),{target:{value:'abholung'}});
