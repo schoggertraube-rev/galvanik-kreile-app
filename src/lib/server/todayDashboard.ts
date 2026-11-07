@@ -5,6 +5,7 @@ import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/a
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
 import { classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
@@ -13,7 +14,7 @@ export type { TodayLayoutItem } from "@/lib/server/todayDashboardPolicy";
 export type TodayItem = {
   key: string;
   field: TodayField;
-  kind: "order" | "mail" | "invoice" | "bundle";
+  kind: "order" | "mail" | "invoice" | "bundle" | "complaint";
   title: string;
   meta: string;
   urgency: "conflict" | "decision" | "warning";
@@ -21,12 +22,13 @@ export type TodayItem = {
   orderVersion?: number;
   invoiceId?: string;
   graphMessageId?: string;
+  target?:{screen:'reklamation'|'mail';arg:string};
   bundleSurface?: string;
   dueDate?: string;
   snoozedUntil?: string;
   assignedToName?: string;
   assignmentVersion?: number;
-  primaryActionLabel?: TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen";
+  primaryActionLabel?: TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
 };
 
 export type TodayCollectionNotice = {
@@ -97,11 +99,11 @@ function toPositiveInteger(value: number | string) {
   return Number.isSafeInteger(normalized) && normalized > 0 ? normalized : null;
 }
 
-export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<TodayDashboard> {
+export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>): Promise<TodayDashboard> {
   const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
   const graphAllowed = hasAuthorizationArea(auth, "mails");
   const moneyAllowed = hasAuthorizationArea(auth, "geld");
-  const [orders, graph, support] = await Promise.all([
+  const [orders, graph, support, complaints] = await Promise.all([
     ordersAllowed ? getOperationalOrders(auth) : Promise.resolve([]),
     graphAllowed ? listMicrosoftGraphInbox() : Promise.resolve({ code: "IN_KLAERUNG" as const, message: "Outlook ist für dieses Profil nicht eingeblendet." }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
@@ -180,6 +182,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
       ]);
       return { preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignments };
     }),
+    ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints():Promise.resolve({code:'OK' as const,complaints:[]}),
   ]);
 
   const allowed = allowedTodayFields(auth);
@@ -193,6 +196,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
   const items: TodayItem[] = [];
   const assignments = new Map(support.assignments.map((row) => [row.order_id, row]));
   const add = (item: TodayItem) => items.push({ ...item, field: item.field === "action" || selectedSet.has(item.field as TodayVisibleField) ? item.field : "action", snoozedUntil: reminders.get(item.key) });
+  if(complaints.code!=='OK')throw Error('TODAY_COMPLAINT_READ_FAILED:'+complaints.code);
+  for(const attention of complaintAttention(complaints.complaints,auth.areas??[]))add({key:attention.key,field:'action',kind:'complaint',title:attention.title,meta:attention.meta,urgency:attention.urgency,orderId:attention.orderId,target:attention.target,primaryActionLabel:attention.actionLabel as TodayItem['primaryActionLabel']});
 
   for (const order of orders) {
     const guidance = deriveOrderGuidance(order, today);
