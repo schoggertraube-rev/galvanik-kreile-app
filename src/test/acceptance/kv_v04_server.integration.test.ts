@@ -182,3 +182,25 @@ it('KV-03 settings persist explicit nullable approaches with DB/event/view, with
  expect(await withSession(restricted,()=>saveQuoteSettingsAction(input))).toMatchObject({code:'FORBIDDEN'});
  expect((await sql`SELECT count(*)::int n FROM private.extra_work_hourly_rates WHERE tenant_id=${KREILE_TENANT_SLUG}`)[0].n).toBe(1);
 });
+
+it('links one real captured KV source, preserves other concerns and rolls back a second quote for that source',async()=>{
+ const fixture=await createFixture();
+ const {saveIntakeNoteAction,getIntakeCaptureAction,selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
+ const {createQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const itemId=randomUUID();
+ const original=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST Schmidt, 4 Weber-Trompeten verchromen, KV in zwei Wochen. Alte Halter bitte erhalten.',context:{customerId:fixture.customerId},concerns:['aufgabe']}));
+ if(original.code!=='OK')throw Error('KV_SOURCE_CREATE:'+original.code);
+ const chosen=await withSession(fixture,()=>selectIntakeConcernAction({itemId,version:original.capture.version,clientEventId:randomUUID(),concern:'kv_anfrage'}));
+ if(chosen.code!=='OK')throw Error('KV_SOURCE_CONCERN:'+chosen.code);
+ const input={clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST KV aus bestehender Erfassung',positions:[{name:'TEST Weber-Trompeten',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}],source:{itemId,version:chosen.capture.version,message:false},specialRequests:'Alte Halter bitte erhalten',deliveryWeeks:2};
+ const created=await withSession(fixture,()=>createQuoteAction(input));
+ expect(created).toMatchObject({code:'OK',quote:{lifecycle:{sourceItemId:itemId,sourceMessageId:null,specialRequests:input.specialRequests,deliveryWeeks:2}}});
+ if(created.code!=='OK')throw Error('KV_SOURCE_QUOTE:'+created.code+':'+created.message);
+ expect((await sql`SELECT source.vorgang_art,source.vorgang_id,source.einsatz,source.anliegen_offen,q.quelle_intake_item_id::text,q.sonderwuensche,q.lieferzeit_wochen FROM public.intake_item source JOIN private.quotes q ON q.tenant_id=source.tenant_id AND q.quelle_intake_item_id=source.id WHERE source.tenant_id=${KREILE_TENANT_SLUG} AND source.id=${itemId}::uuid`)[0]).toMatchObject({vorgang_art:'kv',vorgang_id:created.quote.quoteId,einsatz:'offen',anliegen_offen:['aufgabe'],quelle_intake_item_id:itemId,sonderwuensche:input.specialRequests,lieferzeit_wochen:2});
+ expect((await sql`SELECT count(*)::int n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND nachher->>'action'='kv.angelegt'`)[0].n).toBe(1);
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{sourceItemId:itemId}}});
+ expect(await withSession(fixture,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK'});
+ expect(await withSession(fixture,()=>createQuoteAction(input))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(fixture,()=>createQuoteAction({...input,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ expect((await sql`SELECT count(*)::int n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(1);
+});

@@ -34,7 +34,7 @@ type QuoteRow = {
   gesendet_fassung?:number|null; gesendet_am?:Date|string|null; gesendet_kanal?:string|null;
   zugesagt_fassung?:number|null; zugesagt_am?:Date|string|null; zusage_nachweis?:string|null;
   abgesagt_am?:Date|string|null; absage_grund?:string|null; nachfass_am?:Date|string|null;
-  quelle_intake_item_id?:string|null; quelle_nachricht_id?:string|null; sonderwuensche?:string|null;
+  quelle_intake_item_id?:string|null; quelle_nachricht_id?:string|null; sonderwuensche?:string|null;lieferzeit_wochen?:number|null;
   quote_id: string;
   tenant_id: string;
   quote_number: string;
@@ -126,7 +126,11 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
   if (!plainObject(value)) return null;
   const hasIntakeMetadata = Object.hasOwn(value, "validUntil") || Object.hasOwn(value, "termStatus") || Object.hasOwn(value, "intakeSource");
   if (!exactKeys(value, ["clientEventId", "customerId", "dueDate", "note", "positions",
-    ...(hasIntakeMetadata ? ["validUntil", "termStatus", "intakeSource"] : [])])) return null;
+    ...(hasIntakeMetadata ? ["validUntil", "termStatus", "intakeSource"] : []),
+    ...['source','specialRequests','deliveryWeeks'].filter(key=>Object.hasOwn(value,key))])) return null;
+  if (Object.hasOwn(value,'source')&&(!plainObject(value.source)||!exactKeys(value.source,['itemId','version','message'])||typeof value.source.itemId!=='string'||!UUID_PATTERN.test(value.source.itemId)||!Number.isSafeInteger(value.source.version)||Number(value.source.version)<1||typeof value.source.message!=='boolean')) return null;
+  if (Object.hasOwn(value,'specialRequests')&&value.specialRequests!==null&&(typeof value.specialRequests!=='string'||value.specialRequests.trim().length<1||value.specialRequests.length>4000)) return null;
+  if (Object.hasOwn(value,'deliveryWeeks')&&value.deliveryWeeks!==null&&(!Number.isSafeInteger(value.deliveryWeeks)||Number(value.deliveryWeeks)<1||Number(value.deliveryWeeks)>104)) return null;
   if (typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)) return null;
   const customerId = text(value.customerId, 1, 128);
   const note = optionalText(value.note, 2000);
@@ -153,6 +157,9 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
       termStatus: value.termStatus as typeof TERM_STATUS_VALUES[number],
       intakeSource: value.intakeSource as typeof INTAKE_SOURCE_VALUES[number],
     } : {}),
+    ...(Object.hasOwn(value,'source')?{source:value.source as CreateQuoteInput['source']}:{}),
+    ...(Object.hasOwn(value,'specialRequests')?{specialRequests:typeof value.specialRequests==='string'?value.specialRequests.trim():null}:{}),
+    ...(Object.hasOwn(value,'deliveryWeeks')?{deliveryWeeks:value.deliveryWeeks as number|null}:{}),
   };
 }
 
@@ -269,7 +276,7 @@ function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
     for (const value of [row.gesendet_am,row.zugesagt_am,row.abgesagt_am]) if (value!==null&&(!value||!iso(value))) return null;
     if (![null,'mail','druck'].includes(row.gesendet_kanal===undefined?'missing':row.gesendet_kanal)||[row.quelle_intake_item_id,row.quelle_nachricht_id].some(value=>value!==null&&(typeof value!=='string'||!UUID_PATTERN.test(value)))) return null;
     if ((row.gesendet_fassung===null)!==(row.gesendet_am===null)||(row.gesendet_fassung===null)!==(row.gesendet_kanal===null)||(row.zugesagt_fassung===null)!==(row.zugesagt_am===null)||(row.zugesagt_fassung===null)!==(row.zusage_nachweis===null)) return null;
-    lifecycle={edition:row.fassung,stage:row.derived_status as NonNullable<QuoteReadback['lifecycle']>['stage'],sentEdition:row.gesendet_fassung!,sentAt:iso(row.gesendet_am!),sentChannel:row.gesendet_kanal as 'mail'|'druck'|null,acceptedEdition:row.zugesagt_fassung!,acceptedAt:iso(row.zugesagt_am!),acceptanceEvidence:row.zusage_nachweis!,declinedAt:iso(row.abgesagt_am!),declineReason:row.absage_grund!,followupAt:row.nachfass_am===null?null:row.nachfass_am instanceof Date?row.nachfass_am.toISOString().slice(0,10):String(row.nachfass_am).slice(0,10),sourceItemId:row.quelle_intake_item_id!,sourceMessageId:row.quelle_nachricht_id!,specialRequests:row.sonderwuensche!};
+    lifecycle={edition:row.fassung,stage:row.derived_status as NonNullable<QuoteReadback['lifecycle']>['stage'],sentEdition:row.gesendet_fassung!,sentAt:iso(row.gesendet_am!),sentChannel:row.gesendet_kanal as 'mail'|'druck'|null,acceptedEdition:row.zugesagt_fassung!,acceptedAt:iso(row.zugesagt_am!),acceptanceEvidence:row.zusage_nachweis!,declinedAt:iso(row.abgesagt_am!),declineReason:row.absage_grund!,followupAt:row.nachfass_am===null?null:row.nachfass_am instanceof Date?row.nachfass_am.toISOString().slice(0,10):String(row.nachfass_am).slice(0,10),sourceItemId:row.quelle_intake_item_id!,sourceMessageId:row.quelle_nachricht_id!,specialRequests:row.sonderwuensche!,deliveryWeeks:row.lieferzeit_wochen!};
   }
   const positions = parsePositions(row.positions);
   const createdAt = iso(row.created_at);
@@ -317,7 +324,9 @@ export async function readQuote(tx: PrivilegedTenantTransaction, tenantId: strin
   return quote;
 }
 
-export async function createQuoteCommand(authorization: QuoteCommandContext, input: unknown): Promise<CreateQuoteResult> {
+export type QuoteSourceBinding=(tx:PrivilegedTenantTransaction,input:{source:NonNullable<CreateQuoteInput['source']>;quoteId:string;customerId:string;clientEventId:string})=>Promise<void|{code:'FORBIDDEN'|'NOT_FOUND'|'CONFLICT'|'VALIDATION_ERROR'|'UNAVAILABLE';message:string}>;
+class QuoteSourceFailure extends Error {constructor(readonly result:Exclude<CreateQuoteResult,{code:'OK'}>){super(result.message);}}
+export async function createQuoteCommand(authorization: QuoteCommandContext, input: unknown,bindSource?:QuoteSourceBinding): Promise<CreateQuoteResult> {
   const normalized = normalizeCreate(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollständig oder ungültig." };
   if (!authorization.capabilities.canCreateQuote) return { code: "FORBIDDEN", message: "KVs dürfen mit dieser Rolle nicht angelegt werden." };
@@ -338,6 +347,14 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
           return { code: outcome.result_code, message: outcome.result_code === "CONFLICT" ? "Anfragekennung wurde bereits anders verwendet." : outcome.result_code === "NOT_FOUND" ? "Kunde ist nicht verfügbar." : "KV-Daten sind ungültig." };
         }
         throw new Error("QUOTE_CREATE_RESULT_INVALID");
+      }
+      if (!outcome.replayed) {
+        if (normalized.source) {
+          if (!bindSource) throw new QuoteSourceFailure({code:'UNAVAILABLE',message:'Quellverknüpfung ist nicht verfügbar. Nichts gespeichert.'});
+          const failure=await bindSource(tx,{source:normalized.source,quoteId:outcome.result_quote_id,customerId:normalized.customerId,clientEventId:normalized.clientEventId});
+          if (failure) throw new QuoteSourceFailure(failure);
+        }
+        if (normalized.source||Object.hasOwn(normalized,'specialRequests')||Object.hasOwn(normalized,'deliveryWeeks')) await tx.execute(sql`UPDATE private.quotes SET quelle_intake_item_id=${normalized.source?.itemId??null}::uuid,quelle_nachricht_id=${normalized.source?.message?normalized.source.itemId:null}::uuid,sonderwuensche=${normalized.specialRequests??null},lieferzeit_wochen=${normalized.deliveryWeeks??null} WHERE tenant_id=${authorization.tenantId} AND id=${outcome.result_quote_id}::uuid`);
       }
       const quote = await readQuote(tx, authorization.tenantId, outcome.result_quote_id);
       const receipts = await tx.execute<CreateReceiptRow>(sql`
@@ -361,6 +378,7 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
     });
   } catch (error) {
     console.error("quote_create_command_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
+    if (error instanceof QuoteSourceFailure) return error.result;
     return { code: "UNAVAILABLE", message: "KV konnte nicht sicher gespeichert werden." };
   }
 }

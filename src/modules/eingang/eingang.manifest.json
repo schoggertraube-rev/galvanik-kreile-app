@@ -141,7 +141,8 @@
     "@/modules/eingang/public#AssignmentPorts",
     "@/modules/eingang/server-public#recordIntakeComplaintEffect",
     "@/modules/eingang/public#ComplaintDialogs",
-    "@/modules/eingang/public#ComplaintPorts"
+    "@/modules/eingang/public#ComplaintPorts",
+    "@/modules/eingang/server-public#recordIntakeQuoteEffect"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"

@@ -30,6 +30,9 @@ export type CreateQuoteInput = {
   validUntil?: string | null;
   termStatus?: "wunsch" | "bestaetigt" | "verschoben" | "gegenvorschlag" | null;
   intakeSource?: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
+  source?: {itemId:string;version:number;message:boolean};
+  specialRequests?:string|null;
+  deliveryWeeks?:number|null;
 };
 
 export type ConvertQuoteInput = {
@@ -64,7 +67,7 @@ export type QuoteReadback = {
     sentEdition:number|null; sentAt:string|null; sentChannel:'mail'|'druck'|null;
     acceptedEdition:number|null; acceptedAt:string|null; acceptanceEvidence:string|null;
     declinedAt:string|null; declineReason:string|null; followupAt:string|null;
-    sourceItemId:string|null; sourceMessageId:string|null; specialRequests:string|null;
+    sourceItemId:string|null; sourceMessageId:string|null; specialRequests:string|null;deliveryWeeks:number|null;
   };
   quoteId: string;
   quoteNumber: string;

@@ -12,6 +12,7 @@ import {
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
+import {recordIntakeQuoteEffect} from '@/modules/eingang/server-public';
 import { readCompanyDocumentSettings } from "@/modules/fundament/server-public";
 import {
   createQuoteCommand,
@@ -89,7 +90,8 @@ export async function createQuoteAction(input: CreateQuoteInput) {
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
-  const result = await createQuoteCommand(quoteCommandContext(authorization.data), input);
+  const snapshot=authorization.data;
+  const result = await createQuoteCommand(quoteCommandContext(snapshot), input,(tx,source)=>recordIntakeQuoteEffect(tx,snapshot,source));
   if (result.code === "OK") {
     revalidatePath("/customers");
     revalidatePath(`/customers/${result.quote.customerId}`);

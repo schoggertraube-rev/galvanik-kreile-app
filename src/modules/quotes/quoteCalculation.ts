@@ -10,9 +10,9 @@ export function calculateQuote(input:QuoteCalculation):QuoteCalculationResult {
   if(!Number.isSafeInteger(value)||value<0||field==='hourlyRateCents'&&value===0)return {code:'VALIDATION_ERROR',field,message:'Geldansatz ist ungültig.'};
  }
  const [whole,fraction='']=input.hours.trim().replace(',','.').split('.');
- const hours=BigInt(whole)*10000n+BigInt(fraction.padEnd(4,'0'));
+ const hours=BigInt(whole)*BigInt(10000)+BigInt(fraction.padEnd(4,'0'));
  // Round once, in integer cents. No binary floating point or intermediate rounding.
- const total=(hours*BigInt(input.hourlyRateCents!)+5000n)/10000n+BigInt(input.setupCents!)+BigInt(input.materialCents!);
+ const total=(hours*BigInt(input.hourlyRateCents!)+BigInt(5000))/BigInt(10000)+BigInt(input.setupCents!)+BigInt(input.materialCents!);
  if(total>BigInt(Number.MAX_SAFE_INTEGER))return {code:'VALIDATION_ERROR',field:'total',message:'Der KV-Betrag ist zu groß.'};
  return {code:'OK',totalNetCents:Number(total)};
 }
