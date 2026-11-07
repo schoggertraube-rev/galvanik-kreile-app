@@ -1367,7 +1367,8 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.change(source, { target: { value: "persoenlich" } });
     expect(document.querySelector('[data-spec-id="eingang.telefonnotiz"]')).not.toBeInTheDocument();
     expect(document.querySelector('[data-spec-id="eingang.pruefliste.eingangsfoto"]')).toHaveTextContent("fehlt · sperrt nicht");
-    expect(document.querySelector('[data-spec-id="eingang.pruefliste.geprueft"]')).toHaveTextContent("fehlt");
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.geprueft"]')).toHaveTextContent("Ware gemeinsam prüfen");
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.geprueft"]')).toHaveAttribute("data-state", "open");
   });
 
   it.each([undefined,0])("P67 resumes legacy draft version %s without inventing required values or writing",async(version)=>{
@@ -1482,6 +1483,22 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.getByRole('spinbutton',{name:'Menge'})).toHaveValue(null);
   });
 
+  it("öffnet bei einer ergänzten erkannten Position das richtige Mengenfeld",async()=>{
+    const api=ports({recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions:[{
+      name:'SYNTHETISCH zweites Teil',quantity:'3',unit:'Stück',surfaceRequested:'Verzinken',executionRequested:'offen',source:'Text',
+    }]}})});
+    render(<GlobalCreateFlow ports={api}/>);openFlow();
+    fireEvent.change(await screen.findByLabelText('Teil / Leistung'),{target:{value:'Synthetischer Flansch'}});
+    fireEvent.change(screen.getByRole('spinbutton',{name:'Menge'}),{target:{value:'1'}});
+    fireEvent.change(screen.getByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'3 Stück zweites Teil verzinken'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(2));
+    const check=document.querySelector('[data-spec-id="eingang.pruefliste.menge"]');
+    expect(check).toHaveTextContent('Menge 3 · erkannt, bestätigen');
+    fireEvent.click(check!);
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})[1]).toHaveFocus());
+  });
+
   it("sichert erkannte Positionen über 20 als eigenen Entwurf und behält sie bei einem Fehler",async()=>{
     const positions=Array.from({length:23},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
     const saveDraft=vi.fn().mockResolvedValueOnce({code:'UNAVAILABLE',message:'Speicher nicht erreichbar.'}).mockResolvedValueOnce({code:'OK',drafts:[]}).mockImplementationOnce(async input=>({code:'OK',drafts:[{id:input.id,art:'eingang',payload:input.payload}]}));
@@ -1527,7 +1544,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole('button',{name:'Jetzt ergänzen'}));
     const field=document.querySelector('[data-spec-id="eingang.zahlungsbedingung"]');
     await waitFor(()=>expect(field).toHaveFocus());
-    expect(document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]')).toHaveTextContent('fehlt: Zahlungsbedingung');
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]')).toHaveTextContent('Zahlungsbedingung wählen');
     fireEvent.change(field!,{target:{value:'bar'}});
     expect(screen.getByRole('combobox',{name:'Zahlungsmodus'})).toHaveValue('abholung');
     expect(api.createCustomer).not.toHaveBeenCalled();expect(api.createDirectIntake).not.toHaveBeenCalled();
