@@ -15,7 +15,9 @@ const DESIGN_POINTER_PAGE_COUNT = 162;
 const ENDVERSION_UI_PATH = "docs/project/endversion/ui";
 const TRUTH_SOURCE_CONTRACT = Object.freeze({
   project_rules: "AGENTS.md",
-  active_queue: "_review/AKTUELLE_ANWEISUNG.md",
+  build_rules: "_review/BAUREGELN.md",
+  active_queue: "_review/WARTESCHLANGE.md",
+  page_authority: "_review/SEITENHOHEIT.md",
   owner_decisions: "_review/OWNER_ENTSCHEIDUNGEN.md",
   product_decisions: "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md",
   scope_modules: "docs/project/linie/MODULKARTE_KANON.md",
@@ -229,8 +231,8 @@ function validateActiveEntryDocs(root, errors) {
       continue;
     }
     const text = readFileSync(file, "utf8");
-    if (!text.includes("docs/delivery/KREILE_VERKAUFSSTUFE_1.md")) {
-      errors.push(`ACTIVE_ENTRY_PLAN_POINTER_MISSING:${rel}`);
+    for (const id of ["build_rules", "active_queue", "page_authority"]) {
+      if (!text.includes(TRUTH_SOURCE_CONTRACT[id])) errors.push(`ACTIVE_ENTRY_CONTROL_POINTER_MISSING:${rel}:${id}`);
     }
     for (const token of FORBIDDEN_ACTIVE_TOKENS) if (text.includes(token)) errors.push(`ACTIVE_ENTRY_LEGACY_TOKEN:${rel}:${token}`);
   }
@@ -354,6 +356,10 @@ export function runSelftest(root = process.cwd()) {
   if (errors.length > 0) throw new Error(`selftest baseline invalid: ${errors.join(" | ")}`);
   expectConfigMutation(config, (value) => { value.truthTypes.push({ id: "shadow", source: "shadow.md" }); }, "TRUTH_TYPE_TOTAL");
   expectConfigMutation(config, (value) => { value.truthTypes[0].source = "docs/project/CURRENT_STATE.md"; }, "TRUTH_SOURCE_CONTRACT");
+  for (const id of ["build_rules", "active_queue", "page_authority"]) {
+    expectConfigMutation(config, (value) => { value.truthTypes.find((entry) => entry.id === id).source = "_review/AKTUELLE_ANWEISUNG.md"; }, `TRUTH_SOURCE_CONTRACT:${id}`);
+    expectConfigMutation(config, (value) => { value.truthTypes = value.truthTypes.filter((entry) => entry.id !== id); }, `TRUTH_TYPE_COUNT:${id}`);
+  }
   expectConfigMutation(config, (value) => { value.designSystem.role = "PAGE_COMPOSITION"; }, "DESIGN_SYSTEM_CONFIG_CONTRACT");
   expectConfigMutation(config, (value) => { value.uiReferences.pop(); }, "UI_REFERENCE_CONFIG_CONTRACT");
   expectConfigMutation(config, (value) => { value.schemaVersion = 2; }, "AUTHORITY_CONFIG_SCHEMA_VERSION");

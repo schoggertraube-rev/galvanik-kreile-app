@@ -44,3 +44,11 @@ docs/project/history/legacy-sources/2026-10-11/** -text -whitespace
 docs/project/history/controls/2026-10-11/** -text -whitespace
 docs/project/linie/ui/designsystem_v1_1/README.md -whitespace
 docs/project/endversion/ui/endversion_design.css -whitespace
+
+# #189: preserve supplied planning/archive sources; no product path exemption.
+_review/archiv/2026-11-07/KREILE_CODEX_BAUAUFTRAG_STUFE1_NEU.md -text -whitespace
+_review/archiv/2026-11-07/STAND.md -text -whitespace
+_review/archiv/AKTUELLE_ANWEISUNG_bis_2026-10-29.md -text -whitespace
+_review/lieferung_V44_verworfen/docs/project/endversion/ui/endversion_design.css -text -whitespace
+_review/quellen/IDEENABGLEICH_ERGAENZUNG_2026-11-05.md -text -whitespace
+_review/quellen/minimodule_v04/Kreile_Zuvorkommende_App_Uebergabe_2026-11-07.md -text -whitespace

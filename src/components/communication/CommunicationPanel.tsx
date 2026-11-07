@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AtSign, Inbox, Loader2, MailPlus, Paperclip, Send } from "lucide-react";
 import {
   attachOutlookMailAction,
+  importOutlookMailAction,
   getMicrosoftGraphStatusAction,
   listOutlookInboxAction,
   sendCustomerMailAction,
@@ -87,8 +88,18 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
     const result = await attachOutlookMailAction({ targetType, targetId, graphMessageId: mail.id });
     setBusyId(null);
     setFeedback(result.code === "OK"
-      ? ["Mail ist am Vorgang abgelegt.", result.data.attachmentsImported ? `${result.data.attachmentsImported} Anhang/Anhänge wurden privat gespeichert.` : "", result.data.attachmentsSkipped ? `${result.data.attachmentsSkipped} nicht unterstützte/inline Anhänge wurden nicht übernommen.` : "", result.data.attachmentWarning ?? ""].filter(Boolean).join(" ")
+      ? ["Mail ist am Vorgang abgelegt.", result.data.attachmentsImported ? `${result.data.attachmentsImported} Anhang/Anhänge wurden privat gespeichert.` : "", result.data.attachmentsSkipped ? `${result.data.attachmentsSkipped} Signatur- oder nicht einzeln unterstützte Anhänge bleiben im Mail-Original.` : "", result.data.attachmentWarning ?? ""].filter(Boolean).join(" ")
       : result.message);
+  };
+  const captureMail=async(mail:InboxMessage,intent:'CUSTOMER'|'QUOTE')=>{
+    if(busyId)return;
+    setBusyId(mail.id);setFeedback('');
+    try{
+      const result=await importOutlookMailAction(mail.id);
+      if(result.code!=='OK'){setFeedback(result.message);return;}
+      requestGlobalCreate({intent,prefill:{sourceItemId:result.itemId,...(intent==='CUSTOMER'?{name:mail.senderName,email:mail.senderAddress}:{customerQuery:mail.senderAddress,note:mail.body})}});
+    }catch(error){console.error('[COMMUNICATION_CAPTURE_FAILED]',error instanceof Error?error.name:'UnknownError');setFeedback('Mail-Original noch nicht sicher übernommen · bitte erneut versuchen.');}
+    finally{setBusyId(null);}
   };
 
   const composeForm=(
@@ -140,8 +151,8 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
             <div><strong>{mail.subject}</strong><small>{mail.senderName} · {new Date(mail.receivedAt).toLocaleString("de-DE")}</small><p>{mail.preview || "Keine Vorschau vorhanden."}</p>{mail.hasAttachments ? <span><Paperclip /> Mit Anhang</span> : null}</div>
             <div className={styles.mailActions}>
               <button type="button" disabled={busyId === mail.id} onClick={() => void attach(mail)}>{busyId === mail.id ? <Loader2 className={styles.spin} /> : <Paperclip />}Am Vorgang ablegen</button>
-              <button type="button" onClick={() => requestGlobalCreate({ intent: "CUSTOMER", prefill: { name: mail.senderName, email: mail.senderAddress } })}><MailPlus />Kunde anlegen</button>
-              <button type="button" onClick={() => requestGlobalCreate({ intent: "QUOTE", prefill: { customerQuery: mail.senderAddress, note: `Anfrage aus Outlook: ${mail.subject}` } })}><MailPlus />KV anlegen</button>
+              <button type="button" disabled={busyId!==null} onClick={() => void captureMail(mail,'CUSTOMER')}><MailPlus />Kunde anlegen</button>
+              <button type="button" disabled={busyId!==null} onClick={() => void captureMail(mail,'QUOTE')}><MailPlus />KV anlegen</button>
             </div>
           </li>)}
         </ol>

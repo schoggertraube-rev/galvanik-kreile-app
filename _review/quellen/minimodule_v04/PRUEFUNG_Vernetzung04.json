@@ -1,0 +1,125 @@
+{
+  "date": "2026-11-07",
+  "revision": "Vernetzung 04 – behutsame Abschlusskorrektur, keine V05",
+  "scope": "Isolierte synthetische HTML-Vorschau; keine Produkt-, Backend- oder Providerabnahme",
+  "htmlSHA256": "EE9DD32493D4B1A87F3A51E3134E9B75180358A9C70548E9F5128D22068C0CC4",
+  "status": "PASS – ausschließlich aufgeführte lokale Prüfungen",
+  "passed": 57,
+  "flow": [
+    "Payment is shown with evidence",
+    "Delivery is linked in document",
+    "Invoice, delivery and offer compared",
+    "Concrete discrepancy is in prepared reply",
+    "Reply does not finish invoice case",
+    "Corrected source invalidates old quantity and amount conflict",
+    "Deadline becomes linked follow-up",
+    "Later delivery note updates existing invoice context",
+    "Special requirement carried into quote",
+    "Message follows successful quote send",
+    "Message count no longer treats sent quote as new work",
+    "Mail tab shares all six existing messages",
+    "Reply uses known order rather than asking again",
+    "Mail document backlink durable immediately",
+    "Red plus opens entry in one click",
+    "No horizontal overflow 1914",
+    "No horizontal overflow 1220",
+    "No horizontal overflow 390"
+  ],
+  "edge": [
+    "Different supplier is never silently linked",
+    "Quantity conflict follows matched supplier and reference",
+    "Ambiguous reference is not selected automatically",
+    "Partial payment does not become paid",
+    "Exact payment matches reference supplier and amount",
+    "Two matching payments require inspection",
+    "Resolved quantity and paid invoice clear follow-up",
+    "Impossible document date rejected",
+    "AZ correction replaces rather than adds",
+    "Workshop customer question opens matching message directly",
+    "Receipt does not invent date from brought today"
+  ],
+  "closing": [
+    "Geänderte Fassung bietet direkt erneuten Versand",
+    "KV-Begleitung aktualisiert Zeitansatz und Versandstand",
+    "KV-Eingabefokus bleibt bei Aktualisierung erhalten",
+    "KV-Kopf und Statusmarke zeigen dieselbe neue Fassung",
+    "Erneuter Testversand verbindet aktuelle Fassung und Ursprungsnachricht",
+    "Lieferschein zeigt dieselbe Mengenabweichung wie Rechnung",
+    "Vergleich vom Lieferschein erreicht die Rechnung",
+    "Gesendete Rückfrage wird unverändert und ohne erneuten Senden-Button geöffnet",
+    "Versandverlauf kehrt direkt zum Beleg zurück",
+    "Passende Belege bieten Rückkehr statt sinnloser Rückfrage",
+    "Vergleich-Rückkehr erhält den Ausgangsbeleg",
+    "Fehlendes Angebot bekommt eigene konkrete Aktion",
+    "Angebotsrückfrage nennt die fehlende Referenz",
+    "Uneindeutige Zahlung zeigt beide Kontobelege statt erneute Zahlung vorzuschlagen",
+    "Kontovergleich behauptet keine vollständige Zahlung",
+    "Mehrarbeit bleibt in Kurzansicht erreichbar 1914",
+    "Auftrag führt ohne Suche zur richtigen Kundenfrage 1914",
+    "Rotes Plus bleibt rechts erreichbar 1914",
+    "Hauptaktion sichtbar, berührbar und ohne Querüberlauf 1914",
+    "Mehrarbeit bleibt in Kurzansicht erreichbar 1220",
+    "Auftrag führt ohne Suche zur richtigen Kundenfrage 1220",
+    "Rotes Plus bleibt rechts erreichbar 1220",
+    "Hauptaktion sichtbar, berührbar und ohne Querüberlauf 1220",
+    "Mehrarbeit bleibt in Kurzansicht erreichbar 390",
+    "Auftrag führt ohne Suche zur richtigen Kundenfrage 390",
+    "Rotes Plus bleibt rechts erreichbar 390",
+    "Hauptaktion sichtbar, berührbar und ohne Querüberlauf 390",
+    "Der Tag bleibt im frischen Ausgangszustand unverändert"
+  ],
+  "viewports": [
+    {
+      "width": 1914,
+      "height": 918,
+      "overflow": false,
+      "button": {
+        "x": 1286.2249755859375,
+        "y": 624.0125122070312,
+        "width": 168.1750030517578,
+        "height": 44
+      },
+      "dialogOverflow": false
+    },
+    {
+      "width": 1220,
+      "height": 880,
+      "overflow": false,
+      "button": {
+        "x": 931.4249877929688,
+        "y": 605.2125244140625,
+        "width": 168.1750030517578,
+        "height": 44
+      },
+      "dialogOverflow": false
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "overflow": false,
+      "button": {
+        "x": 201.40000915527344,
+        "y": 766.2000122070312,
+        "width": 142,
+        "height": 52.79999923706055
+      },
+      "dialogOverflow": false
+    }
+  ],
+  "console": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "day": {
+    "freshDOMidentical": true,
+    "length": 9961
+  },
+  "review": "Getrennte Ablauf-/Red-Team-Perspektive und UI-Selbstprüfung. Beide Spezialistenstarts wegen Sitzungslimit abgewiesen; keine unabhängige Abnahme.",
+  "limitations": [
+    "Keine echte KI/OCR, Postfach-/Bank-/Buchhaltungs- oder Geräteanbindung",
+    "Belegvergleich ist auf vereinfachte Einzelpositionen/Testdaten begrenzt",
+    "Lange Eingaben benötigen auf 390px Scrollen; echte Bildschirmtastatur/Hardware nicht geprüft",
+    "Desktop angefordert 1914x917; Browser meldete im Abschlusslauf 1914x918, keine exakte Produkt-Viewport-Abnahme",
+    "Teil-/Sammellieferungen, Gutschriften, viele Positionen, freie Sprache und gleichzeitige echte Nutzer nicht umfassend getestet"
+  ]
+}
