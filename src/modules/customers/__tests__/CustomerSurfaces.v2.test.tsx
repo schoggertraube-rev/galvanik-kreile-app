@@ -38,6 +38,23 @@ describe("Customer card V2", () => {
     expect(screen.getByRole("dialog", { name: "Kundenkarte K-1042" })).not.toHaveTextContent(/Readback|zurückgelesen|tenantgebunden/i);
   });
 
+  it("shows the two customer actions once in the design-system action grid", () => {
+    const newOrder = vi.fn();
+    render(<CustomerCardView state={{kind:"data",card:{...card,orders:[],orderCount:0,wareImHausCount:0}}}
+      onClose={vi.fn()} onOpenOrder={vi.fn()} onNewOrder={newOrder} onSaveCustomer={vi.fn()} />);
+    const order = screen.getByRole("button", {name:"Neuer Auftrag"});
+    const edit = screen.getByRole("button", {name:"Bearbeiten"});
+    expect(order).toHaveAttribute("data-spec-id", "kunde.neuer-auftrag");
+    expect(edit).toHaveAttribute("data-spec-id", "kunde.bearbeiten");
+    expect(order.parentElement).toHaveClass("kr-qa-raster");
+    expect(edit.parentElement).toBe(order.parentElement);
+    expect(Array.from(order.parentElement!.querySelectorAll("button")).slice(0,2)).toEqual([order,edit]);
+    fireEvent.click(order);
+    expect(newOrder).toHaveBeenCalledTimes(1);
+    fireEvent.click(edit);
+    expect(screen.getByRole("combobox", {name:"Land"})).toBeInTheDocument();
+  });
+
   it("starts without country or payment defaults and hides invoice terms without approval", () => {
     render(
       <CustomerCardView

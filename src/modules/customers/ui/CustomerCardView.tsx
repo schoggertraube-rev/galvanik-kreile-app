@@ -188,10 +188,10 @@ export function CustomerCardView({
   const openPhone = () => { if (card.phone) window.location.assign(`tel:${card.phone}`); };
   const openMail = () => { if (card.email) window.location.assign(`mailto:${card.email}`); };
   const quickActions: SchnellAktion[] = [
-    ...(onNewOrder ? [{ key: "order", text: "Neuer Auftrag", icon: "plus" as const, primaer: true, onClick: onNewOrder }] : []),
+    ...(onNewOrder ? [{ key: "order", dataSpecId: "kunde.neuer-auftrag", text: "Neuer Auftrag", icon: "plus" as const, primaer: true, onClick: onNewOrder }] : []),
+    ...(onSaveCustomer ? [{ key: "edit", dataSpecId: "kunde.bearbeiten", text: "Bearbeiten", icon: "edit" as const, onClick: () => setEditOpen(true) }] : []),
     ...(card.phone ? [{ key: "phone", text: "Anrufen", icon: "phone" as const, onClick: openPhone }] : []),
     ...(card.email ? [{ key: "mail", text: "E-Mail", icon: "mail" as const, onClick: openMail }] : []),
-    ...(onSaveCustomer ? [{ key: "edit", text: "Bearbeiten", icon: "edit" as const, onClick: () => setEditOpen(true) }] : []),
   ];
   const agreementAction: SchnellAktion | null = canManageAgreement
     ? {
@@ -223,10 +223,7 @@ export function CustomerCardView({
       titel={`${next.orderNumber} · ${next.title} · Termin ${due(next.dueAt)}`}
       aktionen={<Button art="primaer" icon="open" text="Auftragskarte öffnen" onClick={() => onOpenOrder(next.id)} />}
     /></KartenBlock> : null}
-    <KartenBlock
-      label="Aktive Aufträge"
-      rechts={onNewOrder ? <Button art="leise" icon="plus" text="Neuer Auftrag" onClick={onNewOrder} /> : undefined}
-    >
+    <KartenBlock label="Aktive Aufträge">
       {active.length ? <div className="kr-stapel" style={{ gap: 8 }}>{active.map((order) => <Auftragszeile
         key={order.id}
         id={order.orderNumber}
@@ -237,7 +234,7 @@ export function CustomerCardView({
         status={{ text: order.status, ton: isClosedStation(order.station) ? "ok" : "info" }}
         karte
         onOeffnen={() => onOpenOrder(order.id)}
-      />)}</div> : <Zustand art="leer" text="Keine aktiven Aufträge." aktion={onNewOrder ? { text: "Neuer Auftrag", icon: "plus", onClick: onNewOrder } : undefined} />}
+      />)}</div> : <Zustand art="leer" text="Keine aktiven Aufträge." />}
     </KartenBlock>
     <KartenBlock label="Notizen & Telefonnotizen">
       {card.notes ? <Notiz text={card.notes} bezug={<Chip text="Kundennotiz" ton="teil" icon="phone" />} autor={`aktualisiert ${moment(card.updatedAt)}`} /> : <Zustand art="leer" text="Keine interne Kundennotiz hinterlegt." />}
@@ -269,7 +266,7 @@ export function CustomerCardView({
         </div>
       </details> : null}
     </KartenBlock> : null}
-    <KartenBlock label="Stammdaten" rechts={onSaveCustomer ? <Button data-spec-id="kunde.bearbeiten" art="leise" icon="edit" text="Bearbeiten" onClick={() => setEditOpen(true)} /> : undefined}>
+    <KartenBlock label="Stammdaten">
       <Fakten zeilen={[
         { k: "Ansprechpartner", v: card.contactPerson ?? "Nicht hinterlegt" },
         { k: "Telefon", v: card.phone ?? "Nicht hinterlegt" },
