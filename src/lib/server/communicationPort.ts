@@ -272,7 +272,7 @@ export async function sendCommunicationMail(
     return { code: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "CONFLICT" : "UNAVAILABLE", message: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "Der Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; zuerst im Outlook-Ausgang prüfen." : "Der Mailversand konnte nicht sicher vorbereitet werden." };
   }
   if (pending.replay) return { code: "OK", data: pending.replay };
-  const sent = await sendMicrosoftGraphMail({ to: target.email, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment });
+  const sent = await sendMicrosoftGraphMail({ to: target.email, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment, replyToMessageId: input.document?.source?.graphMessageId });
   if (sent.code !== "OK") {
     await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
       UPDATE public.communication_threads SET status='failed', updated_at=statement_timestamp()

@@ -504,15 +504,27 @@ it('KV-04 sends the real current PDF through the existing mail Action and marks 
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST KV PDF' WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
  await sql`UPDATE public.company_settings SET company_name='TEST KV PDF',street='Pruefstrasse 18',zip='70173',city='Stuttgart',country='Deutschland',iban='DE02120300000000202051',bic='BYLADEM1001',bank_name='TEST Bank',tax_id='DE999999999',invoice_vat_rate_basis_points=1900,invoice_payment_term_days=14,kv_nachfass_tage=5 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const {createQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
- const quote=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST PDF current edition',positions:[{name:'TEST Halter',quantity:3,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]}));
+ const {saveIntakeNoteAction,selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
+ const itemId=randomUUID(),fileId=randomUUID(),graphMessageId='TEST-source-KV-mail/'+randomUUID();
+ const original=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST KV bitte fuer drei Halter verchromen.',context:{customerId:fixture.customerId}}));
+ if(original.code!=='OK')throw Error('TEST_REPLY_SOURCE:'+original.code);
+ // Isolated completed imported-mail DB precondition; no external import/delivery claim.
+ await sql`UPDATE public.intake_item SET kanal='mail',richtung='rein',graph_message_id=${graphMessageId},absender_name='TEST Kunde',absender_adresse='test-kv@example.invalid',betreff='TEST Ursprungsanfrage',empfangen_am=statement_timestamp() WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`;
+ const fileHash='f'.repeat(64);
+ await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${fileId},'mime','TEST-Original.eml','message/rfc822',32,${fileHash},${KREILE_TENANT_SLUG+'/'+fileHash},statement_timestamp(),${fixture.actorId}::uuid,1,true,false,'fertig')`;
+ await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'original_gespeichert',${fileId}::uuid,${fixture.actorId},${sql.json({fileId,sha256:fileHash,bytes:32})})`;
+ await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'einsatz',${randomUUID()}::uuid,${fixture.actorId},${sql.json({action:'mail_import_complete',fileIds:[fileId],originalCount:0,filteredAttachments:0})})`;
+ const chosen=await withSession(fixture,()=>selectIntakeConcernAction({itemId,version:original.capture.version,clientEventId:randomUUID(),concern:'kv_anfrage'}));
+ if(chosen.code!=='OK')throw Error('TEST_REPLY_CONCERN:'+chosen.code);
+ const quote=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST PDF current edition',source:{itemId,version:chosen.capture.version,message:true},positions:[{name:'TEST Halter',quantity:3,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]}));
  if(quote.code!=='OK')throw Error('TEST_MAIL_QUOTE:'+quote.code);
  const envNames=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const;
  const previous=new Map(envNames.map(key=>[key,process.env[key]]));
  for(const key of envNames)process.env[key]=key==='MS_GRAPH_MAILBOX'?'test-kv@fixture.invalid':'TEST-kv-provider-only';
- const deliveries:Record<string,unknown>[]=[];
+ const deliveries:Record<string,unknown>[]=[],endpoints:string[]=[];
  vi.stubGlobal('fetch',vi.fn(async(url:string|URL,init?:RequestInit)=>{
   if(String(url).startsWith('https://login.microsoftonline.com/'))return Response.json({access_token:'TEST-kv-provider-token-'+('x'.repeat(32))});
-  if(String(url).startsWith('https://graph.microsoft.com/')&&String(url).endsWith('/sendMail')){deliveries.push(JSON.parse(String(init?.body)));return new Response('',{status:202});}
+  if(String(url).startsWith('https://graph.microsoft.com/')&&String(url).endsWith('/reply')){endpoints.push(String(url));deliveries.push(JSON.parse(String(init?.body)));return new Response('',{status:202});}
   throw Error('TEST_EXTERNAL_NETWORK_DENIED');
  }));
  try{
@@ -521,12 +533,13 @@ it('KV-04 sends the real current PDF through the existing mail Action and marks 
   const sent=await withSession(fixture,()=>sendCustomerMailAction(input));
   expect(sent).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('TEST_SEND:'+sent.code);
   expect(deliveries).toHaveLength(1);
+  expect(endpoints[0]).toContain('/messages/'+encodeURIComponent(graphMessageId)+'/reply');
   const payload=deliveries[0] as {message:{attachments:Array<{name:string;contentBytes:string}>}};
   expect(payload.message.attachments).toHaveLength(1);
   expect(Buffer.from(payload.message.attachments[0].contentBytes,'base64').subarray(0,4).toString()).toBe('%PDF');
   const events=await sql`SELECT event_type,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND (correlation_id=${input.clientRequestId}::uuid OR client_event_id=${input.clientRequestId}::uuid) ORDER BY created_at`;
   expect(events.map(event=>event.event_type)).toEqual(['COMMUNICATION_DOCUMENT_PREPARED_V1','COMMUNICATION_DOCUMENT_SENT_V1','QUOTE_LIFECYCLE_V04']);
-  expect(events[0].payload.document).toMatchObject({id:quote.quote.quoteId,edition:1,version:1,sha256:expect.stringMatching(/^[0-9a-f]{64}$/)});
+  expect(events[0].payload.document).toMatchObject({id:quote.quote.quoteId,edition:1,version:1,sha256:expect.stringMatching(/^[0-9a-f]{64}$/),source:{itemId,graphMessageId}});
   expect(await withSession(fixture,()=>readQuoteAction({quoteId:quote.quote.quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{sentEdition:1,sentChannel:'mail',stage:'versendet'}}});
   expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK',data:{replayed:true}});
   expect(deliveries).toHaveLength(1);

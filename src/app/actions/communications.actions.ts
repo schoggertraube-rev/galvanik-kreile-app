@@ -85,6 +85,11 @@ export async function sendCustomerMailAction(input: TargetInput & {
   if(pdf.document.edition===null)return {code:'VALIDATION_ERROR' as const,message:'KV-Fassung fehlt. Es wurde nichts gesendet.'};
   attachment={filename:pdf.quoteNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.pdf)};
   document={kind:'QUOTE',id:pdf.document.id,number:pdf.quoteNumber,version:pdf.document.version,edition:pdf.document.edition,sha256:createHash('sha256').update(attachment.bytes).digest('hex')};
+  if(pdf.document.sourceMessageId){
+   const source=await readIntakeMailImportReceipt(auth,{itemId:pdf.document.sourceMessageId});
+   if(source.code!=='OK')return {...source,message:'KV-Ursprungsnachricht konnte nicht sicher gelesen werden. Es wurde nichts gesendet. '+source.message};
+   document.source={itemId:source.itemId,graphMessageId:source.message.id};
+  }
  }
  const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,document,beforePrepare:document?tx=>lockQuoteDeliverySnapshot(tx,auth.tenantId,document!):undefined});
  return sent.code==='OK'&&document?confirmQuoteDelivery(input,document,sent):sent;

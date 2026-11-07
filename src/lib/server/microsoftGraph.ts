@@ -227,7 +227,7 @@ export async function readMicrosoftGraphMessage(
 }
 
 export async function sendMicrosoftGraphMail(
-  input: { to: string; subject: string; body: string; attachment?: GraphMailAttachment },
+  input: { to: string; subject: string; body: string; attachment?: GraphMailAttachment; replyToMessageId?: string },
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
 ): Promise<GraphResult<{ accepted: true }>> {
@@ -241,7 +241,10 @@ export async function sendMicrosoftGraphMail(
       contentType: input.attachment.contentType,
       contentBytes: Buffer.from(input.attachment.bytes).toString("base64"),
     }] : undefined;
-    const response = await fetchPort(`${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/sendMail`, {
+    const endpoint = input.replyToMessageId
+      ? `${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/messages/${encodeURIComponent(input.replyToMessageId)}/reply`
+      : `${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/sendMail`;
+    const response = await fetchPort(endpoint, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({
@@ -251,7 +254,7 @@ export async function sendMicrosoftGraphMail(
           toRecipients: [{ emailAddress: { address: input.to } }],
           ...(attachments ? { attachments } : {}),
         },
-        saveToSentItems: true,
+        ...(!input.replyToMessageId ? { saveToSentItems: true } : {}),
       }),
       cache: "no-store",
     });
