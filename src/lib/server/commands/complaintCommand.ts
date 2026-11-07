@@ -21,6 +21,17 @@ export async function readComplaintOrderSource(auth:AuthorizationSnapshot,orderI
     return {...order,items:[...items]};
   });
 }
+/** Picker uses the persisted delivery event, never a later order edit date. */
+export async function readComplaintOrderChoices(auth:AuthorizationSnapshot,customerId:string){
+ if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const,message:'Reklamation aufnehmen benötigt Aufträge.'};
+ if(typeof customerId!=='string'||!customerId||customerId.length>128)return {code:'VALIDATION_ERROR' as const,message:'Kundenbezug ist ungültig.'};
+ try{
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;number:string;title:string}>(sql`SELECT orders.id,orders.order_number AS number,orders.title FROM public.orders orders
+   JOIN LATERAL (SELECT max(event.created_at) AS delivered FROM public.events event WHERE event.tenant_id=orders.tenant_id AND event.order_id=orders.id AND (event.event_type LIKE 'ORDER_PICKED_UP_%' OR event.event_type LIKE 'ORDER_SHIPPED_%')) delivery ON delivery.delivered>=statement_timestamp()-interval '24 months'
+   WHERE orders.tenant_id=${auth.tenantId} AND orders.customer_id=${customerId} AND orders.station IN ('abgeholt','versendet') ORDER BY delivery.delivered DESC,orders.id`));
+  return {code:'OK' as const,orders:[...rows]};
+ }catch(error){console.error('[COMPLAINT_ORDER_CHOICES_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Gelieferte Aufträge konnten nicht geladen werden.'};}
+}
 class Rejected extends Error { constructor(readonly result:Failure) { super(result.message); } }
 function reject(code:Failure['code'],message:string):never { throw new Rejected({code,message}); }
 function canonical(value:unknown):string {

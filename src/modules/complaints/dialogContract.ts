@@ -14,6 +14,7 @@ export type ComplaintDialogData = {
 };
 export type ComplaintPorts = {
   areas:readonly AccessArea[];
+  listDeliveredOrders?:(customerId:string)=>Promise<{code:'OK';orders:Array<{id:string;number:string;title:string}>}|{code:string;message:string}>;
   read:(request:ComplaintRequest)=>Promise<{code:'OK';data:ComplaintDialogData}|{code:string;message:string}>;
   write:(input:ComplaintCommand)=>Promise<ComplaintWriteResult>;
   rework:(input:{reklamationId:string;version:number;bewertung:'berechtigt'|'kulanz';massnahme:'nacharbeit';liefertermin:string})=>Promise<{code:'OK';receipt:{orderId:string}}|{code:string;message:string}>;

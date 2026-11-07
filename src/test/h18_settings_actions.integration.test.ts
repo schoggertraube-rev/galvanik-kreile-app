@@ -915,7 +915,7 @@ it('4c persists editable email_templates through the real settings action, event
  const result=await withSession(fixture,()=>saveEmailTemplateAction(input));
  expect(result).toMatchObject({code:'OK',template:{id,subject:input.subject,body:input.body},replayed:false});
  const [row]=await sql`SELECT template.subject_template,template.body_text_template,template.body_html_template,event.payload,event.user_id::text FROM public.email_templates template JOIN public.events event ON event.tenant_id=template.tenant_id AND event.client_event_id=${input.clientKey}::uuid WHERE template.tenant_id=${KREILE_TENANT_SLUG} AND template.id=${id}::uuid`;
- expect(row).toMatchObject({subject_template:input.subject,body_text_template:input.body,user_id:fixture.actorId,payload:{templateId:id,after:{body:input.body}}});
+ expect(row).toMatchObject({subject_template:input.subject,body_text_template:input.body,user_id:fixture.actorId,payload:{templateId:id,before:{subject:'TEST alt'},after:{body:input.body}}});
  expect(row.body_html_template).toContain('&lt;sicher&gt;');
  expect(await withSession(fixture,()=>saveEmailTemplateAction(input))).toMatchObject({code:'OK',replayed:true});
  expect(await withSession(fixture,()=>saveEmailTemplateAction({...input,body:'TEST anderer Inhalt'}))).toMatchObject({code:'CONFLICT'});
