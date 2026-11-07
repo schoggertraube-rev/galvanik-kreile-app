@@ -145,18 +145,6 @@
     "paket": "AP-EIN-4c-Rest",
     "grund": "Endversion-Angleich L03 Neue Reklamation am Nacharbeitsauftrag: PL 17:50/22:05 verlangt einen neuen Vorgang statt Ueberschreiben des alten; generierter Fall erwartet weiter genau eine Reklamation."
   },
-  "L04": {
-    "paket": "AP-EIN-4c-Rest",
-    "grund": "Generierte Alt-Fixture reklamation_aufgenommen ohne version (DB nullable, kein Default); Feldfehler/Fokus korrigiert, danach ist kein gueltiger Sperrzaehler vorhanden. Kein erfundener Ersatzwert. Echter Schreibweg mit Version per Replay und Komponentenfall gruen."
-  },
-  "L06": {
-    "paket": "AP-EIN-4c-Rest",
-    "grund": "Generierte Alt-Fixture reklamation_aufgenommen ohne version; Notizfehler jetzt am Feld, Abschliessen ohne echten Sperrzaehler wird ehrlich blockiert. Keine Produktlockerung fuer Testdaten."
-  },
-  "L08": {
-    "paket": "AP-EIN-4c-Rest",
-    "grund": "Generierte Alt-Fixture reklamation_gutschrift ohne version. Echte Aufnahme→Entscheidung→Gutschrift-Action→DB/Event/Ansicht und Gutschrift-Komponentenweg gruen; kein Ersatz-Sperrzaehler fuer alte Musterdaten."
-  },
   "L09": {
     "paket": "AP-EIN-4c-Rest",
     "grund": "Einmaliger Browserlauf fand spaeten Schliess-Callback beim unmittelbaren Wieder-Oeffnen. Danach eng auf aktuelle Dialogkennung begrenzt; eigener echter Komponentenfall mit laufender Animation gruen. Voller generierter Browserfall wird nicht lokal wiederholt; CI bestaetigt."
@@ -264,5 +252,9 @@
   "U241-03": {
     "paket": "AP-EIN",
     "grund": "Folge-PR Teil 2b rein"
+  },
+  "L06": {
+    "paket": "AP-EIN-4c-Rest",
+    "grund": "Nach explizitem Sperrzaehler der synthetischen Fixture ist die Version repariert; neuer gezielter Browserbefund: erwartete Kennung reklamation.zurueckgezogen fehlt (waitFor attached). Keine zweite Produktkorrekturrunde oder abgeschwaechte Assertion; echte Zurueckziehen-Action gesondert belegt."
   }
 }
