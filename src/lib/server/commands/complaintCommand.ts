@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from '@/lib/server/authorization';
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 import { validComplaintCommand, type ComplaintCommand, type ComplaintWriteResult } from '@/modules/complaints/public';
+import {readSecuredOrderPhotoIds} from '@/lib/server/domainAttachment';
 import type { ComplaintState } from '@/modules/complaints/public';
 
 type Failure = Exclude<ComplaintWriteResult, {code:'OK'}>;
@@ -79,8 +80,9 @@ export async function executeComplaint(input:unknown,sourceEffect:ComplaintSourc
         const items=await tx.execute<{id:string;quantity:number}>(sql`SELECT id,quantity FROM public.items WHERE tenant_id=${auth.tenantId} AND order_id=${input.orderId} AND customer_id=${order.customer_id}`);
         for(const part of input.parts){const item=items.find(row=>row.id===part.position_id);if(!item||part.menge>Number(item.quantity))reject('VALIDATION_ERROR','Menge betroffen muss zwischen 1 und geliefert liegen.');}
         if(input.photoIds.length){
-          const photos=await tx.execute<{id:string}>(sql`SELECT id::text AS id FROM public.scan_uploads WHERE tenant_id=${auth.tenantId} AND id IN (${sql.join(input.photoIds.map(id=>sql`${id}`),sql`, `)}) AND linked_order_id=${order.id} AND status='secured' AND file_type LIKE 'image/%' UNION SELECT file.id::text AS id FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.tenantId} AND file.id::text IN (${sql.join(input.photoIds.map(id=>sql`${id}`),sql`, `)}) AND file.item_id=${input.intakeItemId}::uuid AND source.kunde_id=${order.customer_id} AND file.mime LIKE 'image/%' AND EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text)`);
-          if(photos.length!==new Set(input.photoIds).size)reject('VALIDATION_ERROR','Ein Originalfoto ist nicht verfügbar.');
+          const orderPhotoIds=await readSecuredOrderPhotoIds(tx,auth,order.id,input.photoIds);
+          const photos=await tx.execute<{id:string}>(sql`SELECT file.id::text AS id FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.tenantId} AND file.id::text IN (${sql.join(input.photoIds.map(id=>sql`${id}`),sql`, `)}) AND file.item_id=${input.intakeItemId}::uuid AND source.kunde_id=${order.customer_id} AND file.mime LIKE 'image/%' AND EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text)`);
+          if(new Set([...orderPhotoIds,...photos.map(photo=>photo.id)]).size!==new Set(input.photoIds).size)reject('VALIDATION_ERROR','Ein Originalfoto ist nicht verfügbar.');
         }
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('complaint-number:'||${auth.tenantId},0))`);
         const [counter]=await tx.execute<{number:string}>(sql`SELECT 'RK-'||to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY')||'-'||lpad((coalesce(max(substring(nummer FROM '[0-9]+$')::integer),0)+1)::text,4,'0') AS number FROM public.complaints WHERE tenant_id=${auth.tenantId} AND nummer LIKE 'RK-'||to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY')||'-%'`);

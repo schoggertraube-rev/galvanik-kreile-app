@@ -3,7 +3,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -257,4 +257,11 @@ export async function importDomainAttachmentBytes(authorization: AuthorizationSn
     return { code: "UNAVAILABLE", message: "Mailanhang konnte nicht privat gespeichert werden." };
   }
   return finalizeDomainAttachment(authorization, { attachmentId: reserved.data.receipt.attachmentId, fileBytes: input.bytes.byteLength, contentSha256: digest });
+}
+
+/** Secured photo ownership stays with the attachment owner, in the caller transaction. */
+export async function readSecuredOrderPhotoIds(tx:PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,orderId:string,ids:readonly string[]):Promise<string[]> {
+  if(!ids.length)return [];
+  const rows=await tx.execute<{id:string}>(sql`SELECT id::text AS id FROM public.scan_uploads WHERE tenant_id=${authorization.tenantId} AND id IN (${sql.join(ids.map(id=>sql`${id}`),sql`, `)}) AND linked_order_id=${orderId} AND status='secured' AND file_type LIKE 'image/%'`);
+  return rows.map(row=>row.id);
 }

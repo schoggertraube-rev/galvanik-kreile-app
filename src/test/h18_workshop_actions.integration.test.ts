@@ -794,6 +794,10 @@ it('4c writes recording, credit, closure, reopening and withdrawal through real 
   expect(await withSession(fixture,()=>getComplaintOrderChoicesAction(fixture.customerId))).toMatchObject({code:'OK',orders:expect.arrayContaining([expect.objectContaining({id:order.orderId})])});
   const input:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST 4c lokale Replay-DB',photoIds:[],goodsReturn:'offen'};
   const {reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
+  const missingPhotoKey=randomUUID();
+  expect(await withSession(fixture,()=>reklamationAusfuehrenAction({...input,clientKey:missingPhotoKey,photoIds:[randomUUID()]}))).toMatchObject({code:'VALIDATION_ERROR'});
+  const [missingPhotoRow]=await sql`SELECT count(*)::integer AS n FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${missingPhotoKey}::uuid`;
+  expect(missingPhotoRow.n).toBe(0);
   const received=await complaintWrite(fixture,input);
   const repeated=await withSession(fixture,()=>reklamationAusfuehrenAction(input));
   expect(repeated).toMatchObject({code:'OK',replayed:true,receipt:received});
