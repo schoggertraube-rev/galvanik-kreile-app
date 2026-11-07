@@ -52,11 +52,11 @@ describe("recognizeIntakeText", () => {
     ]);
   });
 
-  it("gibt auch Positionen nach der zwanzigsten an die Erfassung zurück", () => {
-    const text = Array.from({ length: 23 }, (_, index) => `1 Stück Prüfkörper ${index + 1} verzinken`).join("\n");
+  it("meldet mehr als zwanzig erkannte Positionen ohne eine falsche Anzahl", () => {
+    const text = Array.from({ length: 23 }, (_, index) => `1 Stück Prüfkörper ${index + 1} verzinken`).join("\n") + "\nMitteilung ohne Position";
     const result = recognizeIntakeText(text);
-    expect(result.positions).toHaveLength(23);
-    expect(result.positions[22]).toMatchObject({ name: "Prüfkörper 23", quantity: "1" });
+    expect(result.positions).toHaveLength(20);
+    expect(result.totalPositions).toBe(23);
   });
 
   it("erkennt den Wunsch-Wochentag statt des Maildatums", () => {

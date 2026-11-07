@@ -1499,35 +1499,16 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})[1]).toHaveFocus());
   });
 
-  it("sichert erkannte Positionen über 20 als eigenen Entwurf und behält sie bei einem Fehler",async()=>{
-    const positions=Array.from({length:23},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
-    const saveDraft=vi.fn().mockResolvedValueOnce({code:'UNAVAILABLE',message:'Speicher nicht erreichbar.'}).mockResolvedValueOnce({code:'OK',drafts:[]})
-      .mockImplementationOnce(async input=>({code:'OK',drafts:[{id:input.id,art:'eingang',payload:{...input.payload,source:'abweichend'}}]}))
-      .mockImplementationOnce(async input=>({code:'OK',drafts:[{id:input.id,art:'eingang',payload:Object.fromEntries(Object.entries(input.payload).reverse())}]}));
-    const drafts={saveDraft,readDrafts:vi.fn().mockResolvedValue({code:'OK',drafts:[]}),discardDraft:vi.fn()};
-    const api=ports({drafts,recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions}})});
+  it("weist auf nicht übernommene Positionen hin und verhindert eine unvollständige Buchung",async()=>{
+    const positions=Array.from({length:20},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
+    const api=ports({recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions,totalPositions:23}})});
     render(<GlobalCreateFlow ports={api}/>);openFlow();
     fireEvent.change(await screen.findByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'SYNTHETISCH 23 Positionen'}});
     fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
-    const save=await screen.findByRole('button',{name:'Rest als zweiten Beleg anlegen'});
-    expect(screen.getByText(/23 Positionen erkannt · 20 übernommen · 3 noch offen/)).toBeInTheDocument();
-    fireEvent.click(save);
-    await waitFor(()=>expect(saveDraft).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText(/Weiterer Beleg nicht gespeichert/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button',{name:'Rest als zweiten Beleg anlegen'}));
-    await waitFor(()=>expect(saveDraft).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText(/Weiterer Beleg nicht bestätigt/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button',{name:'Rest als zweiten Beleg anlegen'}));
-    await waitFor(()=>expect(saveDraft).toHaveBeenCalledTimes(3));
-    expect(await screen.findByText(/Weiterer Beleg nicht bestätigt/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button',{name:'Rest als zweiten Beleg anlegen'}));
-    await waitFor(()=>expect(saveDraft).toHaveBeenCalledTimes(4));
-    expect(saveDraft.mock.calls[1][0]).toEqual(saveDraft.mock.calls[0][0]);
-    expect(saveDraft.mock.calls[2][0]).toEqual(saveDraft.mock.calls[0][0]);
-    expect(saveDraft.mock.calls[3][0]).toEqual(saveDraft.mock.calls[0][0]);
-    expect(saveDraft.mock.calls[0][0].payload.items).toHaveLength(3);
-    expect(saveDraft.mock.calls[0][0].payload.items[0].name).toBe('SYNTHETISCH Teil 21');
-    expect(await screen.findByText(/Weiterer Beleg als Entwurf gespeichert/)).toBeInTheDocument();
+    expect(await screen.findByText(/3 weitere Positionen nicht übernommen/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Wareneingang buchen'}));
+    expect(await screen.findByText(/Nicht alle Positionen sind übernommen/)).toBeInTheDocument();
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
   });
 
   it("E22 visibly adjusts a selected pickup payment to advance payment when handover changes to shipping",async()=>{
