@@ -472,7 +472,7 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
         throw new Error("QUOTE_UPDATE_RESULT_INVALID");
       }
       if(!outcome.replayed&&normalized.calculation)await writeCalculationSnapshot(tx,authorization,normalized.quoteId,normalized.clientEventId,normalized.calculation,calculationBefore);
-      if(!outcome.replayed&&(Object.hasOwn(normalized,'termStatus')||before&&before.dueDate!==normalized.dueDate))await tx.execute(sql`UPDATE private.quotes SET intake_term_status=${normalized.termStatus??null} WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid`);
+      if(!outcome.replayed&&Object.hasOwn(normalized,'termStatus'))await tx.execute(sql`UPDATE private.quotes SET intake_term_status=${normalized.termStatus??null} WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid`);
       let quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if(!outcome.replayed&&before?.lifecycle&&quote?.lifecycle&&quote.lifecycle.edition===before.lifecycle.edition&&quoteContent(before)!==quoteContent(quote)&&await quoteHasPreparedDocument(tx,authorization.tenantId,normalized.quoteId,before.lifecycle.edition)){
         await tx.execute(sql`UPDATE private.quotes SET fassung=fassung+1 WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid`);
