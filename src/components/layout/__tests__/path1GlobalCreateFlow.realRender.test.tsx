@@ -1520,6 +1520,40 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.queryByDisplayValue('SYNTHETISCH anderes Teil')).not.toBeInTheDocument();
   });
 
+  it('keeps a manually edited position after saving, reopening and recognizing the draft again',async()=>{
+    const line=(name:string,quantity:string,source:string)=>({name,quantity,source,unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const});
+    const recognizeIntakeText=vi.fn().mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH A','1','Text Abschnitt 1'),line('SYNTHETISCH B','2','Text Abschnitt 2')]}})
+      .mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH A','3','Text Abschnitt 1'),line('SYNTHETISCH B','4','Text Abschnitt 2')]}});
+    const saved=new Map<string,{id:string;art:'eingang';payload:Record<string,unknown>;zuletzt_feld:null;version:number;updated_at:string}>();
+    const drafts={readDrafts:vi.fn(async()=>({code:'OK' as const,drafts:[...saved.values()]})),
+      saveDraft:vi.fn(async(value:Parameters<IntakeDraftPorts['saveDraft']>[0])=>{
+        const row={id:value.id,art:'eingang' as const,payload:value.payload,zuletzt_feld:null,version:0,updated_at:'2026-11-07T06:00:00Z'};
+        saved.set(row.id,row);return {code:'OK' as const,drafts:[row]};
+      }),discardDraft:vi.fn()};
+    let capture:IntakeCapture|null=null;
+    const saveCaptureNote:NonNullable<GlobalCreatePorts['saveCaptureNote']>=async value=>{
+      capture={id:value.itemId,version:1,text:value.text,customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],files:[]};
+      return {code:'OK',capture};
+    };
+    const getCapture:NonNullable<GlobalCreatePorts['getCapture']>=async id=>capture?.id===id?{code:'OK',capture}:{code:'NOT_FOUND',message:'Eingang fehlt'};
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText,drafts,saveCaptureNote,getCapture})}/>);openFlow();
+    const text=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH Ausgangstext'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(2));
+    fireEvent.change(screen.getAllByRole('spinbutton',{name:'Menge'})[0],{target:{value:'9'}});
+    fireEvent.click(screen.getByRole('button',{name:'Abbrechen'}));
+    fireEvent.click(within(await screen.findByRole('dialog',{name:'Änderungen nicht gespeichert'})).getByRole('button',{name:'Als Entwurf ablegen'}));
+    await waitFor(()=>expect(saved.size).toBe(1));
+    const id=[...saved.keys()][0]!;
+    await act(async()=>{window.dispatchEvent(new CustomEvent('path1:global-create-open',{detail:{intent:'DIRECT_INTAKE',draftId:id}}));});
+    const restored=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    expect(restored).toHaveValue('SYNTHETISCH Ausgangstext');
+    fireEvent.change(restored,{target:{value:'SYNTHETISCH geänderter Text'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})[1]).toHaveValue(4));
+    expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(2);
+    expect(screen.getAllByRole('spinbutton',{name:'Menge'})[0]).toHaveValue(9);
+  });
+
   it("E40 shows a non-blocking photo warning only when goods are present", () => {
     render(<GlobalCreateFlow ports={ports()} />);
     openFlow();
