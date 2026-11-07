@@ -10,6 +10,14 @@ vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({status:'authe
 vi.mock('../GlobalCreateFlow',()=>({requestGlobalCreate:vi.fn()}));
 afterEach(()=>{cleanup();state.path='/';vi.clearAllMocks();});
 describe('Mehr menu route completion',()=>{
+ it('lets the browser commit the messages document without cancelling its initiating link',()=>{
+  const close=vi.fn();const view=render(<MoreMenu open onClose={close}/>);
+  const link=screen.getByRole('link',{name:'Nachrichten'});
+  expect(link).toHaveAttribute('href','/nachrichten');
+  expect(fireEvent.click(link)).toBe(true);expect(close).not.toHaveBeenCalled();
+  state.path='/nachrichten';view.rerender(<MoreMenu open onClose={close}/>);
+  expect(close).toHaveBeenCalledTimes(1);
+ });
  it('keeps a settings navigation mounted until the pathname confirms the destination',()=>{
   const close=vi.fn();const view=render(<MoreMenu open onClose={close}/>);
   const link=screen.getByRole('link',{name:'Einstellungen'});

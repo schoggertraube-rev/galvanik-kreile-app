@@ -18,8 +18,8 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
   const settingsVisible = hasPermission("perm_sys_toggles") || hasPermission("perm_sys_users") || hasPermission("perm_sys_diag");
   const supportedProfile = status === "authenticated";
 
-  // Keep the initiating link mounted until navigation commits. Settings uses a
-  // native document navigation, consistent with the desktop settings entry.
+  // Keep links mounted until navigation commits. Messages/settings use native
+  // document navigation because WebKit can receive Flight without committing it.
   useEffect(()=>{
     if(!open){openedAtPath.current=pathname;return;}
     if(pathname!==openedAtPath.current)onClose();
@@ -46,9 +46,9 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
           <button type="button" className={styles.moreClose} onClick={onClose} aria-label="Schließen"><X aria-hidden="true" /></button>
         </header>
         <div className={styles.moreGrid}>
-          {hasArea("mails") ? <Link className={styles.moreTile} data-spec-id="navigation.nachrichten" href="/nachrichten" prefetch={false} onNavigate={()=>closeIfCurrentRoute('/nachrichten')}>
+          {hasArea("mails") ? <a className={styles.moreTile} data-spec-id="navigation.nachrichten" href="/nachrichten" onClick={event=>{if(pathname==='/nachrichten'){event.preventDefault();onClose();}}}>
             <Mail aria-hidden="true" /><strong>Nachrichten</strong>
-          </Link> : null}
+          </a> : null}
           {hasPermission("perm_data_orders") ? <button type="button" className={styles.moreTile} onClick={() => { onClose(); requestGlobalCreate("DIRECT_INTAKE"); }}>
             <Inbox aria-hidden="true" /><strong>Neu erfassen</strong>
           </button> : null}
