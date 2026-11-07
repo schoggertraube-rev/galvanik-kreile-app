@@ -231,17 +231,25 @@
     "paket": "AP-ABS-b",
     "grund": "Folge-PR AP-ABS-b Sammelrechnung"
   },
+  "RT04-11": {
+    "paket": "AP-EIN",
+    "grund": "Endversion-Angleich Testmodell RT04"
+  },
   "RT04-12": {
     "paket": "AP-EIN",
-    "grund": "R53-Angleich"
+    "grund": "Endversion-Angleich Testmodell RT04"
   },
   "RT04-13": {
     "paket": "AP-EIN",
     "grund": "R53-Angleich"
   },
+  "RT04-14": {
+    "paket": "AP-EIN",
+    "grund": "Endversion-Angleich Testmodell RT04"
+  },
   "RT04-15": {
     "paket": "AP-EIN",
-    "grund": "R53-Angleich"
+    "grund": "Endversion-Angleich Testmodell RT04"
   },
   "U241-01": {
     "paket": "AP-EIN",
