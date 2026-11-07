@@ -4,7 +4,7 @@ import { Icon, type IconName } from './Icon';
 import { Button } from './Button';
 import { cx } from './typen';
 import { useKrGeraet } from './AppShell';
-export type DialogMeldung = { text: string; ton: 'fehler' | 'erfolg' };
+export type DialogMeldung = { text: string; ton: 'fehler' | 'erfolg'; specId?:string };
 export interface DialogProps { titel: string; unterzeile?: ReactNode; icon?: IconName; groesse?: 'normal' | 'breit' | 'schmal' | 'karte' | 'werkbank'; onSchliessen: () => void; vorSchliessen?: () => boolean; onZurueck?: () => void; schliessenSpecId?: string; fuss?: ReactNode; meldung?: DialogMeldung | null; children: ReactNode; }
 export function isTopDialog(element: HTMLElement | null) {
   const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].filter(dialog => !dialog.closest('[hidden], [aria-hidden="true"]') && getComputedStyle(dialog).display !== 'none');
@@ -33,7 +33,7 @@ export function Dialog({ titel, unterzeile, icon = 'file', groesse = 'normal', o
   );
 }
 export function DialogAktionsmeldung({ meldung }: { meldung: DialogMeldung }) {
-  return <div role="status" aria-live="polite"><Hinweis ton={meldung.ton === 'erfolg' ? 'ok' : 'warn'} icon={meldung.ton === 'erfolg' ? 'check' : 'alert'}>{meldung.text}</Hinweis></div>;
+  return <div data-spec-id={meldung.specId} role="status" aria-live="polite"><Hinweis ton={meldung.ton === 'erfolg' ? 'ok' : 'warn'} icon={meldung.ton === 'erfolg' ? 'check' : 'alert'}>{meldung.text}</Hinweis></div>;
 }
 export function Schritte({ aktuell, gesamt }: { aktuell: number; gesamt: number }) {
   return <div className="kr-schritte" aria-label={'Schritt ' + (aktuell + 1) + ' von ' + gesamt}>{Array.from({ length: gesamt }, (_, n) => <span key={n} className={n <= aktuell ? 'an' : undefined} />)}</div>;
