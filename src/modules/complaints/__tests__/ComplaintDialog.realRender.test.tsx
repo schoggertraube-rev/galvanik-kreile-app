@@ -2,6 +2,7 @@ import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {cleanup} from '@testing-library/react';
 import {ComplaintDialog} from '../ui/ComplaintDialog';
+import {ComplaintDialogs} from '../ui/ComplaintDialogs';
 import type {ComplaintDialogData,ComplaintPorts} from '../dialogContract';
 
 const base:ComplaintDialogData={complaint:null,source:{id:'test-order',number:'A-TEST-4C',customerName:'TEST Kunde',items:[{id:'test-part',name:'TEST Gehäuse',quantity:3,unit:'Stück'}]},initial:{description:'',defect:'',photoIds:[],intakeItemId:null,intakeVersion:null},suggestedDate:'2027-05-18',rework:null};
@@ -83,4 +84,21 @@ it('reopened completed rework preserves the historical link and starts a new com
   expect((opened.mock.calls[0][0] as CustomEvent).detail).toEqual({ziel:'reklamation',arg:'test-rework#aufnehmen'});
   expect(ports.write).not.toHaveBeenCalled();expect(ports.rework).not.toHaveBeenCalled();
  }finally{window.removeEventListener('kreile:oeffne',opened);}
+});
+
+it('customer entry reuses the delivered-order picker, retries a read failure and opens only the selected source',async()=>{
+ const list=vi.fn<NonNullable<ComplaintPorts['listDeliveredOrders']>>().mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST Lesen unterbrochen'}).mockResolvedValueOnce({code:'OK',orders:[{id:'test-order',number:'A-TEST-4C',title:'TEST Gehäuse'}]});
+ const ports:ComplaintPorts={areas:['auftraege','kunden'],listDeliveredOrders:list,read:vi.fn<ComplaintPorts['read']>(async()=>({code:'OK',data:base})),write:vi.fn(),rework:vi.fn(),openOrder:vi.fn(),openPhoto:vi.fn(),addPhoto:vi.fn(),sendResult:vi.fn()};
+ render(<ComplaintDialogs ports={ports} onRefresh={vi.fn()}/>);
+ window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'reklamation',arg:'test-customer#kundenwahl'},cancelable:true}));
+ expect(await screen.findByText('TEST Lesen unterbrochen')).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Erneut'}));
+ const choice=await screen.findByRole('button',{name:/A-TEST-4C.*TEST Gehäuse/});
+ expect(ports.write).not.toHaveBeenCalled();
+ fireEvent.click(choice);
+ expect(await screen.findByRole('button',{name:'Reklamation aufnehmen'})).toBeInTheDocument();
+ expect(ports.read).toHaveBeenCalledWith({orderId:'test-order'});
+ expect(list).toHaveBeenNthCalledWith(1,'test-customer');expect(list).toHaveBeenNthCalledWith(2,'test-customer');
+ expect(screen.queryByRole('dialog',{name:'Vorgang wählen'})).not.toBeInTheDocument();
+ expect(ports.write).not.toHaveBeenCalled();
 });

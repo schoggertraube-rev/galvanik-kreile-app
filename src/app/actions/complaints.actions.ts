@@ -1,6 +1,6 @@
 "use server";
 import {unstable_noStore as noStore} from "next/cache";
-import {readComplaints,executeComplaint,readComplaintOrderSource} from "@/modules/complaints/server-public";
+import {readComplaints,executeComplaint,readComplaintOrderSource,readComplaintOrderChoices} from "@/modules/complaints/server-public";
 import {recordIntakeComplaintEffect} from "@/modules/eingang/server-public";
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {sendCommunicationMail} from '@/lib/server/communicationPort';
@@ -13,6 +13,10 @@ import type {ComplaintFilter} from "@/modules/complaints/public";
 
 export async function getComplaints(filter?:ComplaintFilter){noStore();return readComplaints(filter);}
 export async function getByOrder(orderId:string){noStore();return readComplaints({orderId});}
+export async function getComplaintOrderChoicesAction(customerId:string){
+ noStore();const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung fehlt.'};
+ return readComplaintOrderChoices(auth.data,customerId);
+}
 export async function nacharbeitAnlegenAction(input: Parameters<typeof nacharbeitAnlegen>[0]) {
  return nacharbeitAnlegen(input);
 }

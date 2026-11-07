@@ -943,6 +943,7 @@ export function OrderCardAppAdapter({
       onCallCustomer: () => { if (card?.customerPhone) window.location.href = `tel:${card.customerPhone}`; },
       onOpenPhoto: () => document.getElementById(`order-documents-${orderId}`)?.querySelector<HTMLInputElement>('input[type="file"]')?.click(),
       onOpenDocument: () => document.getElementById(`order-documents-${orderId}`)?.querySelector<HTMLInputElement>('input[type="file"]')?.click(),
+      onRecordComplaint:card?.station==='abgeholt'&&hasArea('auftraege')?()=>{window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'reklamation',arg:card.id+'#aufnehmen'}}));}:undefined,
       onOpenQuote: () => { if (card) requestGlobalCreate({ intent: "QUOTE", prefill: { customerQuery: card.customerName } }); },
       onDuplicate,
       onChangeDueDate,
@@ -979,7 +980,7 @@ export function OrderCardAppAdapter({
     onClose ?? (fallbackHref ? () => router.replace(fallbackHref) : storeClose);
   return <>
     <OrderCardView
-      complaintsPanel={state.kind==='data'?<ComplaintPanel filter={{orderId:state.card.id}} read={getComplaints} orderId={state.card.id} mayRecord={hasArea('auftraege')} delivered={state.card.station==='abgeholt'}/>:null}
+      complaintsPanel={state.kind==='data'?<ComplaintPanel filter={{orderId:state.card.id}} read={getComplaints}/>:null}
       state={state}
       actions={actions}
       attachmentPanel={

@@ -22,7 +22,8 @@
     "@/modules/complaints/public#ComplaintDialogData",
     "@/modules/complaints/public#ComplaintRequest",
     "@/modules/complaints/public#complaintAttention",
-    "@/modules/complaints/server-public#readComplaintOrderSource"
+    "@/modules/complaints/server-public#readComplaintOrderSource",
+    "@/modules/complaints/server-public#readComplaintOrderChoices"
   ],
   "capabilities": [
     "reklamation:lesen",

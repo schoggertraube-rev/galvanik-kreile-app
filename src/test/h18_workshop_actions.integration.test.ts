@@ -790,6 +790,8 @@ async function complaintWrite(fixture:Fixture,input:import('@/modules/complaints
 
 it('4c writes recording, credit, closure, reopening and withdrawal through real UI actions with DB/event/view readback',async()=>{
   const fixture=await createFixture(),order=await deliveredComplaintSource(fixture);
+  const {getComplaintOrderChoicesAction}=await import('@/app/actions/complaints.actions');
+  expect(await withSession(fixture,()=>getComplaintOrderChoicesAction(fixture.customerId))).toMatchObject({code:'OK',orders:expect.arrayContaining([expect.objectContaining({id:order.orderId})])});
   const input:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST 4c lokale Replay-DB',photoIds:[],goodsReturn:'offen'};
   const {reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
   const received=await complaintWrite(fixture,input);
