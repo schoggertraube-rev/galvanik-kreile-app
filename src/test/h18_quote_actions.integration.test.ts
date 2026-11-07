@@ -1,5 +1,7 @@
 // @vitest-environment node
 
+import {seedAcceptedQuoteGoodsForTest} from './helpers/acceptedQuoteGoodsFixture';
+
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
@@ -222,9 +224,11 @@ describe("H18 quote Server Actions against the real replay database", () => {
       quote: { version: 2, dueDate: "2027-04-17", positions: [expect.objectContaining({ name: "H18 Flansch aktualisiert", quantity: 4 })] },
     });
 
+    const goodsReceiptId=await seedAcceptedQuoteGoodsForTest(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,quoteId:created.quote.quoteId});
     const converted = await withSession(fixture, () => convertQuoteToOrderAction({
       quoteId: created.quote.quoteId,
       clientEventId: convertClientEventId,
+      goodsReceiptId,
       expectedVersion: 2,
       confirmedAward: true,
       confirmedOrderDueDate: "2027-04-24",

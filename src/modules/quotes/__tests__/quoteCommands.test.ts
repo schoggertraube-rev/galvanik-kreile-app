@@ -50,6 +50,10 @@ const quoteRow = {
   integrity_ok: true,
 };
 
+const GOODS="99999999-9999-4999-8999-999999999999";
+const acceptedQuoteRow={...quoteRow,fassung:1,derived_status:'zugesagt',gesendet_fassung:1,gesendet_am:'2026-09-14T10:00:00Z',gesendet_kanal:'druck',zugesagt_fassung:1,zugesagt_am:'2026-09-14T11:00:00Z',zusage_nachweis:'SYNTHETISCH aktuelle Fassung angenommen',abgesagt_am:null,absage_grund:null,nachfass_am:null,quelle_intake_item_id:null,quelle_nachricht_id:null,sonderwuensche:null,lieferzeit_wochen:null};
+const goodsRow={id:GOODS,orderId:null,edition:1,location:'SYNTHETISCH E1',blocked:false,version:1};
+
 describe("quotes command boundary", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -85,17 +89,18 @@ describe("quotes command boundary", () => {
 
   it("keeps stale version and intent conflicts fail-closed", async () => {
     execute
-      .mockResolvedValueOnce([quoteRow])
-      .mockResolvedValueOnce([{ result_code: "CONFLICT", order_input: null, replayed: false }]);
+      .mockResolvedValueOnce([{id:QUOTE}])
+      .mockResolvedValueOnce([acceptedQuoteRow])
+      .mockResolvedValueOnce([goodsRow]);
     const { prepareQuoteConversionCommand } = await import("../server/quoteCommands");
     await expect(prepareQuoteConversionCommand(authorization, {
       quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 2, confirmedAward: true, confirmedOrderDueDate: "2026-10-20",
-      handoverMode: "pickup", paymentMode: "rechnung",
+      handoverMode: "pickup", paymentMode: "rechnung",goodsReceiptId:GOODS,
     })).resolves.toMatchObject({ code: "CONFLICT" });
   });
 
   it("binds the conversion hash to the complete normalized order intake", async () => {
-    const orderInput = { geprueft: false,
+    const orderInput = { geprueft: true,
       clientEventId: CLIENT,
       customer: { mode: "EXISTING" as const, customerId: CUSTOMER },
       dueDate: "2026-10-20",
@@ -109,7 +114,7 @@ describe("quotes command boundary", () => {
       termStatus: "bestaetigt" as const,
       intakeSource: "anfrage_mail" as const,
     };
-    const expectedOrderIntent = { geprueft: false,
+    const expectedOrderIntent = { geprueft: true,
       clientEventId: orderInput.clientEventId,
       customer: orderInput.customer,
       dueDate: orderInput.dueDate,
@@ -132,8 +137,10 @@ describe("quotes command boundary", () => {
     };
     const expectedOrderHash = createHash("sha256").update(JSON.stringify(expectedOrderIntent), "utf8").digest("hex");
     execute
-      .mockResolvedValueOnce([quoteRow])
-      .mockResolvedValueOnce([{ result_code: "OK", order_input: { geprueft: false,
+      .mockResolvedValueOnce([{id:QUOTE}])
+      .mockResolvedValueOnce([acceptedQuoteRow])
+      .mockResolvedValueOnce([goodsRow])
+      .mockResolvedValueOnce([{ result_code: "OK", order_input: { geprueft: true,
         clientEventId: CLIENT,
         customer: { mode: "EXISTING", customerId: CUSTOMER },
         dueDate: input.dueDate,
@@ -143,9 +150,9 @@ describe("quotes command boundary", () => {
     const { prepareQuoteConversionCommand } = await import("../server/quoteCommands");
     await expect(prepareQuoteConversionCommand(authorization, {
       quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 1, confirmedAward: true,
-      confirmedOrderDueDate: "2026-10-20", handoverMode: "shipping", paymentMode: "vorkasse",
+      confirmedOrderDueDate: "2026-10-20", handoverMode: "shipping", paymentMode: "vorkasse",goodsReceiptId:GOODS,
     })).resolves.toMatchObject({ code: "OK", orderInput });
-    expect(execute.mock.calls[1]?.[0]?.values[5]).toBe(expectedOrderHash);
+    expect(execute.mock.calls.find(call=>call[0]?.text.includes("prepare_quote_conversion_v1"))?.[0]?.values[5]).toBe(expectedOrderHash);
   });
 
   it("does not turn corrupt tenant or integrity readback into success or not-found", async () => {
