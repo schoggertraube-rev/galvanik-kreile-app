@@ -728,3 +728,24 @@ describe("H18 workshop Server Actions against the real replay database", () => {
     expect(closedView).toMatchObject({ code: "OK", data: { card: { id: created.receipt.orderId, station: "abgeholt" } } });
   });
 });
+
+it("4c reader exposes the persisted complaint lifecycle through the existing action and customer timeline", async () => {
+  const fixture = await createFixture();
+  const order = await createOrder(fixture, "4C-READ", "vorkasse");
+  const complaint = await createReworkComplaint(fixture, order);
+  const { getByOrder } = await import("@/app/actions/complaints.actions");
+  const { getTimelineForCustomerDb } = await import("@/app/actions/timeline.actions");
+  const result = await withSession(fixture, () => getByOrder(order.orderId));
+  expect(result.code).toBe("OK");
+  if (result.code !== "OK") throw Error(result.message);
+  expect(result.complaints).toEqual([expect.objectContaining({
+    id: complaint.complaintId, customerId: fixture.customerId, orderId: order.orderId,
+    stand: "aufgenommen", version: 1, wareZurueck: "ja", nacharbeitAuftragId: null,
+  })]);
+  const [row] = await sql`SELECT nummer,stand,version FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${complaint.complaintId}`;
+  expect(result.complaints[0]).toMatchObject({ nummer: row.nummer, stand: row.stand, version: row.version });
+  const timeline = await withSession(fixture, () => getTimelineForCustomerDb(fixture.customerId));
+  expect(timeline.ok).toBe(true);
+  if (!timeline.ok) throw Error(timeline.message);
+  expect(timeline.data).toContainEqual(expect.objectContaining({ id: complaint.complaintId, type: "complaint", orderId: order.orderId }));
+});

@@ -2,7 +2,8 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import { db } from "@/db";
-import { events, orders, customers, complaints } from "@/db/schema";
+import { events, orders, customers } from "@/db/schema";
+import { readComplaints } from "@/modules/complaints/server-public";
 import { eq, desc } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { TimelineEntry } from "@/lib/repositories/timelineRepository";
@@ -181,16 +182,17 @@ export async function getTimelineForCustomerDb(customerId: string): Promise<Acti
     });
 
     // 2. Reklamationen
-    const dbComplaints = await db.select().from(complaints).where(eq(complaints.customerId, customerId));
-    dbComplaints.forEach(c => {
+    const complaintResult = await readComplaints({ customerId });
+    if (complaintResult.code !== "OK") return { ok: false, error: "DB_ERROR", message: complaintResult.message };
+    complaintResult.complaints.forEach(c => {
       entries.push({
         id: c.id,
         customerId: customerId,
         orderId: c.orderId,
         type: "complaint",
-        title: `Reklamation: ${c.reason}`,
+        title: `Reklamation ${c.nummer ?? c.reason}${c.stand ? ` · ${c.stand}` : ""}`,
         subtitle: c.description,
-        timestamp: c.createdAt.toISOString(),
+        timestamp: c.createdAt,
         severity: "critical"
       });
     });
