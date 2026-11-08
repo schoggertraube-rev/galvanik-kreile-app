@@ -96,7 +96,7 @@ test('fixed quote overlay: real read, one telephone acceptance, DB/event/readbac
 
 });
 
-for(const storedGoods of [false,true]) test('quote goods '+(storedGoods?'stored':'direct')+': actual photos and one atomic telephone conversion with server quantity price',async({page})=>{
+for(const storedGoods of [false,true,'operational'] as const) test('quote goods '+(storedGoods==='operational'?'operational':storedGoods?'stored':'direct')+': actual photos and one atomic telephone conversion with server quantity price',async({page})=>{
  await prepareGeneratedSeed({id:'KV-UI-GOODS',gegeben:{login:'login_meister',datenlagen:['kunde_vollstaendig_firma'],aufruf:{seite:'nachrichten',weg:'oeffne'}}} as FlowCase);
  await page.setViewportSize({width:1220,height:880});await page.goto('/start');
  const actor=generatedFlowRuntime.logins.login_meister;
@@ -157,7 +157,22 @@ for(const storedGoods of [false,true]) test('quote goods '+(storedGoods?'stored'
   const tiles=page.getByRole('region',{name:'KV-Ware',exact:true});await tiles.getByRole('button',{name:/Gesperrt ·/}).click();
   const tile=tiles.locator('section.kr-kachel').filter({hasText:'TEST Regal Telefon'}).filter({hasText:'Zusage fehlt'});
   await expect(tile).toHaveCount(1);await tile.getByRole('button',{name:'KV öffnen',exact:true}).click();
-  const storedCard=page.getByRole('dialog',{name:/KV-2026-/});await storedCard.getByRole('button',{name:/hat am Telefon zugesagt/}).click();
+  if(storedGoods==='operational'){
+   await page.context().clearCookies();await page.goto('/start');const worker=generatedFlowRuntime.logins.login_werkstatt;
+   await page.getByTestId('pin-user-card-'+createPinLoginHandle(worker.id)).click();
+   const workerKeys=page.locator('[data-spec-id="login.anmelden"]'),workerNavigation=page.waitForURL(url=>url.pathname!=='/start');
+   for(const digit of worker.pin)await workerKeys.getByRole('button',{name:digit,exact:true}).click();await workerNavigation;
+   await page.goto('/warendurchlauf');
+   const workerTiles=page.getByRole('region',{name:'KV-Ware',exact:true});await workerTiles.getByRole('button',{name:/Gesperrt ·/}).click();
+   await workerTiles.locator('section.kr-kachel').filter({hasText:'TEST Regal Telefon'}).filter({hasText:'Zusage fehlt'}).getByRole('button',{name:'KV öffnen',exact:true}).click();
+  }
+  const storedCard=page.getByRole('dialog',{name:/KV-2026-/});
+  if(storedGoods==='operational'){
+   await expect(storedCard.getByText('61,00 € netto',{exact:true})).toHaveCount(0);
+   await expect(storedCard.getByRole('button',{name:/Fassung 2 anlegen/})).toHaveCount(0);
+   await expect(storedCard.getByRole('button',{name:'KV per E-Mail senden',exact:true})).toHaveCount(0);
+  }
+  await storedCard.getByRole('button',{name:/hat am Telefon zugesagt/}).click();
   await expect(storedCard.getByText(/ist Auftrag A-2026-.* geworden/)).toBeVisible({timeout:20000});
   await storedCard.getByRole('button',{name:'Auftrag öffnen',exact:true}).click();
  }else{await receipt.getByRole('button',{name:/Auftrag aus KV-2026-.* anlegen/}).click();await expect(receipt).toHaveCount(0,{timeout:20000});}
@@ -172,7 +187,7 @@ for(const storedGoods of [false,true]) test('quote goods '+(storedGoods?'stored'
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id='galvanik-kreile' AND payload->>'quoteId'=${quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='accept'`)[0].n).toBe(1);
  await expect(page.getByRole('dialog',{name:/Auftragskarte A-2026-/})).toBeVisible({timeout:10000});
  const orderRead=await action(page,'getLiveOrderCardAction',{orderId:stored.linked_order_id},'src/app/actions/orders.actions.ts');
- expect(orderRead?.data.card.commercialQuote).toMatchObject({quoteId,totalNetCents:4875,positions:[{quantity:3,lineTotalCents:4875}]});
+ if(storedGoods==='operational'){expect(orderRead?.data.card.commercialQuote).toBeUndefined();expect((await sql`SELECT user_id::text FROM public.events WHERE tenant_id='galvanik-kreile' AND payload->>'quoteId'=${quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='accept'`)[0].user_id).toBe(generatedFlowRuntime.logins.login_werkstatt.id);}else expect(orderRead?.data.card.commercialQuote).toMatchObject({quoteId,totalNetCents:4875,positions:[{quantity:3,lineTotalCents:4875}]});
  await expect(page.getByText('TEST-Etikett.png',{exact:true})).toBeVisible();
  await expect(page.getByText('TEST-Inhalt.png',{exact:true})).toBeVisible();
  await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),quoteId);
