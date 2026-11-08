@@ -150,6 +150,7 @@
     "@/modules/eingang/server-public#bindQuoteGoodsReceiptToCreatedOrder",
     "@/modules/eingang/server-public#writeQuoteGoodsReceiptInTransaction",
     "@/modules/eingang/public#parseQuoteGoodsReceiptInput",
+    "@/modules/eingang/public#hasQuoteFinancials",
     "@/modules/eingang/server-public#returnQuoteGoodsReceipt",
     "@/modules/eingang/server-public#readQuoteGoodsReturns"
   ],

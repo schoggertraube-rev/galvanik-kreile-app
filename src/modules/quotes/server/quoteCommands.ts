@@ -3,7 +3,7 @@ import "server-only";
 import { createHash,randomUUID } from "node:crypto";
 import {calculateQuote,type QuoteCalculation} from "../quoteCalculation";
 import {appendQuoteJournal,quoteHasPreparedDocument} from "@/lib/server/quoteJournalPort";
-import {readQuoteReceivedQuantities,readQuoteGoodsSummaries} from "@/lib/server/quoteGoodsContextPort";
+import {readQuoteReceivedQuantities,readQuoteGoodsSummaries,readQuoteGoodsSummariesForQuotes} from "@/lib/server/quoteGoodsContextPort";
 import { sql } from "drizzle-orm";
 import { normaliseOrderPositionSurface, orderPositionSurfaceLabel, orderPositionUnitLabel, orderPositionQuantityError, orderPositionPriceError } from "@/lib/orderPositionContract";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -439,6 +439,8 @@ export async function listOpenQuotesCommand(authorization: QuoteCommandContext):
       const rows = await tx.execute<QuoteRow>(sql`SELECT * FROM private.v_open_quotes_v1 ORDER BY updated_at DESC, quote_number ASC LIMIT 100`);
       const quotes = rows.map((row) => quoteFromRow(row, authorization.tenantId));
       if (quotes.some((quote) => quote === null)) throw new Error("QUOTE_LIST_READBACK_INVALID");
+        const goods=await readQuoteGoodsSummariesForQuotes(tx,authorization.tenantId,quotes.filter(quote=>quote?.lifecycle).map(quote=>quote!.quoteId));
+        for(const quote of quotes)if(quote?.lifecycle)quote.lifecycle.goods=goods.get(quote.quoteId)??[];
       return { code: "OK", quotes: quotes as QuoteReadback[] };
     });
   } catch (error) {
@@ -588,7 +590,7 @@ export async function readQuoteUpdateReceiptCommand(
   }
 }
 
-export async function prepareQuoteConversionCommand(authorization: QuoteCommandContext, input: unknown,options:{transaction?:PrivilegedTenantTransaction;planOnly?:boolean;pendingGoodsId?:string;pendingQuantities?:Array<{itemId:string;confirmed:boolean;expected:number;received:number|null}>}={}): Promise<PrepareQuoteConversionResult> {
+export async function prepareQuoteConversionCommand(authorization: QuoteCommandContext, input: unknown,options:{transaction?:PrivilegedTenantTransaction;planOnly?:boolean;pendingGoodsId?:string;pendingAcceptance?:{edition:number;beforeVersion:number};pendingQuantities?:Array<{itemId:string;confirmed:boolean;expected:number;received:number|null}>}={}): Promise<PrepareQuoteConversionResult> {
   const normalized = normalizeConvert(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Beauftragungsdaten sind ungültig." };
   if (!authorization.capabilities.canConvertQuote) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht beauftragt werden." };
@@ -599,13 +601,17 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
       if(!normalized.goodsReceiptId)return {code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${quote.quoteNumber} annehmen`};
-      if(!quote.lifecycle||quote.lifecycle.acceptedEdition!==quote.lifecycle.edition||!quote.lifecycle.acceptedAt||!quote.lifecycle.acceptanceEvidence?.trim()||quote.lifecycle.declinedAt)return {code:'VALIDATION_ERROR',message:'Aktuelle KV-Fassung ohne Vorbehalt zusagen; danach Ware zum Auftrag buchen.'};
+      const pendingAcceptance=Boolean(options.planOnly&&options.pendingAcceptance&&quote.lifecycle&&!quote.linkedOrderId
+        &&quote.version===options.pendingAcceptance.beforeVersion&&normalized.expectedVersion===quote.version+1
+        &&quote.lifecycle.edition===options.pendingAcceptance.edition&&quote.lifecycle.sentEdition===quote.lifecycle.edition
+        &&quote.lifecycle.stage!=='abgelaufen'&&!quote.lifecycle.declinedAt&&quote.lifecycle.conditional?.edition!==quote.lifecycle.edition);
+      if(!quote.lifecycle||!pendingAcceptance&&(quote.lifecycle.acceptedEdition!==quote.lifecycle.edition||!quote.lifecycle.acceptedAt||!quote.lifecycle.acceptanceEvidence?.trim())||quote.lifecycle.declinedAt)return {code:'VALIDATION_ERROR',message:'Aktuelle KV-Fassung ohne Vorbehalt zusagen; danach Ware zum Auftrag buchen.'};
       const goods=quote.lifecycle.goods?.find(row=>row.id===normalized.goodsReceiptId);
-      if((!goods&&!(options.planOnly&&!quote.linkedOrderId&&options.pendingGoodsId===normalized.goodsReceiptId))||(goods&&(goods.blocked||goods.orderId!==quote.linkedOrderId)))return {code:'VALIDATION_ERROR',message:'Passender angenommener Warenbeleg fehlt oder ist gesperrt.'};
+      if((!goods&&!(options.planOnly&&!quote.linkedOrderId&&options.pendingGoodsId===normalized.goodsReceiptId))||(goods&&(goods.blocked&&!pendingAcceptance||goods.orderId!==quote.linkedOrderId)))return {code:'VALIDATION_ERROR',message:'Passender angenommener Warenbeleg fehlt oder ist gesperrt.'};
       if(quote.linkedOrderId){
         const prior=await tx.execute<{order_id:string;intent_sha256:string}>(sql`SELECT order_id,intent_sha256 FROM private.quote_conversion_receipts WHERE tenant_id=${authorization.tenantId} AND quote_id=${normalized.quoteId}::uuid AND actor_id=${authorization.userId}::uuid AND client_event_id=${normalized.clientEventId}::uuid`);
         if(prior.length!==1||prior[0].order_id!==quote.linkedOrderId||prior[0].intent_sha256!==intentSha256)return {code:'CONFLICT',message:'KV wurde bereits mit einer anderen Buchung zum Auftrag.'};
-      }else if(quote.version!==normalized.expectedVersion)return {code:'CONFLICT',message:'KV-Fassung wurde geaendert. Neu lesen und abgleichen.'};
+      }else if(quote.version+(pendingAcceptance?1:0)!==normalized.expectedVersion)return {code:'CONFLICT',message:'KV-Fassung wurde geaendert. Neu lesen und abgleichen.'};
       const sourceOrderInput: Omit<QuoteOrderInput, "handoverMode" | "paymentMode"> = {
         // The selected canonical goods record has passed the inspection.
         geprueft: true,
@@ -698,6 +704,7 @@ export async function readQuoteConversionReceiptCommand(
       const recordedAt = row ? iso(row.recorded_at) : null;
       const quote = await readQuote(tx, authorization.tenantId, input.quoteId);
       if (!row) return { code: "NOT_FOUND", message: "Beauftragungsbeleg ist nicht verfügbar." };
+      if(quote&&row.integrity_ok===true&&row.tenant_id===authorization.tenantId&&row.order_id!==quote.linkedOrderId)return {code:'CONFLICT',message:'Diese Umwandlung wurde zurückgenommen. Der alte Auftrag bleibt im Verlauf erhalten.'};
       if (!quote || row.integrity_ok !== true || row.tenant_id !== authorization.tenantId || row.quote_version !== quote.version
         || row.quote_id !== quote.quoteId || row.order_id !== quote.linkedOrderId || !recordedAt) throw new Error("QUOTE_CONVERSION_RECEIPT_INVALID");
       const receipt: QuoteConversionReceipt = {
@@ -734,9 +741,9 @@ export async function readQuoteCopyCommand(authorization: QuoteCommandContext, i
   return await withPrivilegedTenantTransaction(authorization,async tx=>{
    const quote=await readQuote(tx,authorization.tenantId,input.quoteId);
    if(!quote)return {code:'NOT_FOUND' as const,message:'KV ist nicht verfuegbar.'};
-   const rows=await tx.execute<{position:number;unitPriceCents:number;lineTotalCents:number}>(sql`SELECT position,unit_price_cents::float8 AS "unitPriceCents",coalesce(zeilen_gesamt_cents,line_total_cents)::float8 AS "lineTotalCents" FROM private.quote_positions WHERE tenant_id=${authorization.tenantId} AND quote_id=${input.quoteId}::uuid AND revision=${quote.version} ORDER BY position`);
+   const rows=await tx.execute<{position:number;unitPriceCents:number;lineTotalCents:number;storedLineTotalCents:number|null}>(sql`SELECT position,unit_price_cents::float8 AS "unitPriceCents",zeilen_gesamt_cents::float8 AS "storedLineTotalCents",coalesce(zeilen_gesamt_cents,line_total_cents)::float8 AS "lineTotalCents" FROM private.quote_positions WHERE tenant_id=${authorization.tenantId} AND quote_id=${input.quoteId}::uuid AND revision=${quote.version} ORDER BY position`);
    if(rows.length!==quote.positions.length||rows.some((row,index)=>row.position!==quote.positions[index].position||!Number.isSafeInteger(row.unitPriceCents)||row.unitPriceCents<0||row.lineTotalCents!==quote.positions[index].lineTotalCents))throw Error('QUOTE_COPY_SOURCE_INVALID');
-   return {code:'OK' as const,quote,positions:quote.positions.map((position,index)=>({name:position.name,quantity:position.quantity,material:position.material,surfaceRequested:position.surfaceRequested,unitPriceCents:rows[index].unitPriceCents,lineTotalCents:rows[index].lineTotalCents}))};
+   return {code:'OK' as const,quote,storedLineTotals:rows.map(row=>row.storedLineTotalCents),positions:quote.positions.map((position,index)=>({name:position.name,quantity:position.quantity,material:position.material,surfaceRequested:position.surfaceRequested,unitPriceCents:rows[index].unitPriceCents,lineTotalCents:rows[index].lineTotalCents}))};
   });
  }catch(error){console.error('[QUOTE_COPY_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Kopiervorlage konnte nicht sicher gelesen werden.'};}
 }

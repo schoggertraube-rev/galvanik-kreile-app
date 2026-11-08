@@ -1,5 +1,6 @@
 "use client";
 
+import {hasQuoteFinancials} from '@/modules/eingang/public';
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {getIncomingInvoiceAction,saveIncomingInvoiceAction,changeIncomingInvoiceStatusAction,clarifyIncomingInvoiceAction,searchInvoiceSuppliersAction} from '@/app/actions/eingang.actions';
@@ -11,7 +12,7 @@ import { chooseIntakeCaptureKindAction } from "@/app/actions/eingang.actions";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, readCustomerAddressAction } from "@/app/actions/customers.actions";
 import { erfasseAuftragAusEingangAction, getIntakeDraftsAction, saveIntakeDraftAction, discardIntakeDraftAction, createIntakeContinuationAction, getIntakePendingScopeAction, saveIntakeNoteAction, recognizeIntakeNoteAction, prepareIntakeFileAction, finishIntakeFileAction, getIntakeCaptureAction, saveIntakeDeviceRequestAction, discardIntakeCaptureAction } from "@/app/actions/eingang.actions";
 import {getGoodsReceiptsAction,saveGoodsReceiptAction,openIntakeOriginalAction,confirmIntakeOriginalAction,retryIntakeRecognitionAction} from "@/app/actions/eingang.actions";
-import { changeQuoteLifecycleAction, convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
+import { prepareQuoteFromIntakeAction, changeQuoteLifecycleAction, convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
 import { getIntakeCatalogAction } from "@/app/actions/catalog.actions";
 import {getComplaintOrderChoicesAction} from '@/app/actions/complaints.actions';
@@ -57,9 +58,10 @@ const PENDING_QUOTE_CONVERSION_KEY = "path1.global-create.pending-quote-conversi
 export function GlobalCreateAppAdapter() {
   const router = useRouter();
   const mailPorts=useMemo<MailSelectionPorts>(()=>({list:getOpenIntakeMailsAction,read:getIntakeCaptureAction}),[]);
-  const objectPorts=useMemo<IntakeObjectPorts>(()=>({goods:{scope:getIntakePendingScopeAction,read:getGoodsReceiptsAction,save:saveGoodsReceiptAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction},original:{open:openIntakeOriginalAction,confirm:confirmIntakeOriginalAction,capture:getIntakeCaptureAction,retry:retryIntakeRecognitionAction}}),[]);
+  const objectPorts=useMemo<IntakeObjectPorts>(()=>({quoteGoods:{device:saveIntakeDeviceRequestAction,read:(id,request)=>readQuoteAction({quoteId:id,purpose:'operations',...(request?.quantities?{receivedQuantities:request.quantities}:{}),...(request?.goodsReceiptId?{goodsReceiptId:request.goodsReceiptId}:{})}),capture:getIntakeCaptureAction,scope:getIntakePendingScopeAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,original:openIntakeOriginalAction,save:saveGoodsReceiptAction,convert:convertQuoteToOrderAction},goods:{scope:getIntakePendingScopeAction,read:getGoodsReceiptsAction,save:saveGoodsReceiptAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction},original:{open:openIntakeOriginalAction,confirm:confirmIntakeOriginalAction,capture:getIntakeCaptureAction,retry:retryIntakeRecognitionAction}}),[]);
   const openCustomer = useOverlayStore((state) => state.openCustomer);
   const openOrder = useOverlayStore((state) => state.openOrder);
+  const openQuote = useOverlayStore((state) => state.openQuote);
   const activeCustomerOverlayId = useOverlayStore((state) => {
     for (let index = state.stack.length - 1; index >= 0; index -= 1) {
       const overlay = state.stack[index];
@@ -129,6 +131,8 @@ export function GlobalCreateAppAdapter() {
 
   useEffect(()=>{
     const handler=(event:Event)=>{const {ziel,arg,sourceItemId}=(event as CustomEvent<{ziel:string;arg?:unknown;sourceItemId?:string}>).detail??{};
+      if((ziel==='kv'||ziel==='quote')&&typeof arg==='string'){event.preventDefault();openQuote(arg);return;}
+      if(ziel==='kv-vorbereiten'&&typeof sourceItemId==='string'){event.preventDefault();requestGlobalCreate({intent:'QUOTE',prefill:{sourceItemId}});return;}
       if(ziel==='nachrichten'){event.preventDefault();router.push('/nachrichten'+(typeof arg==='string'&&arg?'?gruppe='+encodeURIComponent(arg):''));return;}
       if(ziel==='eingang'&&typeof sourceItemId==='string'){event.preventDefault();requestGlobalCreate({intent:'DIRECT_INTAKE',prefill:{sourceItemId,intakeKind:hasArea('geld')?'kv':'auftrag'}});return;}
       if(ziel==="kundeneu"){requestGlobalCreate({intent:"CUSTOMER",prefill:typeof arg==="string"&&arg.endsWith("#lieferant")?{customerMode:"lieferant"}:undefined});return;}
@@ -142,14 +146,14 @@ export function GlobalCreateAppAdapter() {
         if((ziel==="kunde"||ziel==="kundebearbeiten")&&typeof arg==="string")openCustomer(ziel==="kundebearbeiten"&&!arg.includes("#")?arg+"#bearbeiten":arg);
     };
     window.addEventListener("kreile:oeffne",handler);return()=>window.removeEventListener("kreile:oeffne",handler);
-  },[openCustomer,openOrder,router,hasArea]);
+  },[openCustomer,openOrder,openQuote,router,hasArea]);
 
   // Keep one safe, typed intake boundary mounted for authenticated workshop roles.
   // Their request is denied by the same flow before any command can run.
   if (!role || !isAppRole(role)) return null;
 
   return (
-    <><ComplaintDialogs ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs ports={invoicePorts} allowed={hasArea('geld')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs ports={objectPorts} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('geld')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
+    <><ComplaintDialogs ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs ports={invoicePorts} allowed={hasArea('geld')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs ports={objectPorts} onOpenCustomer={openCustomer} onOpenOrder={openOrder} onOpenQuote={openQuote} customerOverlayId={activeCustomerOverlayId} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('geld')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
       ports={{
         readIntakeOrderSource: async (orderId) => {
           const result = await getLiveOrderCardAction({ orderId });
@@ -169,6 +173,7 @@ export function GlobalCreateAppAdapter() {
         discardCapture: discardIntakeCaptureAction,
         deviceRequest: saveIntakeDeviceRequestAction,
         saveCaptureNote: saveIntakeNoteAction,
+        readCaptureOriginal: openIntakeOriginalAction,
         readCaptureNote: recognizeIntakeNoteAction,
         prepareCaptureFile: prepareIntakeFileAction,
         finishCaptureFile: finishIntakeFileAction,
@@ -180,6 +185,7 @@ export function GlobalCreateAppAdapter() {
         canDecide:hasArea("entscheiden"),
         showPrimaryTrigger: false,
         roleLabel,
+        actorDisplayName:name,
         resumeQuoteId,
         resumeQuoteConversionId,
         listCustomers: async () => {
@@ -253,20 +259,21 @@ export function GlobalCreateAppAdapter() {
           if (result.code !== "OK") return result;
           return {code:"OK",replayed:true,receipt:result.receipt,customer:customerChoice(result.customer)};
         },
+        prepareQuote:prepareQuoteFromIntakeAction,
         createQuote: async (input: CreateQuoteInput): Promise<GlobalCreateQuoteResult> => createQuoteAction(input),
         updateQuote: async (input: UpdateQuoteInput): Promise<GlobalCreateQuoteResult> => updateQuoteAction(input),
         readQuoteCreateReceipt: async (input: CreateQuoteInput): Promise<GlobalCreateQuoteResult> => {
           const result = await readQuoteCreateReceiptAction(input);
           return result.code === "OK" ? { ...result, replayed: true } : result;
         },
-        readQuote: async (input: { quoteId: string }): Promise<GlobalCreateQuoteReadResult> => readQuoteAction(input),
+        readQuote: async (input: { quoteId: string }): Promise<GlobalCreateQuoteReadResult> => {const result=await readQuoteAction(input);return result.code!=='OK'?result:hasQuoteFinancials(result.quote)?{...result,quote:result.quote}:{code:'FORBIDDEN',message:'KV-Finanzansicht ist nicht freigegeben.'};},
         listOpenQuotes: async (): Promise<GlobalCreateOpenQuotesResult> => listOpenQuotesAction(),
         readQuoteUpdateReceipt: async (input: UpdateQuoteInput): Promise<GlobalCreateQuoteResult> => {
           const result = await readQuoteUpdateReceiptAction(input);
           return result.code === "OK" ? { ...result, replayed: true } : result;
         },
-        recordQuoteAcceptance:changeQuoteLifecycleAction,
-        convertQuote: async (input: ConvertQuoteInput): Promise<GlobalCreateConversionResult> => convertQuoteToOrderAction(input),
+        recordQuoteAcceptance:async input=>{const result=await changeQuoteLifecycleAction(input);return result.code!=='OK'?result:hasQuoteFinancials(result.quote)?{...result,quote:result.quote}:{code:'FORBIDDEN',message:'KV-Finanzansicht ist nicht freigegeben.'};},
+        convertQuote: async (input: ConvertQuoteInput): Promise<GlobalCreateConversionResult> => {const result=await convertQuoteToOrderAction(input);return result.code!=='OK'?result:hasQuoteFinancials(result.quote)?{...result,quote:result.quote}:{code:'FORBIDDEN',message:'KV-Finanzansicht ist nicht freigegeben.'};},
         readQuoteConversionReceipt: async (input: { quoteId: string; clientEventId: string }): Promise<GlobalCreateConversionResult> => {
           const result = await readQuoteConversionReceiptAction(input);
           return result.code === "OK" ? { ...result, replayed: true } : result;

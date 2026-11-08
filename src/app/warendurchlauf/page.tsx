@@ -1,3 +1,4 @@
+import {readWorkshopQuoteGoodsAction} from '@/app/actions/quotes.actions';
 import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import {
   buildWerkstattData,
@@ -74,11 +75,13 @@ export default async function WarendurchlaufIndex() {
   let wareneingangResult;
   let galvanikResult;
   let kpiResult;
+  let quoteGoodsResult;
   try {
-    [wareneingangResult, galvanikResult, kpiResult] = await Promise.all([
+    [wareneingangResult, galvanikResult, kpiResult,quoteGoodsResult] = await Promise.all([
       getWareneingangOrdersAction(),
       getGalvanikOrdersAction(),
       getWarendurchlaufKPIs(),
+      readWorkshopQuoteGoodsAction(),
     ]);
   } catch {
     return render({ kind: "error", message: ERROR_MESSAGE });
@@ -102,12 +105,13 @@ export default async function WarendurchlaufIndex() {
     return render({ kind: "conflict", message: CONFLICT_MESSAGE });
   }
 
-  if (wareneingangResult.data.length === 0 && galvanikResult.data.length === 0) {
+  if (wareneingangResult.data.length === 0 && galvanikResult.data.length === 0 && quoteGoodsResult.code==="OK"&&quoteGoodsResult.quotes.length===0&&!quoteGoodsResult.limited) {
     return render({ kind: "empty", canCreateOrder });
   }
 
   return render({
     kind: "data",
+    quoteGoods:quoteGoodsResult.code==="OK"?quoteGoodsResult.quotes:[],quoteGoodsLimited:quoteGoodsResult.code==="OK"&&quoteGoodsResult.limited,quoteGoodsError:quoteGoodsResult.code==="OK"?null:quoteGoodsResult.message,
     ...buildWerkstattData({
       wareneingang: wareneingangResult.data.map(toWerkstattSurfaceOrder),
       galvanik: galvanikResult.data.map(toWerkstattSurfaceOrder),

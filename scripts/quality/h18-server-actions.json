@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "2a78d6f6437787e462489533d9839def9bf9e6644c03a7c23e5859f405c21437",
+  "inventorySha256": "5b124be4ba2014e2ef74a25d173aa6ab35c30a3ad1ef92fd77bcf438567e2cb9",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -266,16 +266,19 @@
     "src/app/actions/quotes.actions.ts#receiveOnsiteQuoteAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
+    "src/app/actions/quotes.actions.ts#readWorkshopQuoteGoodsAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#readQuoteReplyTargetsAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#undoQuoteConversionAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
     "src/app/actions/eingang.actions.ts#recordQuoteGoodsReturnAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#getQuoteGoodsReturnsAction": [
-      "src/test/acceptance/kv_v04_server.integration.test.ts"
-    ],
-    "src/app/actions/quotes.actions.ts#recordQuoteDecisionAction": [
-      "src/test/acceptance/kv_v04_server.integration.test.ts"
-    ],
-    "src/app/actions/quotes.actions.ts#getQuoteOperationContextAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"
     ]
   },

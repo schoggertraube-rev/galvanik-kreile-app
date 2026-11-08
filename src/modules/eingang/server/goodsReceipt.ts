@@ -1,3 +1,4 @@
+import {quoteHasCreatedOrder} from '@/lib/server/quoteGoodsContextPort';
 import "server-only";
 import {createHash} from "node:crypto";
 import {sql} from "drizzle-orm";
@@ -131,7 +132,8 @@ export async function readGoodsReceipts(orderId:string):Promise<GoodsReceiptRead
 
 /** Attach the same early receipt after the canonical quote/order event, in that transaction. */
 export async function bindQuoteGoodsReceiptToCreatedOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{quoteId:string;receiptId:string;clientEventId:string;orderId:string;items:readonly {id:string;quantity:number}[]}){
- if(!hasAuthorizationArea(auth,'eingang'))fail('FORBIDDEN','Warenannahme erfordert Eingang.');
+ // U-249: binding an inspected KV receipt is allowed to the real actor only for its canonical conversion.
+ if(!await quoteHasCreatedOrder(tx,auth.tenantId,input.quoteId,input.orderId))fail('FORBIDDEN','Auftrag gehört nicht zur gespeicherten KV-Umwandlung.');
  const locked=await tx.execute(sql`SELECT id FROM public.goods_receipt WHERE tenant_id=${auth.tenantId} AND id=${input.receiptId}::uuid FOR UPDATE`);
  const before=await readReceipt(tx,auth,input.receiptId);
  if(locked.length!==1||!before||before.kv_id!==input.quoteId||before.status!=='angenommen'||!before.item_id)fail('VALIDATION_ERROR','Angenommener KV-Warenbeleg fehlt.');
@@ -144,7 +146,7 @@ export async function bindQuoteGoodsReceiptToCreatedOrder(tx:PrivilegedTenantTra
  const quantities=before.mengen.map(row=>{if(row.bestaetigt===0)return row;const item=typeof row.kv_position==='number'?input.items[arrivedIndex++]:undefined;if(!item||!order.items.some(stored=>stored.id===item.id&&stored.quantity===item.quantity)||row.bestaetigt!==item.quantity)fail('VALIDATION_ERROR','Mengenabweichung zwischen Ware und aktueller KV-Fassung; zuerst abgleichen.');return {...row,teil_id:item.id};});
  await tx.execute(sql`UPDATE public.goods_receipt SET auftrag_id=${order.id},mengen=${JSON.stringify(quantities)}::jsonb,version=version+1,geaendert_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${input.receiptId}::uuid AND version=${before.version} AND auftrag_id IS NULL`);
  await updateGoodsReceiptOrder(tx,auth,order,'da','creation');
- await bindIntakeOriginalToOrder(tx,auth,{itemId:before.item_id,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true});
+ await bindIntakeOriginalToOrder(tx,auth,{itemId:before.item_id,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true,quoteId:input.quoteId});
  const originals=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND vorgang_art='kv' AND vorgang_id=${input.quoteId} ORDER BY id FOR UPDATE`);
  for(const original of originals)await bindIntakeOriginalToOrder(tx,auth,{itemId:original.id,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true,quoteId:input.quoteId});
  const receipt=await readReceipt(tx,auth,input.receiptId);if(!receipt||receipt.auftrag_id!==order.id||receipt.version!==before.version+1)throw Error('QUOTE_GOODS_ORDER_READBACK_INVALID');

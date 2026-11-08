@@ -1,7 +1,7 @@
 import 'server-only';
 import {createHash, randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
-import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {QuoteCommandContext, QuoteCommandFailure, QuoteReadback,CreateQuoteInput} from './types';
 import {readQuote,type QuoteSourceBinding,type QuoteFollowupBinding} from './quoteCommands';
 import {readQuoteJournal,quoteJournalActorIsActive,appendQuoteJournal,readQuoteSentDocument} from '@/lib/server/quoteJournalPort';
@@ -36,13 +36,13 @@ function normalize(value:unknown):QuoteLifecycleInput|null {
 /** Explicit manual sent/acceptance/decline records. Actual mail dispatch stays in communications. */
 class QuoteLifecycleSourceFailure extends Error{constructor(readonly result:QuoteCommandFailure){super(result.code);}}
 
-export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:unknown,bindSource:QuoteSourceBinding|undefined,followup:QuoteFollowupBinding,options:{actualMail?:boolean;onsiteGoodsReceiptId?:string}={}):Promise<Result> {
+export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:unknown,bindSource:QuoteSourceBinding|undefined,followup:QuoteFollowupBinding,options:{actualMail?:boolean;onsiteGoodsReceiptId?:string;transaction?:PrivilegedTenantTransaction}={}):Promise<Result> {
   const input=normalize(raw);
   if (!input) return {code:'VALIDATION_ERROR',message:'KV-Fassung, Nachweis oder Entscheidung fehlt.'};
-  if (!auth.capabilities.canUpdateQuote||!auth.capabilities.canReadQuote) return {code:'FORBIDDEN',message:'KV-Entscheidung ist nicht freigegeben.'};
+  if (!(auth.capabilities.canUpdateQuote||(input.action==='accept'||input.action==='extend')&&auth.capabilities.canDecideQuote)||!auth.capabilities.canReadQuote) return {code:'FORBIDDEN',message:'KV-Entscheidung ist nicht freigegeben.'};
   const intent=createHash('sha256').update(JSON.stringify(options.onsiteGoodsReceiptId?{input,onsiteGoodsReceiptId:options.onsiteGoodsReceiptId}:input)).digest('hex');
   try {
-    return await withPrivilegedTenantTransaction(auth,async tx=>{
+    const run=async(tx:PrivilegedTenantTransaction):Promise<Result>=>{
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('quote-lifecycle:'||${auth.tenantId}||':'||${auth.userId}||':'||${input.clientEventId},0))`);
       const prior=await readQuoteJournal<{quoteId:string;intent:string}>(tx,auth,input.clientEventId);
       if (prior.length) {
@@ -95,9 +95,10 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
       if (!result?.lifecycle||result.version!==version) throw Error('QUOTE_LIFECYCLE_WRITE_READBACK_INVALID');
       const notices=[...(followupNotice?[followupNotice]:[]),...(!currentMail&&mailDocument?['E-Mail mit Fassung '+mailDocument.edition+' gesendet · aktuelle Fassung '+life.edition+(life.sentEdition===life.edition?' bleibt bereits versendet.':' ist noch nicht versendet.')]:[])];
       return {code:'OK',quote:result,eventId,replayed:false,...(notices.length?{notices}:{})};
-    });
+    };
+    return options.transaction?await run(options.transaction):await withPrivilegedTenantTransaction(auth,run);
   } catch (error) {
-    console.error('[QUOTE_LIFECYCLE_FAILED]',error instanceof Error?error.name:'UnknownError');
+    console.error('[QUOTE_LIFECYCLE_FAILED]',{name:error instanceof Error?error.name:'UnknownError',message:error instanceof Error&&/^[A-Z][A-Z0-9_: -]*$/.test(error.message)?error.message:'DATABASE_OR_INTERNAL_FAILURE',cause:error instanceof Error&&error.cause instanceof Error?error.cause.message.slice(0,300):undefined});
     if(error instanceof QuoteLifecycleSourceFailure)return error.result;
     return {code:'UNAVAILABLE',message:'KV-Entscheidung konnte nicht sicher bestätigt werden. Eingaben und Kennung behalten.'};
   }

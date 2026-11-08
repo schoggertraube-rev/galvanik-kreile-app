@@ -6,7 +6,8 @@ import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
 import {MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult} from '../messageContract';
 
 /** One projection of intake_item; no communications/phone_notes shadow inbox. */
-export async function readIntakeMessages(filter:unknown='offen'):Promise<IntakeMessagesResult>{
+export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string):Promise<IntakeMessagesResult>{
+ if(sourceItemId!==undefined&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceItemId))return {code:'VALIDATION_ERROR',message:'Originalantwort ist ungültig.'};
  if(!MESSAGE_FILTERS.includes(filter as MessageFilter))return {code:'VALIDATION_ERROR',message:'Nachrichtenfilter ist ungültig.'};
  try{
   const result=await resolveAuthorization();if(!result.ok)return {code:result.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED',message:'Sitzung konnte nicht geprüft werden. Code: INTAKE_MESSAGES_SESSION.'};
@@ -27,9 +28,12 @@ export async function readIntakeMessages(filter:unknown='offen'):Promise<IntakeM
     source.anliegen AS concerns,source.anliegen_offen AS "openConcerns",source.aussortiert AS "discardReason",source.erstellt_von::text AS "createdBy",
     ARRAY(SELECT file.id::text FROM public.intake_file file WHERE file.tenant_id=source.tenant_id AND (file.item_id=source.id OR EXISTS(
       SELECT 1 FROM public.intake_event created WHERE source.fortsetzung_von IS NOT NULL AND created.tenant_id=source.tenant_id
-        AND created.item_id=source.id AND created.art='angelegt' AND jsonb_exists(created.nachher->'originalFileIds',file.id::text))) ORDER BY file.reihenfolge,file.id) AS "fileIds"
+        AND created.item_id=source.id AND created.art='angelegt' AND jsonb_exists(created.nachher->'originalFileIds',file.id::text))) ORDER BY file.reihenfolge,file.id) AS "fileIds",
+    (SELECT coalesce(jsonb_agg(jsonb_build_object('id',file.id::text,'name',file.dateiname) ORDER BY file.reihenfolge,file.id),'[]'::jsonb) FROM public.intake_file file WHERE file.tenant_id=source.tenant_id AND (file.item_id=source.id OR EXISTS(
+      SELECT 1 FROM public.intake_event created WHERE source.fortsetzung_von IS NOT NULL AND created.tenant_id=source.tenant_id
+        AND created.item_id=source.id AND created.art='angelegt' AND jsonb_exists(created.nachher->'originalFileIds',file.id::text)))) AS files
     FROM public.intake_item source LEFT JOIN private.v_intake_message_contexts_v1 context ON context.tenant_id=source.tenant_id AND context.item_id=source.id
-    WHERE source.tenant_id=${auth.tenantId} AND ${filter==='aussortiert'?sql`source.aussortiert IS NOT NULL`:sql`source.aussortiert IS NULL`}
+    WHERE source.tenant_id=${auth.tenantId} AND ${sourceItemId?sql`source.id=${sourceItemId}::uuid`:sql`true`} AND ${filter==='aussortiert'?sql`source.aussortiert IS NOT NULL`:sql`source.aussortiert IS NULL`}
     AND (source.einsatz='offen' OR source.erstellt_am>=statement_timestamp()-interval '90 days')
     AND EXISTS(SELECT 1 FROM public.intake_item candidate WHERE candidate.tenant_id=source.tenant_id AND ${matches}
      AND (source.kunde_id IS NOT NULL AND candidate.kunde_id=source.kunde_id OR source.kunde_id IS NULL AND candidate.kunde_id IS NULL

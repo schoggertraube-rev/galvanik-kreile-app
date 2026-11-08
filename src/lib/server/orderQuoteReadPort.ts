@@ -22,7 +22,7 @@ export async function readOrderCommercialQuote(tx:PrivilegedTenantTransaction,te
  if(rows.length!==1||!rows[0].integrity)throw Error('ORDER_CARD_QUOTE_PRICE_INVALID');
  const {integrity:_integrity,sourceCalculation,sourcePositions,...quote}=rows[0];void _integrity;
  if(!Number.isSafeInteger(quote.totalNetCents)||quote.totalNetCents<0||!Array.isArray(quote.positions)||!quote.positions.length||quote.positions.some(row=>typeof row.itemId!=='string'||!Number.isSafeInteger(row.lineTotalCents)||row.lineTotalCents<0)||quote.positions.reduce((total,row)=>total+row.lineTotalCents,0)!==quote.totalNetCents)throw Error('ORDER_CARD_QUOTE_PRICE_INVALID');
- if(sourceCalculation){
+ {
   const scaled=scaleQuotePositions(sourceCalculation,sourcePositions,sourcePositions.map(row=>({position:row.position,quantity:quote.positions.find(received=>received.position===row.position)?.quantity??0})));
   if(scaled.code!=='OK')throw Error('ORDER_CARD_QUOTE_CALCULATION_INVALID');
   quote.totalNetCents=scaled.totalNetCents;quote.positions=quote.positions.map(row=>({...row,lineTotalCents:scaled.positions.find(priced=>priced.position===row.position)!.lineTotalCents}));quote.plannedHours=scaled.calculation?.hours??null;

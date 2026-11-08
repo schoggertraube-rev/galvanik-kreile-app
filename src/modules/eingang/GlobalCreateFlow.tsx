@@ -1,4 +1,5 @@
 "use client";
+import {QUOTE_PREPARATION_COPY} from "@/ui/situationCatalog";
 
 import {
   Check,
@@ -80,6 +81,7 @@ type FailureCode =
   | "UNAVAILABLE";
 
 type Failure = { code: FailureCode; message: string };
+type QuotePreparation={source:{itemId:string;version:number;message:boolean};text:string;customer:{id:string;name:string}|null;customerQuery:string;specialRequests:string|null;files:Array<{id:string;name:string}>;recognition:IntakeTextRecognition};
 
 export type GlobalCreateCustomerChoice = {
   id: string;
@@ -213,17 +215,19 @@ export type GlobalCreatePorts = {
   getCapture?: (id: string) => Promise<IntakeCaptureResult>;
   getCaptureScope?: () => Promise<{ code: "OK"; scope: string } | { code: "FORBIDDEN"; message: string }>;
   saveCaptureNote?: (input: IntakeNoteInput) => Promise<IntakeCaptureResult>;
+  readCaptureOriginal?: (input:{fileId:string;clientEventId:string}) => Promise<import("./originalContract").OriginalReadResult>;
   readCaptureNote?: (text: string) => Promise<{ code: "OK"; data: IntakeNoteReading } | { code: "FORBIDDEN" | "VALIDATION_ERROR"; message: string }>;
   prepareCaptureFile?: (input: IntakeFileInput) => Promise<IntakeFileGrant>;
   finishCaptureFile?: (id: string) => Promise<IntakeCaptureResult>;
   chooseCaptureKind?: (input: IntakeCaptureKindInput) => Promise<IntakeCaptureResult>;
-  openCaptureObject?: (target: "mailein" | "original" | "ware" | "rechnungein", arg: string) => boolean;
+  openCaptureObject?: (target: "mailein" | "original" | "ware" | "rechnungein" | "kvware", arg: string) => boolean;
   canCreateOrder: boolean;
   canCreateQuote: boolean;
   canManageMoney: boolean;
   canDecide?:boolean;
   showPrimaryTrigger?: boolean;
   roleLabel: string;
+  actorDisplayName?:string|null;
   resumeQuoteId: string | null;
   resumeQuoteConversionId: string | null;
   listCustomers: () => Promise<
@@ -241,6 +245,7 @@ export type GlobalCreatePorts = {
   createCustomer: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult>;
   createCustomerFromCapture?: (input: CreateCustomerInput, source: { itemId: string; version: number }) => Promise<GlobalCreateCustomerResult>;
   readCustomerCreateReceipt: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult | Failure>;
+  prepareQuote?: (input:{sourceItemId:string;customerId?:string})=>Promise<{code:'OK';preparation:QuotePreparation}|{code:string;message:string}>;
   createQuote: (input: CreateQuoteInput) => Promise<GlobalCreateQuoteResult>;
   updateQuote: (input: UpdateQuoteInput) => Promise<GlobalCreateQuoteResult>;
   readQuoteCreateReceipt: (input: CreateQuoteInput) => Promise<GlobalCreateQuoteResult>;
@@ -510,6 +515,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerChoices, setCustomerChoices] = useState<GlobalCreateCustomerChoice[]>([]);
   const [customerLoad, setCustomerLoad] = useState<"idle" | "loading" | "ready" | "empty" | "error">("idle");
+  const quoteSubmitInFlight=useRef(false);
+  const [quotePreparation,setQuotePreparation]=useState<QuotePreparation|null>(null);
   const [positions, setPositions] = useState<PositionDraft[]>(() => [newPosition()]);
   const [dueDate, setDueDate] = useState("");
   const [quoteNote, setQuoteNote] = useState("");
@@ -886,7 +893,47 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setStep("denied");
   };
 
-  const loadCustomers = async () => {
+  const startQuote = async (selected: GlobalCreateCustomerChoice,prepared:QuotePreparation|null=quotePreparation) => {
+    if (!ports.canCreateQuote) {
+      deny("quote");
+      return;
+    }
+    let services = catalogServices;
+    if (services.length === 0) {
+      setBusy(true);
+      setFeedback(null);
+      try {
+        const catalog = await (ports.listCatalog?.() ?? Promise.resolve({ code: "UNAVAILABLE" as const, message: "Leistungskatalog ist nicht angebunden." }));
+        if (catalog.code !== "OK") {
+          setFeedback({ kind: catalog.code === "DENIED" ? "denied" : "error", message: catalog.message });
+          return;
+        }
+        services = normaliseIntakeCatalog(catalog.services);
+        setCatalogServices(services);
+      } catch {
+        setFeedback({ kind: "error", message: "Der Leistungskatalog konnte nicht sicher gelesen werden." });
+        return;
+      } finally {
+        setBusy(false);
+      }
+    }
+    resetAwardDateForQuoteContext();
+    setCustomer(selected);
+    setQuote(null);
+    setQuoteReceipt(null);
+    setOpenQuotesState({ kind: "idle" });
+    setConversion(null);
+    requestIds.current.quote = "";
+    requestIds.current.conversion = "";
+    if(prepared){
+      setQuoteNote(prepared.text);
+      setPositions(prepared.recognition.positions.length?prepared.recognition.positions.map(row=>({...newPosition(),catalogServiceId:FREE_TEXT_SERVICE,name:row.name,quantity:row.quantity,material:'',unit:row.unit,surfaceRequested:normaliseOrderPositionSurface(row.surfaceRequested)??'',unitPriceCents:null})):[newPosition()]);
+      const term=prepared.recognition.fields.find(row=>row.field==='dueDate')?.value;setDueDate(term??'');
+    }
+    navigate("quote");
+  };
+
+  const loadCustomers = async (sourceItemId?:string) => {
     if (!ports.canCreateQuote) {
       deny("quote");
       return;
@@ -895,6 +942,13 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setCustomerLoad("loading");
     const seq = ++customerRequestSeq.current;
     try {
+      let prepared:QuotePreparation|null=null;
+      if(sourceItemId){
+        const read=await ports.prepareQuote?.({sourceItemId});
+        if(seq!==customerRequestSeq.current)return;
+        if(!read||read.code!=='OK'||!('preparation'in read)){setCustomerLoad('error');setFeedback({kind:'error',message:read&&'message'in read?read.message:'KV-Vorbereitung ist nicht angebunden.'});return;}
+        prepared=read.preparation;setQuotePreparation(prepared);setCustomerQuery(prepared.customerQuery);
+      }
       const [result, catalog] = await Promise.all([
         ports.listCustomers(),
         ports.listCatalog?.() ?? Promise.resolve({ code: "UNAVAILABLE" as const, message: "Leistungskatalog ist nicht angebunden." }),
@@ -913,6 +967,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setCatalogServices(normaliseIntakeCatalog(catalog.services));
       setCustomerChoices(result.customers);
       setCustomerLoad(result.customers.length > 0 ? "ready" : "empty");
+      if(prepared?.customer){const selected=result.customers.find(row=>row.id===prepared.customer!.id);if(selected)await startQuote(selected,prepared);}
     } catch {
       if (seq !== customerRequestSeq.current) return;
       setCustomerLoad("error");
@@ -959,6 +1014,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         const read=await ports.getCapture?.(sourceEntry.itemId);if(seq!==customerRequestSeq.current)return;
         if(!read||read.code!=='OK'){setCustomerLoad('error');setFeedback({kind:'error',message:read?.message??'Original ist nicht lesbar · INTAKE_SOURCE_CAPTURE_UNAVAILABLE.'});return;}
         loadedSourceCapture=read.capture;preselectedCustomerId=loadedSourceCapture.customerId??preselectedCustomerId;
+
       }
       let source: Extract<Awaited<ReturnType<NonNullable<GlobalCreatePorts["readIntakeOrderSource"]>>>, { code: "OK" }>["source"] | null = null;
       if (orderCopyId) {
@@ -1063,7 +1119,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setCustomerDuplicateAcceptedFor("");
     setCustomer(null);
     setCustomerReceipt(null);
-    setPositions([newPosition()]);
+    setQuotePreparation(null);setPositions([newPosition()]);
     setDueDate("");
     setQuoteNote("");
     resetAwardDateForQuoteContext();
@@ -1310,7 +1366,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         quantity: /^\d+(?:[.,]\d+)?$/.test(position.quantity ?? "") ? (position.quantity ?? "1").replace(",", ".") : "1",
         material: position.material?.slice(0, 500) ?? "",
       })));
-      void loadCustomers();
+      void loadCustomers(prefill?.sourceItemId);
       return;
     }
     if (!ports.canCreateOrder) {
@@ -1600,43 +1656,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     else if (step === "quote-saved") void recordQuoteAcceptance();
   };
 
-  const startQuote = async (selected: GlobalCreateCustomerChoice) => {
-    if (!ports.canCreateQuote) {
-      deny("quote");
-      return;
-    }
-    let services = catalogServices;
-    if (services.length === 0) {
-      setBusy(true);
-      setFeedback(null);
-      try {
-        const catalog = await (ports.listCatalog?.() ?? Promise.resolve({ code: "UNAVAILABLE" as const, message: "Leistungskatalog ist nicht angebunden." }));
-        if (catalog.code !== "OK") {
-          setFeedback({ kind: catalog.code === "DENIED" ? "denied" : "error", message: catalog.message });
-          return;
-        }
-        services = normaliseIntakeCatalog(catalog.services);
-        setCatalogServices(services);
-      } catch {
-        setFeedback({ kind: "error", message: "Der Leistungskatalog konnte nicht sicher gelesen werden." });
-        return;
-      } finally {
-        setBusy(false);
-      }
-    }
-    resetAwardDateForQuoteContext();
-    setCustomer(selected);
-    setQuote(null);
-    setQuoteReceipt(null);
-    setOpenQuotesState({ kind: "idle" });
-    setConversion(null);
-    requestIds.current.quote = "";
-    requestIds.current.conversion = "";
-    navigate("quote");
-  };
-
   const submitQuote = async (event: FormEvent) => {
     event.preventDefault();
+    if(quoteSubmitInFlight.current)return;
     if (!ports.canCreateQuote || !customer) {
       deny("quote");
       return;
@@ -1655,13 +1677,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       return;
     }
     const id = requestId("quote");
-    setBusy(true);
+    quoteSubmitInFlight.current=true;setBusy(true);
     setFeedback(null);
     try {
       const payload = {
         clientEventId: id,
         dueDate,
         note: nullable(quoteNote),
+        ...(quotePreparation?{source:quotePreparation.source,specialRequests:quotePreparation.specialRequests,deliveryWeeks:quotePreparation.recognition.deliveryWeeks?.value}:{}),
         positions: mapped.map((position) => ({ ...position, unitPriceCents: position.unitPriceCents! })),
       };
       const result = quote
@@ -1674,7 +1697,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setQuote(result.quote);
       setQuoteReceipt(result.receipt);
       ports.rememberQuote(result.quote.quoteId);
-      navigate("quote-saved");
+      if(quotePreparation){setOpen(false);window.dispatchEvent(new Event('kreile:intake-changed'));window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:result.quote.quoteId}}));}
+      else navigate("quote-saved");
     } catch {
       setFeedback({
         kind: "unclear",
@@ -1682,7 +1706,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         requestId: id,
       });
     } finally {
-      setBusy(false);
+      quoteSubmitInFlight.current=false;setBusy(false);
     }
   };
 
@@ -2700,6 +2724,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
               {step === "quote" && customer ? (
                 <form className={styles.createForm} onSubmit={(event) => void submitQuote(event)}>
+                  {quotePreparation?<section data-spec-id="kv.vorbereitung-original"><h3>{QUOTE_PREPARATION_COPY.original}</h3><p>{quotePreparation.text}</p>{quotePreparation.specialRequests?<p>{QUOTE_PREPARATION_COPY.wishes+' · '+quotePreparation.specialRequests}</p>:null}{quotePreparation.files.map(file=><button type="button" key={file.id} onClick={()=>{if(!ports.openCaptureObject?.('original',quotePreparation.source.itemId+'#'+file.id))setFeedback({kind:'error',message:QUOTE_PREPARATION_COPY.unavailable});}}>{QUOTE_PREPARATION_COPY.openFile(file.name)}</button>)}</section>:null}
                   <div className={styles.createContext}><span>Kunde</span><strong>{customer.name} · {customer.customerNumber ?? "Kundennummer wird gelesen"}</strong></div>
                   <div className={styles.createPositions}>
                     <h3>Positionen</h3>
