@@ -21,3 +21,11 @@ Sechs gezielte IntakeSituation-Renderfälle grün, einschließlich expliziter Hi
 PE-01/03/05/06 vollständige Paketabnahme und UI-Anschluss des bereits vorhandenen receiveOnsiteQuoteAction, Nacharbeit-Rücksendung, tatsächlicher Foto-/Datei-Sichtlauf und exakte READY-Preview. Quote-Leser liefert aktuell die bestehenden bis 100 offenen KVs: keine Zusicherung vollständiger Archivsuche. Ungeklärter Foto-Wortlaut: Paket nennt Zustandfoto optional, vorhandener GoodsContract fordert Etikett/Inhalt/Packstückprüfung. Vorschlag beim PL: Zustandszusatzfoto optional, vorhandene Pflichtbelege nicht abschwächen. Keine Änderung dieser Pflicht implementiert.
 
 Modul-Gate meldet lokal nur die fremde uncommittete Designbindung DESIGN_POINTER_PAGE_BINDING, eigene Grenze korrigiert und nicht gelockert. Fremde Planungsdateien werden nicht gestaged. Draft, keine Owner-Merge-Bitte, keine vollständige Paket- oder Livefähigkeitsbehauptung.
+
+## Fortschreibung 08.11.22:34
+
+Historische KV-Kunden stammen jetzt aus einem engen, betragsfreien Besitzerport mit echter, integritätsgeprüfter KV-Historie einschließlich geschlossener KVs. Keine Begrenzung auf die 100 offenen KVs für die Historienvorschläge. Im echten PE-04-Fall zusätzlich einen KV angelegt und abgelehnt: sein Kunde bleibt als unverbindlicher historischer Vorschlag erhalten, während der Auftrag-Kunde ebenfalls korrekt angeboten wird; endgültiger Fall PASS5.90s.
+
+PE-06 Kandidaten-/Rechtenachweis: zwei echte KVs angelegt, tatsächlichen Druckversand und jeweilige aktuelle Zusage gespeichert; derselbe Paketleser liefert beide als mehrdeutig und legt keinen Auftrag an. Capture-Login mit ausschließlich Eingang erhält weder fremde erwartete Aufträge noch Kunden/KV-Kandidaten. PASS6.85s. Ein Testfixture wurde mechanisch um die fachlich nötige vorausgehende Versandhandlung ergänzt; keine produktive Annahmevoraussetzung gelockert. Dies ist PE-06 aus der Fallliste (mehrere KVs), noch nicht der NEW-Onsite-UI-Anschluss aus Weg 6/PE-05.
+
+Die bestehenden neuen Renderfälle und echte DB-Zuordnung bleiben getrennt vom noch offenen vollständigen Foto-/Datei-Sichtlauf. Keine Abnahme durch bloße gemockte UI-Writer behauptet.

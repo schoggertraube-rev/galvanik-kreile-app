@@ -1,6 +1,6 @@
 "use server";
 
-import {listOpenQuotesCommand} from '@/modules/quotes/server-public';
+import {listOpenQuotesCommand,readPackageQuoteHistory} from '@/modules/quotes/server-public';
 import {readPackageExpectation} from '@/modules/eingang/server-public';
 import type {IntakeCaptureResult} from '@/modules/eingang/public';
 async function withPackageExpectation(result:IntakeCaptureResult):Promise<IntakeCaptureResult>{
@@ -9,7 +9,8 @@ async function withPackageExpectation(result:IntakeCaptureResult):Promise<Intake
   const auth=await resolveAuthorization();if(!auth.ok)return result;
   const canQuotes=hasAuthorizationArea(auth.data,'auftraege')&&hasAuthorizationArea(auth.data,'geld');
   const quotes=canQuotes?await listOpenQuotesCommand({tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canReadQuote:true,canCreateQuote:false,canUpdateQuote:false,canConvertQuote:false}}):null;
-  result.capture.packageContext=await withPrivilegedTenantTransaction(auth.data,tx=>readPackageExpectation(tx,auth.data,result.capture,quotes));
+  const history=!result.capture.customerId?await readPackageQuoteHistory(auth.data,result.capture.recognition?.text??result.capture.text??''):[];
+  result.capture.packageContext=await withPrivilegedTenantTransaction(auth.data,tx=>readPackageExpectation(tx,auth.data,result.capture,quotes,history));
  }catch(error){console.error('[PACKAGE_EXPECTATION_READ_FAILED]',error);result.capture.packageContext={status:'UNAVAILABLE',message:'Erwartete Ware konnte nicht sicher gelesen werden · Original bleibt erhalten.'};}
  return result;
 }
