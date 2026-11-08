@@ -56,13 +56,6 @@ function selftest() {
   if (wrongFileMessages.length !== 1) {
     throw new Error("H16_SELFTEST_EXCEPTION_ESCAPED_ALLOWLIST");
   }
-
-  const statisticGuard="function actorStatisticsScope(actor){\n// erlaubt H11c: U250 Personenstatistik\nif(actor.role!=='admin') deny();\n}";
-  const statisticPath="src/lib/server/quoteJournalPort.ts";
-  if(verifySample(statisticGuard,statisticPath).some(message=>message.ruleId?.startsWith('h16/')))throw Error('U250_STATISTIC_EXCEPTION_REJECTED');
-  for(const [source,file] of [[statisticGuard.replace('actorStatisticsScope','otherFunction'),statisticPath],[statisticGuard,'src/other.ts'],[statisticGuard.replace('// erlaubt H11c: U250 Personenstatistik','// no authority'),statisticPath]]){
-    if(verifySample(source,file).filter(message=>message.ruleId==='h16/no-role-identity-comparison').length!==1)throw Error('U250_STATISTIC_EXCEPTION_ESCAPED');
-  }
   process.stdout.write("H16_ESLINT_SELFTEST=PASS\n");
 }
 

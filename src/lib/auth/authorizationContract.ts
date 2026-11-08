@@ -46,6 +46,7 @@ export const ACCESS_AREAS = [
   "einstellungen",
   "logins",
   "wartung",
+  "statistik_alle",
 ] as const;
 
 export type AccessArea = typeof ACCESS_AREAS[number];
@@ -60,6 +61,7 @@ export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string
   entscheiden: { text: "Abweichungen & Reklamationen entscheiden", sub: "Ware unbearbeitet zurückgeben, Abweichungen freigeben, Reklamation bewerten" },
   einstellungen: { text: "Firmen-Einstellungen", sub: "Firmendaten, Katalog, Stundensatz" },
   logins: { text: "Logins & Rechte verwalten" },
+  statistik_alle: { text: "Statistik aller Personen" },
   wartung: { text: "Wartung, Stufen & Anbindungen" },
 };
 
@@ -80,6 +82,7 @@ const DEVELOPER_BUSINESS_AREAS = [
   "kassieren",
   "mails",
   "entscheiden",
+  "statistik_alle",
 ] as const satisfies readonly AccessArea[];
 
 const BLOCKED_ACCESS_AREAS_BY_ROLE: Record<AppRole, readonly AccessArea[]> = {
@@ -122,6 +125,7 @@ export function getFixedAccessAreasForRole(role: AppRole): readonly AccessArea[]
 }
 
 const ACCESS_AREA_PERMISSIONS: Record<AccessArea, readonly PermissionKey[]> = {
+  statistik_alle: [],
   auftraege: ["perm_op_status", "perm_op_risk", "perm_op_photos", "perm_op_qa", "perm_view_leitstand"],
   eingang: ["perm_data_orders"],
   kunden: ["perm_data_customers", "perm_view_customers"],

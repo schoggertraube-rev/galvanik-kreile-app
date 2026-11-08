@@ -45,3 +45,12 @@ Der am 22:02 gebündelt vorgeschlagene enge Ausnahmeweg wurde nach Ablauf der 60
 Wichtige Liefergrenze: der geschützte CI-Ratchet verwendet das Plugin von main. Die neue Kandidaten-Ausnahme kann diesen Richter vor dem Merge nicht ändern; dort bleibt der direkte Rollenvergleich erwartbar rot. Neuer Beleg samt konkreter enger Migration im BAULOG für den Planungschat. Kein automatischer Override, keine Merge-Bitte, keine Behauptung vollständig grüner CI. Die Pflicht zur Planung-Diff-Abnahme bleibt bestehen.
 
 Unveränderter Sichtprüfer am Produktstand056632ce nach einer mechanischen Routenkorrektur: sechs rote ORDER_RECEIVER_NOT_READY-Navigationsfälle; fehlende Rekla/Beleg-Routen als Gelb offen. Nicht als Gesamt-Sichtpass ausgegeben. Der getrennte echte read-only Auftrags-Akteur-Lauf1220/390 ist belegt und visuell kontrolliert. Kein weiterer Harness-Wiederholungslauf.
+
+
+## PL-Entscheidung 09.11. 00:01 umgesetzt
+
+Die oben beschriebene temporäre H16-Ausnahme ist vollständig entfernt: Plugin und Selbsttest wieder bytegleich origin/main. Keine Regel-/Ratchet-/Baseline-Migration. Der Statistikleser prüft ausschließlich das vorhandene Rechtesystem, Bereich `statistik_alle`. Im kanonischen Register als Admin-Vorlage geführt, Entwickler-Geschäftsgrenze beachtet. Tatsächliche effektive Rechte bleiben maßgeblich: Admin ohne erteiltes Recht wird abgewiesen. Keine Task-Empfängergruppe daraus erzeugt.
+
+Additive Migration 20261108230500_actor_statistics_access_area.sql erweitert den bestehenden Rechte-Constraint und ergänzt fehlende Admin-Standardrechte ohne alte Rechte zu verändern. Dev-Abbruchprobe inklusive Rechte-/Constraint-/Migrations-Snapshot PASS; vorhandene Rechte unverändert. SA-Branch104 + zuvor freigegebene RM-Vorlage20261108222500 = gemeinsame freigegebene Union105 = Dev105. Branch allein nicht gleich Dev behauptet (PL00:01 additive Differenz bestätigt). SHA-2568579c680fff783d3bbe094751909def0ef70ddfa7d299eae60189f4878ab7c34.
+
+Echter AK-Auftrag-Replay: zwei Logins, Anlage, Übernahme, eigene Statistik, fremde Statistik abgewiesen; Admin ohne Recht abgewiesen, mit dem tatsächlichen Recht beide Akteure gelesen. PASS7,20s. Geschützter H16-Selbsttest PASS. Neuer Kandidat benötigt CI/READY-Nachweis und Planungs-Diffprüfung; keine Merge-Bitte vorweg.

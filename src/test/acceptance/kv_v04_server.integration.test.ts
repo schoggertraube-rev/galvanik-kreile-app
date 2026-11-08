@@ -1197,7 +1197,9 @@ it('AK order: two actual logins retain creator and last actor, take through exis
  expect(stats).toMatchObject({code:'OK',userId:second.actorId,rows:expect.arrayContaining([expect.objectContaining({kind:'order',action:'ORDER_TASK_ASSIGNED_V1',events:1,cases:1})])});
  const all=async(actor:Fixture)=>withSession(actor,async()=>{const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(new Date());return getActorStatistics({from:today,through:today,all:true});});
  expect(await all(second)).toMatchObject({code:'FORBIDDEN'});
- const admin=await createFixture(true,['auftraege'],'admin');
+ const adminDenied=await createFixture(true,['auftraege'],'admin');
+ expect(await all(adminDenied)).toMatchObject({code:'FORBIDDEN'});
+ const admin=await createFixture(true,['auftraege','statistik_alle'],'admin');
  expect(await all(admin)).toMatchObject({code:'OK',userId:null,rows:expect.arrayContaining([expect.objectContaining({userId:first.actorId,action:'ORDER_INTAKE_CREATED_V1'}),expect.objectContaining({userId:second.actorId,action:'ORDER_TASK_ASSIGNED_V1'})])});
 
 });
