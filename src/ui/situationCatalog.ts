@@ -86,7 +86,7 @@ export const QUOTE_CANCELLED_ORDER_COPY={title:'Auftrag zurückgenommen',explana
 export const QUOTE_UNDO_COPY={open:"Rückgängig",reason:"Grund der Rücknahme",missing:"Nenne den Grund der Rücknahme.",confirm:"Auftrag zurücknehmen",saved:"Auftrag zurückgenommen · die Ware ist wieder beim KV.",unavailable:(reason:string)=>"Rückgängig nicht mehr möglich · "+reason} as const;
 
 export const QUOTE_CYCLE_COPY={
- editionWarning:(before:number,after:number)=>`Zusage zu Fassung ${before} liegt vor – Fassung ${after} hebt sie auf`,
+ editionWarning:(before:number,after:number,customer:string)=>`Du änderst Fassung ${before} zu Fassung ${after} – die Zusage von ${customer} gilt dann nicht mehr. Termin allein ändert nichts.`,
  editionConfirm:'Neue Fassung speichern · Zusage aufheben',
  acceptanceInvalid:(edition:number)=>`Zusage zu Fassung ${edition} ist ungültig · aktuelle Fassung bestätigen lassen`,
  goodsLocation:(location:string)=>'Ware liegt in '+location,
