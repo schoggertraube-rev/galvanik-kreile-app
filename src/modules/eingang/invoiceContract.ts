@@ -32,6 +32,7 @@ export type InvoiceDuplicate = {
   date: string | null; gross: string | null; exact: boolean;
 };
 export type InvoiceView = {
+  canUndo?:boolean;canRebook?:boolean;
   automation?: import('./invoiceAutomation').InvoiceAutomaticReadiness;
   item: { id: string; version: number; at: string; channel: string; sender: string | null };
   invoice: IncomingInvoice | null; supplier: InvoiceSupplier | null;
@@ -51,6 +52,7 @@ export type InvoiceSaveInput = {
   duplicateId: string | null; duplicateReason: string | null; unclearReason: string | null;
 };
 export type InvoiceChangeInput = {
+  command?: "undo" | "rebook";
   invoiceId: string; version: number; clientKey: string;
   result: Exclude<IncomingInvoiceStatus, 'unklar'>;
   paidDate: string | null; proofFileId: string | null;

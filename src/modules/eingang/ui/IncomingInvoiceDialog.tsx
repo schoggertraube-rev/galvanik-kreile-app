@@ -1,11 +1,12 @@
 'use client';
+import {BELEG_AUTO_COPY as C} from '@/ui/situationCatalog';
 import {useEffect,useRef,useState} from 'react';
 import {Button,Checkbox,Dialog,Eingabe,Feld,Hinweis,Kachel,Rueckfrage,Segment,Textfeld,Zustandskette} from '@/ui/kr';
 import {invoiceDate,invoiceFieldErrors,invoiceWarnings,type InvoiceFields,type InvoicePorts,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
 import {INTAKE_CHANGED_EVENT} from '../messageContract';
 import {uploadIntakeOriginal} from '../intakeOriginalUpload';
 
-type Mode='pruefen'|'bezahlt'|'unklar'|'klaeren'|'bezahlt_markieren'|'ansicht';
+type Mode='rueckgaengig'|'neu_ablegen'|'pruefen'|'bezahlt'|'unklar'|'klaeren'|'bezahlt_markieren'|'ansicht';
 type Outcome='offen'|'bezahlt'|'doppelt'|'ungueltig';
 function dateLabel(value:string){return invoiceDate(value)?new Intl.DateTimeFormat('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',timeZone:'Europe/Berlin'}).format(new Date(value+'T12:00:00Z')).replace(/^(\p{L}+)\.,?\s/u,'$1 '):'';}
 function today(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(new Date());}
@@ -14,7 +15,7 @@ const fieldRows=[['nummer','rechnungsnummer','Rechnungsnummer','text'],['datum',
 /** 3.8 is a projection of the canonical intake/original and its one supplier_invoice. */
 export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial:InvoiceView;ports:InvoicePorts;onClose:()=>void;onMessage:(text:string,taskId?:string)=>void}){
  const [view,setView]=useState(initial),[fields,setFields]=useState({...initial.fields}),[selected,setSelected]=useState<InvoiceSupplier|null>(initial.supplier);
- const [mode,setMode]=useState<Mode>(initial.invoice?.zahlstatus==='unklar'?'klaeren':initial.invoice?.zahlstatus==='offen'?'bezahlt_markieren':initial.invoice?'ansicht':'pruefen');
+ const [mode,setMode]=useState<Mode>(initial.canRebook?'neu_ablegen':initial.invoice?.zahlstatus==='unklar'?'klaeren':initial.invoice?.zahlstatus==='offen'?'bezahlt_markieren':initial.invoice?'ansicht':'pruefen');
  const [supplierQuery,setSupplierQuery]=useState(initial.supplier?.name??''),[suppliers,setSuppliers]=useState<InvoiceSupplier[]>([]),[searching,setSearching]=useState(false);
  const [initialPaidDate]=useState(today),[paidDate,setPaidDate]=useState(initialPaidDate),[reason,setReason]=useState(''),[outcome,setOutcome]=useState<Outcome|' '>(' '),[correct,setCorrect]=useState(false);
  const [duplicate,setDuplicate]=useState<InvoiceView['duplicate']>(null),[duplicateReason,setDuplicateReason]=useState(''),[errors,setErrors]=useState<Record<string,string>>({});
@@ -76,25 +77,27 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
   try{
    const invoice=view.invoice;
    const result=invoice?await (mode==='klaeren'?ports.clarify:ports.status)({invoiceId:invoice.id,version:invoice.version,clientKey:key.current,result:status as Outcome,
-    paidDate:status==='bezahlt'?paidDate:null,proofFileId:status==='bezahlt'?proofFileId:null,duplicateId:status==='doppelt'?(duplicate??view.duplicate)?.id??null:null,reason:reason.trim()||null,fields:mode==='klaeren'&&correct?fields:null})
+    paidDate:status==='bezahlt'?paidDate:null,proofFileId:status==='bezahlt'?proofFileId:null,duplicateId:status==='doppelt'?(duplicate??view.duplicate)?.id??null:null,reason:reason.trim()||null,fields:mode==='neu_ablegen'||mode==='klaeren'&&correct?fields:null,...(mode==='rueckgaengig'?{command:'undo' as const}:mode==='neu_ablegen'?{command:'rebook' as const}:{})})
     :await ports.save({itemId:view.item.id,fileId:view.fileId,version:view.item.version,clientKey:key.current,fields,status:status as Exclude<typeof status,'ungueltig'>,
      paidDate:status==='bezahlt'?paidDate:null,proofFileId:status==='bezahlt'?proofFileId:null,duplicateId:status==='doppelt'?duplicate?.id??null:null,duplicateReason:duplicateReason.trim()||null,unclearReason:status==='unklar'?reason.trim():null});
    if(result.code==='DUPLICATE'){setDuplicate(result.duplicate);return;}
    if(result.code!=='OK'){setErrors(result.fields??{});setMessage('Nicht gespeichert · alle Eingaben sind noch da · '+result.message);setRetry(true);return;}
-   const text=result.invoice.unklar_grund==='Lieferant fehlt'?'Lieferant fehlt · Aufgabe angelegt':mode==='klaeren'?'Rechnung geklärt · '+status:mode==='bezahlt_markieren'?'Als bezahlt markiert':status==='doppelt'?'Als doppelt abgelegt · Eingang erledigt':status==='unklar'?'Eingangsrechnung unklar · Aufgabe für Recht Geld':status==='bezahlt'?'Eingangsrechnung erfasst · bezahlt':'Eingangsrechnung erfasst · fällig '+dateLabel(result.invoice.faellig_am??'');
+   const text=mode==='rueckgaengig'?C.undone:mode==='neu_ablegen'?C.rebooked:result.invoice.unklar_grund==='Lieferant fehlt'?'Lieferant fehlt · Aufgabe angelegt':mode==='klaeren'?'Rechnung geklärt · '+status:mode==='bezahlt_markieren'?'Als bezahlt markiert':status==='doppelt'?'Als doppelt abgelegt · Eingang erledigt':status==='unklar'?'Eingangsrechnung unklar · Aufgabe für Recht Geld':status==='bezahlt'?'Eingangsrechnung erfasst · bezahlt':'Eingangsrechnung erfasst · fällig '+dateLabel(result.invoice.faellig_am??'');
    onMessage(text,result.invoice.aufgabe_id??undefined);onClose();window.dispatchEvent(new Event(INTAKE_CHANGED_EVENT));
   }catch(error){console.error('[INCOMING_INVOICE_SAVE_CLIENT_FAILED]',error);setMessage('Nicht gespeichert · alle Eingaben sind noch da · Fehlercode: INCOMING_INVOICE_SAVE_CLIENT_FAILED.');setRetry(true);}
   finally{working.current=false;setBusy(false);}
  };
  const missingSupplier=!!view.invoice&&!view.invoice.lieferant_id&&view.invoice.unklar_grund==='Lieferant fehlt';
- const readOnly=mode==='ansicht'||mode==='bezahlt_markieren'||mode==='klaeren'&&!correct&&!missingSupplier;
- const warnings=invoiceWarnings(fields,selected),due=dateLabel(fields.faelligAm),primaryLabel=uploading?'Nachweis wird gesichert …':busy?'Wird erfasst …':mode==='klaeren'?'Klärung speichern':mode==='bezahlt_markieren'?'Als bezahlt markieren':mode==='unklar'?'Als unklar erfassen':mode==='bezahlt'?'Erfassen · bezahlt':due?'Erfassen · fällig '+due:'Erfassen';
+ const readOnly=mode==='rueckgaengig'||mode==='ansicht'||mode==='bezahlt_markieren'||mode==='klaeren'&&!correct&&!missingSupplier;
+ const warnings=invoiceWarnings(fields,selected),due=dateLabel(fields.faelligAm),primaryLabel=mode==='rueckgaengig'?C.undoConfirm:mode==='neu_ablegen'?C.rebook:uploading?'Nachweis wird gesichert …':busy?'Wird erfasst …':mode==='klaeren'?'Klärung speichern':mode==='bezahlt_markieren'?'Als bezahlt markieren':mode==='unklar'?'Als unklar erfassen':mode==='bezahlt'?'Erfassen · bezahlt':due?'Erfassen · fällig '+due:'Erfassen';
  const primaryId=mode==='klaeren'?'klaerung-speichern':mode==='bezahlt_markieren'?'als-bezahlt':mode==='unklar'?'unklar-speichern':mode==='bezahlt'?'bezahlt-speichern':'offen';
- const primary=()=>void save(mode==='klaeren'?(outcome===' '?'offen':outcome):mode==='bezahlt'||mode==='bezahlt_markieren'?'bezahlt':mode==='unklar'?'unklar':'offen');
+ const primary=()=>void save(mode==='rueckgaengig'?'ungueltig':mode==='klaeren'?(outcome===' '?'offen':outcome):mode==='bezahlt'||mode==='bezahlt_markieren'?'bezahlt':mode==='unklar'?'unklar':'offen');
  return <><Dialog titel="Rechnung prüfen" icon="file" groesse="breit" schliessenSpecId="rechnungein.schliessen" onSchliessen={close} vorSchliessen={()=>!working.current}
   unterzeile={mode==='klaeren'?'Rechnung klären':mode==='bezahlt_markieren'?'Eingangsrechnung · als bezahlt markieren':undefined}
   meldung={message?{text:message,ton:'fehler'}:null}
   fuss={<><Button data-spec-id={mode==='klaeren'?'rechnungein.klaeren-abbrechen':'rechnungein.abbrechen'} text={mode==='ansicht'?'Schließen':'Abbrechen'} onClick={close} disabled={busy}/>
+   {view.canUndo&&mode!=='rueckgaengig'?<Button text={C.undo} disabled={busy} onClick={()=>{setMode('rueckgaengig');setReason('');}}/>:null}
+   {mode==='rueckgaengig'?<Button text={C.back} disabled={busy} onClick={()=>{setMode('bezahlt_markieren');setReason('');}}/>:null}
    {mode==='pruefen'&&!duplicate?<><Button data-spec-id="rechnungein.unklar" icon="alert" text="Unklar – klären" onClick={()=>setMode('unklar')}/><Button data-spec-id="rechnungein.ist-bezahlt" icon="check" text="Ist schon bezahlt" onClick={()=>setMode('bezahlt')}/></>:null}
    {(mode==='unklar'||mode==='bezahlt')&&!duplicate?<Button data-spec-id="rechnungein.zurueck-daten" text="Zurück" onClick={()=>setMode('pruefen')}/>:null}
    {duplicate?<><Button data-spec-id="rechnungein.doppelt-ablegen" text="Als doppelt ablegen" art="erledigen" disabled={busy} onClick={()=>void save('doppelt')}/>{!duplicate.exact?<Button data-spec-id="rechnungein.trotzdem" text="Trotzdem erfassen" disabled={busy} onClick={()=>{if(duplicateReason.trim().length<3||duplicateReason.length>200){setErrors({duplicateReason:'Grund fehlt · 3 bis 200 Zeichen'});return;}setDuplicate(null);}}/>:null}</>:mode!=='ansicht'?<Button data-spec-id={'rechnungein.'+primaryId} art="erledigen" icon="check" text={primaryLabel} disabled={busy} onClick={primary}/>:null}
@@ -117,14 +120,15 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
   {retry?<div data-spec-id="rechnungein.zustand.fehler"><p>Nicht gespeichert · alle Eingaben sind noch da</p><Button data-spec-id="rechnungein.erneut" text="Erneut" onClick={()=>{setRetry(false);setMessage(null);}} disabled={busy}/></div>:null}
   <div className="r38-raster"><Kachel titel="Original" icon="file">{view.originals.map(file=><button key={file.id} className="kr-zeile" type="button" data-spec-id="rechnungein.original" onClick={()=>ports.openOriginal(view.item.id,file.id)}><span><b>{file.name||'Beleg'}</b><small>gesichert · unverändert</small></span></button>)}{!view.originals.length?<Hinweis ton="warn">Original fehlt</Hinweis>:null}</Kachel>
    <section aria-label="Rechnung"><h3 className="kr-block-label">1 · Rechnung</h3><div className="kr-form">
-    <Feld label="Lieferant" voll fehler={errors.lieferantId}><Eingabe data-invoice-field="lieferantId" data-spec-id="rechnungein.lieferant" required value={supplierQuery} disabled={busy} readOnly={readOnly||!!view.invoice&&!missingSupplier} onChange={event=>{setSupplierQuery(event.target.value);setSelected(null);update('lieferantId','');}}/>
+    <Feld label="Lieferant" voll fehler={errors.lieferantId}><Eingabe data-invoice-field="lieferantId" data-spec-id="rechnungein.lieferant" required value={supplierQuery} disabled={busy} readOnly={readOnly||!!view.invoice&&!missingSupplier&&mode!=='neu_ablegen'} onChange={event=>{setSupplierQuery(event.target.value);setSelected(null);update('lieferantId','');}}/>
      {searching?<span role="status">Lieferant wird gesucht …</span>:null}
     </Feld>
-    {!readOnly&&!selected&&(!view.invoice||missingSupplier)?<div className="kr-voll">{suppliers.map(value=><Button key={value.id} text={value.name+' · übernehmen'} onClick={()=>chooseSupplier(value)}/>)}<Button data-spec-id="rechnungein.lieferant-anlegen" text="Lieferant anlegen" onClick={()=>{
+    {!readOnly&&!selected&&(!view.invoice||missingSupplier||mode==='neu_ablegen')?<div className="kr-voll">{suppliers.map(value=><Button key={value.id} text={value.name+' · übernehmen'} onClick={()=>chooseSupplier(value)}/>)}<Button data-spec-id="rechnungein.lieferant-anlegen" text="Lieferant anlegen" onClick={()=>{
      void ports.createSupplier(view.item.id).then(result=>{if(result.code!=='OK')setMessage(result.message);}).catch(error=>{console.error('[INVOICE_CREATE_SUPPLIER_OPEN_FAILED]',error);setMessage('Lieferant kann nicht geöffnet werden · Fehlercode: INVOICE_CREATE_SUPPLIER_OPEN_FAILED.');});
     }}/></div>:null}
     {fieldRows.map(([field,id,label,type])=><Feld key={field} label={label} className={errors[field]?'kr-feld--fehler':undefined}><Eingabe data-invoice-field={field} data-spec-id={'rechnungein.'+id} type={type} required={field!=='iban'&&!readOnly} readOnly={readOnly||field==='iban'&&!!view.invoice} disabled={busy} value={fields[field]} aria-invalid={!!errors[field]} aria-describedby={errors[field]?'invoice-error-'+id:undefined} inputMode={['netto','ust','brutto'].includes(field)?'decimal':undefined} onChange={event=>update(field,event.target.value)}/>{errors[field]?<span id={'invoice-error-'+id} className="kr-feld-fehler" data-spec-id={'rechnungein.'+id+'.fehler'}>{errors[field]}</span>:null}</Feld>)}
    </div></section></div>
+  {mode==='rueckgaengig'?<Feld label={C.undoReason} fehler={errors.reason}><Textfeld data-invoice-field="reason" value={reason} maxLength={200} onChange={event=>setReason(event.target.value)}/></Feld>:null}
   {mode==='unklar'?<div data-spec-id="rechnungein.zustand.unklar"><h3>Unklar · was ist zu klären?</h3><Feld label="Grund" fehler={errors.reason}><Textfeld data-invoice-field="reason" data-spec-id="rechnungein.grund" maxLength={200} value={reason} onChange={event=>setReason(event.target.value)}/></Feld></div>:null}
   {mode==='klaeren'?<div data-spec-id="rechnungein.zustand.klaeren"><h3>Rechnung klären</h3><p>{view.invoice?.unklar_grund}</p><div data-spec-id="rechnungein.ergebnis"><Feld label="Ergebnis" fehler={errors.outcome}><Segment label="Ergebnis" wert={outcome} onWert={setOutcome} optionen={[{wert:'offen',text:'offen'},{wert:'bezahlt',text:'schon bezahlt'},{wert:'doppelt',text:'doppelt'},{wert:'ungueltig',text:'ungültig'}]}/></Feld></div>
    {outcome==='ungueltig'?<Feld label="Grund" fehler={errors.reason}><Textfeld data-invoice-field="reason" data-spec-id="rechnungein.grund" value={reason} maxLength={200} onChange={event=>setReason(event.target.value)}/></Feld>:null}
