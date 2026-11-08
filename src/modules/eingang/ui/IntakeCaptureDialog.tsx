@@ -28,15 +28,13 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
   const [text, setText] = useState("");
   const [situationRequested,setSituationRequested]=useState(false);
   const [capture, setCapture] = useState<IntakeCapture | null>(null);
-  const [quoteCandidates,setQuoteCandidates]=useState<IntakeQuoteCandidate[]>([]);
-  const [quotesLoading,setQuotesLoading]=useState(false);
-  const [quoteCustomer,setQuoteCustomer]=useState<string|null>(null);
-  const candidateCustomer=capture?.customerId??null,candidateKind=capture?.recognition?.kind;
+  const quoteCandidates:IntakeQuoteCandidate[]=capture?.packageContext?.status==='OK'?capture.packageContext.candidates.filter(row=>row.kind==='quote').map(row=>({id:row.id,number:row.number,customer:row.customerName??'',accepted:row.state==='accepted',edition:row.edition??1,goodsHere:row.goodsHere??false,location:row.location??null})):[];
+  const packageAssignKeys=useRef(new Map<string,string>());
   const concerns = useMemo(() => recognizeNoteConcerns(text), [text]);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
   const [error, setError] = useState<string | null>(null);
-  useEffect(()=>{if(!candidateCustomer||candidateKind!=='ware')return;let active=true;Promise.resolve().then(()=>{if(active){setQuotesLoading(true);setQuoteCandidates([]);}return ports.listOpenQuotes();}).then(result=>{if(!active)return;if(result.code!=='OK'){setError(result.message);return;}setQuoteCustomer(candidateCustomer);setQuoteCandidates(result.quotes.filter(q=>q.customerId===candidateCustomer&&!q.linkedOrderId&&q.lifecycle?.stage!=='abgesagt').map(q=>({id:q.quoteId,number:q.quoteNumber,customer:q.customerDisplayName,accepted:Boolean(q.lifecycle?.acceptedAt&&q.lifecycle.acceptedEdition===q.lifecycle.edition),edition:q.lifecycle?.edition??1,goodsHere:Boolean(q.lifecycle?.goods?.some(row=>!row.orderId)),location:q.lifecycle?.goods?.find(row=>!row.orderId)?.location??null})));}).catch(cause=>{console.error('[INTAKE_QUOTE_CANDIDATES_FAILED]',cause);if(active)setError('Passende KVs konnten nicht sicher gelesen werden.');}).finally(()=>{if(active)setQuotesLoading(false);});return()=>{active=false;};},[ports,candidateCustomer,candidateKind]);
+
   const [createContext, setCreateContext] = useState<{ customerId: string; label: string } | null>(null);
   const [contextLoading, setContextLoading] = useState(!mode && Boolean(ports.getCreateContext));
   const [contextError, setContextError] = useState<string | null>(null);
@@ -454,6 +452,16 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
     try { const saved = await saveNote(); if (saved) openObject("mailein", saved.id + "#rein"); }
     catch (cause) { console.error("[INTAKE_CAPTURE_ASSIGN_OPEN_FAILED]", cause); setError("Zuordnung konnte nicht geöffnet werden · Eingaben bleiben erhalten. Code: INTAKE_CAPTURE_ASSIGN_OPEN_FAILED."); }
   };
+  const choosePackageCustomer=async(customerId:string)=>{
+    if(inFlight.current||!capture||capture.customerId)return;
+    if(!ports.assignCaptureCustomer||!getCapture){setError('Kundenzuordnung ist nicht verbunden · Original bleibt erhalten.');return;}
+    const key=capture.id+':'+capture.version+':'+customerId;if(!packageAssignKeys.current.has(key))packageAssignKeys.current.set(key,crypto.randomUUID());
+    inFlight.current=true;setBusy(true);setError(null);
+    try{const assigned=await ports.assignCaptureCustomer({itemId:capture.id,version:capture.version,clientEventId:packageAssignKeys.current.get(key)!,customerId,mode:'manual'});
+      if(assigned.code!=='OK'){setError('message'in assigned?assigned.message:'Kunde wurde inzwischen zugeordnet · neu lesen.');return;}
+      const refreshed=await getCapture(capture.id);if(refreshed.code!=='OK'){setError(refreshed.message);return;}setCapture(refreshed.capture);
+    }catch(cause){console.error('[PACKAGE_CUSTOMER_ASSIGN_FAILED]',cause);setError('Zuordnung nicht bestätigt · Original und Auswahl bleiben erhalten.');}finally{inFlight.current=false;setBusy(false);}
+  };
   const chooseKind = async (kind: Exclude<CaptureKind, "unklar">) => {
     if (!capture || inFlight.current) return;
     if (!ports.chooseCaptureKind) { setError("Die Art des Eingangs kann nicht gespeichert werden · Code: INTAKE_KIND_PORT_MISSING."); return; }
@@ -516,7 +524,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
       if (showCamera && (event.key === " " || event.key === "Enter") && !(event.target as HTMLElement).closest("input,textarea,select,button,a,[contenteditable=true]")) { event.preventDefault(); takePhoto(); }
     }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); chooseFiles(event.dataTransfer.files); }}
       onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); chooseFiles(event.clipboardData.files); } }}>
-      {showSituation&&capture?<IntakeSituation readOriginal={ports.readCaptureOriginal} capture={capture} kind={recognizedKind} busy={busy||quotesLoading} quotes={quoteCustomer===candidateCustomer&&candidateCustomer&&candidateKind==="ware"?quoteCandidates:[]} onQuote={id=>openObject("kvware",id+"#"+capture.id)} primary={resultMain} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onKind={kind=>void chooseKind(kind)} onTask={()=>{const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}}));if(!opened){console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");setError("Aufgabe konnte nicht geöffnet werden · Code: INTAKE_TASK_TARGET_UNAVAILABLE.");}}}/>:null}
+      {showSituation&&capture?<IntakeSituation readOriginal={ports.readCaptureOriginal} capture={capture} kind={recognizedKind} busy={busy} quotes={quoteCandidates} onCustomerCandidate={id=>void choosePackageCustomer(id)} onQuote={id=>openObject("kvware",id+"#"+capture.id)} primary={resultMain} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onKind={kind=>void chooseKind(kind)} onTask={()=>{const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}}));if(!opened){console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");setError("Aufgabe konnte nicht geöffnet werden · Code: INTAKE_TASK_TARGET_UNAVAILABLE.");}}}/>:null}
       <div className="ev-rein-feld" hidden={showSituation} style={showSituation?{display:"none"}:undefined}>
         {!mode&&ports.actorDisplayName?.trim()?<h2>{intakeStartTitle(ports.actorDisplayName)}</h2>:null}
         {contextLoading ? <p role="status">Kontext wird gelesen …</p> : null}

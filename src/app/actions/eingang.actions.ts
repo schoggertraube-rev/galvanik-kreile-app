@@ -1,5 +1,19 @@
 "use server";
 
+import {listOpenQuotesCommand} from '@/modules/quotes/server-public';
+import {readPackageExpectation} from '@/modules/eingang/server-public';
+import type {IntakeCaptureResult} from '@/modules/eingang/public';
+async function withPackageExpectation(result:IntakeCaptureResult):Promise<IntakeCaptureResult>{
+ if(result.code!=='OK'||result.capture.recognition?.kind!=='ware')return result;
+ try{
+  const auth=await resolveAuthorization();if(!auth.ok)return result;
+  const canQuotes=hasAuthorizationArea(auth.data,'auftraege')&&hasAuthorizationArea(auth.data,'geld');
+  const quotes=canQuotes?await listOpenQuotesCommand({tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canReadQuote:true,canCreateQuote:false,canUpdateQuote:false,canConvertQuote:false}}):null;
+  result.capture.packageContext=await withPrivilegedTenantTransaction(auth.data,tx=>readPackageExpectation(tx,auth.data,result.capture,quotes));
+ }catch(error){console.error('[PACKAGE_EXPECTATION_READ_FAILED]',error);result.capture.packageContext={status:'UNAVAILABLE',message:'Erwartete Ware konnte nicht sicher gelesen werden · Original bleibt erhalten.'};}
+ return result;
+}
+
 import { createHash } from "node:crypto";
 import { after } from "next/server";
 import {revalidatePath} from "next/cache";
@@ -69,7 +83,7 @@ async function syncIntakeMailbox():Promise<string|null>{
  }catch(error){console.error('[INTAKE_MAIL_SYNC_FAILED]',error);return 'Neue Mails momentan nicht abrufbar · bereits gesicherte Eingänge bleiben verfügbar.';}
 }
 import { processIntakeDeviceRequest, discardIntakeCapture, chooseIntakeCaptureKind } from "@/modules/eingang/server-public";
-export async function chooseIntakeCaptureKindAction(input: unknown) { return chooseIntakeCaptureKind(input); }
+export async function chooseIntakeCaptureKindAction(input: unknown) { return withPackageExpectation(await chooseIntakeCaptureKind(input)); }
 import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation } from "@/modules/eingang/server-public";
 import {saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,type GoodsReceiptResult} from "@/modules/eingang/server-public";
 import {parseGoodsReceiptInput} from "@/modules/eingang/public";
@@ -108,11 +122,11 @@ import { saveIntakeNote, readIntakeCapture, readIntakeNoteText, readIntakePendin
 import type { IntakeContext } from "@/modules/eingang/public";
 
 export async function saveIntakeNoteAction(input: unknown) {
-  return saveIntakeNote(input, readCustomerProfile);
+  return withPackageExpectation(await saveIntakeNote(input, readCustomerProfile));
 }
 export async function discardIntakeCaptureAction(input:unknown){return discardIntakeCapture(input);}
 export async function prepareIntakeFileAction(input: unknown) { return prepareIntakeFile(input); }
-export async function finishIntakeFileAction(fileId: string) { return finishIntakeFile(fileId); }
+export async function finishIntakeFileAction(fileId: string) { return withPackageExpectation(await finishIntakeFile(fileId)); }
 export async function getIntakePendingScopeAction() { return readIntakePendingScope(); }
 export async function getIntakeFileChangesAction(since: string, after: string | null) { return readIntakeFileChanges(since, after); }
 export async function saveIntakeDeviceRequestAction(input: unknown) {
@@ -121,7 +135,7 @@ export async function saveIntakeDeviceRequestAction(input: unknown) {
   return processIntakeDeviceRequest(input, fingerprint);
 }
 export async function getIntakeCaptureAction(itemId: string, context?: IntakeContext) {
-  return readIntakeCapture(itemId, context);
+  return withPackageExpectation(await readIntakeCapture(itemId, context));
 }
 export async function recognizeIntakeNoteAction(text: string) {
   const authorization = await resolveAuthorization();

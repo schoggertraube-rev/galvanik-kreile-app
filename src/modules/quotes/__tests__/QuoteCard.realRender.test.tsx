@@ -182,3 +182,12 @@ it('AF5 shows physical discrepancy, retains a failed reason and retries the same
  expect(clarify).toHaveBeenCalledTimes(2);expect(clarify.mock.calls[1][0]).toEqual(clarify.mock.calls[0][0]);expect(clarify.mock.calls[0][0]).toEqual({command:'clarify',quoteId:quote.quoteId,receiptId:'TEST-goods',expectedVersion:1,expectedQuoteVersion:2,clientEventId:expect.any(String),reason:'TEST Kunde bestätigt'});
  expect(screen.getByText('TEST Fach 3 · 2 von 3 Packstücke · TEST Schaden')).toBeVisible();
 });
+
+it('PE-02 opens the existing mail draft for a pending quote without sending automatically',async()=>{
+ const send=vi.fn();render(<QuoteCard quoteId={quote.quoteId} initialIntent="send" ports={{read:async()=>({code:'OK',quote,canEdit:true}),send,change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()} MailView={({draft})=><label>TEST Paket Betreff<input value={draft.subject} onChange={e=>draft.onSubject(e.target.value)}/></label>}/>);
+ expect((await screen.findByRole('textbox',{name:'TEST Paket Betreff'}) as HTMLInputElement).value).toContain(quote.quoteNumber);expect(send).not.toHaveBeenCalled();
+});
+it('PE-02 never exposes the mail draft without the actual quote edit grant',async()=>{
+ render(<QuoteCard quoteId={quote.quoteId} initialIntent="send" ports={{read:async()=>({code:'OK',quote,canEdit:false}),send:vi.fn(),change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()} MailView={()=><p>TEST forbidden draft</p>}/>);
+ await screen.findByText(quote.customerDisplayName,{exact:true});expect(screen.queryByText('TEST forbidden draft')).toBeNull();
+});

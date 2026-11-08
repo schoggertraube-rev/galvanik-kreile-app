@@ -105,3 +105,5 @@ export const ORDER_HANDOVER_COPY={
  call:(customer:string,phone:string|null)=>'Ruf '+customer.slice(0,55)+' an: '+(phone??'Telefon fehlt'),
  late:(number:string,customer:string,phone:string|null,carrier:string|null,mode:'pickup'|'shipping',label:boolean,passed:boolean)=>number+' · '+(passed?'Ware ist bereits übergeben':label?'Versandetikett ist bereits erstellt':'Paket ist bereits beim '+(carrier??'Versanddienst · Name fehlt'))+' · '+customer+' wollte '+(mode==='pickup'?'abholen':'Versand')+'. Ruf '+customer+' an: '+(phone??'Telefon fehlt')+'.',
 };
+
+export const PACKAGE_COPY={candidateTitle:'Von wem ist die Ware?',customer:(name:string)=>name+' · Kunde auswählen',history:'Dieses Teil gab es zuletzt bei',unavailable:'Erwartete Ware konnte nicht sicher gelesen werden · Original bleibt erhalten.'};

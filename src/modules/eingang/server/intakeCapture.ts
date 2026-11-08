@@ -62,7 +62,7 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
       orderId: invoiceOnly?null:row.vorgang_id, assignment: row.zuordnung, usage: row.einsatz, concerns: invoiceOnly?row.anliegen.filter(value=>value==='rechnung'):contentAllowed?row.anliegen:[],dismissedConcerns:contentAllowed?row.anliegen_abgewaehlt:[],openConcerns:contentAllowed?row.anliegen_offen:[],
       files: files.map(file => ({ ...file, bytes: Number(file.bytes) })),suggestions:contentAllowed||invoiceOnly?suggestions:[] };
     capture.recognition = invoiceOnly ? { kind: "rechnung", text: "" } : captureRecognition(capture);
-    if (!invoiceOnly && (capture.recognition.kind === "unklar" || capture.recognition.kind === "ware")) {
+    if (!invoiceOnly && hasAuthorizationArea(auth,"auftraege") && (capture.recognition.kind === "unklar" || capture.recognition.kind === "ware")) {
       capture.expectedOrders = await tx.execute<NonNullable<IntakeCapture["expectedOrders"]>[number]>(sql`
         SELECT o.id::text, o.order_number AS number, o.customer_id AS "customerId", o.customer_name AS "customerName",
           o.title, o.ware_seit::text AS since

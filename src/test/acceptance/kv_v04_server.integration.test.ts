@@ -1308,3 +1308,22 @@ it.each(['early','label','two','future','delivered'] as const)('AF19 real mail h
  }
 
 });
+
+it('PE-04 actual package history offers existing customers without assigning; selected customer writes once and rereads',async()=>{
+ const fixture=await createFixture();const {createOrderIntake}=await import('@/lib/server/commands/orderIntakeCommand');
+ const created=await withSession(fixture,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:fixture.customerId},dueDate:'2027-04-20',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',items:[{catalogServiceId:null,name:'TEST Tuergriff',quantity:2,material:null,surfaceRequested:'verchromen',executionRequested:'offen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:'TEST PE04 historical source'}));
+ expect(created.code).toBe('OK');
+ const {saveIntakeNoteAction,getIntakeCaptureAction,assignIntakeCustomerAction}=await import('@/app/actions/eingang.actions');
+ const itemId=randomUUID();const saved=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'DPD Paket mit 2 Tuergriff verchromen'}));
+ if(saved.code!=='OK')throw Error(saved.message);
+ expect(saved.capture.customerId).toBeNull();
+ expect(saved.capture.packageContext).toMatchObject({status:'OK',customers:expect.arrayContaining([expect.objectContaining({customerId:fixture.customerId,source:'order'})])});
+ expect(saved.capture.packageContext?.status==='OK'&&saved.capture.packageContext.customers.length).toBeLessThanOrEqual(3);
+ expect((await sql`SELECT kunde_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].kunde_id).toBeNull();
+ const request={itemId,version:saved.capture.version,clientEventId:randomUUID(),customerId:fixture.customerId,mode:'manual' as const};
+ expect(await withSession(fixture,()=>assignIntakeCustomerAction(request))).toMatchObject({code:'OK',replayed:false});
+ expect(await withSession(fixture,()=>assignIntakeCustomerAction(request))).toMatchObject({code:'OK',replayed:true});
+ expect((await sql`SELECT kunde_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].kunde_id).toBe(fixture.customerId);
+ expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${request.clientEventId}::uuid AND von=${fixture.actorId}`).toHaveLength(1);
+ expect(await withSession(fixture,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{customerId:fixture.customerId,packageContext:{status:'OK',customers:[]}}});
+});

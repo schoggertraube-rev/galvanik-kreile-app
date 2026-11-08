@@ -267,6 +267,7 @@ export function GlobalCreateAppAdapter() {
           return result.code === "OK" ? { ...result, replayed: true } : result;
         },
         readQuote: async (input: { quoteId: string }): Promise<GlobalCreateQuoteReadResult> => {const result=await readQuoteAction(input);return result.code!=='OK'?result:hasQuoteFinancials(result.quote)?{...result,quote:result.quote}:{code:'FORBIDDEN',message:'KV-Finanzansicht ist nicht freigegeben.'};},
+        assignCaptureCustomer: assignIntakeCustomerAction,
         listOpenQuotes: async (): Promise<GlobalCreateOpenQuotesResult> => listOpenQuotesAction(),
         readQuoteUpdateReceipt: async (input: UpdateQuoteInput): Promise<GlobalCreateQuoteResult> => {
           const result = await readQuoteUpdateReceiptAction(input);
