@@ -34,11 +34,11 @@ function normalize(value:unknown):QuoteLifecycleInput|null {
 /** Explicit manual sent/acceptance/decline records. Actual mail dispatch stays in communications. */
 class QuoteLifecycleSourceFailure extends Error{constructor(readonly result:QuoteCommandFailure){super(result.code);}}
 
-export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:unknown,bindSource:QuoteSourceBinding|undefined,followup:QuoteFollowupBinding,options:{actualMail?:boolean}={}):Promise<Result> {
+export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:unknown,bindSource:QuoteSourceBinding|undefined,followup:QuoteFollowupBinding,options:{actualMail?:boolean;onsiteGoodsReceiptId?:string}={}):Promise<Result> {
   const input=normalize(raw);
   if (!input) return {code:'VALIDATION_ERROR',message:'KV-Fassung, Nachweis oder Entscheidung fehlt.'};
   if (!auth.capabilities.canUpdateQuote||!auth.capabilities.canReadQuote) return {code:'FORBIDDEN',message:'KV-Entscheidung ist nicht freigegeben.'};
-  const intent=createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  const intent=createHash('sha256').update(JSON.stringify(options.onsiteGoodsReceiptId?{input,onsiteGoodsReceiptId:options.onsiteGoodsReceiptId}:input)).digest('hex');
   try {
     return await withPrivilegedTenantTransaction(auth,async tx=>{
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('quote-lifecycle:'||${auth.tenantId}||':'||${auth.userId}||':'||${input.clientEventId},0))`);
@@ -63,7 +63,9 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
       const wantsFollowup=!mailDocument||currentMail&&!keepNewer&&life.stage!=='abgelaufen';
       if ((!mailDocument&&(quote.version!==input.expectedVersion||life.edition!==input.edition))||quote.linkedOrderId||life.declinedAt) return {code:'CONFLICT',message:'KV wurde geändert, abgesagt oder bereits umgewandelt. Aktuelle Fassung neu lesen.'};
       if (life.stage==='abgelaufen'&&input.action!=='reject'&&!mailDocument) return {code:'VALIDATION_ERROR',message:'KV ist abgelaufen. Vor einer Zusage die aktuelle Fassung erneuern.'};
-      if ((input.action==='accept'||input.action==='conditional')&&life.sentEdition!==life.edition) return {code:'VALIDATION_ERROR',message:'Zusage gilt nur für die aktuelle versendete Fassung. Aktuellen KV senden.'};
+      const onsite=options.onsiteGoodsReceiptId!==undefined;
+      if(onsite&&(input.action!=='accept'||life.sentEdition!==null||!life.goods?.some(goods=>goods.id===options.onsiteGoodsReceiptId&&goods.orderId===null)))return {code:'VALIDATION_ERROR',message:'Zusage vor Ort braucht den tatsaechlich angenommenen Warenbeleg dieses neuen KV.'};
+      if ((input.action==='accept'||input.action==='conditional')&&!onsite&&life.sentEdition!==life.edition) return {code:'VALIDATION_ERROR',message:'Zusage gilt nur für die aktuelle versendete Fassung. Aktuellen KV senden.'};
       if (input.action==='accept'&&life.conditional?.edition===life.edition) return {code:'VALIDATION_ERROR',message:'Zusage mit Vorbehalt erfordert eine geänderte, neu versendete Fassung.'};
       if (!await quoteJournalActorIsActive(tx,auth)) return {code:'FORBIDDEN',message:'Login ist nicht mehr aktiv.'};
       if(wantsFollowup)await followup(tx,{quote,action:input.action,phase:'before'});
@@ -85,7 +87,7 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
         if(failure)throw new QuoteLifecycleSourceFailure(failure);
       }
       const followupNotice=wantsFollowup?await followup(tx,{quote,action:input.action,phase:'after'}):null;
-      await appendQuoteJournal(tx,auth,{id:eventId,type:'QUOTE_LIFECYCLE_V04',clientEventId:input.clientEventId,correlationId:randomUUID(),version,description:input.action==='sent'?(mailDocument?'KV-Versand mit tatsächlichem Mailbeleg bestätigt':'KV-Versand ausdrücklich vermerkt'):input.action==='accept'?'KV-Zusage vermerkt':input.action==='conditional'?'KV-Vorbehalt vermerkt · neue Fassung erforderlich':'KV-Absage vermerkt',payload:{quoteId:input.quoteId,intent,action:input.action,edition:input.edition,before:life,proof:input.action==='reject'?input.reason:input.evidence,manual:input.action==='sent'&&!mailDocument,...(mailDocument?{mailDocument}:{}),...(input.source?{source:input.source}:{} )}});
+      await appendQuoteJournal(tx,auth,{id:eventId,type:'QUOTE_LIFECYCLE_V04',clientEventId:input.clientEventId,correlationId:randomUUID(),version,description:input.action==='sent'?(mailDocument?'KV-Versand mit tatsächlichem Mailbeleg bestätigt':'KV-Versand ausdrücklich vermerkt'):input.action==='accept'?'KV-Zusage vermerkt':input.action==='conditional'?'KV-Vorbehalt vermerkt · neue Fassung erforderlich':'KV-Absage vermerkt',payload:{quoteId:input.quoteId,intent,action:input.action,edition:input.edition,...(onsite?{onsiteGoodsReceiptId:options.onsiteGoodsReceiptId}:{}),before:life,proof:input.action==='reject'?input.reason:input.evidence,manual:input.action==='sent'&&!mailDocument,...(mailDocument?{mailDocument}:{}),...(input.source?{source:input.source}:{} )}});
       const result=await readQuote(tx,auth.tenantId,input.quoteId);
       if (!result?.lifecycle||result.version!==version) throw Error('QUOTE_LIFECYCLE_WRITE_READBACK_INVALID');
       const notices=[...(followupNotice?[followupNotice]:[]),...(!currentMail&&mailDocument?['E-Mail mit Fassung '+mailDocument.edition+' gesendet · aktuelle Fassung '+life.edition+(life.sentEdition===life.edition?' bleibt bereits versendet.':' ist noch nicht versendet.')]:[])];
