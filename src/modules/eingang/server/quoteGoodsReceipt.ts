@@ -82,7 +82,7 @@ function readClarification(raw:unknown):Clarification|null{
 }
 async function hydrateClarification(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:Clarification){
  // Same lock order as conversion: quote, then its receipt.
- await tx.execute(sql`SELECT id FROM private.quotes WHERE tenant_id=${auth.tenantId} AND id=${input.quoteId}::uuid FOR UPDATE`);
+ await readQuoteGoodsContext(tx,auth,input.quoteId);
  const [row]=await tx.execute<GoodsReceiptRecord&{source_version:number}>(sql`SELECT receipt.*,source.version AS source_version FROM public.goods_receipt receipt JOIN public.intake_item source ON source.tenant_id=receipt.tenant_id AND source.id=receipt.item_id WHERE receipt.tenant_id=${auth.tenantId} AND receipt.id=${input.receiptId}::uuid AND receipt.kv_id=${input.quoteId}::uuid FOR UPDATE OF receipt`);
  if(!row)return null;
  return parseQuoteGoodsReceiptInput({id:row.id,clientKey:row.client_key,clientEventId:input.clientEventId,itemId:row.item_id,quoteId:input.quoteId,expectedQuoteVersion:input.expectedQuoteVersion,sourceVersion:row.source_version,expectedVersion:input.expectedVersion,mode:row.modus,command:'clarify',card:row.karte,packagesReceived:row.packstuecke_da,packagesTotal:row.packstuecke_gesamt,condition:row.zustand,deviations:row.abweichung,foundUnattended:row.abgestellt,foundAt:row.fund_zeit,procedure:row.verfahren_wie_kv,procedureNote:row.verfahren_abweichung,photos:row.fotos,location:row.lagerort,clarificationReason:input.reason,quantities:row.mengen.map(line=>({itemId:line.teil_id,expected:line.erwartet,received:line.geaendert?line.bestaetigt:null,confirmed:!line.geaendert,note:line.hinweis}))});
