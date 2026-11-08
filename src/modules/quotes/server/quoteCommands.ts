@@ -635,8 +635,8 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
           vatRateBasisPoints: null,
         })),
       };
-      // The quote keeps the customer's requested date. The confirmed order date is
-      // explicitly part of the immutable F1.1 intent and therefore of replay/conflict.
+      // Only the current quote date may enter the immutable order intent.
+      // A later quote-date amendment must be read before conversion.
       const storedQuantities=await readQuoteReceivedQuantities(tx,authorization.tenantId,quote.quoteId,normalized.goodsReceiptId);
       const received=storedQuantities??options.pendingQuantities?.map(row=>({kv_position:quote.positions.find(position=>position.id===row.itemId)?.position,bestaetigt:row.confirmed?row.expected:row.received}));
       if(!received||!received.some(row=>Number(row.bestaetigt)>0)||received.length!==quote.positions.length||received.some((row,index)=>!Number.isSafeInteger(row.bestaetigt)||Number(row.bestaetigt)<0||row.kv_position!==index+1))return {code:'VALIDATION_ERROR',message:'Angenommene Menge fuer jede KV-Position pruefen.'};
@@ -670,9 +670,8 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
           throw new Error("QUOTE_ORDER_INPUT_INVALID");
         }
       }
-      // SQL preserves the quote's wish-date snapshot and its immutable order-intent
-      // hash. The actual F1.1 input below uses the explicit promised date; changing
-      // that date with the same client event conflicts on the stored hash.
+      // SQL preserves the current quote snapshot and immutable order-intent hash.
+      // AF-7 rejects any different client date before this reservation exists.
       if (!plainObject(persistedOrderInput) || !plainObject(persistedOrderInput.customer)
         || persistedOrderInput.clientEventId !== normalized.clientEventId
         || persistedOrderInput.customer.mode !== "EXISTING" || persistedOrderInput.customer.customerId !== sourceOrderInput.customer.customerId

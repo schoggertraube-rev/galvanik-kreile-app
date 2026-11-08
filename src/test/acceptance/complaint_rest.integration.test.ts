@@ -218,3 +218,16 @@ it('L08/L10/L11 real recording and credit actions persist one row, event, replay
  console.info('TEST_AF12_DB_PROOF',JSON.stringify({quoteId:quote.quote.quoteId,complaintId:result.complaintId,priceCents:1000}));
 
 });
+
+it('AF-12 rejects an undecided complaint and rolls quote, event and receipt back together',async()=>{
+ const fixture=await createFixture(),order=await deliveredComplaintSource(fixture);
+ const source=await complaintWrite(fixture,{action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST AF12 noch nicht entschieden',photoIds:await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,customerId:fixture.customerId,orderId:order.orderId}),goodsReturn:'offen'});
+ const {createQuoteAction}=await import('@/app/actions/quotes.actions');
+ const key=randomUUID();
+ expect(await withSession(fixture,()=>createQuoteAction({clientEventId:key,customerId:fixture.customerId,sourceComplaintId:source.complaintId,dueDate:'2027-04-20',note:'TEST AF12 forbidden source',positions:[{name:'TEST Halter',quantity:1,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND quelle_reklamation_id=${source.complaintId}`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toHaveLength(0);
+ expect(await sql`SELECT receipt_id FROM private.v_quote_create_receipts_v1 WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toHaveLength(0);
+ const {getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
+ expect(await withSession(fixture,()=>getComplaintDialogAction({complaintId:source.complaintId}))).toMatchObject({code:'OK',data:{complaint:{stand:'aufgenommen',version:1}}});
+});
