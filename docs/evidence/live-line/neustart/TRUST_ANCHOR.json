@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "pullRequest": 189,
+  "branch": "codex/bauregeln-neustart",
+  "baseSha": "7101a7fc2169aa5c30819485ccc791c50fe2670c",
+  "authorization": "Owner Neustart 07.11.; PL BAULOG 20:05 (1)",
+  "activeSources": [
+    "_review/BAUREGELN.md",
+    "_review/WARTESCHLANGE.md",
+    "_review/SEITENHOHEIT.md"
+  ],
+  "excluded": "_review/BAULOG.md; product; rejected active endversion working copies",
+  "hashes": {
+    "scripts/quality/check-authoritative-sources.mjs": "b2a1676697939967b9684862eff2137c839649a6050188df1f6572154a318a7a",
+    "quality/authoritative-sources.json": "ad7563820699cd11df55f8733118d5798a430cddc0c723105c22afa9bec0ad17",
+    "scripts/quality/check-live-package-scope.mjs": "40e4ed86a119b4e4e0af579a3f825ee78c83136a6084c80a63042ccc27046ecb"
+  },
+  "ratchetBeforeMerge": "Protected base expects previous authority bytes; expected Authority checker hash mismatch, no lint-rule/budget change."
+}

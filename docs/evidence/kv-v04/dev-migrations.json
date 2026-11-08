@@ -1,0 +1,42 @@
+{
+  "projectRef": "syhaigjhsbpjmtnggqka",
+  "checkedAt": "2026-11-07T22:13:01.225Z",
+  "applied": [
+    {
+      "file": "20261107193000_kv_v04_content_editions.sql",
+      "sha256": "26e379fa3f24946e384ed58c23883b982237276fb194a294fbde41e989acf90b"
+    },
+    {
+      "file": "20261107211500_kv_v04_conditional_acceptance.sql",
+      "sha256": "f3cdc14168f8084c56117042054584b97b2381dc896854fab1ee2dd6da0ab466"
+    },
+    {
+      "file": "20261107213000_kv_v04_goods_reference.sql",
+      "sha256": "570bf1027a0733efa76502e0835332ffb5117a65d13f6a39147f393fd1de46b5"
+    },
+    {
+      "file": "20261107214500_kv_v04_independent_metadata.sql",
+      "sha256": "27bf36edec4fc44b93f5da43ad5fff7d001728d7a7b1651ff9381ab971673430"
+    },
+    {
+      "file": "20261107221000_kv_v04_followup_projection.sql",
+      "sha256": "9855b873cade13bc474bb18f29e85f82a296fa49a8148d780637ee9ef83e8b0a"
+    }
+  ],
+  "rollbackVerified": true,
+  "existingRowsUnchanged": true,
+  "oldRowCounts": {
+    "private.quotes": 2,
+    "private.quote_positions": 3,
+    "public.goods_receipt": 0,
+    "public.tasks": 0,
+    "public.company_settings": 1
+  },
+  "repoCount": 92,
+  "devCount": 93,
+  "repoEqualsDev": false,
+  "onlyExtra": [
+    "20261107195500"
+  ],
+  "expectedUnionMatches": true
+}

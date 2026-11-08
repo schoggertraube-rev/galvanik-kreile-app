@@ -9,7 +9,7 @@ export function MailSelectionDialog({ports,target,onClose}:{ports:MailSelectionP
  const [mails,setMails]=useState<IntakeMailSummary[]>([]),[selected,setSelected]=useState<{row:IntakeMailSummary;capture:IntakeCapture}|null>(null),[loading,setLoading]=useState(false),[failure,setFailure]=useState<string|null>(null);
  const load=useCallback(async()=>{
   setLoading(true);setFailure(null);
-  try{const result=await ports.list();if(result.code!=='OK'){setFailure(result.message);return;}setMails(result.mails);}
+  try{const result=await ports.list();if(result.code!=='OK'){setFailure(result.message);return;}setMails(result.mails);if(result.notice)setFailure(result.notice);}
   catch(error){console.error('[MAIL_SELECTION_DIALOG_READ_FAILED]',error);setFailure('Offene Mails nicht verfügbar · Fehlercode: MAIL_SELECTION_DIALOG_READ_FAILED.');}
   finally{setLoading(false);}
  },[ports]);

@@ -22,6 +22,7 @@ function quote(status: "draft" | "converted" = "draft", overrides: Partial<Quote
     customerDisplayName: "SYNTHETISCH Musterkunde GmbH",
     status,
     version: status === "draft" ? 1 as const : 2 as const,
+    lifecycle:{edition:1,stage:status==='converted'?'umgewandelt':'versendet',sentEdition:1,sentAt:'2026-09-14T10:00:00.000Z',sentChannel:'druck',acceptedEdition:null,acceptedAt:null,acceptanceEvidence:null,declinedAt:null,declineReason:null,followupAt:null,sourceItemId:null,sourceMessageId:null,specialRequests:null,deliveryWeeks:null},
     currency: "EUR" as const,
     dueDate: "2026-10-15",
     validUntil: null,
@@ -131,6 +132,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
     readQuoteUpdateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein KV-Stand gefunden." }),
     readQuote: vi.fn().mockResolvedValue({ code: "OK", quote: quote() }),
     listOpenQuotes: vi.fn().mockResolvedValue({ code: "OK", quotes: [quote()] }),
+    recordQuoteAcceptance:vi.fn().mockImplementation(async input=>({code:'OK',eventId:'42026a2b-1457-4058-b1bf-20846d7bc654',replayed:false,quote:quote('draft',{version:2,lifecycle:{...quote().lifecycle!,stage:'zugesagt',acceptedEdition:1,acceptedAt:'2026-09-14T10:10:00.000Z',acceptanceEvidence:input.evidence}})})),
     convertQuote: vi.fn().mockImplementation(async (input) => ({
       code: "OK",
       replayed: false,
@@ -457,29 +459,23 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.getByText(/250,00\s€ netto/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "KV als PDF" })).toHaveAttribute("href", `/api/documents/${QUOTE_ID}/quote-pdf`);
 
-    const confirmedDate = screen.getByLabelText("Zugesagter Termin für den Auftrag");
-    const awardButton = screen.getByRole("button", { name: /Zuschlag bestätigen/ });
-    expect(document.activeElement).toBe(confirmedDate);
-    expect(confirmedDate).toHaveAttribute("aria-invalid", "true");
-    expect(awardButton).toBeDisabled();
-    fireEvent.change(confirmedDate, { target: { value: "2026-11-20" } });
-    expect(confirmedDate).toHaveAttribute("aria-invalid", "false");
-    expect(awardButton).toBeEnabled();
-    fireEvent.click(awardButton);
-    await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
-    expect(value.rememberQuoteConversion).toHaveBeenCalledWith(QUOTE_ID, expect.any(String));
-    expect(value.convertQuote).toHaveBeenCalledWith(expect.objectContaining({
-      quoteId: QUOTE_ID,
-      expectedVersion: 1,
-      confirmedAward: true,
-      confirmedOrderDueDate: "2026-11-20",
-      handoverMode: "pickup",
-      paymentMode: "vorkasse",
-    }));
-    expect(value.rememberQuote).toHaveBeenLastCalledWith(null);
-    expect(screen.getByRole("group", { name: "Auftrag – technische Details für Support" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Auftragskarte öffnen" }));
-    expect(value.openOrder).toHaveBeenCalledWith(ORDER_ID);
+    const proof=screen.getByLabelText('Wortlaut oder Gesprächsvermerk zur Zusage');
+    const accept=screen.getByRole('button',{name:'Zusage vermerken'});
+    expect(proof).toHaveFocus();
+    fireEvent.click(accept);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Wortlaut oder Gesprächsvermerk');
+    expect(value.recordQuoteAcceptance).not.toHaveBeenCalled();
+    fireEvent.change(proof,{target:{value:'SYNTHETISCH Kunde sagt telefonisch ohne Vorbehalt zu'}});
+    fireEvent.click(accept);fireEvent.click(accept);
+    await screen.findByText(/Zugesagt · Ware erwartet/);
+    expect(value.recordQuoteAcceptance).toHaveBeenCalledTimes(1);
+    expect(value.recordQuoteAcceptance).toHaveBeenCalledWith(expect.objectContaining({quoteId:QUOTE_ID,expectedVersion:1,edition:1,action:'accept',evidence:'SYNTHETISCH Kunde sagt telefonisch ohne Vorbehalt zu'}));
+    expect(value.rememberQuote).toHaveBeenLastCalledWith(QUOTE_ID);
+    expect(value.convertQuote).not.toHaveBeenCalled();
+    expect(value.rememberQuoteConversion).not.toHaveBeenCalled();
+    expect(value.openOrder).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading',{name:'Auftrag A-2026-0061 angelegt'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Auftragskarte öffnen'})).not.toBeInTheDocument();
   });
 
   it("saves a prospect with name and phone and blocks the order path until master data is complete", async () => {
@@ -1397,7 +1393,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await waitFor(() => expect(value.openOrder).toHaveBeenCalledWith(ORDER_ID));
   });
 
-  it("clears an award date when editing a KV", async () => {
+  it("clears an acceptance proof when editing a KV", async () => {
     const value = ports();
     render(<GlobalCreateFlow ports={value} />);
 
@@ -1405,16 +1401,16 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await fillCustomer();
     await startQuoteForExistingCustomer();
     await fillQuote();
-    fireEvent.change(screen.getByLabelText("Zugesagter Termin für den Auftrag"), { target: { value: "2026-11-20" } });
-    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Wortlaut oder Gesprächsvermerk zur Zusage"), { target: { value: "2026-11-20" } });
+    expect(screen.getByRole("button", { name: /Zusage vermerken/ })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "KV bearbeiten" }));
-    expect(screen.queryByLabelText("Zugesagter Termin für den Auftrag")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Wortlaut oder Gesprächsvermerk zur Zusage")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "KV sichern" }));
     await screen.findByRole("heading", { name: "KV-2026-0042 gesichert" });
-    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveValue("");
-    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeDisabled();
+    expect(screen.getByLabelText("Wortlaut oder Gesprächsvermerk zur Zusage")).toHaveValue("");
+    expect(value.recordQuoteAcceptance).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Zusage vermerken/ })).toBeEnabled();
 
   });
 
@@ -1464,7 +1460,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       code: "VALIDATION_ERROR",
       message: "Kundendaten sind nicht vollständig.",
     });
-    const convertQuote = vi.fn<GlobalCreatePorts["convertQuote"]>().mockResolvedValue({
+    const recordQuoteAcceptance = vi.fn<NonNullable<GlobalCreatePorts["recordQuoteAcceptance"]>>().mockResolvedValue({
       code: "CONFLICT",
       message: "Der KV wurde zwischenzeitlich geändert.",
     });
@@ -1481,36 +1477,43 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.queryByRole("region", { name: "Kunden-Receipt" })).not.toBeInTheDocument();
 
     unmount();
-    const conflictValue = ports({ convertQuote });
+    const conflictValue = ports({ recordQuoteAcceptance });
     render(<GlobalCreateFlow ports={conflictValue} />);
     await startQuoteForExistingCustomer();
     await fillQuote();
-    fireEvent.change(screen.getByLabelText("Zugesagter Termin für den Auftrag"), { target: { value: "2026-11-20" } });
-    fireEvent.click(screen.getByRole("button", { name: /Zuschlag bestätigen/ }));
+    fireEvent.change(screen.getByLabelText("Wortlaut oder Gesprächsvermerk zur Zusage"), { target: { value: "2026-11-20" } });
+    fireEvent.click(screen.getByRole("button", { name: /Zusage vermerken/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Der KV wurde zwischenzeitlich geändert");
     expect(screen.getByRole("heading", { name: "KV-2026-0042 gesichert" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveValue("2026-11-20");
-    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeEnabled();
+    expect(screen.getByLabelText("Wortlaut oder Gesprächsvermerk zur Zusage")).toHaveValue("2026-11-20");
+    expect(screen.getByRole("button", { name: /Zusage vermerken/ })).toBeEnabled();
     expect(screen.queryByRole("region", { name: "F1.1-Auftragsreceipt" })).not.toBeInTheDocument();
     expect(conflictValue.openOrder).not.toHaveBeenCalled();
   });
 
-  it("keeps the award date after an unknown conversion outcome", async () => {
-    const convertQuote = vi.fn<GlobalCreatePorts["convertQuote"]>().mockRejectedValue(new Error("network"));
-    const value = ports({ convertQuote });
+  it("keeps the acceptance proof and retries the identical decision after an unknown outcome", async () => {
+    const recordQuoteAcceptance = vi.fn<NonNullable<GlobalCreatePorts["recordQuoteAcceptance"]>>().mockRejectedValue(new Error("network"));
+    const value = ports({ recordQuoteAcceptance });
     render(<GlobalCreateFlow ports={value} />);
 
     await startQuoteForExistingCustomer();
     await fillQuote();
-    const confirmedDate = screen.getByLabelText("Zugesagter Termin für den Auftrag");
+    const confirmedDate = screen.getByLabelText("Wortlaut oder Gesprächsvermerk zur Zusage");
     fireEvent.change(confirmedDate, { target: { value: "2026-11-20" } });
-    fireEvent.click(screen.getByRole("button", { name: /Zuschlag bestätigen/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Zusage vermerken/ }));
 
     expect(await screen.findByText("Ausgang ungeklärt", { selector: "strong" })).toBeInTheDocument();
     expect(confirmedDate).toHaveValue("2026-11-20");
-    expect(confirmedDate).toHaveAttribute("aria-invalid", "false");
-    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeEnabled();
-    expect(convertQuote).toHaveBeenCalledTimes(1);
+    expect(confirmedDate).toBeDisabled();
+    expect(screen.getByRole('button',{name:'Zusage vermerken'})).toBeDisabled();
+    expect(recordQuoteAcceptance).toHaveBeenCalledTimes(1);
+    const original=recordQuoteAcceptance.mock.calls[0][0];
+    recordQuoteAcceptance.mockResolvedValueOnce({code:'OK',eventId:'42026a2b-1457-4058-b1bf-20846d7bc654',replayed:true,quote:quote('draft',{version:2,lifecycle:{...quote().lifecycle!,stage:'zugesagt',acceptedEdition:1,acceptedAt:'2026-09-14T10:10:00.000Z',acceptanceEvidence:original.evidence}})});
+    fireEvent.click(screen.getByRole('button',{name:'Zusage mit gleicher Kennung erneut bestätigen'}));
+    await screen.findByText(/Zugesagt · Ware erwartet/);
+    expect(recordQuoteAcceptance.mock.calls[1][0]).toEqual(original);
+    expect(value.convertQuote).not.toHaveBeenCalled();
+    expect(value.openOrder).not.toHaveBeenCalled();
   });
 
   it('PositionZeile retains an entered unit price in both the field and command when part, surface and unit change',async()=>{

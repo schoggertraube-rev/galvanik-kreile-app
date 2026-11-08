@@ -751,7 +751,8 @@ async function seedSupplementalFixtures(fixtures: GeneratedFixture[]) {
         tenant_id: TENANT,
         order_id: value.auftrag_id,
         customer_id: value.kunde_id,
-        reason: value.mangel ?? "sonstiges",
+        version: value.version ?? 1, // Synthetic initial fixture; product has no legacy-version fallback.
+        reason: value.mangel === "blasen" ? "Blasen" : value.mangel ?? "sonstiges",
         description: value.beschreibung ?? "",
         status: value.stand === "abgeschlossen" ? "resolved" : "open",
       });
@@ -1625,6 +1626,8 @@ async function storageValue(table: string, row: Record<string, unknown>, field: 
   const column = storageColumn(table, field);
   if (!Object.hasOwn(row, column)) throw new Error(`FLOW_DB_COLUMN_NOT_BUILT:${table}:${column}`);
   const value = row[column];
+  // The immutable model uses a reason code, the existing control stores its display label.
+  if (table === "complaint" && field === "mangel" && value === "Blasen") return "blasen";
   if (transform === 'order_kind') return value === true ? 'kv' : 'auftrag';
   if (transform === 'handover') return value === 'pickup' ? 'abholung' : value === 'shipping' ? 'versand' : value;
   if (transform === 'payment_mode') return value === 'abholung' ? 'bar' : value;

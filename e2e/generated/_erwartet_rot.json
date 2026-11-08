@@ -141,53 +141,29 @@
     "paket": "AP-EIN-3",
     "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
-  "L02": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
   "L03": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "L04": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "L05": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "L06": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "L07": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "L08": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+    "paket": "AP-EIN-4c-Rest",
+    "grund": "Endversion-Angleich L03 Neue Reklamation am Nacharbeitsauftrag: PL 17:50/22:05 verlangt einen neuen Vorgang statt Ueberschreiben des alten; generierter Fall erwartet weiter genau eine Reklamation."
   },
   "L09": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+    "paket": "AP-EIN-4c-Rest",
+    "grund": "Einmaliger Browserlauf fand spaeten Schliess-Callback beim unmittelbaren Wieder-Oeffnen. Danach eng auf aktuelle Dialogkennung begrenzt; eigener echter Komponentenfall mit laufender Animation gruen. Voller generierter Browserfall wird nicht lokal wiederholt; CI bestaetigt."
   },
   "L10": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+    "paket": "AP-EIN-4c-Rest",
+    "grund": "Einmaliger Browserlauf: Teile-Marker auf sichtbare Checkbox-Beschriftung korrigiert. Fixture auftrag_quelle bezeichnet abgeschlossen mit ware da, aber ohne bewiesenen Warenausgang; Server verlangt geliefert. Test erwartet ausserdem mangel blasen, bestehender UI-/Befehlsvertrag speichert Blasen. Echter UI-Action→DB/Event/Ansicht-Fall mit geliefertem Auftrag gruen, keine gelockerten Guards."
   },
   "L11": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+    "paket": "AP-EIN-4c-Rest",
+    "grund": "Wie L10: generierte Quell-Fixture ist kein nachgewiesen gelieferter Auftrag. Echter identischer Action-Retry erzeugt genau eine Reklamation mit einem Event; keine Produktlockerung fuer Musterdaten."
   },
   "L12": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+    "paket": "AP-EIN-4c-Rest",
+    "grund": "Endversion-Angleich nach PL22:05: unterbrochener Serverausgang ist ungeklaert, nicht nachweislich nicht gespeichert. Eingaben und dieselbe Anfragekennung bleiben erhalten; keine falsche Nicht-gespeichert-Zusage."
   },
   "L13": {
-    "paket": "AP-EIN-4",
-    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+    "paket": "AP-EIN-4c-Rest",
+    "grund": "Mengenfehler-Marker am Feld korrigiert; danach generierter Quellauftrag nicht nachweislich geliefert (wie L10). Mengenpruefung und Fehler bleiben erhalten, kein Lockern des gelieferten Auftragsvertrags."
   },
   "T01": {
     "paket": "AP-EIN",
@@ -276,5 +252,9 @@
   "U241-03": {
     "paket": "AP-EIN",
     "grund": "Folge-PR Teil 2b rein"
+  },
+  "L06": {
+    "paket": "AP-EIN-4c-Rest",
+    "grund": "Nach explizitem Sperrzaehler der synthetischen Fixture ist die Version repariert; neuer gezielter Browserbefund: erwartete Kennung reklamation.zurueckgezogen fehlt (waitFor attached). Keine zweite Produktkorrekturrunde oder abgeschwaechte Assertion; echte Zurueckziehen-Action gesondert belegt."
   }
 }

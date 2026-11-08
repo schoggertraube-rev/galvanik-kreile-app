@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "a568a539234430bd4299f81b7e997101c664da0a87348620ae453d45d7507bd9",
+  "inventorySha256": "fbcf3916ce933666fab0d0f9deb6b85567f18ce78f6c2895f8637e6bc29d082e",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -224,6 +224,36 @@
     "src/app/actions/complaints.actions.ts#getComplaintOrderChoicesAction": [
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
+    "src/app/actions/eingang.actions.ts#getOpenIntakeMailsAction": [
+      "src/test/acceptance/ein34_mail_import.integration.test.ts"
+    ],
+    "src/app/actions/communications.actions.ts#importOutlookMailAction": [
+      "src/test/acceptance/ein34_mail_import.integration.test.ts"
+    ],
+    "src/app/actions/communications.actions.ts#attachOutlookMailAction": [
+      "src/test/acceptance/ein34_mail_import.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#changeQuoteLifecycleAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#saveQuoteSettingsAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#readQuoteDefaultsAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#getQuoteFollowupsForTodayAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#prepareQuoteFromIntakeAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/communications.actions.ts#sendCustomerMailAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#prepareQuoteCopyAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
     "src/app/actions/complaints.actions.ts#sendeNacharbeitBegleitscheinAction": [
       "src/test/acceptance/complaint_goods_reminder.integration.test.ts"
     ]
@@ -241,8 +271,6 @@
     "src/app/actions/auth.ts#logout": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/baths.actions.ts#createBathMeasurementDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/baths.actions.ts#updateBathDb": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/communications.actions.ts#attachOutlookMailAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/communications.actions.ts#sendCustomerMailAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/company.actions.ts#updateCompanySettings": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#createCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#updateCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",

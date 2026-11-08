@@ -493,6 +493,7 @@ async function allocateOrderNumber(tx: PrivilegedTenantTransaction): Promise<str
 
 export type OrderIntakeTransactionBinding = {
   intentKey?: string;
+  beforeEvent?: (tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
   before: (tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot) => Promise<void>;
   recoverProspectCustomer?:()=>string|null;
   after: (tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot, receipt: OrderIntakeReceipt) => Promise<void>;
@@ -689,6 +690,8 @@ export async function createOrderIntake(input: unknown,createCustomer?:CustomerW
           insertedItem.customer_id !== customer.id
         ) throw new Error("ORDER_INTAKE_ITEM_INSERT_FAILED");
       }
+
+      await binding?.beforeEvent?.(tx,authorization.data);
 
       const insertedEvents = await tx.execute<{ id: string; tenant_id: string; order_id: string; user_id: string; client_event_id: string }>(sql`
         INSERT INTO public.events (

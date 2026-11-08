@@ -287,3 +287,13 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(ports.refresh).toHaveBeenCalled();
   });
 });
+
+
+it('opens a persisted KV follow-up through the existing task receiver instead of an unrelated order',()=>{
+ const opened=vi.fn((event:Event)=>event.preventDefault());window.addEventListener('kreile:oeffne',opened);
+ try{
+  render(<RolfHomeClient ports={actionPorts} model={{kind:'data',role:'meister',canCreateOrder:true,canWorkOrders:true,canDelegate:false,projection,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items:[{key:'task:TEST-followup',kind:'task',field:'action',title:'Bei TEST Kunde wegen KV TEST nachfragen',meta:'TEST KV',urgency:'warning',target:{screen:'aufgabe',arg:'TEST-followup'},primaryActionLabel:'Öffnen'}]}}}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Öffnen'}));
+  expect(opened).toHaveBeenCalledTimes(1);expect((opened.mock.calls[0][0] as CustomEvent).detail).toEqual({ziel:'aufgabe',arg:'TEST-followup'});expect(ports.openOrder).not.toHaveBeenCalled();
+ }finally{window.removeEventListener('kreile:oeffne',opened);}
+});

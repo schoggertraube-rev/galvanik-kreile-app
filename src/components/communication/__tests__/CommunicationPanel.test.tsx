@@ -1,9 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor,fireEvent,cleanup } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CommunicationPanel } from "../CommunicationPanel";
 
 const actions = vi.hoisted(() => ({
   getStatus: vi.fn(),
+  importMail: vi.fn(),
+  request: vi.fn(),
   listGlobal: vi.fn(),
   attach: vi.fn(),
   send: vi.fn(),
@@ -12,6 +14,7 @@ const actions = vi.hoisted(() => ({
 
 vi.mock("@/app/actions/communications.actions", () => ({
   getMicrosoftGraphStatusAction: actions.getStatus,
+  importOutlookMailAction: actions.importMail,
   listOutlookInboxAction: actions.listGlobal,
   attachOutlookMailAction: actions.attach,
   sendCustomerMailAction: actions.send,
@@ -22,7 +25,7 @@ vi.mock("@/app/actions/quotes.actions", () => ({
 }));
 
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({
-  requestGlobalCreate: vi.fn(),
+  requestGlobalCreate: actions.request,
 }));
 
 describe("CommunicationPanel order assignment", () => {
@@ -63,4 +66,33 @@ describe("CommunicationPanel order assignment", () => {
 
     await waitFor(() => expect(screen.getByText("Diesem Auftrag sind keine Mails zugeordnet.")).toBeInTheDocument());
   });
+});
+
+it('locks duplicate submits, preserves an unclear mail intent and retries with the exact same key and body',async()=>{
+ cleanup();actions.getStatus.mockResolvedValue({code:'OK'});actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});actions.listGlobal.mockResolvedValue({code:'OK',data:[]});
+ actions.send.mockRejectedValueOnce(new Error('TEST interrupted response')).mockResolvedValueOnce({code:'OK',data:{},notice:'TEST Mail gesendet · KV-Stand bitte prüfen'});
+ render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer"/>);
+ const send=await screen.findByRole('button',{name:'Versenden'});
+ fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:'TEST KV'}});
+ fireEvent.change(screen.getByRole('textbox',{name:'Nachricht'}),{target:{value:'TEST Originaltext'}});
+ const form=send.closest('form')!;fireEvent.submit(form);fireEvent.submit(form);
+ const retry=await screen.findByRole('button',{name:'Mit gleicher Kennung erneut versuchen'});
+ expect(actions.send).toHaveBeenCalledTimes(1);
+ expect(screen.getByRole('textbox',{name:'Nachricht'})).toBeDisabled();
+ expect(screen.getByRole('textbox',{name:'Nachricht'})).toHaveValue('TEST Originaltext');
+ const original=actions.send.mock.calls[0][0];fireEvent.click(retry);
+ await screen.findByText('TEST Mail gesendet · KV-Stand bitte prüfen');
+ expect(actions.send.mock.calls[1][0]).toEqual(original);
+ expect(screen.getByRole('textbox',{name:'Nachricht'})).toHaveValue('');
+});
+
+it('starts capture only with a secured canonical mail source and keeps a failed import on screen',async()=>{
+ cleanup();actions.getStatus.mockResolvedValue({code:'OK'});actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});
+ actions.listGlobal.mockResolvedValue({code:'OK',data:[{id:'TEST-mail',subject:'TEST Mail',body:'TEST Auftrag',preview:'TEST Auftrag',senderName:'TEST Kunde',senderAddress:'test@example.invalid',receivedAt:'2026-11-07T10:00:00Z',hasAttachments:true}]});
+ actions.importMail.mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST Original fehlt'}).mockResolvedValueOnce({code:'OK',itemId:'TEST-intake'});
+ render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer"/>);
+ fireEvent.click(await screen.findByRole('button',{name:'KV anlegen'}));
+ expect(await screen.findByText('TEST Original fehlt')).toBeInTheDocument();expect(actions.request).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'KV anlegen'}));
+ await waitFor(()=>expect(actions.request).toHaveBeenCalledWith({intent:'QUOTE',prefill:{sourceItemId:'TEST-intake',customerQuery:'test@example.invalid',note:'TEST Auftrag'}}));
 });

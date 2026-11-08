@@ -1,6 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import {readOrderCommercialQuote,type OrderCommercialQuote} from "./orderQuoteReadPort";
 import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice } from "@/lib/orderPositionContract";
 import { orderPositionQuantityError, orderPositionUnitLabel, orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -53,6 +54,7 @@ export type OrderCardItem = {
 };
 
 export type LiveOrderCard = {
+  commercialQuote?:OrderCommercialQuote;
   id: string;
   version: number;
   orderNumber: string;
@@ -152,6 +154,7 @@ type IntakeRow = {
 };
 
 type OrderOriginRow = {
+  has_commercial_quote:boolean;
   tenant_id: string;
   source: string | null;
   nacharbeit_zu: string | null;
@@ -601,8 +604,8 @@ export async function readLiveOrderCard(
       ) throw new Error("ORDER_CARD_QUEUE_INVALID");
 
       const originRows = await tx.execute<OrderOriginRow>(sql`
-        SELECT tenant_id, source, nacharbeit_zu
-        FROM public.orders
+        SELECT tenant_id, source, nacharbeit_zu,EXISTS(SELECT 1 FROM private.quote_conversion_receipts quote WHERE quote.tenant_id=orders.tenant_id AND quote.order_id=orders.id) AS has_commercial_quote
+        FROM public.orders orders
         WHERE tenant_id = ${authorization.tenantId}
           AND id = ${input.orderId}
         LIMIT 2
@@ -611,7 +614,7 @@ export async function readLiveOrderCard(
       if (
         originRows.length !== 1
         || !origin
-        || origin.tenant_id !== authorization.tenantId
+        || origin.tenant_id !== authorization.tenantId||typeof origin.has_commercial_quote!=="boolean"
       ) throw new Error("ORDER_CARD_ORIGIN_INVALID");
       const isReworkOrder = origin.source === "REKLAMATION_NACHARBEIT";
       if (isReworkOrder && !validId(origin.nacharbeit_zu)) {
@@ -843,7 +846,9 @@ export async function readLiveOrderCard(
       }
 
       const canReadMoney = authorization.permissions.includes("perm_view_prices");
+      const commercialQuote=canReadMoney&&origin.has_commercial_quote?await readOrderCommercialQuote(tx,authorization.tenantId,input.orderId):undefined;
       return {
+        ...(commercialQuote?{commercialQuote}:{}),
         id: queue.id,
         version: queue.version,
         orderNumber: queue.order_number,

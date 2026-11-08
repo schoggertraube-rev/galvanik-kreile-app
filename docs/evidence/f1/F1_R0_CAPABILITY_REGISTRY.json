@@ -385,7 +385,8 @@
         "getMicrosoftGraphStatusAction",
         "listOutlookInboxAction",
         "attachOutlookMailAction",
-        "sendCustomerMailAction"
+        "sendCustomerMailAction",
+        "importOutlookMailAction"
       ],
       "classification": "REAL_PENDING_SECRET",
       "open_reason": "Tenant-bound Microsoft Graph mail port. Preview activation is externally blocked by invalid_client and remains In Klärung.",
@@ -485,7 +486,8 @@
         "readShippingSettingsAction",
         "saveShippingSettingsAction",
         "readEmailTemplatesAction",
-        "saveEmailTemplateAction"
+        "saveEmailTemplateAction",
+        "saveQuoteSettingsAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Stufe 1 P1 exposes tenant-bound administration for company settings, catalog services, and existing users. Package acceptance remains pending.",
@@ -518,7 +520,12 @@
         "readQuoteConversionReceiptAction",
         "readQuoteUpdateReceiptAction",
         "readQuotePdfAction",
-        "updateQuoteAction"
+        "updateQuoteAction",
+        "changeQuoteLifecycleAction",
+        "readQuoteDefaultsAction",
+        "getQuoteFollowupsForTodayAction",
+        "prepareQuoteFromIntakeAction",
+        "prepareQuoteCopyAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "V5 Work Unit 2 implements the real tenant-bound quote and existing F1.1 conversion candidate. The two additional read-only receipt actions recover a known outcome without a mutation; the technical checkpoint remains no UI delivery claim.",

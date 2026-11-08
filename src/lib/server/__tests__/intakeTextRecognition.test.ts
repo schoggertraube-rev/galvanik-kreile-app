@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest";
 import { recognizeIntakeText } from "../intakeTextRecognition";
 
 describe("recognizeIntakeText", () => {
+  it('recognizes the KV-01 counted part and lead time without inventing contact or price values',()=>{
+    const result=recognizeIntakeText('Schmidt, 4 Weber-Trompeten verchromen, KV, in zwei Wochen');
+    expect(result.positions).toEqual([expect.objectContaining({name:'Weber-Trompeten',quantity:'4',unit:'Stück',surfaceRequested:'Verchromen',surfaceRecognized:true})]);
+    expect(result.deliveryWeeks).toEqual({value:2,source:'in zwei Wochen'});
+    expect(result.fields).toEqual([]);
+    expect(result.positions[0]).not.toHaveProperty('unitPriceCents');
+  });
+  it('retains explicit preservation instructions and never turns a lead time into a part',()=>{
+    const result=recognizeIntakeText('In drei Wochen. Die alten Halter bitte erhalten.');
+    expect(result.positions).toEqual([]);
+    expect(result.deliveryWeeks).toEqual({value:3,source:'In drei Wochen'});
+    expect(result.instructions).toEqual([{text:'Die alten Halter bitte erhalten.',source:'Originaltext'}]);
+    expect(recognizeIntakeText('Nicht in zwei Wochen.').deliveryWeeks).toBeUndefined();
+  });
   it("extracts contact data, due date and separate positions without prices", () => {
     const result = recognizeIntakeText(
       "TEST Kreile GmbH\ninfo@example.invalid\n0711 / 123456\n70173 Stuttgart\n2 Stück Flansch verzinken matt; 3 kg Halter vernickeln bis 12.11.",

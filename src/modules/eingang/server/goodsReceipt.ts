@@ -8,6 +8,8 @@ import {orderPositionQuantityError} from "@/lib/orderPositionContract";
 import {goodsReceiptGaps,goodsReceiptWare,parseGoodsReceiptInput,type GoodsReceiptInput,type GoodsReceiptRecord,type GoodsReceiptFailure,type GoodsReceiptReadResult} from "../goodsReceiptContract";
 import {bindIntakeOriginalToOrder} from "./intakeOrderBinding";
 
+import {saveQuoteGoodsReceipt} from './quoteGoodsReceipt';
+
 type ReceiptRow=GoodsReceiptRecord;
 type Failure=GoodsReceiptFailure;
 export type GoodsReceiptResult={code:"OK";receipt:ReceiptRow;replayed:boolean}|Failure;
@@ -18,7 +20,7 @@ export type GoodsReceiptDependencies={
 class InspectionFailure extends Error{constructor(public result:Failure){super(result.message);}}
 function fail(code:Failure["code"],message:string):never{throw new InspectionFailure({code,message});}
 function intent(input:GoodsReceiptInput){const {expectedVersion:_receiptVersion,expectedOrderVersion:_orderVersion,clientEventId:_event,...fields}=input;void _receiptVersion;void _orderVersion;void _event;return createHash('sha256').update(JSON.stringify(fields)).digest('hex');}
-const receiptProjection=sql`id::text,client_key::text,item_id::text,auftrag_id,modus,status,version,karte,packstuecke_da,packstuecke_gesamt,zustand,abweichung,abgestellt,fund_zeit::text,verfahren_wie_kv,verfahren_abweichung,fotos,mengen,offen,bestaetigt_von::text`;
+const receiptProjection=sql`id::text,client_key::text,item_id::text,auftrag_id,kv_id::text,kv_fassung,lagerort,modus,status,version,karte,packstuecke_da,packstuecke_gesamt,zustand,abweichung,abgestellt,fund_zeit::text,verfahren_wie_kv,verfahren_abweichung,fotos,mengen,offen,bestaetigt_von::text`;
 async function readReceipt(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string){const rows=await tx.execute<ReceiptRow>(sql`SELECT ${receiptProjection} FROM public.goods_receipt WHERE tenant_id=${auth.tenantId} AND id=${id}::uuid`);return rows.length===1?rows[0]:null;}
 function receiptSnapshot(value:unknown):ReceiptRow|null{
  if(!value||typeof value!=='object'||Array.isArray(value))return null;const row=value as Record<string,unknown>;
@@ -98,6 +100,7 @@ async function write(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,p
 }
 
 export async function saveGoodsReceipt(input:unknown,deps:GoodsReceiptDependencies={}):Promise<GoodsReceiptResult>{
+ if(input&&typeof input==='object'&&'quoteId'in input)return saveQuoteGoodsReceipt(input);
  const parsed=parseGoodsReceiptInput(input);if(!parsed||parsed.command==='galvanik')return {code:'VALIDATION_ERROR',message:'Warenprüfung ist ungültig.'};
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED',message:auth.message};
  if(!hasAuthorizationArea(auth.data,'eingang'))return {code:'FORBIDDEN',message:'Warenannahme erfordert Eingang.'};
@@ -124,4 +127,31 @@ export async function readGoodsReceipts(orderId:string):Promise<GoodsReceiptRead
   return {code:'OK' as const,order,receipts,canStartGalvanik:hasAuthorizationArea(auth.data,'auftraege')};
  });}
  catch(error){console.error('[GOODS_RECEIPT_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Warenprüfung konnte nicht geladen werden. Fehlercode: GOODS_RECEIPT_READ_FAILED.'};}
+}
+
+/** Attach the same early receipt after the canonical quote/order event, in that transaction. */
+export async function bindQuoteGoodsReceiptToCreatedOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{quoteId:string;receiptId:string;clientEventId:string;orderId:string;items:readonly {id:string;quantity:number}[]}){
+ if(!hasAuthorizationArea(auth,'eingang'))fail('FORBIDDEN','Warenannahme erfordert Eingang.');
+ const locked=await tx.execute(sql`SELECT id FROM public.goods_receipt WHERE tenant_id=${auth.tenantId} AND id=${input.receiptId}::uuid FOR UPDATE`);
+ const before=await readReceipt(tx,auth,input.receiptId);
+ if(locked.length!==1||!before||before.kv_id!==input.quoteId||before.status!=='angenommen'||!before.item_id)fail('VALIDATION_ERROR','Angenommener KV-Warenbeleg fehlt.');
+ const order=await readGoodsReceiptOrder(tx,auth,input.orderId);
+ if(!order)fail('NOT_FOUND','Neuer Auftrag ist nicht lesbar.');
+ if(before.auftrag_id){if(before.auftrag_id!==order.id)fail('CONFLICT','Warenbeleg gehört bereits zu einem anderen Auftrag.');return {code:'OK' as const,receipt:before,replayed:true};}
+ if(before.zustand!=='unauffaellig'||before.abweichung.length||before.packstuecke_da!==before.packstuecke_gesamt||before.verfahren_wie_kv!=='stimmt')fail('VALIDATION_ERROR','Warenabweichung zuerst klären; der KV wird nicht still zum Auftrag.');
+ if(before.mengen.length!==order.items.length)fail('VALIDATION_ERROR','KV und Warenmenge passen nicht zusammen. KV-Fassung und Warenannahme abgleichen.');
+ const quantities=before.mengen.map(row=>{const item=typeof row.kv_position==='number'?input.items[row.kv_position-1]:undefined;if(!item||!order.items.some(stored=>stored.id===item.id&&stored.quantity===item.quantity)||row.bestaetigt!==item.quantity)fail('VALIDATION_ERROR','Mengenabweichung zwischen Ware und aktueller KV-Fassung; zuerst abgleichen.');return {...row,teil_id:item.id};});
+ await tx.execute(sql`UPDATE public.goods_receipt SET auftrag_id=${order.id},mengen=${JSON.stringify(quantities)}::jsonb,version=version+1,geaendert_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${input.receiptId}::uuid AND version=${before.version} AND auftrag_id IS NULL`);
+ await updateGoodsReceiptOrder(tx,auth,order,'da','creation');
+ await bindIntakeOriginalToOrder(tx,auth,{itemId:before.item_id,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true});
+ const originals=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND vorgang_art='kv' AND vorgang_id=${input.quoteId} ORDER BY id FOR UPDATE`);
+ for(const original of originals)await bindIntakeOriginalToOrder(tx,auth,{itemId:original.id,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true,quoteId:input.quoteId});
+ const receipt=await readReceipt(tx,auth,input.receiptId);if(!receipt||receipt.auftrag_id!==order.id||receipt.version!==before.version+1)throw Error('QUOTE_GOODS_ORDER_READBACK_INVALID');
+ await appendGoodsReceiptEvent(tx,auth,{clientEventId:input.clientEventId,orderId:order.id,receiptId:input.receiptId,version:order.version,intent:createHash('sha256').update(JSON.stringify(input)).digest('hex'),before,after:receipt});
+ return {code:'OK' as const,receipt,replayed:false};
+}
+
+/** Existing receipt writer participating in the canonical order transaction. */
+export async function writeQuoteGoodsReceiptInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:unknown){
+ return saveQuoteGoodsReceipt(input,{transaction:tx,authorization:auth,allowAccepted:true});
 }

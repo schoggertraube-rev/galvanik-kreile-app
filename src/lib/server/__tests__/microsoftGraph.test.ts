@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphAttachments,
+  readMicrosoftGraphMime,
   readMicrosoftGraphConfigurationStatus,
   sendMicrosoftGraphMail,
 } from "../microsoftGraph";
@@ -14,6 +15,26 @@ const env = {
 };
 
 afterEach(() => vi.restoreAllMocks());
+
+it('preserves large inline work photos and small ordinary images while excluding a signature CID',async()=>{
+  const rows=[
+    {id:'TEST-part',name:'TEST-Teil.png',contentType:'image/png',isInline:true,contentId:'TEST-part',size:16000,contentBytes:Buffer.alloc(16000,7).toString('base64')},
+    {id:'TEST-label',name:'TEST-Etikett.png',contentType:'image/png',isInline:false,size:200,contentBytes:Buffer.alloc(200,8).toString('base64')},
+    {id:'TEST-logo',name:'TEST-Signatur.png',contentType:'image/png',isInline:true,contentId:'TEST-signature',size:16000,contentBytes:Buffer.alloc(16000,9).toString('base64')},
+  ];
+  const fetchPort=vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({access_token:'TEST-token'.repeat(5)}),{status:200})).mockResolvedValueOnce(new Response(JSON.stringify({value:rows}),{status:200}));
+  const result=await readMicrosoftGraphAttachments('TEST-mail',env,fetchPort);
+  expect(result).toMatchObject({code:'OK',data:{skipped:1,attachments:[{id:'TEST-part'},{id:'TEST-label'}]}});
+});
+
+it('retrieves unchanged MIME bytes rather than constructing an original from body text',async()=>{
+  const mime='From: TEST <test@example.invalid>\r\nMIME-Version: 1.0\r\n\r\nTEST original\r\n';
+  const fetchPort=vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({access_token:'TEST-token'.repeat(5)}),{status:200})).mockResolvedValueOnce(new Response(mime,{status:200}));
+  const result=await readMicrosoftGraphMime('TEST/mail',env,fetchPort);
+  expect(result.code).toBe('OK');if(result.code!=='OK')return;
+  expect(Buffer.from(result.data).equals(Buffer.from(mime))).toBe(true);
+  expect(String(fetchPort.mock.calls[1][0])).toContain('/messages/TEST%2Fmail/$value');
+});
 
 describe("Microsoft Graph port", () => {
   it("fails closed without persisting or exposing missing values", () => {

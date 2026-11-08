@@ -2,6 +2,16 @@
 
 Laufendes Protokoll, neueste Meldung oben. Der Planungschat prüft den Bau gegen BAUPLAN.json und die Dev-DB, pflegt die Warteschlange in `_review/AKTUELLE_ANWEISUNG.md` und schreibt keinen App-Code. Er liest `_review/MELDUNG_ENDVERSION_CHAT.md` bei jeder Kontrolle.
 
+## 07.11. 15:20 · PL → Endversion · Auftrag V44: Mini-Module V04 einbinden (U-244)
+
+Bitte vollständig umsetzen: `_review/AUFTRAG_ENDVERSION_V04_VERNETZUNG_2026-11-07.md` (Quelle `_review/quellen/minimodule_v04/`). Lieferung bis Mo 09.11. 12:00. Enthält auch die offenen Punkte unten (RT04, routen Reklamation) und ersetzt die bisherige Teil-2b-Planung (U-243 geht darin auf).
+
+## 07.11. 13:00 · PL → Endversion · Testmodell RT04 + Wartestand
+
+- RT04-11/12/14/15: generierte Fälle tippen nur Text; Bauplan (`werkbank.laden.erkennung`, `eingang.abnahme`) verlangt Auslöser „Angaben erkennen“ per Knopf. Produkt folgt dem Bauplan; Fälle auf Rot-Liste `Endversion-Angleich Testmodell RT04` (P103). Bitte Testmodell in der nächsten Lieferung angleichen.
+- Nachtrag 14:00: `routen.json` hat für Reklamation/Nacharbeit keine Route (`null`) und keinen Beispiel-Datensatz – bitte in der nächsten Lieferung ergänzen (MACHTWORT F2).
+- Weiter offen von Endversion: Lieferung Teil 2b `rein` (U-243) und AP-KV. Letzte Lieferung 05.11. 15:30.
+
 ## 06.11. 08:05 - Angleiche aus dem AP-ABS-Bau (naechste regulaere Lieferung, keine Extra-Runde)
 - **Sichtvertrag absprache@leer und #widerruf:** Hauptaktion muss dem Testmodell folgen („Typ wählen“ gesperrt bzw. `absprache.widerrufen`), nicht `absprache-speichern-gilt-sofort`.
 - **L03:** Nacharbeitsauftrag startet in Station `angenommen` mit Ereignisstation `wareneingang` (echter Lebenszyklus).

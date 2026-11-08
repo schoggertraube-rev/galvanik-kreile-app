@@ -54,7 +54,7 @@ export type {CustomerComparisonValue} from "@/modules/customers/public";
 export { getIntakeDeviceId, type IntakeDeviceCommand, type IntakeDeviceRequest, type IntakeDeviceResult } from "./deviceContract";
 export { IntakeDirectEntry } from "./ui/IntakeDirectEntry";
 export { IntakeDraftList } from "./ui/IntakeDraftList";
-export {parseGoodsReceiptInput,goodsReceiptGaps,goodsReceiptWare} from "./goodsReceiptContract";
+export {parseGoodsReceiptInput,parseQuoteGoodsReceiptInput,goodsReceiptGaps,goodsReceiptWare} from "./goodsReceiptContract";
 export type {GoodsReceiptInput,GoodsReceiptPhotoKind,GoodsReceiptOrderRead,GoodsReceiptRecord,GoodsReceiptFailure,GoodsReceiptReadResult} from "./goodsReceiptContract";
 export {IntakeObjectDialogs} from "./ui/IntakeObjectDialogs";
 export type {IntakeObjectPorts} from "./ui/IntakeObjectDialogs";

@@ -1,0 +1,49 @@
+# KV V04 Server-A – Zwischenabgabe, noch nicht mergebereit
+
+Produkt-/Registerstand `7938c5f00c9cba3e4d30d5e340ef32ea19e95a65`. Der frühere kombinierte 15-Fälle-Lauf gehört zu `2be47bea`; spätere Änderungen wurden ausschließlich gezielt geprüft. PR-Kopf und Git-Preview werden im PR am exakten Kopf gebunden. Kein neuer V04-Oberflächenbau; Freigabe des Durchstich-Moduls steht aus.
+
+## Gebaut und gezielt belegt
+
+- Bestehende Quote-Writer: Fassung, genaue Zeilensummen, explizite Kalkulations-Snapshots, unabhängige Metadaten, Zusage/Vorbehalt/Absage samt Nachweis und idempotentem Journal.
+- Eingang/Mail → Vorbereitung mit bestehender Erkennung/Kundensuche, Originalbezug und aktiven Kundenhinweisen; ausschließlich vorhandener createQuote-Writer.
+- Zusage erzeugt keinen Auftrag. Frühe Ware nutzt denselben goods_receipt mit KV-Bezug und abgeleiteter Sperre. Aktuelle Zusage plus Ware erzeugen genau einen Auftrag mit Ware atomar über createOrderIntake; Rollback und Retry geprüft.
+- Exakte KV-Preise, Sonderwünsche und Originale bleiben am Auftrag nachvollziehbar; keine gerundete Preiskopie.
+- Nachfassen: vorhandene Aufgabe ist die Autorität, Quote-Datum nur geschützte Projektion; Der Tag öffnet den vorhandenen Aufgabendialog. Keine neue Task-Datenwelt.
+- Mailversand: reales PDF und Inhaltsfassung/Hash, echter lokaler Versandbeleg und erst danach KV-Status. Bei gesicherter Ursprungs-Mail nutzt derselbe Graph-Writer den Reply-Endpunkt; Item-/Graph-Bezug bleibt im unveränderlichen Dokumentbeleg und im Retry-Hash. Gleiches Anliegen sendet nicht doppelt; fremder Retry wird abgelehnt. Konkurrierende Änderung bleibt eine neue, ungesendete Fassung; Providerfehler markiert nichts als gesendet.
+- Nachtrag: bestehender KV-Update und genau das Änderungsanliegen atomar; anderes offenes Anliegen bleibt offen. Nur expliziter Terminstatus wird geändert, unabhängige Herkunftsfakten bleiben erhalten.
+
+15 echte Replay-Fälle des Pakets zusammen PASS am oben genannten Produktstand; später gezielt KV-11 (2 Fälle) und KV-12 bis zum Auftrag PASS, insgesamt 16 Paketfälle implementiert; Datenbankzeile, Ereignis und Ansicht werden nachgelesen. Geschäftsbefehle/Auth/DB sind echt. Nur isolierter TEST-Tenant und bei Versand die äußere Graph-HTTP-Grenze sind synthetisch. Mail-/Foto-Vorzustand im Vorbereitungsfall ist ausdrücklich eine synthetische DB-Fixture; kein Live-Graph-/Storage-Versandclaim.
+
+Gezielte Erkennung (15 Fälle), Mailformular (5 Fälle), vorhandener GlobalCreate-Render (88 Fälle), Lint/Typen/Diff bestanden. Keine lokale Projektsuite. CI am neuen PR-Kopf folgt.
+
+## Änderung bestehender Assertions (alt → neu)
+
+| Fall | Alt → neu |
+| --- | --- |
+| Früherer Zuschlag ohne Ware | Auftrag/Receipt/Navigation erwartet → echte Zusage mit Wortlaut, KV behalten, ausdrücklich kein Auftrag/Conversion-Aufruf/Navigation. U-245 und PL22:05. |
+| Neuer Zuschlag nach Bearbeiten | Auftragstermin zurücksetzen → Zusage-Wortlaut zurücksetzen; keine Speicherung vor neuer Bestätigung. |
+| Konflikt beim Zuschlag | Conversion-Konflikt + Datum erhalten → Zusage-Konflikt + Wortlaut erhalten; kein falscher Erfolg. |
+| Ungeklärter Ausgang | Neuer Submit möglich → Eingaben gesperrt, gleicher unveränderter Request beim expliziten Retry, keine neue Auftragsanlage. |
+| Bestehende Konversions-Tests | Zusage und tatsächlich angenommene TEST-Ware als Vorbedingung ergänzt; Ergebnis-/Preis-/Receipt-/Einmaligkeitsassertionen bleiben erhalten. Hash `geprueft=false` → `true`, da die Ware geprüft ist. |
+| Neue Mailbelege | Tatsächliche vorhandene Korrelation ODER client_event_id lesen; drei echte Ereignisse bleiben Pflicht. Kein reduzierter Prüfinhalt. |
+
+Bestehender KV-Bereich: „Zusage vermerken“ und erforderlicher Wortlaut ersetzen dort die frühere direkte Auftragsbeauftragung. Auftragstermin/Übergabe/Zahlung werden dort nicht mehr ohne Auftrag abgefragt; direkte Auftragserfassung bleibt bestehen. Vollständiger Waren-Klickweg und neue KV-Oberfläche folgen erst nach Freigabe. Diese sichtbare Umfangsänderung ist dem PL-Diffreview ausdrücklich vorzulegen.
+
+## Dev-Schema
+
+Fünf unveränderte additive Migrationen nach echter Abbruchprobe angewandt. Alte Inhalte von 2 Quotes, 3 Positionszeilen, 0 Warenbelegen, 0 Aufgaben und 1 Firmendatenzeile unverändert. Einzel-SHAs und Beleg: `docs/evidence/kv-v04/dev-migrations.json`.
+
+**Repo 92 / Dev 93; kein behaupteter Gleichstand.** Einziger zusätzlicher Dev-Stand ist die bereits bytegeprüfte Migration `20261107195500` aus dem noch offenen #193. Nach dessen Owner-Merge Branch synchronisieren und Gleichstand neu belegen.
+
+## Vor Abschluss offen
+
+- KV-11 Kopierport für bestehenden KV/Auftrag gebaut: exakte gespeicherte Eingabepreise und Zeilensummen, keine rückgerundete Anzeige; createQuote bleibt der einzige Schreibweg. Zwei gezielte Replay-Belege PASS (Kopie/DB/Event/Ansicht/Retry). Aktive kanonische Ist-Stundenquelle weiter vom PL benötigt; Vergleich liefert ehrlich null/fehlt. Keine Mehrarbeitsminuten oder Stationsdauer als Gesamtarbeitszeit.
+- KV-12 jetzt bis zum echten Auftrag belegt: Nachtrag 20.11. → aktuelle Zusage → echte Warenannahme → orders.due_date und Auftragskarten-Port 20.11.; Original und anderes Anliegen bleiben erhalten.
+- Alte H18-Konversionsfälle lokal durch die strenge Migrationsparität blockiert, weil Replay bereits #193 enthält; Check bleibt unverändert. Fresh-CI prüft saubere Paketbasis.
+- Finale CI, Exact-SHA-Preview, freigegebener Sichtumfang und PL-Diffreview. Keine Merge-Bitte, kein Gesamt-PASS und kein Production-Deploy.
+
+Bestehender Quote-Command-Unit-Test: nur SQL-Vorbedingung für die neue ausdrückliche FOR-UPDATE-Sperre ergänzt; alle bisherigen Ergebnis-/Receipt-/Versions-/Rechteassertionen unverändert.
+
+Thread-Bezug gezielt gegen Replay belegt: abgeschlossenes importiertes TEST-Mail-Original → bestehender Quote-Writer → reales PDF → bestehender Mail-Writer/Graph-Reply an exakt diese Nachricht → Dokumentereignisse mit Item-/Graph-ID → KV-Ansicht; identischer Retry sendet nicht doppelt. Import-/Graph-HTTP-Grenze ist synthetisch, keine externe Zustellbehauptung. Vorbedingung auf vorhandenen MIME-Artvertrag und die echte Anliegen-Auswahl mechanisch korrigiert. Acht bestehende Graph-Adapterfälle bleiben grün. Grundlage des vorhandenen Providers: [Microsoft Graph reply](https://learn.microsoft.com/en-us/graph/api/message-reply?view=graph-rest-1.0), derselbe Mail.Send-Zugang, keine neue Abhängigkeit.
+
+Konkrete erhaltene Replay-Zeilen für Nachtrag, Kopie und Reply: `docs/evidence/kv-v04/replay-proof.json` (Loopback, synthetische TEST-Tenants, Testdatei-SHA, Quote-/Auftrags-/Thread-/Event-IDs, nachgelesene Summen und Termine). Zusätzliche reine Abgabe-Commits ändern diesen Produktstand nicht; der genaue PR-Kopf samt CI/Preview wird im PR gebunden.

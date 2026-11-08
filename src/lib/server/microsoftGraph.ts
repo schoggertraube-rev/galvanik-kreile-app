@@ -227,7 +227,7 @@ export async function readMicrosoftGraphMessage(
 }
 
 export async function sendMicrosoftGraphMail(
-  input: { to: string; subject: string; body: string; attachment?: GraphMailAttachment },
+  input: { to: string; subject: string; body: string; attachment?: GraphMailAttachment; replyToMessageId?: string },
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
 ): Promise<GraphResult<{ accepted: true }>> {
@@ -241,7 +241,10 @@ export async function sendMicrosoftGraphMail(
       contentType: input.attachment.contentType,
       contentBytes: Buffer.from(input.attachment.bytes).toString("base64"),
     }] : undefined;
-    const response = await fetchPort(`${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/sendMail`, {
+    const endpoint = input.replyToMessageId
+      ? `${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/messages/${encodeURIComponent(input.replyToMessageId)}/reply`
+      : `${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/sendMail`;
+    const response = await fetchPort(endpoint, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({
@@ -251,7 +254,7 @@ export async function sendMicrosoftGraphMail(
           toRecipients: [{ emailAddress: { address: input.to } }],
           ...(attachments ? { attachments } : {}),
         },
-        saveToSentItems: true,
+        ...(!input.replyToMessageId ? { saveToSentItems: true } : {}),
       }),
       cache: "no-store",
     });
@@ -285,9 +288,12 @@ export async function readMicrosoftGraphAttachments(
       const contentType = clean(row.contentType, 100);
       const encoded = typeof row.contentBytes === "string" ? row.contentBytes : "";
       const allowed = contentType === "application/pdf" || contentType === "image/jpeg" || contentType === "image/png" || contentType === "image/webp";
-      if (row.isInline === true || !allowed || !encoded || typeof row.id !== "string") { skipped += 1; continue; }
+      if (!allowed || !encoded || typeof row.id !== "string") { skipped += 1; continue; }
       const bytes = new Uint8Array(Buffer.from(encoded, "base64"));
       const size = typeof row.size === "number" ? row.size : bytes.byteLength;
+      const namedSignature = /(?:^|[_. -])(?:logo|signature|signatur)(?:[_. -]|$)/iu.test(typeof row.name === "string" ? row.name : "");
+      const signatureImage = contentType.startsWith("image/") && ((bytes.byteLength < 10 * 1024 && (row.isInline === true || namedSignature)) || (row.isInline === true && typeof row.contentId === "string" && row.contentId.length > 0 && namedSignature));
+      if (signatureImage) { skipped += 1; continue; }
       total += bytes.byteLength;
       if (bytes.byteLength < 1 || bytes.byteLength > 20 * 1024 * 1024 || total > 40 * 1024 * 1024 || size !== bytes.byteLength) { skipped += 1; continue; }
       attachments.push({ id: row.id, filename: clean(row.name, 120) || `Mailanhang-${attachments.length + 1}`, contentType, bytes });
@@ -297,4 +303,19 @@ export async function readMicrosoftGraphAttachments(
   } catch (error) {
     return unavailable("Die Mailanhänge sind momentan nicht sicher erreichbar.", error);
   }
+}
+
+/** Preserve the provider's MIME bytes; never synthesize an email original from its preview. */
+export async function readMicrosoftGraphMime(messageId:string,env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<Uint8Array>> {
+  const config=readConfig(env);
+  if(!config)return {code:"IN_KLAERUNG",message:"Microsoft 365 ist noch nicht für die Preview verbunden."};
+  if(!messageId||messageId.length>1024)return {code:"UNAVAILABLE",message:"Die Mailkennung ist ungültig."};
+  try {
+    const token=await accessToken(config,fetchPort);
+    const response=await graphGetMessage(config,token,`messages/${encodeURIComponent(messageId)}/$value`,fetchPort);
+    if(!response.ok)await providerFailure(response,"GRAPH_MIME");
+    const bytes=new Uint8Array(await response.arrayBuffer());
+    if(bytes.byteLength<1||bytes.byteLength>20*1024*1024)throw new Error("GRAPH_MIME_SIZE_INVALID");
+    return {code:"OK",data:bytes};
+  }catch(error){return unavailable("Das Mail-Original konnte nicht sicher geladen werden.",error);}
 }
