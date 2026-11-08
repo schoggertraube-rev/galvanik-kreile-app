@@ -79,7 +79,7 @@ async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise
   return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work);
 }
 
-async function createFixture(settings=true): Promise<Fixture> {
+async function createFixture(settings=true,rights=true): Promise<Fixture> {
   const actorId = randomUUID();
   const customerId = randomUUID();
   const updatedAt = new Date(Date.now() - 5_000).toISOString();
@@ -95,7 +95,7 @@ async function createFixture(settings=true): Promise<Fixture> {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
-      FROM unnest(${transaction.array(['eingang','auftraege','kunden','geld',...(settings?['einstellungen']:[])])}::text[]) area
+      FROM unnest(${transaction.array(rights?['eingang','auftraege','kunden','geld',...(settings?['einstellungen']:[])]:[])}::text[]) area
     `;
     await transaction`
       INSERT INTO public.customers (
@@ -909,4 +909,39 @@ it.each([false,true])('AF-4/13: return declined KV goods with one real actor rec
  expect(await sql`SELECT von FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND nachher->>'action'='kv.ware_zurueckgegeben'`).toEqual([{von:worker.actorId}]);
  expect(await sql`SELECT id FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toHaveLength(2);
  expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(0);
+});
+
+it('U249: a login without area rights extends and accepts through the same writer without receiving money data',async()=>{
+ const owner=await createFixture(),operator=await createFixture(false,false);
+ const {createQuoteAction,changeQuoteLifecycleAction,recordQuoteDecisionAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,updated_at) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST U249 settings',statement_timestamp() WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ const {readQuoteDefaultsAction}=await import('@/app/actions/quotes.actions');const {saveQuoteSettingsAction}=await import('@/app/actions/settings.actions');
+ const settings=await withSession(owner,()=>readQuoteDefaultsAction());if(settings.code!=='OK')throw Error('TEST U249 settings');
+ expect(await withSession(owner,()=>saveQuoteSettingsAction({clientEventId:randomUUID(),expectedUpdatedAt:settings.settings.updatedAt,setupCents:settings.settings.setupCents,materialCents:settings.settings.materialCents,followupDays:5,validityDays:settings.settings.validityDays}))).toMatchObject({code:'OK'});
+ const [dates]=await sql<{past:string;future:string;later:string;due:string}[]>`SELECT (current_date-1)::text AS past,(current_date+30)::text AS future,(current_date+60)::text AS later,(current_date+14)::text AS due`;
+ const quote=await withSession(owner,()=>createQuoteAction({clientEventId:randomUUID(),customerId:owner.customerId,dueDate:dates.due,validUntil:dates.future,note:'TEST U249 keine Geldfreigabe',positions:[{name:'TEST Halter',quantity:1,material:null,surfaceRequested:'verchromen',unitPriceCents:1234}]}));
+ if(quote.code!=='OK')throw Error('TEST U249 quote');
+ expect(await withSession(owner,()=>changeQuoteLifecycleAction({action:'sent',quoteId:quote.quote.quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck',evidence:'TEST bestehende Fassung ausgedruckt'}))).toMatchObject({code:'OK'});
+ const [task]=await sql`SELECT id::text,status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quote.quote.quoteId}`;expect(task.status).toBe('offen');
+ const {completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+ expect(await withSession(operator,()=>completeIntakeTaskAction({taskId:task.id,version:1,note:'TEST allgemeine Aufgabe nicht freigegeben'}))).toMatchObject({code:'FORBIDDEN'});
+ const input={action:'extend' as const,quoteId:quote.quote.quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,validUntil:dates.later,evidence:'TEST Kunde moechte eine laengere Entscheidungsfrist'};
+ expect(await withSession(operator,()=>changeQuoteLifecycleAction(input))).toMatchObject({code:'FORBIDDEN'});
+ const extended=await withSession(operator,()=>recordQuoteDecisionAction(input));
+ expect(extended).toMatchObject({code:'OK',receipt:{quoteId:input.quoteId,version:3,edition:1,validUntil:dates.later,acceptedEdition:null}});
+ if(extended.code!=='OK')throw Error('TEST U249 extend');
+ expect(Object.keys(extended).sort()).toEqual(['code','receipt','replayed']);
+ expect(Object.keys(extended.receipt).sort()).toEqual(['acceptedEdition','edition','eventId','number','quoteId','validUntil','version']);
+ const accept={action:'accept' as const,quoteId:input.quoteId,expectedVersion:3,edition:1,clientEventId:randomUUID(),evidence:'TEST Kunde sagt diese unveraenderte Fassung telefonisch zu'};
+ expect(await withSession(operator,()=>recordQuoteDecisionAction({...accept,source:{itemId:randomUUID(),version:1,message:true}}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(operator,()=>recordQuoteDecisionAction(accept))).toMatchObject({code:'OK',receipt:{version:4,acceptedEdition:1}});
+ expect(await withSession(operator,()=>recordQuoteDecisionAction(accept))).toMatchObject({code:'OK',replayed:true,receipt:{version:4}});
+ expect(await withSession(operator,()=>recordQuoteDecisionAction({...accept,evidence:'TEST anderer Wortlaut'}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(operator,()=>recordQuoteDecisionAction({action:'sent',quoteId:input.quoteId,expectedVersion:4,edition:1,clientEventId:randomUUID(),channel:'druck',evidence:'TEST nicht erlaubt'}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(operator,()=>readQuoteAction({quoteId:input.quoteId}))).toMatchObject({code:'FORBIDDEN'});
+ expect((await sql`SELECT status,erledigt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${task.id}::uuid`)[0]).toMatchObject({status:'erledigt',erledigt_von:operator.actorId});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${operator.actorId}::uuid AND event_type='QUOTE_FOLLOWUP_COMPLETED_V1' AND payload->>'taskId'=${task.id}`).toHaveLength(1);
+ expect(await sql`SELECT bereich FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${operator.actorId}::uuid`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${operator.actorId}::uuid AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'quoteId'=${input.quoteId}`).toHaveLength(2);
+ expect(await withSession(owner,()=>readQuoteAction({quoteId:input.quoteId}))).toMatchObject({code:'OK',quote:{version:4,totalNetCents:1234,lifecycle:{edition:1,acceptedEdition:1,acceptanceEvidence:accept.evidence}}});
 });
