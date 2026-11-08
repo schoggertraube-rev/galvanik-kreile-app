@@ -26,14 +26,30 @@
     "@/modules/tasks/server-public#completeTask",
     "@/modules/tasks/server-public#readTask",
     "@/modules/tasks/server-public#TaskEffectRequest",
-    "@/modules/tasks/server-public#TaskEffects"
+    "@/modules/tasks/server-public#TaskEffects",
+    "@/modules/tasks/server-public#syncQuoteFollowupTask",
+    "@/modules/tasks/server-public#readQuoteFollowupTasksForToday",
+    "@/modules/tasks/server-public#QuoteFollowupRequest"
   ],
-  "capabilities": ["aufgabe:speichern", "aufgabe:erledigen"],
-  "migrations": ["20261104012000_ein4_nachrichten.sql"],
-  "viewsFunctions": ["private.v_task_contexts_v1", "private.v_task_recipients_v1"],
-  "ownsTables": ["public.tasks"],
+  "capabilities": [
+    "aufgabe:speichern",
+    "aufgabe:erledigen"
+  ],
+  "migrations": [
+    "20261104012000_ein4_nachrichten.sql"
+  ],
+  "viewsFunctions": [
+    "private.v_task_contexts_v1",
+    "private.v_task_recipients_v1"
+  ],
+  "ownsTables": [
+    "public.tasks"
+  ],
   "storagePurposes": [],
-  "events": {"emits": [], "consumes": []},
+  "events": {
+    "emits": [],
+    "consumes": []
+  },
   "config": {},
   "dependencies": []
 }

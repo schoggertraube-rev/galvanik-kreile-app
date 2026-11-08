@@ -115,6 +115,12 @@
       "private.v_goods_out_ui_state_v1",
       "private.v_payment_summary_v1"
     ],
+    "src/lib/server/quoteGoodsContextPort.ts": [
+      "private.v_quotes_v1"
+    ],
+    "src/lib/server/quoteJournalPort.ts": [
+      "private.v_extra_work_current_rate_v1"
+    ],
     "src/lib/server/searchAuxiliaryRead.ts": [
       "private.v_evidence_records_v2"
     ],

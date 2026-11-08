@@ -1,3 +1,5 @@
+import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
+import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
@@ -148,4 +150,31 @@ export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
   const canEdit=task?task.status==='offen'&&allowed(auth,task):true;
   return {code:'OK',task,reference,currentLogin:auth.userId,canEdit,canComplete:!!task&&canEdit&&task.art!=='rechnung',canOpenReference:reference.type==='allgemein'||reference.label!==null};
  });}catch(error){return resultError(error);}
+}
+
+
+export type QuoteFollowupRequest={quoteId:string;quoteNumber:string;customerName:string;edition:number;sentEdition:number|null;action:'sent'|'cancel';dueDate:string|null;reason:string};
+/** Current and previous sent edition keys identify only this automatic task, never a user's other task. */
+export async function syncQuoteFollowupTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:QuoteFollowupRequest,deps:Dependencies):Promise<string|null>{
+ if(!hasAuthorizationArea(auth,'geld')||!hasAuthorizationArea(auth,'auftraege')||!taskUuid(input.quoteId)||!Number.isSafeInteger(input.edition)||input.edition<1)reject('FORBIDDEN','KV-Nachfassen ist nicht freigegeben.');
+ const currentKey=eventKey(input.quoteId,input.edition,'quote-followup');
+ const keys=[...new Set([currentKey,...(input.sentEdition?[eventKey(input.quoteId,input.sentEdition,'quote-followup')]:[])])];
+ const rows=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=ANY(ARRAY[${sql.join(keys.map(key=>sql`${key}`),sql`, `)}]::uuid[]) ORDER BY id FOR UPDATE`);
+ if(rows.some(row=>row.bezug_typ!=='kv'||row.bezug_id!==input.quoteId||row.art!=='aufgabe'))reject('CONFLICT','Nachfasskennung ist bereits anders belegt.');
+ for(const row of rows){if(row.status==='offen'&&(input.action==='cancel'||row.client_key!==currentKey))await finishTask(tx,auth,{taskId:row.id,version:row.version,note:input.reason},deps);}
+ if(input.action==='cancel')return null;
+ const current=rows.find(row=>row.client_key===currentKey);
+ if(current?.status==='erledigt')return null;
+ if(input.dueDate===null)return current?.faellig_am??null;
+ const customer=input.customerName.length>120?input.customerName.slice(0,119)+'…':input.customerName;
+ const value:TaskSaveInput={clientKey:currentKey,version:current?.version??0,...(current?{taskId:current.id}:{}),kind:'aufgabe',title:'Bei '+customer+' wegen KV '+input.quoteNumber+' nachfragen',dueDate:input.dueDate,time:null,forLogin:null,forArea:'geld',reference:{type:'kv',id:input.quoteId},note:'Nachfassen zur versendeten KV-Fassung '+input.edition};
+ if(Object.keys(taskValidation(value)).length)reject('VALIDATION_ERROR','KV-Nachfassdatum oder Bezug ist unvollständig.');
+ return (await persistTask(tx,auth,value,deps)).task.faellig_am;
+}
+export async function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,today=berlinCalendarDay()){
+ if(!hasAuthorizationArea(auth,'geld')||!hasAuthorizationArea(auth,'auftraege'))return [];
+ const tasks=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND bezug_typ='kv' AND art='aufgabe' AND status='offen' AND faellig_am<=${today}::date ORDER BY faellig_am,id`);
+ const candidates=tasks.filter(task=>taskUuid(task.bezug_id)&&allowed(auth,task));
+ const facts=await readQuoteFollowupFacts(tx,auth.tenantId,[...new Set(candidates.map(task=>task.bezug_id!))]);
+ return candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];if(!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');return [{id:task.id,title:task.titel,dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName}];});
 }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "d0bcd0447e4724b56acde07ed32547145276f163e5764742c8685c359ca300aa",
+  "inventorySha256": "cceb15809bd94fee48bab7db398cc47000e89b1e8224d1da2d1cba9e648a7edd",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -39,13 +39,16 @@
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#convertQuoteToOrderAction": [
-      "src/test/h18_quote_actions.integration.test.ts"
+      "src/test/h18_quote_actions.integration.test.ts",
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#createQuoteAction": [
-      "src/test/h18_quote_actions.integration.test.ts"
+      "src/test/h18_quote_actions.integration.test.ts",
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#updateQuoteAction": [
-      "src/test/h18_quote_actions.integration.test.ts"
+      "src/test/h18_quote_actions.integration.test.ts",
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#changeOrderPromisedDueDateAction": [
       "src/test/h18_settings_actions.integration.test.ts"
@@ -170,7 +173,8 @@
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#saveGoodsReceiptAction": [
-      "src/test/h18_customer_actions.integration.test.ts"
+      "src/test/h18_customer_actions.integration.test.ts",
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#openIntakeOriginalAction": [
       "src/test/h18_customer_actions.integration.test.ts"
@@ -231,6 +235,27 @@
     ],
     "src/app/actions/communications.actions.ts#attachOutlookMailAction": [
       "src/test/acceptance/ein34_mail_import.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#changeQuoteLifecycleAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#saveQuoteSettingsAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#readQuoteDefaultsAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#getQuoteFollowupsForTodayAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#prepareQuoteFromIntakeAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/communications.actions.ts#sendCustomerMailAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#prepareQuoteCopyAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ]
   },
   "writeActionOverrides": {
@@ -246,7 +271,6 @@
     "src/app/actions/auth.ts#logout": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/baths.actions.ts#createBathMeasurementDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/baths.actions.ts#updateBathDb": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/communications.actions.ts#sendCustomerMailAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/company.actions.ts#updateCompanySettings": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#createCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#updateCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",

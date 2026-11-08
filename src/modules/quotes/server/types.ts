@@ -1,3 +1,4 @@
+import type {QuoteCalculation} from "../quoteCalculation";
 export type QuoteCommandCapabilities = {
   canCreateQuote: boolean;
   canReadQuote: boolean;
@@ -17,6 +18,8 @@ export type QuotePositionInput = {
   material: string | null;
   surfaceRequested: string;
   unitPriceCents: number;
+  /** Exact total for calculations that cannot be divided into integer unit cents. */
+  lineTotalCents?: number;
 };
 
 export type CreateQuoteInput = {
@@ -28,6 +31,10 @@ export type CreateQuoteInput = {
   validUntil?: string | null;
   termStatus?: "wunsch" | "bestaetigt" | "verschoben" | "gegenvorschlag" | null;
   intakeSource?: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
+  calculation?:QuoteCalculation;
+  source?: {itemId:string;version:number;message:boolean};
+  specialRequests?:string|null;
+  deliveryWeeks?:number|null;
 };
 
 export type ConvertQuoteInput = {
@@ -35,6 +42,7 @@ export type ConvertQuoteInput = {
   clientEventId: string;
   expectedVersion: number;
   confirmedAward: true;
+  goodsReceiptId?:string;
   /** The order promise is intentionally distinct from the customer's KV wish date. */
   confirmedOrderDueDate: string;
   handoverMode: "pickup" | "shipping";
@@ -42,6 +50,9 @@ export type ConvertQuoteInput = {
 };
 
 export type UpdateQuoteInput = {
+  source?:CreateQuoteInput['source'];
+  termStatus?:CreateQuoteInput['termStatus'];
+  calculation?:QuoteCalculation;
   quoteId: string;
   clientEventId: string;
   expectedVersion: number;
@@ -57,6 +68,16 @@ export type QuotePosition = QuotePositionInput & {
 };
 
 export type QuoteReadback = {
+  lifecycle?: {
+    edition:number; stage:'entwurf'|'versendet'|'geaendert_seit_versand'|'zugesagt'|'umgewandelt'|'abgesagt'|'abgelaufen';
+    sentEdition:number|null; sentAt:string|null; sentChannel:'mail'|'druck'|null;
+    acceptedEdition:number|null; acceptedAt:string|null; acceptanceEvidence:string|null;
+    conditional?:{edition:number;recordedAt:string;reason:string}|null;
+    calculation?:QuoteCalculation|null;
+    goods?:Array<{id:string;orderId:string|null;edition:number;location:string;blocked:boolean;version:number}>;
+    declinedAt:string|null; declineReason:string|null; followupAt:string|null;
+    sourceItemId:string|null; sourceMessageId:string|null; specialRequests:string|null;deliveryWeeks:number|null;
+  };
   quoteId: string;
   quoteNumber: string;
   customerId: string;
@@ -148,7 +169,7 @@ export type ReadQuoteUpdateReceiptResult =
   | QuoteCommandFailure;
 
 export type QuoteOrderInput = {
-  geprueft: false;
+  geprueft: boolean;
   clientEventId: string;
   customer: { mode: "EXISTING"; customerId: string };
   dueDate: string;

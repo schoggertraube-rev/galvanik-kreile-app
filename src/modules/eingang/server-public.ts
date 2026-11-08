@@ -1,4 +1,5 @@
 import "server-only";
+export {recordIntakeQuoteEffect} from './server/intakeQuoteEffect';
 export {readIncomingInvoice,saveIncomingInvoice,changeIncomingInvoice,readInvoiceTaskContext} from './server/incomingInvoice';
 export type {InvoiceDependencies} from './server/incomingInvoice';
 export {readIntakeMessages} from './server/intakeMessages';
@@ -10,7 +11,7 @@ export {saveIntakeProspect} from './server/intakeProspect';
 export {readOpenIntakeMails,readLinkedIntakeMails} from "./server/intakeMailRead";
 export {importIntakeGraphMail,linkImportedMail,readIntakeMailImportReceipt} from './server/intakeMailImport';
 export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals} from "./server/intakeOriginal";
-export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt } from "./server/goodsReceipt";
+export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction } from "./server/goodsReceipt";
 export type { GoodsReceiptResult,GoodsReceiptDependencies } from "./server/goodsReceipt";
 export { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, createIntakeContinuation } from "./server/intakeDraft";
 

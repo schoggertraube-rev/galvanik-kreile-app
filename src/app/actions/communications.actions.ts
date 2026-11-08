@@ -1,5 +1,8 @@
 "use server";
 
+import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
+import {createHash} from "node:crypto";
+import {readCommunicationDocumentReceipt,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization,hasAuthorizationArea } from "@/lib/server/authorization";
 import {
@@ -11,7 +14,7 @@ import {
   readCommunicationImportContext,
 } from "@/lib/server/communicationPort";
 import { readMicrosoftGraphConfigurationStatus } from "@/lib/server/microsoftGraph";
-import { readQuoteAction, readQuotePdfAction } from "@/app/actions/quotes.actions";
+import { changeQuoteLifecycleAction, readQuotePdfAction } from "@/app/actions/quotes.actions";
 import {linkImportedMail,readLinkedIntakeMails,readIntakeMailImportReceipt} from '@/modules/eingang/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
 
@@ -56,39 +59,40 @@ export async function attachOutlookMailAction(input: TargetInput & { graphMessag
   return correspondence.code==='OK'?{...correspondence,data:{...correspondence.data,attachmentsImported:imported.originalCount,attachmentsSkipped:imported.filteredAttachments}}:correspondence;
 }
 
+async function confirmQuoteDelivery(input:{clientRequestId:string},document:CommunicationDocument,data:Awaited<ReturnType<typeof sendCommunicationMail>> & {code:'OK'}){
+ const marked=await changeQuoteLifecycleAction({action:'sent',quoteId:document.id,clientEventId:input.clientRequestId,expectedVersion:document.version,edition:document.edition,channel:'mail',evidence:'Versandbeleg '+data.data.threadId+' · PDF SHA-256 '+document.sha256},{actualMail:true});
+ const current=marked.code==='OK'?marked.quote.lifecycle:null;
+ const notices=marked.code==='OK'?[...(marked.notices??[])]:[];
+ if(current&&current.edition!==document.edition&&!notices.some(value=>value.includes('aktuelle Fassung')))notices.push('E-Mail mit Fassung '+document.edition+' gesendet · aktuelle Fassung '+current.edition+(current.sentEdition===current.edition?' bleibt bereits versendet.':' ist noch nicht versendet.'));
+ return marked.code==='OK'?{...data,notice:notices.join(' ')||undefined}:{...data,notice:'E-Mail mit KV '+document.number+' · Fassung '+document.edition+' wurde versendet. KV-Stand konnte nicht angepasst werden: '+marked.message+' Nicht erneut senden.'};
+}
+
 export async function sendCustomerMailAction(input: TargetInput & {
-  clientRequestId: string;
-  subject: string;
-  body: string;
-  attachment?: { kind: "QUOTE"; documentId: string };
-}) {
-  const authorizationResult = await authorization();
-  if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
-  const auth = authorizationResult.data;
-  let attachment;
-  if (input.attachment) {
-    const quote = await readQuoteAction({ quoteId: input.attachment.documentId });
-    if (quote.code !== "OK") return quote;
-    const belongs = input.targetType === "CUSTOMER"
-      ? quote.quote.customerId === input.targetId
-      : quote.quote.linkedOrderId === input.targetId;
-    if (!belongs) return { code: "FORBIDDEN" as const, message: "Der KV gehört nicht zu diesem Kunden oder Auftrag." };
-    const pdf = await readQuotePdfAction({ quoteId: input.attachment.documentId });
-    if (pdf.code !== "OK") return pdf;
-    attachment = {
-      filename: `${pdf.quoteNumber}.pdf`,
-      contentType: "application/pdf" as const,
-      bytes: new Uint8Array(pdf.pdf),
-    };
+ clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE';documentId:string};
+}){
+ const authorizationResult=await authorization();
+ if(!authorizationResult.ok)return {code:'UNAUTHENTICATED' as const,message:authorizationResult.message};
+ const auth=authorizationResult.data;
+ let attachment,document:CommunicationDocument|undefined;
+ if(input.attachment){
+  const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
+  if(prior.code==='OK')return confirmQuoteDelivery(input,prior.document,{code:'OK',data:prior.data});
+  if(prior.code!=='NOT_FOUND')return prior;
+  const pdf=await readQuotePdfAction({quoteId:input.attachment.documentId});
+  if(pdf.code!=='OK')return pdf;
+  const belongs=input.targetType==='CUSTOMER'?pdf.document.customerId===input.targetId:pdf.document.linkedOrderId===input.targetId;
+  if(!belongs)return {code:'FORBIDDEN' as const,message:'Der KV gehört nicht zu diesem Kunden oder Auftrag.'};
+  if(pdf.document.edition===null)return {code:'VALIDATION_ERROR' as const,message:'KV-Fassung fehlt. Es wurde nichts gesendet.'};
+  attachment={filename:pdf.quoteNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.pdf)};
+  document={kind:'QUOTE',id:pdf.document.id,number:pdf.quoteNumber,version:pdf.document.version,edition:pdf.document.edition,sha256:createHash('sha256').update(attachment.bytes).digest('hex')};
+  if(pdf.document.sourceMessageId){
+   const source=await readIntakeMailImportReceipt(auth,{itemId:pdf.document.sourceMessageId});
+   if(source.code!=='OK')return {...source,message:'KV-Ursprungsnachricht konnte nicht sicher gelesen werden. Es wurde nichts gesendet. '+source.message};
+   document.source={itemId:source.itemId,graphMessageId:source.message.id};
   }
-  return sendCommunicationMail(auth, {
-    targetType: input.targetType,
-    targetId: input.targetId,
-    clientRequestId: input.clientRequestId,
-    subject: input.subject,
-    body: input.body,
-    attachment,
-  });
+ }
+ const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,document,beforePrepare:document?tx=>lockQuoteDeliverySnapshot(tx,auth.tenantId,document!):undefined});
+ return sent.code==='OK'&&document?confirmQuoteDelivery(input,document,sent):sent;
 }
 
 import {importIntakeGraphMail} from '@/modules/eingang/server-public';

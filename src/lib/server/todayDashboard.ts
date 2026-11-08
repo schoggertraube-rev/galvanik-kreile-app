@@ -14,7 +14,7 @@ export type { TodayLayoutItem } from "@/lib/server/todayDashboardPolicy";
 export type TodayItem = {
   key: string;
   field: TodayField;
-  kind: "order" | "mail" | "invoice" | "bundle" | "complaint";
+  kind: "order" | "mail" | "invoice" | "bundle" | "complaint" | "task";
   title: string;
   meta: string;
   urgency: "conflict" | "decision" | "warning";
@@ -22,7 +22,7 @@ export type TodayItem = {
   orderVersion?: number;
   invoiceId?: string;
   graphMessageId?: string;
-  target?:{screen:'reklamation'|'mail';arg:string};
+  target?:{screen:'reklamation'|'mail'|'aufgabe';arg:string};
   bundleSurface?: string;
   dueDate?: string;
   snoozedUntil?: string;
@@ -99,11 +99,12 @@ function toPositiveInteger(value: number | string) {
   return Number.isSafeInteger(normalized) && normalized > 0 ? normalized : null;
 }
 
-export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>): Promise<TodayDashboard> {
+export type TodayQuoteFollowup={id:string;title:string;dueDate:string;quoteId:string;quoteNumber:string;customerName:string};
+export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>): Promise<TodayDashboard> {
   const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
   const graphAllowed = hasAuthorizationArea(auth, "mails");
   const moneyAllowed = hasAuthorizationArea(auth, "geld");
-  const [orders, graph, support, complaints] = await Promise.all([
+  const [orders, graph, support, complaints,quoteFollowups] = await Promise.all([
     ordersAllowed ? getOperationalOrders(auth) : Promise.resolve([]),
     graphAllowed ? listMicrosoftGraphInbox() : Promise.resolve({ code: "IN_KLAERUNG" as const, message: "Outlook ist für dieses Profil nicht eingeblendet." }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
@@ -183,6 +184,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
       return { preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignments };
     }),
     ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints():Promise.resolve({code:'OK' as const,complaints:[]}),
+    moneyAllowed&&ordersAllowed?readQuoteFollowups():Promise.resolve({code:'OK' as const,tasks:[]}),
   ]);
 
   const allowed = allowedTodayFields(auth);
@@ -196,6 +198,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const items: TodayItem[] = [];
   const assignments = new Map(support.assignments.map((row) => [row.order_id, row]));
   const add = (item: TodayItem) => items.push({ ...item, field: item.field === "action" || selectedSet.has(item.field as TodayVisibleField) ? item.field : "action", snoozedUntil: reminders.get(item.key) });
+  if(quoteFollowups.code!=='OK'||!('tasks'in quoteFollowups))throw Error('TODAY_QUOTE_FOLLOWUP_READ_FAILED');
+  for(const task of quoteFollowups.tasks)add({key:'task:'+task.id,field:'action',kind:'task',title:task.title,meta:'KV '+task.quoteNumber+' · '+task.customerName,urgency:'warning',dueDate:task.dueDate,target:{screen:'aufgabe',arg:task.id},primaryActionLabel:'Öffnen'});
   if(complaints.code!=='OK')throw Error('TODAY_COMPLAINT_READ_FAILED:'+complaints.code);
   for(const attention of complaintAttention(complaints.complaints,auth.areas??[]))add({key:attention.key,field:'action',kind:'complaint',title:attention.title,meta:attention.meta,urgency:attention.urgency,orderId:attention.orderId,target:attention.target,primaryActionLabel:attention.actionLabel as TodayItem['primaryActionLabel']});
 

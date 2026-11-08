@@ -1,6 +1,6 @@
 export type GoodsReceiptPhotoKind="uebersicht"|"teile"|"abweichung";
 export type GoodsReceiptOrderRead={id:string;number:string|null;customerId:string;customerName:string|null;title:string|null;note:string|null;version:number;station:string;status:string;ware:string;fromQuote:boolean;items:Array<{id:string;name:string;quantity:number;unit:string|null;surface:string|null;note:string|null}>};
-export type GoodsReceiptRecord={id:string;client_key:string;item_id:string|null;auftrag_id:string;modus:"erwartet"|"erfassung";status:"entwurf"|"angenommen"|"galvanik";version:number;karte:number;packstuecke_da:number|null;packstuecke_gesamt:number|null;zustand:GoodsReceiptInput["condition"];abweichung:string[];abgestellt:boolean;fund_zeit:string|null;verfahren_wie_kv:GoodsReceiptInput["procedure"];verfahren_abweichung:string|null;fotos:GoodsReceiptInput["photos"];mengen:Array<{teil_id:string;erwartet:number;bestaetigt:number|null;geaendert:boolean;hinweis:string|null}>;offen:string[];bestaetigt_von:string|null};
+export type GoodsReceiptRecord={id:string;client_key:string;item_id:string|null;auftrag_id:string|null;kv_id?:string|null;kv_fassung?:number|null;lagerort?:string|null;gesperrt?:boolean;modus:"erwartet"|"erfassung";status:"entwurf"|"angenommen"|"galvanik";version:number;karte:number;packstuecke_da:number|null;packstuecke_gesamt:number|null;zustand:GoodsReceiptInput["condition"];abweichung:string[];abgestellt:boolean;fund_zeit:string|null;verfahren_wie_kv:GoodsReceiptInput["procedure"];verfahren_abweichung:string|null;fotos:GoodsReceiptInput["photos"];mengen:Array<{teil_id:string;kv_position?:number;erwartet:number;bestaetigt:number|null;geaendert:boolean;hinweis:string|null}>;offen:string[];bestaetigt_von:string|null};
 export type GoodsReceiptFailure={code:"UNAUTHENTICATED"|"FORBIDDEN"|"NOT_FOUND"|"VALIDATION_ERROR"|"CONFLICT"|"UNAVAILABLE";message:string};
 export type GoodsReceiptReadResult={code:"OK";order:GoodsReceiptOrderRead;receipts:GoodsReceiptRecord[];canStartGalvanik:boolean}|GoodsReceiptFailure;
 export type GoodsReceiptInput={
@@ -49,4 +49,17 @@ export function goodsReceiptWare(input:GoodsReceiptInput):"erwartet"|"teilweise"
  if(input.condition==='teillieferung'||input.packagesReceived!==input.packagesTotal)return 'teilweise';
  if(input.condition==='abweichung'&&!input.quantities.every(row=>row.confirmed))return 'abweichung';
  return 'da';
+}
+
+/** Same inspection fields; the business reference is a KV until conversion. */
+export type QuoteGoodsReceiptInput=Omit<GoodsReceiptInput,'orderId'|'expectedOrderVersion'|'command'>&{quoteId:string;expectedQuoteVersion:number;sourceVersion:number;location:string;command:'accept'};
+export function parseQuoteGoodsReceiptInput(value:unknown):QuoteGoodsReceiptInput|null{
+ if(!value||typeof value!=='object'||Array.isArray(value))return null;
+ const row=value as QuoteGoodsReceiptInput;
+ if(typeof row.quoteId!=='string'||!UUID.test(row.quoteId)||!Number.isSafeInteger(row.expectedQuoteVersion)||row.expectedQuoteVersion<1||!Number.isSafeInteger(row.sourceVersion)||row.sourceVersion<1||typeof row.location!=='string'||row.location.trim()!==row.location||!row.location||row.location.length>120||row.command!=='accept'||!row.itemId)return null;
+ const keys=['id','clientKey','clientEventId','itemId','expectedVersion','mode','command','card','packagesReceived','packagesTotal','condition','deviations','foundUnattended','foundAt','procedure','procedureNote','photos','quantities','quoteId','expectedQuoteVersion','sourceVersion','location'];
+ if(Object.keys(row).sort().join('|')!==keys.sort().join('|'))return null;
+ // Reuse only the existing pure inspection validator; no synthetic order is stored.
+ if(!parseGoodsReceiptInput({...row,orderId:row.quoteId,expectedOrderVersion:row.expectedQuoteVersion}))return null;
+ return row;
 }

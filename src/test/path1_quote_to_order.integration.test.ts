@@ -1,5 +1,7 @@
 // @vitest-environment node
 
+import {seedAcceptedQuoteGoodsForTest} from './helpers/acceptedQuoteGoodsFixture';
+
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -153,9 +155,11 @@ describe("PATH1 quote to existing F1.1 order", () => {
     `;
     expect(counts).toEqual({ revisions: 2, updates: 1, receipts: 1 });
 
+    const goodsReceiptId=await seedAcceptedQuoteGoodsForTest(db,{tenantId:KREILE_TENANT_SLUG,actorId:users.buero,quoteId:created.quote.quoteId});
     const conversion = await convertQuoteToOrderAction({
       quoteId: created.quote.quoteId,
       clientEventId: randomUUID(),
+      goodsReceiptId,
       expectedVersion: 2,
       confirmedAward: true,
       confirmedOrderDueDate: "2026-10-24",
@@ -176,7 +180,8 @@ describe("PATH1 quote to existing F1.1 order", () => {
     const created = await createQuoteAction(quoteInput(customerId, "CONVERT"));
     expect(created.code).toBe("OK");
     if (created.code !== "OK") return;
-    const conversion = { quoteId: created.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true as const, confirmedOrderDueDate: "2026-10-20", handoverMode: "pickup" as const, paymentMode: "rechnung" as const };
+    const goodsReceiptId=await seedAcceptedQuoteGoodsForTest(db,{tenantId:KREILE_TENANT_SLUG,actorId:users.buero,quoteId:created.quote.quoteId});
+    const conversion = { goodsReceiptId,quoteId: created.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true as const, confirmedOrderDueDate: "2026-10-20", handoverMode: "pickup" as const, paymentMode: "rechnung" as const };
     const first = await convertQuoteToOrderAction(conversion);
     expect(first.code).toBe("OK");
     if (first.code !== "OK") return;
@@ -209,14 +214,15 @@ describe("PATH1 quote to existing F1.1 order", () => {
     const staleQuote = await createQuoteAction(quoteInput(customerId, "STALE"));
     expect(staleQuote.code).toBe("OK");
     if (staleQuote.code !== "OK") return;
-    await expect(convertQuoteToOrderAction({ quoteId: staleQuote.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 2, confirmedAward: true, confirmedOrderDueDate: "2026-10-20", handoverMode: "pickup", paymentMode: "rechnung" })).resolves.toMatchObject({ code: "CONFLICT" });
+    await expect(convertQuoteToOrderAction({ quoteId: staleQuote.quote.quoteId, goodsReceiptId:await seedAcceptedQuoteGoodsForTest(db,{tenantId:KREILE_TENANT_SLUG,actorId:users.buero,quoteId:staleQuote.quote.quoteId}), clientEventId: randomUUID(), expectedVersion: 2, confirmedAward: true, confirmedOrderDueDate: "2026-10-20", handoverMode: "pickup", paymentMode: "rechnung" })).resolves.toMatchObject({ code: "CONFLICT" });
 
     const concurrentQuote = await createQuoteAction(quoteInput(customerId, "CONCURRENT"));
     expect(concurrentQuote.code).toBe("OK");
     if (concurrentQuote.code !== "OK") return;
+    const concurrentGoods=await seedAcceptedQuoteGoodsForTest(db,{tenantId:KREILE_TENANT_SLUG,actorId:users.buero,quoteId:concurrentQuote.quote.quoteId});
     const results = await Promise.all([
-      convertQuoteToOrderAction({ quoteId: concurrentQuote.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20", handoverMode: "pickup", paymentMode: "rechnung" }),
-      convertQuoteToOrderAction({ quoteId: concurrentQuote.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20", handoverMode: "pickup", paymentMode: "rechnung" }),
+      convertQuoteToOrderAction({ quoteId: concurrentQuote.quote.quoteId, goodsReceiptId:concurrentGoods, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20", handoverMode: "pickup", paymentMode: "rechnung" }),
+      convertQuoteToOrderAction({ quoteId: concurrentQuote.quote.quoteId, goodsReceiptId:concurrentGoods, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20", handoverMode: "pickup", paymentMode: "rechnung" }),
     ]);
     expect(results.filter((result) => result.code === "OK")).toHaveLength(1);
     expect(results.filter((result) => result.code === "CONFLICT")).toHaveLength(1);
@@ -253,9 +259,10 @@ describe("PATH1 quote to existing F1.1 order", () => {
     expect(created.code).toBe("OK");
     if (created.code !== "OK") return;
     const clientEventId = randomUUID();
+    const goodsReceiptId=await seedAcceptedQuoteGoodsForTest(db,{tenantId:KREILE_TENANT_SLUG,actorId:users.buero,quoteId:created.quote.quoteId});
     const { prepareQuoteConversionCommand } = await import("@/modules/quotes/server-public");
     const prepared = await prepareQuoteConversionCommand({ tenantId: KREILE_TENANT_SLUG, userId: users.buero, capabilities: { canCreateQuote: true, canReadQuote: true, canUpdateQuote: true, canConvertQuote: true } }, {
-      quoteId: created.quote.quoteId, clientEventId, expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20",
+      quoteId: created.quote.quoteId, goodsReceiptId, clientEventId, expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20",
       handoverMode: "pickup", paymentMode: "rechnung",
     });
     expect(prepared.code).toBe("OK");

@@ -22,6 +22,8 @@ export type IntakeTextRecognition = {
   positions: IntakeTextRecognitionPosition[];
   totalPositions?: number;
   overflowPositions?: IntakeTextRecognitionPosition[];
+  deliveryWeeks?: {value:number;source:string};
+  instructions?: Array<{text:string;source:string}>;
 };
 
 const SURFACES: Array<{ pattern: RegExp; surface: string }> = [
@@ -98,11 +100,16 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
   }
 
   const positions = corrected.split(/\r?\n|;|,(?=\s*\d)|\s+und\s+/i).flatMap((part, index) => {
-    const quantityMatch = part.trim().replace(/^bitte\s+/i, "").match(/^(\d+(?:[.,]\d+)?|ein dutzend|ein paar|eins|ein|eine|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf|zwanzig|dreißig|hundert|einige)\s*(kg|Stück|Stk\.?|St\.?|Teile|x)\b\s*(.*)$/i);
+    const content=part.trim().replace(/^bitte\s+/i, "");
+    const explicit=content.match(/^(\d+(?:[.,]\d+)?|ein dutzend|ein paar|eins|ein|eine|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf|zwanzig|dreißig|hundert|einige)\s*(kg|Stück|Stk\.?|St\.?|Teile|x)\b\s*(.*)$/i);
+    // A counted part with an explicit treatment needs no word "Stück".
+    // A bare time or money amount is never turned into a workshop position.
+    const counted=!explicit&&SURFACES.some(entry=>entry.pattern.test(content))?content.match(/^(\d+|ein|eine|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf)\s+(.+)$/i):null;
+    const quantityMatch=explicit??(counted?[counted[0],counted[1],'Stück',counted[2]]:null);
     if (!quantityMatch) return [];
     const surface = SURFACES.find((entry) => entry.pattern.test(part));
     const execution = EXECUTIONS.find((entry) => entry.pattern.test(part));
-    let name = quantityMatch[3]!.trim();
+    let name = quantityMatch[3]!.trim().split(/,\s*(?:KV\b|in\s+(?:\d+|ein\w*|zwei|drei|vier)\s+Wochen?\b)/i,1)[0]!;
     for (const entry of [...SURFACES, ...EXECUTIONS]) name = name.replace(entry.pattern, " ");
     name = name.replace(/\s+/g, " ").replace(/^[,.-]+|[,.-]+$/g, "").trim();
     if (!name && /^teile$/i.test(quantityMatch[2]!)) name = "Teile";
@@ -118,5 +125,10 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
     }];
   });
 
-  return { fields, positions: positions.slice(0, 20), ...(positions.length > 20 ? { totalPositions: positions.length, overflowPositions: positions.slice(20) } : {}) };
+  const lead=corrected.match(/\bin\s+(\d{1,2}|einer|ein|eine|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf)\s+Wochen?\b/i);
+  const weeks=lead?(lead[1]!.toLocaleLowerCase('de-DE')==='einer'?1:Number(NUMBER_WORDS[lead[1]!.toLocaleLowerCase('de-DE')]??lead[1])):null;
+  const negatedLead=lead&&/\b(?:nicht|keine|ohne)\s*$/i.test(corrected.slice(0,lead.index));
+  const deliveryWeeks=lead&&!negatedLead&&weeks!==null&&Number.isSafeInteger(weeks)&&weeks>=1&&weeks<=52?{value:weeks,source:lead[0]}:null;
+  const instructions=requestText.split(/[;\n]+|(?<=[.!?])\s+/u).map(text=>text.trim()).filter(text=>text&&/\b(?:nicht|kein(?:e|en)?|nur|erhalten|abdecken|ausschließen|ohne)\b/iu.test(text)).map(text=>({text,source:'Originaltext'}));
+  return { fields, positions: positions.slice(0, 20), ...(positions.length > 20 ? { totalPositions: positions.length, overflowPositions: positions.slice(20) } : {}),...(deliveryWeeks?{deliveryWeeks}:{}),...(instructions.length?{instructions}:{}) };
 }
