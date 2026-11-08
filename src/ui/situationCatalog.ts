@@ -105,3 +105,5 @@ export const ORDER_HANDOVER_COPY={
  call:(customer:string,phone:string|null)=>'Ruf '+customer.slice(0,55)+' an: '+(phone??'Telefon fehlt'),
  late:(number:string,customer:string,phone:string|null,carrier:string|null,mode:'pickup'|'shipping',label:boolean,passed:boolean)=>number+' · '+(passed?'Ware ist bereits übergeben':label?'Versandetikett ist bereits erstellt':'Paket ist bereits beim '+(carrier??'Versanddienst · Name fehlt'))+' · '+customer+' wollte '+(mode==='pickup'?'abholen':'Versand')+'. Ruf '+customer+' an: '+(phone??'Telefon fehlt')+'.',
 };
+
+export const REKLA_MAIL_COPY={request:'Fotos anfordern',waiting:(customer:string)=>'Wartet auf Fotos von '+customer,sent:'Fotos angefordert · Versandbeleg gespeichert.',unavailable:'Fotoanfrage konnte nicht sicher gesendet werden · Versandbeleg prüfen.',missing:'Du forderst die fehlenden Fotos zur Reklamation an.'} as const;

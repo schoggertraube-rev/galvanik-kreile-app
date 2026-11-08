@@ -156,7 +156,11 @@
     "@/modules/eingang/server-public#readIntakeQuoteReplyReference",
     "@/modules/eingang/public#intakeHandoverDirective",
     "@/modules/eingang/server-public#readIntakeHandoverMail",
-    "@/modules/eingang/server-public#recordIntakeHandoverEffect"
+    "@/modules/eingang/server-public#recordIntakeHandoverEffect",
+    "@/modules/eingang/server-public#prepareComplaintPhotoMail",
+    "@/modules/eingang/server-public#readComplaintPhotoMailSource",
+    "@/modules/eingang/server-public#complaintPhotoMailReplay",
+    "@/modules/eingang/server-public#completeComplaintPhotoMail"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"

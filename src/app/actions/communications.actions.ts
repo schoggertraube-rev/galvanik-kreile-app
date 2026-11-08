@@ -16,6 +16,9 @@ import {
 import { readMicrosoftGraphConfigurationStatus } from "@/lib/server/microsoftGraph";
 import { changeQuoteLifecycleAction, readQuotePdfAction } from "@/app/actions/quotes.actions";
 import {linkImportedMail,readLinkedIntakeMails,readIntakeMailImportReceipt} from '@/modules/eingang/server-public';
+import {prepareComplaintPhotoMail,readComplaintPhotoMailSource,complaintPhotoMailReplay,completeComplaintPhotoMail} from '@/modules/eingang/server-public';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {sql} from 'drizzle-orm';
 import {readCustomerProfile} from '@/modules/customers/server-public';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
@@ -68,11 +71,12 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Comm
 }
 
 export async function sendCustomerMailAction(input: TargetInput & {
- clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE';documentId:string};
+ clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE';documentId:string};complaintPhotoRequest?:{itemId:string;version:number};
 }){
  const authorizationResult=await authorization();
  if(!authorizationResult.ok)return {code:'UNAUTHENTICATED' as const,message:authorizationResult.message};
  const auth=authorizationResult.data;
+ if(input.complaintPhotoRequest)return sendComplaintPhotoRequest(auth,input);
  let attachment,document:CommunicationDocument|undefined;
  if(input.attachment){
   const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
@@ -116,4 +120,27 @@ export async function importOutlookMailAction(graphMessageId:string){
  const mail=await readMicrosoftGraphMessage(graphMessageId);
  if(mail.code!=='OK')return mail;
  return importIntakeMessage(authorization.data,mail.data);
+}
+
+/** Bound reply purpose of the existing sender; never an arbitrary recipient override. */
+async function sendComplaintPhotoRequest(auth:import('@/lib/server/authorization').AuthorizationSnapshot,input:TargetInput&{clientRequestId:string;subject:string;body:string;attachment?:unknown;complaintPhotoRequest?:{itemId:string;version:number}}){
+ const request=input.complaintPhotoRequest;
+ if(!request||Object.keys(request).some(key=>!['itemId','version'].includes(key))||!/^[0-9a-f-]{36}$/i.test(request.itemId)||!Number.isSafeInteger(request.version)||request.version<1||!/^[0-9a-f-]{36}$/i.test(input.clientRequestId)||input.attachment)return {code:'VALIDATION_ERROR' as const,message:'Eingang oder Anfragekennung ist ungültig.'};
+ try{
+  const context=await withPrivilegedTenantTransaction(auth,async tx=>{
+   const source=await readComplaintPhotoMailSource(tx,auth,{...request,clientRequestId:input.clientRequestId});
+   if(input.targetType!=='CUSTOMER'||input.targetId!==source.customerId)throw Error('COMPLAINT_PHOTO_MAIL_TARGET_MISMATCH');
+   const customer=await readCustomerProfile(tx,auth.tenantId,source.customerId!);if(!customer)throw Error('COMPLAINT_PHOTO_MAIL_CUSTOMER_MISSING');
+   const [template]=await tx.execute<{subject:string;body:string|null}>(sql`SELECT subject_template AS subject,body_text_template AS body FROM public.email_templates WHERE tenant_id=${auth.tenantId} AND template_key=${auth.tenantId+':reklamation_fotos_anfordern'}`);
+   if(!template?.body?.trim()||!template.subject.trim())throw Error('COMPLAINT_PHOTO_MAIL_TEMPLATE_MISSING');
+   const subject=template.subject.replaceAll('{Kunde}',customer.name),body=template.body.replaceAll('{Kunde}',customer.name);
+   if(/\{[^}]+\}/.test(subject+body))throw Error('COMPLAINT_PHOTO_MAIL_TEMPLATE_VARIABLE_UNKNOWN');
+   return {source,subject,body};
+  });
+  const intent=createHash('sha256').update(JSON.stringify({itemId:request.itemId,version:request.version,customerId:context.source.customerId,graphId:context.source.graphId,original:context.source.originalSha256,subject:context.subject,body:context.body})).digest('hex');
+  return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:context.source.customerId!,clientRequestId:input.clientRequestId,subject:context.subject,body:context.body,intakeReply:{itemId:request.itemId,version:request.version,graphMessageId:context.source.graphId!,sender:context.source.sender!,intent,
+   validate:tx=>prepareComplaintPhotoMail(tx,auth,{...request,clientRequestId:input.clientRequestId,customerId:context.source.customerId!,originalSha256:context.source.originalSha256,graphId:context.source.graphId!,sender:context.source.sender!,intent}),
+   complete:async(tx,threadId)=>completeComplaintPhotoMail(tx,auth,{...request,clientRequestId:input.clientRequestId,intent,threadId,customerId:context.source.customerId!,originalSha256:context.source.originalSha256}),
+   replay:async(tx,threadId)=>complaintPhotoMailReplay(tx,auth,{itemId:request.itemId,clientRequestId:input.clientRequestId,intent,threadId})}});
+ }catch(error){console.error('[COMPLAINT_PHOTO_REQUEST_FAILED]',{code:error instanceof Error?error.message:'UNKNOWN'});return {code:'VALIDATION_ERROR' as const,message:error instanceof Error&&error.message==='COMPLAINT_PHOTO_MAIL_TEMPLATE_MISSING'?'Mailvorlage fehlt · in Einstellungen ergänzen.':error instanceof Error&&error.message==='COMPLAINT_PHOTO_MAIL_ALREADY_REQUESTED'?'Fotoanfrage läuft bereits · Versandbeleg prüfen.':error instanceof Error&&error.message==='COMPLAINT_PHOTO_MAIL_PHOTOS_ALREADY_PRESENT'?'Fotos sind schon da · Reklamation anlegen.':'Original-Mail, Kundenzuordnung oder Stand konnte nicht sicher geprüft werden. Es wurde nichts erneut gesendet.'};}
 }

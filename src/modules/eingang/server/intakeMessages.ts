@@ -1,4 +1,5 @@
 import 'server-only';
+import {readComplaintPhotoWaiting} from '@/lib/server/communicationPort';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -25,6 +26,7 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
       WHERE source.fortsetzung_von IS NOT NULL AND created.tenant_id=source.tenant_id AND created.item_id=source.id AND created.art='angelegt' ORDER BY created.zeit,created.id LIMIT 1)) AS text,
     coalesce(source.empfangen_am,source.erstellt_am)::text AS at,source.kunde_id AS "customerId",context.customer_name AS "customerName",context.customer_type AS "customerType",
     source.vorgang_id AS "orderId",source.vorgang_art AS "orderKind",context.order_number AS "orderNumber",context.order_station AS "orderStation",context.goods,
+    (SELECT count(*)::int FROM public.intake_file photo WHERE photo.tenant_id=source.tenant_id AND photo.item_id=source.id AND photo.mime LIKE 'image/%' AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=photo.tenant_id AND receipt.item_id=photo.item_id AND receipt.art='original_gespeichert' AND receipt.nachher->>'fileId'=photo.id::text AND receipt.nachher->>'sha256'=photo.sha256)) AS "photoCount",
     source.anliegen AS concerns,source.anliegen_offen AS "openConcerns",source.aussortiert AS "discardReason",source.erstellt_von::text AS "createdBy",
     ARRAY(SELECT file.id::text FROM public.intake_file file WHERE file.tenant_id=source.tenant_id AND (file.item_id=source.id OR EXISTS(
       SELECT 1 FROM public.intake_event created WHERE source.fortsetzung_von IS NOT NULL AND created.tenant_id=source.tenant_id
@@ -39,6 +41,8 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
      AND (source.kunde_id IS NOT NULL AND candidate.kunde_id=source.kunde_id OR source.kunde_id IS NULL AND candidate.kunde_id IS NULL
       AND (source.gruppe_adresse IS NOT NULL AND candidate.gruppe_adresse=source.gruppe_adresse OR candidate.id=source.id)))
     ORDER BY coalesce(source.empfangen_am,source.erstellt_am),source.id`);
+   const waiting=await readComplaintPhotoWaiting(tx,auth,messages.map(row=>row.id));
+   for(const row of messages){const state=waiting.get(row.id);if(state)row.photoRequest=state;}
    return {code:'OK' as const,messages:[...messages],areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
   });
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}

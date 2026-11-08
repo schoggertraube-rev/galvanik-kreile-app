@@ -199,3 +199,41 @@ it('sends a reminder through the real Action, DB receipt and shared view; only M
   expect(sends).toBe(1);
  }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
 });
+
+
+it('RM01 real source reply Action persists mail, event and waiting view exactly once',async()=>{
+ const fixture=await createFixture(['eingang','mails','kunden']);
+ const itemId=randomUUID(),fileId=randomUUID(),hash='a'.repeat(64),graphId='TEST-RM01-'+itemId;
+ await sql`INSERT INTO public.email_templates(tenant_id,template_key,name,subject_template,body_html_template,body_text_template,variables) VALUES(${KREILE_TENANT_SLUG},${KREILE_TENANT_SLUG+':reklamation_fotos_anfordern'},'TEST Fotos','TEST Fotos {Kunde}','<p>TEST Fotos</p>','TEST Bitte Fotos senden, {Kunde}', '["Kunde"]'::jsonb)`;
+ await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,zuordnung,einsatz,text,anliegen,anliegen_offen,absender_adresse,graph_message_id,empfangen_am) VALUES(${itemId}::uuid,${KREILE_TENANT_SLUG},${itemId},'mail','rein','mailabruf',${fixture.actorId}::uuid,${fixture.customerId},'hand','offen','TEST Flecken',ARRAY['reklamation'],ARRAY['reklamation'],'TEST-sender@example.invalid',${graphId},statement_timestamp())`;
+ await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${fileId},'mime','TEST RM01.eml','message/rfc822',32,${hash},${KREILE_TENANT_SLUG+'/'+hash},now(),${fixture.actorId}::uuid,1,true,false,'fertig')`;
+ for(const [art,payload]of [['original_gespeichert',{fileId,sha256:hash,bytes:32}],['einsatz',{action:'mail_import_complete',fileIds:[fileId]}]] as const)await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,${art},${randomUUID()}::uuid,${fixture.actorId},${sql.json(payload)})`;
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ const {readIntakeMessages}=await import('@/modules/eingang/server-public');
+ const input={targetType:'CUSTOMER' as const,targetId:fixture.customerId,clientRequestId:randomUUID(),subject:'',body:'',complaintPhotoRequest:{itemId,version:1}};
+ const keys=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const;
+ const before=Object.fromEntries(keys.map(key=>[key,process.env[key]]));const native=globalThis.fetch;let sends=0;
+ try{
+  for(const key of keys)process.env[key]='';
+  expect(await withSession(fixture,()=>sendCustomerMailAction(input))).not.toMatchObject({code:'OK'});
+  expect((await sql`SELECT version FROM public.intake_item WHERE id=${itemId}::uuid`)[0].version).toBe(1);
+  process.env.MS_GRAPH_TENANT_ID='TEST-tenant';process.env.MS_GRAPH_CLIENT_ID='TEST-client';process.env.MS_GRAPH_CLIENT_SECRET='TEST-provider-fixture';process.env.MS_GRAPH_MAILBOX='TEST-mailbox@example.invalid';
+  vi.spyOn(globalThis,'fetch').mockImplementation(async(url,options)=>{
+   const target=new URL(typeof url==='string'?url:url instanceof URL?url.href:url.url);
+   if(target.hostname==='login.microsoftonline.com')return new Response(JSON.stringify({access_token:'TEST-provider-token-not-a-real-secret',expires_in:3600}),{status:200,headers:{'content-type':'application/json'}});
+   if(target.hostname==='graph.microsoft.com'&&target.pathname.endsWith('/reply')){expect(decodeURIComponent(target.pathname)).toContain(graphId);sends++;expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}))).not.toMatchObject({code:'OK'});return new Response(null,{status:202});}
+   return native(url,options);
+  });
+  const sent=await withSession(fixture,()=>sendCustomerMailAction(input));expect(sent).toMatchObject({code:'OK'});
+  const [stored]=await sql`SELECT thread.id,thread.status,message.body FROM public.communication_threads thread JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId}`;
+  expect(stored).toMatchObject({status:'sent',body:'TEST Bitte Fotos senden, TEST Begleitscheinkunde'});
+  const [source]=await sql`SELECT version,einsatz,anliegen_offen FROM public.intake_item WHERE id=${itemId}::uuid`;
+  expect(source).toMatchObject({version:2,einsatz:'offen',anliegen_offen:['reklamation']});
+  expect(await sql`SELECT von FROM public.intake_event WHERE item_id=${itemId}::uuid AND nachher->>'action'='reklamation.fotos_angefordert'`).toEqual([{von:fixture.actorId}]);
+  expect(await sql`SELECT user_id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientRequestId}::uuid AND event_type='INTAKE_COMPLAINT_PHOTO_REQUESTED_V1'`).toEqual([{user_id:fixture.actorId}]);
+  expect(await withSession(fixture,()=>readIntakeMessages('offen',itemId))).toMatchObject({code:'OK',messages:[expect.objectContaining({id:itemId,photoRequest:{threadId:stored.id,at:expect.any(String)}})]});
+  expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK',data:{replayed:true}});
+  expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID(),complaintPhotoRequest:{itemId,version:2}}))).not.toMatchObject({code:'OK'});
+  expect(sends).toBe(1);
+ }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
+});

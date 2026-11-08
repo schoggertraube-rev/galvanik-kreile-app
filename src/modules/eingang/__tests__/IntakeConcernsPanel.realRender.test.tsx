@@ -36,3 +36,19 @@ it('AF19 selects the mail concern, never guesses between orders and retries the 
  await waitFor(()=>expect(opened).toHaveBeenCalled());expect(opened.mock.calls.at(-1)?.[0]).toMatchObject({detail:{ziel:'auftrag',arg:'TEST-order-b'}});
  }finally{window.removeEventListener('kreile:oeffne',opened);}
 });
+
+
+it('RM01 retries the same reply key and shows waiting only after the persisted view reload',async()=>{
+ const message=row('TEST-rekla',{concerns:['reklamation'],openConcerns:['reklamation'],photoCount:0});
+ const requestPhotos=vi.fn().mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST provider unavailable'}).mockResolvedValueOnce({code:'OK',data:{}});
+ const list=vi.fn<IntakeMessagesPorts['list']>().mockResolvedValueOnce({code:'OK',messages:[message],areas:['mails','eingang','kunden'],currentLogin:'TEST-actor'}).mockResolvedValue({code:'OK',messages:[{...message,version:2,photoRequest:{at:'2026-11-08T11:00:00Z',threadId:'TEST-thread'}}],areas:['mails','eingang','kunden'],currentLogin:'TEST-actor'});
+ const ports:IntakeMessagesPorts={list,requestPhotos,select:vi.fn(),finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}};
+ render(<IntakeMessages ports={ports}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Fotos anfordern'}));
+ await screen.findByText('Nicht gespeichert · TEST provider unavailable');
+ expect(screen.queryByText('Wartet auf Fotos von TEST Schmidt')).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Erneut'}));
+ await screen.findByText('Wartet auf Fotos von TEST Schmidt');
+ expect(requestPhotos).toHaveBeenCalledTimes(2);expect(requestPhotos.mock.calls[1][0]).toEqual(requestPhotos.mock.calls[0][0]);
+ expect(screen.queryByRole('button',{name:'Fotos anfordern'})).toBeNull();expect(list).toHaveBeenCalledTimes(2);
+});

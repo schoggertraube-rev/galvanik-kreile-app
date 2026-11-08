@@ -216,13 +216,15 @@ export async function attachInboxMessage(
   }
 }
 
+export type IntakeComplaintReply={itemId:string;version:number;graphMessageId:string;sender:string;intent:string;validate:(tx:PrivilegedTenantTransaction)=>Promise<boolean>;complete:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>;replay:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<boolean>};
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeReply?:IntakeComplaintReply },
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || !/^[0-9a-f-]{36}$/i.test(input.clientRequestId) || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
   }
+  if(input.intakeReply&&(input.document||input.complaintResult||input.targetType!=='CUSTOMER'||!hasAuthorizationArea(auth,'eingang')||!hasAuthorizationArea(auth,'kunden')))return {code:'FORBIDDEN',message:'Diese Fotoanfrage benötigt einen eindeutigen Eingang und Kunden.'};
   // The bound 4.8 result mail requires Kunden. It grants no inbox or arbitrary
   // mail access: target, state and version are read from the complaint itself.
   const reminder=input.complaintResult?.kind==='reminder';
@@ -244,7 +246,8 @@ export async function sendCommunicationMail(
     return null;
   });
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
-  if (!/^\S+@\S+\.\S+$/.test(target.email)) return { code: "VALIDATION_ERROR", message: "Beim Kunden ist keine gültige E-Mail-Adresse hinterlegt." };
+  const recipient=input.intakeReply?.sender??target.email;
+  if (!/^\S+@\S+\.\S+$/.test(recipient)) return { code: "VALIDATION_ERROR", message: "Beim Kunden ist keine gültige E-Mail-Adresse hinterlegt." };
   const source = `MS_GRAPH_OUT:${input.clientRequestId}`;
   let pending: { threadId: string; recordedAt: string; replay?: CommunicationReceipt };
   try {
@@ -265,9 +268,11 @@ export async function sendCommunicationMail(
             AND message.summary=${complaintSummary} AND message.body=${input.body.trim()} AND thread.subject=${input.subject.trim()}`);
           if(confirmed.length!==1)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         }
+        if(input.intakeReply&&!await input.intakeReply.replay(tx,existing[0].id))throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         return { threadId: existing[0].id, recordedAt: iso(existing[0].created_at), replay: { threadId: existing[0].id, messageId: null, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(existing[0].created_at), replayed: true } };
       }
       if(readMicrosoftGraphConfigurationStatus().code!=='READY')throw Error('COMMUNICATION_NOT_CONFIGURED');
+      if(input.intakeReply&&!await input.intakeReply.validate(tx))throw Error('COMMUNICATION_INTAKE_SNAPSHOT_CHANGED');
       if(input.document&&(!input.beforePrepare||!await input.beforePrepare(tx)))throw Error('COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED');
       const threadId = randomUUID();
       const rows = await tx.execute<ThreadRow>(sql`
@@ -286,7 +291,7 @@ export async function sendCommunicationMail(
     return { code: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "CONFLICT" : "UNAVAILABLE", message: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "Der Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; zuerst im Outlook-Ausgang prüfen." : "Der Mailversand konnte nicht sicher vorbereitet werden." };
   }
   if (pending.replay) return { code: "OK", data: pending.replay };
-  const sent = await sendMicrosoftGraphMail({ to: target.email, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment, replyToMessageId: input.document?.source?.graphMessageId });
+  const sent = await sendMicrosoftGraphMail({ to: recipient, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment, replyToMessageId: input.intakeReply?.graphMessageId??input.document?.source?.graphMessageId });
   if (sent.code !== "OK") {
     await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
       UPDATE public.communication_threads SET status='failed', updated_at=statement_timestamp()
@@ -307,14 +312,27 @@ export async function sendCommunicationMail(
       if (updated.length !== 1) throw new Error("COMMUNICATION_THREAD_FINALIZE_FAILED");
       const messages = await tx.execute<{ id: string }>(sql`
         INSERT INTO public.communication_messages (id, tenant_id, thread_id, direction, channel, body, summary, created_by)
-        VALUES (${messageId}, ${auth.tenantId}, ${pending.threadId}, 'outgoing', 'email', ${input.body.trim()}, ${complaintSummary??(input.attachment ? `Anhang: ${input.attachment.filename}` : 'Ohne Anhang')}, ${auth.userId}) RETURNING id
+        VALUES (${messageId}, ${auth.tenantId}, ${pending.threadId}, 'outgoing', 'email', ${input.body.trim()}, ${input.intakeReply?'Reklamation · Fotos anfordern · Eingang '+input.intakeReply.itemId:complaintSummary??(input.attachment ? `Anhang: ${input.attachment.filename}` : 'Ohne Anhang')}, ${auth.userId}) RETURNING id
       `);
       if (messages.length !== 1 || messages[0]?.id !== messageId) throw new Error("COMMUNICATION_MESSAGE_INSERT_FAILED");
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,pending.threadId,'sent');
+      if(input.intakeReply){await input.intakeReply.complete(tx,pending.threadId);await tx.execute(sql`INSERT INTO public.events(tenant_id,id,event_type,user_id,client_event_id,event_schema_version,correlation_id,aggregate_version,status,description,payload)
+       VALUES(${auth.tenantId},${randomUUID()},'INTAKE_COMPLAINT_PHOTO_REQUESTED_V1',${auth.userId}::uuid,${input.clientRequestId}::uuid,1,${input.clientRequestId}::uuid,${input.intakeReply.version+1},'success','Reklamationsfotos angefordert',${JSON.stringify({itemId:input.intakeReply.itemId,threadId:pending.threadId,intent:input.intakeReply.intent})}::jsonb)`);}
+
     });
     return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: false } };
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_SEND_FINALIZE_FAILED", error);
     return { code: "UNAVAILABLE", message: "Microsoft 365 hat die Mail angenommen, die lokale Vorgangskopie ist aber noch nicht sicher bestätigt. Nicht erneut senden." };
   }
+}
+
+/** Visible waiting state is the real sent thread plus its atomic source receipt, never a local flag. */
+export async function readComplaintPhotoWaiting(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]){
+ if(!ids.length||!hasAuthorizationArea(auth,'mails'))return new Map<string,{at:string;threadId:string}>();
+ const rows=await tx.execute<{id:string;at:string;threadId:string}>(sql`SELECT DISTINCT ON(source.id) source.id::text,event.zeit::text AS at,thread.id::text AS "threadId"
+ FROM public.intake_item source JOIN public.intake_event event ON event.tenant_id=source.tenant_id AND event.item_id=source.id AND event.art='anliegen' AND event.nachher->>'action'='reklamation.fotos_angefordert' AND event.nachher->>'customerId'=source.kunde_id
+ JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.nachher->>'threadId' AND thread.status='sent' AND thread.source='MS_GRAPH_OUT:'||event.befehl_id::text
+ WHERE source.tenant_id=${auth.tenantId} AND source.id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}::uuid`),sql`, `)}]) ORDER BY source.id,event.zeit DESC,event.id DESC`);
+ return new Map(rows.map(row=>[row.id,{at:row.at,threadId:row.threadId}]));
 }
