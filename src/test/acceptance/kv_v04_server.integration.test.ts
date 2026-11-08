@@ -1096,3 +1096,21 @@ it('reply targets use the real source customer without money rights or financial
  expect((await sql`SELECT version FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${own.quote.quoteId}::uuid`)[0].version).toBe(1);
  expect((await sql`SELECT version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].version).toBe(source.capture.version);
 });
+
+it('AK order: two actual logins retain creator and last actor, take through existing assignment writer and read own statistics',async()=>{
+ const first=await createFixture(),second=await createFixture();
+ const {createOrderIntake}=await import('@/lib/server/commands/orderIntakeCommand');
+ const created=await withSession(first,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:first.customerId},dueDate:'2027-04-20',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',items:[{catalogServiceId:null,name:'TEST AK Halter',quantity:1,material:null,surfaceRequested:'verchromen',executionRequested:'offen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:'TEST AK actor projection'}));
+ if(created.code!=='OK')throw Error(created.message);const orderId=created.receipt.orderId;
+ const {getLiveOrderCardAction,assignOrderTaskAction}=await import('@/app/actions/orders.actions');
+ expect(await withSession(second,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{actors:{createdBy:{userId:first.actorId,action:'ORDER_INTAKE_CREATED_V1'},lastActor:{userId:first.actorId},responsible:{userId:first.actorId,source:'first-event'},currentLoginId:second.actorId}}}});
+ const request={orderId,assigneeUserId:second.actorId,expectedVersion:1,clientEventId:randomUUID()};
+ const taken=await withSession(second,()=>assignOrderTaskAction(request));expect(taken).toMatchObject({code:'OK',replayed:false});
+ expect(await withSession(second,()=>assignOrderTaskAction(request))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND client_event_id=${request.clientEventId}::uuid AND user_id=${second.actorId}::uuid`).toHaveLength(1);
+ expect((await sql`SELECT assigned_to::text,active FROM private.order_task_assignment_state WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`)[0]).toMatchObject({assigned_to:second.actorId,active:true});
+ expect(await withSession(first,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{actors:{createdBy:{userId:first.actorId},lastActor:{userId:second.actorId,action:'ORDER_TASK_ASSIGNED_V1'},responsible:{userId:second.actorId,source:'assignment'}}}}});
+ const {readOwnOrderActorStatistics}=await import('@/modules/orders/server-public');const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const stats=await withSession(second,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK auth');const today=new Date().toISOString().slice(0,10);return readOwnOrderActorStatistics(auth.data,{from:today,through:today});});
+ expect(stats).toMatchObject({code:'OK',userId:second.actorId,rows:expect.arrayContaining([expect.objectContaining({action:'ORDER_TASK_ASSIGNED_V1',events:1,orders:1})])});
+});

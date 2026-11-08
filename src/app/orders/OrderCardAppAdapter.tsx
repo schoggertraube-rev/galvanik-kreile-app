@@ -1,4 +1,5 @@
 "use client";
+import {ACTOR_COPY} from "@/ui/situationCatalog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -10,6 +11,7 @@ import { recordGoodsOutAction } from "@/app/actions/goodsOut.actions";
 import { generateOrderLabel } from "@/app/actions/pdf.actions";
 import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
 import {
+  assignOrderTaskAction,
   changeOrderContentAction,
   changeOrderPromisedDueDateAction,
   freezeOrderAction,
@@ -172,6 +174,8 @@ function mapCard(
   catalog: NonNullable<OrderCardModel["catalog"]>,
 ): OrderCardModel {
   return {
+    actors:card.actors,
+    actorReadError:card.actorReadError,
     id: card.id,
     version: card.version,
     orderNumber: card.orderNumber,
@@ -367,10 +371,11 @@ export function OrderCardAppAdapter({
     return () => window.clearTimeout(timer);
   }, [load]);
   const fail = useCallback(
-    async (result: { code: string; message: string }) => {
+    async (result: { code: string; message: string },operation?:"responsibility") => {
       if (result.code === "CONFLICT") await load(true);
       setFeedback({
         kind: result.code === "CONFLICT" ? "conflict" : "error",
+        operation,
         message:
           result.code === "CONFLICT"
             ? `${result.message} Der Auftrag wurde neu geladen.`
@@ -382,7 +387,7 @@ export function OrderCardAppAdapter({
   const success = useCallback(
     (
       kind:
-        "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate" | "label",
+        "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate" | "label" | "responsibility",
       receipt: {
         actorId: string;
         occurredAt: string;
@@ -396,6 +401,17 @@ export function OrderCardAppAdapter({
     },
     [],
   );
+  const takeInFlight=useRef(false);
+  const onTakeResponsibility=useCallback(async()=>{
+    if(takeInFlight.current||!snapshot?.card.actors)return;
+    takeInFlight.current=true;setFeedback({kind:'submitting',message:ACTOR_COPY.saving,operation:'responsibility'});
+    const key=requests.current.responsibility??=crypto.randomUUID();
+    try{
+      const result=await assignOrderTaskAction({orderId,assigneeUserId:snapshot.card.actors.currentLoginId,expectedVersion:snapshot.card.version,clientEventId:key});
+      if(result.code!=='OK'){await fail(result,'responsibility');return;}
+      delete requests.current.responsibility;await load(true);success('responsibility',{actorId:result.receipt.actorId,occurredAt:result.receipt.occurredAt,eventId:result.receipt.eventId,receiptId:result.receipt.assignmentStateId},ACTOR_COPY.taken);router.refresh();
+    }catch(error){console.error('[ORDER_RESPONSIBILITY_FAILED]',error);setFeedback({kind:'error',message:ACTOR_COPY.failed,operation:'responsibility'});}finally{takeInFlight.current=false;}
+  },[snapshot,orderId,fail,load,router,success]);
   const onChangeDueDate = useCallback(async (dueDate: string, reason: string) => {
     if (!snapshot) return;
     setFeedback({
@@ -864,6 +880,8 @@ export function OrderCardAppAdapter({
       payment?.invoiceState === "issued" &&
       Boolean(payment.payment && payment.payment.openAmountCents > 0);
     return {
+      takeResponsibility:availability(Boolean(card?.actors),hasArea("auftraege")&&!card?.actors?.assignmentUnavailable&&card?.actors?.responsible?.userId!==card?.actors?.currentLoginId,null),
+      onTakeResponsibility,
       content: availability(Boolean(card), editContent && !card?.freeze, !editContent ? "Ihre Rolle darf Auftragsinhalte nicht ändern." : card?.freeze ? "Der Auftrag ist bereits fertig gemeldet." : null),
       itemStatus: availability(Boolean(card), canPhoto && !card?.freeze, !canPhoto ? "Ihre Rolle darf den Teilstatus nicht ändern." : card?.freeze ? "Der Auftrag ist bereits fertig gemeldet." : null),
       contact: availability(Boolean(card?.customerPhone), Boolean(card?.customerPhone), card?.customerPhone ? null : "Keine Telefonnummer hinterlegt."),
@@ -961,6 +979,7 @@ export function OrderCardAppAdapter({
       },
     };
   }, [
+    onTakeResponsibility,
     feedback,
     load,
     onConfirmPayment,

@@ -86,3 +86,13 @@ export const QUOTE_CANCELLED_ORDER_COPY={title:'Auftrag zurückgenommen',explana
 export const QUOTE_UNDO_COPY={open:"Rückgängig",reason:"Grund der Rücknahme",missing:"Nenne den Grund der Rücknahme.",confirm:"Auftrag zurücknehmen",saved:"Auftrag zurückgenommen · die Ware ist wieder beim KV.",unavailable:(reason:string)=>"Rückgängig nicht mehr möglich · "+reason} as const;
 
 export const QUOTE_RECOVERY_COPY={extend:'Gültig bis verlängern',until:'Neues Gültigkeitsdatum',reason:'Grund / Wortlaut',missing:'Datum und konkreten Grund ergänzen.',extended:'Gültigkeit verlängert · Fassung und vorhandene Zusage bleiben erhalten.',return:(customer:string,location:string)=>'Ware an '+customer+' zurückgeben · '+location,returnConfirm:'Rückgabe mit Beleg bestätigen',returned:'Ware zurückgegeben · der Beleg bleibt im Verlauf.',receipt:'Rückgabebeleg',receiptLine:(quantity:number,location:string,actor:string,at:string)=>quantity+' Stück · '+location+' · '+actor+' · '+at};
+
+export const ACTOR_COPY={
+ created:(name:string,at:string)=>'Angelegt von '+name+' · '+at,
+ last:(name:string,action:string)=>'Zuletzt: '+name+' · '+action,
+ responsible:(name:string)=>'Zuständig: '+name,
+ missing:'Für diesen Auftrag fehlt ein belegtes Anlageereignis.',unknownLogin:'Loginname nicht mehr verfügbar',
+ take:'Übernehmen',mine:'Deins',saving:'Deine Zuständigkeit wird gespeichert.',taken:'Du hast den Auftrag übernommen.',failed:'Zuständigkeit nicht gespeichert · erneut mit derselben Kennung versuchen.',
+ action:(type:string)=>type==='ORDER_TASK_ASSIGNED_V1'?'Zuständigkeit übernommen':type==='ORDER_INTAKE_CREATED_V1'?'Auftrag angelegt':type==='ORDER_PROMISED_DUE_DATE_CHANGED_V1'?'Termin geändert':type.includes('PAYMENT')?'Zahlung erfasst':type.includes('PICKED_UP')?'Ware ausgegeben':type.includes('FROZEN')?'Fertig gemeldet':'Auftrag geändert',
+ mail:(sender:string)=>'Mail von '+sender,
+};

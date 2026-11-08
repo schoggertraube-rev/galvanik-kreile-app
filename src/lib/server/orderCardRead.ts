@@ -1,3 +1,4 @@
+import type {OrderActorSummary} from "@/modules/orders/public";
 import "server-only";
 
 import { sql } from "drizzle-orm";
@@ -54,6 +55,8 @@ export type OrderCardItem = {
 };
 
 export type LiveOrderCard = {
+  actors?:OrderActorSummary;
+  actorReadError?:string;
   cancellation?:{reason:string;at:string;actor:string;quoteId:string|null;quoteNumber:string|null};
   commercialQuote?:OrderCommercialQuote;
   id: string;

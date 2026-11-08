@@ -1,5 +1,5 @@
 "use client";
-import {QUOTE_CANCELLED_ORDER_COPY as cancelledCopy} from "@/ui/situationCatalog";
+import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import {
@@ -305,7 +305,17 @@ export function OrderCardView({
     {!paymentFree && payment ? <ZahlungsSchwelle text={`${paymentModeLabel(payment.mode)} · ${payment.invoiceState === "issued" ? payment.status ?? "offen" : "Rechnung noch nicht ausgestellt"}`} aktion={actions.payment.visible && actions.payment.enabled ? <Button art="primaer" icon="card" text="Zahlung prüfen" onClick={() => setPaymentOpen(true)} /> : undefined} /> : null}
   </>;
 
+  const responsibilityFeedback=actions.feedback.kind==='success'?actions.feedback.receipt.kind==='responsibility':'operation'in actions.feedback&&actions.feedback.operation==='responsibility';
   const main = <>
+    {card.actors||card.actorReadError?<KartenBlock><section data-spec-id="auftrag.akteure">
+      {card.actorReadError?<Hinweis ton="warn">{card.actorReadError}</Hinweis>:card.actors?<>
+        {card.actors.createdBy?<p>{ACTOR_COPY.created(card.actors.createdBy.name??ACTOR_COPY.unknownLogin,formatMoment(card.actors.createdBy.at))}</p>:<p>{ACTOR_COPY.missing}</p>}
+        {card.actors.lastActor?<p>{ACTOR_COPY.last(card.actors.lastActor.mailSender?ACTOR_COPY.mail(card.actors.lastActor.mailSender):card.actors.lastActor.name??ACTOR_COPY.unknownLogin,ACTOR_COPY.action(card.actors.lastActor.action))}</p>:null}
+        {card.actors.responsible?<p>{ACTOR_COPY.responsible(card.actors.responsible.name??ACTOR_COPY.unknownLogin)}</p>:null}
+        {actions.takeResponsibility?.visible&&actions.onTakeResponsibility?<Button text={card.actors.responsible?.userId===card.actors.currentLoginId?ACTOR_COPY.mine:ACTOR_COPY.take} disabled={!actions.takeResponsibility.enabled||actions.feedback.kind==='submitting'} onClick={()=>void actions.onTakeResponsibility?.()}/>:null}
+      </>:null}
+      {responsibilityFeedback?<Hinweis ton={actions.feedback.kind==='success'?'ok':'warn'}><span role={actions.feedback.kind==='error'||actions.feedback.kind==='conflict'?'alert':'status'}>{actions.feedback.message}</span></Hinweis>:null}
+    </section></KartenBlock>:null}
     {complaintsPanel}
     {next ? <KartenBlock><NaechsteAktion titel={next.title} aktionen={<Button art={actions.freeze.visible ? "erledigen" : "primaer"} icon={next.icon} text={next.text} disabled={!next.enabled} onClick={next.onClick} />} /></KartenBlock> : null}
     <KartenBlock label="Teile" rechts={<Button art="leise" icon="plus" text="Teil hinzufügen" disabled={!contentEnabled || card.items.length >= 20} onClick={() => contentEnabled ? setItemOpen("new") : unavailable(actions.content?.reason)} />}>
@@ -331,7 +341,7 @@ export function OrderCardView({
     </KartenBlock> : null}
     {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment ? paymentModeLabel(payment.mode) : "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.invoiceNumber ?? payment.status ?? "ausgestellt" : "noch nicht ausgestellt" }, { k: payment?.status === "bezahlt" ? "Bezahlt" : payment?.status === "teilbezahlt" ? "Noch offen" : "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} />{payment?.invoiceState === "issued" && payment.invoiceId ? <Button art="sekundaer" icon="file" text="Rechnungs-PDF öffnen" onClick={openInvoicePdf} /> : null}</KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
     {actions.freeze.visible && !actions.freeze.enabled && actions.freeze.reason?.includes("Stundensatz") ? <Hinweis ton="warn">{actions.freeze.reason} <a href={`/settings?returnTo=${encodeURIComponent(`/orders/${card.id}`)}#extra-work-rate`}>Stundensatz jetzt einrichten</a>.</Hinweis> : null}
-    {actions.feedback.kind !== "idle" ? actions.feedback.kind === "submitting" ? <Zustand art="laedt" text={actions.feedback.message} /> : <Hinweis ton={actions.feedback.kind === "success" ? "ok" : "warn"}>{actions.feedback.message}{actions.feedback.kind === "conflict" ? <Button art="sekundaer" icon="refresh" text="Neu laden" onClick={() => void actions.onReload()} /> : null}</Hinweis> : null}
+    {!responsibilityFeedback&&actions.feedback.kind !== "idle" ? actions.feedback.kind === "submitting" ? <Zustand art="laedt" text={actions.feedback.message} /> : <Hinweis ton={actions.feedback.kind === "success" ? "ok" : "warn"}>{actions.feedback.message}{actions.feedback.kind === "conflict" ? <Button art="sekundaer" icon="refresh" text="Neu laden" onClick={() => void actions.onReload()} /> : null}</Hinweis> : null}
     {notice ? <Hinweis ton="warn">{notice}</Hinweis> : null}
   </>;
 
