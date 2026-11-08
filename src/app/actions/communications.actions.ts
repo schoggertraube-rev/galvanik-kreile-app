@@ -124,6 +124,7 @@ export async function importOutlookMailAction(graphMessageId:string){
 
 /** Bound reply purpose of the existing sender; never an arbitrary recipient override. */
 async function sendComplaintPhotoRequest(auth:import('@/lib/server/authorization').AuthorizationSnapshot,input:TargetInput&{clientRequestId:string;subject:string;body:string;attachment?:unknown;complaintPhotoRequest?:{itemId:string;version:number}}){
+ if(!['eingang','mails','kunden'].every(area=>hasAuthorizationArea(auth,area as 'eingang'|'mails'|'kunden')))return {code:'FORBIDDEN' as const,message:'Fotoanfrage benötigt Eingang, Mails und Kunden.'};
  const request=input.complaintPhotoRequest;
  if(!request||Object.keys(request).some(key=>!['itemId','version'].includes(key))||!/^[0-9a-f-]{36}$/i.test(request.itemId)||!Number.isSafeInteger(request.version)||request.version<1||!/^[0-9a-f-]{36}$/i.test(input.clientRequestId)||input.attachment)return {code:'VALIDATION_ERROR' as const,message:'Eingang oder Anfragekennung ist ungültig.'};
  try{

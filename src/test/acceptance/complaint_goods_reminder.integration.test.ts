@@ -211,6 +211,12 @@ it('RM01 real source reply Action persists mail, event and waiting view exactly 
  const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
  const {readIntakeMessages}=await import('@/modules/eingang/server-public');
  const input={targetType:'CUSTOMER' as const,targetId:fixture.customerId,clientRequestId:randomUUID(),subject:'',body:'',complaintPhotoRequest:{itemId,version:1}};
+ for(const rights of [['eingang','kunden'],['eingang','mails']] ){
+  const denied=await createFixture(rights);
+  expect(await withSession(denied,()=>sendCustomerMailAction(input))).toMatchObject({code:'FORBIDDEN'});
+ }
+ expect(await sql`SELECT id FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`).toEqual([]);
+
  const keys=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const;
  const before=Object.fromEntries(keys.map(key=>[key,process.env[key]]));const native=globalThis.fetch;let sends=0;
  try{
