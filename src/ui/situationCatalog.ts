@@ -84,3 +84,10 @@ export const QUOTE_REPLY_PICKER_COPY={title:'Du wählst den KV zu dieser Antwort
 export const QUOTE_CANCELLED_ORDER_COPY={title:'Auftrag zurückgenommen',explanation:'Dieser Auftrag ist storniert. Er bleibt mit seinem Rücknahmegrund im Verlauf erhalten.',customer:'Kundenkarte öffnen',quote:(number:string|null)=>number?number+' öffnen':'KV öffnen',reason:'Grund',actor:'Zurückgenommen von'};
 
 export const QUOTE_UNDO_COPY={open:"Rückgängig",reason:"Grund der Rücknahme",missing:"Nenne den Grund der Rücknahme.",confirm:"Auftrag zurücknehmen",saved:"Auftrag zurückgenommen · die Ware ist wieder beim KV.",unavailable:(reason:string)=>"Rückgängig nicht mehr möglich · "+reason} as const;
+
+export const QUOTE_CYCLE_COPY={
+ editionWarning:(before:number,after:number)=>`Zusage zu Fassung ${before} liegt vor – Fassung ${after} hebt sie auf`,
+ editionConfirm:'Neue Fassung speichern · Zusage aufheben',
+ acceptanceInvalid:(edition:number)=>`Zusage zu Fassung ${edition} ist ungültig · aktuelle Fassung bestätigen lassen`,
+ goodsLocation:(location:string)=>'Ware liegt in '+location,
+};

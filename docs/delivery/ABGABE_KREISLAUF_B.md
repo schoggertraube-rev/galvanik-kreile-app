@@ -112,3 +112,9 @@ Konfliktintegration gezielt gegen echte lokale Replay-DB: bestehende Telefon-/Ru
 Typpruefung und gezielter Lint PASS; W4 PASS39, H18 PASS310/147/88/59 ohne neue Ausnahmen; Scope PASS nach gemeinsamer main-Basis. Modul-Gate weiterhin ausschliesslich fremder DESIGN_POINTER_PAGE_BINDING. Die vorher protokollierte Scope-Behauptung vor Rebase war verfrueht: die inzwischen neue main-Migration erzeugte eine Abstammungsabweichung; nach Integration ist sie unveraendert enthalten und Scope tatsaechlich PASS.
 
 Dies ist noch keine Gesamtfreigabe: sichtbare AF5/AF12/AF18-Anschluesse, Dev-Migrationsgleichstand, Sicht und PL-Pruefung stehen aus. Keine Owner-Merge-Bitte.
+
+## Sichtbare Anschluesse AF6 / AF18
+
+Die vorhandene Warenkarte zeigt alle gespeicherten KV-Pakete mit Lagerort; mehrere Belege sind kein Zuordnungsfehler mehr und nutzen denselben Umwandlungsaufruf. Automatik nur, wenn alle Belege entsperrt und die bestehende Ruecknahme-Sperre frei sind. Die vorhandene KV-Karte uebernimmt auch mehrere Belege atomar.
+
+Vor einer neuen fachlichen Fassung nach Zusage stehen der konkrete Fassungshinweis und eine ausdrueckliche Bestaetigung. Reine Termin-Nachtraege bleiben ausgenommen. Alte belegte Zusagen bleiben im Verlauf sichtbar als ungueltig gekennzeichnet. Alle neuen Texte kommen aus dem bestehenden Situationskatalog. Zwei gezielte Render-Faelle PASS5,59s, vorhandener Telefon-/Termin-Renderfall bereits PASS. Mechanisch: der Test-Leseport musste nach erfolgreicher Aktualisierung den echten neuen Zustand liefern statt veraltet zurueckzusetzen. Typen/Lint/Scope/Diff PASS. Noch kein Browser-Sichtlauf/Gesamtabnahme.

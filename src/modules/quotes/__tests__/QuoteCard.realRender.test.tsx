@@ -129,3 +129,18 @@ it('offers reversal only from current server eligibility, preserves a failed rea
  expect(undo).toHaveBeenCalledTimes(2);expect(undo.mock.calls[1]).toEqual(undo.mock.calls[0]);
  expect(screen.queryByRole('button',{name:'Rückgängig'})).toBeNull();
 });
+
+it('AF18 requires explicit confirmation before replacing an accepted edition, retains invalidated evidence',async()=>{
+ const accepted={...quote,lifecycle:{...quote.lifecycle!,acceptedEdition:1,acceptedAt:'2026-11-08T10:00:00Z',acceptanceEvidence:'TEST alte verbindliche Zusage'}};
+ const candidate={quoteId:quote.quoteId,expectedVersion:2,dueDate:quote.dueDate,note:quote.note,positions:quote.positions.map(({name,quantity,material,surfaceRequested,unitPriceCents})=>({name,quantity,material,surfaceRequested,unitPriceCents:unitPriceCents!+100}))};
+ const prepare=vi.fn(async()=>({code:'OK' as const,preparation:{dateOnly:false,before:accepted,after:{dueDate:quote.dueDate,positions:candidate.positions,calculation:null,totalNetCents:4400},changes:['TEST Preis'],missing:[],canApply:true,candidate}}));
+ const updated={...accepted,version:3,lifecycle:{...accepted.lifecycle,edition:2,stage:'geaendert_seit_versand' as const}};
+ const update=vi.fn(async()=>({code:'OK' as const,quote:updated,receipt:{} as never,replayed:false}));
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:update.mock.calls.length?updated:accepted,canEdit:true}),change:vi.fn(),prepare,update}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Ändern · Fassung 2 anlegen'}));fireEvent.change(screen.getByRole('textbox',{name:'Was soll geändert werden?'}),{target:{value:'TEST Preis anpassen'}});fireEvent.click(screen.getByRole('button',{name:'Änderungsvorschlag anzeigen'}));
+ fireEvent.click(await screen.findByRole('button',{name:'Fassung 2 anlegen'}));expect(update).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Neue Fassung speichern · Zusage aufheben'}));
+ await waitFor(()=>expect(update).toHaveBeenCalledOnce());
+ fireEvent.click(screen.getByText('Verlauf und Anfrage'));
+ expect(await screen.findByText(/Zusage zu Fassung 1 ist ungültig.*TEST alte verbindliche Zusage/)).toBeVisible();
+});
