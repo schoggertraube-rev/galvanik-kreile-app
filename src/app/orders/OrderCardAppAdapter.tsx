@@ -182,6 +182,7 @@ function mapCard(
     note: card.note,
     station: card.station,
     status: card.status,
+    cancellation:card.cancellation,
     dueAt: card.dueAt,
     intakeAt: card.intakeAt,
     assignedTo: card.assignment?.assignedToName ?? null,

@@ -27,3 +27,5 @@ export type {QuoteFollowupBinding} from './server/quoteCommands';
 export {readQuoteCopyCommand} from "./server/quoteCommands";
 
 export {prepareQuoteTextChangeCommand} from "./server/quoteTextProposal";
+
+export {reverseQuoteConversionCommand,readQuoteUndoContext} from './server/quoteConversionUndo';

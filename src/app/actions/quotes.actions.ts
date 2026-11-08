@@ -37,7 +37,7 @@ import {
   type QuoteFollowupBinding,
   listOpenQuotesCommand,
   prepareQuoteConversionCommand,
-  readQuoteCommand,
+  reverseQuoteConversionCommand,readQuoteUndoContext,readQuoteCommand,
   readQuoteCreateReceiptCommand,
   readQuoteConversionReceiptCommand,
   readQuoteUpdateReceiptCommand,
@@ -159,7 +159,7 @@ export async function readQuoteAction(input: { quoteId: string;receivedQuantitie
     if(!Array.isArray(quantities))return {code:'VALIDATION_ERROR' as const,message:'Beauftragungsdaten sind ungültig.'};
     const preview=scaleQuotePositions(result.quote.lifecycle?.calculation??null,result.quote.positions,quantities);
     if(preview.code!=='OK')return preview;
-    return {...result,quote:quoteForUi(result.quote,financial),canEdit:financial&&context.capabilities.canUpdateQuote,canOperate:true,canReceive:hasAuthorizationArea(authorization.data,'eingang'),conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:financial?preview.totalNetCents:null,plannedHours:preview.calculation?.hours??null,positions:preview.positions.map(row=>({position:row.position,quantity:row.quantity,lineTotalCents:financial?row.lineTotalCents:null}))}};
+    return {...result,undo:await readQuoteUndoContext(context,result.quote),quote:quoteForUi(result.quote,financial),canEdit:financial&&context.capabilities.canUpdateQuote,canOperate:true,canReceive:hasAuthorizationArea(authorization.data,'eingang'),conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:financial?preview.totalNetCents:null,plannedHours:preview.calculation?.hours??null,positions:preview.positions.map(row=>({position:row.position,quantity:row.quantity,lineTotalCents:financial?row.lineTotalCents:null}))}};
   }catch(error){console.error('[QUOTE_CONVERSION_DEFAULTS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV konnte nicht sicher gelesen werden.'};}
 }
 
@@ -580,4 +580,14 @@ export async function readQuoteReplyTargetsAction(input:{sourceItemId:string;quo
   if(input.quoteId&&quotes[0].customerId!==source.customerId)return {code:'CONFLICT' as const,message:'Nachricht und KV gehören nicht zum selben Kunden.'};
   return {code:'OK' as const,source:{id:source.id,version:source.version,channel:source.channel,text:source.text,customer:source.customerName??'Name fehlt',openConcerns:source.openConcerns,files:source.files??[]},targets:quotes.filter(q=>q.customerId===source.customerId&&!q.linkedOrderId&&q.lifecycle?.stage!=='abgesagt').map(q=>({id:q.quoteId,number:q.quoteNumber,customer:q.customerDisplayName,parts:q.positions.map(row=>row.quantity+' × '+row.name).join(' / ')})),limited:!input.quoteId&&quotes.length===100};
  }catch(error){console.error('[QUOTE_REPLY_TARGETS_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const,message:'KVs zu dieser Antwort konnten nicht sicher gelesen werden.'};}
+}
+
+
+export async function undoQuoteConversionAction(input:{quoteId:string;expectedVersion:number;clientEventId:string;reason:string}){
+ try{const authorized=await resolveAuthorization(),denied=authorizationFailure(authorized);if(denied||!authorized.ok)return denied!;
+  const result=await reverseQuoteConversionCommand(quoteOperationContext(authorized.data),input);
+  if(result.code!=='OK')return result;
+  for(const route of ['/','/orders','/warendurchlauf','/nachrichten'])revalidatePath(route);
+  return {...result,quote:quoteForUi(result.quote,quoteCommandContext(authorized.data).capabilities.canReadQuote)};
+ }catch(error){console.error('[QUOTE_UNDO_ACTION_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:'Rücknahme ist ungeklärt. Mit derselben Kennung erneut prüfen.'};}
 }

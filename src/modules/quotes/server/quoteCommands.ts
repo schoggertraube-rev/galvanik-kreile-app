@@ -704,6 +704,7 @@ export async function readQuoteConversionReceiptCommand(
       const recordedAt = row ? iso(row.recorded_at) : null;
       const quote = await readQuote(tx, authorization.tenantId, input.quoteId);
       if (!row) return { code: "NOT_FOUND", message: "Beauftragungsbeleg ist nicht verfügbar." };
+      if(quote&&row.integrity_ok===true&&row.tenant_id===authorization.tenantId&&row.order_id!==quote.linkedOrderId)return {code:'CONFLICT',message:'Diese Umwandlung wurde zurückgenommen. Der alte Auftrag bleibt im Verlauf erhalten.'};
       if (!quote || row.integrity_ok !== true || row.tenant_id !== authorization.tenantId || row.quote_version !== quote.version
         || row.quote_id !== quote.quoteId || row.order_id !== quote.linkedOrderId || !recordedAt) throw new Error("QUOTE_CONVERSION_RECEIPT_INVALID");
       const receipt: QuoteConversionReceipt = {

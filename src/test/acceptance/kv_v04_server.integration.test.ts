@@ -918,6 +918,32 @@ it.each([false,true,'operational'] as const)('AF-8/17 telephone acceptance and g
   const {resolveAuthorization}=await import('@/lib/server/authorization');
   const auth=await withSession(operator,()=>resolveAuthorization());expect(auth.ok).toBe(true);if(auth.ok){expect(auth.data.areas).not.toContain('geld');expect(auth.data.areas).not.toContain('eingang');}
   expect(await withSession(operator,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:fixture.customerId},dueDate:'2027-04-20',handoverMode:'pickup',items:[{catalogServiceId:null,name:'TEST Direktversuch',quantity:1,material:null,surfaceRequested:'verchromen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:null}))).toMatchObject({code:'FORBIDDEN'});
+  const {undoQuoteConversionAction,readQuoteConversionReceiptAction}=await import('@/app/actions/quotes.actions');
+  const beforeUndo=await withSession(operator,()=>readQuoteAction({quoteId,purpose:'operations'}));expect(beforeUndo).toMatchObject({code:'OK',undo:{ready:true,canUndo:true}});
+  if(beforeUndo.code!=='OK')throw Error('TEST_UNDO_READ');
+  const undo={quoteId,expectedVersion:beforeUndo.quote.version,clientEventId:randomUUID(),reason:'TEST falsche Zuordnung unmittelbar zurückgenommen'};
+  const reversed=await withSession(operator,()=>undoQuoteConversionAction(undo));expect(reversed).toMatchObject({code:'OK',replayed:false,orderId:result.orderReceipt.orderId,quote:{status:'draft',linkedOrderId:null,lifecycle:{acceptedEdition:1}}});
+  expect((await sql`SELECT status,ware,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${result.orderReceipt.orderId}`)[0]).toMatchObject({status:'storniert',ware:'storniert',version:2});
+  expect((await sql`SELECT auftrag_id,kv_id::text FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`)[0]).toMatchObject({auftrag_id:null,kv_id:quoteId});
+  expect((await sql`SELECT vorgang_art,vorgang_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0]).toMatchObject({vorgang_art:'kv',vorgang_id:quoteId});
+  expect(await withSession(operator,()=>undoQuoteConversionAction(undo))).toMatchObject({code:'OK',replayed:true});
+  expect(await withSession(operator,()=>undoQuoteConversionAction({...undo,reason:'TEST anderer Grund'}))).toMatchObject({code:'CONFLICT'});
+  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='QUOTE_CONVERSION_REVERSED_V04' AND client_event_id=${undo.clientEventId}::uuid AND user_id=${operator.actorId}::uuid`)[0].n).toBe(1);
+  expect(await withSession(operator,()=>readQuoteConversionReceiptAction({quoteId,clientEventId:award.clientEventId}))).toMatchObject({code:'FORBIDDEN'});
+  const restored=await withSession(operator,()=>readQuoteAction({quoteId,purpose:'operations'}));expect(restored).toMatchObject({code:'OK',undo:{ready:true,canUndo:false,automaticSuppressed:true},quote:{linkedOrderId:null,lifecycle:{goods:[{id:input.id,orderId:null}]}}});
+  if(restored.code!=='OK')throw Error('TEST_UNDO_RESTORED');
+  const again=await withSession(operator,()=>convertQuoteToOrderAction({...award,clientEventId:randomUUID(),expectedVersion:restored.quote.version}));expect(again).toMatchObject({code:'OK',replayed:false});
+  if(again.code!=='OK')throw Error('TEST_RECONVERT');expect(again.orderReceipt.orderId).not.toBe(result.orderReceipt.orderId);
+  expect(await sql.begin(async tx=>{await tx`SELECT set_config('app.tenant_id',${KREILE_TENANT_SLUG},true)`;return (await tx`SELECT count(*)::int n FROM private.v_quote_conversion_receipts_v1 WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid AND integrity_ok`)[0].n;})).toBe(2);
+  const {getLiveOrderCardAction,transitionWareneingangToGalvanikAction}=await import('@/app/actions/orders.actions');
+  const cancelledCard=await withSession(fixture,()=>getLiveOrderCardAction({orderId:result.orderReceipt.orderId}));expect(cancelledCard).toMatchObject({code:'OK',data:{card:{status:'storniert',cancellation:{reason:undo.reason,quoteId}}}});
+  if(cancelledCard.code==='OK')expect(cancelledCard.data.card.commercialQuote).toBeUndefined();
+  expect(await withSession(operator,()=>transitionWareneingangToGalvanikAction({orderId:again.orderReceipt.orderId,expectedVersion:1,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const afterStation=await withSession(operator,()=>readQuoteAction({quoteId,purpose:'operations'}));expect(afterStation).toMatchObject({code:'OK',undo:{ready:true,canUndo:false}});
+  if(afterStation.code!=='OK')throw Error('TEST_UNDO_STATION_READ');
+  expect(await withSession(operator,()=>undoQuoteConversionAction({quoteId,expectedVersion:afterStation.quote.version,clientEventId:randomUUID(),reason:'TEST nach Folgehandlung gesperrt'}))).toMatchObject({code:'CONFLICT'});
+  expect((await sql`SELECT linked_order_id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0].linked_order_id).toBe(again.orderReceipt.orderId);
+
  }
 
 });

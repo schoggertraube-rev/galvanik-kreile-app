@@ -79,3 +79,5 @@ export function quoteReplyPresentation(concerns:string[],text:string|null){
 }
 
 export const QUOTE_REPLY_PICKER_COPY={title:'Du wählst den KV zu dieser Antwort.',sentence:(name:string)=>'Die Antwort gehört zu '+name+'. Öffne den passenden gespeicherten KV.',search:'KV-Nummer oder Teil eingrenzen',reason:(name:string)=>'Offener KV des zugeordneten Kunden '+name,empty:'Kein passender KV in der gelesenen Auswahl.',more:(n:number)=>n+' KVs in der Auswahl · bitte Nummer oder Teil eingrenzen.',limited:'Die Quelle enthält die 100 zuletzt geänderten offenen KVs. Die Auswahl ist begrenzt.',assignment:'Kundenzuordnung öffnen',unavailable:'KVs zur Antwort konnten nicht sicher gelesen werden.'};
+
+export const QUOTE_CANCELLED_ORDER_COPY={title:'Auftrag zurückgenommen',explanation:'Dieser Auftrag ist storniert. Er bleibt mit seinem Rücknahmegrund im Verlauf erhalten.',customer:'Kundenkarte öffnen',quote:(number:string|null)=>number?number+' öffnen':'KV öffnen',reason:'Grund',actor:'Zurückgenommen von'};
