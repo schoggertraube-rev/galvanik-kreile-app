@@ -79,7 +79,7 @@ async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise
   return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work);
 }
 
-async function createFixture(settings=true): Promise<Fixture> {
+async function createFixture(settings=true,rights=true): Promise<Fixture> {
   const actorId = randomUUID();
   const customerId = randomUUID();
   const updatedAt = new Date(Date.now() - 5_000).toISOString();
@@ -95,7 +95,7 @@ async function createFixture(settings=true): Promise<Fixture> {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
-      FROM unnest(${transaction.array(['eingang','auftraege','kunden','geld',...(settings?['einstellungen']:[])])}::text[]) area
+      FROM unnest(${transaction.array(rights?['eingang','auftraege','kunden','geld',...(settings?['einstellungen']:[])]:[])}::text[]) area
     `;
     await transaction`
       INSERT INTO public.customers (
@@ -859,38 +859,52 @@ it('U246 multi-position price uses the same text and goods proposal without inve
 
 });
 
-it.each([false,true])('AF-6: two package receipts preserve every source; damaged secondary blocks the whole conversion: %s',async(damaged)=>{
+it.each([false,true,'partial'] as const)('AF-6: two package receipts preserve every source; damaged secondary blocks the whole conversion: %s',async(damaged)=>{
  const fixture=await createFixture();
  const {createQuoteAction,changeQuoteLifecycleAction,convertQuoteToOrderAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
  const {saveIntakeNoteAction,saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
  const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST AF6 zwei reale Pakete',positions:[{name:'TEST Halter',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
  if(created.code!=='OK')throw Error('TEST AF6 quote');
- const quoteId=created.quote.quoteId,receipts:string[]=[],sources:string[]=[];
+ const quoteId=created.quote.quoteId,receipts:string[]=[],sources:string[]=[],inspections:Array<NonNullable<ReturnType<typeof import('@/modules/eingang/public').parseQuoteGoodsReceiptInput>>>=[];
  for(const [index,amount] of [2,3].entries()){
   const itemId=randomUUID();sources.push(itemId);
   const capture=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST AF6 Paket '+index,context:{customerId:fixture.customerId}}));
   if(capture.code!=='OK')throw Error('TEST AF6 capture');
-  const photos=[{fileId:randomUUID(),kind:'uebersicht' as const},{fileId:randomUUID(),kind:'teile' as const}];
+  const photos=[{fileId:randomUUID(),kind:'uebersicht' as const},{fileId:randomUUID(),kind:'teile' as const},...(damaged&&index===1?[{fileId:randomUUID(),kind:'abweichung' as const}]:[])];
   for(const [photoIndex,photo] of photos.entries()){
    const hash=(photoIndex?'d':'c').repeat(64);
    await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${photo.fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${photo.fileId},'foto','TEST-AF6.jpg','image/jpeg',32,${hash},${KREILE_TENANT_SLUG+'/'+hash},now(),${fixture.actorId}::uuid,${photoIndex+1},true,false,'fertig')`;
    await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'original_gespeichert',${photo.fileId}::uuid,${fixture.actorId},${sql.json({fileId:photo.fileId,sha256:hash,bytes:32})})`;
   }
   const id=randomUUID();receipts.push(id);
-  expect(await withSession(fixture,()=>saveGoodsReceiptAction({id,clientKey:randomUUID(),clientEventId:randomUUID(),itemId,quoteId,expectedQuoteVersion:1,sourceVersion:capture.capture.version,expectedVersion:0,mode:'erfassung',command:'accept',card:1,packagesReceived:1,packagesTotal:1,condition:damaged&&index===1?'abweichung':'unauffaellig',deviations:damaged&&index===1?['beschädigt']:[],foundUnattended:false,foundAt:null,procedure:'stimmt',procedureNote:null,photos,quantities:created.quote.positions.map(position=>({itemId:position.id,expected:position.quantity,received:amount,confirmed:false,note:'TEST tatsaechlich angenommene Teilmenge'})),location:'TEST AF6 Regal '+index}))).toMatchObject({code:'OK'});
+  const inspection:NonNullable<ReturnType<typeof import('@/modules/eingang/public').parseQuoteGoodsReceiptInput>>={id,clientKey:randomUUID(),clientEventId:randomUUID(),itemId,quoteId,expectedQuoteVersion:1,sourceVersion:capture.capture.version,expectedVersion:0,mode:'erfassung',command:'accept',card:1,packagesReceived:damaged==='partial'&&index===1?2:1,packagesTotal:damaged==='partial'&&index===1?3:1,condition:damaged&&index===1?(damaged==='partial'?'teillieferung':'abweichung'):'unauffaellig',deviations:damaged===true&&index===1?['beschädigt']:[],foundUnattended:false,foundAt:null,procedure:'stimmt',procedureNote:null,photos,quantities:created.quote.positions.map(position=>({itemId:position.id,expected:position.quantity,received:amount,confirmed:false,note:'TEST tatsaechlich angenommene Teilmenge'})),location:'TEST AF6 Regal '+index};inspections.push(inspection);
+  expect(await withSession(fixture,()=>saveGoodsReceiptAction(inspection))).toMatchObject({code:'OK'});
  }
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'sent',quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck',evidence:'TEST AF6 aktuelle Fassung gedruckt'}))).toMatchObject({code:'OK'});
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST AF6 aktuelle Fassung zugesagt'}))).toMatchObject({code:'OK'});
  const input={quoteId,clientEventId:randomUUID(),expectedVersion:3,confirmedAward:true as const,confirmedOrderDueDate:'2027-04-20',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:receipts[0]};
- const converted=await withSession(fixture,()=>convertQuoteToOrderAction(input));
+ let converted=await withSession(fixture,()=>convertQuoteToOrderAction(input));
  if(damaged){
   expect(converted).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Warenabweichung')});
   expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(0);
   expect(await sql`SELECT quote_id FROM private.quote_conversion_requests WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid`).toHaveLength(0);
   expect(await sql`SELECT id FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid AND auftrag_id IS NULL`).toHaveLength(2);
   expect(await sql`SELECT id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=ANY(${sql.array(sources)}::uuid[]) AND vorgang_art='kv' AND vorgang_id=${quoteId}`).toHaveLength(2);
-  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:null}});
-  return;
+  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:null,lifecycle:{goods:expect.arrayContaining([expect.objectContaining({id:receipts[1],blocked:true})])}}});
+  const operator=await createFixture(false,false);
+  expect(await sql`SELECT bereich FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${operator.actorId}::uuid`).toHaveLength(0);
+  const clarification={...inspections[1],command:'clarify' as const,expectedVersion:1,expectedQuoteVersion:3,clientEventId:randomUUID(),clarificationReason:'TEST Kunde hat die Abweichung besprochen und die Bearbeitung dieser Ware bestaetigt'};
+  expect(await withSession(operator,()=>saveGoodsReceiptAction({...clarification,clientEventId:randomUUID(),condition:'unauffaellig',deviations:[]}))).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Prüfdaten unverändert')});
+  expect(await withSession(operator,()=>saveGoodsReceiptAction(clarification))).toMatchObject({code:'OK',receipt:{id:receipts[1],version:2,gesperrt:false,zustand:inspections[1].condition,packstuecke_da:inspections[1].packagesReceived,packstuecke_gesamt:inspections[1].packagesTotal,abweichung_geklaert:{reason:clarification.clarificationReason,actorId:operator.actorId}}});
+  expect(await withSession(operator,()=>saveGoodsReceiptAction(clarification))).toMatchObject({code:'OK',replayed:true});
+  expect(await withSession(operator,()=>saveGoodsReceiptAction({...clarification,clarificationReason:'TEST anderer Grund'}))).toMatchObject({code:'CONFLICT'});
+  expect(await withSession(operator,()=>readQuoteAction({quoteId}))).toMatchObject({code:'FORBIDDEN'});
+  expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${sources[1]}::uuid AND befehl_id=${clarification.clientEventId}::uuid AND von=${operator.actorId} AND nachher->>'action'='kv.abweichung_geklaert'`).toHaveLength(1);
+  const [facts]=await sql`SELECT zustand,abweichung,packstuecke_da,packstuecke_gesamt,fotos,mengen FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${receipts[1]}::uuid`;
+  expect(facts).toMatchObject({zustand:inspections[1].condition,abweichung:inspections[1].deviations,packstuecke_da:inspections[1].packagesReceived,packstuecke_gesamt:inspections[1].packagesTotal,fotos:inspections[1].photos});
+  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{goods:expect.arrayContaining([expect.objectContaining({id:receipts[1],blocked:false,clearance:{reason:clarification.clarificationReason,actorId:operator.actorId,at:expect.any(String)}})])}}});
+  converted=await withSession(fixture,()=>convertQuoteToOrderAction(input));
+
  }
  expect(converted).toMatchObject({code:'OK'});if(converted.code!=='OK')throw Error('TEST AF6 convert:'+converted.message);
  expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(1);
@@ -903,5 +917,6 @@ it.each([false,true])('AF-6: two package receipts preserve every source; damaged
  expect(event.user_id).toBe(fixture.actorId);expect(event.payload.after.boundReceipts).toHaveLength(2);
  expect(await withSession(fixture,()=>convertQuoteToOrderAction(input))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId:converted.orderReceipt.orderId}});
  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:converted.orderReceipt.orderId,lifecycle:{goods:expect.arrayContaining(receipts.map(id=>expect.objectContaining({id,orderId:converted.orderReceipt.orderId})))}}});
+ if(damaged)expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{goods:expect.arrayContaining([expect.objectContaining({id:receipts[1],clearance:expect.objectContaining({reason:expect.stringContaining('TEST Kunde')})})])}}});
  console.info('TEST_AF6_DB_PROOF',JSON.stringify({orderId:converted.orderReceipt.orderId,receipts,quantity:5,actor:fixture.actorId}));
 });

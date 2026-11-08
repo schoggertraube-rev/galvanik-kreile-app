@@ -18,7 +18,7 @@ Die vorhandene Reklamationskarte zeigt die bestehende Nummer/Betrag und sperrt d
 
 ## Offen
 
-AF-5/8/9/18 sowie die übrigen gebundenen mittleren Regeln, vollständige Sicht-/CI-/Planungsprüfung und Preview des abschließenden SHA. Dieser Teilstand ist kein vollständiger Kreislauf-PASS. Kein Merge/Production/Remote-Datenänderung in diesem Schritt.
+AF-8/9/18 sowie die übrigen gebundenen mittleren Regeln, vollständige Sicht-/CI-/Planungsprüfung und Preview des abschließenden SHA. Dieser Teilstand ist kein vollständiger Kreislauf-PASS. Kein Merge/Production/Remote-Datenänderung in diesem Schritt.
 
 
 ## AF-17: abgesagten KV auch auf der SQL-Grenze sperren
@@ -56,3 +56,13 @@ Der bestehende Mengen-Leseport summiert alle aktiven angenommenen Belege nach KV
 Echter Replay PASS 5,18 s: zwei getrennte Aufnahmen/Original-Fotometadaten/Warenwriter mit Mengen 2+3 zu KV-Menge 4, danach echte Zusage und Umwandlung: genau ein Auftrag mit 5, beide Belege und Originale beim Auftrag, Actorbeleg mit zwei Belegen, identischer Retry ohne Duplikat, KV neu gelesen. Gezielte bestehende KV-07-Faelle PASS 5,43 s und frische Waren-/Mengen-/Preisfaelle KV-06/U246 PASS 8,06 s, sechs Unit-Faelle PASS. Keine alte Assertion abgeschwaecht.
 
 Zusaetzliche Gegenprobe PASS 4,57 s: zweiter Beleg beschaedigt, erster unauffaellig und als Hauptbeleg gewaehlt; trotzdem ganze Umwandlung abgewiesen. Kein Auftrag/keine Reservierung, beide Belege ungebunden, beide Originalquellen weiterhin beim KV, Ansicht ohne Auftrag. Die vorgelagerte Anzeige/Klaerung der Abweichung ist noch AF-5, nicht als erledigt ausgegeben.
+
+## AF-5: abweichende Ware behalten, ausdruecklich klaeren
+
+Der bestehende KV-Warenwriter speichert auch 2 von 3 Packstuecken oder belegten Schaden. Zustand, Zahlen, Gruende und Originalfotos bleiben unveraendert. Die gemeinsame View sperrt die Ware fuer den Auftrag, bis im selben Writer der explizite Befehl clarify mit Versionsbezug und Begruendung ausgefuehrt wurde. Klaerung schreibt einen unveraenderlichen Actorbeleg und erhoeht die Belegversion; sie setzt weder Schaden noch fehlende Packstuecke auf erfundene Gutwerte. Jeder wirklich aktive Login darf klaeren (U249), ohne dadurch Geld-/KV-Leserechte zu erhalten. Gleiches Kommando wiederholt sich genau einmal, veraenderter Grund mit gleicher Kennung ist Konflikt. Mitgeschickte geaenderte Pruefdaten werden ausdruecklich abgewiesen.
+
+Additive View-Migrationen 20261108173258 und 20261108173803 jeweils lokal nach Abbruchprobe angewendet. Die Folge-Migration haelt den Klaerungsnachweis bei reiner Auftragsbindung sichtbar; erst geaenderte sachliche Pruefdaten entwerten ihn. Rueckgabe-Belegspalte und geschlossene Grants/security_invoker bleiben erhalten. Vorhandene Migrationen nicht editiert, keine alten Zeilen geloescht.
+
+Zwei echte Aktionsfaelle PASS 5,67 s: Schaden mit Foto bzw. Teillieferung 2/3 werden als getrennte reale Aufnahme/Warenbelege gespeichert; trotz Zusage kein Auftrag. Login ohne Bereichsrechte klaert mit Grund, urspruengliche Zustands-/Packstueck-/Foto-/Mengenfakten bleiben, falsche geaenderte Pruefdaten abgewiesen, Retry und Konflikt, genau ein Actorereignis, finanzielle KV-Leserechte weiterhin FORBIDDEN. Danach derselbe Umwandlungswriter: ein Auftrag mit beiden Belegen und summierter Menge, Originale/Neulesen/Historie samt Klaerungsgrund erhalten. Ein enges Vergleichsproblem durch JSONB-Objektschluesselreihenfolge wurde einmal auf den fachlichen Foto-ID/Art-Vergleich korrigiert, keine Assertions geschwaecht.
+
+Serverteil belegt; der sichtbare Klaerungsknopf an der einen KV-Karte folgt mit dem #200-Rebase. Dies ist noch kein UI-/Gesamt-Abnahmepass und kein Dev-Gleichstand.

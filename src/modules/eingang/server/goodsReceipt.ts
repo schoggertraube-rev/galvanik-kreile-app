@@ -132,7 +132,7 @@ export async function readGoodsReceipts(orderId:string):Promise<GoodsReceiptRead
 /** Attach the same early receipt after the canonical quote/order event, in that transaction. */
 export async function bindQuoteGoodsReceiptToCreatedOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{quoteId:string;receiptId:string;clientEventId:string;orderId:string;items:readonly {id:string;quantity:number}[]}){
  if(!hasAuthorizationArea(auth,'eingang'))fail('FORBIDDEN','Warenannahme erfordert Eingang.');
- const locked=await tx.execute<{id:string}>(sql`SELECT receipt.id::text FROM public.goods_receipt receipt
+ const locked=await tx.execute<{id:string;cleared:unknown}>(sql`SELECT receipt.id::text,projection.abweichung_geklaert AS cleared FROM public.goods_receipt receipt JOIN public.v_quote_goods_receipt_v1 projection ON projection.tenant_id=receipt.tenant_id AND projection.id=receipt.id
  WHERE receipt.tenant_id=${auth.tenantId} AND receipt.kv_id=${input.quoteId}::uuid AND receipt.status='angenommen'
  AND NOT EXISTS(SELECT 1 FROM public.intake_event returned WHERE returned.tenant_id=receipt.tenant_id AND returned.art='ware' AND returned.nachher->>'action'='kv.ware_zurueckgegeben' AND returned.nachher->>'receiptId'=receipt.id::text)
  ORDER BY receipt.id FOR UPDATE OF receipt`);
@@ -144,7 +144,7 @@ export async function bindQuoteGoodsReceiptToCreatedOrder(tx:PrivilegedTenantTra
  if(!order)fail('NOT_FOUND','Neuer Auftrag ist nicht lesbar.');
  if(before.some(row=>row.auftrag_id&&row.auftrag_id!==order.id))fail('CONFLICT','Warenbeleg gehört bereits zu einem anderen Auftrag.');
  if(before.every(row=>row.auftrag_id===order.id))return {code:'OK' as const,receipt:primary,replayed:true};
- if(before.some(row=>row.zustand!=='unauffaellig'||row.abweichung.length||row.packstuecke_da!==row.packstuecke_gesamt||row.verfahren_wie_kv!=='stimmt'))fail('VALIDATION_ERROR','Warenabweichung zuerst klären; der KV wird nicht still zum Auftrag.');
+ if(before.some(row=>(row.zustand!=='unauffaellig'||row.abweichung.length||row.packstuecke_da!==row.packstuecke_gesamt||row.verfahren_wie_kv!=='stimmt')&&!locked.find(original=>original.id===row.id)?.cleared))fail('VALIDATION_ERROR','Warenabweichung zuerst klären; der KV wird nicht still zum Auftrag.');
  const totals=new Map<number,number>();
  for(const row of before)for(const line of row.mengen){if(!Number.isSafeInteger(line.kv_position)||!Number.isSafeInteger(line.bestaetigt)||Number(line.bestaetigt)<0)fail('VALIDATION_ERROR','Mengenabweichung zwischen Ware und aktueller KV-Fassung; zuerst abgleichen.');const position=line.kv_position!;totals.set(position,(totals.get(position)??0)+Number(line.bestaetigt));}
  const arrived=[...totals].filter(([,amount])=>amount>0).sort(([a],[b])=>a-b);
