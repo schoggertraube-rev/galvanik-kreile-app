@@ -99,3 +99,9 @@ Der operational beschränkte Leser liefert keinerlei Preis-/Kalkulations-/PDF-Fe
 Gefundener Fehler: `listOpenQuotesCommand` dekodierte die KV-Zeilen ohne zugehörige Warenbelege, während der Einzel-KV-Leser diese bereits ergänzte. Dadurch verschwand gesperrte KV-Ware aus der neuen Werkstattprojektion. Derselbe kanonische Warenlese-Port ergänzt die gesamte Liste jetzt in genau einer Sammelabfrage (keine Abfrage je KV). Alte KV-Zeilen ohne Lifecycle verursachen keine unnötige Warenabfrage.
 
 Echter Browser: erwartete KV-Ware nach Zusage sichtbar; separater Warenweg mit gesperrtem Ablegen → Werkstattfilter/Ort/Grund → KV-Karte → Telefon-Zusage plus genau ein Auftrag aus vorhandenem Beleg → Auftragskarte/Galvanik. Gesperrter Hauptweg PASS 35,3 s. Drei gezielte Werkstatt-Renderfälle PASS. Keine automatische Mail-Zusage oder U-249-Schreibrechte als erledigt behauptet.
+
+## Konsistenz nach Umwandlung
+
+Ein direkt geöffneter Warenweg zu einem bereits umgewandelten KV zeigt keine zweite Erfassung mehr. Er öffnet den tatsächlich verknüpften Auftrag auch ohne Editierrecht. Gezielter Renderfall PASS: keine Mengen-/Dateifelder, kein Waren-/Umwandlungsaufruf, Navigation exakt auf gespeicherte Auftrags-ID. Kein Schattenentwurf.
+
+CI-Nachtrag: Der neue öffentliche Editor-DTO fehlte im bestehenden Modulmanifest. Ausschließlich den tatsächlich exportierten Typ QuoteMailDraft nachgetragen; Checker, Schema und Baseline unverändert. Die beiden neuen CI-Modulverletzungen sind lokal beseitigt; übrig bleibt allein der bekannte fremde DESIGN_POINTER_PAGE_BINDING des Planungs-Arbeitsbaums.
