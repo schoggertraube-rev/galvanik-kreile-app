@@ -55,12 +55,17 @@ describe("U241: unknown originals always have a concrete next step", () => {
     Object.defineProperty(file, "arrayBuffer", { value: async () => new Uint8Array([1]).buffer });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     const labels = { anfrage: "Auftrag/KV", ware: "Ware", rechnung: "Eingangsrechnung", dokument: "Dokument/Notiz zum Kunden" };
+    await screen.findByText("Anders zuordnen");
+    fireEvent.click(screen.getByText("Anders zuordnen"));
     await screen.findByRole("button", { name: labels[kind] });
-    for (const name of [...Object.values(labels), "Wem gehört das?", "Später zuordnen", "Original ansehen"])
+    for (const name of [...Object.values(labels), "Zuordnung öffnen", "Text ändern"])
       expect(screen.getByRole("button", { name })).toBeEnabled();
+    expect(screen.getByRole("button",{name:"Original ansehen · "+capture.files[0].name})).toBeEnabled();
+    expect(screen.queryByRole("textbox",{name:"Notiz"})).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: labels[kind] }));
     await waitFor(() => expect(chooseCaptureKind).toHaveBeenCalledWith(expect.objectContaining({ itemId: capture.id, version: 1, kind })));
-    if (kind === "anfrage" || kind === "ware") await waitFor(() => expect(onOrder).toHaveBeenCalledWith(undefined, chosen));
+    if (kind === "anfrage") await waitFor(() => expect(onOrder).toHaveBeenCalledWith(undefined, chosen));
+    else if(kind === "ware"){await screen.findByRole("heading",{name:"Von wem ist die Ware?"});expect(onOrder).not.toHaveBeenCalled();expect(screen.getByRole("button",{name:"Zuordnen · Kunde klären"})).toBeEnabled();}
     else await waitFor(() => expect(openCaptureObject).toHaveBeenCalledWith(kind === "rechnung" ? "rechnungein" : "mailein", capture.id + (kind === "dokument" ? "#rein" : "")));
   });
 });

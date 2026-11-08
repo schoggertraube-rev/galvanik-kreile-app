@@ -21,3 +21,15 @@ CI/READY und PL-Abnahme werden erst am vollständigen Kandidaten gebunden. Kein 
 Beide Reiter lesen dieselbe Intake-Liste. Kategorien und Zähler stammen aus realen Datensätzen, KV-Verknüpfungen öffnen die gespeicherte KV-Karte. Andere Anliegen öffnen die bestehende Originalnachricht. Ein noch nicht verknüpfter KV nutzt vorerst die bestehende Erfassung; der vollständige Vorbereitungsweg ist noch offen.
 
 Echter Browser: Nachricht über Server-Action erfasst, Anliegen KV gewählt, KV mit Quellenbindung angelegt, über Anliegen geöffnet und telefonisch zugesagt; DB/Event/Ansicht geprüft: PASS 18,7 s. Zwei gezielte Panel-Tests PASS; Typprüfung und Lint PASS. Keine Änderungen an Assertions bestehender Tests.
+
+## Schritt 3: Situation nach der Aufnahme (U-250, noch Teilstand)
+
+Nach ausdrücklich gelesenem Text oder Foto/Datei zeigt derselbe Erfassungsdialog die Situation: keine sichtbare Eingabezeile/Aufnahmekacheln, ein Hauptschritt und die bisherigen Zuordnungs-/Artwege unter „Anders zuordnen“. Mehrdeutige Ware zeigt höchstens drei echte Auftragskandidaten. Ware ohne Bezug löst keine geratenen Auftragsanlage mehr aus. Das Original bleibt über seinen echten Leser erreichbar. Noch offen: kleines echtes Vorschaubild statt Originalsymbol, KV-Kandidaten samt atomarer Warenbuchung und tatsächlicher Gegenbuchung; keine automatische Erledigung behauptet.
+
+Echter Browser → Notiz-Action → intake_item und intake_event mit angemeldeter Person → Situationsansicht: PASS 16,7 s; Desktop/Handy außerhalb des Repos. Zwei gezielte Situationsfälle PASS. Initialer Klick vor lokaler Vorbereitung war ohne Wirkung: Lesen wartet jetzt auf die vorhandene Sicherungsbereitschaft. Mechanische Testkorrektur: intake_event.von ist Text, keine UUID-Spalte. Kein Mock im Browserlauf.
+
+Geänderte bestehende Assertions (U-250):
+- P63 unbekanntes Original: Artknöpfe sofort sichtbar → dieselben vier Artknöpfe unter „Anders zuordnen“ sichtbar und klickbar; jede gespeicherte Auswahl weiterhin mit derselben Capture-ID/Version belegt.
+- „Wem gehört das? / Später zuordnen / Original ansehen“ als gleichzeitig sichtbare Fußaktionen → Zuordnung/Textänderung im Alternativenbereich, echtes Original als benannter Originalknopf, keine sichtbare Notizzeile. Schließen bleibt im Fuß.
+- Ware ohne passenden Auftrag ruft automatisch onOrder auf → ausdrücklich kein Aufruf, konkrete Zuordnungsaktion sichtbar. Anfrage/Dokument/Rechnung behalten ihre ursprünglichen Wege.
+- EntityOverlayStack: keine vorhandene Assertion geändert; KV-Adapter wird wie Kunden-/Auftragsadapter im isolierten Stacktest ersetzt, zusätzlicher KV→Kunde→Zurück-Fall. Echter KV-Writer bereits im Browser geprüft. Behebt CI-Import einer echten DB im reinen Stacktest.

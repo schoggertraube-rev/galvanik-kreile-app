@@ -56,4 +56,19 @@ test('fixed quote overlay: real read, one telephone acceptance, DB/event/readbac
  expect(stored).toMatchObject({version:3,fassung:1,zugesagt_fassung:1,linked_order_id:null,accept_events:1});
  await expect(dialog.getByText(/hat am .* zugesagt\./)).toBeVisible();
  await page.setViewportSize({width:390,height:844});await dialog.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-ui-real-mobile.png')});
+ await dialog.getByRole('button',{name:'Zurück',exact:true}).click();
+ await page.evaluate(()=>window.dispatchEvent(new CustomEvent('path1:global-create-open',{detail:'DIRECT_INTAKE'})));
+ const intake=page.getByRole('dialog',{name:'Neu erfassen',exact:true});await expect(intake).toBeVisible();
+ const situationText='TEST Situation '+randomUUID()+' bitte Original erhalten';
+ await intake.getByRole('textbox',{name:'Notiz',exact:true}).fill(situationText);
+ await intake.getByRole('button',{name:'Lesen',exact:true}).click({timeout:25000});
+ const situation=intake.locator('[data-spec-id="rein.situation"]');await expect(situation).toBeVisible();
+ await expect(intake.getByRole('textbox',{name:'Notiz',exact:true})).toHaveCount(0);
+ await expect(intake.getByRole('button',{name:'Datei',exact:true})).toHaveCount(0);
+ await expect(intake.getByRole('button',{name:'Auftrag erfassen',exact:true})).toHaveCount(0);
+ const [note]=await sql`SELECT item.id,item.version,(SELECT count(*)::int FROM public.intake_event e WHERE e.tenant_id=item.tenant_id AND e.item_id=item.id AND e.von=${actor.id}) AS actor_events FROM public.intake_item item WHERE item.tenant_id='galvanik-kreile' AND item.text=${situationText}`;
+ expect(note).toBeDefined();expect(note.version).toBeGreaterThan(0);expect(note.actor_events).toBeGreaterThan(0);
+ await page.setViewportSize({width:1220,height:880});await intake.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-situation-desktop.png')});
+ await page.setViewportSize({width:390,height:844});await intake.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-situation-mobile.png')});
+
 });

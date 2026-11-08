@@ -10,6 +10,7 @@ import { uploadIntakeOriginal } from "../intakeOriginalUpload";
 import QRCode from "qrcode";
 import Image from "next/image";
 import { getIntakeDeviceId, type IntakeDeviceRequest } from "../deviceContract";
+import {IntakeSituation} from "./IntakeSituation";
 import type { CaptureKind } from "../captureRecognition";
 
 type Props = { ports: GlobalCreatePorts; handoverToken?: string | null; mode?:"eingang"|"datei"|"eingangsfoto"|"visitenkarte"; onClose: (message?: string) => void;
@@ -24,6 +25,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
   const [itemId, setItemId] = useState(() => crypto.randomUUID());
   const [scope, setScope] = useState<string | null>(null);
   const [text, setText] = useState("");
+  const [situationRequested,setSituationRequested]=useState(false);
   const [capture, setCapture] = useState<IntakeCapture | null>(null);
   const concerns = useMemo(() => recognizeNoteConcerns(text), [text]);
   const [dismissed, setDismissed] = useState<string[]>([]);
@@ -409,6 +411,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
   });
   const changeText = (value: string) => {
     localInput.current = true;
+    setSituationRequested(false);
     setText(value); textstand.current = crypto.randomUUID(); setDismissed([]); setError(null);
     setCustomers([]);
     const stand = textstand.current;
@@ -459,12 +462,13 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
         if (ports.canManageMoney) openObject("rechnungein", result.capture.id);
         else onClose("Gespeichert · Büro prüft");
       } else if (kind === "ware") {
-        if (!result.capture.expectedOrders?.length) onOrder(result.capture.customerId ?? undefined, result.capture);
-        else setGoodsChoice(true);
+        setGoodsChoice(true);
       } else openObject("mailein", result.capture.id + "#rein");
     } catch (cause) { console.error("[INTAKE_KIND_UI_WRITE_FAILED]", cause); setError("Die Art des Eingangs wurde nicht bestätigt · Original bleibt erhalten. Code: INTAKE_KIND_UI_WRITE_FAILED."); }
     finally { inFlight.current = false; setBusy(false); setKindWorking(null); }
   };
+  const showSituation=Boolean(!mode&&!receiving&&capture&&hasCapturedContent&&!showCamera&&!hidePreviousResult&&(capture.files.length>0||situationRequested));
+  const readSituation=async()=>{if(inFlight.current)return;inFlight.current=true;setBusy(true);try{const saved=await saveNote();if(saved){setSituationRequested(true);setHidePreviousResult(false);}}catch(cause){console.error("[INTAKE_NOTE_SAVE_FAILED]",cause);setError("Speichern fehlgeschlagen · Text bleibt erhalten. Code: INTAKE_NOTE_SAVE_FAILED.");}finally{inFlight.current=false;setBusy(false);}};
   const resultMain = capture && hasCapturedContent && !mode && !receiving && !busy && !showCamera && !hidePreviousResult ? recognizedKind === "anfrage" ?
     <Button data-spec-id="rein.erfassen-aus-eingang" art="primaer" text="Auftrag oder KV erfassen" onClick={() => onOrder(capture.customerId ?? undefined, capture)} />
     : recognizedKind === "kontakt" ? <Button data-spec-id="rein.kontakt-anlegen" art="primaer" text="Kunde anlegen" onClick={() => { const reason = onCustomer(capture); if (reason) setError(reason); }} />
@@ -472,7 +476,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
       : <Button data-spec-id="rein.fuers-buero" art="primaer" text="Fürs Büro speichern" onClick={() => onClose("Gespeichert · Büro prüft")} />
     : recognizedKind === "ware" && capture.expectedOrders?.length === 1 && capture.customerId === capture.expectedOrders[0].customerId ?
       <Button data-spec-id="rein.ware-annehmen-kunde" art="primaer" text={"Ware annehmen · " + capture.expectedOrders[0].number} onClick={() => openObject("ware", capture.expectedOrders![0].id + "#" + capture.id)} />
-    : recognizedKind === "ware" ? <Button data-spec-id="rein.auftrag-aus-eingang" art="primaer" text="Auftrag erfassen" onClick={() => onOrder(capture.customerId ?? undefined, capture)} />
+    : recognizedKind === "ware" ? null
     : <Button data-spec-id="rein.wem-gehoert" art="primaer" text="Wem gehört das?" onClick={() => void assign()} /> : null;
   const anotherPage = () => { setCameraReady(false); setCameraAttempt(value => value + 1); setCameraRequested(true); setHidePreviousResult(true); };
   const finishReading = async () => {
@@ -491,7 +495,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
   return <Dialog titel="Neu erfassen" unterzeile={modeTitle} icon="plus" groesse="breit" schliessenSpecId="rein.schliessen" onSchliessen={() => void close()} vorSchliessen={() => { void close(); return false; }}
     fuss={<>
       <Button text="Schließen" onClick={() => void close()} disabled={busy || deviceWorking} />
-      {showCamera ? <Button data-spec-id="rein.ausloesen" icon="camera" art="primaer" text={busy ? "Wird gesichert …" : "Foto"} disabled={busy || blockedReceiver || deviceWorking || !cameraReady} onClick={takePhoto} /> : null}
+      {!showSituation?<>{showCamera ? <Button data-spec-id="rein.ausloesen" icon="camera" art="primaer" text={busy ? "Wird gesichert …" : "Foto"} disabled={busy || blockedReceiver || deviceWorking || !cameraReady} onClick={takePhoto} /> : null}
       {receiving ? <Button data-spec-id="rein.handy-fertig" art={showCamera ? "leise" : "erledigen"} text="Fertig" disabled={busy || deviceWorking || pending.length > 0} onClick={() => void finishPhotos("fertig")} />
         : mode && capture && hasCapturedContent && !showCamera && !hidePreviousResult ? <Button data-spec-id={failedFile ? "rein.als-dokument" : "rein.uebernehmen"} art="erledigen" text={failedFile ? "Als Dokument übernehmen" : "Übernehmen"} disabled={busy} onClick={adopt} />
           : !mode && hasContent ? <Button data-spec-id="rein.spaeter-zuordnen" text="Später zuordnen" disabled={busy} onClick={() => void close()} /> : null}
@@ -500,12 +504,14 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
         onClick={() => openObject("original", capture!.id + "#" + firstOriginal.id)} /> : null}
       {!mode && !receiving && hasContent && (!capture || ["anfrage", "kontakt", "rechnung", "ware"].includes(recognizedKind)) ?
         <Button data-spec-id="rein.wem-gehoert" art="leise" text="Wem gehört das?" disabled={busy} onClick={() => void assign()} /> : null}
+      </>:null}
     </>}>
     <div data-spec-id="rein" className={`ev-rein${mode ? " ev-rein--erg" : ""}`} onKeyDown={event => {
       if (showCamera && (event.key === " " || event.key === "Enter") && !(event.target as HTMLElement).closest("input,textarea,select,button,a,[contenteditable=true]")) { event.preventDefault(); takePhoto(); }
     }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); chooseFiles(event.dataTransfer.files); }}
       onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); chooseFiles(event.clipboardData.files); } }}>
-      <div className="ev-rein-feld">
+      {showSituation&&capture?<IntakeSituation capture={capture} kind={recognizedKind} busy={busy} primary={resultMain} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onKind={kind=>void chooseKind(kind)}/>:null}
+      <div className="ev-rein-feld" hidden={showSituation} style={showSituation?{display:"none"}:undefined}>
         {contextLoading ? <p role="status">Kontext wird gelesen …</p> : null}
         {createContext ? <div data-spec-id="rein.kontext" className="ev-rein-kontext">
           <strong>für {createContext.label}</strong>
@@ -528,14 +534,14 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
           {!cameraReady ? <p role="status">Kamera wird vorbereitet …</p> : null}
         </div> : null}
         <Textfeld data-spec-id="rein.notiz" aria-label="Notiz" rows={7} maxLength={20_000} placeholder="Schreib, füge ein oder zieh eine Datei hierher …" value={text}
-          onChange={event => changeText(event.target.value)} />
-        {text.trim() ? <Button data-spec-id="rein.notiz-lesen" text={reading ? "Wird gelesen …" : "Lesen"} disabled={busy} onClick={() => void saveNote().catch(cause => { console.error("[INTAKE_NOTE_SAVE_FAILED]", cause); setError("Speichern fehlgeschlagen · Text bleibt erhalten. Code: INTAKE_NOTE_SAVE_FAILED."); })} /> : null}
+          onChange={event => changeText(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();if(text.trim()&&!busy)void readSituation();}}} />
+        {text.trim() ? <Button data-spec-id="rein.notiz-lesen" text={!scope?"Wird vorbereitet …":reading ? "Wird gelesen …" : "Lesen"} disabled={busy||!scope} onClick={()=>void readSituation()} /> : null}
         {concerns.length || customers.length ? <div aria-label="Erkannt" className="ev-rein-erkannt"><strong>ERKANNT · Vorschläge</strong>
           {customers.map(customer => <span key={customer.id}>{customer.name} · Vorschlag aus dem Namen</span>)}
           {concerns.filter(value => !dismissed.includes(value.id)).map(concern => <Button key={concern.id} text={`${concern.label} ×`} onClick={() => dismissConcern(concern.id)} />)}
         </div> : null}
       </div>
-      <div className="ev-rein-rechts">
+      <div className="ev-rein-rechts" hidden={showSituation} style={showSituation?{display:"none"}:undefined}>
         <div className="ev-rein-karten">
           <button type="button" className="ev-karte" data-spec-id="rein.datei" aria-label="Datei" onClick={() => input.current?.click()} disabled={busy || blockedReceiver}><Icon name="upload" /><b>Datei</b><small>Datei hierher ziehen oder auswählen</small></button>
           {cameraAvailable ? <button type="button" className="ev-karte" data-spec-id="rein.handy" aria-label="Fotos mit Tablet/Handy" onClick={() => setCameraRequested(true)} disabled={busy}><Icon name="camera" /><b>Fotos mit Tablet/Handy</b><small>Kamera auf diesem Gerät öffnen</small></button> : deviceRequest ? <button type="button" className="ev-karte" data-spec-id="rein.handy" aria-label="Fotos mit Tablet/Handy" onClick={() => void requestPhotos()} disabled={deviceWorking || busy}><Icon name="camera" /><b>Fotos mit Tablet/Handy</b><small>Kamera öffnet auf deinem Gerät</small></button> : null}

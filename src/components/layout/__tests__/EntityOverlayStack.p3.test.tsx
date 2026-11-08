@@ -12,12 +12,27 @@ vi.mock("@/app/customers/CustomerCardAppAdapter", () => ({
   ),
 }));
 
+vi.mock("@/app/quotes/QuoteCardAppAdapter", () => ({
+  QuoteCardAppAdapter: ({ quoteId, onOpenCustomer, onClose }: { quoteId: string; onOpenCustomer: (id: string) => void; onClose: () => void }) => (
+    <div data-testid="mock-quote-card"><span>{quoteId}</span><button onClick={() => onOpenCustomer("customer-1")}>Kunde öffnen</button><button onClick={onClose}>Zurück</button></div>
+  ),
+}));
+
 import { EntityOverlayStack } from "../EntityOverlayStack";
 import { useOverlayStore } from "@/lib/overlayStore";
 
 beforeEach(() => useOverlayStore.setState({ stack: [], orderStack: [] }));
 
 describe("P3 shared entity overlay/backstack", () => {
+  it("keeps quote -> customer and back on the same stack", () => {
+    render(<EntityOverlayStack />);
+    act(() => useOverlayStore.getState().openQuote("quote-1"));
+    expect(screen.getByTestId("mock-quote-card")).toHaveTextContent("quote-1");
+    fireEvent.click(screen.getByRole("button", { name: "Kunde öffnen" }));
+    expect(screen.getByTestId("mock-customer-card")).toHaveTextContent("customer-1");
+    fireEvent.click(screen.getByRole("button", { name: "Zurück" }));
+    expect(screen.getByTestId("mock-quote-card")).toHaveTextContent("quote-1");
+  });
   it("keeps Home -> order -> customer -> order and every back step on one stack", () => {
     render(<EntityOverlayStack />);
     act(() => useOverlayStore.getState().openOrder("order-1"));
