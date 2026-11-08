@@ -75,3 +75,18 @@ it('operational purpose shows the phone decision but hides finance and editing',
  expect(screen.queryByText('40,00 € netto')).toBeNull();expect(screen.queryByRole('button',{name:/Fassung 2 anlegen/})).toBeNull();expect(screen.queryByRole('button',{name:'KV per E-Mail senden'})).toBeNull();
  fireEvent.click(phone);await screen.findByText('TEST Offline');expect(change).toHaveBeenCalledOnce();
 });
+
+it('copy requires a new date and retries an uncertain result with identical intent',async()=>{
+ const duplicate=vi.fn().mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST Kopie ungeklärt'}).mockResolvedValueOnce({code:'OK',quote:{...quote,quoteId:'TEST-copy'}}),onQuote=vi.fn();
+ const ports:QuoteCardPorts={read:async()=>({code:'OK',quote,canEdit:true}),change:vi.fn(),prepare:vi.fn(),update:vi.fn(),copySource:async()=>({code:'OK',preparation:{source:{number:quote.quoteNumber,version:2},positions:quote.positions,missing:[]}}),duplicate};
+ render(<QuoteCard quoteId={quote.quoteId} ports={ports} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()} onQuote={onQuote}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Diesen KV als Vorlage'}));
+ const date=await screen.findByLabelText('Neuer Fertigtermin');expect(date).toHaveValue('');
+ fireEvent.click(screen.getByRole('button',{name:'Neuen Fertigtermin wählen'}));expect(duplicate).not.toHaveBeenCalled();
+ fireEvent.change(date,{target:{value:'2026-12-15'}});
+ const save=screen.getByRole('button',{name:'Neuen KV aus Vorlage anlegen'});fireEvent.click(save);fireEvent.click(save);
+ await screen.findByText('TEST Kopie ungeklärt');expect(duplicate).toHaveBeenCalledOnce();expect(date).toBeDisabled();
+ fireEvent.click(screen.getByRole('button',{name:'Mit gleicher Kennung erneut kopieren'}));
+ await waitFor(()=>expect(onQuote).toHaveBeenCalledWith('TEST-copy'));
+ expect(duplicate.mock.calls[1][0]).toEqual(duplicate.mock.calls[0][0]);
+});

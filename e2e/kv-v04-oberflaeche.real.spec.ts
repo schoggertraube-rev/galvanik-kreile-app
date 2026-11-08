@@ -201,3 +201,29 @@ for(const storedGoods of [false,true,'operational'] as const) test('quote goods 
  expect(moved.version).toBeGreaterThan(1);
  await expect(progressCard.getByRole('button',{name:/in die Galvanik nehmen/})).toHaveCount(0);
 });
+
+
+test('quote copy: existing writer creates one new card and preserves its real source',async({page})=>{
+ await prepareGeneratedSeed({id:'KV-UI-COPY',gegeben:{login:'login_meister',datenlagen:['kunde_vollstaendig_firma'],aufruf:{seite:'nachrichten',weg:'oeffne'}}} as FlowCase);
+ await page.setViewportSize({width:1220,height:880});await page.goto('/start');
+ const actor=generatedFlowRuntime.logins.login_meister;
+ await page.getByTestId('pin-user-card-'+createPinLoginHandle(actor.id)).click();
+ const keypad=page.locator('[data-spec-id="login.anmelden"]'),navigation=page.waitForURL(url=>url.pathname!=='/start');
+ for(const digit of actor.pin)await keypad.getByRole('button',{name:digit,exact:true}).click();await navigation;await page.goto('/orders');
+ const customer=generatedFlowRuntime.datenlagen.kunde_vollstaendig_firma.id,createId=randomUUID();
+ await action(page,'createQuoteAction',{clientEventId:createId,customerId:customer,dueDate:'2026-12-01',note:'TEST Kopiervorlage',calculation:{hours:'4',hourlyRateCents:1000,setupCents:1200,materialCents:900},positions:[{name:'TEST Kopierte Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1525}]});
+ const [source]=await sql`SELECT q.id::text,q.quote_number,q.version FROM private.quotes q JOIN private.quote_create_receipts r ON r.quote_id=q.id AND r.tenant_id=q.tenant_id WHERE r.tenant_id='galvanik-kreile' AND r.client_event_id=${createId}::uuid`;
+ await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),source.id);
+ const card=page.getByRole('dialog',{name:/KV-2026-/});await expect(card).toBeVisible();
+ await card.getByRole('button',{name:'Diesen KV als Vorlage',exact:true}).click();
+ await expect(card.getByLabel('Neuer Fertigtermin')).toHaveValue('');
+ await card.getByLabel('Neuer Fertigtermin').fill('2026-12-16');
+ await card.getByRole('button',{name:'Neuen KV aus Vorlage anlegen',exact:true}).dblclick();
+ await expect(card.getByText('16.12.2026',{exact:true})).toBeVisible();
+ const copies=await sql`SELECT id::text,quote_number,due_date::text,total_net_cents FROM private.quotes WHERE tenant_id='galvanik-kreile' AND note LIKE ${'%Kopie von '+source.quote_number+'%'} ORDER BY created_at DESC`;
+ expect(copies).toHaveLength(1);expect(copies[0].due_date).toBe('2026-12-16');expect(Number(copies[0].total_net_cents)).toBe(6100);
+ await expect(card).toHaveAccessibleName(copies[0].quote_number+' · Prueffirma Alpha GmbH');
+ expect((await sql`SELECT version FROM private.quotes WHERE tenant_id='galvanik-kreile' AND id=${source.id}::uuid`)[0].version).toBe(source.version);
+ const reread=await action(page,'readQuoteAction',{quoteId:copies[0].id});expect(reread.quote.positions[0]).toMatchObject({name:'TEST Kopierte Halter',quantity:4,lineTotalCents:6100});
+ await card.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-copy-real.png')});
+});
