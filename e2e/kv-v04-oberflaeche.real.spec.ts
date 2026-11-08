@@ -109,6 +109,18 @@ test('quote goods: actual photos and one atomic telephone conversion with server
 
  const receipt=page.getByRole('dialog',{name:/Ware zu KV-2026-.* prüfen/});await expect(receipt).toBeVisible();
  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
+ await receipt.locator('label').filter({hasText:'Paketetikett fotografieren'}).click();
+ await expect(receipt.getByRole('img',{name:'QR-Code für Fotos mit Tablet/Handy',exact:true})).toBeVisible();
+ const handoff=await receipt.getByRole('link',{name:'Fotos für den PC öffnen',exact:true}).getAttribute('href');
+ expect(handoff).toBeTruthy();
+ const receiver=await page.context().newPage();await receiver.setViewportSize({width:390,height:844});await receiver.goto(handoff!);
+ const camera=receiver.getByRole('dialog',{name:'Neuer Eingang',exact:true});await expect(camera).toBeVisible();
+ await expect(camera.getByText('Foto-Anfrage konnte nicht geöffnet werden. Code: INTAKE_HANDOVER_ACCEPT_FAILED.')).toHaveCount(0);
+ await expect(camera.getByText('0 an den PC gesendet',{exact:true})).toBeVisible();
+ await camera.locator('input[type="file"]').setInputFiles([{name:'TEST-Handy-Etikett.png',mimeType:'image/png',buffer:png},{name:'TEST-Handy-Inhalt.png',mimeType:'image/png',buffer:png}]);
+ await expect(receipt.getByText('2 Fotos am Eingang',{exact:true})).toBeVisible({timeout:20000});
+ await receipt.getByRole('button',{name:'Fotos übernehmen',exact:true}).click();await receiver.close();
+ await expect(receipt.getByRole('img',{name:'QR-Code für Fotos mit Tablet/Handy',exact:true})).toHaveCount(0);
  const original=receipt.locator('input[type="file"]').nth(0),content=receipt.locator('input[type="file"]').nth(1);
  await original.setInputFiles({name:'TEST-Etikett.png',mimeType:'image/png',buffer:png});
  await expect(receipt.getByRole('img',{name:'Paketetikett',exact:true})).toBeVisible({timeout:20000});
@@ -126,7 +138,10 @@ test('quote goods: actual photos and one atomic telephone conversion with server
  await receipt.getByRole('button',{name:/Auftrag aus KV-2026-.* anlegen/}).click();
  await expect(receipt).toHaveCount(0,{timeout:20000});
  const [stored]=await sql`SELECT q.linked_order_id,q.zugesagt_fassung,r.auftrag_id,r.lagerort,o.ware,o.geprueft,(SELECT sum(quantity)::float8 FROM public.items i WHERE i.tenant_id=o.tenant_id AND i.order_id=o.id) AS quantity,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=r.tenant_id AND f.item_id=r.item_id) AS files FROM private.quotes q JOIN public.goods_receipt r ON r.tenant_id=q.tenant_id AND r.kv_id=q.id JOIN public.orders o ON o.tenant_id=q.tenant_id AND o.id=q.linked_order_id WHERE q.tenant_id='galvanik-kreile' AND q.id=${quoteId}::uuid`;
- expect(stored).toMatchObject({zugesagt_fassung:1,auftrag_id:stored.linked_order_id,lagerort:'TEST Regal Telefon',ware:'da',geprueft:true,quantity:3,files:2});
+ expect(stored).toMatchObject({zugesagt_fassung:1,auftrag_id:stored.linked_order_id,lagerort:'TEST Regal Telefon',ware:'da',geprueft:true,quantity:3,files:4});
+ const [device]=await sql`SELECT d.status,cardinality(d.angenommen_auf) AS devices,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=d.tenant_id AND f.item_id=d.item_id AND f.art='foto') AS photos FROM public.device_request d JOIN public.goods_receipt r ON r.tenant_id=d.tenant_id AND r.item_id=d.item_id WHERE d.tenant_id='galvanik-kreile' AND r.auftrag_id=${stored.linked_order_id}`;
+ expect(device).toMatchObject({status:'beendet',devices:1});expect(device.photos).toBeGreaterThanOrEqual(2);
+
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id='galvanik-kreile' AND payload->>'quoteId'=${quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='accept'`)[0].n).toBe(1);
  await expect(page.getByRole('dialog',{name:/Auftragskarte A-2026-/})).toBeVisible({timeout:10000});
  const orderRead=await action(page,'getLiveOrderCardAction',{orderId:stored.linked_order_id},'src/app/actions/orders.actions.ts');

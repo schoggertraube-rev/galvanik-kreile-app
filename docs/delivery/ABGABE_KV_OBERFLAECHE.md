@@ -73,3 +73,13 @@ CI am vorherigen fbd6c5c0: quality/agentur rot ausschließlich vier alte Render-
 Bei tatsächlich zugeordnetem Kunden und erkanntem Wareneingang liest das Plus den vorhandenen offenen KV-Port, beschränkt auf genau diesen Kunden und unkonvertierte KVs. KVs und wartende Aufträge erscheinen gemeinsam mit echten IDs/Begründungen, höchstens drei. Bei einem KV führt der Katalogknopf in dieselbe `kvware`-Karte mit der gesicherten Quell-ID; kein zweiter Erfassungs-/Auftragswriter. Kein Kunde aus bloßem Namensvorschlag wird still gesetzt. Ein Kundenwechsel verwirft die vorherigen Kandidaten; Lesefehler stehen im Dialog. Automatische Auftragserstellung und Rückgängig sind damit noch nicht als fertig behauptet.
 
 Echter Browserfall erweitert: vorhandenen Kunden aus der KV-Karte öffnen → Plus → DHL-Absender als Notiz → tatsächliche Notiz-Action/Erkennung → offener KV desselben Kunden → derselbe Warenkartenknopf → Fotos → atomare Buchung → DB/Auftragskarte → Galvanik. PASS 22,4 s. Neun gezielte Situation-/Capturefälle PASS; Typen/Lint PASS.
+
+## Desktop → Handy: bestehende Foto-Anfrage
+
+Warenkachel am Desktop öffnet die vorhandene gebundene Geräteübergabe am selben Eingang, mit QR/Fotos-für-PC-Link und Dateialternative. Auf dem Handy bleibt die echte Kamera/Dateiaufnahme im vorhandenen Capture-Modul. PC liest denselben Eingang nach, Originale erhalten explizite Rollen. Übernehmen/Beenden schließt die Sammlung über den vorhandenen Gerätebefehl; Schließen verwirft keine Originale. Kurzlebiger Link nur im Komponenten-Zustand.
+
+Echter Browser mit zweiter angemeldeter Seite: QR-Anfrage → tatsächliches Annehmen → zwei Fotos über den vorhandenen Upload/Storage → PC-Zähler 2 → Übernehmen → weitere zwei Originale → Auftrag. Replay-DB: device_request beendet/ein angenommenes Gerät, mindestens zwei Fotos, Warenbeleg und Auftrag mit vier gesicherten Originalen; anschließend echte Galvanik-Action/Einzelevent/Neulesen. PASS 28,1 s.
+
+Gefundener Fehler: Dateiauswahl war beim noch nicht angenommenen Handy-Link möglich und konnte die ursprüngliche statt gebundene Eingangs-ID verwenden. Empfangs-Dateieingabe bleibt nun bis zur tatsächlichen Annahme gesperrt, auch Paste/Drop werden vor diesem Zeitpunkt abgefangen. Keine Änderung des Upload-/Gerätewriters. Test wartet auf die reale Annahme statt allein auf das sichtbare Dialogfenster. Die zunächst erwogene Änderung der Fotoherkunft wurde verworfen, da sie nicht ursächlich war.
+
+PL 14:01 bestätigt strenge Foto-Pflicht. Fehlender Inhalt nennt den bestehenden KV als Herkunft des noch nicht angelegten Auftrags; eine zukünftige Auftragsnummer wird nicht erfunden.

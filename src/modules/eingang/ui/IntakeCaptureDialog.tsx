@@ -32,11 +32,11 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
   const [quotesLoading,setQuotesLoading]=useState(false);
   const [quoteCustomer,setQuoteCustomer]=useState<string|null>(null);
   const candidateCustomer=capture?.customerId??null,candidateKind=capture?.recognition?.kind;
-  useEffect(()=>{if(!candidateCustomer||candidateKind!=='ware')return;let active=true;Promise.resolve().then(()=>{if(active){setQuotesLoading(true);setQuoteCandidates([]);}return ports.listOpenQuotes();}).then(result=>{if(!active)return;if(result.code!=='OK'){setError(result.message);return;}setQuoteCustomer(candidateCustomer);setQuoteCandidates(result.quotes.filter(q=>q.customerId===candidateCustomer&&!q.linkedOrderId&&q.lifecycle?.stage!=='abgesagt').map(q=>({id:q.quoteId,number:q.quoteNumber,customer:q.customerDisplayName,accepted:Boolean(q.lifecycle?.acceptedAt&&q.lifecycle.acceptedEdition===q.lifecycle.edition),edition:q.lifecycle?.edition??1,goodsHere:Boolean(q.lifecycle?.goods?.some(row=>!row.orderId)),location:q.lifecycle?.goods?.find(row=>!row.orderId)?.location??null})));}).catch(cause=>{console.error('[INTAKE_QUOTE_CANDIDATES_FAILED]',cause);if(active)setError('Passende KVs konnten nicht sicher gelesen werden.');}).finally(()=>{if(active)setQuotesLoading(false);});return()=>{active=false;};},[ports,candidateCustomer,candidateKind]);
   const concerns = useMemo(() => recognizeNoteConcerns(text), [text]);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
   const [error, setError] = useState<string | null>(null);
+  useEffect(()=>{if(!candidateCustomer||candidateKind!=='ware')return;let active=true;Promise.resolve().then(()=>{if(active){setQuotesLoading(true);setQuoteCandidates([]);}return ports.listOpenQuotes();}).then(result=>{if(!active)return;if(result.code!=='OK'){setError(result.message);return;}setQuoteCustomer(candidateCustomer);setQuoteCandidates(result.quotes.filter(q=>q.customerId===candidateCustomer&&!q.linkedOrderId&&q.lifecycle?.stage!=='abgesagt').map(q=>({id:q.quoteId,number:q.quoteNumber,customer:q.customerDisplayName,accepted:Boolean(q.lifecycle?.acceptedAt&&q.lifecycle.acceptedEdition===q.lifecycle.edition),edition:q.lifecycle?.edition??1,goodsHere:Boolean(q.lifecycle?.goods?.some(row=>!row.orderId)),location:q.lifecycle?.goods?.find(row=>!row.orderId)?.location??null})));}).catch(cause=>{console.error('[INTAKE_QUOTE_CANDIDATES_FAILED]',cause);if(active)setError('Passende KVs konnten nicht sicher gelesen werden.');}).finally(()=>{if(active)setQuotesLoading(false);});return()=>{active=false;};},[ports,candidateCustomer,candidateKind]);
   const [createContext, setCreateContext] = useState<{ customerId: string; label: string } | null>(null);
   const [contextLoading, setContextLoading] = useState(!mode && Boolean(ports.getCreateContext));
   const [contextError, setContextError] = useState<string | null>(null);
@@ -318,6 +318,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
   };
   const chooseFiles = (list: FileList | File[] | null) => {
     if (!list || !list.length) return;
+    if (blockedReceiver) { setError("Foto-Anfrage wird noch geöffnet · Dateien danach erneut wählen."); return; }
     if (inFlight.current) { setError("Eine Übertragung läuft bereits · weitere Dateien bitte danach wählen."); return; }
     const files = Array.from(list);
     if (files.some(file => file.size < 1 || file.size > 150 * 1024 * 1024)) { setError("Dateien müssen 1 Byte bis 150 MB groß sein."); return; }
@@ -560,7 +561,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
           {photoRequest.photoCount > 0 ? <Button data-spec-id="rein.fertig-lesen" text="Fertig · lesen" onClick={() => void finishPhotos("fertig")} disabled={deviceWorking} /> : null}
           <Button data-spec-id="rein.uebergabe-abbrechen" text="Abbrechen" onClick={() => void finishPhotos("abgebrochen")} disabled={deviceWorking} />
         </div> : null}
-        <input ref={input} type="file" multiple hidden onChange={event => { chooseFiles(event.target.files); event.target.value = ""; }} />
+        <input ref={input} type="file" multiple hidden disabled={blockedReceiver||busy} onChange={event => { chooseFiles(event.target.files); event.target.value = ""; }} />
         {!hasContent&&!mode ? <section aria-label="Ohne Vorlage" className="ev-rein-ohne"><span>Ohne Vorlage</span>
           <Button art="leise" icon="inbox" title="Taste A" text="Auftrag oder KV erfassen" disabled={contextLoading || Boolean(contextError)} data-spec-id="rein.auftrag-erfassen" onClick={() => onOrder(createContext?.customerId)} />
           <Button art="leise" icon="user" title="Taste K" text="Kunde anlegen" data-spec-id="rein.kunde-anlegen" onClick={() => onCustomer()} />
