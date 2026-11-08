@@ -31,3 +31,20 @@ export function quoteGoodsPrimary(f:{busy:boolean;retry:boolean;linked:boolean;g
 export function quoteCardSentence(f:{number:string;customer:string;linkedOrder:boolean;declined:boolean;location?:string|null;accepted:boolean;acceptedDate?:string|null;sent:boolean;sentDate?:string|null}){
  return f.linkedOrder?'Aus '+f.number+' ist der Auftrag geworden.':f.declined?f.customer+' hat abgesagt. Es gibt keinen Auftrag.':f.location&&!f.accepted?'Die Ware liegt in '+f.location+' – es fehlt nur die Zusage von '+f.customer+'.':f.accepted?f.customer+' hat '+(f.acceptedDate?'am '+f.acceptedDate+' ':'')+'zugesagt.':f.sent?'Liegt seit '+f.sentDate+' bei '+f.customer+'.':'Du bereitest den KV vor.';
 }
+
+/** Read-only projection of canonical quote/order/receipt readers; permission alone never means ready. */
+export type QuoteProgressFacts={orderId:string;number:string;version:number;station:string;status:string;ware:string;canStart:boolean;receipts:Array<{status:string;location:string|null;open:string[]}>};
+export function quoteProgressPresentation(f:{accepted:boolean;acceptedAt:string|null;sentChannel:string|null;due:string;order:QuoteProgressFacts|null;goodsLocation:string|null}){
+ const o=f.order,inspection=o?.receipts.some(r=>(r.status==='angenommen'||r.status==='galvanik')&&r.open.length===0)===true;
+ const ready=Boolean(f.accepted&&o&&o.station==='angenommen'&&o.status==='angenommen'&&(o.ware==='da'||o.ware==='teilweise')&&inspection);
+ const started=Boolean(o&&o.station==='galvanik');
+ const location=o?.receipts.find(r=>r.location)?.location??f.goodsLocation;
+ return {title:'Stand auf einen Blick',ready,started,rows:[
+ {done:f.accepted,text:f.accepted?'Zugesagt'+(f.acceptedAt?' am '+new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(f.acceptedAt)):''):'Zusage fehlt'},
+ {done:Boolean(o&&(o.ware==='da'||o.ware==='teilweise')||f.goodsLocation),text:location?'Ware im Haus · '+location:o?.ware==='da'?'Ware im Haus':o?.ware==='teilweise'?'Ware teilweise im Haus':'Ware fehlt'},
+ {done:Boolean(o),text:o?'Auftrag '+o.number+' angelegt':'Auftrag fehlt'},
+ {done:ready||started,text:started?'In der Galvanik':ready?'Freigegeben · kann in die Galvanik':'Freigabe noch offen'},
+ {done:false,text:'Fertig bis '+new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(f.due))}],
+ sentence:ready&&o?'Alles bereit – '+o.number+' kann in die Galvanik.':null,
+ action:ready&&o?.canStart?o.number+' in die Galvanik nehmen':null};
+}

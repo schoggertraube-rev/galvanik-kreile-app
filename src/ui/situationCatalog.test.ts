@@ -15,3 +15,16 @@ describe('one situation catalogue, actual reader facts as input',()=>{
  it('complaint with no photo asks for photos rather than creating a complaint',()=>{expect(resolveIntakeSituation({...base,complaint:{orderNumber:'TEST-A-1',photoCount:0}})).toMatchObject({id:'complaint-no-photos',primary:{command:'request-photos'}});});
  it('undo appears only for an actual completed record with an available reversal',()=>{expect(resolveIntakeSituation({...base,completed:{kind:'order',id:'TEST-order',number:'TEST-A-1',undoAvailable:true}})).toMatchObject({phase:'done',primary:{command:'open-order',id:'TEST-order'},undo:{command:'undo-order',id:'TEST-order'}});expect(resolveIntakeSituation({...base,completed:{kind:'document',id:'TEST-doc',number:'TEST-RG',undoAvailable:false}}).sentence).not.toContain('verbucht');});
 });
+
+import {quoteProgressPresentation,type QuoteProgressFacts} from './situationCatalog';
+it('progress requires real accepted inspection and station, never permission alone',()=>{
+ const order:QuoteProgressFacts={orderId:'TEST-order',number:'TEST-A-1',version:1,station:'angenommen',status:'angenommen',ware:'da',canStart:true,receipts:[]};
+ const facts={accepted:true,acceptedAt:null,sentChannel:null,due:'2026-12-01',order,goodsLocation:null};
+ expect(quoteProgressPresentation(facts)).toMatchObject({ready:false,action:null});
+ expect(quoteProgressPresentation({...facts,order:{...order,receipts:[{status:'angenommen',location:'TEST Regal',open:[]}]}})).toMatchObject({ready:true,action:'TEST-A-1 in die Galvanik nehmen'});
+ expect(quoteProgressPresentation({...facts,order:{...order,ware:'abweichung',receipts:[{status:'angenommen',location:'TEST Regal',open:[]}]}}).action).toBeNull();
+ expect(quoteProgressPresentation({...facts,order:{...order,receipts:[{status:'angenommen',location:'TEST Regal',open:['Zustand']}]}}).ready).toBe(false);
+ expect(quoteProgressPresentation({...facts,accepted:false,order:{...order,receipts:[{status:'angenommen',location:'TEST Regal',open:[]}]}}).ready).toBe(false);
+ expect(quoteProgressPresentation({...facts,order:{...order,canStart:false,receipts:[{status:'angenommen',location:'TEST Regal',open:[]}]}})).toMatchObject({ready:true,action:null});
+ expect(quoteProgressPresentation({...facts,order:{...order,station:'galvanik',status:'in_arbeit'}})).toMatchObject({ready:false,started:true,action:null});
+});

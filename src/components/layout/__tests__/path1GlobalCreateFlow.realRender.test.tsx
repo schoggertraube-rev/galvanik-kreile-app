@@ -393,7 +393,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const { unmount } = render(<GlobalCreateFlow ports={value} />);
 
     fireEvent.keyDown(window, { key: "n" });
-    const entry = await screen.findByRole("dialog", { name: "Neu erfassen" });
+    const entry = await screen.findByRole("dialog", { name: "Neuer Eingang" });
     expect(within(within(entry).getByRole("region", { name: "Ohne Vorlage" })).getAllByRole("button")).toHaveLength(2);
     expect(within(entry).getByRole("button", { name: /Auftrag oder KV erfassen/ })).toHaveAttribute("title", "Taste A");
     expect(within(entry).getByRole("button", { name: /Kunde anlegen/ })).toHaveAttribute("title", "Taste K");
@@ -412,7 +412,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
   it("ignores the N shortcut without the eingang right", () => {
     render(<GlobalCreateFlow ports={ports({ canCreateOrder: false, showPrimaryTrigger: false })} />);
     fireEvent.keyDown(window, { key: "n" });
-    expect(screen.queryByRole("dialog", { name: "Neu erfassen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Neuer Eingang" })).not.toBeInTheDocument();
   });
 
   it("opens the shared capture above the same intake and keeps later mail integration separate", async () => {
@@ -425,7 +425,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(capture).toBeEnabled();
     expect(capture.querySelector("svg")).not.toBeNull();
     fireEvent.click(capture);
-    const layer=await screen.findByRole("dialog",{name:"Neu erfassen"});
+    const layer=await screen.findByRole("dialog",{name:"Neuer Eingang"});
     expect(within(layer).getByRole("heading")).toHaveTextContent("Zettel lesen · für die Erfassung");
     expect(within(layer).getByRole("button",{name:"Datei"})).toBeEnabled();
     expect(screen.getAllByRole("dialog")).toHaveLength(2);
@@ -884,7 +884,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await act(async () => {
       window.dispatchEvent(new CustomEvent("path1:global-create-open", { detail: "DIRECT_INTAKE" }));
     });
-    await screen.findByRole("heading", { name: "Neu erfassen" });
+    await screen.findByRole("heading", { name: "Neuer Eingang" });
     fireEvent.click(screen.getByRole("button", { name: "Auftrag oder KV erfassen" }));
     expect(screen.queryByText("Digitaler Wareneingang")).not.toBeInTheDocument();
     await fillDirectIntakeForExistingCustomer();
@@ -1209,7 +1209,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await act(async () => {
       window.dispatchEvent(new CustomEvent("path1:global-create-open", { detail: "DIRECT_INTAKE" }));
     });
-    await screen.findByRole("heading", { name: "Neu erfassen" });
+    await screen.findByRole("heading", { name: "Neuer Eingang" });
     fireEvent.click(screen.getByRole("button", { name: "Auftrag oder KV erfassen" }));
     await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
     fireEvent.click(within(screen.getByRole("group", { name: "Art" })).getAllByRole("button")[0]);

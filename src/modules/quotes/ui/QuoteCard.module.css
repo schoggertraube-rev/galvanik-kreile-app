@@ -13,3 +13,5 @@
 @media(max-width:700px){.card :global(.kr-dialog-glas){padding:12px 0}.card :global(.kr-dialog){width:calc(100vw - 24px);height:calc(100dvh - 24px)}.card :global(.kr-dialog-kopf){padding:16px}.card :global(.kr-dialog-titel){font-size:24px}.card :global(.kr-dialog-inhalt){padding:16px}.facts{grid-template-columns:1fr;gap:2px 0}.facts dd{margin-bottom:8px}}
 
 .soft{background:#e8f2ff;border-color:#bbd6f3;color:#225c98}.facts,.say,.edit,.history{font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}.facts dt,.facts dd,.say p,.history p{font:inherit}
+
+.progress{margin-top:16px;border:1px solid var(--line);border-radius:14px;padding:14px 18px;background:#f5f9f4}.progress h3{font:600 15px/1.5 system-ui;margin:0 0 8px}.progress ul{list-style:none;padding:0;margin:0}.progress li{padding:4px 0}.progress p{margin:10px 0}

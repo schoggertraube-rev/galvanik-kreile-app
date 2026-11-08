@@ -122,4 +122,14 @@ test('quote goods: actual photos and one atomic telephone conversion with server
  expect(orderRead?.data.card.commercialQuote).toMatchObject({quoteId,totalNetCents:4875,positions:[{quantity:3,lineTotalCents:4875}]});
  await expect(page.getByText('TEST-Etikett.png',{exact:true})).toBeVisible();
  await expect(page.getByText('TEST-Inhalt.png',{exact:true})).toBeVisible();
+ await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),quoteId);
+ const progressCard=page.getByRole('dialog',{name:/KV-2026-/});
+ await expect(progressCard.getByRole('region',{name:'Stand auf einen Blick'})).toBeVisible();
+ const start=progressCard.getByRole('button',{name:/A-2026-.* in die Galvanik nehmen/});
+ await expect(start).toBeVisible();await start.dblclick();
+ await expect(progressCard.getByRole('listitem').filter({hasText:'In der Galvanik'})).toBeVisible({timeout:15000});
+ const [moved]=await sql`SELECT o.station,o.version,(SELECT count(*)::int FROM public.events e WHERE e.tenant_id=o.tenant_id AND e.order_id=o.id AND e.event_type='ORDER_STATION_MOVED_V1') AS moves FROM public.orders o WHERE o.tenant_id='galvanik-kreile' AND o.id=${stored.linked_order_id}`;
+ expect(moved).toMatchObject({station:'galvanik',moves:1});
+ expect(moved.version).toBeGreaterThan(1);
+ await expect(progressCard.getByRole('button',{name:/in die Galvanik nehmen/})).toHaveCount(0);
 });
