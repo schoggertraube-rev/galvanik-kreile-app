@@ -122,7 +122,8 @@ describe("Gregor system administration composition", () => {
     const gregorOrders = screen.getByLabelText("Aufträge & Werkstatt für Gregor");
     expect(gregorOrders).not.toBeChecked();
     expect(gregorOrders).toBeDisabled();
-    expect(screen.getAllByText("Entwickler, keine Geschäftsvorgänge")).toHaveLength(7);
+    expect(screen.getAllByText("Entwickler, keine Geschäftsvorgänge")).toHaveLength(8);
+    expect(screen.getByText("Statistik aller Personen")).toBeInTheDocument();
     expect(screen.getByLabelText("Firmen-Einstellungen für Gregor")).toBeChecked();
     expect(screen.getByLabelText("Logins & Rechte verwalten für Rolf")).toBeChecked();
     expect(screen.getByLabelText("Wartung, Stufen & Anbindungen für Gregor")).toBeDisabled();

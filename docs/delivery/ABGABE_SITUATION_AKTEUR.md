@@ -54,3 +54,12 @@ Die oben beschriebene temporäre H16-Ausnahme ist vollständig entfernt: Plugin 
 Additive Migration 20261108230500_actor_statistics_access_area.sql erweitert den bestehenden Rechte-Constraint und ergänzt fehlende Admin-Standardrechte ohne alte Rechte zu verändern. Dev-Abbruchprobe inklusive Rechte-/Constraint-/Migrations-Snapshot PASS; vorhandene Rechte unverändert. SA-Branch104 + zuvor freigegebene RM-Vorlage20261108222500 = gemeinsame freigegebene Union105 = Dev105. Branch allein nicht gleich Dev behauptet (PL00:01 additive Differenz bestätigt). SHA-2568579c680fff783d3bbe094751909def0ef70ddfa7d299eae60189f4878ab7c34.
 
 Echter AK-Auftrag-Replay: zwei Logins, Anlage, Übernahme, eigene Statistik, fremde Statistik abgewiesen; Admin ohne Recht abgewiesen, mit dem tatsächlichen Recht beide Akteure gelesen. PASS7,20s. Geschützter H16-Selbsttest PASS. Neuer Kandidat benötigt CI/READY-Nachweis und Planungs-Diffprüfung; keine Merge-Bitte vorweg.
+
+
+## Gezielte CI-Korrektur 09.11. 00:23
+
+Ratchet am da34d413 bereits grün. Zwei neue konkrete Befunde behoben: statischer Import des Rechtehelfers initialisierte in bisher DB-freien Quote-Tests die Datenbank. Die unveränderte reine hasAuthorizationArea-Funktion liegt nun einmal im bestehenden kanonischen Register; der bisherige Serverport re-exportiert genau diese Funktion. Keine zweite Rechteauswertung und keine neue Policy. 41 betroffene Quote-/Settings-/Autorisierungstests PASS.
+
+Bestehende Assertion SettingsAppAdapter: blockierte Entwickler-Geschäftsrechte Anzahl7 →8 wegen neuem Recht statistik_alle; zusätzlich explizit die neue Zeile Statistik aller Personen geprüft. Alle bisherigen Sperr-/Haken-Assertions bleiben erhalten. Dies ist die einzige bestehende Assertion-Änderung dieses Fixes.
+
+Fresh-Rot am da34d413: Storage lieferte in sämtlichen zwölf vorbereitenden HTTP-Fällen502, bevor Produkttests starten konnten. Kein Produktcheck abgeschwächt; neuer Fix-Kandidat startet regulär neue CI. Falls dessen Fresh erneut ausschließlich Infrastruktur meldet, gilt die vorhandene einmalige Neustartregel.

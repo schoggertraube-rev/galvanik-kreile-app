@@ -164,3 +164,15 @@ export function isAppRole(value: unknown): value is AppRole {
 export function getRoleLabel(role: AppRole): string {
   return ROLE_LABELS[role] || role;
 }
+
+/** Live snapshots use app_user_rights. The role template is only a compatibility
+ * fallback for older isolated fixtures that predate the areas field. */
+export function hasAuthorizationArea(
+  authorization: {areas?:readonly AccessArea[];role:AppRole},
+  area: AccessArea,
+): boolean {
+  return isAccessAreaAllowedForRole(authorization.role, area) && (authorization.areas === undefined
+    ? ROLE_ACCESS_AREA_TEMPLATES[authorization.role].includes(area)
+    : authorization.areas.includes(area));
+}
+

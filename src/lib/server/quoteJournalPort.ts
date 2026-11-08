@@ -1,7 +1,8 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import type {AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import type {CommunicationDocument} from './communicationDocumentPort';
 
 type Actor={tenantId:string;userId:string};
