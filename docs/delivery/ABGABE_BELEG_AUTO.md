@@ -9,3 +9,8 @@ Vorbedingungen: gesichertes Original mit identischem SHA-256 im Originalereignis
 Drei gezielte Unitfälle PASS (vollständig/fehlend, widersprüchlich/unsicher/Betrag, gespeichert/doppelt), Typen und ESLint PASS. Modulgrenzen PASS bis auf fremde uncommittete DESIGN_POINTER_PAGE_BINDING. Scope PASS. Kein Schreibweg geändert, kein Replay-Schreibnachweis beansprucht.
 
 Offen: automatischer Aufruf des bestehenden Writers, echte Action→DB→Ansicht-Fälle, Rückgängig/Storno, Originalanhang an Dublette, Nachrichten-Direktablage, Sicht/CI/Preview/PL-Abnahme. Keine neue Migration; gemeinsame Dev-DB enthält zusätzlich die separat dokumentierte RM01-Vorlage (104 statt diesem Main-Stand103). Kein Gleichstand dieses Kandidaten behauptet.
+
+
+## Echter Lese-Nachweis 08.11. 23:48
+
+`beleg_auto_readiness.integration.test.ts`: echte lokale Replay-DB, tatsächliche Sitzung, bestehende getIncomingInvoiceAction → gespeicherte sichere Felder/Original-SHA/Lieferant → automation ready mit kanonischem Zahlungsziel. Keine supplier_invoice- oder Buchungs-Ereigniszeile entsteht. Zweite widersprechende Nummer und fehlendes Original bleiben unvollständig. Original-Unveränderlichkeit wird ausdrücklich gegen versuchte TEST-Mutation geprüft und bleibt erhalten. PASS5,62s. Vorherige zwei Fehlversuche waren reine Fixturefehler (Lieferanten-Constraint, absichtlich unveränderliches Original); keine Produktlockerung, keine Assertion abgeschwächt. Isolierte TEST-Originalmetadaten belegen die DB-Regel, nicht echte OCR/Storage/Kamera.
