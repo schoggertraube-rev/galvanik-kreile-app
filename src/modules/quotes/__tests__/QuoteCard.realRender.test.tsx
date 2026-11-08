@@ -72,7 +72,7 @@ it('operational purpose shows the phone decision but hides finance and editing',
  const change=vi.fn(async()=>({code:'UNAVAILABLE' as const,message:'TEST Offline'}));
  render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:safe,canEdit:false,canOperate:true,canReceive:false}),change,prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
  const phone=await screen.findByRole('button',{name:'TEST Schmidt hat am Telefon zugesagt'});
- expect(screen.queryByText('40,00 € netto')).toBeNull();expect(screen.queryByRole('button',{name:/Fassung 2 anlegen/})).toBeNull();expect(screen.queryByRole('button',{name:'KV per E-Mail senden'})).toBeNull();
+ expect(screen.queryByText('40,00 € netto')).toBeNull();expect(screen.queryByRole('link',{name:'Drucken'})).toBeNull();expect(screen.queryByRole('button',{name:/Fassung 2 anlegen/})).toBeNull();expect(screen.queryByRole('button',{name:'KV per E-Mail senden'})).toBeNull();
  fireEvent.click(phone);await screen.findByText('TEST Offline');expect(change).toHaveBeenCalledOnce();
 });
 
