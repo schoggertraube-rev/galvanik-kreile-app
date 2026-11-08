@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import postgres from "postgres";
@@ -89,6 +89,7 @@ const sql = postgres(databaseUrl, { max: 1, prepare: false, onnotice: (notice) =
 } });
 
 export async function prepareGeneratedSeed(flowCase: FlowCase) {
+  complaintDeliveryFixture = /^L(?:10|11|13)$/.test(flowCase.id);
   fixtureLoginId = generatedFlowRuntime.logins[flowCase.gegeben.login].id;
   canonicalOrderIds.clear();
   canonicalOrderSource = null;
@@ -105,7 +106,7 @@ export async function prepareGeneratedSeed(flowCase: FlowCase) {
   const names = selectedFixtureNames(flowCase.gegeben.datenlagen);
   const seeds = generatedFlowRuntime.fixtureSql as unknown as Record<string, string>;
   for (const name of names) {
-    if (name === canonicalOrderSource?.name) continue;
+    if (name === canonicalOrderSource?.name || complaintDeliveryFixture && name === "auftrag_quelle") continue;
     if (seeds[name]) await sql.unsafe(seeds[name]);
     else await seedSupplementalFixtures([generatedFixtures[name]!]);
   }
@@ -120,6 +121,7 @@ type GeneratedFixture = {
 };
 const canonicalOrderIds = new Map<string, { id: string; order_number: string }>();
 let canonicalOrderSource: { name: string; fixture: GeneratedFixture } | null = null;
+let complaintDeliveryFixture = false;
 
 const generatedFixtures = generatedFlowRuntime.datenlagen as unknown as Record<string, GeneratedFixture>;
 const columnCache = new Map<string, Map<string, { column_name: string; data_type: string; udt_name: string }>>();
@@ -804,6 +806,51 @@ async function login(page: Page, loginName: keyof typeof generatedFlowRuntime.lo
   await navigation;
   await shellReady(page);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+}
+
+/** These three model cases need actual delivery, never a forged delivered status. */
+async function materializeDeliveredComplaintSource(page: Page) {
+  const fixture=generatedFixtures.auftrag_quelle!,value=resolvedFixture(fixture);
+  const positions=value.positionen as Array<Record<string,unknown>>;
+  await login(page,'login_meister');
+  await page.goto('/orders');
+  const invoke=async(filename:string,exportedName:string,input:Record<string,unknown>)=>{
+    const production=path.join(process.cwd(),'.next/server/server-reference-manifest.json');
+    const manifest=JSON.parse(readFileSync(existsSync(production)?production:path.join(process.cwd(),'.next/dev/server/server-reference-manifest.json'),'utf8')) as {node:Record<string,{workers:Record<string,{filename?:string;exportedName?:string}>}>};
+    const actions=Object.entries(manifest.node).filter(([,action])=>Object.values(action.workers).some(worker=>worker.filename===filename&&worker.exportedName===exportedName));
+    if(actions.length!==1)throw Error('FLOW_DELIVERY_ACTION_AMBIGUOUS:'+exportedName);
+    const response=await page.evaluate(async({actionId,input})=>{const reply=await fetch('/',{method:'POST',headers:{'Next-Action':actionId,'Content-Type':'text/plain;charset=UTF-8',Accept:'text/x-component'},body:JSON.stringify([input])});return {status:reply.status,text:await reply.text()};},{actionId:actions[0]![0],input});
+    const result=readFlightActionResult(response.text);
+    if(response.status!==200||result.code!=='OK')throw Error('FLOW_DELIVERY_ACTION_FAILED:'+exportedName+':'+result.code+':'+result.message);
+  };
+  const clientEventId=randomUUID();
+  await invoke('src/app/actions/eingang.actions.ts','createOrderIntakeAction',{
+    clientEventId,geprueft:true,customer:{mode:'EXISTING',customerId:value.kunde},dueDate:value.liefertermin,termStatus:value.terminstatus,
+    intakeSource:value.eingangsart,handoverMode:'shipping',paymentMode:'vorkasse',note:'SYNTHETISCH: vollstaendige Lieferquelle fuer Reklamation',
+    items:positions.map(position=>({name:position.bezeichnung,quantity:position.menge,material:position.material,surfaceRequested:position.oberflaeche,executionRequested:position.ausfuehrung,unit:position.einheit,catalogServiceId:null,unitPriceCents:position.einzelpreis===null?null:Math.round(Number(position.einzelpreis)*100),vatRateBasisPoints:position.einzelpreis===null?null:1900})),
+  });
+  const [receipt]=await sql<{order_id:string;order_number:string}[]>`SELECT order_id,order_number FROM private.order_intake_receipts WHERE tenant_id=${TENANT} AND client_event_id=${clientEventId}::uuid`;
+  if(!receipt)throw Error('FLOW_DELIVERY_INTAKE_RECEIPT_MISSING');
+  const orderId=receipt.order_id;
+  const version=async()=>{const [row]=await sql<{version:number}[]>`SELECT version FROM public.orders WHERE tenant_id=${TENANT} AND id=${orderId}`;if(!row)throw Error('FLOW_DELIVERY_ORDER_MISSING');return row.version;};
+  await sql`INSERT INTO private.extra_work_hourly_rates(id,tenant_id,hourly_rate_cents,version,created_by,effective_at) SELECT ${randomUUID()}::uuid,${TENANT},12000,coalesce(max(version),0)+1,${fixtureLoginId}::uuid,now() FROM private.extra_work_hourly_rates WHERE tenant_id=${TENANT}`;
+  await invoke('src/app/actions/orders.actions.ts','transitionWareneingangToGalvanikAction',{orderId,expectedVersion:await version(),clientEventId:randomUUID()});
+  const items=await sql<{id:string;name:string}[]>`SELECT id,name FROM public.items WHERE tenant_id=${TENANT} AND order_id=${orderId} ORDER BY id`;
+  for(const item of items)await invoke('src/app/actions/orders.actions.ts','setOrderItemFinishedAction',{orderId,itemId:item.id,finished:true,expectedVersion:await version(),clientEventId:randomUUID()});
+  await invoke('src/app/actions/orders.actions.ts','freezeOrderAction',{orderId,freezeId:randomUUID(),expectedVersion:await version(),clientEventId:randomUUID()});
+  // The model intentionally omits one price; this explicit synthetic 10 EUR
+  // fixture price is set through the real writer, never a product fallback.
+  await invoke('src/app/actions/invoices.actions.ts','setInvoiceItemPricesAction',{orderId,expectedVersion:await version(),clientEventId:randomUUID(),prices:items.filter(item=>positions.some(position=>position.bezeichnung===item.name&&position.einzelpreis===null)).map(item=>{const source=positions.find(position=>position.bezeichnung===item.name);if(!source)throw Error('FLOW_DELIVERY_POSITION_UNKNOWN');return {itemId:item.id,unitPriceCents:source.einzelpreis===null?1000:Math.round(Number(source.einzelpreis)*100)};})});
+  await invoke('src/app/actions/invoices.actions.ts','issueInvoiceAction',{orderId,expectedVersion:await version(),clientEventId:randomUUID()});
+  const [invoice]=await sql<{id:string;amount:number;version:number}[]>`SELECT id::text,gross_amount_cents::float8 AS amount,payment_version AS version FROM public.invoices WHERE tenant_id=${TENANT} AND order_id=${orderId} AND status='issued'`;
+  if(!invoice)throw Error('FLOW_DELIVERY_INVOICE_MISSING');
+  await invoke('src/app/actions/payments.actions.ts','confirmPaymentAction',{invoiceId:invoice.id,amount:invoice.amount,expectedVersion:invoice.version,method:'ueberweisung',clientEventId:randomUUID()});
+  const outKey=randomUUID();
+  await invoke('src/app/actions/goodsOut.actions.ts','recordGoodsOutAction',{orderId,expectedVersion:await version(),mode:'versand',clientEventId:outKey});
+  const proof=await sql`SELECT orders.id FROM public.orders orders JOIN public.events event ON event.tenant_id=orders.tenant_id AND event.order_id=orders.id AND event.client_event_id=${outKey}::uuid AND event.event_type LIKE 'ORDER_PICKED_UP_%' WHERE orders.tenant_id=${TENANT} AND orders.id=${orderId} AND orders.station='abgeholt'`;
+  if(proof.length!==1)throw Error('FLOW_DELIVERY_EVENT_MISSING');
+  canonicalOrderIds.set(fixture.id,{id:orderId,order_number:receipt.order_number});
+  return true;
 }
 
 /** Copy givens need the existing reader's genuine intake receipt, not an invented event. */
@@ -1700,7 +1747,7 @@ export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
 
 async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
   testTimeoutGuard(flowCase);
-  const sourceWasMaterialized = await materializeCanonicalOrderSource(page);
+  const sourceWasMaterialized = complaintDeliveryFixture ? await materializeDeliveredComplaintSource(page) : await materializeCanonicalOrderSource(page);
   const dbExpectations = flowCase.dann?.db ?? [];
   const state: FlowRunState = {
     before: new Map<string, number>(),
