@@ -32,3 +32,4 @@ Keine Dev-/Produktionsdatenänderung. Replay-Daten isoliert und synthetisch. Die
 Früherer Kopf 4dee75b4 nach einmaligem Infrastruktur-Neustart vollständig grün (Storage-Upstream-502); dessen READY-Preview und Sichtlauf 0 Rot/21 bekannte Gelb sind historisch. Nach dem Mehrpositionsnachtrag müssen CI und READY exakt am neuen Kopf neu gebunden werden. Keine neue Oberfläche, kein erneuter Sichtlauf als Sicherheitswiederholung.
 
 Unabhängige PL-Diffprüfung vor Merge-Bitte erforderlich. Kein Merge durch Codex.
+`n## CI-Nachtrag A04`nSchema/Browserlauf scheiterte ausschließlich in A04 vor dem ersten Nachrichten-Knopf (5-s-Ankunftswarten). Isolierter Testadapter wartet nun auf das vorhandene aria-busy=false der echten Nachrichten-Abfrage und das echte Bedienelement; Produkt und Originalassertions unverändert. A04 einzeln gegen Replay-Browser/DB PASS (26,4 s), gezieltes ESLint/Diff PASS. Kein pauschaler CI-Neustart oder Produktumbau.
