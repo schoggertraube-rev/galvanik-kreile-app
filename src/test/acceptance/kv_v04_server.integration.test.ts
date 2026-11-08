@@ -868,4 +868,9 @@ it('AF-3: validity extension rescues an expired quote without a new content edit
  const events=await sql`SELECT user_id::text,payload->>'validUntil' AS valid_until FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND payload->>'quoteId'=${input.quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='extend' ORDER BY created_at`;
  expect(events).toEqual([{user_id:fixture.actorId,valid_until:dates.future},{user_id:fixture.actorId,valid_until:dates.later}]);
  expect(await withSession(fixture,()=>readQuoteAction({quoteId:input.quoteId}))).toMatchObject({code:'OK',quote:{version:5,validUntil:dates.later,totalNetCents:1000,linkedOrderId:null,lifecycle:{edition:1,acceptedEdition:1}}});
+ const next=new Date(dates.later+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+30);const later=next.toISOString().slice(0,10);next.setUTCDate(next.getUTCDate()+30);
+ const competing=await Promise.all([later,next.toISOString().slice(0,10)].map(validUntil=>withSession(fixture,()=>changeQuoteLifecycleAction({...input,expectedVersion:5,clientEventId:randomUUID(),validUntil}))));
+ expect(competing.map(row=>row.code).sort()).toEqual(['CONFLICT','OK']);
+ expect((await sql`SELECT version,fassung,zugesagt_fassung FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.quoteId}::uuid`)[0]).toMatchObject({version:6,fassung:1,zugesagt_fassung:1});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND payload->>'quoteId'=${input.quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='extend'`).toHaveLength(3);
 });
