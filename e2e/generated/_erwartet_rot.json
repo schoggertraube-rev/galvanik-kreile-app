@@ -240,9 +240,5 @@
   "U241-03": {
     "paket": "AP-EIN",
     "grund": "Folge-PR Teil 2b rein"
-  },
-  "KV-UI-MAIL-DRAFT": {
-    "paket": "AP-KV-V04-OBERFLAECHE",
-    "grund": "Neue echte Mailentwurf-Browserpruefung bleibt offen: erster Lauf erhielt Entwurf, exakte Playwright-Labelsuche nach Weiter-bearbeiten fand Textarea trotz vorhandenem Inhalt nicht; mechanisch auf Rolle umgestellt. Folgeversuch erreichte schon den bisherigen Anliegen-KV-Knopf nicht (90s), kein weiterer Reparatur-/Wiederholungslauf. Komponentenvertrag mit gleichem Retry/Abbruchschutz ist gruen, kein externer Versand-PASS behauptet."
   }
 }
