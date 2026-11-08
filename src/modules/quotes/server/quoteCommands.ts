@@ -224,7 +224,7 @@ function hashIntent(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
 }
 
-function quoteContent(quote:QuoteReadback){return JSON.stringify({customerId:quote.customerId,dueDate:quote.dueDate,validUntil:quote.validUntil,termStatus:quote.termStatus,intakeSource:quote.intakeSource,note:quote.note,positions:quote.positions.map(p=>({name:p.name,quantity:p.quantity,material:p.material,surface:p.surfaceRequested,price:p.unitPriceCents,total:p.lineTotalCents})),calculation:quote.lifecycle?.calculation,specialRequests:quote.lifecycle?.specialRequests,deliveryWeeks:quote.lifecycle?.deliveryWeeks});}
+function quoteContent(quote:QuoteReadback){return JSON.stringify({customerId:quote.customerId,validUntil:quote.validUntil,intakeSource:quote.intakeSource,note:quote.note,positions:quote.positions.map(p=>({name:p.name,quantity:p.quantity,material:p.material,surface:p.surfaceRequested,price:p.unitPriceCents,total:p.lineTotalCents})),calculation:quote.lifecycle?.calculation,specialRequests:quote.lifecycle?.specialRequests,deliveryWeeks:quote.lifecycle?.deliveryWeeks});}
 
 /** Holds the quote only during pending-mail preparation, never during Graph I/O. */
 export async function lockQuoteDeliverySnapshot(tx:PrivilegedTenantTransaction,tenantId:string,input:{id:string;version:number;edition:number}){

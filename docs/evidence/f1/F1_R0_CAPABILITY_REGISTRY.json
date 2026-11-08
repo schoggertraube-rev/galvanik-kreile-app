@@ -526,6 +526,8 @@
         "getQuoteFollowupsForTodayAction",
         "prepareQuoteFromIntakeAction",
         "prepareQuoteCopyAction",
+        "prepareQuoteTextChangeAction",
+        "duplicateQuoteAction",
         "receiveOnsiteQuoteAction"
       ],
       "classification": "PENDING_CONTRACT",

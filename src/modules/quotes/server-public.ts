@@ -25,3 +25,5 @@ export type {
 export type {QuoteFollowupBinding} from './server/quoteCommands';
 
 export {readQuoteCopyCommand} from "./server/quoteCommands";
+
+export {prepareQuoteTextChangeCommand} from "./server/quoteTextProposal";

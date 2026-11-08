@@ -42,7 +42,8 @@
     "@/modules/quotes/server-public#lockQuoteDeliverySnapshot",
     "@/modules/quotes/server-public#readQuoteCopyCommand",
     "@/modules/quotes/public#scaleQuoteCalculation",
-    "@/modules/quotes/public#QuoteCalculation"
+    "@/modules/quotes/public#QuoteCalculation",
+    "@/modules/quotes/server-public#prepareQuoteTextChangeCommand"
   ],
   "capabilities": [
     "quotes:create",
@@ -56,7 +57,8 @@
     "20261107193000_kv_v04_content_editions.sql",
     "20261107211500_kv_v04_conditional_acceptance.sql",
     "20261107214500_kv_v04_independent_metadata.sql",
-    "20261107221000_kv_v04_followup_projection.sql"
+    "20261107221000_kv_v04_followup_projection.sql",
+    "supabase/migrations/20261108060000_kv_date_preserves_edition.sql"
   ],
   "viewsFunctions": [
     "private.create_quote_v1",
