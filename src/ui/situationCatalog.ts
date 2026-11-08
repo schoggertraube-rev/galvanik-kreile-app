@@ -118,4 +118,4 @@ export const ORDER_HANDOVER_COPY={
  late:(number:string,customer:string,phone:string|null,carrier:string|null,mode:'pickup'|'shipping',label:boolean,passed:boolean)=>number+' · '+(passed?'Ware ist bereits übergeben':label?'Versandetikett ist bereits erstellt':'Paket ist bereits beim '+(carrier??'Versanddienst · Name fehlt'))+' · '+customer+' wollte '+(mode==='pickup'?'abholen':'Versand')+'. Ruf '+customer+' an: '+(phone??'Telefon fehlt')+'.',
 };
 
-export const BELEG_AUTO_COPY={saved:'Erkannt, abgelegt und verbucht.',saving:'Beleg wird geprüft und abgelegt …',failed:'Nicht abgelegt · Original und Eingaben sind erhalten.'} as const;
+export const BELEG_AUTO_COPY={retry:'Mit gleicher Kennung erneut versuchen',saved:'Erkannt, abgelegt und verbucht.',saving:'Beleg wird geprüft und abgelegt …',failed:'Nicht abgelegt · Original und Eingaben sind erhalten.'} as const;
