@@ -76,8 +76,12 @@ async function duplicate(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapsh
 export async function readIncomingInvoice(input:unknown,deps:InvoiceDependencies):Promise<InvoiceReadResult>{
  if(!object(input)||!keys(input,['id'])||!uuid(input.id))return {code:'VALIDATION_ERROR',message:'Rechnungsaufruf ist ungültig.'};
  try{const auth=await authorization();return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const invoice=await findInvoice(tx,auth,input.id as string)??await findInvoice(tx,auth,input.id as string,true);
-  const row=await source(tx,auth,invoice?.item_id??input.id as string);
+  return readInvoiceView(tx,auth,input.id as string,deps);
+ });}catch(error){const result=failure(error);return result.code==='DUPLICATE'?{code:'CONFLICT',message:result.message}:result;}
+}
+async function readInvoiceView(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,deps:InvoiceDependencies){
+  const invoice=await findInvoice(tx,auth,id)??await findInvoice(tx,auth,id,true);
+  const row=await source(tx,auth,invoice?.item_id??id);
   const originals=await tx.execute<{id:string;name:string;mime:string;sha256:string}>(sql`SELECT file.id::text,file.dateiname AS name,file.mime,file.sha256 FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml'
    AND EXISTS(SELECT 1 FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id AND event.art='original_gespeichert' AND event.nachher->>'fileId'=file.id::text) ORDER BY file.reihenfolge,file.id`);
   const primaryFileId=invoice?.file_id??originals[0]?.id??null;
@@ -103,10 +107,10 @@ export async function readIncomingInvoice(input:unknown,deps:InvoiceDependencies
   const secured=primaryFileId?await tx.execute(sql`SELECT file.id FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.id=${primaryFileId}::uuid AND file.art<>'mime' AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=file.tenant_id AND receipt.item_id=file.item_id AND receipt.art='original_gespeichert' AND receipt.nachher->>'fileId'=file.id::text AND receipt.nachher->>'sha256'=file.sha256)`):[];
   view.automation=invoiceAutomaticReadiness({fields,originalSecured:secured.length===1,supplierConfirmed:Boolean(selected&&row.kunde_id===selected.id&&row.zuordnung!=='offen'),stored:invoice!==null,duplicate:view.duplicate!==null,suggestions:[...suggestions]});
   return {code:'OK' as const,view};
- });}catch(error){const result=failure(error);return result.code==='DUPLICATE'?{code:'CONFLICT',message:result.message}:result;}
 }
+
 function validSave(input:unknown):input is InvoiceSaveInput{
- return object(input)&&keys(input,['itemId','fileId','version','clientKey','fields','status','paidDate','proofFileId','duplicateId','duplicateReason','unclearReason'])
+ return object(input)&&keys(input,['itemId','fileId','version','clientKey','fields','status','paidDate','proofFileId','duplicateId','duplicateReason','unclearReason',...(input.automatic===true?['automatic']:[])])
   &&uuid(input.itemId)&&uuid(input.fileId)&&uuid(input.clientKey)&&Number.isSafeInteger(input.version)&&Number(input.version)>=1&&invoiceFieldShape(input.fields)
   &&['offen','bezahlt','unklar','doppelt'].includes(String(input.status))&&optionalText(input.paidDate,10)
   &&(input.proofFileId===null||uuid(input.proofFileId))&&(input.duplicateId===null||uuid(input.duplicateId))&&optionalText(input.duplicateReason,200)&&optionalText(input.unclearReason,200);
@@ -161,6 +165,12 @@ export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies
  try{const auth=await authorization();return await withPrivilegedTenantTransaction(auth,async tx=>{
   const row=await source(tx,auth,input.itemId,true),command=input.status==='unklar'?'rechnung.unklar':'rechnung.erfassen';
   const repeated=await replay(tx,auth,row,input.clientKey,command,input);if(repeated)return repeated;
+  if(input.automatic){
+   const read=await readInvoiceView(tx,auth,row.id,deps),view=read.view;
+   if(view.automation?.state!=='ready')reject('VALIDATION_ERROR','Nicht automatisch abgelegt · '+(view.automation?.missing.join(' · ')||'Beleg zuerst prüfen.'));
+   if(input.status!=='offen'||input.fileId!==view.fileId||!isDeepStrictEqual(input.fields,view.fields)||input.paidDate!==null||input.proofFileId!==null||input.duplicateId!==null||input.duplicateReason!==null||input.unclearReason!==null)reject('VALIDATION_ERROR','Automatische Ablage verwendet ausschließlich die sicher erkannten Originalangaben.');
+   if(input.fields.iban.trim()&&normaliseIban(input.fields.iban)!==normaliseIban(view.supplier?.iban??''))reject('VALIDATION_ERROR','IBAN zuerst beim Lieferanten prüfen · keine automatische Stammdatenänderung.');
+  }
   if(row.version!==input.version)reject('CONFLICT','Eingang wurde inzwischen geändert · Eingaben bleiben erhalten.');
   if(await findInvoice(tx,auth,row.id,true))reject('CONFLICT','Dieser Eingang hat bereits eine Rechnung.');
   if(row.einsatz!=='offen'||row.aussortiert)reject('CONFLICT','Eingang ist nicht mehr offen.');

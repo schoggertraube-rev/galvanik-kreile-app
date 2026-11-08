@@ -113,14 +113,7 @@ async function createFixture(areas:string[]=['eingang', 'auftraege', 'kunden', '
 afterAll(async()=>{await sql.end({timeout:1});if(originalSecret===undefined)delete process.env.APP_SESSION_SECRET;else process.env.APP_SESSION_SECRET=originalSecret;});
 
 it('BA readiness reads secure persisted invoice facts through the real Action without creating a booking',async()=>{
- const fixture=await createFixture();
- await sql`UPDATE public.customers SET type='lieferant',zahlungsziel_tage=14,payment_preference=NULL,vat_id=NULL,billing_email=NULL,handover_preference=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
- const itemId=randomUUID(),fileId=randomUUID(),hash='d'.repeat(64);
- await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,zuordnung,einsatz,anliegen,anliegen_offen) VALUES(${itemId}::uuid,${KREILE_TENANT_SLUG},${itemId},'notiz','rein','app',${fixture.actorId}::uuid,${fixture.customerId},'hand','offen',ARRAY['rechnung'],ARRAY['rechnung'])`;
- // Isolated TEST original metadata, not a real camera/Storage/OCR success claim.
- await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${fileId},'anhang','TEST Beleg.jpg','image/jpeg',32,${hash},${KREILE_TENANT_SLUG+'/'+hash},now(),${fixture.actorId}::uuid,1,true,false,'fertig')`;
- await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'original_gespeichert',${fileId}::uuid,${fixture.actorId},${sql.json({fileId,sha256:hash,bytes:32})})`;
- for(const [field,value]of [['rechnung.nummer','TEST-BA-42'],['rechnung.datum','2026-11-08'],['rechnung.betrag',{netto:'100.00',ust:'19.00',brutto:'119.00'}]] as const)await sql`INSERT INTO public.intake_suggestion(id,tenant_id,item_id,file_id,feld,wert,sicherheit,status) VALUES(${randomUUID()}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${fileId}::uuid,${field},${sql.json(value)},'sicher','offen')`;
+ const {fixture,itemId,fileId}=await secureSource();
  const {getIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
  const view=await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}));
  expect(view).toMatchObject({code:'OK',view:{invoice:null,fields:{lieferantId:fixture.customerId,nummer:'TEST-BA-42',datum:'2026-11-08',faelligAm:'2026-11-22'},automation:{state:'ready',missing:[]}}});
@@ -132,4 +125,35 @@ it('BA readiness reads secure persisted invoice facts through the real Action wi
  const emptyId=randomUUID();
  await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,zuordnung,einsatz,anliegen,anliegen_offen) VALUES(${emptyId}::uuid,${KREILE_TENANT_SLUG},${emptyId},'notiz','rein','app',${fixture.actorId}::uuid,${fixture.customerId},'hand','offen',ARRAY['rechnung'],ARRAY['rechnung'])`;
  expect(await withSession(fixture,()=>getIncomingInvoiceAction({id:emptyId}))).toMatchObject({code:'OK',view:{automation:{state:'incomplete',missing:expect.arrayContaining(['Gesichertes Original fehlt'])}}});
+});
+
+async function secureSource(areas?:string[]){
+ const fixture=await createFixture(areas);
+ await sql`UPDATE public.customers SET type='lieferant',zahlungsziel_tage=14,payment_preference=NULL,vat_id=NULL,billing_email=NULL,handover_preference=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+ const itemId=randomUUID(),fileId=randomUUID(),hash='d'.repeat(64);
+ await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,zuordnung,einsatz,anliegen,anliegen_offen) VALUES(${itemId}::uuid,${KREILE_TENANT_SLUG},${itemId},'notiz','rein','app',${fixture.actorId}::uuid,${fixture.customerId},'hand','offen',ARRAY['rechnung'],ARRAY['rechnung'])`;
+ // Isolated TEST original metadata, not a real camera/Storage/OCR success claim.
+ await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${fileId},'anhang','TEST Beleg.jpg','image/jpeg',32,${hash},${KREILE_TENANT_SLUG+'/'+hash},now(),${fixture.actorId}::uuid,1,true,false,'fertig')`;
+ await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'original_gespeichert',${fileId}::uuid,${fixture.actorId},${sql.json({fileId,sha256:hash,bytes:32})})`;
+ for(const [field,value]of [['rechnung.nummer','TEST-BA-42'],['rechnung.datum','2026-11-08'],['rechnung.betrag',{netto:'100.00',ust:'19.00',brutto:'119.00'}]] as const)await sql`INSERT INTO public.intake_suggestion(id,tenant_id,item_id,file_id,feld,wert,sicherheit,status) VALUES(${randomUUID()}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${fileId}::uuid,${field},${sql.json(value)},'sicher','offen')`;
+ return {fixture,itemId,fileId};
+}
+
+it('BA01/03/06 automatic mode uses the actual existing invoice Action once, preserves originals and refuses unsafe or unauthorized writes',async()=>{
+ const {getIncomingInvoiceAction,saveIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
+ const {fixture,itemId,fileId}=await secureSource();
+ const read=await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}));if(read.code!=='OK')throw Error(read.message);
+ const input={automatic:true as const,itemId,fileId,version:read.view.item.version,clientKey:randomUUID(),fields:read.view.fields,status:'offen' as const,paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null};
+ expect(await withSession(fixture,()=>saveIncomingInvoiceAction({...input,fields:{...input.fields,brutto:'0.01'}}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toHaveLength(0);
+ const saved=await withSession(fixture,()=>saveIncomingInvoiceAction(input));expect(saved).toMatchObject({code:'OK',invoice:{item_id:itemId,file_id:fileId,brutto:'119.00',zahlstatus:'offen'},replayed:false});if(saved.code!=='OK')throw Error(saved.message);
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toHaveLength(1);
+ expect(await sql`SELECT von FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND art='einsatz' AND befehl_id=${input.clientKey}::uuid`).toEqual([{von:fixture.actorId}]);
+ expect(await withSession(fixture,()=>saveIncomingInvoiceAction(input))).toMatchObject({code:'OK',replayed:true,invoice:{id:saved.invoice.id}});
+ expect(await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}))).toMatchObject({code:'OK',view:{invoice:{id:saved.invoice.id,zahlstatus:'offen'},automation:{state:'stored'},originals:[expect.objectContaining({id:fileId})]}});
+ const denied=await secureSource(['eingang','kunden']);expect(await withSession(denied.fixture,()=>saveIncomingInvoiceAction({...input,itemId:denied.itemId,fileId:denied.fileId,clientKey:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${denied.itemId}::uuid`).toHaveLength(0);
+ const incomplete=await secureSource();await sql`INSERT INTO public.intake_suggestion(id,tenant_id,item_id,file_id,feld,wert,sicherheit,status) VALUES(${randomUUID()}::uuid,${KREILE_TENANT_SLUG},${incomplete.itemId}::uuid,${incomplete.fileId}::uuid,'rechnung.betrag',${sql.json({netto:'100.00',ust:'19.00',brutto:'1.00'})},'sicher','offen')`;
+ expect(await withSession(incomplete.fixture,()=>saveIncomingInvoiceAction({...input,itemId:incomplete.itemId,fileId:incomplete.fileId,clientKey:randomUUID(),fields:{...input.fields,lieferantId:incomplete.fixture.customerId}}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${incomplete.itemId}::uuid`).toHaveLength(0);
 });
