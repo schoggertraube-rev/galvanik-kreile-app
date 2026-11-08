@@ -195,4 +195,20 @@ it('L08/L10/L11 real recording and credit actions persist one row, event, replay
  expect(await withSession(fixture,()=>reklamationAusfuehrenAction(credit))).toMatchObject({code:'OK',replayed:true,receipt:{version:3}});
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${credit.clientKey}::uuid`).toHaveLength(1);
  expect(await withSession(fixture,()=>getComplaintDialogAction({complaintId:result.complaintId}))).toMatchObject({code:'OK',data:{complaint:{version:6,gutschriftBetrag:'50.00',gutschriftNr:'GS-TEST-REST'}}});
+ const {createQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const quoteInput={clientEventId:randomUUID(),customerId:fixture.customerId,sourceComplaintId:result.complaintId,dueDate:'2027-04-20',note:'TEST AF12 berechnete Reklamation',positions:[{name:'TEST erneute Bearbeitung',quantity:1,material:'Stahl',surfaceRequested:'verchromen',unitPriceCents:1000}]};
+ const quote=await withSession(fixture,()=>createQuoteAction(quoteInput));
+ expect(quote).toMatchObject({code:'OK',quote:{sourceComplaintId:result.complaintId,totalNetCents:1000}});
+ if(quote.code!=='OK')throw Error('TEST AF12 creation failed');
+ expect(await withSession(fixture,()=>createQuoteAction(quoteInput))).toMatchObject({code:'OK',replayed:true,quote:{quoteId:quote.quote.quoteId}});
+ expect(await withSession(fixture,()=>createQuoteAction({...quoteInput,sourceComplaintId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId:quote.quote.quoteId}))).toMatchObject({code:'OK',quote:{sourceComplaintId:result.complaintId,totalNetCents:1000}});
+ expect((await sql`SELECT quelle_reklamation_id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quote.quote.quoteId}::uuid`)[0]).toMatchObject({quelle_reklamation_id:result.complaintId});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='QUOTE_COMPLAINT_LINKED_V1' AND user_id=${fixture.actorId}::uuid AND payload->>'quoteId'=${quote.quote.quoteId}`).toHaveLength(1);
+ expect(await withSession(fixture,()=>createQuoteAction({...quoteInput,clientEventId:randomUUID(),positions:[{...quoteInput.positions[0],unitPriceCents:0}]}))).toMatchObject({code:'VALIDATION_ERROR'});
+ const other=await createFixture();
+ expect(await withSession(fixture,()=>createQuoteAction({...quoteInput,clientEventId:randomUUID(),customerId:other.customerId}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND quelle_reklamation_id=${result.complaintId}`).toHaveLength(1);
+ console.info('TEST_AF12_DB_PROOF',JSON.stringify({quoteId:quote.quote.quoteId,complaintId:result.complaintId,priceCents:1000}));
+
 });

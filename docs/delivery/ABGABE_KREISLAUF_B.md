@@ -18,7 +18,7 @@ Die vorhandene Reklamationskarte zeigt die bestehende Nummer/Betrag und sperrt d
 
 ## Offen
 
-AF-5/6/8/9/10/12/18 sowie die übrigen gebundenen mittleren Regeln, vollständige Sicht-/CI-/Planungsprüfung und Preview des abschließenden SHA. Dieser Teilstand ist kein vollständiger Kreislauf-PASS. Kein Merge/Production/Remote-Datenänderung in diesem Schritt.
+AF-5/6/8/9/10/18 sowie die übrigen gebundenen mittleren Regeln, vollständige Sicht-/CI-/Planungsprüfung und Preview des abschließenden SHA. Dieser Teilstand ist kein vollständiger Kreislauf-PASS. Kein Merge/Production/Remote-Datenänderung in diesem Schritt.
 
 
 ## AF-17: abgesagten KV auch auf der SQL-Grenze sperren
@@ -26,3 +26,13 @@ AF-5/6/8/9/10/12/18 sowie die übrigen gebundenen mittleren Regeln, vollständig
 Additive Migration `20261108165057_quote_decline_write_guard.sql` übernimmt die vorhandene `update_quote_v1` mit identischer Signatur und sämtlichen bestehenden Validierungen/Receipts/Terminregeln. Genau die Statusbedingung ist strenger: `abgesagt_am IS NOT NULL` verbietet neue Änderungen. Die vorhandene Definer-Eigenschaft/ACL wird weder erweitert noch neu eingeführt; kein neuer privilegierter Einstieg.
 
 Abbruchprobe und lokale Anwendung PASS. Bestehender echter KV-04/05-Replayfall ergänzt: Versand → Zusage → neue Fassung → Absage → Versuch weiterer Termin-/Preisänderung → CONFLICT, Version 5/Betrag 1100 Cent/Absagegrund unverändert, kein Update-Receipt; View neu gelesen. PASS 4,69 s. Historische Wiederholungen bestehender Receipts bleiben nachvollziehbar. Eine kopierte Konsolenbeschriftung des lokalen Helfers nannte zunächst die Vorgängernummer; SQL-Datei und eingetragene Migrationsversion sind 20261108165057, Beschriftung korrigiert, kein zweites Anwenden.
+
+## AF-12: berechneter KV mit dauerhaftem Reklamationsbezug
+
+Der bestehende createQuoteAction/create_quote_v1 bleibt der einzige Anlageweg. Optionale sourceComplaintId ist an den Intent gebunden. Nur eine abgelehnte Reklamation desselben Kunden ist erlaubt. Der nullable Tenant-Fremdschluessel quelle_reklamation_id und unveraenderlicher Quellschutz werden mit dem Actor-Ereignis atomar geschrieben. Fehler rollen auch die Anlage zurueck. Ein positiver Preis ist Pflicht, kein kostenloser Ersatzauftrag. Bestehender Core-Port und exakte Leseregisterdeklarationen, kein Gate gelockert.
+
+Migration 20261108170039_quote_complaint_source.sql lokal nach Abbruchprobe angewendet. Echter Replay: abgelehnte Reklamation / berechneter KV / Quellenzeile / Actor / Ansicht / identischer Retry / geaenderter Quellbezug abgewiesen / Nullpreis und anderer Kunde abgewiesen / genau ein KV. PASS 7,95 s. Alte Assertions erhalten. UI-Anschluss an die vorhandene KV-Karte und Dev-Paritaet bleiben offen.
+
+## CI-Fixtures zur AF-7-Sperre
+
+Alte Unit-/H18-Erfolgsfixtures sendeten einen anderen Termin als der gespeicherte KV. Nur diese synthetischen Eingaben angeglichen: Unit 20.10. auf input.dueDate (15.10.), H18 24.04.2027 auf gespeicherten 17.04.2027. Alle Erfolg-/Konflikt-/Hash-/DB-Assertions erhalten, echter negativer KV-07-Fall fuer fremden Termin ebenfalls erhalten. Sechs Unit-Faelle PASS; echter H18-Aktionslauf PASS 5,95 s. Fuer dessen strenge lokale Migrationsliste wurden die bereits angewandten zwei Vorgaengermigrationen bytegleich nur temporaer aus Git bereitgestellt und anschliessend entfernt; keine Migration erneut ausgefuehrt. Fresh-Storage-502 separat Infrastruktur, kein Produkt-PASS.

@@ -23,6 +23,7 @@ export type QuotePositionInput = {
 };
 
 export type CreateQuoteInput = {
+  sourceComplaintId?:string;
   clientEventId: string;
   customerId: string;
   dueDate: string;
@@ -68,6 +69,7 @@ export type QuotePosition = QuotePositionInput & {
 };
 
 export type QuoteReadback = {
+  sourceComplaintId?:string;
   lifecycle?: {
     edition:number; stage:'entwurf'|'versendet'|'geaendert_seit_versand'|'zugesagt'|'umgewandelt'|'abgesagt'|'abgelaufen';
     sentEdition:number|null; sentAt:string|null; sentChannel:'mail'|'druck'|null;
