@@ -32,6 +32,7 @@ export type InvoiceDuplicate = {
   date: string | null; gross: string | null; exact: boolean;
 };
 export type InvoiceView = {
+  automation?: import('./invoiceAutomation').InvoiceAutomaticReadiness;
   item: { id: string; version: number; at: string; channel: string; sender: string | null };
   invoice: IncomingInvoice | null; supplier: InvoiceSupplier | null;
   originals: InvoiceOriginal[]; fileId: string | null; fields: InvoiceFields;
