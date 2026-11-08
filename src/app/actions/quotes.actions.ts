@@ -229,7 +229,11 @@ export async function readQuoteConversionReceiptAction(input: { quoteId: string;
   }
 }
 
-export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown) {
+export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown,telephoneAcceptance?:{clientEventId:string;edition:number;evidence:string}) {
+  if(!input||typeof input!=='object')return {code:'VALIDATION_ERROR' as const,message:'KV und Buchungsdaten fehlen.'};
+  if(telephoneAcceptance!==undefined&&(!telephoneAcceptance||typeof telephoneAcceptance!=='object'||Array.isArray(telephoneAcceptance)||Object.keys(telephoneAcceptance).sort().join(',')!=='clientEventId,edition,evidence'||typeof telephoneAcceptance.clientEventId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(telephoneAcceptance.clientEventId)||telephoneAcceptance.clientEventId===input.clientEventId||!Number.isSafeInteger(telephoneAcceptance.edition)||telephoneAcceptance.edition<1||typeof telephoneAcceptance.evidence!=='string'||telephoneAcceptance.evidence.trim().length<3||telephoneAcceptance.evidence.length>4000))return {code:'VALIDATION_ERROR' as const,message:'Telefonische Zusage braucht eigene Kennung, Fassung und Wortlaut.'};
+  const conversionInput=telephoneAcceptance?{...input,expectedVersion:input.expectedVersion+1}:input;
+  const pendingAcceptance=telephoneAcceptance?{edition:telephoneAcceptance.edition,beforeVersion:input.expectedVersion}:undefined;
   const newGoods=newGoodsInput===undefined?null:parseQuoteGoodsReceiptInput(newGoodsInput);
   if(newGoodsInput!==undefined&&(!newGoods||newGoods.quoteId!==input.quoteId||newGoods.id!==input.goodsReceiptId||newGoods.expectedQuoteVersion!==input.expectedVersion))return {code:"VALIDATION_ERROR" as const,message:"KV und neue Warenprüfung passen nicht zusammen."};
   let authorization;
@@ -242,7 +246,7 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
   if (failure || !authorization.ok) return failure!;
 
   const commandContext = quoteCommandContext(authorization.data);
-  const prepared = await prepareQuoteConversionCommand(commandContext, input,{planOnly:true,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
+  const prepared = await prepareQuoteConversionCommand(commandContext, conversionInput,{planOnly:true,pendingAcceptance,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
   if (prepared.code !== "OK") return prepared;
 
   let goods:Awaited<ReturnType<typeof bindQuoteGoodsReceiptToCreatedOrder>>|null=null;
@@ -252,13 +256,19 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
     const saved=await writeQuoteGoodsReceiptInTransaction(tx,auth,newGoods);
     if(saved.code!=='OK'){boundFailure={code:saved.code==='UNAUTHENTICATED'?'FORBIDDEN':saved.code,message:saved.message};throw Error('QUOTE_NEW_GOODS_FAILED');}
   };
-  const check=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],planOnly:boolean)=>{
-    const result=await prepareQuoteConversionCommand(commandContext,input,{transaction:tx,planOnly,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
+  const check=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],planOnly:boolean,prospective=false)=>{
+    const result=await prepareQuoteConversionCommand(commandContext,conversionInput,{transaction:tx,planOnly,pendingAcceptance:prospective?pendingAcceptance:undefined,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
     if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_ORDER_BINDING_FAILED');}
   };
+  const accept=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],auth:AuthorizationSnapshot)=>{
+    if(!telephoneAcceptance)return;
+    const result=await changeQuoteLifecycleCommand(commandContext,{quoteId:input.quoteId,expectedVersion:input.expectedVersion,action:'accept',...telephoneAcceptance},(transaction,source)=>recordIntakeQuoteEffect(transaction,auth,source),quoteFollowupBinding(auth),{transaction:tx});
+    if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_TELEPHONE_ACCEPTANCE_FAILED');}
+  };
   const order = await createOrderIntake(prepared.orderInput,undefined,{
-    before:async(tx,auth)=>{await check(tx,true);if(newGoods&&prepared.replayed)await saveGoods(tx,auth);},
-    beforeEvent:async(tx,auth)=>{await saveGoods(tx,auth);await check(tx,false);},
+    before:async(tx,auth)=>{if(prepared.replayed)await accept(tx,auth);await check(tx,true,!prepared.replayed);if(newGoods&&prepared.replayed)await saveGoods(tx,auth);},
+    // No lifecycle mutation before intake validation: a returned failure must not commit an acceptance.
+    beforeEvent:async(tx,auth)=>{await saveGoods(tx,auth);await accept(tx,auth);await check(tx,false);},
     after:async(tx,auth,receipt)=>{
       try{goods=await bindQuoteGoodsReceiptToCreatedOrder(tx,auth,{quoteId:input.quoteId,receiptId:input.goodsReceiptId!,clientEventId:input.clientEventId,orderId:receipt.orderId,items:receipt.items});}
       catch(error){
