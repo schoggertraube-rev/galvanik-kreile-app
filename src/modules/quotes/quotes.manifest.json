@@ -41,7 +41,11 @@
     "@/modules/quotes/server-public#QuoteFollowupBinding",
     "@/modules/quotes/server-public#lockQuoteDeliverySnapshot",
     "@/modules/quotes/server-public#readQuoteCopyCommand",
+    "@/modules/quotes/public#scaleQuoteCalculation",
+    "@/modules/quotes/public#QuoteCalculation",
     "@/modules/quotes/server-public#prepareQuoteTextChangeCommand",
+    "@/modules/quotes/public#scaleQuotePositions",
+    "@/modules/quotes/public#QuoteQuantityLine",
     "@/modules/quotes/public#QuoteCard",
     "@/modules/quotes/public#QuoteCardPorts"
   ],

@@ -1,7 +1,25 @@
 import {describe,expect,it} from 'vitest';
-import {calculateQuote,nextQuoteEdition,quoteAcceptanceIsCurrent} from '../quoteCalculation';
+import {calculateQuote,scaleQuoteCalculation,scaleQuotePositions,nextQuoteEdition,quoteAcceptanceIsCurrent} from '../quoteCalculation';
 
 describe('AP-KV-V04 Server A: configured arithmetic and content edition',()=>{
+ it('keeps setup fixed when quantity changes and scales work/material identically for both entry paths',()=>{
+  const original={hours:'8',hourlyRateCents:7500,setupCents:1200,materialCents:900};
+  expect(scaleQuoteCalculation(original,4,3)).toEqual({code:'OK',totalNetCents:46875,calculation:{hours:'6.0000',hourlyRateCents:7500,setupCents:1200,materialCents:675}});
+  expect(scaleQuoteCalculation(original,4,5)).toMatchObject({code:'OK',totalNetCents:77325,calculation:{hours:'10.0000',setupCents:1200,materialCents:1125}});
+  expect(original).toEqual({hours:'8',hourlyRateCents:7500,setupCents:1200,materialCents:900});
+ });
+ it('rounds decimal hours and material in integers without supplying missing values',()=>{
+  expect(scaleQuoteCalculation({hours:'1',hourlyRateCents:7500,setupCents:1200,materialCents:100},3,1)).toMatchObject({code:'OK',totalNetCents:3733,calculation:{hours:'0.3333',setupCents:1200,materialCents:33}});
+  expect(scaleQuoteCalculation({hours:'1',hourlyRateCents:7500,setupCents:null,materialCents:100},3,1)).toMatchObject({code:'VALIDATION_ERROR',field:'setupCents'});
+  expect(scaleQuoteCalculation({hours:'1',hourlyRateCents:7500,setupCents:1200,materialCents:100},0,1).code).toBe('VALIDATION_ERROR');
+ });
+ it('apportions fixed setup from original lines, handles omitted parts and never invents mixed-factor hours',()=>{
+  const calculation={hours:'4',hourlyRateCents:1000,setupCents:1200,materialCents:800};
+  const source=[{position:1,quantity:4,lineTotalCents:4000},{position:2,quantity:4,lineTotalCents:2000}];
+  expect(scaleQuotePositions(calculation,source,[{position:1,quantity:3},{position:2,quantity:4}])).toEqual({code:'OK',totalNetCents:5200,calculation:null,positions:[{position:1,quantity:3,lineTotalCents:3200},{position:2,quantity:4,lineTotalCents:2000}]});
+  expect(scaleQuotePositions(calculation,source,[{position:1,quantity:3},{position:2,quantity:3}])).toMatchObject({code:'OK',totalNetCents:4800,calculation:{hours:'3.0000',setupCents:1200,materialCents:600}});
+  expect(scaleQuotePositions(calculation,source,[{position:1,quantity:3},{position:2,quantity:0}])).toEqual({code:'OK',totalNetCents:3600,calculation:null,positions:[{position:1,quantity:3,lineTotalCents:3600}]});
+ });
  it('KV-03 uses the supplied settings snapshot exactly and never supplies absent monetary values',()=>{
   expect(calculateQuote({hours:'8',hourlyRateCents:7500,setupCents:1200,materialCents:900})).toEqual({code:'OK',totalNetCents:62100});
   expect(calculateQuote({hours:'1,3333',hourlyRateCents:5000,setupCents:0,materialCents:0})).toEqual({code:'OK',totalNetCents:6667});
