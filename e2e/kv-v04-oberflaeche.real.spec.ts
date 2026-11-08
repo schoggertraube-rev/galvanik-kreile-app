@@ -318,7 +318,7 @@ test('quote quantity change: real proposed amount requires a new acceptance',asy
 });
 
 
-for(const decision of ['accept','conditional','reject'] as const)test('quote reply '+decision+': real message card writes source and actor atomically',async({page})=>{
+for(const [variant,decision] of [['accept','accept'],['conditional','conditional'],['reject','reject'],['unbound','accept']] as const)test('quote reply '+variant+': real message card writes source and actor atomically',async({page})=>{
  await prepareGeneratedSeed({id:'KV-UI-REPLY',gegeben:{login:'login_meister',datenlagen:['kunde_vollstaendig_firma'],aufruf:{seite:'nachrichten',weg:'oeffne'}}} as FlowCase);
  await page.setViewportSize({width:1220,height:880});await page.goto('/start');const actor=generatedFlowRuntime.logins.login_meister;
  await page.getByTestId('pin-user-card-'+createPinLoginHandle(actor.id)).click();
@@ -328,14 +328,15 @@ for(const decision of ['accept','conditional','reject'] as const)test('quote rep
  await action(page,'createQuoteAction',{clientEventId:createId,customerId:customer,dueDate:'2026-12-01',note:'TEST KV-Antwort',positions:[{name:'TEST Antwort-Halter',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]});
  const [quote]=await sql`SELECT q.id::text,q.quote_number FROM private.quotes q JOIN private.quote_create_receipts r ON r.tenant_id=q.tenant_id AND r.quote_id=q.id WHERE r.tenant_id='galvanik-kreile' AND r.client_event_id=${createId}::uuid`;
  await action(page,'changeQuoteLifecycleAction',{quoteId:quote.id,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST aktuelle Fassung ausgegeben'});
- const text=decision==='accept'?'TEST aktuelle Fassung verbindlich angenommen':decision==='conditional'?'TEST einverstanden, aber nicht für den Preis':'TEST Vorhaben abgesagt',itemId=randomUUID();
+ const text=decision==='accept'?'TEST aktuelle Fassung verbindlich angenommen'+(variant==='unbound'?' · '+quote.quote_number:''):decision==='conditional'?'TEST einverstanden, aber nicht für den Preis':'TEST Vorhaben abgesagt',itemId=randomUUID();
  await action(page,'saveIntakeNoteAction',{itemId,textstand:randomUUID(),text:'TEST Bitte andere offene Arbeit erledigen',context:{customerId:customer},concerns:['aufgabe']},'src/app/actions/eingang.actions.ts');
  const [original]=await sql`SELECT version FROM public.intake_item WHERE tenant_id='galvanik-kreile' AND id=${itemId}::uuid`;
  await action(page,'selectIntakeConcernAction',{itemId,version:original.version,clientEventId:randomUUID(),concern:decision==='reject'?'kv_ablehnung':'kv_annahme'},'src/app/actions/eingang.actions.ts');
  // Synthetic imported-reply precondition. The following decision, events and rereads use real Actions.
- await sql`UPDATE public.intake_item SET kanal='mail',richtung='rein',graph_message_id=${'TEST-reply-'+itemId},absender_adresse='test-reply@example.invalid',betreff=${'TEST Antwort '+decision},text=${text},vorgang_art='kv',vorgang_id=${quote.id}::uuid WHERE tenant_id='galvanik-kreile' AND id=${itemId}::uuid`;
+ await sql`UPDATE public.intake_item SET kanal='mail',richtung='rein',graph_message_id=${'TEST-reply-'+itemId},absender_adresse='test-reply@example.invalid',betreff=${'TEST Antwort '+decision},text=${text},vorgang_art=${variant==='unbound'?null:'kv'},vorgang_id=${variant==='unbound'?null:quote.id}::uuid WHERE tenant_id='galvanik-kreile' AND id=${itemId}::uuid`;
  await page.goto('/nachrichten');await page.getByRole('tab',{name:'Anliegen',exact:true}).click();
- const concerns=page.locator('[data-spec-id="nachrichten.anliegen"]');await concerns.getByRole('button',{name:'KV öffnen',exact:true}).click();
+ const concerns=page.locator('[data-spec-id="nachrichten.anliegen"]');
+ if(variant==='unbound'){await concerns.getByRole('button',{name:'Du wählst den KV zu dieser Antwort.',exact:true}).click();const picker=page.getByRole('dialog',{name:'Du wählst den KV zu dieser Antwort.',exact:true});await picker.getByRole('button',{name:new RegExp(quote.quote_number)}).click();}else await concerns.getByRole('button',{name:'KV öffnen',exact:true}).click();
  const card=page.getByRole('dialog',{name:quote.quote_number+' · Prueffirma Alpha GmbH',exact:true});await expect(card.getByText(text,{exact:true})).toBeVisible();
  const label=decision==='accept'?'Zusage aus dieser Antwort übernehmen':decision==='conditional'?'Vorbehalt aus dieser Antwort festhalten':'Absage aus dieser Antwort übernehmen';
  await card.getByRole('button',{name:label,exact:true}).dblclick();

@@ -953,3 +953,22 @@ it('U249 a logged-in workshop actor can record a phone decision without quote cr
  expect(await withSession(actor,()=>readQuoteAction({quoteId}))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(actor,()=>changeQuoteLifecycleAction({quoteId,edition:1,clientEventId:randomUUID(),expectedVersion:3,action:'reject',reason:'TEST keine pauschale Editfreigabe'}))).toMatchObject({code:'FORBIDDEN'});
 });
+
+
+it('reply targets use the real source customer without money rights or financial fields',async()=>{
+ const owner=await createFixture(),other=await createFixture(false),actor=await createFixture(false,['mails'],'werkstatt');
+ const {createQuoteAction,readQuoteReplyTargetsAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const {saveIntakeNoteAction}=await import('@/app/actions/eingang.actions');
+ const input={dueDate:'2027-04-20',note:'TEST reply targets',positions:[{name:'TEST Reply Halter',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]};
+ const own=await withSession(owner,()=>createQuoteAction({...input,clientEventId:randomUUID(),customerId:owner.customerId}));
+ const foreign=await withSession(other,()=>createQuoteAction({...input,clientEventId:randomUUID(),customerId:other.customerId}));
+ if(own.code!=='OK'||foreign.code!=='OK')throw Error('TEST_TARGET_QUOTES');
+ const itemId=randomUUID(),source=await withSession(owner,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST Bitte diese Antwort zuordnen',context:{customerId:owner.customerId}}));if(source.code!=='OK')throw Error('TEST_TARGET_SOURCE');
+ const read=await withSession(actor,()=>readQuoteReplyTargetsAction({sourceItemId:itemId}));
+ expect(read).toMatchObject({code:'OK',source:{id:itemId},targets:[{id:own.quote.quoteId,number:own.quote.quoteNumber}],limited:false});
+ if(read.code!=='OK')throw Error('TEST_REPLY_TARGETS:'+read.code);expect(read.targets).toHaveLength(1);expect(read.targets.some(row=>row.id===foreign.quote.quoteId)).toBe(false);
+ expect(JSON.stringify(read)).not.toMatch(/totalNetCents|unitPriceCents|calculation/);
+ expect(await withSession(actor,()=>readQuoteAction({quoteId:own.quote.quoteId}))).toMatchObject({code:'FORBIDDEN'});
+ expect((await sql`SELECT version FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${own.quote.quoteId}::uuid`)[0].version).toBe(1);
+ expect((await sql`SELECT version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].version).toBe(source.capture.version);
+});

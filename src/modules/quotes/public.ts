@@ -30,3 +30,6 @@ export type {QuoteCardPorts,QuoteMailDraft} from "./ui/QuoteCard";
 
 export {quoteForUi,hasQuoteFinancials} from './quotePresentation';
 export type {QuoteUiReadback} from './quotePresentation';
+
+export {QuoteReplyPicker} from './ui/QuoteReplyPicker';
+export type {QuoteReplyPickerPorts} from './ui/QuoteReplyPicker';

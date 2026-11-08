@@ -51,7 +51,9 @@
     "@/modules/quotes/public#QuoteMailDraft",
     "@/modules/quotes/public#quoteForUi",
     "@/modules/quotes/public#hasQuoteFinancials",
-    "@/modules/quotes/public#QuoteUiReadback"
+    "@/modules/quotes/public#QuoteUiReadback",
+    "@/modules/quotes/public#QuoteReplyPicker",
+    "@/modules/quotes/public#QuoteReplyPickerPorts"
   ],
   "capabilities": [
     "quotes:create",

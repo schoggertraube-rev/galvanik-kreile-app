@@ -22,7 +22,7 @@ import {findRecognizedCustomers} from '@/modules/eingang/public';
 import {withPrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
-import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect,readIntakeAssignment} from '@/modules/eingang/server-public';
+import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect,readIntakeMessages,readIntakeAssignment} from '@/modules/eingang/server-public';
 import {parseQuoteGoodsReceiptInput} from '@/modules/eingang/public';
 import {syncQuoteFollowupTask,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
@@ -561,4 +561,23 @@ export async function readWorkshopQuoteGoodsAction(){
   });
   return {code:'OK' as const,quotes,limited:result.quotes.length===100};
  }catch(error){console.error('[WORKSHOP_QUOTE_GOODS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Ware konnte nicht sicher gelesen werden.'};}
+}
+
+
+/** Operational targets are bounded by the real reply's assigned customer; no financial projection. */
+export async function readQuoteReplyTargetsAction(input:{sourceItemId:string;quoteId?:string}){
+ noStore();
+ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+ if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>!['sourceItemId','quoteId'].includes(key))||typeof input.sourceItemId!=='string'||!uuid.test(input.sourceItemId)||input.quoteId!==undefined&&(typeof input.quoteId!=='string'||!uuid.test(input.quoteId)))return {code:'VALIDATION_ERROR' as const,message:'Originalantwort fehlt.'};
+ try{
+  const authorized=await resolveAuthorization(),denied=authorizationFailure(authorized);if(denied||!authorized.ok)return denied!;
+  const messages=await readIntakeMessages('alle',input.sourceItemId);if(messages.code!=='OK')return messages;
+  const source=messages.messages.find(row=>row.id===input.sourceItemId);if(!source)return {code:'NOT_FOUND' as const,message:'Originalantwort ist nicht verfügbar.'};
+  if(!source.customerId)return {code:'VALIDATION_ERROR' as const,message:'Ordne die Antwort zuerst einem Kunden zu.'};
+  const context=quoteOperationContext(authorized.data);
+  const result=input.quoteId?await readQuoteCommand(context,{quoteId:input.quoteId}):await listOpenQuotesCommand(context);if(result.code!=='OK')return result;
+  const quotes='quotes'in result?result.quotes:[result.quote];
+  if(input.quoteId&&quotes[0].customerId!==source.customerId)return {code:'CONFLICT' as const,message:'Nachricht und KV gehören nicht zum selben Kunden.'};
+  return {code:'OK' as const,source:{id:source.id,version:source.version,channel:source.channel,text:source.text,customer:source.customerName??'Name fehlt',openConcerns:source.openConcerns,files:source.files??[]},targets:quotes.filter(q=>q.customerId===source.customerId&&!q.linkedOrderId&&q.lifecycle?.stage!=='abgesagt').map(q=>({id:q.quoteId,number:q.quoteNumber,customer:q.customerDisplayName,parts:q.positions.map(row=>row.quantity+' × '+row.name).join(' / ')})),limited:!input.quoteId&&quotes.length===100};
+ }catch(error){console.error('[QUOTE_REPLY_TARGETS_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const,message:'KVs zu dieser Antwort konnten nicht sicher gelesen werden.'};}
 }

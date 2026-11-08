@@ -106,3 +106,10 @@ it.each([['TEST Fassung verbindlich angenommen','accept','Zusage aus dieser Antw
  const button=await screen.findByRole('button',{name:label});expect(screen.queryByRole('button',{name:/hat am Telefon zugesagt/})).toBeNull();fireEvent.click(button);fireEvent.click(button);
  await screen.findByText('TEST Quelle geändert');expect(change).toHaveBeenCalledOnce();expect(change.mock.calls[0][0]).toMatchObject({quoteId:quote.quoteId,expectedVersion:2,edition:1,source,action,...(action==='reject'?{reason:text}:{evidence:text})});
 });
+
+it('keeps a late reply visible but offers the actual order instead of another acceptance',async()=>{
+ const stored={...quote,linkedOrderId:'TEST-order'},onOrder=vi.fn(),change=vi.fn();
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:stored,canEdit:true,reply:{source:{itemId:'TEST-source',version:3,message:true},text:'TEST späte Zusage',concerns:['kv_annahme'],files:[]}}),change,prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={onOrder}/>);
+ await screen.findByText('TEST späte Zusage');expect(screen.queryByRole('button',{name:'Zusage aus dieser Antwort übernehmen'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Auftrag öffnen'}));expect(onOrder).toHaveBeenCalledWith('TEST-order');expect(change).not.toHaveBeenCalled();
+});

@@ -15,3 +15,5 @@
 .soft{background:#e8f2ff;border-color:#bbd6f3;color:#225c98}.facts,.say,.edit,.history{font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}.facts dt,.facts dd,.say p,.history p{font:inherit}
 
 .progress{margin-top:16px;border:1px solid var(--line);border-radius:14px;padding:14px 18px;background:#f5f9f4}.progress h3{font:600 15px/1.5 system-ui;margin:0 0 8px}.progress ul{list-style:none;padding:0;margin:0}.progress li{padding:4px 0}.progress p{margin:10px 0}
+
+.edit input{width:100%;min-height:48px;border:1px solid #cad9cf;border-radius:9px;padding:11px 12px;font:inherit;color:var(--ink);background:white}
