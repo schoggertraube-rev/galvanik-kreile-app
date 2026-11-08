@@ -851,3 +851,21 @@ it('U246 multi-position price uses the same text and goods proposal without inve
   expect(await withSession(fixture,()=>prepareQuoteTextChangeAction({quoteId:quote.quote.quoteId,text:'3 Halter statt 4'}))).toMatchObject({code:'OK',preparation:{canApply:false,candidate:null,after:{totalNetCents:5200,calculation:null,positions:[{quantity:3,lineTotalCents:3200},{quantity:4,lineTotalCents:2000}]}}});
 
 });
+it('AF-3: validity extension rescues an expired quote without a new content edition and keeps accepted evidence',async()=>{
+ const fixture=await createFixture();
+ const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const [dates]=await sql<{past:string;future:string;later:string;due:string}[]>`SELECT (current_date-1)::text AS past,(current_date+30)::text AS future,(current_date+60)::text AS later,(current_date+14)::text AS due`;
+ const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:dates.due,validUntil:dates.past,note:'TEST AF3 abgelaufener KV',positions:[{name:'TEST AF3 Halter',quantity:1,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
+ expect(created).toMatchObject({code:'OK',quote:{lifecycle:{stage:'abgelaufen',edition:1}}});if(created.code!=='OK')throw Error('AF3_CREATE_FAILED');
+ const input={action:'extend' as const,quoteId:created.quote.quoteId,expectedVersion:1,edition:1,clientEventId:randomUUID(),validUntil:dates.future,evidence:'TEST Kunde erbittet eine neue Entscheidungsfrist'};
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction(input))).toMatchObject({code:'OK',quote:{version:2,validUntil:dates.future,totalNetCents:1000,lifecycle:{edition:1,stage:'entwurf'}}});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction(input))).toMatchObject({code:'OK',replayed:true,quote:{version:2}});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({...input,validUntil:dates.later}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({...input,expectedVersion:2,clientEventId:randomUUID(),validUntil:dates.past}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({quoteId:input.quoteId,expectedVersion:2,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST verlaengerten KV ausgedruckt'}))).toMatchObject({code:'OK'});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({quoteId:input.quoteId,expectedVersion:3,edition:1,clientEventId:randomUUID(),action:'accept',evidence:'TEST aktuelle unveraenderte Fassung zugesagt'}))).toMatchObject({code:'OK'});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({...input,expectedVersion:4,clientEventId:randomUUID(),validUntil:dates.later}))).toMatchObject({code:'OK',quote:{version:5,validUntil:dates.later,lifecycle:{edition:1,acceptedEdition:1,acceptanceEvidence:'TEST aktuelle unveraenderte Fassung zugesagt'}}});
+ const events=await sql`SELECT user_id::text,payload->>'validUntil' AS valid_until FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND payload->>'quoteId'=${input.quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='extend' ORDER BY created_at`;
+ expect(events).toEqual([{user_id:fixture.actorId,valid_until:dates.future},{user_id:fixture.actorId,valid_until:dates.later}]);
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId:input.quoteId}))).toMatchObject({code:'OK',quote:{version:5,validUntil:dates.later,totalNetCents:1000,linkedOrderId:null,lifecycle:{edition:1,acceptedEdition:1}}});
+});

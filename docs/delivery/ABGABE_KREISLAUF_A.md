@@ -19,3 +19,9 @@ Auswahl und Writer akzeptieren abgeholt/versendet konsistent. Echter lokaler Rep
 ## Rest
 
 AF-3/4/13 weiterbauen, anschließend vollständige gezielte Abnahme/Preview/CI/Planungsprüfung. Keine Migration in diesem Teilstand, keine Remote-Datenänderung, kein Merge. Die Foto-Pflicht AF-10 ist ein späterer Paketpunkt und hier nicht als umgesetzt dargestellt.
+
+## AF-3 Server-Teilschritt: Gültigkeit ohne neue Inhaltsfassung
+
+Der vorhandene Lifecycle-Writer versteht die eigenständige Handlung `extend` mit neuem Datum und Begründung. Bestehende Quote-/Positionsrevision, Versionssperre, Journal und Retry bleiben der einzige Schreibweg. Nur ein späteres bisheriges Gültigkeitsdatum und heute/später sind zulässig; ungültiges Datum, veränderte Kennung, abgesagter/umgewandelter Stand bleiben gesperrt. Der Verlängerungsschritt löst keine neue Inhaltsfassung aus und beendet kein Anliegen still.
+
+Echter Replay-Fall PASS 4,72 s: abgelaufenen KV wirklich angelegt → verlängert (Fassung 1/1000 Cent unverändert) → gleicher Retry/anderer Intent abgewiesen → versendet und zugesagt → nochmals verlängert (Zusage/Fassung 1 bleiben) → zwei korrekte Actor-Ereignisse und aktuelle Ansicht neu gelesen. Typen/Lint/Scope/Diff PASS. Keine neue Migration. Der sichtbare Anschluss an die einzige KV-Karte sowie die operativen Rechte werden nach dem Rebase auf PR 200 ergänzt; keine zweite Karte in diesem Branch. AF-3 damit noch kein vollständiger UI-/Waren-Kreislauf-PASS. AF-4/13 Rückgabe und Ware nach Absage bleiben weiter offen.
