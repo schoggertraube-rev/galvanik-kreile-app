@@ -11,6 +11,7 @@ export function actorStatisticsScope(actor:Actor&{role:string},input:unknown){
  if(typeof value.from!=='string'||typeof value.through!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value.from)||!/^\d{4}-\d{2}-\d{2}$/.test(value.through)||value.all!==undefined&&typeof value.all!=='boolean')return {code:'VALIDATION_ERROR' as const,message:'Zeitraum oder Statistikbereich fehlt.'};
  const start=Date.parse(value.from),end=Date.parse(value.through);
  if(!Number.isFinite(start)||!Number.isFinite(end)||new Date(start).toISOString().slice(0,10)!==value.from||new Date(end).toISOString().slice(0,10)!==value.through||end<start||end-start>366*86400000)return {code:'VALIDATION_ERROR' as const,message:'Zeitraum muss zwischen einem und 367 Tagen liegen.'};
+ // erlaubt H11c: U250 / PL 08.11.21:30, ausschliesslich Admin sieht fremde Personenstatistik.
  if(value.all===true&&actor.role!=='admin')return {code:'FORBIDDEN' as const,message:'Personenuebergreifende Statistik benoetigt Admin.'};
  return {code:'OK' as const,from:value.from,through:value.through,all:value.all===true};
 }
