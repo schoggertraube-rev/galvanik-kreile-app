@@ -29,3 +29,9 @@ Historische KV-Kunden stammen jetzt aus einem engen, betragsfreien Besitzerport 
 PE-06 Kandidaten-/Rechtenachweis: zwei echte KVs angelegt, tatsächlichen Druckversand und jeweilige aktuelle Zusage gespeichert; derselbe Paketleser liefert beide als mehrdeutig und legt keinen Auftrag an. Capture-Login mit ausschließlich Eingang erhält weder fremde erwartete Aufträge noch Kunden/KV-Kandidaten. PASS6.85s. Ein Testfixture wurde mechanisch um die fachlich nötige vorausgehende Versandhandlung ergänzt; keine produktive Annahmevoraussetzung gelockert. Dies ist PE-06 aus der Fallliste (mehrere KVs), noch nicht der NEW-Onsite-UI-Anschluss aus Weg 6/PE-05.
 
 Die bestehenden neuen Renderfälle und echte DB-Zuordnung bleiben getrennt vom noch offenen vollständigen Foto-/Datei-Sichtlauf. Keine Abnahme durch bloße gemockte UI-Writer behauptet.
+
+## Fortschreibung 08.11.22:37
+
+Betragsfreie operative KV-Kandidaten verwenden jetzt denselben bestehenden Werkstatt-Lesezweck (Aufträge/Leitstand) statt Finanzleserecht. Der echte PE-06-Test prüft zusätzlich den Werkstattlogin ohne Geld: beide zugesagten KVs sichtbar, keine Preisfelder; der Login nur mit Eingang sieht weiter keine Kandidaten. PASS6.99s. Kein neues Rollen-/Sessionmodell.
+
+CI fand W4_READ_PORT_CONTRACT: neuer SQL-Standort quoteReads.ts war nicht als View-Lesestelle registriert. Ein Fix: wie die dort bereits reexportierten vorhandenen Leser liegt die Implementierung nun beim vorhandenen registrierten Quote-Owner quoteCommands.ts; quoteReads bleibt die öffentliche Lesegrenze. Kein Gate/Inventar erweitert oder abgeschwächt. Lokaler W4-Vertrag grün (683 Dateien/39 Leseports), Typprüfung und gezielter Lint geprüft. Die Änderung verändert weder SQL noch Leserecht.

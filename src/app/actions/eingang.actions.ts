@@ -7,7 +7,7 @@ async function withPackageExpectation(result:IntakeCaptureResult):Promise<Intake
  if(result.code!=='OK'||result.capture.recognition?.kind!=='ware')return result;
  try{
   const auth=await resolveAuthorization();if(!auth.ok)return result;
-  const canQuotes=hasAuthorizationArea(auth.data,'auftraege')&&hasAuthorizationArea(auth.data,'geld');
+  const canQuotes=hasAuthorizationArea(auth.data,'auftraege')&&auth.data.permissions.includes('perm_view_leitstand');
   const quotes=canQuotes?await listOpenQuotesCommand({tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canReadQuote:true,canCreateQuote:false,canUpdateQuote:false,canConvertQuote:false}}):null;
   const history=!result.capture.customerId?await readPackageQuoteHistory(auth.data,result.capture.recognition?.text??result.capture.text??''):[];
   result.capture.packageContext=await withPrivilegedTenantTransaction(auth.data,tx=>readPackageExpectation(tx,auth.data,result.capture,quotes,history));

@@ -1347,6 +1347,11 @@ it('PE-06 two actual accepted quotes remain ambiguous and a restricted capture r
  expect(read.capture.packageContext).toMatchObject({status:'OK',ambiguous:true,candidates:expect.arrayContaining(quoteIds.map(id=>expect.objectContaining({kind:'quote',id,state:'accepted'})))});
  if(read.capture.packageContext?.status==='OK')expect(read.capture.packageContext.candidates.every(candidate=>!Object.hasOwn(candidate,'totalNetCents'))).toBe(true);
  expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(0);
+ const workshop=await createFixture(false,['eingang','kunden','auftraege'],'werkstatt');
+ const {getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+ const workshopRead=await withSession(workshop,()=>getIntakeCaptureAction(itemId));
+ expect(workshopRead).toMatchObject({code:'OK',capture:{packageContext:{status:'OK',ambiguous:true,candidates:expect.arrayContaining(quoteIds.map(id=>expect.objectContaining({id,state:'accepted'})))}}});
+ if(workshopRead.code==='OK'&&workshopRead.capture.packageContext?.status==='OK')for(const candidate of workshopRead.capture.packageContext.candidates)expect(candidate).not.toHaveProperty('totalNetCents');
  const restricted=await createFixture(false,['eingang']);const otherId=randomUUID();
  const limited=await withSession(restricted,()=>saveIntakeNoteAction({itemId:otherId,textstand:randomUUID(),text:'DPD Paket mit 2 Halter'}));
  expect(limited).toMatchObject({code:'OK',capture:{packageContext:{status:'OK',customers:[],candidates:[]}}});
