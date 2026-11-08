@@ -61,3 +61,8 @@ it('KV goods filters partition the actual reader rows and open the exact quote',
  expect(screen.getByText('gesperrt · TEST Regal · Zusage fehlt')).toBeVisible();
  fireEvent.click(screen.getByRole('button',{name:'KV öffnen'}));expect(open).toHaveBeenCalledWith('TEST-KV-B');
 });
+
+it('never hides the canonical list limit when no loaded quote is a goods candidate',()=>{
+ render(<WerkstattView view={{...view,kind:'data',quoteGoods:[],quoteGoodsLimited:true}} ports={ports} onRetry={vi.fn()}/>);
+ expect(screen.getByText('Anzeige auf die 100 zuletzt geänderten offenen KVs beschränkt.')).toBeVisible();
+});

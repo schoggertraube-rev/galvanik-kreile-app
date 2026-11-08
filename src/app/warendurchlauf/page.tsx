@@ -105,7 +105,7 @@ export default async function WarendurchlaufIndex() {
     return render({ kind: "conflict", message: CONFLICT_MESSAGE });
   }
 
-  if (wareneingangResult.data.length === 0 && galvanikResult.data.length === 0 && quoteGoodsResult.code==="OK"&&quoteGoodsResult.quotes.length===0) {
+  if (wareneingangResult.data.length === 0 && galvanikResult.data.length === 0 && quoteGoodsResult.code==="OK"&&quoteGoodsResult.quotes.length===0&&!quoteGoodsResult.limited) {
     return render({ kind: "empty", canCreateOrder });
   }
 
