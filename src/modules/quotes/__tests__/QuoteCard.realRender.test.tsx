@@ -113,3 +113,19 @@ it('keeps a late reply visible but offers the actual order instead of another ac
  await screen.findByText('TEST späte Zusage');expect(screen.queryByRole('button',{name:'Zusage aus dieser Antwort übernehmen'})).toBeNull();
  fireEvent.click(screen.getByRole('button',{name:'Auftrag öffnen'}));expect(onOrder).toHaveBeenCalledWith('TEST-order');expect(change).not.toHaveBeenCalled();
 });
+it('offers reversal only from current server eligibility, preserves a failed reason and repeats the identical request',async()=>{
+ const linked={...quote,linkedOrderId:'TEST-order'};
+ const read=vi.fn().mockResolvedValueOnce({code:'OK',quote:linked,canEdit:false,canOperate:true,undo:{ready:true,canUndo:true,reason:null,automaticSuppressed:false}}).mockResolvedValue({code:'OK',quote,canEdit:false,undo:{ready:true,canUndo:false,reason:null,automaticSuppressed:true}});
+ const undo=vi.fn().mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST Rücknahme ungeklärt'}).mockResolvedValueOnce({code:'OK',quote});
+ const ports:QuoteCardPorts={read,undo,change:vi.fn(),prepare:vi.fn(),update:vi.fn()};
+ render(<QuoteCard quoteId={quote.quoteId} ports={ports} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Rückgängig'}));
+ fireEvent.change(screen.getByRole('textbox',{name:'Grund der Rücknahme'}),{target:{value:'TEST falsche Ware'}});
+ const confirm=screen.getByRole('button',{name:'Auftrag zurücknehmen'});fireEvent.click(confirm);fireEvent.click(confirm);
+ await screen.findByText('TEST Rücknahme ungeklärt');expect(undo).toHaveBeenCalledOnce();
+ expect(screen.getByRole('textbox',{name:'Grund der Rücknahme'})).toHaveValue('TEST falsche Ware');
+ fireEvent.click(screen.getByRole('button',{name:'Auftrag zurücknehmen'}));
+ await screen.findByText('Auftrag zurückgenommen · die Ware ist wieder beim KV.');
+ expect(undo).toHaveBeenCalledTimes(2);expect(undo.mock.calls[1]).toEqual(undo.mock.calls[0]);
+ expect(screen.queryByRole('button',{name:'Rückgängig'})).toBeNull();
+});
