@@ -3,3 +3,5 @@
 .root p,.root summary,.root span,.root :global(.kr-btn){font:15px/1.5 system-ui,sans-serif}.root :global(.kr-btn){min-height:48px}
 
 .root{border:1px solid #c2d9bd;border-radius:14px;background:#eef7ea;padding:18px}.root h2{font:600 20px/1.4 system-ui,sans-serif}.root .main button{background:#22724b;color:white;border-color:#22724b}
+
+.original img{width:100%;height:auto;max-height:92px;object-fit:contain;border-radius:6px}

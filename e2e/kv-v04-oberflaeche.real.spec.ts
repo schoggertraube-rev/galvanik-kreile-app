@@ -87,6 +87,7 @@ test('fixed quote overlay: real read, one telephone acceptance, DB/event/readbac
  expect(note).toBeDefined();expect(note.version).toBeGreaterThan(0);expect(note.actor_events).toBeGreaterThan(0);
  await intake.locator('input[type="file"]').setInputFiles({name:'TEST-situation-original.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64')});
  await expect(situation).toBeVisible({timeout:20000});
+ await expect(situation.getByRole('img',{name:'TEST-situation-original.png',exact:true})).toBeVisible();
  await expect(intake.getByRole('textbox',{name:'Notiz',exact:true})).toHaveCount(0);
  await expect(situation.getByText('Kunde noch offen')).toHaveCount(0);
  await expect(situation.getByText('0 Originale gesichert')).toHaveCount(0);

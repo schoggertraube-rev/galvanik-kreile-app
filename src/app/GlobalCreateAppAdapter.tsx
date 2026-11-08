@@ -173,6 +173,7 @@ export function GlobalCreateAppAdapter() {
         discardCapture: discardIntakeCaptureAction,
         deviceRequest: saveIntakeDeviceRequestAction,
         saveCaptureNote: saveIntakeNoteAction,
+        readCaptureOriginal: openIntakeOriginalAction,
         readCaptureNote: recognizeIntakeNoteAction,
         prepareCaptureFile: prepareIntakeFileAction,
         finishCaptureFile: finishIntakeFileAction,

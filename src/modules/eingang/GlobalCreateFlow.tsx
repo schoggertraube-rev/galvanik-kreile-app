@@ -215,6 +215,7 @@ export type GlobalCreatePorts = {
   getCapture?: (id: string) => Promise<IntakeCaptureResult>;
   getCaptureScope?: () => Promise<{ code: "OK"; scope: string } | { code: "FORBIDDEN"; message: string }>;
   saveCaptureNote?: (input: IntakeNoteInput) => Promise<IntakeCaptureResult>;
+  readCaptureOriginal?: (input:{fileId:string;clientEventId:string}) => Promise<import("./originalContract").OriginalReadResult>;
   readCaptureNote?: (text: string) => Promise<{ code: "OK"; data: IntakeNoteReading } | { code: "FORBIDDEN" | "VALIDATION_ERROR"; message: string }>;
   prepareCaptureFile?: (input: IntakeFileInput) => Promise<IntakeFileGrant>;
   finishCaptureFile?: (id: string) => Promise<IntakeCaptureResult>;

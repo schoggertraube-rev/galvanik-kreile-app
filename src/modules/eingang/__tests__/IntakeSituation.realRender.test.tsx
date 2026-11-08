@@ -15,3 +15,7 @@ it('a real matching quote opens the same goods target and never creates or choos
  expect(onQuote).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'Paket kommt an'}));
  expect(onQuote).toHaveBeenCalledWith('TEST-quote');expect(onOrder).not.toHaveBeenCalled();
 });
+it('unidentified goods retain a task tied to the same capture rather than a guessed order',()=>{
+ const task=vi.fn(),order=vi.fn();render(<IntakeSituation capture={capture} kind="ware" busy={false} primary={null} onAssign={vi.fn()} onOriginal={vi.fn()} onOrder={order} onMore={vi.fn()} onEdit={vi.fn()} onKind={vi.fn()} onTask={task}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Ablegen · Absender klären'}));expect(task).toHaveBeenCalledOnce();expect(order).not.toHaveBeenCalled();
+});
