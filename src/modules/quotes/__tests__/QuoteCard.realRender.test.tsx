@@ -129,3 +129,26 @@ it('offers reversal only from current server eligibility, preserves a failed rea
  expect(undo).toHaveBeenCalledTimes(2);expect(undo.mock.calls[1]).toEqual(undo.mock.calls[0]);
  expect(screen.queryByRole('button',{name:'Rückgängig'})).toBeNull();
 });
+
+it('AF3 offers a reasoned validity extension to an operational login without edit or money rights',async()=>{
+ const current={...quote,totalNetCents:null,lifecycle:{...quote.lifecycle!,stage:'abgelaufen' as const,calculation:null}};
+ const change=vi.fn<QuoteCardPorts['change']>(async()=>({code:'CONFLICT',message:'TEST Stand geändert'}));
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:current,canEdit:false,canOperate:true}),change,prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Gültig bis verlängern'}));
+ fireEvent.change(screen.getByLabelText('Neues Gültigkeitsdatum'),{target:{value:'2027-01-20'}});fireEvent.change(screen.getByRole('textbox',{name:'Grund / Wortlaut'}),{target:{value:'TEST Kunde benötigt Zeit'}});
+ fireEvent.click(screen.getAllByRole('button',{name:'Gültig bis verlängern'}).at(-1)!);await screen.findByText('TEST Stand geändert');
+ expect(change).toHaveBeenCalledWith({action:'extend',quoteId:quote.quoteId,expectedVersion:2,edition:1,clientEventId:expect.any(String),validUntil:'2027-01-20',evidence:'TEST Kunde benötigt Zeit'});
+ expect(screen.getByRole('textbox',{name:'Grund / Wortlaut'})).toHaveValue('TEST Kunde benötigt Zeit');expect(screen.queryByText('40,00 € netto')).toBeNull();
+});
+it('AF4 returns declined goods through the existing port and rereads its persistent actor receipt',async()=>{
+ let returned=false;const goods={id:'TEST-goods',orderId:null,edition:1,location:'TEST Regal',blocked:true,version:1};
+ const current={...quote,lifecycle:{...quote.lifecycle!,stage:'abgesagt' as const,declinedAt:'2026-11-08T10:00:00Z',declineReason:'TEST Kunde sagt ab',goods:[goods]}};
+ const receipt={eventId:'TEST-event',receiptId:goods.id,quoteNumber:quote.quoteNumber,quantity:4,location:goods.location,reason:'TEST Kunde hat abgeholt',actorName:'TEST Phillip',returnedAt:'2026-11-08T10:00:00Z'};
+ const returnGoods=vi.fn<NonNullable<QuoteCardPorts['returnGoods']>>().mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST Rückgabe unbestätigt'}).mockImplementationOnce(async()=>{returned=true;return {code:'OK'};});
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:returned?{...current,lifecycle:{...current.lifecycle,goods:[]}}:current,canEdit:false,canOperate:true,goodsReturns:returned?[receipt]:[]}),returnGoods,change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Ware an TEST Schmidt zurückgeben · TEST Regal'}));
+ fireEvent.change(screen.getByRole('textbox',{name:'Grund / Wortlaut'}),{target:{value:receipt.reason}});fireEvent.click(screen.getByRole('button',{name:'Rückgabe mit Beleg bestätigen'}));await screen.findByText('TEST Rückgabe unbestätigt');
+ fireEvent.click(screen.getByRole('button',{name:'Rückgabe mit Beleg bestätigen'}));await screen.findByText('Rückgabebeleg · KV-TEST-118');
+ expect(returnGoods).toHaveBeenCalledTimes(2);expect(returnGoods.mock.calls[1][0]).toEqual(returnGoods.mock.calls[0][0]);expect(returnGoods.mock.calls[0][0]).toEqual({quoteId:quote.quoteId,receiptId:goods.id,expectedQuoteVersion:2,expectedVersion:1,clientEventId:expect.any(String),reason:receipt.reason});
+ expect(screen.getByText(/4 Stück.*TEST Regal.*TEST Phillip/)).toBeVisible();expect(screen.getByText(receipt.reason)).toBeVisible();expect(screen.queryByRole('button',{name:'Ware an TEST Schmidt zurückgeben · TEST Regal'})).toBeNull();
+});

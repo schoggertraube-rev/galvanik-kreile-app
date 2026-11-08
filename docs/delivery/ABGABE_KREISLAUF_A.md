@@ -60,3 +60,9 @@ main72671bf1 integriert, Telefon-Transaktion/U249/Undo und alle main-Tests erhal
 Gezielte Replaypruefung der Integration: AF3, AF4/13 und die drei main-Telefon/Undo-Varianten PASS im ersten Lauf (6 Faelle). Operativer Zwei-Login-Fall nach mechanischer Anpassung an die kanonische main-Fehlerantwort PASS: nicht existierende Quelle ergibt NOT_FOUND statt des entfernten Adapter-Validierungsfehlers, kein Erfolg; Zusage/Verlaengerung/finanzielle Redaktion/Actor/geschlossene Nachfassaufgabe/Retry/Konflikt separat nachgelesen. Alte Adapter-Schluesselassertions werden ersetzt durch explizit totalNetCents=null, alle Positionspreise=null und calculation=null an derselben main-Antwort; kein Privacy-Pruefinhalt entfallen.
 
 Typen/Lint/W4/H18/Scope geprueft; H18 312/149/90/59 ohne neue Ausnahme. Sichtbarer Verlaengerungs-/Rueckgabeanschluss, Dev-Paritaet und PL-/Gesamtabnahme stehen weiter aus; Draft bleibt, keine Owner-Merge-Bitte.
+
+## Sichtbarer Ausweg AF3 / AF4 / AF13
+
+Die eine bestehende KV-Karte bietet aktiven Nutzern eine begruendete Gueltigkeitsverlaengerung ohne fachliche Neufassung. Beim abgesagten KV nennt jeder vorhandene Warenbeleg den konkreten Rueckgabe-Hauptschritt mit Kunde und Lagerort; Grund und Version gehen an den vorhandenen Rueckgabewriter. Nach Erfolg wird derselbe gespeicherte Actor-/Zeit-/Mengen-/Lagerbeleg neu gelesen und bleibt an der Karte sichtbar, Ware verschwindet nur aus der offenen Liste mit diesem nachlesbaren Beleg. Keine Auftragsanlage. Texte aus dem zentralen Situationskatalog.
+
+Zwei gezielte Renderfaelle PASS4,93s: operativer Login ohne Edit-/Geldrecht, konkreter Verlaengerungsgrund und Konflikt ohne Eingabeverlust, Rueckgabe-Fehler/gleichbleibender Request bei Retry/gespeicherter Beleg/Actor/Originalfakten und keine zweite Rueckgabe. Die echten Server-DB-Nachweise stehen oben; Browser-Sicht/Dev-Abgabe und PL-Freigabe noch ausstehend.
