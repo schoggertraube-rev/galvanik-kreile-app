@@ -874,3 +874,39 @@ it('AF-3: validity extension rescues an expired quote without a new content edit
  expect((await sql`SELECT version,fassung,zugesagt_fassung FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.quoteId}::uuid`)[0]).toMatchObject({version:6,fassung:1,zugesagt_fassung:1});
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND payload->>'quoteId'=${input.quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='extend'`).toHaveLength(3);
 });
+it.each([false,true])('AF-4/13: return declined KV goods with one real actor receipt, including goods arriving after decline: %s',async(afterDecline)=>{
+ const fixture=await createFixture();
+ const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const {saveIntakeNoteAction,saveGoodsReceiptAction,recordQuoteGoodsReturnAction,getQuoteGoodsReturnsAction}=await import('@/app/actions/eingang.actions');
+ const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST AF4 Rueckgabe',positions:[{name:'TEST AF4 Halter',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
+ if(created.code!=='OK')throw Error('AF4_CREATE_FAILED');const quoteId=created.quote.quoteId;
+ const decline=()=>withSession(fixture,()=>changeQuoteLifecycleAction({quoteId,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'reject',reason:'TEST kein Beschichtungsauftrag gewuenscht'}));
+ if(afterDecline)expect(await decline()).toMatchObject({code:'OK'});
+ const itemId=randomUUID(),capture=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST AF4 Warenoriginale',context:{customerId:fixture.customerId}}));if(capture.code!=='OK')throw Error('AF4_CAPTURE_FAILED');
+ const photos=[{fileId:randomUUID(),kind:'uebersicht' as const},{fileId:randomUUID(),kind:'teile' as const}];
+ // Canonical synthetic photo metadata: no external Storage delivery is claimed.
+ for(const [index,photo]of photos.entries()){
+  const hash=(index?'b':'a').repeat(64);
+  await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${photo.fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${photo.fileId},'foto',${'TEST-AF4-'+index+'.jpg'},'image/jpeg',32,${hash},${KREILE_TENANT_SLUG+'/'+hash},statement_timestamp(),${fixture.actorId}::uuid,${index+1},true,false,'fertig')`;
+  await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'original_gespeichert',${photo.fileId}::uuid,${fixture.actorId},${sql.json({fileId:photo.fileId})})`;
+ }
+ const current=await withSession(fixture,()=>readQuoteAction({quoteId}));if(current.code!=='OK')throw Error('AF4_READ_FAILED');
+ const goods={id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId,quoteId,expectedQuoteVersion:afterDecline?2:1,sourceVersion:capture.capture.version,expectedVersion:0,mode:'erfassung' as const,command:'accept' as const,card:1,packagesReceived:1,packagesTotal:1,condition:'unauffaellig' as const,deviations:[],foundUnattended:false,foundAt:null,procedure:'stimmt' as const,procedureNote:null,photos,quantities:current.quote.positions.map(p=>({itemId:p.id,expected:4,received:null,confirmed:true,note:null})),location:'TEST AF4 Rueckgaberegal'};
+ expect(await withSession(fixture,()=>saveGoodsReceiptAction(goods))).toMatchObject({code:'OK',receipt:{id:goods.id,gesperrt:true,auftrag_id:null}});
+ const worker={...fixture,actorId:randomUUID(),actorIssuedAt:Date.now()};
+ await sql`INSERT INTO public.app_users(id,tenant_id,email,full_name,role,active,created_at,updated_at) VALUES(${worker.actorId}::uuid,${KREILE_TENANT_SLUG},${worker.actorId+'@fixture.invalid'},'TEST AF4 ohne Bereichsrechte','meister',true,statement_timestamp()-interval '5 seconds',statement_timestamp()-interval '5 seconds')`;
+ const input={quoteId,receiptId:goods.id,expectedQuoteVersion:2,expectedVersion:1,clientEventId:randomUUID(),reason:'TEST Ware an den Kunden zurueckgegeben'};
+ if(!afterDecline){expect(await withSession(worker,()=>recordQuoteGoodsReturnAction({...input,expectedQuoteVersion:1}))).toMatchObject({code:'CONFLICT'});expect(await decline()).toMatchObject({code:'OK'});}
+ const returned=await withSession(worker,()=>recordQuoteGoodsReturnAction(input));
+ expect(returned).toMatchObject({code:'OK',replayed:false,receipt:{receiptId:goods.id,quoteId,customerId:fixture.customerId,actorId:worker.actorId,quantity:4,reason:input.reason,location:goods.location}});
+ expect(await withSession(worker,()=>recordQuoteGoodsReturnAction(input))).toEqual({...returned,replayed:true});
+ expect(await withSession(worker,()=>recordQuoteGoodsReturnAction({...input,reason:'TEST anderer Grund'}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(worker,()=>recordQuoteGoodsReturnAction({...input,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(worker,()=>getQuoteGoodsReturnsAction(quoteId))).toMatchObject({code:'OK',receipts:[expect.objectContaining({receiptId:goods.id,actorId:worker.actorId})]});
+ expect(await withSession(worker,()=>readQuoteAction({quoteId}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:null,lifecycle:{stage:'abgesagt',goods:[]}}});
+ expect((await sql`SELECT status,version,auftrag_id FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${goods.id}::uuid`)[0]).toMatchObject({status:'angenommen',version:2,auftrag_id:null});
+ expect(await sql`SELECT von FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND nachher->>'action'='kv.ware_zurueckgegeben'`).toEqual([{von:worker.actorId}]);
+ expect(await sql`SELECT id FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toHaveLength(2);
+ expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(0);
+});

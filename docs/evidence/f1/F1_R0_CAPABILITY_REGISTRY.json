@@ -455,6 +455,8 @@
         "finishIntakeUseAction",
         "reopenIntakeAction",
         "getGoodsReceiptsAction",
+        "getQuoteGoodsReturnsAction",
+        "recordQuoteGoodsReturnAction",
         "saveGoodsReceiptAction",
         "openIntakeOriginalAction",
         "confirmIntakeOriginalAction",
