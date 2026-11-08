@@ -265,6 +265,9 @@ it.each([false,true])('KV-07 goods lock and real onsite acceptance without ficti
  expect((await sql`SELECT count(*)::int AS n FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid`)[0].n).toBe(1);
  if(onsite)expect((await sql`SELECT gesendet_fassung,zugesagt_fassung FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0]).toMatchObject({gesendet_fassung:null,zugesagt_fassung:1});
  const award={quoteId,clientEventId:randomUUID(),expectedVersion:onsite?2:3,confirmedAward:true as const,confirmedOrderDueDate:'2027-04-20',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:input.id};
+ expect(await withSession(fixture,()=>convertQuoteToOrderAction({...award,confirmedOrderDueDate:'2027-04-21'}))).toMatchObject({code:'VALIDATION_ERROR',message:'Auftragstermin muss dem aktuellen KV-Termin entsprechen.'});
+ expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(0);
+ expect(await sql`SELECT quote_id FROM private.quote_conversion_requests WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid`).toHaveLength(0);
  expect(await withSession(fixture,()=>convertQuoteToOrderAction({...award,goodsReceiptId:undefined}))).toMatchObject({code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${created.quote.quoteNumber} annehmen`});
  // Zero is not arrived goods. Positive deviation is separately covered by U246 cases.
  await sql`UPDATE public.goods_receipt SET mengen=jsonb_set(mengen,'{0,bestaetigt}','0'::jsonb) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`;

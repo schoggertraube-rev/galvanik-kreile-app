@@ -598,6 +598,7 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       await tx.execute(sql`SELECT id FROM private.quotes WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid FOR UPDATE`);
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
+      if(normalized.confirmedOrderDueDate!==quote.dueDate)return {code:"VALIDATION_ERROR",message:"Auftragstermin muss dem aktuellen KV-Termin entsprechen."};
       if(!normalized.goodsReceiptId)return {code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${quote.quoteNumber} annehmen`};
       if(!quote.lifecycle||quote.lifecycle.acceptedEdition!==quote.lifecycle.edition||!quote.lifecycle.acceptedAt||!quote.lifecycle.acceptanceEvidence?.trim()||quote.lifecycle.declinedAt)return {code:'VALIDATION_ERROR',message:'Aktuelle KV-Fassung ohne Vorbehalt zusagen; danach Ware zum Auftrag buchen.'};
       const goods=quote.lifecycle.goods?.find(row=>row.id===normalized.goodsReceiptId);

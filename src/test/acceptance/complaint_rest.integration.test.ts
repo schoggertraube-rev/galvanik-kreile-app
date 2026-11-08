@@ -185,4 +185,14 @@ it('L08/L10/L11 real recording and credit actions persist one row, event, replay
  expect(await withSession(fixture,()=>getComplaintDialogAction({complaintId:result.complaintId}))).toMatchObject({code:'OK',data:{complaint:{stand:'kunde_informieren',gutschriftBetrag:'50.00',gutschriftNr:'GS-TEST-REST'}}});
  const [proof]=await sql`SELECT id,nummer,order_id,stand,version,gutschrift_betrag::text,gutschrift_nr FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${result.complaintId}`;
  console.info('TEST_4C_REST_DB_PROOF',JSON.stringify({tenant:KREILE_TENANT_SLUG,receivedEventId:result.eventId,row:proof}));
+ await complaintWrite(fixture,{action:'abschliessen',clientKey:randomUUID(),complaintId:result.complaintId,version:3,kind:'ohne_mail',note:'TEST Kunde telefonisch informiert',sentThreadId:null});
+ await complaintWrite(fixture,{action:'wieder_oeffnen',clientKey:randomUUID(),complaintId:result.complaintId,version:4,reason:'TEST weiterer Sachverhalt'});
+ expect(await withSession(fixture,()=>getComplaintDialogAction({complaintId:result.complaintId}))).toMatchObject({code:'OK',data:{complaint:{stand:'aufgenommen',version:5,gutschriftBetrag:'50.00',gutschriftNr:'GS-TEST-REST'}}});
+ expect(await withSession(fixture,()=>reklamationAusfuehrenAction({...credit,clientKey:randomUUID(),version:5,creditNumber:'GS-TEST-ZWEIT'}))).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('GS-TEST-REST besteht')});
+ expect(await withSession(fixture,()=>reklamationAusfuehrenAction({action:'entscheiden',clientKey:randomUUID(),complaintId:result.complaintId,version:5,assessment:'kulanz',measure:'gutschrift',reason:'TEST zweite Gutschrift',creditCents:3000}))).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('GS-TEST-REST besteht')});
+ await complaintWrite(fixture,{action:'entscheiden',clientKey:randomUUID(),complaintId:result.complaintId,version:5,assessment:'abgelehnt',measure:'ablehnen',reason:'TEST neue Beanstandung abgelehnt',creditCents:null});
+ expect((await sql`SELECT gutschrift_betrag::text,gutschrift_nr,version FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${result.complaintId}`)[0]).toMatchObject({gutschrift_betrag:'50.00',gutschrift_nr:'GS-TEST-REST',version:6});
+ expect(await withSession(fixture,()=>reklamationAusfuehrenAction(credit))).toMatchObject({code:'OK',replayed:true,receipt:{version:3}});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${credit.clientKey}::uuid`).toHaveLength(1);
+ expect(await withSession(fixture,()=>getComplaintDialogAction({complaintId:result.complaintId}))).toMatchObject({code:'OK',data:{complaint:{version:6,gutschriftBetrag:'50.00',gutschriftNr:'GS-TEST-REST'}}});
 });

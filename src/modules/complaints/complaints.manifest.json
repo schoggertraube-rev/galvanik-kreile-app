@@ -34,7 +34,8 @@
     "20261106020000_ein4b_nacharbeit.sql",
     "20261107152034_ein4c_complaint_lifecycle.sql",
     "20261107171549_ein4c_result_mail_template.sql",
-    "20261107195500_complaint_goods_reminder_template.sql"
+    "20261107195500_complaint_goods_reminder_template.sql",
+    "20261108164501_complaint_reopen_history.sql"
   ],
   "viewsFunctions": [
     "public.v_complaint_rework_context_v1"
