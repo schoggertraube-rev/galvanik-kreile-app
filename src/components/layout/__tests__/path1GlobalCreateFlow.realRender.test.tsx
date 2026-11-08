@@ -1923,3 +1923,17 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
   });
 
 });
+
+it('AF12 preserves rejected complaint identity through the single paid quote writer',async()=>{
+ const value=ports(),complaint={id:'21be1de6-2587-4e88-a200-080800000001',number:'RK-TEST-AF12',customerId:CUSTOMER_ID};
+ render(<GlobalCreateFlow ports={value}/>);
+ await act(async()=>{window.dispatchEvent(new CustomEvent('path1:global-create-open',{detail:{intent:'QUOTE',prefill:{sourceComplaint:complaint}}}));});
+ expect(await screen.findByText('KV aus Reklamation RK-TEST-AF12')).toBeVisible();
+ fireEvent.change(await screen.findByLabelText('Teil / Leistung'),{target:{value:'Synthetischer Flansch'}});
+ fireEvent.change(screen.getByLabelText('Material'),{target:{value:'Stahl'}});
+ fireEvent.change(screen.getByLabelText('Gewünschter Termin'),{target:{value:'2026-10-15'}});
+ fireEvent.click(screen.getByRole('button',{name:/KV sichern/}));
+ await waitFor(()=>expect(value.createQuote).toHaveBeenCalledOnce());
+ expect(value.createQuote).toHaveBeenCalledWith(expect.objectContaining({customerId:CUSTOMER_ID,sourceComplaintId:complaint.id,positions:expect.arrayContaining([expect.objectContaining({unitPriceCents:12500})])}));
+ expect(value.createDirectIntake).not.toHaveBeenCalled();expect(value.updateQuote).not.toHaveBeenCalled();
+});

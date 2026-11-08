@@ -1,5 +1,5 @@
 "use client";
-import {QUOTE_PREPARATION_COPY} from "@/ui/situationCatalog";
+import {QUOTE_PREPARATION_COPY,QUOTE_CYCLE_COPY} from "@/ui/situationCatalog";
 
 import {
   Check,
@@ -516,6 +516,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [customerChoices, setCustomerChoices] = useState<GlobalCreateCustomerChoice[]>([]);
   const [customerLoad, setCustomerLoad] = useState<"idle" | "loading" | "ready" | "empty" | "error">("idle");
   const quoteSubmitInFlight=useRef(false);
+  const [quoteComplaint,setQuoteComplaint]=useState<{id:string;number:string;customerId:string}|null>(null);
   const [quotePreparation,setQuotePreparation]=useState<QuotePreparation|null>(null);
   const [positions, setPositions] = useState<PositionDraft[]>(() => [newPosition()]);
   const [dueDate, setDueDate] = useState("");
@@ -933,7 +934,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     navigate("quote");
   };
 
-  const loadCustomers = async (sourceItemId?:string) => {
+  const loadCustomers = async (sourceItemId?:string,complaintCustomerId?:string) => {
     if (!ports.canCreateQuote) {
       deny("quote");
       return;
@@ -967,7 +968,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setCatalogServices(normaliseIntakeCatalog(catalog.services));
       setCustomerChoices(result.customers);
       setCustomerLoad(result.customers.length > 0 ? "ready" : "empty");
-      if(prepared?.customer){const selected=result.customers.find(row=>row.id===prepared.customer!.id);if(selected)await startQuote(selected,prepared);}
+      if(prepared?.customer||complaintCustomerId){const selected=result.customers.find(row=>row.id===(complaintCustomerId??prepared!.customer!.id));if(selected)await startQuote(selected,prepared);else if(complaintCustomerId)setFeedback({kind:'error',message:QUOTE_CYCLE_COPY.complaintCustomerUnavailable});}
     } catch {
       if (seq !== customerRequestSeq.current) return;
       setCustomerLoad("error");
@@ -1119,7 +1120,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setCustomerDuplicateAcceptedFor("");
     setCustomer(null);
     setCustomerReceipt(null);
-    setQuotePreparation(null);setPositions([newPosition()]);
+    setQuoteComplaint(null);setQuotePreparation(null);setPositions([newPosition()]);
     setDueDate("");
     setQuoteNote("");
     resetAwardDateForQuoteContext();
@@ -1366,7 +1367,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         quantity: /^\d+(?:[.,]\d+)?$/.test(position.quantity ?? "") ? (position.quantity ?? "1").replace(",", ".") : "1",
         material: position.material?.slice(0, 500) ?? "",
       })));
-      void loadCustomers(prefill?.sourceItemId);
+      if(prefill?.sourceComplaint)setQuoteComplaint(prefill.sourceComplaint);
+      void loadCustomers(prefill?.sourceItemId,prefill?.sourceComplaint?.customerId);
       return;
     }
     if (!ports.canCreateOrder) {
@@ -1689,7 +1691,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       };
       const result = quote
         ? await ports.updateQuote({ ...payload, quoteId: quote.quoteId, expectedVersion: quote.version })
-        : await ports.createQuote({ ...payload, customerId: customer.id });
+        : await ports.createQuote({ ...payload, customerId: customer.id,...(quoteComplaint?{sourceComplaintId:quoteComplaint.id}:{}) });
       if (result.code !== "OK") {
         setFeedback(requestFeedback(result, id));
         return;
@@ -1697,7 +1699,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setQuote(result.quote);
       setQuoteReceipt(result.receipt);
       ports.rememberQuote(result.quote.quoteId);
-      if(quotePreparation){setOpen(false);window.dispatchEvent(new Event('kreile:intake-changed'));window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:result.quote.quoteId}}));}
+      if(quotePreparation||quoteComplaint){setOpen(false);window.dispatchEvent(new Event('kreile:intake-changed'));window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:result.quote.quoteId}}));}
       else navigate("quote-saved");
     } catch {
       setFeedback({
@@ -2724,7 +2726,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
               {step === "quote" && customer ? (
                 <form className={styles.createForm} onSubmit={(event) => void submitQuote(event)}>
-                  {quotePreparation?<section data-spec-id="kv.vorbereitung-original"><h3>{QUOTE_PREPARATION_COPY.original}</h3><p>{quotePreparation.text}</p>{quotePreparation.specialRequests?<p>{QUOTE_PREPARATION_COPY.wishes+' · '+quotePreparation.specialRequests}</p>:null}{quotePreparation.files.map(file=><button type="button" key={file.id} onClick={()=>{if(!ports.openCaptureObject?.('original',quotePreparation.source.itemId+'#'+file.id))setFeedback({kind:'error',message:QUOTE_PREPARATION_COPY.unavailable});}}>{QUOTE_PREPARATION_COPY.openFile(file.name)}</button>)}</section>:null}
+                  {quoteComplaint?<p data-spec-id="kv.quelle-reklamation">{QUOTE_CYCLE_COPY.fromComplaint(quoteComplaint.number)}</p>:null}{quotePreparation?<section data-spec-id="kv.vorbereitung-original"><h3>{QUOTE_PREPARATION_COPY.original}</h3><p>{quotePreparation.text}</p>{quotePreparation.specialRequests?<p>{QUOTE_PREPARATION_COPY.wishes+' · '+quotePreparation.specialRequests}</p>:null}{quotePreparation.files.map(file=><button type="button" key={file.id} onClick={()=>{if(!ports.openCaptureObject?.('original',quotePreparation.source.itemId+'#'+file.id))setFeedback({kind:'error',message:QUOTE_PREPARATION_COPY.unavailable});}}>{QUOTE_PREPARATION_COPY.openFile(file.name)}</button>)}</section>:null}
                   <div className={styles.createContext}><span>Kunde</span><strong>{customer.name} · {customer.customerNumber ?? "Kundennummer wird gelesen"}</strong></div>
                   <div className={styles.createPositions}>
                     <h3>Positionen</h3>
