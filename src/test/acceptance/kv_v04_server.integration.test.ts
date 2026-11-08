@@ -41,12 +41,16 @@ async function withRequest<T>(cookie: string, work: () => Promise<T>): Promise<T
   const { createRequestStoreForAPI } = await import("next/dist/server/async-storage/request-store");
   const { workAsyncStorage } = await import("next/dist/server/app-render/work-async-storage.external");
   const { workUnitAsyncStorage } = await import("next/dist/server/app-render/work-unit-async-storage.external");
+  const { AfterContext } = await import('next/dist/server/after/after-context');
+  const deferred:Promise<unknown>[]=[];
+  let onClose:()=>void=()=>{};
+  const afterContext=new AfterContext({waitUntil:promise=>{deferred.push(promise);},onClose:callback=>{onClose=callback;},onTaskError:error=>{throw error;}});
   const request = new NextRequest("http://127.0.0.1/h18-quote-actions", { headers: { cookie } });
   const workStore = {
     isStaticGeneration: false,
     page: "/h18-quote-actions",
     route: "/h18-quote-actions",
-    afterContext: {},
+    afterContext,
     previouslyRevalidatedTags: [],
     refreshTagsByCacheKind: new Map(),
     shouldTrackFetchMetrics: false,
@@ -64,7 +68,8 @@ async function withRequest<T>(cookie: string, work: () => Promise<T>): Promise<T
     undefined,
     undefined as never,
   );
-  return workAsyncStorage.run(workStore, () => workUnitAsyncStorage.run(requestStore, work));
+  try{return await workAsyncStorage.run(workStore, () => workUnitAsyncStorage.run(requestStore, work));}
+  finally{onClose();await Promise.all(deferred);}
 }
 
 async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise<T> {
@@ -857,7 +862,7 @@ it('U246 multi-position price uses the same text and goods proposal without inve
 it.each([false,true,'operational'] as const)('AF-8/17 telephone acceptance and goods conversion commit once atomically, existing receipt: %s',async(existingReceipt)=>{
  const fixture=await createFixture();
  if(existingReceipt==='operational'){
-  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,updated_at) VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST U249 Nachfassen',statement_timestamp())`;
+  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,updated_at) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST U249 Nachfassen',statement_timestamp() WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
   const {readQuoteDefaultsAction}=await import('@/app/actions/quotes.actions');const {saveQuoteSettingsAction}=await import('@/app/actions/settings.actions');
   const defaults=await withSession(fixture,()=>readQuoteDefaultsAction());if(defaults.code!=='OK')throw Error('TEST_DEFAULTS:'+defaults.code);
   expect(await withSession(fixture,()=>saveQuoteSettingsAction({clientEventId:randomUUID(),expectedUpdatedAt:defaults.settings.updatedAt,setupCents:null,materialCents:null,followupDays:3,validityDays:null}))).toMatchObject({code:'OK'});

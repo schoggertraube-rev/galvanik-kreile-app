@@ -40,6 +40,8 @@ vi.mock("@/app/warendurchlauf/actions", () => ({
   getGalvanikOrdersAction: ports.getGalvanikOrdersAction,
   getWarendurchlaufKPIs: ports.getWarendurchlaufKPIs,
 }));
+// Keep this station-reader unit fixture isolated from the separate real KV reader.
+vi.mock("@/app/actions/quotes.actions",()=>({readWorkshopQuoteGoodsAction:async()=>({code:'OK',quotes:[],limited:false})}));
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
   hasAuthorizationArea: (authorization: { areas?: readonly string[] }, area: string) =>
