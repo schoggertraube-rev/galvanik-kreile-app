@@ -38,8 +38,10 @@ export async function readQuoteComplaintSource(tx:PrivilegedTenantTransaction,te
  if(rows.length>1)throw Error('QUOTE_COMPLAINT_SOURCE_AMBIGUOUS');return rows[0]??null;
 }
 
-export type QuoteReplyProof={quoteId:string;edition:number;sha256:string;sourceItemId:string;sourceVersion:number;originalSha256:string;inReplyTo:string;sentGraphId:string;dispatchEventId:string};
+export type QuoteReplyProof={quoteId:string;edition:number;sha256:string;sourceItemId:string;sourceVersion:number;originalSha256:string;inReplyTo:string;sentGraphId:string;dispatchEventId:string;automaticOrder?:true};
 export async function readQuoteReplyDocuments(tx:PrivilegedTenantTransaction,actor:Actor,quoteId:string,customerId:string){
  return [...await tx.execute<{eventId:string;document:CommunicationDocument}>(sql`SELECT event.id AS "eventId",event.payload->'document' AS document FROM public.events event JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->>'threadId' AND thread.source='MS_GRAPH_OUT:'||event.correlation_id::text AND thread.status='sent' AND thread.customer_id=${customerId}
  WHERE event.tenant_id=${actor.tenantId} AND event.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND event.payload->'document'->>'kind'='QUOTE' AND event.payload->'document'->>'id'=${quoteId} ORDER BY event.created_at,event.id LIMIT 101`)];
 }
+
+export function quoteReplyEditionMessage(replyEdition:number,currentEdition:number){return "Zusage galt Fassung "+replyEdition+" · Fassung "+currentEdition+" bestätigen lassen.";}

@@ -1,8 +1,9 @@
 "use server";
 
 import {readMicrosoftGraphSentDocumentEvidence} from "@/lib/server/microsoftGraph";
+import {intakePaymentContract} from "@/lib/server/paymentContract";
 import {createHash} from "node:crypto";
-import {appendQuoteJournal,readQuoteJournal,readQuoteReplyDocuments,type QuoteReplyProof} from "@/lib/server/quoteJournalPort";
+import {appendQuoteJournal,readQuoteJournal,readQuoteReplyDocuments,quoteReplyEditionMessage,type QuoteReplyProof} from "@/lib/server/quoteJournalPort";
 
 import { renderToBuffer } from "@react-pdf/renderer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
@@ -45,6 +46,9 @@ import {
   type UpdateQuoteInput,
   type QuoteCommandContext,
 } from "@/modules/quotes/server-public";
+
+type PendingMailAcceptance={input:QuoteLifecycleInput;proof:QuoteReplyProof;handoverMode:'pickup'|'shipping';paymentMode:'vorkasse'|'abholung'|'rechnung';eventId?:string;notices?:string[]};
+function mailOrderKey(requestId:string){const bytes=createHash('sha256').update('quote-mail-order:'+requestId).digest().subarray(0,16);bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const h=bytes.toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;}
 
 function quoteCommandContext(authorization: AuthorizationSnapshot): QuoteCommandContext {
   const actionGrants = getAuthorizationActionGrants(authorization);
@@ -103,6 +107,18 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
       const matching=documents.filter(row=>Number.isSafeInteger(row.document?.edition)&&target.data.pdfSha256.includes(row.document?.sha256));
       const editions=[...new Set(matching.map(row=>row.document.edition))];if(documents.length>100||editions.length!==1)return {code:'VALIDATION_ERROR' as const,message:'Das beantwortete PDF ist keiner eindeutigen gesendeten KV-Fassung zugeordnet. Aktuelle Fassung bestätigen lassen.'};
       const match=matching[0];replyProof={quoteId:input.quoteId,edition:match.document.edition,sha256:match.document.sha256,sourceItemId:input.source.itemId,sourceVersion:input.source.version,originalSha256:source.reference.originalSha256,inReplyTo:target.data.internetMessageId,sentGraphId:target.data.graphMessageId,dispatchEventId:match.eventId};
+      if(replyProof.edition!==quote.quote.lifecycle?.edition)return {code:'VALIDATION_ERROR' as const,message:quoteReplyEditionMessage(replyProof.edition,quote.quote.lifecycle!.edition)};
+      if(!quote.quote.linkedOrderId&&quote.quote.lifecycle?.goods?.some(row=>!row.orderId)){
+       const profile=await withPrivilegedTenantTransaction(auth.data,tx=>readCustomerProfile(tx,auth.data.tenantId,quote.quote.customerId));
+       if(!profile?.handoverPreference||!profile.paymentPreference)return {code:'VALIDATION_ERROR' as const,message:'Übergabe und Zahlungsbedingung in der Kundenkarte ergänzen. Die Mail-Zusage bleibt offen.'};
+       const payment=intakePaymentContract({customerMode:'EXISTING',paymentPreference:profile.paymentPreference,handoverMode:profile.handoverPreference,invoiceTermsEnabled:profile.invoiceTermsEnabled,invoiceTermDays:profile.invoiceTermDays});
+       if(!payment.ok)return {code:'VALIDATION_ERROR' as const,message:payment.message};
+       const pending:PendingMailAcceptance={input,proof:{...replyProof,automaticOrder:true},handoverMode:profile.handoverPreference,paymentMode:payment.mode};
+       const converted=await convertQuoteToOrder({quoteId:input.quoteId,clientEventId:mailOrderKey(input.clientEventId),expectedVersion:input.expectedVersion+1,confirmedAward:true,confirmedOrderDueDate:quote.quote.dueDate,handoverMode:pending.handoverMode,paymentMode:pending.paymentMode,goodsReceiptId:quote.quote.lifecycle.goods.find(row=>!row.orderId)!.id},undefined,false,pending);
+       if(converted.code!=='OK')return converted;
+       return {code:'OK' as const,quote:converted.quote,eventId:pending.eventId!,replayed:converted.replayed,notices:pending.notices,orderId:converted.orderReceipt.orderId};
+      }
+
      }
     }
     const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId,replyProof});
@@ -250,7 +266,7 @@ export async function convertQuoteOperationalAction(input:ConvertQuoteInput){
  return {code:'OK' as const,replayed:result.replayed,receipt:{quoteId:result.quote.quoteId,quoteNumber:result.quote.quoteNumber,orderId:result.orderReceipt.orderId,orderNumber:result.orderReceipt.orderNumber,eventId:result.orderReceipt.eventId}};
 }
 
-async function convertQuoteToOrder(input: ConvertQuoteInput,newGoodsInput?:unknown,operational=false) {
+async function convertQuoteToOrder(input: ConvertQuoteInput,newGoodsInput?:unknown,operational=false,pendingMail?:PendingMailAcceptance) {
   const newGoods=newGoodsInput===undefined?null:parseQuoteGoodsReceiptInput(newGoodsInput);
   if(newGoodsInput!==undefined&&(!newGoods||newGoods.quoteId!==input.quoteId||newGoods.id!==input.goodsReceiptId||newGoods.expectedQuoteVersion!==input.expectedVersion))return {code:"VALIDATION_ERROR" as const,message:"KV und neue Warenprüfung passen nicht zusammen."};
   let authorization;
@@ -264,7 +280,7 @@ async function convertQuoteToOrder(input: ConvertQuoteInput,newGoodsInput?:unkno
 
   const ordinaryContext=quoteCommandContext(authorization.data);
   const commandContext=operational?{...ordinaryContext,capabilities:{...ordinaryContext.capabilities,canReadQuote:true,canConvertQuote:true}}:ordinaryContext;
-  const prepared = await prepareQuoteConversionCommand(commandContext, input,{planOnly:true,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
+  const prepared = await prepareQuoteConversionCommand(commandContext, input,{planOnly:true,pendingAcceptance:Boolean(pendingMail),pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
   if (prepared.code !== "OK") return prepared;
 
   let goods:Awaited<ReturnType<typeof bindQuoteGoodsReceiptToCreatedOrder>>|null=null;
@@ -279,8 +295,18 @@ async function convertQuoteToOrder(input: ConvertQuoteInput,newGoodsInput?:unkno
     if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_ORDER_BINDING_FAILED');}
   };
   const order = await createOrderIntake(prepared.orderInput,undefined,{
-    ...(operational?{quoteAuthorization:{quoteId:input.quoteId}}:{}),
-    before:async(tx,auth)=>{await check(tx,!operational);if(newGoods&&prepared.replayed)await saveGoods(tx,auth);},
+    ...((operational||pendingMail)?{quoteAuthorization:{quoteId:input.quoteId}}:{}),
+    before:async(tx,auth)=>{
+      if(pendingMail){
+       const accepted=await changeQuoteLifecycleCommand(commandContext,pendingMail.input,(transaction,source)=>recordIntakeQuoteEffect(transaction,auth,source),quoteFollowupBinding(auth),{transaction:tx,replyProof:pendingMail.proof});
+       if(accepted.code!=='OK'){boundFailure=accepted;throw Error('QUOTE_MAIL_ACCEPT_FAILED');}pendingMail.eventId=accepted.eventId;pendingMail.notices=accepted.notices;
+       const profile=await readCustomerProfile(tx,auth.tenantId,prepared.orderInput.customer.customerId,true);
+       if(!profile?.handoverPreference||!profile.paymentPreference||profile.handoverPreference!==pendingMail.handoverMode){boundFailure={code:'VALIDATION_ERROR',message:'Kundenbedingungen wurden geändert. Mail-Zusage bleibt offen.'};throw Error('QUOTE_MAIL_CUSTOMER_CHANGED');}
+       const payment=intakePaymentContract({customerMode:'EXISTING',paymentPreference:profile.paymentPreference,handoverMode:profile.handoverPreference,invoiceTermsEnabled:profile.invoiceTermsEnabled,invoiceTermDays:profile.invoiceTermDays});
+       if(!payment.ok||payment.mode!==pendingMail.paymentMode){boundFailure={code:'VALIDATION_ERROR',message:'Zahlungsbedingung wurde geändert. Mail-Zusage bleibt offen.'};throw Error('QUOTE_MAIL_PAYMENT_CHANGED');}
+      }
+      await check(tx,!operational&&!pendingMail);if(newGoods&&prepared.replayed)await saveGoods(tx,auth);
+    },
     beforeEvent:async(tx,auth)=>{await saveGoods(tx,auth);await check(tx,false);},
     after:async(tx,auth,receipt)=>{
       try{goods=await bindQuoteGoodsReceiptToCreatedOrder(tx,auth,{quoteId:input.quoteId,receiptId:input.goodsReceiptId!,clientEventId:input.clientEventId,orderId:receipt.orderId,items:receipt.items});}

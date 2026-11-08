@@ -599,7 +599,7 @@ export async function readQuoteUpdateReceiptCommand(
   }
 }
 
-export async function prepareQuoteConversionCommand(authorization: QuoteCommandContext, input: unknown,options:{transaction?:PrivilegedTenantTransaction;planOnly?:boolean;pendingGoodsId?:string;pendingQuantities?:Array<{itemId:string;confirmed:boolean;expected:number;received:number|null}>}={}): Promise<PrepareQuoteConversionResult> {
+export async function prepareQuoteConversionCommand(authorization: QuoteCommandContext, input: unknown,options:{transaction?:PrivilegedTenantTransaction;planOnly?:boolean;pendingAcceptance?:boolean;pendingGoodsId?:string;pendingQuantities?:Array<{itemId:string;confirmed:boolean;expected:number;received:number|null}>}={}): Promise<PrepareQuoteConversionResult> {
   const normalized = normalizeConvert(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Beauftragungsdaten sind ungültig." };
   if (!authorization.capabilities.canConvertQuote) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht beauftragt werden." };
@@ -611,13 +611,14 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
       if(normalized.confirmedOrderDueDate!==quote.dueDate)return {code:"VALIDATION_ERROR",message:"Auftragstermin muss dem aktuellen KV-Termin entsprechen."};
       if(!normalized.goodsReceiptId)return {code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${quote.quoteNumber} annehmen`};
-      if(!quote.lifecycle||quote.lifecycle.acceptedEdition!==quote.lifecycle.edition||!quote.lifecycle.acceptedAt||!quote.lifecycle.acceptanceEvidence?.trim()||quote.lifecycle.declinedAt)return {code:'VALIDATION_ERROR',message:'Aktuelle KV-Fassung ohne Vorbehalt zusagen; danach Ware zum Auftrag buchen.'};
+      const pendingAcceptance=options.planOnly===true&&options.pendingAcceptance===true;
+      if(!quote.lifecycle||quote.lifecycle.declinedAt||(!pendingAcceptance&&(quote.lifecycle.acceptedEdition!==quote.lifecycle.edition||!quote.lifecycle.acceptedAt||!quote.lifecycle.acceptanceEvidence?.trim()))||(pendingAcceptance&&(quote.lifecycle.sentEdition!==quote.lifecycle.edition||quote.lifecycle.conditional?.edition===quote.lifecycle.edition||quote.lifecycle.stage==='abgelaufen')))return {code:'VALIDATION_ERROR',message:'Aktuelle KV-Fassung ohne Vorbehalt zusagen; danach Ware zum Auftrag buchen.'};
       const goods=quote.lifecycle.goods?.find(row=>row.id===normalized.goodsReceiptId);
-      if((!goods&&!(options.planOnly&&!quote.linkedOrderId&&options.pendingGoodsId===normalized.goodsReceiptId))||(goods&&(goods.blocked||goods.orderId!==quote.linkedOrderId)))return {code:'VALIDATION_ERROR',message:'Passender angenommener Warenbeleg fehlt oder ist gesperrt.'};
+      if((!goods&&!(options.planOnly&&!quote.linkedOrderId&&options.pendingGoodsId===normalized.goodsReceiptId))||(goods&&((goods.blocked&&!pendingAcceptance)||goods.orderId!==quote.linkedOrderId)))return {code:'VALIDATION_ERROR',message:'Passender angenommener Warenbeleg fehlt oder ist gesperrt.'};
       if(quote.linkedOrderId){
         const prior=await tx.execute<{order_id:string;intent_sha256:string}>(sql`SELECT order_id,intent_sha256 FROM private.quote_conversion_receipts WHERE tenant_id=${authorization.tenantId} AND quote_id=${normalized.quoteId}::uuid AND actor_id=${authorization.userId}::uuid AND client_event_id=${normalized.clientEventId}::uuid`);
         if(prior.length!==1||prior[0].order_id!==quote.linkedOrderId||prior[0].intent_sha256!==intentSha256)return {code:'CONFLICT',message:'KV wurde bereits mit einer anderen Buchung zum Auftrag.'};
-      }else if(quote.version!==normalized.expectedVersion)return {code:'CONFLICT',message:'KV-Fassung wurde geaendert. Neu lesen und abgleichen.'};
+      }else if(quote.version+(pendingAcceptance?1:0)!==normalized.expectedVersion)return {code:'CONFLICT',message:'KV-Fassung wurde geaendert. Neu lesen und abgleichen.'};
       const sourceOrderInput: Omit<QuoteOrderInput, "handoverMode" | "paymentMode"> = {
         // The selected canonical goods record has passed the inspection.
         geprueft: true,
