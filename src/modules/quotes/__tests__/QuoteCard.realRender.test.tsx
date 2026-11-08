@@ -63,6 +63,6 @@ it('quote mail uses the existing send port, retains uncertain payload and only r
  fireEvent.click(screen.getByRole('button',{name:'Zurück'}));expect(close).not.toHaveBeenCalled();
  fireEvent.click(screen.getByRole('button',{name:'Mit gleicher Kennung erneut senden'}));
  await waitFor(()=>expect(send).toHaveBeenCalledTimes(2));expect(send.mock.calls[1][0]).toEqual(send.mock.calls[0][0]);
- expect(send.mock.calls[0][0]).toMatchObject({quoteId:quote.quoteId,customerId:quote.customerId,subject:'KV KV-TEST-118',body:'TEST Bitte aktuelle Fassung bestätigen'});
+ expect(send.mock.calls[0][0]).toMatchObject({quoteId:quote.quoteId,customerId:quote.customerId,subject:'KV-TEST-118',body:'TEST Bitte aktuelle Fassung bestätigen'});
  await waitFor(()=>expect(read.mock.calls.length).toBeGreaterThan(1));
 });

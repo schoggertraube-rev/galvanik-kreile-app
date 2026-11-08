@@ -12,7 +12,7 @@ Echter Browser mit isolierter Replay-DB: KV über reale Action angelegt und als 
 
 ## Noch im selben Paket offen
 
-KV-Versand und Originalfassung; Warenannahme/Situation nach U-250 mit bestehenden Original-/Warenports und einem Transaktionswriter; Werkstatt-Kachel/Filter; KV-06/07/07b/12 über echte Browseraktionen; abschließender Bildvergleich 1220/390. Nachgelagerte Kreislaufregeln nur soweit für die genannten laufenden Knöpfe ausdrücklich gebunden. Kein Beleg-Autobau oder Reklamations-Mails in diesem Paket.
+U-249: zweckgebundene Schreibrechte für alle angemeldeten Personen, ohne Finanzfreigabe oder zweiten Writer; U-250: tatsächlich sichere automatische Erledigung mit realer Rücknahme; KV-Vorbereitung/Kopie und vollständige Änderungs-/Originalfassungswege in der gebundenen Oberfläche; offener Mailentwurf-Browserfall; abschließende Hauptweg-/Sichtabnahme 1220/390. Warenannahme, Mengenpreis, atomare Telefon-Zusage mit neuen/vorhandenen Belegen, Werkstatt-KV-Kacheln und bestehender Galvanik-Anschluss sind unten mit gezielten Nachweisen beschrieben, damit ist das Gesamtpaket noch nicht abgenommen. Nachgelagerte Kreislaufregeln nur soweit für die genannten laufenden Knöpfe ausdrücklich gebunden. Kein Beleg-Autobau oder Reklamations-Mails in diesem Paket.
 
 CI/READY und PL-Abnahme werden erst am vollständigen Kandidaten gebunden. Kein Merge durch Codex.
 
@@ -105,3 +105,11 @@ Echter Browser: erwartete KV-Ware nach Zusage sichtbar; separater Warenweg mit g
 Ein direkt geöffneter Warenweg zu einem bereits umgewandelten KV zeigt keine zweite Erfassung mehr. Er öffnet den tatsächlich verknüpften Auftrag auch ohne Editierrecht. Gezielter Renderfall PASS: keine Mengen-/Dateifelder, kein Waren-/Umwandlungsaufruf, Navigation exakt auf gespeicherte Auftrags-ID. Kein Schattenentwurf.
 
 CI-Nachtrag: Der neue öffentliche Editor-DTO fehlte im bestehenden Modulmanifest. Ausschließlich den tatsächlich exportierten Typ QuoteMailDraft nachgetragen; Checker, Schema und Baseline unverändert. Die beiden neuen CI-Modulverletzungen sind lokal beseitigt; übrig bleibt allein der bekannte fremde DESIGN_POINTER_PAGE_BINDING des Planungs-Arbeitsbaums.
+
+## Letzte Nachführung
+
+- Werkstatt hört auf das bestehende Änderungsereignis und liest nach der Buchung neu. Echter Browser PASS 37,6 s: nach Umwandlung verschwindet die alte gesperrte KV-Kachel auch im Hintergrund ohne manuelles Neuladen; der Auftrag bleibt über seine Karte erreichbar.
+- Der einzige neue F1-Registry-Abgleich ist der tatsächliche exportierte Warenleser in der bestehenden Quotes-Gruppe. No-Fake und Scope lokal PASS; keine Status-/Erfolgsfreigabe oder Ausnahme geändert.
+- Statische Unterstützungs-Knopftexte des Capture-Dialogs liegen jetzt ebenfalls im gemeinsamen Katalog. Verhalten und sichtbare Texte unverändert. Mailbetreff verwendet die tatsächliche KV-Nummer einmal; gezielter Retry-Vertrag PASS.
+- Der neue echte Mailentwurf-Browserfall ist ausdrücklich offen und auf der Rot-Liste: erster Lauf zeigte den erhaltenen Text, die exakte Labelsuche scheiterte; danach Timeout bereits vor dem bisherigen Anliegen-KV-Knopf. Keine weiteren Wiederholungsschleifen und kein externer Versand-PASS. Ein versehentlicher zweiter Browserstart wurde am belegten Port abgewiesen, keine zweite laufende Anwendung gestartet.
+- Lokale Next-Dev-Typdateien enthielten überlappende Generatorreste. Nach beendeten Browserprozessen mit den aktuellen generierten Routentypen repariert; Produktdateien, tsconfig und Gates unverändert. Danach Typprüfung PASS. Keine weiteren Browserläufe in diesem Schritt.

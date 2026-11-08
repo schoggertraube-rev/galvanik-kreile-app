@@ -49,6 +49,18 @@ test('fixed quote overlay: real read, one telephone acceptance, DB/event/readbac
  await page.getByRole('button',{name:'KV öffnen',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:/KV-2026-/});await expect(dialog).toBeVisible();
  await expect(dialog.getByText('40,00 € netto')).toBeVisible();await expect(dialog.getByRole('textbox')).toHaveCount(0);
+ await dialog.getByRole('button',{name:'KV per E-Mail senden',exact:true}).click();
+ await expect(dialog.getByLabel('Betreff',{exact:true})).toHaveValue(/KV-2026-/);
+ await dialog.getByRole('button',{name:'Betreff und Nachricht ergänzen',exact:true}).click();
+ await expect(dialog.getByRole('textbox',{name:'Nachricht',exact:true})).toBeFocused();
+ await dialog.getByRole('textbox',{name:'Nachricht',exact:true}).fill('TEST Mailentwurf bleibt bis zur ausdruecklichen Entscheidung erhalten');
+ await dialog.getByRole('button',{name:'Zurück',exact:true}).click();
+ await page.getByRole('button',{name:'Weiter bearbeiten',exact:true}).click();
+ await expect(dialog.getByRole('textbox',{name:'Nachricht',exact:true})).toHaveValue('TEST Mailentwurf bleibt bis zur ausdruecklichen Entscheidung erhalten');
+ await dialog.getByRole('button',{name:'Zurück',exact:true}).click();await page.getByRole('button',{name:'Verwerfen',exact:true}).click();
+ await expect(dialog).toHaveCount(0);await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),quoteId);
+ await expect(dialog.getByRole('textbox')).toHaveCount(0);
+
  await dialog.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-ui-real-desktop.png')});
  await dialog.getByRole('button',{name:/hat am Telefon zugesagt/}).click();
  await expect(dialog.getByText('Zusage gespeichert · Ware erwartet.')).toBeVisible();
@@ -150,10 +162,12 @@ for(const storedGoods of [false,true]) test('quote goods '+(storedGoods?'stored'
   await storedCard.getByRole('button',{name:'Auftrag öffnen',exact:true}).click();
  }else{await receipt.getByRole('button',{name:/Auftrag aus KV-2026-.* anlegen/}).click();await expect(receipt).toHaveCount(0,{timeout:20000});}
 
- const [stored]=await sql`SELECT q.linked_order_id,q.zugesagt_fassung,r.auftrag_id,r.lagerort,o.ware,o.geprueft,(SELECT sum(quantity)::float8 FROM public.items i WHERE i.tenant_id=o.tenant_id AND i.order_id=o.id) AS quantity,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=r.tenant_id AND f.item_id=r.item_id) AS files FROM private.quotes q JOIN public.goods_receipt r ON r.tenant_id=q.tenant_id AND r.kv_id=q.id JOIN public.orders o ON o.tenant_id=q.tenant_id AND o.id=q.linked_order_id WHERE q.tenant_id='galvanik-kreile' AND q.id=${quoteId}::uuid`;
+ const [stored]=await sql`SELECT q.quote_number,q.linked_order_id,q.zugesagt_fassung,r.auftrag_id,r.lagerort,o.ware,o.geprueft,(SELECT sum(quantity)::float8 FROM public.items i WHERE i.tenant_id=o.tenant_id AND i.order_id=o.id) AS quantity,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=r.tenant_id AND f.item_id=r.item_id) AS files FROM private.quotes q JOIN public.goods_receipt r ON r.tenant_id=q.tenant_id AND r.kv_id=q.id JOIN public.orders o ON o.tenant_id=q.tenant_id AND o.id=q.linked_order_id WHERE q.tenant_id='galvanik-kreile' AND q.id=${quoteId}::uuid`;
  expect(stored).toMatchObject({zugesagt_fassung:1,auftrag_id:stored.linked_order_id,lagerort:'TEST Regal Telefon',ware:'da',geprueft:true,quantity:3,files:4});
  const [device]=await sql`SELECT d.status,cardinality(d.angenommen_auf) AS devices,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=d.tenant_id AND f.item_id=d.item_id AND f.art='foto') AS photos FROM public.device_request d JOIN public.goods_receipt r ON r.tenant_id=d.tenant_id AND r.item_id=d.item_id WHERE d.tenant_id='galvanik-kreile' AND r.auftrag_id=${stored.linked_order_id}`;
  expect(device).toMatchObject({status:'beendet',devices:1});expect(device.photos).toBeGreaterThanOrEqual(2);
+ if(storedGoods)await expect(page.locator('[aria-label="KV-Ware"]').getByRole('heading',{name:stored.quote_number+' · Prueffirma Alpha GmbH',exact:true})).toHaveCount(0);
+
 
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id='galvanik-kreile' AND payload->>'quoteId'=${quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='accept'`)[0].n).toBe(1);
  await expect(page.getByRole('dialog',{name:/Auftragskarte A-2026-/})).toBeVisible({timeout:10000});
