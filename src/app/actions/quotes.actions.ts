@@ -82,12 +82,12 @@ function authorizationFailure(result: Awaited<ReturnType<typeof resolveAuthoriza
     : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
 }
 
-export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,options?:{actualMail?:boolean}) {
+export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,options?:{actualMail?:boolean;onsiteGoodsReceiptId?:string}) {
   try {
     const auth=await resolveAuthorization();
     const failure=authorizationFailure(auth);
     if (failure||!auth.ok) return failure!;
-    const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data),{actualMail:options?.actualMail===true});
+    const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId});
     if (result.code==='OK') {
       revalidatePath('/');
       revalidatePath('/customers');
