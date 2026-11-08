@@ -108,7 +108,7 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
     if (failure||!auth.ok) return failure!;
     let replyProof:QuoteReplyProof|undefined;
     if(input?.action==='accept'&&input.source?.message&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientEventId)&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.source.itemId)){
-     const context=quoteOperationContext(auth.data);if(!context.capabilities.canDecideQuote||!hasAuthorizationArea(auth.data,'mails'))return {code:'FORBIDDEN' as const,message:'KV-Entscheidung ist nicht freigegeben.'};
+     const context=quoteOperationContext(auth.data);if(!context.capabilities.canDecideQuote)return {code:'FORBIDDEN' as const,message:'KV-Entscheidung ist nicht freigegeben.'};
      const prior=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteJournal(tx,auth.data,input.clientEventId));
      if(!prior.length){
       const quote=await readQuoteCommand(context,{quoteId:input.quoteId});if(quote.code!=='OK')return quote;

@@ -24,8 +24,10 @@ export async function recordIntakeQuoteEffect(tx:PrivilegedTenantTransaction,aut
 
 /** Only reply provenance is exposed; the original and its concerns remain owned here. */
 export async function readIntakeQuoteReplyReference(auth:AuthorizationSnapshot,input:{itemId:string;version:number;quoteId:string;customerId:string}){
- if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:'Der Mailbeleg benötigt Mails.'};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const found=await tx.execute(sql`SELECT id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid`);
+  if(found.length!==1)return {code:'NOT_FOUND' as const,message:'Ausloesender Eingang ist nicht verfuegbar.'};
+  if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:'Der Mailbeleg benoetigt Mails.'};
   const rows=await tx.execute<{version:number;kunde_id:string|null;vorgang_art:string|null;vorgang_id:string|null;sender:string;chain:{source?:string;status?:string;originalSha256?:string;inReplyTo?:string[]}|null}>(sql`SELECT source.version,source.kunde_id,source.vorgang_art,source.vorgang_id,source.absender_adresse AS sender,original.nachher->'replyChain' AS chain FROM public.intake_item source
    JOIN LATERAL(SELECT event.nachher FROM public.intake_event event WHERE event.tenant_id=source.tenant_id AND event.item_id=source.id AND event.art='angelegt' ORDER BY event.zeit,event.id LIMIT 1) original ON true
    WHERE source.tenant_id=${auth.tenantId} AND source.id=${input.itemId}::uuid AND source.kanal='mail'
