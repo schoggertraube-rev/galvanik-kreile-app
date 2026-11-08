@@ -183,6 +183,9 @@ export type OrderCardActionPorts = {
   onReload: () => void | Promise<void>;
 };
 export type OrderCardModel = {
+  shippingService?:string|null;
+  shippingServiceError?:string;
+  handoverNotice?:{message:string;taskId:string|null;originalItemId:string;taskState?:'offen'|'erledigt'|'nicht_verfuegbar'};
   id: string;
   version: number;
   orderNumber: string;

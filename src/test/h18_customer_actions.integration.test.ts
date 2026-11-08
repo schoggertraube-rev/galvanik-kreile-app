@@ -1434,3 +1434,21 @@ describe("AP-ABS agreement actions: real Action, database event and reread", () 
     });
   });
 });
+
+
+describe('AP-KREISLAUF AF-1',()=>{
+ it('retains each pending business concern and rolls back an entire mixed batch through the real actions',async()=>{
+  const actor=await createFixture('meister',['eingang','mails','geld','auftraege','kunden']);
+  const {saveIntakeNoteAction,selectIntakeConcernAction,finishIntakeUseAction,setIntakeNoBusinessAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+  for(const concern of ['kv_annahme','kv_ablehnung','preis_einwand','reklamation','termin']){
+   const ids=[randomUUID(),randomUUID()].sort(),key=randomUUID();
+   for(const itemId of ids)expect(await withSession(actor,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'SYNTHETISCH AF1 bitte zurückrufen',concerns:['rueckruf']}))).toMatchObject({code:'OK'});
+   expect(await withSession(actor,()=>selectIntakeConcernAction({itemId:ids[1],version:1,clientEventId:randomUUID(),concern}))).toMatchObject({code:'OK'});
+   for(const kind of ['info','erledigt'] as const){const result=await withSession(actor,()=>finishIntakeUseAction({items:ids.map((itemId,index)=>({itemId,version:index===0?1:2})),kind,note:null,clientEventId:key}));expect(result).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Eingang bleibt offen')});}
+   expect(await sql`SELECT version,einsatz FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=ANY(${ids}::uuid[]) ORDER BY id`).toEqual([{version:1,einsatz:'offen'},{version:2,einsatz:'offen'}]);
+   expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND befehl_id=${key}::uuid`).toHaveLength(0);
+   expect(await withSession(actor,()=>setIntakeNoBusinessAction({itemId:ids[1],version:2,reason:'info',clientEventId:randomUUID()}))).toMatchObject({code:'VALIDATION_ERROR'});
+   expect(await withSession(actor,()=>getIntakeCaptureAction(ids[1]))).toMatchObject({code:'OK',capture:{version:2,usage:'offen',openConcerns:[concern,'rueckruf']}});
+  }
+ });
+});

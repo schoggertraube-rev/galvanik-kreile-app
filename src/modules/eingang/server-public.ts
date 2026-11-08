@@ -1,5 +1,6 @@
 import "server-only";
 export {recordIntakeQuoteEffect,readIntakeQuoteReplyReference} from './server/intakeQuoteEffect';
+export {readIntakeHandoverMail,recordIntakeHandoverEffect} from './server/intakeOrderBinding';
 export {readIncomingInvoice,saveIncomingInvoice,changeIncomingInvoice,readInvoiceTaskContext} from './server/incomingInvoice';
 export type {InvoiceDependencies} from './server/incomingInvoice';
 export {readIntakeMessages} from './server/intakeMessages';
@@ -26,3 +27,5 @@ export type {
 
 export { readIntakeFileChanges, type IntakeFileChange } from "./server/intakeLive";
 export { processIntakeDeviceRequest } from "./server/intakeDevice";
+
+export {returnQuoteGoodsReceipt,readQuoteGoodsReturns} from "./server/quoteGoodsReturn";

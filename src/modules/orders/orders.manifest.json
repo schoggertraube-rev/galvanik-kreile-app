@@ -39,7 +39,8 @@
   ],
   "capabilities": [],
   "migrations": [
-    "20261106020000_ein4b_nacharbeit.sql"
+    "20261106020000_ein4b_nacharbeit.sql",
+    "supabase/migrations/20261108192708_af19_handover_receipt_lineage.sql"
   ],
   "viewsFunctions": [],
   "ownsTables": [

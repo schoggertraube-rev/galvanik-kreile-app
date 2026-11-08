@@ -85,6 +85,7 @@ export const QUOTE_CANCELLED_ORDER_COPY={title:'Auftrag zurückgenommen',explana
 
 export const QUOTE_UNDO_COPY={open:"Rückgängig",reason:"Grund der Rücknahme",missing:"Nenne den Grund der Rücknahme.",confirm:"Auftrag zurücknehmen",saved:"Auftrag zurückgenommen · die Ware ist wieder beim KV.",unavailable:(reason:string)=>"Rückgängig nicht mehr möglich · "+reason} as const;
 
+export const QUOTE_RECOVERY_COPY={extend:'Gültig bis verlängern',until:'Neues Gültigkeitsdatum',reason:'Grund / Wortlaut',missing:'Datum und konkreten Grund ergänzen.',extended:'Gültigkeit verlängert · Fassung und vorhandene Zusage bleiben erhalten.',return:(customer:string,location:string)=>'Ware an '+customer+' zurückgeben · '+location,returnConfirm:'Rückgabe mit Beleg bestätigen',returned:'Ware zurückgegeben · der Beleg bleibt im Verlauf.',receipt:'Rückgabebeleg',receiptLine:(quantity:number,location:string,actor:string,at:string)=>quantity+' Stück · '+location+' · '+actor+' · '+at};
 export const QUOTE_CYCLE_COPY={
  editionWarning:(before:number,after:number,customer:string)=>`Du änderst Fassung ${before} zu Fassung ${after} – die Zusage von ${customer} gilt dann nicht mehr. Termin allein ändert nichts.`,
  editionConfirm:'Neue Fassung speichern · Zusage aufheben',
@@ -93,4 +94,14 @@ export const QUOTE_CYCLE_COPY={
  fromComplaint:(number:string)=>'KV aus Reklamation '+number,complaintCustomerUnavailable:'Der Kunde der Reklamation ist nicht verfügbar · Kundenkarte prüfen.',
  clarify:'Abweichung geklärt',clarificationReason:'Grund der Klärung',clarificationMissing:'Nenne den Grund der Klärung.',clarificationSaved:'Abweichung geklärt · die ursprünglichen Prüfdaten bleiben im Verlauf.',
  discrepancy:(location:string,received:number|null|undefined,total:number|null|undefined,deviations:string[])=>location+' · '+(received??'—')+' von '+(total??'—')+' Packstücke'+(deviations.length?' · '+deviations.join(', '):''),
+};
+
+export const ORDER_HANDOVER_COPY={
+ chooseOrder:"Wähle den Auftrag zu dieser Mail",choose:(number:string)=>"Übergabe für "+number+" übernehmen",
+ mode:(mode:'pickup'|'shipping')=>mode==='pickup'?'Abholen':'Versand',
+ label:(mode:'pickup'|'shipping'|null|undefined,service:string|null|undefined,error?:string)=>mode==='pickup'?'Abholen':mode==='shipping'?'Versand · '+(service??error??'Versanddienst fehlt'):'Übergabeart fehlt',
+ original:'Original-Mail ansehen',task:'Rückruf-Aufgabe öffnen',completed:'Rückruf erledigt',taskUnavailable:'Rückruf-Aufgabe ist für diesen Login nicht verfügbar.',targetUnavailable:'Der gespeicherte Bezug konnte nicht geöffnet werden.',
+ changed:(number:string,mode:'pickup'|'shipping',sender:string,at:string)=>'Du übernimmst '+(mode==='pickup'?'Abholen':'Versand')+' für '+number+' · so hat es '+sender+' am '+new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(at))+' geschrieben.',
+ call:(customer:string,phone:string|null)=>'Ruf '+customer.slice(0,55)+' an: '+(phone??'Telefon fehlt'),
+ late:(number:string,customer:string,phone:string|null,carrier:string|null,mode:'pickup'|'shipping',label:boolean,passed:boolean)=>number+' · '+(passed?'Ware ist bereits übergeben':label?'Versandetikett ist bereits erstellt':'Paket ist bereits beim '+(carrier??'Versanddienst · Name fehlt'))+' · '+customer+' wollte '+(mode==='pickup'?'abholen':'Versand')+'. Ruf '+customer+' an: '+(phone??'Telefon fehlt')+'.',
 };

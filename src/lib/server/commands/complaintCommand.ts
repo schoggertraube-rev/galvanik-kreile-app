@@ -76,7 +76,7 @@ export async function executeComplaint(input:unknown,sourceEffect:ComplaintSourc
       if(input.action==='aufnehmen') {
         const [order]=await tx.execute<{id:string;customer_id:string;station:string}>(sql`SELECT id,customer_id,station FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId} FOR SHARE`);
         if(!order)reject('NOT_FOUND','Der zugehörige Auftrag ist nicht verfügbar.');
-        if(order.station!=='abgeholt')reject('VALIDATION_ERROR','Reklamationen beziehen sich auf einen gelieferten Auftrag.');
+        if(!['abgeholt','versendet'].includes(order.station))reject('VALIDATION_ERROR','Reklamationen beziehen sich auf einen gelieferten Auftrag.');
         const items=await tx.execute<{id:string;quantity:number}>(sql`SELECT id,quantity FROM public.items WHERE tenant_id=${auth.tenantId} AND order_id=${input.orderId} AND customer_id=${order.customer_id}`);
         for(const part of input.parts){const item=items.find(row=>row.id===part.position_id);if(!item||part.menge>Number(item.quantity))reject('VALIDATION_ERROR','Menge betroffen muss zwischen 1 und geliefert liegen.');}
         if(input.photoIds.length){

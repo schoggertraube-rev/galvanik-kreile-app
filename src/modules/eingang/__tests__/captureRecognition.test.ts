@@ -1,3 +1,4 @@
+import {intakeHandoverDirective} from "../intakeLifecycleContract";
 import { describe, expect, it } from "vitest";
 import { captureRecognition } from "../captureRecognition";
 import type { IntakeCapture } from "../captureContract";
@@ -30,4 +31,10 @@ describe("P63: result derived from the one saved capture", () => {
     expect(captureRecognition({ ...base, concerns: ["rechnung"], suggestions: [{ field: "art", value: "anfrage", status: "uebernommen" }] }))
       .toEqual({ kind: "rechnung", text: "" });
   });
+});
+
+describe('AF19 conservative handover directive',()=>{
+ it.each(['Hole ich ab.','Ich hole die Ware ab.','Bitte abholen.'])('recognizes clear pickup %s',text=>expect(intakeHandoverDirective(text)).toEqual({mode:'pickup',forFuture:false}));
+ it('changes the future default only when explicit',()=>{expect(intakeHandoverDirective('Ab jetzt immer abholen.')).toEqual({mode:'pickup',forFuture:true});expect(intakeHandoverDirective('Bitte versenden.')).toEqual({mode:'shipping',forFuture:false});});
+ it.each(['Nicht abholen.','Vielleicht abholen.','Falls Versand, hole ich ab.','Abholen oder versenden?','> Hole ich ab.','Von: alter Kunde\nBitte versenden.'])('does not guess from negation, ambiguity or quoted mail %s',text=>expect(intakeHandoverDirective(text)).toBeNull());
 });

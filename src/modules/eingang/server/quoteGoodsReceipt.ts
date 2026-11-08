@@ -27,8 +27,9 @@ export async function saveQuoteGoodsReceipt(raw:unknown,options:{transaction?:Pr
    ?{code:'OK',receipt:prior[0].nachher.after,replayed:true}:{code:'CONFLICT',message:'Diese Warenbuchung wurde bereits anders verwendet.'};
   const quote=await readQuoteGoodsContext(tx,auth,input.quoteId);
   if(!quote)return {code:'NOT_FOUND',message:'KV ist nicht verfügbar.'};
-  if(quote.version!==input.expectedQuoteVersion||quote.linkedOrderId||quote.declined)return {code:'CONFLICT',message:'KV wurde geändert, abgesagt oder bereits zum Auftrag. Neu lesen und abgleichen.'};
+  if(quote.version!==input.expectedQuoteVersion||quote.linkedOrderId)return {code:'CONFLICT',message:'KV wurde geändert, abgesagt oder bereits zum Auftrag. Neu lesen und abgleichen.'};
   if(input.command==='clarify'){
+   if(quote.declined)return {code:'CONFLICT',message:'Abgesagter KV: Ware nur zurueckgeben, nicht fuer Auftrag freigeben.'};
    const locked=await tx.execute(sql`SELECT id FROM public.goods_receipt WHERE tenant_id=${auth.tenantId} AND id=${input.id}::uuid FOR UPDATE`);
    const [before]=await tx.execute<GoodsReceiptRecord>(sql`SELECT * FROM public.v_quote_goods_receipt_v1 WHERE tenant_id=${auth.tenantId} AND id=${input.id}::uuid`);
    if(locked.length!==1||!before||before.kv_id!==quote.id||before.item_id!==input.itemId||before.client_key!==input.clientKey||before.auftrag_id||before.status!=='angenommen')return {code:'VALIDATION_ERROR',message:'Angenommener Warenbeleg dieses KV fehlt.'};

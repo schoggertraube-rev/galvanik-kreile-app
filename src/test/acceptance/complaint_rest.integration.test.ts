@@ -111,7 +111,7 @@ async function createFixture(areas:string[]=['eingang', 'auftraege', 'kunden', '
   return { actorId, actorIssuedAt, customerId };
 }
 
-async function createOrder(fixture: Fixture, label: string, paymentMode: "vorkasse" | "rechnung") {
+async function createOrder(fixture: Fixture, label: string, paymentMode: "vorkasse" | "rechnung",handoverMode:"pickup"|"shipping"="pickup") {
   const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
   const result = await withSession(fixture, () => createOrderIntakeAction({ geprueft: true,
     clientEventId: randomUUID(),
@@ -119,7 +119,7 @@ async function createOrder(fixture: Fixture, label: string, paymentMode: "vorkas
     dueDate: "2027-05-15",
     termStatus: "bestaetigt",
     intakeSource: "persoenlich",
-    handoverMode: "pickup",
+    handoverMode,
     paymentMode,
     note: `TEST Reklamation Rest ${label}`,
     items: [{
@@ -138,8 +138,8 @@ async function createOrder(fixture: Fixture, label: string, paymentMode: "vorkas
   return result.receipt;
 }
 
-async function deliveredComplaintSource(fixture:Fixture) {
-  const order=await createOrder(fixture,'4C-TEST','rechnung');
+async function deliveredComplaintSource(fixture:Fixture,mode:'abholung'|'versand'='abholung') {
+  const order=await createOrder(fixture,'4C-TEST','rechnung',mode==='versand'?'shipping':'pickup');
   const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,freezeOrderAction}=await import('@/app/actions/orders.actions');
   const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
   await sql`INSERT INTO private.extra_work_hourly_rates(id,tenant_id,hourly_rate_cents,version,created_by,effective_at)
@@ -148,7 +148,7 @@ async function deliveredComplaintSource(fixture:Fixture) {
   expect(await withSession(fixture,()=>transitionWareneingangToGalvanikAction({orderId:order.orderId,expectedVersion:1,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await withSession(fixture,()=>setOrderItemFinishedAction({orderId:order.orderId,itemId:order.items[0].id,expectedVersion:2,clientEventId:randomUUID(),finished:true}))).toMatchObject({code:'OK'});
   expect(await withSession(fixture,()=>freezeOrderAction({orderId:order.orderId,freezeId:randomUUID(),expectedVersion:3,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
-  expect(await withSession(fixture,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:4,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  expect(await withSession(fixture,()=>recordGoodsOutAction({orderId:order.orderId,mode,expectedVersion:4,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   return order;
 }
 
@@ -230,4 +230,18 @@ it('AF-12 rejects an undecided complaint and rolls quote, event and receipt back
  expect(await sql`SELECT receipt_id FROM private.v_quote_create_receipts_v1 WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toHaveLength(0);
  const {getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
  expect(await withSession(fixture,()=>getComplaintDialogAction({complaintId:source.complaintId}))).toMatchObject({code:'OK',data:{complaint:{stand:'aufgenommen',version:1}}});
+});
+
+
+it('AF-2: shipped goods remain claimable through the actual goods-out and complaint actions',async()=>{
+ const fixture=await createFixture(),order=await deliveredComplaintSource(fixture,'versand');
+ const [delivered]=await sql`SELECT o.station,e.payload->>'mode' AS mode FROM public.orders o JOIN public.events e ON e.tenant_id=o.tenant_id AND e.order_id=o.id AND e.event_type LIKE 'ORDER_PICKED_UP_%' WHERE o.tenant_id=${KREILE_TENANT_SLUG} AND o.id=${order.orderId}`;
+ expect(delivered).toMatchObject({station:'abgeholt',mode:'versand'});
+ const input:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST AF2 nach tatsaechlichem Versand',photoIds:[],goodsReturn:'offen'};
+ const result=await complaintWrite(fixture,input);
+ const [event]=await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${result.eventId}`;
+ expect(event.user_id).toBe(fixture.actorId);
+ const {reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
+ expect(await withSession(fixture,()=>reklamationAusfuehrenAction(input))).toMatchObject({code:'OK',replayed:true,receipt:{complaintId:result.complaintId}});
+ expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${input.clientKey}::uuid`).toHaveLength(1);
 });

@@ -3,7 +3,7 @@ import {sql} from 'drizzle-orm';
 import {isDeepStrictEqual} from 'node:util';
 import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {INTAKE_CONCERN_AREAS,intakeInvoiceReviewRequired,type IntakeSelectionInput,type IntakeUseInput,type IntakeReopenInput,type IntakeUseResult} from '../intakeLifecycleContract';
+import {INTAKE_CONCERN_AREAS,intakeInvoiceReviewRequired,intakeRequiredEffect,type IntakeSelectionInput,type IntakeUseInput,type IntakeReopenInput,type IntakeUseResult} from '../intakeLifecycleContract';
 import type {IntakeCaptureResult} from '../captureContract';
 import {intakeCaptureSnapshot} from './intakeCapture';
 
@@ -55,7 +55,7 @@ export async function selectIntakeConcern(input:unknown):Promise<IntakeCaptureRe
   await event(tx,auth,row,value.clientEventId,'anliegen',intent,{anliegen:concerns,anliegen_offen:concerns,einsatz:'offen'});
  });return await intakeCaptureSnapshot(auth,value.itemId);}catch(error){return failure(error);}
 }
-/** Explicit Info/Erledigt is the documented override, even while a reply draft exists. */
+/** Info/Erledigt never clears an unresolved business decision, including in batches. */
 export async function finishIntakeUse(input:unknown):Promise<IntakeUseResult>{
  if(!record(input)||!keys(input,'clientEventId,items,kind,note')||!uuid(input.clientEventId)||!['info','erledigt'].includes(String(input.kind))
   ||!(input.note===null||typeof input.note==='string'&&input.note.length<=2000)||!Array.isArray(input.items)||!input.items.length||input.items.length>100
@@ -68,6 +68,7 @@ export async function finishIntakeUse(input:unknown):Promise<IntakeUseResult>{
    if(row.version!==item.version)reject('CONFLICT','Ein Eingang wurde inzwischen geändert · nichts gespeichert.');
    if(row.einsatz!=='offen')reject('CONFLICT','Ein Eingang ist bereits erledigt · nichts gespeichert.');
    if(intakeInvoiceReviewRequired(row.anliegen,row.vorgang_art,row.vorgang_id))throw new InvoiceReviewRequired(row.id);
+   const required=intakeRequiredEffect(row.anliegen_offen);if(required)reject('VALIDATION_ERROR',required+' · Eingang bleibt offen.');
    await tx.execute(sql`UPDATE public.intake_item SET einsatz=${value.kind},anliegen_offen='{}'::text[],einsatz_aktion=${value.kind},einsatz_vermerk=${value.note},einsatz_am=statement_timestamp(),einsatz_von=${auth.userId}::uuid,
     geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp(),version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid AND version=${item.version}`);
    await event(tx,auth,row,value.clientEventId,'einsatz',intent,{einsatz:value.kind,anliegen_offen:[],vermerk:value.note});

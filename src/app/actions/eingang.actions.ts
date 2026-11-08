@@ -2,6 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { after } from "next/server";
+import {revalidatePath} from "next/cache";
 import { getAppSession } from "@/lib/server/appSession";
 import {readIntakeMessages} from '@/modules/eingang/server-public';
 export async function getIntakeMessagesAction(filter:unknown='offen'){return readIntakeMessages(filter);}
@@ -171,3 +172,7 @@ export async function createOrderIntakeAction(input:unknown){
   const result=await createOrderIntake(input,createCustomerInTransaction);
   return result.code==="OK"?{...result,receipt:presentOrderIntakeReceipt(result.receipt,hasAuthorizationArea(authorization.data,"geld"))}:result;
 }
+
+import {returnQuoteGoodsReceipt,readQuoteGoodsReturns} from "@/modules/eingang/server-public";
+export async function recordQuoteGoodsReturnAction(input:unknown){const result=await returnQuoteGoodsReceipt(input);if(result.code==='OK'){for(const path of ['/','/warendurchlauf','/nachrichten'])revalidatePath(path);}return result;}
+export async function getQuoteGoodsReturnsAction(quoteId:unknown){return readQuoteGoodsReturns(quoteId);}
