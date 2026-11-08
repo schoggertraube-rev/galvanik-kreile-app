@@ -1,3 +1,4 @@
+import {hasReservedQuoteOrderIntent} from '@/lib/server/quoteGoodsContextPort';
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
@@ -491,9 +492,10 @@ async function allocateOrderNumber(tx: PrivilegedTenantTransaction): Promise<str
   return `A-${year}-${String(next).padStart(4, "0")}`;
 }
 
+class QuoteOrderRejected extends Error{constructor(readonly result:Exclude<OrderIntakeCommandResult,{code:'OK'}>){super('ORDER_INTAKE_QUOTE_REJECTED:'+result.code);}}
+
 export type OrderIntakeTransactionBinding = {
-  /** Internal canonical KV binding, never deserialized from a public Action input. */
-  quoteConversion?:true;
+  quoteAuthorization?:{quoteId:string};
   intentKey?: string;
   beforeEvent?: (tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
   before: (tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot) => Promise<void>;
@@ -511,19 +513,18 @@ export async function createOrderIntake(input: unknown,createCustomer?:CustomerW
       ? { code: "UNAVAILABLE", message: authorization.message }
       : { code: "UNAUTHENTICATED", message: authorization.message };
   }
-  const boundQuote=binding?.quoteConversion===true&&Boolean(binding.beforeEvent)&&normalized.customer.mode==="EXISTING"&&!normalized.customer.changes;
-  if (!authorization.data.permissions.includes("perm_data_orders")&&!boundQuote) {
+  if (!authorization.data.permissions.includes("perm_data_orders")&&!binding?.quoteAuthorization) {
     return { code: "FORBIDDEN", message: "Aufträge dürfen mit dieser Rolle nicht angelegt werden." };
   }
   if ((normalized.customer.mode === "NEW" || normalized.customer.changes) && !authorization.data.permissions.includes("perm_data_customers")) {
     return { code: "FORBIDDEN", message: "Kunden dürfen mit dieser Rolle nicht angelegt werden." };
   }
   if(normalized.termOrigin==="ueber_auslastung"&&!authorization.data.areas?.includes("entscheiden"))return {code:"FORBIDDEN",message:"Wunsch trotzdem zusagen benötigt das Recht Entscheiden."};
-  const canManageMoney = authorization.data.areas?.includes("geld") === true||boundQuote;
+  const canManageMoney = authorization.data.areas?.includes("geld") === true;
   if (canManageMoney && normalized.paymentMode === null) {
     return { code: "VALIDATION_ERROR", message: "Zahlungsmodus ist erforderlich." };
   }
-  if (!canManageMoney && normalized.paymentMode !== null) {
+  if (!canManageMoney && normalized.paymentMode !== null&&!binding?.quoteAuthorization) {
     return { code: "FORBIDDEN", message: "Zahlungsmodus darf ohne Geld-Recht nicht vorgegeben werden." };
   }
   if (!canManageMoney && normalized.items.some((item) => item.unitPriceCents !== null || item.vatRateBasisPoints !== null)) {
@@ -540,12 +541,17 @@ export async function createOrderIntake(input: unknown,createCustomer?:CustomerW
 
   try {
     return await withPrivilegedTenantTransaction(authorization.data, async (tx) => {
+      const run=async():Promise<OrderIntakeCommandResult>=>{
       await tx.execute(sql`
         SELECT pg_advisory_xact_lock(hashtextextended(
           'f1:order-intake:' || ${expected.tenantId} || ':' || ${expected.actorId} || ':' || ${expected.clientEventId}, 0
         ))
       `);
       await binding?.before(tx,authorization.data);
+      if(binding?.quoteAuthorization){
+       if(normalized.customer.mode!=='EXISTING'||normalized.customer.changes||!await hasReservedQuoteOrderIntent(tx,authorization.data,{quoteId:binding.quoteAuthorization.quoteId,customerId:normalized.customer.customerId,clientEventId:normalized.clientEventId,orderIntentSha256:intentHash(normalized)}))return {code:'FORBIDDEN',message:'Ein exakt reservierter, zugesagter KV ist für diese Auftragsanlage erforderlich.'};
+      }
+
 
       const existingRows = await tx.execute<{ intent_sha256: string }>(sql`
         SELECT intent_sha256
@@ -749,6 +755,10 @@ export async function createOrderIntake(input: unknown,createCustomer?:CustomerW
       }
       await binding?.after(tx,authorization.data,receipt);
       return { code: "OK", receipt, replayed: false };
+      };
+      const result=await run();
+      if(binding?.quoteAuthorization&&result.code!=='OK')throw new QuoteOrderRejected(result);
+      return result;
     });
   } catch (error) {
     console.error("[ORDER_INTAKE_WRITE_FAILED]", {
@@ -756,7 +766,7 @@ export async function createOrderIntake(input: unknown,createCustomer?:CustomerW
       errorMessage: error instanceof Error ? error.message : "Unbekannter Serverfehler",
       cause: error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined,
     });
-    if(error instanceof CustomerWriteRejected)return error.result;
+    if(error instanceof CustomerWriteRejected||error instanceof QuoteOrderRejected)return error.result;
     return { code: "UNAVAILABLE", message: "Wareneingang konnte nicht sicher gespeichert werden. Fehlercode: ORDER_INTAKE_WRITE_FAILED." };
   }
 }

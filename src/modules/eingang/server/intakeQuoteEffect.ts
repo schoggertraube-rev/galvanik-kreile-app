@@ -1,7 +1,7 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
-import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
 /** Called only inside the existing quote writer's transaction; no separate capture. */
 export async function recordIntakeQuoteEffect(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{source:{itemId:string;version:number;message:boolean};quoteId:string;customerId:string;clientEventId:string;effect?:'ware'|'accept'|'reject'|'conditional'|'amend'}) {
@@ -20,4 +20,20 @@ export async function recordIntakeQuoteEffect(tx:PrivilegedTenantTransaction,aut
   const updated=await tx.execute(sql`UPDATE public.intake_item SET kunde_id=${input.customerId},vorgang_art='kv',vorgang_id=${input.quoteId},zuordnung='hand',anliegen=CASE WHEN ${input.effect==='conditional'} THEN array_append(array_remove(anliegen,'aenderung'),'aenderung') ELSE anliegen END,anliegen_haupt=${concerns[0]??null},anliegen_offen=ARRAY[${sql.join(concerns.map(value=>sql`${value}`),sql`, `)}]::text[],einsatz=${usage},version=version+1,geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${input.source.itemId}::uuid AND version=${source.version} RETURNING id`);
   if (updated.length!==1) throw Error('QUOTE_SOURCE_WRITE_CONFLICT');
   await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES(${auth.tenantId},${input.source.itemId}::uuid,${input.effect==='ware'?'zugeordnet':'anliegen'},${input.clientEventId}::uuid,${auth.userId},${JSON.stringify(source)}::jsonb,${JSON.stringify({action:input.effect==='amend'?'kv.geaendert':input.effect==='ware'?'kv.ware_angenommen':input.effect==='accept'?'kv.zugesagt':input.effect==='reject'?'kv.abgesagt':input.effect==='conditional'?'kv.anpassen':'kv.angelegt',quoteId:input.quoteId,anliegenOffen:concerns,einsatz:usage})}::jsonb)`);
+}
+
+/** Only reply provenance is exposed; the original and its concerns remain owned here. */
+export async function readIntakeQuoteReplyReference(auth:AuthorizationSnapshot,input:{itemId:string;version:number;quoteId:string;customerId:string}){
+ if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:'Der Mailbeleg benötigt Mails.'};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<{version:number;kunde_id:string|null;vorgang_art:string|null;vorgang_id:string|null;sender:string;chain:{source?:string;status?:string;originalSha256?:string;inReplyTo?:string[]}|null}>(sql`SELECT source.version,source.kunde_id,source.vorgang_art,source.vorgang_id,source.absender_adresse AS sender,original.nachher->'replyChain' AS chain FROM public.intake_item source
+   JOIN LATERAL(SELECT event.nachher FROM public.intake_event event WHERE event.tenant_id=source.tenant_id AND event.item_id=source.id AND event.art='angelegt' ORDER BY event.zeit,event.id LIMIT 1) original ON true
+   WHERE source.tenant_id=${auth.tenantId} AND source.id=${input.itemId}::uuid AND source.kanal='mail'
+   AND EXISTS(SELECT 1 FROM public.intake_event done WHERE done.tenant_id=source.tenant_id AND done.item_id=source.id AND done.art='einsatz' AND done.nachher->>'action'='mail_import_complete')
+   AND EXISTS(SELECT 1 FROM public.intake_file file WHERE file.tenant_id=source.tenant_id AND file.item_id=source.id AND file.mime='message/rfc822' AND file.sha256=original.nachher->'replyChain'->>'originalSha256'
+     AND EXISTS(SELECT 1 FROM public.intake_event secured WHERE secured.tenant_id=file.tenant_id AND secured.item_id=file.item_id AND secured.art='original_gespeichert' AND secured.nachher->>'fileId'=file.id::text))`);
+  const row=rows[0];if(rows.length!==1||!row?.chain||row.chain.source!=='original_mime'||row.chain.status!=='present'||!Array.isArray(row.chain.inReplyTo)||row.chain.inReplyTo.length!==1||typeof row.chain.originalSha256!=='string'||!/^[0-9a-f]{64}$/.test(row.chain.originalSha256))return {code:'VALIDATION_ERROR' as const,message:'Die Mail hat keinen eindeutigen direkten Fassungsbeleg. Aktuelle Fassung bestätigen lassen.'};
+  if(row.version!==input.version||row.kunde_id&&row.kunde_id!==input.customerId||row.vorgang_id&&(row.vorgang_art!=='kv'||row.vorgang_id!==input.quoteId))return {code:'CONFLICT' as const,message:'Mailbezug wurde geändert. Original neu lesen.'};
+  return {code:'OK' as const,reference:{internetMessageId:row.chain.inReplyTo[0],sender:row.sender,originalSha256:row.chain.originalSha256}};
+ });}catch(error){console.error('[QUOTE_REPLY_REFERENCE_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Der originale Antwortbezug konnte nicht sicher gelesen werden.'};}
 }

@@ -105,7 +105,7 @@ async function createFixture(rights: string[]): Promise<Fixture> {
 it('imports one MIME + inline/non-inline originals via the real UI action, rereads DB/events/Storage/view and never duplicates or hides them on provider failure',async()=>{
  const run=randomUUID(),graphId='TEST-graph-'+run,internetId='<TEST-'+run+'@example.invalid>';
  const photo=Buffer.alloc(16000,7),smallPhoto=Buffer.alloc(200,8),logo=Buffer.from('TEST-logo');
- const mime=Buffer.from('From: TEST Kunde <test-'+run+'@example.invalid>\r\nMessage-ID: '+internetId+'\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=TEST\r\n\r\n--TEST\r\nContent-Type: text/plain\r\n\r\nTEST Bitte Angebot erstellen\r\n--TEST\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\n\r\n'+photo.toString('base64')+'\r\n--TEST--\r\n');
+ const mime=Buffer.from('From: TEST Kunde <test-'+run+'@example.invalid>\r\nMessage-ID: '+internetId+'\r\nIn-Reply-To: <TEST-KV-Edition1@example.invalid>\r\nReferences: <TEST-Request@example.invalid>\r\n <TEST-KV-Edition1@example.invalid>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=TEST\r\n\r\n--TEST\r\nContent-Type: text/plain\r\n\r\nTEST Bitte Angebot erstellen\r\n--TEST\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\n\r\n'+photo.toString('base64')+'\r\n--TEST--\r\n');
  let offline=false,providerCalls=0,failOriginalDownload=true;
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
   const url=typeof input==='string'?input:input instanceof URL?input.href:input.url;
@@ -138,7 +138,13 @@ it('imports one MIME + inline/non-inline originals via the real UI action, rerea
  expect(row).toMatchObject({graph_message_id:graphId,kanal:'mail',text:'TEST Bitte Angebot erstellen'});
  expect(first.mails).toContainEqual(expect.objectContaining({id:row.id,fileCount:2}));
  const events=await sql`SELECT art,nachher FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${row.id}::uuid`;
- expect(events.filter(event=>event.art==='angelegt')).toHaveLength(1);expect(events.filter(event=>event.art==='original_gespeichert')).toHaveLength(3);
+ expect(events.filter(event=>event.art==='angelegt')).toHaveLength(1);
+ expect(events.find(event=>event.art==='angelegt')?.nachher.replyChain).toEqual({source:'original_mime',originalSha256:createHash('sha256').update(mime).digest('hex'),status:'present',inReplyTo:['<TEST-KV-Edition1@example.invalid>'],references:['<TEST-Request@example.invalid>','<TEST-KV-Edition1@example.invalid>']});
+ const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const {readIntakeMailImportReceipt}=await import('@/modules/eingang/server-public');
+ const sourceRead=await withSession(full,async()=>{const authorization=await resolveAuthorization();if(!authorization.ok)throw Error('TEST reply source authorization');return readIntakeMailImportReceipt(authorization.data,{itemId:row.id});});
+ expect(sourceRead).toMatchObject({code:'OK',message:{replyChain:{source:'original_mime',status:'present',inReplyTo:['<TEST-KV-Edition1@example.invalid>'],references:['<TEST-Request@example.invalid>','<TEST-KV-Edition1@example.invalid>']}}});
+expect(events.filter(event=>event.art==='original_gespeichert')).toHaveLength(3);
  const files=await sql`SELECT id::text,art,dateiname,mime,sha256,speicherpfad FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${row.id}::uuid`;
  expect(files).toHaveLength(3);expect(files.some(file=>file.art==='mime'&&file.mime==='message/rfc822')).toBe(true);expect(files.some(file=>file.dateiname.includes('Signatur'))).toBe(false);
  const {createAdminClient}=await import('@/lib/supabase/admin');

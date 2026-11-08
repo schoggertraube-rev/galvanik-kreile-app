@@ -231,7 +231,7 @@ describe("H18 quote Server Actions against the real replay database", () => {
       goodsReceiptId,
       expectedVersion: 2,
       confirmedAward: true,
-      confirmedOrderDueDate: "2027-04-24",
+      confirmedOrderDueDate: "2027-04-17",
       handoverMode: "pickup",
       paymentMode: "rechnung",
     }));

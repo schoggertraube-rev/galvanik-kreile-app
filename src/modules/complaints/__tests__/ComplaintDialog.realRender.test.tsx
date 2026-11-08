@@ -201,3 +201,13 @@ it('opens the reminder in the existing composer, retains edits on failure and re
  expect(await screen.findByText('Begleitschein gesendet · Erinnerung ruht für 5 Arbeitstage')).toBeInTheDocument();
  expect(send.mock.calls[1][0]).toEqual(original);expect(ports.write).not.toHaveBeenCalled();expect(ports.sendResult).not.toHaveBeenCalled();expect(refreshed).toHaveBeenCalledTimes(1);
 });
+
+
+it('AF-11 shows the preserved issued credit after reopening and disables a second credit',async()=>{
+ const value=recorded();value.complaint={...value.complaint!,gutschriftNr:'GS-TEST-REST',gutschriftBetrag:'50.00',version:5};
+ const {ports}=setup(value);
+ await screen.findByText('Gutschrift GS-TEST-REST besteht · 50,00 € · keine zweite Gutschrift anlegen.');
+ fireEvent.click(screen.getByRole('button',{name:'berechtigt'}));
+ expect(screen.getByRole('button',{name:'Gutschrift'})).toBeDisabled();
+ expect(ports.write).not.toHaveBeenCalled();
+});

@@ -1,4 +1,3 @@
-import {quoteHasCreatedOrder} from '@/lib/server/quoteGoodsContextPort';
 import "server-only";
 import {createHash} from "node:crypto";
 import {sql} from "drizzle-orm";
@@ -9,6 +8,7 @@ import {orderPositionQuantityError} from "@/lib/orderPositionContract";
 import {goodsReceiptGaps,goodsReceiptWare,parseGoodsReceiptInput,type GoodsReceiptInput,type GoodsReceiptRecord,type GoodsReceiptFailure,type GoodsReceiptReadResult} from "../goodsReceiptContract";
 import {bindIntakeOriginalToOrder} from "./intakeOrderBinding";
 
+import {quoteHasCreatedOrder} from '@/lib/server/quoteGoodsContextPort';
 import {saveQuoteGoodsReceipt} from './quoteGoodsReceipt';
 
 type ReceiptRow=GoodsReceiptRecord;
@@ -132,25 +132,39 @@ export async function readGoodsReceipts(orderId:string):Promise<GoodsReceiptRead
 
 /** Attach the same early receipt after the canonical quote/order event, in that transaction. */
 export async function bindQuoteGoodsReceiptToCreatedOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{quoteId:string;receiptId:string;clientEventId:string;orderId:string;items:readonly {id:string;quantity:number}[]}){
- // U-249: binding an inspected KV receipt is allowed to the real actor only for its canonical conversion.
- if(!await quoteHasCreatedOrder(tx,auth.tenantId,input.quoteId,input.orderId))fail('FORBIDDEN','Auftrag gehört nicht zur gespeicherten KV-Umwandlung.');
- const locked=await tx.execute(sql`SELECT id FROM public.goods_receipt WHERE tenant_id=${auth.tenantId} AND id=${input.receiptId}::uuid FOR UPDATE`);
- const before=await readReceipt(tx,auth,input.receiptId);
- if(locked.length!==1||!before||before.kv_id!==input.quoteId||before.status!=='angenommen'||!before.item_id)fail('VALIDATION_ERROR','Angenommener KV-Warenbeleg fehlt.');
+ if(!await quoteHasCreatedOrder(tx,auth.tenantId,input.quoteId,input.orderId))fail('FORBIDDEN','Warenbindung benötigt den wirklichen KV-Auftrag.');
+ const locked=await tx.execute<{id:string;cleared:unknown}>(sql`SELECT receipt.id::text,projection.abweichung_geklaert AS cleared FROM public.goods_receipt receipt JOIN public.v_quote_goods_receipt_v1 projection ON projection.tenant_id=receipt.tenant_id AND projection.id=receipt.id
+ WHERE receipt.tenant_id=${auth.tenantId} AND receipt.kv_id=${input.quoteId}::uuid AND receipt.status='angenommen'
+ AND NOT EXISTS(SELECT 1 FROM public.intake_event returned WHERE returned.tenant_id=receipt.tenant_id AND returned.art='ware' AND returned.nachher->>'action'='kv.ware_zurueckgegeben' AND returned.nachher->>'receiptId'=receipt.id::text)
+ ORDER BY receipt.id FOR UPDATE OF receipt`);
+ const before:ReceiptRow[]=[];
+ for(const row of locked){const receipt=await readReceipt(tx,auth,row.id);if(!receipt||!receipt.item_id)fail('VALIDATION_ERROR','Angenommener KV-Warenbeleg fehlt.');before.push(receipt);}
+ const primary=before.find(row=>row.id===input.receiptId);
+ if(!primary)fail('VALIDATION_ERROR','Angenommener KV-Warenbeleg fehlt.');
  const order=await readGoodsReceiptOrder(tx,auth,input.orderId);
  if(!order)fail('NOT_FOUND','Neuer Auftrag ist nicht lesbar.');
- if(before.auftrag_id){if(before.auftrag_id!==order.id)fail('CONFLICT','Warenbeleg gehört bereits zu einem anderen Auftrag.');return {code:'OK' as const,receipt:before,replayed:true};}
- if(before.zustand!=='unauffaellig'||before.abweichung.length||before.packstuecke_da!==before.packstuecke_gesamt||before.verfahren_wie_kv!=='stimmt')fail('VALIDATION_ERROR','Warenabweichung zuerst klären; der KV wird nicht still zum Auftrag.');
- if(before.mengen.filter(row=>Number(row.bestaetigt)>0).length!==order.items.length)fail('VALIDATION_ERROR','KV und Warenmenge passen nicht zusammen. KV-Fassung und Warenannahme abgleichen.');
- let arrivedIndex=0;
- const quantities=before.mengen.map(row=>{if(row.bestaetigt===0)return row;const item=typeof row.kv_position==='number'?input.items[arrivedIndex++]:undefined;if(!item||!order.items.some(stored=>stored.id===item.id&&stored.quantity===item.quantity)||row.bestaetigt!==item.quantity)fail('VALIDATION_ERROR','Mengenabweichung zwischen Ware und aktueller KV-Fassung; zuerst abgleichen.');return {...row,teil_id:item.id};});
- await tx.execute(sql`UPDATE public.goods_receipt SET auftrag_id=${order.id},mengen=${JSON.stringify(quantities)}::jsonb,version=version+1,geaendert_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${input.receiptId}::uuid AND version=${before.version} AND auftrag_id IS NULL`);
+ if(before.some(row=>row.auftrag_id&&row.auftrag_id!==order.id))fail('CONFLICT','Warenbeleg gehört bereits zu einem anderen Auftrag.');
+ if(before.every(row=>row.auftrag_id===order.id))return {code:'OK' as const,receipt:primary,replayed:true};
+ if(before.some(row=>(row.zustand!=='unauffaellig'||row.abweichung.length||row.packstuecke_da!==row.packstuecke_gesamt||row.verfahren_wie_kv!=='stimmt')&&!locked.find(original=>original.id===row.id)?.cleared))fail('VALIDATION_ERROR','Warenabweichung zuerst klären; der KV wird nicht still zum Auftrag.');
+ const totals=new Map<number,number>();
+ for(const row of before)for(const line of row.mengen){if(!Number.isSafeInteger(line.kv_position)||!Number.isSafeInteger(line.bestaetigt)||Number(line.bestaetigt)<0)fail('VALIDATION_ERROR','Mengenabweichung zwischen Ware und aktueller KV-Fassung; zuerst abgleichen.');const position=line.kv_position!;totals.set(position,(totals.get(position)??0)+Number(line.bestaetigt));}
+ const arrived=[...totals].filter(([,amount])=>amount>0).sort(([a],[b])=>a-b);
+ if(arrived.length!==input.items.length||arrived.length!==order.items.length||arrived.some(([,amount],index)=>!Number.isSafeInteger(amount)||amount!==input.items[index]?.quantity||!order.items.some(row=>row.id===input.items[index]?.id&&row.quantity===amount)))fail('VALIDATION_ERROR','Mengenabweichung zwischen Ware und aktuellem Auftrag; nichts gebunden.');
+ const itemByPosition=new Map(arrived.map(([position],index)=>[position,input.items[index].id]));
+ const after:ReceiptRow[]=[];
+ for(const row of before){
+  if(row.auftrag_id){after.push(row);continue;}
+  const quantities=row.mengen.map(line=>Number(line.bestaetigt)>0?{...line,teil_id:itemByPosition.get(line.kv_position!)!}:line);
+  const changed=await tx.execute(sql`UPDATE public.goods_receipt SET auftrag_id=${order.id},mengen=${JSON.stringify(quantities)}::jsonb,version=version+1,geaendert_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid AND version=${row.version} AND auftrag_id IS NULL RETURNING id`);
+  if(changed.length!==1)throw Error('QUOTE_GOODS_ORDER_VERSION_CONFLICT');
+  await bindIntakeOriginalToOrder(tx,auth,{itemId:row.item_id!,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true,quoteId:input.quoteId});
+  const receipt=await readReceipt(tx,auth,row.id);if(!receipt||receipt.auftrag_id!==order.id||receipt.version!==row.version+1)throw Error('QUOTE_GOODS_ORDER_READBACK_INVALID');after.push(receipt);
+ }
  await updateGoodsReceiptOrder(tx,auth,order,'da','creation');
- await bindIntakeOriginalToOrder(tx,auth,{itemId:before.item_id,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true,quoteId:input.quoteId});
  const originals=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND vorgang_art='kv' AND vorgang_id=${input.quoteId} ORDER BY id FOR UPDATE`);
  for(const original of originals)await bindIntakeOriginalToOrder(tx,auth,{itemId:original.id,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true,quoteId:input.quoteId});
- const receipt=await readReceipt(tx,auth,input.receiptId);if(!receipt||receipt.auftrag_id!==order.id||receipt.version!==before.version+1)throw Error('QUOTE_GOODS_ORDER_READBACK_INVALID');
- await appendGoodsReceiptEvent(tx,auth,{clientEventId:input.clientEventId,orderId:order.id,receiptId:input.receiptId,version:order.version,intent:createHash('sha256').update(JSON.stringify(input)).digest('hex'),before,after:receipt});
+ const receipt=after.find(row=>row.id===input.receiptId)!;
+ await appendGoodsReceiptEvent(tx,auth,{clientEventId:input.clientEventId,orderId:order.id,receiptId:input.receiptId,version:order.version,intent:createHash('sha256').update(JSON.stringify(input)).digest('hex'),before:before.length===1?primary:before,after:after.length===1?receipt:{...receipt,boundReceipts:after}});
  return {code:'OK' as const,receipt,replayed:false};
 }
 
