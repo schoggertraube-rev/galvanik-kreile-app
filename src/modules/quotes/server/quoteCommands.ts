@@ -760,10 +760,12 @@ export async function readQuoteCopyCommand(authorization: QuoteCommandContext, i
  }catch(error){console.error('[QUOTE_COPY_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Kopiervorlage konnte nicht sicher gelesen werden.'};}
 }
 
-import {hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
-import {packagePartWords,type PackageCustomerHistory} from '@/lib/server/packageIntakeContextPort';
+import type {AuthorizationSnapshot} from '@/lib/server/authorization';
+import type {PackageCustomerHistory} from '@/lib/server/packageIntakeContextPort';
 /** Price-free history owned by quotes; closed quotes are included, never inferred into an assignment. */
 export async function readPackageQuoteHistory(auth:AuthorizationSnapshot,text:string):Promise<PackageCustomerHistory[]>{
+ const {hasAuthorizationArea}=await import('@/lib/server/authorization');
+ const {packagePartWords}=await import('@/lib/server/packageIntakeContextPort');
  if(!['eingang','kunden','auftraege'].every(area=>hasAuthorizationArea(auth,area as 'eingang'|'kunden'|'auftraege')))return [];
  const words=packagePartWords(text);if(!words.length)return [];
  return withPrivilegedTenantTransaction(auth,async tx=>{
