@@ -3,7 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderTaskAssignmentReceipt } from "@/lib/server/commands/orderTaskAssignmentCommand";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
