@@ -28,14 +28,14 @@ export async function readIntakeHandoverMail(tx:PrivilegedTenantTransaction,auth
 }
 
 export async function recordIntakeHandoverEffect(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;orderId:string;clientEventId:string;taskId:string|null;mode:'pickup'|'shipping';requestedMode:'pickup'|'shipping'}){
-  const [before]=await tx.execute<{anliegen_offen:string[];version:number}>(sql`SELECT anliegen_offen,version FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid AND version=${input.version} FOR UPDATE`);
+  const [before]=await tx.execute<{anliegen_offen:string[];version:number;kunde_id:string|null}>(sql`SELECT anliegen_offen,version,kunde_id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid AND version=${input.version} FOR UPDATE`);
   if(!before?.anliegen_offen.includes('abholung'))throw Error('HANDOVER_SOURCE_VERSION_CONFLICT');
   const concerns=before.anliegen_offen.filter(value=>value!=='abholung');
   const waiting=await tx.execute(sql`SELECT id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND antwort_auf_item=${input.itemId}::uuid AND sendestatus IN ('entwurf','sendet','unklar','fehler') LIMIT 1`);
   const usage=concerns.length||waiting.length?'offen':'erledigt';
   const changed=await tx.execute(sql`UPDATE public.intake_item SET vorgang_art='auftrag',vorgang_id=${input.orderId},zuordnung='hand',anliegen_haupt=${concerns[0]??null},anliegen_offen=ARRAY[${sql.join(concerns.map(value=>sql`${value}`),sql`, `)}]::text[],einsatz=${usage},version=version+1,geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid AND version=${input.version} RETURNING id`);
   if(changed.length!==1)throw Error('HANDOVER_SOURCE_WRITE_CONFLICT');
-  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES(${auth.tenantId},${input.itemId}::uuid,'anliegen',${input.clientEventId}::uuid,${auth.userId},${JSON.stringify(before)}::jsonb,${JSON.stringify({action:input.taskId?'auftrag.uebergabe_klaeren':'auftrag.uebergabe_geaendert',orderId:input.orderId,taskId:input.taskId,handoverMode:input.mode,requestedHandoverMode:input.requestedMode,anliegenOffen:concerns,einsatz:usage})}::jsonb)`);
+  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES(${auth.tenantId},${input.itemId}::uuid,'anliegen',${input.clientEventId}::uuid,${auth.userId},${JSON.stringify(before)}::jsonb,${JSON.stringify({customerId:before.kunde_id,action:input.taskId?'auftrag.uebergabe_klaeren':'auftrag.uebergabe_geaendert',orderId:input.orderId,taskId:input.taskId,handoverMode:input.mode,requestedHandoverMode:input.requestedMode,anliegenOffen:concerns,einsatz:usage})}::jsonb)`);
 }
 
 /** Shared association writer for booking and the receipt of an existing order. */

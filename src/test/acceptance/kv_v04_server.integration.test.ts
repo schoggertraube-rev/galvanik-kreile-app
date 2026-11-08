@@ -1301,4 +1301,10 @@ it.each(['early','label','two','future','delivered'] as const)('AF19 real mail h
  const tasks=await sql`SELECT id::text,titel,notiz,bezug_id,status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${request.clientEventId}::uuid`;
  if(kind==='label'||kind==='delivered'){expect(tasks).toHaveLength(1);expect(tasks[0]).toMatchObject({bezug_id:orderId,status:'offen',titel:expect.stringContaining('+49 711 5550189'),notiz:expect.stringContaining(kind==='label'?'Versandetikett':'bereits übergeben')});expect(result).toMatchObject({receipt:{taskId:tasks[0].id}});}else expect(tasks).toHaveLength(0);
  if(kind==='future')expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='CUSTOMER_UPDATED_V1' AND payload::text LIKE ${'%'+fixture.customerId+'%'}`).toHaveLength(1);
+ if(kind==='early'){
+  const {assignIntakeCustomerAction}=await import('@/app/actions/eingang.actions');
+  expect(await withSession(fixture,()=>assignIntakeCustomerAction({itemId,version:2,clientEventId:randomUUID(),customerId:fixture.customerId,mode:'move'}))).toMatchObject({code:'OK'});
+  expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{id:orderId,handoverMode:'pickup',handoverNotice:{originalItemId:itemId}}}});
+ }
+
 });
