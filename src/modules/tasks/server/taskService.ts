@@ -108,10 +108,10 @@ export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransact
  return (await persistTask(tx,auth,value,deps,true,true)).task.id;
 }
 /** Shared completion writer. Invoice tasks remain inaccessible to the normal completion action. */
-async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quotePurpose?:{id:string;key:string}):Promise<Extract<TaskResult,{code:'OK'}>>{
+async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]}):Promise<Extract<TaskResult,{code:'OK'}>>{
   const before=await find(tx,auth,value.taskId,true);if(!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
-  const quoteCompletion=quotePurpose&&before.bezug_typ==='kv'&&before.bezug_id===quotePurpose.id&&before.client_key===quotePurpose.key&&before.art==='aufgabe';
-  if(!allowed(auth,before)&&!quoteCompletion)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
+  const operationalQuote=quoteOperation&&before.art==='aufgabe'&&before.bezug_typ==='kv'&&before.bezug_id===quoteOperation.quoteId&&quoteOperation.keys.includes(before.client_key);
+  if(!allowed(auth,before)&&!operationalQuote)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
   if(before.art==='rechnung'&&(!invoiceId||before.bezug_typ!=='eingangsrechnung'||before.bezug_id!==invoiceId||!hasAuthorizationArea(auth,'geld')))reject('FORBIDDEN','Rechnung klären wird ausschließlich in der Eingangsrechnung erledigt.');
   const note=value.note?.trim()||null;
   if(before.status==='erledigt'){
@@ -156,17 +156,15 @@ export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
 
 export type QuoteFollowupRequest={quoteId:string;quoteNumber:string;customerName:string;edition:number;sentEdition:number|null;action:'sent'|'cancel';dueDate:string|null;reason:string};
 /** Current and previous sent edition keys identify only this automatic task, never a user's other task. */
-export async function syncQuoteFollowupTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:QuoteFollowupRequest,deps:Dependencies):Promise<string|null>{
- if(!taskUuid(input.quoteId)||!Number.isSafeInteger(input.edition)||input.edition<1)reject('FORBIDDEN','KV-Nachfassen ist nicht freigegeben.');
- const financial=hasAuthorizationArea(auth,'geld')&&hasAuthorizationArea(auth,'auftraege');
- let acceptedCancellation=false;
- if(!financial&&input.action==='cancel'){const facts=await readQuoteFollowupFacts(tx,auth.tenantId,[input.quoteId]);acceptedCancellation=facts.length===1&&facts[0].integrity&&facts[0].stage==='zugesagt'&&facts[0].edition===input.edition;}
- if(!financial&&!acceptedCancellation)reject('FORBIDDEN','KV-Nachfassen ist nicht freigegeben.');
+export async function syncQuoteFollowupTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:QuoteFollowupRequest,deps:Dependencies,options:{operationalCancel?:boolean}={}):Promise<string|null>{
+ const operational=options.operationalCancel===true&&input.action==='cancel'&&input.reason==='KV zugesagt';
+ if((!operational&&(!hasAuthorizationArea(auth,'geld')||!hasAuthorizationArea(auth,'auftraege')))||!taskUuid(input.quoteId)||!Number.isSafeInteger(input.edition)||input.edition<1)reject('FORBIDDEN','KV-Nachfassen ist nicht freigegeben.');
+ if(operational){const [quote]=await readQuoteFollowupFacts(tx,auth.tenantId,[input.quoteId]);if(!quote?.integrity||quote.stage!=='zugesagt'||quote.edition!==input.edition)reject('CONFLICT','Die bestätigte KV-Zusage fehlt für das Erledigen der Nachfassaufgabe.');}
  const currentKey=eventKey(input.quoteId,input.edition,'quote-followup');
  const keys=[...new Set([currentKey,...(input.sentEdition?[eventKey(input.quoteId,input.sentEdition,'quote-followup')]:[])])];
  const rows=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=ANY(ARRAY[${sql.join(keys.map(key=>sql`${key}`),sql`, `)}]::uuid[]) ORDER BY id FOR UPDATE`);
  if(rows.some(row=>row.bezug_typ!=='kv'||row.bezug_id!==input.quoteId||row.art!=='aufgabe'))reject('CONFLICT','Nachfasskennung ist bereits anders belegt.');
- for(const row of rows){if(row.status==='offen'&&(input.action==='cancel'||row.client_key!==currentKey))await finishTask(tx,auth,{taskId:row.id,version:row.version,note:input.reason},deps,undefined,acceptedCancellation?{id:input.quoteId,key:row.client_key}:undefined);}
+ for(const row of rows){if(row.status==='offen'&&(input.action==='cancel'||row.client_key!==currentKey))await finishTask(tx,auth,{taskId:row.id,version:row.version,note:input.reason},deps,undefined,operational?{quoteId:input.quoteId,keys}:undefined);}
  if(input.action==='cancel')return null;
  const current=rows.find(row=>row.client_key===currentKey);
  if(current?.status==='erledigt')return null;

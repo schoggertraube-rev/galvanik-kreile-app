@@ -26,3 +26,5 @@ export type {
 
 export { readIntakeFileChanges, type IntakeFileChange } from "./server/intakeLive";
 export { processIntakeDeviceRequest } from "./server/intakeDevice";
+
+export {returnQuoteGoodsReceipt,readQuoteGoodsReturns} from "./server/quoteGoodsReturn";

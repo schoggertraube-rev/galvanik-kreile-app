@@ -9,3 +9,7 @@ export type IntakeSelectionInput={itemId:string;version:number;clientEventId:str
 export type IntakeUseInput={items:Array<{itemId:string;version:number}>;clientEventId:string;kind:'info'|'erledigt';note:string|null};
 export type IntakeReopenInput={itemId:string;version:number;clientEventId:string;reason:string};
 export type IntakeUseResult={code:'OK';captures:IntakeCapture[]}|{code:'INVOICE_REVIEW_REQUIRED';itemId:string;message:string}|Exclude<IntakeCaptureResult,{code:'OK'}>;
+
+/** A pending business decision must be completed by its existing domain writer. */
+export const INTAKE_REQUIRED_EFFECT_COPY={kv_annahme:'Zusage zum KV übernehmen',kv_ablehnung:'Absage zum KV übernehmen',kv_vorbehalt:'KV-Vorbehalt klären',preis_einwand:'KV-Vorbehalt klären',reklamation:'Reklamation bearbeiten',termin:'Termin abstimmen'} as const;
+export function intakeRequiredEffect(concerns:readonly string[]){for(const concern of concerns)if(Object.hasOwn(INTAKE_REQUIRED_EFFECT_COPY,concern))return INTAKE_REQUIRED_EFFECT_COPY[concern as keyof typeof INTAKE_REQUIRED_EFFECT_COPY];return null;}

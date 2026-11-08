@@ -66,16 +66,22 @@ function quoteCommandContext(authorization: AuthorizationSnapshot): QuoteCommand
 
 /** U-249 is an operational decision grant, never an edit/financial grant. */
 function quoteOperationContext(auth:AuthorizationSnapshot):QuoteCommandContext{const context=quoteCommandContext(auth);return {...context,capabilities:{...context.capabilities,canReadQuote:true,canDecideQuote:true,canConvertQuote:true}};}
-function quoteFollowupBinding(auth:AuthorizationSnapshot):QuoteFollowupBinding{
+function quoteFollowupBinding(auth:AuthorizationSnapshot,operationalCancel=false):QuoteFollowupBinding{
  return async(tx,{quote,action,phase})=>{
   const life=quote.lifecycle;if(!life)throw Error('QUOTE_FOLLOWUP_LIFECYCLE_MISSING');
-  const deps={effect:(transaction:typeof tx,snapshot:AuthorizationSnapshot,effect:Parameters<typeof recordIntakeTaskEffect>[2])=>recordIntakeTaskEffect(transaction,snapshot,effect,readCustomerProfile)};
+  const deps={effect:async(transaction:typeof tx,snapshot:AuthorizationSnapshot,effect:Parameters<typeof recordIntakeTaskEffect>[2])=>{
+   if(operationalCancel){
+    if(effect.action!=='erledigt'||effect.kind!=='aufgabe'||effect.reference.type!=='kv'||effect.reference.id!==quote.quoteId)throw Error('QUOTE_OPERATIONAL_TASK_SCOPE_INVALID');
+    await appendQuoteJournal(transaction,snapshot,{id:globalThis.crypto.randomUUID(),type:'QUOTE_FOLLOWUP_COMPLETED_V1',clientEventId:effect.key,correlationId:globalThis.crypto.randomUUID(),version:quote.version+1,description:'KV-Nachfassaufgabe durch persönliche Zusage erledigt',payload:{quoteId:quote.quoteId,taskId:effect.taskId,reason:effect.note}});return;
+   }
+   return recordIntakeTaskEffect(transaction,snapshot,effect,readCustomerProfile);
+  }};
   const request={quoteId:quote.quoteId,quoteNumber:quote.quoteNumber,customerName:quote.customerDisplayName,edition:life.edition,sentEdition:life.sentEdition,dueDate:null as string|null,reason:action==='accept'?'KV zugesagt':action==='reject'?'KV abgesagt':action==='conditional'?'KV mit Vorbehalt · Anpassung erforderlich':'Neue KV-Fassung'};
   if(phase==='before'){
    if(action==='sent'&&life.sentEdition!==null&&life.sentEdition!==life.edition)await syncQuoteFollowupTask(tx,auth,{...request,edition:life.sentEdition,action:'cancel'},deps);
    return null;
   }
-  if(action!=='sent'||life.acceptedEdition===life.edition){await syncQuoteFollowupTask(tx,auth,{...request,action:'cancel'},deps);return null;}
+  if(action!=='sent'||life.acceptedEdition===life.edition){await syncQuoteFollowupTask(tx,auth,{...request,action:'cancel'},deps,{operationalCancel});return null;}
   const settings=await readQuoteSettingsInTransaction(tx,auth.tenantId),days=settings?.followupDays;
   if(days!==null&&days!==undefined){const date=new Date(berlinCalendarDay()+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+days);request.dueDate=date.toISOString().slice(0,10);}
   await syncQuoteFollowupTask(tx,auth,{...request,action:'sent'},deps);
@@ -95,7 +101,7 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
     const auth=await resolveAuthorization();
     const failure=authorizationFailure(auth);
     if (failure||!auth.ok) return failure!;
-    const result=await changeQuoteLifecycleCommand(input?.action==='accept'?quoteOperationContext(auth.data):quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId});
+    const result=await changeQuoteLifecycleCommand((input?.action==='accept'||input?.action==='extend')?quoteOperationContext(auth.data):quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data,input?.action==='accept'&&!quoteCommandContext(auth.data).capabilities.canReadQuote),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId});
     if (result.code==='OK') {
       revalidatePath('/');
       revalidatePath('/customers');
@@ -280,7 +286,7 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
   };
   const accept=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],auth:AuthorizationSnapshot)=>{
     if(!telephoneAcceptance)return;
-    const result=await changeQuoteLifecycleCommand(commandContext,{quoteId:input.quoteId,expectedVersion:input.expectedVersion,action:'accept',...telephoneAcceptance},(transaction,source)=>recordIntakeQuoteEffect(transaction,auth,source),quoteFollowupBinding(auth),{transaction:tx});
+    const result=await changeQuoteLifecycleCommand(commandContext,{quoteId:input.quoteId,expectedVersion:input.expectedVersion,action:'accept',...telephoneAcceptance},(transaction,source)=>recordIntakeQuoteEffect(transaction,auth,source),quoteFollowupBinding(auth,!quoteCommandContext(auth).capabilities.canReadQuote),{transaction:tx});
     if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_TELEPHONE_ACCEPTANCE_FAILED');}
   };
   const order = await createOrderIntake(prepared.orderInput,undefined,{
