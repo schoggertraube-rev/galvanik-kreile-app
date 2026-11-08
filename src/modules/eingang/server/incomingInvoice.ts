@@ -1,5 +1,6 @@
 import {readIntakeActorTraces} from './actorRead';
 import 'server-only';
+import {invoiceAutomaticReadiness} from '../invoiceAutomation';
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {sql} from 'drizzle-orm';
@@ -17,7 +18,7 @@ export type InvoiceDependencies={
  createTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;clientKey:string;reason:string})=>Promise<string>;
  resolveTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;taskId:string;note:string})=>Promise<void>;
 };
-type Source={id:string;version:number;at:string;channel:string;sender:string|null;kunde_id:string|null;vorgang_art:string|null;vorgang_id:string|null;einsatz:string;anliegen_offen:string[];aussortiert:string|null};
+type Source={id:string;version:number;at:string;channel:string;sender:string|null;kunde_id:string|null;vorgang_art:string|null;vorgang_id:string|null;einsatz:string;anliegen_offen:string[];aussortiert:string|null;zuordnung:string};
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const optionalText=(v:unknown,max:number)=>v===null||typeof v==='string'&&v.length<=max;
@@ -50,7 +51,7 @@ export async function readInvoiceTaskContext(tx:PrivilegedTenantTransaction,auth
 async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,lock=false){
  if(lock)await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${id},0))`);
  const rows=await tx.execute<Source>(sql`SELECT id::text,version,coalesce(empfangen_am,erstellt_am)::text AS at,kanal AS channel,absender_name AS sender,
-  kunde_id,vorgang_art,vorgang_id,einsatz,anliegen_offen,aussortiert FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${id}::uuid ${lock?sql`FOR UPDATE`:sql``}`);
+  kunde_id,vorgang_art,vorgang_id,einsatz,anliegen_offen,aussortiert,zuordnung FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${id}::uuid ${lock?sql`FOR UPDATE`:sql``}`);
  if(rows.length!==1)reject('NOT_FOUND','Eingang der Rechnung nicht verfügbar.');return rows[0];
 }
 function fieldsFrom(invoice:IncomingInvoice):InvoiceFields{return {
@@ -99,6 +100,8 @@ export async function readIncomingInvoice(input:unknown,deps:InvoiceDependencies
   const actorTrace=(await readIntakeActorTraces(tx,auth,[row.id],invoice?.id)).get(row.id);
   const view:InvoiceView={actorTrace,item:{id:row.id,version:row.version,at:row.at,channel:row.channel,sender:row.sender},invoice,supplier:selected,originals:[...originals],fileId:primaryFileId,
    fields,uncertain:invoice?0:suggestions.filter(value=>value.sicherheit!=='sicher'&&!value.verified).length,conflict:null,duplicate:await duplicate(tx,auth,fields,invoice?.id)};
+  const secured=primaryFileId?await tx.execute(sql`SELECT file.id FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.id=${primaryFileId}::uuid AND file.art<>'mime' AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=file.tenant_id AND receipt.item_id=file.item_id AND receipt.art='original_gespeichert' AND receipt.nachher->>'fileId'=file.id::text AND receipt.nachher->>'sha256'=file.sha256)`):[];
+  view.automation=invoiceAutomaticReadiness({fields,originalSecured:secured.length===1,supplierConfirmed:Boolean(selected&&row.kunde_id===selected.id&&row.zuordnung!=='offen'),stored:invoice!==null,duplicate:view.duplicate!==null,suggestions:[...suggestions]});
   return {code:'OK' as const,view};
  });}catch(error){const result=failure(error);return result.code==='DUPLICATE'?{code:'CONFLICT',message:result.message}:result;}
 }
