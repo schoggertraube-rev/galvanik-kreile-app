@@ -42,3 +42,12 @@ export async function readQuoteReceivedQuantities(tx:PrivilegedTenantTransaction
  void receiptId;
  return [...totals].sort(([a],[b])=>a-b).map(([kv_position,bestaetigt])=>({kv_position,bestaetigt}));
 }
+
+/** A closed authorization case for the existing order writer, backed by its canonical KV reservation. */
+export async function hasReservedQuoteOrderIntent(tx:PrivilegedTenantTransaction,actor:{tenantId:string;userId:string},input:{quoteId:string;customerId:string;clientEventId:string;orderIntentSha256:string}){
+ const rows=await tx.execute(sql`SELECT request.quote_id FROM private.quote_conversion_requests request JOIN private.quotes quote ON quote.tenant_id=request.tenant_id AND quote.id=request.quote_id
+ WHERE request.tenant_id=${actor.tenantId} AND request.quote_id=${input.quoteId}::uuid AND request.actor_id=${actor.userId}::uuid AND request.client_event_id=${input.clientEventId}::uuid AND request.order_intent_sha256=${input.orderIntentSha256}
+ AND quote.customer_id=${input.customerId} AND quote.zugesagt_fassung=quote.fassung AND quote.zugesagt_am IS NOT NULL AND nullif(btrim(quote.zusage_nachweis),'') IS NOT NULL AND quote.abgesagt_am IS NULL
+ AND (quote.linked_order_id IS NULL OR EXISTS(SELECT 1 FROM private.quote_conversion_receipts receipt WHERE receipt.tenant_id=request.tenant_id AND receipt.quote_id=request.quote_id AND receipt.actor_id=request.actor_id AND receipt.client_event_id=request.client_event_id AND receipt.order_id=quote.linked_order_id))`);
+ return rows.length===1;
+}

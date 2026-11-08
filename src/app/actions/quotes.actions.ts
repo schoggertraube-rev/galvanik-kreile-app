@@ -242,7 +242,15 @@ export async function readQuoteConversionReceiptAction(input: { quoteId: string;
   }
 }
 
-export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown) {
+export async function convertQuoteToOrderAction(input:ConvertQuoteInput,newGoodsInput?:unknown){return convertQuoteToOrder(input,newGoodsInput);}
+
+/** U249 adapter: same conversion/order writers, restricted response without financial quote data. */
+export async function convertQuoteOperationalAction(input:ConvertQuoteInput){
+ const result=await convertQuoteToOrder(input,undefined,true);if(result.code!=='OK')return result;
+ return {code:'OK' as const,replayed:result.replayed,receipt:{quoteId:result.quote.quoteId,quoteNumber:result.quote.quoteNumber,orderId:result.orderReceipt.orderId,orderNumber:result.orderReceipt.orderNumber,eventId:result.orderReceipt.eventId}};
+}
+
+async function convertQuoteToOrder(input: ConvertQuoteInput,newGoodsInput?:unknown,operational=false) {
   const newGoods=newGoodsInput===undefined?null:parseQuoteGoodsReceiptInput(newGoodsInput);
   if(newGoodsInput!==undefined&&(!newGoods||newGoods.quoteId!==input.quoteId||newGoods.id!==input.goodsReceiptId||newGoods.expectedQuoteVersion!==input.expectedVersion))return {code:"VALIDATION_ERROR" as const,message:"KV und neue Warenprüfung passen nicht zusammen."};
   let authorization;
@@ -254,7 +262,8 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
 
-  const commandContext = quoteCommandContext(authorization.data);
+  const ordinaryContext=quoteCommandContext(authorization.data);
+  const commandContext=operational?{...ordinaryContext,capabilities:{...ordinaryContext.capabilities,canReadQuote:true,canConvertQuote:true}}:ordinaryContext;
   const prepared = await prepareQuoteConversionCommand(commandContext, input,{planOnly:true,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
   if (prepared.code !== "OK") return prepared;
 
@@ -270,7 +279,8 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
     if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_ORDER_BINDING_FAILED');}
   };
   const order = await createOrderIntake(prepared.orderInput,undefined,{
-    before:async(tx,auth)=>{await check(tx,true);if(newGoods&&prepared.replayed)await saveGoods(tx,auth);},
+    ...(operational?{quoteAuthorization:{quoteId:input.quoteId}}:{}),
+    before:async(tx,auth)=>{await check(tx,!operational);if(newGoods&&prepared.replayed)await saveGoods(tx,auth);},
     beforeEvent:async(tx,auth)=>{await saveGoods(tx,auth);await check(tx,false);},
     after:async(tx,auth,receipt)=>{
       try{goods=await bindQuoteGoodsReceiptToCreatedOrder(tx,auth,{quoteId:input.quoteId,receiptId:input.goodsReceiptId!,clientEventId:input.clientEventId,orderId:receipt.orderId,items:receipt.items});}

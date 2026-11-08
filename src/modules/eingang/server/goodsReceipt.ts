@@ -8,6 +8,7 @@ import {orderPositionQuantityError} from "@/lib/orderPositionContract";
 import {goodsReceiptGaps,goodsReceiptWare,parseGoodsReceiptInput,type GoodsReceiptInput,type GoodsReceiptRecord,type GoodsReceiptFailure,type GoodsReceiptReadResult} from "../goodsReceiptContract";
 import {bindIntakeOriginalToOrder} from "./intakeOrderBinding";
 
+import {quoteHasCreatedOrder} from '@/lib/server/quoteGoodsContextPort';
 import {saveQuoteGoodsReceipt} from './quoteGoodsReceipt';
 
 type ReceiptRow=GoodsReceiptRecord;
@@ -131,7 +132,7 @@ export async function readGoodsReceipts(orderId:string):Promise<GoodsReceiptRead
 
 /** Attach the same early receipt after the canonical quote/order event, in that transaction. */
 export async function bindQuoteGoodsReceiptToCreatedOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{quoteId:string;receiptId:string;clientEventId:string;orderId:string;items:readonly {id:string;quantity:number}[]}){
- if(!hasAuthorizationArea(auth,'eingang'))fail('FORBIDDEN','Warenannahme erfordert Eingang.');
+ if(!hasAuthorizationArea(auth,'eingang')&&!await quoteHasCreatedOrder(tx,auth.tenantId,input.quoteId,input.orderId))fail('FORBIDDEN','Warenbindung benötigt den wirklichen KV-Auftrag.');
  const locked=await tx.execute<{id:string;cleared:unknown}>(sql`SELECT receipt.id::text,projection.abweichung_geklaert AS cleared FROM public.goods_receipt receipt JOIN public.v_quote_goods_receipt_v1 projection ON projection.tenant_id=receipt.tenant_id AND projection.id=receipt.id
  WHERE receipt.tenant_id=${auth.tenantId} AND receipt.kv_id=${input.quoteId}::uuid AND receipt.status='angenommen'
  AND NOT EXISTS(SELECT 1 FROM public.intake_event returned WHERE returned.tenant_id=receipt.tenant_id AND returned.art='ware' AND returned.nachher->>'action'='kv.ware_zurueckgegeben' AND returned.nachher->>'receiptId'=receipt.id::text)
@@ -156,7 +157,7 @@ export async function bindQuoteGoodsReceiptToCreatedOrder(tx:PrivilegedTenantTra
   const quantities=row.mengen.map(line=>Number(line.bestaetigt)>0?{...line,teil_id:itemByPosition.get(line.kv_position!)!}:line);
   const changed=await tx.execute(sql`UPDATE public.goods_receipt SET auftrag_id=${order.id},mengen=${JSON.stringify(quantities)}::jsonb,version=version+1,geaendert_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid AND version=${row.version} AND auftrag_id IS NULL RETURNING id`);
   if(changed.length!==1)throw Error('QUOTE_GOODS_ORDER_VERSION_CONFLICT');
-  await bindIntakeOriginalToOrder(tx,auth,{itemId:row.item_id!,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true});
+  await bindIntakeOriginalToOrder(tx,auth,{itemId:row.item_id!,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true,quoteId:input.quoteId});
   const receipt=await readReceipt(tx,auth,row.id);if(!receipt||receipt.auftrag_id!==order.id||receipt.version!==row.version+1)throw Error('QUOTE_GOODS_ORDER_READBACK_INVALID');after.push(receipt);
  }
  await updateGoodsReceiptOrder(tx,auth,order,'da','creation');

@@ -888,9 +888,9 @@ it('U246 multi-position price uses the same text and goods proposal without inve
 
 });
 
-it.each([false,true,'partial'] as const)('AF-6: two package receipts preserve every source; damaged secondary blocks the whole conversion: %s',async(damaged)=>{
+it.each([false,true,'partial','operational'] as const)('AF-6: two package receipts preserve every source; damaged secondary blocks the whole conversion: %s',async(damaged)=>{
  const fixture=await createFixture();
- const {createQuoteAction,changeQuoteLifecycleAction,convertQuoteToOrderAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const {createQuoteAction,changeQuoteLifecycleAction,convertQuoteToOrderAction,convertQuoteOperationalAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
  const {saveIntakeNoteAction,saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
  const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST AF6 zwei reale Pakete',positions:[{name:'TEST Halter',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
  if(created.code!=='OK')throw Error('TEST AF6 quote');
@@ -899,19 +899,44 @@ it.each([false,true,'partial'] as const)('AF-6: two package receipts preserve ev
   const itemId=randomUUID();sources.push(itemId);
   const capture=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST AF6 Paket '+index,context:{customerId:fixture.customerId}}));
   if(capture.code!=='OK')throw Error('TEST AF6 capture');
-  const photos=[{fileId:randomUUID(),kind:'uebersicht' as const},{fileId:randomUUID(),kind:'teile' as const},...(damaged&&index===1?[{fileId:randomUUID(),kind:'abweichung' as const}]:[])];
+  const photos=[{fileId:randomUUID(),kind:'uebersicht' as const},{fileId:randomUUID(),kind:'teile' as const},...(damaged&&damaged!=='operational'&&index===1?[{fileId:randomUUID(),kind:'abweichung' as const}]:[])];
   for(const [photoIndex,photo] of photos.entries()){
    const hash=(photoIndex?'d':'c').repeat(64);
    await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${photo.fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${photo.fileId},'foto','TEST-AF6.jpg','image/jpeg',32,${hash},${KREILE_TENANT_SLUG+'/'+hash},now(),${fixture.actorId}::uuid,${photoIndex+1},true,false,'fertig')`;
    await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'original_gespeichert',${photo.fileId}::uuid,${fixture.actorId},${sql.json({fileId:photo.fileId,sha256:hash,bytes:32})})`;
   }
   const id=randomUUID();receipts.push(id);
-  const inspection:NonNullable<ReturnType<typeof import('@/modules/eingang/public').parseQuoteGoodsReceiptInput>>={id,clientKey:randomUUID(),clientEventId:randomUUID(),itemId,quoteId,expectedQuoteVersion:1,sourceVersion:capture.capture.version,expectedVersion:0,mode:'erfassung',command:'accept',card:1,packagesReceived:damaged==='partial'&&index===1?2:1,packagesTotal:damaged==='partial'&&index===1?3:1,condition:damaged&&index===1?(damaged==='partial'?'teillieferung':'abweichung'):'unauffaellig',deviations:damaged===true&&index===1?['beschädigt']:[],foundUnattended:false,foundAt:null,procedure:'stimmt',procedureNote:null,photos,quantities:created.quote.positions.map(position=>({itemId:position.id,expected:position.quantity,received:amount,confirmed:false,note:'TEST tatsaechlich angenommene Teilmenge'})),location:'TEST AF6 Regal '+index};inspections.push(inspection);
+  const inspection:NonNullable<ReturnType<typeof import('@/modules/eingang/public').parseQuoteGoodsReceiptInput>>={id,clientKey:randomUUID(),clientEventId:randomUUID(),itemId,quoteId,expectedQuoteVersion:1,sourceVersion:capture.capture.version,expectedVersion:0,mode:'erfassung',command:'accept',card:1,packagesReceived:damaged==='partial'&&index===1?2:1,packagesTotal:damaged==='partial'&&index===1?3:1,condition:damaged&&damaged!=='operational'&&index===1?(damaged==='partial'?'teillieferung':'abweichung'):'unauffaellig',deviations:damaged===true&&index===1?['beschädigt']:[],foundUnattended:false,foundAt:null,procedure:'stimmt',procedureNote:null,photos,quantities:created.quote.positions.map(position=>({itemId:position.id,expected:position.quantity,received:amount,confirmed:false,note:'TEST tatsaechlich angenommene Teilmenge'})),location:'TEST AF6 Regal '+index};inspections.push(inspection);
   expect(await withSession(fixture,()=>saveGoodsReceiptAction(inspection))).toMatchObject({code:'OK'});
  }
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'sent',quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck',evidence:'TEST AF6 aktuelle Fassung gedruckt'}))).toMatchObject({code:'OK'});
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST AF6 aktuelle Fassung zugesagt'}))).toMatchObject({code:'OK'});
  const input={quoteId,clientEventId:randomUUID(),expectedVersion:3,confirmedAward:true as const,confirmedOrderDueDate:'2027-04-20',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:receipts[0]};
+ if(damaged==='operational'){
+  const operator=await createFixture(false,false);
+  const {createOrderIntake}=await import('@/lib/server/commands/orderIntakeCommand');
+  const direct={geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING' as const,customerId:fixture.customerId},dueDate:'2027-04-20',termStatus:'bestaetigt' as const,intakeSource:null,handoverMode:'pickup' as const,items:[{catalogServiceId:null,name:'TEST unauthorized',quantity:1,material:null,surfaceRequested:'verchromen',executionRequested:'offen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:null};
+  expect(await withSession(operator,()=>createOrderIntake(direct))).toMatchObject({code:'FORBIDDEN'});
+  const {prepareQuoteConversionCommand}=await import('@/modules/quotes/server-public');
+  const {resolveAuthorization}=await import('@/lib/server/authorization');
+  const deniedKey=randomUUID(),deniedInput={...direct,clientEventId:deniedKey,paymentMode:'rechnung' as const};
+  expect(await withSession(operator,()=>createOrderIntake(deniedInput,undefined,{quoteAuthorization:{quoteId},before:async tx=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST canonical quote authorization');const prepared=await prepareQuoteConversionCommand({tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canCreateQuote:false,canReadQuote:true,canUpdateQuote:false,canConvertQuote:true}},{...input,clientEventId:deniedKey},{transaction:tx});if(prepared.code!=='OK')throw Error('TEST canonical reservation');},after:async()=>undefined}))).toMatchObject({code:'FORBIDDEN'});
+  expect(await sql`SELECT quote_id FROM private.quote_conversion_requests WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${deniedKey}::uuid`).toHaveLength(0);
+  expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(0);
+  const converted=await withSession(operator,()=>convertQuoteOperationalAction(input));
+  expect(converted).toMatchObject({code:'OK'});if(converted.code!=='OK')throw Error('TEST U249 conversion:'+converted.message);
+  expect(Object.keys(converted).sort()).toEqual(['code','receipt','replayed']);
+  expect(Object.keys(converted.receipt).sort()).toEqual(['eventId','orderId','orderNumber','quoteId','quoteNumber']);
+  expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(1);
+  expect((await sql`SELECT quantity::int FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${converted.receipt.orderId}`)[0]).toMatchObject({quantity:5});
+  expect(await sql`SELECT id FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid AND auftrag_id=${converted.receipt.orderId}`).toHaveLength(2);
+  expect(await sql`SELECT id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=ANY(${sql.array(sources)}::uuid[]) AND vorgang_art='auftrag' AND vorgang_id=${converted.receipt.orderId}`).toHaveLength(2);
+  expect(await withSession(operator,()=>convertQuoteOperationalAction(input))).toMatchObject({code:'OK',replayed:true,receipt:{orderId:converted.receipt.orderId}});
+  expect(await withSession(operator,()=>readQuoteAction({quoteId}))).toMatchObject({code:'FORBIDDEN'});
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${converted.receipt.orderId} AND user_id=${operator.actorId}::uuid AND event_type='ORDER_INTAKE_CREATED_V1'`).toHaveLength(1);
+  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:converted.receipt.orderId}});
+  return;
+ }
  let converted=await withSession(fixture,()=>convertQuoteToOrderAction(input));
  if(damaged){
   expect(converted).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Warenabweichung')});
