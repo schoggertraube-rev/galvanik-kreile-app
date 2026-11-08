@@ -66,3 +66,12 @@ it('quote mail uses the existing send port, retains uncertain payload and only r
  expect(send.mock.calls[0][0]).toMatchObject({quoteId:quote.quoteId,customerId:quote.customerId,subject:'KV-TEST-118',body:'TEST Bitte aktuelle Fassung bestätigen'});
  await waitFor(()=>expect(read.mock.calls.length).toBeGreaterThan(1));
 });
+
+it('operational purpose shows the phone decision but hides finance and editing',async()=>{
+ const safe={...quote,totalNetCents:null,plannedHours:'4',positions:quote.positions.map(row=>({...row,unitPriceCents:null,lineTotalCents:null})),lifecycle:{...quote.lifecycle!,calculation:null}};
+ const change=vi.fn(async()=>({code:'UNAVAILABLE' as const,message:'TEST Offline'}));
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:safe,canEdit:false,canOperate:true,canReceive:false}),change,prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ const phone=await screen.findByRole('button',{name:'TEST Schmidt hat am Telefon zugesagt'});
+ expect(screen.queryByText('40,00 € netto')).toBeNull();expect(screen.queryByRole('button',{name:/Fassung 2 anlegen/})).toBeNull();expect(screen.queryByRole('button',{name:'KV per E-Mail senden'})).toBeNull();
+ fireEvent.click(phone);await screen.findByText('TEST Offline');expect(change).toHaveBeenCalledOnce();
+});

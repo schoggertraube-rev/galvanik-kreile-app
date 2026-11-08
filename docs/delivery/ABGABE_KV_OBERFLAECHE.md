@@ -115,3 +115,16 @@ CI-Nachtrag: Der neue öffentliche Editor-DTO fehlte im bestehenden Modulmanifes
 - Lokale Next-Dev-Typdateien enthielten überlappende Generatorreste. Nach beendeten Browserprozessen mit den aktuellen generierten Routentypen repariert; Produktdateien, tsconfig und Gates unverändert. Danach Typprüfung PASS. Keine weiteren Browserläufe in diesem Schritt.
 
 Die Listenbegrenzung bleibt auch dann sichtbar, wenn unter den geladenen 100 KVs kein Warenkandidat liegt. Gezielter Leer-/Begrenzungsfall PASS; kein falscher vollständiger Leerzustand.
+
+## U-249: Telefon-Zusage und vorhandene KV-Ware ohne Geld-/Anlagerecht
+
+Bestehende KV-Karte/Warenkarte lesen dieselben Daten über eine zweckgebundene Projektion. Ohne Finanzrecht werden Summen, Einzel-/Zeilenpreise und Kalkulation serverseitig entfernt (null, keine Ersatzpreise); Stunden bleiben als Arbeitsinformation sichtbar. Neue KV-Fassungen, Versand und Preisbearbeitung erhalten dadurch keine Freigabe. Die normale vollständige KV-Ansicht bleibt ohne Geldrecht gesperrt.
+
+Telefon-Zusage verwendet die bestehende Lifecycle-Action mit einem engen Entscheidungsgrant; kein globales createQuote/Editrecht. Umwandeln bereits geprüfter KV-Ware verwendet dieselbe Conversion-Action und denselben createOrderIntake-Writer. Nur dessen intern erzeugte, transaktional nachgelesene KV-Bindung darf den kanonischen Auftrag für diesen Zweck anlegen. Normale Direktanlage bleibt gesperrt. Neue Warenannahme erfordert weiterhin Eingang; Freigabe/Umwandlung eines vorhandenen KV-Belegs ist der U-249-Zweck.
+
+Zwei zusätzliche Sicherungen aus den echten Tests: (1) Eine durch die Zusage erledigte automatische Nachfassaufgabe wird auch beim anderen Mitarbeiter sauber abgeschlossen – nur der tatsächlich zugesagte KV derselben Fassung und die berechneten automatischen Task-Schlüssel erlauben das. Andere Aufgabenrechte bleiben bestehen. (2) Übertragen fremd erfasster Warenoriginale verwendet den bereits vorhandenen Nachweis der gespeicherten KV→Auftrags-Umwandlung; kein Mails-/Eingangsrecht wird vorgetäuscht.
+
+Nachweise gegen echte Replay-DB:
+- Werkstatt-Login nur mit Aufträge, ohne Geld/Eingang: fremd erfassten gesperrten Beleg telefonisch bestätigen und genau einmal umwandeln, reale Actor-ID im Ereignis, automatische Aufgabe erledigt durch diesen Actor, Warenbeleg/Originale beim Auftrag, gleicher Retry genau ein Auftrag, geänderter Wortlaut Konflikt. Direkte Auftragsanlage bleibt FORBIDDEN, vollständiger KV-Leser bleibt FORBIDDEN, Rückgabe/Readback enthält keine Finanzwerte. PASS 4,70 s.
+- Werkstatt-Login ohne zusätzliche Fachrechte: operativ lesen, Telefon-Zusage mit echtem Wortlaut/Actor in DB/Event, Ansicht neu lesen, kein Geldbetrag; allgemeine KV-Absage bleibt ohne Editrecht FORBIDDEN. PASS 4,32 s.
+- Sieben gezielte Kartenfälle einschließlich operativer Ansicht ohne Preis/Edit/Versand PASS; Typen/Lint PASS. Modulprüfung nur fremder Planungs-Pointer. Gültigkeit verlängern/Rückgabe folgen dem dafür vorgesehenen Kreislauf-Paket; kein solcher noch fehlender Befehl wird hier als fertig behauptet.

@@ -1,5 +1,6 @@
 "use client";
 
+import {hasQuoteFinancials} from '@/modules/eingang/public';
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {getIncomingInvoiceAction,saveIncomingInvoiceAction,changeIncomingInvoiceStatusAction,clarifyIncomingInvoiceAction,searchInvoiceSuppliersAction} from '@/app/actions/eingang.actions';
@@ -57,7 +58,7 @@ const PENDING_QUOTE_CONVERSION_KEY = "path1.global-create.pending-quote-conversi
 export function GlobalCreateAppAdapter() {
   const router = useRouter();
   const mailPorts=useMemo<MailSelectionPorts>(()=>({list:getOpenIntakeMailsAction,read:getIntakeCaptureAction}),[]);
-  const objectPorts=useMemo<IntakeObjectPorts>(()=>({quoteGoods:{device:saveIntakeDeviceRequestAction,read:(id,request)=>readQuoteAction({quoteId:id,...(request?.quantities?{receivedQuantities:request.quantities}:{}),...(request?.goodsReceiptId?{goodsReceiptId:request.goodsReceiptId}:{})}),capture:getIntakeCaptureAction,scope:getIntakePendingScopeAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,original:openIntakeOriginalAction,save:saveGoodsReceiptAction,convert:convertQuoteToOrderAction},goods:{scope:getIntakePendingScopeAction,read:getGoodsReceiptsAction,save:saveGoodsReceiptAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction},original:{open:openIntakeOriginalAction,confirm:confirmIntakeOriginalAction,capture:getIntakeCaptureAction,retry:retryIntakeRecognitionAction}}),[]);
+  const objectPorts=useMemo<IntakeObjectPorts>(()=>({quoteGoods:{device:saveIntakeDeviceRequestAction,read:(id,request)=>readQuoteAction({quoteId:id,purpose:'operations',...(request?.quantities?{receivedQuantities:request.quantities}:{}),...(request?.goodsReceiptId?{goodsReceiptId:request.goodsReceiptId}:{})}),capture:getIntakeCaptureAction,scope:getIntakePendingScopeAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,original:openIntakeOriginalAction,save:saveGoodsReceiptAction,convert:convertQuoteToOrderAction},goods:{scope:getIntakePendingScopeAction,read:getGoodsReceiptsAction,save:saveGoodsReceiptAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction},original:{open:openIntakeOriginalAction,confirm:confirmIntakeOriginalAction,capture:getIntakeCaptureAction,retry:retryIntakeRecognitionAction}}),[]);
   const openCustomer = useOverlayStore((state) => state.openCustomer);
   const openOrder = useOverlayStore((state) => state.openOrder);
   const openQuote = useOverlayStore((state) => state.openQuote);
@@ -262,14 +263,14 @@ export function GlobalCreateAppAdapter() {
           const result = await readQuoteCreateReceiptAction(input);
           return result.code === "OK" ? { ...result, replayed: true } : result;
         },
-        readQuote: async (input: { quoteId: string }): Promise<GlobalCreateQuoteReadResult> => readQuoteAction(input),
+        readQuote: async (input: { quoteId: string }): Promise<GlobalCreateQuoteReadResult> => {const result=await readQuoteAction(input);return result.code!=='OK'?result:hasQuoteFinancials(result.quote)?{...result,quote:result.quote}:{code:'FORBIDDEN',message:'KV-Finanzansicht ist nicht freigegeben.'};},
         listOpenQuotes: async (): Promise<GlobalCreateOpenQuotesResult> => listOpenQuotesAction(),
         readQuoteUpdateReceipt: async (input: UpdateQuoteInput): Promise<GlobalCreateQuoteResult> => {
           const result = await readQuoteUpdateReceiptAction(input);
           return result.code === "OK" ? { ...result, replayed: true } : result;
         },
-        recordQuoteAcceptance:changeQuoteLifecycleAction,
-        convertQuote: async (input: ConvertQuoteInput): Promise<GlobalCreateConversionResult> => convertQuoteToOrderAction(input),
+        recordQuoteAcceptance:async input=>{const result=await changeQuoteLifecycleAction(input);return result.code!=='OK'?result:hasQuoteFinancials(result.quote)?{...result,quote:result.quote}:{code:'FORBIDDEN',message:'KV-Finanzansicht ist nicht freigegeben.'};},
+        convertQuote: async (input: ConvertQuoteInput): Promise<GlobalCreateConversionResult> => {const result=await convertQuoteToOrderAction(input);return result.code!=='OK'?result:hasQuoteFinancials(result.quote)?{...result,quote:result.quote}:{code:'FORBIDDEN',message:'KV-Finanzansicht ist nicht freigegeben.'};},
         readQuoteConversionReceipt: async (input: { quoteId: string; clientEventId: string }): Promise<GlobalCreateConversionResult> => {
           const result = await readQuoteConversionReceiptAction(input);
           return result.code === "OK" ? { ...result, replayed: true } : result;

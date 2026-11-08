@@ -27,3 +27,6 @@ export type {QuoteQuantityLine} from "./quoteCalculation";
 
 export {QuoteCard} from "./ui/QuoteCard";
 export type {QuoteCardPorts,QuoteMailDraft} from "./ui/QuoteCard";
+
+export {quoteForUi,hasQuoteFinancials} from './quotePresentation';
+export type {QuoteUiReadback} from './quotePresentation';

@@ -12,7 +12,7 @@ import {
   resolveAuthorization,
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
-import {scaleQuotePositions} from "@/modules/quotes/public";
+import {quoteForUi,scaleQuotePositions} from "@/modules/quotes/public";
 import {readQuoteReceivedQuantities} from "@/lib/server/quoteGoodsContextPort";
 import {intakePaymentContract} from "@/lib/server/paymentContract";
 import { readCustomerSummary,readCustomerListSignals } from "@/lib/server/customerSummaryRead";
@@ -64,6 +64,8 @@ function quoteCommandContext(authorization: AuthorizationSnapshot): QuoteCommand
   };
 }
 
+/** U-249 is an operational decision grant, never an edit/financial grant. */
+function quoteOperationContext(auth:AuthorizationSnapshot):QuoteCommandContext{const context=quoteCommandContext(auth);return {...context,capabilities:{...context.capabilities,canReadQuote:true,canDecideQuote:true,canConvertQuote:true}};}
 function quoteFollowupBinding(auth:AuthorizationSnapshot):QuoteFollowupBinding{
  return async(tx,{quote,action,phase})=>{
   const life=quote.lifecycle;if(!life)throw Error('QUOTE_FOLLOWUP_LIFECYCLE_MISSING');
@@ -93,13 +95,13 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
     const auth=await resolveAuthorization();
     const failure=authorizationFailure(auth);
     if (failure||!auth.ok) return failure!;
-    const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId});
+    const result=await changeQuoteLifecycleCommand(input?.action==='accept'?quoteOperationContext(auth.data):quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId});
     if (result.code==='OK') {
       revalidatePath('/');
       revalidatePath('/customers');
       revalidatePath(`/customers/${result.quote.customerId}`);
     }
-    return result;
+    return result.code==='OK'?{...result,quote:quoteForUi(result.quote,quoteCommandContext(auth.data).capabilities.canReadQuote)}:result;
   } catch (error) {
     console.error('[QUOTE_LIFECYCLE_ACTION_FAILED]',error instanceof Error?error.name:'UnknownError');
     return {code:'UNAVAILABLE' as const,message:'KV-Entscheidung konnte nicht sicher bestätigt werden.'};
@@ -133,7 +135,7 @@ export async function createQuoteAction(input: CreateQuoteInput) {
   return result;
 }
 
-export async function readQuoteAction(input: { quoteId: string;receivedQuantities?:Array<{position:number;quantity:number}>;goodsReceiptId?:string }) {
+export async function readQuoteAction(input: { quoteId: string;receivedQuantities?:Array<{position:number;quantity:number}>;goodsReceiptId?:string;purpose?:'operations' }) {
   noStore();
   let authorization;
   try {
@@ -143,7 +145,8 @@ export async function readQuoteAction(input: { quoteId: string;receivedQuantitie
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
-  const context=quoteCommandContext(authorization.data);
+  const financial=quoteCommandContext(authorization.data).capabilities.canReadQuote;
+  const context=input?.purpose==='operations'?quoteOperationContext(authorization.data):quoteCommandContext(authorization.data);
   const result=await readQuoteCommand(context,{quoteId:input?.quoteId});
   if(result.code!=='OK')return result;
   try{
@@ -156,7 +159,7 @@ export async function readQuoteAction(input: { quoteId: string;receivedQuantitie
     if(!Array.isArray(quantities))return {code:'VALIDATION_ERROR' as const,message:'Beauftragungsdaten sind ungültig.'};
     const preview=scaleQuotePositions(result.quote.lifecycle?.calculation??null,result.quote.positions,quantities);
     if(preview.code!=='OK')return preview;
-    return {...result,canEdit:context.capabilities.canUpdateQuote,conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:preview.totalNetCents,plannedHours:preview.calculation?.hours??null,positions:preview.positions}};
+    return {...result,quote:quoteForUi(result.quote,financial),canEdit:financial&&context.capabilities.canUpdateQuote,canOperate:true,canReceive:hasAuthorizationArea(authorization.data,'eingang'),conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:financial?preview.totalNetCents:null,plannedHours:preview.calculation?.hours??null,positions:preview.positions.map(row=>({position:row.position,quantity:row.quantity,lineTotalCents:financial?row.lineTotalCents:null}))}};
   }catch(error){console.error('[QUOTE_CONVERSION_DEFAULTS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV konnte nicht sicher gelesen werden.'};}
 }
 
@@ -260,7 +263,7 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
 
-  const commandContext = quoteCommandContext(authorization.data);
+  const commandContext = quoteOperationContext(authorization.data);
   const prepared = await prepareQuoteConversionCommand(commandContext, conversionInput,{planOnly:true,pendingAcceptance,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
   if (prepared.code !== "OK") return prepared;
 
@@ -281,6 +284,7 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
     if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_TELEPHONE_ACCEPTANCE_FAILED');}
   };
   const order = await createOrderIntake(prepared.orderInput,undefined,{
+    quoteConversion:true,
     before:async(tx,auth)=>{if(prepared.replayed)await accept(tx,auth);await check(tx,true,!prepared.replayed);if(newGoods&&prepared.replayed)await saveGoods(tx,auth);},
     // No lifecycle mutation before intake validation: a returned failure must not commit an acceptance.
     beforeEvent:async(tx,auth)=>{await saveGoods(tx,auth);await accept(tx,auth);await check(tx,false);},
@@ -311,9 +315,9 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
   revalidatePath(`/customers/${persisted.receipt.customerId}`);
   return {
     code: "OK" as const,
-    quote: persisted.quote,
+    quote: quoteForUi(persisted.quote,quoteCommandContext(authorization.data).capabilities.canReadQuote),
     quoteReceipt: persisted.receipt,
-    orderReceipt: order.receipt,
+    orderReceipt: quoteCommandContext(authorization.data).capabilities.canReadQuote?order.receipt:{...order.receipt,items:order.receipt.items.map(row=>({...row,unitPriceCents:null,vatRateBasisPoints:null}))},
     goodsReceipt:goods,
     replayed: prepared.replayed && order.replayed,
   };

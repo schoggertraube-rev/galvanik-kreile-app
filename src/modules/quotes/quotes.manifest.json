@@ -48,7 +48,10 @@
     "@/modules/quotes/public#QuoteQuantityLine",
     "@/modules/quotes/public#QuoteCard",
     "@/modules/quotes/public#QuoteCardPorts",
-    "@/modules/quotes/public#QuoteMailDraft"
+    "@/modules/quotes/public#QuoteMailDraft",
+    "@/modules/quotes/public#quoteForUi",
+    "@/modules/quotes/public#hasQuoteFinancials",
+    "@/modules/quotes/public#QuoteUiReadback"
   ],
   "capabilities": [
     "quotes:create",

@@ -30,6 +30,7 @@ const originalSecret = process.env.APP_SESSION_SECRET;
 process.env.APP_SESSION_SECRET = "TEST-kv-v04-local-only";
 
 type Fixture = {
+  role?:AppSession["role"];
   actorId: string;
   actorIssuedAt: number;
   customerId: string;
@@ -71,7 +72,7 @@ async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise
   const session: AppSession = {
     userId: fixture.actorId,
     tenantId: KREILE_TENANT_SLUG,
-    role: "meister",
+    role: fixture.role??"meister",
     displayName: "TEST KV V04",
     issuedAt: fixture.actorIssuedAt,
     expiresAt: Date.now() + 5 * 60_000,
@@ -79,7 +80,7 @@ async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise
   return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work);
 }
 
-async function createFixture(settings=true,areas=['eingang','auftraege','kunden','geld']): Promise<Fixture> {
+async function createFixture(settings=true,areas=['eingang','auftraege','kunden','geld'],role:AppSession['role']='meister'): Promise<Fixture> {
   const actorId = randomUUID();
   const customerId = randomUUID();
   const updatedAt = new Date(Date.now() - 5_000).toISOString();
@@ -89,7 +90,7 @@ async function createFixture(settings=true,areas=['eingang','auftraege','kunden'
         (id, tenant_id, email, full_name, role, active, created_at, updated_at)
       VALUES (
         ${actorId}::uuid, ${KREILE_TENANT_SLUG}, ${`rolf-h18-quote-${actorId}@local.invalid`},
-        'TEST KV V04', 'meister', true, ${updatedAt}::timestamptz, ${updatedAt}::timestamptz
+        'TEST KV V04', ${role}, true, ${updatedAt}::timestamptz, ${updatedAt}::timestamptz
       )
     `;
     await transaction`
@@ -111,7 +112,7 @@ async function createFixture(settings=true,areas=['eingang','auftraege','kunden'
   `;
   const actorIssuedAt = Date.now();
   if (!clock || Number(clock.updated_at_ms) >= actorIssuedAt) throw new Error("H18_QUOTE_SESSION_ORDER_INVALID");
-  return { actorId, actorIssuedAt, customerId };
+  return { actorId, actorIssuedAt, customerId,role };
 }
 
 afterAll(async()=>{await sql.end({timeout:1});if(originalSecret===undefined)delete process.env.APP_SESSION_SECRET;else process.env.APP_SESSION_SECRET=originalSecret;});
@@ -236,6 +237,7 @@ it('KV-07b conditional response clears acceptance, creates no order and requires
 
 it.each([false,true])('KV-07 goods lock and real onsite acceptance without fictitious dispatch: %s',async(onsite)=>{
  const fixture=await createFixture();
+
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
  const {saveIntakeNoteAction,saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
  const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST Ware vor Zusage',positions:[{name:'TEST Weber-Trompeten',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
@@ -852,8 +854,14 @@ it('U246 multi-position price uses the same text and goods proposal without inve
 
 });
 
-it.each([false,true])('AF-8/17 telephone acceptance and goods conversion commit once atomically, existing receipt: %s',async(existingReceipt)=>{
+it.each([false,true,'operational'] as const)('AF-8/17 telephone acceptance and goods conversion commit once atomically, existing receipt: %s',async(existingReceipt)=>{
  const fixture=await createFixture();
+ if(existingReceipt==='operational'){
+  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,updated_at) VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST U249 Nachfassen',statement_timestamp())`;
+  const {readQuoteDefaultsAction}=await import('@/app/actions/quotes.actions');const {saveQuoteSettingsAction}=await import('@/app/actions/settings.actions');
+  const defaults=await withSession(fixture,()=>readQuoteDefaultsAction());if(defaults.code!=='OK')throw Error('TEST_DEFAULTS:'+defaults.code);
+  expect(await withSession(fixture,()=>saveQuoteSettingsAction({clientEventId:randomUUID(),expectedUpdatedAt:defaults.settings.updatedAt,setupCents:null,materialCents:null,followupDays:3,validityDays:null}))).toMatchObject({code:'OK'});
+ }
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
  const {saveIntakeNoteAction,saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
  const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST Ware vor Zusage',calculation:{hours:'4',hourlyRateCents:1000,setupCents:0,materialCents:0},specialRequests:'TEST alte Halter erhalten',positions:[{name:'TEST Weber-Trompeten',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
@@ -876,25 +884,37 @@ it.each([false,true])('AF-8/17 telephone acceptance and goods conversion commit 
  input.quantities=sent.quote.positions.map(position=>({itemId:position.id,expected:position.quantity,received:null,confirmed:true,note:null}));
  if(existingReceipt)expect(await withSession(fixture,()=>saveGoodsReceiptAction(input))).toMatchObject({code:'OK',receipt:{gesperrt:true,auftrag_id:null}});
  const award={quoteId,clientEventId:randomUUID(),expectedVersion:2,confirmedAward:true as const,confirmedOrderDueDate:'2027-04-20',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:input.id};
+ const operator=existingReceipt==='operational'?await createFixture(false,['auftraege'],'werkstatt'):fixture;
  const telephone={clientEventId:randomUUID(),edition:1,evidence:'TEST Kunde sagt am Telefon die aktuelle Fassung zu'};
  if(!existingReceipt){
   // Real late business failure: binding rejects a damaged receipt after acceptance and order planning.
-  expect(await withSession(fixture,()=>convertQuoteToOrderAction(award,{...input,condition:'abweichung'},telephone))).toMatchObject({code:'VALIDATION_ERROR'});
+  expect(await withSession(operator,()=>convertQuoteToOrderAction(award,{...input,condition:'abweichung'},telephone))).toMatchObject({code:'VALIDATION_ERROR'});
   expect((await sql`SELECT version,zugesagt_fassung,linked_order_id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0]).toMatchObject({version:2,zugesagt_fassung:null,linked_order_id:null});
   expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${telephone.clientEventId}::uuid`)[0].n).toBe(0);
   expect((await sql`SELECT count(*)::int n FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid`)[0].n).toBe(0);
   expect((await sql`SELECT count(*)::int n FROM private.quote_conversion_requests WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid`)[0].n).toBe(0);
   expect((await sql`SELECT count(*)::int n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(0);
  }
- const result=await withSession(fixture,()=>convertQuoteToOrderAction(award,existingReceipt?undefined:input,telephone));
+ const result=await withSession(operator,()=>convertQuoteToOrderAction(award,existingReceipt?undefined:input,telephone));
  expect(result).toMatchObject({code:'OK',quote:{status:'converted',lifecycle:{acceptedEdition:1}}});
  if(result.code!=='OK')throw Error('TEST_ATOMIC_CONVERSION:'+result.code+':'+result.message);
  expect((await sql`SELECT q.zugesagt_fassung,q.linked_order_id,r.auftrag_id,o.ware,o.geprueft FROM private.quotes q JOIN public.goods_receipt r ON r.tenant_id=q.tenant_id AND r.kv_id=q.id JOIN public.orders o ON o.tenant_id=q.tenant_id AND o.id=q.linked_order_id WHERE q.tenant_id=${KREILE_TENANT_SLUG} AND q.id=${quoteId}::uuid`)[0]).toMatchObject({zugesagt_fassung:1,linked_order_id:result.orderReceipt.orderId,auftrag_id:result.orderReceipt.orderId,ware:'da',geprueft:true});
- expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${telephone.clientEventId}::uuid AND event_type='QUOTE_LIFECYCLE_V04' AND user_id=${fixture.actorId}::uuid`)[0].n).toBe(1);
- expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:result.orderReceipt.orderId,lifecycle:{goods:[{id:input.id,orderId:result.orderReceipt.orderId,blocked:false}]}}});
- expect(await withSession(fixture,()=>convertQuoteToOrderAction(award,existingReceipt?undefined:input,telephone))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId:result.orderReceipt.orderId}});
- expect(await withSession(fixture,()=>convertQuoteToOrderAction(award,existingReceipt?undefined:input,{...telephone,evidence:'TEST anderer Wortlaut'}))).toMatchObject({code:'CONFLICT'});
+ expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${telephone.clientEventId}::uuid AND event_type='QUOTE_LIFECYCLE_V04' AND user_id=${operator.actorId}::uuid`)[0].n).toBe(1);
+ expect(await withSession(operator,()=>readQuoteAction({quoteId,purpose:'operations'}))).toMatchObject({code:'OK',quote:{linkedOrderId:result.orderReceipt.orderId,lifecycle:{goods:[{id:input.id,orderId:result.orderReceipt.orderId,blocked:false}]}}});
+ expect(await withSession(operator,()=>convertQuoteToOrderAction(award,existingReceipt?undefined:input,telephone))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId:result.orderReceipt.orderId}});
+ expect(await withSession(operator,()=>convertQuoteToOrderAction(award,existingReceipt?undefined:input,{...telephone,evidence:'TEST anderer Wortlaut'}))).toMatchObject({code:'CONFLICT'});
  expect((await sql`SELECT count(*)::int n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(1);
+ if(existingReceipt==='operational'){
+  expect((await sql`SELECT status,erledigt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quoteId}`)[0]).toMatchObject({status:'erledigt',erledigt_von:operator.actorId});
+  expect(result.orderReceipt.items.every(row=>row.unitPriceCents===null&&row.vatRateBasisPoints===null)).toBe(true);
+  expect(result.quote.totalNetCents).toBeNull();expect(result.quote.positions.every(row=>row.unitPriceCents===null&&row.lineTotalCents===null)).toBe(true);
+  expect(await withSession(operator,()=>readQuoteAction({quoteId}))).toMatchObject({code:'FORBIDDEN'});
+  const {createOrderIntake}=await import('@/lib/server/commands/orderIntakeCommand');
+  const {resolveAuthorization}=await import('@/lib/server/authorization');
+  const auth=await withSession(operator,()=>resolveAuthorization());expect(auth.ok).toBe(true);if(auth.ok){expect(auth.data.areas).not.toContain('geld');expect(auth.data.areas).not.toContain('eingang');}
+  expect(await withSession(operator,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:fixture.customerId},dueDate:'2027-04-20',handoverMode:'pickup',items:[{catalogServiceId:null,name:'TEST Direktversuch',quantity:1,material:null,surfaceRequested:'verchromen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:null}))).toMatchObject({code:'FORBIDDEN'});
+ }
+
 });
 
 it('workshop quote reader returns real warehouse candidates without financial fields for a non-money login',async()=>{
@@ -912,4 +932,19 @@ it('workshop quote reader returns real warehouse candidates without financial fi
  const [stored]=await sql`SELECT version,zugesagt_fassung,linked_order_id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`;
  expect(stored).toMatchObject({version:3,zugesagt_fassung:1,linked_order_id:null});
  expect((await withSession(reader,()=>readWorkshopQuoteGoodsAction()))).toMatchObject({code:'OK',quotes:expect.arrayContaining([expect.objectContaining({id:quoteId})])});
+});
+
+it('U249 a logged-in workshop actor can record a phone decision without quote creation or money access',async()=>{
+ const owner=await createFixture(),actor=await createFixture(false,[],'werkstatt');
+ const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const created=await withSession(owner,()=>createQuoteAction({clientEventId:randomUUID(),customerId:owner.customerId,dueDate:'2027-04-20',note:'TEST U249 ohne Fachrechte',calculation:{hours:'2',hourlyRateCents:1000,setupCents:0,materialCents:0},positions:[{name:'TEST Teil Entscheidung',quantity:1,material:null,surfaceRequested:'verchromen',unitPriceCents:2000}]}));
+ if(created.code!=='OK')throw Error('TEST_CREATE:'+created.code);const quoteId=created.quote.quoteId;
+ expect(await withSession(owner,()=>changeQuoteLifecycleAction({quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,action:'sent',channel:'druck',evidence:'TEST ausgegeben'}))).toMatchObject({code:'OK'});
+ const initial=await withSession(actor,()=>readQuoteAction({quoteId,purpose:'operations'}));expect(initial).toMatchObject({code:'OK',canEdit:false,canOperate:true,canReceive:false,quote:{totalNetCents:null,lifecycle:{calculation:null}}});
+ const request={quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,action:'accept' as const,evidence:'TEST Telefonzusage durch Werkstatt ohne Geldrecht'};
+ const decision=await withSession(actor,()=>changeQuoteLifecycleAction(request));expect(decision).toMatchObject({code:'OK',quote:{totalNetCents:null,lifecycle:{acceptedEdition:1}}});
+ expect((await sql`SELECT q.zugesagt_fassung,q.version,e.user_id::text,e.payload->>'proof' AS proof FROM private.quotes q JOIN public.events e ON e.tenant_id=q.tenant_id AND e.client_event_id=${request.clientEventId}::uuid WHERE q.tenant_id=${KREILE_TENANT_SLUG} AND q.id=${quoteId}::uuid`)[0]).toMatchObject({zugesagt_fassung:1,version:3,user_id:actor.actorId,proof:request.evidence});
+ expect(await withSession(actor,()=>readQuoteAction({quoteId,purpose:'operations'}))).toMatchObject({code:'OK',quote:{version:3,totalNetCents:null,lifecycle:{acceptedEdition:1}}});
+ expect(await withSession(actor,()=>readQuoteAction({quoteId}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(actor,()=>changeQuoteLifecycleAction({quoteId,edition:1,clientEventId:randomUUID(),expectedVersion:3,action:'reject',reason:'TEST keine pauschale Editfreigabe'}))).toMatchObject({code:'FORBIDDEN'});
 });
