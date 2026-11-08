@@ -252,9 +252,5 @@
   "U241-03": {
     "paket": "AP-EIN",
     "grund": "Folge-PR Teil 2b rein"
-  },
-  "L06": {
-    "paket": "AP-EIN-4c-Rest",
-    "grund": "Nach explizitem Sperrzaehler der synthetischen Fixture ist die Version repariert; neuer gezielter Browserbefund: erwartete Kennung reklamation.zurueckgezogen fehlt (waitFor attached). Keine zweite Produktkorrekturrunde oder abgeschwaechte Assertion; echte Zurueckziehen-Action gesondert belegt."
   }
 }
