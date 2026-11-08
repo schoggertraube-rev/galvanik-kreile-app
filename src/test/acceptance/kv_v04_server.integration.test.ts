@@ -234,7 +234,7 @@ it('KV-07b conditional response clears acceptance, creates no order and requires
 });
 
 
-it('KV-07 stores early goods once in the existing receipt, derives the lock and rereads the KV without an order',async()=>{
+it.each([false,true])('KV-07 goods lock and real onsite acceptance without fictitious dispatch: %s',async(onsite)=>{
  const fixture=await createFixture();
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
  const {saveIntakeNoteAction,saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
@@ -258,19 +258,21 @@ it('KV-07 stores early goods once in the existing receipt, derives the lock and 
  expect(await withSession(fixture,()=>saveGoodsReceiptAction({...input,location:'TEST anderer Ort'}))).toMatchObject({code:'CONFLICT'});
  expect((await sql`SELECT count(*)::int AS n FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid`)[0].n).toBe(1);
  expect((await sql`SELECT count(*)::int AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(0);
- expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'sent',quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck',evidence:'TEST ausgedruckter KV'}))).toMatchObject({code:'OK'});
- expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST aktuelle Fassung ohne Vorbehalt angenommen'}))).toMatchObject({code:'OK'});
+ if(!onsite)expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'sent',quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck',evidence:'TEST ausgedruckter KV'}))).toMatchObject({code:'OK'});
+ if(onsite)expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,evidence:'TEST unpassender Warenbeleg'},{onsiteGoodsReceiptId:randomUUID()}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:onsite?1:2,edition:1,evidence:'TEST aktuelle Fassung ohne Vorbehalt angenommen'},onsite?{onsiteGoodsReceiptId:input.id}:undefined))).toMatchObject({code:'OK'});
  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:null,lifecycle:{goods:[{id:input.id,blocked:false,orderId:null}]}}});
  expect((await sql`SELECT count(*)::int AS n FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid`)[0].n).toBe(1);
- const award={quoteId,clientEventId:randomUUID(),expectedVersion:3,confirmedAward:true as const,confirmedOrderDueDate:'2027-04-20',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:input.id};
+ if(onsite)expect((await sql`SELECT gesendet_fassung,zugesagt_fassung FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0]).toMatchObject({gesendet_fassung:null,zugesagt_fassung:1});
+ const award={quoteId,clientEventId:randomUUID(),expectedVersion:onsite?2:3,confirmedAward:true as const,confirmedOrderDueDate:'2027-04-20',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:input.id};
  expect(await withSession(fixture,()=>convertQuoteToOrderAction({...award,goodsReceiptId:undefined}))).toMatchObject({code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${created.quote.quoteNumber} annehmen`});
- // Change only this TEST fixture to exercise a late failure after the canonical order event.
- await sql`UPDATE public.goods_receipt SET mengen=jsonb_set(mengen,'{0,bestaetigt}','3'::jsonb) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`;
+ // Zero is not arrived goods. Positive deviation is separately covered by U246 cases.
+ await sql`UPDATE public.goods_receipt SET mengen=jsonb_set(mengen,'{0,bestaetigt}','0'::jsonb) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`;
  const mismatch=await withSession(fixture,()=>convertQuoteToOrderAction(award));
- expect(mismatch).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Mengenabweichung')});
+ expect(mismatch).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Angenommene Menge')});
  expect((await sql`SELECT count(*)::int AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(0);
  expect((await sql`SELECT count(*)::int AS n FROM private.quote_conversion_requests WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid`)[0].n).toBe(0);
- expect((await sql`SELECT linked_order_id,version FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0]).toMatchObject({linked_order_id:null,version:3});
+ expect((await sql`SELECT linked_order_id,version FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0]).toMatchObject({linked_order_id:null,version:onsite?2:3});
  await sql`UPDATE public.goods_receipt SET mengen=jsonb_set(mengen,'{0,bestaetigt}','4'::jsonb) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`;
  const converted=await withSession(fixture,()=>convertQuoteToOrderAction(award));
  expect(converted).toMatchObject({code:'OK',quote:{status:'converted',lifecycle:{stage:'umgewandelt'}},goodsReceipt:{receipt:{id:input.id,kv_id:quoteId}}});
@@ -285,11 +287,11 @@ it('KV-07 stores early goods once in the existing receipt, derives the lock and 
 });
 
 
-it('KV-06 books new goods and order atomically only after current acceptance, including failure and repeat',async()=>{
+it.each([4,3,5])('KV-06 books actual quantity %i atomically, with proportional price, failure and repeat',async(receivedQuantity)=>{
  const fixture=await createFixture();
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
  const {saveIntakeNoteAction,saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
- const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST Ware vor Zusage',specialRequests:'TEST alte Halter erhalten',positions:[{name:'TEST Weber-Trompeten',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
+ const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST Ware vor Zusage',calculation:{hours:'4',hourlyRateCents:1000,setupCents:0,materialCents:0},specialRequests:'TEST alte Halter erhalten',positions:[{name:'TEST Weber-Trompeten',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
  if(created.code!=='OK')throw Error('TEST_EARLY_GOODS_QUOTE:'+created.code);
  const quoteId=created.quote.quoteId,itemId=randomUUID();
  const capture=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST Warenfotos zu bestehendem Vorgang',context:{customerId:fixture.customerId}}));
@@ -301,12 +303,12 @@ it('KV-06 books new goods and order atomically only after current acceptance, in
   await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${photo.fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${photo.fileId},'foto',${'TEST-KV-Ware-'+index+'.jpg'},'image/jpeg',32,${hash},${KREILE_TENANT_SLUG+'/'+hash},statement_timestamp(),${fixture.actorId}::uuid,${index+1},true,false,'fertig')`;
   await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'original_gespeichert',${photo.fileId}::uuid,${fixture.actorId},${sql.json({fileId:photo.fileId,sha256:hash,bytes:32})})`;
  }
- const input={id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId,quoteId,expectedQuoteVersion:3,sourceVersion:capture.capture.version,expectedVersion:0,mode:'erfassung' as const,command:'accept' as const,card:1,packagesReceived:1,packagesTotal:1,condition:'unauffaellig' as const,deviations:[],foundUnattended:false,foundAt:null,procedure:'stimmt' as const,procedureNote:null,photos,quantities:created.quote.positions.map(position=>({itemId:position.id,expected:4,received:null,confirmed:true,note:null})),location:'TEST Regal E1'};
+ const input={id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId,quoteId,expectedQuoteVersion:3,sourceVersion:capture.capture.version,expectedVersion:0,mode:'erfassung' as const,command:'accept' as const,card:1,packagesReceived:1,packagesTotal:1,condition:'unauffaellig' as const,deviations:[],foundUnattended:false,foundAt:null,procedure:'stimmt' as const,procedureNote:null,photos,quantities:created.quote.positions.map(position=>({itemId:position.id,expected:4,received:receivedQuantity===4?null:receivedQuantity,confirmed:receivedQuantity===4,note:receivedQuantity===4?null:'TEST angenommene Menge weicht ab'})),location:'TEST Regal E1'};
 
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'sent',quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck',evidence:'TEST aktuelle Fassung gedruckt'}))).toMatchObject({code:'OK'});
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST aktuelle Fassung zugesagt, Ware folgt'}))).toMatchObject({code:'OK'});
  const current=await withSession(fixture,()=>readQuoteAction({quoteId}));if(current.code!=='OK')throw Error('TEST_CURRENT_GOODS_QUOTE');
- input.quantities=current.quote.positions.map(position=>({itemId:position.id,expected:position.quantity,received:null,confirmed:true,note:null}));
+ input.quantities=current.quote.positions.map(position=>({itemId:position.id,expected:position.quantity,received:receivedQuantity===4?null:receivedQuantity,confirmed:receivedQuantity===4,note:receivedQuantity===4?null:'TEST angenommene Menge weicht ab'}));
  expect((await sql`SELECT count(*)::int n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(0);
  expect(await withSession(fixture,()=>saveGoodsReceiptAction(input))).toMatchObject({code:'VALIDATION_ERROR'});
  const quoteOriginal=randomUUID();
@@ -324,10 +326,11 @@ it('KV-06 books new goods and order atomically only after current acceptance, in
  expect((await sql`SELECT vorgang_art,vorgang_id,text,anliegen_offen,einsatz FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteOriginal}::uuid`)[0]).toMatchObject({vorgang_art:'auftrag',vorgang_id:converted.orderReceipt.orderId,text:'TEST Nachtrag bleibt erhalten',anliegen_offen:['aufgabe'],einsatz:'offen'});
  const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
  expect((await sql`SELECT freetext_original FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${converted.orderReceipt.orderId}`)[0].freetext_original).toContain('TEST alte Halter erhalten');
- expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId:converted.orderReceipt.orderId}))).toMatchObject({code:'OK',data:{card:{commercialQuote:{quoteId,totalNetCents:4000,specialRequests:'TEST alte Halter erhalten',positions:[{quantity:4,lineTotalCents:4000}]}}}});
+ expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId:converted.orderReceipt.orderId}))).toMatchObject({code:'OK',data:{card:{commercialQuote:{quoteId,plannedHours:receivedQuantity+'.0000',totalNetCents:receivedQuantity*1000,specialRequests:'TEST alte Halter erhalten',positions:[{quantity:receivedQuantity,lineTotalCents:receivedQuantity*1000}]}}}});
  const {prepareQuoteCopyAction}=await import('@/app/actions/quotes.actions');
  const copy=await withSession(fixture,()=>prepareQuoteCopyAction({kind:'order',id:converted.orderReceipt.orderId,customerId:fixture.customerId}));
- expect(copy).toMatchObject({code:'OK',preparation:{source:{kind:'order',id:converted.orderReceipt.orderId},positions:[{quantity:4,lineTotalCents:4000}],specialRequests:'TEST alte Halter erhalten',comparison:{actualHours:null,orderId:converted.orderReceipt.orderId},missing:[]}});
+ expect(copy).toMatchObject({code:'OK',preparation:{source:{kind:'order',id:converted.orderReceipt.orderId},positions:[{quantity:receivedQuantity,lineTotalCents:receivedQuantity*1000}],specialRequests:'TEST alte Halter erhalten',comparison:{actualHours:null,orderId:converted.orderReceipt.orderId},missing:[]}});
+ expect((await sql`SELECT quantity::float8 AS quantity FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${converted.orderReceipt.orderId}`)[0].quantity).toBe(receivedQuantity);
  expect((await sql`SELECT count(*)::int n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND art='ware' AND befehl_id=${input.clientEventId}::uuid`)[0].n).toBe(1);
  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:converted.orderReceipt.orderId,lifecycle:{goods:[{id:input.id,blocked:false,orderId:converted.orderReceipt.orderId}]}}});
  expect(await withSession(fixture,()=>convertQuoteToOrderAction(award,input))).toMatchObject({code:'OK',replayed:true});
@@ -698,4 +701,35 @@ it('U247 text proposal reuses real recognition and update, shows before/after an
  for(const text of ['Arbeitszeit -8 Stunden','3 Halter statt 99','Arbeitszeit 8 Stunden, Preisziel 700 Euro'])expect(await withSession(fixture,()=>prepareQuoteTextChangeAction({quoteId,text}))).toMatchObject({code:'OK',preparation:{canApply:false,candidate:null}});
  const unknown=await withSession(fixture,()=>prepareQuoteTextChangeAction({quoteId,text:'3 Unbekannte statt 4'}));expect(unknown).toMatchObject({code:'OK',preparation:{canApply:false,candidate:null}});
  expect((await sql`SELECT version,fassung,zugesagt_fassung,due_date::date::text AS date FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0]).toMatchObject({version:dated.version,fassung:edition,zugesagt_fassung:edition,date:'2026-11-30'});
+
+});
+it.each([false,true])('U246 onsite request existing/new customer %s uses the real writers, retries and rejects changed intent',async(newCustomer)=>{
+ const fixture=await createFixture();
+ const {saveIntakeNoteAction}=await import('@/app/actions/eingang.actions');
+ const {receiveOnsiteQuoteAction,getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
+ const itemId=randomUUID(),photoIds=[randomUUID(),randomUUID()];
+ const captured=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST Kunde vor Ort mit Ware, 3 Halter statt 4.'}));
+ if(captured.code!=='OK')throw Error('TEST_ONSITE_SOURCE:'+captured.code);
+ for(const [index,fileId]of photoIds.entries()){
+  const hash=(index?'6':'7').repeat(64);
+  await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${fileId},'foto',${'TEST-onsite-'+index+'.jpg'},'image/jpeg',32,${hash},${KREILE_TENANT_SLUG+'/'+hash},statement_timestamp(),${fixture.actorId}::uuid,${index+1},true,false,'fertig')`;
+  await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'original_gespeichert',${fileId}::uuid,${fixture.actorId},${sql.json({fileId,sha256:hash,bytes:32})})`;
+ }
+ const customer=newCustomer?{mode:'NEW' as const,data:{customerType:'privat' as const,firstName:'TEST',lastName:'VorOrt',phone:'061001234567',email:'test-onsite@example.invalid',street:'Testweg',houseNumber:'1',zipCode:'70173',city:'Stuttgart',country:'DE',paymentPreference:'vorkasse'}}:{mode:'EXISTING' as const,customerId:fixture.customerId};
+ const input={clientRequestId:randomUUID(),customer,quote:{dueDate:'2026-12-01',note:'TEST Vor-Ort-KV',positions:[{name:'TEST Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]},evidence:'TEST Kunde vor Ort bestaetigt Preis und Menge ohne Vorbehalt',goods:{itemId,sourceVersion:captured.capture.version,expectedVersion:0,mode:'erfassung',command:'accept',card:1,packagesReceived:1,packagesTotal:1,condition:'unauffaellig',deviations:[],foundUnattended:false,foundAt:null,procedure:'stimmt',procedureNote:null,photos:photoIds.map((fileId,index)=>({fileId,kind:index?'teile':'uebersicht'})),location:'TEST Vor-Ort Regal'},quantities:[{position:1,received:3,note:'TEST drei tatsaechlich abgegeben'}],handoverMode:'pickup' as const,paymentMode:newCustomer?'vorkasse' as const:'rechnung' as const,confirmedOrderDueDate:'2026-12-01'};
+ if(newCustomer){input.quote.positions.push({name:'TEST Fehlteil',quantity:2,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000});input.quantities.push({position:2,received:0,note:'TEST noch nicht geliefert'});}
+ Object.assign(input.quote,{calculation:{hours:newCustomer?'6':'4',hourlyRateCents:1000,setupCents:0,materialCents:0}});
+ const received=await withSession(fixture,()=>receiveOnsiteQuoteAction(input));
+ expect(received,JSON.stringify(received)).toMatchObject({code:'OK'});
+ if(received.code!=='OK'||!('orderReceipt'in received))throw Error('TEST_ONSITE_ACTION:'+received.code+':'+('message'in received?received.message:''));
+ const orderId=received.orderReceipt.orderId;
+ if(newCustomer){const {readQuoteAction}=await import('@/app/actions/quotes.actions');expect(await withSession(fixture,()=>readQuoteAction({quoteId:received.quote.quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{goods:[{expectedPositions:[{position:2,quantity:2}]}]}}});}
+
+ expect(await withSession(fixture,()=>receiveOnsiteQuoteAction(input))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId}});
+ expect(await withSession(fixture,()=>receiveOnsiteQuoteAction({...input,evidence:'TEST geaenderte Zusage'}))).toMatchObject({code:'CONFLICT'});
+ expect((await sql`SELECT q.gesendet_fassung,q.zugesagt_fassung,q.linked_order_id,(SELECT quantity::float8 FROM public.items WHERE tenant_id=q.tenant_id AND order_id=q.linked_order_id) AS quantity FROM private.quotes q WHERE q.tenant_id=${KREILE_TENANT_SLUG} AND q.linked_order_id=${orderId}`)[0]).toMatchObject({gesendet_fassung:null,zugesagt_fassung:1,linked_order_id:orderId,quantity:3});
+ expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientRequestId}::uuid AND event_type='QUOTE_ONSITE_REQUESTED_V04'`)[0].n).toBe(1);
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{commercialQuote:{plannedHours:newCustomer?null:'3.0000',totalNetCents:3000,positions:[{quantity:3,lineTotalCents:3000}]}}}});
+ expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[]});
 });

@@ -43,3 +43,7 @@ KV-11 verwendet statt separater Vorbereitung plus Anlegen nun den einzelnen Dupl
 ## Offen vor Merge-Bitte
 
 Pflicht-CI, READY-Preview exakt am aktuellen Kopf, einmaliger Sichtlauf der berührten Bestandsseite und unabhängige PL-Diffprüfung. Kein Merge durch Codex.
+
+## Synchronisierung nach Owner-Merge #196/#198
+
+Main `edb2767d` integriert. Konflikte in Aktionsdatei, Testdatei und beiden Aktionsregistern als Vereinigung aufgeloest; Vor-Ort-Erfassung, Textvorschlag und Duplizierbefehl bleiben erhalten. Vier gezielte echte Replay-Faelle PASS (Text, Kopie, Vor-Ort Bestand/Neukunde), Typpruefung/gezieltes Lint/H18/No-Fake/Diff PASS. H18 jetzt Inventar307/Schreibaktionen144/getestet85/Ausnahmen59. Kein Testfall oder Assertion beim Zusammenfuehren gestrichen. CI und READY werden neu am synchronisierten Kopf gebunden; alte Kopfbelege gelten nur historisch. Die Preisangleichung aus PL08:40 erfolgt ausdruecklich als eigener Folge-PR.

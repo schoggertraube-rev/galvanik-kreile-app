@@ -139,8 +139,9 @@ export async function bindQuoteGoodsReceiptToCreatedOrder(tx:PrivilegedTenantTra
  if(!order)fail('NOT_FOUND','Neuer Auftrag ist nicht lesbar.');
  if(before.auftrag_id){if(before.auftrag_id!==order.id)fail('CONFLICT','Warenbeleg gehört bereits zu einem anderen Auftrag.');return {code:'OK' as const,receipt:before,replayed:true};}
  if(before.zustand!=='unauffaellig'||before.abweichung.length||before.packstuecke_da!==before.packstuecke_gesamt||before.verfahren_wie_kv!=='stimmt')fail('VALIDATION_ERROR','Warenabweichung zuerst klären; der KV wird nicht still zum Auftrag.');
- if(before.mengen.length!==order.items.length)fail('VALIDATION_ERROR','KV und Warenmenge passen nicht zusammen. KV-Fassung und Warenannahme abgleichen.');
- const quantities=before.mengen.map(row=>{const item=typeof row.kv_position==='number'?input.items[row.kv_position-1]:undefined;if(!item||!order.items.some(stored=>stored.id===item.id&&stored.quantity===item.quantity)||row.bestaetigt!==item.quantity)fail('VALIDATION_ERROR','Mengenabweichung zwischen Ware und aktueller KV-Fassung; zuerst abgleichen.');return {...row,teil_id:item.id};});
+ if(before.mengen.filter(row=>Number(row.bestaetigt)>0).length!==order.items.length)fail('VALIDATION_ERROR','KV und Warenmenge passen nicht zusammen. KV-Fassung und Warenannahme abgleichen.');
+ let arrivedIndex=0;
+ const quantities=before.mengen.map(row=>{if(row.bestaetigt===0)return row;const item=typeof row.kv_position==='number'?input.items[arrivedIndex++]:undefined;if(!item||!order.items.some(stored=>stored.id===item.id&&stored.quantity===item.quantity)||row.bestaetigt!==item.quantity)fail('VALIDATION_ERROR','Mengenabweichung zwischen Ware und aktueller KV-Fassung; zuerst abgleichen.');return {...row,teil_id:item.id};});
  await tx.execute(sql`UPDATE public.goods_receipt SET auftrag_id=${order.id},mengen=${JSON.stringify(quantities)}::jsonb,version=version+1,geaendert_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${input.receiptId}::uuid AND version=${before.version} AND auftrag_id IS NULL`);
  await updateGoodsReceiptOrder(tx,auth,order,'da','creation');
  await bindIntakeOriginalToOrder(tx,auth,{itemId:before.item_id,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true});

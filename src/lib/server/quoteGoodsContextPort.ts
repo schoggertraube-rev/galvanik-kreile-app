@@ -13,9 +13,9 @@ export async function readQuoteGoodsContext(tx:PrivilegedTenantTransaction,auth:
  return {id:row.quote_id,customerId:row.customer_id,version:row.version,edition:row.fassung,linkedOrderId:row.linked_order_id,accepted:row.zugesagt_fassung===row.fassung&&Boolean(row.zugesagt_am)&&Boolean(row.zusage_nachweis?.trim())&&!row.abgesagt_am,declined:Boolean(row.abgesagt_am),positions:row.positions};
 }
 
-export type QuoteGoodsSummary={id:string;orderId:string|null;edition:number;location:string;blocked:boolean;version:number};
+export type QuoteGoodsSummary={id:string;orderId:string|null;edition:number;location:string;blocked:boolean;version:number;expectedPositions:Array<{position:number;quantity:number}>};
 export async function readQuoteGoodsSummaries(tx:PrivilegedTenantTransaction,tenantId:string,quoteId:string):Promise<QuoteGoodsSummary[]>{
- return [...await tx.execute<QuoteGoodsSummary>(sql`SELECT id::text,auftrag_id AS "orderId",kv_fassung AS edition,lagerort AS location,gesperrt AS blocked,version FROM public.v_quote_goods_receipt_v1 WHERE tenant_id=${tenantId} AND kv_id=${quoteId}::uuid AND status<>'entwurf' ORDER BY erstellt_am,id`)];
+ return [...await tx.execute<QuoteGoodsSummary>(sql`SELECT id::text,auftrag_id AS "orderId",kv_fassung AS edition,lagerort AS location,gesperrt AS blocked,version,(SELECT coalesce(jsonb_agg(jsonb_build_object('position',(line->>'kv_position')::integer,'quantity',(line->>'erwartet')::numeric)),'[]'::jsonb) FROM jsonb_array_elements(mengen) line WHERE (line->>'bestaetigt')::numeric=0) AS "expectedPositions" FROM public.v_quote_goods_receipt_v1 WHERE tenant_id=${tenantId} AND kv_id=${quoteId}::uuid AND status<>'entwurf' ORDER BY erstellt_am,id`)];
 }
 
 export async function quoteHasCreatedOrder(tx:PrivilegedTenantTransaction,tenantId:string,quoteId:string,orderId:string){
@@ -27,4 +27,11 @@ export type QuoteFollowupFact={id:string;edition:number;stage:string;number:stri
 export async function readQuoteFollowupFacts(tx:PrivilegedTenantTransaction,tenantId:string,ids:readonly string[]){
  if(!ids.length)return [];
  return [...await tx.execute<QuoteFollowupFact>(sql`SELECT quote_id::text AS id,fassung AS edition,derived_status AS stage,quote_number AS number,customer_display_name AS "customerName",integrity_ok AS integrity FROM private.v_quotes_v1 WHERE tenant_id=${tenantId} AND quote_id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::uuid[])`)];
+}
+
+/** Quantities belong to the existing received-goods record, not a second order draft. */
+export async function readQuoteReceivedQuantities(tx:PrivilegedTenantTransaction,tenantId:string,quoteId:string,receiptId:string){
+ const rows=await tx.execute<{mengen:Array<{kv_position:number;bestaetigt:number}>}>(sql`SELECT mengen FROM public.goods_receipt WHERE tenant_id=${tenantId} AND kv_id=${quoteId}::uuid AND id=${receiptId}::uuid AND status='angenommen'`);
+ if(rows.length>1)throw Error('QUOTE_GOODS_QUANTITIES_AMBIGUOUS');
+ return rows[0]?.mengen??null;
 }

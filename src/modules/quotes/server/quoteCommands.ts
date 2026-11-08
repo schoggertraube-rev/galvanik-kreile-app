@@ -3,7 +3,7 @@ import "server-only";
 import { createHash,randomUUID } from "node:crypto";
 import {calculateQuote,type QuoteCalculation} from "../quoteCalculation";
 import {appendQuoteJournal,quoteHasPreparedDocument} from "@/lib/server/quoteJournalPort";
-import {readQuoteGoodsSummaries} from "@/lib/server/quoteGoodsContextPort";
+import {readQuoteReceivedQuantities,readQuoteGoodsSummaries} from "@/lib/server/quoteGoodsContextPort";
 import { sql } from "drizzle-orm";
 import { normaliseOrderPositionSurface, orderPositionSurfaceLabel, orderPositionUnitLabel, orderPositionQuantityError, orderPositionPriceError } from "@/lib/orderPositionContract";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -588,7 +588,7 @@ export async function readQuoteUpdateReceiptCommand(
   }
 }
 
-export async function prepareQuoteConversionCommand(authorization: QuoteCommandContext, input: unknown,options:{transaction?:PrivilegedTenantTransaction;planOnly?:boolean;pendingGoodsId?:string}={}): Promise<PrepareQuoteConversionResult> {
+export async function prepareQuoteConversionCommand(authorization: QuoteCommandContext, input: unknown,options:{transaction?:PrivilegedTenantTransaction;planOnly?:boolean;pendingGoodsId?:string;pendingQuantities?:Array<{itemId:string;confirmed:boolean;expected:number;received:number|null}>}={}): Promise<PrepareQuoteConversionResult> {
   const normalized = normalizeConvert(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Beauftragungsdaten sind ungültig." };
   if (!authorization.capabilities.canConvertQuote) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht beauftragt werden." };
@@ -625,8 +625,12 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       };
       // The quote keeps the customer's requested date. The confirmed order date is
       // explicitly part of the immutable F1.1 intent and therefore of replay/conflict.
+      const storedQuantities=await readQuoteReceivedQuantities(tx,authorization.tenantId,quote.quoteId,normalized.goodsReceiptId);
+      const received=storedQuantities??options.pendingQuantities?.map(row=>({kv_position:quote.positions.find(position=>position.id===row.itemId)?.position,bestaetigt:row.confirmed?row.expected:row.received}));
+      if(!received||!received.some(row=>Number(row.bestaetigt)>0)||received.length!==quote.positions.length||received.some((row,index)=>!Number.isSafeInteger(row.bestaetigt)||Number(row.bestaetigt)<0||row.kv_position!==index+1))return {code:'VALIDATION_ERROR',message:'Angenommene Menge fuer jede KV-Position pruefen.'};
       const orderInput: QuoteOrderInput = {
         ...sourceOrderInput,
+        items:sourceOrderInput.items.map((item,index)=>({...item,quantity:Number(received[index].bestaetigt)})).filter(item=>item.quantity>0),
         dueDate: normalized.confirmedOrderDueDate,
         handoverMode: normalized.handoverMode,
         paymentMode: normalized.paymentMode,
