@@ -400,8 +400,7 @@ export async function prepareQuoteCopyAction(input: { kind: 'quote' | 'order'; i
         if (sourceQuote.code !== 'OK') return sourceQuote;
         quote = sourceQuote.quote;
         const commercial=order.commercialQuote;
-        if(commercial.positions.length!==sourceQuote.positions.length)return {code:'UNAVAILABLE' as const,message:'Auftragsmenge und KV-Positionen passen nicht zusammen.'};
-        copyPositions = sourceQuote.positions.map((position,index)=>({...position,quantity:commercial.positions[index].quantity,lineTotalCents:commercial.positions[index].lineTotalCents}));
+        copyPositions = commercial.positions.map(actual=>{const position=sourceQuote.positions[actual.position-1];if(!position)throw Error('QUOTE_COPY_POSITION_MISSING');return {...position,quantity:actual.quantity,lineTotalCents:actual.lineTotalCents};});
       }
     } else {
       const source = await readQuoteCopyCommand(context, { quoteId: input.id });
@@ -425,7 +424,7 @@ export async function prepareQuoteCopyAction(input: { kind: 'quote' | 'order'; i
         positions,
         specialRequests: quote?.lifecycle?.specialRequests ?? null,
         previousCalculation: quote?.lifecycle?.calculation ?? null,
-        comparison: { plannedHours: quote?.lifecycle?.calculation?.hours ?? null,
+        comparison: { plannedHours: order?.commercialQuote ? order.commercialQuote.plannedHours : quote?.lifecycle?.calculation?.hours ?? null,
           actualHours: null, actualHoursReason: 'Ist-Stunden fehlen: keine gebundene aktive Zeiterfassung.',
           orderId: order?.id ?? quote?.linkedOrderId ?? null },
         missing: positions.some(position => position.unitPriceCents === null || position.lineTotalCents === null)
@@ -449,7 +448,7 @@ export async function receiveOnsiteQuoteAction(input:{
  handoverMode:'pickup'|'shipping';paymentMode:'abholung'|'vorkasse'|'rechnung';confirmedOrderDueDate:string;
 }){
  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
- if(!input||!uuid.test(input.clientRequestId)||!input.customer||!['NEW','EXISTING'].includes(input.customer.mode)||!input.quote||Object.hasOwn(input.quote,'source')||typeof input.evidence!=='string'||input.evidence.trim().length<3||!Array.isArray(input.quantities)||!input.quantities.length||input.quantities.some(row=>!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.received)||row.received<1)||new Set(input.quantities.map(row=>row.position)).size!==input.quantities.length)return {code:'VALIDATION_ERROR' as const,message:'Kunde, KV, Zusage und tatsaechlich angenommene Mengen vollstaendig pruefen.'};
+ if(!input||!uuid.test(input.clientRequestId)||!input.customer||!['NEW','EXISTING'].includes(input.customer.mode)||!input.quote||Object.hasOwn(input.quote,'source')||typeof input.evidence!=='string'||input.evidence.trim().length<3||!Array.isArray(input.quantities)||!input.quantities.length||input.quantities.some(row=>!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.received)||row.received<0)||new Set(input.quantities.map(row=>row.position)).size!==input.quantities.length)return {code:'VALIDATION_ERROR' as const,message:'Kunde, KV, Zusage und tatsaechlich angenommene Mengen vollstaendig pruefen.'};
  const phase=(name:string)=>{const hex=createHash('sha256').update('kreile-onsite:'+input.clientRequestId+':'+name).digest('hex');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-5'+hex.slice(13,16)+'-8'+hex.slice(17,20)+'-'+hex.slice(20,32);};
  const intent=createHash('sha256').update(JSON.stringify(input)).digest('hex');
  let customerId:string|undefined,quoteId:string|undefined;
