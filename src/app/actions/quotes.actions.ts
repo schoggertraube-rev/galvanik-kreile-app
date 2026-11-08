@@ -101,7 +101,7 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
     const auth=await resolveAuthorization();
     const failure=authorizationFailure(auth);
     if (failure||!auth.ok) return failure!;
-    const result=await changeQuoteLifecycleCommand((input?.action==='accept'||input?.action==='extend')?quoteOperationContext(auth.data):quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data,input?.action==='accept'),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId});
+    const result=await changeQuoteLifecycleCommand((input?.action==='accept'||input?.action==='extend')?quoteOperationContext(auth.data):quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data,input?.action==='accept'&&!quoteCommandContext(auth.data).capabilities.canReadQuote),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId});
     if (result.code==='OK') {
       revalidatePath('/');
       revalidatePath('/customers');
@@ -286,7 +286,7 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
   };
   const accept=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],auth:AuthorizationSnapshot)=>{
     if(!telephoneAcceptance)return;
-    const result=await changeQuoteLifecycleCommand(commandContext,{quoteId:input.quoteId,expectedVersion:input.expectedVersion,action:'accept',...telephoneAcceptance},(transaction,source)=>recordIntakeQuoteEffect(transaction,auth,source),quoteFollowupBinding(auth,true),{transaction:tx});
+    const result=await changeQuoteLifecycleCommand(commandContext,{quoteId:input.quoteId,expectedVersion:input.expectedVersion,action:'accept',...telephoneAcceptance},(transaction,source)=>recordIntakeQuoteEffect(transaction,auth,source),quoteFollowupBinding(auth,!quoteCommandContext(auth).capabilities.canReadQuote),{transaction:tx});
     if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_TELEPHONE_ACCEPTANCE_FAILED');}
   };
   const order = await createOrderIntake(prepared.orderInput,undefined,{
