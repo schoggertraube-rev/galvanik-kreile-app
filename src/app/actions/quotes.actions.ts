@@ -1,5 +1,8 @@
 "use server";
 
+import {createHash} from "node:crypto";
+import {appendQuoteJournal,readQuoteJournal} from "@/lib/server/quoteJournalPort";
+
 import { renderToBuffer } from "@react-pdf/renderer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { createQuotePdfDocument } from "@/lib/pdf/QuoteDocument";
@@ -433,4 +436,59 @@ export async function prepareQuoteCopyAction(input: { kind: 'quote' | 'order'; i
     console.error('[QUOTE_COPY_PREPARATION_FAILED]', error);
     return { code: 'UNAVAILABLE' as const, message: 'Kopiervorlage konnte nicht sicher gelesen werden. Es wurde kein KV angelegt.' };
   }
+}
+
+/** One confirmed onsite request; every mutation delegates to its existing idempotent writer. */
+export async function receiveOnsiteQuoteAction(input:{
+ clientRequestId:string;
+ customer:{mode:'EXISTING';customerId:string}|{mode:'NEW';data:Omit<import('@/modules/customers/public').CreateCustomerInput,'clientEventId'>};
+ quote:Omit<CreateQuoteInput,'clientEventId'|'customerId'|'source'>;
+ evidence:string;
+ goods:Record<string,unknown>;
+ quantities:Array<{position:number;received:number;note:string|null}>;
+ handoverMode:'pickup'|'shipping';paymentMode:'abholung'|'vorkasse'|'rechnung';confirmedOrderDueDate:string;
+}){
+ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+ if(!input||!uuid.test(input.clientRequestId)||!input.customer||!['NEW','EXISTING'].includes(input.customer.mode)||!input.quote||Object.hasOwn(input.quote,'source')||typeof input.evidence!=='string'||input.evidence.trim().length<3||!Array.isArray(input.quantities)||!input.quantities.length||input.quantities.some(row=>!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.received)||row.received<1)||new Set(input.quantities.map(row=>row.position)).size!==input.quantities.length)return {code:'VALIDATION_ERROR' as const,message:'Kunde, KV, Zusage und tatsaechlich angenommene Mengen vollstaendig pruefen.'};
+ const phase=(name:string)=>{const hex=createHash('sha256').update('kreile-onsite:'+input.clientRequestId+':'+name).digest('hex');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-5'+hex.slice(13,16)+'-8'+hex.slice(17,20)+'-'+hex.slice(20,32);};
+ const intent=createHash('sha256').update(JSON.stringify(input)).digest('hex');
+ let customerId:string|undefined,quoteId:string|undefined;
+ try{
+  const authResult=await resolveAuthorization(),denied=authorizationFailure(authResult);if(denied||!authResult.ok)return denied!;
+  const auth=authResult.data;
+  if(!quoteCommandContext(auth).capabilities.canCreateQuote||!hasAuthorizationArea(auth,'eingang'))return {code:'FORBIDDEN' as const,message:'Vor-Ort-Erfassung benoetigt KV und Eingang.'};
+  const reserved=await withPrivilegedTenantTransaction(auth,async tx=>{
+   await tx.execute((await import('drizzle-orm')).sql`SELECT pg_advisory_xact_lock(hashtextextended(${'onsite:'+auth.tenantId+':'+input.clientRequestId},0))`);
+   const prior=await readQuoteJournal<{intent:string}>(tx,auth,input.clientRequestId);
+   if(prior.length)return prior.length===1&&prior[0].eventType==='QUOTE_ONSITE_REQUESTED_V04'&&prior[0].payload.intent===intent;
+   await appendQuoteJournal(tx,auth,{id:phase('request-event'),type:'QUOTE_ONSITE_REQUESTED_V04',clientEventId:input.clientRequestId,correlationId:input.clientRequestId,version:null,description:'Vor-Ort-Erfassung bestaetigt',payload:{intent,quoteRequestId:phase('quote'),orderRequestId:phase('order'),customerRequestId:phase('customer')}});return true;
+  });
+  if(!reserved)return {code:'CONFLICT' as const,message:'Diese Erfassungskennung wurde bereits mit anderen Eingaben verwendet. Nicht erneut buchen.'};
+  if(input.customer.mode==='EXISTING')customerId=input.customer.customerId;
+  else{
+   const {createCustomerAction}=await import('@/app/actions/customers.actions');
+   const customer=await createCustomerAction({...input.customer.data,clientEventId:phase('customer')});
+   if(customer.code!=='OK')return {...customer,phase:'customer',requestId:input.clientRequestId};
+   customerId=customer.receipt.customerId;
+  }
+  const savedQuote=await readQuoteCreateReceiptAction({...input.quote,customerId,clientEventId:phase('quote')});
+  // A completed outcome is recovered before any new phase; the root intent was checked above.
+  if(savedQuote.code==='OK'){
+   const completed=await readQuoteConversionReceiptAction({quoteId:savedQuote.quote.quoteId,clientEventId:phase('order')});
+   if(completed.code==='OK')return {...completed,replayed:true,phase:'complete' as const,quoteId:completed.quote.quoteId,customerId,requestId:input.clientRequestId};
+   if(completed.code!=='NOT_FOUND')return {...completed,phase:'readback',requestId:input.clientRequestId};
+  }
+  const created=await createQuoteAction({...input.quote,customerId,clientEventId:phase('quote')});
+  if(created.code!=='OK')return {...created,phase:'quote',customerId,requestId:input.clientRequestId};
+  quoteId=created.quote.quoteId;
+  if(input.quantities.length!==created.quote.positions.length)return {code:'VALIDATION_ERROR' as const,message:'Jede KV-Position braucht ihre angenommene Menge.',quoteId,customerId,requestId:input.clientRequestId};
+  const goods={...input.goods,id:phase('goods-id'),clientKey:phase('goods-key'),clientEventId:phase('goods'),quoteId,expectedQuoteVersion:1,quantities:created.quote.positions.map(position=>{const quantity=input.quantities.find(row=>row.position===position.position);return {itemId:position.id,expected:position.quantity,received:quantity?.received===position.quantity?null:quantity?.received,confirmed:quantity?.received===position.quantity,note:quantity?.note};})};
+  const {saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
+  const received=created.quote.lifecycle?.goods?.some(row=>row.id===phase('goods-id'))?{code:'OK' as const}:await saveGoodsReceiptAction(goods);
+  if(received.code!=='OK')return {...received,phase:'goods',quoteId,customerId,requestId:input.clientRequestId};
+  const accepted=await changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:phase('accept'),expectedVersion:1,edition:1,evidence:input.evidence},{onsiteGoodsReceiptId:phase('goods-id')});
+  if(accepted.code!=='OK')return {...accepted,phase:'acceptance',quoteId,customerId,requestId:input.clientRequestId};
+  const result=await convertQuoteToOrderAction({quoteId,clientEventId:phase('order'),expectedVersion:2,confirmedAward:true,confirmedOrderDueDate:input.confirmedOrderDueDate,handoverMode:input.handoverMode,paymentMode:input.paymentMode,goodsReceiptId:phase('goods-id')});
+  return {...result,phase:result.code==='OK'?'complete':'order',quoteId,customerId,requestId:input.clientRequestId};
+ }catch(error){console.error('[QUOTE_ONSITE_REQUEST_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Ausgang nicht sicher bestaetigt. Eingaben und Erfassungskennung behalten; gespeicherte Zwischenschritte bleiben nachvollziehbar.',customerId,quoteId,requestId:input.clientRequestId};}
 }
