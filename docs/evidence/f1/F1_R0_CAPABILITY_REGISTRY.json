@@ -531,7 +531,8 @@
         "prepareQuoteTextChangeAction",
         "duplicateQuoteAction",
         "receiveOnsiteQuoteAction",
-        "recordQuoteDecisionAction"
+        "recordQuoteDecisionAction",
+        "getQuoteOperationContextAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "V5 Work Unit 2 implements the real tenant-bound quote and existing F1.1 conversion candidate. The two additional read-only receipt actions recover a known outcome without a mutation; the technical checkpoint remains no UI delivery claim.",

@@ -913,7 +913,7 @@ it.each([false,true])('AF-4/13: return declined KV goods with one real actor rec
 
 it('U249: a login without area rights extends and accepts through the same writer without receiving money data',async()=>{
  const owner=await createFixture(),operator=await createFixture(false,false);
- const {createQuoteAction,changeQuoteLifecycleAction,recordQuoteDecisionAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const {createQuoteAction,changeQuoteLifecycleAction,recordQuoteDecisionAction,readQuoteAction,getQuoteOperationContextAction}=await import('@/app/actions/quotes.actions');
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,updated_at) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST U249 settings',statement_timestamp() WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
  const {readQuoteDefaultsAction}=await import('@/app/actions/quotes.actions');const {saveQuoteSettingsAction}=await import('@/app/actions/settings.actions');
  const settings=await withSession(owner,()=>readQuoteDefaultsAction());if(settings.code!=='OK')throw Error('TEST U249 settings');
@@ -925,6 +925,10 @@ it('U249: a login without area rights extends and accepts through the same write
  const [task]=await sql`SELECT id::text,status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quote.quote.quoteId}`;expect(task.status).toBe('offen');
  const {completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
  expect(await withSession(operator,()=>completeIntakeTaskAction({taskId:task.id,version:1,note:'TEST allgemeine Aufgabe nicht freigegeben'}))).toMatchObject({code:'FORBIDDEN'});
+ const operation=await withSession(operator,()=>getQuoteOperationContextAction({quoteId:quote.quote.quoteId}));
+ expect(operation).toMatchObject({code:'OK',context:{quoteId:quote.quote.quoteId,version:2,edition:1,acceptedEdition:null}});
+ if(operation.code!=='OK')throw Error('TEST U249 operational read');
+ expect(Object.keys(operation.context).sort()).toEqual(['acceptedEdition','customerName','declinedAt','dueDate','edition','goods','linkedOrderId','number','quoteId','sentEdition','validUntil','version']);
  const input={action:'extend' as const,quoteId:quote.quote.quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,validUntil:dates.later,evidence:'TEST Kunde moechte eine laengere Entscheidungsfrist'};
  expect(await withSession(operator,()=>changeQuoteLifecycleAction(input))).toMatchObject({code:'FORBIDDEN'});
  const extended=await withSession(operator,()=>recordQuoteDecisionAction(input));
@@ -943,5 +947,6 @@ it('U249: a login without area rights extends and accepts through the same write
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${operator.actorId}::uuid AND event_type='QUOTE_FOLLOWUP_COMPLETED_V1' AND payload->>'taskId'=${task.id}`).toHaveLength(1);
  expect(await sql`SELECT bereich FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${operator.actorId}::uuid`).toHaveLength(0);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${operator.actorId}::uuid AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'quoteId'=${input.quoteId}`).toHaveLength(2);
+ expect(await withSession(operator,()=>getQuoteOperationContextAction({quoteId:input.quoteId}))).toMatchObject({code:'OK',context:{version:4,acceptedEdition:1}});
  expect(await withSession(owner,()=>readQuoteAction({quoteId:input.quoteId}))).toMatchObject({code:'OK',quote:{version:4,totalNetCents:1234,lifecycle:{edition:1,acceptedEdition:1,acceptanceEvidence:accept.evidence}}});
 });

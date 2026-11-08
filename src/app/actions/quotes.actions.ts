@@ -109,6 +109,18 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
   }
 }
 
+/** Minimal work context for U249, without the financial quote projection. */
+export async function getQuoteOperationContextAction(input:{quoteId:string}){
+ noStore();
+ try{
+  const auth=await resolveAuthorization(),failure=authorizationFailure(auth);if(failure||!auth.ok)return failure!;
+  const ordinary=quoteCommandContext(auth.data),result=await readQuoteCommand({...ordinary,capabilities:{...ordinary.capabilities,canReadQuote:true}},input);
+  if(result.code!=='OK')return result;
+  const quote=result.quote,life=quote.lifecycle;if(!life)return {code:'UNAVAILABLE' as const,message:'KV-Arbeitsstand ist nicht sicher lesbar.'};
+  return {code:'OK' as const,context:{quoteId:quote.quoteId,number:quote.quoteNumber,customerName:quote.customerDisplayName,version:quote.version,edition:life.edition,dueDate:quote.dueDate,validUntil:quote.validUntil,sentEdition:life.sentEdition,acceptedEdition:life.acceptedEdition,declinedAt:life.declinedAt,linkedOrderId:quote.linkedOrderId,goods:(life.goods??[]).map(row=>({id:row.id,orderId:row.orderId,edition:row.edition,location:row.location,blocked:row.blocked,version:row.version}))}};
+ }catch(error){console.error('[QUOTE_OPERATIONAL_CONTEXT_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Arbeitsstand konnte nicht sicher gelesen werden.'};}
+}
+
 /** U249: an operational decision, not a grant to read/edit monetary quote data. */
 export async function recordQuoteDecisionAction(input:QuoteLifecycleInput){
  try{

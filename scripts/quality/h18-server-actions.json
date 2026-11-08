@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "0e870fe30b80960cf65d777c78b9006f66de10bf315b2c1bc262b5a385afe72a",
+  "inventorySha256": "2a78d6f6437787e462489533d9839def9bf9e6644c03a7c23e5859f405c21437",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
