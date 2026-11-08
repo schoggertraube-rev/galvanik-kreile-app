@@ -42,6 +42,10 @@ export async function prepareQuoteTextChangeCommand(auth:QuoteCommandContext,quo
  }
  if(calculation){const total=calculateQuote(calculation);if(total.code!=='OK'||total.totalNetCents!==positions.reduce((sum,position)=>sum+(position.lineTotalCents??position.quantity*position.unitPriceCents),0))missing.push('Kalkulation und Positionspreise angleichen');}
  if(!changes.length)missing.push('Keine eindeutige Aenderung erkannt');
- const candidate:Omit<UpdateQuoteInput,'clientEventId'>={quoteId,expectedVersion:before.version,dueDate,note:before.note,positions,...(calculation?{calculation}:{})};
- return {code:'OK' as const,preparation:{before,after:{dueDate,positions,totalNetCents:positions.reduce((sum,row)=>sum+(row.lineTotalCents??row.quantity*row.unitPriceCents),0),calculation:missing.includes('Arbeitszeit fuer geaenderten Umfang bestaetigen')?null:calculation??null},changes,missing:[...new Set(missing)],canApply:missing.length===0,candidate:missing.length?null:candidate}};
+ const dateOnly=changes.length===1&&changes[0]==='Liefertermin';
+ // Preserve the persisted position shape on a date-only change: adding an equivalent
+ // explicit line total would otherwise look like a commercial edit to the SQL writer.
+ const writePositions=dateOnly?positions.map((row,index)=>{const {lineTotalCents,...base}=row;return source.storedLineTotals[index]===null?base:{...base,lineTotalCents};}):positions;
+ const candidate:Omit<UpdateQuoteInput,'clientEventId'>={quoteId,expectedVersion:before.version,dueDate,note:before.note,positions:writePositions,...(calculation?{calculation}:{})};
+ return {code:'OK' as const,preparation:{dateOnly,before,after:{dueDate,positions,totalNetCents:positions.reduce((sum,row)=>sum+(row.lineTotalCents??row.quantity*row.unitPriceCents),0),calculation:missing.includes('Arbeitszeit fuer geaenderten Umfang bestaetigen')?null:calculation??null},changes,missing:[...new Set(missing)],canApply:missing.length===0,candidate:missing.length?null:candidate}};
 }

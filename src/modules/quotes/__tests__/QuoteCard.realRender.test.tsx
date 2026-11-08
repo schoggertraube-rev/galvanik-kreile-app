@@ -90,3 +90,12 @@ it('copy requires a new date and retries an uncertain result with identical inte
  await waitFor(()=>expect(onQuote).toHaveBeenCalledWith('TEST-copy'));
  expect(duplicate.mock.calls[1][0]).toEqual(duplicate.mock.calls[0][0]);
 });
+
+it('shows the actual date comparison and preserves the edition wording before applying',async()=>{
+ const candidate={quoteId:quote.quoteId,expectedVersion:2,dueDate:'2026-12-18',note:quote.note,positions:quote.positions.map(({name,quantity,material,surfaceRequested,unitPriceCents})=>({name,quantity,material,surfaceRequested,unitPriceCents}))};
+ const prepare=vi.fn(async()=>({code:'OK' as const,preparation:{dateOnly:true,before:quote,after:{dueDate:'2026-12-18',positions:candidate.positions,calculation:null,totalNetCents:4000},changes:['Liefertermin'],missing:[],canApply:true,candidate}})),update=vi.fn();
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote,canEdit:true}),change:vi.fn(),prepare,update}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Ändern · Fassung 2 anlegen'}));fireEvent.change(screen.getByRole('textbox',{name:'Was soll geändert werden?'}),{target:{value:'Termin 18.12.2026'}});fireEvent.click(screen.getByRole('button',{name:'Änderungsvorschlag anzeigen'}));
+ await screen.findByText('Fertig · 1.12.2026 → 18.12.2026');
+ expect(screen.getByRole('button',{name:'Termin ändern · Fassung bleibt gültig'})).toBeVisible();expect(update).not.toHaveBeenCalled();
+});

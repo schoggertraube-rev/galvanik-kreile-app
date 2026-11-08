@@ -740,9 +740,9 @@ export async function readQuoteCopyCommand(authorization: QuoteCommandContext, i
   return await withPrivilegedTenantTransaction(authorization,async tx=>{
    const quote=await readQuote(tx,authorization.tenantId,input.quoteId);
    if(!quote)return {code:'NOT_FOUND' as const,message:'KV ist nicht verfuegbar.'};
-   const rows=await tx.execute<{position:number;unitPriceCents:number;lineTotalCents:number}>(sql`SELECT position,unit_price_cents::float8 AS "unitPriceCents",coalesce(zeilen_gesamt_cents,line_total_cents)::float8 AS "lineTotalCents" FROM private.quote_positions WHERE tenant_id=${authorization.tenantId} AND quote_id=${input.quoteId}::uuid AND revision=${quote.version} ORDER BY position`);
+   const rows=await tx.execute<{position:number;unitPriceCents:number;lineTotalCents:number;storedLineTotalCents:number|null}>(sql`SELECT position,unit_price_cents::float8 AS "unitPriceCents",zeilen_gesamt_cents::float8 AS "storedLineTotalCents",coalesce(zeilen_gesamt_cents,line_total_cents)::float8 AS "lineTotalCents" FROM private.quote_positions WHERE tenant_id=${authorization.tenantId} AND quote_id=${input.quoteId}::uuid AND revision=${quote.version} ORDER BY position`);
    if(rows.length!==quote.positions.length||rows.some((row,index)=>row.position!==quote.positions[index].position||!Number.isSafeInteger(row.unitPriceCents)||row.unitPriceCents<0||row.lineTotalCents!==quote.positions[index].lineTotalCents))throw Error('QUOTE_COPY_SOURCE_INVALID');
-   return {code:'OK' as const,quote,positions:quote.positions.map((position,index)=>({name:position.name,quantity:position.quantity,material:position.material,surfaceRequested:position.surfaceRequested,unitPriceCents:rows[index].unitPriceCents,lineTotalCents:rows[index].lineTotalCents}))};
+   return {code:'OK' as const,quote,storedLineTotals:rows.map(row=>row.storedLineTotalCents),positions:quote.positions.map((position,index)=>({name:position.name,quantity:position.quantity,material:position.material,surfaceRequested:position.surfaceRequested,unitPriceCents:rows[index].unitPriceCents,lineTotalCents:rows[index].lineTotalCents}))};
   });
  }catch(error){console.error('[QUOTE_COPY_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Kopiervorlage konnte nicht sicher gelesen werden.'};}
 }

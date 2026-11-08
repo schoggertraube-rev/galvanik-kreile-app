@@ -143,3 +143,12 @@ Echter Browser PASS 19,1 s: synthetisches Original mit gebundenem Kunden und vie
 Die Anliegen-Überschrift, Kategorien, Situationssätze und Knopftexte kommen aus demselben zentralen Situationskatalog; keine Frage-Überschrift im Bauteil. Neun gezielte Renderfälle, Typen/Lint/Diff PASS. Modulprüfung enthält allein den fremden Planungs-Pointer `DESIGN_POINTER_PAGE_BINDING`; kein Checker geändert.
 
 Weiterhin Draft: automatische sichere KV-Warenzuordnung samt tatsächlicher Rücknahme ist noch nicht als umgesetzt behauptet (Produktpräzisierung im BAULOG angefragt). Formale abschließende Sicht und übrige vollständige Browser-Abnahme bleiben offen. Keine Merge-Reife, kein externer Mailversandnachweis.
+
+
+## Reine Terminänderung an der zugesagten KV-Karte
+
+Die echte Vorschau nennt jetzt die tatsächlichen Vorher-/Nachher-Werte für Termin, geänderte Menge und Gesamtpreis, soweit der Server sie liefert. Ein reiner Terminwechsel bestätigt ausdrücklich den Erhalt der Fassung; eine gültige Zusage wird nur dann genannt, wenn sie tatsächlich zur Fassung vorliegt. Erfolgstext richtet sich zusätzlich nach der zurückgegebenen Fassung, nicht nach einer angenommenen Wirkung.
+
+Gefundener fachlicher Fehler im echten Browser: Bei einem KV ohne ausdrücklich gespeicherte Zeilensumme ergänzte die Vorbereitung für den bloßen Terminwechsel eine rechnerisch gleiche ausdrückliche Zeilensumme. Der bestehende SQL-Inhaltsvergleich wertete diesen Formwechsel als Preisänderung und erzeugte fälschlich Fassung 2. Der bestehende Kopier-Leseport liefert jetzt zusätzlich die tatsächliche ursprüngliche Speicherform; nur der reine Termin-Vorschlag erhält sie unverändert. Kein neuer Schreibweg, keine Migration, kein gelockerter Inhaltsvergleich. Geänderte Mengen/Preise behalten die ausdrücklichen exakten Summen.
+
+Echter Browser PASS 12,5 s: Zusage zu Fassung 1 → Text „Termin 18.12.2026“ → tatsächlicher Vorschlag → ein Update → DB-Version 4, Fassung 1, Zusage 1, 6100 Cent unverändert; genau ein QUOTE_UPDATED_V1 mit der tatsächlichen Login-ID; erneuter Server-Readback und Karte. Zwei gezielte Replayfälle für Textänderungen/Kopie PASS 5,86 s, acht Kartenfälle einschließlich echter Datumsanzeige/fehlender Zusage PASS, sechs Befehlsfälle PASS, Typen/Lint/Diff/Scope PASS. Generierte Next-Typcache-Reste wurden neu erzeugt, ohne Produkt-/tsconfig-/Gateänderung.
