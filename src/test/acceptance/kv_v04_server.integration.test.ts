@@ -161,6 +161,10 @@ it('KV-04/05 records sent edition, acceptance evidence, changes and decline thro
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction(rejected))).toMatchObject({code:'OK',quote:{version:5,lifecycle:{stage:'abgesagt',declineReason:rejected.reason}}});
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${rejected.clientEventId}::uuid AND event_type='QUOTE_LIFECYCLE_V04'`)[0].n).toBe(1);
  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:5,lifecycle:{stage:'abgesagt'}}});
+ const forbiddenUpdate={quoteId,clientEventId:randomUUID(),expectedVersion:5,dueDate:'2027-04-22',note:'TEST unerlaubte Aenderung nach Absage',positions:[{...position,lineTotalCents:1200}]};
+ expect(await withSession(fixture,()=>updateQuoteAction(forbiddenUpdate))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:5,totalNetCents:1100,lifecycle:{stage:'abgesagt',declineReason:rejected.reason}}});
+ expect(await sql`SELECT id FROM private.quote_update_receipts WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${forbiddenUpdate.clientEventId}::uuid`).toHaveLength(0);
 });
 
 it('KV-03 settings persist explicit nullable approaches with DB/event/view, without changing the shared hourly-rate truth',async()=>{

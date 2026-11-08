@@ -18,4 +18,11 @@ Die vorhandene Reklamationskarte zeigt die bestehende Nummer/Betrag und sperrt d
 
 ## Offen
 
-AF-5/6/8/9/10/12/17/18 sowie die übrigen gebundenen mittleren Regeln, vollständige Sicht-/CI-/Planungsprüfung und Preview des abschließenden SHA. Dieser Teilstand ist kein vollständiger Kreislauf-PASS. Kein Merge/Production/Remote-Datenänderung in diesem Schritt.
+AF-5/6/8/9/10/12/18 sowie die übrigen gebundenen mittleren Regeln, vollständige Sicht-/CI-/Planungsprüfung und Preview des abschließenden SHA. Dieser Teilstand ist kein vollständiger Kreislauf-PASS. Kein Merge/Production/Remote-Datenänderung in diesem Schritt.
+
+
+## AF-17: abgesagten KV auch auf der SQL-Grenze sperren
+
+Additive Migration `20261108165057_quote_decline_write_guard.sql` übernimmt die vorhandene `update_quote_v1` mit identischer Signatur und sämtlichen bestehenden Validierungen/Receipts/Terminregeln. Genau die Statusbedingung ist strenger: `abgesagt_am IS NOT NULL` verbietet neue Änderungen. Die vorhandene Definer-Eigenschaft/ACL wird weder erweitert noch neu eingeführt; kein neuer privilegierter Einstieg.
+
+Abbruchprobe und lokale Anwendung PASS. Bestehender echter KV-04/05-Replayfall ergänzt: Versand → Zusage → neue Fassung → Absage → Versuch weiterer Termin-/Preisänderung → CONFLICT, Version 5/Betrag 1100 Cent/Absagegrund unverändert, kein Update-Receipt; View neu gelesen. PASS 4,69 s. Historische Wiederholungen bestehender Receipts bleiben nachvollziehbar. Eine kopierte Konsolenbeschriftung des lokalen Helfers nannte zunächst die Vorgängernummer; SQL-Datei und eingetragene Migrationsversion sind 20261108165057, Beschriftung korrigiert, kein zweites Anwenden.
