@@ -1,7 +1,7 @@
 import type {AccessArea} from '@/lib/auth/authorizationContract';
 export type AssignmentMode='normal'|'rein'|'kein'|'umhaengen';
 export type AssignmentCustomer={id:string;name:string;type:string;reason:string|null};
-export type AssignmentView={itemId:string;version:number;channel:string;assignment:string;usage:string;senderName:string|null;senderAddress:string|null;subject:string|null;text:string|null;at:string;customer:AssignmentCustomer|null;proposals:AssignmentCustomer[];files:Array<{id:string;name:string}>;areas:AccessArea[];restricted:boolean;concerns:string[];duplicates:Array<{id:string;title:string|null;at:string}>};
+export type AssignmentView={itemId:string;version:number;channel:string;assignment:string;usage:string;senderName:string|null;senderAddress:string|null;subject:string|null;text:string|null;at:string;customer:AssignmentCustomer|null;proposals:AssignmentCustomer[];files:Array<{id:string;name:string}>;areas:AccessArea[];restricted:boolean;concerns:string[];openConcerns?:string[];duplicates:Array<{id:string;title:string|null;at:string}>};
 export type AssignmentFailure={code:'UNAUTHENTICATED'|'FORBIDDEN'|'NOT_FOUND'|'VALIDATION_ERROR'|'CONFLICT'|'UNAVAILABLE';message:string};
 export type AssignmentReadResult={code:'OK';view:AssignmentView}|AssignmentFailure;
 export type AssignmentInput={itemId:string;version:number;clientEventId:string;customerId:string;mode:'confirm'|'manual'|'move'};

@@ -99,3 +99,10 @@ it('shows the actual date comparison and preserves the edition wording before ap
  await screen.findByText('Fertig · 1.12.2026 → 18.12.2026');
  expect(screen.getByRole('button',{name:'Termin ändern · Fassung bleibt gültig'})).toBeVisible();expect(update).not.toHaveBeenCalled();
 });
+
+it.each([['TEST Fassung verbindlich angenommen','accept','Zusage aus dieser Antwort übernehmen'],['TEST einverstanden, aber nicht für den Preis','conditional','Vorbehalt aus dieser Antwort festhalten'],['TEST Vorhaben abgesagt','reject','Absage aus dieser Antwort übernehmen']] as const)('uses the persisted reply and source version for %s',async(text,action,label)=>{
+ const source={itemId:'TEST-source',version:4,message:true},change=vi.fn<QuoteCardPorts['change']>(async()=>({code:'CONFLICT' as const,message:'TEST Quelle geändert'}));
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote,canEdit:true,reply:{source,text,concerns:[action==='reject'?'kv_ablehnung':'kv_annahme'],files:[]}}),change,prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ const button=await screen.findByRole('button',{name:label});expect(screen.queryByRole('button',{name:/hat am Telefon zugesagt/})).toBeNull();fireEvent.click(button);fireEvent.click(button);
+ await screen.findByText('TEST Quelle geändert');expect(change).toHaveBeenCalledOnce();expect(change.mock.calls[0][0]).toMatchObject({quoteId:quote.quoteId,expectedVersion:2,edition:1,source,action,...(action==='reject'?{reason:text}:{evidence:text})});
+});

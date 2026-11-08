@@ -158,3 +158,14 @@ CI-Nachtrag zur offenen Mailprüfung: Die generierte Rot-Liste akzeptiert aussch
 
 
 Gegenprobe Mengenänderung im echten Browser PASS 17,2 s: zugesagte vier Halter → Text „3 Halter statt 4“ → sichtbarer Vorher-/Nachher-Vorschlag 4→3 und 61,00→48,75 Euro → vorhandener Update-Befehl → DB-Fassung 2, alte Zusage weiterhin historisch Fassung 1, kein Auftrag; Server-Readback bestätigt drei Teile/4875 Cent und geaendert_seit_versand. Telefon-Zusage für die noch nicht versendete neue Fassung wird nicht angeboten. Dieser Inhaltswechsel wird ausdrücklich anders behandelt als der reine Terminwechsel.
+
+
+## Antworten bleiben beim tatsächlichen KV
+
+KV-Annahme/Absage aus der Nachrichtenansicht öffnen jetzt dieselbe KV-Karte mit der Quell-ID, statt eine KV-ID als Auftrags-ID zu öffnen oder einen unverdrahteten Absageempfänger aufzurufen. Der vorhandene Zuordnungsleser liefert die bereits abgefragten offenen Anliegen zusätzlich zurück. Keine zweite Liste/Abfrage/Datenhaltung. Die Karte liest Wortlaut, Version und ursprüngliche Dateien erneut aus dieser Quelle; fremder Kunde oder gesperrter Nachrichteninhalt verweigert den Kontext.
+
+Der Handlungskatalog bietet die passende Übernahme an: Zusage, Absage oder Vorbehalt (beispielsweise „einverstanden, aber nicht für den Preis“). Es ist eine bewusste Übernahme des tatsächlichen Wortlauts, keine unbewiesene automatische Mailentscheidung. `changeQuoteLifecycleAction` bindet genau diese Quell-Version in derselben Transaktion. Kein Auftrag ohne Ware. Nach Vorbehalt bleibt die Ware gesperrt, und das offene Anliegen wird „aenderung“; die Karte bietet dieselbe vorhandene Textänderung an. Ein echter Änderungsvorschlag übernimmt dessen Quelle ebenfalls in den vorhandenen Update-Befehl.
+
+Drei echte Browserfälle PASS 27,5 s: synthetischer bereits importierter und zugeordneter Mail-Ausgangszustand → Anliegen → KV-Karte → bewusste Zusage/Vorbehalt/Absage → DB genau ein Lifecycle-Ereignis mit realer Login-ID, Quelle samt offenen Restanliegen und intake_event, KV neu gelesen, kein Auftrag. Mobile-Bilder außerhalb des Repos gesichert. Graph-Transport/automatische erstmalige Zuordnung einer ungebundenen Antwort sind mit dieser Fixture ausdrücklich nicht bewiesen. 13 gezielte Renderfälle PASS, einschließlich Quelle/Version/Wortlaut, Konfliktanzeige und Doppelklick. Die übrige vollständige Abnahme bleibt offen.
+
+Zusätzlicher echter KV-12-Mail-Browserfall PASS 14,5 s: gespeicherte importierte Änderungsnachricht → gebundene KV-Karte → Wortlaut im vorhandenen Texteditor → Termin-Vorschlag → gleicher Update-Befehl mit Quell-Version → KV-Version 4/Fassung 1/Zusage 1 und Datum 18.12.; Anliegen aenderung atomar erledigt, andere Aufgabe bleibt offen, genau ein intake_event mit echter Actor-ID, Karte und Server nachgelesen.

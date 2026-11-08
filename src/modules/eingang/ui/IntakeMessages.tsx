@@ -70,6 +70,10 @@ export function IntakeMessages({ports,initialGroup,onClose}:{ports:IntakeMessage
    if(option.target==='aufgabe'){
     const request={reference:{type:'eingang',id:row.id},kind:option.concern,itemId:row.id};
     if(open('aufgabe',row.id+'#'+option.concern,{taskRequest:request})){fail('Aufgabe konnte nicht geöffnet werden · Anliegen bleibt offen. Code: TASK_TARGET_NOT_MOUNTED.');return;}
+   }else if(row.orderKind==='kv'&&row.orderId&&['kv_annahme','kv_ablehnung'].includes(option.concern)){
+    if(open('kv',row.orderId+'#'+row.id)){fail('KV konnte nicht geöffnet werden · Anliegen bleibt offen.');return;}
+   }else if(option.concern==='kv_anfrage'){
+    if(open('kv-vorbereiten','',{sourceItemId:row.id})){fail('KV-Vorbereitung konnte nicht geöffnet werden · Anliegen bleibt offen.');return;}
    }else if(open(option.target,option.target==='eingang'||option.target==='rechnungein'?row.id:(row.orderId??'')+'#'+row.id,option.target==='eingang'?{sourceItemId:row.id}:{})){
     fail('Ziel konnte nicht geöffnet werden · Anliegen bleibt offen. Code: INTAKE_CONCERN_TARGET_NOT_MOUNTED.');return;
    }

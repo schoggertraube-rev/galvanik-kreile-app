@@ -66,3 +66,14 @@ export const CONCERN_COPY={title:'Du findest Nachricht und nächsten Schritt zus
 export const QUOTE_PREPARATION_COPY={original:'Original dieser KV-Anfrage',wishes:'Bestätigte Hinweise aus Kunde und Anfrage',openFile:(name:string)=>name+' · Original ansehen',unavailable:'Original konnte nicht geöffnet werden · INTAKE_ORIGINAL_TARGET_NOT_MOUNTED.'};
 
 export const QUOTE_CHANGE_COPY={saveDate:(accepted:boolean)=>accepted?'Termin ändern · Zusage bleibt gültig':'Termin ändern · Fassung bleibt gültig',dateSaved:(accepted:boolean)=>accepted?'Termin geändert · Fassung und Zusage bleiben gültig.':'Termin geändert · Fassung bleibt gültig.',draftSaved:'KV-Entwurf gespeichert.',comparison:'Vorher → Nachher',dateComparison:(before:string,after:string)=>'Fertig · '+before+' → '+after,quantityComparison:(name:string,before:number,after:number)=>name+' · '+before+' → '+after,priceComparison:(before:string,after:string)=>'Preis netto · '+before+' → '+after,editionSaved:'KV geändert · neue Fassung sicher gespeichert.'};
+
+export const QUOTE_REPLY_COPY={title:'Antwort zu diesem KV',accept:'Zusage aus dieser Antwort übernehmen',conditional:'Vorbehalt aus dieser Antwort festhalten',reject:'Absage aus dieser Antwort übernehmen',amend:'Änderung aus dieser Antwort vorbereiten',missing:'Wortlaut der Antwort fehlt',tooLong:'Wortlaut ist zu lang · Nachricht öffnen und den entscheidenden Abschnitt bestätigen.',accepted:'Zusage aus der Antwort gespeichert · Ware erwartet.',conditionalSaved:'Vorbehalt gespeichert · KV anpassen, Ware bleibt gesperrt.',rejected:'Absage aus der Antwort gespeichert · kein Auftrag angelegt.',original:'Originalantwort',sourceUnavailable:'Originalantwort konnte nicht geöffnet werden.'};
+export function quoteReplyPresentation(concerns:string[],text:string|null){
+ if(concerns.includes('kv_ablehnung'))return {action:'reject' as const,sentence:'Du hältst die Absage aus dieser Antwort fest.',primary:QUOTE_REPLY_COPY.reject};
+ if(concerns.includes('kv_annahme')||concerns.includes('preis_einwand')){
+  const conditional=concerns.includes('preis_einwand')||/\baber\b|vorbehalt/iu.test(text??'');
+  return conditional?{action:'conditional' as const,sentence:'Die Antwort nennt einen Vorbehalt. Du passt den KV an, bevor daraus ein Auftrag wird.',primary:QUOTE_REPLY_COPY.conditional}:{action:'accept' as const,sentence:'Du übernimmst die Zusage zur aktuellen Fassung aus dieser Antwort.',primary:QUOTE_REPLY_COPY.accept};
+ }
+ if(concerns.includes('aenderung'))return {action:'amend' as const,sentence:'Du bereitest die Änderung aus dieser Antwort vor.',primary:QUOTE_REPLY_COPY.amend};
+ return null;
+}

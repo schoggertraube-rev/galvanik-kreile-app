@@ -316,3 +316,74 @@ test('quote quantity change: real proposed amount requires a new acceptance',asy
  expect(read.quote.positions[0]).toMatchObject({quantity:3,lineTotalCents:4875});
  await expect(card.getByRole('button',{name:/hat am Telefon zugesagt/})).toHaveCount(0);
 });
+
+
+for(const decision of ['accept','conditional','reject'] as const)test('quote reply '+decision+': real message card writes source and actor atomically',async({page})=>{
+ await prepareGeneratedSeed({id:'KV-UI-REPLY',gegeben:{login:'login_meister',datenlagen:['kunde_vollstaendig_firma'],aufruf:{seite:'nachrichten',weg:'oeffne'}}} as FlowCase);
+ await page.setViewportSize({width:1220,height:880});await page.goto('/start');const actor=generatedFlowRuntime.logins.login_meister;
+ await page.getByTestId('pin-user-card-'+createPinLoginHandle(actor.id)).click();
+ const keypad=page.locator('[data-spec-id="login.anmelden"]'),navigation=page.waitForURL(url=>url.pathname!=='/start');
+ for(const digit of actor.pin)await keypad.getByRole('button',{name:digit,exact:true}).click();await navigation;await page.goto('/orders');
+ const customer=generatedFlowRuntime.datenlagen.kunde_vollstaendig_firma.id,createId=randomUUID();
+ await action(page,'createQuoteAction',{clientEventId:createId,customerId:customer,dueDate:'2026-12-01',note:'TEST KV-Antwort',positions:[{name:'TEST Antwort-Halter',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]});
+ const [quote]=await sql`SELECT q.id::text,q.quote_number FROM private.quotes q JOIN private.quote_create_receipts r ON r.tenant_id=q.tenant_id AND r.quote_id=q.id WHERE r.tenant_id='galvanik-kreile' AND r.client_event_id=${createId}::uuid`;
+ await action(page,'changeQuoteLifecycleAction',{quoteId:quote.id,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST aktuelle Fassung ausgegeben'});
+ const text=decision==='accept'?'TEST aktuelle Fassung verbindlich angenommen':decision==='conditional'?'TEST einverstanden, aber nicht für den Preis':'TEST Vorhaben abgesagt',itemId=randomUUID();
+ await action(page,'saveIntakeNoteAction',{itemId,textstand:randomUUID(),text:'TEST Bitte andere offene Arbeit erledigen',context:{customerId:customer},concerns:['aufgabe']},'src/app/actions/eingang.actions.ts');
+ const [original]=await sql`SELECT version FROM public.intake_item WHERE tenant_id='galvanik-kreile' AND id=${itemId}::uuid`;
+ await action(page,'selectIntakeConcernAction',{itemId,version:original.version,clientEventId:randomUUID(),concern:decision==='reject'?'kv_ablehnung':'kv_annahme'},'src/app/actions/eingang.actions.ts');
+ // Synthetic imported-reply precondition. The following decision, events and rereads use real Actions.
+ await sql`UPDATE public.intake_item SET kanal='mail',richtung='rein',graph_message_id=${'TEST-reply-'+itemId},absender_adresse='test-reply@example.invalid',betreff=${'TEST Antwort '+decision},text=${text},vorgang_art='kv',vorgang_id=${quote.id}::uuid WHERE tenant_id='galvanik-kreile' AND id=${itemId}::uuid`;
+ await page.goto('/nachrichten');await page.getByRole('tab',{name:'Anliegen',exact:true}).click();
+ const concerns=page.locator('[data-spec-id="nachrichten.anliegen"]');await concerns.getByRole('button',{name:'KV öffnen',exact:true}).click();
+ const card=page.getByRole('dialog',{name:quote.quote_number+' · Prueffirma Alpha GmbH',exact:true});await expect(card.getByText(text,{exact:true})).toBeVisible();
+ const label=decision==='accept'?'Zusage aus dieser Antwort übernehmen':decision==='conditional'?'Vorbehalt aus dieser Antwort festhalten':'Absage aus dieser Antwort übernehmen';
+ await card.getByRole('button',{name:label,exact:true}).dblclick();
+ const message=decision==='accept'?'Zusage aus der Antwort gespeichert · Ware erwartet.':decision==='conditional'?'Vorbehalt gespeichert · KV anpassen, Ware bleibt gesperrt.':'Absage aus der Antwort gespeichert · kein Auftrag angelegt.';
+ await expect(card.getByText(message,{exact:true})).toBeVisible();
+ const [saved]=await sql`SELECT q.version,q.fassung,q.zugesagt_fassung,q.vorbehalt_fassung,q.abgesagt_am,q.linked_order_id,(SELECT count(*)::int FROM public.events e WHERE e.tenant_id=q.tenant_id AND e.payload->>'quoteId'=q.id::text AND e.event_type='QUOTE_LIFECYCLE_V04' AND e.payload->>'action'=${decision} AND e.user_id=${actor.id}) AS decisions FROM private.quotes q WHERE q.tenant_id='galvanik-kreile' AND q.id=${quote.id}::uuid`;
+ expect(saved).toMatchObject({version:3,fassung:1,linked_order_id:null,decisions:1,zugesagt_fassung:decision==='accept'?1:null,vorbehalt_fassung:decision==='conditional'?1:null});
+ expect(Boolean(saved.abgesagt_am)).toBe(decision==='reject');
+ const [source]=await sql`SELECT vorgang_id::text,anliegen_offen FROM public.intake_item WHERE tenant_id='galvanik-kreile' AND id=${itemId}::uuid`;
+ expect(source.vorgang_id).toBe(quote.id);expect(source.anliegen_offen).toEqual(decision==='conditional'?['aufgabe','aenderung']:['aufgabe']);
+ const [event]=await sql`SELECT von::text,nachher->>'action' AS action FROM public.intake_event WHERE tenant_id='galvanik-kreile' AND item_id=${itemId}::uuid AND nachher->>'action'=${decision==='accept'?'kv.zugesagt':decision==='conditional'?'kv.anpassen':'kv.abgesagt'}`;
+ expect(event.von).toBe(actor.id);
+ const read=await action(page,'readQuoteAction',{quoteId:quote.id});expect(read.quote.version).toBe(3);
+ if(decision==='conditional')await expect(card.getByRole('button',{name:'Änderung aus dieser Antwort vorbereiten',exact:true})).toBeVisible();
+ await page.setViewportSize({width:390,height:844});await card.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-reply-'+decision+'-mobile.png')});
+});
+
+
+test('quote mail term amendment: same writer completes source and retains acceptance',async({page})=>{
+ await prepareGeneratedSeed({id:'KV-UI-MAIL-TERM',gegeben:{login:'login_meister',datenlagen:['kunde_vollstaendig_firma'],aufruf:{seite:'nachrichten',weg:'oeffne'}}} as FlowCase);
+ await page.setViewportSize({width:1220,height:880});await page.goto('/start');
+ const actor=generatedFlowRuntime.logins.login_meister;
+ await page.getByTestId('pin-user-card-'+createPinLoginHandle(actor.id)).click();
+ const keypad=page.locator('[data-spec-id="login.anmelden"]'),navigation=page.waitForURL(url=>url.pathname!=='/start');
+ for(const digit of actor.pin)await keypad.getByRole('button',{name:digit,exact:true}).click();await navigation;await page.goto('/orders');
+ const customer=generatedFlowRuntime.datenlagen.kunde_vollstaendig_firma.id,createId=randomUUID();
+ await action(page,'createQuoteAction',{clientEventId:createId,customerId:customer,dueDate:'2026-12-01',note:'TEST Kopiervorlage',calculation:{hours:'4',hourlyRateCents:1000,setupCents:1200,materialCents:900},positions:[{name:'TEST Kopierte Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1525}]});
+ const [source]=await sql`SELECT q.id::text,q.quote_number,q.version FROM private.quotes q JOIN private.quote_create_receipts r ON r.quote_id=q.id AND r.tenant_id=q.tenant_id WHERE r.tenant_id='galvanik-kreile' AND r.client_event_id=${createId}::uuid`;
+ await action(page,'changeQuoteLifecycleAction',{quoteId:source.id,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST ausgedruckt'});
+ await action(page,'changeQuoteLifecycleAction',{quoteId:source.id,expectedVersion:2,edition:1,clientEventId:randomUUID(),action:'accept',evidence:'TEST am Telefon bestätigt'});
+
+ const itemId=randomUUID(),text='Termin 18.12.2026';
+ await action(page,'saveIntakeNoteAction',{itemId,textstand:randomUUID(),text:'TEST Bitte andere offene Arbeit erledigen',context:{customerId:customer},concerns:['aufgabe']},'src/app/actions/eingang.actions.ts');
+ const [original]=await sql`SELECT version FROM public.intake_item WHERE tenant_id='galvanik-kreile' AND id=${itemId}::uuid`;
+ await action(page,'selectIntakeConcernAction',{itemId,version:original.version,clientEventId:randomUUID(),concern:'aenderung'},'src/app/actions/eingang.actions.ts');
+ // Synthetic imported mail metadata only. The amendment and its source effects use the real writer.
+ await sql`UPDATE public.intake_item SET kanal='mail',richtung='rein',graph_message_id=${'TEST-term-'+itemId},text=${text},vorgang_art='kv',vorgang_id=${source.id}::uuid WHERE tenant_id='galvanik-kreile' AND id=${itemId}::uuid`;
+ await page.evaluate(arg=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg}})),source.id+'#'+itemId);
+ const card=page.getByRole('dialog',{name:source.quote_number+' · Prueffirma Alpha GmbH',exact:true});
+ await card.getByRole('button',{name:'Änderung aus dieser Antwort vorbereiten',exact:true}).click();
+ await expect(card.getByRole('textbox',{name:'Was soll geändert werden?',exact:true})).toHaveValue(text);
+ await card.getByRole('button',{name:'Änderungsvorschlag anzeigen',exact:true}).click();
+ await card.getByRole('button',{name:'Termin ändern · Zusage bleibt gültig',exact:true}).dblclick();
+ await expect(card.getByText('Termin geändert · Fassung und Zusage bleiben gültig.',{exact:true})).toBeVisible();
+ const [stored]=await sql`SELECT q.version,q.fassung,q.zugesagt_fassung,q.due_date::text,s.vorgang_id::text,s.anliegen_offen FROM private.quotes q JOIN public.intake_item s ON s.tenant_id=q.tenant_id AND s.id=${itemId}::uuid WHERE q.tenant_id='galvanik-kreile' AND q.id=${source.id}::uuid`;
+ expect(stored).toMatchObject({version:4,fassung:1,zugesagt_fassung:1,due_date:'2026-12-18',vorgang_id:source.id,anliegen_offen:['aufgabe']});
+ const events=await sql`SELECT von::text,nachher->>'action' AS action FROM public.intake_event WHERE tenant_id='galvanik-kreile' AND item_id=${itemId}::uuid AND nachher->>'action'='kv.geaendert'`;
+ expect(events).toHaveLength(1);expect(events[0].von).toBe(actor.id);
+ await expect(card.getByRole('button',{name:'Änderung aus dieser Antwort vorbereiten',exact:true})).toHaveCount(0);
+ expect((await action(page,'readQuoteAction',{quoteId:source.id})).quote.dueDate).toBe('2026-12-18');
+});
