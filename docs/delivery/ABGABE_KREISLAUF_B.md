@@ -18,7 +18,7 @@ Die vorhandene Reklamationskarte zeigt die bestehende Nummer/Betrag und sperrt d
 
 ## Offen
 
-AF-5/6/8/9/10/18 sowie die übrigen gebundenen mittleren Regeln, vollständige Sicht-/CI-/Planungsprüfung und Preview des abschließenden SHA. Dieser Teilstand ist kein vollständiger Kreislauf-PASS. Kein Merge/Production/Remote-Datenänderung in diesem Schritt.
+AF-5/6/8/9/18 sowie die übrigen gebundenen mittleren Regeln, vollständige Sicht-/CI-/Planungsprüfung und Preview des abschließenden SHA. Dieser Teilstand ist kein vollständiger Kreislauf-PASS. Kein Merge/Production/Remote-Datenänderung in diesem Schritt.
 
 
 ## AF-17: abgesagten KV auch auf der SQL-Grenze sperren
@@ -40,3 +40,9 @@ Alte Unit-/H18-Erfolgsfixtures sendeten einen anderen Termin als der gespeichert
 ## AF-16: Nacharbeit bleibt ohne Rechnung, Ausgabe schliesst Reklamation
 
 Vorhandene Writer erfuellen bereits den Vertrag: Rechnungsanlage lehnt payment_mode=keiner ab; der reale Warenausgang schliesst die zugehoerige Reklamation mit nacharbeit_raus. Kein zweiter Writer oder Produktumbau notwendig. Der bestehende echte Workshop-Replayfall wurde um den tatsaechlichen issueInvoiceAction-Aufruf nach Fertigung/Freeze erweitert: VALIDATION_ERROR, keine Rechnungszeile, kein Erfolgsereignis zu diesem Schluessel, Auftragskarte erneut gelesen. Danach unveraenderte positive Ausgabe-/Beschwerdeabschluss-Assertions. PASS 6,49 s, Typen/Lint/Diff sauber. Synthetische isolierte Fixtures, keine Echtdaten und keine gefaelschten Stationswechsel.
+
+## AF-10: Foto beim Aufnehmen serverseitig Pflicht
+
+Der eine bestehende ComplaintCommand-Vertrag verlangt mindestens ein Foto. Die unveraenderten Original-Leser pruefen weiterhin, ob alle angegebenen Foto-IDs wirklich zu diesem Auftrag bzw. dieser Quellnachricht und diesem Tenant gehoeren. Leere Liste wird vor irgendeinem Schreibvorgang abgewiesen. Keine neue Uploadstrecke, keine Anforderung von Fotos im Produkt vorweggenommen (Folgepaket AP-REKLA-MAIL).
+
+Echter Aktions-Replay mit leerer Liste: VALIDATION_ERROR, keine Reklamationszeile/kein Erfolgsereignis; danach positives Foto-Aufnehmen, DB/Actor/Neulesen und AF11/12-Gesamtweg PASS 6,93 s. Die sechs bisherigen positiven Testeingaben ohne Foto besitzen nun explizite isolierte synthetische, persistierte Tenant-/Auftrags-Fotoreferenzen. Diese Fixture beweist keine Speicherung von Bildbytes oder Browser-Uploads, sondern die echte referenzpruefende Serveraktion. Keine Produktionsdaten simuliert, keine alte Assertion entfernt. Die fuenf betroffenen bestehenden Workshop-Faelle gezielt PASS 8,99 s. Typen/Lint sauber. Nach spaeterem Rebase von Teil A muss dessen zusaetzlicher AF2-Fall ebenfalls diese strengere Foto-Fixture nutzen.

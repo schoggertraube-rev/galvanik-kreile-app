@@ -1,6 +1,7 @@
 // @vitest-environment node
 // @vitest-environment node
 
+import {seedSyntheticComplaintPhoto} from '@/test/fixtures/complaintPhoto';
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
@@ -172,7 +173,12 @@ afterAll(async()=>{await sql.end({timeout:1});if(originalSecret===undefined)dele
 it('L08/L10/L11 real recording and credit actions persist one row, event, replay and both readbacks',async()=>{
  const fixture=await createFixture(),order=await deliveredComplaintSource(fixture);
  const {reklamationAusfuehrenAction,getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
- const input:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST L10 eindeutiger realer Klickweg',photoIds:[],goodsReturn:'offen'};
+ const input:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST L10 eindeutiger realer Klickweg',photoIds:await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,customerId:fixture.customerId,orderId:order.orderId}),goodsReturn:'offen'};
+ const {reklamationAusfuehrenAction:recordComplaint}=await import('@/app/actions/complaints.actions');
+ const emptyKey=randomUUID();
+ expect(await withSession(fixture,()=>recordComplaint({...input,clientKey:emptyKey,photoIds:[]}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${emptyKey}::uuid`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${emptyKey}::uuid`).toHaveLength(0);
  const result=await complaintWrite(fixture,input);
  expect(await withSession(fixture,()=>reklamationAusfuehrenAction(input))).toMatchObject({code:'OK',replayed:true,receipt:{complaintId:result.complaintId}});
  const [row]=await sql`SELECT count(*)::int AS n FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${input.clientKey}::uuid`;
