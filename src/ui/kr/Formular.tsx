@@ -1,9 +1,9 @@
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { cx } from './typen';
-export interface FeldProps { label: ReactNode; fehler?: string; voll?: boolean; className?: string; children: ReactNode; }
+export interface FeldProps { label: ReactNode; fehler?: string; fehlerSpecId?:string; voll?: boolean; className?: string; children: ReactNode; }
 /** Label (10,5px, Versal) + Steuerelement + optional Fehler. Keine Hilfetexte (§6.4). */
-export function Feld({ label, fehler, voll, className, children }: FeldProps) {
-  return <label className={cx('kr-feld', fehler && 'kr-feld--fehler', voll && 'kr-voll', className)}><span className="kr-feld-label">{label}</span>{children}{fehler && <span className="kr-feld-fehler">{fehler}</span>}</label>;
+export function Feld({ label, fehler, fehlerSpecId, voll, className, children }: FeldProps) {
+  return <label className={cx('kr-feld', fehler && 'kr-feld--fehler', voll && 'kr-voll', className)}><span className="kr-feld-label">{label}</span>{children}{fehler && <span data-spec-id={fehlerSpecId} className="kr-feld-fehler">{fehler}</span>}</label>;
 }
 export function Eingabe(p: InputHTMLAttributes<HTMLInputElement>) { return <input {...p} className={cx('kr-eingabe', p.className)} />; }
 export interface AuswahlOption { wert: string; text: string; gesperrt?: boolean; }

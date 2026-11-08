@@ -1,4 +1,4 @@
-import {fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {cleanup} from '@testing-library/react';
 import {ComplaintDialog} from '../ui/ComplaintDialog';
@@ -15,6 +15,88 @@ function setup(data=base,areas:ComplaintPorts['areas']=['auftraege','entscheiden
 beforeEach(()=>{vi.stubGlobal('matchMedia',()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn()}));});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 
+function recorded(state:'aufgenommen'|'massnahme_gutschrift'='aufgenommen'):ComplaintDialogData{
+ return {...base,complaint:{id:'test-complaint',customerId:'test-customer',orderId:base.source.id,itemId:null,legacyPositionId:null,reason:'Blasen',stationId:null,description:'',photoIds:[],createdAt:'2026-11-07T10:00:00Z',resolvedAt:null,resolution:null,status:'open',nummer:'RK-TEST-REST',stand:state,version:2,wareZurueck:'nein',teile:[{position_id:'test-part',menge:1}],mangel:'Blasen',...(state==='massnahme_gutschrift'?{massnahme:'gutschrift',bewertung:'kulanz',gutschriftBetrag:'50.00'}:{})}};
+}
+
+it('L04/L06 show field errors at the editable gap without the missing-fields screen',async()=>{
+ const {ports}=setup(recorded());
+ fireEvent.click(await screen.findByRole('button',{name:'abgelehnt'}));
+ fireEvent.click(screen.getByRole('button',{name:'Ergebnis speichern'}));
+ expect(document.querySelector('[data-spec-id="reklamation.begruendung.fehler"]')).toHaveTextContent('Begründung fehlt');
+ expect(document.querySelector('[data-spec-id="reklamation.zustand.teilweise"]')).toBeNull();
+ await waitFor(()=>expect(screen.getByRole('textbox',{name:/Begründung/})).toHaveFocus());
+ expect(ports.write).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Kunde zieht zurück'}));
+ fireEvent.click(screen.getByRole('button',{name:'Zurückgezogen · abschließen'}));
+ expect(document.querySelector('[data-spec-id="reklamation.notiz.fehler"]')).toHaveTextContent('3–500 Zeichen');
+ expect(document.querySelector('[data-spec-id="reklamation.zustand.teilweise"]')).toBeNull();
+ expect(ports.write).not.toHaveBeenCalled();
+});
+
+it('L05 keeps the reason with the disabled rework action',async()=>{
+ const {ports}=setup(recorded());
+ fireEvent.click(await screen.findByRole('button',{name:'berechtigt'}));
+ const choice=document.querySelector('[data-spec-id="reklamation.massnahme"]') as HTMLElement;
+ expect(within(choice).getByRole('button',{name:'Nacharbeit'})).toBeDisabled();
+ expect(within(choice).getByText('Nacharbeit braucht die Teile')).toBeVisible();
+ expect(ports.rework).not.toHaveBeenCalled();
+});
+
+it('L08 credit success closes only after the returned receipt and shows the bound message',async()=>{
+ const {ports,onClose,onMessage}=setup(recorded('massnahme_gutschrift'));
+ fireEvent.click(await screen.findByRole('button',{name:'Gutschrift erteilt'}));
+ fireEvent.change(screen.getByRole('textbox',{name:'Betrag'}),{target:{value:'50,00'}});
+ fireEvent.change(screen.getByRole('textbox',{name:'Gutschrift- bzw. Storno-Nr.'}),{target:{value:'GS-TEST-REST'}});
+ vi.mocked(ports.write).mockResolvedValue({code:'OK',receipt:{complaintId:'test-complaint',number:'RK-TEST-REST',state:'kunde_informieren',version:3,eventId:'test-event'},replayed:false});
+ fireEvent.click(screen.getByRole('button',{name:'Gutschrift vermerken'}));
+ await waitFor(()=>expect(onClose).toHaveBeenCalledTimes(1));
+ expect(ports.write).toHaveBeenCalledWith(expect.objectContaining({action:'gutschrift',creditCents:5000,creditNumber:'GS-TEST-REST',version:2}));
+ expect(onMessage).toHaveBeenCalledWith('Gutschrift vermerkt · Kunde informieren');
+});
+
+it('L09 closes both actual layers after discard, and reopening starts a clean recording',async()=>{
+ const ports:ComplaintPorts={areas:['auftraege'],read:vi.fn(async()=>({code:'OK' as const,data:base})),write:vi.fn(),rework:vi.fn(),openOrder:vi.fn(),openPhoto:vi.fn(),addPhoto:vi.fn(),sendResult:vi.fn()};
+ render(<ComplaintDialogs ports={ports} onRefresh={vi.fn()}/>);
+ const open=()=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'reklamation',arg:'test-order#aufnehmen'},cancelable:true}));
+ open();await screen.findByRole('button',{name:'Reklamation aufnehmen'});
+ fireEvent.keyDown(window,{key:'Escape'});
+ await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+ open();await screen.findByRole('button',{name:'Reklamation aufnehmen'});
+ fireEvent.change(screen.getByRole('textbox',{name:'Beschreibung'}),{target:{value:'TEST zu verwerfende Beschreibung'}});
+ fireEvent.keyDown(window,{key:'Escape'});
+ expect(await screen.findByRole('dialog',{name:'Änderungen nicht gespeichert'})).toHaveTextContent('Beschreibung');
+ fireEvent.click(screen.getByRole('button',{name:'Verwerfen'}));
+ await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+ open();await screen.findByRole('button',{name:'Reklamation aufnehmen'});
+ expect(screen.getByRole('textbox',{name:'Beschreibung'})).toHaveValue('');
+ expect(ports.write).not.toHaveBeenCalled();
+});
+
+it('L09 an old closing animation cannot close a newly opened complaint',async()=>{
+ vi.stubGlobal('matchMedia',()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()}));
+ const ports:ComplaintPorts={areas:['auftraege'],read:vi.fn(async()=>({code:'OK' as const,data:base})),write:vi.fn(),rework:vi.fn(),openOrder:vi.fn(),openPhoto:vi.fn(),addPhoto:vi.fn(),sendResult:vi.fn()};
+ render(<ComplaintDialogs ports={ports} onRefresh={vi.fn()}/>);
+ const open=()=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'reklamation',arg:'test-order#aufnehmen'},cancelable:true}));
+ open();await screen.findByRole('button',{name:'Reklamation aufnehmen'});
+ fireEvent.keyDown(window,{key:'Escape'});
+ open();await screen.findByRole('button',{name:'Reklamation aufnehmen'});
+ await act(async()=>{await new Promise(resolve=>setTimeout(resolve,230));});
+ expect(screen.getByRole('dialog',{name:'Reklamation'})).toBeInTheDocument();
+ expect(ports.write).not.toHaveBeenCalled();
+});
+
+it('a missing legacy version is named before sending, and is never replaced by an invented version',async()=>{
+ const data=recorded();data.complaint!.version=null;
+ const {ports}=setup(data);
+ fireEvent.click(await screen.findByRole('button',{name:'abgelehnt'}));
+ fireEvent.change(screen.getByRole('textbox',{name:'Begründung'}),{target:{value:'TEST sachliche Begründung'}});
+ fireEvent.click(screen.getByRole('button',{name:'Ergebnis speichern'}));
+ expect(await screen.findByText(/Bearbeitungsstand fehlt · Reklamation neu laden/)).toBeInTheDocument();
+ expect(ports.write).not.toHaveBeenCalled();
+ expect(screen.getByRole('textbox',{name:'Begründung'})).toHaveValue('TEST sachliche Begründung');
+});
+
 describe('4.8 real component interactions (isolated TEST ports; server effects have Replay tests)',()=>{
   it('keeps missing fields on screen and sends nothing; delivered quantity is the editable initial quantity',async()=>{
     const {ports}=setup();
@@ -22,7 +104,7 @@ describe('4.8 real component interactions (isolated TEST ports; server effects h
     fireEvent.click(save);
     expect(await screen.findByText('Noch offen: Betroffene Teile, Mangel')).toBeInTheDocument();
     expect(ports.write).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(document.querySelector('[data-spec-id="reklamation.teile"]')!);
     expect(screen.getByRole('spinbutton',{name:'Menge betroffen · TEST Gehäuse'})).toHaveValue(3);
     fireEvent.change(screen.getByRole('combobox'),{target:{value:'Blasen'}});
     fireEvent.change(screen.getByRole('spinbutton'),{target:{value:'4'}});
@@ -33,7 +115,7 @@ describe('4.8 real component interactions (isolated TEST ports; server effects h
   it('records once on double click and closes only after the real port result is OK',async()=>{
     const {ports,onClose,onMessage}=setup();
     const save=await screen.findByRole('button',{name:'Reklamation aufnehmen'});
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(document.querySelector('[data-spec-id="reklamation.teile"]')!);
     fireEvent.change(screen.getByRole('combobox'),{target:{value:'Blasen'}});
     fireEvent.click(save);fireEvent.click(save);
     await waitFor(()=>expect(ports.write).toHaveBeenCalledTimes(1));
