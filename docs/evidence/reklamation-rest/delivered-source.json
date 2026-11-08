@@ -1,0 +1,27 @@
+{
+  "checkedAt": "2026-11-08T08:04:08.314Z",
+  "database": "isolated local Replay",
+  "case": "L13 last retained fixture; L10/L11 separate browser cases passed before reset",
+  "assertionsUnchanged": true,
+  "actions": [
+    "createOrderIntakeAction",
+    "transitionWareneingangToGalvanikAction",
+    "setOrderItemFinishedAction",
+    "freezeOrderAction",
+    "setInvoiceItemPricesAction",
+    "issueInvoiceAction",
+    "confirmPaymentAction",
+    "recordGoodsOutAction"
+  ],
+  "rows": [
+    {
+      "id": "f71e0fbb-0ac1-432a-b9de-457c95a84bb6",
+      "order_number": "A-2026-0001",
+      "station": "abgeholt",
+      "invoice_number": "R-2026-0003",
+      "invoice_status": "issued",
+      "gross_amount_cents": 6843,
+      "goods_out_events": 1
+    }
+  ]
+}
