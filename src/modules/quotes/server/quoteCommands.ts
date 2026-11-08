@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash,randomUUID } from "node:crypto";
 import {calculateQuote,type QuoteCalculation} from "../quoteCalculation";
-import {appendQuoteJournal,quoteHasPreparedDocument} from "@/lib/server/quoteJournalPort";
+import {appendQuoteJournal,quoteHasPreparedDocument,readQuoteComplaintSource} from "@/lib/server/quoteJournalPort";
 import {readQuoteReceivedQuantities,readQuoteGoodsSummaries,readQuoteGoodsSummariesForQuotes} from "@/lib/server/quoteGoodsContextPort";
 import { sql } from "drizzle-orm";
 import { normaliseOrderPositionSurface, orderPositionSurfaceLabel, orderPositionUnitLabel, orderPositionQuantityError, orderPositionPriceError } from "@/lib/orderPositionContract";
@@ -40,6 +40,7 @@ type QuoteRow = {
   zugesagt_fassung?:number|null; zugesagt_am?:Date|string|null; zusage_nachweis?:string|null;
   abgesagt_am?:Date|string|null; absage_grund?:string|null; nachfass_am?:Date|string|null;
   quelle_intake_item_id?:string|null; quelle_nachricht_id?:string|null; sonderwuensche?:string|null;lieferzeit_wochen?:number|null;
+  source_complaint_id?:string|null;
   quote_id: string;
   tenant_id: string;
   quote_number: string;
@@ -140,7 +141,8 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
   const hasIntakeMetadata = Object.hasOwn(value, "validUntil") || Object.hasOwn(value, "termStatus") || Object.hasOwn(value, "intakeSource");
   if (!exactKeys(value, ["clientEventId", "customerId", "dueDate", "note", "positions",
     ...["validUntil", "termStatus", "intakeSource"].filter(key=>Object.hasOwn(value,key)),
-    ...['source','specialRequests','deliveryWeeks','calculation'].filter(key=>Object.hasOwn(value,key))])) return null;
+    ...['sourceComplaintId','source','specialRequests','deliveryWeeks','calculation'].filter(key=>Object.hasOwn(value,key))])) return null;
+  if(Object.hasOwn(value,'sourceComplaintId')&&(typeof value.sourceComplaintId!=='string'||!UUID_PATTERN.test(value.sourceComplaintId)||Object.hasOwn(value,'source')))return null;
   if (Object.hasOwn(value,'source')&&(!plainObject(value.source)||!exactKeys(value.source,['itemId','version','message'])||typeof value.source.itemId!=='string'||!UUID_PATTERN.test(value.source.itemId)||!Number.isSafeInteger(value.source.version)||Number(value.source.version)<1||typeof value.source.message!=='boolean')) return null;
   if (Object.hasOwn(value,'specialRequests')&&value.specialRequests!==null&&(typeof value.specialRequests!=='string'||value.specialRequests.trim().length<1||value.specialRequests.length>4000)) return null;
   if (Object.hasOwn(value,'deliveryWeeks')&&value.deliveryWeeks!==null&&(!Number.isSafeInteger(value.deliveryWeeks)||Number(value.deliveryWeeks)<1||Number(value.deliveryWeeks)>104)) return null;
@@ -168,6 +170,7 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
   return {
     clientEventId: value.clientEventId, customerId, dueDate: value.dueDate, note, positions,
     ...(calculation?{calculation}:{}),
+    ...(Object.hasOwn(value,'sourceComplaintId')?{sourceComplaintId:value.sourceComplaintId as string}:{}),
     ...(hasIntakeMetadata ? {
       validUntil: value.validUntil===undefined?null:value.validUntil as string|null,
       termStatus: value.termStatus===undefined?null:value.termStatus as typeof TERM_STATUS_VALUES[number]|null,
@@ -333,6 +336,7 @@ function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
     dueDate, validUntil, termStatus: row.intake_term_status as QuoteReadback["termStatus"],
     intakeSource: row.intake_source as QuoteReadback["intakeSource"],
     note: row.note, totalNetCents: total, linkedOrderId: row.linked_order_id,
+    ...(row.source_complaint_id?{sourceComplaintId:row.source_complaint_id}:{}),
     actorId: row.created_by, actorDisplayName: row.actor_display_name, createdAt, updatedAt, convertedAt, positions,
   };
 }
@@ -347,7 +351,7 @@ function diagnostic(error: unknown, key: "message" | "details" | "hint"): string
 }
 
 export async function readQuote(tx: PrivilegedTenantTransaction, tenantId: string, quoteId: string): Promise<QuoteReadback | null> {
-  const rows = await tx.execute<QuoteRow>(sql`SELECT * FROM private.v_quotes_v1 WHERE quote_id = ${quoteId}::uuid LIMIT 2`);
+  const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id FROM private.v_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id WHERE projection.quote_id = ${quoteId}::uuid LIMIT 2`);
   if (rows.length === 0) return null;
   if (rows.length !== 1 || !rows[0]) throw new Error("QUOTE_READBACK_AMBIGUOUS");
   const quote = quoteFromRow(rows[0], tenantId);
@@ -363,6 +367,7 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
   const normalized = normalizeCreate(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollständig oder ungültig." };
   if (!authorization.capabilities.canCreateQuote) return { code: "FORBIDDEN", message: "KVs dürfen mit dieser Rolle nicht angelegt werden." };
+  if(normalized.sourceComplaintId&&normalized.positions.reduce((total,p)=>total+(p.lineTotalCents??p.quantity*p.unitPriceCents),0)<=0)return {code:'VALIDATION_ERROR',message:'KV aus einer Reklamation benötigt einen berechneten Preis.'};
   const intentSha256 = hashQuoteWriteIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
@@ -382,6 +387,12 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
         throw new Error("QUOTE_CREATE_RESULT_INVALID");
       }
       if (!outcome.replayed) {
+        if(normalized.sourceComplaintId){
+          const source=await readQuoteComplaintSource(tx,authorization.tenantId,normalized.sourceComplaintId);
+          if(!source||source.customerId!==normalized.customerId||source.assessment!=='abgelehnt')throw new QuoteSourceFailure({code:'VALIDATION_ERROR',message:'KV benötigt die abgelehnte Reklamation desselben Kunden.'});
+          await tx.execute(sql`UPDATE private.quotes SET quelle_reklamation_id=${source.id} WHERE tenant_id=${authorization.tenantId} AND id=${outcome.result_quote_id}::uuid`);
+          await appendQuoteJournal(tx,authorization,{id:randomUUID(),type:'QUOTE_COMPLAINT_LINKED_V1',clientEventId:randomUUID(),correlationId:normalized.clientEventId,version:1,description:'KV aus Reklamation '+source.number,payload:{quoteId:outcome.result_quote_id,complaintId:source.id,complaintNumber:source.number,customerId:source.customerId}});
+        }
         if (normalized.source) {
           if (!bindSource) throw new QuoteSourceFailure({code:'UNAVAILABLE',message:'Quellverknüpfung ist nicht verfügbar. Nichts gespeichert.'});
           const failure=await bindSource(tx,{source:normalized.source,quoteId:outcome.result_quote_id,customerId:normalized.customerId,clientEventId:normalized.clientEventId});
@@ -436,7 +447,7 @@ export async function listOpenQuotesCommand(authorization: QuoteCommandContext):
   if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Offene KVs dürfen mit dieser Rolle nicht gelesen werden." };
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<QuoteRow>(sql`SELECT * FROM private.v_open_quotes_v1 ORDER BY updated_at DESC, quote_number ASC LIMIT 100`);
+      const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id FROM private.v_open_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id ORDER BY projection.updated_at DESC, projection.quote_number ASC LIMIT 100`);
       const quotes = rows.map((row) => quoteFromRow(row, authorization.tenantId));
       if (quotes.some((quote) => quote === null)) throw new Error("QUOTE_LIST_READBACK_INVALID");
         const goods=await readQuoteGoodsSummariesForQuotes(tx,authorization.tenantId,quotes.filter(quote=>quote?.lifecycle).map(quote=>quote!.quoteId));
@@ -600,6 +611,7 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       await tx.execute(sql`SELECT id FROM private.quotes WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid FOR UPDATE`);
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
+      if(normalized.confirmedOrderDueDate!==quote.dueDate)return {code:"VALIDATION_ERROR",message:"Auftragstermin muss dem aktuellen KV-Termin entsprechen."};
       if(!normalized.goodsReceiptId)return {code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${quote.quoteNumber} annehmen`};
       const pendingAcceptance=Boolean(options.planOnly&&options.pendingAcceptance&&quote.lifecycle&&!quote.linkedOrderId
         &&quote.version===options.pendingAcceptance.beforeVersion&&normalized.expectedVersion===quote.version+1
@@ -629,10 +641,11 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
           vatRateBasisPoints: null,
         })),
       };
-      // The quote keeps the customer's requested date. The confirmed order date is
-      // explicitly part of the immutable F1.1 intent and therefore of replay/conflict.
+      // Only the current quote date may enter the immutable order intent.
+      // A later quote-date amendment must be read before conversion.
       const storedQuantities=await readQuoteReceivedQuantities(tx,authorization.tenantId,quote.quoteId,normalized.goodsReceiptId);
-      const received=storedQuantities??options.pendingQuantities?.map(row=>({kv_position:quote.positions.find(position=>position.id===row.itemId)?.position,bestaetigt:row.confirmed?row.expected:row.received}));
+      const pending=options.pendingGoodsId&&!quote.lifecycle.goods?.some(row=>row.id===options.pendingGoodsId)?options.pendingQuantities?.map(row=>({kv_position:quote.positions.find(position=>position.id===row.itemId)?.position,bestaetigt:row.confirmed?row.expected:row.received})):undefined;
+      const received=pending?quote.positions.map(position=>({kv_position:position.position,bestaetigt:Number(storedQuantities?.find(row=>row.kv_position===position.position)?.bestaetigt??0)+Number(pending.find(row=>row.kv_position===position.position)?.bestaetigt??NaN)})):storedQuantities;
       if(!received||!received.some(row=>Number(row.bestaetigt)>0)||received.length!==quote.positions.length||received.some((row,index)=>!Number.isSafeInteger(row.bestaetigt)||Number(row.bestaetigt)<0||row.kv_position!==index+1))return {code:'VALIDATION_ERROR',message:'Angenommene Menge fuer jede KV-Position pruefen.'};
       const orderInput: QuoteOrderInput = {
         ...sourceOrderInput,
@@ -664,9 +677,8 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
           throw new Error("QUOTE_ORDER_INPUT_INVALID");
         }
       }
-      // SQL preserves the quote's wish-date snapshot and its immutable order-intent
-      // hash. The actual F1.1 input below uses the explicit promised date; changing
-      // that date with the same client event conflicts on the stored hash.
+      // SQL preserves the current quote snapshot and immutable order-intent hash.
+      // AF-7 rejects any different client date before this reservation exists.
       if (!plainObject(persistedOrderInput) || !plainObject(persistedOrderInput.customer)
         || persistedOrderInput.clientEventId !== normalized.clientEventId
         || persistedOrderInput.customer.mode !== "EXISTING" || persistedOrderInput.customer.customerId !== sourceOrderInput.customer.customerId

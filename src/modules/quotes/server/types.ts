@@ -25,6 +25,7 @@ export type QuotePositionInput = {
 };
 
 export type CreateQuoteInput = {
+  sourceComplaintId?:string;
   clientEventId: string;
   customerId: string;
   dueDate: string;
@@ -72,13 +73,14 @@ export type QuotePosition = QuotePositionInput & {
 export type QuoteReadback = {
   actorTrace?:CaseActorTrace;
   actorReadError?:string;
+  sourceComplaintId?:string;
   lifecycle?: {
     edition:number; stage:'entwurf'|'versendet'|'geaendert_seit_versand'|'zugesagt'|'umgewandelt'|'abgesagt'|'abgelaufen';
     sentEdition:number|null; sentAt:string|null; sentChannel:'mail'|'druck'|null;
     acceptedEdition:number|null; acceptedAt:string|null; acceptanceEvidence:string|null;
     conditional?:{edition:number;recordedAt:string;reason:string}|null;
     calculation?:QuoteCalculation|null;
-    goods?:Array<{id:string;orderId:string|null;edition:number;location:string;blocked:boolean;version:number;expectedPositions?:Array<{position:number;quantity:number}>}>;
+    goods?:Array<{id:string;orderId:string|null;edition:number;location:string;blocked:boolean;version:number;packagesReceived?:number|null;packagesTotal?:number|null;condition?:string|null;deviations?:string[];clearance?:{reason:string;actorId:string;at:string}|null;expectedPositions?:Array<{position:number;quantity:number}>}>;
     declinedAt:string|null; declineReason:string|null; followupAt:string|null;
     sourceItemId:string|null; sourceMessageId:string|null; specialRequests:string|null;deliveryWeeks:number|null;
   };

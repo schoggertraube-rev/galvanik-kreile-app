@@ -17,6 +17,9 @@
     "src/lib/server/cardSearchRead.ts": [
       "private.v_card_search_documents_v1"
     ],
+    "src/lib/server/commands/complaintCommand.ts": [
+      "public.v_complaint_rework_context_v1"
+    ],
     "src/lib/server/commands/extraWorkAdminCommand.ts": [
       "private.v_extra_work_catalog_receipts_v1",
       "private.v_extra_work_rate_receipts_v1"
@@ -52,7 +55,11 @@
       "private.v_order_task_assignment_receipts_v1"
     ],
     "src/lib/server/commands/recordGoodsOutCommand.ts": [
-      "private.v_payment_summary_v1"
+      "private.v_payment_summary_v1",
+      "public.v_complaint_rework_context_v1"
+    ],
+    "src/lib/server/communicationPort.ts": [
+      "public.v_complaint_rework_context_v1"
     ],
     "src/lib/server/customerSummaryRead.ts": [
       "private.v_customer_summary_v1",
@@ -119,7 +126,8 @@
       "private.v_quotes_v1"
     ],
     "src/lib/server/quoteJournalPort.ts": [
-      "private.v_extra_work_current_rate_v1"
+      "private.v_extra_work_current_rate_v1",
+      "public.v_complaint_rework_context_v1"
     ],
     "src/lib/server/searchAuxiliaryRead.ts": [
       "private.v_evidence_records_v2"
@@ -132,11 +140,17 @@
       "private.v_user_last_seen_receipts_v1",
       "private.v_user_last_seen_v1"
     ],
+    "src/modules/complaints/server/complaintRead.ts": [
+      "public.v_complaint_rework_context_v1"
+    ],
     "src/modules/customers/server/createCustomerCommand.ts": [
       "private.v_customer_create_receipts_v1"
     ],
     "src/modules/eingang/server/intakeMessages.ts": [
       "private.v_intake_message_contexts_v1"
+    ],
+    "src/modules/orders/server/reworkOrderCommand.ts": [
+      "public.v_complaint_rework_context_v1"
     ],
     "src/modules/quotes/server/quoteCommands.ts": [
       "private.v_open_quotes_v1",

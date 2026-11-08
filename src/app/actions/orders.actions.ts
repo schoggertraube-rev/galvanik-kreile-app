@@ -1,6 +1,6 @@
 "use server";
 
-import { unstable_noStore as noStore } from "next/cache";
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import type { ActionResult } from "@/lib/server/authHelper";
 import {
   resolveAuthorization,
@@ -60,7 +60,12 @@ import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 // DTO Typen (zur Vereinfachung)
 export type OrderResponse = OperationalOrder & { cardReadErrorCode?: string | null };
 export async function getOrderPickupNoticeAction(input:unknown){const {readOrderPickupNotice}=await import("@/lib/server/commands/orderContentCommand");return readOrderPickupNotice(input);}
-export async function changeOrderPickupNoticeAction(input:unknown){const {changeOrderPickupNotice}=await import("@/lib/server/commands/orderContentCommand");return changeOrderPickupNotice(input);}
+export async function changeOrderPickupNoticeAction(input:unknown){
+ const [{changeOrderPickupNotice},{readIntakeHandoverMail,recordIntakeHandoverEffect},{readCustomerProfile,updateCustomerInTransaction},{createOrderHandoverTask}]=await Promise.all([import('@/lib/server/commands/orderContentCommand'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public'),import('@/modules/tasks/server-public')]);
+ const result=await changeOrderPickupNotice(input,{readMail:readIntakeHandoverMail,recordEffect:recordIntakeHandoverEffect,readCustomer:readCustomerProfile,updateDefault:(tx,auth,request)=>updateCustomerInTransaction(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:false,canEditCustomer:auth.permissions.includes('perm_data_customers'),canManageMoney:auth.areas?.includes('geld')===true}},{customerId:request.customerId,clientEventId:request.clientEventId,handoverPreference:request.mode}),createTask:(tx,auth,request,effect)=>createOrderHandoverTask(tx,auth,request,{effect:(_tx,_auth,task)=>effect(task.taskId)})});
+ if(result.code==='OK'){revalidatePath('/');revalidatePath('/orders/[orderId]','page');revalidatePath('/nachrichten');}
+ return result;
+}
 
 export type OrderRegisterFilter = "ALL" | "ORDER" | "QUOTE";
 
@@ -223,6 +228,17 @@ export async function getLiveOrderCardAction(
     ]);
     const card = await readLiveOrderCard(authorization.data, input);
     if (card.code !== "OK") return card;
+    if(card.data.handoverNotice?.taskId){
+      const [{readOrderHandoverTaskState},{withPrivilegedTenantTransaction}]=await Promise.all([import('@/modules/tasks/server-public'),import('@/lib/server/privilegedDb')]);
+      const task=await withPrivilegedTenantTransaction(authorization.data,tx=>readOrderHandoverTaskState(tx,authorization.data,{orderId:card.data.id,taskId:card.data.handoverNotice!.taskId!}));
+      card.data.handoverNotice.taskState=task?.status??'nicht_verfuegbar';
+    }
+    if(card.data.handoverMode==='shipping'){
+      const {readShippingSettings}=await import('@/modules/fundament/server-public');
+      const settings=await readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true});
+      card.data.shippingService=settings.code==='OK'?settings.settings.service:null;
+      if(settings.code!=='OK')card.data.shippingServiceError=settings.message;
+    }
     const evidence = await readEvidenceRecordsByTarget(authorization.data, {
       targetType: "ORDER",
       targetId: input.orderId,

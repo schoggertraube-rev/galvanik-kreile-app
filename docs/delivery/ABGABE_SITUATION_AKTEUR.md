@@ -23,3 +23,13 @@ Echte Replay-DB, keine Writer-Mocks: KV A legt an/B sagt zu (U249 PASS7.93s); Au
 4. Sichtlauf/pruefe_sicht und finale CI/READY-Preview exakt am Kandidaten stehen aus. Daher Draft, keine Owner-Merge-Bitte, kein LivefÃ¤higkeitsclaim. Teil A und Belegautomatik bleiben eigene spÃ¤tere Arbeit.
 
 Keine Echtdaten geÃ¤ndert, keine Remote-Migration ausgefÃ¼hrt, keine vorhandene Assertion entfernt oder geschwÃ¤cht. Bestehende Pakettests nur um tatsÃ¤chliche Akteur- und Sortierungsnachweise ergÃ¤nzt; neue Fixturegrenzen ausdrÃ¼cklich isoliert.
+
+## Fortschreibung 08.11. 22:13
+
+Owner-Merge #202 d25a35aa in den Arbeitszweig integriert; beide Seiten der Konflikte (insbesondere AF19, KV-Historie und alle neuen Assertions) erhalten. Rebase war wegen einer fremden unverändert markierten CRLF-Datei nicht möglich; normale lokale Main-Integration erhält stattdessen die veröffentlichte Historie. Kein PR-Merge durch Codex. Fremde Planungsbytes gesichert und unverändert wiederhergestellt.
+
+Deins-zuerst gilt jetzt auch für auftragsbezogene Anliegen (aktive bestehende Zuweisung vor erstem Ereignis), Reklamationen und KV-Nachfassaufgaben. Nur Reihenfolge, keine Ausblendung. Ein gebündelter Core-Leser verwendet dieselbe vorhandene geprüfte Zuweisungsview. Echter Übernahme-/DB-/Karten-/Zuständigkeitsfall PASS7.44s; U249 nach Main-Integration beide Fälle grün. Gezielte kombinierte AK/AF18/AF19-Renderfälle 3 PASS10.40s.
+
+AK-04 zusätzlich gegen tatsächliche Replay-DB: absichtlich ereignisloser synthetischer Schreibweg ändert eine echte TEST-Kundenzeile, der Belegwächter erkennt WRITE_WITHOUT_LOGIN_EVENT, anschließend Rollback und unveränderte Zeile nachgelesen (PASS1.15s). Derselbe Wächter akzeptiert die echte bestehende Übernahmeaction mit DB-Zeile und Login-Ereignis. Dies hebt keine der 59 bestehenden H18-Ausnahmen auf und behauptet keine pauschale Abnahme aller Altaktionen.
+
+Preview 5004437a war READY (jp7ubnavd), erster Browserlauf zeigte Auftragskarte und Akteure; zweite Automatik scheiterte am Ziel/Locator, daher kein erfolgreiches Bildpaar und keine vollständige Sichtabnahme. Der kommende integrierte Kandidat braucht einen eigenen exakten Preview-Nachweis. Admin-H16-Entscheidung weiterhin offen; keine neue Frage an die Owner.

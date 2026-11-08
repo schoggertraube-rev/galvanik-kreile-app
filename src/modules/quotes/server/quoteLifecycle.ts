@@ -4,7 +4,7 @@ import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {QuoteCommandContext, QuoteCommandFailure, QuoteReadback,CreateQuoteInput} from './types';
 import {readQuote,type QuoteSourceBinding,type QuoteFollowupBinding} from './quoteCommands';
-import {readQuoteJournal,quoteJournalActorIsActive,appendQuoteJournal,readQuoteSentDocument} from '@/lib/server/quoteJournalPort';
+import {readQuoteJournal,quoteJournalActorIsActive,appendQuoteJournal,readQuoteSentDocument,quoteReplyEditionMessage,type QuoteReplyProof} from '@/lib/server/quoteJournalPort';
 
 type Identity = {quoteId:string; clientEventId:string; expectedVersion:number; edition:number;source?:NonNullable<CreateQuoteInput['source']>};
 export type QuoteLifecycleInput = Identity & (
@@ -36,7 +36,7 @@ function normalize(value:unknown):QuoteLifecycleInput|null {
 /** Explicit manual sent/acceptance/decline records. Actual mail dispatch stays in communications. */
 class QuoteLifecycleSourceFailure extends Error{constructor(readonly result:QuoteCommandFailure){super(result.code);}}
 
-export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:unknown,bindSource:QuoteSourceBinding|undefined,followup:QuoteFollowupBinding,options:{actualMail?:boolean;onsiteGoodsReceiptId?:string;transaction?:PrivilegedTenantTransaction}={}):Promise<Result> {
+export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:unknown,bindSource:QuoteSourceBinding|undefined,followup:QuoteFollowupBinding,options:{actualMail?:boolean;onsiteGoodsReceiptId?:string;replyProof?:QuoteReplyProof;transaction?:PrivilegedTenantTransaction}={}):Promise<Result> {
   const input=normalize(raw);
   if (!input) return {code:'VALIDATION_ERROR',message:'KV-Fassung, Nachweis oder Entscheidung fehlt.'};
   if (!(auth.capabilities.canUpdateQuote||(input.action==='accept'||input.action==='extend')&&auth.capabilities.canDecideQuote)||!auth.capabilities.canReadQuote) return {code:'FORBIDDEN',message:'KV-Entscheidung ist nicht freigegeben.'};
@@ -56,6 +56,12 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
       const quote=await readQuote(tx,auth.tenantId,input.quoteId);
       if (!quote?.lifecycle) throw Error('QUOTE_LIFECYCLE_READBACK_INVALID');
       const life=quote.lifecycle;
+      if(input.action==='accept'&&input.source?.message){
+       const proof=options.replyProof;
+       if(!proof||proof.quoteId!==input.quoteId||proof.sourceItemId!==input.source.itemId||proof.sourceVersion!==input.source.version)return {code:'VALIDATION_ERROR',message:'Der tatsächliche Mail-Fassungsbeleg fehlt. Aktuelle Fassung bestätigen lassen.'};
+       if(proof.edition!==life.edition)return {code:'VALIDATION_ERROR',message:quoteReplyEditionMessage(proof.edition,life.edition)};
+      }
+
       const actual=options.actualMail?await readQuoteSentDocument(tx,auth,input.clientEventId,input.quoteId):null;
       if(options.actualMail&&(!actual||input.action!=='sent'||input.channel!=='mail'||actual.document.version!==input.expectedVersion||actual.document.edition!==input.edition||input.evidence!=='Versandbeleg '+actual.threadId+' · PDF SHA-256 '+actual.document.sha256))return {code:'CONFLICT',message:'Ein passender tatsächlicher Mailbeleg zur KV-Fassung fehlt.'};
       const mailDocument=actual?.document??null;
@@ -90,7 +96,7 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
         if(failure)throw new QuoteLifecycleSourceFailure(failure);
       }
       const followupNotice=input.action!=='extend'&&wantsFollowup?await followup(tx,{quote,action:input.action,phase:'after'}):null;
-      await appendQuoteJournal(tx,auth,{id:eventId,type:'QUOTE_LIFECYCLE_V04',clientEventId:input.clientEventId,correlationId:randomUUID(),version,description:input.action==='extend'?'KV-Gültigkeit mit Begründung verlängert':input.action==='sent'?(mailDocument?'KV-Versand mit tatsächlichem Mailbeleg bestätigt':'KV-Versand ausdrücklich vermerkt'):input.action==='accept'?'KV-Zusage vermerkt':input.action==='conditional'?'KV-Vorbehalt vermerkt · neue Fassung erforderlich':'KV-Absage vermerkt',payload:{quoteId:input.quoteId,intent,action:input.action,edition:input.edition,...(input.action==='extend'?{validUntil:input.validUntil,previousValidUntil:quote.validUntil}:{}),...(onsite?{onsiteGoodsReceiptId:options.onsiteGoodsReceiptId}:{}),before:life,proof:input.action==='reject'?input.reason:input.evidence,manual:input.action==='sent'&&!mailDocument,...(mailDocument?{mailDocument}:{}),...(input.source?{source:input.source}:{} )}});
+      await appendQuoteJournal(tx,auth,{id:eventId,type:'QUOTE_LIFECYCLE_V04',clientEventId:input.clientEventId,correlationId:randomUUID(),version,description:input.action==='extend'?'KV-Gültigkeit mit Begründung verlängert':input.action==='sent'?(mailDocument?'KV-Versand mit tatsächlichem Mailbeleg bestätigt':'KV-Versand ausdrücklich vermerkt'):input.action==='accept'?'KV-Zusage vermerkt':input.action==='conditional'?'KV-Vorbehalt vermerkt · neue Fassung erforderlich':'KV-Absage vermerkt',payload:{quoteId:input.quoteId,intent,action:input.action,edition:input.edition,...(input.action==='extend'?{validUntil:input.validUntil,previousValidUntil:quote.validUntil}:{}),...(onsite?{onsiteGoodsReceiptId:options.onsiteGoodsReceiptId}:{}),before:life,proof:input.action==='reject'?input.reason:input.evidence,manual:input.action==='sent'&&!mailDocument,...(mailDocument?{mailDocument}:{}),...(options.replyProof?{replyProof:options.replyProof}:{}),...(input.source?{source:input.source}:{} )}});
       const result=await readQuote(tx,auth.tenantId,input.quoteId);
       if (!result?.lifecycle||result.version!==version) throw Error('QUOTE_LIFECYCLE_WRITE_READBACK_INVALID');
       const notices=[...(followupNotice?[followupNotice]:[]),...(!currentMail&&mailDocument?['E-Mail mit Fassung '+mailDocument.edition+' gesendet · aktuelle Fassung '+life.edition+(life.sentEdition===life.edition?' bleibt bereits versendet.':' ist noch nicht versendet.')]:[])];

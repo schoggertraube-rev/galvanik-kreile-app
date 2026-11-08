@@ -187,6 +187,9 @@ export type OrderCardActionPorts = {
 export type OrderCardModel = {
   actors?:OrderActorSummary;
   actorReadError?:string;
+  shippingService?:string|null;
+  shippingServiceError?:string;
+  handoverNotice?:{message:string;taskId:string|null;originalItemId:string;taskState?:'offen'|'erledigt'|'nicht_verfuegbar'};
   id: string;
   version: number;
   orderNumber: string;

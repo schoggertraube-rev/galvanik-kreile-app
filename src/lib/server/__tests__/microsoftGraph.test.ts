@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   listMicrosoftGraphInbox,
+  readMicrosoftGraphSentDocumentEvidence,
   readMicrosoftGraphAttachments,
   readMicrosoftGraphMime,
   readMicrosoftGraphConfigurationStatus,
@@ -112,4 +113,17 @@ describe("Microsoft Graph port", () => {
     expect(result.data.attachments[0]).toMatchObject({ id: "a-1", filename: "Anfrage.pdf", contentType: "application/pdf" });
     expect(result.data.skipped).toBe(2);
   });
+});
+
+it.each(['ok','ambiguous','foreign','recipient','no_pdf'] as const)('AF9 sent-document lookup verifies actual ID, sender, recipient and PDF bytes: %s',async(kind)=>{
+ const internetId="<TEST-kv'edition1@example.invalid>",pdf=Buffer.from('TEST actual returned PDF bytes');
+ const row={id:'TEST-sent-message',internetMessageId:internetId,from:{emailAddress:{address:kind==='foreign'?'attacker@example.invalid':env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:kind==='recipient'?'other@example.invalid':'customer@example.invalid'}}],isDraft:false,sentDateTime:'2026-11-07T10:00:00Z',hasAttachments:true};
+ const fetchPort=vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({access_token:'TEST-token'.repeat(5)}),{status:200})).mockResolvedValueOnce(new Response(JSON.stringify({value:kind==='ambiguous'?[row,row]:[row]}),{status:200}));
+ if(kind==='ok'||kind==='no_pdf')fetchPort.mockResolvedValueOnce(new Response(JSON.stringify({access_token:'TEST-token'.repeat(5)}),{status:200})).mockResolvedValueOnce(new Response(JSON.stringify({value:kind==='no_pdf'?[]:[{id:'TEST-PDF',name:'TEST-KV.pdf',contentType:'application/pdf',size:pdf.length,contentBytes:pdf.toString('base64')}]}),{status:200}));
+ const result=await readMicrosoftGraphSentDocumentEvidence(internetId,'customer@example.invalid',env,fetchPort);
+ const requested=new URL(String(fetchPort.mock.calls[1][0]));expect(requested.pathname).toContain('/mailFolders/sentitems/messages');expect(requested.searchParams.get('$filter')).toBe("internetMessageId eq '<TEST-kv''edition1@example.invalid>'");
+ if(kind==='ok'){
+  const {createHash}=await import('node:crypto');expect(result).toEqual({code:'OK',data:{graphMessageId:'TEST-sent-message',internetMessageId:internetId,sentAt:'2026-11-07T10:00:00.000Z',pdfSha256:[createHash('sha256').update(pdf).digest('hex')]}});
+ }else expect(result.code).toBe('UNAVAILABLE');
+ expect(fetchPort.mock.calls.every(call=>!call[1]?.method||call[1].method==='GET'||String(call[0]).startsWith('https://login.microsoftonline.com/'))).toBe(true);
 });

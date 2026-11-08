@@ -19,3 +19,14 @@ for(const suppressed of [false,true])it('automatic goods conversion follows real
  const onOrder=vi.fn();render(<QuoteGoodsDialog quoteId={quote.quoteId} ports={ports} onClose={vi.fn()} onOriginal={vi.fn()} onCustomer={vi.fn()} onOrder={onOrder} onMessage={vi.fn()} onQuote={vi.fn()}/>);
  if(suppressed){await screen.findByRole('button',{name:'Auftrag aus TEST-KV-1 anlegen'});expect(convert).not.toHaveBeenCalled();}else{await vi.waitFor(()=>expect(onOrder).toHaveBeenCalledWith('TEST-order'));expect(convert).toHaveBeenCalledOnce();}
 });
+
+it('AF6 converts all stored package receipts through the same port without requesting a new capture',async()=>{
+ const current={...quote,status:'draft' as const,linkedOrderId:null,lifecycle:{edition:1,stage:'zugesagt' as const,sentEdition:1,sentAt:'2026-11-08T09:00:00Z',sentChannel:'druck' as const,acceptedEdition:1,acceptedAt:'2026-11-08T10:00:00Z',acceptanceEvidence:'TEST Zusage',calculation:null,declinedAt:null,declineReason:null,followupAt:null,sourceItemId:null,sourceMessageId:null,specialRequests:null,deliveryWeeks:null,goods:[{id:'TEST-goods-1',orderId:null,edition:1,location:'TEST Regal 1',blocked:false,version:1},{id:'TEST-goods-2',orderId:null,edition:1,location:'TEST Regal 2',blocked:false,version:1}]}};
+ const convert=vi.fn(async()=>({code:'OK' as const,quote,orderReceipt:{orderId:'TEST-order',orderNumber:'TEST-A-1'}}));
+ const ports:QuoteGoodsPorts={read:vi.fn(async()=>({code:'OK' as const,quote:current,canOperate:true,canReceive:false,conversion:{handoverMode:'pickup' as const,paymentMode:'abholung' as const},undo:{ready:true,automaticSuppressed:true}})),scope:async()=>({code:'OK',scope:'TEST-scope'}),capture:vi.fn(),device:vi.fn(),prepareFile:vi.fn(),finishFile:vi.fn(),original:vi.fn(),save:vi.fn(),convert};
+ render(<QuoteGoodsDialog quoteId={quote.quoteId} ports={ports} onClose={vi.fn()} onOriginal={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()} onMessage={vi.fn()} onQuote={vi.fn()}/>);
+ expect(await screen.findByText('Ware liegt in TEST Regal 1')).toBeVisible();expect(screen.getByText('Ware liegt in TEST Regal 2')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Auftrag aus TEST-KV-1 anlegen'}));
+ await vi.waitFor(()=>expect(convert).toHaveBeenCalledOnce());expect(convert.mock.calls[0]).toEqual([expect.objectContaining({goodsReceiptId:'TEST-goods-1'}),undefined,undefined]);
+ expect(ports.save).not.toHaveBeenCalled();expect(ports.capture).not.toHaveBeenCalled();expect(document.querySelector('input[type=file]')).toBeNull();
+});

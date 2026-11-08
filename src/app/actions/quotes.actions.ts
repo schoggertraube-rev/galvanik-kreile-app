@@ -1,7 +1,9 @@
 "use server";
 
+import {readMicrosoftGraphSentDocumentEvidence} from "@/lib/server/microsoftGraph";
+
 import {createHash} from "node:crypto";
-import {appendQuoteJournal,readQuoteJournal} from "@/lib/server/quoteJournalPort";
+import {appendQuoteJournal,readQuoteJournal,readQuoteReplyDocuments,quoteReplyEditionMessage,type QuoteReplyProof} from "@/lib/server/quoteJournalPort";
 
 import { renderToBuffer } from "@react-pdf/renderer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
@@ -22,7 +24,7 @@ import {findRecognizedCustomers} from '@/modules/eingang/public';
 import {withPrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
-import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect,readIntakeMessages,readIntakeAssignment} from '@/modules/eingang/server-public';
+import {readIntakeQuoteReplyReference,recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect,readIntakeMessages,readIntakeAssignment} from '@/modules/eingang/server-public';
 import {parseQuoteGoodsReceiptInput} from '@/modules/eingang/public';
 import {syncQuoteFollowupTask,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
@@ -47,6 +49,9 @@ import {
   type UpdateQuoteInput,
   type QuoteCommandContext,
 } from "@/modules/quotes/server-public";
+
+type PendingMailAcceptance={input:QuoteLifecycleInput;proof:QuoteReplyProof;handoverMode:'pickup'|'shipping';paymentMode:'vorkasse'|'abholung'|'rechnung';eventId?:string;notices?:string[]};
+function mailOrderKey(requestId:string){const bytes=createHash('sha256').update('quote-mail-order:'+requestId).digest().subarray(0,16);bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const h=bytes.toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;}
 
 function quoteCommandContext(authorization: AuthorizationSnapshot): QuoteCommandContext {
   const actionGrants = getAuthorizationActionGrants(authorization);
@@ -101,7 +106,33 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
     const auth=await resolveAuthorization();
     const failure=authorizationFailure(auth);
     if (failure||!auth.ok) return failure!;
-    const result=await changeQuoteLifecycleCommand((input?.action==='accept'||input?.action==='extend')?quoteOperationContext(auth.data):quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data,input?.action==='accept'&&!quoteCommandContext(auth.data).capabilities.canReadQuote),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId});
+    let replyProof:QuoteReplyProof|undefined;
+    if(input?.action==='accept'&&input.source?.message&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientEventId)&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.source.itemId)){
+     const context=quoteOperationContext(auth.data);if(!context.capabilities.canDecideQuote)return {code:'FORBIDDEN' as const,message:'KV-Entscheidung ist nicht freigegeben.'};
+     const prior=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteJournal(tx,auth.data,input.clientEventId));
+     if(!prior.length){
+      const quote=await readQuoteCommand(context,{quoteId:input.quoteId});if(quote.code!=='OK')return quote;
+      const source=await readIntakeQuoteReplyReference(auth.data,{itemId:input.source.itemId,version:input.source.version,quoteId:input.quoteId,customerId:quote.quote.customerId});if(source.code!=='OK')return source;
+      const target=await readMicrosoftGraphSentDocumentEvidence(source.reference.internetMessageId,source.reference.sender);if(target.code!=='OK')return {code:'VALIDATION_ERROR' as const,message:target.message};
+      const documents=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteReplyDocuments(tx,auth.data,input.quoteId,quote.quote.customerId));
+      const matching=documents.filter(row=>Number.isSafeInteger(row.document?.edition)&&target.data.pdfSha256.includes(row.document?.sha256));
+      const editions=[...new Set(matching.map(row=>row.document.edition))];if(documents.length>100||editions.length!==1)return {code:'VALIDATION_ERROR' as const,message:'Das beantwortete PDF ist keiner eindeutigen gesendeten KV-Fassung zugeordnet. Aktuelle Fassung bestätigen lassen.'};
+      const match=matching[0];replyProof={quoteId:input.quoteId,edition:match.document.edition,sha256:match.document.sha256,sourceItemId:input.source.itemId,sourceVersion:input.source.version,originalSha256:source.reference.originalSha256,inReplyTo:target.data.internetMessageId,sentGraphId:target.data.graphMessageId,dispatchEventId:match.eventId};
+      if(replyProof.edition!==quote.quote.lifecycle?.edition)return {code:'VALIDATION_ERROR' as const,message:quoteReplyEditionMessage(replyProof.edition,quote.quote.lifecycle!.edition)};
+      if(!quote.quote.linkedOrderId&&quote.quote.lifecycle?.goods?.some(row=>!row.orderId)&&!(await readQuoteUndoContext(context,quote.quote)).automaticSuppressed){
+       const profile=await withPrivilegedTenantTransaction(auth.data,tx=>readCustomerProfile(tx,auth.data.tenantId,quote.quote.customerId));
+       if(!profile?.handoverPreference||!profile.paymentPreference)return {code:'VALIDATION_ERROR' as const,message:'Übergabe und Zahlungsbedingung in der Kundenkarte ergänzen. Die Mail-Zusage bleibt offen.'};
+       const payment=intakePaymentContract({customerMode:'EXISTING',paymentPreference:profile.paymentPreference,handoverMode:profile.handoverPreference,invoiceTermsEnabled:profile.invoiceTermsEnabled,invoiceTermDays:profile.invoiceTermDays});
+       if(!payment.ok)return {code:'VALIDATION_ERROR' as const,message:payment.message};
+       const pending:PendingMailAcceptance={input,proof:{...replyProof,automaticOrder:true},handoverMode:profile.handoverPreference,paymentMode:payment.mode};
+       const converted=await convertQuoteToOrder({quoteId:input.quoteId,clientEventId:mailOrderKey(input.clientEventId),expectedVersion:input.expectedVersion+1,confirmedAward:true,confirmedOrderDueDate:quote.quote.dueDate,handoverMode:pending.handoverMode,paymentMode:pending.paymentMode,goodsReceiptId:quote.quote.lifecycle.goods.find(row=>!row.orderId)!.id},undefined,undefined,pending);
+       if(converted.code!=='OK')return converted;
+       return {code:'OK' as const,quote:converted.quote,eventId:pending.eventId!,replayed:converted.replayed,notices:pending.notices,orderId:converted.orderReceipt.orderId};
+      }
+
+     }
+    }
+    const result=await changeQuoteLifecycleCommand((input?.action==='accept'||input?.action==='extend')?quoteOperationContext(auth.data):quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data,input?.action==='accept'&&!quoteCommandContext(auth.data).capabilities.canReadQuote),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId,replyProof});
     if (result.code==='OK') {
       revalidatePath('/');
       revalidatePath('/customers');
@@ -256,11 +287,13 @@ export async function readQuoteConversionReceiptAction(input: { quoteId: string;
   }
 }
 
-export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown,telephoneAcceptance?:{clientEventId:string;edition:number;evidence:string}) {
+export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown,telephoneAcceptance?:{clientEventId:string;edition:number;evidence:string}) {return convertQuoteToOrder(input,newGoodsInput,telephoneAcceptance);}
+
+async function convertQuoteToOrder(input:ConvertQuoteInput,newGoodsInput?:unknown,telephoneAcceptance?:{clientEventId:string;edition:number;evidence:string},pendingMail?:PendingMailAcceptance) {
   if(!input||typeof input!=='object')return {code:'VALIDATION_ERROR' as const,message:'KV und Buchungsdaten fehlen.'};
   if(telephoneAcceptance!==undefined&&(!telephoneAcceptance||typeof telephoneAcceptance!=='object'||Array.isArray(telephoneAcceptance)||Object.keys(telephoneAcceptance).sort().join(',')!=='clientEventId,edition,evidence'||typeof telephoneAcceptance.clientEventId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(telephoneAcceptance.clientEventId)||telephoneAcceptance.clientEventId===input.clientEventId||!Number.isSafeInteger(telephoneAcceptance.edition)||telephoneAcceptance.edition<1||typeof telephoneAcceptance.evidence!=='string'||telephoneAcceptance.evidence.trim().length<3||telephoneAcceptance.evidence.length>4000))return {code:'VALIDATION_ERROR' as const,message:'Telefonische Zusage braucht eigene Kennung, Fassung und Wortlaut.'};
   const conversionInput=telephoneAcceptance?{...input,expectedVersion:input.expectedVersion+1}:input;
-  const pendingAcceptance=telephoneAcceptance?{edition:telephoneAcceptance.edition,beforeVersion:input.expectedVersion}:undefined;
+  const pendingAcceptance=telephoneAcceptance?{edition:telephoneAcceptance.edition,beforeVersion:input.expectedVersion}:pendingMail?{edition:pendingMail.input.edition,beforeVersion:pendingMail.input.expectedVersion}:undefined;
   const newGoods=newGoodsInput===undefined?null:parseQuoteGoodsReceiptInput(newGoodsInput);
   if(newGoodsInput!==undefined&&(!newGoods||newGoods.quoteId!==input.quoteId||newGoods.id!==input.goodsReceiptId||newGoods.expectedQuoteVersion!==input.expectedVersion))return {code:"VALIDATION_ERROR" as const,message:"KV und neue Warenprüfung passen nicht zusammen."};
   let authorization;
@@ -293,10 +326,21 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
     if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_TELEPHONE_ACCEPTANCE_FAILED');}
   };
   const order = await createOrderIntake(prepared.orderInput,undefined,{
-    quoteConversion:true,
-    before:async(tx,auth)=>{if(prepared.replayed)await accept(tx,auth);await check(tx,true,!prepared.replayed);if(newGoods&&prepared.replayed)await saveGoods(tx,auth);},
-    // No lifecycle mutation before intake validation: a returned failure must not commit an acceptance.
-    beforeEvent:async(tx,auth)=>{await saveGoods(tx,auth);await accept(tx,auth);await check(tx,false);},
+    quoteAuthorization:{quoteId:input.quoteId},
+    before:async(tx,auth)=>{
+      await saveGoods(tx,auth);
+      if(pendingMail){
+       const accepted=await changeQuoteLifecycleCommand(commandContext,pendingMail.input,(transaction,source)=>recordIntakeQuoteEffect(transaction,auth,source),quoteFollowupBinding(auth),{transaction:tx,replyProof:pendingMail.proof});
+       if(accepted.code!=='OK'){boundFailure=accepted;throw Error('QUOTE_MAIL_ACCEPT_FAILED');}pendingMail.eventId=accepted.eventId;pendingMail.notices=accepted.notices;
+       const profile=await readCustomerProfile(tx,auth.tenantId,prepared.orderInput.customer.customerId,true);
+       if(!profile?.handoverPreference||!profile.paymentPreference||profile.handoverPreference!==pendingMail.handoverMode){boundFailure={code:'VALIDATION_ERROR',message:'Kundenbedingungen wurden geändert. Mail-Zusage bleibt offen.'};throw Error('QUOTE_MAIL_CUSTOMER_CHANGED');}
+       const payment=intakePaymentContract({customerMode:'EXISTING',paymentPreference:profile.paymentPreference,handoverMode:profile.handoverPreference,invoiceTermsEnabled:profile.invoiceTermsEnabled,invoiceTermDays:profile.invoiceTermDays});
+       if(!payment.ok||payment.mode!==pendingMail.paymentMode){boundFailure={code:'VALIDATION_ERROR',message:'Zahlungsbedingung wurde geändert. Mail-Zusage bleibt offen.'};throw Error('QUOTE_MAIL_PAYMENT_CHANGED');}
+      }
+      if(telephoneAcceptance)await accept(tx,auth);
+      await check(tx,false);
+    },
+    beforeEvent:async(tx)=>{await check(tx,false);},
     after:async(tx,auth,receipt)=>{
       try{goods=await bindQuoteGoodsReceiptToCreatedOrder(tx,auth,{quoteId:input.quoteId,receiptId:input.goodsReceiptId!,clientEventId:input.clientEventId,orderId:receipt.orderId,items:receipt.items});}
       catch(error){

@@ -94,7 +94,7 @@ describe("quotes command boundary", () => {
       .mockResolvedValueOnce([goodsRow]);
     const { prepareQuoteConversionCommand } = await import("../server/quoteCommands");
     await expect(prepareQuoteConversionCommand(authorization, {
-      quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 2, confirmedAward: true, confirmedOrderDueDate: "2026-10-20",
+      quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 2, confirmedAward: true, confirmedOrderDueDate: input.dueDate,
       handoverMode: "pickup", paymentMode: "rechnung",goodsReceiptId:GOODS,
     })).resolves.toMatchObject({ code: "CONFLICT" });
   });
@@ -103,7 +103,7 @@ describe("quotes command boundary", () => {
     const orderInput = { geprueft: true,
       clientEventId: CLIENT,
       customer: { mode: "EXISTING" as const, customerId: CUSTOMER },
-      dueDate: "2026-10-20",
+      dueDate: input.dueDate,
       handoverMode: "shipping" as const,
       items: [{
         catalogServiceId: null, name: "Flansch", quantity: 2, material: "Stahl",
@@ -151,7 +151,7 @@ describe("quotes command boundary", () => {
     const { prepareQuoteConversionCommand } = await import("../server/quoteCommands");
     await expect(prepareQuoteConversionCommand(authorization, {
       quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 1, confirmedAward: true,
-      confirmedOrderDueDate: "2026-10-20", handoverMode: "shipping", paymentMode: "vorkasse",goodsReceiptId:GOODS,
+      confirmedOrderDueDate: input.dueDate, handoverMode: "shipping", paymentMode: "vorkasse",goodsReceiptId:GOODS,
     })).resolves.toMatchObject({ code: "OK", orderInput });
     expect(execute.mock.calls.find(call=>call[0]?.text.includes("prepare_quote_conversion_v1"))?.[0]?.values[5]).toBe(expectedOrderHash);
   });
@@ -163,12 +163,12 @@ describe("quotes command boundary", () => {
   });
 
   it("updates only the expected draft revision and requires receipt plus readback", async () => {
-    const update = { quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 1, dueDate: "2026-10-20", note: "Geändert", positions: input.positions };
+    const update = { quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 1, dueDate: input.dueDate, note: "Geändert", positions: input.positions };
     const updateIntent = createHash("sha256").update(JSON.stringify(update), "utf8").digest("hex");
     execute.mockImplementation((query: { text: string }) => {
       if (query.text.includes("FROM private.quotes") && query.text.includes("FOR UPDATE")) return Promise.resolve([{id:QUOTE}]);
       if (query.text.includes("private.update_quote_v1")) return Promise.resolve([{ result_code: "OK", result_quote_id: QUOTE, replayed: false }]);
-      if (query.text.includes("private.v_quotes_v1")) return Promise.resolve([{ ...quoteRow, version: 2, due_date: "2026-10-20", note: "Geändert", updated_at: "2026-09-16T10:01:00.000Z" }]);
+      if (query.text.includes("private.v_quotes_v1")) return Promise.resolve([{ ...quoteRow, version: 2, due_date: input.dueDate, note: "Geändert", updated_at: "2026-09-16T10:01:00.000Z" }]);
       if (query.text.includes("private.v_quote_update_receipts_v1")) return Promise.resolve([{
         receipt_id: RECEIPT, event_id: EVENT, tenant_id: TENANT, quote_id: QUOTE, actor_id: ACTOR,
         client_event_id: CLIENT, correlation_id: CORRELATION, intent_sha256: updateIntent, expected_version: 1,
@@ -178,7 +178,7 @@ describe("quotes command boundary", () => {
     });
     const { updateQuoteCommand } = await import("../server/quoteCommands");
     await expect(updateQuoteCommand(authorization, update,async()=>null)).resolves.toMatchObject({
-      code: "OK", quote: { version: 2, dueDate: "2026-10-20" }, receipt: { expectedVersion: 1, aggregateVersion: 2 },
+      code: "OK", quote: { version: 2, dueDate: input.dueDate }, receipt: { expectedVersion: 1, aggregateVersion: 2 },
     });
     await expect(updateQuoteCommand({ ...authorization, capabilities: { ...authorization.capabilities, canUpdateQuote: false } }, update,async()=>null)).resolves.toMatchObject({ code: "FORBIDDEN" });
   });

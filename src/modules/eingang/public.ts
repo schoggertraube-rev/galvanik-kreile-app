@@ -68,3 +68,4 @@ export {IncomingInvoiceDialogs} from './ui/IncomingInvoiceDialogs';
 export {ComplaintDialogs,type ComplaintPorts} from '@/modules/complaints/public';
 
 export {hasQuoteFinancials} from '@/modules/quotes/public';
+export {intakeHandoverDirective} from './intakeLifecycleContract';

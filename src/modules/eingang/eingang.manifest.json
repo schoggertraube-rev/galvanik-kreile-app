@@ -153,7 +153,11 @@
     "@/modules/eingang/public#hasQuoteFinancials",
     "@/modules/eingang/server-public#returnQuoteGoodsReceipt",
     "@/modules/eingang/server-public#readQuoteGoodsReturns",
-    "@/modules/eingang/server-public#readIntakeActorStatistics"
+    "@/modules/eingang/server-public#readIntakeActorStatistics",
+    "@/modules/eingang/server-public#readIntakeQuoteReplyReference",
+    "@/modules/eingang/public#intakeHandoverDirective",
+    "@/modules/eingang/server-public#readIntakeHandoverMail",
+    "@/modules/eingang/server-public#recordIntakeHandoverEffect"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"
@@ -168,7 +172,9 @@
     "20261105095422_ein2_erwartete_ware.sql",
     "20261105224000_ein2_entwurf_version.sql",
     "20261107213000_kv_v04_goods_reference.sql",
-    "20261108163051_quote_goods_return_receipt.sql"
+    "20261108163051_quote_goods_return_receipt.sql",
+    "supabase/migrations/20261108173258_quote_goods_deviation_clearance.sql",
+    "supabase/migrations/20261108173803_quote_goods_clearance_history.sql"
   ],
   "viewsFunctions": [
     "public.v_intake_expected_goods_v1",

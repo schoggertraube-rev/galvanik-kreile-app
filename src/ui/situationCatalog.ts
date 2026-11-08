@@ -97,3 +97,22 @@ export const ACTOR_COPY={
  action:(type:string,kind:'order'|'quote'|'complaint'='order')=>type==='rechnung.erfassen'?'Rechnung erfasst':type==='rechnung.unklar'?'Rechnung zur Klärung abgelegt':type==='rechnung.status'?'Rechnung geändert':type==='rechnung.klaeren'?'Rechnung geklärt':type==='INTAKE:angelegt'?'Eingang angelegt':type==='INTAKE:original_gespeichert'?'Original gesichert':type==='INTAKE:zugeordnet'?'Kunde zugeordnet':type==='INTAKE:umgehaengt'?'Zuordnung geaendert':type.startsWith('INTAKE:')?'Eingang bearbeitet':type==='QUOTE_LIFECYCLE_V04:accept'?'Zusage übernommen':type==='QUOTE_LIFECYCLE_V04:sent'?'KV gesendet':type==='QUOTE_LIFECYCLE_V04:extend'?'Gültigkeit verlängert':type==='QUOTE_CREATED_V1'?'KV angelegt':type==='COMPLAINT_CHANGED_V1:aufnehmen'?'Reklamation aufgenommen':type==='COMPLAINT_CHANGED_V1:entscheiden'?'Reklamation entschieden':type==='ORDER_TASK_ASSIGNED_V1'?'Zuständigkeit übernommen':type==='ORDER_INTAKE_CREATED_V1'?'Auftrag angelegt':type==='ORDER_PROMISED_DUE_DATE_CHANGED_V1'?'Termin geändert':type.includes('PAYMENT')?'Zahlung erfasst':type.includes('PICKED_UP')?'Ware ausgegeben':type.includes('FROZEN')?'Fertig gemeldet':kind==='quote'?'KV geändert':kind==='complaint'?'Reklamation geändert':'Auftrag geändert',
  mail:(sender:string)=>'Mail von '+sender,
 };
+export const QUOTE_CYCLE_COPY={
+ editionWarning:(before:number,after:number,customer:string)=>`Du änderst Fassung ${before} zu Fassung ${after} – die Zusage von ${customer} gilt dann nicht mehr. Termin allein ändert nichts.`,
+ editionConfirm:'Neue Fassung speichern · Zusage aufheben',
+ acceptanceInvalid:(edition:number)=>`Zusage zu Fassung ${edition} ist ungültig · aktuelle Fassung bestätigen lassen`,
+ goodsLocation:(location:string)=>'Ware liegt in '+location,
+ fromComplaint:(number:string)=>'KV aus Reklamation '+number,complaintCustomerUnavailable:'Der Kunde der Reklamation ist nicht verfügbar · Kundenkarte prüfen.',
+ clarify:'Abweichung geklärt',clarificationReason:'Grund der Klärung',clarificationMissing:'Nenne den Grund der Klärung.',clarificationSaved:'Abweichung geklärt · die ursprünglichen Prüfdaten bleiben im Verlauf.',
+ discrepancy:(location:string,received:number|null|undefined,total:number|null|undefined,deviations:string[])=>location+' · '+(received??'—')+' von '+(total??'—')+' Packstücke'+(deviations.length?' · '+deviations.join(', '):''),
+};
+
+export const ORDER_HANDOVER_COPY={
+ chooseOrder:"Wähle den Auftrag zu dieser Mail",choose:(number:string)=>"Übergabe für "+number+" übernehmen",
+ mode:(mode:'pickup'|'shipping')=>mode==='pickup'?'Abholen':'Versand',
+ label:(mode:'pickup'|'shipping'|null|undefined,service:string|null|undefined,error?:string)=>mode==='pickup'?'Abholen':mode==='shipping'?'Versand · '+(service??error??'Versanddienst fehlt'):'Übergabeart fehlt',
+ original:'Original-Mail ansehen',task:'Rückruf-Aufgabe öffnen',completed:'Rückruf erledigt',taskUnavailable:'Rückruf-Aufgabe ist für diesen Login nicht verfügbar.',targetUnavailable:'Der gespeicherte Bezug konnte nicht geöffnet werden.',
+ changed:(number:string,mode:'pickup'|'shipping',sender:string,at:string)=>'Du übernimmst '+(mode==='pickup'?'Abholen':'Versand')+' für '+number+' · so hat es '+sender+' am '+new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(at))+' geschrieben.',
+ call:(customer:string,phone:string|null)=>'Ruf '+customer.slice(0,55)+' an: '+(phone??'Telefon fehlt'),
+ late:(number:string,customer:string,phone:string|null,carrier:string|null,mode:'pickup'|'shipping',label:boolean,passed:boolean)=>number+' · '+(passed?'Ware ist bereits übergeben':label?'Versandetikett ist bereits erstellt':'Paket ist bereits beim '+(carrier??'Versanddienst · Name fehlt'))+' · '+customer+' wollte '+(mode==='pickup'?'abholen':'Versand')+'. Ruf '+customer+' an: '+(phone??'Telefon fehlt')+'.',
+};

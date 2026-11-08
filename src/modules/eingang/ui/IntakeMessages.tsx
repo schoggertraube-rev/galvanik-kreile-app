@@ -1,9 +1,10 @@
 'use client';
 import {ACTOR_COPY} from '@/ui/situationCatalog';
+import {ORDER_HANDOVER_COPY} from '@/ui/situationCatalog';
 import {useCallback,useEffect,useMemo,useRef,useState,type MouseEvent,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {Button,Dialog,Hinweis,Icon,KrApp,useKrGeraet} from '@/ui/kr';
-import {MESSAGE_FILTERS,INTAKE_CHANGED_EVENT,messageGroupId,messageTone,type MessageFilter,type IntakeMessage,type IntakeMessagesPorts,type IntakeMessagesResult} from '../messageContract';
+import {MESSAGE_FILTERS,INTAKE_CHANGED_EVENT,messageGroupId,messageTone,type MessageFilter,type IntakeMessage,type IntakeMessagesPorts,type IntakeMessagesResult,type IntakeHandoverRequest} from '../messageContract';
 import {concernOptions,type ConcernOption} from '../concernMenuContract';
 import {intakeRequiredEffect} from '../intakeLifecycleContract';
 import {ConcernMenu} from './ConcernMenu';
@@ -20,6 +21,7 @@ type Group={id:string;name:string;rows:IntakeMessage[];open:number;tone:ReturnTy
 
 /** The same conversation component is used by the route and the existing navigation bus. */
 export function IntakeMessages({ports,initialGroup,onClose}:{ports:IntakeMessagesPorts;initialGroup?:string;onClose?:()=>void}){
+ const[handoverChoice,setHandoverChoice]=useState<{request:IntakeHandoverRequest;choices:Array<{id:string;number:string|null;version:number}>}|null>(null);
  const [tab,setTab]=useState<'mail'|'concerns'>('mail');
  const changeTab=(next:'mail'|'concerns')=>setTab(next);
  const [filter,setFilter]=useState<MessageFilter>(initialGroup?'alle':'offen'),[concernFilter,setConcernFilter]=useState<string|null>(null),[result,setResult]=useState<Extract<IntakeMessagesResult,{code:'OK'}>|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState<string|null>(null),[selected,setSelected]=useState<string|null>(initialGroup??null),[menu,setMenu]=useState<{id:string;x:number;y:number}|null>(null),[busy,setBusy]=useState(false),[toast,setToast]=useState<string|null>(null),[retry,setRetry]=useState<(()=>void)|null>(null),[reopening,setReopening]=useState<IntakeMessage|null>(null),[reason,setReason]=useState('');
@@ -65,9 +67,24 @@ export function IntakeMessages({ports,initialGroup,onClose}:{ports:IntakeMessage
   try{const saved=await ports.finish({items:[{itemId:row.id,version:row.version}],kind,note:null,clientEventId:key(kind,row)});if(saved.code!=='OK'){fail(saved.message,()=>void finish(row,kind));return;}setMenu(null);setToast(kind==='info'?'Als Info vermerkt':'Erledigt');await load();}
   catch(failure){console.error('[INTAKE_MESSAGES_FINISH_FAILED]',failure);fail('Code: INTAKE_MESSAGES_FINISH_FAILED.',()=>void finish(row,kind));}finally{inFlight.current=false;setBusy(false);}
  };
+ const handover=async(request:IntakeHandoverRequest)=>{
+  if(!ports.handover){fail(ORDER_HANDOVER_COPY.targetUnavailable);return;}
+  let saved;try{saved=await ports.handover(request);}catch(failure){console.error('[MAIL_HANDOVER_UI_FAILED]',failure);fail(ORDER_HANDOVER_COPY.targetUnavailable,()=>void runHandover(request));return;}
+  if(saved.code!=='OK'){
+   if('choices'in saved&&saved.choices?.length){setHandoverChoice({request,choices:saved.choices});setMenu(null);}
+   fail('message'in saved?saved.message:ORDER_HANDOVER_COPY.targetUnavailable,()=>void runHandover(request));return;
+  }
+  setHandoverChoice(null);setMenu(null);setWriteError(null);setRetry(null);await load();
+  const receipt=saved.receipt as {orderId?:string;message?:string};setToast(receipt.message??null);
+  if(receipt.orderId&&open('auftrag',receipt.orderId))fail(ORDER_HANDOVER_COPY.targetUnavailable);
+ };
+ const runHandover=async(request:IntakeHandoverRequest)=>{if(inFlight.current)return;inFlight.current=true;setBusy(true);try{await handover(request);}catch(failure){console.error('[MAIL_HANDOVER_UI_FAILED]',failure);fail(ORDER_HANDOVER_COPY.targetUnavailable,()=>void runHandover(request));}finally{inFlight.current=false;setBusy(false);}};
  const choose=async(row:IntakeMessage,option:ConcernOption)=>{
   if(inFlight.current)return;inFlight.current=true;setBusy(true);setError(null);setWriteError(null);setRetry(null);
   try{const saved=await ports.select({itemId:row.id,version:row.version,concern:option.concern,clientEventId:key('select:'+option.concern,row)});if(saved.code!=='OK'){fail(saved.message,()=>void choose(row,option));return;}
+   if(option.concern==='abholung'&&row.channel==='mail'){
+    await handover({command:'handover_from_mail',sourceItemId:row.id,sourceVersion:saved.capture.version,clientEventId:key('handover',row)});return;
+   }
    await load();
    if(option.target==='aufgabe'){
     const request={reference:{type:'eingang',id:row.id},kind:option.concern,itemId:row.id};
@@ -114,6 +131,7 @@ export function IntakeMessages({ports,initialGroup,onClose}:{ports:IntakeMessage
   {tab==='mail'&&!loading&&!visibleError&&!visible.length?<div data-spec-id="nachrichten.zustand.leer"><p>Alles erledigt · keine offenen Nachrichten</p><Button data-spec-id="nachrichten.alle-zeigen" text="Alle zeigen" onClick={()=>{setFilter('alle');setConcernFilter(null);}}/></div>:null}
   {tab==='mail'?<div className="ev-nachrichten"><div className="ev-nlinks ev-nliste">{visible.map(group=><button type="button" key={group.id} data-spec-id="nachrichten.gruppe" className={'ev-ngruppe ev-ngruppe--'+group.tone+(current?.id===group.id?' ev-ngruppe--an':'')} onClick={()=>setSelected(group.id)}><span className="kr-avatar">{group.name.trim().slice(0,2).toUpperCase()}</span><span className="ev-ngruppe-t"><b>{group.name}</b><span className="ev-ngruppe-l">{group.rows.at(-1)?.subject??group.rows.at(-1)?.text??'Inhalt fehlt'}</span></span><span className="ev-ngruppe-r">{time(group.rows.at(-1)!.at)}<i className="ev-ngruppe-n">{group.open}</i></span></button>)}</div>{current&&(device!=='handy'||selected!==null)?<div className="ev-nrechts">{renderRows(current)}</div>:null}</div>:null}
   {menu&&menuMessage&&result?createPortal(<KrApp geraet={device} portal><ConcernMenu message={menuMessage} areas={result.areas} anchor={menu} busy={busy} error={visibleError} onSelect={option=>void choose(menuMessage,option)} onInfo={()=>void finish(menuMessage,'info')} onNoBusiness={()=>noBusiness(menuMessage)} onClose={()=>{setMenu(null);setError(null);setWriteError(null);setRetry(null);}}/></KrApp>,document.body):null}
+  {handoverChoice?<Dialog titel={ORDER_HANDOVER_COPY.chooseOrder} onSchliessen={()=>{if(!busy)setHandoverChoice(null);}} meldung={visibleError?{ton:'fehler',text:visibleError}:null}>{handoverChoice.choices.map(choice=><Button key={choice.id} text={ORDER_HANDOVER_COPY.choose(choice.number??choice.id)} disabled={busy} onClick={()=>void runHandover({...handoverChoice.request,orderId:choice.id,expectedVersion:choice.version})}/>)}</Dialog>:null}
   {reopening?<Dialog titel="Wieder öffnen" onSchliessen={()=>{if(!busy){setReopening(null);setWriteError(null);setRetry(null);}}} meldung={visibleError?{ton:'fehler',text:visibleError}:null} fuss={<><Button text="Zurück" disabled={busy} onClick={()=>{setReopening(null);setWriteError(null);setRetry(null);}}/><Button data-spec-id="nachrichten.wieder-speichern" art="primaer" text={busy?'Wird gespeichert …':'Wieder öffnen'} disabled={busy} onClick={()=>{setWriteError(null);void reopen();}}/></>}><div data-spec-id="nachrichten.zustand.wieder"><label>Grund<input className="kr-input" data-spec-id="nachrichten.grund" aria-invalid={reopenInvalid} aria-describedby={reopenInvalid?'nachrichten.grund.fehler':undefined} minLength={3} maxLength={200} value={reason} onChange={event=>{setReason(event.target.value);setReopenInvalid(false);setError(null);}}/></label>{reopenInvalid?<span id="nachrichten.grund.fehler" data-spec-id="nachrichten.grund.fehler" role="alert">{visibleError}</span>:null}</div></Dialog>:null}
  </section>;
 }

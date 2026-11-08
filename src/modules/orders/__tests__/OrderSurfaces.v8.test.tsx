@@ -46,6 +46,24 @@ const card: OrderCardModel = {
 };
 
 describe("Orders V1.1 one-surface truth", () => {
+  it('AF19 shows the stored handover and real callback/original in the card and outgoing check',()=>{
+    const dispatch=vi.fn((event:Event)=>event.preventDefault());
+    window.addEventListener('kreile:oeffne',dispatch);
+    try{
+      render(<OrderCardView actions={{...actions,goodsOut:{visible:true,enabled:true,reason:null}}} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{kind:'data',card:{...card,station:'fertig',handoverMode:'shipping',shippingService:'TEST Versanddienst',handoverNotice:{message:'TEST Bitte ruf den Kunden an.',taskId:'TEST-task',taskState:'offen',originalItemId:'TEST-mail'}}}}/>);
+      const panel=document.querySelector('[data-spec-id="auftrag.uebergabe"]')!;
+      expect(panel).toHaveTextContent('TEST Versanddienst');
+      expect(panel).toHaveTextContent('TEST Bitte ruf den Kunden an.');
+      fireEvent.click(within(panel as HTMLElement).getByRole('button',{name:/Original/i}));
+      expect(dispatch.mock.calls.at(-1)?.[0]).toMatchObject({detail:{ziel:'mailein',arg:'TEST-mail'}});
+      fireEvent.click(within(panel as HTMLElement).getByRole('button',{name:/Aufgabe/i}));
+      expect(dispatch.mock.calls.at(-1)?.[0]).toMatchObject({detail:{ziel:'aufgabe',arg:'TEST-task'}});
+      fireEvent.click(screen.getAllByRole('button',{name:'Ware raus'}).at(-1)!);
+      const outgoing=document.querySelector('[data-spec-id="rauspruefen"]')!;
+      expect(outgoing).toHaveTextContent('TEST Versanddienst');
+      expect(outgoing).toHaveTextContent('TEST Bitte ruf den Kunden an.');
+    }finally{window.removeEventListener('kreile:oeffne',dispatch);}
+  });
   it('R53 opens exactly one existing photo panel and protects an unfinished upload from closing',async()=>{
     vi.stubGlobal('matchMedia',()=>({matches:true}));
     try {

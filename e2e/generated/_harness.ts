@@ -1798,6 +1798,13 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
   } else {
     for (const step of route.weg ?? []) await executeStep(page, step, state);
   }
+  if(complaintDeliveryFixture){
+    // AF10: positive L10/L11/L13 givens include a real uploaded original, never a fabricated photo ID.
+    const photo=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jGZkAAAAASUVORK5CYII=','base64');
+    await page.locator('input[type="file"][accept="image/jpeg,image/png,image/webp"]').setInputFiles({name:'SYNTHETISCH-Reklamationsfoto.png',mimeType:'image/png',buffer:photo});
+    await expect(page.getByRole('button',{name:'Foto 1',exact:true})).toBeVisible();
+    await expect(dataSpec(page,'reklamation.fotos')).toBeEnabled();
+  }
   for (const step of flowCase.wenn ?? []) await executeStep(page, step, state);
   await captureDbResults(dbExpectations, state);
   await assertExpectations(page, flowCase.dann?.anzeige ?? [], state);

@@ -96,14 +96,16 @@ export async function executeComplaint(input:unknown,sourceEffect:ComplaintSourc
         if(before.version!==input.version)reject('CONFLICT','Reklamation wurde inzwischen geändert · bitte neu lesen.');
         let change;
         if(input.action==='entscheiden'){
+          if(before.gutschrift_nr&&input.measure==='gutschrift')reject('VALIDATION_ERROR','Gutschrift '+before.gutschrift_nr+' besteht · keine zweite Gutschrift anlegen.');
           if(before.stand!=='aufgenommen')reject('CONFLICT','Die Reklamation wurde bereits entschieden.');
-          change=sql`stand=${input.assessment==='abgelehnt'?'kunde_informieren':'massnahme_gutschrift'},bewertung=${input.assessment},massnahme=${input.measure},begruendung=${input.reason},gutschrift_betrag=${input.creditCents===null?null:(input.creditCents/100).toFixed(2)}`;
+          change=sql`stand=${input.assessment==='abgelehnt'?'kunde_informieren':'massnahme_gutschrift'},bewertung=${input.assessment},massnahme=${input.measure},begruendung=${input.reason},gutschrift_betrag=${before.gutschrift_nr?before.gutschrift_betrag:input.creditCents===null?null:(input.creditCents/100).toFixed(2)}`;
         } else if(input.action==='gutschrift'){
+          if(before.gutschrift_nr)reject('VALIDATION_ERROR','Gutschrift '+before.gutschrift_nr+' besteht · keine zweite Gutschrift anlegen.');
           if(before.stand!=='massnahme_gutschrift')reject('CONFLICT','Es ist keine Gutschrift offen.');
           change=sql`stand='kunde_informieren',gutschrift_betrag=${(input.creditCents/100).toFixed(2)},gutschrift_nr=${input.creditNumber}`;
         } else if(input.action==='wieder_oeffnen'){
           if(before.stand!=='abgeschlossen')reject('CONFLICT','Die Reklamation ist bereits offen.');
-          change=sql`stand='aufgenommen',bewertung=NULL,massnahme=NULL,begruendung=NULL,gutschrift_betrag=NULL,gutschrift_nr=NULL,abschluss_art=NULL,abschluss_notiz=NULL,abgeschlossen_am=NULL,abgeschlossen_von=NULL`;
+          change=sql`stand='aufgenommen',bewertung=NULL,massnahme=NULL,begruendung=NULL,abschluss_art=NULL,abschluss_notiz=NULL,abgeschlossen_am=NULL,abgeschlossen_von=NULL`;
         } else {
           if(before.stand==='abgeschlossen'||input.kind!=='zurueckgezogen'&&before.stand!=='kunde_informieren')reject('CONFLICT','Dieser Reklamationsstand kann so nicht abgeschlossen werden.');
           if(input.kind==='mail'){

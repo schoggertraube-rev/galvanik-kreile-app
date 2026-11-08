@@ -158,3 +158,34 @@ it('AK shows the actual quote creator and latest decision actor without exposing
  render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:{...quote,totalNetCents:null,actorTrace:{createdBy:edge,lastActor:{...edge,userId:'TEST-bea',name:'TEST Bea',action:'QUOTE_LIFECYCLE_V04:accept'}}},canOperate:true,canEdit:false}),change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
  expect(await screen.findByText(/Angelegt von TEST Ada/)).toBeVisible();expect(screen.getByText('Zuletzt: TEST Bea · Zusage übernommen')).toBeVisible();expect(screen.queryByText('40,00 € netto')).toBeNull();
 });
+
+it('AF18 requires explicit confirmation before replacing an accepted edition, retains invalidated evidence',async()=>{
+ const accepted={...quote,lifecycle:{...quote.lifecycle!,acceptedEdition:1,acceptedAt:'2026-11-08T10:00:00Z',acceptanceEvidence:'TEST alte verbindliche Zusage'}};
+ const candidate={quoteId:quote.quoteId,expectedVersion:2,dueDate:quote.dueDate,note:quote.note,positions:quote.positions.map(({name,quantity,material,surfaceRequested,unitPriceCents})=>({name,quantity,material,surfaceRequested,unitPriceCents:unitPriceCents!+100}))};
+ const prepare=vi.fn(async()=>({code:'OK' as const,preparation:{dateOnly:false,before:accepted,after:{dueDate:quote.dueDate,positions:candidate.positions,calculation:null,totalNetCents:4400},changes:['TEST Preis'],missing:[],canApply:true,candidate}}));
+ const updated={...accepted,version:3,lifecycle:{...accepted.lifecycle,edition:2,stage:'geaendert_seit_versand' as const}};
+ const update=vi.fn(async()=>({code:'OK' as const,quote:updated,receipt:{} as never,replayed:false}));
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:update.mock.calls.length?updated:accepted,canEdit:true}),change:vi.fn(),prepare,update}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Ändern · Fassung 2 anlegen'}));fireEvent.change(screen.getByRole('textbox',{name:'Was soll geändert werden?'}),{target:{value:'TEST Preis anpassen'}});fireEvent.click(screen.getByRole('button',{name:'Änderungsvorschlag anzeigen'}));
+ fireEvent.click(await screen.findByRole('button',{name:'Fassung 2 anlegen'}));expect(update).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Neue Fassung speichern · Zusage aufheben'}));
+ await waitFor(()=>expect(update).toHaveBeenCalledOnce());
+ fireEvent.click(screen.getByText('Verlauf und Anfrage'));
+ expect(await screen.findByText(/Zusage zu Fassung 1 ist ungültig.*TEST alte verbindliche Zusage/)).toBeVisible();
+});
+
+it('AF5 shows physical discrepancy, retains a failed reason and retries the same existing writer',async()=>{
+ let cleared=false;
+ const goods={id:'TEST-goods',orderId:null,edition:1,location:'TEST Fach 3',blocked:true,version:1,packagesReceived:2,packagesTotal:3,condition:'teillieferung',deviations:['TEST Schaden']};
+ const current={...quote,lifecycle:{...quote.lifecycle!,goods:[goods]}};
+ const clarify=vi.fn<NonNullable<QuoteCardPorts['clarify']>>().mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST Klärung unbestätigt'}).mockImplementationOnce(async()=>{cleared=true;return {code:'OK'};});
+ const read:QuoteCardPorts['read']=async()=>({code:'OK',quote:cleared?{...current,lifecycle:{...current.lifecycle,goods:[{...goods,version:2,clearance:{reason:'TEST Kunde bestätigt',actorId:'TEST-actor',at:'2026-11-08T10:00:00Z'}}]}}:current,canEdit:false,canOperate:true});
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read,clarify,change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ expect(await screen.findByText('TEST Fach 3 · 2 von 3 Packstücke · TEST Schaden')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Abweichung geklärt'}));fireEvent.change(screen.getByRole('textbox',{name:'Grund der Klärung'}),{target:{value:'TEST Kunde bestätigt'}});
+ fireEvent.click(screen.getAllByRole('button',{name:'Abweichung geklärt'}).at(-1)!);await screen.findByText('TEST Klärung unbestätigt');
+ expect(screen.getByRole('textbox',{name:'Grund der Klärung'})).toHaveValue('TEST Kunde bestätigt');
+ fireEvent.click(screen.getAllByRole('button',{name:'Abweichung geklärt'}).at(-1)!);await screen.findByText('Abweichung geklärt · die ursprünglichen Prüfdaten bleiben im Verlauf.');
+ expect(clarify).toHaveBeenCalledTimes(2);expect(clarify.mock.calls[1][0]).toEqual(clarify.mock.calls[0][0]);expect(clarify.mock.calls[0][0]).toEqual({command:'clarify',quoteId:quote.quoteId,receiptId:'TEST-goods',expectedVersion:1,expectedQuoteVersion:2,clientEventId:expect.any(String),reason:'TEST Kunde bestätigt'});
+ expect(screen.getByText('TEST Fach 3 · 2 von 3 Packstücke · TEST Schaden')).toBeVisible();
+});

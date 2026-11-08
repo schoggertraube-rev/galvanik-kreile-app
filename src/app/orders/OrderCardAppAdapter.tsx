@@ -226,6 +226,9 @@ function mapCard(
     agreement: card.agreement,
     agreementHint: card.agreementHint,
     handoverMode: card.handoverMode,
+    shippingService:card.shippingService,
+    shippingServiceError:card.shippingServiceError,
+    handoverNotice:card.handoverNotice,
     payment,
     catalog,
   };

@@ -57,6 +57,9 @@ export type OrderCardItem = {
 export type LiveOrderCard = {
   actors?:OrderActorSummary;
   actorReadError?:string;
+  shippingService?:string|null;
+  shippingServiceError?:string;
+  handoverNotice?:{message:string;taskId:string|null;originalItemId:string;taskState?:'offen'|'erledigt'|'nicht_verfuegbar'};
   cancellation?:{reason:string;at:string;actor:string;quoteId:string|null;quoteNumber:string|null};
   commercialQuote?:OrderCommercialQuote;
   id: string;
@@ -852,7 +855,11 @@ export async function readLiveOrderCard(
       const canReadMoney = authorization.permissions.includes("perm_view_prices");
       const cancellationRows=queue.status==='storniert'?await tx.execute<{reason:string;at:string;actor:string;quoteId:string|null;quoteNumber:string|null}>(sql`SELECT event.notes AS reason,event.created_at::text AS at,coalesce(actor.full_name,'Name fehlt') AS actor,event.payload->>'quoteId' AS "quoteId",quote.quote_number AS "quoteNumber" FROM public.events event LEFT JOIN public.app_users actor ON actor.tenant_id=event.tenant_id AND actor.id=event.user_id LEFT JOIN private.quotes quote ON quote.tenant_id=event.tenant_id AND quote.id::text=event.payload->>'quoteId' WHERE event.tenant_id=${authorization.tenantId} AND event.order_id=${input.orderId} AND event.event_type='ORDER_CANCELLED_V1' AND event.status='success' ORDER BY event.created_at DESC,event.id DESC LIMIT 1`):[];
       const commercialQuote=canReadMoney&&origin.has_commercial_quote&&queue.status!=='storniert'?await readOrderCommercialQuote(tx,authorization.tenantId,input.orderId):undefined;
+      const [handoverEvent]=await tx.execute<{payload:{receipt:{orderId:string;orderVersion:number;message:string;taskId:string|null;mailActor:{originalItemId:string}}}}>(sql`SELECT payload FROM public.events WHERE tenant_id=${authorization.tenantId} AND order_id=${input.orderId} AND event_type='ORDER_HANDOVER_MAIL_V1' AND event_schema_version=1 AND status='success' ORDER BY aggregate_version DESC,created_at DESC,id DESC LIMIT 1`);
+      const handover=handoverEvent?.payload?.receipt;
+      if(handover&&(handover.orderId!==queue.id||!Number.isSafeInteger(handover.orderVersion)||handover.orderVersion>queue.version||typeof handover.message!=='string'||!handover.message.trim()||!UUID_PATTERN.test(handover.mailActor?.originalItemId)||handover.taskId!==null&&!UUID_PATTERN.test(handover.taskId)))throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');
       return {
+        ...(handover?{handoverNotice:{message:handover.message,taskId:handover.taskId,originalItemId:handover.mailActor.originalItemId}}:{}),
         ...(commercialQuote?{commercialQuote}:{}),
         ...(cancellationRows[0]?{cancellation:cancellationRows[0]}:{}),
         id: queue.id,

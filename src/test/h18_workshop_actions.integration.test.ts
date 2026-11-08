@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import {seedSyntheticComplaintPhoto} from '@/test/fixtures/complaintPhoto';
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
@@ -693,6 +694,14 @@ describe("H18 workshop Server Actions against the real replay database", () => {
     `;
     expect(frozenOrder?.ausgabe_frei).toBe(true);
     if (!frozenOrder) throw new Error("H18_REWORK_FROZEN_ORDER_MISSING");
+    // AF-16: the same real invoice action must refuse a free rework order.
+    const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
+    const invoiceKey=randomUUID();
+    expect(await withSession(fixture,()=>issueInvoiceAction({orderId:created.receipt.orderId,expectedVersion:frozenOrder.version,clientEventId:invoiceKey}))).toMatchObject({code:'VALIDATION_ERROR'});
+    expect(await sql`SELECT id FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId}`).toHaveLength(0);
+    expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${invoiceKey}::uuid`).toHaveLength(0);
+    expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId:created.receipt.orderId}))).toMatchObject({code:'OK',data:{card:{id:created.receipt.orderId}}});
+
 
     const goodsOut = await withSession(fixture, () => recordGoodsOutAction({
       orderId: created.receipt.orderId,
@@ -732,7 +741,7 @@ describe("H18 workshop Server Actions against the real replay database", () => {
     expect(duplicate).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Neue Reklamation zum Nacharbeitsauftrag')});
     const [history]=await sql`SELECT count(*)::int AS n,min(id) AS id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND nacharbeit_zu=${complaint.complaintId}`;
     expect(history).toEqual({n:1,id:created.receipt.orderId});
-    const next=await complaintWrite(fixture,{action:'aufnehmen',clientKey:randomUUID(),orderId:created.receipt.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:receivedItem.id,menge:1}],defect:'Blasen',description:'TEST neuer Kreislauf zur Nacharbeit',photoIds:[],goodsReturn:'offen'});
+    const next=await complaintWrite(fixture,{action:'aufnehmen',clientKey:randomUUID(),orderId:created.receipt.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:receivedItem.id,menge:1}],defect:'Blasen',description:'TEST neuer Kreislauf zur Nacharbeit',photoIds:await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,customerId:fixture.customerId,orderId:created.receipt.orderId}),goodsReturn:'offen'});
     const [nextRow]=await sql`SELECT order_id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${next.complaintId}`;
     expect(nextRow).toEqual({order_id:created.receipt.orderId});
   });
@@ -792,7 +801,7 @@ it('4c writes recording, credit, closure, reopening and withdrawal through real 
   const fixture=await createFixture(),order=await deliveredComplaintSource(fixture);
   const {getComplaintOrderChoicesAction}=await import('@/app/actions/complaints.actions');
   expect(await withSession(fixture,()=>getComplaintOrderChoicesAction(fixture.customerId))).toMatchObject({code:'OK',orders:expect.arrayContaining([expect.objectContaining({id:order.orderId})])});
-  const input:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST 4c lokale Replay-DB',photoIds:[],goodsReturn:'offen'};
+  const input:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST 4c lokale Replay-DB',photoIds:await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,customerId:fixture.customerId,orderId:order.orderId}),goodsReturn:'offen'};
   const {reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
   const missingPhotoKey=randomUUID();
   expect(await withSession(fixture,()=>reklamationAusfuehrenAction({...input,clientKey:missingPhotoKey,photoIds:[randomUUID()]}))).toMatchObject({code:'VALIDATION_ERROR'});
@@ -820,7 +829,7 @@ it('4c writes recording, credit, closure, reopening and withdrawal through real 
 
 it('4c accepts still-open return goods for canonical rework and atomically cancels expected rework on withdrawal',async()=>{
   const fixture=await createFixture(),order=await deliveredComplaintSource(fixture);
-  const received=await complaintWrite(fixture,{action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST Nacharbeit noch offen',photoIds:[],goodsReturn:'offen'});
+  const received=await complaintWrite(fixture,{action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST Nacharbeit noch offen',photoIds:await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,customerId:fixture.customerId,orderId:order.orderId}),goodsReturn:'offen'});
   const {nacharbeitAnlegenAction}=await import('@/app/actions/complaints.actions');
   const rework=await withSession(fixture,()=>nacharbeitAnlegenAction({reklamationId:received.complaintId,version:1,bewertung:'berechtigt',massnahme:'nacharbeit',liefertermin:'2027-05-18'}));
   expect(rework.code,rework.code==='OK'?'OK':rework.message).toBe('OK');
@@ -840,7 +849,7 @@ it('4c records the originating intake concern in the same transaction and reject
   const capture=source.capture;
   source=await withSession(fixture,()=>selectIntakeConcernAction({itemId:capture.id,version:capture.version,clientEventId:randomUUID(),concern:'reklamation'}));
   if(source.code!=='OK')throw Error(source.message);
-  const input:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:source.capture.id,intakeVersion:source.capture.version,parts:[{position_id:order.items[0].id,menge:2}],defect:'Blasen',description:'TEST Quellnachricht',photoIds:[],goodsReturn:'offen'};
+  const input:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:source.capture.id,intakeVersion:source.capture.version,parts:[{position_id:order.items[0].id,menge:2}],defect:'Blasen',description:'TEST Quellnachricht',photoIds:await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,customerId:fixture.customerId,orderId:order.orderId}),goodsReturn:'offen'};
   expect(await withSession(fixture,()=>reklamationAusfuehrenAction(input))).toMatchObject({code:'VALIDATION_ERROR'});
   const [count]=await sql`SELECT count(*)::integer AS n FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${input.clientKey}::uuid`;
   expect(count.n).toBe(0);
@@ -854,7 +863,7 @@ it('4c records the originating intake concern in the same transaction and reject
 
 it('4c closes only from the exact persisted result-mail receipt, with Kunden but without general mail access',async()=>{
   const fixture=await createFixture(),order=await deliveredComplaintSource(fixture),customerActor=await createFixture(['kunden']);
-  const received=await complaintWrite(fixture,{action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST Ergebnis-Mail',photoIds:[],goodsReturn:'nein'});
+  const received=await complaintWrite(fixture,{action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST Ergebnis-Mail',photoIds:await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,customerId:fixture.customerId,orderId:order.orderId}),goodsReturn:'nein'});
   await complaintWrite(fixture,{action:'entscheiden',clientKey:randomUUID(),complaintId:received.complaintId,version:1,assessment:'abgelehnt',measure:'ablehnen',reason:'TEST nicht durch Behandlung verursacht',creditCents:null});
   const {sendeReklamationErgebnisAction,getByOrder,getComplaintDialogAction,reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
   const dialog=await withSession(customerActor,()=>getComplaintDialogAction({complaintId:received.complaintId}));
