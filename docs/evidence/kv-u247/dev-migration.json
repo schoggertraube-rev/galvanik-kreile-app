@@ -1,0 +1,12 @@
+{
+  "checkedAt": "2026-11-08T05:03:11.787Z",
+  "project": "syhaigjhsbpjmtnggqka",
+  "file": "20261108060000_kv_date_preserves_edition.sql",
+  "sha256": "50663f4ce511e42d246d158894a6f46c030665fd6b93dbc1793d1043b2f8190d",
+  "rollbackVerified": true,
+  "oldQuoteRowsUnchanged": true,
+  "oldQuoteCount": 2,
+  "repoCount": 94,
+  "devCount": 94,
+  "repoEqualsDev": true
+}
