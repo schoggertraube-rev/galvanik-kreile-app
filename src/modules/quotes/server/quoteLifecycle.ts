@@ -53,7 +53,6 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
       }
       const locked=await tx.execute(sql`SELECT id FROM private.quotes WHERE tenant_id=${auth.tenantId} AND id=${input.quoteId}::uuid FOR UPDATE`);
       if (locked.length!==1) return {code:'NOT_FOUND',message:'KV ist nicht verfügbar.'};
-      await tx.execute(sql`SELECT id FROM private.quotes WHERE tenant_id=${auth.tenantId} AND id=${input.quoteId}::uuid FOR UPDATE`);
       const quote=await readQuote(tx,auth.tenantId,input.quoteId);
       if (!quote?.lifecycle) throw Error('QUOTE_LIFECYCLE_READBACK_INVALID');
       const life=quote.lifecycle;
