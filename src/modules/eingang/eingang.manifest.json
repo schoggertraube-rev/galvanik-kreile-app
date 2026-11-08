@@ -149,7 +149,8 @@
     "@/modules/eingang/server-public#recordIntakeQuoteEffect",
     "@/modules/eingang/server-public#bindQuoteGoodsReceiptToCreatedOrder",
     "@/modules/eingang/server-public#writeQuoteGoodsReceiptInTransaction",
-    "@/modules/eingang/public#parseQuoteGoodsReceiptInput"
+    "@/modules/eingang/public#parseQuoteGoodsReceiptInput",
+    "@/modules/eingang/server-public#readIntakeQuoteReplyReference"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"

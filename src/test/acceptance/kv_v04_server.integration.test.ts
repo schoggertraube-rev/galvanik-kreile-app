@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { randomUUID } from "node:crypto";
+import { createHash,randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
@@ -579,14 +579,16 @@ it('KV-04 sends the real current PDF through the existing mail Action and marks 
  const chosen=await withSession(fixture,()=>selectIntakeConcernAction({itemId,version:original.capture.version,clientEventId:randomUUID(),concern:'kv_anfrage'}));
  if(chosen.code!=='OK')throw Error('TEST_REPLY_CONCERN:'+chosen.code);
  const quote=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST PDF current edition',source:{itemId,version:chosen.capture.version,message:true},positions:[{name:'TEST Halter',quantity:3,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]}));
- if(quote.code!=='OK')throw Error('TEST_MAIL_QUOTE:'+quote.code);
+ if(quote.code!=='OK')throw Error('TEST_MAIL_QUOTE:'+quote.code);const createdQuoteId=quote.quote.quoteId;
  const envNames=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const;
  const previous=new Map(envNames.map(key=>[key,process.env[key]]));
  for(const key of envNames)process.env[key]=key==='MS_GRAPH_MAILBOX'?'test-kv@fixture.invalid':'TEST-kv-provider-only';
- const deliveries:Record<string,unknown>[]=[],endpoints:string[]=[];
+ const deliveries:Record<string,unknown>[]=[],endpoints:string[]=[];let proofReads=0;
  vi.stubGlobal('fetch',vi.fn(async(url:string|URL,init?:RequestInit)=>{
   if(String(url).startsWith('https://login.microsoftonline.com/'))return Response.json({access_token:'TEST-kv-provider-token-'+('x'.repeat(32))});
   if(String(url).startsWith('https://graph.microsoft.com/')&&String(url).endsWith('/reply')){endpoints.push(String(url));deliveries.push(JSON.parse(String(init?.body)));return new Response('',{status:202});}
+  if(String(url).includes('/mailFolders/sentitems/messages?')){proofReads++;const second=new URL(String(url)).searchParams.get('$filter')?.includes('edition2');return Response.json({value:[{id:second?'TEST-sent-2':'TEST-sent-1',internetMessageId:second?'<TEST-KV-edition2@fixture.invalid>':'<TEST-KV-edition1@fixture.invalid>',from:{emailAddress:{address:'test-kv@fixture.invalid'}},toRecipients:[{emailAddress:{address:'kv-'+fixture.customerId+'@local.invalid'}}],isDraft:false,sentDateTime:'2026-11-08T10:00:00Z',hasAttachments:true}]});}
+  if(/\/messages\/TEST-sent-[12]\/attachments$/.test(String(url))){proofReads++;const index=String(url).includes('TEST-sent-2')?1:0;const delivered=deliveries[index] as {message:{attachments:Array<{name:string;contentType:string;contentBytes:string}>}};const file=delivered.message.attachments[0];return Response.json({value:[{...file,id:'TEST-actual-PDF-'+index,size:Buffer.from(file.contentBytes,'base64').length}]});}
   throw Error('TEST_EXTERNAL_NETWORK_DENIED');
  }));
  try{
@@ -608,6 +610,33 @@ it('KV-04 sends the real current PDF through the existing mail Action and marks 
   expect(await withSession(fixture,()=>sendCustomerMailAction({...input,body:'TEST anderer Inhalt bei gleicher Kennung'}))).toMatchObject({code:'CONFLICT'});
   expect(deliveries).toHaveLength(1);
   expect((await sql`SELECT count(*)::int n FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`)[0].n).toBe(1);
+  // AF9: actual dispatch receipts and actual PDF bytes; only the remote provider is synthetic.
+  const {updateQuoteAction,changeQuoteLifecycleAction}=await import('@/app/actions/quotes.actions');
+  expect(await withSession(fixture,()=>updateQuoteAction({quoteId:quote.quote.quoteId,clientEventId:randomUUID(),expectedVersion:2,dueDate:'2027-04-20',note:'TEST PDF edition two',positions:[{name:'TEST Halter',quantity:3,material:null,surfaceRequested:'Verchromen',unitPriceCents:1100}]}))).toMatchObject({code:'OK',quote:{version:3,lifecycle:{edition:2}}});
+  expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID(),subject:'TEST KV Fassung zwei'}))).toMatchObject({code:'OK'});
+  expect(deliveries).toHaveLength(2);
+  async function replySource(edition:number){
+   const id=randomUUID(),mimeId=randomUUID(),ref='<TEST-KV-edition'+edition+'@fixture.invalid>',mime=Buffer.from('From: TEST customer\r\nIn-Reply-To: '+ref+'\r\n\r\nTEST Zusage');const hash=createHash('sha256').update(mime).digest('hex');
+   await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,vorgang_art,vorgang_id,zuordnung,einsatz,text,anliegen,anliegen_offen,absender_adresse,graph_message_id) VALUES(${id}::uuid,${KREILE_TENANT_SLUG},${id},'mail','rein','mailabruf',${fixture.actorId}::uuid,${fixture.customerId},'kv',${createdQuoteId},'hand','offen','TEST Zusage',ARRAY['kv_annahme'],ARRAY['kv_annahme'],${'kv-'+fixture.customerId+'@local.invalid'},${'TEST-incoming-'+id})`;
+   await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${mimeId}::uuid,${KREILE_TENANT_SLUG},${id}::uuid,${mimeId},'mime','TEST-AF9.eml','message/rfc822',${mime.length},${hash},${KREILE_TENANT_SLUG+'/'+hash},now(),${fixture.actorId}::uuid,1,true,false,'fertig')`;
+   for(const [art,payload]of [['angelegt',{kanal:'mail',replyChain:{source:'original_mime',status:'present',originalSha256:hash,inReplyTo:[ref],references:[ref]}}],['original_gespeichert',{fileId:mimeId,sha256:hash,bytes:mime.length}],['einsatz',{action:'mail_import_complete',fileIds:[mimeId],originalCount:0,filteredAttachments:0}]] as const)await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${id}::uuid,${art},${randomUUID()}::uuid,${fixture.actorId},${sql.json(payload)})`;
+   return {id,hash};
+  }
+  const oldReply=await replySource(1),oldKey=randomUUID();
+  const oldAccept={action:'accept' as const,quoteId:quote.quote.quoteId,expectedVersion:4,edition:2,clientEventId:oldKey,evidence:'TEST Kunde sagt per alter Mail zu',source:{itemId:oldReply.id,version:1,message:true}};
+  expect(await withSession(fixture,()=>changeQuoteLifecycleAction(oldAccept))).toMatchObject({code:'VALIDATION_ERROR',message:'Zusage galt Fassung 1 · Fassung 2 bestätigen lassen.'});
+  expect((await sql`SELECT version,zugesagt_fassung FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${createdQuoteId}::uuid`)[0]).toMatchObject({version:4,zugesagt_fassung:null});
+  expect((await sql`SELECT anliegen_offen,einsatz,version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${oldReply.id}::uuid`)[0]).toMatchObject({anliegen_offen:['kv_annahme'],einsatz:'offen',version:1});
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${oldKey}::uuid`).toHaveLength(0);
+  const currentReply=await replySource(2),accept={...oldAccept,clientEventId:randomUUID(),source:{itemId:currentReply.id,version:1,message:true},evidence:'TEST aktuelle Fassung per Mail zugesagt'};
+  expect(await withSession(fixture,()=>changeQuoteLifecycleAction(accept))).toMatchObject({code:'OK',quote:{version:5,lifecycle:{acceptedEdition:2}}});
+  const readCount=proofReads;
+  expect(await withSession(fixture,()=>changeQuoteLifecycleAction(accept))).toMatchObject({code:'OK',replayed:true});expect(proofReads).toBe(readCount);
+  const [accepted]=await sql`SELECT payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${accept.clientEventId}::uuid`;
+  expect(accepted.payload.replyProof).toMatchObject({quoteId:quote.quote.quoteId,edition:2,originalSha256:currentReply.hash,inReplyTo:'<TEST-KV-edition2@fixture.invalid>',sentGraphId:'TEST-sent-2',sha256:expect.stringMatching(/^[0-9a-f]{64}$/)});
+  expect((await sql`SELECT anliegen_offen,einsatz FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${currentReply.id}::uuid`)[0]).toMatchObject({anliegen_offen:[],einsatz:'erledigt'});
+  expect(await withSession(fixture,()=>readQuoteAction({quoteId:quote.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:5,lifecycle:{acceptedEdition:2}}});
+
  }finally{vi.unstubAllGlobals();for(const key of envNames){const value=previous.get(key);if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 });
 

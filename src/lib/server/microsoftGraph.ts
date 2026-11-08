@@ -1,4 +1,5 @@
 import "server-only";
+import {createHash} from "node:crypto";
 
 const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
 const TOKEN_SCOPE = "https://graph.microsoft.com/.default";
@@ -318,4 +319,30 @@ export async function readMicrosoftGraphMime(messageId:string,env:Environment=pr
     if(bytes.byteLength<1||bytes.byteLength>20*1024*1024)throw new Error("GRAPH_MIME_SIZE_INVALID");
     return {code:"OK",data:bytes};
   }catch(error){return unavailable("Das Mail-Original konnte nicht sicher geladen werden.",error);}
+}
+
+/** Resolve a real reply target from Sent Items; no draft/send API or wider mail grant. */
+export async function readMicrosoftGraphSentDocumentEvidence(
+ internetMessageId:string,replySender:string,env:Environment=process.env,fetchPort:FetchPort=fetch,
+):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;sentAt:string;pdfSha256:string[]}>>{
+ const config=readConfig(env);
+ if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
+ if(!/^<[^<>\s]{1,998}>$/.test(internetMessageId)||!/^\S+@\S+\.\S+$/.test(replySender)||replySender.length>320)return {code:'UNAVAILABLE',message:'Die direkte Antwortreferenz ist nicht eindeutig lesbar.'};
+ const boundedFetch:FetchPort=(input,init)=>fetchPort(input,{...init,signal:AbortSignal.timeout(10000)});
+ try{
+  const token=await accessToken(config,boundedFetch),query=new URLSearchParams({'$top':'2','$filter':"internetMessageId eq '"+internetMessageId.replaceAll("'","''")+"'",'$select':'id,internetMessageId,from,toRecipients,isDraft,sentDateTime,hasAttachments'});
+  const response=await graphGetMessage(config,token,'mailFolders/sentitems/messages?'+query,boundedFetch);
+  if(!response.ok)await providerFailure(response,'GRAPH_REPLY_SENT_TARGET');
+  const payload=await response.json() as {value?:unknown;'@odata.nextLink'?:unknown};
+  if(!Array.isArray(payload.value)||payload.value.length!==1||payload['@odata.nextLink'])throw Error('GRAPH_REPLY_TARGET_NOT_UNIQUE');
+  const row=payload.value[0] as Record<string,unknown>;
+  const from=row.from as {emailAddress?:{address?:unknown}}|undefined;
+  const recipients=Array.isArray(row.toRecipients)?row.toRecipients as Array<{emailAddress?:{address?:unknown}}>:[];
+  if(typeof row.id!=='string'||!row.id||row.id.length>1024||row.internetMessageId!==internetMessageId||row.isDraft!==false||typeof row.sentDateTime!=='string'||!Number.isFinite(Date.parse(row.sentDateTime))||typeof from?.emailAddress?.address!=='string'||from.emailAddress.address.trim().toLowerCase()!==config.mailbox.toLowerCase()||!recipients.some(recipient=>typeof recipient.emailAddress?.address==='string'&&recipient.emailAddress.address.trim().toLowerCase()===replySender.toLowerCase()))throw Error('GRAPH_REPLY_TARGET_IDENTITY_INVALID');
+  const attachments=await readMicrosoftGraphAttachments(row.id,env,boundedFetch);
+  if(attachments.code!=='OK')return attachments;
+  const hashes=[...new Set(attachments.data.attachments.filter(file=>file.contentType==='application/pdf').map(file=>createHash('sha256').update(file.bytes).digest('hex')))];
+  if(!hashes.length)throw Error('GRAPH_REPLY_TARGET_PDF_MISSING');
+  return {code:'OK',data:{graphMessageId:row.id,internetMessageId,sentAt:new Date(row.sentDateTime).toISOString(),pdfSha256:hashes}};
+ }catch(error){return unavailable('Die beantwortete KV-Mail ist nicht eindeutig mit einem gesendeten Original-PDF belegt.',error);}
 }

@@ -1,7 +1,8 @@
 "use server";
 
+import {readMicrosoftGraphSentDocumentEvidence} from "@/lib/server/microsoftGraph";
 import {createHash} from "node:crypto";
-import {appendQuoteJournal,readQuoteJournal} from "@/lib/server/quoteJournalPort";
+import {appendQuoteJournal,readQuoteJournal,readQuoteReplyDocuments,type QuoteReplyProof} from "@/lib/server/quoteJournalPort";
 
 import { renderToBuffer } from "@react-pdf/renderer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
@@ -19,7 +20,7 @@ import {findRecognizedCustomers} from '@/modules/eingang/public';
 import {withPrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
-import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect,readIntakeAssignment} from '@/modules/eingang/server-public';
+import {readIntakeQuoteReplyReference,recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect,readIntakeAssignment} from '@/modules/eingang/server-public';
 import {parseQuoteGoodsReceiptInput} from '@/modules/eingang/public';
 import {syncQuoteFollowupTask,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
@@ -90,7 +91,21 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
     const auth=await resolveAuthorization();
     const failure=authorizationFailure(auth);
     if (failure||!auth.ok) return failure!;
-    const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId});
+    let replyProof:QuoteReplyProof|undefined;
+    if(input?.action==='accept'&&input.source?.message&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientEventId)&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.source.itemId)){
+     const context=quoteCommandContext(auth.data);if(!context.capabilities.canUpdateQuote||!context.capabilities.canReadQuote)return {code:'FORBIDDEN' as const,message:'KV-Entscheidung ist nicht freigegeben.'};
+     const prior=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteJournal(tx,auth.data,input.clientEventId));
+     if(!prior.length){
+      const quote=await readQuoteCommand(context,{quoteId:input.quoteId});if(quote.code!=='OK')return quote;
+      const source=await readIntakeQuoteReplyReference(auth.data,{itemId:input.source.itemId,version:input.source.version,quoteId:input.quoteId,customerId:quote.quote.customerId});if(source.code!=='OK')return source;
+      const target=await readMicrosoftGraphSentDocumentEvidence(source.reference.internetMessageId,source.reference.sender);if(target.code!=='OK')return {code:'VALIDATION_ERROR' as const,message:target.message};
+      const documents=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteReplyDocuments(tx,auth.data,input.quoteId,quote.quote.customerId));
+      const matching=documents.filter(row=>Number.isSafeInteger(row.document?.edition)&&target.data.pdfSha256.includes(row.document?.sha256));
+      const editions=[...new Set(matching.map(row=>row.document.edition))];if(documents.length>100||editions.length!==1)return {code:'VALIDATION_ERROR' as const,message:'Das beantwortete PDF ist keiner eindeutigen gesendeten KV-Fassung zugeordnet. Aktuelle Fassung bestätigen lassen.'};
+      const match=matching[0];replyProof={quoteId:input.quoteId,edition:match.document.edition,sha256:match.document.sha256,sourceItemId:input.source.itemId,sourceVersion:input.source.version,originalSha256:source.reference.originalSha256,inReplyTo:target.data.internetMessageId,sentGraphId:target.data.graphMessageId,dispatchEventId:match.eventId};
+     }
+    }
+    const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId,replyProof});
     if (result.code==='OK') {
       revalidatePath('/');
       revalidatePath('/customers');
