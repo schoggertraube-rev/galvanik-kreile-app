@@ -1,7 +1,18 @@
 import {describe,expect,it} from 'vitest';
-import {calculateQuote,nextQuoteEdition,quoteAcceptanceIsCurrent} from '../quoteCalculation';
+import {calculateQuote,scaleQuoteCalculation,nextQuoteEdition,quoteAcceptanceIsCurrent} from '../quoteCalculation';
 
 describe('AP-KV-V04 Server A: configured arithmetic and content edition',()=>{
+ it('keeps setup fixed when quantity changes and scales work/material identically for both entry paths',()=>{
+  const original={hours:'8',hourlyRateCents:7500,setupCents:1200,materialCents:900};
+  expect(scaleQuoteCalculation(original,4,3)).toEqual({code:'OK',totalNetCents:46875,calculation:{hours:'6.0000',hourlyRateCents:7500,setupCents:1200,materialCents:675}});
+  expect(scaleQuoteCalculation(original,4,5)).toMatchObject({code:'OK',totalNetCents:77325,calculation:{hours:'10.0000',setupCents:1200,materialCents:1125}});
+  expect(original).toEqual({hours:'8',hourlyRateCents:7500,setupCents:1200,materialCents:900});
+ });
+ it('rounds decimal hours and material in integers without supplying missing values',()=>{
+  expect(scaleQuoteCalculation({hours:'1',hourlyRateCents:7500,setupCents:1200,materialCents:100},3,1)).toMatchObject({code:'OK',totalNetCents:3733,calculation:{hours:'0.3333',setupCents:1200,materialCents:33}});
+  expect(scaleQuoteCalculation({hours:'1',hourlyRateCents:7500,setupCents:null,materialCents:100},3,1)).toMatchObject({code:'VALIDATION_ERROR',field:'setupCents'});
+  expect(scaleQuoteCalculation({hours:'1',hourlyRateCents:7500,setupCents:1200,materialCents:100},0,1).code).toBe('VALIDATION_ERROR');
+ });
  it('KV-03 uses the supplied settings snapshot exactly and never supplies absent monetary values',()=>{
   expect(calculateQuote({hours:'8',hourlyRateCents:7500,setupCents:1200,materialCents:900})).toEqual({code:'OK',totalNetCents:62100});
   expect(calculateQuote({hours:'1,3333',hourlyRateCents:5000,setupCents:0,materialCents:0})).toEqual({code:'OK',totalNetCents:6667});

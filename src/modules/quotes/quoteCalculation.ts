@@ -17,6 +17,24 @@ export function calculateQuote(input:QuoteCalculation):QuoteCalculationResult {
  return {code:'OK',totalNetCents:Number(total)};
 }
 
+/** U-246/247: setup is fixed; only work and material follow the quantity. */
+export function scaleQuoteCalculation(input:QuoteCalculation,previousQuantity:number,nextQuantity:number):
+ {code:'OK';calculation:QuoteCalculation;totalNetCents:number}|Exclude<QuoteCalculationResult,{code:'OK'}>{
+ const original=calculateQuote(input);
+ if(original.code!=='OK')return original;
+ if(!Number.isSafeInteger(previousQuantity)||previousQuantity<1||!Number.isSafeInteger(nextQuantity)||nextQuantity<1)
+  return {code:'VALIDATION_ERROR',field:'total',message:'Mengenfaktor ist ungueltig.'};
+ const numerator=BigInt(nextQuantity),denominator=BigInt(previousQuantity);
+ const rounded=(value:bigint)=>(value*numerator+denominator/BigInt(2))/denominator;
+ const [whole,fraction='']=input.hours.trim().replace(',','.').split('.');
+ const hours=rounded(BigInt(whole)*BigInt(10000)+BigInt(fraction.padEnd(4,'0')));
+ const material=rounded(BigInt(input.materialCents!));
+ if(material>BigInt(Number.MAX_SAFE_INTEGER))return {code:'VALIDATION_ERROR',field:'materialCents',message:'Materialansatz ist zu gross.'};
+ const calculation={...input,hours:(hours/BigInt(10000)).toString()+'.'+(hours%BigInt(10000)).toString().padStart(4,'0'),materialCents:Number(material)};
+ const result=calculateQuote(calculation);
+ return result.code==='OK'?{...result,calculation}:result;
+}
+
 /** A sent acceptance belongs to its content edition, independently of optimistic locking. */
 export function quoteAcceptanceIsCurrent(facts:{edition:number;acceptedEdition:number|null;acceptedAt:string|null;acceptanceEvidence:string|null}){
  return Number.isSafeInteger(facts.edition)&&facts.edition>0&&facts.acceptedEdition===facts.edition
