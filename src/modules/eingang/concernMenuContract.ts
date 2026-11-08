@@ -7,7 +7,7 @@ export type ConcernOption={concern:IntakeSelectableConcern;id:string;text:string
 /** Labels/targets are the one bound eingang.anliegen vocabulary used by M6 and the conversation. */
 export const CONCERN_OPTIONS:readonly ConcernOption[]=[
  {concern:'reklamation',id:'reklamation_aufnehmen',text:'Reklamation aufnehmen',icon:'alert',target:'reklamation',context:'order'},
- {concern:'kv_annahme',id:'kv_annehmen',text:'KV annehmen → Auftrag',icon:'check',target:'auftrag',context:'quote'},
+ {concern:'kv_annahme',id:'kv_annehmen',text:'Zusage übernehmen · Ware erwartet',icon:'check',target:'auftrag',context:'quote'},
  {concern:'kv_ablehnung',id:'kv_absage',text:'Absage vermerken',icon:'x',target:'kv_absage',context:'quote'},
  {concern:'termin',id:'termin_aendern',text:'Termin ändern',icon:'calendar',target:'termin',context:'openOrder'},
  {concern:'zahlung',id:'zahlung_pruefen',text:'Zahlung zuordnen',icon:'euro',target:'zahlung',context:'order'},

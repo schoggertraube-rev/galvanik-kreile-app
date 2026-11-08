@@ -8,7 +8,7 @@ import type {CustomerStoredProfile} from '@/modules/customers/public';
 import type {CustomerWriter} from '@/lib/server/commands/orderIntakeCommand';
 import type {CustomerCreateCommandResult} from '@/modules/customers/public';
 import type {AssignmentReadResult,AssignmentFailure,AssignmentCustomer,AssignmentInput,AssignmentResult,NoBusinessInput,NoBusinessResult} from '../assignmentContract';
-import {intakeInvoiceReviewRequired} from '../intakeLifecycleContract';
+import {intakeInvoiceReviewRequired,intakeRequiredEffect} from '../intakeLifecycleContract';
 
 type CustomerReader=(tx:PrivilegedTenantTransaction,tenantId:string,id:string)=>Promise<CustomerStoredProfile|null>;
 type Source={id:string;version:number;kanal:string;richtung:string;zuordnung:string;einsatz:string;erstellt_von:string;geaendert_von:string|null;kunde_id:string|null;vorgang_art:string|null;vorgang_id:string|null;gruppe_adresse:string|null;absender_name:string|null;absender_adresse:string|null;betreff:string|null;text:string|null;at:string;anliegen:string[];anliegen_offen:string[]};
@@ -115,6 +115,7 @@ export async function setIntakeNoBusiness(input:unknown):Promise<NoBusinessResul
    if(row.version!==value.version)reject('CONFLICT','Eingang wurde inzwischen geändert.');
    if(row.einsatz!=='offen')reject('CONFLICT','Eingang ist bereits erledigt · zuerst mit Grund wieder öffnen.');
    if(intakeInvoiceReviewRequired(row.anliegen,row.vorgang_art,row.vorgang_id))return {code:'INVOICE_REVIEW_REQUIRED' as const,itemId:row.id,message:'Sieht aus wie eine Rechnung · Eingang bleibt offen. Rechnung prüfen.'};
+   const required=value.reason==='info'?intakeRequiredEffect(row.anliegen_offen):null;if(required)reject('VALIDATION_ERROR',required+' · Eingang bleibt offen.');
    if(value.reason==='doppelt'){
     if(value.originalId===row.id)reject('VALIDATION_ERROR','Ein Eingang kann nicht sein eigenes Original sein.');
     const original=await tx.execute(sql`SELECT id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${value.originalId}::uuid AND erstellt_am>=statement_timestamp()-interval '30 days' AND einsatz_aktion IS DISTINCT FROM 'kein_gv'
