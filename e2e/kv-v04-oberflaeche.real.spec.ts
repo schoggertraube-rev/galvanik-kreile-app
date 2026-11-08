@@ -95,7 +95,18 @@ test('quote goods: actual photos and one atomic telephone conversion with server
  const quoteId=created.quote_id;
  await action(page,'changeQuoteLifecycleAction',{quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,action:'sent',channel:'druck',evidence:'TEST KV tatsaechlich ausgedruckt'});
  await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),quoteId);
- const card=page.getByRole('dialog',{name:/KV-2026-/});await card.getByRole('button',{name:'Paket kommt an',exact:true}).click();
+ const card=page.getByRole('dialog',{name:/KV-2026-/});
+ await card.getByRole('button',{name:'Prueffirma Alpha GmbH',exact:true}).click();
+ await page.evaluate(()=>window.dispatchEvent(new CustomEvent('path1:global-create-open',{detail:'DIRECT_INTAKE'})));
+ const capture=page.getByRole('dialog',{name:'Neuer Eingang',exact:true});await expect(capture).toBeVisible();
+ await expect(capture.locator('[data-spec-id="rein.kontext-entfernen"]')).toBeVisible();
+ await capture.getByRole('textbox',{name:'Notiz',exact:true}).fill('DHL Absender Prueffirma Alpha GmbH · TEST 3 Halter angekommen');
+ await capture.getByRole('button',{name:'Lesen',exact:true}).click();
+ const quoteChoice=capture.getByRole('group',{name:'Passende Vorgänge'});
+ await expect(quoteChoice.getByText('Offener KV dieses Kunden · Zusage fehlt')).toBeVisible({timeout:15000});
+ await quoteChoice.getByRole('button',{name:'Paket kommt an',exact:true}).click();
+ await expect(capture).toHaveCount(0);
+
  const receipt=page.getByRole('dialog',{name:/Ware zu KV-2026-.* prüfen/});await expect(receipt).toBeVisible();
  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
  const original=receipt.locator('input[type="file"]').nth(0),content=receipt.locator('input[type="file"]').nth(1);

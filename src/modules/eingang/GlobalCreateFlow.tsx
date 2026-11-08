@@ -217,7 +217,7 @@ export type GlobalCreatePorts = {
   prepareCaptureFile?: (input: IntakeFileInput) => Promise<IntakeFileGrant>;
   finishCaptureFile?: (id: string) => Promise<IntakeCaptureResult>;
   chooseCaptureKind?: (input: IntakeCaptureKindInput) => Promise<IntakeCaptureResult>;
-  openCaptureObject?: (target: "mailein" | "original" | "ware" | "rechnungein", arg: string) => boolean;
+  openCaptureObject?: (target: "mailein" | "original" | "ware" | "rechnungein" | "kvware", arg: string) => boolean;
   canCreateOrder: boolean;
   canCreateQuote: boolean;
   canManageMoney: boolean;

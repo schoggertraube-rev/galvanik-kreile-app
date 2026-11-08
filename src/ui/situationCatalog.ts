@@ -48,3 +48,6 @@ export function quoteProgressPresentation(f:{accepted:boolean;acceptedAt:string|
  sentence:ready&&o?'Alles bereit – '+o.number+' kann in die Galvanik.':null,
  action:ready&&o?.canStart?o.number+' in die Galvanik nehmen':null};
 }
+
+export type IntakeQuoteCandidate={id:string;number:string;customer:string;accepted:boolean;edition:number;goodsHere:boolean;location:string|null};
+export function quoteCandidatePresentation(q:IntakeQuoteCandidate){return {id:q.id,kind:'quote' as const,label:q.customer+' · '+q.number,reason:q.accepted?'Zusage zur aktuellen Fassung liegt vor':'Offener KV dieses Kunden · Zusage fehlt'};}

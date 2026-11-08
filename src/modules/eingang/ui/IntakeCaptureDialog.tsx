@@ -10,7 +10,7 @@ import { uploadIntakeOriginal } from "../intakeOriginalUpload";
 import QRCode from "qrcode";
 import Image from "next/image";
 import { getIntakeDeviceId, type IntakeDeviceRequest } from "../deviceContract";
-import {intakeStartTitle,SITUATION_COPY} from '@/ui/situationCatalog';
+import {intakeStartTitle,SITUATION_COPY,type IntakeQuoteCandidate} from '@/ui/situationCatalog';
 import {IntakeSituation} from "./IntakeSituation";
 import type { CaptureKind } from "../captureRecognition";
 
@@ -28,6 +28,11 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
   const [text, setText] = useState("");
   const [situationRequested,setSituationRequested]=useState(false);
   const [capture, setCapture] = useState<IntakeCapture | null>(null);
+  const [quoteCandidates,setQuoteCandidates]=useState<IntakeQuoteCandidate[]>([]);
+  const [quotesLoading,setQuotesLoading]=useState(false);
+  const [quoteCustomer,setQuoteCustomer]=useState<string|null>(null);
+  const candidateCustomer=capture?.customerId??null,candidateKind=capture?.recognition?.kind;
+  useEffect(()=>{if(!candidateCustomer||candidateKind!=='ware')return;let active=true;Promise.resolve().then(()=>{if(active){setQuotesLoading(true);setQuoteCandidates([]);}return ports.listOpenQuotes();}).then(result=>{if(!active)return;if(result.code!=='OK'){setError(result.message);return;}setQuoteCustomer(candidateCustomer);setQuoteCandidates(result.quotes.filter(q=>q.customerId===candidateCustomer&&!q.linkedOrderId&&q.lifecycle?.stage!=='abgesagt').map(q=>({id:q.quoteId,number:q.quoteNumber,customer:q.customerDisplayName,accepted:Boolean(q.lifecycle?.acceptedAt&&q.lifecycle.acceptedEdition===q.lifecycle.edition),edition:q.lifecycle?.edition??1,goodsHere:Boolean(q.lifecycle?.goods?.some(row=>!row.orderId)),location:q.lifecycle?.goods?.find(row=>!row.orderId)?.location??null})));}).catch(cause=>{console.error('[INTAKE_QUOTE_CANDIDATES_FAILED]',cause);if(active)setError('Passende KVs konnten nicht sicher gelesen werden.');}).finally(()=>{if(active)setQuotesLoading(false);});return()=>{active=false;};},[ports,candidateCustomer,candidateKind]);
   const concerns = useMemo(() => recognizeNoteConcerns(text), [text]);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
@@ -437,12 +442,12 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
   const showCamera = cameraAvailable && cameraRequested && !cameraError;
   const recognizedKind = capture?.recognition?.kind ?? (capture?.text ? "notiz" : "unklar");
   const kindNames = { ware: "Ware", anfrage: "Anfrage oder Bestellung", rechnung: "Rechnung (Lieferant)", dokument: "Dokument", kontakt: "Kontakt", notiz: "Notiz", unklar: "unklar" };
-  const openObject = (target: "mailein" | "original" | "ware" | "rechnungein", arg: string) => {
+  const openObject = (target: "mailein" | "original" | "ware" | "rechnungein" | "kvware", arg: string) => {
     if (!ports.openCaptureObject) { setError("Diese Ansicht ist in diesem Stand noch nicht verbunden · Code: INTAKE_CAPTURE_TARGET_UNAVAILABLE."); return; }
     if (!ports.openCaptureObject(target, arg)) {
       setError("Die angeforderte Ansicht konnte nicht geöffnet werden · Original und Eingaben bleiben erhalten. Code: INTAKE_CAPTURE_TARGET_UNAVAILABLE.");
       console.error("[INTAKE_CAPTURE_TARGET_UNAVAILABLE]", { target });
-    } else if (target === "ware" || target === "rechnungein") onClose();
+    } else if (target === "ware" || target === "rechnungein" || target === "kvware") onClose();
   };
   const assign = async () => {
     try { const saved = await saveNote(); if (saved) openObject("mailein", saved.id + "#rein"); }
@@ -510,7 +515,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
       if (showCamera && (event.key === " " || event.key === "Enter") && !(event.target as HTMLElement).closest("input,textarea,select,button,a,[contenteditable=true]")) { event.preventDefault(); takePhoto(); }
     }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); chooseFiles(event.dataTransfer.files); }}
       onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); chooseFiles(event.clipboardData.files); } }}>
-      {showSituation&&capture?<IntakeSituation capture={capture} kind={recognizedKind} busy={busy} primary={resultMain} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onKind={kind=>void chooseKind(kind)} onTask={()=>{const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}}));if(!opened){console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");setError("Aufgabe konnte nicht geöffnet werden · Code: INTAKE_TASK_TARGET_UNAVAILABLE.");}}}/>:null}
+      {showSituation&&capture?<IntakeSituation capture={capture} kind={recognizedKind} busy={busy||quotesLoading} quotes={quoteCustomer===candidateCustomer&&candidateCustomer&&candidateKind==="ware"?quoteCandidates:[]} onQuote={id=>openObject("kvware",id+"#"+capture.id)} primary={resultMain} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onKind={kind=>void chooseKind(kind)} onTask={()=>{const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}}));if(!opened){console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");setError("Aufgabe konnte nicht geöffnet werden · Code: INTAKE_TASK_TARGET_UNAVAILABLE.");}}}/>:null}
       <div className="ev-rein-feld" hidden={showSituation} style={showSituation?{display:"none"}:undefined}>
         {!mode&&ports.actorDisplayName?.trim()?<h2>{intakeStartTitle(ports.actorDisplayName)}</h2>:null}
         {contextLoading ? <p role="status">Kontext wird gelesen …</p> : null}
