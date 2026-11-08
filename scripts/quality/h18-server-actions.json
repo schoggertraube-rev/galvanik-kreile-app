@@ -274,6 +274,9 @@
     ],
     "src/app/actions/quotes.actions.ts#recordQuoteDecisionAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#getQuoteOperationContextAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ]
   },
   "writeActionOverrides": {
