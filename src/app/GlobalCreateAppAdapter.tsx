@@ -57,7 +57,7 @@ const PENDING_QUOTE_CONVERSION_KEY = "path1.global-create.pending-quote-conversi
 export function GlobalCreateAppAdapter() {
   const router = useRouter();
   const mailPorts=useMemo<MailSelectionPorts>(()=>({list:getOpenIntakeMailsAction,read:getIntakeCaptureAction}),[]);
-  const objectPorts=useMemo<IntakeObjectPorts>(()=>({goods:{scope:getIntakePendingScopeAction,read:getGoodsReceiptsAction,save:saveGoodsReceiptAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction},original:{open:openIntakeOriginalAction,confirm:confirmIntakeOriginalAction,capture:getIntakeCaptureAction,retry:retryIntakeRecognitionAction}}),[]);
+  const objectPorts=useMemo<IntakeObjectPorts>(()=>({quoteGoods:{read:(id,request)=>readQuoteAction({quoteId:id,...(request?.quantities?{receivedQuantities:request.quantities}:{}),...(request?.goodsReceiptId?{goodsReceiptId:request.goodsReceiptId}:{})}),capture:getIntakeCaptureAction,scope:getIntakePendingScopeAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,original:openIntakeOriginalAction,save:saveGoodsReceiptAction,convert:convertQuoteToOrderAction},goods:{scope:getIntakePendingScopeAction,read:getGoodsReceiptsAction,save:saveGoodsReceiptAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction},original:{open:openIntakeOriginalAction,confirm:confirmIntakeOriginalAction,capture:getIntakeCaptureAction,retry:retryIntakeRecognitionAction}}),[]);
   const openCustomer = useOverlayStore((state) => state.openCustomer);
   const openOrder = useOverlayStore((state) => state.openOrder);
   const openQuote = useOverlayStore((state) => state.openQuote);
@@ -151,7 +151,7 @@ export function GlobalCreateAppAdapter() {
   if (!role || !isAppRole(role)) return null;
 
   return (
-    <><ComplaintDialogs ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs ports={invoicePorts} allowed={hasArea('geld')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs ports={objectPorts} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('geld')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
+    <><ComplaintDialogs ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs ports={invoicePorts} allowed={hasArea('geld')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs ports={objectPorts} onOpenCustomer={openCustomer} onOpenOrder={openOrder} onOpenQuote={openQuote} customerOverlayId={activeCustomerOverlayId} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('geld')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
       ports={{
         readIntakeOrderSource: async (orderId) => {
           const result = await getLiveOrderCardAction({ orderId });

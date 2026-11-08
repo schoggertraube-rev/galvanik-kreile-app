@@ -46,3 +46,9 @@ describe('AP-KV-V04 Server A: configured arithmetic and content edition',()=>{
   expect(quoteAcceptanceIsCurrent({...facts,acceptedAt:null})).toBe(false);
  });
 });
+
+it('legacy lines and calculated lines share the canonical quantity scaler without invented setup',()=>{
+ expect(scaleQuotePositions(null,[{position:1,quantity:4,lineTotalCents:4000}],[{position:1,quantity:3}])).toMatchObject({code:'OK',totalNetCents:3000,calculation:null,positions:[{position:1,quantity:3,lineTotalCents:3000}]});
+ expect(scaleQuotePositions(null,[{position:1,quantity:3,lineTotalCents:1000}],[{position:1,quantity:1}])).toMatchObject({code:'OK',totalNetCents:333});
+ expect(scaleQuotePositions(null,[{position:1,quantity:4,lineTotalCents:4000}],[{position:1,quantity:0}])).toMatchObject({code:'VALIDATION_ERROR'});
+});

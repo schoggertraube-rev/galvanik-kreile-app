@@ -39,3 +39,14 @@ it('shows server errors inside the dialog and retries the same acceptance reques
  expect(vi.mocked(ports.change).mock.calls[1][0]).toEqual(first);
  expect(screen.getByRole('dialog').textContent).toContain('TEST Offline');
 });
+
+it('phone acceptance with stored goods calls the one atomic conversion port and never separate acceptance',async()=>{
+ const stored={...quote,lifecycle:{...quote.lifecycle!,goods:[{id:'TEST-goods',orderId:null,edition:1,location:'TEST Regal',blocked:true,version:1}]}};
+ const change=vi.fn(),convert=vi.fn(async()=>({code:'OK' as const,quote:{...stored,linkedOrderId:'TEST-order'},orderReceipt:{orderId:'TEST-order',orderNumber:'TEST-A-1'}}));
+ const ports:QuoteCardPorts={read:async()=>({code:'OK',quote:stored,canEdit:true,conversion:{handoverMode:'pickup',paymentMode:'abholung'}}),change,convert,prepare:vi.fn(),update:vi.fn()};
+ render(<QuoteCard quoteId={quote.quoteId} ports={ports} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ const phone=await screen.findByRole('button',{name:'TEST Schmidt hat am Telefon zugesagt'});fireEvent.click(phone);fireEvent.click(phone);
+ await screen.findByText('Aus KV-TEST-118 ist Auftrag TEST-A-1 geworden');
+ expect(convert).toHaveBeenCalledOnce();expect(change).not.toHaveBeenCalled();
+ expect(vi.mocked(convert).mock.calls[0]).toEqual([expect.objectContaining({goodsReceiptId:'TEST-goods',expectedVersion:2,confirmedOrderDueDate:quote.dueDate,handoverMode:'pickup',paymentMode:'abholung'}),expect.objectContaining({edition:1,evidence:expect.stringContaining('Telefon')})]);
+});

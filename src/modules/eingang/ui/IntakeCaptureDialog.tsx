@@ -10,6 +10,7 @@ import { uploadIntakeOriginal } from "../intakeOriginalUpload";
 import QRCode from "qrcode";
 import Image from "next/image";
 import { getIntakeDeviceId, type IntakeDeviceRequest } from "../deviceContract";
+import {intakeStartTitle,SITUATION_COPY} from '@/ui/situationCatalog';
 import {IntakeSituation} from "./IntakeSituation";
 import type { CaptureKind } from "../captureRecognition";
 
@@ -491,7 +492,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
   const adopt = () => {
     if (capture && !busy) onAdopt?.(capture, mode === "eingangsfoto" ? "Eingangsfoto übernommen" : failedFile ? "Als Dokument übernommen · ohne Vorschläge" : "Übernommen · erkannt markiert");
   };
-  return <Dialog titel="Neuer Eingang" unterzeile={modeTitle} icon="plus" groesse="breit" schliessenSpecId="rein.schliessen" onSchliessen={() => void close()} vorSchliessen={() => { void close(); return false; }}
+  return <Dialog titel={SITUATION_COPY.header} unterzeile={modeTitle} icon="plus" groesse="breit" schliessenSpecId="rein.schliessen" onSchliessen={() => void close()} vorSchliessen={() => { void close(); return false; }}
     fuss={<>
       <Button text="Schließen" onClick={() => void close()} disabled={busy || deviceWorking} />
       {!showSituation?<>{showCamera ? <Button data-spec-id="rein.ausloesen" icon="camera" art="primaer" text={busy ? "Wird gesichert …" : "Foto"} disabled={busy || blockedReceiver || deviceWorking || !cameraReady} onClick={takePhoto} /> : null}
@@ -511,7 +512,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
       onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); chooseFiles(event.clipboardData.files); } }}>
       {showSituation&&capture?<IntakeSituation capture={capture} kind={recognizedKind} busy={busy} primary={resultMain} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onKind={kind=>void chooseKind(kind)} onTask={()=>{const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}}));if(!opened){console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");setError("Aufgabe konnte nicht geöffnet werden · Code: INTAKE_TASK_TARGET_UNAVAILABLE.");}}}/>:null}
       <div className="ev-rein-feld" hidden={showSituation} style={showSituation?{display:"none"}:undefined}>
-        {!mode&&ports.actorDisplayName?.trim()?<h2>{`Hey ${ports.actorDisplayName.trim().split(/\s+/u)[0]}, was kann ich für dich tun?`}</h2>:null}
+        {!mode&&ports.actorDisplayName?.trim()?<h2>{intakeStartTitle(ports.actorDisplayName)}</h2>:null}
         {contextLoading ? <p role="status">Kontext wird gelesen …</p> : null}
         {createContext ? <div data-spec-id="rein.kontext" className="ev-rein-kontext">
           <strong>für {createContext.label}</strong>

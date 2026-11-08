@@ -19,7 +19,7 @@ async function action(page:Page,name:string,input:unknown,filename='src/app/acti
  expect(candidates).toHaveLength(1);
  const response=await page.evaluate(async({id,input})=>{const response=await fetch('/',{method:'POST',headers:{'Next-Action':id,'Content-Type':'text/plain;charset=UTF-8',Accept:'text/x-component'},body:JSON.stringify([input])});return {status:response.status,text:await response.text()};},{id:candidates[0][0],input});
  expect(response.status).toBe(200);
- for(const line of response.text.split('\n')){try{const value=JSON.parse(line.slice(line.indexOf(':')+1));if(value&&typeof value==='object'&&'code'in value){expect(value.code,JSON.stringify(value)).toBe('OK');return;}}catch(error){if(error instanceof SyntaxError)continue;throw error;}}
+ for(const line of response.text.split('\n')){try{const value=JSON.parse(line.slice(line.indexOf(':')+1));if(value&&typeof value==='object'&&'code'in value){expect(value.code,JSON.stringify(value)).toBe('OK');return value;}}catch(error){if(error instanceof SyntaxError)continue;throw error;}}
  throw Error('QUOTE_UI_ACTION_RESULT_MISSING');
 }
 
@@ -78,4 +78,48 @@ test('fixed quote overlay: real read, one telephone acceptance, DB/event/readbac
  await situation.getByRole('button',{name:'Aufgabe anlegen',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Aufgabe',exact:true})).toBeVisible();
 
+});
+
+test('quote goods: actual photos and one atomic telephone conversion with server quantity price',async({page})=>{
+ await prepareGeneratedSeed({id:'KV-UI-GOODS',gegeben:{login:'login_meister',datenlagen:['kunde_vollstaendig_firma'],aufruf:{seite:'nachrichten',weg:'oeffne'}}} as FlowCase);
+ await page.setViewportSize({width:1220,height:880});await page.goto('/start');
+ const actor=generatedFlowRuntime.logins.login_meister;
+ await page.getByTestId('pin-user-card-'+createPinLoginHandle(actor.id)).click();
+ const keypad=page.locator('[data-spec-id="login.anmelden"]'),navigation=page.waitForURL(url=>url.pathname!=='/start');
+ for(const digit of actor.pin)await keypad.getByRole('button',{name:digit,exact:true}).click();await navigation;await page.goto('/orders');
+ const customer=generatedFlowRuntime.datenlagen.kunde_vollstaendig_firma.id;
+ await action(page,'updateCustomerAction',{customerId:customer,clientEventId:randomUUID(),handoverPreference:'pickup',paymentPreference:'bar'},'src/app/actions/customers.actions.ts');
+ const createId=randomUUID();
+ await action(page,'createQuoteAction',{clientEventId:createId,customerId:customer,dueDate:'2026-12-01',note:'TEST UI atomare Telefonannahme',calculation:{hours:'4',hourlyRateCents:1000,setupCents:1200,materialCents:900},positions:[{name:'TEST UI Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1525}]});
+ const [created]=await sql<{quote_id:string}[]>`SELECT quote_id::text FROM private.quote_create_receipts WHERE tenant_id='galvanik-kreile' AND client_event_id=${createId}::uuid`;
+ const quoteId=created.quote_id;
+ await action(page,'changeQuoteLifecycleAction',{quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,action:'sent',channel:'druck',evidence:'TEST KV tatsaechlich ausgedruckt'});
+ await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),quoteId);
+ const card=page.getByRole('dialog',{name:/KV-2026-/});await card.getByRole('button',{name:'Paket kommt an',exact:true}).click();
+ const receipt=page.getByRole('dialog',{name:/Ware zu KV-2026-.* prüfen/});await expect(receipt).toBeVisible();
+ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
+ const original=receipt.locator('input[type="file"]').nth(0),content=receipt.locator('input[type="file"]').nth(1);
+ await original.setInputFiles({name:'TEST-Etikett.png',mimeType:'image/png',buffer:png});
+ await expect(receipt.getByRole('img',{name:'Paketetikett',exact:true})).toBeVisible({timeout:20000});
+ await content.setInputFiles({name:'TEST-Inhalt.png',mimeType:'image/png',buffer:png});
+ await expect(receipt.getByRole('img',{name:'Inhaltsfoto',exact:true})).toBeVisible({timeout:20000});
+ await receipt.getByLabel('Angekommen · TEST UI Halter (KV: 4)',{exact:true}).fill('3');
+ await receipt.getByLabel('Lager vor Galvanik · Regal / Kiste',{exact:true}).fill('TEST Regal Telefon');
+ await receipt.getByRole('checkbox',{name:/hat am Telefon zugesagt/}).check();
+ await receipt.getByLabel('Wortlaut der Zusage',{exact:true}).fill('TEST Kunde bestaetigt am Telefon die aktuelle Fassung');
+ await expect(receipt.getByText('48,75 € netto',{exact:true})).toBeVisible({timeout:15000});
+ await expect(receipt.getByText('3 × TEST UI Halter · verchromen',{exact:true})).toBeVisible();
+ await receipt.locator('.kr-dialog-inhalt').evaluate(element=>{element.scrollTop=0;});
+ await receipt.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-goods-desktop.png')});
+ await page.setViewportSize({width:390,height:844});await receipt.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-goods-mobile.png')});
+ await receipt.getByRole('button',{name:/Auftrag aus KV-2026-.* anlegen/}).click();
+ await expect(receipt).toHaveCount(0,{timeout:20000});
+ const [stored]=await sql`SELECT q.linked_order_id,q.zugesagt_fassung,r.auftrag_id,r.lagerort,o.ware,o.geprueft,(SELECT sum(quantity)::float8 FROM public.items i WHERE i.tenant_id=o.tenant_id AND i.order_id=o.id) AS quantity,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=r.tenant_id AND f.item_id=r.item_id) AS files FROM private.quotes q JOIN public.goods_receipt r ON r.tenant_id=q.tenant_id AND r.kv_id=q.id JOIN public.orders o ON o.tenant_id=q.tenant_id AND o.id=q.linked_order_id WHERE q.tenant_id='galvanik-kreile' AND q.id=${quoteId}::uuid`;
+ expect(stored).toMatchObject({zugesagt_fassung:1,auftrag_id:stored.linked_order_id,lagerort:'TEST Regal Telefon',ware:'da',geprueft:true,quantity:3,files:2});
+ expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id='galvanik-kreile' AND payload->>'quoteId'=${quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='accept'`)[0].n).toBe(1);
+ await expect(page.getByRole('dialog',{name:/Auftragskarte A-2026-/})).toBeVisible({timeout:10000});
+ const orderRead=await action(page,'getLiveOrderCardAction',{orderId:stored.linked_order_id},'src/app/actions/orders.actions.ts');
+ expect(orderRead?.data.card.commercialQuote).toMatchObject({quoteId,totalNetCents:4875,positions:[{quantity:3,lineTotalCents:4875}]});
+ await expect(page.getByText('TEST-Etikett.png',{exact:true})).toBeVisible();
+ await expect(page.getByText('TEST-Inhalt.png',{exact:true})).toBeVisible();
 });

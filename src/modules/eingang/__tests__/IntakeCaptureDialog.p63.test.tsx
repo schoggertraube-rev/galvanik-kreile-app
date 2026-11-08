@@ -58,7 +58,7 @@ describe("U241: unknown originals always have a concrete next step", () => {
     await screen.findByText("Anders zuordnen");
     fireEvent.click(screen.getByText("Anders zuordnen"));
     await screen.findByRole("button", { name: labels[kind] });
-    for (const name of [...Object.values(labels), "Zuordnung öffnen", "Text ändern"])
+    for (const name of [...Object.values(labels), "Anderen Kunden oder Vorgang wählen", "Text ändern"])
       expect(screen.getByRole("button", { name })).toBeEnabled();
     expect(screen.getByRole("button",{name:"Original ansehen · "+capture.files[0].name})).toBeEnabled();
     expect(screen.queryByRole("textbox",{name:"Notiz"})).toBeNull();

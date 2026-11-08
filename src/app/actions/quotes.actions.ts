@@ -12,6 +12,9 @@ import {
   resolveAuthorization,
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
+import {scaleQuotePositions} from "@/modules/quotes/public";
+import {readQuoteReceivedQuantities} from "@/lib/server/quoteGoodsContextPort";
+import {intakePaymentContract} from "@/lib/server/paymentContract";
 import { readCustomerSummary,readCustomerListSignals } from "@/lib/server/customerSummaryRead";
 import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
 import {recognizeIntakeText} from '@/lib/server/intakeTextRecognition';
@@ -130,7 +133,7 @@ export async function createQuoteAction(input: CreateQuoteInput) {
   return result;
 }
 
-export async function readQuoteAction(input: { quoteId: string }) {
+export async function readQuoteAction(input: { quoteId: string;receivedQuantities?:Array<{position:number;quantity:number}>;goodsReceiptId?:string }) {
   noStore();
   let authorization;
   try {
@@ -141,8 +144,20 @@ export async function readQuoteAction(input: { quoteId: string }) {
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
   const context=quoteCommandContext(authorization.data);
-  const result=await readQuoteCommand(context,input);
-  return result.code==='OK'?{...result,canEdit:context.capabilities.canUpdateQuote}:result;
+  const result=await readQuoteCommand(context,{quoteId:input?.quoteId});
+  if(result.code!=='OK')return result;
+  try{
+    const customer=await withPrivilegedTenantTransaction(authorization.data,tx=>readCustomerProfile(tx,authorization.data.tenantId,result.quote.customerId));
+    const handoverMode=customer?.handoverPreference??null;
+    const payment=customer&&handoverMode?intakePaymentContract({customerMode:'EXISTING',paymentPreference:customer.paymentPreference,handoverMode,invoiceTermsEnabled:customer.invoiceTermsEnabled,invoiceTermDays:customer.invoiceTermDays}):null;
+    const receiptQuantities=input.goodsReceiptId?await withPrivilegedTenantTransaction(authorization.data,tx=>readQuoteReceivedQuantities(tx,authorization.data.tenantId,result.quote.quoteId,input.goodsReceiptId!)):null;
+    if(input.goodsReceiptId&&!receiptQuantities)return {code:'VALIDATION_ERROR' as const,message:'Passender angenommener Warenbeleg fehlt oder ist gesperrt.'};
+    const quantities=receiptQuantities?receiptQuantities.map(row=>({position:row.kv_position,quantity:Number(row.bestaetigt)})):input.receivedQuantities??result.quote.positions.map(row=>({position:row.position,quantity:row.quantity}));
+    if(!Array.isArray(quantities))return {code:'VALIDATION_ERROR' as const,message:'Beauftragungsdaten sind ungültig.'};
+    const preview=scaleQuotePositions(result.quote.lifecycle?.calculation??null,result.quote.positions,quantities);
+    if(preview.code!=='OK')return preview;
+    return {...result,canEdit:context.capabilities.canUpdateQuote,conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:preview.totalNetCents,plannedHours:preview.calculation?.hours??null,positions:preview.positions}};
+  }catch(error){console.error('[QUOTE_CONVERSION_DEFAULTS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV konnte nicht sicher gelesen werden.'};}
 }
 
 export async function listOpenQuotesAction() {
