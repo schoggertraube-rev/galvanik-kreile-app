@@ -1256,6 +1256,12 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
   }
   const locator = step.id ? dataSpec(page, step.id, step.nr) : null;
   const value = resolveValue(step.wert, state);
+  // The real message read finishes asynchronously after opening the route.
+  // Wait for its declared loading state before locating the first action.
+  if(locator&&step.id?.startsWith('nachrichten.')&&step.aktion!=='erwarten'){
+    await expect(page.locator('[data-spec-id="nachrichten"]')).toHaveAttribute('aria-busy','false',{timeout:15_000});
+    await locator.waitFor({state:'attached',timeout:15_000});
+  }
   if(locator&&step.aktion&&["datei","klicken","doppelklicken","tippen","waehlen","verlassen","taste"].includes(step.aktion))await revealForInteraction(locator);
   // Arm only after the actual control has loaded; unrelated RSC/asset reads stay online.
   if(state.restoreOnlineAfterWrite&&["datei","klicken","doppelklicken"].includes(step.aktion??""))await interruptNextServerAction(page,state,step.id);
