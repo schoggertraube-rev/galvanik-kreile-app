@@ -1,4 +1,5 @@
 "use client";
+import {QuotePositionsEditor,type PositionDraft} from "./ui/QuotePositionsEditor";
 import {QUOTE_PREPARATION_COPY,QUOTE_CYCLE_COPY} from "@/ui/situationCatalog";
 
 import {
@@ -7,7 +8,6 @@ import {
   FileText,
   Loader2,
   Plus,
-  Trash2,
   UserPlus,
   X,
 } from "lucide-react";
@@ -200,6 +200,7 @@ export type GlobalCreateDirectIntakeResult =
   | Failure;
 
 export type GlobalCreatePorts = {
+  receiveOnsiteQuote?: (input:import("@/lib/onsiteQuoteContract").OnsiteQuoteInput)=>Promise<{code:string;message?:string;orderReceipt?:{orderId:string;orderNumber:string}}>;
   readIntakeOrderSource?: (orderId: string) => Promise<{ code: "OK"; source: {
     orderNumber: string; customerId: string; customerQuery: string; intakeSource?: DirectIntakeInput["intakeSource"] | null;
     items: Array<Omit<DirectIntakeInput["items"][number], "executionRequested"> & { executionRequested?: IntakeExecution | null }>;
@@ -279,16 +280,7 @@ type OpenQuotesState =
   | { kind: "data"; quotes: QuoteReadback[] }
   | { kind: "denied" | "error" | "unknown"; message: string; requestId?: string };
 type CustomerDraft = CustomerFormValue;
-type PositionDraft = {
-  key: string;
-  catalogServiceId: string;
-  name: string;
-  quantity: string;
-  material: string;
-  surfaceRequested: string;
-  unit: string;
-  unitPriceCents: number | null;
-};
+
 type IntakeExecution = "hochglanz" | "glaenzend" | "matt" | "gelb_passiviert" | "blau_passiviert" | "offen";
 type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; surfaceTouched:boolean; executionRequested:IntakeExecution; unit:string|null; unitPriceCents:number|null; priceText?:string; vatRateBasisPoints:0|700|1900|null; recognitionOrigin?:{source:string;name:string;edited:boolean} };
 type IntakeSuggestionState = { kind: "idle" | "loading" | "error" } | { kind: "data"; data: IntakeSuggestions; loading: boolean };
@@ -492,6 +484,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [statusChecked, setStatusChecked] = useState(false);
   const [retryConfirmed, setRetryConfirmed] = useState(false);
+  const [resumePackageSource,setResumePackageSource]=useState<string|null>(null);
   const [copied, setCopied] = useState(false);
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(EMPTY_CUSTOMER);
   const customerType=customerDraft.customerType;
@@ -1105,6 +1098,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   };
 
   function reset() {
+    setResumePackageSource(null);
     setCustomerSource(null);
     prospectPending.current=null;setLastIntakeAction('book');
     setIntakeChecked(false);setActiveDraft(null);draftOperation.current=null;
@@ -1196,6 +1190,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       const draft=result.drafts.find(value=>value.id===id);
       if(!draft||draft.art!=="eingang")throw Error("INTAKE_DRAFT_NOT_FOUND");
       const raw=draft.payload;
+      if(raw.kind==='package-onsite'&&typeof raw.sourceItemId==='string'){setResumePackageSource(raw.sourceItemId);setOpen(true);setStep('choose');return;}
+
       // P67: version 0 remains editable. Missing business fields stay empty;
       // the stored payload is only changed by an explicit save or valid booking.
       const p:Record<string,unknown>=raw.version===undefined||raw.version===0?{
@@ -2351,7 +2347,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       {ports.showPrimaryTrigger !== false ? <button type="button" className={styles.globalCreateButton} onClick={() => openWithIntent("DIRECT_INTAKE")} aria-label="Neu erfassen" aria-haspopup="dialog" aria-expanded={open}>
         <span className={styles.globalCreatePlus} aria-hidden="true">＋</span><span>Neu erfassen</span>
       </button> : null}
-      {open && step === "choose" ? aboveCards(<IntakeCaptureDialog ports={ports} handoverToken={handoverToken} onClose={(message)=>{closeNow();if(message)setIntakeToast(message);}} onOrder={(customerId,source)=>void loadDirectIntake(customerId, Boolean(customerId)&&!source, undefined, source)} onCustomer={(source)=>{
+      {open && step === "choose" ? aboveCards(<IntakeCaptureDialog resumeSourceId={resumePackageSource} ports={ports} handoverToken={handoverToken} onClose={(message)=>{closeNow();if(message)setIntakeToast(message);}} onOrder={(customerId,source)=>void loadDirectIntake(customerId, Boolean(customerId)&&!source, undefined, source)} onCustomer={(source)=>{
         if(!ports.canCreateCustomer){deny("customer");return;}
         if(source&&!ports.createCustomerFromCapture)return "Kunde und Original können in diesem Stand noch nicht gemeinsam gespeichert werden · Code: CUSTOMER_INTAKE_PORT_MISSING.";
         navigate("customer");setCustomerSource(source?{itemId:source.id,version:source.version}:null);if(source){setIntakeSourceCaptures([source]);setCustomerRecognitionText(captureRecognitionText(source));}
@@ -2729,22 +2725,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <form className={styles.createForm} onSubmit={(event) => void submitQuote(event)}>
                   {quoteComplaint?<p data-spec-id="kv.quelle-reklamation">{QUOTE_CYCLE_COPY.fromComplaint(quoteComplaint.number)}</p>:null}{quotePreparation?<section data-spec-id="kv.vorbereitung-original"><h3>{QUOTE_PREPARATION_COPY.original}</h3><p>{quotePreparation.text}</p>{quotePreparation.specialRequests?<p>{QUOTE_PREPARATION_COPY.wishes+' · '+quotePreparation.specialRequests}</p>:null}{quotePreparation.files.map(file=><button type="button" key={file.id} onClick={()=>{if(!ports.openCaptureObject?.('original',quotePreparation.source.itemId+'#'+file.id))setFeedback({kind:'error',message:QUOTE_PREPARATION_COPY.unavailable});}}>{QUOTE_PREPARATION_COPY.openFile(file.name)}</button>)}</section>:null}
                   <div className={styles.createContext}><span>Kunde</span><strong>{customer.name} · {customer.customerNumber ?? "Kundennummer wird gelesen"}</strong></div>
-                  <div className={styles.createPositions}>
-                    <h3>Positionen</h3>
-                    {positions.map((position, index) => (
-                      <fieldset key={position.key} className={styles.createPosition}>
-                        <legend>Position {index + 1}</legend>
-                        <label className={styles.createFieldWide}>Teil / Leistung<input data-autofocus={index === 0 || undefined} required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={position.name} onChange={(event) => setQuotePositionName(position.key, event.target.value)} /></label>
-                        <label>Menge<input required inputMode="numeric" type="number" min="1" max="1000000" value={position.quantity} onChange={(event) => setPosition(position.key, "quantity", event.target.value)} /></label>
-                        <label>Material<input value={position.material} onChange={(event) => setPosition(position.key, "material", event.target.value)} /></label>
-                        <label>Oberfläche<select required value={position.surfaceRequested} onChange={(event) => setQuotePositionSurface(position.key, event.target.value)}><option value="">Bitte wählen</option>{surfaceOptions.map((surface) => <option key={surface.key} value={surface.key}>{surface.label}</option>)}</select></label>
-                        <label>Einheit<input readOnly value={position.unit} /></label>
-                        <label>Preis netto (€)<input required type="number" min="0" step="0.01" readOnly={position.catalogServiceId !== FREE_TEXT_SERVICE} value={position.unitPriceCents === null ? "" : String(position.unitPriceCents / 100)} onChange={(event) => setQuotePositionPrice(position.key, event.target.value)} /></label>
-                        {positions.length > 1 ? <button type="button" className={styles.createRemove} onClick={() => setPositions((current) => current.filter((entry) => entry.key !== position.key))} aria-label={`Position ${index + 1} entfernen`}><Trash2 /></button> : null}
-                      </fieldset>
-                    ))}
-                    {positions.length < 20 ? <button type="button" className={styles.createAddPosition} onClick={() => setPositions((current) => [...current, newPosition()])}><Plus /> Position hinzufügen</button> : null}
-                  </div>
+                  <QuotePositionsEditor positions={positions} surfaceOptions={surfaceOptions} onName={setQuotePositionName} onSurface={setQuotePositionSurface} onPrice={setQuotePositionPrice} onField={setPosition} onRemove={key=>setPositions(current=>current.filter(row=>row.key!==key))} onAdd={()=>setPositions(current=>[...current,newPosition()])}/>
                   <div className={styles.createFormGrid}>
                     <label>Gewünschter Termin<input required type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
                     <label className={styles.createFieldWide}>Hinweis zum KV<textarea rows={3} value={quoteNote} onChange={(event) => setQuoteNote(event.target.value)} /></label>
