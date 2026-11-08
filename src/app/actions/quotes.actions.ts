@@ -432,3 +432,24 @@ export async function prepareQuoteCopyAction(input: { kind: 'quote' | 'order'; i
     return { code: 'UNAVAILABLE' as const, message: 'Kopiervorlage konnte nicht sicher gelesen werden. Es wurde kein KV angelegt.' };
   }
 }
+
+export async function prepareQuoteTextChangeAction(input:{quoteId:string;text:string}){
+ noStore();
+ if(!input||typeof input.quoteId!=='string'||typeof input.text!=='string'||!input.text.trim()||input.text.length>6000)return {code:'VALIDATION_ERROR' as const,message:'KV und Aenderungstext fehlen oder sind zu lang.'};
+ try{const auth=await resolveAuthorization(),denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
+  if(!quoteCommandContext(auth.data).capabilities.canUpdateQuote)return {code:'FORBIDDEN' as const,message:'KV-Aenderung ist nicht freigegeben.'};
+  const {prepareQuoteTextChangeCommand}=await import('@/modules/quotes/server-public');
+  return prepareQuoteTextChangeCommand(quoteCommandContext(auth.data),input.quoteId,recognizeIntakeText(input.text));
+ }catch(error){console.error('[QUOTE_TEXT_PROPOSAL_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Aenderungsvorschlag konnte nicht sicher gelesen werden. Es wurde nichts geaendert.'};}
+}
+
+/** Single copy command; preparation and persistence remain the existing quote ports. */
+export async function duplicateQuoteAction(input:{kind:'quote'|'order';id:string;customerId:string;expectedSourceVersion:number;clientEventId:string;dueDate:string}){
+ if(!input||!Number.isSafeInteger(input.expectedSourceVersion)||input.expectedSourceVersion<1)return {code:'VALIDATION_ERROR' as const,message:'Version der Kopiervorlage fehlt.'};
+ const source=await prepareQuoteCopyAction({kind:input.kind,id:input.id,customerId:input.customerId});
+ if(source.code!=='OK')return source;
+ if(source.preparation.source.version!==input.expectedSourceVersion)return {code:'CONFLICT' as const,message:'Kopiervorlage wurde geaendert. Aktuellen Stand pruefen.'};
+ if(source.preparation.missing.length)return {code:'VALIDATION_ERROR' as const,message:'Kopiervorlage ist unvollstaendig: '+source.preparation.missing.join(', ')};
+ const positions=source.preparation.positions.map(position=>{if(position.unitPriceCents===null||position.lineTotalCents===null||position.lineTotalCents===undefined)throw Error('QUOTE_COPY_PRICE_MISSING');return {...position,unitPriceCents:position.unitPriceCents,lineTotalCents:position.lineTotalCents};});
+ return createQuoteAction({clientEventId:input.clientEventId,customerId:input.customerId,dueDate:input.dueDate,note:'Kopie von '+source.preparation.source.number+' · Stand '+input.expectedSourceVersion,positions,specialRequests:source.preparation.specialRequests,...(input.kind==='quote'&&source.preparation.previousCalculation?{calculation:source.preparation.previousCalculation}:{})});
+}

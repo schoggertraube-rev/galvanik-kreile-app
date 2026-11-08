@@ -18,6 +18,7 @@ export type IntakeTextRecognitionPosition = {
 };
 
 export type IntakeTextRecognition = {
+  quoteChanges?: {quoteNumber?:{year:string|null;number:number};quantity?:{value:number;name:string;mode:'replace'|'add';previous?:number};hours?:string;targetNetCents?:number};
   fields: IntakeTextRecognitionField[];
   positions: IntakeTextRecognitionPosition[];
   totalPositions?: number;
@@ -82,7 +83,7 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
   const requestText = normalized.split(/\r?\n(?:--\s*|mit freundlichen gr[üu][ßs]en\b)/i, 1)[0]!;
   const corrected = requestText.replace(/\b(?:nicht|kein(?:e|en)?)\s+[^,;\n]{1,80}?,\s*(?:nur|sondern)\s+/gi, "");
   // Ein Mail- oder Signaturdatum ist kein Lieferwunsch; nur ausdrücklich eingeleitete Termine übernehmen.
-  const dateMatch = corrected.match(/\b(?:bis|zum)\s+(\d{1,2})\.(\d{1,2})\.(?:(\d{2,4}))?/i);
+  const dateMatch = corrected.match(/\b(?:bis|zum|(?:liefer)?termin(?:\s+(?:auf|bitte))?)\s+(\d{1,2})\.(\d{1,2})\.(?:(\d{2,4}))?/i);
   if (dateMatch) {
     const value = nextDate(Number(dateMatch[1]), Number(dateMatch[2]), dateMatch[3] ? Number(dateMatch[3]) : null, berlinToday);
     if (value) addField("dueDate", value, "Text");
@@ -130,5 +131,14 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
   const negatedLead=lead&&/\b(?:nicht|keine|ohne)\s*$/i.test(corrected.slice(0,lead.index));
   const deliveryWeeks=lead&&!negatedLead&&weeks!==null&&Number.isSafeInteger(weeks)&&weeks>=1&&weeks<=52?{value:weeks,source:lead[0]}:null;
   const instructions=requestText.split(/[;\n]+|(?<=[.!?])\s+/u).map(text=>text.trim()).filter(text=>text&&/\b(?:nicht|kein(?:e|en)?|nur|erhalten|abdecken|ausschließen|ohne)\b/iu.test(text)).map(text=>({text,source:'Originaltext'}));
-  return { fields, positions: positions.slice(0, 20), ...(positions.length > 20 ? { totalPositions: positions.length, overflowPositions: positions.slice(20) } : {}),...(deliveryWeeks?{deliveryWeeks}:{}),...(instructions.length?{instructions}:{}) };
+  const quoteChanges:NonNullable<IntakeTextRecognition['quoteChanges']>={};
+  const quoteReference=corrected.match(/\bKV(?:[-\s]*(\d{4})-)?[-\s]*(\d{1,9})\b/i);
+  if(quoteReference)quoteChanges.quoteNumber={year:quoteReference[1]??null,number:Number(quoteReference[2])};
+  const quantityChange=corrected.match(/\b(?:(noch)\s+)?(\d+)\s+(?:St[üu]ck\s+)?([\p{L}][\p{L} -]*?)(?:\s+statt\s+(\d+)|\s+(dazu))\b/iu);
+  if(quantityChange&&!/(?:\b(?:nicht|keine?|ohne)|-)\s*$/i.test(corrected.slice(0,quantityChange.index)))quoteChanges.quantity={value:Number(quantityChange[2]),name:quantityChange[3].trim(),mode:quantityChange[5]?'add':'replace',...(quantityChange[4]?{previous:Number(quantityChange[4])}:{})};
+  const hoursChange=corrected.match(/\b(?:Arbeitszeit\s*(?:auf\s*)?)?(\d+(?:[.,]\d{1,4})?)\s*(?:Stunden?|Std\.?|h)\b/iu);
+  if(hoursChange&&!/(?:\b(?:nicht|keine?|ohne)|-)\s*$/i.test(corrected.slice(0,hoursChange.index)))quoteChanges.hours=hoursChange[1].replace(',','.');
+  const priceChange=corrected.match(/\b(?:Preis(?:ziel)?(?:\s+auf)?|auf)\s+(\d{1,9}(?:[.,]\d{1,2})?)\s*(?:Euro|€)/iu);
+  if(priceChange){const [whole,fraction='']=priceChange[1].replace(',','.').split('.');quoteChanges.targetNetCents=Number(BigInt(whole)*BigInt(100)+BigInt(fraction.padEnd(2,'0')));}
+  return { ...(Object.keys(quoteChanges).length?{quoteChanges}:{}),fields, positions: positions.slice(0, 20), ...(positions.length > 20 ? { totalPositions: positions.length, overflowPositions: positions.slice(20) } : {}),...(deliveryWeeks?{deliveryWeeks}:{}),...(instructions.length?{instructions}:{}) };
 }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "fbcf3916ce933666fab0d0f9deb6b85567f18ce78f6c2895f8637e6bc29d082e",
+  "inventorySha256": "f8e6582d46fb675bdaf2e98255deed3ceb778463f0e8bff2bf8677d81682c6f7",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -256,6 +256,12 @@
     ],
     "src/app/actions/complaints.actions.ts#sendeNacharbeitBegleitscheinAction": [
       "src/test/acceptance/complaint_goods_reminder.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#prepareQuoteTextChangeAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#duplicateQuoteAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

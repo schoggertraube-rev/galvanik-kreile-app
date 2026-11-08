@@ -653,7 +653,7 @@ it('KV-12 applies a mail term amendment to the existing quote and concern atomic
 
 it('KV-11 copies exact existing quote contents through the sole create writer and keeps missing actual hours honest',async()=>{
  const fixture=await createFixture();
- const {createQuoteAction,prepareQuoteCopyAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const {createQuoteAction,prepareQuoteCopyAction,readQuoteAction,duplicateQuoteAction}=await import('@/app/actions/quotes.actions');
  const original=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2026-12-01',note:'TEST Kopiervorlage',specialRequests:'TEST alte Halter erhalten',positions:[{name:'TEST Halter',quantity:3,material:null,surfaceRequested:'verchromen',unitPriceCents:333,lineTotalCents:1000}]}));
  if(original.code!=='OK')throw Error('TEST_COPY_QUOTE:'+original.code);
  const prepared=await withSession(fixture,()=>prepareQuoteCopyAction({kind:'quote',id:original.quote.quoteId,customerId:fixture.customerId}));
@@ -661,15 +661,41 @@ it('KV-11 copies exact existing quote contents through the sole create writer an
  if(prepared.code!=='OK')throw Error('TEST_COPY_READ:'+prepared.code);
  expect((await sql`SELECT count(*)::int n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(1);
  expect(await withSession(fixture,()=>prepareQuoteCopyAction({kind:'quote',id:original.quote.quoteId,customerId:'TEST-other-customer'}))).toMatchObject({code:'CONFLICT'});
- const positions=prepared.preparation.positions.map(position=>{if(position.unitPriceCents===null||position.lineTotalCents===null)throw Error('TEST_COPY_PRICE_MISSING');return {...position,unitPriceCents:position.unitPriceCents,lineTotalCents:position.lineTotalCents};});
- const input={clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2026-12-08',note:'TEST Kopie von '+prepared.preparation.source.number,positions,specialRequests:prepared.preparation.specialRequests};
- const created=await withSession(fixture,()=>createQuoteAction(input));
+ const input={kind:'quote' as const,id:original.quote.quoteId,expectedSourceVersion:1,clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2026-12-08'};
+ const created=await withSession(fixture,()=>duplicateQuoteAction(input));
  expect(created).toMatchObject({code:'OK',quote:{totalNetCents:1000,dueDate:'2026-12-08',lifecycle:{edition:1,sentEdition:null,acceptedEdition:null,specialRequests:'TEST alte Halter erhalten'}}});
  if(created.code!=='OK')throw Error('TEST_COPY_CREATE:'+created.code);
  expect(created.quote.quoteId).not.toBe(original.quote.quoteId);
- expect(await withSession(fixture,()=>createQuoteAction(input))).toMatchObject({code:'OK',replayed:true,quote:{quoteId:created.quote.quoteId}});
+ expect(await withSession(fixture,()=>duplicateQuoteAction(input))).toMatchObject({code:'OK',replayed:true,quote:{quoteId:created.quote.quoteId}});
  expect((await sql`SELECT count(*)::int n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(2);
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`)[0].n).toBe(1);
  expect(await withSession(fixture,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toMatchObject({code:'OK',quote:{totalNetCents:1000,positions:[{quantity:3,lineTotalCents:1000}]}});
  expect(await withSession(fixture,()=>readQuoteAction({quoteId:original.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:1,dueDate:'2026-12-01',totalNetCents:1000}});
+});
+
+it('U247 text proposal reuses real recognition and update, shows before/after and preserves acceptance for date only',async()=>{
+ const fixture=await createFixture();
+ const {createQuoteAction,prepareQuoteTextChangeAction,updateQuoteAction,readQuoteAction,changeQuoteLifecycleAction}=await import('@/app/actions/quotes.actions');
+ const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2026-11-20',note:'TEST Text-KV Original',positions:[{name:'TEST Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}],calculation:{hours:'4',hourlyRateCents:1000,setupCents:0,materialCents:0}}));
+ if(created.code!=='OK')throw Error('TEST_TEXT_QUOTE:'+created.code);const quoteId=created.quote.quoteId;
+ const apply=async(text:string)=>{
+  const before=await withSession(fixture,()=>readQuoteAction({quoteId}));if(before.code!=='OK')throw Error('TEST_TEXT_BEFORE');
+  const proposal=await withSession(fixture,()=>prepareQuoteTextChangeAction({quoteId,text}));
+  expect(proposal,JSON.stringify(proposal)).toMatchObject({code:'OK',preparation:{canApply:true,before:{version:before.quote.version}}});
+  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:before.quote.version}});
+  if(proposal.code!=='OK'||!proposal.preparation.candidate)throw Error('TEST_TEXT_PROPOSAL');
+  const result=await withSession(fixture,()=>updateQuoteAction({...proposal.preparation.candidate!,clientEventId:randomUUID()}));expect(result).toMatchObject({code:'OK'});if(result.code!=='OK')throw Error('TEST_TEXT_UPDATE:'+result.code);return result.quote;
+ };
+ expect(await apply('3 Halter statt 4')).toMatchObject({totalNetCents:3000,positions:[{quantity:3}],lifecycle:{calculation:{hours:'3.0000'}}});
+ expect(await apply('noch 2 Halter dazu')).toMatchObject({totalNetCents:5000,positions:[{quantity:5}],lifecycle:{calculation:{hours:'5.0000'}}});
+ expect(await apply('Arbeitszeit 8 Stunden')).toMatchObject({totalNetCents:8000,lifecycle:{calculation:{hours:'8.0000'}}});
+ const priced=await apply('KV Preisziel 700 Euro');expect(priced).toMatchObject({totalNetCents:70000,lifecycle:{calculation:{hours:'70.0000'}}});
+ const edition=priced.lifecycle!.edition;
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'sent',quoteId,clientEventId:randomUUID(),expectedVersion:priced.version,edition,channel:'druck',evidence:'TEST aktuelle Fassung ausgegeben'}))).toMatchObject({code:'OK'});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:priced.version+1,edition,evidence:'TEST aktuelle Fassung zugesagt'}))).toMatchObject({code:'OK'});
+ const dated=await apply('Termin 30.11.2026');expect(dated).toMatchObject({dueDate:'2026-11-30',note:'TEST Text-KV Original',lifecycle:{edition,acceptedEdition:edition,stage:'zugesagt'}});
+ expect(await withSession(fixture,()=>prepareQuoteTextChangeAction({quoteId,text:'KV 999999999 auf 700 Euro'}))).toMatchObject({code:'CONFLICT'});
+ for(const text of ['Arbeitszeit -8 Stunden','3 Halter statt 99','Arbeitszeit 8 Stunden, Preisziel 700 Euro'])expect(await withSession(fixture,()=>prepareQuoteTextChangeAction({quoteId,text}))).toMatchObject({code:'OK',preparation:{canApply:false,candidate:null}});
+ const unknown=await withSession(fixture,()=>prepareQuoteTextChangeAction({quoteId,text:'3 Unbekannte statt 4'}));expect(unknown).toMatchObject({code:'OK',preparation:{canApply:false,candidate:null}});
+ expect((await sql`SELECT version,fassung,zugesagt_fassung,due_date::date::text AS date FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0]).toMatchObject({version:dated.version,fassung:edition,zugesagt_fassung:edition,date:'2026-11-30'});
 });

@@ -40,7 +40,8 @@
     "@/modules/quotes/server-public#QuoteLifecycleInput",
     "@/modules/quotes/server-public#QuoteFollowupBinding",
     "@/modules/quotes/server-public#lockQuoteDeliverySnapshot",
-    "@/modules/quotes/server-public#readQuoteCopyCommand"
+    "@/modules/quotes/server-public#readQuoteCopyCommand",
+    "@/modules/quotes/server-public#prepareQuoteTextChangeCommand"
   ],
   "capabilities": [
     "quotes:create",
