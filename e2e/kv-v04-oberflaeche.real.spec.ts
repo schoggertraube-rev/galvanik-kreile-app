@@ -46,7 +46,8 @@ test('fixed quote overlay: real read, one telephone acceptance, DB/event/readbac
  await action(page,'changeQuoteLifecycleAction',{quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,action:'sent',channel:'druck',evidence:'TEST KV am Telefonlauf ausgegeben'});
  await page.goto('/nachrichten');
  await page.getByRole('tab',{name:'Anliegen',exact:true}).click();
- await page.getByRole('button',{name:'KV öffnen',exact:true}).click();
+ // The prepared request has been fulfilled; open its real KV through the existing overlay receiver.
+ await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),quoteId);
  const dialog=page.getByRole('dialog',{name:/KV-2026-/});await expect(dialog).toBeVisible();
  await expect(dialog.getByText('40,00 € netto')).toBeVisible();await expect(dialog.getByRole('textbox')).toHaveCount(0);
  await dialog.getByRole('button',{name:'KV per E-Mail senden',exact:true}).click();
@@ -96,7 +97,7 @@ test('fixed quote overlay: real read, one telephone acceptance, DB/event/readbac
 
 });
 
-for(const storedGoods of [false,true,'operational'] as const) test('quote goods '+(storedGoods==='operational'?'operational':storedGoods?'stored':'direct')+': actual photos and one atomic telephone conversion with server quantity price',async({page})=>{
+for(const storedGoods of [false,true,'operational','automatic'] as const) test('quote goods '+(storedGoods==='operational'?'operational':storedGoods==='automatic'?'automatic':storedGoods?'stored':'direct')+': actual photos and one atomic telephone conversion with server quantity price',async({page})=>{
  await prepareGeneratedSeed({id:'KV-UI-GOODS',gegeben:{login:'login_meister',datenlagen:['kunde_vollstaendig_firma'],aufruf:{seite:'nachrichten',weg:'oeffne'}}} as FlowCase);
  await page.setViewportSize({width:1220,height:880});await page.goto('/start');
  const actor=generatedFlowRuntime.logins.login_meister;
@@ -172,11 +173,19 @@ for(const storedGoods of [false,true,'operational'] as const) test('quote goods 
    await expect(storedCard.getByRole('button',{name:/Fassung 2 anlegen/})).toHaveCount(0);
    await expect(storedCard.getByRole('button',{name:'KV per E-Mail senden',exact:true})).toHaveCount(0);
   }
-  await storedCard.getByRole('button',{name:/hat am Telefon zugesagt/}).click();
-  await expect(storedCard.getByText(/ist Auftrag A-2026-.* geworden/)).toBeVisible({timeout:20000});
-  await storedCard.getByRole('button',{name:'Auftrag öffnen',exact:true}).click();
+  if(storedGoods==='automatic'){
+   const current=await action(page,'readQuoteAction',{quoteId,purpose:'operations'});
+   await action(page,'changeQuoteLifecycleAction',{quoteId,expectedVersion:current.quote.version,edition:current.quote.lifecycle.edition,clientEventId:randomUUID(),action:'accept',evidence:'TEST ausdrueckliche Zusage zur aktuellen Fassung'});
+   await storedCard.getByRole('button',{name:'Zurück',exact:true}).click();
+   await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kvware',arg:id}})),quoteId);
+  }else{
+   await storedCard.getByRole('button',{name:/hat am Telefon zugesagt/}).click();
+   await expect(storedCard.getByText(/ist Auftrag A-2026-.* geworden/)).toBeVisible({timeout:20000});
+   await storedCard.getByRole('button',{name:'Auftrag öffnen',exact:true}).click();
+  }
  }else{await receipt.getByRole('button',{name:/Auftrag aus KV-2026-.* anlegen/}).click();await expect(receipt).toHaveCount(0,{timeout:20000});}
 
+ await expect(page.getByRole('dialog',{name:/Auftragskarte A-2026-/})).toBeVisible({timeout:20000});
  const [stored]=await sql`SELECT q.quote_number,q.linked_order_id,q.zugesagt_fassung,r.auftrag_id,r.lagerort,o.ware,o.geprueft,(SELECT sum(quantity)::float8 FROM public.items i WHERE i.tenant_id=o.tenant_id AND i.order_id=o.id) AS quantity,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=r.tenant_id AND f.item_id=r.item_id) AS files FROM private.quotes q JOIN public.goods_receipt r ON r.tenant_id=q.tenant_id AND r.kv_id=q.id JOIN public.orders o ON o.tenant_id=q.tenant_id AND o.id=q.linked_order_id WHERE q.tenant_id='galvanik-kreile' AND q.id=${quoteId}::uuid`;
  expect(stored).toMatchObject({zugesagt_fassung:1,auftrag_id:stored.linked_order_id,lagerort:'TEST Regal Telefon',ware:'da',geprueft:true,quantity:3,files:4});
  const [device]=await sql`SELECT d.status,cardinality(d.angenommen_auf) AS devices,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=d.tenant_id AND f.item_id=d.item_id AND f.art='foto') AS photos FROM public.device_request d JOIN public.goods_receipt r ON r.tenant_id=d.tenant_id AND r.item_id=d.item_id WHERE d.tenant_id='galvanik-kreile' AND r.auftrag_id=${stored.linked_order_id}`;
