@@ -39,6 +39,7 @@ export function quoteProgressPresentation(f:{accepted:boolean;acceptedAt:string|
  const ready=Boolean(f.accepted&&o&&o.station==='angenommen'&&o.status==='angenommen'&&(o.ware==='da'||o.ware==='teilweise')&&inspection);
  const started=Boolean(o&&o.station==='galvanik');
  const location=o?.receipts.find(r=>r.location)?.location??f.goodsLocation;
+ if(!o)return {title:'Stand auf einen Blick',ready:false,started:false,rows:[{done:f.accepted,text:f.accepted?'Zugesagt'+(f.acceptedAt?' am '+new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(f.acceptedAt)):''):f.sentChannel?'KV beim Kunden · Zusage fehlt noch':'KV noch nicht zugesagt'},{done:Boolean(location),text:location?'Ware im Haus · '+location:'Ware noch nicht da'},...(f.accepted?[{done:false,text:'Auftrag entsteht, sobald die Ware angenommen ist'}]:[]),{done:false,text:'Fertig bis '+new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(f.due))}],sentence:null,action:null};
  return {title:'Stand auf einen Blick',ready,started,rows:[
  {done:f.accepted,text:f.accepted?'Zugesagt'+(f.acceptedAt?' am '+new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(f.acceptedAt)):''):'Zusage fehlt'},
  {done:Boolean(o&&(o.ware==='da'||o.ware==='teilweise')||f.goodsLocation),text:location?'Ware im Haus · '+location:o?.ware==='da'?'Ware im Haus':o?.ware==='teilweise'?'Ware teilweise im Haus':'Ware fehlt'},
