@@ -144,3 +144,19 @@ it('AF18 requires explicit confirmation before replacing an accepted edition, re
  fireEvent.click(screen.getByText('Verlauf und Anfrage'));
  expect(await screen.findByText(/Zusage zu Fassung 1 ist ungültig.*TEST alte verbindliche Zusage/)).toBeVisible();
 });
+
+it('AF5 shows physical discrepancy, retains a failed reason and retries the same existing writer',async()=>{
+ let cleared=false;
+ const goods={id:'TEST-goods',orderId:null,edition:1,location:'TEST Fach 3',blocked:true,version:1,packagesReceived:2,packagesTotal:3,condition:'teillieferung',deviations:['TEST Schaden']};
+ const current={...quote,lifecycle:{...quote.lifecycle!,goods:[goods]}};
+ const clarify=vi.fn<NonNullable<QuoteCardPorts['clarify']>>().mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST Klärung unbestätigt'}).mockImplementationOnce(async()=>{cleared=true;return {code:'OK'};});
+ const read:QuoteCardPorts['read']=async()=>({code:'OK',quote:cleared?{...current,lifecycle:{...current.lifecycle,goods:[{...goods,version:2,clearance:{reason:'TEST Kunde bestätigt',actorId:'TEST-actor',at:'2026-11-08T10:00:00Z'}}]}}:current,canEdit:false,canOperate:true});
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read,clarify,change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ expect(await screen.findByText('TEST Fach 3 · 2 von 3 Packstücke · TEST Schaden')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Abweichung geklärt'}));fireEvent.change(screen.getByRole('textbox',{name:'Grund der Klärung'}),{target:{value:'TEST Kunde bestätigt'}});
+ fireEvent.click(screen.getAllByRole('button',{name:'Abweichung geklärt'}).at(-1)!);await screen.findByText('TEST Klärung unbestätigt');
+ expect(screen.getByRole('textbox',{name:'Grund der Klärung'})).toHaveValue('TEST Kunde bestätigt');
+ fireEvent.click(screen.getAllByRole('button',{name:'Abweichung geklärt'}).at(-1)!);await screen.findByText('Abweichung geklärt · die ursprünglichen Prüfdaten bleiben im Verlauf.');
+ expect(clarify).toHaveBeenCalledTimes(2);expect(clarify.mock.calls[1][0]).toEqual(clarify.mock.calls[0][0]);expect(clarify.mock.calls[0][0]).toEqual({command:'clarify',quoteId:quote.quoteId,receiptId:'TEST-goods',expectedVersion:1,expectedQuoteVersion:2,clientEventId:expect.any(String),reason:'TEST Kunde bestätigt'});
+ expect(screen.getByText('TEST Fach 3 · 2 von 3 Packstücke · TEST Schaden')).toBeVisible();
+});

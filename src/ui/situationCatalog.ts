@@ -90,4 +90,6 @@ export const QUOTE_CYCLE_COPY={
  editionConfirm:'Neue Fassung speichern · Zusage aufheben',
  acceptanceInvalid:(edition:number)=>`Zusage zu Fassung ${edition} ist ungültig · aktuelle Fassung bestätigen lassen`,
  goodsLocation:(location:string)=>'Ware liegt in '+location,
+ clarify:'Abweichung geklärt',clarificationReason:'Grund der Klärung',clarificationMissing:'Nenne den Grund der Klärung.',clarificationSaved:'Abweichung geklärt · die ursprünglichen Prüfdaten bleiben im Verlauf.',
+ discrepancy:(location:string,received:number|null|undefined,total:number|null|undefined,deviations:string[])=>location+' · '+(received??'—')+' von '+(total??'—')+' Packstücke'+(deviations.length?' · '+deviations.join(', '):''),
 };
