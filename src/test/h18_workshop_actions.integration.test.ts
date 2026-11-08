@@ -693,6 +693,14 @@ describe("H18 workshop Server Actions against the real replay database", () => {
     `;
     expect(frozenOrder?.ausgabe_frei).toBe(true);
     if (!frozenOrder) throw new Error("H18_REWORK_FROZEN_ORDER_MISSING");
+    // AF-16: the same real invoice action must refuse a free rework order.
+    const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
+    const invoiceKey=randomUUID();
+    expect(await withSession(fixture,()=>issueInvoiceAction({orderId:created.receipt.orderId,expectedVersion:frozenOrder.version,clientEventId:invoiceKey}))).toMatchObject({code:'VALIDATION_ERROR'});
+    expect(await sql`SELECT id FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId}`).toHaveLength(0);
+    expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${invoiceKey}::uuid`).toHaveLength(0);
+    expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId:created.receipt.orderId}))).toMatchObject({code:'OK',data:{card:{id:created.receipt.orderId}}});
+
 
     const goodsOut = await withSession(fixture, () => recordGoodsOutAction({
       orderId: created.receipt.orderId,

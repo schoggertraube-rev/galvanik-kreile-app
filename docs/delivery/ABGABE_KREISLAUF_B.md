@@ -36,3 +36,7 @@ Migration 20261108170039_quote_complaint_source.sql lokal nach Abbruchprobe ange
 ## CI-Fixtures zur AF-7-Sperre
 
 Alte Unit-/H18-Erfolgsfixtures sendeten einen anderen Termin als der gespeicherte KV. Nur diese synthetischen Eingaben angeglichen: Unit 20.10. auf input.dueDate (15.10.), H18 24.04.2027 auf gespeicherten 17.04.2027. Alle Erfolg-/Konflikt-/Hash-/DB-Assertions erhalten, echter negativer KV-07-Fall fuer fremden Termin ebenfalls erhalten. Sechs Unit-Faelle PASS; echter H18-Aktionslauf PASS 5,95 s. Fuer dessen strenge lokale Migrationsliste wurden die bereits angewandten zwei Vorgaengermigrationen bytegleich nur temporaer aus Git bereitgestellt und anschliessend entfernt; keine Migration erneut ausgefuehrt. Fresh-Storage-502 separat Infrastruktur, kein Produkt-PASS.
+
+## AF-16: Nacharbeit bleibt ohne Rechnung, Ausgabe schliesst Reklamation
+
+Vorhandene Writer erfuellen bereits den Vertrag: Rechnungsanlage lehnt payment_mode=keiner ab; der reale Warenausgang schliesst die zugehoerige Reklamation mit nacharbeit_raus. Kein zweiter Writer oder Produktumbau notwendig. Der bestehende echte Workshop-Replayfall wurde um den tatsaechlichen issueInvoiceAction-Aufruf nach Fertigung/Freeze erweitert: VALIDATION_ERROR, keine Rechnungszeile, kein Erfolgsereignis zu diesem Schluessel, Auftragskarte erneut gelesen. Danach unveraenderte positive Ausgabe-/Beschwerdeabschluss-Assertions. PASS 6,49 s, Typen/Lint/Diff sauber. Synthetische isolierte Fixtures, keine Echtdaten und keine gefaelschten Stationswechsel.
