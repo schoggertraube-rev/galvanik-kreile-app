@@ -88,6 +88,7 @@ export const QUOTE_UNDO_COPY={open:"Rückgängig",reason:"Grund der Rücknahme",
 export const QUOTE_RECOVERY_COPY={extend:'Gültig bis verlängern',until:'Neues Gültigkeitsdatum',reason:'Grund / Wortlaut',missing:'Datum und konkreten Grund ergänzen.',extended:'Gültigkeit verlängert · Fassung und vorhandene Zusage bleiben erhalten.',return:(customer:string,location:string)=>'Ware an '+customer+' zurückgeben · '+location,returnConfirm:'Rückgabe mit Beleg bestätigen',returned:'Ware zurückgegeben · der Beleg bleibt im Verlauf.',receipt:'Rückgabebeleg',receiptLine:(quantity:number,location:string,actor:string,at:string)=>quantity+' Stück · '+location+' · '+actor+' · '+at};
 
 export const ACTOR_COPY={
+ missingCase:'Für diesen Vorgang fehlt ein belegtes Anlageereignis.',
  received:(name:string,at:string)=>'Eingang erfasst von '+name+' · '+at,
  created:(name:string,at:string)=>'Angelegt von '+name+' · '+at,
  last:(name:string,action:string)=>'Zuletzt: '+name+' · '+action,

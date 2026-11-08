@@ -103,16 +103,3 @@ export async function readQuoteReplyDocuments(tx:PrivilegedTenantTransaction,act
 }
 
 export function quoteReplyEditionMessage(replyEdition:number,currentEdition:number){return "Zusage galt Fassung "+replyEdition+" · Fassung "+currentEdition+" bestätigen lassen.";}
-
-/** Existing assignment receipt overrides the first real order actor; no persisted second ownership. */
-export async function readOrderResponsibilityForToday(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]){
- const unique=[...new Set(ids)];if(unique.length>1000||unique.some(id=>!id||id.length>128))throw Error('TODAY_RESPONSIBILITY_IDS_INVALID');
- if(!unique.length)return new Map<string,string|null>();
- const rows=await tx.execute<{id:string;userId:string|null;assignmentOk:boolean|null}>(sql`SELECT orders.id,
- CASE WHEN assignment.active THEN assignment.assigned_to::text ELSE first.user_id::text END AS "userId",assignment.integrity_ok AS "assignmentOk"
- FROM public.orders orders LEFT JOIN private.v_order_task_assignment_v1 assignment ON assignment.tenant_id=orders.tenant_id AND assignment.order_id=orders.id AND assignment.active=true
- LEFT JOIN LATERAL(SELECT event.user_id FROM public.events event WHERE event.tenant_id=orders.tenant_id AND event.order_id=orders.id AND event.status='success' AND event.event_type NOT LIKE 'COMPLAINT_%' AND (event.aggregate_version IS NULL OR event.aggregate_version<=orders.version) ORDER BY event.aggregate_version ASC NULLS LAST,(event.event_type='ORDER_INTAKE_CREATED_V1') DESC,event.created_at,event.id LIMIT 1) first ON true
- WHERE orders.tenant_id=${auth.tenantId} AND orders.id IN (${sql.join(unique.map(id=>sql`${id}`),sql`, `)})`);
- if(rows.some(row=>row.assignmentOk===false))throw Error('TODAY_RESPONSIBILITY_RECEIPT_INVALID');
- return new Map(rows.map(row=>[row.id,row.userId]));
-}

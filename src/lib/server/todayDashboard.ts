@@ -1,5 +1,5 @@
 import "server-only";
-import {readOrderResponsibilityForToday} from "@/lib/server/quoteJournalPort";
+import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentRead";
 
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";

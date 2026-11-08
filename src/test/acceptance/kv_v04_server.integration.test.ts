@@ -1189,7 +1189,7 @@ it('AK order: two actual logins retain creator and last actor, take through exis
  expect(await withSession(first,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{actors:{createdBy:{userId:first.actorId},lastActor:{userId:second.actorId,action:'ORDER_TASK_ASSIGNED_V1'},responsible:{userId:second.actorId,source:'assignment'}}}}});
  const {readActorStatistics}=await import('@/lib/server/quoteJournalPort');const {readIntakeActorStatistics}=await import('@/modules/eingang/server-public');const {resolveAuthorization}=await import('@/lib/server/authorization');
  const getActorStatistics=async(input:unknown)=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK statistics session');return readActorStatistics(auth.data,input,readIntakeActorStatistics);};
- const {readOrderResponsibilityForToday}=await import('@/lib/server/quoteJournalPort');
+ const {readOrderResponsibilityForToday}=await import('@/lib/server/orderTaskAssignmentRead');
  const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
  const responsibility=await withSession(second,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK responsibility auth');return withPrivilegedTenantTransaction(auth.data,tx=>readOrderResponsibilityForToday(tx,auth.data,[orderId]));});
  expect(responsibility.get(orderId)).toBe(second.actorId);
