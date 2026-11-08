@@ -245,3 +245,13 @@ it('AF-2: shipped goods remain claimable through the actual goods-out and compla
  expect(await withSession(fixture,()=>reklamationAusfuehrenAction(input))).toMatchObject({code:'OK',replayed:true,receipt:{complaintId:result.complaintId}});
  expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${input.clientKey}::uuid`).toHaveLength(1);
 });
+
+it('RM-04 no photo original produces the actionable error and no complaint or success event',async()=>{
+ const fixture=await createFixture(),order=await deliveredComplaintSource(fixture);
+ const {reklamationAusfuehrenAction,getByOrder}=await import('@/app/actions/complaints.actions');
+ const clientKey=randomUUID();const input={action:'aufnehmen' as const,clientKey,orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST RM04 fehlendes Foto',photoIds:[],goodsReturn:'offen' as const};
+ expect(await withSession(fixture,()=>reklamationAusfuehrenAction(input))).toMatchObject({code:'VALIDATION_ERROR',message:'Fotos fehlen · Fotos anfordern'});
+ expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${clientKey}::uuid`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientKey}::uuid AND event_type='COMPLAINT_CHANGED_V1'`).toHaveLength(0);
+ expect(await withSession(fixture,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[]});
+});

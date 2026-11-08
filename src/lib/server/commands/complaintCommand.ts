@@ -56,6 +56,7 @@ function mayWrite(auth:AuthorizationSnapshot,input:ComplaintCommand) {
 
 /** One tenant transaction contains the complaint row, source effect and before/after receipt. */
 export async function executeComplaint(input:unknown,sourceEffect:ComplaintSourceEffect):Promise<ComplaintWriteResult> {
+  if(input&&typeof input==='object'&&!Array.isArray(input)&&'action'in input&&input.action==='aufnehmen'&&(!('photoIds'in input)||Array.isArray(input.photoIds)&&input.photoIds.length===0))return {code:'VALIDATION_ERROR',message:'Fotos fehlen · Fotos anfordern'};
   if(!validComplaintCommand(input))return {code:'VALIDATION_ERROR',message:'Reklamation ist unvollständig oder enthält ungültige Angaben.'};
   try {
     const authorization=await resolveAuthorization();
