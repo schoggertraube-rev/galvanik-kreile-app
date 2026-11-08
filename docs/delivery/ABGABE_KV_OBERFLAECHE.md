@@ -12,6 +12,12 @@ Echter Browser mit isolierter Replay-DB: KV über reale Action angelegt und als 
 
 ## Noch im selben Paket offen
 
-Nachrichten-Reiter mit KV-Anliegen aus derselben Quelle; KV-Versand und Originalfassung; Warenannahme/Situation nach U-250 mit bestehenden Original-/Warenports und einem Transaktionswriter; Werkstatt-Kachel/Filter; KV-06/07/07b/12 über echte Browseraktionen; abschließender Bildvergleich 1220/390. Nachgelagerte Kreislaufregeln nur soweit für die genannten laufenden Knöpfe ausdrücklich gebunden. Kein Beleg-Autobau oder Reklamations-Mails in diesem Paket.
+KV-Versand und Originalfassung; Warenannahme/Situation nach U-250 mit bestehenden Original-/Warenports und einem Transaktionswriter; Werkstatt-Kachel/Filter; KV-06/07/07b/12 über echte Browseraktionen; abschließender Bildvergleich 1220/390. Nachgelagerte Kreislaufregeln nur soweit für die genannten laufenden Knöpfe ausdrücklich gebunden. Kein Beleg-Autobau oder Reklamations-Mails in diesem Paket.
 
 CI/READY und PL-Abnahme werden erst am vollständigen Kandidaten gebunden. Kein Merge durch Codex.
+
+## Schritt 2: Anliegen und Mailansicht
+
+Beide Reiter lesen dieselbe Intake-Liste. Kategorien und Zähler stammen aus realen Datensätzen, KV-Verknüpfungen öffnen die gespeicherte KV-Karte. Andere Anliegen öffnen die bestehende Originalnachricht. Ein noch nicht verknüpfter KV nutzt vorerst die bestehende Erfassung; der vollständige Vorbereitungsweg ist noch offen.
+
+Echter Browser: Nachricht über Server-Action erfasst, Anliegen KV gewählt, KV mit Quellenbindung angelegt, über Anliegen geöffnet und telefonisch zugesagt; DB/Event/Ansicht geprüft: PASS 18,7 s. Zwei gezielte Panel-Tests PASS; Typprüfung und Lint PASS. Keine Änderungen an Assertions bestehender Tests.

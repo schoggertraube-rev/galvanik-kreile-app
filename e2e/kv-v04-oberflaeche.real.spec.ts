@@ -12,10 +12,10 @@ if(new URL(database).hostname!=='127.0.0.1'||process.env.KREILE_GENERATED_REPLAY
 const sql=postgres(database,{max:1});
 test.afterAll(async()=>sql.end());
 
-async function action(page:Page,name:string,input:unknown){
+async function action(page:Page,name:string,input:unknown,filename='src/app/actions/quotes.actions.ts'){
  const production=path.resolve('.next/server/server-reference-manifest.json');
  const manifest=JSON.parse(readFileSync(existsSync(production)?production:path.resolve('.next/dev/server/server-reference-manifest.json'),'utf8')) as {node:Record<string,{workers:Record<string,{exportedName?:string;filename?:string}>}>};
- const candidates=Object.entries(manifest.node).filter(([,entry])=>Object.values(entry.workers).some(worker=>worker.filename==='src/app/actions/quotes.actions.ts'&&worker.exportedName===name));
+ const candidates=Object.entries(manifest.node).filter(([,entry])=>Object.values(entry.workers).some(worker=>worker.filename===filename&&worker.exportedName===name));
  expect(candidates).toHaveLength(1);
  const response=await page.evaluate(async({id,input})=>{const response=await fetch('/',{method:'POST',headers:{'Next-Action':id,'Content-Type':'text/plain;charset=UTF-8',Accept:'text/x-component'},body:JSON.stringify([input])});return {status:response.status,text:await response.text()};},{id:candidates[0][0],input});
  expect(response.status).toBe(200);
@@ -34,12 +34,19 @@ test('fixed quote overlay: real read, one telephone acceptance, DB/event/readbac
  for(const digit of actor.pin)await keypad.getByRole('button',{name:digit,exact:true}).click();
  await navigation;await page.goto('/orders');
  const customer=generatedFlowRuntime.datenlagen.kunde_vollstaendig_firma.id;
+ const itemId=randomUUID();
+ await action(page,'saveIntakeNoteAction',{itemId,textstand:randomUUID(),text:'TEST Schmidt, 4 Halter verchromen, KV in zwei Wochen. Originalteile bitte erhalten.',context:{customerId:customer},concerns:['aufgabe']},'src/app/actions/eingang.actions.ts');
+ const [captured]=await sql<{version:number}[]>`SELECT version FROM public.intake_item WHERE tenant_id='galvanik-kreile' AND id=${itemId}::uuid`;
+ await action(page,'selectIntakeConcernAction',{itemId,version:captured.version,clientEventId:randomUUID(),concern:'kv_anfrage'},'src/app/actions/eingang.actions.ts');
+ const [chosen]=await sql<{version:number}[]>`SELECT version FROM public.intake_item WHERE tenant_id='galvanik-kreile' AND id=${itemId}::uuid`;
  const key=randomUUID();
- await action(page,'createQuoteAction',{clientEventId:key,customerId:customer,dueDate:'2026-12-01',note:'TEST UI Originalteile erhalten',calculation:{hours:'4',hourlyRateCents:1000,setupCents:0,materialCents:0},positions:[{name:'TEST UI Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]});
+ await action(page,'createQuoteAction',{clientEventId:key,customerId:customer,source:{itemId,version:chosen.version,message:false},dueDate:'2026-12-01',note:'TEST UI Originalteile erhalten',calculation:{hours:'4',hourlyRateCents:1000,setupCents:0,materialCents:0},positions:[{name:'TEST UI Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]});
  const [created]=await sql<{quote_id:string}[]>`SELECT quote_id::text FROM private.quote_create_receipts WHERE tenant_id='galvanik-kreile' AND client_event_id=${key}::uuid`;
  expect(created).toBeDefined();const quoteId=created.quote_id;
  await action(page,'changeQuoteLifecycleAction',{quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,action:'sent',channel:'druck',evidence:'TEST KV am Telefonlauf ausgegeben'});
- await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),quoteId);
+ await page.goto('/nachrichten');
+ await page.getByRole('tab',{name:'Anliegen',exact:true}).click();
+ await page.getByRole('button',{name:'KV öffnen',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:/KV-2026-/});await expect(dialog).toBeVisible();
  await expect(dialog.getByText('40,00 € netto')).toBeVisible();await expect(dialog.getByRole('textbox')).toHaveCount(0);
  await dialog.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-ui-real-desktop.png')});
