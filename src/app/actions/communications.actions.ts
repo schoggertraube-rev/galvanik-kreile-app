@@ -1,4 +1,5 @@
 "use server";
+import {readComplaintRejectionSource,prepareComplaintRejection,complaintRejectionReplay,completeIntakeComplaintRejection} from "@/modules/eingang/server-public";
 
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {createHash} from "node:crypto";
@@ -71,11 +72,12 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Comm
 }
 
 export async function sendCustomerMailAction(input: TargetInput & {
- clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE';documentId:string};complaintPhotoRequest?:{itemId:string;version:number};
+ clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE';documentId:string};complaintRejection?:{itemId:string;version:number;reason:string};complaintPhotoRequest?:{itemId:string;version:number};
 }){
  const authorizationResult=await authorization();
  if(!authorizationResult.ok)return {code:'UNAUTHENTICATED' as const,message:authorizationResult.message};
  const auth=authorizationResult.data;
+ if(input.complaintRejection)return sendComplaintRejection(auth,input);
  if(input.complaintPhotoRequest)return sendComplaintPhotoRequest(auth,input);
  let attachment,document:CommunicationDocument|undefined;
  if(input.attachment){
@@ -144,4 +146,19 @@ async function sendComplaintPhotoRequest(auth:import('@/lib/server/authorization
    complete:async(tx,threadId)=>completeComplaintPhotoMail(tx,auth,{...request,clientRequestId:input.clientRequestId,intent,threadId,customerId:context.source.customerId!,originalSha256:context.source.originalSha256}),
    replay:async(tx,threadId)=>complaintPhotoMailReplay(tx,auth,{itemId:request.itemId,clientRequestId:input.clientRequestId,intent,threadId})}});
  }catch(error){console.error('[COMPLAINT_PHOTO_REQUEST_FAILED]',{code:error instanceof Error?error.message:'UNKNOWN'});return {code:'VALIDATION_ERROR' as const,message:error instanceof Error&&error.message==='COMPLAINT_PHOTO_MAIL_TEMPLATE_MISSING'?'Mailvorlage fehlt · in Einstellungen ergänzen.':error instanceof Error&&error.message==='COMPLAINT_PHOTO_MAIL_ALREADY_REQUESTED'?'Fotoanfrage läuft bereits · Versandbeleg prüfen.':error instanceof Error&&error.message==='COMPLAINT_PHOTO_MAIL_PHOTOS_ALREADY_PRESENT'?'Fotos sind schon da · Reklamation anlegen.':'Original-Mail, Kundenzuordnung oder Stand konnte nicht sicher geprüft werden. Es wurde nichts erneut gesendet.'};}
+}
+
+async function sendComplaintRejection(auth:import('@/lib/server/authorization').AuthorizationSnapshot,input:TargetInput&{clientRequestId:string;subject:string;body:string;attachment?:unknown;complaintPhotoRequest?:unknown;complaintRejection?:{itemId:string;version:number;reason:string}}){
+ if(!['eingang','mails','kunden'].every(area=>hasAuthorizationArea(auth,area as 'eingang'|'mails'|'kunden')))return {code:'FORBIDDEN' as const,message:'Antwort benötigt Eingang, Mails und Kunden.'};
+ const request=input.complaintRejection,uuid=/^[0-9a-f-]{36}$/i;
+ if(!request||!uuid.test(request.itemId)||!uuid.test(input.clientRequestId)||!Number.isSafeInteger(request.version)||request.version<1||typeof request.reason!=='string'||request.reason.trim().length<3||request.reason.length>500||typeof input.subject!=='string'||!input.subject.trim()||input.subject.length>500||typeof input.body!=='string'||!input.body.trim()||input.body.length>20000||input.attachment||input.complaintPhotoRequest)return {code:'VALIDATION_ERROR' as const,message:'Original, Antwort und konkreten Grund ergänzen.'};
+ try{
+  const source=await withPrivilegedTenantTransaction(auth,tx=>readComplaintRejectionSource(tx,auth,{...request,clientRequestId:input.clientRequestId}));
+  if(input.targetType!=='CUSTOMER'||input.targetId!==source.customerId)return {code:'FORBIDDEN' as const,message:'Die Antwort gehört zu einem anderen Kunden.'};
+  const intent=createHash('sha256').update(JSON.stringify({itemId:request.itemId,version:request.version,customerId:source.customerId,graphId:source.graphId,originalSha256:source.originalSha256,subject:input.subject.trim(),body:input.body.trim(),reason:request.reason.trim()})).digest('hex');
+  return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:source.customerId!,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,intakeReply:{purpose:'no-complaint',itemId:request.itemId,version:request.version,graphMessageId:source.graphId!,sender:source.sender!,intent,
+   validate:tx=>prepareComplaintRejection(tx,auth,{...request,clientRequestId:input.clientRequestId,intent}),
+   complete:(tx,threadId)=>completeIntakeComplaintRejection(tx,auth,{itemId:request.itemId,version:request.version,clientKey:input.clientRequestId,customerId:source.customerId!,orderId:null,threadId,reason:request.reason.trim(),intent}),
+   replay:(tx,threadId)=>complaintRejectionReplay(tx,auth,{itemId:request.itemId,clientRequestId:input.clientRequestId,threadId,intent})}});
+ }catch(error){console.error('[COMPLAINT_RESPONSE_FAILED]',{code:error instanceof Error?error.message:'UNKNOWN'});return {code:'CONFLICT' as const,message:'Antwort oder Anliegen ist inzwischen geändert · kein erneuter Versand bestätigt.'};}
 }

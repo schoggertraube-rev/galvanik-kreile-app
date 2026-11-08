@@ -31,3 +31,6 @@ export { processIntakeDeviceRequest } from "./server/intakeDevice";
 export {returnQuoteGoodsReceipt,readQuoteGoodsReturns} from "./server/quoteGoodsReturn";
 
 export {readComplaintPhotoReplyRelations,prepareComplaintPhotoMail,readComplaintPhotoMailSource,complaintPhotoMailReplay,completeComplaintPhotoMail} from './server/complaintMail';
+
+export {readComplaintRejectionSource,prepareComplaintRejection,complaintRejectionReplay} from './server/complaintMail';
+export {completeIntakeComplaintRejection} from './server/intakeComplaintEffect';

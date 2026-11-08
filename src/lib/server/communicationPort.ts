@@ -216,7 +216,7 @@ export async function attachInboxMessage(
   }
 }
 
-export type IntakeComplaintReply={itemId:string;version:number;graphMessageId:string;sender:string;intent:string;validate:(tx:PrivilegedTenantTransaction)=>Promise<boolean>;complete:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>;replay:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<boolean>};
+export type IntakeComplaintReply={purpose?:'no-complaint';itemId:string;version:number;graphMessageId:string;sender:string;intent:string;validate:(tx:PrivilegedTenantTransaction)=>Promise<boolean>;complete:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>;replay:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<boolean>};
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
   input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeReply?:IntakeComplaintReply },
@@ -312,12 +312,12 @@ export async function sendCommunicationMail(
       if (updated.length !== 1) throw new Error("COMMUNICATION_THREAD_FINALIZE_FAILED");
       const messages = await tx.execute<{ id: string }>(sql`
         INSERT INTO public.communication_messages (id, tenant_id, thread_id, direction, channel, body, summary, created_by)
-        VALUES (${messageId}, ${auth.tenantId}, ${pending.threadId}, 'outgoing', 'email', ${input.body.trim()}, ${input.intakeReply?'Reklamation · Fotos anfordern · Eingang '+input.intakeReply.itemId:complaintSummary??(input.attachment ? `Anhang: ${input.attachment.filename}` : 'Ohne Anhang')}, ${auth.userId}) RETURNING id
+        VALUES (${messageId}, ${auth.tenantId}, ${pending.threadId}, 'outgoing', 'email', ${input.body.trim()}, ${input.intakeReply?(input.intakeReply.purpose==='no-complaint'?'Reklamation · Antwort · Eingang ':'Reklamation · Fotos anfordern · Eingang ')+input.intakeReply.itemId:complaintSummary??(input.attachment ? `Anhang: ${input.attachment.filename}` : 'Ohne Anhang')}, ${auth.userId}) RETURNING id
       `);
       if (messages.length !== 1 || messages[0]?.id !== messageId) throw new Error("COMMUNICATION_MESSAGE_INSERT_FAILED");
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,pending.threadId,'sent');
       if(input.intakeReply){await input.intakeReply.complete(tx,pending.threadId);await tx.execute(sql`INSERT INTO public.events(tenant_id,id,event_type,user_id,client_event_id,event_schema_version,correlation_id,aggregate_version,status,description,payload)
-       VALUES(${auth.tenantId},${randomUUID()},'INTAKE_COMPLAINT_PHOTO_REQUESTED_V1',${auth.userId}::uuid,${input.clientRequestId}::uuid,1,${input.clientRequestId}::uuid,${input.intakeReply.version+1},'success','Reklamationsfotos angefordert',${JSON.stringify({itemId:input.intakeReply.itemId,threadId:pending.threadId,intent:input.intakeReply.intent})}::jsonb)`);}
+       VALUES(${auth.tenantId},${randomUUID()},${input.intakeReply.purpose==='no-complaint'?'INTAKE_COMPLAINT_RESPONSE_SENT_V1':'INTAKE_COMPLAINT_PHOTO_REQUESTED_V1'},${auth.userId}::uuid,${input.clientRequestId}::uuid,1,${input.clientRequestId}::uuid,${input.intakeReply.version+1},'success',${input.intakeReply.purpose==='no-complaint'?'Keine Reklamation · Antwort gesendet':'Reklamationsfotos angefordert'},${JSON.stringify({itemId:input.intakeReply.itemId,threadId:pending.threadId,intent:input.intakeReply.intent})}::jsonb)`);}
 
     });
     return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: false } };

@@ -34,3 +34,19 @@ RM02/RM03: Originalantwort mit Fotos am bestehenden Anliegen, Aufnahme/Rückantw
 Der Eingang-Besitzerport `readComplaintPhotoReplyRelations` findet eine Antwort nur aus gesicherter MIME-Referenz zum Original, identischem bestätigtem Kunden und tatsächlich gespeicherter Fotoanfrage. MIME-SHA und Foto-SHAs müssen zu Original-Ereignissen passen und im vollständigen Importbeleg stehen. Fremder Kunde, ungesicherte Header und mehrere mögliche Wurzeln erzeugen keine geratene Verbindung. Alle Originale bleiben an ihren bisherigen Eingängen; keine Kopie, keine neue Relationstabelle und kein Schreibbefehl.
 
 Echter lokaler Replay-Test ergänzt: bestehende Fotoanfrage → Antwort mit zwei isolierten TEST-Fotooriginalen → öffentlicher Besitzer-Leser liefert exakt beide Original-IDs; fehlende Kundenzuordnung oder abweichender MIME-SHA liefert keine Verbindung. PASS 5,41s, Typen/Lint grün. TEST-Metadaten belegen die Datenbank-Leseregel, ausdrücklich keinen echten Graph-/Storage-Import. RM02-Aufnahme/Root-Abschluss und RM03-Antwort-Oberfläche noch nicht gebaut; weiterhin keine Paket-Vollabnahme.
+
+## RM02/RM03/RM05 – Umsetzung 09.11.
+
+- Neue Fotoantwort erbt Kontext nur aus exakt belegtem MIME-Thread, bestätigtem Kunden und gespeicherter Fotoanfrage. Original und Antwort bleiben eigene erreichbare Originale; der Leser zeigt sie am selben Anliegen, ohne zweite Relationstabelle.
+- Aufnahme verwendet unverändert den vorhandenen Reklamationswriter. Dessen Transaktion schließt das Reklamationsanliegen am Ursprung und an der Antwort gemeinsam; andere Anliegen bleiben offen. Tatsächliche Foto-Original-IDs werden übernommen, kein Kopiermodell.
+- „Keine Reklamation · antworten“ verwendet den bestehenden CommunicationPanel-Editor, sendCustomerMailAction und sendCommunicationMail/Graph-Reply. Expliziter Grund, Betreff und Nachricht; keine complaints-Zeile. Versandbeleg, Akteurbeleg und Abschluss beider Eingänge werden gemeinsam bestätigt. Vorabreservierung verhindert weitere Versandkennungen; Wiederholung nutzt denselben Intent.
+- Vor Versand wird der vorhandene private Actor-Entwurf gespeichert. Schließen sichert denselben Entwurf ohne Versand; Wiederaufnahme über Der Tag führt in denselben Nachrichten-Editor. Bei unklarem Ergebnis bleiben Inhalt und Kennung erhalten. Bestehender Entwurfs-Abschluss wird erst nach bestätigtem Versand aufgerufen; keine Original-/Geschäftszeile gelöscht.
+- „Foto-Original öffnen“ öffnet tatsächlich das bestehende Original, statt nur dieselbe Nachrichtengruppe auszuwählen. Neuer Text liegt im zentralen Situationskatalog.
+
+Nachweise: RM02/RM05 und RM03 echte lokale Replay-DB mit Sitzung→Action→Zeile/Ereignis→Ansicht PASS 6,84s; zwei Dialogfälle für Öffnen/Validierung/Doppelklick/identischen Retry/gesichertes Schließen PASS 3,78s. RM01 nach gemeinsamer Quellenleser-Extraktion erneut gezielt PASS 9,04s. Ausschließlich Microsoft-HTTP ist im Versandtest eine synthetische TEST-Grenze; Foto/MIME-Metadaten sind isolierte TEST-Fixtures. Kein echter externer Versand und kein kompletter Graph-/Storage-Import behauptet.
+
+Typen und gezielter ESLint nach mechanischer Typ-/Renderkorrektur grün. H18 PASS inventory312/writes149/tested90/overrides59; vorhandene Versandaktion um echten RM03-Testbeleg ergänzt, keine Ausnahme hinzugefügt. Modulprüfung meldet ausschließlich fremde offene DESIGN_POINTER_PAGE_BINDING, keine neue Produktgrenzenverletzung.
+
+Dev-Migrationsnachtrag: eigener RM-Stand104, zusätzlich genehmigte SA-Rechtemigration ergibt Union105=Dev105; keine Einzelbranch-Parität104=Dev mehr behauptet. Keine weitere Migration dieses Schritts.
+
+Noch offen vor Paket-Abgabe: exakte Git-Preview, einmalige Sicht, Pflicht-CI und PL-Diffprüfung. Maximal zwei offene PRs: dieser Produktstand wird nur auf eigenem Zweig gepusht, kein dritter PR. RM03-Editor und Entwurfswiederaufnahme sind gebaut; vollständige Paket-Abnahme wird erst mit den offenen Nachweisen gemeldet.

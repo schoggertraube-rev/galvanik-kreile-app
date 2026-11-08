@@ -58,7 +58,8 @@ export async function getComplaintDialogAction(request:ComplaintRequest):Promise
   if(!source)return {code:'NOT_FOUND',message:'Auftrag ist nicht verfügbar.'};
   let initial:ComplaintDialogData['initial']={description:'',defect:'',photoIds:[],intakeItemId:null,intakeVersion:null};
   if('sourceItemId'in request&&request.sourceItemId){
-   const capture=await readIntakeCapture(request.sourceItemId,{orderId:source.id});if(capture.code!=='OK')return capture;
+   const capture=await readIntakeCapture(request.sourceItemId,{customerId:source.customerId});if(capture.code!=='OK')return capture;
+   if(capture.capture.orderId&&capture.capture.orderId!==source.id)return {code:'FORBIDDEN',message:'Die Nachricht gehört zu einem anderen Auftrag.'};
    const text=capture.capture.text??'',signal=text.toLocaleLowerCase('de-DE');
    const defects:[RegExp,string][]=[[/blasen/u,'Blasen'],[/rost|korrosion/u,'Rost / Korrosion'],[/abgeplatzt|abplatzung/u,'Abplatzung'],[/transportschaden|beschädigt/u,'Transportschaden'],[/farbe|glanz/u,'Farbe / Glanz'],[/gewinde|maß/u,'Maß / Gewinde']];
    const defect=defects.find(([pattern])=>pattern.test(signal))?.[1]??'';

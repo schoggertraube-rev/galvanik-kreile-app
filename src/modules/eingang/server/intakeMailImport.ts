@@ -1,4 +1,5 @@
 import 'server-only';
+import {readComplaintPhotoParentForMail} from './complaintMail';
 import {createHash} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
@@ -58,12 +59,15 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
    const existing=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND (graph_message_id=${mail.id} OR (${mail.internetMessageId}::text IS NOT NULL AND internet_message_id=${mail.internetMessageId})) FOR UPDATE`);
    if(existing.length>1)throw Error('INTAKE_MAIL_IDENTITY_AMBIGUOUS');
    if(existing[0])return {itemId:existing[0].id,replayed:true};
-   const previous=readPrevious?await readPrevious(tx,auth,mail.id):null;
-   const id=intakeMailIdentity(auth.tenantId+':graph:'+mail.id),concerns=recognizeNoteConcerns(mail.subject+'\n'+mail.body,'mail').map(row=>row.id);
+   const parent=await readComplaintPhotoParentForMail(tx,auth,mail.senderAddress,replyChain);
+   const linked=readPrevious?await readPrevious(tx,auth,mail.id):null;
+   const previous=linked??(parent?{customerId:parent.customerId,orderId:parent.orderId}:null);
+   if(parent&&linked&&(linked.customerId!==parent.customerId||linked.orderId&&linked.orderId!==parent.orderId))throw Error('COMPLAINT_REPLY_CONTEXT_CONFLICT');
+   const id=intakeMailIdentity(auth.tenantId+':graph:'+mail.id),concerns=[...new Set([...recognizeNoteConcerns(mail.subject+'\n'+mail.body,'mail').map(row=>row.id),...(parent?['reklamation']:[])])];
    const concernArray=sql`ARRAY[${sql.join(concerns.map(value=>sql`${value}`),sql`, `)}]::text[]`;
    await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,empfangen_am,absender_name,absender_adresse,betreff,text,gruppe_adresse,graph_message_id,internet_message_id,anliegen,anliegen_offen,kunde_id,vorgang_art,vorgang_id,zuordnung)
     VALUES(${id}::uuid,${auth.tenantId},${'graph:'+mail.id},'mail','rein','mailabruf',${auth.userId}::uuid,${mail.receivedAt}::timestamptz,${mail.senderName},${mail.senderAddress},${mail.subject},${mail.body},${mail.senderAddress.trim().toLowerCase()},${mail.id},${mail.internetMessageId},${concernArray},${concernArray},${previous?.customerId??null},${previous?.orderId?'auftrag':null},${previous?.orderId??null},${previous?.customerId?'hand':'offen'})`);
-   await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${auth.tenantId},${id}::uuid,'angelegt',${id}::uuid,${auth.userId},${JSON.stringify({kanal:'mail',graphMessageId:mail.id,text:mail.body,replyChain,...(previous?.customerId?{importedCorrespondence:previous}:{})})}::jsonb)`);
+   await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${auth.tenantId},${id}::uuid,'angelegt',${id}::uuid,${auth.userId},${JSON.stringify({kanal:'mail',graphMessageId:mail.id,text:mail.body,replyChain,...(parent?{complaintThreadParent:parent.id}:{}),...(previous?.customerId?{importedCorrespondence:previous}:{})})}::jsonb)`);
    return {itemId:id,replayed:false};
   });
   const prior=await readIntakeMailImportReceipt(auth,{itemId:result.itemId});

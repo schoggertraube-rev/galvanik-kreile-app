@@ -251,7 +251,8 @@
     ],
     "src/app/actions/communications.actions.ts#sendCustomerMailAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts",
-      "src/test/acceptance/complaint_goods_reminder.integration.test.ts"
+      "src/test/acceptance/complaint_goods_reminder.integration.test.ts",
+      "src/test/acceptance/complaint_rest.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#prepareQuoteCopyAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"

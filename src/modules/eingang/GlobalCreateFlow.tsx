@@ -1195,6 +1195,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       const draft=result.drafts.find(value=>value.id===id);
       if(!draft||draft.art!=="eingang")throw Error("INTAKE_DRAFT_NOT_FOUND");
       const raw=draft.payload;
+      if(raw.kind==='rekla-response'&&typeof raw.sourceItemId==='string'){window.location.assign('/nachrichten?gruppe='+encodeURIComponent(raw.sourceItemId)+'&antwortEntwurf='+encodeURIComponent(draft.id));return;}
+
       // P67: version 0 remains editable. Missing business fields stay empty;
       // the stored payload is only changed by an explicit save or valid booking.
       const p:Record<string,unknown>=raw.version===undefined||raw.version===0?{
