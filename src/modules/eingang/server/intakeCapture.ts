@@ -1,4 +1,5 @@
 import "server-only";
+import {readExpectedPackageOrders} from "@/lib/server/packageIntakeContextPort";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -63,12 +64,7 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
       files: files.map(file => ({ ...file, bytes: Number(file.bytes) })),suggestions:contentAllowed||invoiceOnly?suggestions:[] };
     capture.recognition = invoiceOnly ? { kind: "rechnung", text: "" } : captureRecognition(capture);
     if (!invoiceOnly && hasAuthorizationArea(auth,"auftraege") && (capture.recognition.kind === "unklar" || capture.recognition.kind === "ware")) {
-      capture.expectedOrders = await tx.execute<NonNullable<IntakeCapture["expectedOrders"]>[number]>(sql`
-        SELECT o.id::text, o.order_number AS number, o.customer_id AS "customerId", o.customer_name AS "customerName",
-          o.title, o.ware_seit::text AS since
-        FROM public.v_intake_expected_goods_v1 o
-        WHERE o.tenant_id=${auth.tenantId} AND o.ware IN ('erwartet','teilweise')
-        ORDER BY (o.customer_id=${row.kunde_id}) DESC NULLS LAST, o.ware_seit ASC NULLS LAST, o.id LIMIT 8`);
+      capture.expectedOrders=await readExpectedPackageOrders(tx,auth,row.kunde_id);
     }
     return { code: "OK", capture };
   });

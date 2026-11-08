@@ -35,3 +35,7 @@ Die bestehenden neuen Renderfälle und echte DB-Zuordnung bleiben getrennt vom n
 Betragsfreie operative KV-Kandidaten verwenden jetzt denselben bestehenden Werkstatt-Lesezweck (Aufträge/Leitstand) statt Finanzleserecht. Der echte PE-06-Test prüft zusätzlich den Werkstattlogin ohne Geld: beide zugesagten KVs sichtbar, keine Preisfelder; der Login nur mit Eingang sieht weiter keine Kandidaten. PASS6.99s. Kein neues Rollen-/Sessionmodell.
 
 CI fand W4_READ_PORT_CONTRACT: neuer SQL-Standort quoteReads.ts war nicht als View-Lesestelle registriert. Ein Fix: wie die dort bereits reexportierten vorhandenen Leser liegt die Implementierung nun beim vorhandenen registrierten Quote-Owner quoteCommands.ts; quoteReads bleibt die öffentliche Lesegrenze. Kein Gate/Inventar erweitert oder abgeschwächt. Lokaler W4-Vertrag grün (683 Dateien/39 Leseports), Typprüfung und gezielter Lint geprüft. Die Änderung verändert weder SQL noch Leserecht.
+
+## Fortschreibung 08.11.22:46
+
+Erwartete Rücksendung zur Nacharbeit wird aus dem vorhandenen kanonischen Auftragsursprung als solche bezeichnet. Der gebündelte Core-Leser fragt dieselben gespeicherten Waren-/Kunden-/Auftragsfakten und entfernt zurückgenommene Aufträge vor der Begrenzung. Keine neue Erwartungsablage. Der vorhandene echte Nacharbeit-/Rücknahmefall wurde um Capture-Neulesen ergänzt: Nacharbeit erscheint als rework, nach der echten protokollierten Rücknahme nicht mehr als erwartete Ware (PASS6.36s); sämtliche bisherigen Assertions bleiben erhalten. Die Nacharbeits-/Auftragshistorie wird dadurch nicht gelöscht.

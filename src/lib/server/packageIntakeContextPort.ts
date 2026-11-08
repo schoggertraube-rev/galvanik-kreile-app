@@ -20,3 +20,14 @@ export async function readPackageOrderCustomers(tx:PrivilegedTenantTransaction,a
  GROUP BY customer.id,customer.name ORDER BY max(orders.created_at) DESC,customer.id LIMIT 3`);
  return rows.map(row=>({...row,source:'order' as const}));
 }
+
+/** Same stored goods expectation, excluding withdrawn orders before limiting the candidate list. */
+export async function readExpectedPackageOrders(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string|null){
+ if(!hasAuthorizationArea(auth,'auftraege'))return [];
+ const rows=await tx.execute<{id:string;number:string;customerId:string;customerName:string|null;title:string|null;since:string|null;reason:'rework'|'waiting'}>(sql`SELECT orders.id,orders.order_number AS number,orders.customer_id AS "customerId",customer.name AS "customerName",orders.task AS title,orders.ware_seit::text AS since,
+ CASE WHEN orders.source='REKLAMATION_NACHARBEIT' THEN 'rework' ELSE 'waiting' END AS reason
+ FROM public.orders orders LEFT JOIN public.customers customer ON customer.tenant_id=orders.tenant_id AND customer.id=orders.customer_id
+ WHERE orders.tenant_id=${auth.tenantId} AND orders.ware IN ('erwartet','teilweise') AND orders.status<>'storniert'
+ ORDER BY (orders.customer_id=${customerId}) DESC NULLS LAST,orders.ware_seit ASC NULLS LAST,orders.id LIMIT 8`);
+ return [...rows];
+}

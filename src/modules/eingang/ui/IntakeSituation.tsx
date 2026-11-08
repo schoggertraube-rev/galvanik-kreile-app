@@ -17,7 +17,7 @@ export function IntakeSituation({readOriginal,capture,kind,busy,primary,onAssign
  const orders=(capture.expectedOrders??[]).filter(order=>!capture.customerId||order.customerId===capture.customerId);
  const pending=capture.files.some(file=>['wartet','laeuft'].includes(file.status));
  const failed=capture.files.some(file=>file.status==='fehler');
- const candidates=[...quotes.map(quoteCandidatePresentation),...orders.map(order=>({id:order.id,kind:'order' as const,label:order.number+' · '+(order.customerName??'')+' · '+(order.title??''),reason:'wartet auf Ware'}))];
+ const candidates=[...quotes.map(quoteCandidatePresentation),...orders.map(order=>({id:order.id,kind:'order' as const,label:order.number+' · '+(order.customerName??'')+' · '+(order.title??''),reason:order.reason==='rework'?PACKAGE_COPY.rework:PACKAGE_COPY.waiting}))];
  const onlyQuote=quotes.length===1&&orders.length===0?quotes[0]:null;
  const view=resolveIntakeSituation({originalCount:capture.files.filter(file=>file.secured===true).length,recognizedText:Boolean(capture.recognition?.text),kind,customerId:capture.customerId,candidates,...(onlyQuote?{context:'quote' as const,quote:{...onlyQuote,sent:true},match:'chosen' as const}:{}),recognized:orders.length===1?[{label:'Auftrag',value:orders[0].number},{label:'Kunde',value:orders[0].customerName}]:[]});
 
