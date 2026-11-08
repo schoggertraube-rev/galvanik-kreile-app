@@ -9,9 +9,10 @@ import {IncomingInvoiceDialog} from './IncomingInvoiceDialog';
 export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoicePorts;allowed:boolean;onRefresh:()=>void}){
  const [entry,setEntry]=useState<{key:string;view:InvoiceView}|null>(null),[loading,setLoading]=useState(false),[failure,setFailure]=useState<string|null>(null);
  const [message,setMessage]=useState<{text:string;taskId?:string}|null>(null),device=useKrGeraet(),generation=useRef(0),autoKeys=useRef(new Map<string,string>()),automatic=useRef(new Map<string,Promise<Awaited<ReturnType<InvoicePorts['save']>>>>());
+ const refresh=useRef(onRefresh),lastOpen=useRef<string|null>(null);useEffect(()=>{refresh.current=onRefresh;},[onRefresh]);
  const open=useCallback(async(arg:string)=>{
   if(!allowed){setMessage({text:'Recht Geld fehlt'});return;}
-  const id=arg.split('#',2)[0];if(!id)return;const current=++generation.current;setLoading(true);setFailure(null);
+  lastOpen.current=arg;const id=arg.split('#',2)[0];if(!id)return;const current=++generation.current;setLoading(true);setFailure(null);
   try{const result=await ports.read({id});if(current!==generation.current)return;
    if(result.code!=='OK'){if(result.code==='FORBIDDEN'){setMessage({text:'Recht Geld fehlt'});return;}setFailure(result.message);return;}
    const view=result.view;
@@ -22,12 +23,12 @@ export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoiceP
     if(saved.code!=='OK'){automatic.current.delete(operation);setFailure('message' in saved?saved.message:C.failed);return;}
     const fresh=await ports.read({id:saved.invoice.id});if(current!==generation.current)return;
     if(fresh.code!=='OK'){setFailure(fresh.message);return;}
-    setMessage({text:C.saved});setEntry(null);onRefresh();return;
+    setMessage({text:C.saved});setEntry(null);if(location.hash.startsWith('#rechnungein:'))history.replaceState(history.state,'',location.pathname+location.search);refresh.current();return;
    }
    setEntry({key:crypto.randomUUID(),view:result.view});
   }catch(error){console.error('[INVOICE_DIALOG_OPEN_FAILED]',error);if(current===generation.current)setFailure('Rechnung konnte nicht gelesen werden · Fehlercode: INVOICE_DIALOG_OPEN_FAILED.');}
   finally{if(current===generation.current)setLoading(false);}
- },[allowed,ports,onRefresh]);
+ },[allowed,ports]);
  useEffect(()=>{
   const handler=(event:Event)=>{const value=(event as CustomEvent<{ziel?:string;arg?:unknown}>).detail;if(value?.ziel==='rechnungein'&&typeof value.arg==='string'){event.preventDefault();void open(value.arg);}};
   const fromHash=()=>{const match=/^#rechnungein:(.+)$/u.exec(location.hash);if(match)void open(decodeURIComponent(match[1]));};
@@ -39,7 +40,7 @@ export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoiceP
  return <>{message?<Toast text={message.text} aktion={message.taskId?{text:'Aufgabe ansehen',onClick:()=>ports.openTask(message.taskId!)}:undefined}/>:null}
   {loading?<Toast text={C.saving}/>:null}
   {(entry||failure)&&typeof document!=='undefined'?createPortal(<KrApp geraet={device} portal>
-   {entry?<IncomingInvoiceDialog key={entry.key} initial={entry.view} ports={ports} onClose={close} onMessage={notify}/>:<Dialog titel="Rechnung prüfen" onSchliessen={close} fuss={<Button text="Schließen" onClick={close}/>}>
+   {entry?<IncomingInvoiceDialog key={entry.key} initial={entry.view} ports={ports} onClose={close} onMessage={notify}/>:<Dialog titel="Rechnung prüfen" onSchliessen={close} fuss={<><Button text="Schließen" onClick={close}/>{failure?<Button text={C.retry} onClick={()=>{if(lastOpen.current)void open(lastOpen.current);}}/>:null}</>}>
     {loading?<p role="status">Rechnung wird geladen …</p>:<Hinweis ton="warn">{failure}</Hinweis>}</Dialog>}
   </KrApp>,document.body):null}</>;
 }
