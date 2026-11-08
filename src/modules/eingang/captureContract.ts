@@ -1,3 +1,4 @@
+import {intakeHandoverDirective} from './intakeLifecycleContract';
 import type { IntakeTextRecognition } from "@/lib/server/intakeTextRecognition";
 import type { CaptureKind } from "./captureRecognition";
 
@@ -27,6 +28,7 @@ export type IntakeFileGrant = { code: "OK"; upload: { bucket: string; path: stri
 
 // The signal vocabulary is eingang.anliegen in the frozen AP-EIN specification.
 const NOTE_SIGNALS = [
+  { id: "reklamation", label: "Reklamation", pattern: /\breklamation\b|\breklamier[\p{L}]*\b|\bflecken\b|\bbeschädigt\b/iu },
   { id: "rueckruf", label: "Rückruf", pattern: /ruft zurück|rückruf|zurückrufen|bitte anrufen|rufen sie mich|melden sie sich|mailbox|call back/iu },
   { id: "frist", label: "Frist", pattern: /frist|bis zum|spätestens|mahnung|bescheid|behörde|widerspruch/iu },
   { id: "aufgabe", label: "Aufgabe (intern)", pattern: /\bbitte\b|erledigen|kannst du|maschine|störung/iu },
@@ -36,11 +38,13 @@ const NOTE_SIGNALS = [
   { id: "kundendaten", label: "Kundendaten", pattern: /rechnung an|rechnungs.?e.?mail/iu },
 ] as const;
 const NEGATED_SIGNAL = /\b(?:nicht|kein|keine|keinen|entfällt|erledigt|ohne|bereits|schon)\b/iu;
-export function recognizeNoteConcerns(text: string): IntakeConcern[] {
+export function recognizeNoteConcerns(text: string,source:'note'|'mail'='note'): IntakeConcern[] {
   const sentences=text.split(/[.!?;\n]+/u);
-  return NOTE_SIGNALS.filter(signal=>sentences.some(sentence=>{
+  const concerns:IntakeConcern[]=NOTE_SIGNALS.filter(signal=>sentences.some(sentence=>{
     const match=signal.pattern.exec(sentence);if(!match)return false;
     if(signal.id==="aufgabe"&&(NEGATED_SIGNAL.test(sentence)||/\bnur\b|zurückrufen|anrufen|rufen sie mich|rechnung an/iu.test(sentence)))return false;
     return !NEGATED_SIGNAL.test(sentence.slice(0,match.index));
   })).map(({id,label})=>({id,label}));
+  const handover=source==='mail'?intakeHandoverDirective(text):null;if(handover)concerns.push({id:'abholung',label:handover.mode==='pickup'?'Abholung':'Versand'});
+  return concerns;
 }

@@ -1308,3 +1308,22 @@ it.each(['early','label','two','future','delivered'] as const)('AF19 real mail h
  }
 
 });
+
+
+it('RM shared recognition persists actual mail handover and note complaint concerns; partial original stays explicitly unavailable',async()=>{
+ const fixture=await createFixture(true,['eingang','auftraege','kunden','geld','mails']);const {saveIntakeNoteAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+ const hand=await withSession(fixture,()=>saveIntakeNoteAction({itemId:randomUUID(),textstand:randomUUID(),text:'Bitte die Teile versenden.'}));
+ if(hand.code!=='OK')throw Error(hand.message);expect(hand.capture.concerns).not.toContain('abholung');
+ const {importIntakeGraphMail}=await import('@/modules/eingang/server-public');const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const graphId='TEST-RM-'+randomUUID(),internetMessageId='<'+graphId+'@example.invalid>';
+ const result=await withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST RM session');return importIntakeGraphMail(auth.data,{id:graphId,internetMessageId,subject:'Bitte versenden',senderName:'TEST Kunde',senderAddress:'test@example.invalid',receivedAt:new Date().toISOString(),body:'Bitte die Teile versenden.'},[{key:'original',name:'TEST-original.eml',mime:'message/rfc822',bytes:new TextEncoder().encode('From: TEST Kunde <test@example.invalid>\r\nTo: test@example.invalid\r\nMessage-ID: '+internetMessageId+'\r\nSubject: Bitte versenden\r\n\r\nBitte die Teile versenden.')}]);});
+ expect(result.code).not.toBe('OK'); // The isolated runner deliberately has no privileged Storage credential.
+ const [row]=await sql`SELECT id::text,anliegen,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND graph_message_id=${graphId}`;
+ expect(row).toMatchObject({anliegen:expect.arrayContaining(['abholung']),anliegen_offen:expect.arrayContaining(['abholung'])});
+ expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${row.id}::uuid AND art='angelegt' AND von=${fixture.actorId}`).toHaveLength(1);
+ expect(await withSession(fixture,()=>getIntakeCaptureAction(row.id))).toMatchObject({code:'OK',capture:{concerns:expect.arrayContaining(['abholung'])}});
+ const complaint=await withSession(fixture,()=>saveIntakeNoteAction({itemId:randomUUID(),textstand:randomUUID(),text:'Reklamation: Flecken an den Trompeten.'}));
+ expect(complaint).toMatchObject({code:'OK',capture:{concerns:expect.arrayContaining(['reklamation'])}});
+ expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG}`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(0);
+});

@@ -1,3 +1,4 @@
+import {recognizeNoteConcerns} from '../captureContract';
 import {intakeHandoverDirective} from "../intakeLifecycleContract";
 import { describe, expect, it } from "vitest";
 import { captureRecognition } from "../captureRecognition";
@@ -37,4 +38,11 @@ describe('AF19 conservative handover directive',()=>{
  it.each(['Hole ich ab.','Ich hole die Ware ab.','Bitte abholen.'])('recognizes clear pickup %s',text=>expect(intakeHandoverDirective(text)).toEqual({mode:'pickup',forFuture:false}));
  it('changes the future default only when explicit',()=>{expect(intakeHandoverDirective('Ab jetzt immer abholen.')).toEqual({mode:'pickup',forFuture:true});expect(intakeHandoverDirective('Bitte versenden.')).toEqual({mode:'shipping',forFuture:false});});
  it.each(['Nicht abholen.','Vielleicht abholen.','Falls Versand, hole ich ab.','Abholen oder versenden?','> Hole ich ab.','Von: alter Kunde\nBitte versenden.'])('does not guess from negation, ambiguity or quoted mail %s',text=>expect(intakeHandoverDirective(text)).toBeNull());
+});
+
+it('RM routes only clear original mail instructions to the existing handover concern',()=>{
+ expect(recognizeNoteConcerns('Bitte die Teile versenden.','mail').map(row=>row.id)).toContain('abholung');
+ for(const text of ['Bitte nicht versenden.','Vielleicht abholen.','Abholen und versenden.','> Bitte versenden.'])expect(recognizeNoteConcerns(text,'mail').map(row=>row.id)).not.toContain('abholung');
+ expect(recognizeNoteConcerns('Bitte die Teile versenden.').map(row=>row.id)).not.toContain('abholung');
+ expect(recognizeNoteConcerns('Keine Reklamation.','mail').map(row=>row.id)).not.toContain('reklamation');
 });
