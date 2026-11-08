@@ -30,4 +30,4 @@ export { processIntakeDeviceRequest } from "./server/intakeDevice";
 
 export {returnQuoteGoodsReceipt,readQuoteGoodsReturns} from "./server/quoteGoodsReturn";
 
-export {prepareComplaintPhotoMail,readComplaintPhotoMailSource,complaintPhotoMailReplay,completeComplaintPhotoMail} from './server/complaintMail';
+export {readComplaintPhotoReplyRelations,prepareComplaintPhotoMail,readComplaintPhotoMailSource,complaintPhotoMailReplay,completeComplaintPhotoMail} from './server/complaintMail';

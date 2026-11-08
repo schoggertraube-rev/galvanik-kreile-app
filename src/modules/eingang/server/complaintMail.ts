@@ -1,4 +1,5 @@
 import 'server-only';
+import {readComplaintPhotoWaiting} from '@/lib/server/communicationPort';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -36,4 +37,29 @@ export async function prepareComplaintPhotoMail(tx:PrivilegedTenantTransaction,a
  if(source.version!==input.version||source.customerId!==input.customerId||source.originalSha256!==input.originalSha256||source.graphId!==input.graphId||source.sender!==input.sender)return false;
  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${auth.tenantId},${input.itemId}::uuid,'anliegen',${input.clientRequestId}::uuid,${auth.userId},${JSON.stringify({action:'reklamation.fotoanfrage_vorbereitet',customerId:source.customerId,sourceGraphId:source.graphId,intent:input.intent})}::jsonb)`);
  return true;
+}
+
+/** Exact secured MIME references, not subject similarity or guessed customer matches. Read-only. */
+export async function readComplaintPhotoReplyRelations(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]){
+ if(!ids.length||!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'eingang'))return [];
+ const rows=await tx.execute<{rootId:string;rootVersion:number;replyId:string;replyVersion:number;customerId:string;orderId:string|null;photoIds:string[]}>(sql`
+ SELECT root.id::text AS "rootId",root.version AS "rootVersion",reply.id::text AS "replyId",reply.version AS "replyVersion",root.kunde_id AS "customerId",CASE WHEN root.vorgang_art='auftrag' THEN root.vorgang_id ELSE NULL END AS "orderId",
+ ARRAY(SELECT photo.id::text FROM public.intake_file photo WHERE photo.tenant_id=reply.tenant_id AND photo.item_id=reply.id AND photo.mime LIKE 'image/%'
+  AND EXISTS(SELECT 1 FROM public.intake_event secured WHERE secured.tenant_id=photo.tenant_id AND secured.item_id=photo.item_id AND secured.art='original_gespeichert' AND secured.nachher->>'fileId'=photo.id::text AND secured.nachher->>'sha256'=photo.sha256)
+  AND EXISTS(SELECT 1 FROM public.intake_event complete WHERE complete.tenant_id=photo.tenant_id AND complete.item_id=photo.item_id AND complete.nachher->>'action'='mail_import_complete' AND complete.nachher->'fileIds' ? photo.id::text) ORDER BY photo.reihenfolge,photo.id) AS "photoIds"
+ FROM public.intake_item root JOIN public.intake_item reply ON reply.tenant_id=root.tenant_id AND reply.id<>root.id AND reply.kunde_id=root.kunde_id
+ JOIN public.intake_event original ON original.tenant_id=reply.tenant_id AND original.item_id=reply.id AND original.art='angelegt'
+ WHERE root.tenant_id=${auth.tenantId} AND root.kanal='mail' AND reply.kanal='mail' AND root.richtung='rein' AND reply.richtung='rein' AND root.einsatz='offen' AND root.anliegen_offen @> ARRAY['reklamation']::text[]
+ AND root.internet_message_id IS NOT NULL AND original.nachher->'replyChain'->>'source'='original_mime' AND original.nachher->'replyChain'->>'status'='present'
+ AND (original.nachher->'replyChain'->'inReplyTo' ? root.internet_message_id OR original.nachher->'replyChain'->'references' ? root.internet_message_id)
+ AND EXISTS(SELECT 1 FROM public.intake_file mime JOIN public.intake_event secured ON secured.tenant_id=mime.tenant_id AND secured.item_id=mime.item_id AND secured.art='original_gespeichert' AND secured.nachher->>'fileId'=mime.id::text AND secured.nachher->>'sha256'=mime.sha256
+   WHERE mime.tenant_id=reply.tenant_id AND mime.item_id=reply.id AND mime.art='mime' AND mime.sha256=original.nachher->'replyChain'->>'originalSha256'
+   AND EXISTS(SELECT 1 FROM public.intake_event complete WHERE complete.tenant_id=mime.tenant_id AND complete.item_id=mime.item_id AND complete.nachher->>'action'='mail_import_complete' AND complete.nachher->'fileIds' ? mime.id::text))
+ AND (reply.vorgang_id IS NULL OR reply.vorgang_art='auftrag' AND root.vorgang_art='auftrag' AND reply.vorgang_id=root.vorgang_id)
+ AND (root.id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}::uuid`),sql`, `)}]) OR reply.id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}::uuid`),sql`, `)}]))
+ ORDER BY reply.empfangen_am,reply.id,root.id`);
+ const waiting=await readComplaintPhotoWaiting(tx,auth,[...new Set(rows.map(row=>row.rootId))]);
+ const eligible=rows.filter(row=>row.photoIds.length>0&&waiting.has(row.rootId));
+ // Ambiguous roots stay unassigned; every original remains accessible in its existing intake.
+ return eligible.filter(row=>eligible.filter(other=>other.replyId===row.replyId).length===1);
 }

@@ -331,7 +331,7 @@ export async function sendCommunicationMail(
 export async function readComplaintPhotoWaiting(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]){
  if(!ids.length||!hasAuthorizationArea(auth,'mails'))return new Map<string,{at:string;threadId:string}>();
  const rows=await tx.execute<{id:string;at:string;threadId:string}>(sql`SELECT DISTINCT ON(source.id) source.id::text,event.zeit::text AS at,thread.id::text AS "threadId"
- FROM public.intake_item source JOIN public.intake_event event ON event.tenant_id=source.tenant_id AND event.item_id=source.id AND event.art='anliegen' AND event.nachher->>'action'='reklamation.fotos_angefordert' AND event.nachher->>'customerId'=source.kunde_id
+ FROM public.intake_item source JOIN public.intake_event event ON event.tenant_id=source.tenant_id AND event.item_id=source.id AND event.art='anliegen' AND event.nachher->>'action'='reklamation.fotos_angefordert' AND event.nachher->>'customerId'=source.kunde_id AND event.nachher->>'sourceGraphId'=source.graph_message_id
  JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.nachher->>'threadId' AND thread.status='sent' AND thread.source='MS_GRAPH_OUT:'||event.befehl_id::text
  WHERE source.tenant_id=${auth.tenantId} AND source.id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}::uuid`),sql`, `)}]) ORDER BY source.id,event.zeit DESC,event.id DESC`);
  return new Map(rows.map(row=>[row.id,{at:row.at,threadId:row.threadId}]));

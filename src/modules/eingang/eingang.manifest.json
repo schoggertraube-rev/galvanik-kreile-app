@@ -157,6 +157,7 @@
     "@/modules/eingang/public#intakeHandoverDirective",
     "@/modules/eingang/server-public#readIntakeHandoverMail",
     "@/modules/eingang/server-public#recordIntakeHandoverEffect",
+    "@/modules/eingang/server-public#readComplaintPhotoReplyRelations",
     "@/modules/eingang/server-public#prepareComplaintPhotoMail",
     "@/modules/eingang/server-public#readComplaintPhotoMailSource",
     "@/modules/eingang/server-public#complaintPhotoMailReplay",

@@ -234,6 +234,28 @@ it('RM01 real source reply Action persists mail, event and waiting view exactly 
   expect(await withSession(fixture,()=>readIntakeMessages('offen',itemId))).toMatchObject({code:'OK',messages:[expect.objectContaining({id:itemId,photoRequest:{threadId:stored.id,at:expect.any(String)}})]});
   expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK',data:{replayed:true}});
   expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID(),complaintPhotoRequest:{itemId,version:2}}))).not.toMatchObject({code:'OK'});
+  // Isolated TEST originals establish the reader contract; no real Storage/Graph import is claimed.
+  const replyId=randomUUID(),mimeId=randomUUID(),photos=[randomUUID(),randomUUID()],replyHash='b'.repeat(64),internetId='<TEST-rekla-'+itemId+'@example.invalid>';
+  await sql`UPDATE public.intake_item SET internet_message_id=${internetId} WHERE id=${itemId}::uuid`;
+  await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,zuordnung,einsatz,text,anliegen,anliegen_offen,absender_adresse,graph_message_id,empfangen_am) VALUES(${replyId}::uuid,${KREILE_TENANT_SLUG},${replyId},'mail','rein','mailabruf',${fixture.actorId}::uuid,${fixture.customerId},'hand','offen','TEST anbei zwei Fotos',ARRAY['reklamation'],ARRAY['reklamation'],'TEST-sender@example.invalid',${'TEST-reply-'+replyId},statement_timestamp())`;
+  for(const [index,id]of [mimeId,...photos].entries()){
+   const hash=index?String(index).repeat(64):replyHash;
+   await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${id}::uuid,${KREILE_TENANT_SLUG},${replyId}::uuid,${id},${index?'foto':'mime'},${index?'TEST Foto.jpg':'TEST Antwort.eml'},${index?'image/jpeg':'message/rfc822'},32,${hash},${KREILE_TENANT_SLUG+'/'+hash},now(),${fixture.actorId}::uuid,${index+1},true,false,'fertig')`;
+   await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${replyId}::uuid,'original_gespeichert',${id}::uuid,${fixture.actorId},${sql.json({fileId:id,sha256:hash,bytes:32})})`;
+  }
+  await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${replyId}::uuid,'angelegt',${randomUUID()}::uuid,${fixture.actorId},${sql.json({kanal:'mail',replyChain:{source:'original_mime',status:'present',originalSha256:replyHash,inReplyTo:[internetId],references:[]}})})`;
+  await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${replyId}::uuid,'einsatz',${randomUUID()}::uuid,${fixture.actorId},${sql.json({action:'mail_import_complete',fileIds:[mimeId,...photos],originalCount:2,filteredAttachments:0})})`;
+  const readRelations=()=>withSession(fixture,async()=>{
+   const {resolveAuthorization}=await import('@/lib/server/authorization');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST real session');
+   const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');const {readComplaintPhotoReplyRelations}=await import('@/modules/eingang/server-public');
+   return withPrivilegedTenantTransaction(auth.data,tx=>readComplaintPhotoReplyRelations(tx,auth.data,[itemId]));
+  });
+  expect(await readRelations()).toEqual([expect.objectContaining({rootId:itemId,replyId,customerId:fixture.customerId,orderId:null,photoIds:photos})]);
+  await sql`UPDATE public.intake_item SET kunde_id=NULL WHERE id=${replyId}::uuid`;
+  expect(await readRelations()).toEqual([]);
+  await sql`UPDATE public.intake_item SET kunde_id=${fixture.customerId} WHERE id=${replyId}::uuid`;
+  await sql`UPDATE public.intake_event SET nachher=jsonb_set(nachher,'{replyChain,originalSha256}',to_jsonb(${'c'.repeat(64)}::text)) WHERE item_id=${replyId}::uuid AND art='angelegt'`;
+  expect(await readRelations()).toEqual([]);
   expect(sends).toBe(1);
  }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
 });
