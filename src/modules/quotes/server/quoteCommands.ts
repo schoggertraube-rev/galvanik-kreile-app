@@ -3,7 +3,7 @@ import "server-only";
 import { createHash,randomUUID } from "node:crypto";
 import {calculateQuote,type QuoteCalculation} from "../quoteCalculation";
 import {appendQuoteJournal,quoteHasPreparedDocument} from "@/lib/server/quoteJournalPort";
-import {readQuoteReceivedQuantities,readQuoteGoodsSummaries} from "@/lib/server/quoteGoodsContextPort";
+import {readQuoteReceivedQuantities,readQuoteGoodsSummaries,readQuoteGoodsSummariesForQuotes} from "@/lib/server/quoteGoodsContextPort";
 import { sql } from "drizzle-orm";
 import { normaliseOrderPositionSurface, orderPositionSurfaceLabel, orderPositionUnitLabel, orderPositionQuantityError, orderPositionPriceError } from "@/lib/orderPositionContract";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -439,6 +439,8 @@ export async function listOpenQuotesCommand(authorization: QuoteCommandContext):
       const rows = await tx.execute<QuoteRow>(sql`SELECT * FROM private.v_open_quotes_v1 ORDER BY updated_at DESC, quote_number ASC LIMIT 100`);
       const quotes = rows.map((row) => quoteFromRow(row, authorization.tenantId));
       if (quotes.some((quote) => quote === null)) throw new Error("QUOTE_LIST_READBACK_INVALID");
+        const goods=await readQuoteGoodsSummariesForQuotes(tx,authorization.tenantId,quotes.filter(quote=>quote?.lifecycle).map(quote=>quote!.quoteId));
+        for(const quote of quotes)if(quote?.lifecycle)quote.lifecycle.goods=goods.get(quote.quoteId)??[];
       return { code: "OK", quotes: quotes as QuoteReadback[] };
     });
   } catch (error) {

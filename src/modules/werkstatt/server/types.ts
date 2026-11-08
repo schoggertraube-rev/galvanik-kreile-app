@@ -1,3 +1,4 @@
+export type WorkshopQuoteGoods={id:string;number:string;customer:string;parts:string;due:string;kind:'expected'|'blocked'|'here';locations:string[];reason:string|null};
 /** Minimal real order surface injected by the route composition root. */
 export type WerkstattSurfaceOrder = {
   ausgabeFrei?:boolean;
@@ -52,6 +53,7 @@ export type WerkstattKpiSnapshot = {
 /** App-owned interactions injected into the reusable Werkstatt UI. */
 export type WerkstattViewPorts = {
   onOpenOrder: (orderId: string) => void;
+  onOpenQuote?:(quoteId:string)=>void;
   onOpenGoodsOut: (orderId: string) => void;
   onOpenWip: () => void;
   onScanOrder: () => void;
@@ -59,6 +61,7 @@ export type WerkstattViewPorts = {
 };
 
 export type WerkstattData = {
+  quoteGoods?:WorkshopQuoteGoods[];quoteGoodsError?:string|null;quoteGoodsLimited?:boolean;
   source: "Auftragsbestand";
   loadedAt: string;
   dominant: null | { orderId: string; reason: string };

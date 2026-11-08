@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkshopViewModel, WerkstattViewPorts } from "../server/types";
 import { WerkstattView } from "./WerkstattView";
@@ -50,4 +50,14 @@ describe("WerkstattView projection", () => {
     expect(screen.getByRole("button", { name: "Neu erfassen" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Ware raus" })).toBeVisible();
   });
+});
+
+it('KV goods filters partition the actual reader rows and open the exact quote',()=>{
+ const open=vi.fn();render(<WerkstattView onRetry={vi.fn()} ports={{...ports,onOpenQuote:open}} view={{...view,kind:'data',quoteGoods:[{id:'TEST-KV-A',number:'TEST-KV-1',customer:'TEST Kunde A',parts:'3 × TEST Halter',due:'2026-12-01',kind:'expected',locations:[],reason:null},{id:'TEST-KV-B',number:'TEST-KV-2',customer:'TEST Kunde B',parts:'4 × TEST Griff',due:'2026-12-01',kind:'blocked',locations:['TEST Regal'],reason:'Zusage fehlt'}]}}/>);
+ expect(screen.getByRole('button',{name:'Alle · 2'})).toBeVisible();
+ expect(screen.getByRole('button',{name:'Ware erwartet · 1'})).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Gesperrt · 1'}));
+ expect(screen.queryByRole('heading',{name:'TEST-KV-1 · TEST Kunde A'})).toBeNull();
+ expect(screen.getByText('gesperrt · TEST Regal · Zusage fehlt')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'KV öffnen'}));expect(open).toHaveBeenCalledWith('TEST-KV-B');
 });

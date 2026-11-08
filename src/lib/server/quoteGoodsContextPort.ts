@@ -14,8 +14,15 @@ export async function readQuoteGoodsContext(tx:PrivilegedTenantTransaction,auth:
 }
 
 export type QuoteGoodsSummary={id:string;orderId:string|null;edition:number;location:string;blocked:boolean;version:number;expectedPositions:Array<{position:number;quantity:number}>};
+const goodsSummaryProjection=sql`id::text,auftrag_id AS "orderId",kv_fassung AS edition,lagerort AS location,gesperrt AS blocked,version,(SELECT coalesce(jsonb_agg(jsonb_build_object('position',(line->>'kv_position')::integer,'quantity',(line->>'erwartet')::numeric)),'[]'::jsonb) FROM jsonb_array_elements(mengen) line WHERE (line->>'bestaetigt')::numeric=0) AS "expectedPositions"`;
 export async function readQuoteGoodsSummaries(tx:PrivilegedTenantTransaction,tenantId:string,quoteId:string):Promise<QuoteGoodsSummary[]>{
- return [...await tx.execute<QuoteGoodsSummary>(sql`SELECT id::text,auftrag_id AS "orderId",kv_fassung AS edition,lagerort AS location,gesperrt AS blocked,version,(SELECT coalesce(jsonb_agg(jsonb_build_object('position',(line->>'kv_position')::integer,'quantity',(line->>'erwartet')::numeric)),'[]'::jsonb) FROM jsonb_array_elements(mengen) line WHERE (line->>'bestaetigt')::numeric=0) AS "expectedPositions" FROM public.v_quote_goods_receipt_v1 WHERE tenant_id=${tenantId} AND kv_id=${quoteId}::uuid AND status<>'entwurf' ORDER BY erstellt_am,id`)];
+ return [...await tx.execute<QuoteGoodsSummary>(sql`SELECT ${goodsSummaryProjection} FROM public.v_quote_goods_receipt_v1 WHERE tenant_id=${tenantId} AND kv_id=${quoteId}::uuid AND status<>'entwurf' ORDER BY erstellt_am,id`)];
+}
+
+export async function readQuoteGoodsSummariesForQuotes(tx:PrivilegedTenantTransaction,tenantId:string,quoteIds:string[]){
+ const grouped=new Map<string,QuoteGoodsSummary[]>();if(!quoteIds.length)return grouped;
+ const rows=await tx.execute<QuoteGoodsSummary&{quoteId:string}>(sql`SELECT kv_id::text AS "quoteId",${goodsSummaryProjection} FROM public.v_quote_goods_receipt_v1 WHERE tenant_id=${tenantId} AND kv_id=ANY(ARRAY[${sql.join(quoteIds.map(id=>sql`${id}::uuid`),sql`, `)}]) AND status<>'entwurf' ORDER BY erstellt_am,id`);
+ for(const row of rows){const {quoteId,...summary}=row;const list=grouped.get(quoteId)??[];list.push(summary);grouped.set(quoteId,list);}return grouped;
 }
 
 export async function quoteHasCreatedOrder(tx:PrivilegedTenantTransaction,tenantId:string,quoteId:string,orderId:string){

@@ -52,11 +52,15 @@ test('fixed quote overlay: real read, one telephone acceptance, DB/event/readbac
  await dialog.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-ui-real-desktop.png')});
  await dialog.getByRole('button',{name:/hat am Telefon zugesagt/}).click();
  await expect(dialog.getByText('Zusage gespeichert · Ware erwartet.')).toBeVisible();
- const [stored]=await sql`SELECT q.version,q.fassung,q.zugesagt_fassung,q.linked_order_id,(SELECT count(*)::int FROM public.events e WHERE e.tenant_id=q.tenant_id AND e.payload->>'quoteId'=q.id::text AND e.event_type='QUOTE_LIFECYCLE_V04' AND e.payload->>'action'='accept') AS accept_events FROM private.quotes q WHERE q.tenant_id='galvanik-kreile' AND q.id=${quoteId}::uuid`;
+ const [stored]=await sql`SELECT q.version,q.quote_number,q.fassung,q.zugesagt_fassung,q.linked_order_id,(SELECT count(*)::int FROM public.events e WHERE e.tenant_id=q.tenant_id AND e.payload->>'quoteId'=q.id::text AND e.event_type='QUOTE_LIFECYCLE_V04' AND e.payload->>'action'='accept') AS accept_events FROM private.quotes q WHERE q.tenant_id='galvanik-kreile' AND q.id=${quoteId}::uuid`;
  expect(stored).toMatchObject({version:3,fassung:1,zugesagt_fassung:1,linked_order_id:null,accept_events:1});
  await expect(dialog.getByText(/hat am .* zugesagt\./)).toBeVisible();
  await page.setViewportSize({width:390,height:844});await dialog.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-ui-real-mobile.png')});
  await dialog.getByRole('button',{name:'Zurück',exact:true}).click();
+ await page.goto('/warendurchlauf');
+ const workshopQuotes=page.getByRole('region',{name:'KV-Ware',exact:true});
+ await workshopQuotes.getByRole('button',{name:/Ware erwartet ·/}).click();
+ await expect(workshopQuotes.getByRole('heading',{name:stored.quote_number+' · Prueffirma Alpha GmbH',exact:true})).toBeVisible();
  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('path1:global-create-open',{detail:'DIRECT_INTAKE'})));
  const intake=page.getByRole('dialog',{name:'Neuer Eingang',exact:true});await expect(intake).toBeVisible();
  const situationText='TEST Situation '+randomUUID()+' bitte Original erhalten';
@@ -80,7 +84,7 @@ test('fixed quote overlay: real read, one telephone acceptance, DB/event/readbac
 
 });
 
-test('quote goods: actual photos and one atomic telephone conversion with server quantity price',async({page})=>{
+for(const storedGoods of [false,true]) test('quote goods '+(storedGoods?'stored':'direct')+': actual photos and one atomic telephone conversion with server quantity price',async({page})=>{
  await prepareGeneratedSeed({id:'KV-UI-GOODS',gegeben:{login:'login_meister',datenlagen:['kunde_vollstaendig_firma'],aufruf:{seite:'nachrichten',weg:'oeffne'}}} as FlowCase);
  await page.setViewportSize({width:1220,height:880});await page.goto('/start');
  const actor=generatedFlowRuntime.logins.login_meister;
@@ -128,15 +132,24 @@ test('quote goods: actual photos and one atomic telephone conversion with server
  await expect(receipt.getByRole('img',{name:'Inhaltsfoto',exact:true})).toBeVisible({timeout:20000});
  await receipt.getByLabel('Angekommen · TEST UI Halter (KV: 4)',{exact:true}).fill('3');
  await receipt.getByLabel('Lager vor Galvanik · Regal / Kiste',{exact:true}).fill('TEST Regal Telefon');
- await receipt.getByRole('checkbox',{name:/hat am Telefon zugesagt/}).check();
- await receipt.getByLabel('Wortlaut der Zusage',{exact:true}).fill('TEST Kunde bestaetigt am Telefon die aktuelle Fassung');
+ if(!storedGoods){await receipt.getByRole('checkbox',{name:/hat am Telefon zugesagt/}).check();
+ await receipt.getByLabel('Wortlaut der Zusage',{exact:true}).fill('TEST Kunde bestaetigt am Telefon die aktuelle Fassung');}
  await expect(receipt.getByText('48,75 € netto',{exact:true})).toBeVisible({timeout:15000});
  await expect(receipt.getByText('3 × TEST UI Halter · verchromen',{exact:true})).toBeVisible();
  await receipt.locator('.kr-dialog-inhalt').evaluate(element=>{element.scrollTop=0;});
  await receipt.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-goods-desktop.png')});
  await page.setViewportSize({width:390,height:844});await receipt.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-goods-mobile.png')});
- await receipt.getByRole('button',{name:/Auftrag aus KV-2026-.* anlegen/}).click();
- await expect(receipt).toHaveCount(0,{timeout:20000});
+ if(storedGoods){
+  await receipt.getByRole('button',{name:'Ware gesperrt ablegen',exact:true}).click();
+  await expect(receipt).toHaveCount(0,{timeout:20000});await page.goto('/warendurchlauf');
+  const tiles=page.getByRole('region',{name:'KV-Ware',exact:true});await tiles.getByRole('button',{name:/Gesperrt ·/}).click();
+  const tile=tiles.locator('section.kr-kachel').filter({hasText:'TEST Regal Telefon'}).filter({hasText:'Zusage fehlt'});
+  await expect(tile).toHaveCount(1);await tile.getByRole('button',{name:'KV öffnen',exact:true}).click();
+  const storedCard=page.getByRole('dialog',{name:/KV-2026-/});await storedCard.getByRole('button',{name:/hat am Telefon zugesagt/}).click();
+  await expect(storedCard.getByText(/ist Auftrag A-2026-.* geworden/)).toBeVisible({timeout:20000});
+  await storedCard.getByRole('button',{name:'Auftrag öffnen',exact:true}).click();
+ }else{await receipt.getByRole('button',{name:/Auftrag aus KV-2026-.* anlegen/}).click();await expect(receipt).toHaveCount(0,{timeout:20000});}
+
  const [stored]=await sql`SELECT q.linked_order_id,q.zugesagt_fassung,r.auftrag_id,r.lagerort,o.ware,o.geprueft,(SELECT sum(quantity)::float8 FROM public.items i WHERE i.tenant_id=o.tenant_id AND i.order_id=o.id) AS quantity,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=r.tenant_id AND f.item_id=r.item_id) AS files FROM private.quotes q JOIN public.goods_receipt r ON r.tenant_id=q.tenant_id AND r.kv_id=q.id JOIN public.orders o ON o.tenant_id=q.tenant_id AND o.id=q.linked_order_id WHERE q.tenant_id='galvanik-kreile' AND q.id=${quoteId}::uuid`;
  expect(stored).toMatchObject({zugesagt_fassung:1,auftrag_id:stored.linked_order_id,lagerort:'TEST Regal Telefon',ware:'da',geprueft:true,quantity:3,files:4});
  const [device]=await sql`SELECT d.status,cardinality(d.angenommen_auf) AS devices,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=d.tenant_id AND f.item_id=d.item_id AND f.art='foto') AS photos FROM public.device_request d JOIN public.goods_receipt r ON r.tenant_id=d.tenant_id AND r.item_id=d.item_id WHERE d.tenant_id='galvanik-kreile' AND r.auftrag_id=${stored.linked_order_id}`;

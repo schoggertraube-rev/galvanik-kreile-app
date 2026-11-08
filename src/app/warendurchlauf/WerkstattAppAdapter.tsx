@@ -17,6 +17,7 @@ export function WerkstattAppAdapter({
 }) {
   usePageView();
   const router = useRouter();
+  const openQuote=useOverlayStore(state=>state.openQuote);
   const openOrder = useOverlayStore((state) => state.openOrder);
 
   return (
@@ -25,6 +26,7 @@ export function WerkstattAppAdapter({
       onRetry={() => router.refresh()}
       ports={{
         onOpenOrder: openOrder,
+        onOpenQuote:openQuote,
         onOpenGoodsOut: openOrder,
         onOpenWip: () => router.push("/warendurchlauf/galvanik"),
         onScanOrder: () => requestGlobalCreate("DIRECT_INTAKE"),

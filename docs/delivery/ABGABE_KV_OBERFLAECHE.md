@@ -89,3 +89,13 @@ PL 14:01 bestätigt strenge Foto-Pflicht. Fehlender Inhalt nennt den bestehenden
 Die Karte verbindet den vorhandenen CommunicationPanel-Editor mit demselben `sendCustomerMailAction` und dem tatsächlichen KV als PDF-Anhang. Kein zusätzlicher Versandwriter, kein manuelles „gesendet“ nach Klick: erst die bestätigte Versandantwort löst das Neulesen der KV-Karte aus. Doppelklick gesperrt, unklarer Versand hält Kennung und kompletten Text fest; erneuter Versuch verwendet dieselbe Anfrage. Bei ungeklärtem Versand kann die Karte nicht unbemerkt geschlossen werden. Unsende Entwürfe fragen vor dem Verwerfen.
 
 Fünf gezielte Kartenfälle PASS, darunter Portvertrag für Kunden-/KV-ID, Nachricht, dieselbe Retry-ID und Neulesen erst nach bestätigter Antwort. Externer Mailversand ist hiermit nicht als erfolgreich geprüft behauptet; die Provider-/Versandbelege des vorhandenen Mailwriters bleiben Voraussetzung der vollständigen Abnahme.
+
+## Werkstatt: KV-Ware aus derselben Quelle
+
+Eigene KV-Waren-Kacheln zeigen erwartete Ware, gesperrte Ware mit Ort/Grund und bereits vorhandene Ware vor der Auftragserzeugung. Die drei Filter teilen die tatsächlich gelesenen KV-Zeilen auf; „Alle“ ist deren Summe. Öffnen geht zur einen festen KV-Karte. Bestehende Auftrags-/WIP-Zähler bleiben aus ihrem bisherigen kanonischen Leser. Lesefehler werden angezeigt; bei der bestehenden Listenobergrenze wird die Begrenzung genannt.
+
+Der operational beschränkte Leser liefert keinerlei Preis-/Kalkulations-/PDF-Felder und braucht nur das vorhandene Werkstatt-Leserecht. Echte Replay-Action: nicht finanzberechtigter Login kann die erwartete Ware lesen, Voll-KV-Leser bleibt FORBIDDEN, DB-Version/Zusage/Auftragsreferenz unverändert; PASS 5,58 s. H18 erfasst den neuen Leser mit diesem echten Test, keine Ausnahme hinzugefügt.
+
+Gefundener Fehler: `listOpenQuotesCommand` dekodierte die KV-Zeilen ohne zugehörige Warenbelege, während der Einzel-KV-Leser diese bereits ergänzte. Dadurch verschwand gesperrte KV-Ware aus der neuen Werkstattprojektion. Derselbe kanonische Warenlese-Port ergänzt die gesamte Liste jetzt in genau einer Sammelabfrage (keine Abfrage je KV). Alte KV-Zeilen ohne Lifecycle verursachen keine unnötige Warenabfrage.
+
+Echter Browser: erwartete KV-Ware nach Zusage sichtbar; separater Warenweg mit gesperrtem Ablegen → Werkstattfilter/Ort/Grund → KV-Karte → Telefon-Zusage plus genau ein Auftrag aus vorhandenem Beleg → Auftragskarte/Galvanik. Gesperrter Hauptweg PASS 35,3 s. Drei gezielte Werkstatt-Renderfälle PASS. Keine automatische Mail-Zusage oder U-249-Schreibrechte als erledigt behauptet.

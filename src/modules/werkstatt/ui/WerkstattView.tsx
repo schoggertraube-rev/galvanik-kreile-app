@@ -1,5 +1,6 @@
 "use client";
 
+import {WORKSHOP_QUOTE_COPY} from '@/ui/situationCatalog';
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Auftragszeile,
@@ -218,6 +219,7 @@ export function WerkstattView({
     readDevice,
     () => "desktop" as const,
   );
+  const[quoteFilter,setQuoteFilter]=useState<'all'|'expected'|'blocked'|'here'>('all');
   const [activePicker, setActivePicker] = useState<PickerKind | null>(null);
   const [bundleFilterActive, setBundleFilterActive] = useState(false);
   const [filter, setFilter] = useState<HandlungsArt | "alle">("alle");
@@ -424,6 +426,8 @@ export function WerkstattView({
     <section data-testid="werkstatt-v11">
       <SeitenKopf titel="Werkstatt" />
       <DayStatus view={view} />
+      {view.quoteGoods?.length||view.quoteGoodsError?<section aria-label={WORKSHOP_QUOTE_COPY.title} className="kr-stapel"><h2>{WORKSHOP_QUOTE_COPY.title}</h2>{view.quoteGoodsError?<p role="alert">{view.quoteGoodsError}</p>:null}<div role="group" aria-label={WORKSHOP_QUOTE_COPY.title}>{(['all','expected','blocked','here'] as const).map(key=><Button key={key} text={WORKSHOP_QUOTE_COPY.filters[key]+' · '+(view.quoteGoods??[]).filter(row=>key==='all'||row.kind===key).length} aria-pressed={quoteFilter===key} onClick={()=>setQuoteFilter(key)}/>)}</div>{(view.quoteGoods??[]).filter(row=>quoteFilter==='all'||row.kind===quoteFilter).map(row=><Kachel key={row.id} titel={row.number+' · '+row.customer}><p>{row.parts}</p><p>{WORKSHOP_QUOTE_COPY.state(row.kind,row.locations,row.reason)}</p>{ports.onOpenQuote?<Button text={WORKSHOP_QUOTE_COPY.open} onClick={()=>ports.onOpenQuote!(row.id)}/>:null}</Kachel>)}{!(view.quoteGoods??[]).some(row=>quoteFilter==='all'||row.kind===quoteFilter)?<p role="status">{WORKSHOP_QUOTE_COPY.empty}</p>:null}{view.quoteGoodsLimited?<p role="status">{WORKSHOP_QUOTE_COPY.limited}</p>:null}</section>:null}
+
       <Lageleiste
         zaehler={counts}
         filter={filter}

@@ -539,3 +539,22 @@ export async function receiveOnsiteQuoteAction(input:{
   return {...result,phase:result.code==='OK'?'complete':'order',quoteId,customerId,requestId:input.clientRequestId};
  }catch(error){console.error('[QUOTE_ONSITE_REQUEST_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Ausgang nicht sicher bestaetigt. Eingaben und Erfassungskennung behalten; gespeicherte Zwischenschritte bleiben nachvollziehbar.',customerId,quoteId,requestId:input.clientRequestId};}
 }
+
+/** Operational workshop projection: no prices/calculation/PDFs leave this purpose-bound reader. */
+export async function readWorkshopQuoteGoodsAction(){
+ noStore();
+ try{const auth=await resolveAuthorization(),denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
+  if(!auth.data.permissions.includes('perm_view_leitstand'))return {code:'FORBIDDEN' as const,message:'KV-Ware ist nicht freigegeben.'};
+  const context={tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canReadQuote:true,canCreateQuote:false,canUpdateQuote:false,canConvertQuote:false}};
+  const result=await listOpenQuotesCommand({...context,capabilities:{...context.capabilities,canReadQuote:true}});
+  if(result.code!=='OK')return result;
+  const today=berlinCalendarDay();
+  const quotes=result.quotes.flatMap(quote=>{const life=quote.lifecycle;if(quote.linkedOrderId||!life)return [];
+   const goods=life.goods?.filter(row=>!row.orderId)??[],accepted=life.acceptedEdition===life.edition&&Boolean(life.acceptedAt),expired=Boolean(quote.validUntil&&quote.validUntil<today),conditional=life.conditional?.edition===life.edition;
+   if(!goods.length&&(!accepted||expired||conditional))return [];
+   const blocked=life.stage==='abgesagt'||!accepted||expired||conditional;
+   return [{id:quote.quoteId,number:quote.quoteNumber,customer:quote.customerDisplayName,parts:quote.positions.map(row=>row.quantity+' × '+row.name).join(' / '),due:quote.dueDate,kind:goods.length?(blocked?'blocked' as const:'here' as const):'expected' as const,locations:goods.map(row=>row.location).filter(Boolean),reason:life.stage==='abgesagt'?'KV abgesagt':expired?'Gültigkeit abgelaufen':conditional?'Zusage mit Vorbehalt':!accepted?'Zusage fehlt':goods.length?'Auftrag noch nicht angelegt':null}];
+  });
+  return {code:'OK' as const,quotes,limited:result.quotes.length===100};
+ }catch(error){console.error('[WORKSHOP_QUOTE_GOODS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Ware konnte nicht sicher gelesen werden.'};}
+}
