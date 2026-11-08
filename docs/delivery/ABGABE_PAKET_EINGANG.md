@@ -39,3 +39,12 @@ CI fand W4_READ_PORT_CONTRACT: neuer SQL-Standort quoteReads.ts war nicht als Vi
 ## Fortschreibung 08.11.22:46
 
 Erwartete Rücksendung zur Nacharbeit wird aus dem vorhandenen kanonischen Auftragsursprung als solche bezeichnet. Der gebündelte Core-Leser fragt dieselben gespeicherten Waren-/Kunden-/Auftragsfakten und entfernt zurückgenommene Aufträge vor der Begrenzung. Keine neue Erwartungsablage. Der vorhandene echte Nacharbeit-/Rücknahmefall wurde um Capture-Neulesen ergänzt: Nacharbeit erscheint als rework, nach der echten protokollierten Rücknahme nicht mehr als erwartete Ware (PASS6.36s); sämtliche bisherigen Assertions bleiben erhalten. Die Nacharbeits-/Auftragshistorie wird dadurch nicht gelöscht.
+
+
+## Fortschreibung 08.11. 23:29
+
+Der optionale Knopf „Ware fotografieren · Zustand bei Annahme“ benutzt dieselbe vorhandene Inhaltskamera bzw. denselben PC→Handy-Fotoweg. Kein zusätzlicher Uploadwriter, keine zweite Fotoablage; Etikett/Inhalt/Packstückprüfung bleiben unverändert Pflicht. Fünf gezielte QuoteGoods-Renderfälle PASS; optionaler Kameraaufruf speichert oder konvertiert für sich keinen Vorgang. Texte aus QUOTE_PHOTO_COPY.
+
+Am bisherigen Kandidaten 116a4013 waren alle acht GitHub-Checks grün. Der neue optische Schritt benötigt neue CI/Preview; nicht als fertiges Paket ausgegeben. PE05-Ergänzungsebene für noch fehlende Neukunden-/KV-Angaben ist beim PL mit Wiederverwendungs-Vorschlag gebündelt, kein selbst erfundenes Plus-Formular.
+
+Gemeinsam genutzte Dev-DB: inzwischen 104 Migrationen durch die ausdrücklich additive RM01-Vorlage auf dem vorbereiteten Branch codex/reklamation-mail. Dieser PE-Branch hat weiterhin 103, keine eigene Migration; Differenz genau 20261108222500_complaint_photo_request_template.sql. Für diesen SHA wird deshalb KEIN Repo=Dev-Gleichstand behauptet. Bestehende Vorlagen/Daten unverändert, RM-Abbruchprobe/Gleichstand auf seinem Branch belegt. Vor einer abschließenden Merge-Abgabe muss die gemeinsame Abhängigkeit sauber eingebunden werden.
