@@ -28,3 +28,10 @@ export async function readQuoteFollowupFacts(tx:PrivilegedTenantTransaction,tena
  if(!ids.length)return [];
  return [...await tx.execute<QuoteFollowupFact>(sql`SELECT quote_id::text AS id,fassung AS edition,derived_status AS stage,quote_number AS number,customer_display_name AS "customerName",integrity_ok AS integrity FROM private.v_quotes_v1 WHERE tenant_id=${tenantId} AND quote_id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::uuid[])`)];
 }
+
+/** Quantities belong to the existing received-goods record, not a second order draft. */
+export async function readQuoteReceivedQuantities(tx:PrivilegedTenantTransaction,tenantId:string,quoteId:string,receiptId:string){
+ const rows=await tx.execute<{mengen:Array<{kv_position:number;bestaetigt:number}>}>(sql`SELECT mengen FROM public.goods_receipt WHERE tenant_id=${tenantId} AND kv_id=${quoteId}::uuid AND id=${receiptId}::uuid AND status='angenommen'`);
+ if(rows.length>1)throw Error('QUOTE_GOODS_QUANTITIES_AMBIGUOUS');
+ return rows[0]?.mengen??null;
+}

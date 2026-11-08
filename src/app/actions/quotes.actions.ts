@@ -237,7 +237,7 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
   if (failure || !authorization.ok) return failure!;
 
   const commandContext = quoteCommandContext(authorization.data);
-  const prepared = await prepareQuoteConversionCommand(commandContext, input,{planOnly:true,pendingGoodsId:newGoods?.id});
+  const prepared = await prepareQuoteConversionCommand(commandContext, input,{planOnly:true,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
   if (prepared.code !== "OK") return prepared;
 
   let goods:Awaited<ReturnType<typeof bindQuoteGoodsReceiptToCreatedOrder>>|null=null;
@@ -248,7 +248,7 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
     if(saved.code!=='OK'){boundFailure={code:saved.code==='UNAUTHENTICATED'?'FORBIDDEN':saved.code,message:saved.message};throw Error('QUOTE_NEW_GOODS_FAILED');}
   };
   const check=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],planOnly:boolean)=>{
-    const result=await prepareQuoteConversionCommand(commandContext,input,{transaction:tx,planOnly,pendingGoodsId:newGoods?.id});
+    const result=await prepareQuoteConversionCommand(commandContext,input,{transaction:tx,planOnly,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
     if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_ORDER_BINDING_FAILED');}
   };
   const order = await createOrderIntake(prepared.orderInput,undefined,{
@@ -396,7 +396,9 @@ export async function prepareQuoteCopyAction(input: { kind: 'quote' | 'order'; i
         const sourceQuote = await readQuoteCopyCommand(context, { quoteId: order.commercialQuote.quoteId });
         if (sourceQuote.code !== 'OK') return sourceQuote;
         quote = sourceQuote.quote;
-        copyPositions = sourceQuote.positions;
+        const commercial=order.commercialQuote;
+        if(commercial.positions.length!==sourceQuote.positions.length)return {code:'UNAVAILABLE' as const,message:'Auftragsmenge und KV-Positionen passen nicht zusammen.'};
+        copyPositions = sourceQuote.positions.map((position,index)=>({...position,quantity:commercial.positions[index].quantity,lineTotalCents:commercial.positions[index].lineTotalCents}));
       }
     } else {
       const source = await readQuoteCopyCommand(context, { quoteId: input.id });

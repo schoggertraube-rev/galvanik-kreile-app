@@ -140,6 +140,7 @@ describe("quotes command boundary", () => {
       .mockResolvedValueOnce([{id:QUOTE}])
       .mockResolvedValueOnce([acceptedQuoteRow])
       .mockResolvedValueOnce([goodsRow])
+      .mockResolvedValueOnce([{mengen:[{kv_position:1,bestaetigt:2}]}])
       .mockResolvedValueOnce([{ result_code: "OK", order_input: { geprueft: true,
         clientEventId: CLIENT,
         customer: { mode: "EXISTING", customerId: CUSTOMER },
