@@ -83,3 +83,9 @@ Echter Browser mit zweiter angemeldeter Seite: QR-Anfrage → tatsächliches Ann
 Gefundener Fehler: Dateiauswahl war beim noch nicht angenommenen Handy-Link möglich und konnte die ursprüngliche statt gebundene Eingangs-ID verwenden. Empfangs-Dateieingabe bleibt nun bis zur tatsächlichen Annahme gesperrt, auch Paste/Drop werden vor diesem Zeitpunkt abgefangen. Keine Änderung des Upload-/Gerätewriters. Test wartet auf die reale Annahme statt allein auf das sichtbare Dialogfenster. Die zunächst erwogene Änderung der Fotoherkunft wurde verworfen, da sie nicht ursächlich war.
 
 PL 14:01 bestätigt strenge Foto-Pflicht. Fehlender Inhalt nennt den bestehenden KV als Herkunft des noch nicht angelegten Auftrags; eine zukünftige Auftragsnummer wird nicht erfunden.
+
+## KV-Mail aus der festen Karte
+
+Die Karte verbindet den vorhandenen CommunicationPanel-Editor mit demselben `sendCustomerMailAction` und dem tatsächlichen KV als PDF-Anhang. Kein zusätzlicher Versandwriter, kein manuelles „gesendet“ nach Klick: erst die bestätigte Versandantwort löst das Neulesen der KV-Karte aus. Doppelklick gesperrt, unklarer Versand hält Kennung und kompletten Text fest; erneuter Versuch verwendet dieselbe Anfrage. Bei ungeklärtem Versand kann die Karte nicht unbemerkt geschlossen werden. Unsende Entwürfe fragen vor dem Verwerfen.
+
+Fünf gezielte Kartenfälle PASS, darunter Portvertrag für Kunden-/KV-ID, Nachricht, dieselbe Retry-ID und Neulesen erst nach bestätigter Antwort. Externer Mailversand ist hiermit nicht als erfolgreich geprüft behauptet; die Provider-/Versandbelege des vorhandenen Mailwriters bleiben Voraussetzung der vollständigen Abnahme.

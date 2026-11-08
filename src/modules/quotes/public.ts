@@ -26,4 +26,4 @@ export {scaleQuotePositions} from "./quoteCalculation";
 export type {QuoteQuantityLine} from "./quoteCalculation";
 
 export {QuoteCard} from "./ui/QuoteCard";
-export type {QuoteCardPorts} from "./ui/QuoteCard";
+export type {QuoteCardPorts,QuoteMailDraft} from "./ui/QuoteCard";

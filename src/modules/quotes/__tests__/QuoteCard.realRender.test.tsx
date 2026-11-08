@@ -50,3 +50,19 @@ it('phone acceptance with stored goods calls the one atomic conversion port and 
  expect(convert).toHaveBeenCalledOnce();expect(change).not.toHaveBeenCalled();
  expect(vi.mocked(convert).mock.calls[0]).toEqual([expect.objectContaining({goodsReceiptId:'TEST-goods',expectedVersion:2,confirmedOrderDueDate:quote.dueDate,handoverMode:'pickup',paymentMode:'abholung'}),expect.objectContaining({edition:1,evidence:expect.stringContaining('Telefon')})]);
 });
+
+it('quote mail uses the existing send port, retains uncertain payload and only rereads after confirmed delivery',async()=>{
+ const send=vi.fn().mockResolvedValueOnce({code:'ERROR',message:'TEST Versand ungeklärt',unclear:true}).mockResolvedValueOnce({code:'OK'}),read=vi.fn(async()=>({code:'OK' as const,quote,canEdit:true}));
+ const ports:QuoteCardPorts={read,send,change:vi.fn(),prepare:vi.fn(),update:vi.fn()};
+ const close=vi.fn();render(<QuoteCard quoteId={quote.quoteId} ports={ports} onClose={close} onCustomer={vi.fn()} onOrder={vi.fn()} MailView={({draft})=><><label>TEST Betreff<input value={draft.subject} disabled={draft.busy} onChange={e=>draft.onSubject(e.target.value)}/></label><label>TEST Nachricht<textarea value={draft.body} disabled={draft.busy} onChange={e=>draft.onBody(e.target.value)}/></label></>}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'KV per E-Mail senden'}));
+ fireEvent.change(screen.getByLabelText('TEST Nachricht'),{target:{value:'TEST Bitte aktuelle Fassung bestätigen'}});
+ const sendButton=screen.getByRole('button',{name:'KV senden'});fireEvent.click(sendButton);fireEvent.click(sendButton);
+ await screen.findByText('TEST Versand ungeklärt');expect(send).toHaveBeenCalledOnce();
+ expect(screen.getByLabelText('TEST Nachricht')).toBeDisabled();
+ fireEvent.click(screen.getByRole('button',{name:'Zurück'}));expect(close).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Mit gleicher Kennung erneut senden'}));
+ await waitFor(()=>expect(send).toHaveBeenCalledTimes(2));expect(send.mock.calls[1][0]).toEqual(send.mock.calls[0][0]);
+ expect(send.mock.calls[0][0]).toMatchObject({quoteId:quote.quoteId,customerId:quote.customerId,subject:'KV KV-TEST-118',body:'TEST Bitte aktuelle Fassung bestätigen'});
+ await waitFor(()=>expect(read.mock.calls.length).toBeGreaterThan(1));
+});
