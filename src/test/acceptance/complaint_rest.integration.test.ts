@@ -237,7 +237,7 @@ it('AF-2: shipped goods remain claimable through the actual goods-out and compla
  const fixture=await createFixture(),order=await deliveredComplaintSource(fixture,'versand');
  const [delivered]=await sql`SELECT o.station,e.payload->>'mode' AS mode FROM public.orders o JOIN public.events e ON e.tenant_id=o.tenant_id AND e.order_id=o.id AND e.event_type LIKE 'ORDER_PICKED_UP_%' WHERE o.tenant_id=${KREILE_TENANT_SLUG} AND o.id=${order.orderId}`;
  expect(delivered).toMatchObject({station:'abgeholt',mode:'versand'});
- const input:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST AF2 nach tatsaechlichem Versand',photoIds:[],goodsReturn:'offen'};
+ const input:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST AF2 nach tatsaechlichem Versand',photoIds:await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,customerId:fixture.customerId,orderId:order.orderId}),goodsReturn:'offen'};
  const result=await complaintWrite(fixture,input);
  const [event]=await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${result.eventId}`;
  expect(event.user_id).toBe(fixture.actorId);
