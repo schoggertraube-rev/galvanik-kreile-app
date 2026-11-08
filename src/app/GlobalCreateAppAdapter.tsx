@@ -182,6 +182,7 @@ export function GlobalCreateAppAdapter() {
         canDecide:hasArea("entscheiden"),
         showPrimaryTrigger: false,
         roleLabel,
+        actorDisplayName:name,
         resumeQuoteId,
         resumeQuoteConversionId,
         listCustomers: async () => {

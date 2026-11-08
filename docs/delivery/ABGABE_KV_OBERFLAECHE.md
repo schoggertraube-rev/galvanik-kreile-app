@@ -1,6 +1,6 @@
 # KV → Ware → Auftrag — laufender Bau
 
-**Unfertiger Draft. Keine Merge-Bitte.** Quelle: eingefrorenes Durchstich_KV_2026-11-08.html, SHA-256 93e211498d85e392fdb0746a0d4bad7fa544f6623dcb549b13915b1bf9a12910. U-248 und nachträgliche PL-Regeln/U-250 werden innerhalb dieses Pakets berücksichtigt. Keine Vorschau-Testdaten im Produkt.
+**Unfertiger Draft. Keine Merge-Bitte.** Aktuelle Quelle nach PL 12:40: Durchstich_KV_2026-11-08b.html, SHA-256 8074f7457033a194fdd16aff062f02970b930d230f32c4f806084cfc3a50eef9. Erster Bau nach der inzwischen ersetzten Quelle 93e21149; U-250/U-251 werden nachgeführt. U-248 und nachträgliche PL-Regeln/U-250 werden innerhalb dieses Pakets berücksichtigt. Keine Vorschau-Testdaten im Produkt.
 
 ## Schritt 1: eine KV-Karte im bestehenden Overlay-Stack
 
@@ -33,3 +33,9 @@ Geänderte bestehende Assertions (U-250):
 - „Wem gehört das? / Später zuordnen / Original ansehen“ als gleichzeitig sichtbare Fußaktionen → Zuordnung/Textänderung im Alternativenbereich, echtes Original als benannter Originalknopf, keine sichtbare Notizzeile. Schließen bleibt im Fuß.
 - Ware ohne passenden Auftrag ruft automatisch onOrder auf → ausdrücklich kein Aufruf, konkrete Zuordnungsaktion sichtbar. Anfrage/Dokument/Rechnung behalten ihre ursprünglichen Wege.
 - EntityOverlayStack: keine vorhandene Assertion geändert; KV-Adapter wird wie Kunden-/Auftragsadapter im isolierten Stacktest ersetzt, zusätzlicher KV→Kunde→Zurück-Fall. Echter KV-Writer bereits im Browser geprüft. Behebt CI-Import einer echten DB im reinen Stacktest.
+
+## PL-Korrektur 12:45 (in Arbeit)
+
+Nicht erkannter Text ohne Datei bleibt in der Startansicht. Titel „Neuer Eingang“, Begrüßung aus dem echten Login-Namen; keine Null-/Offen-Chips, kein „Wem gehört das?“. „Anders zuordnen“ ist ein Knopf; Kandidaten sind echte Server-Ergebnisse. Die frühere generische Situationsformulierung wurde zurückgenommen. Für nicht vorhandene konkrete Textfälle und den Task-gebundenen Ablegen-Fallback folgt die Präzisierung im BAULOG; keine automatische Erledigung oder Folgetask ohne Nachweis behauptet. U-251 noch offen: Die KV-Daten allein beweisen weder aktuellen Warenstand nach Warenausgang noch Galvanikfreigabe; deshalb keine geschätzte grüne Freigabe aus einer bloßen Auftragsbindung bauen.
+
+Korrektur PL 12:45 gezielt geprüft: acht Komponentenfälle, Typen/Lint/Diff PASS; echter Browser einschließlich gesicherter Datei → Situation PASS 17,6 s. Vergleich mit eingefrorener 8074f745 bei identischer Fenstergröße vor Push ausgeführt: generischer Notizfall übernimmt nun den wörtlichen Aufgaben-Vorschlag samt vorhandener Aufgabenansicht; keine Status-Chips. Weiter offene Abweichungen: echtes Thumbnail, taskgebundener Ablegen-Fallback, vollständige KV-Situation/Kreislauf und U-251. Kein vollständiger Sicht-PASS und keine Merge-Bitte.

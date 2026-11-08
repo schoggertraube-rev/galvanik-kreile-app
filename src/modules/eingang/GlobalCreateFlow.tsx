@@ -224,6 +224,7 @@ export type GlobalCreatePorts = {
   canDecide?:boolean;
   showPrimaryTrigger?: boolean;
   roleLabel: string;
+  actorDisplayName?:string|null;
   resumeQuoteId: string | null;
   resumeQuoteConversionId: string | null;
   listCustomers: () => Promise<

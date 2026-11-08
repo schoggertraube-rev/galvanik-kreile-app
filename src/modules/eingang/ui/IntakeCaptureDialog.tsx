@@ -467,7 +467,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
     } catch (cause) { console.error("[INTAKE_KIND_UI_WRITE_FAILED]", cause); setError("Die Art des Eingangs wurde nicht bestätigt · Original bleibt erhalten. Code: INTAKE_KIND_UI_WRITE_FAILED."); }
     finally { inFlight.current = false; setBusy(false); setKindWorking(null); }
   };
-  const showSituation=Boolean(!mode&&!receiving&&capture&&hasCapturedContent&&!showCamera&&!hidePreviousResult&&(capture.files.length>0||situationRequested));
+  const showSituation=Boolean(!mode&&!receiving&&capture&&hasCapturedContent&&!showCamera&&!hidePreviousResult&&(capture.files.some(file=>file.secured===true)||situationRequested&&Boolean(capture.recognition?.text.trim())&&!["notiz","unklar"].includes(capture.recognition?.kind??"unklar")));
   const readSituation=async()=>{if(inFlight.current)return;inFlight.current=true;setBusy(true);try{const saved=await saveNote();if(saved){setSituationRequested(true);setHidePreviousResult(false);}}catch(cause){console.error("[INTAKE_NOTE_SAVE_FAILED]",cause);setError("Speichern fehlgeschlagen · Text bleibt erhalten. Code: INTAKE_NOTE_SAVE_FAILED.");}finally{inFlight.current=false;setBusy(false);}};
   const resultMain = capture && hasCapturedContent && !mode && !receiving && !busy && !showCamera && !hidePreviousResult ? recognizedKind === "anfrage" ?
     <Button data-spec-id="rein.erfassen-aus-eingang" art="primaer" text="Auftrag oder KV erfassen" onClick={() => onOrder(capture.customerId ?? undefined, capture)} />
@@ -476,8 +476,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
       : <Button data-spec-id="rein.fuers-buero" art="primaer" text="Fürs Büro speichern" onClick={() => onClose("Gespeichert · Büro prüft")} />
     : recognizedKind === "ware" && capture.expectedOrders?.length === 1 && capture.customerId === capture.expectedOrders[0].customerId ?
       <Button data-spec-id="rein.ware-annehmen-kunde" art="primaer" text={"Ware annehmen · " + capture.expectedOrders[0].number} onClick={() => openObject("ware", capture.expectedOrders![0].id + "#" + capture.id)} />
-    : recognizedKind === "ware" ? null
-    : <Button data-spec-id="rein.wem-gehoert" art="primaer" text="Wem gehört das?" onClick={() => void assign()} /> : null;
+    : null : null;
   const anotherPage = () => { setCameraReady(false); setCameraAttempt(value => value + 1); setCameraRequested(true); setHidePreviousResult(true); };
   const finishReading = async () => {
     if (inFlight.current || !capture || !getCapture) return;
@@ -492,7 +491,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
   const adopt = () => {
     if (capture && !busy) onAdopt?.(capture, mode === "eingangsfoto" ? "Eingangsfoto übernommen" : failedFile ? "Als Dokument übernommen · ohne Vorschläge" : "Übernommen · erkannt markiert");
   };
-  return <Dialog titel="Neu erfassen" unterzeile={modeTitle} icon="plus" groesse="breit" schliessenSpecId="rein.schliessen" onSchliessen={() => void close()} vorSchliessen={() => { void close(); return false; }}
+  return <Dialog titel="Neuer Eingang" unterzeile={modeTitle} icon="plus" groesse="breit" schliessenSpecId="rein.schliessen" onSchliessen={() => void close()} vorSchliessen={() => { void close(); return false; }}
     fuss={<>
       <Button text="Schließen" onClick={() => void close()} disabled={busy || deviceWorking} />
       {!showSituation?<>{showCamera ? <Button data-spec-id="rein.ausloesen" icon="camera" art="primaer" text={busy ? "Wird gesichert …" : "Foto"} disabled={busy || blockedReceiver || deviceWorking || !cameraReady} onClick={takePhoto} /> : null}
@@ -503,15 +502,16 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
       {firstOriginal && !showCamera && !receiving ? <Button data-spec-id="rein.original" art="leise" text="Original ansehen" title={firstOriginal.name}
         onClick={() => openObject("original", capture!.id + "#" + firstOriginal.id)} /> : null}
       {!mode && !receiving && hasContent && (!capture || ["anfrage", "kontakt", "rechnung", "ware"].includes(recognizedKind)) ?
-        <Button data-spec-id="rein.wem-gehoert" art="leise" text="Wem gehört das?" disabled={busy} onClick={() => void assign()} /> : null}
+        <Button data-spec-id="rein.wem-gehoert" art="leise" text="Anderen Kunden oder Vorgang wählen" disabled={busy} onClick={() => void assign()} /> : null}
       </>:null}
     </>}>
     <div data-spec-id="rein" className={`ev-rein${mode ? " ev-rein--erg" : ""}`} onKeyDown={event => {
       if (showCamera && (event.key === " " || event.key === "Enter") && !(event.target as HTMLElement).closest("input,textarea,select,button,a,[contenteditable=true]")) { event.preventDefault(); takePhoto(); }
     }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); chooseFiles(event.dataTransfer.files); }}
       onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); chooseFiles(event.clipboardData.files); } }}>
-      {showSituation&&capture?<IntakeSituation capture={capture} kind={recognizedKind} busy={busy} primary={resultMain} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onKind={kind=>void chooseKind(kind)}/>:null}
+      {showSituation&&capture?<IntakeSituation capture={capture} kind={recognizedKind} busy={busy} primary={resultMain} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onKind={kind=>void chooseKind(kind)} onTask={()=>{const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}}));if(!opened){console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");setError("Aufgabe konnte nicht geöffnet werden · Code: INTAKE_TASK_TARGET_UNAVAILABLE.");}}}/>:null}
       <div className="ev-rein-feld" hidden={showSituation} style={showSituation?{display:"none"}:undefined}>
+        {!mode&&ports.actorDisplayName?.trim()?<h2>{`Hey ${ports.actorDisplayName.trim().split(/\s+/u)[0]}, was kann ich für dich tun?`}</h2>:null}
         {contextLoading ? <p role="status">Kontext wird gelesen …</p> : null}
         {createContext ? <div data-spec-id="rein.kontext" className="ev-rein-kontext">
           <strong>für {createContext.label}</strong>

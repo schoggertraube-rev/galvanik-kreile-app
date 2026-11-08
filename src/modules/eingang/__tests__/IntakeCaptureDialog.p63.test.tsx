@@ -65,7 +65,7 @@ describe("U241: unknown originals always have a concrete next step", () => {
     fireEvent.click(screen.getByRole("button", { name: labels[kind] }));
     await waitFor(() => expect(chooseCaptureKind).toHaveBeenCalledWith(expect.objectContaining({ itemId: capture.id, version: 1, kind })));
     if (kind === "anfrage") await waitFor(() => expect(onOrder).toHaveBeenCalledWith(undefined, chosen));
-    else if(kind === "ware"){await screen.findByRole("heading",{name:"Von wem ist die Ware?"});expect(onOrder).not.toHaveBeenCalled();expect(screen.getByRole("button",{name:"Zuordnen · Kunde klären"})).toBeEnabled();}
+    else if(kind === "ware"){await screen.findByRole("heading",{name:"Absender nicht erkannt"});expect(onOrder).not.toHaveBeenCalled();expect(screen.getByRole("button",{name:"Anderen Kunden oder Vorgang wählen"})).toBeEnabled();}
     else await waitFor(() => expect(openCaptureObject).toHaveBeenCalledWith(kind === "rechnung" ? "rechnungein" : "mailein", capture.id + (kind === "dokument" ? "#rein" : "")));
   });
 });
