@@ -32,12 +32,15 @@ it('AF6 converts all stored package receipts through the same port without reque
 });
 
 
-it('PE condition photo reuses the existing content camera input and never creates a receipt by itself',async()=>{
+it('PE condition photo stays in the single existing content camera after the required original is present',async()=>{
  const current={...quote,status:'draft' as const,linkedOrderId:null};
- const ports:QuoteGoodsPorts={read:vi.fn(async()=>({code:'OK' as const,quote:current,canEdit:true})),scope:async()=>({code:'OK',scope:'TEST-scope'}),capture:vi.fn(),device:vi.fn(),prepareFile:vi.fn(),finishFile:vi.fn(),original:vi.fn(),save:vi.fn(),convert:vi.fn()};
- render(<QuoteGoodsDialog quoteId={quote.quoteId} ports={ports} onClose={vi.fn()} onOriginal={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()} onMessage={vi.fn()} onQuote={vi.fn()}/>);
- const optional=await screen.findByRole('button',{name:'Ware fotografieren · Zustand bei Annahme'});
- expect(screen.getByText('Zusätzliches Zustandsfoto · optional')).toBeVisible();
- const camera=document.querySelector<HTMLInputElement>('input[id$="-teile"]');expect(camera).not.toBeNull();const clicked=vi.spyOn(camera!,'click');
- fireEvent.click(optional);expect(clicked).toHaveBeenCalledOnce();expect(ports.save).not.toHaveBeenCalled();expect(ports.convert).not.toHaveBeenCalled();
+ const source={id:'TEST-source',version:1,text:null,customerId:quote.customerId,orderId:null,assignment:'hand',usage:'offen',concerns:['ware'],files:[{id:'TEST-content',name:'TEST Inhalt.jpg',mime:'image/jpeg',bytes:32,readable:true,status:'fertig',secured:true}]};
+ const ports:QuoteGoodsPorts={read:vi.fn(async()=>({code:'OK' as const,quote:current,canEdit:true})),scope:async()=>({code:'OK',scope:'TEST-scope'}),capture:vi.fn(async()=>({code:'OK' as const,capture:source})),device:vi.fn(),prepareFile:vi.fn(),finishFile:vi.fn(),original:vi.fn(async()=>({code:'UNAVAILABLE' as const,message:'TEST no external preview'})),save:vi.fn(),convert:vi.fn()};
+ render(<QuoteGoodsDialog quoteId={quote.quoteId} sourceId={source.id} ports={ports} onClose={vi.fn()} onOriginal={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()} onMessage={vi.fn()} onQuote={vi.fn()}/>);
+ const role=await screen.findByRole('button',{name:'TEST Inhalt.jpg · Inhaltsfoto'});expect(screen.queryByText('Zusätzliches Zustandsfoto · optional')).toBeNull();
+ fireEvent.click(role);
+ expect(await screen.findByText('Zusätzliches Zustandsfoto · optional')).toBeVisible();
+ expect(screen.getAllByText('Ware fotografieren · Zustand bei Annahme')).toHaveLength(1);
+ expect(document.querySelectorAll('input[type=file][capture=environment]')).toHaveLength(2);
+ expect(ports.save).not.toHaveBeenCalled();expect(ports.convert).not.toHaveBeenCalled();
 });

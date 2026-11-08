@@ -48,3 +48,10 @@ Der optionale Knopf „Ware fotografieren · Zustand bei Annahme“ benutzt dies
 Am bisherigen Kandidaten 116a4013 waren alle acht GitHub-Checks grün. Der neue optische Schritt benötigt neue CI/Preview; nicht als fertiges Paket ausgegeben. PE05-Ergänzungsebene für noch fehlende Neukunden-/KV-Angaben ist beim PL mit Wiederverwendungs-Vorschlag gebündelt, kein selbst erfundenes Plus-Formular.
 
 Gemeinsam genutzte Dev-DB: inzwischen 104 Migrationen durch die ausdrücklich additive RM01-Vorlage auf dem vorbereiteten Branch codex/reklamation-mail. Dieser PE-Branch hat weiterhin 103, keine eigene Migration; Differenz genau 20261108222500_complaint_photo_request_template.sql. Für diesen SHA wird deshalb KEIN Repo=Dev-Gleichstand behauptet. Bestehende Vorlagen/Daten unverändert, RM-Abbruchprobe/Gleichstand auf seinem Branch belegt. Vor einer abschließenden Merge-Abgabe muss die gemeinsame Abhängigkeit sauber eingebunden werden.
+
+
+## Ein gezielter Sicht-Fix 08.11. 23:42
+
+Echter read-only Preview-Lauf ae48af4b, Rolf, 1220/390: zwei bestehende Kamerafelder, Quelle/KV-Version unverändert und kein Warenbeleg entstanden. Die neue zusätzliche Kamera-Schaltfläche war optisch doppelt. Ein Fix: zusätzlichen Knopf entfernt; dieselbe vorhandene Inhaltskachel bietet nach dem ersten gesicherten Inhaltsfoto das zusätzliche optionale Zustandsfoto an. Vorher bleibt der Pflicht-Inhaltsbeleg eindeutig. Fünf gezielte Renderfälle PASS einschließlich vorhandener Originalauswahl, genau zwei Kamera-Inputs, kein Save/Convert. Ein mechanischer Testselektor wurde an den bestehenden Katalogtext angeglichen, keine Assertion abgeschwächt.
+
+Bildpaar des Vor-Fix-Kandidaten außerhalb Repo: `%TEMP%/kreile-pe-readonly-ae48af4b/quote-goods-{1220,390}.png`; ausdrücklich kein finales Bildpaar des neuen SHA. Vollständiger Foto-Upload/PE05 weiterhin offen. Keine erneute Gesamtsicht-Schleife.
