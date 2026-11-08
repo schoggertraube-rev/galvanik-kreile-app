@@ -18,3 +18,6 @@ export type {
   ReadQuoteUpdateReceiptResult,
   ReadQuoteResult,
 } from "./server/types";
+
+export {QuoteCard} from "./ui/QuoteCard";
+export type {QuoteCardPorts} from "./ui/QuoteCard";

@@ -41,7 +41,9 @@
     "@/modules/quotes/server-public#QuoteFollowupBinding",
     "@/modules/quotes/server-public#lockQuoteDeliverySnapshot",
     "@/modules/quotes/server-public#readQuoteCopyCommand",
-    "@/modules/quotes/server-public#prepareQuoteTextChangeCommand"
+    "@/modules/quotes/server-public#prepareQuoteTextChangeCommand",
+    "@/modules/quotes/public#QuoteCard",
+    "@/modules/quotes/public#QuoteCardPorts"
   ],
   "capabilities": [
     "quotes:create",

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 export type OverlayType =
+  | { type: 'quote'; id: string }
   | { type: 'order'; id: string;focus?:'photos' }
   | { type: 'customer'; id: string; prefill?: unknown }
   | { type: 'item'; orderId: string; itemId: string }
@@ -10,6 +11,7 @@ export type OverlayType =
 interface OverlayState {
   stack: OverlayType[];
 
+  openQuote: (id: string) => void;
   openOrder: (id: string,focus?:'photos') => void;
   openCustomer: (id: string,prefill?:unknown) => void;
   openItem: (orderId: string, itemId: string) => void;
@@ -31,6 +33,7 @@ export const useOverlayStore = create<OverlayState>((set) => {
   return {
     stack: [],
 
+    openQuote: (id) => set((state) => ({stack:[...state.stack,{type:'quote',id}]})),
     openOrder: (id,focus) => set((state) => ({
       stack: [...state.stack, { type: 'order', id,...(focus?{focus}:{}) }],
       orderStack: [...state.orderStack, id]

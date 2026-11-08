@@ -140,7 +140,9 @@ export async function readQuoteAction(input: { quoteId: string }) {
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
-  return readQuoteCommand(quoteCommandContext(authorization.data), input);
+  const context=quoteCommandContext(authorization.data);
+  const result=await readQuoteCommand(context,input);
+  return result.code==='OK'?{...result,canEdit:context.capabilities.canUpdateQuote}:result;
 }
 
 export async function listOpenQuotesAction() {

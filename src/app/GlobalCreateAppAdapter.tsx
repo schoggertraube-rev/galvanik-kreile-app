@@ -60,6 +60,7 @@ export function GlobalCreateAppAdapter() {
   const objectPorts=useMemo<IntakeObjectPorts>(()=>({goods:{scope:getIntakePendingScopeAction,read:getGoodsReceiptsAction,save:saveGoodsReceiptAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction},original:{open:openIntakeOriginalAction,confirm:confirmIntakeOriginalAction,capture:getIntakeCaptureAction,retry:retryIntakeRecognitionAction}}),[]);
   const openCustomer = useOverlayStore((state) => state.openCustomer);
   const openOrder = useOverlayStore((state) => state.openOrder);
+  const openQuote = useOverlayStore((state) => state.openQuote);
   const activeCustomerOverlayId = useOverlayStore((state) => {
     for (let index = state.stack.length - 1; index >= 0; index -= 1) {
       const overlay = state.stack[index];
@@ -129,6 +130,7 @@ export function GlobalCreateAppAdapter() {
 
   useEffect(()=>{
     const handler=(event:Event)=>{const {ziel,arg,sourceItemId}=(event as CustomEvent<{ziel:string;arg?:unknown;sourceItemId?:string}>).detail??{};
+      if((ziel==='kv'||ziel==='quote')&&typeof arg==='string'){event.preventDefault();openQuote(arg);return;}
       if(ziel==='nachrichten'){event.preventDefault();router.push('/nachrichten'+(typeof arg==='string'&&arg?'?gruppe='+encodeURIComponent(arg):''));return;}
       if(ziel==='eingang'&&typeof sourceItemId==='string'){event.preventDefault();requestGlobalCreate({intent:'DIRECT_INTAKE',prefill:{sourceItemId,intakeKind:hasArea('geld')?'kv':'auftrag'}});return;}
       if(ziel==="kundeneu"){requestGlobalCreate({intent:"CUSTOMER",prefill:typeof arg==="string"&&arg.endsWith("#lieferant")?{customerMode:"lieferant"}:undefined});return;}
@@ -142,7 +144,7 @@ export function GlobalCreateAppAdapter() {
         if((ziel==="kunde"||ziel==="kundebearbeiten")&&typeof arg==="string")openCustomer(ziel==="kundebearbeiten"&&!arg.includes("#")?arg+"#bearbeiten":arg);
     };
     window.addEventListener("kreile:oeffne",handler);return()=>window.removeEventListener("kreile:oeffne",handler);
-  },[openCustomer,openOrder,router,hasArea]);
+  },[openCustomer,openOrder,openQuote,router,hasArea]);
 
   // Keep one safe, typed intake boundary mounted for authenticated workshop roles.
   // Their request is denied by the same flow before any command can run.
