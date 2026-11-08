@@ -98,7 +98,7 @@ test('fixed quote overlay: real read, one telephone acceptance, DB/event/readbac
 
 });
 
-for(const storedGoods of [false,true,'operational','automatic'] as const) test('quote goods '+(storedGoods==='operational'?'operational':storedGoods==='automatic'?'automatic':storedGoods?'stored':'direct')+': actual photos and one atomic telephone conversion with server quantity price',async({page})=>{
+for(const storedGoods of [false,true,'operational','automatic','conditional'] as const) test('quote goods '+(storedGoods==='operational'?'operational':storedGoods==='automatic'?'automatic':storedGoods==='conditional'?'conditional':storedGoods?'stored':'direct')+': actual photos and one atomic telephone conversion with server quantity price',async({page})=>{
  await prepareGeneratedSeed({id:'KV-UI-GOODS',gegeben:{login:'login_meister',datenlagen:['kunde_vollstaendig_firma'],aufruf:{seite:'nachrichten',weg:'oeffne'}}} as FlowCase);
  await page.setViewportSize({width:1220,height:880});await page.goto('/start');
  const actor=generatedFlowRuntime.logins.login_meister;
@@ -169,6 +169,24 @@ for(const storedGoods of [false,true,'operational','automatic'] as const) test('
    await workerTiles.locator('section.kr-kachel').filter({hasText:'TEST Regal Telefon'}).filter({hasText:'Zusage fehlt'}).getByRole('button',{name:'KV öffnen',exact:true}).click();
   }
   const storedCard=page.getByRole('dialog',{name:/KV-2026-/});
+  if(storedGoods==='conditional'){
+   const before=await action(page,'readQuoteAction',{quoteId,purpose:'operations'});
+   await action(page,'changeQuoteLifecycleAction',{quoteId,expectedVersion:before.quote.version,edition:1,clientEventId:randomUUID(),action:'conditional',evidence:'TEST einverstanden aber nicht zu diesem Preis'});
+   const [blocked]=await sql`SELECT auftrag_id,kv_fassung FROM public.goods_receipt WHERE tenant_id='galvanik-kreile' AND kv_id=${quoteId}::uuid`;
+   expect(blocked).toMatchObject({auftrag_id:null,kv_fassung:1});
+   await storedCard.getByRole('button',{name:'Zurück',exact:true}).click();
+   await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),quoteId);
+   await storedCard.getByRole('button',{name:'Ändern · Fassung 2 anlegen',exact:true}).click();
+   await storedCard.getByRole('textbox',{name:'Was soll geändert werden?',exact:true}).fill('3 Halter statt 4');
+   await storedCard.getByRole('button',{name:'Änderungsvorschlag anzeigen',exact:true}).click();
+   await storedCard.getByRole('button',{name:'Fassung 2 anlegen',exact:true}).click();
+   await expect(storedCard.getByText('KV geändert · neue Fassung sicher gespeichert.',{exact:true})).toBeVisible();
+   const changed=await action(page,'readQuoteAction',{quoteId,purpose:'operations'});
+   expect(changed.quote.lifecycle.edition).toBe(2);expect(changed.quote.linkedOrderId).toBeNull();
+   await action(page,'changeQuoteLifecycleAction',{quoteId,expectedVersion:changed.quote.version,edition:2,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST geaenderte Fassung ausgedruckt'});
+   await storedCard.getByRole('button',{name:'Zurück',exact:true}).click();
+   await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),quoteId);
+  }
   if(storedGoods==='operational'){
    await expect(storedCard.getByText('61,00 € netto',{exact:true})).toHaveCount(0);
    await expect(storedCard.getByRole('button',{name:/Fassung 2 anlegen/})).toHaveCount(0);
@@ -188,7 +206,7 @@ for(const storedGoods of [false,true,'operational','automatic'] as const) test('
 
  await expect(page.getByRole('dialog',{name:/Auftragskarte A-2026-/})).toBeVisible({timeout:20000});
  const [stored]=await sql`SELECT q.quote_number,q.linked_order_id,q.zugesagt_fassung,r.auftrag_id,r.lagerort,o.ware,o.geprueft,(SELECT sum(quantity)::float8 FROM public.items i WHERE i.tenant_id=o.tenant_id AND i.order_id=o.id) AS quantity,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=r.tenant_id AND f.item_id=r.item_id) AS files FROM private.quotes q JOIN public.goods_receipt r ON r.tenant_id=q.tenant_id AND r.kv_id=q.id JOIN public.orders o ON o.tenant_id=q.tenant_id AND o.id=q.linked_order_id WHERE q.tenant_id='galvanik-kreile' AND q.id=${quoteId}::uuid`;
- expect(stored).toMatchObject({zugesagt_fassung:1,auftrag_id:stored.linked_order_id,lagerort:'TEST Regal Telefon',ware:'da',geprueft:true,quantity:3,files:4});
+ expect(stored).toMatchObject({zugesagt_fassung:storedGoods==='conditional'?2:1,auftrag_id:stored.linked_order_id,lagerort:'TEST Regal Telefon',ware:'da',geprueft:true,quantity:3,files:4});
  const [device]=await sql`SELECT d.status,cardinality(d.angenommen_auf) AS devices,(SELECT count(*)::int FROM public.intake_file f WHERE f.tenant_id=d.tenant_id AND f.item_id=d.item_id AND f.art='foto') AS photos FROM public.device_request d JOIN public.goods_receipt r ON r.tenant_id=d.tenant_id AND r.item_id=d.item_id WHERE d.tenant_id='galvanik-kreile' AND r.auftrag_id=${stored.linked_order_id}`;
  expect(device).toMatchObject({status:'beendet',devices:1});expect(device.photos).toBeGreaterThanOrEqual(2);
  if(storedGoods)await expect(page.locator('[aria-label="KV-Ware"]').getByRole('heading',{name:stored.quote_number+' · Prueffirma Alpha GmbH',exact:true})).toHaveCount(0);
