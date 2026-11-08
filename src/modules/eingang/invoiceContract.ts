@@ -44,6 +44,7 @@ export type InvoiceFailure = {
 };
 export type InvoiceReadResult = { code: 'OK'; view: InvoiceView } | InvoiceFailure;
 export type InvoiceSaveInput = {
+  automatic?: true;
   itemId: string; fileId: string; version: number; clientKey: string;
   fields: InvoiceFields; status: Exclude<IncomingInvoiceStatus, 'ungueltig'>;
   paidDate: string | null; proofFileId: string | null;
