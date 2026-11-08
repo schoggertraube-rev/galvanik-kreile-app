@@ -27,5 +27,5 @@ export function concernOptions(row:IntakeMessage,areas:readonly AccessArea[]){
  const match:Record<Context,boolean>={any:true,order,openOrder:open,quote:row.orderKind==='kv'&&row.orderId!==null,
   goods:open&&(row.goods==='erwartet'||row.goods==='teilweise'),invoice:row.customerType==='lieferant'||row.concerns.includes('rechnung'),letter:row.concerns.includes('frist'),internal:row.channel==='notiz'&&row.direction==='intern'};
  const reasons:Record<Context,string>={any:'',order:'braucht einen Auftrag',openOrder:'braucht einen offenen Auftrag',quote:'braucht einen offenen KV',goods:'braucht einen Auftrag mit erwarteter Ware',invoice:'braucht einen Lieferanten oder eine erkannte Rechnung',letter:'braucht eine Brief- oder Fristsache',internal:'braucht eine interne Notiz'};
- return CONCERN_OPTIONS.filter(option=>INTAKE_CONCERN_AREAS[option.concern].every(area=>areas.includes(area))).map(option=>({...option,reason:match[option.context]?null:reasons[option.context]}));
+ return CONCERN_OPTIONS.filter(option=>INTAKE_CONCERN_AREAS[option.concern].every(area=>areas.includes(area))).map(option=>({...option,reason:match[option.context]||option.concern==='abholung'&&row.channel==='mail'&&row.customerId!==null?null:reasons[option.context]}));
 }

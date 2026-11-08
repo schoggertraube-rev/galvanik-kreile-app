@@ -7,7 +7,7 @@ import type {ComplaintDialogData,ComplaintPorts} from '../dialogContract';
 
 const base:ComplaintDialogData={complaint:null,source:{id:'test-order',number:'A-TEST-4C',customerName:'TEST Kunde',items:[{id:'test-part',name:'TEST Gehäuse',quantity:3,unit:'Stück'}]},initial:{description:'',defect:'',photoIds:[],intakeItemId:null,intakeVersion:null},suggestedDate:'2027-05-18',rework:null};
 function setup(data=base,areas:ComplaintPorts['areas']=['auftraege','entscheiden','geld','kunden']) {
-  const ports:ComplaintPorts={areas,read:vi.fn<ComplaintPorts['read']>(async()=>({code:'OK',data})),write:vi.fn<ComplaintPorts['write']>(async()=>({code:'OK',receipt:{complaintId:'test-complaint',number:'RK-TEST-4C',state:'aufgenommen',version:1,eventId:'test-event'},replayed:false})),rework:vi.fn<ComplaintPorts['rework']>(async()=>({code:'OK',receipt:{orderId:'test-rework'}})),openOrder:vi.fn(),openPhoto:vi.fn(async()=>undefined),addPhoto:vi.fn<ComplaintPorts['addPhoto']>(async()=>({code:'OK',id:'test-photo'})),sendResult:vi.fn<ComplaintPorts['sendResult']>(async()=>({code:'UNAVAILABLE',message:'TEST Offline'}))};
+  const ports:ComplaintPorts={areas,read:vi.fn<ComplaintPorts['read']>(async()=>({code:'OK',data})),write:vi.fn<ComplaintPorts['write']>(async()=>({code:'OK',receipt:{complaintId:'test-complaint',number:'RK-TEST-4C',state:'aufgenommen',version:1,eventId:'test-event'},replayed:false})),rework:vi.fn<ComplaintPorts['rework']>(async()=>({code:'OK',receipt:{orderId:'test-rework'}})),openOrder:vi.fn(),createQuote:vi.fn(),openPhoto:vi.fn(async()=>undefined),addPhoto:vi.fn<ComplaintPorts['addPhoto']>(async()=>({code:'OK',id:'test-photo'})),sendResult:vi.fn<ComplaintPorts['sendResult']>(async()=>({code:'UNAVAILABLE',message:'TEST Offline'}))};
   const onClose=vi.fn(),onMessage=vi.fn();
   render(<ComplaintDialog request={data.complaint?{complaintId:data.complaint.id}:{orderId:data.source.id}} ports={ports} onClose={onClose} onMessage={onMessage}/>);
   return {ports,onClose,onMessage};
@@ -200,4 +200,22 @@ it('opens the reminder in the existing composer, retains edits on failure and re
  fireEvent.click(screen.getAllByRole('button',{name:'Erneut'})[0]);
  expect(await screen.findByText('Begleitschein gesendet · Erinnerung ruht für 5 Arbeitstage')).toBeInTheDocument();
  expect(send.mock.calls[1][0]).toEqual(original);expect(ports.write).not.toHaveBeenCalled();expect(ports.sendResult).not.toHaveBeenCalled();expect(refreshed).toHaveBeenCalledTimes(1);
+});
+
+
+it('AF-11 shows the preserved issued credit after reopening and disables a second credit',async()=>{
+ const value=recorded();value.complaint={...value.complaint!,gutschriftNr:'GS-TEST-REST',gutschriftBetrag:'50.00',version:5};
+ const {ports}=setup(value);
+ await screen.findByText('Gutschrift GS-TEST-REST besteht · 50,00 € · keine zweite Gutschrift anlegen.');
+ fireEvent.click(screen.getByRole('button',{name:'berechtigt'}));
+ expect(screen.getByRole('button',{name:'Gutschrift'})).toBeDisabled();
+ expect(ports.write).not.toHaveBeenCalled();
+});
+
+it('AF12 opens the existing paid quote route with the rejected complaint and actual customer',async()=>{
+ const current=recorded();current.complaint={...current.complaint!,bewertung:'abgelehnt',massnahme:'ablehnen',stand:'kunde_informieren',begruendung:'TEST Leistung ausserhalb Gewährleistung'};
+ const {ports}=setup(current);
+ fireEvent.click(await screen.findByRole('button',{name:'KV aus Reklamation RK-TEST-REST'}));
+ expect(ports.createQuote).toHaveBeenCalledOnce();expect(ports.createQuote).toHaveBeenCalledWith({id:'test-complaint',number:'RK-TEST-REST',customerId:'test-customer'});
+ expect(ports.write).not.toHaveBeenCalled();expect(ports.rework).not.toHaveBeenCalled();
 });

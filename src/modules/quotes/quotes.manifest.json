@@ -71,7 +71,9 @@
     "20261107214500_kv_v04_independent_metadata.sql",
     "20261107221000_kv_v04_followup_projection.sql",
     "supabase/migrations/20261108060000_kv_date_preserves_edition.sql",
-    "20261108151002_kv_conversion_undo.sql"
+    "20261108151002_kv_conversion_undo.sql",
+    "20261108165057_quote_decline_write_guard.sql",
+    "20261108170039_quote_complaint_source.sql"
   ],
   "viewsFunctions": [
     "private.create_quote_v1",
@@ -86,7 +88,8 @@
     "private.project_quote_followup_task",
     "private.protect_quote_followup_projection",
     "private.reverse_quote_conversion_v1",
-    "private.quote_conversion_undo_reason_v1"
+    "private.quote_conversion_undo_reason_v1",
+    "private.protect_quote_complaint_source_v1"
   ],
   "ownsTables": [
     "private.quote_conversion_receipts",
@@ -107,7 +110,8 @@
       "QUOTE_CALCULATION_V04",
       "QUOTE_CONVERSION_REVERSED_V04",
       "ORDER_CANCELLED_V1",
-      "QUOTE_FOLLOWUP_COMPLETED_V1"
+      "QUOTE_FOLLOWUP_COMPLETED_V1",
+      "QUOTE_COMPLAINT_LINKED_V1"
     ],
     "consumes": [
       "ORDER_INTAKE_CREATED_V1"

@@ -29,7 +29,9 @@
     "@/modules/tasks/server-public#TaskEffects",
     "@/modules/tasks/server-public#syncQuoteFollowupTask",
     "@/modules/tasks/server-public#readQuoteFollowupTasksForToday",
-    "@/modules/tasks/server-public#QuoteFollowupRequest"
+    "@/modules/tasks/server-public#QuoteFollowupRequest",
+    "@/modules/tasks/server-public#createOrderHandoverTask",
+    "@/modules/tasks/server-public#readOrderHandoverTaskState"
   ],
   "capabilities": [
     "aufgabe:speichern",

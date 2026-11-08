@@ -95,6 +95,21 @@ export async function createMissingGoodsTask(tx:PrivilegedTenantTransaction,auth
  const fields=taskValidation(value);if(Object.keys(fields).length)reject('VALIDATION_ERROR','Aufgabe zur Warenprüfung ist ungültig.');
  return (await persistTask(tx,auth,value,deps,false)).task.id;
 }
+
+/** U252: the checked order/mail command creates a normal visible callback task. */
+export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string},deps:Dependencies){
+ if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))reject('FORBIDDEN','Übergabe klären benötigt Mails und Aufträge.');
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ const value:TaskSaveInput={clientKey:input.clientKey,version:0,kind:'rueckruf',title:input.title,dueDate:clock.today,time:null,forLogin:null,forArea:'auftraege',reference:{type:'auftrag',id:input.orderId},note:input.note};
+ const errors=taskValidation(value);if(Object.keys(errors).length)reject('VALIDATION_ERROR','Rückruf-Aufgabe ist unvollständig.');
+ return (await persistTask(tx,auth,value,deps)).task.id;
+}
+
+export async function readOrderHandoverTaskState(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;taskId:string}){
+ const task=await find(tx,auth,input.taskId);
+ if(!task||task.bezug_typ!=='auftrag'||task.bezug_id!==input.orderId||task.art!=='rueckruf'||!allowed(auth,task))return null;
+ return {id:task.id,status:task.status,title:task.titel,note:task.notiz};
+}
 /** Only the invoice command can create this task; all persistence stays in persistTask. */
 export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;clientKey:string;reason:string},deps:Dependencies):Promise<string>{
  if(!hasAuthorizationArea(auth,'geld'))reject('FORBIDDEN','Rechnung klären benötigt Geld.');

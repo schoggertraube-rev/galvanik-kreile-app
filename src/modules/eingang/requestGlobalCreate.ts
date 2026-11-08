@@ -6,6 +6,7 @@ export type GlobalCreateRequest = {
   draftId?: string;
   prefill?: {
     orderCopyId?: string;
+    sourceComplaint?: {id:string;number:string;customerId:string};
     sourceItemId?: string;
     sourceVersion?: number;
     intakeKind?: 'auftrag'|'kv';

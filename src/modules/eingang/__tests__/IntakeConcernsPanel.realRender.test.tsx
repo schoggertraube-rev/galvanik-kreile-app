@@ -1,5 +1,7 @@
-import {cleanup,fireEvent,render,screen} from '@testing-library/react';
+import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
+import {IntakeMessages} from '../ui/IntakeMessages';
+import type {IntakeMessagesPorts} from '../messageContract';
 import {IntakeConcernsPanel} from '../ui/IntakeConcernsPanel';
 import type {IntakeMessage} from '../messageContract';
 
@@ -18,4 +20,19 @@ it('does not turn an unbound quote request into an order when quote creation is 
  const onPrepareQuote=vi.fn();render(<IntakeConcernsPanel messages={[row('TEST-no-grant')]} canCreateQuote={false} onQuote={vi.fn()} onMessage={vi.fn()} onPrepareQuote={onPrepareQuote}/>);
  expect(screen.queryByRole('button',{name:'KV aus Nachricht öffnen'})).toBeNull();expect(onPrepareQuote).not.toHaveBeenCalled();
  expect(screen.getByRole('button',{name:'Nachricht öffnen'})).toBeEnabled();
+});
+
+it('AF19 selects the mail concern, never guesses between orders and retries the same real writer key',async()=>{
+ const message=row('TEST-handover',{concerns:['abholung'],openConcerns:['abholung'],text:'Hole ich ab.'});
+ const handover=vi.fn().mockResolvedValueOnce({code:'VALIDATION_ERROR',message:'TEST choose',choices:[{id:'TEST-order-a',number:'TEST A',version:7},{id:'TEST-order-b',number:'TEST B',version:9}]}).mockResolvedValueOnce({code:'OK',receipt:{orderId:'TEST-order-b',message:'TEST saved'},replayed:false});
+ const ports:IntakeMessagesPorts={list:vi.fn<IntakeMessagesPorts['list']>(async()=>({code:'OK',messages:[message],areas:['mails','auftraege'],currentLogin:'TEST-actor'})),select:vi.fn<IntakeMessagesPorts['select']>(async()=>({code:'OK',capture:{id:message.id,version:2,text:message.text,customerId:message.customerId,orderId:null,assignment:'hand',usage:'offen',concerns:['abholung'],files:[]}})),handover,finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}};
+ const opened=vi.fn((event:Event)=>event.preventDefault());window.addEventListener('kreile:oeffne',opened);
+ try{render(<IntakeMessages ports={ports}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Übergabe eintragen'}));
+ await screen.findByRole('dialog',{name:'Wähle den Auftrag zu dieser Mail'});
+ expect(handover).toHaveBeenCalledTimes(1);const first=handover.mock.calls[0][0];expect(first).toMatchObject({sourceItemId:message.id,sourceVersion:2});expect(first.orderId).toBeUndefined();
+ fireEvent.click(screen.getByRole('button',{name:'Übergabe für TEST B übernehmen'}));
+ await waitFor(()=>expect(handover).toHaveBeenCalledTimes(2));expect(handover.mock.calls[1][0]).toEqual({...first,orderId:'TEST-order-b',expectedVersion:9});
+ await waitFor(()=>expect(opened).toHaveBeenCalled());expect(opened.mock.calls.at(-1)?.[0]).toMatchObject({detail:{ziel:'auftrag',arg:'TEST-order-b'}});
+ }finally{window.removeEventListener('kreile:oeffne',opened);}
 });

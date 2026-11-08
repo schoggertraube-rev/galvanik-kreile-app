@@ -13,6 +13,31 @@ import {quoteHasCreatedOrder} from '@/lib/server/quoteGoodsContextPort';
 export type IntakeOrderSource = { id: string; version: number };
 type Row = { id:string; kanal:string; fortsetzung_von:string|null; kunde_id:string|null; vorgang_art:string|null; vorgang_id:string|null; version:number; kennzeichen:string[]; erstellt_von:string; text:string|null };
 
+/** U252: one immutable imported mail is the authority for this order instruction. */
+export async function readIntakeHandoverMail(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;lock?:boolean}){
+  if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:'Diese Mail benötigt den Bereich Mails.'};
+  const [row]=await tx.execute<Row&{absender_adresse:string|null;empfangen_am:Date|string|null;graph_message_id:string|null;anliegen_offen:string[];einsatz:string}>(sql`SELECT id::text,kanal,fortsetzung_von::text,kunde_id,vorgang_art,vorgang_id,version,kennzeichen,erstellt_von::text,text,absender_adresse,empfangen_am,graph_message_id,anliegen_offen,einsatz FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid ${input.lock===false?sql``:sql`FOR UPDATE`}`);
+  if(!row)return {code:'NOT_FOUND' as const,message:'Original-Mail ist nicht verfügbar.'};
+  if(row.version!==input.version||row.einsatz!=='offen'||!row.anliegen_offen.includes('abholung'))return {code:'CONFLICT' as const,message:'Mail oder Übergabe-Anliegen wurde geändert. Neu lesen.'};
+  if(row.kanal!=='mail'||!row.kunde_id||!row.absender_adresse||!row.empfangen_am||!row.graph_message_id||row.kennzeichen.includes('in_erfassung_verworfen'))return {code:'VALIDATION_ERROR' as const,message:'Eine gespeicherte zugeordnete Original-Mail ist erforderlich.'};
+  const originals=await tx.execute<{sha256:string}>(sql`SELECT file.sha256 FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.art='mime'
+    AND EXISTS(SELECT 1 FROM public.intake_event secured WHERE secured.tenant_id=file.tenant_id AND secured.item_id=file.item_id AND secured.art='original_gespeichert' AND secured.nachher->>'fileId'=file.id::text AND secured.nachher->>'sha256'=file.sha256)
+    AND EXISTS(SELECT 1 FROM public.intake_event imported WHERE imported.tenant_id=file.tenant_id AND imported.item_id=file.item_id AND imported.nachher->>'action'='mail_import_complete' AND imported.nachher->'fileIds' ? file.id::text) FOR SHARE`);
+  if(originals.length!==1)return {code:'VALIDATION_ERROR' as const,message:'Der unveränderte Original-Mailbeleg fehlt oder ist mehrdeutig.'};
+  return {code:'OK' as const,mail:{id:row.id,version:row.version,customerId:row.kunde_id,orderId:row.vorgang_art==='auftrag'?row.vorgang_id:null,otherReference:Boolean(row.vorgang_id&&row.vorgang_art!=='auftrag'),sender:row.absender_adresse,text:row.text??'',receivedAt:new Date(row.empfangen_am).toISOString(),graphMessageId:row.graph_message_id,originalSha256:originals[0].sha256}};
+}
+
+export async function recordIntakeHandoverEffect(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;orderId:string;clientEventId:string;taskId:string|null;mode:'pickup'|'shipping';requestedMode:'pickup'|'shipping'}){
+  const [before]=await tx.execute<{anliegen_offen:string[];version:number;kunde_id:string|null}>(sql`SELECT anliegen_offen,version,kunde_id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid AND version=${input.version} FOR UPDATE`);
+  if(!before?.anliegen_offen.includes('abholung'))throw Error('HANDOVER_SOURCE_VERSION_CONFLICT');
+  const concerns=before.anliegen_offen.filter(value=>value!=='abholung');
+  const waiting=await tx.execute(sql`SELECT id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND antwort_auf_item=${input.itemId}::uuid AND sendestatus IN ('entwurf','sendet','unklar','fehler') LIMIT 1`);
+  const usage=concerns.length||waiting.length?'offen':'erledigt';
+  const changed=await tx.execute(sql`UPDATE public.intake_item SET vorgang_art='auftrag',vorgang_id=${input.orderId},zuordnung='hand',anliegen_haupt=${concerns[0]??null},anliegen_offen=ARRAY[${sql.join(concerns.map(value=>sql`${value}`),sql`, `)}]::text[],einsatz=${usage},version=version+1,geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid AND version=${input.version} RETURNING id`);
+  if(changed.length!==1)throw Error('HANDOVER_SOURCE_WRITE_CONFLICT');
+  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES(${auth.tenantId},${input.itemId}::uuid,'anliegen',${input.clientEventId}::uuid,${auth.userId},${JSON.stringify(before)}::jsonb,${JSON.stringify({customerId:before.kunde_id,action:input.taskId?'auftrag.uebergabe_klaeren':'auftrag.uebergabe_geaendert',orderId:input.orderId,taskId:input.taskId,handoverMode:input.mode,requestedHandoverMode:input.requestedMode,anliegenOffen:concerns,einsatz:usage})}::jsonb)`);
+}
+
 /** Shared association writer for booking and the receipt of an existing order. */
 export async function bindIntakeOriginalToOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;orderId:string;customerId:string;clientEventId:string;complete:boolean;quoteId?:string}){
   const rows=await tx.execute<Row&{einsatz:string;anliegen_offen:string[]}>(sql`SELECT id::text,kanal,fortsetzung_von::text,kunde_id,vorgang_art,vorgang_id,version,kennzeichen,erstellt_von::text,text,einsatz,anliegen_offen

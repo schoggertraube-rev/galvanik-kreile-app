@@ -28,7 +28,7 @@ export function validComplaintCommand(input: unknown): input is ComplaintCommand
     && v.parts.every(p => p && typeof p === 'object' && Object.keys(p).sort().join(',') === 'menge,position_id' && text(p.position_id,1,128) && Number.isFinite(p.menge) && p.menge >= 1)
     && new Set(v.parts.map(p => p.position_id)).size === v.parts.length
     && COMPLAINT_DEFECTS.includes(v.defect as typeof COMPLAINT_DEFECTS[number])
-    && typeof v.description === 'string' && v.description.length <= 4000 && Array.isArray(v.photoIds) && v.photoIds.length <= 20 && v.photoIds.every(p => text(p,1,128))
+    && typeof v.description === 'string' && v.description.length <= 4000 && Array.isArray(v.photoIds) && v.photoIds.length >= 1 && v.photoIds.length <= 20 && v.photoIds.every(p => text(p,1,128))
     && ['ja','nein','offen'].includes(String(v.goodsReturn));
   if (!text(v.complaintId,1,128) || !Number.isSafeInteger(v.version) || Number(v.version) < 1) return false;
   const identity = ['action','clientKey','complaintId','version'];

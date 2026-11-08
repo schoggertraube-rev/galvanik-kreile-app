@@ -19,6 +19,7 @@ export type ComplaintPorts = {
   write:(input:ComplaintCommand)=>Promise<ComplaintWriteResult>;
   rework:(input:{reklamationId:string;version:number;bewertung:'berechtigt'|'kulanz';massnahme:'nacharbeit';liefertermin:string})=>Promise<{code:'OK';receipt:{orderId:string}}|{code:string;message:string}>;
   openOrder:(id:string)=>void;
+  createQuote?:(source:{id:string;number:string;customerId:string})=>void;
   openPhoto:(photoId:string,sourceItemId:string|null,orderId:string)=>Promise<void>;
   addPhoto:(orderId:string,file:File)=>Promise<{code:'OK';id:string}|{code:string;message:string}>;
   sendResult:(input:{complaintId:string;version:number;clientKey:string;subject:string;body:string})=>Promise<ComplaintWriteResult>;

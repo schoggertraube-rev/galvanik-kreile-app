@@ -1,5 +1,5 @@
 "use client";
-import {QUOTE_CANCELLED_ORDER_COPY as cancelledCopy} from "@/ui/situationCatalog";
+import {QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import {
@@ -144,6 +144,13 @@ const EVIDENCE_STATE_LABEL: Record<OrderCardEvidence["state"], string> = {
 
 function evidenceLabel(entry: OrderCardEvidence): string {
   return `${EVIDENCE_SOURCE_LABEL[entry.source]} · ${EVIDENCE_STATE_LABEL[entry.state]}`;
+}
+
+function OrderHandoverPanel({card}:{card:OrderCardData}){
+ const[error,setError]=useState<string|null>(null);
+ const notice=card.handoverNotice;
+ const open=(ziel:'aufgabe'|'mailein',arg:string)=>{if(window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel,arg}})))setError(ORDER_HANDOVER_COPY.targetUnavailable);};
+ return <section className="kr-stapel" data-spec-id="auftrag.uebergabe"><h3 className="kr-naechste-t">{ORDER_HANDOVER_COPY.label(card.handoverMode,card.shippingService,card.shippingServiceError)}</h3>{notice?<Hinweis ton={notice.taskId&&notice.taskState!=='erledigt'?'warn':'ok'}><p>{notice.message}</p>{notice.taskId?notice.taskState==='offen'?<Button text={ORDER_HANDOVER_COPY.task} onClick={()=>open('aufgabe',notice.taskId!)}/>:<p>{notice.taskState==='erledigt'?ORDER_HANDOVER_COPY.completed:ORDER_HANDOVER_COPY.taskUnavailable}</p>:null}<Button art="sekundaer" text={ORDER_HANDOVER_COPY.original} onClick={()=>open('mailein',notice.originalItemId)}/></Hinweis>:null}{error?<Hinweis ton="warn">{error}</Hinweis>:null}</section>;
 }
 
 export function OrderCardView({
@@ -306,6 +313,7 @@ export function OrderCardView({
   </>;
 
   const main = <>
+    <OrderHandoverPanel card={card}/>
     {complaintsPanel}
     {next ? <KartenBlock><NaechsteAktion titel={next.title} aktionen={<Button art={actions.freeze.visible ? "erledigen" : "primaer"} icon={next.icon} text={next.text} disabled={!next.enabled} onClick={next.onClick} />} /></KartenBlock> : null}
     <KartenBlock label="Teile" rechts={<Button art="leise" icon="plus" text="Teil hinzufügen" disabled={!contentEnabled || card.items.length >= 20} onClick={() => contentEnabled ? setItemOpen("new") : unavailable(actions.content?.reason)} />}>
@@ -455,6 +463,7 @@ function GoodsOutDialog({
     </>}
   >
     <div data-spec-id="rauspruefen" className="kr-stapel">
+      <OrderHandoverPanel card={card}/>
       <div data-spec-id="rauspruefen.kopf" className="kr-stapel">
         <Fakten zeilen={[
           { k: "Auftrag", v: card.orderNumber },
