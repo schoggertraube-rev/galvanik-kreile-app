@@ -18,3 +18,6 @@ export type {
   ReadQuoteUpdateReceiptResult,
   ReadQuoteResult,
 } from "./server/types";
+
+export {scaleQuoteCalculation} from "./quoteCalculation";
+export type {QuoteCalculation} from "./quoteCalculation";
