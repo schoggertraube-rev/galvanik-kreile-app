@@ -638,7 +638,8 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       // Only the current quote date may enter the immutable order intent.
       // A later quote-date amendment must be read before conversion.
       const storedQuantities=await readQuoteReceivedQuantities(tx,authorization.tenantId,quote.quoteId,normalized.goodsReceiptId);
-      const received=storedQuantities??options.pendingQuantities?.map(row=>({kv_position:quote.positions.find(position=>position.id===row.itemId)?.position,bestaetigt:row.confirmed?row.expected:row.received}));
+      const pending=options.pendingGoodsId&&!quote.lifecycle.goods?.some(row=>row.id===options.pendingGoodsId)?options.pendingQuantities?.map(row=>({kv_position:quote.positions.find(position=>position.id===row.itemId)?.position,bestaetigt:row.confirmed?row.expected:row.received})):undefined;
+      const received=pending?quote.positions.map(position=>({kv_position:position.position,bestaetigt:Number(storedQuantities?.find(row=>row.kv_position===position.position)?.bestaetigt??0)+Number(pending.find(row=>row.kv_position===position.position)?.bestaetigt??NaN)})):storedQuantities;
       if(!received||!received.some(row=>Number(row.bestaetigt)>0)||received.length!==quote.positions.length||received.some((row,index)=>!Number.isSafeInteger(row.bestaetigt)||Number(row.bestaetigt)<0||row.kv_position!==index+1))return {code:'VALIDATION_ERROR',message:'Angenommene Menge fuer jede KV-Position pruefen.'};
       const orderInput: QuoteOrderInput = {
         ...sourceOrderInput,

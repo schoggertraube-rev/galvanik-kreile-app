@@ -18,7 +18,7 @@ Die vorhandene Reklamationskarte zeigt die bestehende Nummer/Betrag und sperrt d
 
 ## Offen
 
-AF-5/6/8/9/18 sowie die übrigen gebundenen mittleren Regeln, vollständige Sicht-/CI-/Planungsprüfung und Preview des abschließenden SHA. Dieser Teilstand ist kein vollständiger Kreislauf-PASS. Kein Merge/Production/Remote-Datenänderung in diesem Schritt.
+AF-5/8/9/18 sowie die übrigen gebundenen mittleren Regeln, vollständige Sicht-/CI-/Planungsprüfung und Preview des abschließenden SHA. Dieser Teilstand ist kein vollständiger Kreislauf-PASS. Kein Merge/Production/Remote-Datenänderung in diesem Schritt.
 
 
 ## AF-17: abgesagten KV auch auf der SQL-Grenze sperren
@@ -48,3 +48,11 @@ Der eine bestehende ComplaintCommand-Vertrag verlangt mindestens ein Foto. Die u
 Echter Aktions-Replay mit leerer Liste: VALIDATION_ERROR, keine Reklamationszeile/kein Erfolgsereignis; danach positives Foto-Aufnehmen, DB/Actor/Neulesen und AF11/12-Gesamtweg PASS 6,93 s. Die sechs bisherigen positiven Testeingaben ohne Foto besitzen nun explizite isolierte synthetische, persistierte Tenant-/Auftrags-Fotoreferenzen. Diese Fixture beweist keine Speicherung von Bildbytes oder Browser-Uploads, sondern die echte referenzpruefende Serveraktion. Keine Produktionsdaten simuliert, keine alte Assertion entfernt. Die fuenf betroffenen bestehenden Workshop-Faelle gezielt PASS 8,99 s. Typen/Lint sauber. Nach spaeterem Rebase von Teil A muss dessen zusaetzlicher AF2-Fall ebenfalls diese strengere Foto-Fixture nutzen.
 
 AF-12 zusaetzliche echte Gegenprobe PASS 4,68 s: noch unentschiedene Reklamation darf keinen berechneten KV erzeugen; nach dem abgewiesenen echten createQuoteAction-Aufruf keine Quellenzeile, kein Erfolgsereignis und kein Create-Receipt, Reklamationsansicht unveraendert aufgenommen/Version 1. Das bestaetigt den vollstaendigen Transaktions-Rollback hinter der bestehenden SQL-Anlage.
+
+## AF-6: alle Warenbelege in genau einen Auftrag
+
+Der bestehende Mengen-Leseport summiert alle aktiven angenommenen Belege nach KV-Position. Der bestehende Bindewriter sperrt alle Belege in stabiler Reihenfolge, prueft die Gesamtmenge gegen die wirklich angelegten Auftragspositionen und bindet jede Originalquelle/jeden Beleg in derselben Transaktion. Kein zweiter Auftrag, kein zweiter Warenbestand. Zurueckgegebene Belege werden am unveraenderlichen Rueckgabeereignis ausgeschlossen. Jede einzelne Belegmenge bleibt erhalten, das Actorereignis beschreibt das ganze gebundene Buendel. Der bisherige Ein-Beleg-Readback bleibt kompatibel.
+
+Echter Replay PASS 5,18 s: zwei getrennte Aufnahmen/Original-Fotometadaten/Warenwriter mit Mengen 2+3 zu KV-Menge 4, danach echte Zusage und Umwandlung: genau ein Auftrag mit 5, beide Belege und Originale beim Auftrag, Actorbeleg mit zwei Belegen, identischer Retry ohne Duplikat, KV neu gelesen. Gezielte bestehende KV-07-Faelle PASS 5,43 s und frische Waren-/Mengen-/Preisfaelle KV-06/U246 PASS 8,06 s, sechs Unit-Faelle PASS. Keine alte Assertion abgeschwaecht.
+
+Zusaetzliche Gegenprobe PASS 4,57 s: zweiter Beleg beschaedigt, erster unauffaellig und als Hauptbeleg gewaehlt; trotzdem ganze Umwandlung abgewiesen. Kein Auftrag/keine Reservierung, beide Belege ungebunden, beide Originalquellen weiterhin beim KV, Ansicht ohne Auftrag. Die vorgelagerte Anzeige/Klaerung der Abweichung ist noch AF-5, nicht als erledigt ausgegeben.

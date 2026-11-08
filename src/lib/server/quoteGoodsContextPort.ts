@@ -31,7 +31,14 @@ export async function readQuoteFollowupFacts(tx:PrivilegedTenantTransaction,tena
 
 /** Quantities belong to the existing received-goods record, not a second order draft. */
 export async function readQuoteReceivedQuantities(tx:PrivilegedTenantTransaction,tenantId:string,quoteId:string,receiptId:string){
- const rows=await tx.execute<{mengen:Array<{kv_position:number;bestaetigt:number}>}>(sql`SELECT mengen FROM public.goods_receipt WHERE tenant_id=${tenantId} AND kv_id=${quoteId}::uuid AND id=${receiptId}::uuid AND status='angenommen'`);
- if(rows.length>1)throw Error('QUOTE_GOODS_QUANTITIES_AMBIGUOUS');
- return rows[0]?.mengen??null;
+ const rows=await tx.execute<{id:string;mengen:Array<{kv_position:number;bestaetigt:number}>}>(sql`SELECT receipt.id::text,receipt.mengen FROM public.goods_receipt receipt
+ WHERE receipt.tenant_id=${tenantId} AND receipt.kv_id=${quoteId}::uuid AND receipt.status='angenommen'
+ AND NOT EXISTS(SELECT 1 FROM public.intake_event returned WHERE returned.tenant_id=receipt.tenant_id AND returned.art='ware' AND returned.nachher->>'action'='kv.ware_zurueckgegeben' AND returned.nachher->>'receiptId'=receipt.id::text)
+ ORDER BY receipt.id FOR SHARE OF receipt`);
+ if(!rows.length)return null;
+ const totals=new Map<number,number>();
+ for(const row of rows)for(const line of row.mengen){if(!Number.isSafeInteger(line.kv_position)||line.kv_position<1||!Number.isSafeInteger(line.bestaetigt)||line.bestaetigt<0)throw Error('QUOTE_GOODS_BUNDLE_INVALID');const sum=(totals.get(line.kv_position)??0)+line.bestaetigt;if(!Number.isSafeInteger(sum))throw Error('QUOTE_GOODS_BUNDLE_OVERFLOW');totals.set(line.kv_position,sum);}
+ // The selected ID is validated against the quote projection by the caller.
+ void receiptId;
+ return [...totals].sort(([a],[b])=>a-b).map(([kv_position,bestaetigt])=>({kv_position,bestaetigt}));
 }
