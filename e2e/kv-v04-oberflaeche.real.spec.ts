@@ -285,3 +285,34 @@ test('quote date change: accepted edition and amount survive the real UI update'
  const read=await action(page,'readQuoteAction',{quoteId:source.id});expect(read.quote.lifecycle).toMatchObject({edition:1,acceptedEdition:1,stage:'zugesagt'});
  await expect(card.getByText('18.12.2026',{exact:true})).toBeVisible();
 });
+
+
+test('quote quantity change: real proposed amount requires a new acceptance',async({page})=>{
+ await prepareGeneratedSeed({id:'KV-UI-QUANTITY',gegeben:{login:'login_meister',datenlagen:['kunde_vollstaendig_firma'],aufruf:{seite:'nachrichten',weg:'oeffne'}}} as FlowCase);
+ await page.setViewportSize({width:1220,height:880});await page.goto('/start');
+ const actor=generatedFlowRuntime.logins.login_meister;
+ await page.getByTestId('pin-user-card-'+createPinLoginHandle(actor.id)).click();
+ const keypad=page.locator('[data-spec-id="login.anmelden"]'),navigation=page.waitForURL(url=>url.pathname!=='/start');
+ for(const digit of actor.pin)await keypad.getByRole('button',{name:digit,exact:true}).click();await navigation;await page.goto('/orders');
+ const customer=generatedFlowRuntime.datenlagen.kunde_vollstaendig_firma.id,createId=randomUUID();
+ await action(page,'createQuoteAction',{clientEventId:createId,customerId:customer,dueDate:'2026-12-01',note:'TEST Kopiervorlage',calculation:{hours:'4',hourlyRateCents:1000,setupCents:1200,materialCents:900},positions:[{name:'TEST Kopierte Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1525}]});
+ const [source]=await sql`SELECT q.id::text,q.quote_number,q.version FROM private.quotes q JOIN private.quote_create_receipts r ON r.quote_id=q.id AND r.tenant_id=q.tenant_id WHERE r.tenant_id='galvanik-kreile' AND r.client_event_id=${createId}::uuid`;
+ await action(page,'changeQuoteLifecycleAction',{quoteId:source.id,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST ausgedruckt'});
+ await action(page,'changeQuoteLifecycleAction',{quoteId:source.id,expectedVersion:2,edition:1,clientEventId:randomUUID(),action:'accept',evidence:'TEST am Telefon bestätigt'});
+ await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),source.id);
+
+
+ const card=page.getByRole('dialog',{name:/KV-2026-/});await expect(card).toBeVisible();
+ await card.getByRole('button',{name:'Ändern · Fassung 2 anlegen',exact:true}).click();
+ await card.getByRole('textbox',{name:'Was soll geändert werden?',exact:true}).fill('3 Halter statt 4');
+ await card.getByRole('button',{name:'Änderungsvorschlag anzeigen',exact:true}).click();
+ await expect(card.getByText('TEST Kopierte Halter · 4 → 3',{exact:true})).toBeVisible();
+ await expect(card.getByText('Preis netto · 61,00 € → 48,75 €',{exact:true})).toBeVisible();
+ await card.getByRole('button',{name:'Fassung 2 anlegen',exact:true}).dblclick();
+ await expect(card.getByText('KV geändert · neue Fassung sicher gespeichert.',{exact:true})).toBeVisible();
+ const [stored]=await sql`SELECT version,fassung,zugesagt_fassung,total_net_cents::text,linked_order_id FROM private.quotes WHERE tenant_id='galvanik-kreile' AND id=${source.id}::uuid`;
+ expect(stored).toMatchObject({version:4,fassung:2,zugesagt_fassung:1,total_net_cents:'4875',linked_order_id:null});
+ const read=await action(page,'readQuoteAction',{quoteId:source.id});expect(read.quote.lifecycle).toMatchObject({edition:2,acceptedEdition:1,stage:'geaendert_seit_versand'});
+ expect(read.quote.positions[0]).toMatchObject({quantity:3,lineTotalCents:4875});
+ await expect(card.getByRole('button',{name:/hat am Telefon zugesagt/})).toHaveCount(0);
+});

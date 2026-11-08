@@ -155,3 +155,6 @@ Echter Browser PASS 12,5 s: Zusage zu Fassung 1 → Text „Termin 18.12.2026“
 
 
 CI-Nachtrag zur offenen Mailprüfung: Die generierte Rot-Liste akzeptiert ausschließlich IDs aus dem gebundenen Bauplan. Die selbst angelegte ID KV-UI-MAIL-DRAFT war dort ungültig und blockierte h16 nach erfolgreichem Build (FLOW_EXPECTED_RED_CASE_UNKNOWN). Diesen ungültigen Eintrag entfernt, ohne Generator/Gate zu lockern oder den echten Browsertest zu löschen/überspringen. Der nicht bestandene individuelle Mailentwurf-Fall bleibt in dieser Abgabe und im BAULOG ausdrücklich offen; keine Abnahmefreigabe daraus. Die 60 h16-Replaytests davor waren grün.
+
+
+Gegenprobe Mengenänderung im echten Browser PASS 17,2 s: zugesagte vier Halter → Text „3 Halter statt 4“ → sichtbarer Vorher-/Nachher-Vorschlag 4→3 und 61,00→48,75 Euro → vorhandener Update-Befehl → DB-Fassung 2, alte Zusage weiterhin historisch Fassung 1, kein Auftrag; Server-Readback bestätigt drei Teile/4875 Cent und geaendert_seit_versand. Telefon-Zusage für die noch nicht versendete neue Fassung wird nicht angeboten. Dieser Inhaltswechsel wird ausdrücklich anders behandelt als der reine Terminwechsel.
