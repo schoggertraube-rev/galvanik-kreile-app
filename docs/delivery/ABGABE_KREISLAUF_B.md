@@ -1,6 +1,16 @@
-# Kreislauf B — hohe/mittlere Serverregeln, laufender Bau
+# Kreislauf B — hohe/mittlere Regeln und AF19
 
 **Draft, nicht mergefähig.** Paket `_review/pakete/AP-KREISLAUF-REGELN.md`, erlaubter Teil B. Eigener Branch frisch von main e8aff802; keine gestapelte Produktwahrheit. Restfälle des Pakets bleiben ausdrücklich offen.
+
+## Aktueller Nachweis 08.11., 21:00
+
+Produktkandidat d714885c4a6417b9edbec6b72d0ed431a55d0ea8, READY-Preview genau dieses SHA: https://galvanik-kreile-werkstatt-kbvyniyqv.vercel.app. #201 ist durch die Owner auf main ba6e0d94 gemergt und in B vollständig integriert. Umgeschriebene Remote-Historie wurde vermieden: die geprüfte Integration liegt als normale Folgecommits einschließlich main-Vorgänger vor; alle alten B-Fixcommits bleiben erhalten. Ein lokaler Sicherheitszweig bewahrt zusätzlich den Stand vor Integration. Alle 14 fremden Reviewdateien sind bytegleich zurückgesichert.
+
+Echter aktueller Migrationsgleichstand: **Repo102 = Dev102**, keine weiteren Versionen; vorherige Angaben zur nur gemeinsamen A+B-Liste sind historische Zwischenstände. Abbruch-/Anwendungsbeleg zur neuen Migration und anschließender reiner Paritäts-Read getrennt erhalten. Alle zuvor vorhandenen Zeilen unverändert. 18 Integrationsfälle: 17 sofort grün; der eine U249-Gegenfall fand die neue Mail-Berechtigungsprüfung vor dem bisherigen NOT_FOUND-Vertrag. Ein gezielter Fix im Eingangs-Leseport stellt den Vertrag vor der Mailprüfung wieder her, unveränderter Test PASS5.59s. Keine neue Mailfreigabe, kein Assertionsabbau. Vier zusammengeführte AF3/4/5/18-Renderfälle PASS3.50s. H18:312/149/90/59, Scope/Typen/Lint/Diff grün.
+
+Normaler bestehender Dev-Auftrag auf dieser echten Preview mit Rolf read-only bei1220 und390 geöffnet; gespeicherte Übergabe „Versand · DPD“ sichtbar, keinerlei Test-/Kundendaten verändert. Screenshots und proof.json außerhalb des Repos unter Temp/kreile-af19-sight-20261108. Keine erfundene Liveprüfung der Sonderzustände: die sind durch echte Replay-DB und gezielten Render belegt. Ein anschließender Darstellungsnachtrag nutzt für die Überschrift die bereits vorhandene kr-naechste-t-Klasse, keine neue Oberfläche.
+
+Pflicht-CI läuft am Kandidaten; Ratchet und Vercel sind bereits grün, quality/agentur/Fresh/h16 zum Nachweiszeitpunkt noch offen. Deshalb bleibt #202 Draft; keine Merge-Bitte. Der abschließende exakte Git-Kopf und dessen Preview/Checkliste stehen im PR, sobald das reine Abgabefortschreiben und der Überschriftennachtrag gebaut sind. Nachfolgende Abschnitte sind zeitlich entstandene Einzelbelege, nicht zusätzliche Produktwahrheiten.
 
 ## AF-7: Termin aus dem KV
 
