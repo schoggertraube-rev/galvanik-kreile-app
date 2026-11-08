@@ -175,4 +175,3 @@ export function hasAuthorizationArea(
     ? ROLE_ACCESS_AREA_TEMPLATES[authorization.role].includes(area)
     : authorization.areas.includes(area));
 }
-
