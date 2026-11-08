@@ -55,7 +55,8 @@
     "@/modules/quotes/public#QuoteReplyPicker",
     "@/modules/quotes/public#QuoteReplyPickerPorts",
     "@/modules/quotes/server-public#reverseQuoteConversionCommand",
-    "@/modules/quotes/server-public#readQuoteUndoContext"
+    "@/modules/quotes/server-public#readQuoteUndoContext",
+    "@/modules/quotes/server-public#readQuoteActors"
   ],
   "capabilities": [
     "quotes:create",

@@ -1,3 +1,4 @@
+import {seedSyntheticComplaintPhoto} from '@/test/fixtures/complaintPhoto';
 // @vitest-environment node
 // @vitest-environment node
 
@@ -199,4 +200,13 @@ it('AF-2: shipped goods remain claimable through the actual goods-out and compla
  const {reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
  expect(await withSession(fixture,()=>reklamationAusfuehrenAction(input))).toMatchObject({code:'OK',replayed:true,receipt:{complaintId:result.complaintId}});
  expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${input.clientKey}::uuid`).toHaveLength(1);
+});
+
+it('AK complaint: two real actions retain the original and latest actor in the same complaint card',async()=>{
+ const first=await createFixture(),second=await createFixture(),order=await deliveredComplaintSource(first);
+ const photoIds=await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:first.actorId,customerId:first.customerId,orderId:order.orderId});
+ const recorded=await complaintWrite(first,{action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST AK complaint actors',photoIds,goodsReturn:'offen'});
+ await complaintWrite(second,{action:'entscheiden',clientKey:randomUUID(),complaintId:recorded.complaintId,version:1,assessment:'abgelehnt',measure:'ablehnen',reason:'TEST AK separate decision',creditCents:null});
+ const {getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
+ expect(await withSession(first,()=>getComplaintDialogAction({complaintId:recorded.complaintId}))).toMatchObject({code:'OK',data:{complaint:{actorTrace:{createdBy:{userId:first.actorId},lastActor:{userId:second.actorId,action:'COMPLAINT_CHANGED_V1:entscheiden'}}}}});
 });

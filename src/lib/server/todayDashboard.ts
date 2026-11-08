@@ -99,7 +99,7 @@ function toPositiveInteger(value: number | string) {
   return Number.isSafeInteger(normalized) && normalized > 0 ? normalized : null;
 }
 
-export type TodayQuoteFollowup={id:string;title:string;dueDate:string;quoteId:string;quoteNumber:string;customerName:string};
+export type TodayQuoteFollowup={isMine?:boolean;id:string;title:string;dueDate:string;quoteId:string;quoteNumber:string;customerName:string};
 export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>): Promise<TodayDashboard> {
   const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
   const graphAllowed = hasAuthorizationArea(auth, "mails");

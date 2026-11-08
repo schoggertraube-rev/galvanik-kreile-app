@@ -241,4 +241,4 @@ export type OrderCardState =
   | { kind: "data"; card: OrderCardModel };
 
 export type OrderActorEvidence={eventId:string;userId:string|null;name:string|null;at:string;action:string;mailSender:string|null};
-export type OrderActorSummary={currentLoginId:string;createdBy:OrderActorEvidence|null;lastActor:OrderActorEvidence|null;responsible:{userId:string;name:string|null;at:string;source:'assignment'|'first-event'}|null;assignmentUnavailable:boolean};
+export type OrderActorSummary={currentLoginId:string;createdBy:OrderActorEvidence|null;lastActor:OrderActorEvidence|null;responsible:{userId:string;name:string|null;at:string;source:'assignment'|'first-event'}|null;assignmentUnavailable:boolean;assignmentReadError?:string};

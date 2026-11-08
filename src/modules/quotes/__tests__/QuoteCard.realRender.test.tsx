@@ -152,3 +152,9 @@ it('AF4 returns declined goods through the existing port and rereads its persist
  expect(returnGoods).toHaveBeenCalledTimes(2);expect(returnGoods.mock.calls[1][0]).toEqual(returnGoods.mock.calls[0][0]);expect(returnGoods.mock.calls[0][0]).toEqual({quoteId:quote.quoteId,receiptId:goods.id,expectedQuoteVersion:2,expectedVersion:1,clientEventId:expect.any(String),reason:receipt.reason});
  expect(screen.getByText(/4 Stück.*TEST Regal.*TEST Phillip/)).toBeVisible();expect(screen.getByText(receipt.reason)).toBeVisible();expect(screen.queryByRole('button',{name:'Ware an TEST Schmidt zurückgeben · TEST Regal'})).toBeNull();
 });
+
+it('AK shows the actual quote creator and latest decision actor without exposing financial facts',async()=>{
+ const edge={eventId:'TEST-actor-event',userId:'TEST-ada',name:'TEST Ada',at:'2026-11-08T12:00:00Z',action:'QUOTE_CREATED_V1',mailSender:null};
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:{...quote,totalNetCents:null,actorTrace:{createdBy:edge,lastActor:{...edge,userId:'TEST-bea',name:'TEST Bea',action:'QUOTE_LIFECYCLE_V04:accept'}}},canOperate:true,canEdit:false}),change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ expect(await screen.findByText(/Angelegt von TEST Ada/)).toBeVisible();expect(screen.getByText('Zuletzt: TEST Bea · Zusage übernommen')).toBeVisible();expect(screen.queryByText('40,00 € netto')).toBeNull();
+});

@@ -28,3 +28,5 @@ export { readIntakeFileChanges, type IntakeFileChange } from "./server/intakeLiv
 export { processIntakeDeviceRequest } from "./server/intakeDevice";
 
 export {returnQuoteGoodsReceipt,readQuoteGoodsReturns} from "./server/quoteGoodsReturn";
+
+export {readIntakeActorStatistics} from "./server/actorRead";

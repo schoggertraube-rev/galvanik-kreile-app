@@ -152,7 +152,8 @@
     "@/modules/eingang/public#parseQuoteGoodsReceiptInput",
     "@/modules/eingang/public#hasQuoteFinancials",
     "@/modules/eingang/server-public#returnQuoteGoodsReceipt",
-    "@/modules/eingang/server-public#readQuoteGoodsReturns"
+    "@/modules/eingang/server-public#readQuoteGoodsReturns",
+    "@/modules/eingang/server-public#readIntakeActorStatistics"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"
