@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "cceb15809bd94fee48bab7db398cc47000e89b1e8224d1da2d1cba9e648a7edd",
+  "inventorySha256": "fbcf3916ce933666fab0d0f9deb6b85567f18ce78f6c2895f8637e6bc29d082e",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -39,16 +39,13 @@
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#convertQuoteToOrderAction": [
-      "src/test/h18_quote_actions.integration.test.ts",
-      "src/test/acceptance/kv_v04_server.integration.test.ts"
+      "src/test/h18_quote_actions.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#createQuoteAction": [
-      "src/test/h18_quote_actions.integration.test.ts",
-      "src/test/acceptance/kv_v04_server.integration.test.ts"
+      "src/test/h18_quote_actions.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#updateQuoteAction": [
-      "src/test/h18_quote_actions.integration.test.ts",
-      "src/test/acceptance/kv_v04_server.integration.test.ts"
+      "src/test/h18_quote_actions.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#changeOrderPromisedDueDateAction": [
       "src/test/h18_settings_actions.integration.test.ts"
@@ -173,8 +170,7 @@
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#saveGoodsReceiptAction": [
-      "src/test/h18_customer_actions.integration.test.ts",
-      "src/test/acceptance/kv_v04_server.integration.test.ts"
+      "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#openIntakeOriginalAction": [
       "src/test/h18_customer_actions.integration.test.ts"
@@ -216,7 +212,8 @@
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/complaints.actions.ts#getComplaintDialogAction": [
-      "src/test/h18_workshop_actions.integration.test.ts"
+      "src/test/h18_workshop_actions.integration.test.ts",
+      "src/test/acceptance/complaint_goods_reminder.integration.test.ts"
     ],
     "src/app/actions/settings.actions.ts#readEmailTemplatesAction": [
       "src/test/h18_settings_actions.integration.test.ts"
@@ -256,6 +253,9 @@
     ],
     "src/app/actions/quotes.actions.ts#prepareQuoteCopyAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/complaints.actions.ts#sendeNacharbeitBegleitscheinAction": [
+      "src/test/acceptance/complaint_goods_reminder.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

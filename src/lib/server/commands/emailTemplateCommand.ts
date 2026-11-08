@@ -3,7 +3,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {COMPLAINT_RESULT_TEMPLATE,renderComplaintResultTemplate,type StoredEmailTemplate} from '@/lib/email/templateContract';
+import {COMPLAINT_RESULT_TEMPLATE,COMPLAINT_GOODS_TEMPLATE,renderComplaintGoodsTemplate,renderComplaintResultTemplate,type StoredEmailTemplate} from '@/lib/email/templateContract';
 
 type Failure={code:'FORBIDDEN'|'VALIDATION_ERROR'|'CONFLICT'|'NOT_FOUND'|'UNAVAILABLE';message:string};
 const html=(value:string)=>'<p>'+value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/\n/g,'<br>')+'</p>';
@@ -31,6 +31,10 @@ export async function saveStoredEmailTemplate(auth:AuthorizationSnapshot,input:u
    try{renderComplaintResultTemplate(v.subject+'\n'+v.body,{'Kunde':'','RK-Nummer':'','Ergebnis':'','Begründung':''});}
    catch{return {code:'VALIDATION_ERROR' as const,message:'Erlaubte Platzhalter: Kunde, RK-Nummer, Ergebnis, Begründung.'};}
   }
+  if(old[0].key.endsWith(':'+COMPLAINT_GOODS_TEMPLATE)){
+   try{renderComplaintGoodsTemplate(v.subject+'\n'+v.body,{Kunde:'',Auftragsnummer:'','RK-Nummer':''});}
+   catch(error){console.warn('[EMAIL_TEMPLATE_VARIABLE_UNKNOWN]',error instanceof Error?error.name:'UnknownError');return {code:'VALIDATION_ERROR' as const,message:'Erlaubte Platzhalter: Kunde, Auftragsnummer, RK-Nummer.'};}
+  }
   const rows=await tx.execute<StoredEmailTemplate>(sql`UPDATE public.email_templates SET subject_template=${v.subject},body_text_template=${v.body},body_html_template=${html(v.body)},updated_at=clock_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${v.id}::uuid AND updated_at=${v.updatedAt}::timestamp RETURNING id::text,template_key AS key,name,subject_template AS subject,body_text_template AS body,updated_at::text AS "updatedAt"`);
   if(!rows[0])return {code:'CONFLICT' as const,message:'Mailvorlage wurde inzwischen geändert · bitte neu laden.'};
   await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'EMAIL_TEMPLATE_UPDATED_V1','Mailvorlage gespeichert',${JSON.stringify({templateId:v.id,requestHash:hash,before:old[0],after:rows[0]})}::jsonb,'success',${auth.userId}::uuid,${v.clientKey}::uuid,1,${v.clientKey}::uuid,clock_timestamp())`);
@@ -42,4 +46,10 @@ export async function readComplaintResultMail(auth:AuthorizationSnapshot,values:
  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{subject:string;body:string|null}>(sql`SELECT subject_template AS subject,body_text_template AS body FROM public.email_templates WHERE tenant_id=${auth.tenantId} AND template_key=${auth.tenantId+':'+COMPLAINT_RESULT_TEMPLATE}`));
  if(rows.length!==1||!rows[0].body)return null;
  return {subject:renderComplaintResultTemplate(rows[0].subject,values),body:renderComplaintResultTemplate(rows[0].body,values)};
+}
+export async function readComplaintGoodsMail(auth:AuthorizationSnapshot,values:Record<'Kunde'|'Auftragsnummer'|'RK-Nummer',string>){
+ if(!hasAuthorizationArea(auth,'kunden'))return null;
+ const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{subject:string;body:string|null}>(sql`SELECT subject_template AS subject,body_text_template AS body FROM public.email_templates WHERE tenant_id=${auth.tenantId} AND template_key=${auth.tenantId+':'+COMPLAINT_GOODS_TEMPLATE}`));
+ if(rows.length!==1||!rows[0].body)return null;
+ return {subject:renderComplaintGoodsTemplate(rows[0].subject,values),body:renderComplaintGoodsTemplate(rows[0].body,values)};
 }

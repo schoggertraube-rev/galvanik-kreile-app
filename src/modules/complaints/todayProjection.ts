@@ -16,7 +16,14 @@ export function complaintAttention(rows:readonly Complaint[],areas:readonly Acce
     if(row.stand==='kunde_informieren'&&areas.includes('kunden'))add('reklamation_informieren',`Reklamation ${order} · Kunde informieren`,`${customer} · ${row.bewertung??'Bewertung fehlt'}`,'warning','Kunde informieren');
     if(row.stand==='massnahme_nacharbeit'&&row.reworkGoods==='erwartet'&&row.reworkGoodsSince&&row.nacharbeitAuftragId&&areas.includes('kunden')){
       const waiting=workingDaysBetween(berlinCalendarDay(new Date(row.reworkGoodsSince)),today);
-      if(waiting!==null&&waiting>=10){add('nacharbeit_ware_fehlt',`Nacharbeit · Ware fehlt seit ${waiting} Tagen`,`Reklamation ${row.nummer??'Nummer fehlt'} · ${customer}`,'warning','Kunde erinnern',{screen:'mail',arg:row.nacharbeitAuftragId+'#auftragsbestaetigung'});continue;}
+      if(waiting!==null&&waiting>=10){
+        const sent=row.goodsReminderSentAt?new Date(row.goodsReminderSentAt):null;
+        const sentDay=sent&&Number.isFinite(sent.getTime())?berlinCalendarDay(sent):null;
+        const quiet=sentDay?workingDaysBetween(sentDay,today):null;
+        if(quiet!==null&&quiet<5)continue;
+        const afterReminder=quiet!==null&&quiet>=5;
+        add('nacharbeit_ware_fehlt',`Nacharbeit · Ware fehlt seit ${waiting} Tagen`+(afterReminder?' · erinnert am '+sent!.toLocaleDateString('de-DE',{timeZone:'Europe/Berlin'}):''),`Reklamation ${row.nummer??'Nummer fehlt'} · ${customer}`,'warning',afterReminder&&areas.includes('auftraege')?'Reklamation öffnen':'Kunde erinnern',afterReminder&&areas.includes('auftraege')?{screen:'reklamation',arg:row.id}:{screen:'mail',arg:row.nacharbeitAuftragId+'#auftragsbestaetigung'});continue;
+      }
     }
     if(row.stand==='massnahme_nacharbeit'&&areas.includes('entscheiden'))add('reklamation_laeuft',overdue?`Reklamation ${order} seit ${days} Tagen offen`:`Reklamation ${order} · Nacharbeit läuft`,`${customer} · ${defect} · ${age} · ${row.reworkNumber??'Nacharbeitsnummer fehlt'} ${row.reworkStation??'Station fehlt'}`,overdue?'conflict':'warning','Öffnen');
   }

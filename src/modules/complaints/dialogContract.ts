@@ -3,7 +3,7 @@ import type {ComponentType} from 'react';
 import type { Complaint } from './contract';
 import type { ComplaintCommand, ComplaintWriteResult } from './writeContract';
 
-export type ComplaintRequest = { complaintId:string } | { orderId:string; sourceItemId?:string };
+export type ComplaintRequest = { complaintId:string } | { orderId:string; sourceItemId?:string } | {reminderOrderId:string};
 export type ComplaintDialogData = {
   complaint:Complaint|null;
   source:{ id:string; number:string; customerName:string; items:Array<{id:string;name:string;quantity:number;unit:string|null}> };
@@ -22,6 +22,7 @@ export type ComplaintPorts = {
   openPhoto:(photoId:string,sourceItemId:string|null,orderId:string)=>Promise<void>;
   addPhoto:(orderId:string,file:File)=>Promise<{code:'OK';id:string}|{code:string;message:string}>;
   sendResult:(input:{complaintId:string;version:number;clientKey:string;subject:string;body:string})=>Promise<ComplaintWriteResult>;
+  sendReminder?:(input:{complaintId:string;version:number;orderId:string;clientKey:string;subject:string;body:string})=>Promise<{code:'OK'}|{code:string;message:string}>;
   ResultMail?:ComponentType<{orderId:string;subject:string;body:string;onSubject:(value:string)=>void;onBody:(value:string)=>void;onSend:()=>void;busy:boolean}>;
 };
 export const COMPLAINT_CHANGED_EVENT='kreile:complaint-changed';

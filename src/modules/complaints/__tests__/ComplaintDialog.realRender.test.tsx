@@ -184,3 +184,20 @@ it('customer entry reuses the delivered-order picker, retries a read failure and
  expect(screen.queryByRole('dialog',{name:'Vorgang wählen'})).not.toBeInTheDocument();
  expect(ports.write).not.toHaveBeenCalled();
 });
+
+it('opens the reminder in the existing composer, retains edits on failure and retries the same key without closing the complaint',async()=>{
+ const data:ComplaintDialogData={...base,complaint:{id:'TEST-complaint',customerId:'TEST-customer',orderId:base.source.id,itemId:null,legacyPositionId:null,reason:'TEST defect',stationId:null,description:'TEST',photoIds:[],createdAt:'2026-10-12T08:00:00Z',resolvedAt:null,resolution:null,status:'open',stand:'massnahme_nacharbeit',nummer:'RK-TEST',version:2,nacharbeitAuftragId:'TEST-rework'},resultMail:{subject:'TEST Begleitschein',body:'TEST Vorlage'},rework:{station:'angenommen',goods:'erwartet'}};
+ const send=vi.fn<NonNullable<ComplaintPorts['sendReminder']>>().mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST network unclear'}).mockResolvedValueOnce({code:'OK'});
+ const ports:ComplaintPorts={areas:['kunden'],read:vi.fn(async()=>({code:'OK' as const,data})),write:vi.fn(),rework:vi.fn(),openOrder:vi.fn(),openPhoto:vi.fn(),addPhoto:vi.fn(),sendResult:vi.fn(),sendReminder:send,ResultMail:p=><label>TEST Nachricht<textarea aria-label="TEST Nachricht" value={p.body} disabled={p.busy} onChange={e=>p.onBody(e.target.value)}/></label>};
+ const refreshed=vi.fn();render(<ComplaintDialogs ports={ports} onRefresh={refreshed}/>);
+ window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'mail',arg:'TEST-rework#auftragsbestaetigung'}}));
+ const body=await screen.findByRole('textbox',{name:'TEST Nachricht'});
+ expect(ports.read).toHaveBeenCalledWith({reminderOrderId:'TEST-rework'});
+ fireEvent.change(body,{target:{value:'TEST eigene Nachricht'}});
+ fireEvent.click(screen.getByRole('button',{name:'Begleitschein senden'}));
+ expect(await screen.findByText(/TEST network unclear/)).toBeInTheDocument();expect(body).toHaveValue('TEST eigene Nachricht');expect(body).toBeDisabled();
+ const original=send.mock.calls[0][0];expect(original).toMatchObject({complaintId:'TEST-complaint',orderId:'TEST-rework',version:2,body:'TEST eigene Nachricht'});
+ fireEvent.click(screen.getAllByRole('button',{name:'Erneut'})[0]);
+ expect(await screen.findByText('Begleitschein gesendet · Erinnerung ruht für 5 Arbeitstage')).toBeInTheDocument();
+ expect(send.mock.calls[1][0]).toEqual(original);expect(ports.write).not.toHaveBeenCalled();expect(ports.sendResult).not.toHaveBeenCalled();expect(refreshed).toHaveBeenCalledTimes(1);
+});

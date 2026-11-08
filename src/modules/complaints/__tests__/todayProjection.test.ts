@@ -20,3 +20,10 @@ describe('4.8 next actions from one stored complaint projection',()=>{
   expect(complaintAttention([{...running,reworkGoods:'da'}],['kunden'],'2026-11-06')).toEqual([]);
  });
 });
+
+it('keeps the reminder quiet for five working days only after a sent receipt and then offers the bound next action',()=>{
+ const waiting:Complaint={...row,stand:'massnahme_nacharbeit',nacharbeitAuftragId:'TEST-rework',reworkGoods:'erwartet',reworkGoodsSince:'2026-10-12T08:00:00Z',goodsReminderSentAt:'2026-11-02T10:00:00Z'};
+ expect(complaintAttention([waiting],['kunden','auftraege'],'2026-11-06')).toEqual([]);
+ expect(complaintAttention([waiting],['kunden','auftraege'],'2026-11-09')).toMatchObject([{actionLabel:'Reklamation öffnen',target:{screen:'reklamation',arg:row.id},title:expect.stringContaining('erinnert am 2.11.2026')}]);
+ expect(complaintAttention([waiting],['kunden'],'2026-11-09')).toMatchObject([{actionLabel:'Kunde erinnern',target:{screen:'mail',arg:'TEST-rework#auftragsbestaetigung'}}]);
+});

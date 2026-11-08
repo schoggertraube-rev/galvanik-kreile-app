@@ -345,6 +345,7 @@
         "getComplaintOrderChoicesAction",
         "reklamationAusfuehrenAction",
         "sendeReklamationErgebnisAction",
+        "sendeNacharbeitBegleitscheinAction",
         "getComplaintDialogAction"
       ],
       "classification": "PENDING_CONTRACT",
