@@ -157,3 +157,21 @@ it('BA01/03/06 automatic mode uses the actual existing invoice Action once, pres
  expect(await withSession(incomplete.fixture,()=>saveIncomingInvoiceAction({...input,itemId:incomplete.itemId,fileId:incomplete.fileId,clientKey:randomUUID(),fields:{...input.fields,lieferantId:incomplete.fixture.customerId}}))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${incomplete.itemId}::uuid`).toHaveLength(0);
 });
+
+it('BA02 actual undo and rebook preserve one canonical invoice and both historical receipts while reopening the source',async()=>{
+ const {fixture,itemId,fileId}=await secureSource(),{getIncomingInvoiceAction,saveIncomingInvoiceAction,changeIncomingInvoiceStatusAction}=await import('@/app/actions/eingang.actions');
+ const initial=await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}));if(initial.code!=='OK')throw Error(initial.message);
+ const saved=await withSession(fixture,()=>saveIncomingInvoiceAction({itemId,fileId,version:initial.view.item.version,clientKey:randomUUID(),automatic:true,fields:initial.view.fields,status:'offen',paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null}));if(saved.code!=='OK')throw Error(saved.message);
+ const undo={command:'undo',invoiceId:saved.invoice.id,version:saved.invoice.version,clientKey:randomUUID(),result:'ungueltig',paidDate:null,proofFileId:null,duplicateId:null,reason:'TEST Betrag falsch erkannt',fields:null};
+ const undone=await withSession(fixture,()=>changeIncomingInvoiceStatusAction(undo));expect(undone).toMatchObject({code:'OK',invoice:{id:saved.invoice.id,zahlstatus:'ungueltig',brutto:'119.00',version:2}});
+ expect(await withSession(fixture,()=>changeIncomingInvoiceStatusAction(undo))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT einsatz,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual([{einsatz:'offen',anliegen_offen:['rechnung']}]);
+ expect(await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}))).toMatchObject({code:'OK',view:{canRebook:true,canUndo:false,invoice:{id:saved.invoice.id,zahlstatus:'ungueltig'},originals:[expect.objectContaining({id:fileId})]}});
+ const rebook={command:'rebook',invoiceId:saved.invoice.id,version:2,clientKey:randomUUID(),result:'offen',paidDate:null,proofFileId:null,duplicateId:null,reason:null,fields:{...initial.view.fields,netto:'200.00',ust:'38.00',brutto:'238.00'}};
+ expect(await withSession(fixture,()=>changeIncomingInvoiceStatusAction(rebook))).toMatchObject({code:'OK',invoice:{id:saved.invoice.id,zahlstatus:'offen',brutto:'238.00',version:3}});
+ expect(await withSession(fixture,()=>changeIncomingInvoiceStatusAction(rebook))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toHaveLength(1);
+ expect(await sql`SELECT nachher->>'command' AS command,vorher->>'brutto' AS before,nachher->'invoice'->>'brutto' AS after,von FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=ANY(${[undo.clientKey,rebook.clientKey]}::uuid[]) ORDER BY zeit,id`).toEqual([{command:'rechnung.rueckgaengig',before:'119.00',after:'119.00',von:fixture.actorId},{command:'rechnung.neu_ablegen',before:'119.00',after:'238.00',von:fixture.actorId}]);
+ expect(await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}))).toMatchObject({code:'OK',view:{canUndo:true,canRebook:false,invoice:{id:saved.invoice.id,zahlstatus:'offen',brutto:'238.00'}}});
+ expect(await sql`SELECT einsatz,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual([{einsatz:'erledigt',anliegen_offen:[]}]);
+});

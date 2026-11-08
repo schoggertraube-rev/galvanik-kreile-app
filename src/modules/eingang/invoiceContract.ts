@@ -34,6 +34,7 @@ export type InvoiceDuplicate = {
 };
 export type InvoiceView = {
  actorTrace?:CaseActorTrace;
+  canUndo?:boolean;canRebook?:boolean;
   automation?: import('./invoiceAutomation').InvoiceAutomaticReadiness;
   item: { id: string; version: number; at: string; channel: string; sender: string | null };
   invoice: IncomingInvoice | null; supplier: InvoiceSupplier | null;
@@ -53,6 +54,7 @@ export type InvoiceSaveInput = {
   duplicateId: string | null; duplicateReason: string | null; unclearReason: string | null;
 };
 export type InvoiceChangeInput = {
+  command?: "undo" | "rebook";
   invoiceId: string; version: number; clientKey: string;
   result: Exclude<IncomingInvoiceStatus, 'unklar'>;
   paidDate: string | null; proofFileId: string | null;
