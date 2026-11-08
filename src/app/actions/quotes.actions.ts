@@ -12,6 +12,9 @@ import {
   resolveAuthorization,
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
+import {quoteForUi,scaleQuotePositions} from "@/modules/quotes/public";
+import {readQuoteReceivedQuantities} from "@/lib/server/quoteGoodsContextPort";
+import {intakePaymentContract} from "@/lib/server/paymentContract";
 import { readCustomerSummary,readCustomerListSignals } from "@/lib/server/customerSummaryRead";
 import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
 import {recognizeIntakeText} from '@/lib/server/intakeTextRecognition';
@@ -19,7 +22,7 @@ import {findRecognizedCustomers} from '@/modules/eingang/public';
 import {withPrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
-import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect,readIntakeAssignment} from '@/modules/eingang/server-public';
+import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect,readIntakeMessages,readIntakeAssignment} from '@/modules/eingang/server-public';
 import {parseQuoteGoodsReceiptInput} from '@/modules/eingang/public';
 import {syncQuoteFollowupTask,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
@@ -34,7 +37,7 @@ import {
   type QuoteFollowupBinding,
   listOpenQuotesCommand,
   prepareQuoteConversionCommand,
-  readQuoteCommand,
+  reverseQuoteConversionCommand,readQuoteUndoContext,readQuoteCommand,
   readQuoteCreateReceiptCommand,
   readQuoteConversionReceiptCommand,
   readQuoteUpdateReceiptCommand,
@@ -61,6 +64,8 @@ function quoteCommandContext(authorization: AuthorizationSnapshot): QuoteCommand
   };
 }
 
+/** U-249 is an operational decision grant, never an edit/financial grant. */
+function quoteOperationContext(auth:AuthorizationSnapshot):QuoteCommandContext{const context=quoteCommandContext(auth);return {...context,capabilities:{...context.capabilities,canReadQuote:true,canDecideQuote:true,canConvertQuote:true}};}
 function quoteFollowupBinding(auth:AuthorizationSnapshot):QuoteFollowupBinding{
  return async(tx,{quote,action,phase})=>{
   const life=quote.lifecycle;if(!life)throw Error('QUOTE_FOLLOWUP_LIFECYCLE_MISSING');
@@ -90,13 +95,13 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
     const auth=await resolveAuthorization();
     const failure=authorizationFailure(auth);
     if (failure||!auth.ok) return failure!;
-    const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId});
+    const result=await changeQuoteLifecycleCommand(input?.action==='accept'?quoteOperationContext(auth.data):quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data),{actualMail:options?.actualMail===true,onsiteGoodsReceiptId:options?.onsiteGoodsReceiptId});
     if (result.code==='OK') {
       revalidatePath('/');
       revalidatePath('/customers');
       revalidatePath(`/customers/${result.quote.customerId}`);
     }
-    return result;
+    return result.code==='OK'?{...result,quote:quoteForUi(result.quote,quoteCommandContext(auth.data).capabilities.canReadQuote)}:result;
   } catch (error) {
     console.error('[QUOTE_LIFECYCLE_ACTION_FAILED]',error instanceof Error?error.name:'UnknownError');
     return {code:'UNAVAILABLE' as const,message:'KV-Entscheidung konnte nicht sicher bestätigt werden.'};
@@ -130,7 +135,7 @@ export async function createQuoteAction(input: CreateQuoteInput) {
   return result;
 }
 
-export async function readQuoteAction(input: { quoteId: string }) {
+export async function readQuoteAction(input: { quoteId: string;receivedQuantities?:Array<{position:number;quantity:number}>;goodsReceiptId?:string;purpose?:'operations' }) {
   noStore();
   let authorization;
   try {
@@ -140,7 +145,22 @@ export async function readQuoteAction(input: { quoteId: string }) {
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
-  return readQuoteCommand(quoteCommandContext(authorization.data), input);
+  const financial=quoteCommandContext(authorization.data).capabilities.canReadQuote;
+  const context=input?.purpose==='operations'?quoteOperationContext(authorization.data):quoteCommandContext(authorization.data);
+  const result=await readQuoteCommand(context,{quoteId:input?.quoteId});
+  if(result.code!=='OK')return result;
+  try{
+    const customer=await withPrivilegedTenantTransaction(authorization.data,tx=>readCustomerProfile(tx,authorization.data.tenantId,result.quote.customerId));
+    const handoverMode=customer?.handoverPreference??null;
+    const payment=customer&&handoverMode?intakePaymentContract({customerMode:'EXISTING',paymentPreference:customer.paymentPreference,handoverMode,invoiceTermsEnabled:customer.invoiceTermsEnabled,invoiceTermDays:customer.invoiceTermDays}):null;
+    const receiptQuantities=input.goodsReceiptId?await withPrivilegedTenantTransaction(authorization.data,tx=>readQuoteReceivedQuantities(tx,authorization.data.tenantId,result.quote.quoteId,input.goodsReceiptId!)):null;
+    if(input.goodsReceiptId&&!receiptQuantities)return {code:'VALIDATION_ERROR' as const,message:'Passender angenommener Warenbeleg fehlt oder ist gesperrt.'};
+    const quantities=receiptQuantities?receiptQuantities.map(row=>({position:row.kv_position,quantity:Number(row.bestaetigt)})):input.receivedQuantities??result.quote.positions.map(row=>({position:row.position,quantity:row.quantity}));
+    if(!Array.isArray(quantities))return {code:'VALIDATION_ERROR' as const,message:'Beauftragungsdaten sind ungültig.'};
+    const preview=scaleQuotePositions(result.quote.lifecycle?.calculation??null,result.quote.positions,quantities);
+    if(preview.code!=='OK')return preview;
+    return {...result,undo:await readQuoteUndoContext(context,result.quote),quote:quoteForUi(result.quote,financial),canEdit:financial&&context.capabilities.canUpdateQuote,canOperate:true,canReceive:hasAuthorizationArea(authorization.data,'eingang'),conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:financial?preview.totalNetCents:null,plannedHours:preview.calculation?.hours??null,positions:preview.positions.map(row=>({position:row.position,quantity:row.quantity,lineTotalCents:financial?row.lineTotalCents:null}))}};
+  }catch(error){console.error('[QUOTE_CONVERSION_DEFAULTS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV konnte nicht sicher gelesen werden.'};}
 }
 
 export async function listOpenQuotesAction() {
@@ -227,7 +247,11 @@ export async function readQuoteConversionReceiptAction(input: { quoteId: string;
   }
 }
 
-export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown) {
+export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown,telephoneAcceptance?:{clientEventId:string;edition:number;evidence:string}) {
+  if(!input||typeof input!=='object')return {code:'VALIDATION_ERROR' as const,message:'KV und Buchungsdaten fehlen.'};
+  if(telephoneAcceptance!==undefined&&(!telephoneAcceptance||typeof telephoneAcceptance!=='object'||Array.isArray(telephoneAcceptance)||Object.keys(telephoneAcceptance).sort().join(',')!=='clientEventId,edition,evidence'||typeof telephoneAcceptance.clientEventId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(telephoneAcceptance.clientEventId)||telephoneAcceptance.clientEventId===input.clientEventId||!Number.isSafeInteger(telephoneAcceptance.edition)||telephoneAcceptance.edition<1||typeof telephoneAcceptance.evidence!=='string'||telephoneAcceptance.evidence.trim().length<3||telephoneAcceptance.evidence.length>4000))return {code:'VALIDATION_ERROR' as const,message:'Telefonische Zusage braucht eigene Kennung, Fassung und Wortlaut.'};
+  const conversionInput=telephoneAcceptance?{...input,expectedVersion:input.expectedVersion+1}:input;
+  const pendingAcceptance=telephoneAcceptance?{edition:telephoneAcceptance.edition,beforeVersion:input.expectedVersion}:undefined;
   const newGoods=newGoodsInput===undefined?null:parseQuoteGoodsReceiptInput(newGoodsInput);
   if(newGoodsInput!==undefined&&(!newGoods||newGoods.quoteId!==input.quoteId||newGoods.id!==input.goodsReceiptId||newGoods.expectedQuoteVersion!==input.expectedVersion))return {code:"VALIDATION_ERROR" as const,message:"KV und neue Warenprüfung passen nicht zusammen."};
   let authorization;
@@ -239,8 +263,8 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
 
-  const commandContext = quoteCommandContext(authorization.data);
-  const prepared = await prepareQuoteConversionCommand(commandContext, input,{planOnly:true,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
+  const commandContext = quoteOperationContext(authorization.data);
+  const prepared = await prepareQuoteConversionCommand(commandContext, conversionInput,{planOnly:true,pendingAcceptance,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
   if (prepared.code !== "OK") return prepared;
 
   let goods:Awaited<ReturnType<typeof bindQuoteGoodsReceiptToCreatedOrder>>|null=null;
@@ -250,13 +274,20 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
     const saved=await writeQuoteGoodsReceiptInTransaction(tx,auth,newGoods);
     if(saved.code!=='OK'){boundFailure={code:saved.code==='UNAUTHENTICATED'?'FORBIDDEN':saved.code,message:saved.message};throw Error('QUOTE_NEW_GOODS_FAILED');}
   };
-  const check=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],planOnly:boolean)=>{
-    const result=await prepareQuoteConversionCommand(commandContext,input,{transaction:tx,planOnly,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
+  const check=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],planOnly:boolean,prospective=false)=>{
+    const result=await prepareQuoteConversionCommand(commandContext,conversionInput,{transaction:tx,planOnly,pendingAcceptance:prospective?pendingAcceptance:undefined,pendingGoodsId:newGoods?.id,pendingQuantities:newGoods?.quantities});
     if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_ORDER_BINDING_FAILED');}
   };
+  const accept=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],auth:AuthorizationSnapshot)=>{
+    if(!telephoneAcceptance)return;
+    const result=await changeQuoteLifecycleCommand(commandContext,{quoteId:input.quoteId,expectedVersion:input.expectedVersion,action:'accept',...telephoneAcceptance},(transaction,source)=>recordIntakeQuoteEffect(transaction,auth,source),quoteFollowupBinding(auth),{transaction:tx});
+    if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_TELEPHONE_ACCEPTANCE_FAILED');}
+  };
   const order = await createOrderIntake(prepared.orderInput,undefined,{
-    before:async(tx,auth)=>{await check(tx,true);if(newGoods&&prepared.replayed)await saveGoods(tx,auth);},
-    beforeEvent:async(tx,auth)=>{await saveGoods(tx,auth);await check(tx,false);},
+    quoteConversion:true,
+    before:async(tx,auth)=>{if(prepared.replayed)await accept(tx,auth);await check(tx,true,!prepared.replayed);if(newGoods&&prepared.replayed)await saveGoods(tx,auth);},
+    // No lifecycle mutation before intake validation: a returned failure must not commit an acceptance.
+    beforeEvent:async(tx,auth)=>{await saveGoods(tx,auth);await accept(tx,auth);await check(tx,false);},
     after:async(tx,auth,receipt)=>{
       try{goods=await bindQuoteGoodsReceiptToCreatedOrder(tx,auth,{quoteId:input.quoteId,receiptId:input.goodsReceiptId!,clientEventId:input.clientEventId,orderId:receipt.orderId,items:receipt.items});}
       catch(error){
@@ -284,9 +315,9 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGood
   revalidatePath(`/customers/${persisted.receipt.customerId}`);
   return {
     code: "OK" as const,
-    quote: persisted.quote,
+    quote: quoteForUi(persisted.quote,quoteCommandContext(authorization.data).capabilities.canReadQuote),
     quoteReceipt: persisted.receipt,
-    orderReceipt: order.receipt,
+    orderReceipt: quoteCommandContext(authorization.data).capabilities.canReadQuote?order.receipt:{...order.receipt,items:order.receipt.items.map(row=>({...row,unitPriceCents:null,vatRateBasisPoints:null}))},
     goodsReceipt:goods,
     replayed: prepared.replayed && order.replayed,
   };
@@ -511,4 +542,52 @@ export async function receiveOnsiteQuoteAction(input:{
   const result=await convertQuoteToOrderAction({quoteId,clientEventId:phase('order'),expectedVersion:2,confirmedAward:true,confirmedOrderDueDate:input.confirmedOrderDueDate,handoverMode:input.handoverMode,paymentMode:input.paymentMode,goodsReceiptId:phase('goods-id')});
   return {...result,phase:result.code==='OK'?'complete':'order',quoteId,customerId,requestId:input.clientRequestId};
  }catch(error){console.error('[QUOTE_ONSITE_REQUEST_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Ausgang nicht sicher bestaetigt. Eingaben und Erfassungskennung behalten; gespeicherte Zwischenschritte bleiben nachvollziehbar.',customerId,quoteId,requestId:input.clientRequestId};}
+}
+
+/** Operational workshop projection: no prices/calculation/PDFs leave this purpose-bound reader. */
+export async function readWorkshopQuoteGoodsAction(){
+ noStore();
+ try{const auth=await resolveAuthorization(),denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
+  if(!auth.data.permissions.includes('perm_view_leitstand'))return {code:'FORBIDDEN' as const,message:'KV-Ware ist nicht freigegeben.'};
+  const context={tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canReadQuote:true,canCreateQuote:false,canUpdateQuote:false,canConvertQuote:false}};
+  const result=await listOpenQuotesCommand({...context,capabilities:{...context.capabilities,canReadQuote:true}});
+  if(result.code!=='OK')return result;
+  const today=berlinCalendarDay();
+  const quotes=result.quotes.flatMap(quote=>{const life=quote.lifecycle;if(quote.linkedOrderId||!life)return [];
+   const goods=life.goods?.filter(row=>!row.orderId)??[],accepted=life.acceptedEdition===life.edition&&Boolean(life.acceptedAt),expired=Boolean(quote.validUntil&&quote.validUntil<today),conditional=life.conditional?.edition===life.edition;
+   if(!goods.length&&(!accepted||expired||conditional))return [];
+   const blocked=life.stage==='abgesagt'||!accepted||expired||conditional;
+   return [{id:quote.quoteId,number:quote.quoteNumber,customer:quote.customerDisplayName,parts:quote.positions.map(row=>row.quantity+' × '+row.name).join(' / '),due:quote.dueDate,kind:goods.length?(blocked?'blocked' as const:'here' as const):'expected' as const,locations:goods.map(row=>row.location).filter(Boolean),reason:life.stage==='abgesagt'?'KV abgesagt':expired?'Gültigkeit abgelaufen':conditional?'Zusage mit Vorbehalt':!accepted?'Zusage fehlt':goods.length?'Auftrag noch nicht angelegt':null}];
+  });
+  return {code:'OK' as const,quotes,limited:result.quotes.length===100};
+ }catch(error){console.error('[WORKSHOP_QUOTE_GOODS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Ware konnte nicht sicher gelesen werden.'};}
+}
+
+
+/** Operational targets are bounded by the real reply's assigned customer; no financial projection. */
+export async function readQuoteReplyTargetsAction(input:{sourceItemId:string;quoteId?:string}){
+ noStore();
+ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+ if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>!['sourceItemId','quoteId'].includes(key))||typeof input.sourceItemId!=='string'||!uuid.test(input.sourceItemId)||input.quoteId!==undefined&&(typeof input.quoteId!=='string'||!uuid.test(input.quoteId)))return {code:'VALIDATION_ERROR' as const,message:'Originalantwort fehlt.'};
+ try{
+  const authorized=await resolveAuthorization(),denied=authorizationFailure(authorized);if(denied||!authorized.ok)return denied!;
+  const messages=await readIntakeMessages('alle',input.sourceItemId);if(messages.code!=='OK')return messages;
+  const source=messages.messages.find(row=>row.id===input.sourceItemId);if(!source)return {code:'NOT_FOUND' as const,message:'Originalantwort ist nicht verfügbar.'};
+  if(!source.customerId)return {code:'VALIDATION_ERROR' as const,message:'Ordne die Antwort zuerst einem Kunden zu.'};
+  const context=quoteOperationContext(authorized.data);
+  const result=input.quoteId?await readQuoteCommand(context,{quoteId:input.quoteId}):await listOpenQuotesCommand(context);if(result.code!=='OK')return result;
+  const quotes='quotes'in result?result.quotes:[result.quote];
+  if(input.quoteId&&quotes[0].customerId!==source.customerId)return {code:'CONFLICT' as const,message:'Nachricht und KV gehören nicht zum selben Kunden.'};
+  return {code:'OK' as const,source:{id:source.id,version:source.version,channel:source.channel,text:source.text,customer:source.customerName??'Name fehlt',openConcerns:source.openConcerns,files:source.files??[]},targets:quotes.filter(q=>q.customerId===source.customerId&&!q.linkedOrderId&&q.lifecycle?.stage!=='abgesagt').map(q=>({id:q.quoteId,number:q.quoteNumber,customer:q.customerDisplayName,parts:q.positions.map(row=>row.quantity+' × '+row.name).join(' / ')})),limited:!input.quoteId&&quotes.length===100};
+ }catch(error){console.error('[QUOTE_REPLY_TARGETS_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const,message:'KVs zu dieser Antwort konnten nicht sicher gelesen werden.'};}
+}
+
+
+export async function undoQuoteConversionAction(input:{quoteId:string;expectedVersion:number;clientEventId:string;reason:string}){
+ try{const authorized=await resolveAuthorization(),denied=authorizationFailure(authorized);if(denied||!authorized.ok)return denied!;
+  const result=await reverseQuoteConversionCommand(quoteOperationContext(authorized.data),input);
+  if(result.code!=='OK')return result;
+  for(const route of ['/','/orders','/warendurchlauf','/nachrichten'])revalidatePath(route);
+  return {...result,quote:quoteForUi(result.quote,quoteCommandContext(authorized.data).capabilities.canReadQuote)};
+ }catch(error){console.error('[QUOTE_UNDO_ACTION_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:'Rücknahme ist ungeklärt. Mit derselben Kennung erneut prüfen.'};}
 }

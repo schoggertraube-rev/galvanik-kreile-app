@@ -1,4 +1,5 @@
 "use client";
+import {QUOTE_CANCELLED_ORDER_COPY as cancelledCopy} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import {
@@ -197,6 +198,8 @@ export function OrderCardView({
   }
 
   const card = state.card;
+  if(card.status==='storniert')return <Seitenblatt titel={`Auftragskarte ${card.orderNumber}`} onSchliessen={onClose}><KartenBlock label={cancelledCopy.title}><h2>{card.orderNumber+' · '+card.title}</h2><Hinweis>{cancelledCopy.explanation}</Hinweis>{card.cancellation?<><p>{cancelledCopy.reason+' · '+card.cancellation.reason}</p><p>{cancelledCopy.actor+' · '+card.cancellation.actor+' · '+formatMoment(card.cancellation.at)}</p></>:null}<Button text={cancelledCopy.customer} onClick={()=>onOpenCustomer(card.customerId)}/>{card.cancellation?.quoteId?<Button text={cancelledCopy.quote(card.cancellation.quoteNumber)} onClick={()=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:card.cancellation!.quoteId}}))}/>:null}{card.items.map(item=><p key={item.id}>{item.quantity+' × '+item.name}</p>)}</KartenBlock></Seitenblatt>;
+
   const invoiceSuccess = actions.feedback.kind === "success"
     && actions.feedback.receipt.kind === "invoice"
     && actions.feedback.receipt.receiptId !== dismissedInvoiceReceiptId

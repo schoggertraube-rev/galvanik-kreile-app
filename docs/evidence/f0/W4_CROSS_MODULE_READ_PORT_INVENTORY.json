@@ -145,6 +145,9 @@
       "private.v_quote_update_receipts_v1",
       "private.v_quotes_v1"
     ],
+    "src/modules/quotes/server/quoteConversionUndo.ts": [
+      "private.v_quote_conversion_receipts_v1"
+    ],
     "src/modules/tasks/server/taskService.ts": [
       "private.v_task_contexts_v1",
       "private.v_task_recipients_v1"

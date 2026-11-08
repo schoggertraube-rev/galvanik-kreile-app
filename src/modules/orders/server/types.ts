@@ -193,6 +193,7 @@ export type OrderCardModel = {
   note: string | null;
   station: string;
   status: string;
+  cancellation?:{reason:string;at:string;actor:string;quoteId:string|null;quoteNumber:string|null};
   dueAt: string | null;
   intakeAt: string;
   assignedTo: string | null;

@@ -1,5 +1,6 @@
 import type {QuoteCalculation} from "../quoteCalculation";
 export type QuoteCommandCapabilities = {
+  canDecideQuote?:boolean;
   canCreateQuote: boolean;
   canReadQuote: boolean;
   canUpdateQuote: boolean;

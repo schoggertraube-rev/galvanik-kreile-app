@@ -492,6 +492,8 @@ async function allocateOrderNumber(tx: PrivilegedTenantTransaction): Promise<str
 }
 
 export type OrderIntakeTransactionBinding = {
+  /** Internal canonical KV binding, never deserialized from a public Action input. */
+  quoteConversion?:true;
   intentKey?: string;
   beforeEvent?: (tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
   before: (tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot) => Promise<void>;
@@ -509,14 +511,15 @@ export async function createOrderIntake(input: unknown,createCustomer?:CustomerW
       ? { code: "UNAVAILABLE", message: authorization.message }
       : { code: "UNAUTHENTICATED", message: authorization.message };
   }
-  if (!authorization.data.permissions.includes("perm_data_orders")) {
+  const boundQuote=binding?.quoteConversion===true&&Boolean(binding.beforeEvent)&&normalized.customer.mode==="EXISTING"&&!normalized.customer.changes;
+  if (!authorization.data.permissions.includes("perm_data_orders")&&!boundQuote) {
     return { code: "FORBIDDEN", message: "Aufträge dürfen mit dieser Rolle nicht angelegt werden." };
   }
   if ((normalized.customer.mode === "NEW" || normalized.customer.changes) && !authorization.data.permissions.includes("perm_data_customers")) {
     return { code: "FORBIDDEN", message: "Kunden dürfen mit dieser Rolle nicht angelegt werden." };
   }
   if(normalized.termOrigin==="ueber_auslastung"&&!authorization.data.areas?.includes("entscheiden"))return {code:"FORBIDDEN",message:"Wunsch trotzdem zusagen benötigt das Recht Entscheiden."};
-  const canManageMoney = authorization.data.areas?.includes("geld") === true;
+  const canManageMoney = authorization.data.areas?.includes("geld") === true||boundQuote;
   if (canManageMoney && normalized.paymentMode === null) {
     return { code: "VALIDATION_ERROR", message: "Zahlungsmodus ist erforderlich." };
   }

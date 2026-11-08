@@ -1,5 +1,6 @@
 "use client";
 
+import {useEffect} from "react";
 import { useRouter } from "next/navigation";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePageView } from "@/hooks/usePageView";
@@ -17,6 +18,8 @@ export function WerkstattAppAdapter({
 }) {
   usePageView();
   const router = useRouter();
+  useEffect(()=>{const refresh=()=>router.refresh();window.addEventListener("kreile:intake-changed",refresh);return()=>window.removeEventListener("kreile:intake-changed",refresh);},[router]);
+  const openQuote=useOverlayStore(state=>state.openQuote);
   const openOrder = useOverlayStore((state) => state.openOrder);
 
   return (
@@ -25,6 +28,7 @@ export function WerkstattAppAdapter({
       onRetry={() => router.refresh()}
       ports={{
         onOpenOrder: openOrder,
+        onOpenQuote:openQuote,
         onOpenGoodsOut: openOrder,
         onOpenWip: () => router.push("/warendurchlauf/galvanik"),
         onScanOrder: () => requestGlobalCreate("DIRECT_INTAKE"),

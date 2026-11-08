@@ -38,10 +38,16 @@ export function scaleQuoteCalculation(input:QuoteCalculation,previousQuantity:nu
 export type QuoteQuantityLine={position:number;quantity:number;lineTotalCents:number};
 
 /** Fixed setup is apportioned once against original lines; only the remainder scales. */
-export function scaleQuotePositions(calculation:QuoteCalculation,source:QuoteQuantityLine[],quantities:Array<{position:number;quantity:number}>):
+export function scaleQuotePositions(calculation:QuoteCalculation|null,source:QuoteQuantityLine[],quantities:Array<{position:number;quantity:number}>):
  {code:'OK';positions:QuoteQuantityLine[];totalNetCents:number;calculation:QuoteCalculation|null}|Exclude<QuoteCalculationResult,{code:'OK'}>{
- const valid=calculateQuote(calculation);
  const invalid=():Exclude<QuoteCalculationResult,{code:'OK'}>=>({code:'VALIDATION_ERROR',field:'total',message:'KV-Positionen und Mengen sind nicht eindeutig oder passen nicht zur Kalkulation.'});
+ if(calculation===null){
+  if(!source.length||source.length!==quantities.length||new Set(source.map(row=>row.position)).size!==source.length||new Set(quantities.map(row=>row.position)).size!==quantities.length||source.some(row=>!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.quantity)||row.quantity<1||!Number.isSafeInteger(row.lineTotalCents)||row.lineTotalCents<0)||quantities.some(row=>!source.some(original=>original.position===row.position)||!Number.isSafeInteger(row.quantity)||row.quantity<0))return invalid();
+  const positions=source.map(row=>{const quantity=quantities.find(next=>next.position===row.position)!.quantity;return {...row,quantity,lineTotalCents:Number((BigInt(row.lineTotalCents)*BigInt(quantity)+BigInt(row.quantity)/BigInt(2))/BigInt(row.quantity))};}).filter(row=>row.quantity>0);
+  const totalNetCents=positions.reduce((sum,row)=>sum+row.lineTotalCents,0);
+  return !positions.length||!Number.isSafeInteger(totalNetCents)||positions.some(row=>!Number.isSafeInteger(row.lineTotalCents))?invalid():{code:'OK',positions,totalNetCents,calculation:null};
+ }
+ const valid=calculateQuote(calculation);
  if(valid.code!=='OK')return valid;
  if(!source.length||source.length!==quantities.length||new Set(source.map(row=>row.position)).size!==source.length||new Set(quantities.map(row=>row.position)).size!==quantities.length||source.some(row=>!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.quantity)||row.quantity<1||!Number.isSafeInteger(row.lineTotalCents)||row.lineTotalCents<0)||quantities.some(row=>!source.some(original=>original.position===row.position)||!Number.isSafeInteger(row.quantity)||row.quantity<0)||source.reduce((sum,row)=>sum+row.lineTotalCents,0)!==valid.totalNetCents)return invalid();
  const setup=BigInt(calculation.setupCents!);

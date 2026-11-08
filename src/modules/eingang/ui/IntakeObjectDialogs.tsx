@@ -3,24 +3,25 @@ import{useCallback,useEffect,useState}from'react';
 import{createPortal}from'react-dom';
 import{KrApp,useKrGeraet}from'@/ui/kr';
 import{GoodsReceiptDialog,type GoodsReceiptPorts}from'./GoodsReceiptDialog';
+import{QuoteGoodsDialog,type QuoteGoodsPorts}from'./QuoteGoodsDialog';
 import{OriginalDialog,type OriginalPorts}from'./OriginalDialog';
 import{INTAKE_CHANGED_EVENT}from'../messageContract';
-type Entry={screen:'ware'|'original';arg:string;key:string};
-export type IntakeObjectPorts={goods:GoodsReceiptPorts;original:OriginalPorts};
+type Entry={screen:'ware'|'original'|'kvware';arg:string;key:string};
+export type IntakeObjectPorts={goods:GoodsReceiptPorts;original:OriginalPorts;quoteGoods:QuoteGoodsPorts};
 /** The existing navigation bus opens object dialogs, never another creation flow. */
-export function IntakeObjectDialogs({ports,allowed,originalAllowed=allowed,onRefresh}:{ports:IntakeObjectPorts;allowed:boolean;originalAllowed?:boolean;onRefresh:()=>void}){
+export function IntakeObjectDialogs({ports,allowed,originalAllowed=allowed,onRefresh,onOpenCustomer,onOpenOrder,onOpenQuote,customerOverlayId=null}:{ports:IntakeObjectPorts;allowed:boolean;originalAllowed?:boolean;onRefresh:()=>void;onOpenCustomer:(id:string)=>void;onOpenOrder:(id:string)=>void;onOpenQuote:(id:string)=>void;customerOverlayId?:string|null}){
  const device=useKrGeraet(),[stack,setStack]=useState<Entry[]>([]),[message,setMessage]=useState<string|null>(null);
  const open=useCallback((screen:Entry['screen'],arg:string)=>{
   if(!(screen==='original'?originalAllowed:allowed)){setMessage('Eingang ist nicht freigegeben.');return;}
   setStack(previous=>previous.at(-1)?.screen===screen&&previous.at(-1)?.arg===arg?previous:[...previous,{screen,arg,key:crypto.randomUUID()}]);
  },[allowed,originalAllowed]);
  useEffect(()=>{
-  const handler=(event:Event)=>{const value=(event as CustomEvent<{ziel?:string;arg?:unknown}>).detail;if((value?.ziel==='ware'||value?.ziel==='original')&&typeof value.arg==='string'){if(allowed)event.preventDefault();open(value.ziel,value.arg);}};
-  const fromHash=()=>{const match=/^#(ware|original):(.+)$/u.exec(location.hash);if(match)open(match[1] as Entry['screen'],decodeURIComponent(match[2]));};
+  const handler=(event:Event)=>{const value=(event as CustomEvent<{ziel?:string;arg?:unknown}>).detail;if((value?.ziel==='ware'||value?.ziel==='original'||value?.ziel==='kvware')&&typeof value.arg==='string'){if(allowed)event.preventDefault();open(value.ziel,value.arg);}};
+  const fromHash=()=>{const match=/^#(ware|original|kvware):(.+)$/u.exec(location.hash);if(match)open(match[1] as Entry['screen'],decodeURIComponent(match[2]));};
   window.addEventListener('kreile:oeffne',handler);window.addEventListener('hashchange',fromHash);const initial=setTimeout(fromHash,0);
   return()=>{clearTimeout(initial);window.removeEventListener('kreile:oeffne',handler);window.removeEventListener('hashchange',fromHash);};
  },[open,allowed]);
- const close=()=>{setStack(previous=>previous.slice(0,-1));window.dispatchEvent(new Event(INTAKE_CHANGED_EVENT));if(stack.length===1&&/^#(?:ware|original):/u.test(location.hash))history.replaceState(history.state,'',location.pathname+location.search);};
+ const close=()=>{setStack(previous=>previous.slice(0,-1));window.dispatchEvent(new Event(INTAKE_CHANGED_EVENT));if(stack.length===1&&/^#(?:ware|original|kvware):/u.test(location.hash))history.replaceState(history.state,'',location.pathname+location.search);};
  const refresh=()=>{window.dispatchEvent(new Event(INTAKE_CHANGED_EVENT));onRefresh();};
  const notify=(text:string)=>{setMessage(text);refresh();};
  const assign=(itemId:string,move:boolean)=>{
@@ -29,7 +30,7 @@ export function IntakeObjectDialogs({ports,allowed,originalAllowed=allowed,onRef
  };
  return <>{message?<div role="status" className="kr-toast">{message}</div>:null}{stack.length&&typeof document!=='undefined'?createPortal(<KrApp geraet={device} portal>{stack.map(entry=>{
   const [id,fileId]=entry.arg.split('#',2);
-  return entry.screen==='ware'?<GoodsReceiptDialog key={entry.key} orderId={id} sourceId={fileId} ports={ports.goods} onClose={close} onMessage={notify} onOriginal={(item,file)=>open('original',item+'#'+file)}/>
+  return entry.screen==='kvware'?<QuoteGoodsDialog key={entry.key} quoteId={id} sourceId={fileId} ports={ports.quoteGoods} customerOverlayId={customerOverlayId} onClose={close} onMessage={notify} onOriginal={(item,file)=>open('original',item+'#'+file)} onCustomer={id=>onOpenCustomer(id)} onOrder={id=>onOpenOrder(id)} onQuote={id=>onOpenQuote(id)}/>:entry.screen==='ware'?<GoodsReceiptDialog key={entry.key} orderId={id} sourceId={fileId} ports={ports.goods} onClose={close} onMessage={notify} onOriginal={(item,file)=>open('original',item+'#'+file)}/>
    :<OriginalDialog key={entry.key} fileId={fileId??id} ports={ports.original} onClose={close} onMessage={refresh} onAssign={assign}/>;
  })}</KrApp>,document.body):null}</>;
 }

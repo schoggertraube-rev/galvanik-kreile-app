@@ -45,7 +45,17 @@
     "@/modules/quotes/public#QuoteCalculation",
     "@/modules/quotes/server-public#prepareQuoteTextChangeCommand",
     "@/modules/quotes/public#scaleQuotePositions",
-    "@/modules/quotes/public#QuoteQuantityLine"
+    "@/modules/quotes/public#QuoteQuantityLine",
+    "@/modules/quotes/public#QuoteCard",
+    "@/modules/quotes/public#QuoteCardPorts",
+    "@/modules/quotes/public#QuoteMailDraft",
+    "@/modules/quotes/public#quoteForUi",
+    "@/modules/quotes/public#hasQuoteFinancials",
+    "@/modules/quotes/public#QuoteUiReadback",
+    "@/modules/quotes/public#QuoteReplyPicker",
+    "@/modules/quotes/public#QuoteReplyPickerPorts",
+    "@/modules/quotes/server-public#reverseQuoteConversionCommand",
+    "@/modules/quotes/server-public#readQuoteUndoContext"
   ],
   "capabilities": [
     "quotes:create",
@@ -60,7 +70,8 @@
     "20261107211500_kv_v04_conditional_acceptance.sql",
     "20261107214500_kv_v04_independent_metadata.sql",
     "20261107221000_kv_v04_followup_projection.sql",
-    "supabase/migrations/20261108060000_kv_date_preserves_edition.sql"
+    "supabase/migrations/20261108060000_kv_date_preserves_edition.sql",
+    "20261108151002_kv_conversion_undo.sql"
   ],
   "viewsFunctions": [
     "private.create_quote_v1",
@@ -73,7 +84,9 @@
     "private.v_quote_update_receipts_v1",
     "private.quote_followup_key",
     "private.project_quote_followup_task",
-    "private.protect_quote_followup_projection"
+    "private.protect_quote_followup_projection",
+    "private.reverse_quote_conversion_v1",
+    "private.quote_conversion_undo_reason_v1"
   ],
   "ownsTables": [
     "private.quote_conversion_receipts",
@@ -91,7 +104,9 @@
       "QUOTE_CREATED_V1",
       "QUOTE_UPDATED_V1",
       "QUOTE_LIFECYCLE_V04",
-      "QUOTE_CALCULATION_V04"
+      "QUOTE_CALCULATION_V04",
+      "QUOTE_CONVERSION_REVERSED_V04",
+      "ORDER_CANCELLED_V1"
     ],
     "consumes": [
       "ORDER_INTAKE_CREATED_V1"
