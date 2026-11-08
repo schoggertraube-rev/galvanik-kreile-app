@@ -21,3 +21,6 @@ export type {
 
 export {scaleQuoteCalculation} from "./quoteCalculation";
 export type {QuoteCalculation} from "./quoteCalculation";
+
+export {scaleQuotePositions} from "./quoteCalculation";
+export type {QuoteQuantityLine} from "./quoteCalculation";

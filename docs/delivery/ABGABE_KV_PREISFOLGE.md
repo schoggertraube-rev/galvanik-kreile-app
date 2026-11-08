@@ -1,24 +1,34 @@
-# KV-Preisfolge U-246/247 — Zwischenabgabe
+# KV-Preisfolge U-246/247
 
-**Draft, noch keine Merge-Bitte.** Mehrpositionsregel angefragt im BAULOG 08.11. 10:24; bisher keine PL-Antwort gefunden. Keine neue Oberfläche.
+Server-Folgefix im bestehenden Quote-Modul. Keine neue Oberfläche, Tabelle, Migration oder Preisablage.
 
-## Fertiger eindeutiger Umfang
+## Preisregel
 
-Eine gemeinsame Rechenfunktion im bestehenden Quote-Modul: Rüsten bleibt fest, Arbeitsstunden und Material werden mengenanteilig angepasst. Ganzzahlige Dezimalrechnung, keine Standardpreise oder zweite Preisablage. Textänderung verwendet den bestehenden Update-Writer; Warenpreis wird aus dem unveränderten Ursprungs-KV und dem tatsächlichen Warenbeleg gelesen. Öffentlicher Modul-Port statt Tiefimport.
+Rüsten bleibt fest; Arbeitszeit und Material folgen der Menge. Textvorschlag und Warenleser verwenden dieselbe Rechenfunktion. Eine Position: KV 4 Stück, 4 Stunden × 10 EUR, Rüsten 12 EUR, Material 9 EUR = 61 EUR. Sowohl „3 statt 4“ als auch echte Annahme von drei Stück ergeben **48,75 EUR** (3 Stunden, Rüsten 12 EUR, Material 6,75 EUR).
 
-Realer Vergleich: KV 4 Stück, 4 Stunden × 10 EUR, Rüsten 12 EUR, Material 9 EUR = 61 EUR. Sowohl „3 statt 4“ als auch echte Annahme von drei Stück ergeben 3 Stunden, Rüsten 12 EUR, Material 6,75 EUR = **48,75 EUR**. Folgeänderung auf fünf Stück ergibt 73,25 EUR.
+Mehrpositionen: Der um 10:24 vorgeschlagene Verteilungsvertrag gilt nach BAUREGELN 3.1 seit 11:24 ohne PL-Gegenentscheid. Rüstanteile werden einmal nach ursprünglichen KV-Zeilensummen verteilt; der Centrest geht deterministisch an die größte Zeile. Nur der verbleibende variable Anteil folgt dem Mengenfaktor. Rüstanteile ausgelassener Nullpositionen bleiben am Auftrag, ohne künstliche Werkstattteile zu erzeugen. Bei gleichem Mengenfaktor kommt der Gesamtpreis aus der gemeinsamen Stunden-/Materialkalkulation; Rundungsreste bleiben centgenau zugeordnet.
 
-## Nachweise
+Bei unterschiedlichen Faktoren bleiben Gesamtplanstunden null. Der Textvorschlag zeigt die richtigen Preise, verlangt aber weiterhin eine ausdrückliche Stunden-/Positionsbestätigung und kann ohne sie nichts schreiben. Keine erfundene Arbeitszeit und keine gelockerte Schreibvalidierung. Anwendung ausschließlich über bestehenden updateQuote-Writer.
 
-- Warenweg: echte Anlage/Zusage/Warenannahme/Auftragsanlage → DB/Ereignis/Auftragskarte/Kopiervorbereitung/Retry, PASS (7,84 s).
-- Textweg: echte Erkennung/Vorschlag/Update → DB/Ereignis/KV-Leseport, einschließlich Preisziel/Termin/Zusage und Fehlergrenzen, PASS (7,26 s).
-- Mehrpositionen mit einem Nullzugang: bestehender echter Vor-Ort-Fall bleibt PASS (7,82 s). Eine einzige gelieferte Position darf nicht mit einem ursprünglich einpositionigen KV verwechselt werden; Prüfung zählt die ursprünglichen KV-Positionen.
-- Sechs gezielte Rechenfälle PASS, Typprüfung/gezieltes Lint/Diffprüfung PASS vor dem letzten engen Herkunfts-Zähler-Nachtrag; dessen finale Typ-/Lintprüfung folgt.
-- Modulprüfung meldet ausschließlich bekannte fremde `DESIGN_POINTER_PAGE_BINDING` aus uncommitteter Planung, keine neue Modulverletzung.
-- Keine Migration und keine Dev-/Produktionsdatenänderung. Replay-Daten isoliert und synthetisch.
+## Gezielte Nachweise
 
-## Offen
+| Prüfung | Ergebnis |
+|---|---|
+| Einzelposition: tatsächliche Waren-/Auftragsaktionen → DB/Event/Auftragskarte/Kopiervorbereitung/Retry, mit Rüsten/Material ungleich null | PASS |
+| Einzelposition: echte Texterkennung/Vorschlag/Update → DB/Event/KV-Ansicht, Preisziel/Termin/Zusage/Fehlergrenzen | PASS |
+| Mehrpositionen: echter Vor-Ort-Direktweg über vorhandene Writer → DB/Event/zwei echte Auftragspositionen/Auftragskarte/Retry und gleicher Textpreis | PASS, 10,21 s |
+| Vergleich Mehrpositionen: ursprüngliche Zeilen 40/20 EUR, Rüsten 12 EUR; Mengenfaktoren 3/4 und 1 → 32/20 EUR = 52 EUR, Planstunden null | PASS |
+| Gleicher Faktor 3/4 → 48 EUR; eine Nullposition → 36 EUR, Rüsten bleibt vollständig | gezielte Rechenfälle PASS |
+| Anschlussregression Einzelposition Text/Ware und vorhandener Nullpositions-Direktweg | 3 echte Replay-Fälle PASS, 11,10 s |
+| Bestehende plus neue Rechenfälle | 7 PASS |
+| Typprüfung, gezieltes Lint, Produkt-Diff-Leerzeichenprüfung | PASS |
 
-Mehrere Positionen mit verschiedenen Mengenfaktoren brauchen die verbindliche Verteilung des festen Rüstanteils; es gibt keine gespeicherten Ansätze pro Position. Vorschlag und Alternativen werden ausschließlich durch PL im BAULOG geklärt. Bis dahin bleiben diese bestehenden Mehrpositionswege unverändert; dieser Draft behauptet ihre Preisangleichung ausdrücklich nicht.
+Tests: src/test/acceptance/kv_v04_server.integration.test.ts und src/modules/quotes/__tests__/quoteCalculation.test.ts. Keine Originalassertion abgeschwächt. Öffentlicher Modul-Port statt Tiefimport. Modul-Gate meldet ausschließlich bekannte fremde DESIGN_POINTER_PAGE_BINDING aus uncommitteter Planung; keine neue Produktverletzung.
 
-CI, READY-Preview exakt am finalen SHA, vorgeschriebener Sichtbeleg und PL-Diffprüfung werden nach der abschließenden Umsetzung ergänzt. Kein Merge durch Codex.
+Keine Dev-/Produktionsdatenänderung. Replay-Daten isoliert und synthetisch. Die neue Preisregel ist aus dem unveränderten KV plus tatsächlichem Warenbeleg abgeleitet, kein zweites gespeichertes Preisbild.
+
+## Freigabestand
+
+Früherer Kopf 4dee75b4 nach einmaligem Infrastruktur-Neustart vollständig grün (Storage-Upstream-502); dessen READY-Preview und Sichtlauf 0 Rot/21 bekannte Gelb sind historisch. Nach dem Mehrpositionsnachtrag müssen CI und READY exakt am neuen Kopf neu gebunden werden. Keine neue Oberfläche, kein erneuter Sichtlauf als Sicherheitswiederholung.
+
+Unabhängige PL-Diffprüfung vor Merge-Bitte erforderlich. Kein Merge durch Codex.

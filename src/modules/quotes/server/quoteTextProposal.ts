@@ -1,6 +1,6 @@
 import 'server-only';
 import type {IntakeTextRecognition} from '@/lib/server/intakeTextRecognition';
-import {calculateQuote,scaleQuoteCalculation,type QuoteCalculation} from '../quoteCalculation';
+import {calculateQuote,scaleQuoteCalculation,scaleQuotePositions,type QuoteCalculation} from '../quoteCalculation';
 import {readQuoteCopyCommand} from './quoteCommands';
 import type {QuoteCommandContext,UpdateQuoteInput} from './types';
 
@@ -22,7 +22,7 @@ export async function prepareQuoteTextChangeCommand(auth:QuoteCommandContext,quo
   else{
    const {position:original,index}=matches[0];if(edit.previous!==undefined&&edit.previous!==original.quantity)missing.push('Genannte Ausgangsmenge passt nicht zum aktuellen KV');const next=edit.mode==='add'?original.quantity+edit.value:edit.value;
    positions[index].quantity=next;positions[index].lineTotalCents=Number((BigInt(original.lineTotalCents)*BigInt(next)+BigInt(original.quantity)/BigInt(2))/BigInt(original.quantity));changes.push('Menge: '+original.quantity+' → '+next);
-   if(calculation){if(positions.length===1){const scaled=scaleQuoteCalculation(calculation,original.quantity,next);if(scaled.code!=='OK')missing.push(scaled.message);else{Object.assign(calculation,scaled.calculation);positions[index].lineTotalCents=scaled.totalNetCents;}}else missing.push('Arbeitszeit fuer geaenderten Umfang bestaetigen');}
+   if(calculation){if(positions.length===1){const scaled=scaleQuoteCalculation(calculation,original.quantity,next);if(scaled.code!=='OK')missing.push(scaled.message);else{Object.assign(calculation,scaled.calculation);positions[index].lineTotalCents=scaled.totalNetCents;}}else{const scaled=scaleQuotePositions(calculation,before.positions,positions.map((row,index)=>({position:before.positions[index].position,quantity:row.quantity})));if(scaled.code!=='OK')missing.push(scaled.message);else for(const line of scaled.positions){const target=positions[before.positions.findIndex(row=>row.position===line.position)];target.lineTotalCents=line.lineTotalCents;}missing.push('Arbeitszeit fuer geaenderten Umfang bestaetigen');}}
   }
  }
  if(command?.hours!==undefined||command?.targetNetCents!==undefined){
@@ -43,5 +43,5 @@ export async function prepareQuoteTextChangeCommand(auth:QuoteCommandContext,quo
  if(calculation){const total=calculateQuote(calculation);if(total.code!=='OK'||total.totalNetCents!==positions.reduce((sum,position)=>sum+(position.lineTotalCents??position.quantity*position.unitPriceCents),0))missing.push('Kalkulation und Positionspreise angleichen');}
  if(!changes.length)missing.push('Keine eindeutige Aenderung erkannt');
  const candidate:Omit<UpdateQuoteInput,'clientEventId'>={quoteId,expectedVersion:before.version,dueDate,note:before.note,positions,...(calculation?{calculation}:{})};
- return {code:'OK' as const,preparation:{before,after:{dueDate,positions,calculation:calculation??null},changes,missing:[...new Set(missing)],canApply:missing.length===0,candidate:missing.length?null:candidate}};
+ return {code:'OK' as const,preparation:{before,after:{dueDate,positions,totalNetCents:positions.reduce((sum,row)=>sum+(row.lineTotalCents??row.quantity*row.unitPriceCents),0),calculation:missing.includes('Arbeitszeit fuer geaenderten Umfang bestaetigen')?null:calculation??null},changes,missing:[...new Set(missing)],canApply:missing.length===0,candidate:missing.length?null:candidate}};
 }
