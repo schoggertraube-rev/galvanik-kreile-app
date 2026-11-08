@@ -227,3 +227,32 @@ test('quote copy: existing writer creates one new card and preserves its real so
  const reread=await action(page,'readQuoteAction',{quoteId:copies[0].id});expect(reread.quote.positions[0]).toMatchObject({name:'TEST Kopierte Halter',quantity:4,lineTotalCents:6100});
  await card.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-copy-real.png')});
 });
+
+
+test('quote preparation: real source hints and writer stay linked through the existing form',async({page})=>{
+ await prepareGeneratedSeed({id:'KV-UI-PREPARE',gegeben:{login:'login_meister',datenlagen:['kunde_vollstaendig_firma'],aufruf:{seite:'nachrichten',weg:'oeffne'}}} as FlowCase);
+ await page.goto('/start');const actor=generatedFlowRuntime.logins.login_meister;
+ await page.getByTestId('pin-user-card-'+createPinLoginHandle(actor.id)).click();
+ const keypad=page.locator('[data-spec-id="login.anmelden"]'),navigation=page.waitForURL(url=>url.pathname!=='/start');
+ for(const digit of actor.pin)await keypad.getByRole('button',{name:digit,exact:true}).click();await navigation;await page.goto('/orders');
+ const itemId=randomUUID(),customer=generatedFlowRuntime.datenlagen.kunde_vollstaendig_firma.id;
+ const text='4 Stück Halter verchromen, KV; Die alten Halter bitte erhalten.';
+ await action(page,'saveIntakeNoteAction',{itemId,textstand:randomUUID(),text,context:{customerId:customer},concerns:['aufgabe']},'src/app/actions/eingang.actions.ts');
+ const [source]=await sql`SELECT version FROM public.intake_item WHERE tenant_id='galvanik-kreile' AND id=${itemId}::uuid`;
+ await action(page,'selectIntakeConcernAction',{itemId,version:source.version,clientEventId:randomUUID(),concern:'kv_anfrage'},'src/app/actions/eingang.actions.ts');
+ await page.evaluate(sourceItemId=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv-vorbereiten',sourceItemId}})),itemId);
+ const form=page.locator('form').filter({has:page.getByRole('button',{name:'KV sichern',exact:true})});
+ await expect(form.getByLabel('Hinweis zum KV')).toHaveValue(text);
+ await expect(form.getByLabel('Menge',{exact:true})).toHaveValue('4');
+ await expect(form.getByLabel('Preis netto (€)',{exact:true})).toHaveValue('');
+ await form.getByLabel('Preis netto (€)',{exact:true}).fill('10');
+ await form.getByLabel('Gewünschter Termin',{exact:true}).fill('2026-12-18');
+ await form.getByRole('button',{name:'KV sichern',exact:true}).dblclick();
+ const card=page.getByRole('dialog',{name:/KV-2026-/});await expect(card).toBeVisible();
+ const quotes=await sql`SELECT id::text,linked_order_id FROM private.quotes WHERE tenant_id='galvanik-kreile' AND quelle_intake_item_id=${itemId}::uuid`;
+ expect(quotes).toHaveLength(1);expect(quotes[0].linked_order_id).toBeNull();
+ const read=await action(page,'readQuoteAction',{quoteId:quotes[0].id});
+ expect(read.quote.lifecycle).toMatchObject({sourceItemId:itemId,specialRequests:'Die alten Halter bitte erhalten.'});
+ expect(read.quote.positions[0]).toMatchObject({quantity:4,unitPriceCents:1000});
+ await expect(card.getByText('Die alten Halter bitte erhalten.',{exact:true})).toBeVisible();
+});
