@@ -99,13 +99,13 @@ export function invoiceDate(value: string): boolean {
   const time = Date.parse(value + 'T12:00:00Z');
   return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value;
 }
-export function invoiceFieldErrors(value: InvoiceFields, partial = false): Record<string, string> {
+export function invoiceFieldErrors(value: InvoiceFields, partial = false, confirmedPaid = false): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!partial && !value.lieferantId.trim()) errors.lieferantId = 'Lieferant fehlt';
   if (!partial && !value.nummer.trim()) errors.nummer = 'Rechnungsnummer fehlt';
   if (value.nummer.length > 255 || /[\u0000-\u001f]/.test(value.nummer)) errors.nummer = 'Rechnungsnummer ist ungültig';
   for (const key of ['datum', 'faelligAm'] as const) {
-    if (!value[key] && !partial) errors[key] = key === 'datum' ? 'Rechnungsdatum fehlt' : 'Fällig am fehlt';
+    if (!value[key] && !partial && !(key==='faelligAm'&&confirmedPaid)) errors[key] = key === 'datum' ? 'Rechnungsdatum fehlt' : 'Fällig am fehlt';
     else if (value[key] && !invoiceDate(value[key])) errors[key] = 'Datum ist ungültig';
   }
   for (const key of ['netto', 'ust', 'brutto'] as const) {

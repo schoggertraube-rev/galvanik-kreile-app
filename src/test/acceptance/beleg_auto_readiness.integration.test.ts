@@ -280,3 +280,23 @@ it('BA vehicle settings use existing rights, reject stale deletion and replay th
  expect(await withSession(fixture,()=>saveCompanySettingsAction({...request,belegVehicles:request.belegVehicles.filter(row=>row.id!==vehicleId),clientEventId:randomUUID()}))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await sql`SELECT beleg_fahrzeuge FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{beleg_fahrzeuge:request.belegVehicles}]);
 });
+
+
+it('BA08 missing due date blocks automatic and open booking but permits explicitly confirmed paid receipt without an invented deadline',async()=>{
+ const {fixture,itemId,fileId}=await secureSource();await sql`UPDATE public.customers SET zahlungsziel_tage=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+ const {getIncomingInvoiceAction,saveIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
+ const read=await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}));expect(read).toMatchObject({code:'OK',view:{fields:{faelligAm:''},automation:{state:'incomplete',missing:expect.arrayContaining(['Fällig am fehlt'])}}});if(read.code!=='OK')throw Error(read.message);
+ const request={itemId,fileId,version:1,clientKey:randomUUID(),fields:read.view.fields,status:'bezahlt' as const,paidDate:'2026-11-08',proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null};
+ expect(await withSession(fixture,()=>saveIncomingInvoiceAction({...request,automatic:true,status:'offen',paidDate:null}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(fixture,()=>saveIncomingInvoiceAction({...request,status:'offen',paidDate:null}))).toMatchObject({code:'VALIDATION_ERROR',fields:{faelligAm:'Fällig am fehlt'}});
+ expect(await withSession(fixture,()=>saveIncomingInvoiceAction({...request,paidDate:null}))).toMatchObject({code:'VALIDATION_ERROR',fields:{paidDate:expect.any(String)}});
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toHaveLength(0);
+ const saved=await withSession(fixture,()=>saveIncomingInvoiceAction(request));expect(saved).toMatchObject({code:'OK',invoice:{zahlstatus:'bezahlt',faellig_am:null,bezahlt_am:'2026-11-08'}});if(saved.code!=='OK')throw Error(saved.message);
+ expect(await sql`SELECT zahlstatus,faellig_am::text,bezahlt_am::text FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.invoice.id}::uuid`).toEqual([{zahlstatus:'bezahlt',faellig_am:null,bezahlt_am:'2026-11-08'}]);
+ await expect(sql`UPDATE public.supplier_invoice SET zahlstatus='offen' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.invoice.id}::uuid`).rejects.toMatchObject({code:'23514'});
+ await expect(sql`UPDATE public.supplier_invoice SET nummer=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.invoice.id}::uuid`).rejects.toMatchObject({code:'23514'});
+ expect(await withSession(fixture,()=>getIncomingInvoiceAction({id:saved.invoice.id}))).toMatchObject({code:'OK',view:{invoice:{zahlstatus:'bezahlt'},fields:{faelligAm:''}}});
+ const [receipt]=await sql<{request:unknown;von:string}[]>`SELECT nachher->'intent' AS request,von FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${request.clientKey}::uuid AND nachher ? 'intent'`;
+ expect(receipt.von).toBe(fixture.actorId);expect(await withSession(fixture,()=>saveIncomingInvoiceAction(receipt.request))).toMatchObject({code:'OK',replayed:true,invoice:{id:saved.invoice.id}});
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toHaveLength(1);
+});

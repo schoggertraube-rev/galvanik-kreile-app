@@ -133,7 +133,7 @@ function validChange(input:unknown):input is InvoiceChangeInput{
   &&optionalText(input.reason,200)&&(input.fields===null||invoiceFieldShape(input.fields));
 }
 async function validate(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,fields:InvoiceFields,status:string,paidDate:string|null,proofId:string|null,itemId:string,deps:InvoiceDependencies){
- const errors=invoiceFieldErrors(fields,status==='unklar'||status==='ungueltig');
+ const errors=invoiceFieldErrors(fields,status==='unklar'||status==='ungueltig',status==='bezahlt');
  if(status==='offen'&&!fields.lieferantId)delete errors.lieferantId;
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  if(status==='bezahlt'&&(!paidDate||!invoiceDate(paidDate)||paidDate>clock.today))errors.paidDate='Bezahlt am fehlt oder liegt in der Zukunft';

@@ -69,3 +69,10 @@ it.each(['prepare','finish'])('BA14 proof %s rejection stays inside the dialog, 
  fireEvent.click(retry);await screen.findByText('TEST-Nachweis.pdf · gesichert');expect(prepare).toHaveBeenCalledTimes(2);expect(prepare.mock.calls[1][0]).toEqual(prepare.mock.calls[0][0]);
  }finally{vi.unstubAllGlobals();}
 });
+
+
+it('BA08 paid confirmation does not force a fictional deadline in the real editor',async()=>{
+ const initial:InvoiceView={item:{id:'TEST-source',version:1,at:'2026-11-09T01:00:00Z',channel:'datei',sender:null},invoice:null,supplier:{id:'TEST-supplier',name:'TEST Lieferant',iban:null,paymentTermDays:null},originals:[],fileId:'TEST-original',fields:{lieferantId:'TEST-supplier',nummer:'TEST-PAID-42',datum:'2026-11-08',faelligAm:'',netto:'100.00',ust:'19.00',brutto:'119.00',iban:'',ibanGeprueft:false},uncertain:0,conflict:null,duplicate:null};
+ const save=vi.fn().mockResolvedValue({code:'OK',invoice:{id:'TEST-invoice',version:1,zahlstatus:'bezahlt'},replayed:false});render(<IncomingInvoiceDialog initial={initial} ports={{save,searchSuppliers:vi.fn().mockResolvedValue({code:'OK',suppliers:[]})} as unknown as InvoicePorts} onClose={vi.fn()} onMessage={vi.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Ist schon bezahlt'}));fireEvent.click(screen.getByRole('button',{name:'Erfassen · bezahlt'}));await waitFor(()=>expect(save).toHaveBeenCalledOnce());expect(save.mock.calls[0][0]).toMatchObject({status:'bezahlt',fields:{faelligAm:''},paidDate:expect.any(String)});
+});

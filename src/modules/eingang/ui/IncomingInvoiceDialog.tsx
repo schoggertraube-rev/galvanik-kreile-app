@@ -67,7 +67,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage,onAutomat
  };
  const save=async(status:Outcome|'unklar')=>{
   if(working.current)return;
-  const validation=invoiceFieldErrors(fields,status==='unklar'||status==='ungueltig');
+  const validation=invoiceFieldErrors(fields,status==='unklar'||status==='ungueltig',status==='bezahlt');
   if(!view.invoice&&status==='offen'&&!fields.lieferantId)delete validation.lieferantId;
   if(status==='unklar'&&(reason.trim().length<3||reason.length>200))validation.reason='Grund fehlt · 3 bis 200 Zeichen';
   if(status==='bezahlt'&&(!invoiceDate(paidDate)||paidDate>today()))validation.paidDate='Bezahlt am fehlt oder liegt in der Zukunft';
