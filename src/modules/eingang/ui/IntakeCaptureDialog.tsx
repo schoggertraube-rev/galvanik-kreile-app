@@ -29,7 +29,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
   const { readCaptureNote, searchIntakeCustomers, getCaptureScope, getCapture:readCapture, deviceRequest, saveCaptureNote, discardCapture } = ports;
   const getCapture=useMemo(()=>readCapture?async(id:string)=>readCapture(id,undefined,{packageExpectation:false}):undefined,[readCapture]);
   const [onsite,setOnsite]=useState(Boolean(resumeSourceId));
-  const [itemId, setItemId] = useState(() => crypto.randomUUID());
+  const [itemId, setItemId] = useState(() => resumeSourceId??crypto.randomUUID());
   const [scope, setScope] = useState<string | null>(null);
 
 
@@ -38,7 +38,8 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
   const quoteCandidates:IntakeQuoteCandidate[]=capture?.packageContext?.status==='OK'?capture.packageContext.candidates.filter(row=>row.kind==='quote').map(row=>({id:row.id,number:row.number,customer:row.customerName??'',accepted:row.state==='accepted',edition:row.edition??1,goodsHere:row.goodsHere??false,location:row.location??null})):[];
   const packageAssignKeys=useRef(new Map<string,string>());
   const concerns = useMemo(() => recognizeNoteConcerns(text), [text]);
-  const [dismissed, setDismissed] = useState<string[]>([]);
+  const [localDismissed, setDismissed] = useState<string[]>([]);
+  const dismissed=useMemo(()=>[...new Set([...localDismissed,...(capture?.id===itemId?capture.dismissedConcerns??[]:[])])],[localDismissed,capture,itemId]);
   const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -408,7 +409,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     const initialize = async () => { for (let attempt=0;attempt<3&&current;attempt+=1) { try {
       const result = await getCaptureScope();
       if (result.code !== "OK") throw new Error("INTAKE_PENDING_SCOPE_UNAVAILABLE");
-      const originals = (await readPendingOriginals(result.scope)).filter(original=>original.kind!=='file'||!original.context);
+      const originals = (await readPendingOriginals(result.scope)).filter(original=>(!resumeSourceId||original.itemId===resumeSourceId)&&(original.kind!=='file'||!original.context));
       if (current) {
         setScope(result.scope);
         setError(message=>message?.includes("INTAKE_PENDING_RESUME_FAILED")||message?.includes("Lokale Sicherung wird vorbereitet")?null:message);
@@ -433,7 +434,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     } } };
     void initialize();
     return () => { current = false; if(retry!==undefined)clearTimeout(retry); };
-  }, [getCaptureScope, handoverToken, itemId]);
+  }, [getCaptureScope, handoverToken, itemId,resumeSourceId]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => { if (pending.length || text.trim() && lastSaved.current !== JSON.stringify([text, concerns.filter(value => !dismissed.includes(value.id)).map(value => value.id)])) { event.preventDefault(); event.returnValue = ""; } };
     const resume = () => { if (pending.length && !inFlight.current) void upload(pending); };
@@ -445,13 +446,14 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
   const changeText = (value: string) => {
     localInput.current = true;
 
-    setText(value); textstand.current = crypto.randomUUID(); setDismissed([]); setError(null);
+    const retained=capture?.id===itemId?capture.dismissedConcerns??[]:[];
+    setText(value); textstand.current = crypto.randomUUID(); setDismissed(retained); setError(null);
     setCustomers([]);
     const stand = textstand.current;
-    earlyNote.current = { text:value,stand,dismissed:[] };
+    earlyNote.current = { text:value,stand,dismissed:retained };
     if (!scope) { setError(CAPTURE_ERROR_COPY.LOCAL_NOTE_PENDING); return; }
     pendingNoteWrites.current = pendingNoteWrites.current.then(() => value.trim()
-      ? retainPendingOriginal(scope, { id: itemId, itemId, kind: "note", text: value, textstand: stand, dismissed: [] })
+      ? retainPendingOriginal(scope, { id: itemId, itemId, kind: "note", text: value, textstand: stand, dismissed: retained })
       : acknowledgePendingOriginal(scope, itemId))
       .catch(cause => { console.error("[INTAKE_PENDING_NOTE_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_PENDING_NOTE_FAILED); });
   };
@@ -524,7 +526,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     : recognizedKind === "rechnung" ? !showSituation?<Button art="erledigen" text={CAPTURE_TEXT_COPY.invoicePhoto} onClick={requestOriginal}/>:ports.canManageMoney ? <Button data-spec-id="rein.rechnung-pruefen" art="primaer" text={CAPTURE_TEXT_COPY.invoiceAction(typeof invoiceNumber==='string'?invoiceNumber:null)} onClick={() => openObject("rechnungein", capture.id)} />
       : <Button data-spec-id="rein.fuers-buero" art="primaer" text={CAPTURE_COPY.office} onClick={() => onClose(CAPTURE_ENTRY_COPY.officeSaved)} />
     : recognizedKind === "ware" && capture.expectedOrders?.length === 1 && capture.customerId === capture.expectedOrders[0].customerId ?
-      <Button data-spec-id="rein.ware-annehmen-kunde" art="primaer" text={CAPTURE_STATUS_COPY.receiveGoods(capture.expectedOrders[0].number)} onClick={() => openObject("ware", capture.expectedOrders![0].id + "#" + capture.id)} />
+      <Button data-spec-id="rein.ware-annehmen-kunde" art={showSituation?"primaer":"erledigen"} text={CAPTURE_STATUS_COPY.receiveGoods(capture.expectedOrders[0].number)} onClick={() => openObject("ware", capture.expectedOrders![0].id + "#" + capture.id)} />
     : null : null;
   const anotherPage = () => { setCameraReady(false); setCameraAttempt(value => value + 1); setCameraRequested(true); setHidePreviousResult(true); };
   const finishReading = async () => {
@@ -573,8 +575,6 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
           : !mode && hasContent ? <Button data-spec-id="rein.spaeter-zuordnen" text={CAPTURE_COPY.later} disabled={busy} onClick={() => void close()} /> : null}
       {firstOriginal && !showCamera && !receiving ? <Button data-spec-id="rein.original" art="leise" text={CAPTURE_COPY.original} title={firstOriginal.name}
         onClick={() => openObject("original", capture!.id + "#" + firstOriginal.id)} /> : null}
-      {!showSituation && !mode && !receiving && hasContent && (!capture || ["anfrage", "kontakt", "rechnung", "ware"].includes(recognizedKind)) ?
-        <Button data-spec-id="rein.wem-gehoert" art="leise" text={CAPTURE_COPY.assign} disabled={busy} onClick={() => void assign()} /> : null}
       </>
     </>;
   return <><div className={styles.host}><Dialog titel={!mode&&!showSituation?intakeStartTitle(ports.actorDisplayName):SITUATION_COPY.header} icon="plus" groesse="karte" schliessenSpecId="rein.schliessen" onSchliessen={()=>void close()} vorSchliessen={()=>{void close();return false;}}>
@@ -654,7 +654,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         {pending.length && !busy ? <Button text={CAPTURE_COPY.uploadRetry} onClick={() => void upload(pending)} /> : null}
       </div>
       {liveError ? <Hinweis ton="warn">{liveError}</Hinweis> : null}
-      {error ? <div role="alert"><Hinweis ton="warn">{error}</Hinweis></div> : null}
+      {error ? <div role="alert"><Hinweis ton="warn">{error}</Hinweis>{error===CAPTURE_ERROR_COPY.INTAKE_NOTE_LOCAL_ACK_FAILED?<Button text={CAPTURE_COPY.retrySave} disabled={busy} onClick={()=>void saveText()}/>:null}</div> : null}
     </div>
     </div><footer className={`kr-dialog-fuss ${styles.footer}`}><span>{CAPTURE_ENTRY_COPY.originalHint}</span><div>{captureFooter}</div></footer>
   </Dialog></div>{onsite&&capture?<PackageOnsiteEditor capture={capture} ports={ports} onCapture={setCapture} onClose={()=>{setOnsite(false);if(getCapture)void getCapture(capture.id).then(result=>{if(result.code==='OK')setCapture(result.capture);});}} onPause={()=>onClose(PACKAGE_ONSITE_COPY.savedDraft)} onDone={message=>onClose(message)}/>:null}</>;

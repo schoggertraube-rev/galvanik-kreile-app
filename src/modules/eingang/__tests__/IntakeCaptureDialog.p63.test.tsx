@@ -1,9 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GlobalCreatePorts } from "../GlobalCreateFlow";
 import { IntakeCaptureDialog } from "../ui/IntakeCaptureDialog";
 import type { IntakeCapture } from "../captureContract";
-import { readPendingOriginals } from "../pendingOriginals";
+import { readPendingOriginals,acknowledgePendingOriginal } from "../pendingOriginals";
 import { IntakeSituation } from "../ui/IntakeSituation";
 
 vi.mock("../pendingOriginals", () => ({
@@ -190,7 +190,7 @@ it.each([true,false])('E1 invoice caption uses only an actually recognized numbe
  const openCaptureObject=vi.fn(()=>true);const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-invoice-original'})),getCapture:vi.fn(async()=>({code:'OK',capture})),prepareCaptureFile:vi.fn(async()=>({code:'OK',upload:null})),finishCaptureFile:vi.fn(async()=>({code:'OK',capture})),openCaptureObject,canManageMoney:true} as unknown as GlobalCreatePorts;
  const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
  await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());const file=new File(['TEST'],capture.files[0].name,{type:'image/png'});Object.defineProperty(file,'arrayBuffer',{value:async()=>new Uint8Array([1]).buffer});fireEvent.change(container.querySelector('input[type=file]')!,{target:{files:[file]}});
- const action=await screen.findByRole('button',{name:hasNumber?'Rechnung TEST-4711 ablegen':'Rechnungsnummer ergänzen'});expect(action).toBeEnabled();
+ const action=await screen.findByRole('button',{name:hasNumber?'Rechnung TEST-4711 ablegen':'Rechnungsnummer eintragen'});expect(action).toBeEnabled();
  if(hasNumber)expect(screen.queryByText('Fehlt noch: Rechnungsnummer')).toBeNull();else expect(screen.getByText('Fehlt noch: Rechnungsnummer')).toBeVisible();
  fireEvent.click(action);expect(openCaptureObject).toHaveBeenCalledWith('rechnungein',capture.id);
 });
@@ -243,4 +243,25 @@ it('GW narrow desktop still requests the existing phone handover rather than sel
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
  const deviceRequest=vi.fn(async()=>({code:'OK',requests:[]}));const ports={actorDisplayName:'TEST Rolf',getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-gw-narrow-desktop'})),deviceRequest} as unknown as GlobalCreatePorts;
  render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);fireEvent.click(screen.getByRole('button',{name:'Foto'}));await waitFor(()=>expect(deviceRequest).toHaveBeenCalledWith(expect.objectContaining({command:'request'})));
+});
+
+it('PL E1 resumeSourceId keeps server-excluded concerns excluded after the real follow-up editor and another save',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+ const id=crypto.randomUUID(),text='TEST bitte anrufen. Bitte die Maschine reparieren.';const resumed:IntakeCapture={id,version:7,text,customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:['rueckruf'],dismissedConcerns:['aufgabe'],files:[]};
+ const save=vi.fn(async input=>({code:'OK',capture:{...resumed,text:input.text,concerns:input.concerns}}));const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-resume-excluded'})),drafts:{readDrafts:vi.fn(async()=>({code:'OK',drafts:[]}))},getCapture:vi.fn(async()=>({code:'OK',capture:resumed})),saveCaptureNote:save,recognizeIntakeText:vi.fn(async()=>({code:'OK',data:{fields:[],positions:[]}})),searchIntakeCustomers:vi.fn(async()=>({code:'OK',customers:[]}))} as unknown as GlobalCreatePorts;
+ render(<IntakeCaptureDialog resumeSourceId={id} ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ const editor=await screen.findByRole('dialog',{name:'Du ergänzt Kunde und Zusage zu diesem Paket.'});fireEvent.click(within(editor).getByRole('button',{name:'Zurück zur Erfassung'}));fireEvent.click(await screen.findByRole('button',{name:'Verwerfen'}));await waitFor(()=>expect(screen.queryByRole('dialog',{name:'Du ergänzt Kunde und Zusage zu diesem Paket.'})).toBeNull());
+ fireEvent.click(await screen.findByRole('button',{name:'Lesen'}));await waitFor(()=>expect(save).toHaveBeenCalledOnce());expect(save.mock.calls[0][0]).toMatchObject({itemId:id,text,concerns:['rueckruf']});expect(save.mock.calls[0][0].concerns).not.toContain('aufgabe');
+ const edited=text+' TEST Zusatz';fireEvent.change(screen.getByRole('textbox',{name:'Notiz'}),{target:{value:edited}});fireEvent.click(screen.getByRole('button',{name:'Lesen'}));await waitFor(()=>expect(save).toHaveBeenCalledTimes(2));expect(save.mock.calls[1][0]).toMatchObject({itemId:id,text:edited,concerns:['rueckruf']});
+});
+
+it('PL E1 text goods proposal is green and the footer has no second assignment route',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+ const customerId=crypto.randomUUID(),orderId=crypto.randomUUID(),open=vi.fn(()=>true);const save=vi.fn(async input=>({code:'OK',capture:{id:input.itemId,version:1,text:input.text,customerId,orderId:null,assignment:'offen',usage:'offen',concerns:[],recognition:{kind:'ware',text:input.text},files:[],expectedOrders:[{id:orderId,number:'TEST-A-1',customerId,customerName:'TEST Kundin',title:'TEST Teile',since:null}]}}));const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-green-proposal'})),saveCaptureNote:save,openCaptureObject:open} as unknown as GlobalCreatePorts;
+ const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());const input=screen.getByRole('textbox',{name:'Notiz'});fireEvent.change(input,{target:{value:'TEST Ware angekommen'}});fireEvent.keyDown(input,{key:'Enter'});const proposal=await screen.findByRole('button',{name:/Ware annehmen.*TEST-A-1/});expect(proposal).toHaveClass('kr-btn--erledigen');expect(container.querySelector('.kr-dialog-fuss [data-spec-id="rein.wem-gehoert"]')).toBeNull();fireEvent.click(proposal);expect(open).toHaveBeenCalledExactlyOnceWith('ware',orderId+'#'+save.mock.calls[0][0].itemId);
+});
+it('PL E1 local acknowledgement failure offers the exact save retry without a second server save',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));const log=vi.spyOn(console,'error').mockImplementation(()=>{});
+ const save=vi.fn(async input=>({code:'OK',capture:{id:input.itemId,version:1,text:input.text,customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:input.concerns,files:[]}}));const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-ack-retry'})),saveCaptureNote:save} as unknown as GlobalCreatePorts;
+ render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());vi.mocked(acknowledgePendingOriginal).mockClear().mockRejectedValueOnce(new Error('TEST local ack unavailable'));const input=screen.getByRole('textbox',{name:'Notiz'});fireEvent.change(input,{target:{value:'TEST Notiz behalten'}});fireEvent.keyDown(input,{key:'Enter'});expect(await screen.findByText('Deine Notiz ist noch nicht gespeichert. Tippe auf „Erneut speichern“.')).toBeVisible();fireEvent.click(screen.getByRole('button',{name:'Erneut speichern'}));await waitFor(()=>expect(screen.queryByRole('button',{name:'Erneut speichern'})).toBeNull());expect(save).toHaveBeenCalledOnce();expect(acknowledgePendingOriginal).toHaveBeenCalledTimes(2);expect(screen.getByRole('textbox',{name:'Notiz'})).toHaveValue('TEST Notiz behalten');expect(log).toHaveBeenCalledWith('[INTAKE_NOTE_LOCAL_ACK_FAILED]',expect.any(Error));
 });

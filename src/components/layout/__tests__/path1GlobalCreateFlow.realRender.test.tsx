@@ -427,6 +427,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(capture);
     const layer=await screen.findByRole("dialog",{name:"Neuer Eingang"});
     expect(within(layer).getByRole("heading")).toHaveTextContent("Neuer Eingang");
+    expect(within(layer).getByText("Zettel lesen · für die Erfassung")).toBeVisible();
     expect(within(layer).getByRole("button",{name:"Datei"})).toBeEnabled();
     expect(screen.getAllByRole("dialog")).toHaveLength(2);
     fireEvent.keyDown(window,{key:"Escape"});
