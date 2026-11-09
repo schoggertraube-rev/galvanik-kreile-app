@@ -79,8 +79,10 @@ export async function getComplaintDialogAction(request:ComplaintRequest):Promise
    try{resultMail=await readComplaintResultMail(authorization.data,{'Kunde':source.customerName,'RK-Nummer':complaint.nummer,Ergebnis:resultLabel,'Begründung':complaint.begruendung??''});}
    catch(error){console.error('[COMPLAINT_RESULT_TEMPLATE_FAILED]',error);}
   }
+  let photoTargets:ComplaintDialogData['photoTargets'];
+  if(!complaint&&initial.intakeItemId&&initial.photoIds.length){const existing=await readComplaints({orderId:source.id});if(existing.code!=='OK')return existing;photoTargets=existing.complaints.map(row=>({id:row.id,number:row.nummer??null,version:row.version??null,state:row.stand??null}));}
   const mailRecovery=complaint?await readPendingComplaintMail(authorization.data,complaint.id):null;
-  return {code:'OK',data:{mailRecovery,complaint,source:{id:source.id,number:source.number,customerName:source.customerName,items:source.items.map(item=>({id:item.id,name:item.name,quantity:item.quantity,unit:item.unit}))},initial,suggestedDate,resultMail,rework:complaint?.nacharbeitAuftragId&&complaint.reworkStation?{station:complaint.reworkStation,goods:complaint.reworkGoods??null}:null}};
+  return {code:'OK',data:{mailRecovery,...(photoTargets?{photoTargets}:{}),complaint,source:{id:source.id,number:source.number,customerName:source.customerName,items:source.items.map(item=>({id:item.id,name:item.name,quantity:item.quantity,unit:item.unit}))},initial,suggestedDate,resultMail,rework:complaint?.nacharbeitAuftragId&&complaint.reworkStation?{station:complaint.reworkStation,goods:complaint.reworkGoods??null}:null}};
  }catch(error){console.error('[COMPLAINT_DIALOG_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Reklamation konnte nicht geladen werden. Code: COMPLAINT_DIALOG_READ_FAILED.'};}
 }
 

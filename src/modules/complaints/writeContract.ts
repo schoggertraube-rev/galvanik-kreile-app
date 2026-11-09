@@ -4,6 +4,7 @@ export const COMPLAINT_DEFECTS = ['Abplatzung', 'Blasen', 'Rost / Korrosion', 'F
 type Identity = { clientKey: string; complaintId: string; version: number };
 export type ComplaintCommand =
   | { action: 'aufnehmen'; clientKey: string; orderId: string; intakeItemId: string | null; intakeVersion: number | null; parts: Array<{ position_id: string; menge: number }>; defect: string; description: string; photoIds: string[]; goodsReturn: 'ja' | 'nein' | 'offen' }
+  | (Identity & {action:'fotoantwort_anhaengen';intakeItemId:string;intakeVersion:number})
   | (Identity & { action: 'entscheiden'; assessment: 'berechtigt' | 'kulanz' | 'abgelehnt'; measure: 'gutschrift' | 'ablehnen'; reason: string | null; creditCents: number | null })
   | (Identity & { action: 'gutschrift'; creditCents: number; creditNumber: string })
   | (Identity & { action: 'abschliessen'; kind: 'ohne_mail' | 'zurueckgezogen' | 'mail'; note: string | null; sentThreadId: string | null })
@@ -32,6 +33,7 @@ export function validComplaintCommand(input: unknown): input is ComplaintCommand
     && ['ja','nein','offen'].includes(String(v.goodsReturn));
   if (!text(v.complaintId,1,128) || !Number.isSafeInteger(v.version) || Number(v.version) < 1) return false;
   const identity = ['action','clientKey','complaintId','version'];
+  if(v.action==='fotoantwort_anhaengen')return keys([...identity,'intakeItemId','intakeVersion'])&&complaintUuid(v.intakeItemId)&&Number.isSafeInteger(v.intakeVersion)&&Number(v.intakeVersion)>0;
   if (v.action === 'entscheiden') return keys([...identity,'assessment','measure','reason','creditCents']) && ['berechtigt','kulanz','abgelehnt'].includes(String(v.assessment))
     && (v.assessment === 'abgelehnt' ? v.measure === 'ablehnen' && text(v.reason,3,2000) && v.creditCents === null : v.measure === 'gutschrift' && (v.reason === null || text(v.reason,0,2000)) && (v.creditCents === null || cents(v.creditCents)));
   if (v.action === 'gutschrift') return keys([...identity,'creditCents','creditNumber']) && cents(v.creditCents) && text(v.creditNumber,1,30);

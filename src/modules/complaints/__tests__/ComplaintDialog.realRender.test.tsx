@@ -282,3 +282,18 @@ it.each(['result','reminder'] as const)('RM07 fully reopened %s dialog recovers 
  await screen.findByText('Die Mail an TEST Kunde ist rausgegangen. Der Vorgang wurde inzwischen geändert – lies ihn neu, die Mail steht im Verlauf.');
  expect(send).toHaveBeenCalledExactlyOnceWith(request);expect(ports.write).not.toHaveBeenCalled();expect(onClose).not.toHaveBeenCalled();
 });
+
+
+it('RM11 offers the existing complaint append command instead of creating a second complaint',async()=>{
+ const data:ComplaintDialogData={...base,initial:{...base.initial,intakeItemId:'TEST-second-mail',intakeVersion:1,photoIds:['TEST-photo']},photoTargets:[{id:'TEST-existing-complaint',number:'RK-TEST-existing',version:4,state:'aufgenommen'}]};
+ const {ports}=setup(data);fireEvent.click(await screen.findByRole('button',{name:'Fotos zu RK-TEST-existing hinzufügen'}));
+ await waitFor(()=>expect(ports.write).toHaveBeenCalledOnce());expect(ports.write).toHaveBeenCalledWith({action:'fotoantwort_anhaengen',clientKey:expect.any(String),complaintId:'TEST-existing-complaint',version:4,intakeItemId:'TEST-second-mail',intakeVersion:1});
+ expect(screen.queryByRole('button',{name:'Reklamation aufnehmen'})).toBeNull();
+});
+
+it.each([{states:['aufgenommen','aufgenommen']},{states:['abgeschlossen']}])('RM11 multiple or closed complaints require explicit selection ($states)',async({states})=>{
+ const targets=states.map((state,index)=>({id:'TEST-complaint-'+index,number:'RK-TEST-'+index,version:1,state}));
+ const {ports}=setup({...base,initial:{...base.initial,intakeItemId:'TEST-second-mail',intakeVersion:1,photoIds:['TEST-photo']},photoTargets:targets});
+ await screen.findByText('Wähle die zugehörige Reklamation.');expect(screen.queryByRole('button',{name:/Fotos zu .* hinzufügen/})).toBeNull();expect(screen.queryByRole('button',{name:'Reklamation aufnehmen'})).toBeNull();
+ expect(screen.getAllByRole('button',{name:/Reklamation RK-TEST-.* öffnen/})).toHaveLength(targets.length);expect(ports.write).not.toHaveBeenCalled();
+});

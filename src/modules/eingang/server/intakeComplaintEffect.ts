@@ -5,7 +5,7 @@ import { hasAuthorizationArea, type AuthorizationSnapshot } from '@/lib/server/a
 import type { PrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 
 /** The complaint command calls this existing-module effect in its own transaction. */
-async function completeComplaintSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientKey:string;complaintId?:string;number?:string;customerId:string;orderId:string|null;threadId?:string;reason?:string;intent?:string;expectedParent?:{id:string;version:number}|null}) {
+async function completeComplaintSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientKey:string;complaintId?:string;number?:string;customerId:string;orderId:string|null;threadId?:string;reason?:string;intent?:string;expectedParent?:{id:string;version:number}|null;appendPhotos?:true}) {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${input.itemId},0))`);
   const rows=await tx.execute<{version:number;kanal:string;erstellt_von:string;kunde_id:string|null;vorgang_id:string|null;vorgang_art:string|null;einsatz:string;anliegen_offen:string[]}>(sql`SELECT version,kanal,erstellt_von::text,kunde_id,vorgang_id,vorgang_art,einsatz,anliegen_offen FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid FOR UPDATE`);
   const row=rows[0];
@@ -18,7 +18,8 @@ async function completeComplaintSource(tx:PrivilegedTenantTransaction,auth:Autho
   if(input.expectedParent!==undefined&&(input.expectedParent===null?!!parent:!parent||parent.rootId!==input.expectedParent.id||parent.rootVersion!==input.expectedParent.version))throw Error('COMPLAINT_RESPONSE_PARENT_CHANGED');
   const [origin]=await tx.execute<{parentId:string|null}>(sql`SELECT nachher->>'complaintThreadParent' AS "parentId" FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${input.itemId}::uuid AND art='angelegt' ORDER BY zeit,id LIMIT 1`);
   if(origin?.parentId&&parent?.rootId!==origin.parentId)throw Error('COMPLAINT_REPLY_THREAD_CHANGED');
-  if(parent){
+  const completedParent=input.appendPhotos&&parent&&(await tx.execute(sql`SELECT id FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${parent.rootId}::uuid AND nachher->>'complaintId'=${input.complaintId??null} AND nachher->>'action' IN ('reklamation.aufgenommen','reklamation.aufgenommen_aus_fotoantwort') LIMIT 1`)).length===1;
+  if(parent&&!completedParent){
    if(parent.customerId!==input.customerId||input.complaintId&&parent.orderId&&parent.orderId!==input.orderId)throw Error('COMPLAINT_REPLY_TARGET_MISMATCH');
    const changed=await tx.execute(sql`UPDATE public.intake_item SET anliegen_offen=array_remove(anliegen_offen,'reklamation'),einsatz=CASE WHEN cardinality(array_remove(anliegen_offen,'reklamation'))>0 OR EXISTS(SELECT 1 FROM public.intake_item pending WHERE pending.tenant_id=${auth.tenantId} AND pending.antwort_auf_item=${parent.rootId}::uuid AND pending.sendestatus IN ('entwurf','sendet','unklar','fehler')) THEN 'offen' ELSE 'erledigt' END,kunde_id=${input.customerId},vorgang_art=CASE WHEN ${input.orderId}::text IS NOT NULL THEN 'auftrag' ELSE vorgang_art END,vorgang_id=coalesce(${input.orderId}::text,vorgang_id),zuordnung='hand',version=version+1,geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${parent.rootId}::uuid AND version=${parent.rootVersion} AND einsatz='offen' AND anliegen_offen @> ARRAY['reklamation']::text[] RETURNING id`);
    if(changed.length!==1)throw Error('COMPLAINT_REPLY_ALREADY_COMPLETED');
@@ -32,8 +33,8 @@ async function completeComplaintSource(tx:PrivilegedTenantTransaction,auth:Autho
     WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid AND version=${input.version}`);
   await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher)
     VALUES(${auth.tenantId},${input.itemId}::uuid,'anliegen',${input.clientKey}::uuid,${auth.userId},${JSON.stringify(row)}::jsonb,
-    ${JSON.stringify({action:input.complaintId?'reklamation.aufgenommen':'reklamation.keine_reklamation',complaintId:input.complaintId,number:input.number,anliegenOffen:concerns,einsatz:usage,threadId:input.threadId,reason:input.reason,intent:input.intent})}::jsonb)`);
+    ${JSON.stringify({action:input.appendPhotos?'reklamation.fotos_ergaenzt':input.complaintId?'reklamation.aufgenommen':'reklamation.keine_reklamation',complaintId:input.complaintId,number:input.number,anliegenOffen:concerns,einsatz:usage,threadId:input.threadId,reason:input.reason,intent:input.intent})}::jsonb)`);
 }
 
-export async function recordIntakeComplaintEffect(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientKey:string;complaintId:string;number:string;customerId:string;orderId:string}){return completeComplaintSource(tx,auth,input);}
+export async function recordIntakeComplaintEffect(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientKey:string;complaintId:string;number:string;customerId:string;orderId:string;appendPhotos?:true}){return completeComplaintSource(tx,auth,input);}
 export async function completeIntakeComplaintRejection(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientKey:string;customerId:string;orderId:string|null;threadId:string;reason:string;intent:string;expectedParent?:{id:string;version:number}|null}){return completeComplaintSource(tx,auth,input);}

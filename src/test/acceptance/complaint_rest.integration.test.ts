@@ -589,3 +589,39 @@ it('RM14 mail-only employee delegates to an explicitly chosen person through the
  expect(await sql`SELECT to_jsonb(source.*) AS row FROM public.intake_item source WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${replyId}::uuid`).toEqual(before);
  const {reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');expect(await withSession(employee,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:replyId,intakeVersion:1,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST denied',photoIds:photos,goodsReturn:'offen'}))).toMatchObject({code:'FORBIDDEN'});
 });
+
+
+it('RM11 second secured photo reply extends one open complaint through the same command and preserves other concerns',async()=>{
+ const fixture=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(fixture);
+ const first=await replyMailFixture(fixture,order);
+ const created=await complaintWrite(fixture,{action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:first.replyId,intakeVersion:1,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST ursprüngliche Reklamation',photoIds:first.photos,goodsReturn:'offen'});
+ const second=await replyMailFixture(fixture,order,'image/jpeg',false);
+ const [root]=await sql`SELECT internet_message_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.rootId}::uuid`;
+ await sql`UPDATE public.intake_event SET nachher=nachher||jsonb_build_object('complaintThreadParent',${first.rootId}::text,'replyChain',jsonb_build_object('source','original_mime','status','present','originalSha256',${'b'.repeat(64)}::text,'inReplyTo',jsonb_build_array(${root.internet_message_id}::text),'references',jsonb_build_array())) WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${second.replyId}::uuid AND art='angelegt'`;
+ await sql`UPDATE public.intake_item SET anliegen=ARRAY['reklamation','aufgabe'],anliegen_offen=ARRAY['reklamation','aufgabe'] WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second.replyId}::uuid`;
+ const rootBefore=await sql`SELECT to_jsonb(source.*) AS row FROM public.intake_item source WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.rootId}::uuid`;
+ const ordersBefore=await sql`SELECT to_jsonb(source.*) AS row FROM public.orders source WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ const {getComplaintDialogAction,reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
+ expect(await withSession(fixture,()=>getComplaintDialogAction({orderId:order.orderId,sourceItemId:second.replyId}))).toMatchObject({code:'OK',data:{photoTargets:[{id:created.complaintId,version:1,state:'aufgenommen'}],initial:{photoIds:second.photos}}});
+ const request={action:'fotoantwort_anhaengen',clientKey:randomUUID(),complaintId:created.complaintId,version:1,intakeItemId:second.replyId,intakeVersion:1};
+ const denied=await createFixture(['eingang','mails']);expect(await withSession(denied,()=>reklamationAusfuehrenAction(request))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(fixture,()=>reklamationAusfuehrenAction({...request,version:2}))).toMatchObject({code:'CONFLICT'});
+ const other=await complaintWrite(fixture,{action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST mehrdeutige zweite Reklamation',photoIds:await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,customerId:fixture.customerId,orderId:order.orderId}),goodsReturn:'offen'});
+ expect(await withSession(fixture,()=>reklamationAusfuehrenAction(request))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientKey}::uuid AND event_type='COMPLAINT_CHANGED_V1'`).toHaveLength(0);
+ await complaintWrite(fixture,{action:'abschliessen',clientKey:randomUUID(),complaintId:other.complaintId,version:1,kind:'zurueckgezogen',note:'TEST anderer Vorgang ausdrücklich zurückgezogen',sentThreadId:null});
+ expect(await withSession(fixture,()=>reklamationAusfuehrenAction({...request,complaintId:other.complaintId,version:2}))).toMatchObject({code:'CONFLICT'});
+ const {saveIntakeDraftAction,getIntakeDraftsAction,getIntakeMessagesAction}=await import('@/app/actions/eingang.actions'),draftId=randomUUID();
+ expect(await withSession(fixture,()=>saveIntakeDraftAction({id:draftId,clientEventId:randomUUID(),art:'eingang',expectedVersion:null,lastField:null,payload:{kind:'TEST-RM11',clientKey:request.clientKey,request}}))).toMatchObject({code:'OK'});
+ const drafts=await withSession(fixture,()=>getIntakeDraftsAction());if(drafts.code!=='OK')throw Error(drafts.message);const reread=drafts.drafts.find(row=>row.id===draftId)?.payload.request;
+ const result=await withSession(fixture,()=>reklamationAusfuehrenAction(reread));expect(result).toMatchObject({code:'OK',receipt:{complaintId:created.complaintId,version:2}});
+ expect(await sql`SELECT id,photo_ids,fotos,stand FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.complaintId}`).toEqual([{id:created.complaintId,photo_ids:[...first.photos,...second.photos],fotos:[...first.photos,...second.photos],stand:'aufgenommen'}]);
+ expect(await withSession(fixture,()=>getComplaintDialogAction({complaintId:created.complaintId}))).toMatchObject({code:'OK',data:{complaint:{photoIds:[...first.photos,...second.photos],version:2}}});
+ expect(await withSession(fixture,()=>getIntakeMessagesAction('offen'))).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:second.replyId,usage:'offen',openConcerns:['aufgabe']})])});
+ expect(await sql`SELECT von,nachher->>'complaintId' AS complaint FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${second.replyId}::uuid AND nachher->>'action'='reklamation.fotos_ergaenzt'`).toEqual([{von:fixture.actorId,complaint:created.complaintId}]);
+ expect(await sql`SELECT user_id,payload->>'sourceItemId' AS source FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientKey}::uuid AND event_type='COMPLAINT_CHANGED_V1'`).toEqual([{user_id:fixture.actorId,source:second.replyId}]);
+ expect(await withSession(fixture,()=>reklamationAusfuehrenAction(reread))).toMatchObject({code:'OK',replayed:true,receipt:{version:2}});
+ expect(await sql`SELECT to_jsonb(source.*) AS row FROM public.intake_item source WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.rootId}::uuid`).toEqual(rootBefore);
+ expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toHaveLength(2);
+ expect(await sql`SELECT to_jsonb(source.*) AS row FROM public.orders source WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(ordersBefore);
+});

@@ -10,7 +10,7 @@ import type { ComplaintState } from '@/modules/complaints/public';
 type Failure = Exclude<ComplaintWriteResult, {code:'OK'}>;
 type Row = { complaint_id:string; source_order_id:string; customer_id:string; nummer:string; stand:ComplaintState; version:number; bewertung:string|null; massnahme:string|null; nacharbeit_auftrag_id:string|null; begruendung:string|null; gutschrift_betrag:string|null; gutschrift_nr:string|null };
 type Success = Extract<ComplaintWriteResult,{code:'OK'}>;
-export type ComplaintSourceEffect = (tx:PrivilegedTenantTransaction, auth:AuthorizationSnapshot, input:{itemId:string;version:number;clientKey:string;complaintId:string;number:string;customerId:string;orderId:string})=>Promise<void>;
+export type ComplaintSourceEffect = (tx:PrivilegedTenantTransaction, auth:AuthorizationSnapshot, input:{itemId:string;version:number;clientKey:string;complaintId:string;number:string;customerId:string;orderId:string;appendPhotos?:true})=>Promise<void>;
 
 /** Limited source projection for 4.8; no invoice, price or other money fields. */
 export async function readComplaintOrderSource(auth:AuthorizationSnapshot,orderId:string) {
@@ -47,7 +47,7 @@ async function context(tx:PrivilegedTenantTransaction,tenant:string,id:string):P
   return rows[0];
 }
 function mayWrite(auth:AuthorizationSnapshot,input:ComplaintCommand) {
-  if(input.action==='aufnehmen')return hasAuthorizationArea(auth,'auftraege');
+  if(input.action==='aufnehmen'||input.action==='fotoantwort_anhaengen')return hasAuthorizationArea(auth,'auftraege');
   if(input.action==='wieder_oeffnen')return hasAuthorizationArea(auth,'entscheiden');
   if(input.action==='gutschrift')return hasAuthorizationArea(auth,'geld');
   if(input.action==='entscheiden')return hasAuthorizationArea(auth,'entscheiden')&&(input.measure!=='gutschrift'||hasAuthorizationArea(auth,'geld'));
@@ -75,6 +75,7 @@ export async function executeComplaint(input:unknown,sourceEffect:ComplaintSourc
       }
       let before:Row|null=null,after:Row;
       if(input.action==='aufnehmen') {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('complaint-order:'||${auth.tenantId}||':'||${input.orderId},0))`);
         const [order]=await tx.execute<{id:string;customer_id:string;station:string}>(sql`SELECT id,customer_id,station FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId} FOR SHARE`);
         if(!order)reject('NOT_FOUND','Der zugehörige Auftrag ist nicht verfügbar.');
         if(!['abgeholt','versendet'].includes(order.station))reject('VALIDATION_ERROR','Reklamationen beziehen sich auf einen gelieferten Auftrag.');
@@ -95,6 +96,18 @@ export async function executeComplaint(input:unknown,sourceEffect:ComplaintSourc
       } else {
         before=await context(tx,auth.tenantId,input.complaintId);
         if(before.version!==input.version)reject('CONFLICT','Reklamation wurde inzwischen geändert · bitte neu lesen.');
+        if(input.action==='fotoantwort_anhaengen'){
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('complaint-order:'||${auth.tenantId}||':'||${before.source_order_id},0))`);
+          const eligible=await tx.execute<{id:string}>(sql`SELECT id FROM public.complaints WHERE tenant_id=${auth.tenantId} AND order_id=${before.source_order_id} AND stand<>'abgeschlossen'`);
+          if(eligible.length!==1||eligible[0].id!==before.complaint_id)reject('CONFLICT','Wähle die zugehörige offene Reklamation.');
+          const photos=await tx.execute<{id:string}>(sql`SELECT file.id::text FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${input.intakeItemId}::uuid AND source.kunde_id=${before.customer_id} AND file.mime LIKE 'image/%' AND EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text AND original.nachher->>'sha256'=file.sha256) ORDER BY file.reihenfolge,file.id`);
+          if(!photos.length)reject('VALIDATION_ERROR','Fotos fehlen · Fotos anfordern');
+          const [oldPhotos]=await tx.execute<{photo_ids:string[];fotos:string[]|null}>(sql`SELECT photo_ids,fotos FROM public.complaints WHERE tenant_id=${auth.tenantId} AND id=${before.complaint_id}`);
+          const merged=[...new Set([...(oldPhotos.photo_ids??[]),...(oldPhotos.fotos??[]),...photos.map(photo=>photo.id)])];
+          const updated=await tx.execute(sql`UPDATE public.complaints SET photo_ids=${JSON.stringify(merged)}::jsonb,fotos=${JSON.stringify(merged)}::jsonb,version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${before.complaint_id} AND version=${input.version} RETURNING id`);
+          if(updated.length!==1)reject('CONFLICT','Reklamation wurde inzwischen geändert · nichts gespeichert.');
+          await sourceEffect(tx,auth,{itemId:input.intakeItemId,version:input.intakeVersion,clientKey:input.clientKey,complaintId:before.complaint_id,number:before.nummer,customerId:before.customer_id,orderId:before.source_order_id,appendPhotos:true});
+        }else{
         let change;
         if(input.action==='entscheiden'){
           if(before.gutschrift_nr&&input.measure==='gutschrift')reject('VALIDATION_ERROR','Gutschrift '+before.gutschrift_nr+' besteht · keine zweite Gutschrift anlegen.');
@@ -121,10 +134,11 @@ export async function executeComplaint(input:unknown,sourceEffect:ComplaintSourc
         }
         const updated=await tx.execute(sql`UPDATE public.v_complaint_rework_context_v1 SET ${change},version=version+1 WHERE tenant_id=${auth.tenantId} AND complaint_id=${before.complaint_id} AND version=${input.version} RETURNING complaint_id`);
         if(updated.length!==1)reject('CONFLICT','Reklamation wurde inzwischen geändert · nichts gespeichert.');
+        }
         after=await context(tx,auth.tenantId,before.complaint_id);
       }
       const receipt:Success['receipt']={complaintId:after.complaint_id,number:after.nummer,state:after.stand,version:after.version,eventId:randomUUID()};
-      const payload={complaintId:after.complaint_id,action:input.action,requestHash,before,after,receipt,...(input.action==='wieder_oeffnen'?{reason:input.reason}:{})};
+      const payload={complaintId:after.complaint_id,action:input.action,requestHash,before,after,receipt,...(input.action==='fotoantwort_anhaengen'?{sourceItemId:input.intakeItemId,sourceVersion:input.intakeVersion}:{}),...(input.action==='wieder_oeffnen'?{reason:input.reason}:{})};
       await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,notes,payload,status,user_id,client_event_id,event_schema_version,correlation_id,aggregate_version,created_at)
         VALUES(${receipt.eventId},${auth.tenantId},${after.source_order_id},'COMPLAINT_CHANGED_V1',${'Reklamation '+after.nummer+' · '+after.stand},${input.action==='wieder_oeffnen'?input.reason:null},${JSON.stringify(payload)}::jsonb,'success',${auth.userId}::uuid,${input.clientKey}::uuid,1,${input.clientKey}::uuid,${after.version},statement_timestamp())`);
       return {code:'OK',receipt,replayed:false};
