@@ -1,4 +1,5 @@
 import type {IntakeCapture,IntakeCaptureResult} from './captureContract';
+import {INTAKE_PENDING_WORKFLOW_COPY} from '@/ui/situationCatalog';
 
 /** The concern identifiers and rights from eingang.anliegen in the bound R52 contract. */
 export const INTAKE_CONCERN_AREAS={reklamation:['auftraege'],kv_annahme:['geld'],kv_ablehnung:['kunden','geld'],termin:['auftraege'],zahlung:['geld'],abholung:['auftraege'],nachfrage:['kunden'],
@@ -21,5 +22,5 @@ export type IntakeReopenInput={itemId:string;version:number;clientEventId:string
 export type IntakeUseResult={code:'OK';captures:IntakeCapture[]}|{code:'INVOICE_REVIEW_REQUIRED';itemId:string;message:string}|Exclude<IntakeCaptureResult,{code:'OK'}>;
 
 /** A pending business decision must be completed by its existing domain writer. */
-export const INTAKE_REQUIRED_EFFECT_COPY={kv_annahme:'Zusage zum KV übernehmen',kv_ablehnung:'Absage zum KV übernehmen',kv_vorbehalt:'KV-Vorbehalt klären',preis_einwand:'KV-Vorbehalt klären',reklamation:'Reklamation bearbeiten',termin:'Termin abstimmen'} as const;
+export const INTAKE_REQUIRED_EFFECT_COPY={kv_anfrage:INTAKE_PENDING_WORKFLOW_COPY.quoteRequest,kv_annahme:'Zusage zum KV übernehmen',kv_ablehnung:'Absage zum KV übernehmen',kv_vorbehalt:'KV-Vorbehalt klären',preis_einwand:'KV-Vorbehalt klären',reklamation:'Reklamation bearbeiten',termin:'Termin abstimmen'} as const;
 export function intakeRequiredEffect(concerns:readonly string[]){for(const concern of concerns)if(Object.hasOwn(INTAKE_REQUIRED_EFFECT_COPY,concern))return INTAKE_REQUIRED_EFFECT_COPY[concern as keyof typeof INTAKE_REQUIRED_EFFECT_COPY];return null;}
