@@ -1,6 +1,8 @@
 import "server-only";
 
 import bcrypt from "bcryptjs";
+import {createHash} from 'node:crypto';
+import {parseBelegVehicles} from '../belegVehicles';
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {
@@ -26,6 +28,14 @@ import type {
 import { mapTenantFeatureRows, type TenantFeatureRow } from "./tenantFeaturePort";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+/** Invoice composition calls this inside its authorized transaction; no login credentials leave this port. */
+export async function readInvoiceAnnotationChoices(tx:PrivilegedTenantTransaction,tenantId:string){
+ const people=await tx.execute<{id:string;label:string}>(sql`SELECT id::text,full_name AS label FROM public.app_users WHERE tenant_id=${tenantId} AND active=true ORDER BY full_name,id`);
+ const rows=await tx.execute<{vehicles:unknown}>(sql`SELECT beleg_fahrzeuge AS vehicles FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY id LIMIT 2`);
+ if(rows.length>1)throw Error('COMPANY_SETTINGS_AMBIGUOUS');
+ const vehicles=rows.length?parseBelegVehicles(rows[0].vehicles):[];if(!vehicles)throw Error('BELEG_VEHICLES_INVALID');
+ return {persons:[...people],vehicles:vehicles.filter(row=>row.active).map(({id,label})=>({id,label}))};
+}
 export type SystemSettingsContext = {
   tenantId: string;
   actorId: string;
@@ -35,7 +45,7 @@ export type SystemSettingsContext = {
   canManageSystem?: boolean;
 };
 export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean };
-type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null };
+type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;beleg_fahrzeuge:unknown;beleg_version:string };
 
 export async function readShippingSettingsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string):Promise<ShippingSettings|null>{
  const rows=await tx.execute<ShippingSettings>(sql`SELECT versand_dienst AS service,versand_nummer_format AS "numberPattern",versand_nummer_hinweis AS "numberHint",
@@ -113,7 +123,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nicht erlaubt." };
   try {
     const snapshot = await withPrivilegedTenantTransaction(context, async (tx): Promise<Omit<SystemSettingsSnapshot, "extraWorkHourlyRate">> => {
-      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url,beleg_fahrzeuge,to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS beleg_version FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
       if (companies.length > 1) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
       const users = await tx.execute<UserRow>(sql`
         SELECT users.id::text AS id,
@@ -139,7 +149,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
           companyName: company.company_name, street: company.street, zip: company.zip,
           city: company.city, country: company.country, taxId: company.tax_id,
           iban: company.iban, bic: company.bic, bankName: company.bank_name,
-          paymentTermDays: company.invoice_payment_term_days, logoUrl: company.logo_url,
+          paymentTermDays: company.invoice_payment_term_days, logoUrl: company.logo_url,belegVehicles:parseBelegVehicles(company.beleg_fahrzeuge)??(()=>{throw Error("BELEG_VEHICLES_INVALID");})(),belegVehiclesVersion:company.beleg_version,
         } : EMPTY_COMPANY,
         users: users.map((user): ManagedUser => {
           const rawAreas = user.areas ?? (process.env.NODE_ENV === "test" && isAppRole(user.role) ? [...ROLE_ACCESS_AREA_TEMPLATES[user.role]] : []);
@@ -216,7 +226,7 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Firmendaten dürfen nicht geändert werden." };
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind ungültig." };
   const value = input as Record<string, unknown>;
-  if (Object.keys(value).sort().join(",") !== "bankName,bic,city,companyName,country,iban,logoUrl,paymentTermDays,street,taxId,zip") return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind unvollständig." };
+  if (Object.keys(value).filter(key=>!["belegVehicles","belegVehiclesVersion","clientEventId"].includes(key)).sort().join(",") !== "bankName,bic,city,companyName,country,iban,logoUrl,paymentTermDays,street,taxId,zip") return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind unvollständig." };
   const normalized: CompanySettingsInput = {
     companyName: text(value.companyName, 2, 160) ?? "", street: text(value.street, 2, 160) ?? "",
     zip: text(value.zip, 2, 20) ?? "", city: text(value.city, 1, 120) ?? "", country: text(value.country, 2, 120) ?? "",
@@ -225,33 +235,47 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
     paymentTermDays: typeof value.paymentTermDays === "number" ? value.paymentTermDays : 0,
   };
   if (Object.values(normalized).some((field) => field === "") || !Number.isSafeInteger(normalized.paymentTermDays) || normalized.paymentTermDays < 1 || normalized.paymentTermDays > 365) return { code: "VALIDATION_ERROR" as const, message: "Alle Firmendaten einschließlich Zahlungsziel sind erforderlich." };
+  const withVehicles=Object.hasOwn(value,'belegVehicles'),vehicles=withVehicles?parseBelegVehicles(value.belegVehicles):null;
+  if(withVehicles&&(!vehicles||typeof value.clientEventId!=='string'||!UUID.test(value.clientEventId)||(value.belegVehiclesVersion!==null&&typeof value.belegVehiclesVersion!=='string')))return {code:'VALIDATION_ERROR' as const,message:'Fahrzeugliste ist unvollstaendig.'};
+  const intent=withVehicles?createHash('sha256').update(JSON.stringify({settings:normalized,vehicles})).digest('hex'):null;
   try {
-    await withPrivilegedTenantTransaction(context, async (tx) => {
-      const rows = await tx.execute<{ id: string }>(sql`
+    const result=await withPrivilegedTenantTransaction(context, async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'company-settings:'+context.tenantId},0))`);
+      const existing=await tx.execute<{beleg_fahrzeuge:unknown;version:string}>(sql`SELECT beleg_fahrzeuge,to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version FROM public.company_settings WHERE tenant_id=${context.tenantId} FOR UPDATE`);
+      if(existing.length>1)throw Error('COMPANY_SETTINGS_AMBIGUOUS');
+      const beforeVehicles=existing.length?parseBelegVehicles(existing[0].beleg_fahrzeuge):[];
+      if(!beforeVehicles)throw Error('BELEG_VEHICLES_INVALID');
+      if(withVehicles){
+        const receipts=await tx.execute<{intent:string;version:string}>(sql`SELECT payload->>'intent' AS intent,payload->>'afterVersion' AS version FROM public.ui_events WHERE tenant_id=${context.tenantId} AND event_type='company_settings_updated' AND payload->>'clientEventId'=${String(value.clientEventId)}`);
+        if(receipts.length)return receipts.length===1&&receipts[0].intent===intent?{code:'OK' as const,belegVehiclesVersion:receipts[0].version}:{code:'CONFLICT' as const,message:'Fahrzeugliste wurde inzwischen geaendert.'};
+        if((existing[0]?.version??null)!==value.belegVehiclesVersion)return {code:'CONFLICT' as const,message:'Fahrzeugliste wurde inzwischen geaendert.'};
+        if(beforeVehicles.some(row=>!vehicles!.some(candidate=>candidate.id===row.id)))return {code:'VALIDATION_ERROR' as const,message:'Fahrzeuge deaktivieren, nicht entfernen.'};
+      }
+      const rows = await tx.execute<{ id: string;version:string }>(sql`
         WITH updated AS (
           UPDATE public.company_settings
           SET company_name=${normalized.companyName}, street=${normalized.street}, zip=${normalized.zip},
               city=${normalized.city}, country=${normalized.country}, tax_id=${normalized.taxId},
               iban=${normalized.iban}, bic=${normalized.bic}, bank_name=${normalized.bankName},
               invoice_payment_term_days=${normalized.paymentTermDays}, logo_url=${normalized.logoUrl},
-              updated_at=statement_timestamp()
+              beleg_fahrzeuge=CASE WHEN ${withVehicles} THEN ${JSON.stringify(vehicles)}::jsonb ELSE beleg_fahrzeuge END,updated_at=statement_timestamp()
           WHERE tenant_id=${context.tenantId}
-          RETURNING id
+          RETURNING id,to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
         ), inserted AS (
           INSERT INTO public.company_settings (
             id, tenant_id, company_name, street, zip, city, country, tax_id,
-            iban, bic, bank_name, invoice_payment_term_days, logo_url, updated_at
+            iban, bic, bank_name, invoice_payment_term_days, logo_url, beleg_fahrzeuge, updated_at
           )
           SELECT ${`company:${context.tenantId}`}, ${context.tenantId}, ${normalized.companyName},
             ${normalized.street}, ${normalized.zip}, ${normalized.city}, ${normalized.country},
             ${normalized.taxId}, ${normalized.iban}, ${normalized.bic}, ${normalized.bankName},
-            ${normalized.paymentTermDays}, ${normalized.logoUrl}, statement_timestamp()
+            ${normalized.paymentTermDays}, ${normalized.logoUrl}, ${JSON.stringify(vehicles??[])}::jsonb, statement_timestamp()
           WHERE NOT EXISTS (SELECT 1 FROM updated)
-          RETURNING id
+          RETURNING id,to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
         )
-        SELECT id FROM updated
+        SELECT id,version FROM updated
         UNION ALL
-        SELECT id FROM inserted
+        SELECT id,version FROM inserted
       `);
       if (rows.length !== 1) throw new Error("COMPANY_SETTINGS_WRITE_AMBIGUOUS");
       await tx.execute(sql`
@@ -259,11 +283,12 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
         VALUES (
           ${context.tenantId},
           'company_settings_updated',
-          jsonb_build_object('actorId', ${context.actorId}::text, 'settingsId', ${rows[0]!.id}::text)
+          jsonb_build_object('actorId', ${context.actorId}::text, 'settingsId', ${rows[0]!.id}::text,'clientEventId',${withVehicles?String(value.clientEventId):null}::text,'intent',${intent}::text,'beforeVehicles',${JSON.stringify(beforeVehicles)}::jsonb,'afterVehicles',${JSON.stringify(vehicles??beforeVehicles)}::jsonb,'afterVersion',${rows[0].version}::text)
         )
       `);
+      return {code:"OK" as const,belegVehiclesVersion:rows[0].version};
     });
-    return { code: "OK" as const };
+    return result;
   } catch (error) {
     logSystemSettingsPortFailure("COMPANY_SETTINGS_WRITE_FAILED", error);
     return { code: "UNAVAILABLE" as const, message: "Firmendaten konnten nicht sicher gespeichert werden. Fehlercode: COMPANY_SETTINGS_WRITE_FAILED." };

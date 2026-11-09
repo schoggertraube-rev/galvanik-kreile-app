@@ -1,4 +1,5 @@
 "use server";
+import {readInvoiceAnnotationChoices} from '@/modules/fundament/server-public';
 
 import { createHash } from "node:crypto";
 import { after } from "next/server";
@@ -25,7 +26,7 @@ import {createInvoiceClarificationTask,resolveInvoiceClarificationTask} from '@/
 import {readIncomingInvoice,saveIncomingInvoice,changeIncomingInvoice,readInvoiceTaskContext} from '@/modules/eingang/server-public';
 import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
 const invoiceTaskEffects={...taskEffects,readInvoice:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string)=>readInvoiceTaskContext(tx,auth,id,readCustomerProfile)};
-const invoiceEffects={readCustomer:readCustomerProfile,updateCustomer:updateCustomerInTransaction,
+const invoiceEffects={readAnnotationChoices:readInvoiceAnnotationChoices,readCustomer:readCustomerProfile,updateCustomer:updateCustomerInTransaction,
  createTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;clientKey:string;reason:string})=>createInvoiceClarificationTask(tx,auth,input,invoiceTaskEffects),
  resolveTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;taskId:string;note:string})=>resolveInvoiceClarificationTask(tx,auth,input,invoiceTaskEffects)};
 export async function getIncomingInvoiceAction(input:unknown){return readIncomingInvoice(input,invoiceEffects);}

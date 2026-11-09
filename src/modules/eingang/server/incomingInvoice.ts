@@ -14,6 +14,7 @@ import {EMPTY_INVOICE_FIELDS,invoiceCents,invoiceDecimal,invoiceDate,invoiceFiel
  type InvoiceReadResult,type InvoiceResult,type InvoiceSaveInput,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
 
 export type InvoiceDependencies={
+ readAnnotationChoices:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<NonNullable<InvoiceView['annotationChoices']>>;
  readCustomer:(tx:PrivilegedTenantTransaction,tenantId:string,id:string,lock?:boolean)=>Promise<CustomerStoredProfile|null>;
  updateCustomer:(tx:PrivilegedTenantTransaction,context:{tenantId:string;userId:string;capabilities:{canCreateCustomer:boolean;canEditCustomer:boolean;canManageMoney:boolean;canDecide:boolean}},input:unknown)=>Promise<{code:'OK';customer:CustomerStoredProfile;replayed:boolean}|InvoiceFailure>;
  createTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;clientKey:string;reason:string})=>Promise<string>;
@@ -108,6 +109,8 @@ async function readInvoiceView(tx:PrivilegedTenantTransaction,auth:Authorization
    fields,uncertain:invoice?0:suggestions.filter(value=>value.sicherheit!=='sicher'&&!value.verified).length,conflict:null,duplicate:await duplicate(tx,auth,fields,invoice?.id)};
   const secured=primaryFileId?await tx.execute(sql`SELECT file.id FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.id=${primaryFileId}::uuid AND file.art<>'mime' AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=file.tenant_id AND receipt.item_id=file.item_id AND receipt.art='original_gespeichert' AND receipt.nachher->>'fileId'=file.id::text AND receipt.nachher->>'sha256'=file.sha256)`):[];
   view.automation=invoiceAutomaticReadiness({fields,originalSecured:secured.length===1,supplierConfirmed:Boolean(selected&&row.kunde_id===selected.id&&row.zuordnung!=='offen'),stored:invoice!==null,duplicate:view.duplicate!==null,suggestions:[...suggestions]});
+  view.annotationChoices=await deps.readAnnotationChoices(tx,auth.tenantId);
+  if(invoice){const entries=await tx.execute<{snapshot:NonNullable<InvoiceView['annotations']>}>(sql`SELECT nachher->'annotationSnapshot' AS snapshot FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${row.id}::uuid AND nachher->>'invoiceId'=${invoice.id} AND nachher->>'command'='rechnung.zusatz' ORDER BY zeit DESC,id DESC LIMIT 1`);if(entries.length){if(!validAnnotationSnapshot(entries[0].snapshot))throw Error('INVOICE_ANNOTATION_INVALID');view.annotations=entries[0].snapshot;}}
   view.canUndo=invoice?.zahlstatus==='offen';view.canRebook=false;
   if(invoice?.zahlstatus==='ungueltig'){const [last]=await tx.execute<{command:string}>(sql`SELECT nachher->>'command' AS command FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${row.id}::uuid AND art='einsatz' AND nachher->>'invoiceId'=${invoice.id} AND nachher->>'invoiceVersion'=${String(invoice.version)} ORDER BY zeit DESC,id DESC LIMIT 1`);view.canRebook=last?.command==='rechnung.rueckgaengig';}
   return {code:'OK' as const,view};
@@ -119,9 +122,13 @@ function validSave(input:unknown):input is InvoiceSaveInput{
   &&['offen','bezahlt','unklar','doppelt'].includes(String(input.status))&&optionalText(input.paidDate,10)
   &&(input.proofFileId===null||uuid(input.proofFileId))&&(input.duplicateId===null||uuid(input.duplicateId))&&optionalText(input.duplicateReason,200)&&optionalText(input.unclearReason,200);
 }
+function validAnnotationSnapshot(value:unknown):value is NonNullable<InvoiceView['annotations']>{
+ if(!object(value)||!keys(value,['remark','person','vehicle'])||typeof value.remark!=='string')return false;
+ return [value.person,value.vehicle].every(row=>row===null||object(row)&&uuid(row.id)&&typeof row.label==='string'&&!!row.label.trim());
+}
 function validChange(input:unknown):input is InvoiceChangeInput{
- return object(input)&&keys(input,['invoiceId','version','clientKey','result','paidDate','proofFileId','duplicateId','reason','fields',...(['undo','rebook'].includes(String(input.command))?['command']:[])])
-  &&uuid(input.invoiceId)&&uuid(input.clientKey)&&Number.isSafeInteger(input.version)&&Number(input.version)>=1&&['offen','bezahlt','doppelt','ungueltig'].includes(String(input.result))
+ return object(input)&&keys(input,['invoiceId','version','clientKey','result','paidDate','proofFileId','duplicateId','reason','fields',...(['undo','rebook','annotations'].includes(String(input.command))?['command',...(input.command==='annotations'?['annotations']:[])]:[])])
+  &&uuid(input.invoiceId)&&uuid(input.clientKey)&&Number.isSafeInteger(input.version)&&Number(input.version)>=1&&['offen','bezahlt','doppelt','ungueltig',...(input.command==='annotations'?['unklar']:[])].includes(String(input.result))
   &&optionalText(input.paidDate,10)&&(input.proofFileId===null||uuid(input.proofFileId))&&(input.duplicateId===null||uuid(input.duplicateId))
   &&optionalText(input.reason,200)&&(input.fields===null||invoiceFieldShape(input.fields));
 }
@@ -145,10 +152,11 @@ async function verifyDuplicate(tx:PrivilegedTenantTransaction,auth:Authorization
  }else if(existing&&(existing.exact||!reason?.trim()))throw new Rejected({code:'DUPLICATE',message:'Rechnung gibt es schon',duplicate:existing});
  if(reason!==null&&(reason.trim().length<3||reason.trim().length>200))reject('VALIDATION_ERROR','Begründung braucht 3 bis 200 Zeichen.',{duplicateReason:'Grund fehlt'});
 }
-async function record(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,row:Source,key:string,command:string,intent:unknown,before:IncomingInvoice|null,after:IncomingInvoice,deps:InvoiceDependencies,originalIds?:string[]){
+async function record(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,row:Source,key:string,command:string,intent:unknown,before:IncomingInvoice|null,after:IncomingInvoice,deps:InvoiceDependencies,originalIds?:string[],annotationSnapshot?:InvoiceView['annotations']){
  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES
   (${auth.tenantId},${row.id}::uuid,'einsatz',${key}::uuid,${auth.userId},${JSON.stringify(before)}::jsonb,
-   ${JSON.stringify({command,intent,invoiceId:after.id,invoiceVersion:after.version,invoice:after,...(originalIds?{originalIds}:{})})}::jsonb)`);
+   ${JSON.stringify({command,intent,invoiceId:after.id,invoiceVersion:after.version,invoice:after,...(originalIds?{originalIds}:{}),...(annotationSnapshot?{annotationSnapshot}:{})})}::jsonb)`);
+ if(command==='rechnung.zusatz')return;
  const historyId=randomUUID(),text=command==='rechnung.original_zugeordnet'?C.originalLinked(after.nummer_intern):'Rechnung '+after.nummer_intern+' erfasst · '+after.zahlstatus+(after.faellig_am?' · fällig '+after.faellig_am:'')+(after.unklar_grund&&after.zahlstatus==='unklar'?' · '+after.unklar_grund:'');
  const result=await writeIntakeNoteInTransaction(tx,auth,{itemId:historyId,textstand:historyId,text,concerns:[],context:after.lieferant_id?{customerId:after.lieferant_id}:undefined},deps.readCustomer);
  if(result)throw new Rejected(result);
@@ -237,10 +245,20 @@ export async function changeIncomingInvoice(input:unknown,deps:InvoiceDependenci
  if(!clarify&&!input.command&&!['offen','bezahlt'].includes(input.result))return {code:'VALIDATION_ERROR',message:'Statuswechsel ist ungültig.'};
  try{const auth=await authorization();return await withPrivilegedTenantTransaction(auth,async tx=>{
   const initial=await findInvoice(tx,auth,input.invoiceId);if(!initial)reject('NOT_FOUND','Rechnung nicht verfügbar.');
-  const row=await source(tx,auth,initial.item_id,true),command=input.command==='undo'?'rechnung.rueckgaengig':input.command==='rebook'?'rechnung.neu_ablegen':clarify?'rechnung.klaeren':'rechnung.status';
+  const row=await source(tx,auth,initial.item_id,true),command=input.command==='annotations'?'rechnung.zusatz':input.command==='undo'?'rechnung.rueckgaengig':input.command==='rebook'?'rechnung.neu_ablegen':clarify?'rechnung.klaeren':'rechnung.status';
   const repeated=await replay(tx,auth,row,input.clientKey,command,input);if(repeated)return repeated;
   const before=await findInvoice(tx,auth,input.invoiceId,false,true);if(!before)reject('NOT_FOUND','Rechnung nicht verfügbar.');
   if(before.version!==input.version)reject('CONFLICT','Rechnung wurde inzwischen geändert · Eingaben bleiben erhalten.');
+  if(input.command==='annotations'){
+   const value=input.annotations;
+   if(clarify||!value||!object(value)||!keys(value,['remark','personId','vehicleId'])||typeof value.remark!=='string'||value.remark.length>2000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value.remark)||(value.personId!==null&&!uuid(value.personId))||(value.vehicleId!==null&&!uuid(value.vehicleId))||input.result!==before.zahlstatus||input.fields!==null||input.paidDate!==null||input.proofFileId!==null||input.duplicateId!==null||input.reason!==null)reject('VALIDATION_ERROR','Zusatzangaben sind unvollstaendig.');
+   const current=await readInvoiceView(tx,auth,before.id,deps),choices=current.view.annotationChoices!;
+   const select=(id:string|null,rows:Array<{id:string;label:string}>,prior:{id:string;label:string}|null|undefined)=>{if(id===null)return null;if(prior?.id===id)return prior;const match=rows.find(candidate=>candidate.id===id);if(!match)reject('VALIDATION_ERROR','Auswahl ist nicht mehr aktiv.');return match;};
+   const snapshot={remark:value.remark,person:select(value.personId,choices.persons,current.view.annotations?.person),vehicle:select(value.vehicleId,choices.vehicles,current.view.annotations?.vehicle)};
+   const updated=await tx.execute(sql`UPDATE public.supplier_invoice SET version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${before.id}::uuid AND version=${before.version} RETURNING id`);if(updated.length!==1)reject('CONFLICT','Beleg wurde inzwischen geaendert.');
+   const after=await findInvoice(tx,auth,before.id);if(!after)throw Error('INVOICE_READBACK_FAILED');
+   await record(tx,auth,row,input.clientKey,command,input,before,after,deps,undefined,snapshot);return {code:'OK' as const,invoice:after,replayed:false};
+  }
   if(input.command==='undo'){
    if(clarify||before.zahlstatus!=='offen'||input.result!=='ungueltig'||input.fields!==null||input.paidDate!==null||input.proofFileId!==null||input.duplicateId!==null)reject('VALIDATION_ERROR','Nur eine offene, unbezahlte Ablage kann zurückgenommen werden.');
   }else if(input.command==='rebook'){

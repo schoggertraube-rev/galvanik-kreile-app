@@ -8,6 +8,7 @@ export { ACCESS_AREAS, ACCESS_AREA_LABELS, isAccessAreaAllowedForRole } from "@/
 export type { AccessArea, AppRole } from "@/lib/auth/authorizationContract";
 
 export type CompanySettingsInput = {
+  belegVehicles?:import('./belegVehicles').BelegVehicle[];belegVehiclesVersion?:string|null;clientEventId?:string;
   companyName: string; street: string; zip: string; city: string; country: string;
   taxId: string; iban: string; bic: string; bankName: string; paymentTermDays: number; logoUrl: string;
 };

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import {BELEG_META_COPY as BM} from "@/ui/situationCatalog";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   changeOwnPinAction,
   createManagedUserAction,
@@ -93,7 +94,9 @@ export function SettingsAdminClient({
     bankName: initialSnapshot.company.bankName ?? "",
     paymentTermDays: initialSnapshot.company.paymentTermDays ?? 0,
     logoUrl: initialSnapshot.company.logoUrl ?? "",
+    ...(initialSnapshot.company.belegVehicles!==undefined?{belegVehicles:initialSnapshot.company.belegVehicles??[],belegVehiclesVersion:initialSnapshot.company.belegVehiclesVersion??null,clientEventId:crypto.randomUUID()}:{}),
   });
+  const companySaving=useRef(false);const [vehicleConflict,setVehicleConflict]=useState(false);
   const [services, setServices] = useState(initialServices);
   const [draft, setDraft] = useState(emptyService());
   const [users, setUsers] = useState(initialSnapshot.users);
@@ -137,7 +140,7 @@ export function SettingsAdminClient({
   }, [reloadAfterRightsSave, rightsToast]);
 
   const field = (key: keyof CompanySettingsInput, label: string, type = "text") => (
-    <label>{label}<input type={type} value={String(company[key])} onChange={(event) => setCompany((current) => ({ ...current, [key]: type === "number" ? Number(event.target.value) : event.target.value }))} /></label>
+    <label>{label}<input type={type} value={String(company[key])} onChange={(event) => setCompany((current) => ({ ...current, [key]: type === "number" ? Number(event.target.value) : event.target.value,...(current.belegVehicles!==undefined?{clientEventId:crypto.randomUUID()}:{}), }))} /></label>
   );
 
   function report(
@@ -193,7 +196,14 @@ export function SettingsAdminClient({
   }
 
   function saveCompany() {
-    report(() => saveCompanySettingsAction(company), "Firmendaten gespeichert.");
+    if(company.belegVehicles===undefined){report(() => saveCompanySettingsAction(company), "Firmendaten gespeichert.");return;}
+    if(companySaving.current)return;companySaving.current=true;setVehicleConflict(false);
+    startTransition(async()=>{try{
+      const result=await saveCompanySettingsAction(company);
+      if(result.code!=="OK"){setVehicleConflict(result.code==='CONFLICT');setMessage(result.code==='CONFLICT'?BM.settingsConflict:BM.settingsError);return;}
+      if('belegVehiclesVersion'in result)setCompany(current=>({...current,belegVehiclesVersion:result.belegVehiclesVersion,clientEventId:crypto.randomUUID()}));
+      setMessage(BM.saved);
+    }catch(error){console.error('[BELEG_VEHICLES_SAVE_FAILED]',{name:error instanceof Error?error.name:'unknown'});setMessage(BM.settingsError);}finally{companySaving.current=false;}});
   }
 
   function saveService() {
@@ -365,6 +375,10 @@ export function SettingsAdminClient({
         {companyReady && catalogReady && rateReady && returnTo ? <Link href={returnTo}>Zurück zum vorherigen Vorgang</Link> : null}
       </div>
       <div id="company-data" className={styles.grid}>{field("companyName", "Firmenname")}{field("street", "Straße")}{field("zip", "PLZ")}{field("city", "Ort")}{field("country", "Land")}{field("taxId", "USt-ID / Steuernummer")}{field("iban", "IBAN")}{field("bic", "BIC")}{field("bankName", "Bank")}{field("paymentTermDays", "Zahlungsziel in Tagen", "number")}{field("logoUrl", "Logo-Pfad")}</div>
+      {company.belegVehicles!==undefined?<fieldset><legend>{BM.vehicles}</legend>{company.belegVehicles.map((vehicle,index)=><div key={vehicle.id} className={styles.grid}>
+        <label>{BM.label}<input disabled={pending} value={vehicle.label} maxLength={120} onChange={event=>setCompany(current=>({...current,clientEventId:crypto.randomUUID(),belegVehicles:current.belegVehicles!.map((row,i)=>i===index?{...row,label:event.target.value}:row)}))}/></label>
+        <label><input type="checkbox" disabled={pending} checked={vehicle.active} onChange={event=>setCompany(current=>({...current,clientEventId:crypto.randomUUID(),belegVehicles:current.belegVehicles!.map((row,i)=>i===index?{...row,active:event.target.checked}:row)}))}/>{BM.active}</label>
+       </div>)}<button disabled={pending} onClick={()=>setCompany(current=>({...current,clientEventId:crypto.randomUUID(),belegVehicles:[...(current.belegVehicles??[]),{id:crypto.randomUUID(),label:'',active:true}]}))}>{BM.add}</button>{vehicleConflict?<button onClick={()=>location.reload()}>{BM.reload}</button>:null}</fieldset>:null}
       <button disabled={pending} onClick={saveCompany}>Firmendaten speichern</button>
       <ShippingSettingsEditor />
       <div id="extra-work-rate"><h3>Mehrarbeit</h3><div className={styles.grid}><label>Stundensatz Mehrarbeit (€/h)<input inputMode="decimal" value={hourlyRateEuro} onChange={(event) => setHourlyRateEuro(event.target.value)} placeholder="z. B. 85,00" /></label></div><button disabled={pending} onClick={saveHourlyRate}>Stundensatz speichern</button></div>

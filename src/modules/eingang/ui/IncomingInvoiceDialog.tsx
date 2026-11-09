@@ -1,8 +1,9 @@
 'use client';
-import {ACTOR_COPY,BELEG_AUTO_COPY as C,belegFailureCopy} from '@/ui/situationCatalog';
+import {ACTOR_COPY,BELEG_AUTO_COPY as C,BELEG_META_COPY as BM,belegFailureCopy} from '@/ui/situationCatalog';
 import {useEffect,useRef,useState} from 'react';
 import {Button,Checkbox,Dialog,Eingabe,Feld,Hinweis,Kachel,Rueckfrage,Segment,Textfeld,Zustandskette} from '@/ui/kr';
 import {invoiceDate,invoiceFieldErrors,invoiceWarnings,type InvoiceFields,type InvoicePorts,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
+import {InvoiceAnnotationEditor} from './InvoiceAnnotationEditor';
 import {INTAKE_CHANGED_EVENT} from '../messageContract';
 import {uploadIntakeOriginal} from '../intakeOriginalUpload';
 
@@ -13,7 +14,7 @@ function today(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin
 const fieldRows=[['nummer','rechnungsnummer','Rechnungsnummer','text'],['datum','rechnungsdatum','Rechnungsdatum','date'],['netto','netto','Netto','text'],['ust','ust','USt','text'],['brutto','brutto','Brutto','text'],['faelligAm','faellig','Fällig am','date'],['iban','iban','IBAN','text']] as const;
 
 /** 3.8 is a projection of the canonical intake/original and its one supplier_invoice. */
-export function IncomingInvoiceDialog({initial,ports,onClose,onMessage,onAutomaticReady}:{initial:InvoiceView;ports:InvoicePorts;onClose:()=>void;onMessage:(text:string,taskId?:string)=>void;onAutomaticReady?:()=>void}){
+export function IncomingInvoiceDialog({initial,ports,onClose,onMessage,onAutomaticReady,annotationsOnly=false,onInvoiceUpdated,onUndo}:{initial:InvoiceView;ports:InvoicePorts;onClose:()=>void;onMessage:(text:string,taskId?:string)=>void;onAutomaticReady?:()=>void;annotationsOnly?:boolean;onInvoiceUpdated?:(view:InvoiceView)=>void;onUndo?:()=>void}){
  const [view,setView]=useState(initial),[fields,setFields]=useState({...initial.fields}),[selected,setSelected]=useState<InvoiceSupplier|null>(initial.supplier);
  const currentFields=useRef(fields);useEffect(()=>{currentFields.current=fields;},[fields]);
  const [mode,setMode]=useState<Mode>(initial.canRebook?'neu_ablegen':initial.invoice?.zahlstatus==='unklar'?'klaeren':initial.invoice?.zahlstatus==='offen'?'bezahlt_markieren':initial.invoice?'ansicht':'pruefen');
@@ -94,6 +95,8 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage,onAutomat
  const warnings=invoiceWarnings(fields,selected),due=dateLabel(fields.faelligAm),primaryLabel=mode==='rueckgaengig'?C.undoConfirm:mode==='neu_ablegen'?C.rebook:uploading?'Nachweis wird gesichert …':busy?'Wird erfasst …':mode==='klaeren'?'Klärung speichern':mode==='bezahlt_markieren'?'Als bezahlt markieren':mode==='unklar'?'Als unklar erfassen':mode==='bezahlt'?'Erfassen · bezahlt':due?'Erfassen · fällig '+due:'Erfassen';
  const primaryId=mode==='klaeren'?'klaerung-speichern':mode==='bezahlt_markieren'?'als-bezahlt':mode==='unklar'?'unklar-speichern':mode==='bezahlt'?'bezahlt-speichern':'offen';
  const primary=()=>void save(mode==='rueckgaengig'?'ungueltig':mode==='klaeren'?(outcome===' '?'offen':outcome):mode==='bezahlt'||mode==='bezahlt_markieren'?'bezahlt':mode==='unklar'?'unklar':'offen');
+ const metadataSaved=(fresh:InvoiceView)=>{setView(fresh);onInvoiceUpdated?.(fresh);window.dispatchEvent(new Event(INTAKE_CHANGED_EVENT));};
+ if(annotationsOnly&&view.invoice)return <Dialog titel={BM.title} icon="file" onSchliessen={close} fuss={<><Button text={C.back} onClick={close}/>{view.canUndo&&onUndo?<Button text={C.undo} onClick={onUndo}/>:null}</>}><InvoiceAnnotationEditor view={view} ports={ports} onSaved={metadataSaved}/></Dialog>;
  return <><Dialog titel="Rechnung prüfen" icon="file" groesse="breit" schliessenSpecId="rechnungein.schliessen" onSchliessen={close} vorSchliessen={()=>!working.current}
   unterzeile={mode==='klaeren'?'Rechnung klären':mode==='bezahlt_markieren'?'Eingangsrechnung · als bezahlt markieren':undefined}
   meldung={message?{text:message,ton:'fehler'}:null}
@@ -131,6 +134,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage,onAutomat
     }}/></div>:null}
     {fieldRows.map(([field,id,label,type])=><Feld key={field} label={label} className={errors[field]?'kr-feld--fehler':undefined}><Eingabe data-invoice-field={field} data-spec-id={'rechnungein.'+id} type={type} required={field!=='iban'&&!readOnly} readOnly={readOnly||field==='iban'&&!!view.invoice} disabled={busy} value={fields[field]} aria-invalid={!!errors[field]} aria-describedby={errors[field]?'invoice-error-'+id:undefined} inputMode={['netto','ust','brutto'].includes(field)?'decimal':undefined} onChange={event=>update(field,event.target.value)}/>{errors[field]?<span id={'invoice-error-'+id} className="kr-feld-fehler" data-spec-id={'rechnungein.'+id+'.fehler'}>{errors[field]}</span>:null}</Feld>)}
    </div></section></div>
+  {view.invoice&&mode==='ansicht'?<InvoiceAnnotationEditor view={view} ports={ports} onSaved={metadataSaved}/>:null}
   {mode==='rueckgaengig'?<Feld label={C.undoReason} fehler={errors.reason}><Textfeld data-invoice-field="reason" value={reason} maxLength={200} onChange={event=>setReason(event.target.value)}/></Feld>:null}
   {mode==='unklar'?<div data-spec-id="rechnungein.zustand.unklar"><h3>Unklar · was ist zu klären?</h3><Feld label="Grund" fehler={errors.reason}><Textfeld data-invoice-field="reason" data-spec-id="rechnungein.grund" maxLength={200} value={reason} onChange={event=>setReason(event.target.value)}/></Feld></div>:null}
   {mode==='klaeren'?<div data-spec-id="rechnungein.zustand.klaeren"><h3>Rechnung klären</h3><p>{view.invoice?.unklar_grund}</p><div data-spec-id="rechnungein.ergebnis"><Feld label="Ergebnis" fehler={errors.outcome}><Segment label="Ergebnis" wert={outcome} onWert={setOutcome} optionen={[{wert:'offen',text:'offen'},{wert:'bezahlt',text:'schon bezahlt'},{wert:'doppelt',text:'doppelt'},{wert:'ungueltig',text:'ungültig'}]}/></Feld></div>

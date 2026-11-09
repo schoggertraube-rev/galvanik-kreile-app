@@ -4,6 +4,7 @@ export type {QuoteCalculationSettings} from './server/quoteSettingsPort';
 export { readShippingSettings,readShippingSettingsInTransaction,updateShippingSettings } from "./server/systemSettingsPort";
 
 export {
+  readInvoiceAnnotationChoices,
   changeOwnPin,
   createManagedUser,
   readCompanyDocumentSettings,

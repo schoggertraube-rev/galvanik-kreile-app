@@ -132,3 +132,5 @@ export function belegFailureCopy(code:string):string{
  };
  return copies[code]??'Du versuchst es erneut. Dein Original und deine Eingaben bleiben erhalten.';
 }
+
+export const BELEG_META_COPY={title:'Zusatzangaben',remark:'Bemerkung',person:'Mitarbeiter',vehicle:'Fahrzeug',none:'Keine Zuordnung',optional:'optional',save:'Zusatzangaben speichern',saved:'Zusatzangaben gespeichert.',saving:'Wird gespeichert …',vehicles:'Fahrzeuge für Belege',label:'Bezeichnung',active:'aktiv',add:'Fahrzeug hinzufügen',inactive:'nicht mehr aktiv',reload:'Neu laden',settingsConflict:'Die Fahrzeugliste wurde geändert. Du lädst sie neu.',settingsError:'Du prüfst die Fahrzeugliste und versuchst es erneut.'} as const;
