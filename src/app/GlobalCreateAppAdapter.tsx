@@ -12,7 +12,7 @@ import { chooseIntakeCaptureKindAction } from "@/app/actions/eingang.actions";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, readCustomerAddressAction } from "@/app/actions/customers.actions";
 import { erfasseAuftragAusEingangAction, getIntakeDraftsAction, saveIntakeDraftAction, discardIntakeDraftAction, createIntakeContinuationAction, getIntakePendingScopeAction, saveIntakeNoteAction, recognizeIntakeNoteAction, prepareIntakeFileAction, finishIntakeFileAction, getIntakeCaptureAction, saveIntakeDeviceRequestAction, discardIntakeCaptureAction } from "@/app/actions/eingang.actions";
 import {getGoodsReceiptsAction,saveGoodsReceiptAction,openIntakeOriginalAction,confirmIntakeOriginalAction,retryIntakeRecognitionAction} from "@/app/actions/eingang.actions";
-import { prepareQuoteFromIntakeAction, changeQuoteLifecycleAction, convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
+import { readOnsiteQuoteProgressAction, receiveOnsiteQuoteAction, prepareQuoteFromIntakeAction, changeQuoteLifecycleAction, convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
 import { getIntakeCatalogAction } from "@/app/actions/catalog.actions";
 import {getComplaintOrderChoicesAction} from '@/app/actions/complaints.actions';
@@ -260,6 +260,8 @@ export function GlobalCreateAppAdapter() {
           return {code:"OK",replayed:true,receipt:result.receipt,customer:customerChoice(result.customer)};
         },
         prepareQuote:prepareQuoteFromIntakeAction,
+        receiveOnsiteQuote: receiveOnsiteQuoteAction,
+        readOnsiteQuoteProgress: readOnsiteQuoteProgressAction,
         createQuote: async (input: CreateQuoteInput): Promise<GlobalCreateQuoteResult> => createQuoteAction(input),
         updateQuote: async (input: UpdateQuoteInput): Promise<GlobalCreateQuoteResult> => updateQuoteAction(input),
         readQuoteCreateReceipt: async (input: CreateQuoteInput): Promise<GlobalCreateQuoteResult> => {
@@ -267,6 +269,7 @@ export function GlobalCreateAppAdapter() {
           return result.code === "OK" ? { ...result, replayed: true } : result;
         },
         readQuote: async (input: { quoteId: string }): Promise<GlobalCreateQuoteReadResult> => {const result=await readQuoteAction(input);return result.code!=='OK'?result:hasQuoteFinancials(result.quote)?{...result,quote:result.quote}:{code:'FORBIDDEN',message:'KV-Finanzansicht ist nicht freigegeben.'};},
+        assignCaptureCustomer: assignIntakeCustomerAction,
         listOpenQuotes: async (): Promise<GlobalCreateOpenQuotesResult> => listOpenQuotesAction(),
         readQuoteUpdateReceipt: async (input: UpdateQuoteInput): Promise<GlobalCreateQuoteResult> => {
           const result = await readQuoteUpdateReceiptAction(input);

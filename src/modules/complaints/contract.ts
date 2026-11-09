@@ -1,4 +1,4 @@
-import type {CaseActorTrace} from "@/lib/server/quoteJournalPort";
+import type {CaseActorTrace} from "@/lib/domain/caseActorContract";
 /** Read projection of the existing complaint row. P48: itemId is the intake source. */
 export type ComplaintState='aufgenommen'|'massnahme_nacharbeit'|'massnahme_gutschrift'|'kunde_informieren'|'abgeschlossen';
 export type Complaint={actorTrace?:CaseActorTrace;id:string;customerId:string;orderId:string;itemId:string|null;legacyPositionId:string|null;reason:string;stationId:string|null;description:string;photoIds:string[]|null;createdAt:string;resolvedAt:string|null;resolution:string|null;status:string|null;

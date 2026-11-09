@@ -31,3 +31,4 @@ export {prepareQuoteTextChangeCommand} from "./server/quoteTextProposal";
 export {reverseQuoteConversionCommand,readQuoteUndoContext} from './server/quoteConversionUndo';
 
 export {readQuoteActors} from "./server/quoteReads";
+export {readPackageQuoteHistory} from './server/quoteReads';

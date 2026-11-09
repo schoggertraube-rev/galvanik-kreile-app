@@ -59,7 +59,7 @@ export async function writeIntakeDraft(input: unknown) {
 export async function discardIntakeDraft(input: unknown) {
   if (!object(input) || typeof input.id !== "string" || !UUID.test(input.id)
     || typeof input.clientEventId !== "string" || !UUID.test(input.clientEventId)
-    || typeof input.expectedVersion !== "number" || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
+    || typeof input.expectedVersion !== "number" || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0 || input.reason!==undefined&&(typeof input.reason!=='string'||input.reason.trim().length<3||input.reason.length>1000)) {
     return { code: "VALIDATION_ERROR" as const, message: "Entwurfskennung ist ungültig." };
   }
   const auth = await authorizeDraft();
@@ -68,11 +68,11 @@ export async function discardIntakeDraft(input: unknown) {
     const result = await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-draft:'||${auth.tenantId}||':'||${auth.userId},0))`);
       const prior=await readIntakeDraftEvent(tx,auth,input.clientEventId as string,"INTAKE_DRAFT_DISCARDED_V1");
-      if(prior.length)return prior.length===1&&prior[0].payload.draftId===input.id?null:{code:"CONFLICT" as const,message:"Diese Kennung wurde für einen anderen Entwurf verwendet."};
+      if(prior.length)return prior.length===1&&prior[0].payload.draftId===input.id&&(prior[0].payload.reason??null)===(typeof input.reason==='string'?input.reason.trim():null)?null:{code:"CONFLICT" as const,message:"Diese Kennung wurde für einen anderen Entwurf verwendet."};
       const deleted = await tx.execute<{ id:string }>(sql`DELETE FROM private.intake_drafts WHERE tenant_id=${auth.tenantId}
         AND actor_id=${auth.userId}::uuid AND id=${input.id}::uuid AND version=${input.expectedVersion}::integer RETURNING id::text`);
       if(deleted.length!==1)return {code:"CONFLICT" as const,message:"Entwurf wurde inzwischen geändert oder ist nicht mehr vorhanden."};
-      await appendIntakeDraftEvent(tx,auth,{kind:"INTAKE_DRAFT_DISCARDED_V1",clientEventId:input.clientEventId as string,draftId:input.id as string});
+      await appendIntakeDraftEvent(tx,auth,{kind:"INTAKE_DRAFT_DISCARDED_V1",clientEventId:input.clientEventId as string,draftId:input.id as string,...(typeof input.reason==='string'?{reason:input.reason.trim()}:{})});
       return null;
     });
     return result ?? await readIntakeDrafts();

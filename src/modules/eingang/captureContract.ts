@@ -1,5 +1,6 @@
 import {intakeHandoverDirective} from './intakeLifecycleContract';
-import type {CaseActorTrace} from "@/lib/server/quoteJournalPort";
+import type {CaseActorTrace} from "@/lib/domain/caseActorContract";
+
 import type { IntakeTextRecognition } from "@/lib/server/intakeTextRecognition";
 import type { CaptureKind } from "./captureRecognition";
 
@@ -13,7 +14,8 @@ export type IntakeCapture = {
   dismissedConcerns?: string[];
   openConcerns?: string[];
   recognition?: { kind: CaptureKind; text: string; source?: "hand" };
-  expectedOrders?: Array<{ id: string; number: string; customerId: string; customerName: string | null; title: string | null; since: string | null }>;
+  packageContext?: {status:"OK";customers:Array<{customerId:string;customerName:string;lastAt:string;source:"order"|"quote"}>;candidates:Array<{kind:"quote"|"order";id:string;number:string;state:"accepted"|"pending"|"waiting"|"rework";customerId:string;customerName?:string;edition?:number;goodsHere?:boolean;location?:string|null}>;ambiguous:boolean;moreCandidates:boolean}|{status:"UNAVAILABLE";message:string};
+  expectedOrders?: Array<{ id: string; number: string; customerId: string; customerName: string | null; title: string | null; since: string | null; reason?:"rework"|"waiting" }>;
   files: Array<{ id: string; name: string; mime: string; bytes: number; readable: boolean; status: string; secured?: boolean; errorCode?: string | null; captureOrigin?: "warenfoto" | "dokument" }>;
   suggestions?: Array<{ id:string; fileId:string|null; orderId:string|null; field:string; value:unknown; confidence:string; rule:string|null; reason:string|null; source:unknown; status:string; verifiedBy?:string|null; verifiedAt?:string|null }>;
 };

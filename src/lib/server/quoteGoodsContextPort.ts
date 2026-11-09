@@ -30,10 +30,10 @@ export async function quoteHasCreatedOrder(tx:PrivilegedTenantTransaction,tenant
  return rows.length===1;
 }
 
-export type QuoteFollowupFact={creatorId:string;id:string;edition:number;stage:string;number:string;customerName:string;integrity:boolean};
+export type QuoteFollowupFact={id:string;edition:number;stage:string;number:string;customerName:string;integrity:boolean};
 export async function readQuoteFollowupFacts(tx:PrivilegedTenantTransaction,tenantId:string,ids:readonly string[]){
  if(!ids.length)return [];
- return [...await tx.execute<QuoteFollowupFact>(sql`SELECT created_by::text AS "creatorId",quote_id::text AS id,fassung AS edition,derived_status AS stage,quote_number AS number,customer_display_name AS "customerName",integrity_ok AS integrity FROM private.v_quotes_v1 WHERE tenant_id=${tenantId} AND quote_id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::uuid[])`)];
+ return [...await tx.execute<QuoteFollowupFact>(sql`SELECT quote_id::text AS id,fassung AS edition,derived_status AS stage,quote_number AS number,customer_display_name AS "customerName",integrity_ok AS integrity FROM private.v_quotes_v1 WHERE tenant_id=${tenantId} AND quote_id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::uuid[])`)];
 }
 
 /** Quantities belong to the existing received-goods record, not a second order draft. */

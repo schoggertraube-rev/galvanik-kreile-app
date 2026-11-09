@@ -133,7 +133,7 @@ function normalizeCalculation(raw:unknown,positions:CreateQuoteInput['positions'
  const value=raw as QuoteCalculation,result=calculateQuote(value);
  if(result.code!=='OK'||positions.reduce((sum,row)=>sum+(row.lineTotalCents??row.quantity*row.unitPriceCents),0)!==result.totalNetCents)return null;
  const [whole,fraction='']=value.hours.trim().replace(',','.').split('.'),digits=fraction.replace(/0+$/u,'');
- return {...value,hours:BigInt(whole).toString()+(digits?'.'+digits:'')};
+ return {hours:BigInt(whole).toString()+(digits?'.'+digits:''),hourlyRateCents:value.hourlyRateCents,setupCents:value.setupCents,materialCents:value.materialCents};
 }
 
 function normalizeCreate(value: unknown): CreateQuoteInput | null {
@@ -443,11 +443,12 @@ export async function readQuoteCommand(authorization: QuoteCommandContext, input
 }
 
 /** Lists only the caller's tenant-bound draft aggregates. */
-export async function listOpenQuotesCommand(authorization: QuoteCommandContext): Promise<ListOpenQuotesResult> {
+export async function listOpenQuotesCommand(authorization: QuoteCommandContext, customerId?:string): Promise<ListOpenQuotesResult> {
   if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Offene KVs dürfen mit dieser Rolle nicht gelesen werden." };
+  if(customerId!==undefined&&!UUID_PATTERN.test(customerId))return {code:'VALIDATION_ERROR',message:'Kunde ist ungültig.'};
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id FROM private.v_open_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id ORDER BY projection.updated_at DESC, projection.quote_number ASC LIMIT 100`);
+      const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id FROM private.v_open_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id WHERE (${customerId??null}::text IS NULL OR projection.customer_id=${customerId??null}::text) ORDER BY projection.updated_at DESC, projection.quote_number ASC LIMIT 100`);
       const quotes = rows.map((row) => quoteFromRow(row, authorization.tenantId));
       if (quotes.some((quote) => quote === null)) throw new Error("QUOTE_LIST_READBACK_INVALID");
         const goods=await readQuoteGoodsSummariesForQuotes(tx,authorization.tenantId,quotes.filter(quote=>quote?.lifecycle).map(quote=>quote!.quoteId));

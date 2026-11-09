@@ -290,15 +290,26 @@ export async function readOrderTaskAssignmentReceipt(
   }
 }
 
-/** Existing assignment receipt overrides the first real order actor; no persisted second ownership. */
+/** Only evidenced active assignments count; a damaged receipt never breaks the whole home. */
 export async function readOrderResponsibilityForToday(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]){
  const unique=[...new Set(ids)];if(unique.length>1000||unique.some(id=>!id||id.length>128))throw Error('TODAY_RESPONSIBILITY_IDS_INVALID');
  if(!unique.length)return new Map<string,string|null>();
- const rows=await tx.execute<{id:string;userId:string|null;assignmentOk:boolean|null}>(sql`SELECT orders.id,
- CASE WHEN assignment.active THEN assignment.assigned_to::text ELSE first.user_id::text END AS "userId",assignment.integrity_ok AS "assignmentOk"
- FROM public.orders orders LEFT JOIN private.v_order_task_assignment_v1 assignment ON assignment.tenant_id=orders.tenant_id AND assignment.order_id=orders.id AND assignment.active=true
- LEFT JOIN LATERAL(SELECT event.user_id FROM public.events event WHERE event.tenant_id=orders.tenant_id AND event.order_id=orders.id AND event.status='success' AND event.event_type NOT LIKE 'COMPLAINT_%' AND (event.aggregate_version IS NULL OR event.aggregate_version<=orders.version) ORDER BY event.aggregate_version ASC NULLS LAST,(event.event_type='ORDER_INTAKE_CREATED_V1') DESC,event.created_at,event.id LIMIT 1) first ON true
- WHERE orders.tenant_id=${auth.tenantId} AND orders.id IN (${sql.join(unique.map(id=>sql`${id}`),sql`, `)})`);
- if(rows.some(row=>row.assignmentOk===false))throw Error('TODAY_RESPONSIBILITY_RECEIPT_INVALID');
- return new Map(rows.map(row=>[row.id,row.userId]));
+ const rows=await tx.execute<{id:string;userId:string|null;assignmentOk:boolean|null}>(sql`SELECT orders.id,assignment.assigned_to::text AS "userId",assignment.integrity_ok AS "assignmentOk" FROM public.orders orders LEFT JOIN private.v_order_task_assignment_v1 assignment ON assignment.tenant_id=orders.tenant_id AND assignment.order_id=orders.id AND assignment.active=true WHERE orders.tenant_id=${auth.tenantId} AND orders.id IN (${sql.join(unique.map(id=>sql`${id}`),sql`, `)})`);
+ const invalid=rows.filter(row=>row.assignmentOk===false);
+ for(const row of invalid)await recordInvalidOrderAssignmentForToday(tx,auth,row.id);
+ return new Map(rows.filter(row=>row.assignmentOk!==false).map(row=>[row.id,row.userId]));
+}
+
+/** One shared diagnostic for both personal and delegated home rows, at most once per Berlin day. */
+export async function recordInvalidOrderAssignmentForToday(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string){
+ console.error('[TODAY_ASSIGNMENT_RECEIPT_INVALID]',{orderId});
+ await tx.execute(sql`SAVEPOINT today_assignment_diagnostic`);
+ try{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('today-assignment-diagnostic:'||${auth.tenantId}||':'||${orderId},0))`);
+  await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload)
+   SELECT ${auth.tenantId},'today_assignment_read_failed',${JSON.stringify({code:'TODAY_ASSIGNMENT_RECEIPT_INVALID',orderId,actorId:auth.userId})}::jsonb
+   WHERE NOT EXISTS(SELECT 1 FROM public.ui_events prior WHERE prior.tenant_id=${auth.tenantId} AND prior.event_type='today_assignment_read_failed' AND prior.payload->>'orderId'=${orderId}
+    AND (prior.created_at AT TIME ZONE 'Europe/Berlin')::date=(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date)`);
+  await tx.execute(sql`RELEASE SAVEPOINT today_assignment_diagnostic`);
+ }catch(error){await tx.execute(sql`ROLLBACK TO SAVEPOINT today_assignment_diagnostic`);await tx.execute(sql`RELEASE SAVEPOINT today_assignment_diagnostic`);console.error('[TODAY_ASSIGNMENT_DIAGNOSTIC_FAILED]',error);}
 }

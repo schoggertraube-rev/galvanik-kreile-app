@@ -1,6 +1,7 @@
 import type {ComponentType} from 'react';
-import type {CaseActorTrace} from '@/lib/server/quoteJournalPort';
 import type {IntakeDraftPorts} from './draftContract';
+import type {CaseActorTrace} from "@/lib/domain/caseActorContract";
+
 import type {AccessArea} from '@/lib/auth/authorizationContract';
 import type {IntakeCaptureResult} from './captureContract';
 import type {IntakeSelectionInput,IntakeUseInput,IntakeUseResult,IntakeReopenInput} from './intakeLifecycleContract';
