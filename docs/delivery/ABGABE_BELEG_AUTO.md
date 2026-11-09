@@ -14,9 +14,11 @@ Offen, NICHT mergefaehig: BA09 Zahlungsart-Hinweis/Datum, BA10 unsichere Dublett
 
 ## Dev-Migrationsnachweis 09.11., 09:19
 
+Nachweisprojektion09:22 praezisiert: alle ganzen Zeilen mit `to_jsonb(kr_domain_snapshot.*)`, ohne Alias-/Spaltenkollision; erneute reine Abbruchprobe derselben Constraint-DDL, keine zweite Anwendung, PASS.
+
 Auf dem nach BAUREGELN Abschnitt4 ausdruecklich freigegebenen Dev-Testsystem wurde ausschliesslich die bereits lokal gepruefte, committed-bytegleiche neue Nachfolgemigration74500 angewandt. Vorher Abbruchprobe; danach vorhandene Rechnungen/Auftraege/KVs/Eingaenge/Ereignisse/Firmendaten/Reklamationen im selben Repeatable-Read-Lauf unveraendert. Kein Produktionszugriff und keine vorhandenen Daten geaendert/geloescht.
 
-Dieser Branch hat106 Migrationen, Dev109. Keine fehlt. Die3 zusaetzlichen Dev-Migrationen sind bereits angewandte andere freigegebene Pakete: RM-Fotovorlage8222500, Ausgangsfristen9003000 und Paket-Warenhinweis9042000. Nur diese explizite angewandte Union ist gleich Dev; weder Einzelbranch-Paritaet noch die Anwendung anderer lokaler Reserve-Migrationen wird behauptet.
+Aktueller Nachzug09:22: Dieser Branch hat106 Migrationen, Dev110. Keine fehlt. Die4 zusaetzlichen Dev-Migrationen sind bereits angewandte andere freigegebene Pakete: RM-Fotovorlage8222500, Ausgangsfristen9003000, Paket-Warenhinweis9042000 und RM-Fotofristen9061000. Nur diese explizite angewandte Union ist gleich Dev; weder Einzelbranch-Paritaet noch die Anwendung anderer lokaler Reserve-Migrationen wird behauptet.
 
 ```json
 {
@@ -36,16 +38,18 @@ Dieser Branch hat106 Migrationen, Dev109. Keine fehlt. Die3 zusaetzlichen Dev-Mi
     "public.complaints": 0
   },
   "repoCount": 106,
-  "devCount": 109,
+  "devCount": 110,
   "repoEqualsDev": false,
   "devOnlyVersions": [
     "20261108222500",
     "20261109003000",
-    "20261109042000"
+    "20261109042000",
+    "20261109061000"
   ],
   "missingRepoVersions": [],
   "qualifiedAppliedUnionEqualsDev": true,
-  "unappliedOtherBranchMigrationsNotClaimed": true
+  "unappliedOtherBranchMigrationsNotClaimed": true,
+  "fullRowProjectionRecheck": "PASS - repeatable read and rollback only, no second migration application"
 }
 ```
 
