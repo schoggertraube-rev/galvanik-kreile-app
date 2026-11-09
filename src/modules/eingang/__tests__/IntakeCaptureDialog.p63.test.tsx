@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GlobalCreatePorts } from "../GlobalCreateFlow";
 import { IntakeCaptureDialog } from "../ui/IntakeCaptureDialog";
 import type { IntakeCapture } from "../captureContract";
+import { readPendingOriginals } from "../pendingOriginals";
 import { IntakeSituation } from "../ui/IntakeSituation";
 
 vi.mock("../pendingOriginals", () => ({
@@ -44,6 +45,8 @@ describe("P63: the camera action is reachable in the fixed footer", () => {
     vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
     const ports = { getCaptureScope: vi.fn(async () => ({ code: "OK", scope: "synthetic-p63-only" })) } as unknown as GlobalCreatePorts;
     render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()} />);
+    expect(getUserMedia).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button",{name:"Foto"}));
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
     const shutter = screen.getByRole("button", { name: /^Foto$/u });
     expect(shutter).toBeDisabled();
@@ -163,7 +166,7 @@ it('EV-11 denied camera keeps a gallery action and browser permission guidance',
  vi.stubGlobal('navigator',{mediaDevices:{getUserMedia:vi.fn(async()=>{throw new DOMException('TEST denied','NotAllowedError');})}});
  const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-camera-denied'}))} as unknown as GlobalCreatePorts;
  const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
- const gallery=await screen.findByRole('button',{name:'Foto aus der Galerie wählen'});expect(gallery).toBeEnabled();expect(gallery).toHaveClass('kr-btn--erledigen');
+ fireEvent.click(screen.getByRole('button',{name:'Foto'}));const gallery=await screen.findByRole('button',{name:'Foto aus der Galerie wählen'});expect(gallery).toBeEnabled();expect(gallery).toHaveClass('kr-btn--erledigen');
  const click=vi.spyOn(container.querySelector('input[type=file]') as HTMLInputElement,'click');fireEvent.click(gallery);expect(click).toHaveBeenCalledOnce();
  expect(screen.getByText('Kamera im Browser freigeben').closest('details')).not.toBeNull();expect(screen.getByRole('textbox',{name:'Notiz'})).toBeEnabled();
 });
@@ -202,11 +205,35 @@ it('GW desktop keeps the photo handover until the phone finishes, then shows the
  const deviceRequest=vi.fn(async input=>({code:'OK',requests:input.command==='refresh'&&!input.requestId?[]:[request()]}));
  const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-handover'})),deviceRequest,getCapture:vi.fn(async()=>({code:'OK',capture})),prepareCaptureFile:vi.fn(async()=>({code:'OK',upload:null})),finishCaptureFile:vi.fn(async()=>({code:'OK',capture}))} as unknown as GlobalCreatePorts;
  const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
- await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());fireEvent.click(screen.getByRole('button',{name:'Fotos mit Tablet/Handy'}));
+ await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());fireEvent.click(screen.getByRole('button',{name:'Foto'}));
  await screen.findByText('Öffne die App auf Handy oder Tablet – die Kamera ist dort offen');
  const file=new File(['TEST'],capture.files[0].name,{type:'image/png'});Object.defineProperty(file,'arrayBuffer',{value:async()=>new Uint8Array([1]).buffer});fireEvent.change(container.querySelector('input[type=file]')!,{target:{files:[file]}});
  await screen.findByText('1 Fotos am Eingang');expect(container.querySelector('[data-spec-id="rein.situation"]')).toBeNull();
  ended=true;await Promise.all([...timers.values()].map(callback=>callback()));
  await waitFor(()=>expect(container.querySelector('[data-spec-id="rein.situation"]')).not.toBeNull());expect(screen.queryByText('Öffne die App auf Handy oder Tablet – die Kamera ist dort offen')).toBeNull();
  expect(deviceRequest.mock.calls.filter(([value])=>value.command==='request')).toHaveLength(1);
+});
+
+it('E1 start shell has one personal heading and compact real photo/file actions, never a speech stub',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+ const deviceRequest=vi.fn(async()=>({code:'OK',requests:[]}));const ports={actorDisplayName:'Rolf Muster',getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-shell'})),deviceRequest} as unknown as GlobalCreatePorts;
+ const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ expect(screen.getAllByRole('heading',{name:'Hey Rolf, was kann ich für dich tun?'})).toHaveLength(1);
+ expect(screen.getByRole('dialog',{name:'Hey Rolf, was kann ich für dich tun?'})).toBeVisible();
+ expect(screen.getByRole('button',{name:'Foto'})).toBeEnabled();expect(screen.getByRole('button',{name:'Datei'})).toBeEnabled();expect(screen.queryByRole('button',{name:/Sprechen|Mikrofon/})).toBeNull();
+ expect(container.querySelector('.ev-rein-karten')).toBeNull();expect(screen.getByRole('button',{name:'Auftrag oder KV erfassen'})).toBeEnabled();expect(screen.getByRole('button',{name:'Kunde anlegen'})).toBeEnabled();
+});
+
+it('E1 replacing the old proposal box preserves excluded concerns from an existing local draft',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+ const id=crypto.randomUUID(),stand=crypto.randomUUID(),text='TEST bitte anrufen. Bitte die Maschine reparieren.';
+ vi.mocked(readPendingOriginals).mockResolvedValueOnce([{id,itemId:id,kind:'note',text,textstand:stand,dismissed:['aufgabe']}]);
+ const save=vi.fn(async input=>({code:'OK',capture:{id:input.itemId,version:1,text:input.text,customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:input.concerns,files:[]}}));
+ const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-retained-concerns'})),saveCaptureNote:save} as unknown as GlobalCreatePorts;
+ render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ await waitFor(()=>expect(screen.getByRole('textbox',{name:'Notiz'})).toHaveValue(text));fireEvent.click(await screen.findByRole('button',{name:'Lesen'}));
+ await waitFor(()=>expect(save).toHaveBeenCalledOnce());expect(save.mock.calls[0][0]).toMatchObject({itemId:id,textstand:stand,text,concerns:['rueckruf']});
+ expect(screen.queryByText('ERKANNT · Vorschläge')).toBeNull();expect(screen.queryByRole('button',{name:/×/})).toBeNull();expect(screen.getByRole('textbox',{name:'Notiz'})).toHaveValue(text);
 });

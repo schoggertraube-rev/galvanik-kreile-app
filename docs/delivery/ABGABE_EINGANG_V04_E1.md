@@ -50,9 +50,20 @@ Replay-Datenbank und ausdrücklich synthetische Daten; sie behaupten keine Provi
 
 ## Noch offen vor Abnahme
 
-- PL-Entscheidung aus BAULOG 11:03 zum vollständigen Startaufbau gegenüber dem eingefrorenen Original und zur alten Mehranliegen-Box neben der einzelnen S13-Zeile.
+- PL 12:00 hat beide Punkte entschieden: persönlicher Titel, kompakte echte Foto/Datei-Werkzeuge und Textfeld im selben E1; die einzelne S13-Zeile ersetzt die alte Box. Diese Korrektur ist umgesetzt und wird als ein gemeinsamer Kopf geprüft.
 - Abschließender Sichtabgleich dieser Entscheidung; vorhandene Bilder belegen Funktion und zeigen die Layoutabweichungen ausdrücklich.
-- Pflicht-CI, READY-Preview genau des PR-Kandidaten und unabhängiger PL-PASS fehlen noch. Ein lokaler grüner Lauf macht main nicht grün.
+- Vorheriger Kopf `3f689bb0` hat alle acht Checks grün und READY; diese Ergebnisse ersetzen die Prüfung des neuen gemeinsamen Kopfes mit Startaufbau nicht. Dessen Pflicht-CI, exakte READY-Preview, Sicht und unabhängiger PL-PASS stehen aus.
 - Der echte Zwei-Sitzungs-Nachweis des gesamten Gerätewechsels gehört nach Paket zu E3; hier wird kein vollständiger GW-PASS behauptet.
 
-E2 ersetzt anschließend das gemeinsame Ergebnismuster, E3 vervollständigt Ware. E4/E5 übernehmen die vorhandenen Beleg-/Reklamationszweige; kein paralleler Neubau.
+E2 ersetzt anschließend das gemeinsame Ergebnismuster, E3 vervollständigt Ware. E5 übernimmt den vorhandenen Reklamationszweig. E4 und der Belegzweig sind nach U-269 bis nach Livegang geparkt.
+
+
+## Startaufbau nach PL 12:00
+
+Der vorhandene Dialog bleibt verantwortlich für Escape, Hintergrundklick und den einen Schließ-/Speicherweg. Im selben Capture ersetzt sein bestehender Kartenmodus den alten breiten Kopf: ein persönlicher Titel, Textfeld, kompakte Foto-/Dateiwerkzeuge und die eine S13-Zeile. Die manuellen Auftrag-/Kunden-Einstiege bleiben erhalten. Alte getrennte ERKANNT-Box und deren frühe Entfernungsknöpfe entfallen gemäß ausdrücklicher PL-Entscheidung; lokale ausgeschlossene Anliegen und gespeicherter Text bleiben erhalten.
+
+23 gezielte Komponentenfälle sind grün. Neue Fälle prüfen den einzelnen persönlichen Kopf, vorhandene echte Werkzeuge und die erhaltenen ausgeschlossenen Anliegen eines alten lokalen Entwurfs. Alte Kamera-Assertion: automatischer Start beim allgemeinen Öffnen → jetzt kein Kamerazugriff vor dem bewussten Foto-Klick; danach bleiben die bisherigen Video-/Auslöser-/Schließ-Assertions vollständig erhalten. Bei übernommener Handy-Fotoanfrage öffnet die vorhandene Kamera weiterhin unmittelbar.
+
+Bewusst offen: **Sprechen** wird nach ausdrücklichem PL-Entscheid nicht als Knopf gezeigt und nicht simuliert; ein Transkriptions-Port fehlt. PL informiert die Owner. Die Beispiel-/Vernetzungs-Demos des HTML-Referenzwerkzeugs werden nicht als Produktfunktionen eingebaut.
+
+Lokale Datenbank weiterhin nicht erreichbar nach einem begrenzten Wiederanlaufversuch; keine neuen DB-Schleifen. Die bereits nachgewiesenen Server-Schreibwege bleiben unverändert. Ein neuer Sichtlauf erfolgt gegen die tatsächliche Git-Preview; ohne diesen Nachweis keine fertige Abnahme.
