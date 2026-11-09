@@ -1,3 +1,6 @@
+import {foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
+import {normaliseCustomerPhone} from '@/modules/customers/public';
+import {SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
 import {
   SEARCH_MAX_HITS,
   SEARCH_MAX_HITS_PER_TYPE,
@@ -8,6 +11,7 @@ import {
   type SearchMatchField,
   type SearchOrderDocument,
   type SearchPorts,
+  type SearchSource,
   type SearchTenantResult,
 } from "./types";
 
@@ -15,7 +19,7 @@ const INVALID_QUERY_MESSAGE = "Suchbegriff ist ungültig oder zu lang.";
 const UNAVAILABLE_MESSAGE = "Die internen Bestände konnten nicht sicher durchsucht werden.";
 
 function normalizedText(value: string): string {
-  return value.trim().toLocaleLowerCase("de-DE");
+  return foldSearchText(value);
 }
 
 function validRequired(value: unknown): value is string {
@@ -90,6 +94,8 @@ function orderMatchField(order: SearchOrderDocument, query: string): SearchMatch
   if (includesQuery(order.customerName, query)) return "customerName";
   if (includesQuery(order.task, query)) return "task";
   if (dateSearchTerms(order.dueDate).some((term) => term.includes(query))) return "dueDate";
+  const words=query.split(/\s+/).filter(Boolean);
+  if(words.length>1&&words.every(word=>orderMatchField(order,word)!==null))return 'orderRecord';
   return null;
 }
 
@@ -99,7 +105,11 @@ export function customerMatchField(customer: SearchCustomerDocument, query: stri
   if (includesQuery(customer.companyName, query)) return "companyName";
   if (includesQuery(customer.customerNumber, query)) return "customerNumber";
   if (includesQuery(customer.city, query)) return "city";
+  if(/^[+\d\s()./-]+$/.test(query)&&normaliseCustomerPhone(query).length>=4
+    &&normaliseCustomerPhone(customer.phone).includes(normaliseCustomerPhone(query)))return 'phone';
   if (includesQuery(customerRecordText(customer), query)) return "customerRecord";
+  if(nameSearchAlternative(customer.name,query))return 'name';
+  if(nameSearchAlternative(customer.companyName,query))return 'companyName';
   return null;
 }
 
@@ -112,6 +122,7 @@ function customerRecordText(customer: SearchCustomerDocument): string {
 
 const MATCH_LABEL: Record<SearchMatchField, string> = {
   orderNumber: "Auftragsnummer", title: "Auftrag", customerName: "Kunde", task: "Aufgabe",
+  orderRecord: "Auftrag", phone: "Telefon",
   part: "Teil", material: "Material", surface: "Oberfläche", dueDate: "Termin",
   name: "Kundenname", companyName: "Firma", customerNumber: "Kundennummer", city: "Ort",
   customerRecord: "Kundendatensatz", quoteNumber: "KV-Nummer", invoiceNumber: "Rechnungsnummer",
@@ -119,6 +130,11 @@ const MATCH_LABEL: Record<SearchMatchField, string> = {
 };
 
 function orderMatchValue(order: SearchOrderDocument, field: SearchMatchField, query: string): string {
+  if(field==='orderRecord')return [...new Set(query.split(/\s+/).filter(Boolean).map(word=>{
+    const match=orderMatchField(order,word);
+    if(!match||match==='orderRecord')throw Error('SEARCH_ORDER_MATCH_UNPROVEN');
+    return orderMatchValue(order,match,word);
+  }))].join(' · ');
   if (field === "orderNumber") return order.orderNumber;
   if (field === "title") return order.title;
   if (field === "customerName") return order.customerName ?? "";
@@ -137,6 +153,7 @@ function customerMatchValue(customer: SearchCustomerDocument, field: SearchMatch
   if (field === "companyName") return customer.companyName ?? "";
   if (field === "customerNumber") return customer.customerNumber ?? "";
   if (field === "city") return customer.city ?? "";
+  if (field === "phone") return customer.phone ?? "";
   if (field === "customerRecord") return customerRecordText(customer);
   throw new Error("SEARCH_CUSTOMER_MATCH_UNPROVEN");
 }
@@ -154,12 +171,15 @@ function toOrderHit(order: SearchOrderDocument, matchField: SearchMatchField, qu
   };
 }
 
-function toCustomerHit(customer: SearchCustomerDocument, matchField: SearchMatchField): SearchHit {
+function toCustomerHit(customer: SearchCustomerDocument, matchField: SearchMatchField,query:string): SearchHit {
+  const value=customerMatchValue(customer,matchField);
+  const alternative=includesQuery(value,query)?null:nameSearchAlternative(value,query);
   return {
+    ...(alternative?{matchKind:alternative}:{}),
     type: "CUSTOMER", id: customer.id, title: customer.companyName ?? customer.name,
     subtitle: [customer.customerNumber, customer.city].filter(Boolean).join(" · "), status: customer.customerType,
-    matchField, source: "Kundenstamm", matchLabel: MATCH_LABEL[matchField],
-    matchValue: customerMatchValue(customer, matchField),
+    matchField, source: "Kundenstamm", matchLabel: alternative?SEARCH_NAME_MATCH_COPY[alternative]:MATCH_LABEL[matchField],
+    matchValue: value,
     context: [customer.companyName ?? customer.name, customer.customerNumber, customer.city].filter(Boolean).join(" · "),
     href: `/customers/${encodeURIComponent(customer.id)}`,
     actionLabel: "Kundenkarte öffnen",
@@ -167,7 +187,8 @@ function toCustomerHit(customer: SearchCustomerDocument, matchField: SearchMatch
 }
 
 function stableHits(hits: SearchHit[]): SearchHit[] {
-  return hits.sort((left, right) => left.title.localeCompare(right.title, "de-DE", { sensitivity: "base" }) || left.id.localeCompare(right.id));
+  const rank=(hit:SearchHit)=>hit.matchKind==='phonetic'?1:hit.matchKind==='spelling'?2:0;
+  return hits.sort((left, right) => rank(left)-rank(right)||left.title.localeCompare(right.title, "de-DE", { sensitivity: "base" }) || left.id.localeCompare(right.id));
 }
 
 function assertProvider(provider: import("./types").SearchProvider): void {
@@ -217,9 +238,19 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
       providerIds.add(provider.id);
       providerLabels.add(provider.label);
     }
-    const [orders, customerBatch, providerBatches] = await Promise.all([
-      ports.readOrders(), ports.searchCustomers(normalized.query), Promise.all(providers.map((provider) => provider.search(normalized.query))),
+    const failed=new Set<SearchSource>();
+    const attempt=async<T>(source:SearchSource,read:()=>Promise<T>)=>{
+      try{return {ok:true as const,value:await read()};}
+      catch(error){failed.add(source);console.error('[SEARCH_SOURCE_FAILED]',{source,errorName:error instanceof Error?error.name:'UnknownError'});return {ok:false as const};}
+    };
+    const [orderResult,customerResult,providerResults]=await Promise.all([
+      attempt('Auftragsbestand',()=>ports.readOrders()),attempt('Kundenstamm',()=>ports.searchCustomers(normalized.query)),
+      Promise.all(providers.map(provider=>attempt(provider.label,()=>provider.search(normalized.query)))),
     ]);
+    if(!orderResult.ok&&!customerResult.ok&&providerResults.every(result=>!result.ok))return {code:'UNAVAILABLE',message:UNAVAILABLE_MESSAGE};
+    const orders=orderResult.ok?orderResult.value:[];
+    const customerBatch=customerResult.ok?customerResult.value:{records:[],exhaustive:false};
+    const providerBatches=providerResults.map(result=>result.ok?result.value:{hits:[],exhaustive:false});
     if (
       !customerBatch
       || typeof customerBatch !== "object"
@@ -240,7 +271,7 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
       assertCustomer(customer);
       const matchField = customerMatchField(customer, loweredQuery);
       if (!matchField) throw new Error("SEARCH_CUSTOMER_MATCH_UNPROVEN");
-      if (!customerHits.has(customer.id)) customerHits.set(customer.id, toCustomerHit(customer, matchField));
+      if (!customerHits.has(customer.id)) customerHits.set(customer.id, toCustomerHit(customer, matchField,loweredQuery));
     }
     const providerHits: SearchHit[] = [];
     let providerMatchingHits = 0;
@@ -266,7 +297,7 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
       ...providerHits,
     ];
     const hits = merged.slice(0, SEARCH_MAX_HITS);
-    const truncated = !customerBatch.exhaustive
+    const truncated = failed.size>0 || !customerBatch.exhaustive
       || orderHits.size > SEARCH_MAX_HITS_PER_TYPE
       || customerHits.size > SEARCH_MAX_HITS_PER_TYPE
       || providerTruncated
@@ -275,7 +306,8 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
       code: "OK",
       query: normalized.query,
       hits,
-      checkedSources: ["Auftragsbestand", "Kundenstamm", ...providers.map((provider) => provider.label)],
+      checkedSources: ["Auftragsbestand", "Kundenstamm", ...providers.map((provider) => provider.label)].filter(source=>!failed.has(source)),
+      ...(failed.size?{failedSources:["Auftragsbestand","Kundenstamm",...providers.map(provider=>provider.label)].filter(source=>failed.has(source))}:{}),
       checkedAt,
       coverage: { returnedHits: hits.length, matchingHitsAtLeast, truncated },
     };

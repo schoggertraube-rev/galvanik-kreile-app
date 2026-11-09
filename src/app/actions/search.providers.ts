@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import {hasAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import type { ImmutableInvoiceSummary, ReadInvoiceSummariesResult } from "@/lib/server/invoiceRead";
 import type { ListOpenQuotesResult, QuoteReadback } from "@/modules/quotes/public";
 import type { SearchHit, SearchMatchField, SearchProvider } from "@/modules/suche/public";
@@ -15,7 +15,7 @@ type SearchProviderReads = {
 const normalized = (value: string) => value.trim().toLocaleLowerCase("de-DE");
 const contains = (value: string | null, query: string) => value !== null && normalized(value).includes(query);
 
-function quoteHit(quote: QuoteReadback, query: string): SearchHit | null {
+function quoteHit(quote: QuoteReadback, query: string,canReadMoney:boolean): SearchHit | null {
   const position = quote.positions.find((item) => [item.name, item.material, item.surfaceRequested].some((value) => contains(value, query)));
   const matched: { field: SearchMatchField; label: string; value: string } | null = contains(quote.quoteNumber, query)
     ? { field: "quoteNumber", label: "KV-Nummer", value: quote.quoteNumber }
@@ -39,7 +39,7 @@ function quoteHit(quote: QuoteReadback, query: string): SearchHit | null {
     source: "Angebote",
     matchLabel: matched.label,
     matchValue: matched.value,
-    context: `${quote.quoteNumber} · ${quote.customerDisplayName} · ${quote.totalNetCents} Cent netto`,
+    context: [quote.quoteNumber,quote.customerDisplayName,...(canReadMoney?[`${quote.totalNetCents} Cent netto`]:[])].join(' · '),
     href: `/customers/${encodeURIComponent(quote.customerId)}`,
     actionLabel: "Kundenkarte zum KV öffnen",
   };
@@ -82,11 +82,11 @@ export function buildSearchProviders(authorization: AuthorizationSnapshot, reads
         const result = await reads.readQuotes();
         if (result.code !== "OK") throw new Error("SEARCH_QUOTES_UNAVAILABLE");
         const lowered = normalized(query);
-        return { hits: result.quotes.map((quote) => quoteHit(quote, lowered)).filter((hit): hit is SearchHit => hit !== null), exhaustive: result.quotes.length < 100 };
+        return { hits: result.quotes.map((quote) => quoteHit(quote, lowered,hasAuthorizationArea(authorization,'geld'))).filter((hit): hit is SearchHit => hit !== null), exhaustive: result.quotes.length < 100 };
       },
     });
   }
-  if (authorization.permissions.includes("perm_view_prices")) {
+  if (hasAuthorizationArea(authorization,'geld')) {
     providers.push({
       id: "invoices",
       label: "Rechnungen",
@@ -111,7 +111,7 @@ export function buildSearchProviders(authorization: AuthorizationSnapshot, reads
         })) };
       },
     });
-    providers.push({
+    if(hasAuthorizationArea(authorization,'mails'))providers.push({
       id: "mails", label: "Mails", search: async (query) => {
         const batch = await auxiliary(); const lowered = normalized(query);
         return { exhaustive: batch.exhaustive, hits: batch.mails.filter((row) => contains(row.subject, lowered) || contains(row.body, lowered) || contains(row.customerName, lowered) || contains(row.orderNumber, lowered)).map((row) => ({

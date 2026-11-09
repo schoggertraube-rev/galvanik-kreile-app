@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import {hasAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 export type DocumentSearchRecord = { id: string; customerId: string; orderId: string | null; customerName: string; orderNumber: string | null; mimeType: string; status: string; content: string; recordedAt: string };
@@ -52,7 +52,7 @@ export async function readAuxiliarySearchRecords(auth: AuthorizationSnapshot): P
           SELECT body, direction, created_at FROM public.communication_messages
           WHERE tenant_id=thread.tenant_id AND thread_id=thread.id ORDER BY created_at DESC LIMIT 1
         ) message ON true
-        WHERE thread.tenant_id=${auth.tenantId}
+        WHERE thread.tenant_id=${auth.tenantId} AND ${hasAuthorizationArea(auth,'mails')}
         ORDER BY recorded_at DESC LIMIT 250
       `),
       tx.execute<{ id:string; customer_id:string|null; order_id:string|null; customer_name:string|null; order_number:string|null; title:string; event_type:string; status:string; starts_at:Date|string }>(sql`

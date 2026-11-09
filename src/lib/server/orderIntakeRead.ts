@@ -1,4 +1,5 @@
 import "server-only";
+import {foldSearchText,GERMAN_SEARCH_REPLACEMENTS,alternativeNameInitialPattern,alternativeNameQuery,nameSearchAlternative} from '@/lib/domain/searchText';
 
 import { sql } from "drizzle-orm";
 import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice } from "@/lib/orderPositionContract";
@@ -266,29 +267,45 @@ function mapReceipt(
 
 export async function searchOrderIntakeCustomers(
   authorization: Pick<AuthorizationSnapshot,"tenantId"> & Partial<Pick<AuthorizationSnapshot,"areas">>,input:unknown,
+  options:{nameAlternatives?:boolean}={},
 ):Promise<OrderIntakeCustomerOption[]> {
   if(!validSearchInput(input))throw new Error("ORDER_INTAKE_CUSTOMER_SEARCH_INPUT_INVALID");
   if(input.query.length<2)return [];
-  const tokens=normaliseCustomerName(input.query).split(" ").filter(Boolean);
+  const tokens=foldSearchText(normaliseCustomerName(input.query)).split(" ").filter(Boolean);
   const phone=normaliseCustomerPhone(input.query);
   const national=phone.startsWith("0")?phone.slice(1):phone;
+  // Only global search opts in. Intake/customer confirmation keeps strict matching.
+  const alternative=options.nameAlternatives&&!input.candidate?alternativeNameQuery(input.query):null;
+  const initialPattern=alternative?alternativeNameInitialPattern(alternative):null;
   return withPrivilegedTenantTransaction(authorization,async tx=>{
-    const textSearch=tokens.length?sql.join(tokens.map(token=>sql`strpos(customer.search_text,${token})>0`),sql` OR `):sql`false`;
+    const searchable=GERMAN_SEARCH_REPLACEMENTS.reduce<ReturnType<typeof sql>>((text,[from,to])=>sql`replace(${text},${from},${to})`,sql`customer.search_text`);
+    const textSearch=tokens.length?sql.join(tokens.map(token=>sql`strpos(${searchable},${token})>0`),sql` OR `):sql`false`;
+    const nameText=sql`lower(concat_ws(' ',customer.name,customer.company_name,customer.first_name,customer.last_name))`;
+    // pg_trgm already exists in the baseline. This only fetches candidates;
+    // the shared phonetic/edit rule proves each returned name below.
+    const alternativeSearch=alternative&&initialPattern?sql`(${nameText} ~ ${initialPattern} OR public.word_similarity(${alternative},${nameText})>=0.2)`:sql`false`;
     const rows=await tx.execute<CustomerRow>(sql`
       SELECT customer.* FROM private.v_order_intake_customers_v1 customer
       WHERE (customer.customer_type <> 'lieferant' OR ${authorization.areas?.includes("geld")===true})
-        AND (${textSearch} OR (${national.length>=2} AND regexp_replace(coalesce(customer.phone,''),'[^0-9]','','g') LIKE ${'%'+national+'%'}))
+        AND (${textSearch} OR ${alternativeSearch} OR (${national.length>=2} AND regexp_replace(coalesce(customer.phone,''),'[^0-9]','','g') LIKE ${'%'+national+'%'}))
     `);
     const mapped=rows.map(row=>{const value=mapCustomer(row,authorization.tenantId);if(!value)throw new Error("ORDER_INTAKE_CUSTOMER_READMODEL_INVALID");return value;});
-    const query=input.query.toLocaleLowerCase("de-DE");
+    const query=foldSearchText(input.query);
     const values=mapped.map(customer=>({...customer,duplicateMatch:input.candidate?customerDuplicateMatch(customer,input.candidate):null})).filter(customer=>{
       if(input.candidate)return customer.duplicateMatch!==null;
       const fields=[customer.name,customer.companyName,customer.firstName,customer.lastName,customerContactLabel(customer),customer.email,customer.city,customer.customerNumber];
-      return fields.some(value=>value?.toLocaleLowerCase("de-DE").includes(query)) || national.length>=2&&normaliseCustomerPhone(customer.phone).includes(national)
-        || tokens.length>0&&tokens.every(token=>normaliseCustomerName(fields.filter(Boolean).join(" ")).includes(token));
+      return fields.some(value=>value!==null&&value!==undefined&&foldSearchText(value).includes(query)) || national.length>=2&&normaliseCustomerPhone(customer.phone).includes(national)
+        ||alternative!==null&&[customer.name,customer.companyName,customer.firstName,customer.lastName].some(value=>nameSearchAlternative(value,alternative)!==null)
+        || tokens.length>0&&tokens.every(token=>foldSearchText(normaliseCustomerName(fields.filter(Boolean).join(" "))).includes(token));
     });
 
-    return values.sort((a,b)=>(a.duplicateMatch?.kind==="exact"?0:1)-(b.duplicateMatch?.kind==="exact"?0:1)||customerSortKey(a).localeCompare(customerSortKey(b),"de")||a.id.localeCompare(b.id)).slice(0,10);
+    const nameRank=(customer:OrderIntakeCustomerOption)=>{
+      if(!alternative)return 0;
+      const names=[customer.name,customer.companyName,customer.firstName,customer.lastName];
+      if(names.some(value=>value&&foldSearchText(value).includes(query)))return 0;
+      return names.some(value=>nameSearchAlternative(value,alternative)==='phonetic')?1:2;
+    };
+    return values.sort((a,b)=>(a.duplicateMatch?.kind==="exact"?0:1)-(b.duplicateMatch?.kind==="exact"?0:1)||nameRank(a)-nameRank(b)||customerSortKey(a).localeCompare(customerSortKey(b),"de")||a.id.localeCompare(b.id)).slice(0,10);
   });
 }
 

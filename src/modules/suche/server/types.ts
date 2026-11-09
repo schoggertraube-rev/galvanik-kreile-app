@@ -7,6 +7,7 @@ export type SearchHitType = "ORDER" | "CUSTOMER" | (string & {});
 
 export type SearchMatchField =
   | "orderNumber"
+  | "orderRecord"
   | "title"
   | "customerName"
   | "task"
@@ -19,6 +20,7 @@ export type SearchMatchField =
   | "customerNumber"
   | "city"
   | "customerRecord"
+  | "phone"
   | "quoteNumber"
   | "invoiceNumber"
   | "note"
@@ -27,6 +29,7 @@ export type SearchMatchField =
 export type SearchSource = "Auftragsbestand" | "Kundenstamm" | (string & {});
 
 export type SearchHit = {
+  matchKind?:'phonetic'|'spelling';
   type: SearchHitType;
   id: string;
   title: string;
@@ -66,6 +69,7 @@ export type SearchCustomerDocument = {
   companyName: string | null;
   customerType: string;
   city: string | null;
+  phone?: string | null;
 };
 
 export type SearchCustomerBatch = {
@@ -106,6 +110,8 @@ export type SearchTenantResult =
       query: string;
       hits: SearchHit[];
       checkedSources: SearchSource[];
+      /** Authorized sources which could not be read; never reported as searched. */
+      failedSources?: SearchSource[];
       checkedAt: string | null;
       coverage: SearchCoverage;
     }
