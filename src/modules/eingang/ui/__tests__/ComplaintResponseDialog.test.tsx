@@ -33,3 +33,14 @@ it('does not send on open or incomplete input, saves before sending and retries 
 it('closing keeps the edited reply in the existing actor draft rather than sending or losing it',async()=>{
  const f=fixture(),closed=vi.fn();render(<ComplaintResponseDialog row={row} ports={f.ports} onClose={closed} onSent={vi.fn()}/>);fireEvent.change(screen.getByLabelText('Nachricht'),{target:{value:'TEST später weiter'}});fireEvent.click(screen.getByText('Schließen'));await waitFor(()=>expect(closed).toHaveBeenCalledWith('Antwortentwurf gespeichert · in Der Tag weiterbearbeiten.'));expect(f.drafts.saveDraft).toHaveBeenCalledWith(expect.objectContaining({payload:expect.objectContaining({kind:'rekla-response',attempted:false,request:expect.objectContaining({body:'TEST später weiter'})})}));expect(f.send).not.toHaveBeenCalled();
 });
+
+it('RM07 confirmed source change keeps the actual send and offers reload instead of another send',async()=>{
+ const f=fixture(),done=vi.fn(),clientKey=crypto.randomUUID();
+ const request={targetType:'CUSTOMER' as const,targetId:row.customerId!,clientRequestId:clientKey,subject:'TEST Antwort',body:'TEST Originalantwort',complaintRejection:{itemId:row.id,version:1,reason:'TEST kein Mangel'}};
+ const rejectComplaint=vi.fn().mockResolvedValue({code:'OK',data:{sourceChanged:true,deliveryCustomer:'TEST Kunde'}});
+ const restored={request,attempted:true,draft:{id:f.draftId,art:'eingang' as const,payload:{clientKey,request,deliveryCheckAt:new Date(Date.now()+100).toISOString()},zuletzt_feld:null,version:7,updated_at:'2026-11-09T00:00:00Z'}};
+ render(<ComplaintResponseDialog row={row} ports={{...f.ports,rejectComplaint}} restored={restored} onClose={vi.fn()} onSent={done}/>);
+ await screen.findByText('Die Mail an TEST Kunde ist rausgegangen. Der Vorgang wurde inzwischen geändert – lies ihn neu, die Mail steht im Verlauf.');
+ expect(screen.queryByRole('button',{name:REKLA_MAIL_COPY.responseRetry})).toBeNull();expect(done).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Neu laden'}));expect(done).toHaveBeenCalledOnce();expect(rejectComplaint).toHaveBeenCalledOnce();
+});

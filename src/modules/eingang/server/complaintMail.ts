@@ -1,14 +1,14 @@
 import 'server-only';
-import {readComplaintPhotoWaiting} from '@/lib/server/communicationPort';
+import {readComplaintPhotoWaiting,readAbsentCommunicationSendKeys} from '@/lib/server/communicationPort';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
 /** A new send key is allowed only after the common Sent Items writer proved the old send absent. */
-function unresolvedPreparation(tenantId:string){return sql`NOT EXISTS(
- SELECT 1 FROM public.communication_threads failed_thread JOIN public.events failed_proof ON failed_proof.tenant_id=failed_thread.tenant_id AND failed_proof.event_type='COMMUNICATION_SEND_NOT_FOUND_V1' AND failed_proof.payload->>'threadId'=failed_thread.id::text AND failed_proof.correlation_id=prepared.befehl_id
- WHERE failed_thread.tenant_id=${tenantId} AND failed_thread.source='MS_GRAPH_OUT:'||prepared.befehl_id::text AND failed_thread.status='failed'
-)`;}
+async function unresolvedPreparation(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot){
+ const keys=await readAbsentCommunicationSendKeys(tx,auth);
+ return sql`prepared.befehl_id::text <> ALL(ARRAY[${sql.join(keys.map(key=>sql`${key}`),sql`, `)}]::text[])`;
+}
 
 async function readComplaintMailBase(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientRequestId?:string}){
  if(!['eingang','mails','kunden'].every(area=>hasAuthorizationArea(auth,area as 'eingang'|'mails'|'kunden')))throw Error('COMPLAINT_PHOTO_MAIL_FORBIDDEN');
@@ -25,7 +25,7 @@ export async function readComplaintPhotoMailSource(tx:PrivilegedTenantTransactio
  const photos=await tx.execute(sql`SELECT file.id FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${input.itemId}::uuid AND file.mime LIKE 'image/%'
  AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=file.tenant_id AND receipt.item_id=file.item_id AND receipt.art='original_gespeichert' AND receipt.nachher->>'fileId'=file.id::text AND receipt.nachher->>'sha256'=file.sha256) LIMIT 1`);
  if(photos.length)throw Error('COMPLAINT_PHOTO_MAIL_PHOTOS_ALREADY_PRESENT');
- const prior=await tx.execute(sql`SELECT prepared.id FROM public.intake_event prepared WHERE prepared.tenant_id=${auth.tenantId} AND prepared.item_id=${input.itemId}::uuid AND prepared.art='anliegen' AND prepared.nachher->>'action' IN ('reklamation.fotos_angefordert','reklamation.fotoanfrage_vorbereitet') AND prepared.nachher->>'customerId'=${source.customerId} AND prepared.nachher->>'sourceGraphId'=${source.graphId} AND (${input.clientRequestId??null}::uuid IS NULL OR prepared.befehl_id<>${input.clientRequestId??null}::uuid) AND (prepared.nachher->>'action'='reklamation.fotos_angefordert' OR ${unresolvedPreparation(auth.tenantId)}) LIMIT 1`);
+ const prior=await tx.execute(sql`SELECT prepared.id FROM public.intake_event prepared WHERE prepared.tenant_id=${auth.tenantId} AND prepared.item_id=${input.itemId}::uuid AND prepared.art='anliegen' AND prepared.nachher->>'action' IN ('reklamation.fotos_angefordert','reklamation.fotoanfrage_vorbereitet') AND prepared.nachher->>'customerId'=${source.customerId} AND prepared.nachher->>'sourceGraphId'=${source.graphId} AND (${input.clientRequestId??null}::uuid IS NULL OR prepared.befehl_id<>${input.clientRequestId??null}::uuid) AND (prepared.nachher->>'action'='reklamation.fotos_angefordert' OR ${await unresolvedPreparation(tx,auth)}) LIMIT 1`);
  if(prior.length)throw Error('COMPLAINT_PHOTO_MAIL_ALREADY_REQUESTED');
 
  return source;
@@ -93,7 +93,7 @@ export async function readComplaintRejectionSource(tx:PrivilegedTenantTransactio
 }
 export async function prepareComplaintRejection(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientRequestId:string;intent:string}){
  const source=await readComplaintRejectionSource(tx,auth,input);
- const prior=await tx.execute(sql`SELECT prepared.id FROM public.intake_event prepared WHERE prepared.tenant_id=${auth.tenantId} AND prepared.item_id=${input.itemId}::uuid AND prepared.nachher->>'action'='reklamation.antwort_vorbereitet' AND prepared.befehl_id<>${input.clientRequestId}::uuid AND ${unresolvedPreparation(auth.tenantId)} LIMIT 1`);if(prior.length)throw Error('COMPLAINT_RESPONSE_ALREADY_PENDING');
+ const prior=await tx.execute(sql`SELECT prepared.id FROM public.intake_event prepared WHERE prepared.tenant_id=${auth.tenantId} AND prepared.item_id=${input.itemId}::uuid AND prepared.nachher->>'action'='reklamation.antwort_vorbereitet' AND prepared.befehl_id<>${input.clientRequestId}::uuid AND ${await unresolvedPreparation(tx,auth)} LIMIT 1`);if(prior.length)throw Error('COMPLAINT_RESPONSE_ALREADY_PENDING');
  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${auth.tenantId},${input.itemId}::uuid,'anliegen',${input.clientRequestId}::uuid,${auth.userId},${JSON.stringify({action:'reklamation.antwort_vorbereitet',intent:input.intent,customerId:source.customerId,sourceGraphId:source.graphId})}::jsonb)`);return true;
 }
 export async function complaintRejectionReplay(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;clientRequestId:string;intent:string;threadId:string}){

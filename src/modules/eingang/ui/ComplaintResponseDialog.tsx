@@ -8,6 +8,7 @@ import type {IntakeDraft} from '../draftContract';
 type Stored={draft:IntakeDraft;request:ComplaintResponseRequest;attempted:boolean};
 export function ComplaintResponseDialog({row,ports,restored,onClose,onSent}:{row:IntakeMessage;ports:IntakeMessagesPorts;restored?:Stored;onClose:(message:string)=>void;onSent:()=>void}){
  const[subject,setSubject]=useState(restored?.request.subject??C.responseSubject(row.subject??'')),[body,setBody]=useState(restored?.request.body??''),[reason,setReason]=useState(restored?.request.complaintRejection.reason??''),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[stored,setStored]=useState<Stored|undefined>(restored);
+ const [sourceChanged,setSourceChanged]=useState(false);
  const [locked,setLocked]=useState(restored?.attempted??false);
  const [checkAt,setCheckAt]=useState<string|null>(()=>restored?.attempted?typeof restored.draft.payload.deliveryCheckAt==='string'&&Number.isFinite(Date.parse(restored.draft.payload.deliveryCheckAt))?restored.draft.payload.deliveryCheckAt:new Date(Date.parse(restored.draft.updated_at)+300000).toISOString():null);
  const [sendFailed,setSendFailed]=useState(false);
@@ -18,7 +19,7 @@ export function ComplaintResponseDialog({row,ports,restored,onClose,onSent}:{row
   const input=request();const result=await ports.replyDrafts.saveDraft({id:draftKey.current,clientEventId:draftOp.current??=crypto.randomUUID(),art:'eingang',expectedVersion:stored?.draft.version??null,lastField:null,payload:{kind:'rekla-response',version:1,clientKey:input.clientRequestId,customerName:row.customerName??row.senderName??row.senderAddress??'',sourceItemId:row.id,request:input,attempted,deliveryCheckAt:checkAt}});
   if(result.code!=='OK')throw Error(result.message);const draft=result.drafts.find(value=>value.id===draftKey.current);if(!draft)throw Error(C.responseUnavailable);const next={draft,request:input,attempted};setStored(next);draftOp.current=null;window.dispatchEvent(new Event('kreile:intake-drafts-changed'));return next;
  };
- const close=async()=>{if(working.current)return;working.current=true;setBusy(true);try{if(!subject.trim()&&!body.trim()&&!reason.trim()&&!stored){onClose('');return;}await save(locked);onClose(C.responseSaved);}catch(failure){console.error('[COMPLAINT_RESPONSE_DRAFT_FAILED]',failure);setError(C.responseUnavailable);}finally{working.current=false;setBusy(false);}};
+ const close=async()=>{if(sourceChanged){onClose('');return;}if(working.current)return;working.current=true;setBusy(true);try{if(!subject.trim()&&!body.trim()&&!reason.trim()&&!stored){onClose('');return;}await save(locked);onClose(C.responseSaved);}catch(failure){console.error('[COMPLAINT_RESPONSE_DRAFT_FAILED]',failure);setError(C.responseUnavailable);}finally{working.current=false;setBusy(false);}};
  const send=async()=>{
   if(working.current||!ports.rejectComplaint||!row.customerId)return;
   const input=request();if(!input.subject.trim()||!input.body.trim()||input.complaintRejection.reason.trim().length<3){setError(C.responseInvalid);return;}
@@ -32,14 +33,15 @@ export function ComplaintResponseDialog({row,ports,restored,onClose,onSent}:{row
     setError(C.responseUnavailable);return;
    }
    setCheckAt(null);
-   if(ports.replyDrafts){const cleared=await ports.replyDrafts.discardDraft({id:saved.draft.id,clientEventId:crypto.randomUUID(),expectedVersion:saved.draft.version});if(cleared.code!=='OK'){setError(C.responseSent+' '+cleared.message);return;}window.dispatchEvent(new Event('kreile:intake-drafts-changed'));}
+   if(ports.replyDrafts){const cleared=await ports.replyDrafts.discardDraft({id:saved.draft.id,clientEventId:crypto.randomUUID(),expectedVersion:saved.draft.version});if(cleared.code!=='OK'){setError(C.responseSent+' '+C.responseUnavailable);return;}window.dispatchEvent(new Event('kreile:intake-drafts-changed'));}
+   if('data'in result&&result.data&&typeof result.data==='object'&&'sourceChanged'in result.data&&result.data.sourceChanged===true){setSourceChanged(true);setError(MAIL_DELIVERY_COPY.sourceChanged(row.customerName??row.senderName??row.senderAddress??''));return;}
    onSent();
   }catch(failure){console.error('[COMPLAINT_RESPONSE_UI_FAILED]',failure);setCheckAt(null);setError(C.responseUnavailable);}finally{working.current=false;setBusy(false);}
  };
  const checkDelivery=useEffectEvent(()=>void send());
  useEffect(()=>{if(!checkAt)return;const at=Date.parse(checkAt);if(!Number.isFinite(at))return;const timer=setTimeout(()=>checkDelivery(),Math.max(0,at-Date.now()));return()=>clearTimeout(timer);},[checkAt]);
  const MailView=ports.ReplyMailView;
- return <Dialog titel={C.responseTitle} onSchliessen={()=>void close()} vorSchliessen={()=>!working.current} meldung={error?{ton:'fehler',text:error}:null} fuss={<><Button text={C.responseBack} disabled={busy} onClick={()=>void close()}/>{!checkAt?<Button art="primaer" text={busy?C.responseSaving:sendFailed?MAIL_DELIVERY_COPY.retry:locked?C.responseRetry:C.responseSend} disabled={busy} onClick={()=>void send()}/>:null}</>}>
+ return <Dialog titel={C.responseTitle} onSchliessen={()=>void close()} vorSchliessen={()=>!working.current} meldung={error?{ton:'fehler',text:error}:null} fuss={<><Button text={C.responseBack} disabled={busy} onClick={()=>void close()}/>{sourceChanged?<Button text={MAIL_DELIVERY_COPY.reload} onClick={onSent}/>:!checkAt?<Button art="primaer" text={busy?C.responseSaving:sendFailed?MAIL_DELIVERY_COPY.retry:locked?C.responseRetry:C.responseSend} disabled={busy} onClick={()=>void send()}/>:null}</>}>
  <label>{C.responseReason}<textarea className="kr-input" minLength={3} maxLength={500} value={reason} disabled={busy||locked} onChange={event=>setReason(event.target.value)}/></label>
  {MailView&&row.customerId?<MailView customerId={row.customerId} composer={{subject,body,onSubject:setSubject,onBody:setBody,onSend:()=>void send(),busy:busy||locked}}/>:null}
  </Dialog>;

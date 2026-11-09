@@ -439,3 +439,31 @@ it('AK complaint: two real actions retain the original and latest actor in the s
  const {getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
  expect(await withSession(first,()=>getComplaintDialogAction({complaintId:recorded.complaintId}))).toMatchObject({code:'OK',data:{complaint:{actorTrace:{createdBy:{userId:first.actorId},lastActor:{userId:second.actorId,action:'COMPLAINT_CHANGED_V1:entscheiden'}}}}});
 });
+
+
+it.each([false,true])('RM07 confirmed photo send preserves immutable proof after a foreign source change (reconcile=%s)',async reconcile=>{
+ const fixture=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(fixture);
+ const {rootId}=await replyMailFixture(fixture,order,'image/jpeg',false);
+ await sql`INSERT INTO public.email_templates(tenant_id,template_key,name,subject_template,body_html_template,body_text_template,variables) VALUES(${KREILE_TENANT_SLUG},${KREILE_TENANT_SLUG+':reklamation_fotos_anfordern'},'TEST Fotos','TEST Fotos für {Kunde}','<p>TEST Fotos</p>','TEST Bitte Fotos senden {Kunde}','["Kunde"]'::jsonb) ON CONFLICT DO NOTHING`;
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions'),{getIntakeMessagesAction,saveIntakeDraftAction,getIntakeDraftsAction}=await import('@/app/actions/eingang.actions');
+ const input={targetType:'CUSTOMER' as const,targetId:fixture.customerId,clientRequestId:randomUUID(),subject:'',body:'',complaintPhotoRequest:{itemId:rootId,version:1}},draftId=randomUUID();
+ expect(await withSession(fixture,()=>saveIntakeDraftAction({id:draftId,clientEventId:randomUUID(),art:'eingang',expectedVersion:null,lastField:null,payload:{kind:'TEST-RM07-SOURCE',clientKey:input.clientRequestId,request:input}}))).toMatchObject({code:'OK'});
+ const keys=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const,before=Object.fromEntries(keys.map(key=>[key,process.env[key]]));let sends=0;
+ const foreign=async()=>{await sql`UPDATE public.intake_item SET version=version+1,text='TEST fremde Bearbeitung erhalten' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${rootId}::uuid`;};
+ try{
+  process.env.MS_GRAPH_TENANT_ID='TEST-tenant';process.env.MS_GRAPH_CLIENT_ID='TEST-client';process.env.MS_GRAPH_CLIENT_SECRET='TEST-provider-fixture';process.env.MS_GRAPH_MAILBOX='TEST-mailbox@example.invalid';
+  const [source]=await sql`SELECT absender_adresse FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${rootId}::uuid`;
+  vi.spyOn(globalThis,'fetch').mockImplementation(async url=>{const target=new URL(typeof url==='string'?url:url instanceof URL?url.href:url.url);if(target.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-provider-token-not-a-real-secret',expires_in:3600});if(target.pathname.endsWith('/reply')){sends++;if(!reconcile)await foreign();return new Response(null,{status:reconcile?503:202});}if(target.pathname.endsWith('/mailFolders/sentitems/messages'))return Response.json({value:[{id:'TEST-confirmed-after-change',internetMessageId:'<TEST-after-change@example.invalid>',internetMessageHeaders:[{name:'x-kreile-send-id',value:input.clientRequestId}],from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:source.absender_adresse}}],isDraft:false,sentDateTime:new Date().toISOString()}]});throw Error('TEST unexpected provider route');});
+  const sent=await withSession(fixture,()=>sendCustomerMailAction(input));
+  if(reconcile){expect(sent).toMatchObject({code:'UNAVAILABLE',delivery:'checking'});await foreign();await sql`UPDATE public.communication_threads SET created_at=now()-interval '6 minutes' WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`;}
+  const stored=await withSession(fixture,()=>getIntakeDraftsAction());if(stored.code!=='OK')throw Error('TEST reread');const reread=stored.drafts.find(row=>row.id===draftId)?.payload.request as typeof input;
+  const result=reconcile?await withSession(fixture,()=>sendCustomerMailAction(reread)):sent;
+  expect(result).toMatchObject({code:'OK',data:{sourceChanged:true,deliveryCustomer:expect.any(String)}});expect(sends).toBe(1);
+  expect(await sql`SELECT message.id FROM public.communication_messages message JOIN public.communication_threads thread ON thread.tenant_id=message.tenant_id AND thread.id=message.thread_id WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId} AND thread.status='sent'`).toHaveLength(1);
+  expect(await sql`SELECT payload->'intake'->>'itemId' AS item,payload->'intake'->>'version' AS version FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_SOURCE_CHANGED_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{item:rootId,version:'1'}]);
+  expect((await sql`SELECT version,text,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${rootId}::uuid`)[0]).toMatchObject({version:2,text:'TEST fremde Bearbeitung erhalten',anliegen_offen:expect.arrayContaining(['reklamation'])});
+  expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${rootId}::uuid AND nachher->>'action'='reklamation.fotos_angefordert'`).toHaveLength(0);
+  const view=await withSession(fixture,()=>getIntakeMessagesAction('offen'));expect(view).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:rootId,version:2,photoDelivery:expect.objectContaining({state:'source-changed',deliveryCustomer:expect.any(String)})})])});
+  expect(await withSession(fixture,()=>sendCustomerMailAction(reread))).toMatchObject({code:'OK',data:{replayed:true,sourceChanged:true}});expect(sends).toBe(1);
+ }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
+});

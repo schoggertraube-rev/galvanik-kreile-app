@@ -741,11 +741,11 @@ it('KV-04 reserves the PDF edition, preserves a real concurrent edit and never m
   const payload=deliveries[0] as {message:{attachments:Array<{name:string;contentBytes:string}>}};
   expect(payload.message.attachments).toHaveLength(1);
   expect(Buffer.from(payload.message.attachments[0].contentBytes,'base64').subarray(0,4).toString()).toBe('%PDF');
-  expect(sent).toMatchObject({code:'OK',notice:expect.stringContaining('aktuelle Fassung 2 ist noch nicht versendet')});
-  expect(await withSession(fixture,()=>readQuoteAction({quoteId:quote.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:3,totalNetCents:6000,lifecycle:{edition:2,sentEdition:1,stage:'geaendert_seit_versand'}}});
+  expect(sent).toMatchObject({code:'OK',data:{sourceChanged:true}});
+  expect(await withSession(fixture,()=>readQuoteAction({quoteId:quote.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:2,totalNetCents:6000,lifecycle:{edition:2,sentEdition:null,stage:'entwurf'}}});
   expect((await sql`SELECT count(*)::int n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quote.quote.quoteId} AND status='offen'`)[0].n).toBe(0);
   const {changeQuoteLifecycleAction}=await import('@/app/actions/quotes.actions');
-  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId:quote.quote.quoteId,clientEventId:randomUUID(),expectedVersion:3,edition:2,evidence:'TEST keine Zusage zu ungesendeter neuer Fassung'}))).toMatchObject({code:'VALIDATION_ERROR'});
+  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId:quote.quote.quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:2,evidence:'TEST keine Zusage zu ungesendeter neuer Fassung'}))).toMatchObject({code:'VALIDATION_ERROR'});
   expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK',data:{replayed:true}});
   expect(deliveries).toHaveLength(1);
   const second=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST failed mail',positions:[{name:'TEST anderer Halter',quantity:1,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]}));

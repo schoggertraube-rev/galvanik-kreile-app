@@ -1,3 +1,15 @@
+## RM07 — PL-Entscheidung 09.11. 06:05 umgesetzt, Teilstand
+
+Die tatsächlich bestätigte Mail und ihr Originalbezug bleiben jetzt erhalten, wenn die Quellversion inzwischen geändert wurde. Die fachliche Eingangsfortschreibung läuft hinter einem Datenbank-Savepoint; bekannte Quellkonflikte nehmen nur diesen fachlichen Teil zurück und hinterlassen genau einen unveränderlichen `COMMUNICATION_SOURCE_CHANGED_V1`-Beleg. Andere Datenbankfehler werden diagnostiziert und bleiben unbestätigt, statt als Erfolg zu gelten. Der alte Eingang wird dabei nicht auf „wartet“ gesetzt.
+
+Wiederaufnahme nach 503 liest den ursprünglichen, an Login/Anfrage/Inhalt gebundenen Vorbereitungs-Snapshot aus dem vorhandenen Journal. Sie erfindet keinen neuen Empfänger und verändert weder Vorlage noch Originalbezug. Derselbe Request wird aus einem tatsächlich gespeicherten JSONB-Entwurf neu gelesen; bei inzwischen geänderter Quelle wird nur der bestätigte Versand abgeglichen, niemals blind erneut gesendet. Nach erneutem Lesen zeigt die Foto-Karte den tatsächlichen Konflikt mit „Neu laden“; Antwortdialog und allgemeines Mailformular haben denselben Katalogtext. Keine neue Tabelle oder zweite Versandstrecke.
+
+Zwei echte Action/Replay-DB-Fälle: unmittelbare Providerbestätigung nach Fremdänderung und 503 → Fremdänderung → bestätigter Ausgangstreffer; je genau ein Mailbeleg, Original-ID/Version im Journal, fremder Text/Version/Anliegen unverändert, Wiederholung ohne erneuten Provideraufruf. Provider ausschließlich isoliert im Test ersetzt; kein tatsächlicher Microsoft-Versand behauptet. Gesamter gezielter RM07-Lauf fünf PASS6,96s. Antwortdialog und allgemeines Mailformular zehn Renderfälle PASS1,78s.
+
+KV-Fremdänderung: Der vorhandene Lifecycle-Writer verändert den inzwischen neuen KV-Stand nicht mehr. Bestehende Assertion alt „Version3, Fassung2, gesendet Fassung1“ → neu „Version2, Fassung2, keine gesendete Fassung“; Betrag6000, tatsächliches PDF und genau ein Versand bleiben geprüft. Alte Hinweis-Assertion → `sourceChanged:true`; Zusageversuch nutzt die tatsächlich unveränderte Version2 und bleibt abgelehnt. Echter KV-Fall PASS4,96s.
+
+**Noch kein fertiger RM-PR:** Ergebnis-/Begleitschein-Dialoge, allgemeine Wiederaufnahme nach vollständigem Schließen und zugehörige Quellkonflikte/Parent-Versionsbindung sind noch durchzuarbeiten. Neue CI/READY-Preview und unabhängiges PL-PASS fehlen. Dieser Abschnitt ersetzt ältere Aussagen, wonach die PL-Entscheidung noch offen sei.
+
 # AP-REKLA-MAIL – Arbeitsstand, noch keine Abnahme
 
 ## Aktueller Nachtrag 09.11., RM07 und RM15

@@ -65,6 +65,7 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
       const actual=options.actualMail?await readQuoteSentDocument(tx,auth,input.clientEventId,input.quoteId):null;
       if(options.actualMail&&(!actual||input.action!=='sent'||input.channel!=='mail'||actual.document.version!==input.expectedVersion||actual.document.edition!==input.edition||input.evidence!=='Versandbeleg '+actual.threadId+' · PDF SHA-256 '+actual.document.sha256))return {code:'CONFLICT',message:'Ein passender tatsächlicher Mailbeleg zur KV-Fassung fehlt.'};
       const mailDocument=actual?.document??null;
+      if(mailDocument&&(quote.version!==mailDocument.version||life.edition!==mailDocument.edition))return {code:'CONFLICT',message:'QUOTE_MAIL_SOURCE_CHANGED'};
       if(mailDocument&&(quote.version<mailDocument.version||life.edition<mailDocument.edition))throw Error('QUOTE_MAIL_FUTURE_DOCUMENT_INVALID');
       const currentMail=!mailDocument||mailDocument.edition===life.edition;
       const keepNewer=Boolean(mailDocument&&life.sentEdition!==null&&life.sentEdition>mailDocument.edition);

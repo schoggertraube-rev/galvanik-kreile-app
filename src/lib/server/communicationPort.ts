@@ -16,7 +16,7 @@ import {
 } from "@/lib/server/microsoftGraph";
 
 type TargetType = "CUSTOMER" | "ORDER";
-function canonicalIntent(value:unknown):string{
+export function canonicalIntent(value:unknown):string{
  if(Array.isArray(value))return '['+value.map(canonicalIntent).join(',')+']';
  if(value!==null&&typeof value==='object')return '{'+Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,entry])=>JSON.stringify(key)+':'+canonicalIntent(entry)).join(',')+'}';
  return JSON.stringify(value);
@@ -49,7 +49,7 @@ function logCommunicationFailure(code: string, error: unknown) {
   console.error(`[${code}]`, error instanceof Error ? error.message : "UNKNOWN_ERROR");
 }
 
-export type CommunicationReceipt = { threadId: string; messageId: string | null; customerId: string; orderId: string | null; recordedAt: string; replayed: boolean; attachmentsImported?: number; attachmentsSkipped?: number; attachmentWarning?: string };
+export type CommunicationReceipt = { threadId: string; messageId: string | null; customerId: string; orderId: string | null; recordedAt: string; replayed: boolean; sourceChanged?:boolean; deliveryCustomer?:string; attachmentsImported?: number; attachmentsSkipped?: number; attachmentWarning?: string };
 function canRead(auth: AuthorizationSnapshot) {
   return auth.areas?.includes("mails") === true;
 }
@@ -222,7 +222,7 @@ export async function attachInboxMessage(
   }
 }
 
-export type IntakeComplaintReply={purpose?:'no-complaint';itemId:string;version:number;graphMessageId:string;sender:string;intent:string;validate:(tx:PrivilegedTenantTransaction)=>Promise<boolean>;complete:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>;replay:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<boolean>};
+export type IntakeComplaintReply={purpose?:'no-complaint';itemId:string;version:number;graphMessageId:string;sender:string;intent:string;snapshot?:unknown;validate:(tx:PrivilegedTenantTransaction)=>Promise<boolean>;complete:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>;replay:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<boolean>};
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
   input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; reconcileOnly?:true;beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeReply?:IntakeComplaintReply },
@@ -280,8 +280,9 @@ export async function sendCommunicationMail(
             AND message.summary=${complaintSummary} AND message.body=${input.body.trim()} AND thread.subject=${input.subject.trim()}`);
           if(confirmed.length!==1)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         }
-        if(input.intakeReply&&!await input.intakeReply.replay(tx,existing[0].id))throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
-        return { threadId: existing[0].id, recordedAt: iso(existing[0].created_at), replay: { threadId: existing[0].id, messageId: null, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(existing[0].created_at), replayed: true } };
+        const sourceChanged=(await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_SOURCE_CHANGED_V1' AND payload->>'threadId'=${existing[0].id}`)).length===1;
+        if(input.intakeReply&&!sourceChanged&&!await input.intakeReply.replay(tx,existing[0].id))throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
+        return { threadId: existing[0].id, recordedAt: iso(existing[0].created_at), replay: { threadId: existing[0].id, messageId: null, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(existing[0].created_at), replayed: true,...(sourceChanged?{sourceChanged:true,deliveryCustomer:target.label}:{}) } };
       }
       if(input.reconcileOnly)throw Error('COMMUNICATION_PREPARED_RECEIPT_MISSING');
       if(readMicrosoftGraphConfigurationStatus().code!=='READY')throw Error('COMMUNICATION_NOT_CONFIGURED');
@@ -295,7 +296,7 @@ export async function sendCommunicationMail(
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("COMMUNICATION_THREAD_INSERT_FAILED");
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,threadId,'prepared');
-      await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'COMMUNICATION_SEND_PREPARED_V1','Mailversand vorbereitet',${JSON.stringify({threadId,sendKey:input.clientRequestId,intent:sendIntent,recipient,...(input.intakeReply?{intake:{itemId:input.intakeReply.itemId,version:input.intakeReply.version,purpose:input.intakeReply.purpose??'photo-request',graphMessageId:input.intakeReply.graphMessageId}}:{})})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
+      await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'COMMUNICATION_SEND_PREPARED_V1','Mailversand vorbereitet',${JSON.stringify({threadId,sendKey:input.clientRequestId,intent:sendIntent,recipient,customerName:target.label,...(input.intakeReply?{intake:{itemId:input.intakeReply.itemId,version:input.intakeReply.version,purpose:input.intakeReply.purpose??'photo-request',graphMessageId:input.intakeReply.graphMessageId,snapshot:input.intakeReply.snapshot}}:{})})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
       return { threadId, recordedAt: iso(rows[0].created_at) };
     });
   } catch (error) {
@@ -329,6 +330,7 @@ export async function sendCommunicationMail(
   }
   try {
     const messageId = randomUUID();
+    let sourceChanged=false;
     await withPrivilegedTenantTransaction(auth, async (tx) => {
       const updated = await tx.execute<{ id: string }>(sql`
         UPDATE public.communication_threads SET status='sent', updated_at=statement_timestamp()
@@ -341,28 +343,46 @@ export async function sendCommunicationMail(
       `);
       if (messages.length !== 1 || messages[0]?.id !== messageId) throw new Error("COMMUNICATION_MESSAGE_INSERT_FAILED");
       if(reconciled)await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'COMMUNICATION_SEND_RECONCILED_V1','Gesendete Mail abgeglichen',${JSON.stringify({threadId:pending.threadId,sendKey:input.clientRequestId,intent:sendIntent,...reconciled})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
-      if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,pending.threadId,'sent');
-      if(input.intakeReply){await input.intakeReply.complete(tx,pending.threadId);await tx.execute(sql`INSERT INTO public.events(tenant_id,id,event_type,user_id,client_event_id,event_schema_version,correlation_id,aggregate_version,status,description,payload)
-       VALUES(${auth.tenantId},${randomUUID()},${input.intakeReply.purpose==='no-complaint'?'INTAKE_COMPLAINT_RESPONSE_SENT_V1':'INTAKE_COMPLAINT_PHOTO_REQUESTED_V1'},${auth.userId}::uuid,${input.clientRequestId}::uuid,1,${input.clientRequestId}::uuid,${input.intakeReply.version+1},'success',${input.intakeReply.purpose==='no-complaint'?'Keine Reklamation · Antwort gesendet':'Reklamationsfotos angefordert'},${JSON.stringify({itemId:input.intakeReply.itemId,threadId:pending.threadId,intent:input.intakeReply.intent})}::jsonb)`);}
+      if(input.document){await appendCommunicationDocument(tx,auth,input,input.document,pending.threadId,'sent');if(input.beforePrepare&&!await input.beforePrepare(tx))sourceChanged=true;}
+      if(input.intakeReply){
+       await tx.execute(sql`SAVEPOINT communication_domain_completion`);
+       try{await input.intakeReply.complete(tx,pending.threadId);await tx.execute(sql`INSERT INTO public.events(tenant_id,id,event_type,user_id,client_event_id,event_schema_version,correlation_id,aggregate_version,status,description,payload)
+       VALUES(${auth.tenantId},${randomUUID()},${input.intakeReply.purpose==='no-complaint'?'INTAKE_COMPLAINT_RESPONSE_SENT_V1':'INTAKE_COMPLAINT_PHOTO_REQUESTED_V1'},${auth.userId}::uuid,${input.clientRequestId}::uuid,1,${input.clientRequestId}::uuid,${input.intakeReply.version+1},'success',${input.intakeReply.purpose==='no-complaint'?'Keine Reklamation · Antwort gesendet':'Reklamationsfotos angefordert'},${JSON.stringify({itemId:input.intakeReply.itemId,threadId:pending.threadId,intent:input.intakeReply.intent})}::jsonb)`);
+       }catch(error){
+        const code=error instanceof Error?error.message:'';
+        if(!['COMPLAINT_PHOTO_MAIL_VERSION_CONFLICT','COMPLAINT_PHOTO_MAIL_SOURCE_INVALID','COMPLAINT_PHOTO_MAIL_PHOTOS_ALREADY_PRESENT','COMPLAINT_RESPONSE_SOURCE_CHANGED','COMPLAINT_RESPONSE_VERSION_CONFLICT','COMPLAINT_SOURCE_CHANGED','COMPLAINT_SOURCE_TARGET_MISMATCH','COMPLAINT_RESPONSE_ROOT_COMPLETED'].includes(code))throw error;
+        await tx.execute(sql`ROLLBACK TO SAVEPOINT communication_domain_completion`);sourceChanged=true;logCommunicationFailure('COMMUNICATION_SOURCE_CHANGED_AFTER_SEND',error);
+       }
+       await tx.execute(sql`RELEASE SAVEPOINT communication_domain_completion`);
+      }
+      if(sourceChanged)await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'COMMUNICATION_SOURCE_CHANGED_V1','Mail gesendet · Fachstand inzwischen geändert',${JSON.stringify({threadId:pending.threadId,sendKey:input.clientRequestId,intent:sendIntent,intake:input.intakeReply?{itemId:input.intakeReply.itemId,version:input.intakeReply.version,graphMessageId:input.intakeReply.graphMessageId,intent:input.intakeReply.intent}:null})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
 
     });
-    return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: false } };
+    return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: false,...(sourceChanged?{sourceChanged:true,deliveryCustomer:target.label}:{}) } };
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_SEND_FINALIZE_FAILED", error);
     return { code: "UNAVAILABLE", message: "Microsoft 365 hat die Mail angenommen, die lokale Vorgangskopie ist aber noch nicht sicher bestätigt. Nicht erneut senden." };
   }
 }
 
+/** Confirmed absent sends from the communication owner's journal, for intake retry guards. */
+export async function readAbsentCommunicationSendKeys(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot):Promise<string[]>{
+ if(!hasAuthorizationArea(auth,'mails'))return [];
+ const rows=await tx.execute<{key:string}>(sql`SELECT DISTINCT proof.correlation_id::text AS key FROM public.communication_threads thread JOIN public.events proof ON proof.tenant_id=thread.tenant_id AND proof.event_type='COMMUNICATION_SEND_NOT_FOUND_V1' AND proof.payload->>'threadId'=thread.id::text
+ WHERE thread.tenant_id=${auth.tenantId} AND thread.status='failed' AND thread.source='MS_GRAPH_OUT:'||proof.correlation_id::text`);
+ return rows.map(row=>row.key);
+}
+
 /** Recover the original actor's unresolved photo send from its actual journal, including after reopening. */
 export async function readComplaintPhotoDelivery(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]){
- if(!ids.length||!hasAuthorizationArea(auth,'mails'))return new Map<string,{state:'checking'|'failed';clientRequestId:string|null;version:number;retryAt:string}>();
- const rows=await tx.execute<{id:string;status:string;clientKey:string;version:number;currentVersion:number;own:boolean;retryAt:string}>(sql`
- SELECT DISTINCT ON(source.id) source.id::text,thread.status,prepared.payload->>'sendKey' AS "clientKey",(prepared.payload->'intake'->>'version')::integer AS version,source.version AS "currentVersion",thread.created_by=${auth.userId}::uuid AS own,(thread.created_at+interval '5 minutes')::text AS "retryAt"
+ if(!ids.length||!hasAuthorizationArea(auth,'mails'))return new Map<string,{state:'checking'|'failed'|'source-changed';deliveryCustomer?:string;clientRequestId:string|null;version:number;retryAt:string}>();
+ const rows=await tx.execute<{id:string;status:string;deliveryCustomer:string|null;clientKey:string;version:number;currentVersion:number;own:boolean;retryAt:string}>(sql`
+ SELECT DISTINCT ON(source.id) source.id::text,thread.status,prepared.payload->>'customerName' AS "deliveryCustomer",prepared.payload->>'sendKey' AS "clientKey",(prepared.payload->'intake'->>'version')::integer AS version,source.version AS "currentVersion",thread.created_by=${auth.userId}::uuid AS own,(thread.created_at+interval '5 minutes')::text AS "retryAt"
  FROM public.intake_item source JOIN public.events prepared ON prepared.tenant_id=source.tenant_id AND prepared.event_type='COMMUNICATION_SEND_PREPARED_V1' AND prepared.payload->'intake'->>'itemId'=source.id::text AND prepared.payload->'intake'->>'purpose'='photo-request' AND prepared.payload->'intake'->>'graphMessageId'=source.graph_message_id
- JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId' AND thread.source='MS_GRAPH_OUT:'||(prepared.payload->>'sendKey') AND thread.customer_id=source.kunde_id
- WHERE source.tenant_id=${auth.tenantId} AND source.id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}::uuid`),sql`, `)}]) AND thread.status IN ('pending','failed')
+ JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId' AND thread.source='MS_GRAPH_OUT:'||(prepared.payload->>'sendKey')
+ WHERE source.tenant_id=${auth.tenantId} AND source.id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}::uuid`),sql`, `)}]) AND (thread.status IN ('pending','failed') OR thread.status='sent' AND EXISTS(SELECT 1 FROM public.events changed WHERE changed.tenant_id=thread.tenant_id AND changed.event_type='COMMUNICATION_SOURCE_CHANGED_V1' AND changed.payload->>'threadId'=thread.id::text))
  ORDER BY source.id,prepared.created_at DESC,prepared.id DESC`);
- return new Map(rows.map(row=>[row.id,{state:row.status==='failed'?'failed' as const:'checking' as const,clientRequestId:row.own&&row.version===row.currentVersion?row.clientKey:null,version:row.version,retryAt:iso(row.retryAt)}]));
+ return new Map(rows.map(row=>[row.id,{state:row.status==='sent'?'source-changed' as const:row.status==='failed'?'failed' as const:'checking' as const,...(row.deliveryCustomer?{deliveryCustomer:row.deliveryCustomer}:{}),clientRequestId:row.own&&row.version===row.currentVersion?row.clientKey:null,version:row.version,retryAt:iso(row.retryAt)}]));
 }
 
 /** Visible waiting state is the real sent thread plus its atomic source receipt, never a local flag. */

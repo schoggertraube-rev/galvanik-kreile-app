@@ -2,6 +2,7 @@
 import {readComplaintRejectionSource,prepareComplaintRejection,complaintRejectionReplay,completeIntakeComplaintRejection} from "@/modules/eingang/server-public";
 
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
+import {canonicalIntent as canonicalJson} from '@/lib/server/communicationPort';
 import {createHash} from "node:crypto";
 import {readCommunicationDocumentReceipt,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
@@ -63,8 +64,9 @@ export async function attachOutlookMailAction(input: TargetInput & { graphMessag
   return correspondence.code==='OK'?{...correspondence,data:{...correspondence.data,attachmentsImported:imported.originalCount,attachmentsSkipped:imported.filteredAttachments}}:correspondence;
 }
 
-async function confirmQuoteDelivery(input:{clientRequestId:string},document:CommunicationDocument,data:Awaited<ReturnType<typeof sendCommunicationMail>> & {code:'OK'}){
+async function confirmQuoteDelivery(auth:import('@/lib/server/authorization').AuthorizationSnapshot,input:{clientRequestId:string},document:CommunicationDocument,data:Awaited<ReturnType<typeof sendCommunicationMail>> & {code:'OK'}){
  const marked=await changeQuoteLifecycleAction({action:'sent',quoteId:document.id,clientEventId:input.clientRequestId,expectedVersion:document.version,edition:document.edition,channel:'mail',evidence:'Versandbeleg '+data.data.threadId+' · PDF SHA-256 '+document.sha256},{actualMail:true});
+ if(data.data.sourceChanged||marked.code==='CONFLICT'){const customer=await withPrivilegedTenantTransaction(auth,tx=>readCustomerProfile(tx,auth.tenantId,data.data.customerId));return {...data,data:{...data.data,sourceChanged:true,...(customer?{deliveryCustomer:customer.name}:{})}};}
  const current=marked.code==='OK'?marked.quote.lifecycle:null;
  const notices=marked.code==='OK'?[...(marked.notices??[])]:[];
  if(current&&current.edition!==document.edition&&!notices.some(value=>value.includes('aktuelle Fassung')))notices.push('E-Mail mit Fassung '+document.edition+' gesendet · aktuelle Fassung '+current.edition+(current.sentEdition===current.edition?' bleibt bereits versendet.':' ist noch nicht versendet.'));
@@ -82,10 +84,10 @@ export async function sendCustomerMailAction(input: TargetInput & {
  let attachment,document:CommunicationDocument|undefined;
  if(input.attachment){
   const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
-  if(prior.code==='OK')return confirmQuoteDelivery(input,prior.document,{code:'OK',data:prior.data});
+  if(prior.code==='OK')return confirmQuoteDelivery(auth,input,prior.document,{code:'OK',data:prior.data});
   if(prior.code==='PENDING'){
-   const checked=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,document:prior.document,reconcileOnly:true});
-   return checked.code==='OK'?confirmQuoteDelivery(input,prior.document,checked):checked;
+   const checked=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,document:prior.document,reconcileOnly:true,beforePrepare:tx=>lockQuoteDeliverySnapshot(tx,auth.tenantId,prior.document)});
+   return checked.code==='OK'?confirmQuoteDelivery(auth,input,prior.document,checked):checked;
   }
   if(prior.code!=='NOT_FOUND')return prior;
   const pdf=await readQuotePdfAction({quoteId:input.attachment.documentId});
@@ -102,7 +104,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   }
  }
  const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,document,beforePrepare:document?tx=>lockQuoteDeliverySnapshot(tx,auth.tenantId,document!):undefined});
- return sent.code==='OK'&&document?confirmQuoteDelivery(input,document,sent):sent;
+ return sent.code==='OK'&&document?confirmQuoteDelivery(auth,input,document,sent):sent;
 }
 
 import {importIntakeGraphMail} from '@/modules/eingang/server-public';
@@ -128,13 +130,27 @@ export async function importOutlookMailAction(graphMessageId:string){
  return importIntakeMessage(authorization.data,mail.data);
 }
 
+/** Resume only the original actor's immutable prepared request, never a fresh send intent. */
+async function preparedIntakeReply(auth:import('@/lib/server/authorization').AuthorizationSnapshot,input:unknown,clientKey:string,itemId:string,purpose:'photo-request'|'no-complaint'){
+ const requestIntent=createHash('sha256').update(canonicalJson(input)).digest('hex');
+ const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{snapshot:{requestIntent:string;source:Awaited<ReturnType<typeof readComplaintPhotoMailSource>>;subject:string;body:string}}>(sql`
+ SELECT prepared.payload->'intake'->'snapshot' AS snapshot FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
+ WHERE prepared.tenant_id=${auth.tenantId} AND prepared.user_id=${auth.userId}::uuid AND prepared.event_type='COMMUNICATION_SEND_PREPARED_V1' AND prepared.correlation_id=${clientKey}::uuid
+ AND thread.source='MS_GRAPH_OUT:'||${clientKey} AND thread.created_by=${auth.userId}::uuid AND prepared.payload->'intake'->>'itemId'=${itemId} AND prepared.payload->'intake'->>'purpose'=${purpose}`));
+ if(rows.length>1)throw Error('COMMUNICATION_PREPARED_SNAPSHOT_AMBIGUOUS');
+ if(!rows[0]?.snapshot)return {requestIntent,prior:null};
+ if(rows[0].snapshot.requestIntent!==requestIntent)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
+ return {requestIntent,prior:rows[0].snapshot};
+}
+
 /** Bound reply purpose of the existing sender; never an arbitrary recipient override. */
 async function sendComplaintPhotoRequest(auth:import('@/lib/server/authorization').AuthorizationSnapshot,input:TargetInput&{clientRequestId:string;subject:string;body:string;attachment?:unknown;complaintPhotoRequest?:{itemId:string;version:number}}){
  if(!['eingang','mails','kunden'].every(area=>hasAuthorizationArea(auth,area as 'eingang'|'mails'|'kunden')))return {code:'FORBIDDEN' as const,message:'Fotoanfrage benötigt Eingang, Mails und Kunden.'};
  const request=input.complaintPhotoRequest;
  if(!request||Object.keys(request).some(key=>!['itemId','version'].includes(key))||!/^[0-9a-f-]{36}$/i.test(request.itemId)||!Number.isSafeInteger(request.version)||request.version<1||!/^[0-9a-f-]{36}$/i.test(input.clientRequestId)||input.attachment)return {code:'VALIDATION_ERROR' as const,message:'Eingang oder Anfragekennung ist ungültig.'};
  try{
-  const context=await withPrivilegedTenantTransaction(auth,async tx=>{
+  const prepared=await preparedIntakeReply(auth,input,input.clientRequestId,request.itemId,'photo-request');
+  const context=prepared.prior??await withPrivilegedTenantTransaction(auth,async tx=>{
    const source=await readComplaintPhotoMailSource(tx,auth,{...request,clientRequestId:input.clientRequestId});
    if(input.targetType!=='CUSTOMER'||input.targetId!==source.customerId)throw Error('COMPLAINT_PHOTO_MAIL_TARGET_MISMATCH');
    const customer=await readCustomerProfile(tx,auth.tenantId,source.customerId!);if(!customer)throw Error('COMPLAINT_PHOTO_MAIL_CUSTOMER_MISSING');
@@ -145,7 +161,7 @@ async function sendComplaintPhotoRequest(auth:import('@/lib/server/authorization
    return {source,subject,body};
   });
   const intent=createHash('sha256').update(JSON.stringify({itemId:request.itemId,version:request.version,customerId:context.source.customerId,graphId:context.source.graphId,original:context.source.originalSha256,subject:context.subject,body:context.body})).digest('hex');
-  return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:context.source.customerId!,clientRequestId:input.clientRequestId,subject:context.subject,body:context.body,intakeReply:{itemId:request.itemId,version:request.version,graphMessageId:context.source.graphId!,sender:context.source.sender!,intent,
+  return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:context.source.customerId!,clientRequestId:input.clientRequestId,subject:context.subject,body:context.body,intakeReply:{snapshot:{requestIntent:prepared.requestIntent,...context},itemId:request.itemId,version:request.version,graphMessageId:context.source.graphId!,sender:context.source.sender!,intent,
    validate:tx=>prepareComplaintPhotoMail(tx,auth,{...request,clientRequestId:input.clientRequestId,customerId:context.source.customerId!,originalSha256:context.source.originalSha256,graphId:context.source.graphId!,sender:context.source.sender!,intent}),
    complete:async(tx,threadId)=>completeComplaintPhotoMail(tx,auth,{...request,clientRequestId:input.clientRequestId,intent,threadId,customerId:context.source.customerId!,originalSha256:context.source.originalSha256}),
    replay:async(tx,threadId)=>complaintPhotoMailReplay(tx,auth,{itemId:request.itemId,clientRequestId:input.clientRequestId,intent,threadId})}});
@@ -157,10 +173,11 @@ async function sendComplaintRejection(auth:import('@/lib/server/authorization').
  const request=input.complaintRejection,uuid=/^[0-9a-f-]{36}$/i;
  if(!request||!uuid.test(request.itemId)||!uuid.test(input.clientRequestId)||!Number.isSafeInteger(request.version)||request.version<1||typeof request.reason!=='string'||request.reason.trim().length<3||request.reason.length>500||typeof input.subject!=='string'||!input.subject.trim()||input.subject.length>500||typeof input.body!=='string'||!input.body.trim()||input.body.length>20000||input.attachment||input.complaintPhotoRequest)return {code:'VALIDATION_ERROR' as const,message:'Original, Antwort und konkreten Grund ergänzen.'};
  try{
-  const source=await withPrivilegedTenantTransaction(auth,tx=>readComplaintRejectionSource(tx,auth,{...request,clientRequestId:input.clientRequestId}));
+  const prepared=await preparedIntakeReply(auth,input,input.clientRequestId,request.itemId,'no-complaint');
+  const source=prepared.prior?.source??await withPrivilegedTenantTransaction(auth,tx=>readComplaintRejectionSource(tx,auth,{...request,clientRequestId:input.clientRequestId}));
   if(input.targetType!=='CUSTOMER'||input.targetId!==source.customerId)return {code:'FORBIDDEN' as const,message:'Die Antwort gehört zu einem anderen Kunden.'};
   const intent=createHash('sha256').update(JSON.stringify({itemId:request.itemId,version:request.version,customerId:source.customerId,graphId:source.graphId,originalSha256:source.originalSha256,subject:input.subject.trim(),body:input.body.trim(),reason:request.reason.trim()})).digest('hex');
-  return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:source.customerId!,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,intakeReply:{purpose:'no-complaint',itemId:request.itemId,version:request.version,graphMessageId:source.graphId!,sender:source.sender!,intent,
+  return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:source.customerId!,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,intakeReply:{snapshot:{requestIntent:prepared.requestIntent,source,subject:input.subject,body:input.body},purpose:'no-complaint',itemId:request.itemId,version:request.version,graphMessageId:source.graphId!,sender:source.sender!,intent,
    validate:tx=>prepareComplaintRejection(tx,auth,{...request,clientRequestId:input.clientRequestId,intent}),
    complete:(tx,threadId)=>completeIntakeComplaintRejection(tx,auth,{itemId:request.itemId,version:request.version,clientKey:input.clientRequestId,customerId:source.customerId!,orderId:null,threadId,reason:request.reason.trim(),intent}),
    replay:(tx,threadId)=>complaintRejectionReplay(tx,auth,{itemId:request.itemId,clientRequestId:input.clientRequestId,threadId,intent})}});

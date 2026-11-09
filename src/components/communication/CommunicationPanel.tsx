@@ -105,11 +105,12 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
 
   const sendLock=useRef(false);
   const pendingSend=useRef<Parameters<typeof sendCustomerMailAction>[0]|null>(null);
+  const [sendSourceChanged,setSendSourceChanged]=useState(false);
   const [sendUnclear,setSendUnclear]=useState(false);
   const [sendCheckAt,setSendCheckAt]=useState<string|null>(null),[sendFailed,setSendFailed]=useState(false);
   const sendForm=useRef<HTMLFormElement>(null);
   const settleSend=useCallback((result:Awaited<ReturnType<typeof sendCustomerMailAction>>)=>{
-    if(result.code==='OK'){pendingSend.current=null;setSendUnclear(false);setSendFailed(false);setSendCheckAt(null);sendForm.current?.reset();setFeedback('notice'in result&&typeof result.notice==='string'&&result.notice?result.notice:'E-Mail wurde versendet und am Vorgang gespeichert.');return;}
+    if(result.code==='OK'){pendingSend.current=null;setSendUnclear(false);setSendFailed(false);setSendCheckAt(null);sendForm.current?.reset();setSendSourceChanged(result.data.sourceChanged===true);setFeedback(result.data.sourceChanged?(result.data.deliveryCustomer?MAIL_DELIVERY_COPY.sourceChanged(result.data.deliveryCustomer):REKLA_MAIL_COPY.unavailable):'notice'in result&&typeof result.notice==='string'&&result.notice?result.notice:'E-Mail wurde versendet und am Vorgang gespeichert.');return;}
     if('delivery'in result&&result.delivery==='checking'){setSendUnclear(true);setSendCheckAt('retryAt'in result&&typeof result.retryAt==='string'?result.retryAt:null);setFeedback(MAIL_DELIVERY_COPY.checking);return;}
     setSendCheckAt(null);
     if('delivery'in result&&result.delivery==='failed'){pendingSend.current=null;setSendUnclear(false);setSendFailed(true);setFeedback('deliveryCustomer'in result&&typeof result.deliveryCustomer==='string'?MAIL_DELIVERY_COPY.failed(result.deliveryCustomer):REKLA_MAIL_COPY.unavailable);return;}
@@ -145,7 +146,8 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
         <label>Betreff<input name="subject" required maxLength={500} value={composer?.subject} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onSubject(event.target.value):undefined} /></label>
         <label>Nachricht<textarea name="body" required maxLength={20_000} value={composer?.body} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onBody(event.target.value):undefined} /></label>
         {!composer?<label>PDF-Anhang<select name="quoteId" defaultValue="" disabled={sendBusy||sendUnclear}><option value="">Ohne Anhang</option>{matchingQuotes.map((quote) => <option key={quote.quoteId} value={quote.quoteId}>KV {quote.quoteNumber}</option>)}</select></label>:null}
-        {!composer&&!sendCheckAt?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{sendFailed?MAIL_DELIVERY_COPY.retry:sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden"}</button>:null}
+        {!composer&&sendSourceChanged?<button type="button" onClick={()=>window.location.reload()}>{MAIL_DELIVERY_COPY.reload}</button>:null}
+        {!composer&&!sendCheckAt&&!sendSourceChanged?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{sendFailed?MAIL_DELIVERY_COPY.retry:sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden"}</button>:null}
       </form>
   );
   if(composer)return <section className={styles.panel}>{composeForm}</section>;
