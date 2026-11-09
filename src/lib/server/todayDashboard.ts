@@ -7,7 +7,7 @@ import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
-import { classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
+import { sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -178,6 +178,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
           SELECT order_id, assigned_to_name, current_order_version
           FROM private.v_order_task_assignment_v1
           WHERE tenant_id=${auth.tenantId}
+            AND integrity_ok=true
             AND assigned_by=${auth.userId}::uuid
             AND active=true
         `) : Promise.resolve([]),
@@ -254,12 +255,11 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   if (STAGE2_TODAY_FEATURES.has("bundle") && bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
   const ownTaskKeys=new Set(quoteFollowups.tasks.filter(task=>task.isMine===true).map(task=>'task:'+task.id));
-  const ownComplaintIds=new Set(complaints.complaints.filter(complaint=>complaint.actorTrace?.createdBy?.userId===auth.userId).map(complaint=>complaint.id));
   const responsible=await withPrivilegedTenantTransaction(auth,tx=>readOrderResponsibilityForToday(tx,auth,items.flatMap(item=>item.orderId?[item.orderId]:[])));
-  const mine=(item:TodayItem)=>ownTaskKeys.has(item.key)||item.kind==='complaint'&&item.target?.screen==='reklamation'&&ownComplaintIds.has(item.target.arg)||item.kind!=='complaint'&&!!item.orderId&&responsible.get(item.orderId)===auth.userId;
-  items.sort((left,right)=>Number(mine(right))-Number(mine(left)));
+  const mine=(item:TodayItem)=>ownTaskKeys.has(item.key)||item.kind!=='complaint'&&!!item.orderId&&responsible.get(item.orderId)===auth.userId;
+  const sortedItems=sortTodayByResponsibility(items,mine);
   return {
-    items,
+    items:sortedItems,
     collectionNotices,
     visibleFields: selected,
     layout,

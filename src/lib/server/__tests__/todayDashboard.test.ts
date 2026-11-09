@@ -1,3 +1,4 @@
+import {sortTodayByResponsibility} from '../todayDashboardPolicy';
 import { describe, expect, it } from "vitest";
 import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/server/todayDashboardPolicy";
 
@@ -112,4 +113,8 @@ describe("Später in Europe/Berlin", () => {
       message: "Aufgeschoben bis 02.11.2026 07:00 · zählt weiter mit",
     });
   });
+});
+
+it('SA correction never puts personal ownership above actual urgency or an earlier deadline',()=>{
+ const rows=[{id:'mine',urgency:'warning' as const,dueDate:'2026-11-10'},{id:'blocked',urgency:'conflict' as const,dueDate:'2026-11-10'},{id:'earlier',urgency:'warning' as const,dueDate:'2026-11-09'},{id:'other',urgency:'warning' as const,dueDate:'2026-11-10'}];expect(sortTodayByResponsibility(rows,row=>row.id==='mine').map(row=>row.id)).toEqual(['blocked','earlier','mine','other']);
 });

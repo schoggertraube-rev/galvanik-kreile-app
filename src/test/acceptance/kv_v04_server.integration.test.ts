@@ -1173,11 +1173,12 @@ it('reply targets use the real source customer without money rights or financial
 it('AK order: two actual logins retain creator and last actor, take through existing assignment writer and read own statistics',async()=>{
  const first=await createFixture(),second=await createFixture();
  const {createOrderIntake}=await import('@/lib/server/commands/orderIntakeCommand');
- const created=await withSession(first,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:first.customerId},dueDate:'2027-04-20',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',items:[{catalogServiceId:null,name:'TEST AK Halter',quantity:1,material:null,surfaceRequested:'verchromen',executionRequested:'offen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:'TEST AK actor projection'}));
+ const created=await withSession(first,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:first.customerId},dueDate:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(new Date()),termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',items:[{catalogServiceId:null,name:'TEST AK Halter',quantity:1,material:null,surfaceRequested:'verchromen',executionRequested:'offen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:'TEST AK actor projection'}));
  if(created.code!=='OK')throw Error(created.message);const orderId=created.receipt.orderId;
  const {getLiveOrderCardAction,assignOrderTaskAction}=await import('@/app/actions/orders.actions');
- expect(await withSession(second,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{actors:{createdBy:{userId:first.actorId,action:'ORDER_INTAKE_CREATED_V1'},lastActor:{userId:first.actorId},responsible:{userId:first.actorId,source:'first-event'},currentLoginId:second.actorId}}}});
- const request={orderId,assigneeUserId:second.actorId,expectedVersion:1,clientEventId:randomUUID()};
+ expect(await withSession(second,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{actors:{createdBy:{userId:first.actorId,action:'ORDER_INTAKE_CREATED_V1'},lastActor:{userId:first.actorId},responsible:null,currentLoginId:second.actorId}}}});
+ const ownRequest={orderId,assigneeUserId:first.actorId,expectedVersion:1,clientEventId:randomUUID()};expect(await withSession(first,()=>assignOrderTaskAction(ownRequest))).toMatchObject({code:'OK'});
+ const request={orderId,assigneeUserId:second.actorId,expectedVersion:2,clientEventId:randomUUID()};
  const taken=await withSession(second,()=>assignOrderTaskAction(request));expect(taken).toMatchObject({code:'OK',replayed:false});
  expect(await withSession(second,()=>assignOrderTaskAction(request))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND client_event_id=${request.clientEventId}::uuid AND user_id=${second.actorId}::uuid`).toHaveLength(1);
@@ -1193,6 +1194,11 @@ it('AK order: two actual logins retain creator and last actor, take through exis
  const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
  const responsibility=await withSession(second,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK responsibility auth');return withPrivilegedTenantTransaction(auth.data,tx=>readOrderResponsibilityForToday(tx,auth.data,[orderId]));});
  expect(responsibility.get(orderId)).toBe(second.actorId);
+ await sql`UPDATE private.order_task_assignment_state SET assigned_to=${first.actorId}::uuid WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;
+ try{
+  const dashboard=await withSession(second,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST home auth');const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});expect(dashboard.items).toEqual(expect.arrayContaining([expect.objectContaining({orderId})]));expect(await sql`SELECT payload->>'orderId' AS order_id,payload->>'actorId' AS actor_id FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='today_assignment_read_failed' AND payload->>'orderId'=${orderId}`).toEqual([{order_id:orderId,actor_id:second.actorId}]);
+ }finally{await sql`UPDATE private.order_task_assignment_state SET assigned_to=${second.actorId}::uuid WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;}
+
  const stats=await withSession(second,async()=>{const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(new Date());return getActorStatistics({from:today,through:today});});
  expect(stats).toMatchObject({code:'OK',userId:second.actorId,rows:expect.arrayContaining([expect.objectContaining({kind:'order',action:'ORDER_TASK_ASSIGNED_V1',events:1,cases:1})])});
  const all=async(actor:Fixture)=>withSession(actor,async()=>{const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(new Date());return getActorStatistics({from:today,through:today,all:true});});

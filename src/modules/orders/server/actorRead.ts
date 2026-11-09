@@ -7,7 +7,7 @@ import {readCaseActorTraces} from '@/lib/server/quoteJournalPort';
 import type {OrderActorSummary} from './types';
 
 type Failure={code:'FORBIDDEN'|'VALIDATION_ERROR'|'NOT_FOUND'|'CONFLICT'|'UNAVAILABLE';message:string};
-/** Read-only event projection. Existing order assignment remains the only override. */
+/** History and responsibility are distinct; only an actual assignment is responsibility. */
 export async function readOrderActors(auth:AuthorizationSnapshot,input:{orderId:string;version:number}):Promise<{code:'OK';actors:OrderActorSummary}|Failure>{
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN',message:'Auftragsakteure benötigen Aufträge.'};
  if(!input||typeof input.orderId!=='string'||!input.orderId||input.orderId.length>128||!Number.isSafeInteger(input.version)||input.version<1)return {code:'VALIDATION_ERROR',message:'Auftragskennung oder Stand fehlt.'};
@@ -23,7 +23,7 @@ export async function readOrderActors(auth:AuthorizationSnapshot,input:{orderId:
   const assignment=await readOrderTaskAssignment(auth,{orderId:input.orderId});
   if(assignment.code==='OK'&&assignment.data&&assignment.data.assignmentVersion>input.version)return {code:'CONFLICT',message:'Auftragszuständigkeit wurde inzwischen geändert. Neu lesen.'};
   const active=assignment.code==='OK'&&assignment.data?.active?assignment.data:null;
-  const responsible=assignment.code!=='OK'?null:active?{userId:active.assignedTo,name:active.assignedToName,at:active.assignedAt,source:'assignment' as const}:trace.createdBy?.userId?{userId:trace.createdBy.userId,name:trace.createdBy.name,at:trace.createdBy.at,source:'first-event' as const}:null;
+  const responsible=assignment.code!=='OK'?null:active?{userId:active.assignedTo,name:active.assignedToName,at:active.assignedAt,source:'assignment' as const}:null;
   return {code:'OK',actors:{currentLoginId:auth.userId,createdBy:trace.createdBy,lastActor:trace.lastActor,responsible,assignmentUnavailable:assignment.code!=='OK',...(assignment.code!=='OK'?{assignmentReadError:assignment.message}:{})}};
  }catch(error){console.error('[ORDER_ACTORS_READ_FAILED]',{code:error instanceof Error?error.name:'UNKNOWN'});return {code:'UNAVAILABLE',message:'Auftragsakteure konnten nicht sicher gelesen werden.'};}
 }

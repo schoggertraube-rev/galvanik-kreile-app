@@ -227,3 +227,8 @@ export function classifyMoneyForToday(candidate: TodayMoneyCandidate, today: str
     ? "overdue_invoice"
     : null;
 }
+
+/** Personal ownership is only a tie breaker after actual urgency and deadline. */
+export function sortTodayByResponsibility<T extends {urgency:'conflict'|'decision'|'warning';dueDate?:string}>(items:readonly T[],isMine:(item:T)=>boolean):T[]{
+ const rank={conflict:0,decision:1,warning:2};return [...items].sort((a,b)=>rank[a.urgency]-rank[b.urgency]||(a.dueDate??'9999').localeCompare(b.dueDate??'9999')||Number(isMine(b))-Number(isMine(a)));
+}
