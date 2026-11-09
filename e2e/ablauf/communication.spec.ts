@@ -5,6 +5,16 @@ import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture} from './orderFixture';
 import {requestMailStep} from './requestMailStep';
 
+it('a non-UUID mail request key cannot send before its audit rejects the identifier',async()=>{
+ await requestMailStep('MAIL-invalid-key');
+ const customerId=await customerFixture('MAIL-invalid-key');
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ const request={targetType:'CUSTOMER' as const,targetId:customerId,clientRequestId:'-'.repeat(36),subject:'TEST ungültige Anfragekennung',body:'TEST darf nicht gesendet werden'};
+ expect(await withSession(full,()=>sendCustomerMailAction(request))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+request.clientRequestId}`).toEqual([{n:0}]);
+ expect(vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&init?.method==='POST')).toHaveLength(0);
+});
+
 it('malformed actual mail submissions return a recoverable rejection without reserving or sending',async()=>{
  await requestMailStep('MAIL-invalid');
  const customerId=await customerFixture('MAIL-invalid');
