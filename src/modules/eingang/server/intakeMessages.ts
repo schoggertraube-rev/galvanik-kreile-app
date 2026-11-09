@@ -1,6 +1,6 @@
 import 'server-only';
 import {readComplaintPhotoReplyRelations} from './complaintMail';
-import {readComplaintPhotoWaiting} from '@/lib/server/communicationPort';
+import {readComplaintPhotoWaiting,readComplaintPhotoDelivery} from '@/lib/server/communicationPort';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -43,6 +43,8 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
       AND (source.gruppe_adresse IS NOT NULL AND candidate.gruppe_adresse=source.gruppe_adresse OR candidate.id=source.id)))
     ORDER BY coalesce(source.empfangen_am,source.erstellt_am),source.id`);
    const waiting=await readComplaintPhotoWaiting(tx,auth,messages.map(row=>row.id));
+   const delivery=await readComplaintPhotoDelivery(tx,auth,messages.map(row=>row.id));
+   for(const row of messages){const state=delivery.get(row.id);if(state&&!waiting.has(row.id))row.photoDelivery=state;}
    for(const row of messages){const state=waiting.get(row.id);if(state)row.photoRequest=state;}
    const relations=await readComplaintPhotoReplyRelations(tx,auth,messages.map(row=>row.id));
    for(const relation of relations){const root=messages.find(row=>row.id===relation.rootId),reply=messages.find(row=>row.id===relation.replyId);if(root)(root.photoReplies??=[]).push({replyId:relation.replyId,orderId:relation.orderId,photoIds:relation.photoIds});if(reply)reply.photoParentId=relation.rootId;}

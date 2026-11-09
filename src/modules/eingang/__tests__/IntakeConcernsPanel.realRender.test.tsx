@@ -65,3 +65,14 @@ it('RM07 photo UI checks automatically and offers a new-key retry only after con
  fireEvent.click(retry);await screen.findByText('Wartet auf Fotos von TEST Schmidt');
  expect(requestPhotos).toHaveBeenCalledTimes(3);expect(requestPhotos.mock.calls[2][0].clientRequestId).not.toBe(requestPhotos.mock.calls[0][0].clientRequestId);expect(list).toHaveBeenCalledTimes(2);
 });
+
+it.each([true,false])('RM07 reopened photo view recovers its actual server key before confirmed outcome (found=%s)',async(found)=>{
+ const oldKey=crypto.randomUUID(),message=row('TEST-photo-resume',{concerns:['reklamation'],openConcerns:['reklamation'],photoCount:0,photoDelivery:{state:'checking',clientRequestId:oldKey,version:1,retryAt:new Date(Date.now()+200).toISOString()}});
+ const requestPhotos=vi.fn().mockResolvedValueOnce(found?{code:'OK',data:{}}:{code:'CONFLICT',delivery:'failed',message:'TEST secret failure'}).mockResolvedValue({code:'OK',data:{}}),list=vi.fn<IntakeMessagesPorts['list']>().mockResolvedValueOnce({code:'OK',messages:[message],areas:['mails','eingang','kunden'],currentLogin:'TEST-actor'}).mockResolvedValue({code:'OK',messages:[{...message,version:2,photoDelivery:undefined,photoRequest:{at:'2026-11-09T04:00:00Z',threadId:'TEST-recovered'}}],areas:['mails','eingang','kunden'],currentLogin:'TEST-actor'});
+ render(<IntakeMessages ports={{list,requestPhotos,select:vi.fn(),finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}}}/>);
+ await screen.findByText('Wird gerade geprüft');expect(screen.queryByRole('button',{name:'Fotos anfordern'})).toBeNull();
+ if(!found){fireEvent.click(await screen.findByRole('button',{name:'Erneut senden'}));}
+ await screen.findByText('Wartet auf Fotos von TEST Schmidt');
+ expect(requestPhotos).toHaveBeenCalledTimes(found?1:2);expect(requestPhotos.mock.calls[0][0]).toMatchObject({clientRequestId:oldKey,complaintPhotoRequest:{itemId:message.id,version:1}});
+ if(!found)expect(requestPhotos.mock.calls[1][0].clientRequestId).not.toBe(oldKey);
+});

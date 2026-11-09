@@ -295,7 +295,7 @@ export async function sendCommunicationMail(
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("COMMUNICATION_THREAD_INSERT_FAILED");
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,threadId,'prepared');
-      await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'COMMUNICATION_SEND_PREPARED_V1','Mailversand vorbereitet',${JSON.stringify({threadId,sendKey:input.clientRequestId,intent:sendIntent,recipient})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
+      await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'COMMUNICATION_SEND_PREPARED_V1','Mailversand vorbereitet',${JSON.stringify({threadId,sendKey:input.clientRequestId,intent:sendIntent,recipient,...(input.intakeReply?{intake:{itemId:input.intakeReply.itemId,version:input.intakeReply.version,purpose:input.intakeReply.purpose??'photo-request',graphMessageId:input.intakeReply.graphMessageId}}:{})})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
       return { threadId, recordedAt: iso(rows[0].created_at) };
     });
   } catch (error) {
@@ -351,6 +351,18 @@ export async function sendCommunicationMail(
     logCommunicationFailure("COMMUNICATION_SEND_FINALIZE_FAILED", error);
     return { code: "UNAVAILABLE", message: "Microsoft 365 hat die Mail angenommen, die lokale Vorgangskopie ist aber noch nicht sicher bestätigt. Nicht erneut senden." };
   }
+}
+
+/** Recover the original actor's unresolved photo send from its actual journal, including after reopening. */
+export async function readComplaintPhotoDelivery(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]){
+ if(!ids.length||!hasAuthorizationArea(auth,'mails'))return new Map<string,{state:'checking'|'failed';clientRequestId:string|null;version:number;retryAt:string}>();
+ const rows=await tx.execute<{id:string;status:string;clientKey:string;version:number;currentVersion:number;own:boolean;retryAt:string}>(sql`
+ SELECT DISTINCT ON(source.id) source.id::text,thread.status,prepared.payload->>'sendKey' AS "clientKey",(prepared.payload->'intake'->>'version')::integer AS version,source.version AS "currentVersion",thread.created_by=${auth.userId}::uuid AS own,(thread.created_at+interval '5 minutes')::text AS "retryAt"
+ FROM public.intake_item source JOIN public.events prepared ON prepared.tenant_id=source.tenant_id AND prepared.event_type='COMMUNICATION_SEND_PREPARED_V1' AND prepared.payload->'intake'->>'itemId'=source.id::text AND prepared.payload->'intake'->>'purpose'='photo-request' AND prepared.payload->'intake'->>'graphMessageId'=source.graph_message_id
+ JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId' AND thread.source='MS_GRAPH_OUT:'||(prepared.payload->>'sendKey') AND thread.customer_id=source.kunde_id
+ WHERE source.tenant_id=${auth.tenantId} AND source.id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}::uuid`),sql`, `)}]) AND thread.status IN ('pending','failed')
+ ORDER BY source.id,prepared.created_at DESC,prepared.id DESC`);
+ return new Map(rows.map(row=>[row.id,{state:row.status==='failed'?'failed' as const:'checking' as const,clientRequestId:row.own&&row.version===row.currentVersion?row.clientKey:null,version:row.version,retryAt:iso(row.retryAt)}]));
 }
 
 /** Visible waiting state is the real sent thread plus its atomic source receipt, never a local flag. */

@@ -396,8 +396,10 @@ it('RM07 photo request retries with a new key only after proved absence and rere
   expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'UNAVAILABLE',delivery:'checking'});
   expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}))).not.toMatchObject({code:'OK'});expect(sends).toBe(1);
   const unclear=await withSession(fixture,()=>getIntakeMessagesAction('offen'));if(unclear.code!=='OK')throw Error(unclear.message);expect(unclear.messages.find(row=>row.id===rootId)?.photoRequest).toBeUndefined();
+  expect(unclear.messages.find(row=>row.id===rootId)?.photoDelivery).toMatchObject({state:'checking',clientRequestId:input.clientRequestId,version:1,retryAt:expect.any(String)});
   await sql`UPDATE public.communication_threads SET created_at=now()-interval '6 minutes' WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`;
   expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'CONFLICT',delivery:'failed'});
+  const failed=await withSession(fixture,()=>getIntakeMessagesAction('offen'));if(failed.code!=='OK')throw Error(failed.message);expect(failed.messages.find(row=>row.id===rootId)?.photoDelivery).toMatchObject({state:'failed',clientRequestId:input.clientRequestId});
   const retryKey=randomUUID();expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:retryKey}))).toMatchObject({code:'OK'});expect(sends).toBe(2);
   expect(await sql`SELECT von FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${rootId}::uuid AND befehl_id=${retryKey}::uuid AND nachher->>'action'='reklamation.fotos_angefordert'`).toEqual([{von:fixture.actorId}]);
   const waiting=await withSession(fixture,()=>getIntakeMessagesAction('offen'));expect(waiting).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:rootId,photoRequest:expect.objectContaining({threadId:expect.any(String)})})])});
