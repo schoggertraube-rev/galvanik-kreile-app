@@ -1,9 +1,9 @@
 import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
-import {sql,full,withSession} from './replayHarness';
+import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
-import {storeOrderPhoto} from './photoFixture';
+import {storeOrderPhoto,storeIntakeGoodsPhoto} from './photoFixture';
 
 it('RA-02 W7/W8 counter complaint before handover requires an actual photo, persists once, and keeps goods in-house',async()=>{
  const order=await readyInvoiceOrder('RA-02');
@@ -15,12 +15,14 @@ it('RA-02 W7/W8 counter complaint before handover requires an actual photo, pers
  expect(await sql`SELECT count(*)::integer AS n FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:0}]);
  const photoId=await storeOrderPhoto(order.orderId);
  const withPhoto={...input,clientKey:randomUUID(),photoIds:[photoId]};
- const created=await withSession(full,()=>reklamationAusfuehrenAction(withPhoto));
+ // Each call receives a newly deserialized request, like the UI's Action transport.
+ const captureRequest=JSON.stringify(withPhoto);
+ const created=await withSession(full,()=>reklamationAusfuehrenAction(JSON.parse(captureRequest)));
  expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('RA02_CREATE:'+created.code);
  expect(await sql`SELECT stand,ware_zurueck FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.receipt.complaintId}`).toEqual([{stand:'aufgenommen',ware_zurueck:'ja'}]);
  expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[{id:created.receipt.complaintId,stand:'aufgenommen',photoIds:[photoId]}]});
  expect(await withSession(full,()=>getComplaints({customerId:order.customerId}))).toMatchObject({code:'OK',complaints:[{id:created.receipt.complaintId}]});
- expect(await withSession(full,()=>reklamationAusfuehrenAction(withPhoto))).toMatchObject({code:'OK',replayed:true,receipt:{complaintId:created.receipt.complaintId}});
+ expect(await withSession(full,()=>reklamationAusfuehrenAction(JSON.parse(captureRequest)))).toMatchObject({code:'OK',replayed:true,receipt:{complaintId:created.receipt.complaintId}});
  expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${withPhoto.clientKey}::uuid`).toEqual([{user_id:full.actorId}]);
  const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
  const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
@@ -37,6 +39,53 @@ it('RA-02 W7/W8 counter complaint before handover requires an actual photo, pers
  expect(released.code).toBe('OK');if(released.code!=='OK')throw Error('RA02_AFTER_CLOSE:'+released.code);
  const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt',version:released.receipt.orderVersion}}});
- expect(await withSession(full,()=>recordGoodsOutAction(outInput))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>recordGoodsOutAction({orderId:released.receipt.orderId,mode:released.receipt.mode,expectedVersion:released.receipt.expectedVersion,clientEventId:released.receipt.clientEventId}))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${outKey}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
+it('H7 rework segment: decision, return, galvanik, finish and release close the complaint without an invoice',async()=>{
+ const order=await readyInvoiceOrder('H7-Na');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ expect(await withSession(full,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:order.version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const photoId=await storeOrderPhoto(order.orderId);
+ const {reklamationAusfuehrenAction,nacharbeitAnlegenAction,getByOrder}=await import('@/app/actions/complaints.actions');
+ const complaint=await withSession(full,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Abplatzung',description:'TEST Nacharbeit nach dokumentiertem Mangel',photoIds:[photoId],goodsReturn:'ja'}));
+ expect(complaint.code).toBe('OK');if(complaint.code!=='OK')throw Error('H7_COMPLAINT:'+complaint.code);
+ const meister=await createFixture(['auftraege','entscheiden']);
+ const input={reklamationId:complaint.receipt.complaintId,version:1,bewertung:'berechtigt' as const,massnahme:'nacharbeit' as const,liefertermin:'2027-05-18'};
+ const reworkRequest=JSON.stringify(input);
+ const rework=await withSession(meister,()=>nacharbeitAnlegenAction(JSON.parse(reworkRequest)));
+ expect(rework.code).toBe('OK');if(rework.code!=='OK')throw Error('H7_REWORK:'+rework.code);
+ expect(await sql`SELECT station,payment_mode,nacharbeit_zu FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${rework.receipt.orderId}`).toEqual([{station:'angenommen',payment_mode:'keiner',nacharbeit_zu:complaint.receipt.complaintId}]);
+ expect(await sql`SELECT bool_and(preis_netto=0) AS free,count(*)::integer AS n FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${rework.receipt.orderId}`).toEqual([{free:true,n:1}]);
+ expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[{stand:'massnahme_nacharbeit',nacharbeitAuftragId:rework.receipt.orderId}]});
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:rework.receipt.orderId}))).toMatchObject({code:'OK',data:{card:{station:'angenommen'}}});
+ expect(await withSession(meister,()=>nacharbeitAnlegenAction(JSON.parse(reworkRequest)))).toMatchObject({code:'OK',replayed:true,receipt:{orderId:rework.receipt.orderId}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND nacharbeit_zu=${complaint.receipt.complaintId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${rework.receipt.orderId}`).toEqual([{n:0}]);
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${rework.receipt.eventId}`).toEqual([{user_id:meister.actorId}]);
+ const {getGoodsReceiptsAction,saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
+ const waiting=await withSession(full,()=>getGoodsReceiptsAction(rework.receipt.orderId));
+ expect(waiting.code).toBe('OK');if(waiting.code!=='OK')throw Error('H7_WAITING:'+waiting.code);
+ const photo=await storeIntakeGoodsPhoto();
+ const accepted=await withSession(full,()=>saveGoodsReceiptAction({id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId:photo.itemId,orderId:rework.receipt.orderId,expectedOrderVersion:waiting.order.version,expectedVersion:0,mode:'erwartet',command:'galvanik',card:0,packagesReceived:1,packagesTotal:1,condition:'unauffaellig',deviations:[],foundUnattended:false,foundAt:null,procedure:null,procedureNote:null,photos:[{fileId:photo.fileId,kind:'teile'}],quantities:waiting.order.items.map(item=>({itemId:item.id,expected:item.quantity,received:null,confirmed:true,note:null}))}));
+ expect(accepted.code).toBe('OK');if(accepted.code!=='OK')throw Error('H7_GOODS:'+accepted.code);
+ const active=await withSession(full,()=>getLiveOrderCardAction({orderId:rework.receipt.orderId}));
+ expect(active.code).toBe('OK');if(active.code!=='OK')throw Error('H7_GALVANIK:'+active.code);
+ expect(active.data.card.station).toBe('galvanik');
+ const {setOrderItemFinishedAction,freezeOrderAction}=await import('@/app/actions/orders.actions');
+ const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId:rework.receipt.orderId,itemId:waiting.order.items[0].id,expectedVersion:active.data.card.version,clientEventId:randomUUID(),finished:true}));
+ expect(finished.code).toBe('OK');if(finished.code!=='OK')throw Error('H7_PART_FINISH:'+finished.code);
+ const frozen=await withSession(full,()=>freezeOrderAction({orderId:rework.receipt.orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));
+ expect(frozen.code).toBe('OK');if(frozen.code!=='OK')throw Error('H7_FINISH:'+frozen.code);
+ const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
+ expect((await withSession(full,()=>issueInvoiceAction({orderId:rework.receipt.orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()}))).code).toBe('VALIDATION_ERROR');
+ const out=await withSession(full,()=>recordGoodsOutAction({orderId:rework.receipt.orderId,mode:'abholung',expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()}));
+ expect(out.code).toBe('OK');if(out.code!=='OK')throw Error('H7_REWORK_OUT:'+out.code);
+ expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[{stand:'abgeschlossen'}]});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:rework.receipt.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt'}}});
+ expect(await withSession(full,()=>recordGoodsOutAction({orderId:out.receipt.orderId,mode:out.receipt.mode,expectedVersion:out.receipt.expectedVersion,clientEventId:out.receipt.clientEventId}))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${out.receipt.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${rework.receipt.orderId}`).toEqual([{n:0}]);
 });
