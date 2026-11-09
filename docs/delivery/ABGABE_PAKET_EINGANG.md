@@ -2,6 +2,8 @@
 
 ## Review-Korrektur 09.11., Nachträge 1–8
 
+Produkt-SHA: `3eeda23b` (einschließlich Registerkorrektur `c142afbd`). Typen, gezielter Lint, Scope, H18 und Whitespace-Prüfung des Produktdiffs sind grün. Der abschließende Dokumentations-Commit und die neue exakte READY-Preview werden nach dem Git-Build getrennt nachgewiesen.
+
 **Noch keine Merge-Bitte:** Alle acht PL-Nachträge einschließlich der Präzisierung PL05:05 sind lokal umgesetzt. Die neue unabhängige Prüfung und die Pflicht-CI am neuen Kandidaten stehen aus.
 
 Punkt7 nutzt denselben offenen KV-Leser mit optionalem Kundenfilter vor dem Limit. Bei zugeordnetem Kunden werden ausschließlich dessen KVs geladen, ohne Zuordnung die globale Liste nur für Ware. Der Erfassungsdialog liest Paket-Erwartungen einmal je Version; der Datei-Abfragezyklus fordert ausschließlich den Erfassungsstand ohne KV-Abfrage an. Das pro Dialog gehaltene Ergebnis wird nur derselben unveränderten Version wieder zugeordnet. Keine zweite Tabelle und kein weiterer KV-Leser.
@@ -18,7 +20,7 @@ Der neue Phasenleser ist im bestehenden Capability-Register nachgetragen. Dies b
 
 Neun echte Replay-Fälle für Vor-Ort-Rundweg, Phasenlesen, Rechte und Paketmehrdeutigkeit: PASS13,12s. Neue gemeinsame Gefahr-/Konflikt-Renderfälle PASS3,76s; Mengenbestätigung und Bearbeitung im gemeinsamen Formular PASS3,55s. Die bestehende Assertion „Angenommene Menge · TEST Teil“ verwendet jetzt das gemeinsame Formular: „Inhalt“ öffnen → „geliefert“. Ihre Prüfungen auf Bearbeitbarkeit und den tatsächlichen Wert1 bleiben erhalten. Keine übrige fachliche Assertion entfernt. Typen, gezielter Lint, Scope und H18 sind grün; die neue Lese-Action ist mit echtem DB-Test klassifiziert, keine zusätzliche Ausnahme.
 
-Migration `20261109042000`: SHA256 `2b44ed2b0b8ad62ffb0715ba50d81c8d83ffdf8cc3b83ba20b218cb93ff29469`. Lokal und auf der freigegebenen Dev mit Abbruchprobe angewandt. Acht Domänentabellen blieben unverändert; Dev hat107 Migrationen, gleich der freigegebenen Union. Dieser Zweig hat105; die zwei weiteren Dev-Migrationen gehören RM und R2. Kein falscher Branch-Gleichstand behauptet.
+Migration `20261109042000`: SHA256 `2b44ed2b0b8ad62ffb0715ba50d81c8d83ffdf8cc3b83ba20b218cb93ff29469`. Lokal und auf der freigegebenen Dev mit Abbruchprobe angewandt. Acht Domänentabellen blieben unverändert. Seit der nachfolgenden freigegebenen BA-Migration hat Dev108 Migrationen, gleich der freigegebenen Union; dieser Zweig hat105, die drei weiteren gehören RM, R2 und BA. Kein falscher Branch-Gleichstand behauptet.
 
 Lokales Modul-Gate ist ausschließlich wegen33 vorhandener ignorierter Referenzbilder zusätzlich zu den162 Sollbildern rot (`DESIGN_POINTER_PAGE_BINDING`). Diese fremden Dateien und der Checker bleiben unverändert; der normale Gitbaum wird in CI geprüft. Noch keine CI-/READY-Behauptung für diesen neuen Kopf. Der früher geprüfte READY-Stand b0854515 ist ein Vergleichsstand und keine Vorschau dieser Korrektur.
 
