@@ -157,15 +157,16 @@ describe("Path-1 Lane-0 search contract", () => {
     });
   });
 
-  it("fails closed for duplicate, malformed or failing providers", async () => {
+  it("fails closed for duplicate provider wiring but preserves proven hits when one provider fails", async () => {
     const duplicate = { id: "quotes", label: "Angebote", search: vi.fn().mockResolvedValue({ hits: [], exhaustive: true }) };
     await expect(searchTenant("Muster", ports({ providers: [duplicate, duplicate] }))).resolves.toMatchObject({ code: "UNAVAILABLE" });
-    await expect(searchTenant("Muster", ports({ providers: [{ ...duplicate, search: vi.fn().mockRejectedValue(new Error("provider secret")) }] }))).resolves.toEqual({
-      code: "UNAVAILABLE", message: "Die internen Bestände konnten nicht sicher durchsucht werden.",
-    });
+    const partial=await searchTenant("Muster", ports({ providers: [{ ...duplicate, search: vi.fn().mockRejectedValue(new Error("provider secret")) }] }));
+    expect(partial).toMatchObject({code:'OK',hits:[{id:ORDER.id}],checkedSources:['Auftragsbestand','Kundenstamm'],failedSources:['Angebote'],coverage:{truncated:true}});
+    expect(JSON.stringify(partial)).not.toContain('provider secret');
+    await expect(searchTenant('Muster',ports({providers:[{...duplicate,search:vi.fn().mockResolvedValue({hits:[{id:'unproven'}],exhaustive:true})}]}))).resolves.toMatchObject({code:'UNAVAILABLE'});
   });
 
-  it.each(["orders", "customers", "clock"] as const)("fails the whole result closed when %s fails", async (failed) => {
+  it.each(["orders", "customers", "clock"] as const)("marks failed source %s honestly and keeps clock failures closed", async (failed) => {
     const boundary = ports({
       readOrders: failed === "orders" ? vi.fn().mockRejectedValue(new Error("private SQL")) : vi.fn().mockResolvedValue([]),
       searchCustomers: failed === "customers"
@@ -174,8 +175,13 @@ describe("Path-1 Lane-0 search contract", () => {
       readTimestamp: () => failed === "clock" ? "invalid" : CHECKED_AT,
     });
     const result = await searchTenant("Muster", boundary);
-    expect(result).toEqual({ code: "UNAVAILABLE", message: "Die internen Bestände konnten nicht sicher durchsucht werden." });
+    if(failed==='clock')expect(result).toEqual({ code: "UNAVAILABLE", message: "Die internen Bestände konnten nicht sicher durchsucht werden." });
+    else expect(result).toMatchObject({code:'OK',hits:[],checkedSources:[failed==='orders'?'Kundenstamm':'Auftragsbestand'],failedSources:[failed==='orders'?'Auftragsbestand':'Kundenstamm'],coverage:{truncated:true}});
     expect(JSON.stringify(result)).not.toMatch(/private SQL|tenant detail/);
+  });
+
+  it('does not present a fabricated empty success when every authorized source fails',async()=>{
+    expect(await searchTenant('Muster',ports({readOrders:async()=>{throw Error('TEST order source unavailable');},searchCustomers:async()=>{throw Error('TEST customer source unavailable');}}))).toEqual({code:'UNAVAILABLE',message:'Die internen Bestände konnten nicht sicher durchsucht werden.'});
   });
 
   it("fails closed on malformed or unproven port data", async () => {

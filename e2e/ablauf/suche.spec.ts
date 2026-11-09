@@ -11,6 +11,21 @@ async function searchOrderFixture(label:string,customerId:string){
  return created;
 }
 
+it('search preserves proven order hits when a separate customer source cannot read an isolated legacy row',async()=>{
+ const needle='49'+Date.now().toString();
+ const customerId=await customerFixture('PARTIAL');
+ const order=await searchOrderFixture(needle,customerId);
+ // Explicit malformed historical TEST data, not a DB/auth mock or production mutation.
+ await sql`INSERT INTO public.customers(id,tenant_id,name,company_name,type,phone,source) VALUES(${'TEST-unreadable-'+randomUUID()},${KREILE_TENANT_SLUG},'',NULL,'business',${'+'+needle},'manual')`;
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const found=await withSession(full,()=>searchTenantAction(needle));
+ expect(found).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'ORDER',id:order.receipt.orderId})]),failedSources:['Kundenstamm'],coverage:{truncated:true}});
+ if(found.code!=='OK')throw Error('PARTIAL_SEARCH:'+found.code);
+ expect(found.checkedSources).toContain('Auftragsbestand');
+ expect(found.checkedSources).not.toContain('Kundenstamm');
+ expect(found.hits.some(hit=>hit.type==='CUSTOMER')).toBe(false);
+});
+
 it('S5/S6 search exact stored order and customer numbers through the actual action without creating data',async()=>{
  const customerId=await customerFixture('S5-S6');
  const created=await searchOrderFixture('S5-S6',customerId);

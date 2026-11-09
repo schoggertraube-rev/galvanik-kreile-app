@@ -110,6 +110,8 @@ export type SearchTenantResult =
       query: string;
       hits: SearchHit[];
       checkedSources: SearchSource[];
+      /** Authorized sources which could not be read; never reported as searched. */
+      failedSources?: SearchSource[];
       checkedAt: string | null;
       coverage: SearchCoverage;
     }

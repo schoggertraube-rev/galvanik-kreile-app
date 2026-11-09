@@ -11,6 +11,7 @@ import {
   type SearchMatchField,
   type SearchOrderDocument,
   type SearchPorts,
+  type SearchSource,
   type SearchTenantResult,
 } from "./types";
 
@@ -237,9 +238,19 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
       providerIds.add(provider.id);
       providerLabels.add(provider.label);
     }
-    const [orders, customerBatch, providerBatches] = await Promise.all([
-      ports.readOrders(), ports.searchCustomers(normalized.query), Promise.all(providers.map((provider) => provider.search(normalized.query))),
+    const failed=new Set<SearchSource>();
+    const attempt=async<T>(source:SearchSource,read:()=>Promise<T>)=>{
+      try{return {ok:true as const,value:await read()};}
+      catch(error){failed.add(source);console.error('[SEARCH_SOURCE_FAILED]',{source,errorName:error instanceof Error?error.name:'UnknownError'});return {ok:false as const};}
+    };
+    const [orderResult,customerResult,providerResults]=await Promise.all([
+      attempt('Auftragsbestand',()=>ports.readOrders()),attempt('Kundenstamm',()=>ports.searchCustomers(normalized.query)),
+      Promise.all(providers.map(provider=>attempt(provider.label,()=>provider.search(normalized.query)))),
     ]);
+    if(!orderResult.ok&&!customerResult.ok&&providerResults.every(result=>!result.ok))return {code:'UNAVAILABLE',message:UNAVAILABLE_MESSAGE};
+    const orders=orderResult.ok?orderResult.value:[];
+    const customerBatch=customerResult.ok?customerResult.value:{records:[],exhaustive:false};
+    const providerBatches=providerResults.map(result=>result.ok?result.value:{hits:[],exhaustive:false});
     if (
       !customerBatch
       || typeof customerBatch !== "object"
@@ -286,7 +297,7 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
       ...providerHits,
     ];
     const hits = merged.slice(0, SEARCH_MAX_HITS);
-    const truncated = !customerBatch.exhaustive
+    const truncated = failed.size>0 || !customerBatch.exhaustive
       || orderHits.size > SEARCH_MAX_HITS_PER_TYPE
       || customerHits.size > SEARCH_MAX_HITS_PER_TYPE
       || providerTruncated
@@ -295,7 +306,8 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
       code: "OK",
       query: normalized.query,
       hits,
-      checkedSources: ["Auftragsbestand", "Kundenstamm", ...providers.map((provider) => provider.label)],
+      checkedSources: ["Auftragsbestand", "Kundenstamm", ...providers.map((provider) => provider.label)].filter(source=>!failed.has(source)),
+      ...(failed.size?{failedSources:["Auftragsbestand","Kundenstamm",...providers.map(provider=>provider.label)].filter(source=>failed.has(source))}:{}),
       checkedAt,
       coverage: { returnedHits: hits.length, matchingHitsAtLeast, truncated },
     };
