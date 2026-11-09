@@ -4,10 +4,10 @@ import { db } from "@/db";
 import { appUsers } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import {
+  hasAuthorizationArea,
   isAppRole,
   getPermissionsForAreas,
   isAccessArea,
-  isAccessAreaAllowedForRole,
   normalizeAccessAreasForRole,
   ROLE_ACCESS_AREA_TEMPLATES,
   type AccessArea,
@@ -27,16 +27,7 @@ export type AuthorizationSnapshot = {
   active: true;
 };
 
-/** Live snapshots use app_user_rights. The role template is only a compatibility
- * fallback for older isolated fixtures that predate the areas field. */
-export function hasAuthorizationArea(
-  authorization: Pick<AuthorizationSnapshot, "areas" | "role">,
-  area: AccessArea,
-): boolean {
-  return isAccessAreaAllowedForRole(authorization.role, area) && (authorization.areas === undefined
-    ? ROLE_ACCESS_AREA_TEMPLATES[authorization.role].includes(area)
-    : authorization.areas.includes(area));
-}
+export {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 
 export function hasAnyAuthorizationArea(
   authorization: Pick<AuthorizationSnapshot, "areas" | "role">,

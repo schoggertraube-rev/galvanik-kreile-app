@@ -1,3 +1,4 @@
+import {readIntakeActorTraces} from './actorRead';
 import "server-only";
 import {readExpectedPackageOrders} from "@/lib/server/packageIntakeContextPort";
 import { createHash } from "node:crypto";
@@ -66,6 +67,7 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
     if (!invoiceOnly && hasAuthorizationArea(auth,"auftraege") && (capture.recognition.kind === "unklar" || capture.recognition.kind === "ware")) {
       capture.expectedOrders=await readExpectedPackageOrders(tx,auth,row.kunde_id);
     }
+    capture.actorTrace=(await readIntakeActorTraces(tx,auth,[itemId])).get(itemId);
     return { code: "OK", capture };
   });
 }

@@ -1,3 +1,4 @@
+import {readIntakeActorTraces} from './actorRead';
 import 'server-only';
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
@@ -95,7 +96,8 @@ export async function readIncomingInvoice(input:unknown,deps:InvoiceDependencies
   if(!invoice&&!fields.faelligAm&&invoiceDate(fields.datum)&&selected?.paymentTermDays!==null&&selected?.paymentTermDays!==undefined){
    const [date]=await tx.execute<{due:string}>(sql`SELECT (${fields.datum}::date+${selected.paymentTermDays}::integer)::text AS due`);fields.faelligAm=date.due;
   }
-  const view:InvoiceView={item:{id:row.id,version:row.version,at:row.at,channel:row.channel,sender:row.sender},invoice,supplier:selected,originals:[...originals],fileId:primaryFileId,
+  const actorTrace=(await readIntakeActorTraces(tx,auth,[row.id],invoice?.id)).get(row.id);
+  const view:InvoiceView={actorTrace,item:{id:row.id,version:row.version,at:row.at,channel:row.channel,sender:row.sender},invoice,supplier:selected,originals:[...originals],fileId:primaryFileId,
    fields,uncertain:invoice?0:suggestions.filter(value=>value.sicherheit!=='sicher'&&!value.verified).length,conflict:null,duplicate:await duplicate(tx,auth,fields,invoice?.id)};
   return {code:'OK' as const,view};
  });}catch(error){const result=failure(error);return result.code==='DUPLICATE'?{code:'CONFLICT',message:result.message}:result;}

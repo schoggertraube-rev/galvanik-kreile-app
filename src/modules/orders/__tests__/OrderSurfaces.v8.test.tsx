@@ -343,3 +343,13 @@ it('opens complaint recording from the existing More menu for an eligible delive
   expect(screen.queryByRole('dialog',{name:'Mehr'})).not.toBeInTheDocument();
  }finally{vi.unstubAllGlobals();}
 });
+
+it('AK renders creator, latest actor and canonical assignee and keeps take errors next to the button',()=>{
+ const take=vi.fn(async()=>{}),evidence={eventId:'TEST-event',userId:'TEST-a',name:'TEST Ada',at:'2026-11-08T12:00:00Z',action:'ORDER_INTAKE_CREATED_V1',mailSender:null};
+ const actorCard={...card,actors:{currentLoginId:'TEST-b',createdBy:evidence,lastActor:{...evidence,userId:'TEST-b',name:'TEST Bea',action:'ORDER_TASK_ASSIGNED_V1'},responsible:{userId:'TEST-a',name:'TEST Ada',at:evidence.at,source:'first-event' as const},assignmentUnavailable:false}};
+ render(<OrderCardView state={{kind:'data',card:actorCard}} actions={{...actions,takeResponsibility:{visible:true,enabled:true,reason:null},onTakeResponsibility:take,feedback:{kind:'error',message:'TEST Zuordnung noch nicht gespeichert',operation:'responsibility'}}} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);
+ const panel=document.querySelector('[data-spec-id="auftrag.akteure"]') as HTMLElement;
+ expect(panel).toHaveTextContent('Angelegt von TEST Ada');expect(panel).toHaveTextContent('Zuletzt: TEST Bea');expect(panel).toHaveTextContent('Zuständig: TEST Ada');expect(within(panel).getByRole('alert')).toHaveTextContent('TEST Zuordnung noch nicht gespeichert');
+ expect(screen.getAllByText('TEST Zuordnung noch nicht gespeichert')).toHaveLength(1);
+ fireEvent.click(within(panel).getByRole('button',{name:'Übernehmen'}));expect(take).toHaveBeenCalledTimes(1);
+});

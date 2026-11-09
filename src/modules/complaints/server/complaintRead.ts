@@ -1,3 +1,4 @@
+import {readCaseActorTraces} from '@/lib/server/quoteJournalPort';
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
@@ -28,9 +29,10 @@ export async function readComplaintsForAuthorization(auth:AuthorizationSnapshot,
     FROM public.complaints complaint LEFT JOIN public.v_complaint_rework_context_v1 context ON context.tenant_id=complaint.tenant_id AND context.complaint_id=complaint.id
     WHERE complaint.tenant_id=${auth.tenantId} AND ${value.customerId?sql`complaint.customer_id=${value.customerId}`:sql`true`} AND ${value.orderId?sql`complaint.order_id=${value.orderId}`:sql`true`} AND ${value.complaintId?sql`(complaint.id=${value.complaintId} OR complaint.nummer=${value.complaintId})`:sql`true`}
     ORDER BY complaint.created_at DESC,complaint.id DESC`);
+   const actors=await readCaseActorTraces(tx,auth,complaints.filter(row=>Number.isSafeInteger(row.version)&&Number(row.version)>0).map(row=>({kind:'complaint' as const,id:row.id,version:row.version!})));
    const reminders=await readComplaintGoodsReminderDates(tx,auth,complaints.filter(row=>row.nacharbeitAuftragId&&row.stand==='massnahme_nacharbeit').map(row=>row.id));
    const sent=new Map(reminders.map(row=>[row.complaintId,row.sentAt]));
-   return {code:'OK' as const,complaints:complaints.map(row=>({...row,...(sent.has(row.id)?{goodsReminderSentAt:sent.get(row.id)!}:{})}))};
+   return {code:'OK' as const,complaints:complaints.map(row=>({...row,...(actors.has('complaint:'+row.id)?{actorTrace:actors.get('complaint:'+row.id)}:{}),...(sent.has(row.id)?{goodsReminderSentAt:sent.get(row.id)!}:{})}))};
   });
  }catch(error){console.error('[COMPLAINT_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Reklamationen konnten nicht geladen werden. Fehlercode: COMPLAINT_READ_FAILED.'};}
 }

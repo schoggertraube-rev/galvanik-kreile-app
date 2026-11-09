@@ -1,3 +1,4 @@
+import type {OrderActorSummary} from "@/modules/orders/public";
 import "server-only";
 
 import { sql } from "drizzle-orm";
@@ -54,6 +55,8 @@ export type OrderCardItem = {
 };
 
 export type LiveOrderCard = {
+  actors?:OrderActorSummary;
+  actorReadError?:string;
   shippingService?:string|null;
   shippingServiceError?:string;
   handoverNotice?:{message:string;taskId:string|null;originalItemId:string;taskState?:'offen'|'erledigt'|'nicht_verfuegbar'};
