@@ -153,7 +153,6 @@
     "@/modules/eingang/public#hasQuoteFinancials",
     "@/modules/eingang/server-public#returnQuoteGoodsReceipt",
     "@/modules/eingang/server-public#readQuoteGoodsReturns",
-    "@/modules/eingang/server-public#readIntakeActorStatistics",
     "@/modules/eingang/server-public#readIntakeQuoteReplyReference",
     "@/modules/eingang/public#intakeHandoverDirective",
     "@/modules/eingang/server-public#readIntakeHandoverMail",

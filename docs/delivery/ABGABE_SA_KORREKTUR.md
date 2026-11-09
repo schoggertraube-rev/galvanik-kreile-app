@@ -21,3 +21,12 @@ PL-Punkte 2, 3, 6, 7 vollständig bearbeiten; CI, exakte READY-Preview, einmalig
 ## Tatsächlicher Aufgabenempfänger
 
 `taskService` verwendet ausschließlich `tasks.fuer_login` für „Deins“. Nachfassen mit Bereichsempfänger gehört nicht automatisch dem KV-Anleger. Der echte AK-02-Replay liest die generierten Aufgaben, weist sie über den vorhandenen UI-Action jeweils der anderen Person zu und liest für beide Logins neu: tatsächlicher Empfänger zuerst, alle Aufgaben bleiben sichtbar. PASS7,69s. Mechanische Fixturekorrektur: eine Person und ein Bereich sind laut unverändertem Aufgabenvertrag gegenseitig ausgeschlossen; der Test sendet wie die UI `forArea:null`. Typprüfung und betroffene Lintprüfung grün.
+
+## Weitere Prüferkorrekturen 2, 3, 6 und 7
+
+- Statistik ohne Produktaufrufer entfernt und ausdrücklich gemäß PL 02:03 auf den separaten Warteschlangenpunkt Einstellungen/Team verschoben. Keine neue Statistikoberfläche. Bereits bestehende additive Migration und Rechte bleiben erhalten. Nur die Tests der zurückgestellten Funktion entfallen; Akteur-/Assignment-/Ansichtsprüfungen bleiben bestehen.
+- Gemeinsamer neutraler `caseActorRead` ersetzt die fachfremde Ablage im KV-Journal; alle realen Auftrag/KV/Reklamation/Eingang-Konsumenten verwenden ihn. Gemeinsame Typen sind browsergeeignet in `caseActorContract`. Kein zusätzliches Erst-Akteur-SQL im Startseitenleser.
+- Zuständigkeitsfehler werden als Codes über den zentralen Situationskatalog angezeigt. Die Auftragskarte zeigt weder Diagnosecode noch rohe Servermeldung.
+- AK-04 ruft jetzt den tatsächlichen Zuweisungsbefehl auf. Ein eng auf die zufällige TEST-Kennung begrenzter lokaler DB-Trigger unterdrückt dessen Ereignis. Der Produktbefehl lehnt ab, Auftrag und Assignment bleiben zurückgerollt; nach Entfernen des Testfehlers bucht dieselbe Kennung erfolgreich und Karte/Ereignis werden real nachgelesen. TEST-Trigger/Funktion werden im finally entfernt. Die frühere Test-Hilfsfunktion ist entfernt.
+
+Nachweise: drei echte Akteur-Reader-Replays PASS15,52s; AK-04 Produktbefehl mit realer DB-Fehlereinspeisung PASS5,25s; zwei gezielte UI-Fälle PASS6,29s. Typprüfung grün, betroffene Lintprüfung ohne Fehler (Manifest-JSON wird von ESLint nicht bearbeitet). Modulprüfung: ausschließlich vorhandene fremde `DESIGN_POINTER_PAGE_BINDING`-Abweichung. Keine Schema- oder Remote-Datenänderung in dieser Korrektur. CI/Sicht/PL-Review vor ready noch erforderlich.

@@ -1170,7 +1170,7 @@ it('reply targets use the real source customer without money rights or financial
  expect((await sql`SELECT version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].version).toBe(source.capture.version);
 });
 
-it('AK order: two actual logins retain creator and last actor, take through existing assignment writer and read own statistics',async()=>{
+it('AK order: two actual logins retain creator and last actor, take through existing assignment writer and preserve home on invalid receipt',async()=>{
  const first=await createFixture(),second=await createFixture();
  const {createOrderIntake}=await import('@/lib/server/commands/orderIntakeCommand');
  const created=await withSession(first,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:first.customerId},dueDate:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(new Date()),termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',items:[{catalogServiceId:null,name:'TEST AK Halter',quantity:1,material:null,surfaceRequested:'verchromen',executionRequested:'offen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:'TEST AK actor projection'}));
@@ -1183,13 +1183,9 @@ it('AK order: two actual logins retain creator and last actor, take through exis
  expect(await withSession(second,()=>assignOrderTaskAction(request))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND client_event_id=${request.clientEventId}::uuid AND user_id=${second.actorId}::uuid`).toHaveLength(1);
  expect((await sql`SELECT assigned_to::text,active FROM private.order_task_assignment_state WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`)[0]).toMatchObject({assigned_to:second.actorId,active:true});
- const {writeActorAudit}=await import('@/test/fixtures/writeActorAudit');
- const auditEvents=await sql<{user_id:string|null;status:string}[]>`SELECT user_id::text,status FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND client_event_id=${request.clientEventId}::uuid`;
- expect(writeActorAudit({before:{responsible:first.actorId},after:{responsible:second.actorId},actorId:second.actorId,events:auditEvents})).toEqual({code:'OK'});
 
  expect(await withSession(first,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{actors:{createdBy:{userId:first.actorId},lastActor:{userId:second.actorId,action:'ORDER_TASK_ASSIGNED_V1'},responsible:{userId:second.actorId,source:'assignment'}}}}});
- const {readActorStatistics}=await import('@/lib/server/quoteJournalPort');const {readIntakeActorStatistics}=await import('@/modules/eingang/server-public');const {resolveAuthorization}=await import('@/lib/server/authorization');
- const getActorStatistics=async(input:unknown)=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK statistics session');return readActorStatistics(auth.data,input,readIntakeActorStatistics);};
+ const {resolveAuthorization}=await import('@/lib/server/authorization');
  const {readOrderResponsibilityForToday}=await import('@/lib/server/orderTaskAssignmentRead');
  const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
  const responsibility=await withSession(second,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK responsibility auth');return withPrivilegedTenantTransaction(auth.data,tx=>readOrderResponsibilityForToday(tx,auth.data,[orderId]));});
@@ -1199,14 +1195,6 @@ it('AK order: two actual logins retain creator and last actor, take through exis
   const dashboard=await withSession(second,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST home auth');const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});expect(dashboard.items).toEqual(expect.arrayContaining([expect.objectContaining({orderId})]));expect(await sql`SELECT payload->>'orderId' AS order_id,payload->>'actorId' AS actor_id FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='today_assignment_read_failed' AND payload->>'orderId'=${orderId}`).toEqual([{order_id:orderId,actor_id:second.actorId}]);
  }finally{await sql`UPDATE private.order_task_assignment_state SET assigned_to=${second.actorId}::uuid WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;}
 
- const stats=await withSession(second,async()=>{const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(new Date());return getActorStatistics({from:today,through:today});});
- expect(stats).toMatchObject({code:'OK',userId:second.actorId,rows:expect.arrayContaining([expect.objectContaining({kind:'order',action:'ORDER_TASK_ASSIGNED_V1',events:1,cases:1})])});
- const all=async(actor:Fixture)=>withSession(actor,async()=>{const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(new Date());return getActorStatistics({from:today,through:today,all:true});});
- expect(await all(second)).toMatchObject({code:'FORBIDDEN'});
- const adminDenied=await createFixture(true,['auftraege'],'admin');
- expect(await all(adminDenied)).toMatchObject({code:'FORBIDDEN'});
- const admin=await createFixture(true,['auftraege','statistik_alle'],'admin');
- expect(await all(admin)).toMatchObject({code:'OK',userId:null,rows:expect.arrayContaining([expect.objectContaining({userId:first.actorId,action:'ORDER_INTAKE_CREATED_V1'}),expect.objectContaining({userId:second.actorId,action:'ORDER_TASK_ASSIGNED_V1'})])});
 
 });
 
@@ -1400,18 +1388,28 @@ it.each(['early','label','two','future','delivered'] as const)('AF19 real mail h
 
 });
 
-it('AK-04 real replay gate rejects an actual changed row without an event; rollback preserves the fixture',async()=>{
- const fixture=await createFixture();const {writeActorAudit}=await import('@/test/fixtures/writeActorAudit');
- const [before]=await sql`SELECT name FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
- const rollback=new Error('TEST AK04 ROLLBACK');
- await expect(sql.begin(async tx=>{
-  const [clock]=await tx`SELECT clock_timestamp() AS at`;
-  await tx`UPDATE public.customers SET name='TEST AK04 intentionally unaudited' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
-  const [after]=await tx`SELECT name FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
-  const events=await tx<{user_id:string|null;status:string}[]>`SELECT user_id::text,status FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND created_at>=${clock.at}`;
-  expect(after.name).toBe('TEST AK04 intentionally unaudited');
-  expect(writeActorAudit({before,after,actorId:fixture.actorId,events})).toEqual({code:'WRITE_WITHOUT_LOGIN_EVENT'});
-  throw rollback;
- })).rejects.toBe(rollback);
- expect((await sql`SELECT name FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`)[0]).toEqual(before);
+it('AK-04 actual assignment command rejects an eventless write and rolls back state and order',async()=>{
+ const fixture=await createFixture();const {createOrderIntake}=await import('@/lib/server/commands/orderIntakeCommand');
+ const created=await withSession(fixture,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:fixture.customerId},dueDate:'2027-04-20',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',items:[{catalogServiceId:null,name:'TEST AK04 Halter',quantity:1,material:null,surfaceRequested:'verchromen',executionRequested:'offen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:'TEST AK04 real writer guard'}));
+ if(created.code!=='OK')throw Error('TEST AK04 create');const orderId=created.receipt.orderId,clientEventId=randomUUID();
+ const suffix=randomUUID().replaceAll('-',''),name='test_ak04_'+suffix;
+ // Isolated real-DB fault injection: drop only this TEST command's event, not the writer or any other event.
+ await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.client_event_id = '${clientEventId}'::uuid THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ try{
+  await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
+  const {assignOrderTaskAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+  const request={orderId,assigneeUserId:fixture.actorId,expectedVersion:1,clientEventId};
+  expect(await withSession(fixture,()=>assignOrderTaskAction(request))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT id FROM private.order_task_assignment_state WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toHaveLength(0);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientEventId}::uuid`).toHaveLength(0);
+  expect((await sql`SELECT version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`)[0]).toMatchObject({version:1});
+  expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{version:1,actors:{responsible:null}}}});
+  await sql.unsafe(`DROP TRIGGER ${name} ON public.events`);
+  expect(await withSession(fixture,()=>assignOrderTaskAction(request))).toMatchObject({code:'OK',replayed:false});
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientEventId}::uuid AND user_id=${fixture.actorId}::uuid`).toHaveLength(1);
+  expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{version:2,actors:{responsible:{userId:fixture.actorId,source:'assignment'}}}}});
+ }finally{
+  await sql.unsafe(`DROP TRIGGER IF EXISTS ${name} ON public.events`);
+  await sql.unsafe(`DROP FUNCTION private.${name}()`);
+ }
 });

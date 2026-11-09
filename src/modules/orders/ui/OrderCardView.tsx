@@ -318,7 +318,7 @@ export function OrderCardView({
       {card.actorReadError?<Hinweis ton="warn">{card.actorReadError}</Hinweis>:card.actors?<>
         {card.actors.createdBy?<p>{ACTOR_COPY.created(card.actors.createdBy.name??ACTOR_COPY.unknownLogin,formatMoment(card.actors.createdBy.at))}</p>:<p>{ACTOR_COPY.missing}</p>}
         {card.actors.lastActor?<p>{ACTOR_COPY.last(card.actors.lastActor.mailSender?ACTOR_COPY.mail(card.actors.lastActor.mailSender):card.actors.lastActor.name??ACTOR_COPY.unknownLogin,ACTOR_COPY.action(card.actors.lastActor.action))}</p>:null}
-        {card.actors.assignmentReadError?<Hinweis ton="warn">{card.actors.assignmentReadError}</Hinweis>:null}
+        {card.actors.assignmentReadError?<Hinweis ton="warn">{ACTOR_COPY.assignmentError(card.actors.assignmentReadError)}</Hinweis>:null}
         {card.actors.responsible?<p>{ACTOR_COPY.responsible(card.actors.responsible.name??ACTOR_COPY.unknownLogin)}</p>:<p>{ACTOR_COPY.unassigned}</p>}
         {actions.takeResponsibility?.visible&&actions.onTakeResponsibility?<Button text={card.actors.responsible?.userId===card.actors.currentLoginId?ACTOR_COPY.mine:ACTOR_COPY.take} disabled={!actions.takeResponsibility.enabled||actions.feedback.kind==='submitting'} onClick={()=>void actions.onTakeResponsibility?.()}/>:null}
       </>:null}

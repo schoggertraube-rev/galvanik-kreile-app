@@ -88,6 +88,7 @@ export const QUOTE_UNDO_COPY={open:"Rückgängig",reason:"Grund der Rücknahme",
 export const QUOTE_RECOVERY_COPY={extend:'Gültig bis verlängern',until:'Neues Gültigkeitsdatum',reason:'Grund / Wortlaut',missing:'Datum und konkreten Grund ergänzen.',extended:'Gültigkeit verlängert · Fassung und vorhandene Zusage bleiben erhalten.',return:(customer:string,location:string)=>'Ware an '+customer+' zurückgeben · '+location,returnConfirm:'Rückgabe mit Beleg bestätigen',returned:'Ware zurückgegeben · der Beleg bleibt im Verlauf.',receipt:'Rückgabebeleg',receiptLine:(quantity:number,location:string,actor:string,at:string)=>quantity+' Stück · '+location+' · '+actor+' · '+at};
 
 export const ACTOR_COPY={
+ assignmentError:(code:string)=>code==='CONFLICT'?'Der Auftrag wurde geändert. Du siehst jetzt den aktuellen Stand.':code==='FORBIDDEN'?'Du darfst die Zuständigkeit für diesen Auftrag nicht ändern.':code==='NOT_FOUND'?'Du kannst diesen Auftrag nicht mehr aufrufen.':code==='VALIDATION_ERROR'?'Prüfe die Zuweisung und versuche es erneut.':'Du kannst die Zuständigkeit gerade nicht laden oder speichern. Versuche es erneut.',
  missingCase:'Für diesen Vorgang fehlt ein belegtes Anlageereignis.',
  received:(name:string,at:string)=>'Eingang erfasst von '+name+' · '+at,
  created:(name:string,at:string)=>'Angelegt von '+name+' · '+at,

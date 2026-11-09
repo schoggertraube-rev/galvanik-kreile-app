@@ -358,3 +358,8 @@ it('SA correction keeps the creator distinct from responsibility and offers taki
  const take=vi.fn(async()=>{}),evidence={eventId:'TEST-created',userId:'TEST-a',name:'TEST Ada',at:'2026-11-08T12:00:00Z',action:'ORDER_INTAKE_CREATED_V1',mailSender:null};
  render(<OrderCardView state={{kind:'data',card:{...card,actors:{currentLoginId:'TEST-a',createdBy:evidence,lastActor:evidence,responsible:null,assignmentUnavailable:false}}}} actions={{...actions,takeResponsibility:{visible:true,enabled:true,reason:null},onTakeResponsibility:take}} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);const panel=document.querySelector('[data-spec-id="auftrag.akteure"]') as HTMLElement;expect(panel).toHaveTextContent('Angelegt von TEST Ada');expect(panel).toHaveTextContent('Noch niemand zuständig');fireEvent.click(within(panel).getByRole('button',{name:'Übernehmen'}));expect(take).toHaveBeenCalledOnce();
 });
+
+it('SA correction maps an unavailable assignment code through the catalog without rendering a server diagnostic',()=>{
+ render(<OrderCardView state={{kind:'data',card:{...card,actors:{currentLoginId:'TEST-a',createdBy:null,lastActor:null,responsible:null,assignmentUnavailable:true,assignmentReadError:'UNAVAILABLE'}}}} actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);
+ expect(screen.getByText('Du kannst die Zuständigkeit gerade nicht laden oder speichern. Versuche es erneut.')).toBeInTheDocument();expect(screen.queryByText('UNAVAILABLE')).not.toBeInTheDocument();
+});
