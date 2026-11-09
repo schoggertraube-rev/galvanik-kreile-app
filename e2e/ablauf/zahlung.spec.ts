@@ -4,6 +4,31 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
 
+it('H8 payment racing cancellation has one winner and never leaves a paid cancelled invoice',async()=>{
+ const order=await readyInvoiceOrder('Zahlung-gegen-Storno');
+ const {cancelInvoiceAction,getInvoiceSummariesAction}=await import('@/app/actions/invoices.actions');
+ const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const cancellation={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST gleichzeitiges Storno',clientEventId:randomUUID()};
+ const payment={invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
+ const [cancelled,paid]=await Promise.all([withSession(full,()=>cancelInvoiceAction(structuredClone(cancellation))),withSession(full,()=>confirmPaymentAction(structuredClone(payment)))]);
+ expect([cancelled.code,paid.code].sort()).toEqual(['CONFLICT','OK']);
+ const [row]=await sql`SELECT status,payment_status,payment_paid_amount_cents::integer AS paid,cancel_event_id::text FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`;
+ const summary=await withSession(full,()=>getInvoiceSummariesAction());
+ expect(summary).toMatchObject({code:'OK',data:expect.arrayContaining([expect.objectContaining({invoiceId:order.invoice.invoiceId,status:row.status})])});
+ if(cancelled.code==='OK'){
+  expect(row).toMatchObject({status:'cancelled',payment_status:'offen',paid:0,cancel_event_id:cancelled.receipt.eventId});
+  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(cancellation))))).toMatchObject({code:'OK',replayed:true});
+  expect(await withSession(full,()=>confirmPaymentAction(structuredClone(payment)))).toMatchObject({code:'CONFLICT'});
+ }else{
+  expect(row).toMatchObject({status:'issued',payment_status:'bezahlt',paid:order.invoice.grossAmountCents,cancel_event_id:null});
+  expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',openAmountCents:0}}});
+  expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(payment))))).toMatchObject({code:'OK',replayed:true});
+  expect(await withSession(full,()=>cancelInvoiceAction(structuredClone(cancellation)))).toMatchObject({code:'CONFLICT'});
+ }
+ const winningKey=cancelled.code==='OK'?cancellation.clientEventId:payment.clientEventId;
+ expect(await sql`SELECT client_event_id::text,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array([cancellation.clientEventId,payment.clientEventId])}::uuid[])`).toEqual([{client_event_id:winningKey,user_id:full.actorId}]);
+});
+
 it('L5 an issued invoice blocks both price supplementation and order content edits without changing its source',async()=>{
  const order=await readyInvoiceOrder('Preis-nach-Rechnung');
  const {setInvoiceItemPricesAction}=await import('@/app/actions/invoices.actions');
