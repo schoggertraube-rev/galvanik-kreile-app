@@ -6,6 +6,24 @@ Quelle: AP-EINGANG-V04, E1, U-261/U-262/U-263. Eingefrorene HTML-Quelle:
 `_review/quellen/freigegeben/Eingang_V04_2026-11-09.html`, SHA-256
 `92d2ec60ce33f81d39827fc06b820390850776933e571de18dc771512fa328f7`.
 
+## Eingefrorener Produktstand zur unabhängigen Prüfung
+
+Produkt-SHA: `054d77251c409fa4b3f4f3f2f38c257846f1ebb5`.
+READY genau dieses SHA: https://galvanik-kreile-werkstatt-1unkwbgsf.vercel.app
+(Vercel `dpl_BS8Go8RoghivuwGKwckmqEVCi8ea`, GitHub-Deployment 7654158514).
+Alle acht Checks dieses Produktstandes sind grün: quality, agentur-gate, h16-schema, Fresh Supabase replay, ratchet, berlin-clock, Vercel und Preview Comments. Diese Dokumentationsnachführung ändert keinen Produktcode; der aktuelle PR-Kopf muss zusätzlich vollständig grün und seine eigene Preview READY sein. Kein Merge durch Codex, unabhängiger PL-PASS noch offen.
+
+Echter Zwei-Sitzungs-Lauf auf Dev: Desktop 1220 und Touch-Browser 390, beide vorhandenes Konto Rolf. Die synthetische TEST-Notiz bleibt derselbe Eingang. Am Desktop erscheint das Foto vor Abschluss; die Situationsansicht bleibt bis „Fotos übernehmen“ am Handy geschlossen und öffnet anschließend mit demselben Original. Browser-Geräteemulation und echte Server-/Storage-Aufrufe, **kein physischer Handy-Kameratest**. Fehlerfälle GW01–08 sind damit nicht pauschal abgenommen.
+
+Nur lesender DB-Nachweis dieses echten Laufs:
+
+- `intake_item.id`: `87d64301-de57-4970-8394-fe5229d751ac`, Kanal notiz, kein Auftrag als Nebenwirkung.
+- `intake_file.id`: `fc501a7e-5e76-481d-bd13-550e0d5710cf`, gleiche item_id, Datei `TEST-GW-zwei-Sitzungen-20261109.png`.
+- Genau ein `original_gespeichert` mit `befehl_id = intake_file.id`. Das zusätzliche Notiz-Original hat seine eigene Textstand-Kennung und ist keine Datei-Dublette. Erkennung und Geräteereignisse vorhanden.
+- Sicht-/Rundwegbelege außerhalb des Repos: `C:/Users/Traube/AppData/Local/Temp/kreile-gw-054d7725/`; endgültige Startbilder 1220/768/390: `C:/Users/Traube/AppData/Local/Temp/kreile-e1-054d7725/`.
+
+Sichtgrenzen: Sprechen fehlt ausdrücklich nach PL-Freigabe. Bestehende manuelle Einstiege bleiben sichtbar. Die neue vollständige Ergebnisdarstellung gehört E2; kein vollständiger V04-/M1-PASS behauptet. Der alte R53-Sichtvertrag ist wegen der gebundenen V04-Quellenablösung gelb, kein grüner Vertragsvergleich behauptet.
+
 ## Umgesetzt
 
 - Text + Enter/Lesen speichert über `saveIntakeNoteAction`; ohne gesichertes Original öffnet sich keine Foto-Situationsansicht.
@@ -66,7 +84,7 @@ Der vorhandene Dialog bleibt verantwortlich für Escape, Hintergrundklick und de
 
 Bewusst offen: **Sprechen** wird nach ausdrücklichem PL-Entscheid nicht als Knopf gezeigt und nicht simuliert; ein Transkriptions-Port fehlt. PL informiert die Owner. Die Beispiel-/Vernetzungs-Demos des HTML-Referenzwerkzeugs werden nicht als Produktfunktionen eingebaut.
 
-Lokale Datenbank weiterhin nicht erreichbar nach einem begrenzten Wiederanlaufversuch; keine neuen DB-Schleifen. Die bereits nachgewiesenen Server-Schreibwege bleiben unverändert. Ein neuer Sichtlauf erfolgt gegen die tatsächliche Git-Preview; ohne diesen Nachweis keine fertige Abnahme.
+Lokale Datenbank weiterhin nicht erreichbar nach einem begrenzten Wiederanlaufversuch; keine neuen DB-Schleifen. Die bereits nachgewiesenen Server-Schreibwege bleiben unverändert. Der letzte tatsächliche Git-Preview-Sichtlauf und der Dev-Zweisitzungs-Rundweg stehen oben; unabhängige Abnahme bleibt erforderlich.
 
 ## Nachführung des bestehenden globalen Fluss-Tests
 
