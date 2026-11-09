@@ -4,6 +4,40 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture} from './orderFixture';
 
+it('H6 sending creates one linked followup and operational acceptance closes it without Geld',async()=>{
+ const customerId=await customerFixture('H6-task');
+ // Synthetic initial company configuration; subsequent settings and task effects use actual actions.
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST followup company' WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ const {createQuoteAction,readQuoteAction,changeQuoteLifecycleAction,readQuoteDefaultsAction,getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
+ const {saveQuoteSettingsAction}=await import('@/app/actions/settings.actions');
+ const {getIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+ const defaults=await withSession(full,()=>readQuoteDefaultsAction());
+ expect(defaults.code).toBe('OK');if(defaults.code!=='OK')throw Error('H6_SETTINGS:'+defaults.code);
+ expect(await withSession(full,()=>saveQuoteSettingsAction({clientEventId:randomUUID(),expectedUpdatedAt:defaults.settings.updatedAt,setupCents:defaults.settings.setupCents,materialCents:defaults.settings.materialCents,followupDays:1,validityDays:14}))).toMatchObject({code:'OK'});
+ const created=await withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',note:'TEST followup',positions:[{name:'TEST followup part',quantity:1,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:2500,lineTotalCents:2500}]}));
+ expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('H6_FOLLOWUP_CREATE:'+created.code);
+ const quoteId=created.quote.quoteId;
+ const sent={quoteId,expectedVersion:1,edition:1,action:'sent' as const,channel:'druck' as const,evidence:'TEST quote handed over',clientEventId:randomUUID()};
+ expect(await withSession(full,()=>changeQuoteLifecycleAction(sent))).toMatchObject({code:'OK',quote:{version:2}});
+ const [task]=await sql`SELECT id::text,status,faellig_am::text,erstellt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quoteId}`;
+ expect(task).toMatchObject({status:'offen',erstellt_von:full.actorId});
+ const [clock]=await sql`SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+1)::text AS due`;
+ expect(task.faellig_am).toBe(clock.due);
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:task.id}))).toMatchObject({code:'OK',task:{status:'offen'},reference:{type:'kv',id:quoteId}});
+ expect(await withSession(full,()=>changeQuoteLifecycleAction(structuredClone(sent)))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quoteId}`).toEqual([{n:1}]);
+ const actor=await createFixture([],'werkstatt');
+ const accept={quoteId,expectedVersion:2,edition:1,action:'accept' as const,evidence:'TEST accepted by phone',clientEventId:randomUUID()};
+ expect(await withSession(actor,()=>changeQuoteLifecycleAction(accept))).toMatchObject({code:'OK',quote:{version:3}});
+ expect(await sql`SELECT status,erledigt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${task.id}::uuid`).toEqual([{status:'erledigt',erledigt_von:actor.actorId}]);
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:task.id}))).toMatchObject({code:'OK',task:{status:'erledigt'}});
+ expect(await withSession(full,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:3,lifecycle:{acceptedEdition:1}}});
+ expect(await withSession(actor,()=>changeQuoteLifecycleAction(structuredClone(accept)))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${accept.clientEventId}::uuid`).toEqual([{user_id:actor.actorId}]);
+ const followups=await withSession(full,()=>getQuoteFollowupsForTodayAction());
+ expect(followups.code).toBe('OK');if(followups.code==='OK')expect(followups.tasks.some(row=>row.quoteId===quoteId)).toBe(false);
+});
+
 it('H6 operational acceptance works for actual logins without Geld and hides all price fields',async()=>{
  const customerId=await customerFixture('H6-op');
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
