@@ -4,6 +4,29 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
 
+it('H8 L5 a physically released order cannot be finished again, returned to Galvanik or invoiced twice',async()=>{
+ const order=await readyInvoiceOrder('H8-Folgesperren');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const released=await withSession(full,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:order.version,clientEventId:randomUUID()}));
+ expect(released.code).toBe('OK');if(released.code!=='OK')throw Error('H8_TERMINAL_RELEASE:'+released.code);
+ const {getLiveOrderCardAction,setOrderItemFinishedAction,freezeOrderAction,transitionWareneingangToGalvanikAction}=await import('@/app/actions/orders.actions');
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt',version:released.receipt.orderVersion}}});
+ const before=await sql`SELECT station,version,promised_due_date::text FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ const keys={part:randomUUID(),finish:randomUUID(),move:randomUUID(),invoice:randomUUID()};
+ const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const results=[
+  await withSession(full,()=>setOrderItemFinishedAction({orderId:order.orderId,itemId:order.items[0].id,expectedVersion:released.receipt.orderVersion,clientEventId:keys.part,finished:false})),
+  await withSession(full,()=>freezeOrderAction({orderId:order.orderId,freezeId:randomUUID(),expectedVersion:released.receipt.orderVersion,clientEventId:keys.finish})),
+  await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId:order.orderId,expectedVersion:released.receipt.orderVersion,clientEventId:keys.move})),
+  await withSession(full,()=>issueInvoiceAction({orderId:order.orderId,expectedVersion:released.receipt.orderVersion,clientEventId:keys.invoice})),
+ ];
+ for(const result of results)expect(result.code).not.toBe('OK');
+ expect(await sql`SELECT station,version,promised_due_date::text FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(before);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array(Object.values(keys))}::uuid[])`).toEqual([{n:0}]);
+ expect(await sql`SELECT id::text FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{id:order.invoice.invoiceId}]);
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt',version:released.receipt.orderVersion}}});
+});
+
 it('H8 active order still accepts a due date change with actor, readback and the same retry receipt',async()=>{
  const order=await readyInvoiceOrder('H8-aktiv');
  const {changeOrderPromisedDueDateAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
