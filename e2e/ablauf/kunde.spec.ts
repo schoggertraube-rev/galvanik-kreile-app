@@ -3,6 +3,35 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('editing visible customer notes without Geld never removes hidden financial or typed agreements',async()=>{
+ const {createCustomerAction,saveCustomerAgreementAction,updateCustomerAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST verborgene Absprache '+randomUUID(),phone:'+49 711 5550190'}));if(created.code!=='OK')throw Error('ABS_HIDDEN_CUSTOMER:'+created.code);
+ const customerId=created.receipt.customerId;
+ expect(await withSession(full,()=>saveCustomerAgreementAction({clientKey:randomUUID(),customerId,type:'ausgabe_ohne_zahlung',reason:'TEST geschützte Zahlungsabsprache'}))).toMatchObject({code:'OK'});
+ const entries=[{id:null,bezeichnung:'TEST Geldhinweis',wert:'TEST nur fürs Büro',geld:true,hinweis:true,gueltigBis:null},{id:null,bezeichnung:'TEST Verpackung',wert:'TEST alter Hinweis',geld:false,hinweis:true,gueltigBis:null}];
+ expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),agreements:entries}))).toMatchObject({code:'OK'});
+ const financial=await sql`SELECT id::text,position,bezeichnung,wert,version,widerrufen_am FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId} AND geld ORDER BY id`;
+ expect(financial).toHaveLength(2);
+ const operational=await createFixture(['kunden'],'werkstatt');
+ const read=await withSession(operational,()=>getCustomerSummaryAction({customerId}));if(read.code!=='OK')throw Error('ABS_HIDDEN_READ:'+read.code);
+ expect(read.data.agreements).toHaveLength(1);
+ const visible=read.data.agreements[0];
+ const update={customerId,clientEventId:randomUUID(),agreements:[{id:visible.id,bezeichnung:visible.label,wert:'TEST neuer Verpackungshinweis',geld:false,hinweis:true,gueltigBis:visible.validUntil}]};
+ expect(await withSession(operational,()=>updateCustomerAction(update))).toMatchObject({code:'OK'});
+ expect(await withSession(operational,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{agreements:[{id:visible.id,value:'TEST neuer Verpackungshinweis'}]}});
+ expect(await withSession(operational,()=>updateCustomerAction(JSON.parse(JSON.stringify(update))))).toMatchObject({code:'OK',replayed:true});
+ const remove={customerId,clientEventId:randomUUID(),agreements:[]};
+ expect(await withSession(operational,()=>updateCustomerAction(remove))).toMatchObject({code:'OK'});
+ const removed=await withSession(operational,()=>getCustomerSummaryAction({customerId}));
+ expect(removed.code).toBe('OK');if(removed.code!=='OK')throw Error('ABS_HIDDEN_REMOVED:'+removed.code);
+ expect(removed.data.agreements.filter(agreement=>agreement.revokedAt===null)).toEqual([]);
+ expect(removed.data.agreements).toContainEqual(expect.objectContaining({id:visible.id,revokeReason:'aus Kundenkarte entfernt',revokedAt:expect.any(String)}));
+ expect(await sql`SELECT id::text,position,bezeichnung,wert,version,widerrufen_am FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId} AND geld ORDER BY id`).toEqual(financial);
+ const office=await withSession(full,()=>getCustomerSummaryAction({customerId}));
+ expect(office).toMatchObject({code:'OK',data:{agreements:expect.arrayContaining(financial.map(row=>expect.objectContaining({id:row.id})))}});
+ for(const key of [update.clientEventId,remove.clientEventId])expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toEqual([{user_id:operational.actorId}]);
+});
+
 it('rejected free-text agreement edits roll back every prior list change and preserve the same retry key',async()=>{
  const {createCustomerAction,updateCustomerAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
  const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST Absprachen atomar '+randomUUID(),phone:'+49 711 5550190'}));if(created.code!=='OK')throw Error('ABS_ATOMIC_CUSTOMER:'+created.code);
