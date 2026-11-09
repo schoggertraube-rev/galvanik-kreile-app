@@ -5,6 +5,19 @@ import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture} from './orderFixture';
 import {requestMailStep} from './requestMailStep';
 
+it('malformed actual mail submissions return a recoverable rejection without reserving or sending',async()=>{
+ await requestMailStep('MAIL-invalid');
+ const customerId=await customerFixture('MAIL-invalid');
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ type Input=Parameters<typeof sendCustomerMailAction>[0];
+ const before=await sql`SELECT count(*)::integer AS n FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source LIKE 'MS_GRAPH_OUT:%'`;
+ for(const input of [null,{targetType:'CUSTOMER',targetId:customerId,clientRequestId:randomUUID(),subject:123,body:'TEST fehlerhafte Eingabe'},{targetType:'CUSTOMER',targetId:customerId,clientRequestId:randomUUID(),subject:'TEST fehlender Inhalt',body:null}]){
+  expect(await withSession(full,()=>sendCustomerMailAction(input as unknown as Input))).toMatchObject({code:'VALIDATION_ERROR'});
+ }
+ expect(await sql`SELECT count(*)::integer AS n FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source LIKE 'MS_GRAPH_OUT:%'`).toEqual(before);
+ expect(vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&init?.method==='POST')).toHaveLength(0);
+});
+
 it('concurrent actual mail requests dispatch once and a fresh retry reads the same message and audit',async()=>{
  await requestMailStep('MAIL-concurrent');
  const customerId=await customerFixture('MAIL-concurrent');
