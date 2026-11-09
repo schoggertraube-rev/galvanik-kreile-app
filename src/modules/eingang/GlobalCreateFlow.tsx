@@ -1,4 +1,5 @@
 "use client";
+import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {QuotePositionsEditor,type PositionDraft} from "./ui/QuotePositionsEditor";
 import {QUOTE_PREPARATION_COPY,QUOTE_CYCLE_COPY} from "@/ui/situationCatalog";
 
@@ -271,10 +272,6 @@ export type GlobalCreatePorts = {
 
 type Step = "choose" | "customer" | "customer-saved" | "customer-picker" | "quote-list" | "quote" | "quote-saved" | "order-saved" | "direct-intake" | "denied";
 type Feedback = { kind: "validation" | "conflict" | "denied" | "error" | "unclear" | "save-failed"; message: string; requestId?: string; operation?:'quote-acceptance' };
-const canonicalDraftPayload = (value: unknown) => JSON.stringify(value, (_key, entry: unknown) =>
-  entry && typeof entry === "object" && !Array.isArray(entry)
-    ? Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left.localeCompare(right)))
-    : entry);
 type OpenQuotesState =
   | { kind: "idle" | "loading" | "empty" }
   | { kind: "data"; quotes: QuoteReadback[] }
@@ -1277,7 +1274,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         const parentSaved=await ports.drafts.saveDraft({id:parentDraftId,clientEventId:draftOperation.current??=crypto.randomUUID(),art:"eingang",payload:parentPayload,lastField:null,expectedVersion:activeDraft?.version??null});
         if(parentSaved.code!=="OK"){setFeedback({kind:"error",message:parentSaved.message});return;}
         const parentDraft=parentSaved.drafts.find(value=>value.id===parentDraftId);
-        if(!parentDraft||canonicalDraftPayload(parentDraft.payload)!==canonicalDraftPayload(parentPayload))throw Error("INTAKE_CONTINUATION_PARENT_DRAFT_MISSING");
+        if(!parentDraft||canonicalJson(parentDraft.payload)!==canonicalJson(parentPayload))throw Error("INTAKE_CONTINUATION_PARENT_DRAFT_MISSING");
         setActiveDraft(parentDraft);draftOperation.current=null;
         const textSource=sources.find(source=>source.text===intakeRecognitionText);
         const parent=sources.find(source=>source.id===intakeClientKey&&source.continuation?.sourceId)
@@ -1304,7 +1301,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if(result.code!=="OK"){setFeedback({kind:"error",message:result.message});return;}
       const [captured,drafts]=await Promise.all([ports.getCapture(result.childId),ports.drafts.readDrafts()]);
       const draft=drafts.code==="OK"?drafts.drafts.find(value=>value.id===result.draftId):null;
-      if(captured.code!=="OK"||captured.capture.continuation?.sourceId!==continuationRequest.current.parentId||!draft||canonicalDraftPayload(draft.payload)!==canonicalDraftPayload(continuationRequest.current.payload))
+      if(captured.code!=="OK"||captured.capture.continuation?.sourceId!==continuationRequest.current.parentId||!draft||canonicalJson(draft.payload)!==canonicalJson(continuationRequest.current.payload))
         throw Error("INTAKE_CONTINUATION_READBACK_FAILED");
       setContinuation({childId:result.childId,draftId:result.draftId,count:overflowPositions.length});setRemainingRecognizedPositions(0);setOverflowPositions([]);
       window.dispatchEvent(new Event("kreile:intake-drafts-changed"));
@@ -1323,7 +1320,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       const saved=await ports.drafts.saveDraft({id:parentDraftId,clientEventId:draftOperation.current??=crypto.randomUUID(),art:"eingang",payload:parentPayload,lastField:null,expectedVersion:activeDraft?.version??null});
       if(saved.code!=="OK"){setFeedback({kind:"error",message:saved.message});return;}
       const parentDraft=saved.drafts.find(value=>value.id===parentDraftId);
-      if(!parentDraft||canonicalDraftPayload(parentDraft.payload)!==canonicalDraftPayload(parentPayload))throw Error("INTAKE_CONTINUATION_PARENT_READBACK_FAILED");
+      if(!parentDraft||canonicalJson(parentDraft.payload)!==canonicalJson(parentPayload))throw Error("INTAKE_CONTINUATION_PARENT_READBACK_FAILED");
       draftOperation.current=null;window.dispatchEvent(new Event("kreile:intake-drafts-changed"));
       if(nextOrderId)ports.openOrder(nextOrderId);
       else if(nextDraftId)await restoreIntakeDraft(nextDraftId);

@@ -1,4 +1,6 @@
 "use server";
+import {quoteCommandContext} from '@/lib/server/quoteAuthorization';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 import {readMicrosoftGraphSentDocumentEvidence} from "@/lib/server/microsoftGraph";
 
@@ -9,7 +11,6 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { createQuotePdfDocument } from "@/lib/pdf/QuoteDocument";
 import {
-  getAuthorizationActionGrants,
   hasAuthorizationArea,
   resolveAuthorization,
   type AuthorizationSnapshot,
@@ -52,22 +53,6 @@ import {
 
 type PendingMailAcceptance={input:QuoteLifecycleInput;proof:QuoteReplyProof;handoverMode:'pickup'|'shipping';paymentMode:'vorkasse'|'abholung'|'rechnung';eventId?:string;notices?:string[]};
 function mailOrderKey(requestId:string){const bytes=createHash('sha256').update('quote-mail-order:'+requestId).digest().subarray(0,16);bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const h=bytes.toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;}
-
-function quoteCommandContext(authorization: AuthorizationSnapshot): QuoteCommandContext {
-  const actionGrants = getAuthorizationActionGrants(authorization);
-  const canReadQuote = hasAuthorizationArea(authorization, "geld")
-    && hasAuthorizationArea(authorization, "auftraege");
-  return {
-    tenantId: authorization.tenantId,
-    userId: authorization.userId,
-    capabilities: {
-      canCreateQuote: actionGrants.createQuote,
-      canReadQuote,
-      canUpdateQuote: actionGrants.createQuote,
-      canConvertQuote: actionGrants.createQuote,
-    },
-  };
-}
 
 /** U-249 is an operational decision grant, never an edit/financial grant. */
 function quoteOperationContext(auth:AuthorizationSnapshot):QuoteCommandContext{const context=quoteCommandContext(auth);return {...context,capabilities:{...context.capabilities,canReadQuote:true,canDecideQuote:true,canConvertQuote:true}};}
@@ -544,7 +529,7 @@ export async function receiveOnsiteQuoteAction(input:import("@/lib/onsiteQuoteCo
  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
  if(!input||!uuid.test(input.clientRequestId)||!input.customer||!['NEW','EXISTING'].includes(input.customer.mode)||!input.quote||Object.hasOwn(input.quote,'source')||typeof input.evidence!=='string'||input.evidence.trim().length<3||!Array.isArray(input.quantities)||!input.quantities.length||input.quantities.some(row=>!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.received)||row.received<0)||new Set(input.quantities.map(row=>row.position)).size!==input.quantities.length)return {code:'VALIDATION_ERROR' as const,message:'Kunde, KV, Zusage und tatsaechlich angenommene Mengen vollstaendig pruefen.'};
  const phase=(name:string)=>{const hex=createHash('sha256').update('kreile-onsite:'+input.clientRequestId+':'+name).digest('hex');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-5'+hex.slice(13,16)+'-8'+hex.slice(17,20)+'-'+hex.slice(20,32);};
- const intent=createHash('sha256').update(JSON.stringify(input)).digest('hex');
+ const intent=createHash('sha256').update(canonicalJson(input)).digest('hex');
  let customerId:string|undefined,quoteId:string|undefined;
  try{
   const authResult=await resolveAuthorization(),denied=authorizationFailure(authResult);if(denied||!authResult.ok)return denied!;

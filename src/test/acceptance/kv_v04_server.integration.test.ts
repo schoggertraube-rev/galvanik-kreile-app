@@ -881,14 +881,14 @@ it.each([false,true])('U246 onsite request existing/new customer %s uses the rea
  const {saveIntakeDraftAction,getIntakeDraftsAction,discardIntakeDraftAction}=await import('@/app/actions/eingang.actions');
  const persisted=await withSession(fixture,()=>saveIntakeDraftAction({id:input.clientRequestId,clientEventId:randomUUID(),art:'eingang',payload:{kind:'package-onsite',version:1,clientKey:input.clientRequestId,sourceItemId:itemId,request:input},lastField:null,expectedVersion:null}));
  expect(persisted).toMatchObject({code:'OK',drafts:expect.arrayContaining([expect.objectContaining({id:input.clientRequestId,payload:expect.objectContaining({request:input})})])});
- expect(await withSession(fixture,()=>getIntakeDraftsAction())).toMatchObject({code:'OK',drafts:expect.arrayContaining([expect.objectContaining({id:input.clientRequestId})])});
+ const resumed=await withSession(fixture,()=>getIntakeDraftsAction());if(resumed.code!=='OK')throw Error('TEST_DRAFT_RESUME');const storedRequest=resumed.drafts.find(row=>row.id===input.clientRequestId)?.payload.request as typeof input;expect(storedRequest).toEqual(input);expect(JSON.stringify(storedRequest)).not.toBe(JSON.stringify(input));
  const received=await withSession(fixture,()=>receiveOnsiteQuoteAction(input));
  expect(received,JSON.stringify(received)).toMatchObject({code:'OK'});
  if(received.code!=='OK'||!('orderReceipt'in received))throw Error('TEST_ONSITE_ACTION:'+received.code+':'+('message'in received?received.message:''));
  const orderId=received.orderReceipt.orderId;
  if(newCustomer){const {readQuoteAction}=await import('@/app/actions/quotes.actions');expect(await withSession(fixture,()=>readQuoteAction({quoteId:received.quote.quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{goods:[{expectedPositions:[{position:2,quantity:2}]}]}}});}
 
- expect(await withSession(fixture,()=>receiveOnsiteQuoteAction(input))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId}});
+ expect(await withSession(fixture,()=>receiveOnsiteQuoteAction(storedRequest))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId}});
  expect(await withSession(fixture,()=>receiveOnsiteQuoteAction({...input,evidence:'TEST geaenderte Zusage'}))).toMatchObject({code:'CONFLICT'});
  expect((await sql`SELECT q.gesendet_fassung,q.zugesagt_fassung,q.linked_order_id,(SELECT quantity::float8 FROM public.items WHERE tenant_id=q.tenant_id AND order_id=q.linked_order_id) AS quantity FROM private.quotes q WHERE q.tenant_id=${KREILE_TENANT_SLUG} AND q.linked_order_id=${orderId}`)[0]).toMatchObject({gesendet_fassung:null,zugesagt_fassung:1,linked_order_id:orderId,quantity:3});
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientRequestId}::uuid AND event_type='QUOTE_ONSITE_REQUESTED_V04'`)[0].n).toBe(1);

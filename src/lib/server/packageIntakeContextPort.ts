@@ -1,13 +1,11 @@
+import {packagePartWords} from '@/lib/domain/packagePartWords';
+export {packagePartWords} from '@/lib/domain/packagePartWords';
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
 
 /** Read-only operational history. No inference is ever saved as a customer assignment. */
-export function packagePartWords(text:string){
- const ignored=new Set(['paket','ware','absender','unbekannt','bitte','stück','stueck','verchromen','verzinken','vernickeln','lieferschein','inhalt','diese','dieser','ohne','steht','zurück','zurueck','versand']);
- return [...new Set(text.toLocaleLowerCase('de-DE').split(/[^\p{L}\p{N}]+/u).filter(word=>word.length>=4&&!ignored.has(word)))].slice(0,8);
-}
 export type PackageCustomerHistory={customerId:string;customerName:string;lastAt:string;source:'order'|'quote'};
 export async function readPackageOrderCustomers(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,text:string):Promise<PackageCustomerHistory[]>{
  if(!hasAuthorizationArea(auth,'eingang')||!hasAuthorizationArea(auth,'kunden')||!hasAuthorizationArea(auth,'auftraege'))return [];

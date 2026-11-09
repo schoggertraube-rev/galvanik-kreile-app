@@ -133,7 +133,7 @@ function normalizeCalculation(raw:unknown,positions:CreateQuoteInput['positions'
  const value=raw as QuoteCalculation,result=calculateQuote(value);
  if(result.code!=='OK'||positions.reduce((sum,row)=>sum+(row.lineTotalCents??row.quantity*row.unitPriceCents),0)!==result.totalNetCents)return null;
  const [whole,fraction='']=value.hours.trim().replace(',','.').split('.'),digits=fraction.replace(/0+$/u,'');
- return {...value,hours:BigInt(whole).toString()+(digits?'.'+digits:'')};
+ return {hours:BigInt(whole).toString()+(digits?'.'+digits:''),hourlyRateCents:value.hourlyRateCents,setupCents:value.setupCents,materialCents:value.materialCents};
 }
 
 function normalizeCreate(value: unknown): CreateQuoteInput | null {
@@ -765,7 +765,7 @@ import type {PackageCustomerHistory} from '@/lib/server/packageIntakeContextPort
 /** Price-free history owned by quotes; closed quotes are included, never inferred into an assignment. */
 export async function readPackageQuoteHistory(auth:AuthorizationSnapshot,text:string):Promise<PackageCustomerHistory[]>{
  const {hasAuthorizationArea}=await import('@/lib/server/authorization');
- const {packagePartWords}=await import('@/lib/server/packageIntakeContextPort');
+ const {packagePartWords}=await import('@/lib/domain/packagePartWords');
  if(!['eingang','kunden','auftraege'].every(area=>hasAuthorizationArea(auth,area as 'eingang'|'kunden'|'auftraege')))return [];
  const words=packagePartWords(text);if(!words.length)return [];
  return withPrivilegedTenantTransaction(auth,async tx=>{
