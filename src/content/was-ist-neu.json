@@ -1,12 +1,300 @@
 [
-  {"datum":"2026-11-05","pr":175,"seite":"rechnungein","punkte":["Vorschau: Über Neu erfassen Eingangsrechnungen mit Original prüfen.","Vorschau: Fehlende Lieferanten über eine Aufgabe ergänzen."],"ziel":"rein"},
-  {"datum":"2026-11-05","pr":173,"seite":"nachrichten","punkte":["Vorschau: Nachrichten lassen sich einem Kunden zuordnen, erledigen und mit Grund wieder öffnen.","Vorschau: Aufgaben bleiben mit ihrem Anlass und dem Verlauf verbunden.","Vorschau: Ein geöffnetes Original einem Kunden zuordnen und zur erhaltenen Erfassung zurückkehren.","Nach einem Speicherfehler kehrt Erneut zur erhaltenen Aufgabe zurück. Erst Auf Der Tag speichert erneut."],"ziel":"/nachrichten"},
-  {"datum":"2026-11-04","pr":172,"seite":"rein","punkte":["Vorbereitung für Nachrichten und Teilen an die App."],"ziel":"rein"},
-  {"datum":"2026-11-04","pr":171,"seite":"ware","punkte":["Vorschau: Ware am Auftrag prüfen und annehmen.","Vorschau: Gespeicherte Originale ansehen und prüfen.","Erwartete oder ungeklärte Ware bleibt vor der Galvanik gesperrt; geprüfte Teillieferungen lassen sich gemeinsam mit dem Stationswechsel buchen."],"ziel":"/orders"},
-  {"datum":"2026-11-04","pr":169,"seite":"rein","punkte":["Vorschau: Die Eingang-Seiten erhalten die freigegebene Darstellung für Desktop, Tablet und Handy."],"ziel":"rein"},
-  {"datum":"2026-11-05","pr":168,"seite":"eingang","punkte":["Vorschau: Kamera auf Tablet und Handy direkt öffnen; Foto im festen Dialogfuß aufnehmen.","Vorschau: Gelesener Dokumenttext bleibt mit dem gesicherten Original verbunden.","Vorschau: Auftrag aus einem Eingang erfassen; fehlende Angaben gezielt ergänzen."],"ziel":"rein"},
-  {"datum":"2026-11-04","pr":167,"seite":"kundeneu","punkte":["Kunde anlegen und Kundendaten in derselben Kartei bearbeiten."],"ziel":"/customers"},
-  {"datum":"2026-11-04","pr":166,"seite":"rein","punkte":["Was ist neu zeigt Änderungen und merkt sich je Login, was bereits angesehen wurde.","Die vorgesehenen Eingang-Wege werden vor ihrer Freigabe geprüft."],"ziel":"rein"},
-  {"datum":"2026-11-05","pr":170,"seite":"ware","punkte":["Vorschau: Vorbereitung für Abholmitteilungen, Versand und die Freigabe zur Ausgabe.","Unter Einstellungen → Firmendaten → Versand lassen sich Dienst, Nummernformat, Hinweis und Sendungsverfolgung speichern; fremde Änderungen werden zum Abgleich angezeigt."],"ziel":"/orders"},
-  {"datum":"2026-11-03","pr":164,"seite":"rein","punkte":["Neu erfassen bündelt den Einstieg über das Plus.","Auftrag oder KV und Kunde anlegen starten von dort."],"ziel":"rein"}
+  {
+    "ziel": "/",
+    "seite": "tag",
+    "pr": 205,
+    "datum": "2026-11-09",
+    "punkte": [
+      "Zuständigkeit wird aus der tatsächlichen Zuweisung gelesen. Ohne Zuweisung bleibt Übernehmen erreichbar.",
+      "Ein beschädigter Zuweisungsbeleg lässt die Startseite und den Auftrag weiterhin öffnen."
+    ]
+  },
+  {
+    "ziel": "rein",
+    "seite": "eingang",
+    "pr": 204,
+    "datum": "2026-11-09",
+    "punkte": [
+      "Paket-Eingänge behalten ihre Originale und bieten passende Kunden und Vorgänge zur bewussten Auswahl.",
+      "Vor Ort Kunde, Positionen und Ware im selben Eingang erfassen; nach einer Unterbrechung dort weiterarbeiten."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "kv",
+    "pr": 202,
+    "datum": "2026-11-08",
+    "punkte": [
+      "Terminänderungen aus einer Mail behalten ihren Bezug zum KV und Auftrag.",
+      "Mehrere Warenbelege und die Gutschrifthistorie bleiben im bestehenden Ablauf erhalten."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "kv",
+    "pr": 201,
+    "datum": "2026-11-08",
+    "punkte": [
+      "Offene Anliegen bleiben bei einer KV-Rückgabe erhalten; die Gültigkeit lässt sich verlängern.",
+      "Reklamationen bleiben mit dem vorhandenen Versandweg verbunden."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "kv",
+    "pr": 200,
+    "datum": "2026-11-08",
+    "punkte": [
+      "KV, Zusage, Warenannahme und Auftrag sind im bestehenden Ablauf verbunden.",
+      "Eine Umwandlung lässt sich mit Grund zurücknehmen, solange keine Folgehandlung sie sperrt."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "kv",
+    "pr": 199,
+    "datum": "2026-11-08",
+    "punkte": [
+      "Bei Teilmengen bleibt der Rüstaufwand fest; Arbeit und Material werden anteilig berechnet.",
+      "Die Preisfolge berücksichtigt einzelne und mehrere Positionen."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "reklamation",
+    "pr": 198,
+    "datum": "2026-11-08",
+    "punkte": [
+      "Reklamationswege verwenden die tatsächliche Lieferquelle; die zugehörigen Restfälle sind repariert."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "kv",
+    "pr": 197,
+    "datum": "2026-11-08",
+    "punkte": [
+      "Beim Ändern eines KV bleibt der Termin erhalten. Textänderungen werden als Vorschlag behandelt.",
+      "Ein vorhandener KV lässt sich über den bestehenden Kopierweg übernehmen."
+    ]
+  },
+  {
+    "ziel": "rein",
+    "seite": "ware",
+    "pr": 196,
+    "datum": "2026-11-08",
+    "punkte": [
+      "Angenommene Mengen werden aus den Warenbelegen übernommen.",
+      "Der Vor-Ort-Weg verbindet die Warenannahme mit dem vorhandenen KV."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "kv",
+    "pr": 195,
+    "datum": "2026-11-08",
+    "punkte": [
+      "KV-Zusage, Warenannahme und Mailversand laufen über die vorhandenen gemeinsamen Befehle."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "reklamation",
+    "pr": 194,
+    "datum": "2026-11-08",
+    "punkte": [
+      "Feldfehler bleiben im Reklamationsdialog sichtbar; Teileauswahl und Wiederöffnen sind abgesichert."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "reklamation",
+    "pr": 193,
+    "datum": "2026-11-08",
+    "punkte": [
+      "Begleitscheine für Nacharbeit lassen sich über den bestehenden Mailweg senden."
+    ]
+  },
+  {
+    "ziel": "rein",
+    "seite": "eingang",
+    "pr": 192,
+    "datum": "2026-11-07",
+    "punkte": [
+      "Mail-Import und Zuordnung verwenden denselben Eingang und behalten den Originalbezug."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "reklamation",
+    "pr": 191,
+    "datum": "2026-11-07",
+    "punkte": [
+      "Reklamationsabläufe verwenden gemeinsame Befehle und Karten; eine doppelte Anzeige in Der Tag ist repariert."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "auftraege",
+    "pr": 190,
+    "datum": "2026-11-07",
+    "punkte": [
+      "Auftragskontext, Kundenhinweise und Menü-Navigation sind im vorhandenen Ablauf korrigiert."
+    ]
+  },
+  {
+    "ziel": "rein",
+    "seite": "eingang",
+    "pr": 188,
+    "datum": "2026-11-07",
+    "punkte": [
+      "Texte, Erfassung und Bezug zum gesicherten Original wurden angeglichen."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "ware",
+    "pr": 186,
+    "datum": "2026-11-07",
+    "punkte": [
+      "Laufzettel lassen sich im bestehenden Auftragsweg drucken."
+    ]
+  },
+  {
+    "ziel": "/nachrichten",
+    "seite": "nachrichten",
+    "pr": 185,
+    "datum": "2026-11-07",
+    "punkte": [
+      "Absprachen werden als eigener Anliegen-Typ im vorhandenen Ablauf geführt."
+    ]
+  },
+  {
+    "ziel": "/orders",
+    "seite": "reklamation",
+    "pr": 183,
+    "datum": "2026-11-07",
+    "punkte": [
+      "Aus einer Reklamation lässt sich Nacharbeit im bestehenden Auftragsweg anlegen."
+    ]
+  },
+  {
+    "ziel": "rein",
+    "seite": "eingang",
+    "pr": 180,
+    "datum": "2026-11-06",
+    "punkte": [
+      "Die gelieferten Aufgaben-, Rechnungs- und Folgewege sind in den gemeinsamen App-Stand übernommen."
+    ]
+  },
+  {
+    "ziel": "rein",
+    "seite": "eingang",
+    "pr": 179,
+    "datum": "2026-11-06",
+    "punkte": [
+      "Entwürfe prüfen ihre Version, damit zwischenzeitliche Änderungen nicht still überschrieben werden."
+    ]
+  },
+  {
+    "datum": "2026-11-05",
+    "pr": 175,
+    "seite": "rechnungein",
+    "punkte": [
+      "Vorschau: Über Neu erfassen Eingangsrechnungen mit Original prüfen.",
+      "Vorschau: Fehlende Lieferanten über eine Aufgabe ergänzen."
+    ],
+    "ziel": "rein"
+  },
+  {
+    "datum": "2026-11-05",
+    "pr": 173,
+    "seite": "nachrichten",
+    "punkte": [
+      "Vorschau: Nachrichten lassen sich einem Kunden zuordnen, erledigen und mit Grund wieder öffnen.",
+      "Vorschau: Aufgaben bleiben mit ihrem Anlass und dem Verlauf verbunden.",
+      "Vorschau: Ein geöffnetes Original einem Kunden zuordnen und zur erhaltenen Erfassung zurückkehren.",
+      "Nach einem Speicherfehler kehrt Erneut zur erhaltenen Aufgabe zurück. Erst Auf Der Tag speichert erneut."
+    ],
+    "ziel": "/nachrichten"
+  },
+  {
+    "datum": "2026-11-04",
+    "pr": 172,
+    "seite": "rein",
+    "punkte": [
+      "Vorbereitung für Nachrichten und Teilen an die App."
+    ],
+    "ziel": "rein"
+  },
+  {
+    "datum": "2026-11-04",
+    "pr": 171,
+    "seite": "ware",
+    "punkte": [
+      "Vorschau: Ware am Auftrag prüfen und annehmen.",
+      "Vorschau: Gespeicherte Originale ansehen und prüfen.",
+      "Erwartete oder ungeklärte Ware bleibt vor der Galvanik gesperrt; geprüfte Teillieferungen lassen sich gemeinsam mit dem Stationswechsel buchen."
+    ],
+    "ziel": "/orders"
+  },
+  {
+    "datum": "2026-11-04",
+    "pr": 169,
+    "seite": "rein",
+    "punkte": [
+      "Vorschau: Die Eingang-Seiten erhalten die freigegebene Darstellung für Desktop, Tablet und Handy."
+    ],
+    "ziel": "rein"
+  },
+  {
+    "datum": "2026-11-05",
+    "pr": 168,
+    "seite": "eingang",
+    "punkte": [
+      "Vorschau: Kamera auf Tablet und Handy direkt öffnen; Foto im festen Dialogfuß aufnehmen.",
+      "Vorschau: Gelesener Dokumenttext bleibt mit dem gesicherten Original verbunden.",
+      "Vorschau: Auftrag aus einem Eingang erfassen; fehlende Angaben gezielt ergänzen."
+    ],
+    "ziel": "rein"
+  },
+  {
+    "datum": "2026-11-04",
+    "pr": 167,
+    "seite": "kundeneu",
+    "punkte": [
+      "Kunde anlegen und Kundendaten in derselben Kartei bearbeiten."
+    ],
+    "ziel": "/customers"
+  },
+  {
+    "datum": "2026-11-04",
+    "pr": 166,
+    "seite": "rein",
+    "punkte": [
+      "Was ist neu zeigt Änderungen und merkt sich je Login, was bereits angesehen wurde.",
+      "Die vorgesehenen Eingang-Wege werden vor ihrer Freigabe geprüft."
+    ],
+    "ziel": "rein"
+  },
+  {
+    "datum": "2026-11-05",
+    "pr": 170,
+    "seite": "ware",
+    "punkte": [
+      "Vorschau: Vorbereitung für Abholmitteilungen, Versand und die Freigabe zur Ausgabe.",
+      "Unter Einstellungen → Firmendaten → Versand lassen sich Dienst, Nummernformat, Hinweis und Sendungsverfolgung speichern; fremde Änderungen werden zum Abgleich angezeigt."
+    ],
+    "ziel": "/orders"
+  },
+  {
+    "datum": "2026-11-03",
+    "pr": 164,
+    "seite": "rein",
+    "punkte": [
+      "Neu erfassen bündelt den Einstieg über das Plus.",
+      "Auftrag oder KV und Kunde anlegen starten von dort."
+    ],
+    "ziel": "rein"
+  }
 ]
