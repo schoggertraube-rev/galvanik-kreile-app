@@ -1,4 +1,6 @@
 import "server-only";
+import {readOpenOrderComplaint} from '@/lib/server/orderReleaseRead';
+import {COMPLAINT_ORDER_COPY} from '@/ui/situationCatalog';
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -669,6 +671,8 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
         return { code: "VALIDATION_ERROR", message: "Auftragsvertrag ist nicht verfügbar." };
       }
 
+      const pendingComplaint=await readOpenOrderComplaint(tx,tenantId,order.id);
+      if(pendingComplaint)return {code:'CONFLICT',message:COMPLAINT_ORDER_COPY.releaseBlocked(pendingComplaint.number)};
       const agreement = input.agreement === undefined
         ? null
         : await readEffectiveCustomerAgreement(tx, {

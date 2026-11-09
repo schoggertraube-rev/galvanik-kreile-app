@@ -1,4 +1,5 @@
 import "server-only";
+import {readOpenOrderComplaint} from './orderReleaseRead';
 
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -90,7 +91,9 @@ export async function getPaymentState(
       `);
       if (rows.length === 0) return null;
       if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
-      return mapOrderPaymentStateRow(rows[0], authorization);
+      const mapped=mapOrderPaymentStateRow(rows[0], authorization);
+      const complaint=await readOpenOrderComplaint(tx,authorization.tenantId,mapped.orderId);
+      return {...mapped,goodsOutAllowed:mapped.goodsOutAllowed&&complaint===null};
     });
     return data
       ? { code: "OK", data }
