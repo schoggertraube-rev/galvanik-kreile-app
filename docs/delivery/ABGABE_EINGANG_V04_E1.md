@@ -67,3 +67,7 @@ Der vorhandene Dialog bleibt verantwortlich für Escape, Hintergrundklick und de
 Bewusst offen: **Sprechen** wird nach ausdrücklichem PL-Entscheid nicht als Knopf gezeigt und nicht simuliert; ein Transkriptions-Port fehlt. PL informiert die Owner. Die Beispiel-/Vernetzungs-Demos des HTML-Referenzwerkzeugs werden nicht als Produktfunktionen eingebaut.
 
 Lokale Datenbank weiterhin nicht erreichbar nach einem begrenzten Wiederanlaufversuch; keine neuen DB-Schleifen. Die bereits nachgewiesenen Server-Schreibwege bleiben unverändert. Ein neuer Sichtlauf erfolgt gegen die tatsächliche Git-Preview; ohne diesen Nachweis keine fertige Abnahme.
+
+## Nachführung des bestehenden globalen Fluss-Tests
+
+Die Modus-Aufnahme erwartet nach dem freigegebenen gemeinsamen Kopf „Neuer Eingang“ statt „Zettel lesen · für die Erfassung“. Alle Prüfungen zu Datei-Werkzeug, zwei Ebenen, Escape-Rückkehr und getrenntem Mailweg bleiben erhalten. Dieser konkrete RealRender-Fall ist lokal grün (1,05 s). Der einmalige Lauf der ganzen Datei bestand 88 von 89 Fällen; ein unberührter PositionZeile-Fall erreichte bei belastetem Rechner das unveränderte 5-Sekunden-Limit. Keine Timeout-Erhöhung und keine Assertion entfernt.
