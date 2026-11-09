@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { GOODS_OUT_DEBT_COPY } from "@/ui/situationCatalog";
 import { sql } from "drizzle-orm";
 import { readEffectiveCustomerAgreement } from "@/lib/server/effectiveCustomerAgreementRead";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
@@ -9,6 +10,7 @@ import {
   isOrderPaymentMode,
   isPaymentMode,
   mapPaymentSummaryRow,
+  overdueInvoiceCondition,
   type OrderPaymentMode,
   type PaymentStatus,
   type PaymentSummaryRow,
@@ -43,6 +45,7 @@ export type RecordGoodsOutInput = {
   expectedVersion: number;
   clientEventId: string;
   agreement?: GoodsOutAgreement;
+  overdueReleaseReason?: string;
 };
 
 type GoodsOutReceiptBase = {
@@ -58,6 +61,7 @@ type GoodsOutReceiptBase = {
   paymentMode: OrderPaymentMode;
   actorId: string;
   occurredAt: string;
+  overdueReleaseReason?: string;
 };
 
 export type GoodsOutReceiptV1 = GoodsOutReceiptBase & {
@@ -204,13 +208,9 @@ function isValidInput(input: unknown): input is RecordGoodsOutInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const value = input as Record<string, unknown>;
   const expectedKeys = ["clientEventId", "expectedVersion", "mode", "orderId"];
-  const expectedWithAgreement = ["agreement", ...expectedKeys].sort();
-  const actualKeys = Object.keys(value).sort();
-  const hasAgreement = actualKeys.length === expectedWithAgreement.length
-    && actualKeys.every((key, index) => key === expectedWithAgreement[index]);
-  return ((actualKeys.length === expectedKeys.length
-      && actualKeys.every((key, index) => key === expectedKeys[index]))
-      || hasAgreement)
+  const allowedKeys = [...expectedKeys, "agreement", "overdueReleaseReason"];
+  return expectedKeys.every(key => Object.hasOwn(value, key))
+    && Object.keys(value).every(key => allowedKeys.includes(key))
     && typeof value.orderId === "string"
     && value.orderId.trim() === value.orderId
     && value.orderId.length > 0
@@ -221,7 +221,12 @@ function isValidInput(input: unknown): input is RecordGoodsOutInput {
     && value.expectedVersion > 0
     && typeof value.clientEventId === "string"
     && UUID_PATTERN.test(value.clientEventId)
-    && (!hasAgreement || isGoodsOutAgreement(value.agreement));
+    && (!Object.hasOwn(value, "agreement") || isGoodsOutAgreement(value.agreement))
+    && (!Object.hasOwn(value, "overdueReleaseReason") || validOverdueReleaseReason(value.overdueReleaseReason));
+}
+
+function validOverdueReleaseReason(value: unknown): value is string {
+  return typeof value === "string" && value === value.trim() && value.length >= 3 && value.length <= 2000;
 }
 
 function readDiagnostic(error: unknown, key: "message" | "details" | "hint"): string | null {
@@ -456,6 +461,25 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
   };
 }
 
+async function readReleaseAudit(tx: PrivilegedTenantTransaction, tenantId: string, receipt: GoodsOutReceipt): Promise<GoodsOutReceipt> {
+  const rows = await tx.execute<{actor: string; payload: Record<string, unknown>}>(sql`
+    SELECT audit.user_id::text AS actor, audit.payload
+    FROM public.events audit
+    WHERE audit.tenant_id = ${tenantId} AND audit.order_id = ${receipt.orderId}
+      AND audit.correlation_id = ${receipt.correlationId}::uuid
+      AND audit.event_type = 'ORDER_GOODS_OUT_DEBT_OVERRIDE_V1'
+    LIMIT 2
+  `);
+  if (rows.length === 0) return receipt;
+  const row = rows[0], payload = row?.payload;
+  if (rows.length !== 1 || row.actor !== receipt.actorId || !payload
+    || Object.keys(payload).sort().join(',') !== 'goodsOutEventId,invoiceId,reason'
+    || payload.goodsOutEventId !== receipt.eventId
+    || typeof payload.invoiceId !== 'string' || !UUID_PATTERN.test(payload.invoiceId)
+    || !validOverdueReleaseReason(payload.reason)) throw new Error('GOODS_OUT_OVERRIDE_RECEIPT_INVALID');
+  return {...receipt, overdueReleaseReason: payload.reason};
+}
+
 function receiptMatchesIntent(
   receipt: GoodsOutReceipt,
   input: RecordGoodsOutInput,
@@ -467,6 +491,7 @@ function receiptMatchesIntent(
     && receipt.expectedVersion === input.expectedVersion
     && receipt.clientEventId === input.clientEventId
     && receipt.actorId === actorId
+    && receipt.overdueReleaseReason === input.overdueReleaseReason
     && (input.agreement === undefined
       ? receiptAgreement === undefined
       : receiptAgreement !== undefined
@@ -583,9 +608,14 @@ async function attachOpenInvoiceCollection(
   }
 }
 
-export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResult> {
+export async function authorizeGoodsOutInput(input: unknown): Promise<
+  {code: 'AUTHORIZED'; input: RecordGoodsOutInput; authorization: {data: AuthorizationSnapshot}}
+  | Exclude<RecordGoodsOutResult, {code: 'OK'}>
+> {
   if (!isValidInput(input)) {
-    return { code: "VALIDATION_ERROR", message: "Ungültiger Warenausgang." };
+    const reasonInvalid = input !== null && typeof input === "object" && Object.hasOwn(input, "overdueReleaseReason")
+      && !validOverdueReleaseReason((input as Record<string, unknown>).overdueReleaseReason);
+    return { code: "VALIDATION_ERROR", message: reasonInvalid ? GOODS_OUT_DEBT_COPY.reasonMissing : "Ungültiger Warenausgang." };
   }
 
   let authorization;
@@ -606,11 +636,29 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
     return { code: "FORBIDDEN", message: "Warenausgang ist mit dieser Rolle nicht erlaubt." };
   }
 
+  if (input.overdueReleaseReason !== undefined && !hasAuthorizationArea(authorization.data, "entscheiden")) {
+    return { code: "FORBIDDEN", message: GOODS_OUT_DEBT_COPY.overrideForbidden };
+  }
+  return {code: 'AUTHORIZED', input, authorization};
+}
+
+type GoodsOutComposition={
+  beforeOrderLock:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
+  beforeWrite:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<Exclude<RecordGoodsOutResult,{code:'OK'}>|null>;
+};
+class GoodsOutRejected extends Error{
+  constructor(readonly result:Exclude<RecordGoodsOutResult,{code:'OK'}>){super('GOODS_OUT_REJECTED');}
+}
+
+export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutComposition): Promise<RecordGoodsOutResult> {
+  const authorized = await authorizeGoodsOutInput(candidate);
+  if (authorized.code !== 'AUTHORIZED') return authorized;
+  const {input, authorization} = authorized;
   const tenantId = authorization.data.tenantId;
   const actorId = authorization.data.userId;
 
   try {
-    return await withPrivilegedTenantTransaction(authorization.data, async (tx) => {
+    const write=async(tx:PrivilegedTenantTransaction):Promise<RecordGoodsOutResult>=>{
       await tx.execute(sql`
         SELECT pg_advisory_xact_lock(
           hashtextextended('f1:goods-out:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0)
@@ -631,7 +679,7 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
         ) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
-        const receipt = parseEvent(existingEvents[0], tenantId);
+        const receipt = await readReleaseAudit(tx, tenantId, parseEvent(existingEvents[0], tenantId));
         if (!receiptMatchesIntent(receipt, input, actorId)) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
@@ -642,6 +690,9 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
         return { code: "OK", receipt, replayed: true };
       }
 
+      // Invoice advisory locks must precede the shared order-row lock to avoid
+      // deadlock with a simultaneous standalone invoice action.
+      await composition?.beforeOrderLock(tx,authorization.data);
       const orders = await readOrder(tx, tenantId, input.orderId, true);
       const order = orders[0];
       if (orders.length !== 1 || !order || order.tenant_id !== tenantId) {
@@ -669,6 +720,32 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
         return { code: "VALIDATION_ERROR", message: "Auftragsvertrag ist nicht verfügbar." };
       }
 
+      // This decision uses invoice facts even when the actor cannot see money.
+      // Do not use the visibility-filtered customer-hints projection as a gate.
+      const overdueInvoices = await tx.execute<{ id: string; invoice_number: string }>(sql`
+        SELECT invoice.id::text, invoice.invoice_number
+        FROM public.invoices invoice
+        WHERE invoice.tenant_id = ${tenantId}
+          AND invoice.customer_id = ${order.customer_id}
+          AND ${overdueInvoiceCondition()}
+        ORDER BY invoice.due_date, invoice.id
+        LIMIT 1
+        FOR SHARE
+      `);
+      if (overdueInvoices.length > 0 && input.overdueReleaseReason === undefined) {
+        return {
+          code: "CONFLICT",
+          message: GOODS_OUT_DEBT_COPY.blocked(
+            hasAuthorizationArea(authorization.data, "geld")
+              ? overdueInvoices[0].invoice_number
+              : undefined,
+          ),
+        };
+      }
+      if (overdueInvoices.length === 0 && input.overdueReleaseReason !== undefined) {
+        return { code: "CONFLICT", message: GOODS_OUT_DEBT_COPY.noLongerBlocked };
+      }
+
       const agreement = input.agreement === undefined
         ? null
         : await readEffectiveCustomerAgreement(tx, {
@@ -692,6 +769,8 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
         return { code: "CONFLICT", message: "Ausgabe ist noch nicht freigegeben. Zahlung oder Abschluss fehlt." };
       }
 
+      const preparation=await composition?.beforeWrite(tx,authorization.data);
+      if(preparation)return preparation;
       const invoices = await readActiveInvoice(tx, tenantId, order.id);
       if (invoices.length > 1) {
         return { code: "CONFLICT", message: "Warenausgang erfordert eine gültige Rechnung." };
@@ -886,6 +965,20 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
       if (inserted.length !== 1 || typeof inserted[0]?.event_id !== "string") {
         throw new Error("GOODS_OUT_EVENT_INSERT_FAILED");
       }
+      if (input.overdueReleaseReason !== undefined) {
+        // The physical receipt keeps its protected exact V1–V4 schema. The
+        // approval is its own linked audit event in the same transaction.
+        await tx.execute(sql`
+          INSERT INTO public.events (id, tenant_id, order_id, event_type, description,
+            user_id, payload, notes, status, client_event_id, correlation_id,
+            event_schema_version, aggregate_version, station, from_station, created_at)
+          VALUES (gen_random_uuid()::text, ${tenantId}, ${order.id}, 'ORDER_GOODS_OUT_DEBT_OVERRIDE_V1',
+            ${GOODS_OUT_DEBT_COPY.overrideRecorded}, ${actorId}::uuid,
+            ${JSON.stringify({goodsOutEventId: inserted[0].event_id, invoiceId: overdueInvoices[0].id, reason: input.overdueReleaseReason})}::jsonb,
+            ${input.overdueReleaseReason}, 'success', gen_random_uuid(), ${correlationId}::uuid,
+            1, ${nextVersion}, ${TARGET_STATION}, ${SOURCE_STATION}, clock_timestamp() AT TIME ZONE 'UTC')
+        `);
+      }
 
       if (reworkComplaint) {
         const expectedComplaintVersion = toNonNegativeInteger(reworkComplaint.version);
@@ -916,15 +1009,21 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
       if (persistedEvents.length !== 1 || !persistedEvents[0] || persistedOrders.length !== 1 || !persistedOrders[0]) {
         throw new Error("GOODS_OUT_READBACK_MISSING");
       }
-      const receipt = parseEvent(persistedEvents[0], tenantId);
+      const receipt = await readReleaseAudit(tx, tenantId, parseEvent(persistedEvents[0], tenantId));
       if (
         !receiptMatchesIntent(receipt, input, actorId)
         || !orderMatchesReceipt(persistedOrders[0], receipt, tenantId)
       ) throw new Error("GOODS_OUT_READBACK_INVALID");
 
       return { code: "OK", receipt, replayed: false };
+    };
+    return await withPrivilegedTenantTransaction(authorization.data,async tx=>{
+      const result=await write(tx);
+      if(result.code!=='OK')throw new GoodsOutRejected(result);
+      return result;
     });
   } catch (error: unknown) {
+    if(error instanceof GoodsOutRejected)return error.result;
     logDatabaseFailure(error);
     return { code: "UNAVAILABLE", message: "Warenausgang konnte nicht sicher gebucht werden." };
   }

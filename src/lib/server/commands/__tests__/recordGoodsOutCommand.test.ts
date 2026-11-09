@@ -184,6 +184,7 @@ function configureSuccess(options: {
   execute.mockImplementation((query: Query) => {
     const text = queryText(query);
     if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+    if (text.includes("FROM public.events audit")) return Promise.resolve([]);
     if (text.includes("FROM public.events")) {
       eventReads += 1;
       return Promise.resolve(eventReads === 1 ? [] : [{
@@ -197,6 +198,7 @@ function configureSuccess(options: {
         ? [{ ...finishedOrder, payment_mode: paymentMode }]
         : [{ ...pickedUpOrder, payment_mode: paymentMode }]);
     }
+    if (text.includes("FROM public.invoices invoice")) return Promise.resolve([]);
     if (text.includes("FROM public.invoices")) return Promise.resolve(invoiceIssued ? [invoice] : []);
     if (text.includes("FROM private.v_payment_summary_v1")) return Promise.resolve([summary(paymentMode, paymentStatus)]);
     if (text.includes("FROM public.items")) return Promise.resolve(Array.from({ length: itemCount }, (_, index) => ({
@@ -391,6 +393,7 @@ describe("recordGoodsOut", () => {
     execute.mockImplementationOnce(() => Promise.resolve([]))
       .mockImplementationOnce(() => Promise.resolve([]))
       .mockImplementationOnce(() => Promise.resolve([finishedOrder]))
+      .mockImplementationOnce(() => Promise.resolve([])) // No overdue customer debt.
       .mockImplementationOnce(() => Promise.resolve([invoice]))
       .mockImplementationOnce(() => Promise.resolve([summary("vorkasse", "bezahlt")]))
       .mockImplementationOnce(() => Promise.resolve([{
@@ -404,6 +407,7 @@ describe("recordGoodsOut", () => {
     execute.mockImplementation((query: Query) => {
       const text = queryText(query);
       if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (text.includes("FROM public.events audit")) return Promise.resolve([]);
       if (text.includes("FROM public.events")) return Promise.resolve([eventRow()]);
       if (text.includes("FROM public.orders")) return Promise.resolve([pickedUpOrder]);
       throw new Error(`Unexpected SQL: ${text}`);

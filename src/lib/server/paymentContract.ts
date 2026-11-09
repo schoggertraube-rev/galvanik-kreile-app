@@ -1,7 +1,16 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 
 export const PAYMENT_CONTRACT_VERSION = 1 as const;
+
+/** Shared invoice fact for customer hints and the release gate; alias is invoice. */
+export function overdueInvoiceCondition() {
+  return sql`invoice.status = 'issued'
+    AND invoice.payment_status IN ('offen', 'teilbezahlt')
+    AND invoice.payment_open_amount_cents > 0
+    AND invoice.due_date < (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date`;
+}
 export const PAYMENT_MODES = ["vorkasse", "abholung", "rechnung"] as const;
 export const ORDER_PAYMENT_MODES = ["vorkasse", "abholung", "rechnung", "keiner"] as const;
 

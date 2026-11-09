@@ -77,6 +77,7 @@ const openRow = {
 
 const orderPaidRow = {
   ...paidRow,
+  customer_overdue_invoice_ids: [],
   order_version: 4,
   station: "fertig",
   current_station: "fertig",
@@ -237,7 +238,12 @@ describe("readPaymentSummary", () => {
       },
     });
     expect(execute.mock.calls[0]?.[0].text).toContain("private.v_goods_out_ui_state_v1");
-    expect(execute.mock.calls[0]?.[0].values).toEqual([paidRow.order_id]);
+    // The shared debt predicate is a nested SQL fragment, not interpolated text.
+    expect(execute.mock.calls[0]?.[0].values).toEqual([
+      expect.objectContaining({ text: expect.stringContaining("invoice.status") }),
+      paidRow.order_id,
+    ]);
+    expect(execute.mock.calls[0]?.[0].text).toContain("AS customer_overdue_invoice_ids");
   });
 
   it("returns Rechnung without an invoice and without inventing payment values", async () => {
@@ -257,6 +263,7 @@ describe("readPaymentSummary", () => {
         paymentActorId: null,
         goodsOut: null,
         goodsOutAllowed: true,
+        customerDeliveryBlock:{blocked:false,reason:'overdue_invoice',invoiceIds:[]},
       },
     });
   });

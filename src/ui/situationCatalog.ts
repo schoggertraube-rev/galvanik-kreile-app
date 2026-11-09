@@ -133,3 +133,12 @@ export const QUOTE_POSITION_COPY={title:'Positionen',position:(n:number)=>'Posit
 export const PACKAGE_ASSIGN_COPY={notConnected:'Kundenzuordnung ist nicht verbunden · Original bleibt erhalten.',changed:'Kunde wurde inzwischen zugeordnet · neu lesen.',failed:'Zuordnung nicht bestätigt · Original und Auswahl bleiben erhalten.',unavailable:PACKAGE_UNAVAILABLE_COPY} as const;
 export const QUOTE_COMMERCIAL_SOURCE_COPY={flatPartial:'Pauschale bei Teilmenge prüfen',missingVat:'Steuersatz in Firmendaten eintragen'};
 export const CUSTOMER_LOOKUP_COPY={invalidId:'Gib eine gültige Kundenkennung an.',invalidQuery:'Gib einen Suchbegriff als Text ein.'} as const;
+export const GOODS_OUT_DEBT_COPY = {
+  overrideRecorded: 'Du hast die Ware trotz der Kundensperre herausgegeben.',
+  reasonMissing: 'Nenne den Grund, warum Du die Ware trotz der überfälligen Rechnung herausgibst.',
+  overrideForbidden: 'Du brauchst das Recht „Entscheiden“, um die Ware trotz der Kundensperre herauszugeben.',
+  noLongerBlocked: 'Die Kundensperre ist aufgehoben. Lies den Auftrag neu und gib die Ware ohne Ausnahme heraus.',
+  blocked: (invoiceNumber?: string) => invoiceNumber
+    ? `Du kannst die Ware noch nicht herausgeben: Rechnung ${invoiceNumber} ist überfällig. Buche zuerst die Zahlung.`
+    : 'Du kannst die Ware noch nicht herausgeben: Eine Rechnung des Kunden ist überfällig. Lass die Zahlung im Büro buchen.',
+} as const;
