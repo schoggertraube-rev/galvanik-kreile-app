@@ -1,5 +1,7 @@
 # AP-PAKET-EINGANG — letzte PL-Korrekturrunde, noch keine Merge-Abgabe
 
+Produkt-SHA dieser letzten Runde: `0ac9f092`. Der folgende Dokumentations-Commit trägt dieselbe Umsetzung. Die frühere Preview zu `b30ccfbe` ist kein Nachweis für diesen Kopf; neue exakte READY-URL und Check-SHA werden nach dem Git-Build im PR und BAULOG belegt.
+
 ## Maßgeblicher Stand: PL-Nachtrag 09.11. „06:35“, acht Punkte
 
 1. `quoteOperationContext` bleibt unverändert (U-249). `readWorkshopQuoteGoodsAction` prüft wieder exakt die Leitstand-Berechtigung von main, ohne zusätzliche Bereichsbedingung. Neuer echter Rollenlauf für Admin/Büro/Werkstatt/Entwickler: KV-Kandidaten und Werkstatt-Warenleser erlaubt/gesperrt wie main; beide DTOs ohne Geldbeträge. Vier PASS.
