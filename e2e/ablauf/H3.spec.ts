@@ -5,6 +5,38 @@ import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture} from './orderFixture';
 import {storeOrderPhoto,storeItemPhoto,TEST_PHOTO_BYTES} from './photoFixture';
 
+it('H3 existing order-card part photo path must satisfy the completion gate without a second upload',async()=>{
+ const customerId=await customerFixture('H3-UI');
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',note:'TEST existing H3 photo port',items:[{catalogServiceId:null,name:'TEST Teilfoto',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
+ expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('H3_EXISTING_CREATE:'+created.code);
+ const orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
+ const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction,freezeOrderAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));
+ expect(moved.code).toBe('OK');if(moved.code!=='OK')throw Error('H3_EXISTING_MOVE:'+moved.code);
+ // These are the exact ports passed to OrderStationAttachmentPanel by OrderCardAppAdapter.
+ const {reserveGalvanikHandoffAttachmentAction,finalizeGalvanikHandoffAttachmentAction,getGalvanikHandoffAttachmentsAction}=await import('@/app/warendurchlauf/actions');
+ const contentSha256=createHash('sha256').update(TEST_PHOTO_BYTES).digest('hex');
+ const reserve=await withSession(full,()=>reserveGalvanikHandoffAttachmentAction({orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientRequestId:randomUUID(),mimeType:'image/png',fileBytes:TEST_PHOTO_BYTES.length,contentSha256}));
+ expect(reserve,JSON.stringify(reserve)).toMatchObject({code:'OK'});if(reserve.code!=='OK'||!reserve.data.upload)throw Error('H3_EXISTING_RESERVE:'+reserve.code);
+ const endpoint=new URL('/storage/v1/object/upload/sign/item-photos/'+reserve.data.upload.path,process.env.NEXT_PUBLIC_SUPABASE_URL);
+ expect(endpoint.hostname).toBe('127.0.0.1');endpoint.searchParams.set('token',reserve.data.upload.token);
+ const upload=await fetch(endpoint,{method:'PUT',headers:{'content-type':'image/png','x-upsert':'false'},body:new Blob([new Uint8Array(TEST_PHOTO_BYTES).buffer],{type:'image/png'})});
+ expect(upload.ok).toBe(true);
+ const finalized=await withSession(full,()=>finalizeGalvanikHandoffAttachmentAction({reservationId:reserve.data.receipt.reservationId}));
+ expect(finalized,JSON.stringify(finalized)).toMatchObject({code:'OK',data:{receipt:{state:'FINALIZED',contentSha256,actorId:full.actorId}}});
+ expect(await withSession(full,()=>getGalvanikHandoffAttachmentsAction({orderId,itemId}))).toMatchObject({code:'OK'});
+ expect(await sql`SELECT count(*)::integer AS n FROM private.evidence_domain_links WHERE tenant_id=${KREILE_TENANT_SLUG} AND target_type='ORDER_ITEM' AND target_id=${itemId}`).toEqual([{n:1}]);
+ const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));
+ expect(finished.code).toBe('OK');if(finished.code!=='OK')throw Error('H3_EXISTING_FINISH:'+finished.code);
+ const master=await withSession(full,()=>getExtraWorkMasterDataAction());
+ expect(master.code).toBe('OK');if(master.code!=='OK')throw Error('H3_EXISTING_MASTER:'+master.code);
+ if(!master.data.currentRate)expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const frozen=await withSession(full,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));
+ expect(frozen,JSON.stringify(frozen)).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{station:'fertig'}}});
+});
+
 it('H3 completion requires a secured photo for each actual part, not an order-level photo',async()=>{
  const customerId=await customerFixture('H3-photo');
  const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');

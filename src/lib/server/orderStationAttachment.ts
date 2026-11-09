@@ -29,7 +29,7 @@ type AttachmentWorkflow = {
   station: "galvanik" | "wareneingang";
   orderStatus: OrderLifecycleStatus;
   eventType: "ORDER_STATION_MOVED_V1" | "ORDER_INTAKE_CREATED_V1";
-  fromStation: "wareneingang" | null;
+  fromStation: "angenommen" | "wareneingang" | null;
   pathPrefix: "order-station-evidence/v1" | "order-intake-evidence/v1";
   downloadName: "galvanik-uebergabe-original" | "wareneingang-original";
 };
@@ -40,7 +40,7 @@ const HANDOFF_WORKFLOW: AttachmentWorkflow = {
   station: "galvanik",
   orderStatus: ORDER_LIFECYCLE_STATUS.GALVANIK,
   eventType: "ORDER_STATION_MOVED_V1",
-  fromStation: "wareneingang",
+  fromStation: "angenommen",
   pathPrefix: "order-station-evidence/v1",
   downloadName: "galvanik-uebergabe-original",
 };
@@ -670,7 +670,8 @@ async function reservationGraphIsCurrent(
           AND event.correlation_id IS NOT NULL
           AND event.event_schema_version = 1
           AND event.aggregate_version = ${reservation.order_version}
-          AND event.from_station IS NOT DISTINCT FROM ${workflow.fromStation}
+          AND (event.from_station IS NOT DISTINCT FROM ${workflow.fromStation}
+            OR (${workflow.key==='HANDOFF'} AND event.from_station='wareneingang'))
           AND event.station = ${workflow.station}
           AND event.status = 'success'
       )
@@ -923,7 +924,8 @@ async function reserveAttachmentForWorkflow(
         || event.order_id !== order.id || event.item_id !== null
         || !validUuid(event.client_event_id) || !validUuid(event.correlation_id)
         || event.event_schema_version !== 1 || event.aggregate_version !== input.expectedVersion
-        || event.from_station !== workflow.fromStation || event.station !== workflow.station
+        // Existing originals keep their historical event; new handoffs use angenommen.
+        || !(event.from_station === workflow.fromStation || workflow.key==='HANDOFF'&&event.from_station==='wareneingang') || event.station !== workflow.station
         || event.status !== "success" || !validUuid(event.actor_id)
         || event.actor_tenant_id !== authorization.tenantId
       ) return { terminal: { code: "VALIDATION_ERROR", message: "Übergabeereignis ist ungültig." } as const };
