@@ -1,3 +1,11 @@
+# AP-REKLA-MAIL — aktueller Teilstand, noch keine Merge-Abgabe
+
+Produktstand `0ca5878e` (09.11.2026). Fertig im lokalen Teilstand: bestätigter Versand trotz Fremdänderung einschließlich Parent-Version; Ergebnis-/Begleitschein-Abgleich; Foto-Wiederaufnahme aus ursprünglicher Kennung/Version/Empfänger; zwei nullable Arbeitstagsfristen mit echtem Settings-Rundweg; ausdrückliches Schließen eines foto-losen Anliegens mit Pflichtgrund über den bestehenden Lifecycle-Writer. Die Nachweise stehen unten.
+
+Weiter offen: vollständige Schließ-/Wiederaufnahme für allgemeines Mailformular und Ergebnis-/Begleitschein; RM08 automatischer Erinnerungs-/Anrufpfad mit vorhandenem R2-Kalender/Rückhaltefenster und ergänzter Mailvorlage; noch nicht vollständig belegte RM06/09/11/14. Die Fristfelder und der Abschlussknopf sind echte Funktionen; eine funktionierende Automatik wird ausdrücklich noch nicht behauptet. Keine neue PR wegen der Grenze von zwei offenen PRs. Kein unabhängiges RM-PASS, keine exakte RM-CI/READY-Abgabe, kein Merge.
+
+Die folgenden Einträge sind chronologische Bau-Nachweise. Ihre früheren Offenlisten werden durch diesen aktuellen Stand ersetzt und sind keine weiteren Aufträge.
+
 ## RM07 — PL-Entscheidung 09.11. 06:05 umgesetzt, Teilstand
 
 Die tatsächlich bestätigte Mail und ihr Originalbezug bleiben jetzt erhalten, wenn die Quellversion inzwischen geändert wurde. Die fachliche Eingangsfortschreibung läuft hinter einem Datenbank-Savepoint; bekannte Quellkonflikte nehmen nur diesen fachlichen Teil zurück und hinterlassen genau einen unveränderlichen `COMMUNICATION_SOURCE_CHANGED_V1`-Beleg. Andere Datenbankfehler werden diagnostiziert und bleiben unbestätigt, statt als Erfolg zu gelten. Der alte Eingang wird dabei nicht auf „wartet“ gesetzt.
