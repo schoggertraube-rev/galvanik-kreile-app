@@ -157,3 +157,56 @@ it.each(['order','customer'] as const)('E1 %s hands off the latest saved text on
  const latest=expect.objectContaining({id:save.mock.calls[1][0].itemId,text:'TEST Anfrage latest preserved text'});
  if(action==='order')expect(onOrder).toHaveBeenCalledWith(undefined,latest);else expect(onCustomer).toHaveBeenCalledWith(latest);
 });
+
+it('EV-11 denied camera keeps a gallery action and browser permission guidance',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.stubGlobal('navigator',{mediaDevices:{getUserMedia:vi.fn(async()=>{throw new DOMException('TEST denied','NotAllowedError');})}});
+ const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-camera-denied'}))} as unknown as GlobalCreatePorts;
+ const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ const gallery=await screen.findByRole('button',{name:'Foto aus der Galerie wählen'});expect(gallery).toBeEnabled();expect(gallery).toHaveClass('kr-btn--erledigen');
+ const click=vi.spyOn(container.querySelector('input[type=file]') as HTMLInputElement,'click');fireEvent.click(gallery);expect(click).toHaveBeenCalledOnce();
+ expect(screen.getByText('Kamera im Browser freigeben').closest('details')).not.toBeNull();expect(screen.getByRole('textbox',{name:'Notiz'})).toBeEnabled();
+});
+
+it('E1 invoice text asks for an original and cannot enter the invoice writer',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+ const save=vi.fn(async(input)=>({code:'OK',capture:{id:input.itemId,version:1,text:input.text,customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],recognition:{kind:'rechnung',text:input.text},files:[]}}));
+ const openCaptureObject=vi.fn(()=>true);const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-invoice-text'})),saveCaptureNote:save,openCaptureObject,canManageMoney:true} as unknown as GlobalCreatePorts;
+ const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());
+ const input=screen.getByRole('textbox',{name:'Notiz'});fireEvent.change(input,{target:{value:'TEST Rechnung Rechnungsnummer TEST-4711'}});fireEvent.keyDown(input,{key:'Enter'});
+ const photo=await screen.findByRole('button',{name:'Rechnung fotografieren oder Datei anhängen'});expect(photo).toHaveClass('kr-btn--erledigen');
+ const pick=vi.spyOn(container.querySelector('input[type=file]') as HTMLInputElement,'click');fireEvent.click(photo);expect(pick).toHaveBeenCalledOnce();expect(openCaptureObject).not.toHaveBeenCalled();expect(container.querySelector('[data-spec-id="rein.situation"]')).toBeNull();
+});
+
+it.each([true,false])('E1 invoice caption uses only an actually recognized number: %s',async hasNumber=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+ const fileId=crypto.randomUUID(),capture:IntakeCapture={id:crypto.randomUUID(),version:1,text:null,customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],recognition:{kind:'rechnung',text:'TEST invoice'},files:[{id:fileId,name:'TEST-invoice.png',mime:'image/png',bytes:1,readable:true,secured:true,status:'fertig'}],suggestions:hasNumber?[{id:crypto.randomUUID(),fileId,orderId:null,field:'rechnung.nummer',value:'TEST-4711',confidence:'high',rule:null,reason:null,source:{},status:'offen'}]:[]};
+ const openCaptureObject=vi.fn(()=>true);const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-invoice-original'})),getCapture:vi.fn(async()=>({code:'OK',capture})),prepareCaptureFile:vi.fn(async()=>({code:'OK',upload:null})),finishCaptureFile:vi.fn(async()=>({code:'OK',capture})),openCaptureObject,canManageMoney:true} as unknown as GlobalCreatePorts;
+ const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());const file=new File(['TEST'],capture.files[0].name,{type:'image/png'});Object.defineProperty(file,'arrayBuffer',{value:async()=>new Uint8Array([1]).buffer});fireEvent.change(container.querySelector('input[type=file]')!,{target:{files:[file]}});
+ const action=await screen.findByRole('button',{name:hasNumber?'Rechnung TEST-4711 ablegen':'Rechnungsnummer ergänzen'});expect(action).toBeEnabled();
+ if(hasNumber)expect(screen.queryByText('Fehlt noch: Rechnungsnummer')).toBeNull();else expect(screen.getByText('Fehlt noch: Rechnungsnummer')).toBeVisible();
+ fireEvent.click(action);expect(openCaptureObject).toHaveBeenCalledWith('rechnungein',capture.id);
+});
+
+it('GW desktop keeps the photo handover until the phone finishes, then shows the same secured capture',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+ let serial=0;const timers=new Map<number,()=>Promise<void>|void>();vi.stubGlobal('setInterval',vi.fn(callback=>{timers.set(++serial,callback);return serial;}));vi.stubGlobal('clearInterval',vi.fn(id=>timers.delete(id)));
+ const id=crypto.randomUUID(),fileId=crypto.randomUUID(),requestId=crypto.randomUUID();let ended=false;
+ const capture:IntakeCapture={id,version:1,text:null,customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],recognition:{kind:'unklar',text:''},files:[{id:fileId,name:'TEST-phone.png',mime:'image/png',bytes:1,readable:false,secured:true,status:'fertig'}]};
+ const request=()=>({id:requestId,itemId:id,status:ended?'beendet':'fotos_da',expiresAt:'2027-01-01T12:00:00Z',acceptedOn:[],finishedOn:[],photoCount:1});
+ const deviceRequest=vi.fn(async input=>({code:'OK',requests:input.command==='refresh'&&!input.requestId?[]:[request()]}));
+ const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-handover'})),deviceRequest,getCapture:vi.fn(async()=>({code:'OK',capture})),prepareCaptureFile:vi.fn(async()=>({code:'OK',upload:null})),finishCaptureFile:vi.fn(async()=>({code:'OK',capture}))} as unknown as GlobalCreatePorts;
+ const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());fireEvent.click(screen.getByRole('button',{name:'Fotos mit Tablet/Handy'}));
+ await screen.findByText('Öffne die App auf Handy oder Tablet – die Kamera ist dort offen');
+ const file=new File(['TEST'],capture.files[0].name,{type:'image/png'});Object.defineProperty(file,'arrayBuffer',{value:async()=>new Uint8Array([1]).buffer});fireEvent.change(container.querySelector('input[type=file]')!,{target:{files:[file]}});
+ await screen.findByText('1 Fotos am Eingang');expect(container.querySelector('[data-spec-id="rein.situation"]')).toBeNull();
+ ended=true;await Promise.all([...timers.values()].map(callback=>callback()));
+ await waitFor(()=>expect(container.querySelector('[data-spec-id="rein.situation"]')).not.toBeNull());expect(screen.queryByText('Öffne die App auf Handy oder Tablet – die Kamera ist dort offen')).toBeNull();
+ expect(deviceRequest.mock.calls.filter(([value])=>value.command==='request')).toHaveLength(1);
+});
