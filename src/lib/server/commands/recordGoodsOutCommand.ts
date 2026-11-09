@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { GOODS_OUT_DEBT_COPY } from "@/ui/situationCatalog";
 import { sql } from "drizzle-orm";
 import { readEffectiveCustomerAgreement } from "@/lib/server/effectiveCustomerAgreementRead";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
@@ -9,6 +10,7 @@ import {
   isOrderPaymentMode,
   isPaymentMode,
   mapPaymentSummaryRow,
+  overdueInvoiceCondition,
   type OrderPaymentMode,
   type PaymentStatus,
   type PaymentSummaryRow,
@@ -667,6 +669,29 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
         || (isRework && input.agreement !== undefined)
       ) {
         return { code: "VALIDATION_ERROR", message: "Auftragsvertrag ist nicht verfügbar." };
+      }
+
+      // This decision uses invoice facts even when the actor cannot see money.
+      // Do not use the visibility-filtered customer-hints projection as a gate.
+      const overdueInvoices = await tx.execute<{ invoice_number: string }>(sql`
+        SELECT invoice.invoice_number
+        FROM public.invoices invoice
+        WHERE invoice.tenant_id = ${tenantId}
+          AND invoice.customer_id = ${order.customer_id}
+          AND ${overdueInvoiceCondition()}
+        ORDER BY invoice.due_date, invoice.id
+        LIMIT 1
+        FOR SHARE
+      `);
+      if (overdueInvoices.length > 0) {
+        return {
+          code: "CONFLICT",
+          message: GOODS_OUT_DEBT_COPY.blocked(
+            hasAuthorizationArea(authorization.data, "geld")
+              ? overdueInvoices[0].invoice_number
+              : undefined,
+          ),
+        };
       }
 
       const agreement = input.agreement === undefined

@@ -6,6 +6,7 @@ import {
   canReadPaymentSummary,
   mapOrderPaymentStateRow,
   mapPaymentSummaryRow,
+  overdueInvoiceCondition,
   type OrderPaymentState,
   type OrderPaymentStateRow,
   type PaymentSummary,
@@ -82,15 +83,25 @@ export async function getPaymentState(
 
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<OrderPaymentStateRow>(sql`
-        SELECT *
-        FROM private.v_goods_out_ui_state_v1
-        WHERE order_id = ${orderId}
+      const rows = await tx.execute<OrderPaymentStateRow & { customer_overdue: boolean }>(sql`
+        SELECT state.*, EXISTS (
+          SELECT 1 FROM public.invoices invoice
+          JOIN public.orders orders
+            ON orders.tenant_id = invoice.tenant_id
+            AND orders.customer_id = invoice.customer_id
+          WHERE orders.tenant_id = state.tenant_id
+            AND orders.id = state.order_id
+            AND ${overdueInvoiceCondition()}
+        ) AS customer_overdue
+        FROM private.v_goods_out_ui_state_v1 state
+        WHERE state.order_id = ${orderId}
         LIMIT 2
       `);
       if (rows.length === 0) return null;
       if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
-      return mapOrderPaymentStateRow(rows[0], authorization);
+      if (typeof rows[0].customer_overdue !== "boolean") throw new Error("ORDER_CUSTOMER_DEBT_STATE_INVALID");
+      const mapped = mapOrderPaymentStateRow(rows[0], authorization);
+      return { ...mapped, goodsOutAllowed: mapped.goodsOutAllowed && !rows[0].customer_overdue };
     });
     return data
       ? { code: "OK", data }

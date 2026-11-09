@@ -197,6 +197,7 @@ function configureSuccess(options: {
         ? [{ ...finishedOrder, payment_mode: paymentMode }]
         : [{ ...pickedUpOrder, payment_mode: paymentMode }]);
     }
+    if (text.includes("SELECT invoice.invoice_number")) return Promise.resolve([]);
     if (text.includes("FROM public.invoices")) return Promise.resolve(invoiceIssued ? [invoice] : []);
     if (text.includes("FROM private.v_payment_summary_v1")) return Promise.resolve([summary(paymentMode, paymentStatus)]);
     if (text.includes("FROM public.items")) return Promise.resolve(Array.from({ length: itemCount }, (_, index) => ({
@@ -391,6 +392,7 @@ describe("recordGoodsOut", () => {
     execute.mockImplementationOnce(() => Promise.resolve([]))
       .mockImplementationOnce(() => Promise.resolve([]))
       .mockImplementationOnce(() => Promise.resolve([finishedOrder]))
+      .mockImplementationOnce(() => Promise.resolve([])) // No overdue customer debt.
       .mockImplementationOnce(() => Promise.resolve([invoice]))
       .mockImplementationOnce(() => Promise.resolve([summary("vorkasse", "bezahlt")]))
       .mockImplementationOnce(() => Promise.resolve([{

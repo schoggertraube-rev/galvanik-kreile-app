@@ -1,6 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import { overdueInvoiceCondition } from "@/lib/server/paymentContract";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {evaluateOrderPriority} from '@/lib/priority';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
@@ -31,7 +32,7 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
         AND queue.station NOT IN ('abgeholt','versendet','raus','storniert') AND order_source.ware<>'storniert') AS active_orders,
       (SELECT count(*)::integer FROM private.v_open_quotes_v1 quote WHERE quote.tenant_id=customer.tenant_id AND quote.customer_id=customer.id) AS active_quotes,
       (SELECT count(*)::integer FROM public.invoices invoice WHERE ${money} AND invoice.tenant_id=customer.tenant_id AND invoice.customer_id=customer.id
-        AND invoice.status='issued' AND invoice.payment_status IN ('offen','teilbezahlt') AND invoice.payment_open_amount_cents>0 AND invoice.due_date<(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date) AS overdue,
+        AND ${overdueInvoiceCondition()}) AS overdue,
       (SELECT count(*)::integer FROM public.intake_item source WHERE source.tenant_id=customer.tenant_id AND source.richtung IN ('rein','intern') AND source.einsatz='offen' AND source.aussortiert IS NULL AND source.zuordnung='offen'
         AND (${mails} OR source.kanal<>'mail' AND ${intake} AND source.erstellt_von=${auth.userId}::uuid)
         AND (source.kunde_id=customer.id OR source.kunde_id IS NULL AND customer.email IS NOT NULL AND lower(btrim(source.absender_adresse))=lower(btrim(customer.email)))) AS unassigned,
