@@ -5,6 +5,28 @@ import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture} from './orderFixture';
 import {requestMailStep} from './requestMailStep';
 
+it('a missing recipient writes no dispatch and saving the real customer permits the same pending request',async()=>{
+ await requestMailStep('MAIL-recipient');
+ const customerId=await customerFixture('MAIL-recipient');
+ const {updateCustomerAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),email:null}))).toMatchObject({code:'OK'});
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ const request={targetType:'CUSTOMER' as const,targetId:customerId,clientRequestId:randomUUID(),subject:'TEST fehlende Adresse',body:'TEST unveränderte Nachricht nach Kundenkorrektur'};
+ expect(await withSession(full,()=>sendCustomerMailAction(request))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+request.clientRequestId}`).toEqual([{n:0}]);
+ const email='TEST-repaired-'+randomUUID()+'@example.invalid';
+ expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),email}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{email}});
+ const sent=await withSession(full,()=>sendCustomerMailAction(structuredClone(request)));
+ expect(sent).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('MAIL_RECIPIENT_RETRY:'+sent.code);
+ expect(await sql`SELECT body FROM public.communication_messages WHERE tenant_id=${KREILE_TENANT_SLUG} AND thread_id=${sent.data.threadId}::uuid AND direction='outgoing'`).toEqual([{body:request.body}]);
+ const sends=vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&init?.method==='POST');
+ expect(sends).toHaveLength(1);
+ expect(JSON.parse(String(sends[0][1]?.body)).message.toRecipients).toEqual([{emailAddress:{address:email.toLowerCase()}}]);
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
+ expect(await sql`SELECT user_id::text,event_type FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${request.clientRequestId}::uuid`).toEqual([{user_id:full.actorId,event_type:'COMMUNICATION_MAIL_SENT_V1'}]);
+});
+
 it('a non-UUID mail request key cannot send before its audit rejects the identifier',async()=>{
  await requestMailStep('MAIL-invalid-key');
  const customerId=await customerFixture('MAIL-invalid-key');
