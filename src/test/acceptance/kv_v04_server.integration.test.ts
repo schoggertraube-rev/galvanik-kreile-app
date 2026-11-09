@@ -1408,7 +1408,11 @@ it.each(['early','label','two','future','delivered'] as const)('AF19 real mail h
  const result=await withSession(fixture,()=>changeOrderPickupNoticeAction(selected));expect(result).toMatchObject({code:'OK',replayed:false,receipt:{orderId,handoverMode:kind==='label'||kind==='delivered'?'shipping':'pickup',outcome:kind==='label'||kind==='delivered'?'call_customer':'changed',mailActor:{kind:'mail',sender,originalItemId:itemId,originalSha256:originalHash}}});
  expect(await withSession(fixture,()=>changeOrderPickupNoticeAction(selected))).toMatchObject({code:'OK',replayed:true});
  expect(await withSession(fixture,()=>changeOrderPickupNoticeAction({...selected,sourceVersion:2}))).toMatchObject({code:'CONFLICT'});
- expect((await sql`SELECT handover_mode,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`)[0]).toMatchObject({handover_mode:kind==='label'||kind==='delivered'?'shipping':'pickup',version:kind==='delivered'?6:2});
+ expect((await sql`SELECT handover_mode,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`)[0]).toMatchObject({handover_mode:kind==='label'||kind==='delivered'?'shipping':'pickup',version:kind==='delivered'?5:2});
+ if(kind==='delivered'){
+  const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+  expect(await withSession(fixture,()=>getOrderPaymentStateAction({orderId}))).toMatchObject({code:'OK',data:{physicalStatus:'abgeholt',goodsOut:{eventSchemaVersion:3,orderVersion:5}}});
+ }
  expect((await sql`SELECT handover_preference FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`)[0].handover_preference).toBe(kind==='future'?'pickup':'shipping');
  expect((await sql`SELECT vorgang_art,vorgang_id,version,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0]).toMatchObject({vorgang_art:'auftrag',vorgang_id:orderId,version:2,anliegen_offen:[]});
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND event_type='ORDER_HANDOVER_MAIL_V1' AND user_id=${fixture.actorId}::uuid AND payload->'receipt'->'mailActor'->>'originalSha256'=${originalHash}`).toHaveLength(1);

@@ -47,13 +47,17 @@ describe("customer payment guards", () => {
   it("accepts an invoice preference only with the stored approval", async () => {
     execute
       .mockResolvedValueOnce([{...profile,paymentPreference:"rechnung",invoiceTermsEnabled:true,invoiceTermDays:14}])
+      .mockResolvedValueOnce([]) // SAVEPOINT around the existing customer writer.
       .mockResolvedValueOnce([{ result_code: "OK", replayed: false }])
+      .mockResolvedValueOnce([]) // RELEASE SAVEPOINT after the successful result.
       .mockResolvedValueOnce([{...profile,paymentPreference:"rechnung",invoiceTermsEnabled:true,invoiceTermDays:14}]);
     const { updateCustomerCommand } = await import("../server/updateCustomerCommand");
     await expect(updateCustomerCommand({
       ...context,
       capabilities: { canCreateCustomer: true,canEditCustomer:true, canManageMoney: true },
     }, updateInput)).resolves.toMatchObject({ code: "OK", replayed: false, customer:{id:profile.id,paymentPreference:"rechnung"} });
+    expect(execute.mock.calls[1]?.[0].text).toContain('SAVEPOINT kreile_customer_update_command');
+    expect(execute.mock.calls[3]?.[0].text).toContain('RELEASE SAVEPOINT kreile_customer_update_command');
   });
 
   it("stellt Rechnung auf Ziel ausschlieÃŸlich Ã¼ber den Geld-Command frei", async () => {
