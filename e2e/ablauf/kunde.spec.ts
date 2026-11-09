@@ -3,6 +3,77 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('supplier visibility uses the same Geld boundary in list, search and direct customer readers',async()=>{
+ const {createCustomerAction,getCustomersDb,searchCustomersDb,getCustomerByIdDb,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const name='TEST Lieferant Grenze '+randomUUID();
+ const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'lieferant',companyName:name}));
+ expect(created,JSON.stringify(created)).toMatchObject({code:'OK'});if(created.code!=='OK')throw Error('SUPPLIER_CREATE:'+created.code);
+ const customerId=created.receipt.customerId;
+ expect(await withSession(full,()=>searchCustomersDb(name))).toMatchObject({ok:true,data:expect.arrayContaining([expect.objectContaining({id:customerId,type:'lieferant'})])});
+ expect(await withSession(full,()=>getCustomerByIdDb(customerId))).toMatchObject({ok:true,data:{id:customerId,type:'lieferant'}});
+ const operational=await createFixture(['kunden'],'werkstatt');
+ expect(await withSession(operational,()=>searchCustomersDb(name))).toMatchObject({ok:true,data:[]});
+ expect(await withSession(operational,()=>getCustomerByIdDb(customerId))).toMatchObject({ok:true,data:null});
+ expect(await withSession(operational,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'NOT_FOUND'});
+ const list=await withSession(operational,()=>getCustomersDb());
+ expect(list.ok).toBe(true);if(!list.ok)throw Error('SUPPLIER_LIST:'+list.error);
+ expect(list.data.some(customer=>customer.id===customerId)).toBe(false);
+ const noCustomers=await createFixture(['auftraege']);
+ expect(await withSession(noCustomers,()=>searchCustomersDb(name))).toMatchObject({ok:false,error:'FORBIDDEN'});
+ expect(await withSession(noCustomers,()=>getCustomerByIdDb(customerId))).toMatchObject({ok:false,error:'FORBIDDEN'});
+ expect(await sql`SELECT type FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{type:'lieferant'}]);
+});
+
+it('ABS17 an order agreement overrides customer terms only for that order and revocation restores the same customer source',async()=>{
+ const {createCustomerAction,saveCustomerAgreementAction,revokeCustomerAgreementAction}=await import('@/app/actions/customers.actions');
+ const customer=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST Absprache Vorrang '+randomUUID(),salutation:'ohne',firstName:'TEST',lastName:'Kontakt',phone:'+49 711 5550190',email:'TEST-scope@example.invalid',street:'TEST Weg',houseNumber:'1',zipCode:'70176',city:'Stuttgart',country:'DE',paymentPreference:'bar'}));
+ expect(customer,JSON.stringify(customer)).toMatchObject({code:'OK'});if(customer.code!=='OK')throw Error('ABS_SCOPE_CUSTOMER:'+customer.code);
+ const customerId=customer.receipt.customerId;
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const orders:string[]=[];
+ for(const suffix of ['A','B']){
+  const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'abholung',note:'TEST Absprache '+suffix,items:[{catalogServiceId:null,name:'TEST Teil '+suffix,quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
+  expect(created,JSON.stringify(created)).toMatchObject({code:'OK'});if(created.code!=='OK')throw Error('ABS_SCOPE_ORDER:'+created.code);orders.push(created.receipt.orderId);
+ }
+ const general=await withSession(full,()=>saveCustomerAgreementAction({clientKey:randomUUID(),customerId,type:'zahlungsziel',targetDays:14,reason:'TEST Kundenziel'}));if(general.code!=='OK')throw Error('ABS_SCOPE_GENERAL:'+general.code);
+ const input={clientKey:randomUUID(),customerId,orderId:orders[0],type:'sammelrechnung' as const,targetDays:30,reason:'TEST nur Auftrag A'};
+ const specific=await withSession(full,()=>saveCustomerAgreementAction(input));if(specific.code!=='OK')throw Error('ABS_SCOPE_SPECIFIC:'+specific.code);
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:orders[0]}))).toMatchObject({code:'OK',data:{card:{agreement:{id:specific.agreement.id,type:'sammelrechnung',orderId:orders[0]}}}});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:orders[1]}))).toMatchObject({code:'OK',data:{card:{agreement:{id:general.agreement.id,type:'zahlungsziel',orderId:null}}}});
+ const operational=await createFixture(['auftraege'],'werkstatt');
+ expect(await withSession(operational,()=>getLiveOrderCardAction({orderId:orders[0]}))).toMatchObject({code:'OK',data:{card:{agreement:{id:specific.agreement.id}}}});
+ const revoke={clientKey:randomUUID(),agreementId:specific.agreement.id,version:specific.agreement.version,reason:'TEST Auftragsabsprache zurückgenommen'};
+ expect(await withSession(full,()=>revokeCustomerAgreementAction(revoke))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:orders[0]}))).toMatchObject({code:'OK',data:{card:{agreement:{id:general.agreement.id,type:'zahlungsziel'}}}});
+ expect(await withSession(full,()=>revokeCustomerAgreementAction(JSON.parse(JSON.stringify(revoke))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT widerrufen_am IS NULL AS active FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${general.agreement.id}::uuid`).toEqual([{active:true}]);
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${revoke.clientKey}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
+it('agreement validation and scope failures leave no row or event and the corrected request can reuse its key',async()=>{
+ const {createCustomerAction,saveCustomerAgreementAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const customer=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST Absprache Fehlerwege '+randomUUID(),phone:'+49 711 5550190'}));
+ if(customer.code!=='OK')throw Error('ABS_INVALID_CUSTOMER:'+customer.code);
+ const customerId=customer.receipt.customerId;
+ const base={customerId,type:'zahlungsziel' as const,targetDays:14,reason:'TEST gültiger Grund'};
+ const cases=[{patch:{targetDays:0},code:'VALIDATION_ERROR'},{patch:{targetDays:121},code:'VALIDATION_ERROR'},{patch:{reason:'xy'},code:'VALIDATION_ERROR'},{patch:{validUntil:'2000-01-01'},code:'VALIDATION_ERROR'},{patch:{validUntil:'2026-02-30'},code:'VALIDATION_ERROR'},{patch:{version:99},code:'CONFLICT'},{patch:{customerId:'TEST-unbekannter-Kunde'},code:'NOT_FOUND'},{patch:{orderId:'TEST-unbekannter-Auftrag'},code:'NOT_FOUND'}];
+ const keys:string[]=[];
+ for(const testCase of cases){
+  const clientKey=randomUUID();keys.push(clientKey);
+  expect(await withSession(full,()=>saveCustomerAgreementAction({...base,...testCase.patch,clientKey}))).toMatchObject({code:testCase.code});
+ }
+ expect(await sql`SELECT count(*)::integer AS n FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId}`).toEqual([{n:0}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array(keys)}::uuid[])`).toEqual([{n:0}]);
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{agreements:[]}});
+ const repaired={...base,clientKey:keys[0]};
+ const saved=await withSession(full,()=>saveCustomerAgreementAction(repaired));
+ expect(saved).toMatchObject({code:'OK',agreement:{customerId,targetDays:14,createdBy:full.actorId}});if(saved.code!=='OK')throw Error('ABS_INVALID_REPAIR:'+saved.code);
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{agreements:expect.arrayContaining([expect.objectContaining({id:saved.agreement.id})])}});
+ expect(await withSession(full,()=>saveCustomerAgreementAction(structuredClone(repaired)))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${repaired.clientKey}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
 it('agreement retries cannot move customer or reason and an old replay never reactivates replaced financial terms',async()=>{
  const {createCustomerAction,saveCustomerAgreementAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
  const customers:string[]=[];

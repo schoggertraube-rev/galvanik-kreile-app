@@ -422,6 +422,7 @@ export async function readCustomerSummary(
             AND ${hasAuthorizationArea(authorization,'geld')}
         ) billing ON true
         WHERE summary.id = ${input.customerId}
+          AND (customer.type IS DISTINCT FROM 'lieferant' OR ${hasAuthorizationArea(authorization,'geld')})
         LIMIT 2
       `);
       if (rows.length > 1) throw new Error("CUSTOMER_SUMMARY_AMBIGUOUS");

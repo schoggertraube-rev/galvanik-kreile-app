@@ -205,6 +205,7 @@ export async function getCustomerByIdDb(id: string): Promise<ActionResult<Custom
 
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  if (!hasAuthorizationArea(authRes.data, "kunden")) return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben." };
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
@@ -214,6 +215,7 @@ export async function getCustomerByIdDb(id: string): Promise<ActionResult<Custom
       and(
         eq(customers.id, id),
         eq(customers.tenantId, tenantId),
+        sql`(${customers.type} IS DISTINCT FROM 'lieferant' OR ${hasAuthorizationArea(authRes.data, "geld")})`,
         sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`
       )
     ).limit(1);
@@ -244,6 +246,7 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
 
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  if (!hasAuthorizationArea(authRes.data, "kunden")) return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben." };
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
@@ -257,6 +260,7 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
     const dbCustomers = await db.select().from(customers).where(
       and(
         eq(customers.tenantId, tenantId),
+        sql`(${customers.type} IS DISTINCT FROM 'lieferant' OR ${hasAuthorizationArea(authRes.data, "geld")})`,
         or(
           ilike(customers.name, searchPattern),
           ilike(customers.phone, searchPattern),
