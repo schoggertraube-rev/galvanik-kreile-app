@@ -17,6 +17,10 @@ function invoiceClientEventId(goodsOutClientEventId: string): string {
 export async function recordGoodsOutAction(
   input: RecordGoodsOutInput,
 ): Promise<RecordGoodsOutResult> {
+  const { authorizeGoodsOutInput, recordGoodsOut } = await import("@/lib/server/commands/recordGoodsOutCommand");
+  // Validate and authorize before the composed invoice writer can change data.
+  const authorized = await authorizeGoodsOutInput(input);
+  if (authorized.code !== "AUTHORIZED") return authorized;
   if (input.agreement && input.agreement.type !== "sammelrechnung") {
     const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
     const invoice = await createInvoice({
@@ -29,7 +33,6 @@ export async function recordGoodsOutAction(
       return { code: invoice.code, message: invoice.message };
     }
   }
-  const { recordGoodsOut } = await import("@/lib/server/commands/recordGoodsOutCommand");
   const result = await recordGoodsOut(input);
   if (result.code === "OK") {
     revalidatePath("/");

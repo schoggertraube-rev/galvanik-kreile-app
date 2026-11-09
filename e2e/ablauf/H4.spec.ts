@@ -86,3 +86,30 @@ for(const scenario of ['not-due','due-today','paid','other-customer'] as const){
   expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
  });
 }
+
+it('W23 only Entscheiden plus a nonempty reason overrides customer debt; actor and reason survive read/retry',async()=>{
+ const order=await readyInvoiceOrder('H4-Ausnahme');
+ const invoiceId=randomUUID();
+ await sql`INSERT INTO public.invoices(id,tenant_id,customer_id,invoice_number,amount_total,status,due_date,gross_amount_cents,payment_contract_version,payment_mode,payment_status,payment_open_amount_cents,payment_paid_amount_cents,payment_currency,payment_version)
+ VALUES(${invoiceId}::uuid,${KREILE_TENANT_SLUG},${order.customerId},${'TEST-OVERRIDE-'+invoiceId},119.00,'issued',(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1,11900,1,'rechnung','offen',11900,0,'EUR',0)`;
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const base={orderId:order.orderId,mode:'abholung' as const,expectedVersion:order.version};
+ for(const reason of ['', '  ', 'ab'])expect(await withSession(full,()=>recordGoodsOutAction({...base,clientEventId:randomUUID(),overdueReleaseReason:reason}))).toMatchObject({code:'VALIDATION_ERROR'});
+ const forbiddenKey=randomUUID();
+ const reason='TEST bewusste Freigabe nach Rücksprache trotz Altrechnung';
+ expect(await withSession(full,()=>recordGoodsOutAction({...base,clientEventId:forbiddenKey,overdueReleaseReason:reason}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(full,()=>recordGoodsOutAction({...base,clientEventId:randomUUID(),overdueReleaseReason:reason,agreement:{id:randomUUID(),version:1,type:'zahlungsziel'}}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${forbiddenKey}::uuid`).toEqual([{n:0}]);
+ const approver=await createFixture(['auftraege','entscheiden']);
+ const input={...base,clientEventId:randomUUID(),overdueReleaseReason:reason};
+ const out=await withSession(approver,()=>recordGoodsOutAction(input));
+ expect(out.code).toBe('OK');if(out.code!=='OK')throw Error('W23_OVERRIDE:'+out.code);
+ expect(await sql`SELECT user_id::text,notes,payload->>'invoiceId' AS invoice FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_GOODS_OUT_DEBT_OVERRIDE_V1' AND correlation_id=${out.receipt.correlationId}::uuid`).toEqual([{user_id:approver.actorId,notes:reason,invoice:invoiceId}]);
+ expect(await sql`SELECT payment_status,payment_open_amount_cents FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${invoiceId}::uuid`).toEqual([{payment_status:'offen',payment_open_amount_cents:11900}]);
+ expect(await withSession(approver,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt',version:out.receipt.orderVersion}}});
+ expect(await withSession(approver,()=>recordGoodsOutAction(input))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:out.receipt.eventId}});
+ expect(await withSession(approver,()=>recordGoodsOutAction({...input,overdueReleaseReason:'TEST nachträglich anderer Grund'}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{n:1}]);
+});
