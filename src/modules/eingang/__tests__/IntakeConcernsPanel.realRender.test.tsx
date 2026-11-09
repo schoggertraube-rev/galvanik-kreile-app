@@ -98,3 +98,15 @@ it('RM08 photo-less close requires a reason, retains it after rejection and uses
  fireEvent.click(screen.getByText('Schließen',{selector:'footer button'}));await screen.findByText('Reklamationsanliegen ohne Fotos geschlossen.');
  expect(finish).toHaveBeenCalledTimes(2);expect(finish.mock.calls[1][0]).toEqual(finish.mock.calls[0][0]);expect(finish.mock.calls[0][0]).toMatchObject({items:[{itemId:message.id,version:1}],kind:'reklamation_ohne_fotos',note:'TEST Kunde liefert keine Fotos'});
 });
+
+
+it.each([null,'TEST-order'])('RM06 photo original opens one complaint flow with the exact source and explicit order choice (%s)',async orderId=>{
+ const message=row('TEST-unthreaded-photo',{concerns:['reklamation'],openConcerns:['reklamation'],photoCount:2,orderId,orderKind:orderId?'auftrag':null});
+ const list=vi.fn<IntakeMessagesPorts['list']>().mockResolvedValue({code:'OK',messages:[message],areas:['mails','eingang','kunden','auftraege'],currentLogin:'TEST-actor'});
+ const ports:IntakeMessagesPorts={list,select:vi.fn(),finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}};
+ const opened=vi.fn((event:Event)=>event.preventDefault());window.addEventListener('kreile:oeffne',opened);
+ try{render(<IntakeMessages ports={ports}/>);fireEvent.click(await screen.findByRole('button',{name:'Reklamation anlegen'}));
+ expect(opened).toHaveBeenCalledOnce();expect((opened.mock.calls[0][0] as CustomEvent).detail).toEqual({ziel:'reklamation',arg:orderId?orderId+'#'+message.id:message.customerId+'#kundenwahl',sourceItemId:message.id});
+ expect(ports.select).not.toHaveBeenCalled();expect(ports.finish).not.toHaveBeenCalled();expect(ports.assignment.assign).not.toHaveBeenCalled();
+ }finally{window.removeEventListener('kreile:oeffne',opened);}
+});

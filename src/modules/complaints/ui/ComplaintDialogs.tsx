@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {REKLA_MAIL_COPY} from '@/ui/situationCatalog';
 import {createPortal} from 'react-dom';
 import {KrApp,useKrGeraet,Dialog,Picker,Button,Hinweis} from '@/ui/kr';
 import {ComplaintDialog} from './ComplaintDialog';
@@ -10,7 +11,7 @@ export function ComplaintDialogs({ports,onRefresh}:{ports:ComplaintPorts;onRefre
   const [entry,setEntry]=useState<{key:string;request:ComplaintRequest}|null>(null),[message,setMessage]=useState<string|null>(null),device=useKrGeraet();
   const [replySource,setReplySource]=useState<string|null>(null);
   const [customer,setCustomer]=useState<string|null>(null),[orders,setOrders]=useState<Array<{id:string;number:string;title:string}>>([]),[query,setQuery]=useState(''),[error,setError]=useState<string|null>(null),[loading,setLoading]=useState(false),[attempt,setAttempt]=useState(0);
-  useEffect(()=>{if(!customer||!ports.listDeliveredOrders)return;let active=true;void ports.listDeliveredOrders(customer).then(result=>{if(!active)return;if(result.code==='OK'&&'orders'in result)setOrders(result.orders);else setError('message'in result?result.message:'Aufträge nicht verfügbar.');}).catch(cause=>{console.error('[COMPLAINT_PICKER_FAILED]',cause);if(active)setError('Gelieferte Aufträge konnten nicht geladen werden.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[customer,ports,attempt]);
+  useEffect(()=>{if(!customer||!ports.listDeliveredOrders)return;let active=true;void ports.listDeliveredOrders(customer).then(result=>{if(!active)return;if(result.code==='OK'&&'orders'in result)setOrders(result.orders);else setError(REKLA_MAIL_COPY.ordersUnavailable);}).catch(cause=>{console.error('[COMPLAINT_PICKER_FAILED]',cause);if(active)setError('Gelieferte Aufträge konnten nicht geladen werden.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[customer,ports,attempt]);
   useEffect(()=>{
     const open=(event:Event)=>{
       const value=(event as CustomEvent<{ziel?:string;arg?:unknown;sourceItemId?:string}>).detail;

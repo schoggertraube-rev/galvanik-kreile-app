@@ -546,3 +546,23 @@ it.each([false,true])('RM08 closes only the photo-less concern through the exist
  expect(await withSession(fixture,()=>finishIntakeUseAction(reread))).toMatchObject({code:'OK'});expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${rootId}::uuid AND befehl_id=${input.clientEventId}::uuid`).toHaveLength(1);
  expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND intake_item_id=${rootId}::uuid`).toHaveLength(0);expect(await sql`SELECT * FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(before);
 });
+
+
+it('RM06 unthreaded photos keep their original while the employee explicitly selects the delivered order',async()=>{
+ const fixture=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(fixture);
+ const {replyId,photos}=await replyMailFixture(fixture,order,'image/jpeg',false);
+ await sql`UPDATE public.intake_item SET vorgang_id=NULL,vorgang_art=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${replyId}::uuid`;
+ await sql`UPDATE public.intake_event SET nachher=(nachher-'complaintThreadParent')||jsonb_build_object('replyChain',jsonb_build_object('source','original_mime','originalSha256',${'b'.repeat(64)}::text,'status','missing','inReplyTo',jsonb_build_array(),'references',jsonb_build_array())) WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${replyId}::uuid AND art='angelegt'`;
+ const {getComplaintOrderChoicesAction,getComplaintDialogAction,reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
+ const choices=await withSession(fixture,()=>getComplaintOrderChoicesAction(fixture.customerId));expect(choices).toMatchObject({code:'OK',orders:expect.arrayContaining([expect.objectContaining({id:order.orderId})])});
+ const data=await withSession(fixture,()=>getComplaintDialogAction({orderId:order.orderId,sourceItemId:replyId}));expect(data).toMatchObject({code:'OK',data:{source:{id:order.orderId},initial:{intakeItemId:replyId,intakeVersion:1,photoIds:photos}}});
+ expect(await sql`SELECT vorgang_id,version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${replyId}::uuid`).toEqual([{vorgang_id:null,version:1}]);
+ const request:import('@/modules/complaints/public').ComplaintCommand={action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:replyId,intakeVersion:1,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST explizit gewählter Auftrag',photoIds:photos,goodsReturn:'offen'};
+ const {saveIntakeDraftAction,getIntakeDraftsAction}=await import('@/app/actions/eingang.actions');const draftId=randomUUID();
+ expect(await withSession(fixture,()=>saveIntakeDraftAction({id:draftId,clientEventId:randomUUID(),art:'eingang',expectedVersion:null,lastField:null,payload:{kind:'TEST-RM06',clientKey:request.clientKey,request}}))).toMatchObject({code:'OK'});
+ const drafts=await withSession(fixture,()=>getIntakeDraftsAction());if(drafts.code!=='OK')throw Error('TEST request reread');const reread=drafts.drafts.find(row=>row.id===draftId)?.payload.request;
+ const result=await withSession(fixture,()=>reklamationAusfuehrenAction(reread));expect(result).toMatchObject({code:'OK'});
+ expect(await sql`SELECT order_id,intake_item_id::text AS source FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND intake_item_id=${replyId}::uuid`).toEqual([{order_id:order.orderId,source:replyId}]);
+ expect(await withSession(fixture,()=>reklamationAusfuehrenAction(reread))).toMatchObject({code:'OK',replayed:true});
+ const {getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');expect(await withSession(fixture,()=>getIntakeMessagesAction('alle'))).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:replyId,orderId:order.orderId,usage:'erledigt',fileIds:expect.arrayContaining(photos)})])});
+});

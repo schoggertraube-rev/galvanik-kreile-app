@@ -193,14 +193,14 @@ it('customer entry reuses the delivered-order picker, retries a read failure and
  const list=vi.fn<NonNullable<ComplaintPorts['listDeliveredOrders']>>().mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST Lesen unterbrochen'}).mockResolvedValueOnce({code:'OK',orders:[{id:'test-order',number:'A-TEST-4C',title:'TEST Gehäuse'}]});
  const ports:ComplaintPorts={areas:['auftraege','kunden'],listDeliveredOrders:list,read:vi.fn<ComplaintPorts['read']>(async()=>({code:'OK',data:base})),write:vi.fn(),rework:vi.fn(),openOrder:vi.fn(),openPhoto:vi.fn(),addPhoto:vi.fn(),sendResult:vi.fn()};
  render(<ComplaintDialogs ports={ports} onRefresh={vi.fn()}/>);
- window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'reklamation',arg:'test-customer#kundenwahl'},cancelable:true}));
- expect(await screen.findByText('TEST Lesen unterbrochen')).toBeInTheDocument();
+ window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'reklamation',arg:'test-customer#kundenwahl',sourceItemId:'TEST-original-source'},cancelable:true}));
+ expect(await screen.findByText('Du lädst die Aufträge erneut. Deine Nachricht bleibt unverändert.')).toBeInTheDocument();expect(screen.queryByText('TEST Lesen unterbrochen')).toBeNull();
  fireEvent.click(screen.getByRole('button',{name:'Erneut'}));
  const choice=await screen.findByRole('button',{name:/A-TEST-4C.*TEST Gehäuse/});
  expect(ports.write).not.toHaveBeenCalled();
  fireEvent.click(choice);
  expect(await screen.findByRole('button',{name:'Reklamation aufnehmen'})).toBeInTheDocument();
- expect(ports.read).toHaveBeenCalledWith({orderId:'test-order'});
+ expect(ports.read).toHaveBeenCalledWith({orderId:'test-order',sourceItemId:'TEST-original-source'});
  expect(list).toHaveBeenNthCalledWith(1,'test-customer');expect(list).toHaveBeenNthCalledWith(2,'test-customer');
  expect(screen.queryByRole('dialog',{name:'Vorgang wählen'})).not.toBeInTheDocument();
  expect(ports.write).not.toHaveBeenCalled();
