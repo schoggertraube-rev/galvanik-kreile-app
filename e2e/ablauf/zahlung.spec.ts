@@ -4,6 +4,30 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder,customerFixture,intakeOrderFixture} from './orderFixture';
 
+it('incomplete seller data consumes no invoice number and the same request succeeds after the TEST configuration is repaired',async()=>{
+ const order=await readyInvoiceOrder('Rechnung-Stammdaten');
+ const {cancelInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');
+ expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST Ersatzrechnung vorbereiten',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ // Only this isolated TEST tenant's fixture is made incomplete; the invoice action is never mocked.
+ await sql`UPDATE public.company_settings SET street='' WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));if(card.code!=='OK')throw Error('MASTER_DATA_CARD:'+card.code);
+ const request={orderId:order.orderId,expectedVersion:card.data.card.version,clientEventId:randomUUID()};
+ const counters=await sql`SELECT * FROM private.invoice_number_sequences WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(full,()=>issueInvoiceAction(request))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT * FROM private.invoice_number_sequences WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(counters);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientEventId}::uuid`).toEqual([{n:0}]);
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:request.clientEventId}))).toMatchObject({code:'OK',data:null});
+ await sql`UPDATE public.company_settings SET street='TEST Weg 1' WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const issued=await withSession(full,()=>issueInvoiceAction(structuredClone(request)));
+ expect(issued).toMatchObject({code:'OK'});if(issued.code!=='OK')throw Error('MASTER_DATA_RETRY:'+issued.code);
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:request.clientEventId}))).toMatchObject({code:'OK',data:{invoiceId:issued.receipt.invoiceId}});
+ expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:issued.receipt.invoiceId}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:2}]);
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
 it('a payment retry key cannot pay another invoice, change the booked method or impersonate the original actor',async()=>{
  const first=await readyInvoiceOrder('Zahlung-Schlüssel-1'),second=await readyInvoiceOrder('Zahlung-Schlüssel-2');
  const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
