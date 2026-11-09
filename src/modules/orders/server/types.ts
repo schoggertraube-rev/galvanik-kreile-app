@@ -109,16 +109,16 @@ export type OrderCardPaymentContext =
   | { kind: "available"; value: OrderCardPayment }
   | { kind: "restricted" | "unavailable"; message: string };
 export type OrderCardActionReceipt = {
-  kind: "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate" | "label";
+  kind: "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate" | "label" | "responsibility";
   actorId: string;
   occurredAt: string;
   eventId: string;
   receiptId: string;
 };
 export type OrderCardActionFeedback =
-  | { kind: "idle" | "submitting"; message: string }
+  | { kind: "idle" | "submitting"; message: string; operation?:"responsibility" }
   | { kind: "success"; message: string; receipt: OrderCardActionReceipt }
-  | { kind: "conflict" | "error"; message: string };
+  | { kind: "conflict" | "error"; message: string; operation?:"responsibility" };
 export type OrderCardActionAvailability = {
   visible: boolean;
   enabled: boolean;
@@ -130,6 +130,8 @@ export type OrderCardAgreementPorts = OrderCardActionAvailability & {
   onRevoke?: () => void;
 };
 export type OrderCardActionPorts = {
+  takeResponsibility?:OrderCardActionAvailability;
+  onTakeResponsibility?:()=>Promise<void>;
   dueDate?: OrderCardActionAvailability;
   content?: OrderCardActionAvailability;
   itemStatus?: OrderCardActionAvailability;
@@ -183,6 +185,8 @@ export type OrderCardActionPorts = {
   onReload: () => void | Promise<void>;
 };
 export type OrderCardModel = {
+  actors?:OrderActorSummary;
+  actorReadError?:string;
   shippingService?:string|null;
   shippingServiceError?:string;
   handoverNotice?:{message:string;taskId:string|null;originalItemId:string;taskState?:'offen'|'erledigt'|'nicht_verfuegbar'};
@@ -238,3 +242,6 @@ export type OrderCardState =
   | { kind: "loading" }
   | { kind: "denied" | "not-found" | "error" | "conflict"; message: string }
   | { kind: "data"; card: OrderCardModel };
+
+export type OrderActorEvidence={eventId:string;userId:string|null;name:string|null;at:string;action:string;mailSender:string|null};
+export type OrderActorSummary={currentLoginId:string;createdBy:OrderActorEvidence|null;lastActor:OrderActorEvidence|null;responsible:{userId:string;name:string|null;at:string;source:'assignment'|'first-event'}|null;assignmentUnavailable:boolean;assignmentReadError?:string};

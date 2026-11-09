@@ -32,7 +32,7 @@ export function taskValidation(value:unknown):Record<string,string>{
  if(typeof value.title!=='string'||value.title.trim().length<3||value.title.trim().length>120)fields.title='Was ist zu tun? (3–120 Zeichen)';
  if(!date(value.dueDate))fields.dueDate='Fällig fehlt oder ist ungültig.';
  if(!(value.time===null||typeof value.time==='string'&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value.time)))fields.time='Uhrzeit ist ungültig.';
- if(!((value.forLogin===null&&isAccessArea(value.forArea))||(taskUuid(value.forLogin)&&value.forArea===null)))fields.recipient='Für fehlt oder ist nicht eindeutig.';
+ if(!((value.forLogin===null&&isAccessArea(value.forArea)&&value.forArea!=='statistik_alle')||(taskUuid(value.forLogin)&&value.forArea===null)))fields.recipient='Für fehlt oder ist nicht eindeutig.';
  if(!validTaskReference(value.reference))fields.reference='Bezug fehlt oder ist ungültig.';
  if(!(value.note===null||typeof value.note==='string'&&value.note.length<=2000))fields.note='Notiz darf höchstens 2000 Zeichen enthalten.';
  if(!(value.itemId===undefined&&value.itemVersion===undefined||taskUuid(value.itemId)&&(value.taskId!==undefined&&value.itemVersion===undefined||Number.isSafeInteger(value.itemVersion)&&(value.itemVersion as number)>0)))fields.item='Eingangsbezug oder Version ist ungültig.';

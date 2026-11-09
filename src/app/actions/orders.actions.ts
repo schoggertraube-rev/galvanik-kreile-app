@@ -244,7 +244,9 @@ export async function getLiveOrderCardAction(
       targetId: input.orderId,
     });
     if (evidence.code !== "OK") return evidence;
-    return { code: "OK", data: { card: card.data, evidence: evidence.data } };
+    const {readOrderActors}=await import('@/modules/orders/server-public');
+    const actors=await readOrderActors(authorization.data,{orderId:input.orderId,version:card.data.version});
+    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,

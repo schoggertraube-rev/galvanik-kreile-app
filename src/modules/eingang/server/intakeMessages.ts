@@ -1,3 +1,4 @@
+import {readIntakeActorTraces} from './actorRead';
 import 'server-only';
 import {readComplaintPhotoReplyRelations} from './complaintMail';
 import {readComplaintPhotoWaiting,readComplaintPhotoDelivery} from '@/lib/server/communicationPort';
@@ -48,7 +49,8 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
    for(const row of messages){const state=waiting.get(row.id);if(state)row.photoRequest=state;}
    const relations=await readComplaintPhotoReplyRelations(tx,auth,messages.map(row=>row.id));
    for(const relation of relations){const root=messages.find(row=>row.id===relation.rootId),reply=messages.find(row=>row.id===relation.replyId);if(root)(root.photoReplies??=[]).push({replyId:relation.replyId,orderId:relation.orderId,photoIds:relation.photoIds});if(reply)reply.photoParentId=relation.rootId;}
-   return {code:'OK' as const,messages:[...messages],areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
+   const actors=await readIntakeActorTraces(tx,auth,messages.map(row=>row.id));
+   return {code:'OK' as const,messages:messages.map(row=>({...row,actorTrace:actors.get(row.id)})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
   });
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }

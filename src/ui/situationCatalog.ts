@@ -87,6 +87,18 @@ export const QUOTE_CANCELLED_ORDER_COPY={title:'Auftrag zurückgenommen',explana
 export const QUOTE_UNDO_COPY={open:"Rückgängig",reason:"Grund der Rücknahme",missing:"Nenne den Grund der Rücknahme.",confirm:"Auftrag zurücknehmen",saved:"Auftrag zurückgenommen · die Ware ist wieder beim KV.",unavailable:(reason:string)=>"Rückgängig nicht mehr möglich · "+reason} as const;
 
 export const QUOTE_RECOVERY_COPY={extend:'Gültig bis verlängern',until:'Neues Gültigkeitsdatum',reason:'Grund / Wortlaut',missing:'Datum und konkreten Grund ergänzen.',extended:'Gültigkeit verlängert · Fassung und vorhandene Zusage bleiben erhalten.',return:(customer:string,location:string)=>'Ware an '+customer+' zurückgeben · '+location,returnConfirm:'Rückgabe mit Beleg bestätigen',returned:'Ware zurückgegeben · der Beleg bleibt im Verlauf.',receipt:'Rückgabebeleg',receiptLine:(quantity:number,location:string,actor:string,at:string)=>quantity+' Stück · '+location+' · '+actor+' · '+at};
+
+export const ACTOR_COPY={
+ missingCase:'Für diesen Vorgang fehlt ein belegtes Anlageereignis.',
+ received:(name:string,at:string)=>'Eingang erfasst von '+name+' · '+at,
+ created:(name:string,at:string)=>'Angelegt von '+name+' · '+at,
+ last:(name:string,action:string)=>'Zuletzt: '+name+' · '+action,
+ responsible:(name:string)=>'Zuständig: '+name,
+ missing:'Für diesen Auftrag fehlt ein belegtes Anlageereignis.',unknownLogin:'Loginname nicht mehr verfügbar',
+ take:'Übernehmen',mine:'Deins',saving:'Deine Zuständigkeit wird gespeichert.',taken:'Du hast den Auftrag übernommen.',failed:'Zuständigkeit nicht gespeichert · erneut mit derselben Kennung versuchen.',
+ action:(type:string,kind:'order'|'quote'|'complaint'='order')=>type==='rechnung.erfassen'?'Rechnung erfasst':type==='rechnung.unklar'?'Rechnung zur Klärung abgelegt':type==='rechnung.status'?'Rechnung geändert':type==='rechnung.klaeren'?'Rechnung geklärt':type==='INTAKE:angelegt'?'Eingang angelegt':type==='INTAKE:original_gespeichert'?'Original gesichert':type==='INTAKE:zugeordnet'?'Kunde zugeordnet':type==='INTAKE:umgehaengt'?'Zuordnung geaendert':type.startsWith('INTAKE:')?'Eingang bearbeitet':type==='QUOTE_LIFECYCLE_V04:accept'?'Zusage übernommen':type==='QUOTE_LIFECYCLE_V04:sent'?'KV gesendet':type==='QUOTE_LIFECYCLE_V04:extend'?'Gültigkeit verlängert':type==='QUOTE_CREATED_V1'?'KV angelegt':type==='COMPLAINT_CHANGED_V1:aufnehmen'?'Reklamation aufgenommen':type==='COMPLAINT_CHANGED_V1:entscheiden'?'Reklamation entschieden':type==='ORDER_TASK_ASSIGNED_V1'?'Zuständigkeit übernommen':type==='ORDER_INTAKE_CREATED_V1'?'Auftrag angelegt':type==='ORDER_PROMISED_DUE_DATE_CHANGED_V1'?'Termin geändert':type.includes('PAYMENT')?'Zahlung erfasst':type.includes('PICKED_UP')?'Ware ausgegeben':type.includes('FROZEN')?'Fertig gemeldet':kind==='quote'?'KV geändert':kind==='complaint'?'Reklamation geändert':'Auftrag geändert',
+ mail:(sender:string)=>'Mail von '+sender,
+};
 export const QUOTE_CYCLE_COPY={
  editionWarning:(before:number,after:number,customer:string)=>`Du änderst Fassung ${before} zu Fassung ${after} – die Zusage von ${customer} gilt dann nicht mehr. Termin allein ändert nichts.`,
  editionConfirm:'Neue Fassung speichern · Zusage aufheben',

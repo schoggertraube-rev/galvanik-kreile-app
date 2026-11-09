@@ -1,7 +1,7 @@
+import {seedSyntheticComplaintPhoto} from '@/test/fixtures/complaintPhoto';
 // @vitest-environment node
 // @vitest-environment node
 
-import {seedSyntheticComplaintPhoto} from '@/test/fixtures/complaintPhoto';
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
@@ -429,4 +429,13 @@ it('RM03 real reply Action sends the explicit response, completes root and reply
   expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}))).not.toMatchObject({code:'OK'});expect(sends).toBe(1);
   expect(await withSession(fixture,()=>getIntakeMessagesAction('alle'))).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:rootId,usage:'erledigt'}),expect.objectContaining({id:replyId,usage:'erledigt'})])});
  }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
+});
+
+it('AK complaint: two real actions retain the original and latest actor in the same complaint card',async()=>{
+ const first=await createFixture(),second=await createFixture(),order=await deliveredComplaintSource(first);
+ const photoIds=await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:first.actorId,customerId:first.customerId,orderId:order.orderId});
+ const recorded=await complaintWrite(first,{action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST AK complaint actors',photoIds,goodsReturn:'offen'});
+ await complaintWrite(second,{action:'entscheiden',clientKey:randomUUID(),complaintId:recorded.complaintId,version:1,assessment:'abgelehnt',measure:'ablehnen',reason:'TEST AK separate decision',creditCents:null});
+ const {getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
+ expect(await withSession(first,()=>getComplaintDialogAction({complaintId:recorded.complaintId}))).toMatchObject({code:'OK',data:{complaint:{actorTrace:{createdBy:{userId:first.actorId},lastActor:{userId:second.actorId,action:'COMPLAINT_CHANGED_V1:entscheiden'}}}}});
 });

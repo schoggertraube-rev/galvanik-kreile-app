@@ -34,3 +34,4 @@ export {readComplaintPhotoReplyRelations,prepareComplaintPhotoMail,readComplaint
 
 export {readComplaintRejectionSource,prepareComplaintRejection,complaintRejectionReplay} from './server/complaintMail';
 export {completeIntakeComplaintRejection} from './server/intakeComplaintEffect';
+export {readIntakeActorStatistics} from "./server/actorRead";

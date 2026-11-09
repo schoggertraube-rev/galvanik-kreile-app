@@ -40,3 +40,5 @@ export {
 } from "./server/types";
 
 export {ComplaintPanel} from '@/modules/complaints/public';
+
+export type {OrderActorEvidence,OrderActorSummary} from "./server/types";

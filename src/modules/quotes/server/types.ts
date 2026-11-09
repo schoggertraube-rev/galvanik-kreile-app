@@ -1,3 +1,4 @@
+import type {CaseActorTrace} from "@/lib/server/quoteJournalPort";
 import type {QuoteCalculation} from "../quoteCalculation";
 export type QuoteCommandCapabilities = {
   canDecideQuote?:boolean;
@@ -70,6 +71,8 @@ export type QuotePosition = QuotePositionInput & {
 };
 
 export type QuoteReadback = {
+  actorTrace?:CaseActorTrace;
+  actorReadError?:string;
   sourceComplaintId?:string;
   lifecycle?: {
     edition:number; stage:'entwurf'|'versendet'|'geaendert_seit_versand'|'zugesagt'|'umgewandelt'|'abgesagt'|'abgelaufen';

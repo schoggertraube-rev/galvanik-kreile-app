@@ -194,9 +194,12 @@ export async function readQuoteAction(input: { quoteId: string;receivedQuantitie
     if(input.goodsReceiptId&&!receiptQuantities)return {code:'VALIDATION_ERROR' as const,message:'Passender angenommener Warenbeleg fehlt oder ist gesperrt.'};
     const quantities=receiptQuantities?receiptQuantities.map(row=>({position:row.kv_position,quantity:Number(row.bestaetigt)})):input.receivedQuantities??result.quote.positions.map(row=>({position:row.position,quantity:row.quantity}));
     if(!Array.isArray(quantities))return {code:'VALIDATION_ERROR' as const,message:'Beauftragungsdaten sind ungültig.'};
+    const {readQuoteActors}=await import('@/modules/quotes/server-public');
+    const actors=await readQuoteActors(context,{quoteId:result.quote.quoteId,version:result.quote.version});
+    const annotated={...result.quote,...(actors.code==='OK'?{actorTrace:actors.trace}:{actorReadError:actors.message})};
     const preview=scaleQuotePositions(result.quote.lifecycle?.calculation??null,result.quote.positions,quantities);
     if(preview.code!=='OK')return preview;
-    return {...result,undo:await readQuoteUndoContext(context,result.quote),quote:quoteForUi(result.quote,financial),canEdit:financial&&context.capabilities.canUpdateQuote,canOperate:true,canReceive:hasAuthorizationArea(authorization.data,'eingang'),conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:financial?preview.totalNetCents:null,plannedHours:preview.calculation?.hours??null,positions:preview.positions.map(row=>({position:row.position,quantity:row.quantity,lineTotalCents:financial?row.lineTotalCents:null}))}};
+    return {...result,undo:await readQuoteUndoContext(context,result.quote),quote:quoteForUi(annotated,financial),canEdit:financial&&context.capabilities.canUpdateQuote,canOperate:true,canReceive:hasAuthorizationArea(authorization.data,'eingang'),conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:financial?preview.totalNetCents:null,plannedHours:preview.calculation?.hours??null,positions:preview.positions.map(row=>({position:row.position,quantity:row.quantity,lineTotalCents:financial?row.lineTotalCents:null}))}};
   }catch(error){console.error('[QUOTE_CONVERSION_DEFAULTS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV konnte nicht sicher gelesen werden.'};}
 }
 

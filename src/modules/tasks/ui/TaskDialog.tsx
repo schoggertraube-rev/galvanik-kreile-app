@@ -7,7 +7,7 @@ import{TASK_KINDS,TASK_KIND_LABELS,taskValidation,type TaskKind,type TaskOpenReq
 export type TaskPorts={read:(request:TaskOpenRequest)=>Promise<TaskReadResult>;save:(input:TaskSaveInput)=>Promise<TaskResult>;complete:(input:TaskCompleteInput)=>Promise<TaskResult>;canManageMoney:boolean;referenceTargets:readonly TaskReferenceType[];openReference:(reference:TaskReferenceRead)=>void;openInvoice?:(id:string)=>void};
 type Data=Extract<TaskReadResult,{code:'OK'}>;
 type Draft={kind:TaskKind;title:string;dueDate:string;time:string;recipient:string;note:string};
-const AREA_NAMES:Record<AccessArea,string>={auftraege:'Aufträge',eingang:'Eingang',kunden:'Kunden',geld:'Geld',kassieren:'Kassieren',mails:'Nachrichten',entscheiden:'Entscheiden',einstellungen:'Einstellungen',logins:'Logins',wartung:'Wartung'};
+const AREA_NAMES:Record<AccessArea,string>={auftraege:'Aufträge',eingang:'Eingang',kunden:'Kunden',geld:'Geld',kassieren:'Kassieren',mails:'Nachrichten',entscheiden:'Entscheiden',einstellungen:'Einstellungen',logins:'Logins',wartung:'Wartung',statistik_alle:'Statistik aller Personen'};
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const dateLabel=(date:string)=>new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'short',day:'2-digit',month:'2-digit'}).format(new Date(date+'T12:00:00Z')).replace(/^(\p{L}+)\.,?\s/u,'$1 ');
 function initial(data:Data,request:TaskOpenRequest):Draft{
@@ -74,7 +74,7 @@ export function TaskDialog({request,ports,onClose,onMessage}:{request:TaskOpenRe
     <Feld label={required('Fällig')} fehler={gaps.dueDate}><Eingabe data-spec-id="aufgabe.faellig" type="date" value={draft.dueDate} disabled={readonly} onChange={event=>change({dueDate:event.target.value})}/></Feld>
     {draft.kind==='rueckruf'?<Feld label="Uhrzeit" fehler={gaps.time}><Eingabe data-spec-id="aufgabe.uhrzeit" type="time" value={draft.time} disabled={readonly} onChange={event=>change({time:event.target.value})}/></Feld>:null}
     <Feld label={required('Für')} fehler={gaps.recipient}><select className="kr-auswahl" data-spec-id="aufgabe.fuer" value={draft.recipient} disabled={readonly} onChange={event=>change({recipient:event.target.value})}>
-     <option value="ich">ich</option>{ACCESS_AREAS.map(area=><option key={area} value={'bereich:'+area}>alle mit Recht {AREA_NAMES[area]}</option>)}{draft.recipient.startsWith('login:')?<option value={draft.recipient}>Login {draft.recipient.slice(6)}</option>:null}
+     <option value="ich">ich</option>{ACCESS_AREAS.filter(area=>area!=='statistik_alle').map(area=><option key={area} value={'bereich:'+area}>alle mit Recht {AREA_NAMES[area]}</option>)}{draft.recipient.startsWith('login:')?<option value={draft.recipient}>Login {draft.recipient.slice(6)}</option>:null}
     </select></Feld>
    </FormRaster>
    <div><b>Bezug</b><p data-spec-id="aufgabe.bezug">{data.canOpenReference&&ports.referenceTargets.includes(data.reference.type)?<button type="button" className="kr-link" onClick={()=>ports.openReference(data.reference)}>{data.reference.label??'Bezeichnung fehlt'}</button>:data.reference.type==='allgemein'?'allgemein':data.reference.label??'Bezug nicht verfügbar'}</p></div>
