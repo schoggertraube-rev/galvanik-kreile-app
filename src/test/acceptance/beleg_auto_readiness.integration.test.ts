@@ -196,3 +196,9 @@ it('BA04 duplicate source links its secured original to the same invoice and ope
  expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND lieferant_id=${first.fixture.customerId}`).toHaveLength(1);
 
 });
+
+it('BA05 reads the direct invoice action label from secure source evidence, never a guessed number',async()=>{
+ const {fixture,itemId}=await secureSource(['eingang','kunden','geld','mails']);const {getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');
+ const read=await withSession(fixture,()=>getIntakeMessagesAction('offen'));expect(read).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:itemId,invoiceNumber:'TEST-BA-42'})])});if(read.code!=='OK')throw Error(read.message);
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toHaveLength(0);
+});

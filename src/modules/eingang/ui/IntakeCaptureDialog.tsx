@@ -10,7 +10,7 @@ import { uploadIntakeOriginal } from "../intakeOriginalUpload";
 import QRCode from "qrcode";
 import Image from "next/image";
 import { getIntakeDeviceId, type IntakeDeviceRequest } from "../deviceContract";
-import {intakeStartTitle,SITUATION_COPY,CAPTURE_COPY,type IntakeQuoteCandidate} from '@/ui/situationCatalog';
+import {BELEG_AUTO_COPY,intakeStartTitle,SITUATION_COPY,CAPTURE_COPY,type IntakeQuoteCandidate} from '@/ui/situationCatalog';
 import {IntakeSituation} from "./IntakeSituation";
 import type { CaptureKind } from "../captureRecognition";
 
@@ -22,7 +22,7 @@ const subscribeDevice = (changed: () => void) => { const query = matchMedia(CAME
 const deviceSnapshot = () => matchMedia(CAMERA_DEVICE_QUERY).matches;
 const serverDeviceSnapshot = () => false;
 export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClose, onOrder, onCustomer }: Props) {
-  const { readCaptureNote, searchIntakeCustomers, getCaptureScope, getCapture, deviceRequest, saveCaptureNote, discardCapture } = ports;
+  const {openCaptureObject:autoInvoiceTarget,canManageMoney:autoInvoiceAllowed, readCaptureNote, searchIntakeCustomers, getCaptureScope, getCapture, deviceRequest, saveCaptureNote, discardCapture } = ports;
   const [itemId, setItemId] = useState(() => crypto.randomUUID());
   const [scope, setScope] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -59,6 +59,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
   const [closeRequested, setCloseRequested] = useState(false);
   const [hidePreviousResult,setHidePreviousResult]=useState(false);
   const discardKey=useRef(crypto.randomUUID());
+  const automaticInvoices=useRef(new Set<string>());
   const kindKeys = useRef(new Map<string, string>());
   const [kindWorking, setKindWorking] = useState<Exclude<CaptureKind, "unklar"> | null>(null);
   const [goodsChoice, setGoodsChoice] = useState(false);
@@ -450,6 +451,14 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
       console.error("[INTAKE_CAPTURE_TARGET_UNAVAILABLE]", { target });
     } else if (target === "ware" || target === "rechnungein" || target === "kvware") onClose();
   };
+  // The existing invoice route verifies actual eligibility and invokes its sole writer.
+  // Never close over an unsaved text edit or a device transfer still in progress.
+  useEffect(()=>{
+    if(mode||receiving||busy||!autoInvoiceAllowed||!autoInvoiceTarget||!capture||capture.usage!=='offen'||capture.recognition?.kind!=='rechnung'||capture.recognition.source==='hand'||!capture.files.length||capture.files.some(file=>!file.secured||file.status!=='fertig')||text.trim()&&text!==capture.text&&text!==capture.recognition.text)return;
+    const operation=capture.id+':'+capture.version;if(automaticInvoices.current.has(operation))return;
+    const timer=setTimeout(()=>{if(automaticInvoices.current.has(operation))return;automaticInvoices.current.add(operation);const handled=autoInvoiceTarget?.('rechnungein',capture.id);if(handled)onClose();else{console.error('[INVOICE_AUTOMATIC_TARGET_UNAVAILABLE]',{itemId:capture.id});setError(BELEG_AUTO_COPY.targetUnavailable);}},0);
+    return()=>clearTimeout(timer);
+  },[capture,mode,receiving,busy,text,autoInvoiceAllowed,autoInvoiceTarget,onClose]);
   const assign = async () => {
     try { const saved = await saveNote(); if (saved) openObject("mailein", saved.id + "#rein"); }
     catch (cause) { console.error("[INTAKE_CAPTURE_ASSIGN_OPEN_FAILED]", cause); setError("Zuordnung konnte nicht geöffnet werden · Eingaben bleiben erhalten. Code: INTAKE_CAPTURE_ASSIGN_OPEN_FAILED."); }

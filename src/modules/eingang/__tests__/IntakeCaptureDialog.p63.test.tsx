@@ -69,3 +69,13 @@ describe("U241: unknown originals always have a concrete next step", () => {
     else await waitFor(() => expect(openCaptureObject).toHaveBeenCalledWith(kind === "rechnung" ? "rechnungein" : "mailein", capture.id + (kind === "dokument" ? "#rein" : "")));
   });
 });
+
+describe('BA automatic invoice route after secured recognition',()=>{
+ it.each([true,false])('opens the sole invoice route once only with money right=%s and retains unprivileged originals',async allowed=>{
+  vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+  const capture:IntakeCapture={id:crypto.randomUUID(),version:2,text:null,customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:['rechnung'],recognition:{kind:'rechnung',text:''},files:[{id:crypto.randomUUID(),name:'TEST BA invoice.jpg',mime:'image/jpeg',bytes:1,readable:true,secured:true,status:'fertig'}]};
+  const openCaptureObject=vi.fn(()=>true),onClose=vi.fn(),ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-BA-scope'})),getCapture:vi.fn(async()=>({code:'OK',capture})),prepareCaptureFile:vi.fn(async()=>({code:'OK',upload:null})),finishCaptureFile:vi.fn(async()=>({code:'OK',capture})),openCaptureObject,canManageMoney:allowed} as unknown as GlobalCreatePorts;
+  const {container}=render(<IntakeCaptureDialog ports={ports} onClose={onClose} onOrder={vi.fn()} onCustomer={vi.fn()}/>);await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());const file=new File(['x'],capture.files[0].name,{type:'image/jpeg'});Object.defineProperty(file,'arrayBuffer',{value:async()=>new Uint8Array([1]).buffer});fireEvent.change(container.querySelector('input[type=file]')!,{target:{files:[file]}});
+  await screen.findByRole('button',{name:'Original ansehen · '+capture.files[0].name});if(allowed){await waitFor(()=>expect(openCaptureObject).toHaveBeenCalledExactlyOnceWith('rechnungein',capture.id));expect(onClose).toHaveBeenCalledOnce();}else{expect(openCaptureObject).not.toHaveBeenCalled();expect(onClose).not.toHaveBeenCalled();expect(screen.getByRole('button',{name:'Original ansehen · '+capture.files[0].name})).toBeEnabled();}
+ });
+});

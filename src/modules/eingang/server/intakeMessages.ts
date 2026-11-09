@@ -26,6 +26,9 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
       WHERE source.fortsetzung_von IS NOT NULL AND created.tenant_id=source.tenant_id AND created.item_id=source.id AND created.art='angelegt' ORDER BY created.zeit,created.id LIMIT 1)) AS text,
     coalesce(source.empfangen_am,source.erstellt_am)::text AS at,source.kunde_id AS "customerId",context.customer_name AS "customerName",context.customer_type AS "customerType",
     source.vorgang_id AS "orderId",source.vorgang_art AS "orderKind",context.order_number AS "orderNumber",context.order_station AS "orderStation",context.goods,
+    (SELECT CASE WHEN count(DISTINCT btrim(suggestion.wert#>>'{}'))=1 THEN min(btrim(suggestion.wert#>>'{}')) ELSE NULL END FROM public.intake_suggestion suggestion
+      WHERE suggestion.tenant_id=source.tenant_id AND suggestion.item_id=source.id AND suggestion.feld='rechnung.nummer' AND suggestion.status<>'verworfen' AND jsonb_typeof(suggestion.wert)='string' AND btrim(suggestion.wert#>>'{}')<>'' AND (suggestion.sicherheit='sicher' OR suggestion.geprueft_am IS NOT NULL)
+      AND EXISTS(SELECT 1 FROM public.intake_file file JOIN public.intake_event secured ON secured.tenant_id=file.tenant_id AND secured.item_id=file.item_id AND secured.art='original_gespeichert' AND secured.nachher->>'fileId'=file.id::text AND secured.nachher->>'sha256'=file.sha256 WHERE file.tenant_id=source.tenant_id AND file.item_id=source.id AND file.id=suggestion.file_id)) AS "invoiceNumber",
     source.anliegen AS concerns,source.anliegen_offen AS "openConcerns",source.aussortiert AS "discardReason",source.erstellt_von::text AS "createdBy",
     ARRAY(SELECT file.id::text FROM public.intake_file file WHERE file.tenant_id=source.tenant_id AND (file.item_id=source.id OR EXISTS(
       SELECT 1 FROM public.intake_event created WHERE source.fortsetzung_von IS NOT NULL AND created.tenant_id=source.tenant_id

@@ -1,3 +1,5 @@
+import {concernOptions} from '../concernMenuContract';
+import type {IntakeMessage} from '../messageContract';
 import {expect,it} from 'vitest';
 import {invoiceAutomaticReadiness} from '../invoiceAutomation';
 const fields={lieferantId:'TEST-supplier',nummer:'TEST-42',datum:'2026-11-08',netto:'100.00',ust:'19.00',brutto:'119.00',faelligAm:'2026-11-22',iban:'',ibanGeprueft:false};
@@ -15,4 +17,10 @@ it('refuses contradictory or uncertain extraction and non-balancing totals',()=>
 it('reports stored or duplicate truth without suggesting a second booking',()=>{
  expect(invoiceAutomaticReadiness({...input,stored:true})).toEqual({state:'stored',missing:[]});
  expect(invoiceAutomaticReadiness({...input,duplicate:true})).toEqual({state:'duplicate',missing:[]});
+});
+
+it('uses the shared direct invoice target with the actual reader number and never invents a missing number',()=>{
+ const row={customerType:'lieferant',concerns:['rechnung'],openConcerns:['rechnung'],orderKind:null,orderId:null,invoiceNumber:'TEST-BA-42'} as IntakeMessage;
+ expect(concernOptions(row,['geld']).find(value=>value.id==='rechnungein')).toMatchObject({text:'Rechnung TEST-BA-42 ablegen',target:'rechnungein',reason:null});
+ expect(concernOptions({...row,invoiceNumber:null},['geld']).find(value=>value.id==='rechnungein')).toMatchObject({text:'Rechnung ablegen'});
 });
