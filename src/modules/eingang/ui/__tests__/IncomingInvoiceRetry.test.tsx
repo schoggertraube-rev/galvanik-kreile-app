@@ -65,6 +65,7 @@ it.each(['prepare','finish','network'])('BA14 proof %s rejection stays inside th
  fireEvent.click(screen.getByRole('button',{name:'Ist schon bezahlt'}));
  const file=new File([new Uint8Array([1,2,3])],'TEST-Nachweis.pdf',{type:'application/pdf'});Object.defineProperty(file,'arrayBuffer',{value:async()=>new Uint8Array([1,2,3]).buffer});
  fireEvent.change(container.querySelector('input[type=file]')!,{target:{files:[file]}});
+ if(stage==='network')await screen.findByText('Du versuchst es erneut. Dein Original und deine Eingaben bleiben erhalten.');
  const retry=await screen.findByRole('button',{name:'Nachweis erneut sichern'});expect(screen.queryByText('TEST SQL private upload detail')).toBeNull();expect(screen.getByDisplayValue('TEST-42')).toBeInTheDocument();
  fireEvent.click(retry);await screen.findByText('TEST-Nachweis.pdf · gesichert');expect(prepare).toHaveBeenCalledTimes(2);expect(prepare.mock.calls[1][0]).toEqual(prepare.mock.calls[0][0]);
  }finally{vi.unstubAllGlobals();}

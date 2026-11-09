@@ -26,7 +26,7 @@ export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoiceP
     setMessage(view.automation?.state==='duplicate'?{text:C.exists}:{text:C.saved,invoice:{id:saved.invoice.id,version:saved.invoice.version}});setEntry(fresh.view.annotationChoices?{key:crypto.randomUUID(),view:fresh.view,annotationsOnly:true}:null);if(location.hash.startsWith('#rechnungein:'))history.replaceState(history.state,'',location.pathname+location.search);refresh.current();return;
    }
    setEntry({key:crypto.randomUUID(),view:result.view});
-  }catch(error){console.error('[INVOICE_DIALOG_OPEN_FAILED]',error);if(current===generation.current)setFailure('Rechnung konnte nicht gelesen werden · Fehlercode: INVOICE_DIALOG_OPEN_FAILED.');}
+  }catch(error){console.error('[INVOICE_DIALOG_OPEN_FAILED]',error);if(current===generation.current)setFailure(belegFailureCopy('UNAVAILABLE'));}
   finally{if(current===generation.current)setLoading(false);}
  },[allowed,ports]);
  useEffect(()=>{
