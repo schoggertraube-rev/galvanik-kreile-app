@@ -465,5 +465,6 @@ it.each([false,true])('RM07 confirmed photo send preserves immutable proof after
   expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${rootId}::uuid AND nachher->>'action'='reklamation.fotos_angefordert'`).toHaveLength(0);
   const view=await withSession(fixture,()=>getIntakeMessagesAction('offen'));expect(view).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:rootId,version:2,photoDelivery:expect.objectContaining({state:'source-changed',deliveryCustomer:expect.any(String)})})])});
   expect(await withSession(fixture,()=>sendCustomerMailAction(reread))).toMatchObject({code:'OK',data:{replayed:true,sourceChanged:true}});expect(sends).toBe(1);
+  expect(await withSession(fixture,()=>sendCustomerMailAction({...reread,subject:'TEST anderer Inhalt unter alter Kennung'}))).toMatchObject({code:'VALIDATION_ERROR'});expect(sends).toBe(1);
  }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
 });
