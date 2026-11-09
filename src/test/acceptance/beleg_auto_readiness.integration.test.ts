@@ -236,3 +236,26 @@ it('BA07 real supplier creation resumes automatic booking through the same invoi
  expect(await withSession(fixture,()=>saveIncomingInvoiceAction(receipt.intent))).toMatchObject({code:'OK',replayed:true,invoice:{id:saved.invoice.id}});
  expect(await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}))).toMatchObject({code:'OK',view:{supplier:{id:created.customer.id},invoice:{id:saved.invoice.id},automation:{state:'stored'}}});
 });
+
+it('BA optional annotations roundtrip preserves invoice money and historical choices with a JSONB retry',async()=>{
+ const {fixture,itemId,fileId}=await secureSource(['eingang','auftraege','kunden','geld','kassieren','entscheiden','einstellungen']);
+ const {saveCompanySettingsAction}=await import('@/app/actions/settings.actions');
+ const vehicleId=randomUUID();
+ const settings={companyName:'TEST Beleg GmbH',street:'Testweg 1',zip:'70178',city:'Stuttgart',country:'DE',taxId:'TEST12345',iban:'DE89370400440532013000',bic:'COBADEFFXXX',bankName:'TEST Bank',logoUrl:'https://local.invalid/test.png',paymentTermDays:14,belegVehicles:[{id:vehicleId,label:'TEST Fahrzeug',active:true}],belegVehiclesVersion:null,clientEventId:randomUUID()};
+ const configured=await withSession(fixture,()=>saveCompanySettingsAction(settings));expect(configured.code).toBe('OK');if(configured.code!=='OK')throw Error(configured.message);
+ expect(await sql`SELECT beleg_fahrzeuge FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{beleg_fahrzeuge:settings.belegVehicles}]);
+ const {getIncomingInvoiceAction,saveIncomingInvoiceAction,changeIncomingInvoiceStatusAction}=await import('@/app/actions/eingang.actions');
+ const initial=await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}));if(initial.code!=='OK')throw Error(initial.message);
+ const booked=await withSession(fixture,()=>saveIncomingInvoiceAction({automatic:true,itemId,fileId,version:initial.view.item.version,clientKey:randomUUID(),fields:initial.view.fields,status:'offen',paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null}));expect(booked.code).toBe('OK');if(booked.code!=='OK')throw Error(booked.message);
+ const request={command:'annotations',invoiceId:booked.invoice.id,version:booked.invoice.version,clientKey:randomUUID(),result:'offen',paidDate:null,proofFileId:null,duplicateId:null,reason:null,fields:null,annotations:{remark:'TEST Tankfahrt',personId:fixture.actorId,vehicleId}};
+ const before=await sql`SELECT brutto,netto,ust,zahlstatus,bezahlt_am FROM public.supplier_invoice WHERE id=${booked.invoice.id}::uuid`;
+ const saved=await withSession(fixture,()=>changeIncomingInvoiceStatusAction(request));expect(saved).toMatchObject({code:'OK',replayed:false});
+ const [receipt]=await sql<{intent:typeof request}[]>`SELECT nachher->'intent' AS intent FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND befehl_id=${request.clientKey}::uuid`;
+ expect(receipt.intent).toEqual(request);expect(await withSession(fixture,()=>changeIncomingInvoiceStatusAction(receipt.intent))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT brutto,netto,ust,zahlstatus,bezahlt_am FROM public.supplier_invoice WHERE id=${booked.invoice.id}::uuid`).toEqual(before);
+ expect(await sql`SELECT von FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND befehl_id=${request.clientKey}::uuid`).toEqual([{von:fixture.actorId}]);
+ const reread=await withSession(fixture,()=>getIncomingInvoiceAction({id:booked.invoice.id}));expect(reread).toMatchObject({code:'OK',view:{annotations:{remark:'TEST Tankfahrt',person:{id:fixture.actorId,label:'TEST BelegAuto'},vehicle:{id:vehicleId,label:'TEST Fahrzeug'}}}});
+ const deactivated=await withSession(fixture,()=>saveCompanySettingsAction({...settings,belegVehicles:[{id:vehicleId,label:'TEST umbenannt',active:false}],belegVehiclesVersion:configured.belegVehiclesVersion,clientEventId:randomUUID()}));expect(deactivated.code).toBe('OK');
+ const history=await withSession(fixture,()=>getIncomingInvoiceAction({id:booked.invoice.id}));expect(history).toMatchObject({code:'OK',view:{annotationChoices:{vehicles:[]},annotations:{vehicle:{id:vehicleId,label:'TEST Fahrzeug'}}}});
+ expect(await withSession(fixture,()=>changeIncomingInvoiceStatusAction({...request,clientKey:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+});

@@ -3,8 +3,26 @@ import {afterEach,expect,it,vi} from 'vitest';
 import {IncomingInvoiceDialog} from '../IncomingInvoiceDialog';
 import type {InvoicePorts,InvoiceView} from '../../invoiceContract';
 import {INTAKE_CHANGED_EVENT} from '../../messageContract';
+import {InvoiceAnnotationEditor} from '../InvoiceAnnotationEditor';
 
 afterEach(cleanup);
+it('BA optional metadata conflict rereads the real editor version and preserves local text and retry key',async()=>{
+ const view={item:{id:'TEST-source',version:1},invoice:{id:'TEST-invoice',version:1,zahlstatus:'offen'},annotations:{remark:'TEST vorher',person:null,vehicle:null},annotationChoices:{persons:[],vehicles:[]}} as unknown as InvoiceView;
+ const fresh={...view,invoice:{...view.invoice!,version:2}};
+ const status=vi.fn().mockResolvedValueOnce({code:'CONFLICT',message:'TEST private detail'}).mockResolvedValueOnce({code:'OK'}),read=vi.fn().mockResolvedValue({code:'OK',view:fresh});
+ render(<InvoiceAnnotationEditor view={view} ports={{status,read} as unknown as InvoicePorts} onSaved={vi.fn()}/>);
+ fireEvent.change(screen.getByDisplayValue('TEST vorher'),{target:{value:'TEST eigene Bemerkung'}});
+ fireEvent.click(screen.getByRole('button',{name:'Zusatzangaben speichern'}));
+ await screen.findByRole('button',{name:'Neu laden'});
+ expect(screen.queryByText('TEST private detail')).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Neu laden'}));
+ await waitFor(()=>expect(screen.queryByRole('button',{name:'Neu laden'})).not.toBeInTheDocument());
+ expect(screen.getByDisplayValue('TEST eigene Bemerkung')).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Zusatzangaben speichern'}));
+ await waitFor(()=>expect(status).toHaveBeenCalledTimes(2));
+ expect(status.mock.calls[1][0]).toMatchObject({version:2,clientKey:status.mock.calls[0][0].clientKey,annotations:{remark:'TEST eigene Bemerkung'}});
+ await screen.findByText('Zusatzangaben gespeichert.');
+});
 it('BA14 real editor rereads after conflict without losing entered invoice fields',async()=>{
  const initial:InvoiceView={item:{id:'TEST-source',version:1,at:'2026-11-09T01:00:00Z',channel:'datei',sender:null},invoice:null,supplier:{id:'TEST-supplier',name:'TEST Lieferant',iban:null,paymentTermDays:null},originals:[],fileId:'TEST-original',fields:{lieferantId:'TEST-supplier',nummer:'TEST-42',datum:'2026-11-08',faelligAm:'2026-11-22',netto:'100.00',ust:'19.00',brutto:'119.00',iban:'',ibanGeprueft:false},uncertain:0,conflict:null,duplicate:null};
  const read=vi.fn().mockResolvedValue({code:'OK',view:{...initial,item:{...initial.item,version:2}}}),save=vi.fn().mockResolvedValueOnce({code:'CONFLICT',message:'TEST private server detail'}).mockResolvedValueOnce({code:'OK',invoice:{id:'TEST-invoice',version:1},replayed:false});
