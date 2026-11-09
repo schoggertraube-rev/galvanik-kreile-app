@@ -193,12 +193,12 @@ it('KV-03 settings persist explicit nullable approaches with DB/event/view, with
  expect((await sql`SELECT count(*)::int n FROM private.extra_work_hourly_rates WHERE tenant_id=${KREILE_TENANT_SLUG}`)[0].n).toBe(1);
 });
 
-it('E1 text note stays a source without an order and retries from the persisted JSONB receipt',async()=>{
+it.each(['TEST Anfrage vier Halter verchromen','TEST KV vier Halter verchromen'])('E1 text note stays a source without an order and retries from the persisted JSONB receipt: %s',async text=>{
  const fixture=await createFixture();
  const {saveIntakeNoteAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
- const itemId=randomUUID(),textstand=randomUUID(),text='TEST Anfrage vier Halter verchromen';
+ const itemId=randomUUID(),textstand=randomUUID();
  const saved=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand,text}));
- expect(saved).toMatchObject({code:'OK',capture:{id:itemId,text,files:[],orderId:null}});
+ expect(saved).toMatchObject({code:'OK',capture:{id:itemId,text,files:[],orderId:null,recognition:{kind:'anfrage'}}});
  expect(await withSession(fixture,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{id:itemId,text,files:[],orderId:null}});
  const [row]=await sql`SELECT jsonb_build_object('itemId',i.id::text,'textstand',e.befehl_id::text,'text',e.nachher->>'text','concerns',e.nachher->'anliegen') request, i.vorgang_id FROM public.intake_item i JOIN public.intake_event e ON e.tenant_id=i.tenant_id AND e.item_id=i.id WHERE i.tenant_id=${KREILE_TENANT_SLUG} AND i.id=${itemId}::uuid AND e.art='original_gespeichert' AND e.befehl_id=${textstand}::uuid`;
  expect(row.vorgang_id).toBeNull();expect(row.request).toMatchObject({itemId,textstand,text});

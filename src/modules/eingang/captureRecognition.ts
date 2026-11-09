@@ -15,7 +15,7 @@ export function captureRecognition(capture: { text: string | null; concerns?: re
   if (/\brechnung\b/iu.test(text) && /rechnungsnummer|\bust\b|\biban\b/iu.test(text)) return { kind: "rechnung", text };
   if (/\b(?:DHL|DPD|UPS|GLS|Hermes|FedEx|Sendungsnummer|Absender)\b/iu.test(text)) return { kind: "ware", text };
   if (/\blieferschein\b/iu.test(text)) return { kind: "dokument", text };
-  if (/\b(?:bestellung|bestellen|anfrage|angebot)\b/iu.test(text) || fields.has("ITEM_DESCRIPTION") && fields.has("QUANTITY")) return { kind: "anfrage", text };
+  if (/\b(?:bestellung|bestellen|anfrage|angebot|kv|kostenvoranschlag)\b/iu.test(text) || fields.has("ITEM_DESCRIPTION") && fields.has("QUANTITY")) return { kind: "anfrage", text };
   if (fields.has("CUSTOMER_NAME") && (fields.has("EMAIL") || fields.has("PHONE")) && !fields.has("ITEM_DESCRIPTION")) return { kind: "kontakt", text };
   return { kind: text ? "notiz" : "unklar", text };
 }

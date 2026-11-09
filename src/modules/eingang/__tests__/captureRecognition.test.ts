@@ -38,3 +38,8 @@ describe('AF19 conservative handover directive',()=>{
  it('changes the future default only when explicit',()=>{expect(intakeHandoverDirective('Ab jetzt immer abholen.')).toEqual({mode:'pickup',forFuture:true});expect(intakeHandoverDirective('Bitte versenden.')).toEqual({mode:'shipping',forFuture:false});});
  it.each(['Nicht abholen.','Vielleicht abholen.','Falls Versand, hole ich ab.','Abholen oder versenden?','> Hole ich ab.','Von: alter Kunde\nBitte versenden.'])('does not guess from negation, ambiguity or quoted mail %s',text=>expect(intakeHandoverDirective(text)).toBeNull());
 });
+
+it.each(['TEST KV vier Halter verchromen','TEST Kostenvoranschlag fuer vier Halter'])('E1 S13 recognizes the explicit quote request through the shared classifier: %s',text=>{
+ expect(captureRecognition({text})).toEqual({kind:'anfrage',text});
+ expect(captureRecognition({text,suggestions:[{field:'art',value:'notiz',status:'uebernommen'}]})).toEqual({kind:'notiz',text,source:'hand'});
+});
