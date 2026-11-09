@@ -1,6 +1,7 @@
 "use server";
 import {quoteCommandContext,quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
+import {bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
 
 import {readMicrosoftGraphSentDocumentEvidence} from "@/lib/server/microsoftGraph";
 
@@ -324,7 +325,7 @@ async function convertQuoteToOrder(input:ConvertQuoteInput,newGoodsInput?:unknow
     },
     beforeEvent:async(tx)=>{await check(tx,false);},
     after:async(tx,auth,receipt)=>{
-      try{goods=await bindQuoteGoodsReceiptToCreatedOrder(tx,auth,{quoteId:input.quoteId,receiptId:input.goodsReceiptId!,clientEventId:input.clientEventId,orderId:receipt.orderId,items:receipt.items});}
+      try{goods=await bindQuoteGoodsReceiptToCreatedOrder(tx,auth,{quoteId:input.quoteId,receiptId:input.goodsReceiptId!,clientEventId:input.clientEventId,orderId:receipt.orderId,items:receipt.items});await bindOrderQuoteCommercialTerms(tx,auth,receipt.orderId);}
       catch(error){
         if(error&&typeof error==='object'&&'result'in error){const result=error.result as {code:string;message:string};boundFailure={code:result.code==='CONFLICT'?'CONFLICT':'VALIDATION_ERROR',message:result.message};}
         throw error;

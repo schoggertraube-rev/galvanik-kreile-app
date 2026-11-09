@@ -16,7 +16,7 @@ if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database
 const sql=postgres(database,{max:2,prepare:false});
 const originalEnv={...process.env};
 const nativeFetch=globalThis.fetch;
-type Fixture={actorId:string;actorIssuedAt:number};
+type Fixture={actorId:string;actorIssuedAt:number;role:AppSession['role']};
 let full:Fixture;
 let storageApi='';
 beforeAll(async()=>{
@@ -67,7 +67,7 @@ async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise
   const session: AppSession = {
     userId: fixture.actorId,
     tenantId: KREILE_TENANT_SLUG,
-    role: "meister",
+    role: fixture.role,
     displayName: "TEST Mail Import",
     issuedAt: fixture.actorIssuedAt,
     expiresAt: Date.now() + 5 * 60_000,
@@ -75,7 +75,7 @@ async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise
   return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work);
 }
 
-async function createFixture(rights: string[]): Promise<Fixture> {
+async function createFixture(rights: string[],role:AppSession['role']='meister'): Promise<Fixture> {
   const actorId = randomUUID();
   const updatedAt = new Date(Date.now() - 5_000).toISOString();
   await sql.begin(async (transaction) => {
@@ -84,7 +84,7 @@ async function createFixture(rights: string[]): Promise<Fixture> {
         (id, tenant_id, email, full_name, role, active, created_at, updated_at)
       VALUES (
         ${actorId}::uuid, ${KREILE_TENANT_SLUG}, ${`TEST-ein34-mail-${actorId}@local.invalid`},
-        'TEST Mail Import', 'meister', true, ${updatedAt}::timestamptz, ${updatedAt}::timestamptz
+        'TEST Mail Import', ${role}, true, ${updatedAt}::timestamptz, ${updatedAt}::timestamptz
       )
     `;
     await transaction`
@@ -99,7 +99,7 @@ async function createFixture(rights: string[]): Promise<Fixture> {
   `;
   const actorIssuedAt = Date.now();
   if (!clock || Number(clock.updated_at_ms) >= actorIssuedAt) throw new Error("ABLAUF_SESSION_ORDER_INVALID");
-  return { actorId, actorIssuedAt };
+  return { actorId, actorIssuedAt, role };
 }
 
 

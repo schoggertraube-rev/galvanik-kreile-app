@@ -79,8 +79,8 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
       if (!await quoteJournalActorIsActive(tx,auth)) return {code:'FORBIDDEN',message:'Login ist nicht mehr aktiv.'};
       if(input.action!=='extend'&&wantsFollowup)await followup(tx,{quote,action:input.action,phase:'before'});
       const version=quote.version+1,eventId=randomUUID();
-      await tx.execute(sql`INSERT INTO private.quote_positions(tenant_id,quote_id,revision,position,name,quantity,material,surface_requested,unit_price_cents,zeilen_gesamt_cents,unit)
-        SELECT tenant_id,quote_id,${version},position,name,quantity,material,surface_requested,unit_price_cents,zeilen_gesamt_cents,unit FROM private.quote_positions
+      await tx.execute(sql`INSERT INTO private.quote_positions(tenant_id,quote_id,revision,position,name,quantity,material,surface_requested,unit_price_cents,zeilen_gesamt_cents,unit,aufwand_min,vat_rate_basis_points)
+        SELECT tenant_id,quote_id,${version},position,name,quantity,material,surface_requested,unit_price_cents,zeilen_gesamt_cents,unit,aufwand_min,vat_rate_basis_points FROM private.quote_positions
         WHERE tenant_id=${auth.tenantId} AND quote_id=${input.quoteId}::uuid AND revision=${quote.version}`);
       const mutation=input.action==='extend'?sql`valid_until=${input.validUntil}::date`:input.action==='sent'
         ? keepNewer?sql`gesendet_fassung=gesendet_fassung`:sql`gesendet_fassung=${mailDocument?.edition??life.edition},gesendet_am=${actual?sql`${actual.sentAt}::timestamptz`:sql`statement_timestamp()`},gesendet_kanal=${input.channel}`

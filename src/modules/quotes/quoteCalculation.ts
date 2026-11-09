@@ -35,12 +35,42 @@ export function scaleQuoteCalculation(input:QuoteCalculation,previousQuantity:nu
  return result.code==='OK'?{...result,calculation}:result;
 }
 
-export type QuoteQuantityLine={position:number;quantity:number;lineTotalCents:number};
+export type QuoteQuantityLine={position:number;quantity:number;lineTotalCents:number;unit?:string|null;plannedMinutes?:number|null};
 
 /** Fixed setup is apportioned once against original lines; only the remainder scales. */
 export function scaleQuotePositions(calculation:QuoteCalculation|null,source:QuoteQuantityLine[],quantities:Array<{position:number;quantity:number}>):
- {code:'OK';positions:QuoteQuantityLine[];totalNetCents:number;calculation:QuoteCalculation|null}|Exclude<QuoteCalculationResult,{code:'OK'}>{
+ {code:'OK';positions:QuoteQuantityLine[];totalNetCents:number;calculation:QuoteCalculation|null;plannedHours?:string|null;legacyMinutesAllocated?:boolean}|Exclude<QuoteCalculationResult,{code:'OK'}>{
  const invalid=():Exclude<QuoteCalculationResult,{code:'OK'}>=>({code:'VALIDATION_ERROR',field:'total',message:'KV-Positionen und Mengen sind nicht eindeutig oder passen nicht zur Kalkulation.'});
+ // Explicit revision metadata distinguishes unit prices from a flat position.
+ // Older calculation-only callers retain their original contract until they supply it.
+ if(source.some(row=>Object.hasOwn(row,'unit'))){
+  if(!source.length||source.length!==quantities.length||new Set(source.map(row=>row.position)).size!==source.length||new Set(quantities.map(row=>row.position)).size!==quantities.length
+   ||source.some(row=>!Object.hasOwn(row,'unit')||!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.quantity)||row.quantity<1||!Number.isSafeInteger(row.lineTotalCents)||row.lineTotalCents<0||row.plannedMinutes!=null&&(!Number.isSafeInteger(row.plannedMinutes)||row.plannedMinutes<0))
+   ||quantities.some(row=>!source.some(original=>original.position===row.position)||!Number.isSafeInteger(row.quantity)||row.quantity<0))return invalid();
+  const net=source.reduce((sum,row)=>sum+BigInt(row.lineTotalCents),BigInt(0));
+  let legacyMinutesAllocated=false;
+  let minutes=source.map(row=>row.plannedMinutes??null);
+  if(calculation&&minutes.every(value=>value===null)&&net>BigInt(0)){
+   if(calculateQuote(calculation).code!=='OK')return invalid();
+   const [whole,fraction='']=calculation.hours.replace(',','.').split('.');
+   const totalMinutes=(BigInt(whole+fraction.padEnd(4,'0'))*BigInt(60)+BigInt(5000))/BigInt(10000);
+   const shares=source.map(row=>totalMinutes*BigInt(row.lineTotalCents)/net);
+   const largest=source.reduce((best,row,index)=>row.lineTotalCents>source[best].lineTotalCents?index:best,0);
+   shares[largest]+=totalMinutes-shares.reduce((sum,value)=>sum+value,BigInt(0));
+   minutes=shares.map(Number);legacyMinutesAllocated=true;
+  }
+  const positions=source.map((row,index)=>{
+   const quantity=quantities.find(next=>next.position===row.position)!.quantity;
+   const denominator=BigInt(row.quantity);
+   return {...row,quantity,lineTotalCents:row.unit===null?row.lineTotalCents:Number((BigInt(row.lineTotalCents)*BigInt(quantity)+denominator/BigInt(2))/denominator),plannedMinutes:minutes[index]===null?null:Number((BigInt(minutes[index]!)*BigInt(quantity)+denominator/BigInt(2))/denominator)};
+  }).filter(row=>row.quantity>0);
+  const totalNetCents=positions.reduce((sum,row)=>sum+row.lineTotalCents,0);
+  if(!positions.length||!Number.isSafeInteger(totalNetCents)||positions.some(row=>!Number.isSafeInteger(row.lineTotalCents)||row.plannedMinutes!==null&&!Number.isSafeInteger(row.plannedMinutes)))return invalid();
+  const knownMinutes=positions.every(row=>row.plannedMinutes!==null);
+  const totalMinutes=positions.reduce((sum,row)=>sum+BigInt(row.plannedMinutes??0),BigInt(0));
+  const hours=(totalMinutes*BigInt(10000)+BigInt(30))/BigInt(60);
+  return {code:'OK',positions,totalNetCents,calculation:null,legacyMinutesAllocated,plannedHours:knownMinutes?(hours/BigInt(10000)).toString()+'.'+(hours%BigInt(10000)).toString().padStart(4,'0'):null};
+ }
  if(calculation===null){
   if(!source.length||source.length!==quantities.length||new Set(source.map(row=>row.position)).size!==source.length||new Set(quantities.map(row=>row.position)).size!==quantities.length||source.some(row=>!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.quantity)||row.quantity<1||!Number.isSafeInteger(row.lineTotalCents)||row.lineTotalCents<0)||quantities.some(row=>!source.some(original=>original.position===row.position)||!Number.isSafeInteger(row.quantity)||row.quantity<0))return invalid();
   const positions=source.map(row=>{const quantity=quantities.find(next=>next.position===row.position)!.quantity;return {...row,quantity,lineTotalCents:Number((BigInt(row.lineTotalCents)*BigInt(quantity)+BigInt(row.quantity)/BigInt(2))/BigInt(row.quantity))};}).filter(row=>row.quantity>0);

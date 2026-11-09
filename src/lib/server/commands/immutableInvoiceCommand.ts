@@ -1,4 +1,6 @@
 import "server-only";
+import {QUOTE_COMMERCIAL_SOURCE_COPY} from '@/ui/situationCatalog';
+import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
 import {customerCountryLabel} from "@/modules/customers/public";
 
 import { createHash, randomUUID } from "node:crypto";
@@ -155,6 +157,7 @@ type InvoicePaymentInitializationRow = {
 };
 
 type SourceRow = {
+  has_quote?:boolean;
   tenant_id: string;
   order_id: string;
   freeze_id: string;
@@ -1020,7 +1023,7 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       // service_date arrives Berlin-normalised from the read port. The command
       // never derives a calendar day from the database session time zone.
       const sourceRows = await tx.execute<SourceRow>(sql`
-        SELECT source.*
+        SELECT source.*,EXISTS(SELECT 1 FROM private.quote_conversion_receipts receipt JOIN private.quotes quote ON quote.tenant_id=receipt.tenant_id AND quote.id=receipt.quote_id AND quote.linked_order_id=receipt.order_id WHERE receipt.tenant_id=source.tenant_id AND receipt.order_id=source.order_id) AS has_quote
         FROM private.v_invoice_issue_source_v2 source
         WHERE source.order_id = ${order.id}
         LIMIT 2
@@ -1038,6 +1041,30 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
 
       if (!source.no_active_invoice) {
         return { code: "CONFLICT", message: "Für diesen Auftrag besteht bereits eine aktive Rechnung." };
+      }
+      const commercial=source.has_quote?await readOrderCommercialQuote(tx,tenantId,order.id):null;
+      if(commercial){
+        const rate=commercial.vatRateBasisPoints??source.invoice_vat_rate_basis_points;
+        if(rate===null)return {code:'VALIDATION_ERROR',message:QUOTE_COMMERCIAL_SOURCE_COPY.missingVat};
+        source.base_lines=commercial.positions.map(row=>{
+          const quantity=row.unit===null?1:row.quantity;
+          return {itemId:row.itemId,name:row.name,quantity,unitNetAmountCents:row.lineTotalCents/quantity,lineNetAmountCents:row.lineTotalCents};
+        });
+        // The existing canonical awarded-quote port proves these prices; no price is copied into an intake intent.
+        source.base_line_count=commercial.positions.length;source.base_net_amount_cents=commercial.totalNetCents;
+        source.base_prices_complete=source.base_line_count>0&&commercial.positions.every(row=>Number.isSafeInteger(row.lineTotalCents)&&row.lineTotalCents>=0);
+        source.invoice_vat_rate_basis_points=rate;
+        // Recompose the existing structural guards with the canonical quote price proof.
+        // The legacy SQL projection includes item prices in integrity_ok, which are
+        // deliberately absent for a quote-backed intake. No structural guard is waived.
+        const proofs=await tx.execute<{frozen:boolean;handed_over:boolean}>(sql`
+          SELECT count(*)=1 AND bool_and(frozen_state.active AND frozen_state.integrity_ok AND frozen_state.freeze_id=${source.freeze_id}::uuid) AS frozen,
+            (SELECT count(*)=1 AND bool_and(receipt.integrity_ok) FROM private.v_goods_out_receipt_v2 receipt WHERE receipt.tenant_id=${tenantId} AND receipt.order_id=${order.id} AND receipt.order_version=${order.version}) AS handed_over
+          FROM private.v_order_freeze_state_v1 frozen_state WHERE frozen_state.tenant_id=${tenantId} AND frozen_state.order_id=${order.id}
+        `);
+        const structural=proofs.length===1&&proofs[0].frozen===true&&source.seller_config_complete&&source.customer_config_complete&&source.base_prices_complete;
+        source.post_goods_out_invoice_eligible=structural&&proofs[0].handed_over===true&&order.payment_mode==='rechnung'&&order.station==='abgeholt'&&order.status==='abgeholt';
+        source.effective_integrity_ok=structural&&(order.station==='fertig'||source.post_goods_out_invoice_eligible);
       }
       if (
         !source.effective_integrity_ok
@@ -1077,6 +1104,10 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
         throw error;
       }
       const { netAmountCents, vatAmountCents, grossAmountCents } = content.totals;
+      if(commercial){
+        const bound=await bindOrderQuoteCommercialTerms(tx,authorization.data,order.id);
+        if(bound.vatRateBasisPoints!==vatRateBasisPoints||bound.totalNetCents!==commercial.totalNetCents)throw Error('QUOTE_COMMERCIAL_TERMS_CHANGED_DURING_INVOICE');
+      }
 
       // Exactly one issue instant per invoice. Berlin is the only legal
       // calendar truth for the invoice year and the due date; the same instant
