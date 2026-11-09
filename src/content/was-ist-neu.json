@@ -4,9 +4,10 @@
     "pr": 210,
     "seite": "auftrag",
     "punkte": [
-      "Die Warenausgabe berücksichtigt offene Reklamationen und überfällige Rechnungen. Eine erlaubte Ausnahme bleibt mit Person und Grund dokumentiert.",
+      "Bar oder Karte bei Abholung gibt die Ware erst nach gespeicherter Zahlung frei. Offene Reklamationen und überfällige Rechnungen sperren weiterhin die Ausgabe.",
       "Kundenänderungen und Absprachen bleiben bei Fehlern und Wiederholungen konsistent.",
-      "Nachrichten, KV, Teilfotos und Zahlung bleiben mit ihrem Vorgang verbunden."
+      "Nachrichten, KV, Teilfotos und Zahlung bleiben mit ihrem Vorgang verbunden.",
+      "Ein zu später Abholwunsch bleibt als Rückruf mit Original erhalten, ohne den gebuchten Ausgang unlesbar zu machen."
     ],
     "ziel": "/orders"
   },
