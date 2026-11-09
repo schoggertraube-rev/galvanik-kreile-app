@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash,randomUUID } from "node:crypto";
 import postgres from "postgres";
@@ -1386,6 +1387,7 @@ it.each(['early','label','two','future','delivered'] as const)('AF19 real mail h
   await sql`INSERT INTO private.extra_work_hourly_rates(id,tenant_id,hourly_rate_cents,version,created_by,effective_at) SELECT ${randomUUID()}::uuid,${KREILE_TENANT_SLUG},12000,coalesce(max(version),0)+1,${fixture.actorId}::uuid,now() FROM private.extra_work_hourly_rates WHERE tenant_id=${KREILE_TENANT_SLUG}`;
   expect(await withSession(fixture,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await withSession(fixture,()=>setOrderItemFinishedAction({orderId,itemId:created.receipt.items[0].id,expectedVersion:2,clientEventId:randomUUID(),finished:true}))).toMatchObject({code:'OK'});
+  await seedSyntheticItemPhotos(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,orderId});
   expect(await withSession(fixture,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:3,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await withSession(fixture,()=>recordGoodsOutAction({orderId,mode:'versand',expectedVersion:4,clientEventId:randomUUID(),agreement:{id:agreement.agreement.id,type:'sammelrechnung',version:agreement.agreement.version}}))).toMatchObject({code:'OK'});
  }

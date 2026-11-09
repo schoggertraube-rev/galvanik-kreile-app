@@ -127,3 +127,4 @@ export const PACKAGE_ONSITE_COPY={partial:(name:string,nr:string)=>'Kunde '+name
 
 export const QUOTE_POSITION_COPY={title:'Positionen',position:(n:number)=>'Position '+n,remove:(n:number)=>'Position '+n+' entfernen',name:'Teil / Leistung',placeholder:'Katalog oder Freitext',quantity:'Menge',material:'Material',surface:'Oberfläche',choose:'Bitte wählen',unit:'Einheit',price:'Preis netto (€)',add:'Position hinzufügen'} as const;
 export const PACKAGE_ASSIGN_COPY={notConnected:'Kundenzuordnung ist nicht verbunden · Original bleibt erhalten.',changed:'Kunde wurde inzwischen zugeordnet · neu lesen.',failed:'Zuordnung nicht bestätigt · Original und Auswahl bleiben erhalten.',unavailable:PACKAGE_UNAVAILABLE_COPY} as const;
+export const ORDER_ITEM_PHOTO_COPY={required:'Nimm für jedes Teil ein Foto auf, bevor Du den Auftrag fertig meldest.',notFound:'Das Teil ist nicht verfügbar.',saved:'Teilfoto gesichert'} as const;
