@@ -1,3 +1,5 @@
+export const GOODS_DEVIATION_REASONS=['beschädigt','nass/verschmutzt','verunreinigt','Menge stimmt nicht','falsche Teile','Paket offen'] as const;
+export const GOODS_RECEIPT_CONDITIONS=['unauffaellig','abweichung','teillieferung','gefahr'] as const;
 export type GoodsReceiptPhotoKind="uebersicht"|"teile"|"abweichung";
 export type GoodsReceiptOrderRead={id:string;number:string|null;customerId:string;customerName:string|null;title:string|null;note:string|null;version:number;station:string;status:string;ware:string;fromQuote:boolean;items:Array<{id:string;name:string;quantity:number;unit:string|null;surface:string|null;note:string|null}>};
 export type GoodsReceiptRecord={id:string;client_key:string;item_id:string|null;auftrag_id:string|null;kv_id?:string|null;kv_fassung?:number|null;lagerort?:string|null;gesperrt?:boolean;abweichung_geklaert?:{reason:string;actorId:string;at:string}|null;modus:"erwartet"|"erfassung";status:"entwurf"|"angenommen"|"galvanik";version:number;karte:number;packstuecke_da:number|null;packstuecke_gesamt:number|null;zustand:GoodsReceiptInput["condition"];abweichung:string[];abgestellt:boolean;fund_zeit:string|null;verfahren_wie_kv:GoodsReceiptInput["procedure"];verfahren_abweichung:string|null;fotos:GoodsReceiptInput["photos"];mengen:Array<{teil_id:string;kv_position?:number;erwartet:number;bestaetigt:number|null;geaendert:boolean;hinweis:string|null}>;offen:string[];bestaetigt_von:string|null};
@@ -20,8 +22,8 @@ export function parseGoodsReceiptInput(value:unknown):GoodsReceiptInput|null{
   ||!['erwartet','erfassung'].includes(v.mode)||!['draft','accept','galvanik'].includes(v.command)||!Number.isSafeInteger(v.card)||v.card<0||v.card>20
   ||![v.packagesReceived,v.packagesTotal].every(n=>n===null||Number.isSafeInteger(n)&&n>=1&&n<=999)
   ||(v.packagesReceived!==null&&v.packagesTotal!==null&&v.packagesReceived>v.packagesTotal)
-  ||!(v.condition===null||['unauffaellig','abweichung','teillieferung','gefahr'].includes(v.condition))
-  ||!Array.isArray(v.deviations)||v.deviations.length>6||new Set(v.deviations).size!==v.deviations.length||v.deviations.some(reason=>!['beschädigt','nass/verschmutzt','verunreinigt','Menge stimmt nicht','falsche Teile','Paket offen'].includes(reason))
+  ||!(v.condition===null||(GOODS_RECEIPT_CONDITIONS as readonly string[]).includes(v.condition))
+  ||!Array.isArray(v.deviations)||v.deviations.length>6||new Set(v.deviations).size!==v.deviations.length||v.deviations.some(reason=>!(GOODS_DEVIATION_REASONS as readonly string[]).includes(reason))
   ||typeof v.foundUnattended!=="boolean"||!(v.foundAt===null||typeof v.foundAt==="string"&&Number.isFinite(Date.parse(v.foundAt)))||v.foundUnattended!==(v.foundAt!==null)
   ||!(v.procedure===null||['stimmt','abweichend'].includes(v.procedure))||!(v.procedureNote===null||typeof v.procedureNote==="string"&&v.procedureNote.trim().length>0&&v.procedureNote.length<=500)
   ||!Array.isArray(v.photos)||v.photos.length>100||new Set(v.photos.map(photo=>photo?.fileId)).size!==v.photos.length

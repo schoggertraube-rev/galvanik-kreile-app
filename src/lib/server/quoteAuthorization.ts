@@ -16,7 +16,9 @@ export function quoteCommandContext(authorization: AuthorizationSnapshot) {
   };
 }
 
+export function canReadQuoteForGoods(auth:AuthorizationSnapshot){return auth.active&&hasAuthorizationArea(auth,'auftraege')&&auth.permissions.includes('perm_view_leitstand');}
+
 /** Existing operational quote purpose; exposes no financial edit grant. */
 export function quoteOperationContext(auth:AuthorizationSnapshot){
- const context=quoteCommandContext(auth);return {...context,capabilities:{...context.capabilities,canReadQuote:true,canDecideQuote:true,canConvertQuote:true}};
+ const context=quoteCommandContext(auth);return {...context,capabilities:{...context.capabilities,canReadQuote:auth.active,canDecideQuote:true,canConvertQuote:true}};
 }

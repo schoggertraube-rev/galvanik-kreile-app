@@ -47,6 +47,41 @@ it('resumes booked customer and quote as locked facts while received quantities 
  const openCustomer=vi.fn();const ports={drafts:{readDrafts:vi.fn(async()=>({code:'OK',drafts:[draft]})),saveDraft:vi.fn(),discardDraft:vi.fn()},receiveOnsiteQuote:vi.fn(),listCustomers:vi.fn(),recognizeIntakeText:vi.fn(),searchIntakeCustomers:vi.fn(async()=>({code:'OK',customers:[]})),openCustomer} as unknown as GlobalCreatePorts;
  render(<PackageOnsiteEditor capture={capture} ports={ports} onCapture={vi.fn()} onClose={vi.fn()} onDone={vi.fn()}/>);
  await screen.findByText('Kunde TEST Kundin und KV TEST-KV-7 sind angelegt - korrigiere Ware/Menge und lege den Auftrag an.');
- expect(screen.getByDisplayValue('TEST Teil')).toBeDisabled();const received=screen.getByLabelText('Angenommene Menge · TEST Teil');expect(received).toBeEnabled();fireEvent.change(received,{target:{value:'1'}});expect(received).toHaveValue(1);
+ expect(screen.getByDisplayValue('TEST Teil')).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'Inhalt'}));const confirm=document.querySelector('[data-spec-id="eingang.position.stimmt"]')!;fireEvent.click(confirm);expect(confirm).toHaveAttribute('aria-pressed','true');fireEvent.click(confirm);const received=screen.getByLabelText('geliefert');expect(received).toBeEnabled();fireEvent.change(received,{target:{value:'1'}});expect(received).toHaveValue(1);
  fireEvent.click(screen.getByRole('button',{name:'Kundenkarte öffnen'}));expect(openCustomer).toHaveBeenCalledWith('TEST-customer');expect(ports.receiveOnsiteQuote).not.toHaveBeenCalled();
+});
+
+it('shared goods inspection exposes danger and the canonical contamination reason without booking',async()=>{
+ const progress={customerId:'TEST-customer',quoteId:'TEST-quote',quoteNumber:'TEST-KV-7',customerName:'TEST Kundin',goodsBooked:false};
+ const draft={id:'TEST-root',art:'eingang',version:3,payload:{kind:'package-onsite',version:1,clientKey:'TEST-root',sourceItemId:capture.id,request,progress}};
+ const ports={drafts:{readDrafts:vi.fn(async()=>({code:'OK',drafts:[draft]}))},receiveOnsiteQuote:vi.fn(),searchIntakeCustomers:vi.fn(async()=>({code:'OK',customers:[]}))} as unknown as GlobalCreatePorts;
+ render(<PackageOnsiteEditor capture={capture} ports={ports} onCapture={vi.fn()} onClose={vi.fn()} onDone={vi.fn()}/>);
+ await screen.findByText(/Kunde TEST Kundin und KV/);
+ fireEvent.click(screen.getByRole('button',{name:'Zustand'}));
+ fireEvent.click(screen.getByRole('button',{name:'Gefahr'}));
+ expect(screen.getByRole('button',{name:'Gefahr'})).toHaveAttribute('aria-pressed','true');
+ fireEvent.click(screen.getByRole('button',{name:'verunreinigt'}));
+ expect(screen.getByRole('button',{name:'verunreinigt'})).toHaveAttribute('aria-pressed','true');
+ expect(ports.receiveOnsiteQuote).not.toHaveBeenCalled();
+});
+
+it('conflict rereads draft and actual phases while preserving edited unbooked quantity',async()=>{
+ const progress={customerId:'TEST-customer',quoteId:'TEST-quote',quoteNumber:'TEST-KV-7',customerName:'TEST Kundin',goodsBooked:false};
+ const storedRequest={...request,customer:{mode:'NEW' as const,data:{...request.customer.mode==='NEW'?request.customer.data:{},paymentPreference:'vorkasse' as const}},goods:{...request.goods,procedure:'stimmt',packagesTotal:1,photos:[{fileId:'TEST-label',kind:'uebersicht'},{fileId:'TEST-content',kind:'teile'}]}};
+ const draft={id:'TEST-root',art:'eingang',version:3,payload:{kind:'package-onsite',version:1,clientKey:'TEST-root',sourceItemId:capture.id,request:storedRequest,progress}};
+ const read=vi.fn(async()=>({code:'OK',drafts:[draft]})),phases=vi.fn(async()=>({code:'OK',phases:{customer:true,quote:true,goods:false,order:false},progress,facts:{customer:storedRequest.customer,quote:storedRequest.quote}}));
+ const ports={drafts:{readDrafts:read,saveDraft:vi.fn(async()=>({code:'OK',drafts:[draft]}))},receiveOnsiteQuote:vi.fn(async()=>({code:'CONFLICT',message:'TEST raw conflict'})),getCapture:vi.fn(async()=>({code:'OK',capture})),readOnsiteQuoteProgress:phases,searchIntakeCustomers:vi.fn(async()=>({code:'OK',customers:[]}))} as unknown as GlobalCreatePorts;
+ render(<PackageOnsiteEditor capture={capture} ports={ports} onCapture={vi.fn()} onClose={vi.fn()} onDone={vi.fn()}/>);
+ await screen.findByText(/Kunde TEST Kundin und KV/);
+ fireEvent.click(screen.getByRole('button',{name:'Inhalt'}));
+ fireEvent.change(screen.getByLabelText('geliefert'),{target:{value:'1'}});
+ fireEvent.click(screen.getByRole('button',{name:'Auftrag anlegen'}));
+ const reload=await screen.findByRole('button',{name:'Stand neu lesen'});
+ expect(screen.queryByText('TEST raw conflict')).not.toBeInTheDocument();
+ fireEvent.click(reload);
+ await waitFor(()=>expect(phases).toHaveBeenCalledOnce());
+ await waitFor(()=>expect(screen.getByLabelText('geliefert')).toBeEnabled());
+ expect(screen.getByLabelText('geliefert')).toHaveValue(1);
+ expect(screen.getByDisplayValue('TEST Teil')).toBeDisabled();
+ expect(read).toHaveBeenCalledTimes(2);
 });

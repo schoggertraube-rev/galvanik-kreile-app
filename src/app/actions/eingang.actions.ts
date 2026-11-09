@@ -1,6 +1,6 @@
 "use server";
 import {PACKAGE_ASSIGN_COPY} from "@/ui/situationCatalog";
-import {quoteOperationContext} from "@/lib/server/quoteAuthorization";
+import {quoteOperationContext,canReadQuoteForGoods} from "@/lib/server/quoteAuthorization";
 
 import {listOpenQuotesCommand,readPackageQuoteHistory} from '@/modules/quotes/server-public';
 import {readPackageExpectation} from '@/modules/eingang/server-public';
@@ -10,7 +10,7 @@ async function withPackageExpectation(result:IntakeCaptureResult):Promise<Intake
  try{
   const auth=await resolveAuthorization();if(!auth.ok)return result;
   const quoteContext=quoteOperationContext(auth.data);
-  const canReadExpected=hasAuthorizationArea(auth.data,'auftraege')&&auth.data.permissions.includes('perm_view_leitstand');
+  const canReadExpected=canReadQuoteForGoods(auth.data);
   const quotes=canReadExpected?await listOpenQuotesCommand(quoteContext):null;
   const history=!result.capture.customerId?await readPackageQuoteHistory(auth.data,result.capture.recognition?.text??result.capture.text??''):[];
   result.capture.packageContext=await withPrivilegedTenantTransaction(auth.data,tx=>readPackageExpectation(tx,auth.data,result.capture,quotes,history));

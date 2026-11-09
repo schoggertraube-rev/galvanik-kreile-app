@@ -1,11 +1,11 @@
 "use server";
-import {quoteCommandContext,quoteOperationContext} from '@/lib/server/quoteAuthorization';
+import {quoteCommandContext,quoteOperationContext,canReadQuoteForGoods} from '@/lib/server/quoteAuthorization';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 import {readMicrosoftGraphSentDocumentEvidence} from "@/lib/server/microsoftGraph";
 
 import {createHash} from "node:crypto";
-import {appendQuoteJournal,readQuoteJournal,readQuoteReplyDocuments,quoteReplyEditionMessage,type QuoteReplyProof} from "@/lib/server/quoteJournalPort";
+import {onsitePhaseKey,appendQuoteJournal,readQuoteJournal,readQuoteJournals,readQuoteReplyDocuments,quoteReplyEditionMessage,type QuoteReplyProof} from "@/lib/server/quoteJournalPort";
 
 import { renderToBuffer } from "@react-pdf/renderer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
@@ -17,7 +17,7 @@ import {
 } from "@/lib/server/authorization";
 import {quoteForUi,scaleQuotePositions} from "@/modules/quotes/public";
 import {readQuoteReceivedQuantities} from "@/lib/server/quoteGoodsContextPort";
-import {intakePaymentContract} from "@/lib/server/paymentContract";
+import {intakePaymentContract} from "@/lib/domain/intakePaymentContract";
 import { readCustomerSummary,readCustomerListSignals } from "@/lib/server/customerSummaryRead";
 import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
 import {recognizeIntakeText} from '@/lib/server/intakeTextRecognition';
@@ -524,13 +524,30 @@ export async function duplicateQuoteAction(input:{kind:'quote'|'order';id:string
  return createQuoteAction({clientEventId:input.clientEventId,customerId:input.customerId,dueDate:input.dueDate,note:'Kopie von '+source.preparation.source.number+' · Stand '+input.expectedSourceVersion,positions,specialRequests:source.preparation.specialRequests,...(input.kind==='quote'&&source.preparation.previousCalculation?{calculation:source.preparation.previousCalculation}:{})});
 
 }
+/** Reread the one confirmed request and its actually booked phases, with the same write authorization. */
+export async function readOnsiteQuoteProgressAction(input:{requestId:string;request?:import('@/lib/onsiteQuoteContract').OnsiteQuoteInput}){
+ if(!input||typeof input!=='object'||Object.keys(input).some(key=>!['requestId','request'].includes(key))||typeof input.requestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId))return {code:'VALIDATION_ERROR' as const};
+ try{const resolved=await resolveAuthorization();if(!resolved.ok)return {code:'UNAUTHENTICATED' as const};const auth=resolved.data;
+  if(!quoteCommandContext(auth).capabilities.canCreateQuote||!hasAuthorizationArea(auth,'eingang'))return {code:'FORBIDDEN' as const};
+  const names=['customer','quote','goods','order'] as const;
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>readQuoteJournals<{phase?:string;customerId?:string;quoteId?:string;intent?:string;snapshot?:unknown}>(tx,auth,[input.requestId,...names.map(name=>onsitePhaseKey(input.requestId,'proof-'+name))]));
+  const phases={customer:false,quote:false,goods:false,order:false};const facts:Partial<Record<typeof names[number],unknown>>={};
+  for(const name of names){const proofs=rows.filter(row=>row.clientEventId===onsitePhaseKey(input.requestId,'proof-'+name));if(proofs.length>1||proofs.some(row=>row.payload.phase!==name||!['QUOTE_ONSITE_PHASE_V04','QUOTE_ONSITE_REQUESTED_V04'].includes(row.eventType)))throw Error('ONSITE_PHASE_READ_INVALID');phases[name]=proofs.length===1;if(proofs.length){const request=input.request;const legacy=request?(name==='customer'?request.customer:name==='quote'?request.quote:name==='goods'?{goods:request.goods,quantities:request.quantities}:{evidence:request.evidence,handoverMode:request.handoverMode,paymentMode:request.paymentMode,due:request.confirmedOrderDueDate}):undefined;const snapshot=proofs[0].payload.snapshot??legacy;if(snapshot!==undefined&&createHash('sha256').update(canonicalJson(snapshot)).digest('hex')===proofs[0].payload.intent)facts[name]=snapshot;else if(request)throw Error('ONSITE_PHASE_SNAPSHOT_MISMATCH');}}
+  const roots=rows.filter(row=>row.clientEventId===input.requestId);if(roots.length>1||rows.length&&!roots.length||roots.some(row=>row.eventType!=='QUOTE_ONSITE_REQUESTED_V04'))throw Error('ONSITE_ROOT_READ_INVALID');
+  let progress:import('@/lib/onsiteQuoteContract').OnsiteQuoteProgress|null=null;
+  const quoteId=rows.find(row=>row.clientEventId===onsitePhaseKey(input.requestId,'proof-quote'))?.payload.quoteId;
+  if(quoteId){const read=await readQuoteCommand(quoteCommandContext(auth),{quoteId});if(read.code!=='OK')return read;progress={customerId:read.quote.customerId,quoteId:read.quote.quoteId,quoteNumber:read.quote.quoteNumber,customerName:read.quote.customerDisplayName,goodsBooked:phases.goods};}
+  return {code:'OK' as const,phases,progress,facts};
+ }catch(error){console.error('[ONSITE_PHASE_READ_FAILED]',{name:error instanceof Error?error.name:'unknown'});return {code:'UNAVAILABLE' as const};}
+}
 /** One confirmed onsite request; every mutation delegates to its existing idempotent writer. */
 export async function receiveOnsiteQuoteAction(input:import("@/lib/onsiteQuoteContract").OnsiteQuoteInput){
  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
  if(!input||!uuid.test(input.clientRequestId)||!input.customer||!['NEW','EXISTING'].includes(input.customer.mode)||!input.quote||Object.hasOwn(input.quote,'source')||typeof input.evidence!=='string'||input.evidence.trim().length<3||!Array.isArray(input.quantities)||!input.quantities.length||input.quantities.some(row=>!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.received)||row.received<0)||new Set(input.quantities.map(row=>row.position)).size!==input.quantities.length)return {code:'VALIDATION_ERROR' as const,message:'Kunde, KV, Zusage und tatsaechlich angenommene Mengen vollstaendig pruefen.'};
- const phase=(name:string)=>{const hex=createHash('sha256').update('kreile-onsite:'+input.clientRequestId+':'+name).digest('hex');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-5'+hex.slice(13,16)+'-8'+hex.slice(17,20)+'-'+hex.slice(20,32);};
+ const phase=(name:string)=>onsitePhaseKey(input.clientRequestId,name);
  const digest=(value:unknown)=>createHash('sha256').update(canonicalJson(value)).digest('hex');
- const hashes={customer:digest(input.customer),quote:digest(input.quote),goods:digest({goods:input.goods,quantities:input.quantities}),order:digest({evidence:input.evidence,handoverMode:input.handoverMode,paymentMode:input.paymentMode,due:input.confirmedOrderDueDate})};
+ const snapshots={customer:input.customer,quote:input.quote,goods:{goods:input.goods,quantities:input.quantities},order:{evidence:input.evidence,handoverMode:input.handoverMode,paymentMode:input.paymentMode,due:input.confirmedOrderDueDate}};
+ const hashes={customer:digest(snapshots.customer),quote:digest(snapshots.quote),goods:digest(snapshots.goods),order:digest(snapshots.order)};
  let customerId:string|undefined,quoteId:string|undefined;
  try{
   const authResult=await resolveAuthorization(),denied=authorizationFailure(authResult);if(denied||!authResult.ok)return denied!;
@@ -546,7 +563,7 @@ export async function receiveOnsiteQuoteAction(input:import("@/lib/onsiteQuoteCo
   type Proof={intent:string;customerId?:string;quoteId?:string;quoteNumber?:string;customerName?:string};
   const readProof=async(name:keyof typeof hashes)=>withPrivilegedTenantTransaction(auth,async tx=>{const rows=await readQuoteJournal<Proof>(tx,auth,phase('proof-'+name));if(rows.length>1)throw Error('ONSITE_PHASE_AMBIGUOUS');const proof=rows[0]?.payload;if(proof&&proof.intent!==hashes[name])throw Error('ONSITE_BOOKED_PHASE_CHANGED');return proof;});
   const customerProof=await readProof('customer');await readProof('quote');await readProof('goods');await readProof('order');
-  const finishProof=async(name:keyof typeof hashes,data:Omit<Proof,'intent'>)=>withPrivilegedTenantTransaction(auth,async tx=>{const {sql}=await import('drizzle-orm');await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'onsite-proof:'+auth.tenantId+':'+input.clientRequestId+':'+name},0))`);const rows=await readQuoteJournal<Proof>(tx,auth,phase('proof-'+name));if(rows.length){if(rows.length!==1||rows[0].payload.intent!==hashes[name])throw Error('ONSITE_BOOKED_PHASE_CHANGED');return;}await appendQuoteJournal(tx,auth,{id:phase('proof-event-'+name),type:'QUOTE_ONSITE_REQUESTED_V04',clientEventId:phase('proof-'+name),correlationId:input.clientRequestId,version:null,description:'Vor-Ort-Teilphase gebucht',payload:{phase:name,intent:hashes[name],...data}});});
+  const finishProof=async(name:keyof typeof hashes,data:Omit<Proof,'intent'>)=>withPrivilegedTenantTransaction(auth,async tx=>{const {sql}=await import('drizzle-orm');await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'onsite-proof:'+auth.tenantId+':'+input.clientRequestId+':'+name},0))`);const rows=await readQuoteJournal<Proof>(tx,auth,phase('proof-'+name));if(rows.length){if(rows.length!==1||rows[0].payload.intent!==hashes[name])throw Error('ONSITE_BOOKED_PHASE_CHANGED');return;}await appendQuoteJournal(tx,auth,{id:phase('proof-event-'+name),type:'QUOTE_ONSITE_PHASE_V04',clientEventId:phase('proof-'+name),correlationId:input.clientRequestId,version:null,description:'Vor-Ort-Teilphase gebucht',payload:{phase:name,intent:hashes[name],snapshot:snapshots[name],...data}});});
   if(customerProof?.customerId)customerId=customerProof.customerId;else if(input.customer.mode==='EXISTING')customerId=input.customer.customerId;
   else{
    const {createCustomerAction}=await import('@/app/actions/customers.actions');
@@ -585,9 +602,9 @@ export async function receiveOnsiteQuoteAction(input:import("@/lib/onsiteQuoteCo
 export async function readWorkshopQuoteGoodsAction(){
  noStore();
  try{const auth=await resolveAuthorization(),denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
-  if(!auth.data.permissions.includes('perm_view_leitstand'))return {code:'FORBIDDEN' as const,message:'KV-Ware ist nicht freigegeben.'};
-  const context={tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canReadQuote:true,canCreateQuote:false,canUpdateQuote:false,canConvertQuote:false}};
-  const result=await listOpenQuotesCommand({...context,capabilities:{...context.capabilities,canReadQuote:true}});
+  if(!canReadQuoteForGoods(auth.data))return {code:'FORBIDDEN' as const,message:'KV-Ware ist nicht freigegeben.'};
+  const context={tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canReadQuote:canReadQuoteForGoods(auth.data),canCreateQuote:false,canUpdateQuote:false,canConvertQuote:false}};
+  const result=await listOpenQuotesCommand(context);
   if(result.code!=='OK')return result;
   const today=berlinCalendarDay();
   const quotes=result.quotes.flatMap(quote=>{const life=quote.lifecycle;if(quote.linkedOrderId||!life)return [];

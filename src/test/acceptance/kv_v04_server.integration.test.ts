@@ -886,6 +886,12 @@ it.each([false,true])('U246 onsite request existing/new customer %s uses the rea
   const bad={...storedRequest,quantities:storedRequest.quantities.map(row=>({...row,received:1,note:null}))};
   const rejected=await withSession(fixture,()=>receiveOnsiteQuoteAction(bad));expect(rejected).toMatchObject({code:'VALIDATION_ERROR',phase:'goods',progress:{quoteId:expect.any(String),customerId:expect.any(String)}});
   if(!('progress'in rejected)||!rejected.progress)throw Error('TEST partial progress');
+  const {readOnsiteQuoteProgressAction}=await import('@/app/actions/quotes.actions');
+  const eventsBefore=await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${input.clientRequestId}::uuid ORDER BY id`;
+  const actualPhase=await withSession(fixture,()=>readOnsiteQuoteProgressAction({requestId:input.clientRequestId,request:bad}));
+  expect(actualPhase).toMatchObject({code:'OK',phases:{customer:true,quote:true,goods:false,order:false},progress:{quoteId:rejected.progress.quoteId,goodsBooked:false},facts:{customer:input.customer,quote:input.quote}});
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${input.clientRequestId}::uuid ORDER BY id`).toEqual(eventsBefore);
+
   const currentDraft=resumed.drafts.find(row=>row.id===input.clientRequestId)!;
   expect(await withSession(fixture,()=>saveIntakeDraftAction({id:currentDraft.id,clientEventId:randomUUID(),art:'eingang',payload:{...currentDraft.payload,request:bad,progress:rejected.progress},lastField:null,expectedVersion:currentDraft.version}))).toMatchObject({code:'OK'});
   const restarted=await withSession(fixture,()=>getIntakeDraftsAction());if(restarted.code!=='OK')throw Error('TEST partial resume');const actual=restarted.drafts.find(row=>row.id===input.clientRequestId)!;
@@ -897,6 +903,11 @@ it.each([false,true])('U246 onsite request existing/new customer %s uses the rea
  expect(received,JSON.stringify(received)).toMatchObject({code:'OK'});
  if(received.code!=='OK'||!('orderReceipt'in received))throw Error('TEST_ONSITE_ACTION:'+received.code+':'+('message'in received?received.message:''));
  const orderId=received.orderReceipt.orderId;
+ const {readOnsiteQuoteProgressAction}=await import('@/app/actions/quotes.actions');
+ const phaseRead=await withSession(fixture,()=>readOnsiteQuoteProgressAction({requestId:input.clientRequestId,request:input}));expect(phaseRead).toMatchObject({code:'OK',phases:{customer:true,quote:true,goods:true,order:true},progress:{quoteId:received.quote.quoteId,goodsBooked:true}});
+ const phaseEvents=await sql`SELECT event_type,payload->>'phase' AS phase FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${input.clientRequestId}::uuid AND event_type='QUOTE_ONSITE_PHASE_V04' ORDER BY payload->>'phase'`;
+ expect(phaseEvents.map(row=>row.phase)).toEqual(['customer','goods','order','quote']);
+
  if(newCustomer){expect(await sql`SELECT id FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${received.quote.customerId}`).toHaveLength(1);expect(await sql`SELECT id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${received.quote.customerId}`).toHaveLength(1);expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${received.quote.customerId}`).toHaveLength(1);}
 
  if(newCustomer){const {readQuoteAction}=await import('@/app/actions/quotes.actions');expect(await withSession(fixture,()=>readQuoteAction({quoteId:received.quote.quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{goods:[{expectedPositions:[{position:2,quantity:2}]}]}}});}

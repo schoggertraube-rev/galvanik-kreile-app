@@ -19,7 +19,7 @@ import type { CatalogServiceChoice } from "@/modules/katalog/public";
 import {
   intakePaymentContract,
   type PaymentMode,
-} from "@/lib/server/paymentContract";
+} from "@/lib/domain/intakePaymentContract";
 import {
   Abschnitt,
   Auswahl,
@@ -201,6 +201,7 @@ export type GlobalCreateDirectIntakeResult =
   | Failure;
 
 export type GlobalCreatePorts = {
+  readOnsiteQuoteProgress?: (input:{requestId:string;request?:import('@/lib/onsiteQuoteContract').OnsiteQuoteInput})=>Promise<{code:string;phases?:{customer:boolean;quote:boolean;goods:boolean;order:boolean};progress?:import('@/lib/onsiteQuoteContract').OnsiteQuoteProgress|null;facts?:Partial<Record<'customer'|'quote'|'goods'|'order',unknown>>}>;
   receiveOnsiteQuote?: (input:import("@/lib/onsiteQuoteContract").OnsiteQuoteInput)=>Promise<{code:string;message?:string;progress?:import("@/lib/onsiteQuoteContract").OnsiteQuoteProgress;orderReceipt?:{orderId:string;orderNumber:string}}>;
   readIntakeOrderSource?: (orderId: string) => Promise<{ code: "OK"; source: {
     orderNumber: string; customerId: string; customerQuery: string; intakeSource?: DirectIntakeInput["intakeSource"] | null;
