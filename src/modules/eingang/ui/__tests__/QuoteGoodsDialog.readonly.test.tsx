@@ -30,3 +30,17 @@ it('AF6 converts all stored package receipts through the same port without reque
  await vi.waitFor(()=>expect(convert).toHaveBeenCalledOnce());expect(convert.mock.calls[0]).toEqual([expect.objectContaining({goodsReceiptId:'TEST-goods-1'}),undefined,undefined]);
  expect(ports.save).not.toHaveBeenCalled();expect(ports.capture).not.toHaveBeenCalled();expect(document.querySelector('input[type=file]')).toBeNull();
 });
+
+
+it('PE condition photo stays in the single existing content camera after the required original is present',async()=>{
+ const current={...quote,status:'draft' as const,linkedOrderId:null};
+ const source={id:'TEST-source',version:1,text:null,customerId:quote.customerId,orderId:null,assignment:'hand',usage:'offen',concerns:['ware'],files:[{id:'TEST-content',name:'TEST Inhalt.jpg',mime:'image/jpeg',bytes:32,readable:true,status:'fertig',secured:true}]};
+ const ports:QuoteGoodsPorts={read:vi.fn(async()=>({code:'OK' as const,quote:current,canEdit:true})),scope:async()=>({code:'OK',scope:'TEST-scope'}),capture:vi.fn(async()=>({code:'OK' as const,capture:source})),device:vi.fn(),prepareFile:vi.fn(),finishFile:vi.fn(),original:vi.fn(async()=>({code:'UNAVAILABLE' as const,message:'TEST no external preview'})),save:vi.fn(),convert:vi.fn()};
+ render(<QuoteGoodsDialog quoteId={quote.quoteId} sourceId={source.id} ports={ports} onClose={vi.fn()} onOriginal={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()} onMessage={vi.fn()} onQuote={vi.fn()}/>);
+ const role=await screen.findByRole('button',{name:'TEST Inhalt.jpg · Inhaltsfoto'});expect(screen.queryByText('Zusätzliches Zustandsfoto · optional')).toBeNull();
+ fireEvent.click(role);
+ expect(await screen.findByText('Zusätzliches Zustandsfoto · optional')).toBeVisible();
+ expect(screen.getAllByText('Ware fotografieren · Zustand bei Annahme')).toHaveLength(1);
+ expect(document.querySelectorAll('input[type=file][capture=environment]')).toHaveLength(2);
+ expect(ports.save).not.toHaveBeenCalled();expect(ports.convert).not.toHaveBeenCalled();
+});

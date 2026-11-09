@@ -8,13 +8,13 @@ type Kind = "INTAKE_DRAFT_SAVED_V1" | "INTAKE_DRAFT_DISCARDED_V1";
 
 /** Transaction port to the existing append-only event store, not another draft store. */
 export async function readIntakeDraftEvent(tx:PrivilegedTenantTransaction,actor:Actor,clientEventId:string,kind:Kind){
-  return tx.execute<{payload:{intent?:string;draftId:string}}>(sql`SELECT payload FROM public.events
+  return tx.execute<{payload:{intent?:string;draftId:string;reason?:string}}>(sql`SELECT payload FROM public.events
     WHERE tenant_id=${actor.tenantId} AND user_id=${actor.userId}::uuid AND client_event_id=${clientEventId}::uuid AND event_type=${kind}`);
 }
-export async function appendIntakeDraftEvent(tx:PrivilegedTenantTransaction,actor:Actor,input:{kind:Kind;clientEventId:string;draftId:string;intent?:string}){
+export async function appendIntakeDraftEvent(tx:PrivilegedTenantTransaction,actor:Actor,input:{kind:Kind;clientEventId:string;draftId:string;intent?:string;reason?:string}){
   await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,aggregate_version)
     VALUES(gen_random_uuid()::text,${actor.tenantId},${input.kind},${input.kind==="INTAKE_DRAFT_SAVED_V1"?"Erfassung als Entwurf abgelegt":"Eigener Entwurf verworfen"},
-      ${JSON.stringify({draftId:input.draftId,...(input.intent?{intent:input.intent}:{})})}::jsonb,'success',${actor.userId}::uuid,${input.clientEventId}::uuid,1,gen_random_uuid(),1)`);
+      ${JSON.stringify({draftId:input.draftId,...(input.intent?{intent:input.intent}:{}),...(input.reason?{reason:input.reason}:{})})}::jsonb,'success',${actor.userId}::uuid,${input.clientEventId}::uuid,1,gen_random_uuid(),1)`);
 }
 export async function hasOwnOrderIntakeReceipt(tx:PrivilegedTenantTransaction,actor:Actor,clientEventId:string){
   const rows=await tx.execute(sql`SELECT id FROM private.order_intake_receipts

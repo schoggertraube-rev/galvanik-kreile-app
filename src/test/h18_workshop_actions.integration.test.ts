@@ -834,9 +834,20 @@ it('4c accepts still-open return goods for canonical rework and atomically cance
   const rework=await withSession(fixture,()=>nacharbeitAnlegenAction({reklamationId:received.complaintId,version:1,bewertung:'berechtigt',massnahme:'nacharbeit',liefertermin:'2027-05-18'}));
   expect(rework.code,rework.code==='OK'?'OK':rework.message).toBe('OK');
   if(rework.code!=='OK')throw Error(rework.message);
+  const {saveIntakeNoteAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+  const packageRead=await withSession(fixture,()=>saveIntakeNoteAction({itemId:randomUUID(),textstand:randomUUID(),text:'DPD Paket Ruecksendung Nacharbeit',context:{customerId:fixture.customerId}}));
+  if(packageRead.code!=='OK')throw Error(packageRead.message);
+  expect(packageRead.capture.packageContext).toBeUndefined();
+  const expectation=await withSession(fixture,()=>getIntakeCaptureAction(packageRead.capture.id,undefined,{packageExpectation:true}));
+  if(expectation.code!=='OK')throw Error(expectation.message);
+  expect(expectation.capture.packageContext).toMatchObject({status:'OK',candidates:expect.arrayContaining([expect.objectContaining({id:rework.receipt.orderId,kind:'order',state:'rework'})])});
   await complaintWrite(fixture,{action:'abschliessen',clientKey:randomUUID(),complaintId:received.complaintId,version:2,kind:'zurueckgezogen',note:'TEST keine Teile zurückgesendet',sentThreadId:null});
   const [stopped]=await sql`SELECT ware,ohne_ware_grund FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${rework.receipt.orderId}`;
   expect(stopped).toEqual({ware:'storniert',ohne_ware_grund:'TEST keine Teile zurückgesendet'});
+  const afterCancel=await withSession(fixture,()=>getIntakeCaptureAction(packageRead.capture.id));
+  if(afterCancel.code!=='OK')throw Error(afterCancel.message);
+  expect(afterCancel.capture.expectedOrders?.some(order=>order.id===rework.receipt.orderId)).toBe(false);
+
 });
 
 it('4c records the originating intake concern in the same transaction and rejects excessive quantities without a complaint',async()=>{

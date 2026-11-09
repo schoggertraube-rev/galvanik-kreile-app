@@ -11,5 +11,5 @@ export type IntakeDraftResult = { code: "OK"; drafts: IntakeDraft[] }
 export type IntakeDraftPorts = {
   readDrafts: () => Promise<IntakeDraftResult>;
   saveDraft: (input: { id: string; clientEventId: string; art: "eingang" | "kunde"; payload: Record<string, unknown>; lastField: string | null; expectedVersion: number | null }) => Promise<IntakeDraftResult>;
-  discardDraft: (input: { id: string; clientEventId: string; expectedVersion: number }) => Promise<IntakeDraftResult>;
+  discardDraft: (input: { id: string; clientEventId: string; expectedVersion: number; reason?:string }) => Promise<IntakeDraftResult>;
 };

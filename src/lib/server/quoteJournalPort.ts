@@ -1,4 +1,11 @@
 import 'server-only';
+import {createHash} from 'node:crypto';
+/** One deterministic identity for each existing onsite command/proof. */
+export function onsitePhaseKey(requestId:string,name:string){
+ const hex=createHash('sha256').update('kreile-onsite:'+requestId+':'+name).digest('hex');
+ return hex.slice(0,8)+'-'+hex.slice(8,12)+'-5'+hex.slice(13,16)+'-8'+hex.slice(17,20)+'-'+hex.slice(20,32);
+}
+
 import {sql} from 'drizzle-orm';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
 import type {CommunicationDocument} from './communicationDocumentPort';
@@ -14,14 +21,15 @@ export async function readQuoteSentDocument(tx:PrivilegedTenantTransaction,actor
  return rows.length===1?rows[0]:null;
 }
 /** Shared audit/rate facts stay behind the core port; modules retain their own rows. */
-export async function readQuoteJournal<T>(tx:PrivilegedTenantTransaction,actor:Actor,clientEventId:string) {
-  return tx.execute<{id:string;eventType:string;payload:T}>(sql`SELECT id,event_type AS "eventType",payload FROM public.events WHERE tenant_id=${actor.tenantId} AND user_id=${actor.userId}::uuid AND client_event_id=${clientEventId}::uuid`);
+export async function readQuoteJournals<T>(tx:PrivilegedTenantTransaction,actor:Actor,clientEventIds:string[]){
+ return tx.execute<{id:string;eventType:string;clientEventId:string;payload:T}>(sql`SELECT id,event_type AS "eventType",client_event_id::text AS "clientEventId",payload FROM public.events WHERE tenant_id=${actor.tenantId} AND user_id=${actor.userId}::uuid AND client_event_id=ANY(ARRAY[${sql.join(clientEventIds.map(id=>sql`${id}::uuid`),sql`, `)}]::uuid[])`);
 }
+export async function readQuoteJournal<T>(tx:PrivilegedTenantTransaction,actor:Actor,clientEventId:string){return readQuoteJournals<T>(tx,actor,[clientEventId]);}
 export async function quoteJournalActorIsActive(tx:PrivilegedTenantTransaction,actor:Actor) {
   const rows=await tx.execute(sql`SELECT id FROM public.app_users WHERE tenant_id=${actor.tenantId} AND id=${actor.userId}::uuid AND active IS TRUE FOR SHARE`);
   return rows.length===1;
 }
-export async function appendQuoteJournal(tx:PrivilegedTenantTransaction,actor:Actor,input:{id:string;type:'QUOTE_COMPLAINT_LINKED_V1'|'QUOTE_FOLLOWUP_COMPLETED_V1'|'QUOTE_ONSITE_REQUESTED_V04'|'QUOTE_LIFECYCLE_V04'|'QUOTE_SETTINGS_UPDATED_V04'|'QUOTE_CALCULATION_V04';clientEventId:string;correlationId:string;version:number|null;description:string;payload:Record<string,unknown>}) {
+export async function appendQuoteJournal(tx:PrivilegedTenantTransaction,actor:Actor,input:{id:string;type:'QUOTE_COMPLAINT_LINKED_V1'|'QUOTE_FOLLOWUP_COMPLETED_V1'|'QUOTE_ONSITE_REQUESTED_V04'|'QUOTE_ONSITE_PHASE_V04'|'QUOTE_LIFECYCLE_V04'|'QUOTE_SETTINGS_UPDATED_V04'|'QUOTE_CALCULATION_V04';clientEventId:string;correlationId:string;version:number|null;description:string;payload:Record<string,unknown>}) {
   if (!await quoteJournalActorIsActive(tx,actor)) throw Error('QUOTE_JOURNAL_ACTOR_INACTIVE');
   await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,user_id,client_event_id,event_schema_version,correlation_id,aggregate_version,status,description,payload)
     VALUES(${input.id},${actor.tenantId},${input.type},${actor.userId}::uuid,${input.clientEventId}::uuid,1,${input.correlationId}::uuid,${input.version},'success',${input.description},${JSON.stringify(input.payload)}::jsonb)`);

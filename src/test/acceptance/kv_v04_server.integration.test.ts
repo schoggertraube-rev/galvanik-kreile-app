@@ -878,19 +878,52 @@ it.each([false,true])('U246 onsite request existing/new customer %s uses the rea
  const input={clientRequestId:randomUUID(),customer,quote:{dueDate:'2026-12-01',note:'TEST Vor-Ort-KV',positions:[{name:'TEST Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]},evidence:'TEST Kunde vor Ort bestaetigt Preis und Menge ohne Vorbehalt',goods:{itemId,sourceVersion:captured.capture.version,expectedVersion:0,mode:'erfassung',command:'accept',card:1,packagesReceived:1,packagesTotal:1,condition:'unauffaellig',deviations:[],foundUnattended:false,foundAt:null,procedure:'stimmt',procedureNote:null,photos:photoIds.map((fileId,index)=>({fileId,kind:index?'teile':'uebersicht'})),location:'TEST Vor-Ort Regal'},quantities:[{position:1,received:3,note:'TEST drei tatsaechlich abgegeben'}],handoverMode:'pickup' as const,paymentMode:newCustomer?'vorkasse' as const:'rechnung' as const,confirmedOrderDueDate:'2026-12-01'};
  if(newCustomer){input.quote.positions.push({name:'TEST Fehlteil',quantity:2,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000});input.quantities.push({position:2,received:0,note:'TEST noch nicht geliefert'});}
  Object.assign(input.quote,{calculation:{hours:newCustomer?'6':'4',hourlyRateCents:1000,setupCents:0,materialCents:0}});
- const received=await withSession(fixture,()=>receiveOnsiteQuoteAction(input));
+ const {saveIntakeDraftAction,getIntakeDraftsAction,discardIntakeDraftAction}=await import('@/app/actions/eingang.actions');
+ const persisted=await withSession(fixture,()=>saveIntakeDraftAction({id:input.clientRequestId,clientEventId:randomUUID(),art:'eingang',payload:{kind:'package-onsite',version:1,clientKey:input.clientRequestId,sourceItemId:itemId,request:input},lastField:null,expectedVersion:null}));
+ expect(persisted).toMatchObject({code:'OK',drafts:expect.arrayContaining([expect.objectContaining({id:input.clientRequestId,payload:expect.objectContaining({request:input})})])});
+ const resumed=await withSession(fixture,()=>getIntakeDraftsAction());if(resumed.code!=='OK')throw Error('TEST_DRAFT_RESUME');const storedRequest=resumed.drafts.find(row=>row.id===input.clientRequestId)?.payload.request as typeof input;expect(storedRequest).toEqual(input);expect(JSON.stringify(storedRequest)).not.toBe(JSON.stringify(input));
+ if(newCustomer){
+  const bad={...storedRequest,quantities:storedRequest.quantities.map(row=>({...row,received:1,note:null}))};
+  const rejected=await withSession(fixture,()=>receiveOnsiteQuoteAction(bad));expect(rejected).toMatchObject({code:'VALIDATION_ERROR',phase:'goods',progress:{quoteId:expect.any(String),customerId:expect.any(String)}});
+  if(!('progress'in rejected)||!rejected.progress)throw Error('TEST partial progress');
+  const {readOnsiteQuoteProgressAction}=await import('@/app/actions/quotes.actions');
+  const eventsBefore=await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${input.clientRequestId}::uuid ORDER BY id`;
+  const actualPhase=await withSession(fixture,()=>readOnsiteQuoteProgressAction({requestId:input.clientRequestId,request:bad}));
+  expect(actualPhase).toMatchObject({code:'OK',phases:{customer:true,quote:true,goods:false,order:false},progress:{quoteId:rejected.progress.quoteId,goodsBooked:false},facts:{customer:input.customer,quote:input.quote}});
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${input.clientRequestId}::uuid ORDER BY id`).toEqual(eventsBefore);
+
+  const currentDraft=resumed.drafts.find(row=>row.id===input.clientRequestId)!;
+  expect(await withSession(fixture,()=>saveIntakeDraftAction({id:currentDraft.id,clientEventId:randomUUID(),art:'eingang',payload:{...currentDraft.payload,request:bad,progress:rejected.progress},lastField:null,expectedVersion:currentDraft.version}))).toMatchObject({code:'OK'});
+  const restarted=await withSession(fixture,()=>getIntakeDraftsAction());if(restarted.code!=='OK')throw Error('TEST partial resume');const actual=restarted.drafts.find(row=>row.id===input.clientRequestId)!;
+  expect(actual.payload.progress).toEqual(rejected.progress);Object.assign(storedRequest,actual.payload.request,{quantities:input.quantities});
+  expect(await sql`SELECT id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${rejected.progress.customerId}`).toHaveLength(1);
+ }
+ if(newCustomer){const rejectedOrder=await withSession(fixture,()=>receiveOnsiteQuoteAction({...storedRequest,paymentMode:'rechnung'}));expect(rejectedOrder).toMatchObject({code:'VALIDATION_ERROR',progress:{goodsBooked:true}});}
+ const received=await withSession(fixture,()=>receiveOnsiteQuoteAction(newCustomer?storedRequest:input));
  expect(received,JSON.stringify(received)).toMatchObject({code:'OK'});
  if(received.code!=='OK'||!('orderReceipt'in received))throw Error('TEST_ONSITE_ACTION:'+received.code+':'+('message'in received?received.message:''));
  const orderId=received.orderReceipt.orderId;
+ const {readOnsiteQuoteProgressAction}=await import('@/app/actions/quotes.actions');
+ const phaseRead=await withSession(fixture,()=>readOnsiteQuoteProgressAction({requestId:input.clientRequestId,request:input}));expect(phaseRead).toMatchObject({code:'OK',phases:{customer:true,quote:true,goods:true,order:true},progress:{quoteId:received.quote.quoteId,goodsBooked:true}});
+ const phaseEvents=await sql`SELECT event_type,payload->>'phase' AS phase FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${input.clientRequestId}::uuid AND event_type='QUOTE_ONSITE_PHASE_V04' ORDER BY payload->>'phase'`;
+ expect(phaseEvents.map(row=>row.phase)).toEqual(['customer','goods','order','quote']);
+
+ if(newCustomer){expect(await sql`SELECT id FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${received.quote.customerId}`).toHaveLength(1);expect(await sql`SELECT id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${received.quote.customerId}`).toHaveLength(1);expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${received.quote.customerId}`).toHaveLength(1);}
+
  if(newCustomer){const {readQuoteAction}=await import('@/app/actions/quotes.actions');expect(await withSession(fixture,()=>readQuoteAction({quoteId:received.quote.quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{goods:[{expectedPositions:[{position:2,quantity:2}]}]}}});}
 
- expect(await withSession(fixture,()=>receiveOnsiteQuoteAction(input))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId}});
+ expect(await withSession(fixture,()=>receiveOnsiteQuoteAction(newCustomer?input:storedRequest))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId}});
  expect(await withSession(fixture,()=>receiveOnsiteQuoteAction({...input,evidence:'TEST geaenderte Zusage'}))).toMatchObject({code:'CONFLICT'});
  expect((await sql`SELECT q.gesendet_fassung,q.zugesagt_fassung,q.linked_order_id,(SELECT quantity::float8 FROM public.items WHERE tenant_id=q.tenant_id AND order_id=q.linked_order_id) AS quantity FROM private.quotes q WHERE q.tenant_id=${KREILE_TENANT_SLUG} AND q.linked_order_id=${orderId}`)[0]).toMatchObject({gesendet_fassung:null,zugesagt_fassung:1,linked_order_id:orderId,quantity:3});
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientRequestId}::uuid AND event_type='QUOTE_ONSITE_REQUESTED_V04'`)[0].n).toBe(1);
  const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
  expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{commercialQuote:{plannedHours:newCustomer?null:'3.0000',totalNetCents:3000,positions:[{quantity:3,lineTotalCents:3000}]}}}});
  expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[]});
+ const finishDraft=await withSession(fixture,()=>getIntakeDraftsAction());if(finishDraft.code!=='OK')throw Error('TEST final draft');
+ expect(await withSession(fixture,()=>discardIntakeDraftAction({id:input.clientRequestId,clientEventId:randomUUID(),reason:'TEST Auftrag erfolgreich übernommen',expectedVersion:finishDraft.drafts.find(row=>row.id===input.clientRequestId)!.version}))).toMatchObject({code:'OK'});
+ expect(await sql`SELECT payload->>'reason' AS reason FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='INTAKE_DRAFT_DISCARDED_V1' AND payload->>'draftId'=${input.clientRequestId} AND user_id=${fixture.actorId}::uuid`).toEqual([{reason:'TEST Auftrag erfolgreich übernommen'}]);
+ const remaining=await withSession(fixture,()=>getIntakeDraftsAction());if(remaining.code!=='OK')throw Error('TEST_ONSITE_DRAFT_READ');expect(remaining.drafts.some(row=>row.id===input.clientRequestId)).toBe(false);
+
 });
 
 it('U246 multi-position price uses the same text and goods proposal without invented hours',async()=>{
@@ -1412,4 +1445,90 @@ it('AK-04 actual assignment command rejects an eventless write and rolls back st
   await sql.unsafe(`DROP TRIGGER IF EXISTS ${name} ON public.events`);
   await sql.unsafe(`DROP FUNCTION private.${name}()`);
  }
+});
+
+it('PE-04 actual package history offers existing customers without assigning; selected customer writes once and rereads',async()=>{
+ const fixture=await createFixture();const {createOrderIntake}=await import('@/lib/server/commands/orderIntakeCommand');
+ const created=await withSession(fixture,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:fixture.customerId},dueDate:'2027-04-20',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',items:[{catalogServiceId:null,name:'TEST Tuergriff',quantity:2,material:null,surfaceRequested:'verchromen',executionRequested:'offen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:'TEST PE04 historical source'}));
+ expect(created.code).toBe('OK');
+ const quoteCustomer=await createFixture();const {createQuoteAction,changeQuoteLifecycleAction}=await import('@/app/actions/quotes.actions');
+ const priorQuote=await withSession(quoteCustomer,()=>createQuoteAction({clientEventId:randomUUID(),customerId:quoteCustomer.customerId,dueDate:'2027-04-20',note:'TEST closed package history',positions:[{name:'TEST Tuergriff',quantity:1,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
+ if(priorQuote.code!=='OK')throw Error(priorQuote.message);
+ expect(await withSession(quoteCustomer,()=>changeQuoteLifecycleAction({quoteId:priorQuote.quote.quoteId,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'reject',reason:'TEST historische nicht erteilte Anfrage'}))).toMatchObject({code:'OK'});
+ const {saveIntakeNoteAction,getIntakeCaptureAction,assignIntakeCustomerAction}=await import('@/app/actions/eingang.actions');
+ const itemId=randomUUID();const saved=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'DPD Paket mit 2 Tuergriff verchromen'}));
+ if(saved.code!=='OK')throw Error(saved.message);
+ expect(saved.capture.customerId).toBeNull();
+ expect(saved.capture.packageContext).toBeUndefined();
+ const expected=await withSession(fixture,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:true}));if(expected.code!=='OK')throw Error(expected.message);
+ expect(expected.capture.packageContext).toMatchObject({status:'OK',customers:expect.arrayContaining([expect.objectContaining({customerId:fixture.customerId,source:'order'})])});
+ expect(expected.capture.packageContext).toMatchObject({status:'OK',customers:expect.arrayContaining([expect.objectContaining({customerId:quoteCustomer.customerId,source:'quote'})])});
+ expect(expected.capture.packageContext?.status==='OK'&&expected.capture.packageContext.customers.length).toBeLessThanOrEqual(3);
+ expect((await sql`SELECT kunde_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].kunde_id).toBeNull();
+ const request={itemId,version:saved.capture.version,clientEventId:randomUUID(),customerId:fixture.customerId,mode:'manual' as const};
+ expect(await withSession(fixture,()=>assignIntakeCustomerAction(request))).toMatchObject({code:'OK',replayed:false});
+ expect(await withSession(fixture,()=>assignIntakeCustomerAction(request))).toMatchObject({code:'OK',replayed:true});
+ expect((await sql`SELECT kunde_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].kunde_id).toBe(fixture.customerId);
+ expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${request.clientEventId}::uuid AND von=${fixture.actorId}`).toHaveLength(1);
+ expect(await withSession(fixture,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:true}))).toMatchObject({code:'OK',capture:{customerId:fixture.customerId,packageContext:{status:'OK',customers:[]}}});
+});
+
+it('PE-06 two actual accepted quotes remain ambiguous and a restricted capture reader receives no hidden candidates',async()=>{
+ const fixture=await createFixture();const {createQuoteAction,changeQuoteLifecycleAction}=await import('@/app/actions/quotes.actions');const quoteIds:string[]=[];
+ for(const label of ['TEST Halter links','TEST Halter rechts']){
+  const made=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST PE06 explicit alternatives',positions:[{name:label,quantity:2,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
+  if(made.code!=='OK')throw Error(made.message);quoteIds.push(made.quote.quoteId);
+  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({quoteId:made.quote.quoteId,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST aktuelle Fassung tatsaechlich gedruckt'}))).toMatchObject({code:'OK'});
+  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({quoteId:made.quote.quoteId,expectedVersion:2,edition:1,clientEventId:randomUUID(),action:'accept',evidence:'TEST ausdrueckliche Zusage'}))).toMatchObject({code:'OK'});
+ }
+ const {saveIntakeNoteAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');const itemId=randomUUID();
+ const saved=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'DPD Paket mit 2 Halter',context:{customerId:fixture.customerId}}));
+ if(saved.code!=='OK')throw Error(saved.message);
+ expect(saved.capture.packageContext).toBeUndefined();
+ const read=await withSession(fixture,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:true}));if(read.code!=='OK')throw Error(read.message);
+ expect(read.capture.packageContext).toMatchObject({status:'OK',ambiguous:true,candidates:expect.arrayContaining(quoteIds.map(id=>expect.objectContaining({kind:'quote',id,state:'accepted'})))});
+ if(read.capture.packageContext?.status==='OK')expect(read.capture.packageContext.candidates.every(candidate=>!Object.hasOwn(candidate,'totalNetCents'))).toBe(true);
+ expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(0);
+ const workshop=await createFixture(false,['eingang','kunden','auftraege'],'werkstatt');
+ const workshopRead=await withSession(workshop,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:true}));
+ expect(workshopRead).toMatchObject({code:'OK',capture:{packageContext:{status:'OK',ambiguous:true,candidates:expect.arrayContaining(quoteIds.map(id=>expect.objectContaining({id,state:'accepted'})))}}});
+ if(workshopRead.code==='OK'&&workshopRead.capture.packageContext?.status==='OK')for(const candidate of workshopRead.capture.packageContext.candidates)expect(candidate).not.toHaveProperty('totalNetCents');
+ const restricted=await createFixture(false,['eingang']);const otherId=randomUUID();
+ const limitedSaved=await withSession(restricted,()=>saveIntakeNoteAction({itemId:otherId,textstand:randomUUID(),text:'DPD Paket mit 2 Halter'}));
+ expect(limitedSaved).toMatchObject({code:'OK'});
+ const limited=await withSession(restricted,()=>getIntakeCaptureAction(otherId,undefined,{packageExpectation:true}));
+ expect(limited).toMatchObject({code:'OK',capture:{packageContext:{status:'OK',customers:[],candidates:[]}}});
+ if(limited.code==='OK')expect(limited.capture.expectedOrders).toBeUndefined();
+});
+
+it('PE204 customer-filtered existing quote reader excludes other customers before its limit',async()=>{
+ const first=await createFixture(),second=await createFixture();
+ const {createQuoteAction}=await import('@/app/actions/quotes.actions');
+ for(const fixture of [first,second])expect(await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST PE204 customer scope',positions:[{name:'TEST Paketfilter',quantity:2,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}))).toMatchObject({code:'OK'});
+ const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const {quoteOperationContext}=await import('@/lib/server/quoteAuthorization');
+ const {listOpenQuotesCommand}=await import('@/modules/quotes/server-public');
+ const filtered=await withSession(first,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST auth missing');return listOpenQuotesCommand(quoteOperationContext(auth.data),first.customerId);});
+ expect(filtered).toMatchObject({code:'OK',quotes:[expect.objectContaining({customerId:first.customerId})]});
+ if(filtered.code==='OK')expect(filtered.quotes.every(quote=>quote.customerId===first.customerId)).toBe(true);
+});
+
+
+it.each(['admin','buero','werkstatt','developer'] as const)('PE204 final rights and unassigned candidates: %s matches main plus U-249 without amounts',async role=>{
+ const owner=await createFixture();const token='Pruefteil'+randomUUID().replaceAll('-','');
+ const {createQuoteAction,changeQuoteLifecycleAction,readWorkshopQuoteGoodsAction}=await import('@/app/actions/quotes.actions');
+ const made=await withSession(owner,()=>createQuoteAction({clientEventId:randomUUID(),customerId:owner.customerId,dueDate:'2027-04-20',note:'TEST final rights',positions:[{name:token,quantity:2,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));if(made.code!=='OK')throw Error(made.message);
+ expect(await withSession(owner,()=>changeQuoteLifecycleAction({quoteId:made.quote.quoteId,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST tatsächlicher Druck'}))).toMatchObject({code:'OK'});
+ expect(await withSession(owner,()=>changeQuoteLifecycleAction({quoteId:made.quote.quoteId,expectedVersion:2,edition:1,clientEventId:randomUUID(),action:'accept',evidence:'TEST tatsächliche Zusage'}))).toMatchObject({code:'OK'});
+ const {saveIntakeNoteAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');const itemId=randomUUID();
+ expect(await withSession(owner,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'DPD Paket '+token}))).toMatchObject({code:'OK'});
+ const reader=await createFixture(false,['eingang','kunden','auftraege'],role);
+ const candidate=await withSession(reader,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:true}));
+ const goods=await withSession(reader,()=>readWorkshopQuoteGoodsAction());
+ if(role==='developer'){expect(candidate.code).toBe('FORBIDDEN');expect(goods.code).toBe('FORBIDDEN');return;}
+ expect(candidate).toMatchObject({code:'OK',capture:{customerId:null,packageContext:{status:'OK',candidates:[expect.objectContaining({id:made.quote.quoteId,customerId:owner.customerId,state:'accepted'})]}}});
+ expect(goods).toMatchObject({code:'OK',quotes:expect.arrayContaining([expect.objectContaining({id:made.quote.quoteId})])});
+ if(candidate.code==='OK'&&candidate.capture.packageContext?.status==='OK')for(const row of candidate.capture.packageContext.candidates){expect(row).not.toHaveProperty('totalNetCents');expect(row).not.toHaveProperty('positions');}
+ expect(JSON.stringify(goods)).not.toMatch(/unitPriceCents|totalNetCents|lineTotalCents/);
+ expect((await sql`SELECT kunde_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].kunde_id).toBeNull();
 });

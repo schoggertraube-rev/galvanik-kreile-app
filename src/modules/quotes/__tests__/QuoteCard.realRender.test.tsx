@@ -194,3 +194,12 @@ it('AK does not silently hide a missing legacy creation event or invent an actor
  render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:{...quote,actorTrace:{createdBy:null,lastActor:null}},canEdit:false}),change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
  expect(await screen.findByText('Für diesen Vorgang fehlt ein belegtes Anlageereignis.')).toBeVisible();expect(screen.queryByText(/Angelegt von System/)).toBeNull();
 });
+
+it('PE-02 opens the existing mail draft for a pending quote without sending automatically',async()=>{
+ const send=vi.fn();render(<QuoteCard quoteId={quote.quoteId} initialIntent="send" ports={{read:async()=>({code:'OK',quote,canEdit:true}),send,change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()} MailView={({draft})=><label>TEST Paket Betreff<input value={draft.subject} onChange={e=>draft.onSubject(e.target.value)}/></label>}/>);
+ expect((await screen.findByRole('textbox',{name:'TEST Paket Betreff'}) as HTMLInputElement).value).toContain(quote.quoteNumber);expect(send).not.toHaveBeenCalled();
+});
+it('PE-02 never exposes the mail draft without the actual quote edit grant',async()=>{
+ render(<QuoteCard quoteId={quote.quoteId} initialIntent="send" ports={{read:async()=>({code:'OK',quote,canEdit:false}),send:vi.fn(),change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()} MailView={()=><p>TEST forbidden draft</p>}/>);
+ await screen.findByText(quote.customerDisplayName,{exact:true});expect(screen.queryByText('TEST forbidden draft')).toBeNull();
+});

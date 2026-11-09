@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { intakePaymentContract, type PaymentMode } from "@/lib/server/paymentContract";
+import { intakePaymentContract, type PaymentMode } from "@/lib/domain/intakePaymentContract";
 import { kundeVollstaendigkeit } from "@/modules/customers/public";
 import {EMPTY_CUSTOMER_FORM,type CreateCustomerInput} from "@/modules/customers/public";
 import type {CustomerCreateCommandResult,CustomerUpdateCommandResult} from "@/modules/customers/public";
