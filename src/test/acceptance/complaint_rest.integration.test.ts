@@ -366,12 +366,14 @@ it.each([true,false])('RM07 actual mail Action reconciles a 503 without a blind 
   expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'UNAVAILABLE',delivery:'checking'});
   expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'CONFLICT',delivery:'checking'});expect(sends).toBe(1);expect(lookups).toBe(0);
   await sql`UPDATE public.communication_threads SET created_at=now()-interval '6 minutes' WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`;
+  await sql`UPDATE public.customers SET email='TEST-spaeter-geaendert@example.invalid' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
   const reopened=await withSession(fixture,()=>getMicrosoftGraphStatusAction({targetType:input.targetType,targetId:input.targetId}));
   expect(reopened).toMatchObject({code:'OK',recovery:{request:input,retryAt:expect.any(String)}});
   if(reopened.code!=='OK'||!('recovery' in reopened)||!reopened.recovery?.request)throw Error('TEST actual pending recovery missing');
   const persisted=reopened.recovery.request;expect(persisted).toEqual(reread);
   const other=await createFixture(['eingang','kunden','mails']);
   expect(await withSession(other,()=>getMicrosoftGraphStatusAction({targetType:input.targetType,targetId:input.targetId}))).toMatchObject({code:'OK',recovery:null});
+  expect(await withSession(other,()=>sendCustomerMailAction({...input}))).toMatchObject({code:'FORBIDDEN'});expect(sends).toBe(1);
   const withoutMail=await createFixture(['kunden']);
   expect(await withSession(withoutMail,()=>getMicrosoftGraphStatusAction({targetType:input.targetType,targetId:input.targetId}))).toMatchObject({code:'FORBIDDEN'});
   const [prepared]=await sql`SELECT id,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_SEND_PREPARED_V1' AND correlation_id=${input.clientRequestId}::uuid`;

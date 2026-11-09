@@ -50,7 +50,7 @@ export async function readComplaintGoodsReminderDates(tx:import('./privilegedDb'
 }
 type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string;delivery?:'checking'|'failed';retryAt?:string;deliveryCustomer?:string };
 type Target = { customerId: string; orderId: string | null; email: string; label: string };
-type ThreadRow = { id: string; customer_id: string | null; order_id: string | null; status: string | null; created_at: Date | string | null };
+type ThreadRow = { id: string; customer_id: string | null; order_id: string | null; status: string | null; created_at: Date | string | null;created_by?:string };
 type LinkedMessageRow = {
   thread_id: string;
   source: string;
@@ -222,11 +222,12 @@ export async function attachInboxMessage(
     const stored = await withPrivilegedTenantTransaction(auth, async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${auth.tenantId}:${source}`}, 0))`);
       const existing = await tx.execute<ThreadRow>(sql`
-        SELECT id, customer_id, order_id, status, created_at FROM public.communication_threads
+        SELECT id, customer_id, order_id, status, created_at,created_by::text FROM public.communication_threads
         WHERE tenant_id=${auth.tenantId} AND source=${source} LIMIT 2 FOR UPDATE
       `);
       if (existing.length > 1) throw new Error("COMMUNICATION_SOURCE_AMBIGUOUS");
       if (existing[0]) {
+        if(existing[0].created_by!==auth.userId)throw Error("COMMUNICATION_OWNER_MISMATCH");
         if (existing[0].customer_id !== target.customerId || existing[0].order_id !== target.orderId) {
           // The app action has already authorized and committed the canonical intake binding.
           // This historical correspondence row is only its projection, never another decision.
@@ -288,7 +289,12 @@ export async function sendCommunicationMail(
     return null;
   });
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
-  const recipient=input.intakeReply?.sender??target.email;
+  let recipient=input.intakeReply?.sender??target.email;
+  try{
+    const previous=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{recipient:string|null;actor:string}>(sql`SELECT prepared.payload->>'recipient' AS recipient,thread.created_by::text AS actor FROM public.communication_threads thread LEFT JOIN public.events prepared ON prepared.tenant_id=thread.tenant_id AND prepared.event_type='COMMUNICATION_SEND_PREPARED_V1' AND prepared.payload->>'threadId'=thread.id::text WHERE thread.tenant_id=${auth.tenantId} AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId} AND thread.customer_id=${target.customerId} AND thread.order_id IS NOT DISTINCT FROM ${target.orderId}::text LIMIT 2`));
+    if(previous.length>1)throw Error('COMMUNICATION_PREPARED_RECEIPT_AMBIGUOUS');
+    if(previous[0]){if(previous[0].actor!==auth.userId)return {code:'FORBIDDEN',message:'Du kannst nur deinen eigenen Versand fortsetzen.'};if(previous[0].recipient)recipient=previous[0].recipient;}
+  }catch(error){logCommunicationFailure('COMMUNICATION_RECIPIENT_RECOVERY_FAILED',error);return {code:'UNAVAILABLE',message:'Ursprünglicher Empfänger konnte nicht sicher geprüft werden.'};}
   if (!/^\S+@\S+\.\S+$/.test(recipient)) return { code: "VALIDATION_ERROR", message: "Beim Kunden ist keine gültige E-Mail-Adresse hinterlegt." };
   const source = `MS_GRAPH_OUT:${input.clientRequestId}`;
   const sendIntent=createHash('sha256').update(canonicalIntent({targetType:input.targetType,targetId:input.targetId,recipient,subject:input.subject.trim(),body:input.body.trim(),attachment:input.document?{filename:input.document.number+'.pdf',sha256:input.document.sha256}:input.attachment?{filename:input.attachment.filename,sha256:createHash('sha256').update(input.attachment.bytes).digest('hex')}:null,document:input.document??null,complaint:input.complaintResult??null,intake:input.intakeReply?{id:input.intakeReply.itemId,intent:input.intakeReply.intent}:null})).digest('hex');
@@ -337,6 +343,7 @@ export async function sendCommunicationMail(
     });
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_SEND_PREPARE_FAILED", error);
+    if(error instanceof Error&&error.message==='COMMUNICATION_OWNER_MISMATCH')return {code:'FORBIDDEN',message:'Du kannst nur deinen eigenen Versand fortsetzen.'};
     if(error instanceof Error&&error.message==='COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED')return {code:'VALIDATION_ERROR',message:'KV wurde seit der PDF-Erstellung geändert. Es wurde nichts gesendet. Aktuellen KV erneut wählen.'};
     if(error instanceof Error&&error.message==='COMMUNICATION_NOT_CONFIGURED')return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
     return { code: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "CONFLICT" : "UNAVAILABLE", message: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "Der Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; zuerst im Outlook-Ausgang prüfen." : "Der Mailversand konnte nicht sicher vorbereitet werden." };
