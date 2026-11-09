@@ -3,6 +3,27 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('rejected free-text agreement edits roll back every prior list change and preserve the same retry key',async()=>{
+ const {createCustomerAction,updateCustomerAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST Absprachen atomar '+randomUUID(),phone:'+49 711 5550190'}));if(created.code!=='OK')throw Error('ABS_ATOMIC_CUSTOMER:'+created.code);
+ const customerId=created.receipt.customerId;
+ const entries=['A','B'].map(label=>({id:null,bezeichnung:'TEST Hinweis '+label,wert:'TEST Wert '+label,geld:false,hinweis:true,gueltigBis:null}));
+ expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),agreements:entries}))).toMatchObject({code:'OK'});
+ const before=await sql`SELECT id::text,position,bezeichnung,wert,version,widerrufen_am FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId} ORDER BY position,id`;
+ expect(before).toHaveLength(2);
+ const key=randomUUID();
+ const edit={customerId,clientEventId:key,notes:'TEST erst nach erfolgreichem Speichern',agreements:[{...entries[0],id:before[0].id,wert:'TEST geänderter Wert'},{...entries[1],id:randomUUID()}]};
+ expect(await withSession(full,()=>updateCustomerAction(edit))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT id::text,position,bezeichnung,wert,version,widerrufen_am FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId} ORDER BY position,id`).toEqual(before);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toEqual([{n:0}]);
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{agreements:expect.arrayContaining([expect.objectContaining({id:before[0].id,value:entries[0].wert}),expect.objectContaining({id:before[1].id,value:entries[1].wert})])}});
+ const corrected={...edit,agreements:[edit.agreements[0],{...entries[1],id:before[1].id}]};
+ expect(await withSession(full,()=>updateCustomerAction(corrected))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{agreements:expect.arrayContaining([expect.objectContaining({id:before[0].id,value:'TEST geänderter Wert'}),expect.objectContaining({id:before[1].id,value:entries[1].wert})])}});
+ expect(await withSession(full,()=>updateCustomerAction(JSON.parse(JSON.stringify(corrected))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
 it('a former customer creation receipt cannot expose a contact later converted to supplier without Geld',async()=>{
  const {createCustomerAction,readCustomerCreateReceiptAction,updateCustomerAction}=await import('@/app/actions/customers.actions');
  const operational=await createFixture(['kunden','eingang'],'werkstatt');
