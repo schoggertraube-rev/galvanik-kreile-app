@@ -57,6 +57,22 @@ it('S10 no match returns an honest empty result and writes no order or event',as
  expect(await sql`SELECT (SELECT count(*)::integer FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG}) AS orders,(SELECT count(*)::integer FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}) AS events`).toEqual(before);
 });
 
+it('S9 city matches only actual customers of this tenant',async()=>{
+ const own=[await customerFixture('S9-N'),await customerFixture('S9-C')];
+ const other=await customerFixture('S9-B');
+ const foreign=randomUUID();
+ const {updateCustomerAction}=await import('@/app/actions/customers.actions');
+ for(const customerId of own)expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),city:'Hamburg'}))).toMatchObject({code:'OK'});
+ // A separate synthetic initial fixture, never a tenant change to an existing row.
+ await sql`INSERT INTO public.customers(id,tenant_id,customer_number,name,company_name,type,contact_person,email,phone,street,house_number,zip_code,city,country,payment_preference,ziel_freigeschaltet,ziel_tage,source,first_name,last_name,salutation)
+ SELECT ${foreign},${'TEST-foreign-'+foreign.slice(0,18)},customer_number,name,company_name,type,contact_person,${'TEST-'+foreign+'@example.invalid'},phone,street,house_number,zip_code,'Hamburg',country,payment_preference,ziel_freigeschaltet,ziel_tage,source,first_name,last_name,salutation FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${own[0]}`;
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const found=await withSession(full,()=>searchTenantAction('Hamburg'));
+ expect(found.code).toBe('OK');if(found.code!=='OK')throw Error('S9_SEARCH:'+found.code);
+ expect(found.hits.filter(row=>row.type==='CUSTOMER').map(row=>row.id).sort()).toEqual([...own].sort());
+ expect(found.hits.some(row=>row.id===foreign||row.id===other)).toBe(false);
+});
+
 it('S4 actual search finds Kunde Süd from Sued and ignores the legal form without inventing a customer',async()=>{
  const customerId=await customerFixture('S4');
  const {updateCustomerAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
