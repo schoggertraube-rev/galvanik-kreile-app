@@ -28,7 +28,7 @@ it('H3 completion requires a secured photo for each actual part, not an order-le
  await storeOrderPhoto(orderId);
  expect(await withSession(full,()=>freezeOrderAction(structuredClone(request)))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{station:'galvanik'}}});
- const {reserveDomainAttachmentAction,finalizeDomainAttachmentAction,getDomainAttachmentsAction}=await import('@/app/actions/domainAttachments.actions');
+ const {reserveDomainAttachmentAction,finalizeDomainAttachmentAction,getDomainAttachmentsAction,getDomainAttachmentOriginalAction}=await import('@/app/actions/domainAttachments.actions');
  const reserveInput={targetType:'ITEM' as const,targetId:created.receipt.items[0].id,clientRequestId:randomUUID(),mimeType:'image/png' as const,fileBytes:TEST_PHOTO_BYTES.length,contentSha256:createHash('sha256').update(TEST_PHOTO_BYTES).digest('hex')};
  const reader=await createFixture([],'readonly');
  expect(await withSession(reader,()=>reserveDomainAttachmentAction(reserveInput))).toMatchObject({code:'FORBIDDEN'});
@@ -38,7 +38,14 @@ it('H3 completion requires a secured photo for each actual part, not an order-le
  });
  expect(await sql`SELECT photo_ids FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.receipt.items[0].id}`).toEqual([{photo_ids:[firstPhoto]}]);
  expect(await withSession(full,()=>freezeOrderAction(structuredClone(request)))).toMatchObject({code:'VALIDATION_ERROR'});
- expect(await withSession(full,()=>getDomainAttachmentsAction({targetType:'ORDER',targetId:orderId}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getDomainAttachmentsAction({targetType:'ORDER',targetId:orderId}))).toMatchObject({code:'OK',data:expect.arrayContaining([expect.objectContaining({attachmentId:firstPhoto,mimeType:'image/png',fileBytes:TEST_PHOTO_BYTES.length})])});
+ const original=await withSession(full,()=>getDomainAttachmentOriginalAction({attachmentId:firstPhoto}));
+ expect(original.code).toBe('OK');if(original.code!=='OK')throw Error('H3_ORIGINAL_READ:'+original.code);
+ const originalUrl=new URL(original.data.downloadUrl);
+ expect(originalUrl.hostname).toBe('127.0.0.1');
+ const downloaded=await fetch(originalUrl);
+ expect(downloaded.ok).toBe(true);
+ expect(createHash('sha256').update(new Uint8Array(await downloaded.arrayBuffer())).digest('hex')).toBe(reserveInput.contentSha256);
  expect(await withSession(full,()=>reserveDomainAttachmentAction(structuredClone(reserveInput)))).toMatchObject({code:'OK',data:{replayed:true,receipt:{attachmentId:firstPhoto,targetType:'ITEM',targetId:created.receipt.items[0].id}}});
  expect(await withSession(full,()=>reserveDomainAttachmentAction({...reserveInput,targetType:'ORDER',targetId:orderId}))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(full,()=>finalizeDomainAttachmentAction({attachmentId:firstPhoto,fileBytes:reserveInput.fileBytes,contentSha256:reserveInput.contentSha256}))).toMatchObject({code:'OK',data:{replayed:true}});
