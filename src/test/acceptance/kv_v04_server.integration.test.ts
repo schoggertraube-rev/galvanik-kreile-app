@@ -1235,7 +1235,7 @@ it('AK invoice: the real invoice creator is distinct from the original importer 
  expect(await withSession(importer,()=>getIncomingInvoiceAction({id:saved.invoice.id}))).toMatchObject({code:'OK',view:{invoice:{id:saved.invoice.id},actorTrace:{createdBy:{userId:creator.actorId,action:'rechnung.erfassen'},lastActor:{userId:creator.actorId}}}});
 });
 
-it('AK-02: quote followups sort the creator first for each login and retain every other persons task',async()=>{
+it('AK-02: quote followups prioritize their actual recipient rather than the quote creator and retain all tasks',async()=>{
  const a=await createFixture(),b=await createFixture();
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteDefaultsAction}=await import('@/app/actions/quotes.actions');
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,updated_at) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST AK settings',statement_timestamp() WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
@@ -1249,8 +1249,15 @@ it('AK-02: quote followups sort the creator first for each login and retain ever
  }
  const {readQuoteFollowupTasksForToday}=await import('@/modules/tasks/server-public');const {resolveAuthorization}=await import('@/lib/server/authorization');const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
  const read=async(actor:Fixture)=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK task auth');return withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data,'2030-12-31'));});
+ const unassigned=await read(a);expect(unassigned).toHaveLength(2);expect(unassigned.every(task=>!task.isMine)).toBe(true);
+ const {getIntakeTaskAction,saveIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+ for(const [index,actor] of [a,b].entries()){
+  const task=unassigned.find(task=>task.quoteId===ids[index])!;
+  const current=await withSession(actor,()=>getIntakeTaskAction({taskId:task.id}));if(current.code!=='OK'||!current.task)throw Error('TEST recipient read');const value=current.task;
+  expect(await withSession(actor,()=>saveIntakeTaskAction({clientKey:value.client_key,taskId:value.id,version:value.version,kind:value.art,title:value.titel,dueDate:value.faellig_am,time:value.uhrzeit,forLogin:index===0?b.actorId:a.actorId,forArea:null,reference:{type:value.bezug_typ,id:value.bezug_id},note:value.notiz}))).toMatchObject({code:'OK'});
+ }
  const mineA=await read(a),mineB=await read(b);expect(mineA).toHaveLength(2);expect(mineB).toHaveLength(2);
- expect(mineA[0]).toMatchObject({quoteId:ids[0],isMine:true});expect(mineB[0]).toMatchObject({quoteId:ids[1],isMine:true});expect(new Set(mineA.map(row=>row.id))).toEqual(new Set(mineB.map(row=>row.id)));
+ expect(mineA[0]).toMatchObject({quoteId:ids[1],isMine:true});expect(mineB[0]).toMatchObject({quoteId:ids[0],isMine:true});expect(new Set(mineA.map(row=>row.id))).toEqual(new Set(mineB.map(row=>row.id)));
 });
 
 it.each([false,true,'partial','operational'] as const)('AF-6: two package receipts preserve every source; damaged secondary blocks the whole conversion: %s',async(damaged)=>{
