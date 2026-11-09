@@ -4,6 +4,23 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
 
+it('L5 an issued invoice blocks both price supplementation and order content edits without changing its source',async()=>{
+ const order=await readyInvoiceOrder('Preis-nach-Rechnung');
+ const {setInvoiceItemPricesAction}=await import('@/app/actions/invoices.actions');
+ const {getLiveOrderCardAction,changeOrderContentAction}=await import('@/app/actions/orders.actions');
+ const prices={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID(),prices:[{itemId:order.items[0].id,unitPriceCents:25000}]};
+ const before=await sql`SELECT preis_netto FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`;
+ expect(await withSession(full,()=>setInvoiceItemPricesAction(prices))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT preis_netto FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual(before);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${prices.clientEventId}::uuid`).toEqual([{n:0}]);
+ const contentKey=randomUUID();
+ expect(await withSession(full,()=>changeOrderContentAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:contentKey,note:'TEST nachträgliche Änderung',items:[{id:order.items[0].id,catalogServiceId:null,name:'TEST geänderter Preis',quantity:1,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:25000,vatRateBasisPoints:1900}]}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{version:order.version,station:'fertig'}}});
+ expect(await sql`SELECT preis_netto FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual(before);
+ expect(await sql`SELECT net_amount_cents::integer AS net,pdf_sha256 FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{net:order.invoice.netAmountCents,pdf_sha256:order.invoice.pdfSha256}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${contentKey}::uuid`).toEqual([{n:0}]);
+});
+
 it('the real PDF route downloads the stored original and cancellation unchanged and enforces Geld',async()=>{
  const order=await readyInvoiceOrder('Rechnungs-PDF');
  const {GET}=await import('@/app/api/invoices/[invoiceId]/pdf/route');
