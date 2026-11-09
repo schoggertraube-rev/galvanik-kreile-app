@@ -3,6 +3,27 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('ABS02 actual agreement save and revoke retain actor and receipt across customer rereads and fresh retries',async()=>{
+ const {createCustomerAction,getCustomerSummaryAction,saveCustomerAgreementAction,revokeCustomerAgreementAction}=await import('@/app/actions/customers.actions');
+ const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST Absprache '+randomUUID(),phone:'+49 711 5550190'}));
+ if(created.code!=='OK')throw Error('ABS_CUSTOMER:'+created.code);
+ const customerId=created.receipt.customerId;
+ const input={clientKey:randomUUID(),customerId,type:'ausgabe_ohne_zahlung' as const,reason:'TEST Rechnung folgt'};
+ const saved=await withSession(full,()=>saveCustomerAgreementAction(input));
+ expect(saved).toMatchObject({code:'OK',agreement:{customerId,type:input.type,createdBy:full.actorId,version:1}});if(saved.code!=='OK')throw Error('ABS_SAVE:'+saved.code);
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{agreements:expect.arrayContaining([expect.objectContaining({id:saved.agreement.id,type:input.type})])}});
+ expect(await withSession(full,()=>saveCustomerAgreementAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,agreement:{id:saved.agreement.id}});
+ const denied=await createFixture(['kunden']);
+ expect(await withSession(denied,()=>revokeCustomerAgreementAction({agreementId:saved.agreement.id,clientKey:randomUUID(),version:1,reason:'TEST nicht erlaubt'}))).toMatchObject({code:'FORBIDDEN'});
+ const revoke={agreementId:saved.agreement.id,clientKey:randomUUID(),version:1,reason:'TEST Absprache beendet'};
+ const revoked=await withSession(full,()=>revokeCustomerAgreementAction(revoke));
+ expect(revoked).toMatchObject({code:'OK',agreement:{id:saved.agreement.id,version:2,revokedBy:full.actorId,revokeReason:revoke.reason}});
+ expect(await sql`SELECT version,widerrufen_von::text,widerruf_grund FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.agreement.id}::uuid`).toEqual([{version:2,widerrufen_von:full.actorId,widerruf_grund:revoke.reason}]);
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>revokeCustomerAgreementAction(structuredClone(revoke)))).toMatchObject({code:'OK',replayed:true,agreement:{id:saved.agreement.id,version:2}});
+ for(const key of [input.clientKey,revoke.clientKey])expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
 it('L3 real customer actions authenticate from the cookie and withhold billing values before serialization',async()=>{
  const {createCustomerAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
  const input={clientEventId:randomUUID(),customerType:'business' as const,companyName:'TEST L3 Rechte '+randomUUID().slice(0,8),phone:'+49 711 5550190'};
