@@ -2,7 +2,7 @@
 import {randomUUID} from 'node:crypto';
 import postgres from 'postgres';
 import {afterAll,expect,it} from 'vitest';
-import {readCustomerListSignals} from '@/lib/server/customerSummaryRead';
+import {readCustomerListSignals,readCustomerSummary} from '@/lib/server/customerSummaryRead';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 
@@ -32,4 +32,14 @@ it('reads actual hints in one tenant projection and withholds money and mail fac
  expect(allowed?.hints).toContainEqual({kind:'agreement',text:'TEST Geld-Grund: TEST nur mit Geld',urgent:false});
  expect(allowed?.hints).toContainEqual({kind:'message',text:'1 Nachricht offen',urgent:false});
  expect((await readCustomerListSignals({...auth,tenantId:'TEST-r53-other-tenant'},[customer])).size).toBe(0);
+ // The card and the hint projection must enforce the same existing money area.
+ // Even a zero amount is a financial fact; absence must not become a fake zero.
+ const card=await readCustomerSummary(auth,{customerId:customer});
+ expect(card.code).toBe('OK');
+ if(card.code!=='OK')throw Error('TEST_CUSTOMER_CARD_READ:'+card.code);
+ expect(card.data).not.toHaveProperty('invoiceRevenueCents');
+ expect(card.data).not.toHaveProperty('invoiceOpenCents');
+ expect(await readCustomerSummary({...auth,areas:['kunden','geld']},{customerId:customer}))
+  .toMatchObject({code:'OK',data:{invoiceRevenueCents:0,invoiceOpenCents:0}});
+ expect(await readCustomerSummary({...auth,areas:[]},{customerId:customer})).toMatchObject({code:'FORBIDDEN'});
 });
