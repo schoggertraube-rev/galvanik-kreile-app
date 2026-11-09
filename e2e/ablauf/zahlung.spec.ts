@@ -4,6 +4,35 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
 
+it('invoice cancellation keeps the original, replays once and permits one replacement while rejecting payment on the cancelled invoice',async()=>{
+ const order=await readyInvoiceOrder('Storno-Neuausstellung');
+ const {cancelInvoiceAction,getInvoiceCancellationReceiptAction,issueInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const original=await sql`SELECT pdf_sha256,pdf_content FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`;
+ const input={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST falsche Rechnungsangabe',clientEventId:randomUUID()};
+ const results=await Promise.all([withSession(full,()=>cancelInvoiceAction(structuredClone(input))),withSession(full,()=>cancelInvoiceAction(structuredClone(input)))]);
+ expect(results.map(result=>result.code)).toEqual(['OK','OK']);
+ expect(results.filter(result=>result.code==='OK'&&!result.replayed)).toHaveLength(1);
+ const cancelled=results[0];if(cancelled.code!=='OK')throw Error('CANCEL_FAILED:'+cancelled.code);
+ expect(await withSession(full,()=>getInvoiceCancellationReceiptAction({invoiceId:input.invoiceId,clientEventId:input.clientEventId}))).toMatchObject({code:'OK',data:{status:'cancelled',cancelledBy:full.actorId,reason:input.reason}});
+ expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:cancelled.receipt.eventId}});
+ expect(await sql`SELECT pdf_sha256,pdf_content FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual(original);
+ expect(await sql`SELECT status,aggregate_version,cancellation_pdf_content IS NOT NULL AS has_pdf FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{status:'cancelled',aggregate_version:2,has_pdf:true}]);
+ const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
+ const payment={invoiceId:input.invoiceId,amount:order.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
+ // The existing payment contract classifies an invoice state changed by cancellation as a conflict.
+ expect(await withSession(full,()=>confirmPaymentAction(payment))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${payment.clientEventId}::uuid`).toEqual([{n:0}]);
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));if(card.code!=='OK')throw Error('CANCEL_CARD:'+card.code);
+ const replacement={orderId:order.orderId,expectedVersion:card.data.card.version,clientEventId:randomUUID()};
+ const issued=await withSession(full,()=>issueInvoiceAction(replacement));
+ expect(issued).toMatchObject({code:'OK'});if(issued.code!=='OK')throw Error('REPLACEMENT:'+issued.code);
+ expect(issued.receipt.invoiceNumber).not.toBe(order.invoice.invoiceNumber);
+ expect(await withSession(full,()=>issueInvoiceAction(structuredClone(replacement)))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:issued.receipt.invoiceId}});
+ expect(await sql`SELECT status FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} ORDER BY invoice_number`).toEqual([{status:'cancelled'},{status:'issued'}]);
+ for(const key of [input.clientEventId,replacement.clientEventId])expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
 it('H8 same-key concurrent invoice, cash payment and pickup each commit once and replay after real readback',async()=>{
  const order=await readyInvoiceOrder('H8-same-key','pickup',true);
  expect(order.issuanceResults.map(row=>row.code)).toEqual(['OK','OK']);
