@@ -3,6 +3,26 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('concurrent agreement replacements on one version keep one winner and preserve the superseded agreement as history',async()=>{
+ const {createCustomerAction,saveCustomerAgreementAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const customer=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST Absprache parallel '+randomUUID(),phone:'+49 711 5550190'}));
+ if(customer.code!=='OK')throw Error('ABS_RACE_CUSTOMER:'+customer.code);
+ const customerId=customer.receipt.customerId;
+ const initial=await withSession(full,()=>saveCustomerAgreementAction({clientKey:randomUUID(),customerId,type:'ausgabe_ohne_zahlung',reason:'TEST ursprüngliche Absprache'}));
+ if(initial.code!=='OK')throw Error('ABS_RACE_INITIAL:'+initial.code);
+ const updates=[7,14].map(targetDays=>({clientKey:randomUUID(),customerId,type:'zahlungsziel' as const,targetDays,reason:'TEST Ziel '+targetDays,version:initial.agreement.version}));
+ const results=await Promise.all(updates.map(input=>withSession(full,()=>saveCustomerAgreementAction(structuredClone(input)))));
+ expect(results.map(result=>result.code).sort()).toEqual(['CONFLICT','OK']);
+ const index=results.findIndex(result=>result.code==='OK'),winner=results[index];if(winner.code!=='OK')throw Error('ABS_RACE_WINNER');
+ expect(winner.agreement.version).toBe(initial.agreement.version+1);
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{agreements:expect.arrayContaining([expect.objectContaining({id:winner.agreement.id,targetDays:updates[index].targetDays})])}});
+ expect(await withSession(full,()=>saveCustomerAgreementAction(JSON.parse(JSON.stringify(updates[index]))))).toMatchObject({code:'OK',replayed:true,agreement:{id:winner.agreement.id,version:winner.agreement.version}});
+ expect(await sql`SELECT id::text,version FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId} AND widerrufen_am IS NULL`).toEqual([{id:winner.agreement.id,version:initial.agreement.version+1}]);
+ expect(await sql`SELECT widerrufen_von::text,version FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${initial.agreement.id}::uuid`).toEqual([{widerrufen_von:full.actorId,version:initial.agreement.version+1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId}`).toEqual([{n:2}]);
+ expect(await sql`SELECT client_event_id::text,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array(updates.map(input=>input.clientKey))}::uuid[])`).toEqual([{client_event_id:updates[index].clientKey,user_id:full.actorId}]);
+});
+
 it('ABS02 actual agreement save and revoke retain actor and receipt across customer rereads and fresh retries',async()=>{
  const {createCustomerAction,getCustomerSummaryAction,saveCustomerAgreementAction,revokeCustomerAgreementAction}=await import('@/app/actions/customers.actions');
  const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST Absprache '+randomUUID(),phone:'+49 711 5550190'}));
