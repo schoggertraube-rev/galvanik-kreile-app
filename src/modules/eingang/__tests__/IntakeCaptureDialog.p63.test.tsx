@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GlobalCreatePorts } from "../GlobalCreateFlow";
 import { IntakeCaptureDialog } from "../ui/IntakeCaptureDialog";
 import type { IntakeCapture } from "../captureContract";
+import { IntakeSituation } from "../ui/IntakeSituation";
 
 vi.mock("../pendingOriginals", () => ({
   readPendingOriginals: vi.fn(async () => []),
@@ -81,8 +82,9 @@ describe("U241: unknown originals always have a concrete next step", () => {
     await screen.findByText("Anders zuordnen");
     fireEvent.click(screen.getByText("Anders zuordnen"));
     await screen.findByRole("button", { name: labels[kind] });
-    for (const name of [...Object.values(labels), "Anderen Kunden oder Vorgang wählen", "Text ändern"])
+    for (const name of [...Object.values(labels), "Anderen Kunden oder Vorgang wählen"])
       expect(screen.getByRole("button", { name })).toBeEnabled();
+    expect(screen.queryByRole("button",{name:"Text ändern"})).toBeNull();
     expect(screen.getByRole("button",{name:"Original ansehen · "+capture.files[0].name})).toBeEnabled();
     expect(screen.queryByRole("textbox",{name:"Notiz"})).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: labels[kind] }));
@@ -91,4 +93,34 @@ describe("U241: unknown originals always have a concrete next step", () => {
     else if(kind === "ware"){await screen.findByRole("heading",{name:"Absender nicht erkannt"});expect(onOrder).not.toHaveBeenCalled();expect(screen.getByRole("button",{name:"Anderen Kunden oder Vorgang wählen"})).toBeEnabled();}
     else await waitFor(() => expect(openCaptureObject).toHaveBeenCalledWith(kind === "rechnung" ? "rechnungein" : "mailein", capture.id + (kind === "dokument" ? "#rein" : "")));
   });
+});
+
+
+it.each(['enter','lesen'])('E1 %s persists text through the same note port without opening a photo situation',async trigger=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+ const save=vi.fn(async(input)=>({code:'OK',capture:{id:input.itemId,version:1,text:input.text,customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],recognition:{kind:'anfrage',text:input.text},files:[]}}));
+ const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-text'})),saveCaptureNote:save,readCaptureNote:vi.fn(async()=>({code:'OK',data:{recognition:{fields:[],positions:[]},concerns:[]}}))} as unknown as GlobalCreatePorts;
+ const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());
+ const input=screen.getByRole('textbox',{name:'Notiz'});fireEvent.change(input,{target:{value:'TEST Anfrage 4 Halter verchromen'}});
+ if(trigger==='enter'){fireEvent.keyDown(input,{key:'Enter'});fireEvent.keyDown(input,{key:'Enter'});}else{const button=screen.getByRole('button',{name:'Lesen'});fireEvent.click(button);fireEvent.click(button);}
+ await waitFor(()=>expect(save).toHaveBeenCalledOnce());
+ await waitFor(()=>expect(screen.getByRole('textbox',{name:'Notiz'})).toHaveValue('TEST Anfrage 4 Halter verchromen'));
+ expect(container.querySelector('[data-spec-id="rein.situation"]')).toBeNull();expect(screen.queryByRole('button',{name:/^Original ansehen/})).toBeNull();
+ expect(save.mock.calls[0][0]).toMatchObject({text:'TEST Anfrage 4 Halter verchromen',textstand:expect.any(String),itemId:expect.any(String)});
+ const row=container.querySelector('[data-spec-id="rein.textvorschlag"]')!;
+ expect(row.querySelectorAll('.kr-btn--erledigen')).toHaveLength(1);
+ expect(screen.getByRole('button',{name:'Anfrage übernehmen'})).toBeEnabled();
+ fireEvent.click(screen.getByRole('button',{name:'Anders'}));
+ expect(screen.getByRole('group',{name:'Anders'}).querySelectorAll('button').length).toBeLessThanOrEqual(2);
+});
+
+it.each(['photo-text','typed-text','unsecured-text','discarded-text'])('E1 photo editing follows secured OCR provenance: %s',async source=>{
+ const fileId=crypto.randomUUID();
+ const capture:IntakeCapture={id:crypto.randomUUID(),version:1,text:'TEST typed note',customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],recognition:{kind:'unklar',text:'TEST text'},files:[{id:fileId,name:'TEST-original.png',mime:'image/png',bytes:1,readable:true,secured:source!=='unsecured-text',status:'fertig'}],suggestions:source==='typed-text'?[]:[{id:crypto.randomUUID(),fileId,orderId:null,field:'DOCUMENT_TEXT',value:'TEST photographed text',confidence:'high',rule:null,reason:null,source:{},status:source==='discarded-text'?'verworfen':'offen'}]};
+ const onEdit=vi.fn();render(<IntakeSituation capture={capture} kind="unklar" busy={false} primary={null} onAssign={vi.fn()} onOriginal={vi.fn()} onOrder={vi.fn()} onMore={vi.fn()} onEdit={onEdit} onKind={vi.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Anders zuordnen'}));
+ const edit=screen.queryByRole('button',{name:'Text ändern'});
+ if(source==='photo-text'){expect(edit).toBeEnabled();fireEvent.click(edit!);expect(onEdit).toHaveBeenCalledOnce();}else expect(edit).toBeNull();
 });

@@ -193,6 +193,21 @@ it('KV-03 settings persist explicit nullable approaches with DB/event/view, with
  expect((await sql`SELECT count(*)::int n FROM private.extra_work_hourly_rates WHERE tenant_id=${KREILE_TENANT_SLUG}`)[0].n).toBe(1);
 });
 
+it('E1 text note stays a source without an order and retries from the persisted JSONB receipt',async()=>{
+ const fixture=await createFixture();
+ const {saveIntakeNoteAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+ const itemId=randomUUID(),textstand=randomUUID(),text='TEST Anfrage vier Halter verchromen';
+ const saved=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand,text}));
+ expect(saved).toMatchObject({code:'OK',capture:{id:itemId,text,files:[],orderId:null}});
+ expect(await withSession(fixture,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{id:itemId,text,files:[],orderId:null}});
+ const [row]=await sql`SELECT jsonb_build_object('itemId',i.id::text,'textstand',e.befehl_id::text,'text',e.nachher->>'text','concerns',e.nachher->'anliegen') request, i.vorgang_id FROM public.intake_item i JOIN public.intake_event e ON e.tenant_id=i.tenant_id AND e.item_id=i.id WHERE i.tenant_id=${KREILE_TENANT_SLUG} AND i.id=${itemId}::uuid AND e.art='original_gespeichert' AND e.befehl_id=${textstand}::uuid`;
+ expect(row.vorgang_id).toBeNull();expect(row.request).toMatchObject({itemId,textstand,text});
+ expect(await withSession(fixture,()=>saveIntakeNoteAction(row.request))).toMatchObject({code:'OK',capture:{id:itemId,text,files:[],orderId:null}});
+ expect((await sql`SELECT count(*)::int n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND art='original_gespeichert' AND befehl_id=${textstand}::uuid`)[0].n).toBe(1);
+ expect((await sql`SELECT count(*)::int n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND quelle_intake_item_id=${itemId}::uuid`)[0].n).toBe(0);
+ expect(await withSession(fixture,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{id:itemId,text,orderId:null}});
+});
+
 it('links one real captured KV source, preserves other concerns and rolls back a second quote for that source',async()=>{
  const fixture=await createFixture();
  const {saveIntakeNoteAction,getIntakeCaptureAction,selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
