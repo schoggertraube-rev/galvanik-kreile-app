@@ -219,3 +219,20 @@ it('BA14 rejected stale booking leaves the source editable and a fresh reread bo
  expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND befehl_id=${input.clientKey}::uuid`).toHaveLength(1);
  expect(await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}))).toMatchObject({code:'OK',view:{invoice:{id:saved.invoice.id},automation:{state:'stored'}}});
 });
+
+it('BA07 real supplier creation resumes automatic booking through the same invoice writer',async()=>{
+ const {fixture,itemId,fileId}=await secureSource();
+ await sql`UPDATE public.intake_item SET kunde_id=NULL,zuordnung='offen' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`;
+ await sql`INSERT INTO public.intake_suggestion(id,tenant_id,item_id,file_id,feld,wert,sicherheit,status) VALUES(${randomUUID()}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${fileId}::uuid,'rechnung.faellig',${sql.json('2026-11-22')},'sicher','offen')`;
+ const {getIncomingInvoiceAction,createCustomerForIntakeAction,saveIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
+ const before=await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}));expect(before).toMatchObject({code:'OK',view:{supplier:null,invoice:null,automation:{state:'incomplete'}}});if(before.code!=='OK')throw Error(before.message);
+ const customerInput={itemId,version:before.view.item.version,customer:{clientEventId:randomUUID(),customerType:'lieferant',companyName:'TEST BA07 neuer Lieferant '+itemId,country:'DE'}};
+ const created=await withSession(fixture,()=>createCustomerForIntakeAction(customerInput));expect(created.code).toBe('OK');if(created.code!=='OK')throw Error(created.message);
+ const fresh=await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}));expect(fresh).toMatchObject({code:'OK',view:{supplier:{id:created.customer.id},automation:{state:'ready'}}});if(fresh.code!=='OK')throw Error(fresh.message);
+ const request={itemId,fileId,version:fresh.view.item.version,clientKey:randomUUID(),automatic:true,fields:fresh.view.fields,status:'offen',paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null};
+ const saved=await withSession(fixture,()=>saveIncomingInvoiceAction(request));expect(saved.code).toBe('OK');if(saved.code!=='OK')throw Error(saved.message);
+ expect(await sql`SELECT lieferant_id,zahlstatus FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toEqual([{lieferant_id:created.customer.id,zahlstatus:'offen'}]);
+ const [receipt]=await sql<{intent:typeof request}[]>`SELECT nachher->'intent' AS intent FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND befehl_id=${request.clientKey}::uuid`;
+ expect(await withSession(fixture,()=>saveIncomingInvoiceAction(receipt.intent))).toMatchObject({code:'OK',replayed:true,invoice:{id:saved.invoice.id}});
+ expect(await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}))).toMatchObject({code:'OK',view:{supplier:{id:created.customer.id},invoice:{id:saved.invoice.id},automation:{state:'stored'}}});
+});

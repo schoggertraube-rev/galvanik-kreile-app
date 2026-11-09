@@ -44,7 +44,7 @@ export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoiceP
  return <>{message?<Toast text={message.text} aktion={message.invoice?{text:C.undo,onClick:()=>void undoAutomatic()}:message.taskId?{text:'Aufgabe ansehen',onClick:()=>ports.openTask(message.taskId!)}:undefined}/>:null}
   {loading?<Toast text={C.saving}/>:null}
   {(entry||failure)&&typeof document!=='undefined'?createPortal(<KrApp geraet={device} portal>
-   {entry?<IncomingInvoiceDialog key={entry.key} initial={entry.view} ports={ports} onClose={close} onMessage={notify}/>:<Dialog titel="Rechnung prüfen" onSchliessen={close} fuss={<><Button text="Schließen" onClick={close}/>{failure?<Button text={C.retry} onClick={()=>{if(lastOpen.current)void open(lastOpen.current);}}/>:null}</>}>
+   {entry?<IncomingInvoiceDialog key={entry.key} initial={entry.view} ports={ports} onClose={close} onMessage={notify} onAutomaticReady={()=>void open(entry.view.item.id)}/>:<Dialog titel="Rechnung prüfen" onSchliessen={close} fuss={<><Button text="Schließen" onClick={close}/>{failure?<Button text={C.retry} onClick={()=>{if(lastOpen.current)void open(lastOpen.current);}}/>:null}</>}>
     {loading?<p role="status">Rechnung wird geladen …</p>:<Hinweis ton="warn">{failure}</Hinweis>}</Dialog>}
   </KrApp>,document.body):null}</>;
 }
