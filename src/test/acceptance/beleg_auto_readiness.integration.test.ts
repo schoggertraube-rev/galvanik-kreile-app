@@ -259,3 +259,24 @@ it('BA optional annotations roundtrip preserves invoice money and historical cho
  const history=await withSession(fixture,()=>getIncomingInvoiceAction({id:booked.invoice.id}));expect(history).toMatchObject({code:'OK',view:{annotationChoices:{vehicles:[]},annotations:{vehicle:{id:vehicleId,label:'TEST Fahrzeug'}}}});
  expect(await withSession(fixture,()=>changeIncomingInvoiceStatusAction({...request,clientKey:randomUUID()}))).toMatchObject({code:'CONFLICT'});
 });
+
+it('BA vehicle settings use existing rights, reject stale deletion and replay the reread settings without another event',async()=>{
+ const fixture=await createFixture(['einstellungen']),denied=await createFixture(['eingang']);
+ const {SALES_STAGE_FEATURES}=await import('@/modules/fundament/public');
+ for(const feature of SALES_STAGE_FEATURES)await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES(${KREILE_TENANT_SLUG},${feature.id},${feature.defaultEnabled}) ON CONFLICT(tenant,feature_id) DO NOTHING`;
+ const {saveCompanySettingsAction,readSettingsAction}=await import('@/app/actions/settings.actions');
+ const view=await withSession(fixture,()=>readSettingsAction());expect(view.code).toBe('OK');if(view.code!=='OK')throw Error(view.message);
+ const vehicleId=randomUUID(),clientEventId=randomUUID();
+ const settings={companyName:'TEST Settings GmbH',street:'Testweg 1',zip:'70178',city:'Stuttgart',country:'DE',taxId:'TEST12345',iban:'DE89370400440532013000',bic:'COBADEFFXXX',bankName:'TEST Bank',logoUrl:'https://local.invalid/test.png',paymentTermDays:14,belegVehicles:[...(view.snapshot.company.belegVehicles??[]),{id:vehicleId,label:'TEST Zweitfahrzeug',active:true}],belegVehiclesVersion:view.snapshot.company.belegVehiclesVersion??null,clientEventId};
+ const before=await sql`SELECT beleg_fahrzeuge,updated_at FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(denied,()=>saveCompanySettingsAction(settings))).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT beleg_fahrzeuge,updated_at FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+ const saved=await withSession(fixture,()=>saveCompanySettingsAction(settings));expect(saved.code).toBe('OK');if(saved.code!=='OK')throw Error(saved.message);
+ const reread=await withSession(fixture,()=>readSettingsAction());expect(reread.code).toBe('OK');if(reread.code!=='OK')throw Error(reread.message);
+ const request={...reread.snapshot.company,clientEventId} as typeof settings;
+ expect(await withSession(fixture,()=>saveCompanySettingsAction(request))).toMatchObject({code:'OK',belegVehiclesVersion:saved.belegVehiclesVersion});
+ expect(await sql`SELECT id FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND payload->>'clientEventId'=${clientEventId}`).toHaveLength(1);
+ expect(await withSession(fixture,()=>saveCompanySettingsAction({...settings,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(fixture,()=>saveCompanySettingsAction({...request,belegVehicles:request.belegVehicles.filter(row=>row.id!==vehicleId),clientEventId:randomUUID()}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT beleg_fahrzeuge FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{beleg_fahrzeuge:request.belegVehicles}]);
+});
