@@ -1,4 +1,5 @@
 "use server";
+import {PACKAGE_ASSIGN_COPY} from "@/ui/situationCatalog";
 import {quoteCommandContext} from "@/lib/server/quoteAuthorization";
 
 import {listOpenQuotesCommand,readPackageQuoteHistory} from '@/modules/quotes/server-public';
@@ -12,7 +13,7 @@ async function withPackageExpectation(result:IntakeCaptureResult):Promise<Intake
   const quotes=quoteContext.capabilities.canReadQuote?await listOpenQuotesCommand(quoteContext):null;
   const history=!result.capture.customerId?await readPackageQuoteHistory(auth.data,result.capture.recognition?.text??result.capture.text??''):[];
   result.capture.packageContext=await withPrivilegedTenantTransaction(auth.data,tx=>readPackageExpectation(tx,auth.data,result.capture,quotes,history));
- }catch(error){console.error('[PACKAGE_EXPECTATION_READ_FAILED]',error);result.capture.packageContext={status:'UNAVAILABLE',message:'Erwartete Ware konnte nicht sicher gelesen werden · Original bleibt erhalten.'};}
+ }catch(error){console.error('[PACKAGE_EXPECTATION_READ_FAILED]',error);result.capture.packageContext={status:'UNAVAILABLE',message:PACKAGE_ASSIGN_COPY.unavailable};}
  return result;
 }
 

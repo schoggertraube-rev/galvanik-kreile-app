@@ -1,4 +1,5 @@
 "use client";
+import {PACKAGE_ASSIGN_COPY} from '@/ui/situationCatalog';
 import {PackageOnsiteEditor} from "./PackageOnsiteEditor";
 import {PACKAGE_ONSITE_COPY} from "@/ui/situationCatalog";
 
@@ -460,13 +461,13 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
   };
   const choosePackageCustomer=async(customerId:string)=>{
     if(inFlight.current||!capture||capture.customerId)return;
-    if(!ports.assignCaptureCustomer||!getCapture){setError('Kundenzuordnung ist nicht verbunden · Original bleibt erhalten.');return;}
+    if(!ports.assignCaptureCustomer||!getCapture){setError(PACKAGE_ASSIGN_COPY.notConnected);return;}
     const key=capture.id+':'+capture.version+':'+customerId;if(!packageAssignKeys.current.has(key))packageAssignKeys.current.set(key,crypto.randomUUID());
     inFlight.current=true;setBusy(true);setError(null);
     try{const assigned=await ports.assignCaptureCustomer({itemId:capture.id,version:capture.version,clientEventId:packageAssignKeys.current.get(key)!,customerId,mode:'manual'});
-      if(assigned.code!=='OK'){setError('message'in assigned?assigned.message:'Kunde wurde inzwischen zugeordnet · neu lesen.');return;}
+      if(assigned.code!=='OK'){setError(assigned.code==='CONFLICT'?PACKAGE_ASSIGN_COPY.changed:PACKAGE_ASSIGN_COPY.failed);return;}
       const refreshed=await getCapture(capture.id);if(refreshed.code!=='OK'){setError(refreshed.message);return;}setCapture(refreshed.capture);
-    }catch(cause){console.error('[PACKAGE_CUSTOMER_ASSIGN_FAILED]',cause);setError('Zuordnung nicht bestätigt · Original und Auswahl bleiben erhalten.');}finally{inFlight.current=false;setBusy(false);}
+    }catch(cause){console.error('[PACKAGE_CUSTOMER_ASSIGN_FAILED]',cause);setError(PACKAGE_ASSIGN_COPY.failed);}finally{inFlight.current=false;setBusy(false);}
   };
   const chooseKind = async (kind: Exclude<CaptureKind, "unklar">) => {
     if (!capture || inFlight.current) return;

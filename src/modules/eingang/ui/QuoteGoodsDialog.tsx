@@ -1,4 +1,5 @@
 "use client";
+import {quoteOverlayTarget} from '@/lib/domain/quoteOverlayTarget';
 import {useEffect,useEffectEvent,useRef,useState} from 'react';
 import Image from 'next/image';
 import QRCode from 'qrcode';
@@ -57,7 +58,7 @@ export function QuoteGoodsDialog({quoteId,sourceId,ports,onClose,onOriginal,onCu
   }
   const result=request.conversion?await ports.convert(request.conversion,request.goods,request.telephone):request.goods?await ports.save(request.goods):null;
   if(!result)return;if(result.code!=='OK'){setError('Nicht gespeichert · alle Eingaben sind noch da · '+result.message);if(result.code==='VALIDATION_ERROR')setPending(null);return;}
-  if('orderReceipt'in result){onMessage('Aus '+quote.quoteNumber+' ist Auftrag '+result.orderReceipt.orderNumber+' geworden');onOrder(result.orderReceipt.orderId);}else {onMessage('Ware liegt gesperrt in '+result.receipt.lagerort+'.');if(!accepted)onQuote(quoteId+'#send');}onClose();
+  if('orderReceipt'in result){onMessage('Aus '+quote.quoteNumber+' ist Auftrag '+result.orderReceipt.orderNumber+' geworden');onOrder(result.orderReceipt.orderId);}else {onMessage('Ware liegt gesperrt in '+result.receipt.lagerort+'.');if(!accepted)onQuote(quoteOverlayTarget(quoteId,capture?.id,'send'));}onClose();
  });
  // Only the explicit goods route may complete a uniquely bound, already inspected receipt.
  // A prior reversal is a persisted server fact and suppresses this automatic attempt.
