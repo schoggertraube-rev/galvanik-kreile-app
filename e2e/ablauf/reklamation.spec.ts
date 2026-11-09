@@ -1,0 +1,30 @@
+import {randomUUID} from 'node:crypto';
+import {expect,it} from 'vitest';
+import {KREILE_TENANT_SLUG} from '@/lib/tenant';
+import {sql,full,withSession} from './replayHarness';
+import {readyInvoiceOrder} from './orderFixture';
+import {storeOrderPhoto} from './photoFixture';
+
+it('RA-02 W7/W8 counter complaint before handover requires an actual photo, persists once, and keeps goods in-house',async()=>{
+ const order=await readyInvoiceOrder('RA-02');
+ const {getComplaintDialogAction,reklamationAusfuehrenAction,getByOrder,getComplaints}=await import('@/app/actions/complaints.actions');
+ const prepared=await withSession(full,()=>getComplaintDialogAction({orderId:order.orderId}));
+ expect(prepared.code).toBe('OK');if(prepared.code!=='OK'||!('data'in prepared))throw Error('RA02_PREPARE:'+prepared.code);
+ const input={action:'aufnehmen' as const,clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:prepared.data.source.items[0].id,menge:1}],defect:'Abplatzung',description:'TEST bei Abholung am Tresen erkannt',photoIds:[] as string[],goodsReturn:'ja' as const};
+ expect(await withSession(full,()=>reklamationAusfuehrenAction(input))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:0}]);
+ const photoId=await storeOrderPhoto(order.orderId);
+ const withPhoto={...input,clientKey:randomUUID(),photoIds:[photoId]};
+ const created=await withSession(full,()=>reklamationAusfuehrenAction(withPhoto));
+ expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('RA02_CREATE:'+created.code);
+ expect(await sql`SELECT stand,ware_zurueck FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.receipt.complaintId}`).toEqual([{stand:'aufgenommen',ware_zurueck:'ja'}]);
+ expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[{id:created.receipt.complaintId,stand:'aufgenommen',photoIds:[photoId]}]});
+ expect(await withSession(full,()=>getComplaints({customerId:order.customerId}))).toMatchObject({code:'OK',complaints:[{id:created.receipt.complaintId}]});
+ expect(await withSession(full,()=>reklamationAusfuehrenAction(withPhoto))).toMatchObject({code:'OK',replayed:true,receipt:{complaintId:created.receipt.complaintId}});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${withPhoto.clientKey}::uuid`).toEqual([{user_id:full.actorId}]);
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const outKey=randomUUID();
+ expect(await withSession(full,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:order.version,clientEventId:outKey}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{station:'fertig',version:order.version}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${outKey}::uuid`).toEqual([{n:0}]);
+});
