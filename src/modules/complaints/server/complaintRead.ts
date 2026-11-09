@@ -1,4 +1,4 @@
-import {readCaseActorTraces} from '@/lib/server/quoteJournalPort';
+import {readCaseActorTraces} from '@/lib/server/caseActorRead';
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';

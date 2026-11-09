@@ -1,5 +1,5 @@
 import "server-only";
-import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentRead";
+import {readOrderResponsibilityForToday,recordInvalidOrderAssignmentForToday} from "@/lib/server/orderTaskAssignmentRead";
 
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -7,7 +7,7 @@ import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
-import { classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
+import { sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -61,7 +61,7 @@ type InvoiceRow = { id: string; invoice_number: string; order_id: string; custom
 type PrepaymentRow = { order_id: string; order_number: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; invoice_id: string | null; open_amount_cents: number | string | null; payment_status: string | null; station: string; goods_out_event_count: number | string };
 type UserRow = { id: string; full_name: string };
 type GraphThreadRow = { source: string };
-type AssignmentRow = { order_id: string; assigned_to_name: string; current_order_version: number };
+type AssignmentRow = { integrity_ok:boolean;order_id: string; assigned_to_name: string; current_order_version: number };
 type CollectionRow = { id: string; customer_name: string; monat: Date | string; order_count: number | string };
 
 const DEFAULT_FIELDS: TodayVisibleField[] = ["today", "assign", "money", "bundle"];
@@ -175,14 +175,15 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
         `) : Promise.resolve([]),
         graphAllowed ? tx.execute<GraphThreadRow>(sql`SELECT source FROM public.communication_threads WHERE tenant_id=${auth.tenantId} AND source LIKE 'MS_GRAPH_IN:%'`) : Promise.resolve([]),
         ordersAllowed ? tx.execute<AssignmentRow>(sql`
-          SELECT order_id, assigned_to_name, current_order_version
+          SELECT order_id, assigned_to_name, current_order_version, integrity_ok
           FROM private.v_order_task_assignment_v1
           WHERE tenant_id=${auth.tenantId}
             AND assigned_by=${auth.userId}::uuid
             AND active=true
         `) : Promise.resolve([]),
       ]);
-      return { preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignments };
+      for(const row of assignments)if(!row.integrity_ok)await recordInvalidOrderAssignmentForToday(tx,auth,row.order_id);
+      return { preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignments:assignments.filter(row=>row.integrity_ok) };
     }),
     ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints():Promise.resolve({code:'OK' as const,complaints:[]}),
     moneyAllowed&&ordersAllowed?readQuoteFollowups():Promise.resolve({code:'OK' as const,tasks:[]}),
@@ -254,12 +255,11 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   if (STAGE2_TODAY_FEATURES.has("bundle") && bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
   const ownTaskKeys=new Set(quoteFollowups.tasks.filter(task=>task.isMine===true).map(task=>'task:'+task.id));
-  const ownComplaintIds=new Set(complaints.complaints.filter(complaint=>complaint.actorTrace?.createdBy?.userId===auth.userId).map(complaint=>complaint.id));
   const responsible=await withPrivilegedTenantTransaction(auth,tx=>readOrderResponsibilityForToday(tx,auth,items.flatMap(item=>item.orderId?[item.orderId]:[])));
-  const mine=(item:TodayItem)=>ownTaskKeys.has(item.key)||item.kind==='complaint'&&item.target?.screen==='reklamation'&&ownComplaintIds.has(item.target.arg)||item.kind!=='complaint'&&!!item.orderId&&responsible.get(item.orderId)===auth.userId;
-  items.sort((left,right)=>Number(mine(right))-Number(mine(left)));
+  const mine=(item:TodayItem)=>ownTaskKeys.has(item.key)||item.kind!=='complaint'&&!!item.orderId&&responsible.get(item.orderId)===auth.userId;
+  const sortedItems=sortTodayByResponsibility(items,mine);
   return {
-    items,
+    items:sortedItems,
     collectionNotices,
     visibleFields: selected,
     layout,

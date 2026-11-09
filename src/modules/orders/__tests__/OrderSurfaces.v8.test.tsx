@@ -346,10 +346,24 @@ it('opens complaint recording from the existing More menu for an eligible delive
 
 it('AK renders creator, latest actor and canonical assignee and keeps take errors next to the button',()=>{
  const take=vi.fn(async()=>{}),evidence={eventId:'TEST-event',userId:'TEST-a',name:'TEST Ada',at:'2026-11-08T12:00:00Z',action:'ORDER_INTAKE_CREATED_V1',mailSender:null};
- const actorCard={...card,actors:{currentLoginId:'TEST-b',createdBy:evidence,lastActor:{...evidence,userId:'TEST-b',name:'TEST Bea',action:'ORDER_TASK_ASSIGNED_V1'},responsible:{userId:'TEST-a',name:'TEST Ada',at:evidence.at,source:'first-event' as const},assignmentUnavailable:false}};
+ const actorCard={...card,actors:{currentLoginId:'TEST-b',createdBy:evidence,lastActor:{...evidence,userId:'TEST-b',name:'TEST Bea',action:'ORDER_TASK_ASSIGNED_V1'},responsible:{userId:'TEST-a',name:'TEST Ada',at:evidence.at,source:'assignment' as const},assignmentUnavailable:false}};
  render(<OrderCardView state={{kind:'data',card:actorCard}} actions={{...actions,takeResponsibility:{visible:true,enabled:true,reason:null},onTakeResponsibility:take,feedback:{kind:'error',message:'TEST Zuordnung noch nicht gespeichert',operation:'responsibility'}}} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);
  const panel=document.querySelector('[data-spec-id="auftrag.akteure"]') as HTMLElement;
  expect(panel).toHaveTextContent('Angelegt von TEST Ada');expect(panel).toHaveTextContent('Zuletzt: TEST Bea');expect(panel).toHaveTextContent('Zuständig: TEST Ada');expect(within(panel).getByRole('alert')).toHaveTextContent('TEST Zuordnung noch nicht gespeichert');
  expect(screen.getAllByText('TEST Zuordnung noch nicht gespeichert')).toHaveLength(1);
  fireEvent.click(within(panel).getByRole('button',{name:'Übernehmen'}));expect(take).toHaveBeenCalledTimes(1);
+});
+
+it('SA correction keeps the creator distinct from responsibility and offers taking an unassigned order to the creator',()=>{
+ const take=vi.fn(async()=>{}),evidence={eventId:'TEST-created',userId:'TEST-a',name:'TEST Ada',at:'2026-11-08T12:00:00Z',action:'ORDER_INTAKE_CREATED_V1',mailSender:null};
+ render(<OrderCardView state={{kind:'data',card:{...card,actors:{currentLoginId:'TEST-a',createdBy:evidence,lastActor:evidence,responsible:null,assignmentUnavailable:false}}}} actions={{...actions,takeResponsibility:{visible:true,enabled:true,reason:null},onTakeResponsibility:take}} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);const panel=document.querySelector('[data-spec-id="auftrag.akteure"]') as HTMLElement;expect(panel).toHaveTextContent('Angelegt von TEST Ada');expect(panel).toHaveTextContent('Noch niemand zuständig');fireEvent.click(within(panel).getByRole('button',{name:'Übernehmen'}));expect(take).toHaveBeenCalledOnce();
+});
+
+it('SA correction maps an unavailable assignment code through the catalog without rendering a server diagnostic',()=>{
+ render(<OrderCardView state={{kind:'data',card:{...card,actors:{currentLoginId:'TEST-a',createdBy:null,lastActor:null,responsible:null,assignmentUnavailable:true,assignmentReadError:'UNAVAILABLE'}}}} actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);
+ expect(screen.getByText('Zuständigkeit gerade nicht lesbar - lade den Auftrag neu.')).toBeInTheDocument();expect(screen.queryByText('Noch niemand zuständig')).not.toBeInTheDocument();expect(screen.queryByText('UNAVAILABLE')).not.toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Neu laden'}));expect(actions.onReload).toHaveBeenCalled();
+});
+
+it('SA review gives a validation rejection a reload exit beside the responsibility action',()=>{
+ const reload=vi.fn();render(<OrderCardView state={{kind:'data',card:{...card,actors:{currentLoginId:'TEST-a',createdBy:null,lastActor:null,responsible:null,assignmentUnavailable:false}}}} actions={{...actions,onReload:reload,feedback:{kind:'error',operation:'responsibility',code:'VALIDATION_ERROR',message:'Der Auftrag hat sich inzwischen geändert. Lade ihn neu und übernimm ihn dann.'}}} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);fireEvent.click(screen.getByRole('button',{name:'Neu laden'}));expect(reload).toHaveBeenCalledOnce();
 });

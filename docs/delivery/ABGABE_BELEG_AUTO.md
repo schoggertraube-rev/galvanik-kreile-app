@@ -53,6 +53,12 @@ Aktueller Nachzug09:22: Dieser Branch hat106 Migrationen, Dev110. Keine fehlt. D
 }
 ```
 
+## M1-Main-Abgleich 09.11., 09:53
+
+Main12d117b8 (#204/#205) in denselben BA-Zweig eingebunden. Bestehende Paket-Erwartungsfunktion und deren ausdruecklich angeforderte Lesestrecke bleiben erhalten; BA-Anmerkungsleser wird daneben am vorhandenen Root-Port injiziert. Derselbe Capture-Dialog behaelt Paket-Wiederaufnahme, Memo fuer getCapture ohne unbeabsichtigte Erwartungsabfrage und den bereits gebauten einmaligen Rechnungs-Aufruf. Keine zweite Erfassung. Beide Kataloggruppen bleiben im zentralen Katalog, keine neue Eingang-V04-Oberflaeche gebaut.
+
+Zwei gezielte echte BA01/03/06+BA08-Actionfaelle9,08sPASS, zwei geaenderte Capture-Rechnungs-Renderfaelle0,827sPASS, Typen/Lint/W4/H18/WhitespacePASS. Scope wird nach dem Integrationscommit gegen den dann enthaltenen Main-Migrationsbaum geprueft. Keine neue Migration oder Datenbank-Anwendung. Offene Produktentscheidungen08:49 bleiben offen; keine vollstaendige BA-Abnahme/kein PR behauptet.
+
 ## Historische Teilnachweise
 
 # AP-BELEG-AUTO – vorbereitete Server-Lesestelle

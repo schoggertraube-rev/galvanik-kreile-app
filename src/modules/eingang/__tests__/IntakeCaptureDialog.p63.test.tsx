@@ -10,7 +10,30 @@ vi.mock("../pendingOriginals", () => ({
   acknowledgePendingOriginal: vi.fn(async () => undefined),
 }));
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it('PE204 loads package expectation once per version outside the file polling interval',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ const capture:IntakeCapture={id:crypto.randomUUID(),version:1,text:'TEST Paket',customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],recognition:{kind:'ware',text:'TEST Paket'},files:[{id:crypto.randomUUID(),name:'TEST-paket.png',mime:'image/png',bytes:1,readable:false,secured:true,status:'fertig'}]};
+ const packageContext={status:'OK' as const,customers:[],candidates:[],ambiguous:false,moreCandidates:false};
+ const getCapture=vi.fn<NonNullable<GlobalCreatePorts['getCapture']>>(async(_id,_context,options)=>({code:'OK',capture:{...capture,...(options?.packageExpectation?{packageContext}:{})}}));
+ let timerId=0;const timers=new Map<number,()=>void>();
+ vi.stubGlobal('setInterval',vi.fn((callback:()=>void)=>{timers.set(++timerId,callback);return timerId;}));vi.stubGlobal('clearInterval',vi.fn((id:number)=>timers.delete(id)));
+ const fetchPort=vi.fn(async()=>Response.json([]));vi.stubGlobal('fetch',fetchPort);
+ const ports={getCapture,getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-pe-poll'})),prepareCaptureFile:vi.fn(async()=>({code:'OK',upload:null})),finishCaptureFile:vi.fn(async()=>({code:'OK',capture}))} as unknown as GlobalCreatePorts;
+ const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());
+ const file=new File(['TEST'],capture.files[0].name,{type:'image/png'});Object.defineProperty(file,'arrayBuffer',{value:async()=>new Uint8Array([1]).buffer});
+ fireEvent.change(container.querySelector('input[type="file"]')!,{target:{files:[file]}});
+ await waitFor(()=>expect(getCapture.mock.calls.filter(call=>call[2]?.packageExpectation===true)).toHaveLength(1));
+ await screen.findByRole('heading',{name:'Absender nicht erkannt'});
+ fetchPort.mockResolvedValueOnce(Response.json([{id:crypto.randomUUID(),itemId:capture.id,fileId:capture.files[0].id,at:new Date().toISOString()}]));
+ for(const callback of timers.values())callback();
+ await waitFor(()=>expect(getCapture.mock.calls.some(call=>call[2]?.packageExpectation===false)).toBe(true));
+ window.dispatchEvent(new CustomEvent('kreile:intake-changed'));
+ await waitFor(()=>expect(getCapture.mock.calls.filter(call=>call[2]?.packageExpectation===false).length).toBeGreaterThan(1));
+ expect(getCapture.mock.calls.filter(call=>call[2]?.packageExpectation===true)).toHaveLength(1);
+});
 
 describe("P63: the camera action is reachable in the fixed footer", () => {
   it.each(["tablet", "handy"])("starts the %s camera immediately and keeps Foto in the dialog footer", async () => {

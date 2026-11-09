@@ -118,7 +118,7 @@ export type OrderCardActionReceipt = {
 export type OrderCardActionFeedback =
   | { kind: "idle" | "submitting"; message: string; operation?:"responsibility" }
   | { kind: "success"; message: string; receipt: OrderCardActionReceipt }
-  | { kind: "conflict" | "error"; message: string; operation?:"responsibility" };
+  | { kind: "conflict" | "error"; message: string; code?:string; operation?:"responsibility" };
 export type OrderCardActionAvailability = {
   visible: boolean;
   enabled: boolean;
@@ -244,4 +244,4 @@ export type OrderCardState =
   | { kind: "data"; card: OrderCardModel };
 
 export type OrderActorEvidence={eventId:string;userId:string|null;name:string|null;at:string;action:string;mailSender:string|null};
-export type OrderActorSummary={currentLoginId:string;createdBy:OrderActorEvidence|null;lastActor:OrderActorEvidence|null;responsible:{userId:string;name:string|null;at:string;source:'assignment'|'first-event'}|null;assignmentUnavailable:boolean;assignmentReadError?:string};
+export type OrderActorSummary={currentLoginId:string;createdBy:OrderActorEvidence|null;lastActor:OrderActorEvidence|null;responsible:{userId:string;name:string|null;at:string;source:'assignment'}|null;assignmentUnavailable:boolean;assignmentReadError?:'FORBIDDEN'|'VALIDATION_ERROR'|'NOT_FOUND'|'UNAVAILABLE'};

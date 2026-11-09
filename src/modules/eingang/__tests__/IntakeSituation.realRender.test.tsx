@@ -19,3 +19,15 @@ it('unidentified goods retain a task tied to the same capture rather than a gues
  const task=vi.fn(),order=vi.fn();render(<IntakeSituation capture={capture} kind="ware" busy={false} primary={null} onAssign={vi.fn()} onOriginal={vi.fn()} onOrder={order} onMore={vi.fn()} onEdit={vi.fn()} onKind={vi.fn()} onTask={task}/>);
  fireEvent.click(screen.getByRole('button',{name:'Ablegen · Absender klären'}));expect(task).toHaveBeenCalledOnce();expect(order).not.toHaveBeenCalled();
 });
+
+it('PE-04 offers history only as an explicit customer choice, retains the task fallback',()=>{
+ const choose=vi.fn(),order=vi.fn();
+ render(<IntakeSituation capture={{...capture,packageContext:{status:'OK',customers:[{customerId:'TEST-history-customer',customerName:'TEST historische Kundin',lastAt:'2026-11-08T10:00:00Z',source:'order'}],candidates:[],ambiguous:false,moreCandidates:false}}} kind="ware" busy={false} primary={null} onAssign={vi.fn()} onCustomerCandidate={choose} onOriginal={vi.fn()} onOrder={order} onMore={vi.fn()} onEdit={vi.fn()} onKind={vi.fn()} onTask={vi.fn()}/>);
+ expect(choose).not.toHaveBeenCalled();expect(order).not.toHaveBeenCalled();
+ expect(screen.getByRole('button',{name:'Ablegen · Absender klären'})).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'TEST historische Kundin · Kunde auswählen'}));expect(choose).toHaveBeenCalledExactlyOnceWith('TEST-history-customer');expect(order).not.toHaveBeenCalled();
+});
+it('PE context read error stays visible and never claims nothing is expected',()=>{
+ render(<IntakeSituation capture={{...capture,packageContext:{status:'UNAVAILABLE',message:'TEST read unavailable'}}} kind="ware" busy={false} primary={null} onAssign={vi.fn()} onOriginal={vi.fn()} onOrder={vi.fn()} onMore={vi.fn()} onEdit={vi.fn()} onKind={vi.fn()}/>);
+ expect(screen.getByRole('alert')).toHaveTextContent('Erwartete Ware konnte nicht sicher gelesen werden');expect(screen.queryByText('Nichts angekündigt')).toBeNull();
+});

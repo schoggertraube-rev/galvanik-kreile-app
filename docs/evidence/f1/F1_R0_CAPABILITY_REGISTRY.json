@@ -531,6 +531,7 @@
         "prepareQuoteTextChangeAction",
         "duplicateQuoteAction",
         "receiveOnsiteQuoteAction",
+        "readOnsiteQuoteProgressAction",
         "readWorkshopQuoteGoodsAction",
         "readQuoteReplyTargetsAction",
         "undoQuoteConversionAction"

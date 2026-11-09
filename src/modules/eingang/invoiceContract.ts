@@ -1,4 +1,4 @@
-import type {CaseActorTrace} from "@/lib/server/quoteJournalPort";
+import type {CaseActorTrace} from "@/lib/domain/caseActorContract";
 import { normaliseIban, validIban } from '@/modules/customers/public';
 import type {IntakeFileInput,IntakeFileGrant,IntakeCaptureResult} from './captureContract';
 

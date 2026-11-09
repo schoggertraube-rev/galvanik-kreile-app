@@ -1,22 +1,23 @@
 "use server";
+import {quoteCommandContext,quoteOperationContext} from '@/lib/server/quoteAuthorization';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 import {readMicrosoftGraphSentDocumentEvidence} from "@/lib/server/microsoftGraph";
 
 import {createHash} from "node:crypto";
-import {appendQuoteJournal,readQuoteJournal,readQuoteReplyDocuments,quoteReplyEditionMessage,type QuoteReplyProof} from "@/lib/server/quoteJournalPort";
+import {onsitePhaseKey,appendQuoteJournal,readQuoteJournal,readQuoteJournals,readQuoteReplyDocuments,quoteReplyEditionMessage,type QuoteReplyProof} from "@/lib/server/quoteJournalPort";
 
 import { renderToBuffer } from "@react-pdf/renderer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { createQuotePdfDocument } from "@/lib/pdf/QuoteDocument";
 import {
-  getAuthorizationActionGrants,
   hasAuthorizationArea,
   resolveAuthorization,
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
 import {quoteForUi,scaleQuotePositions} from "@/modules/quotes/public";
 import {readQuoteReceivedQuantities} from "@/lib/server/quoteGoodsContextPort";
-import {intakePaymentContract} from "@/lib/server/paymentContract";
+import {intakePaymentContract} from "@/lib/domain/intakePaymentContract";
 import { readCustomerSummary,readCustomerListSignals } from "@/lib/server/customerSummaryRead";
 import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
 import {recognizeIntakeText} from '@/lib/server/intakeTextRecognition';
@@ -47,30 +48,11 @@ import {
   type ConvertQuoteInput,
   type CreateQuoteInput,
   type UpdateQuoteInput,
-  type QuoteCommandContext,
 } from "@/modules/quotes/server-public";
 
 type PendingMailAcceptance={input:QuoteLifecycleInput;proof:QuoteReplyProof;handoverMode:'pickup'|'shipping';paymentMode:'vorkasse'|'abholung'|'rechnung';eventId?:string;notices?:string[]};
 function mailOrderKey(requestId:string){const bytes=createHash('sha256').update('quote-mail-order:'+requestId).digest().subarray(0,16);bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const h=bytes.toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;}
 
-function quoteCommandContext(authorization: AuthorizationSnapshot): QuoteCommandContext {
-  const actionGrants = getAuthorizationActionGrants(authorization);
-  const canReadQuote = hasAuthorizationArea(authorization, "geld")
-    && hasAuthorizationArea(authorization, "auftraege");
-  return {
-    tenantId: authorization.tenantId,
-    userId: authorization.userId,
-    capabilities: {
-      canCreateQuote: actionGrants.createQuote,
-      canReadQuote,
-      canUpdateQuote: actionGrants.createQuote,
-      canConvertQuote: actionGrants.createQuote,
-    },
-  };
-}
-
-/** U-249 is an operational decision grant, never an edit/financial grant. */
-function quoteOperationContext(auth:AuthorizationSnapshot):QuoteCommandContext{const context=quoteCommandContext(auth);return {...context,capabilities:{...context.capabilities,canReadQuote:true,canDecideQuote:true,canConvertQuote:true}};}
 function quoteFollowupBinding(auth:AuthorizationSnapshot,operationalCancel=false):QuoteFollowupBinding{
  return async(tx,{quote,action,phase})=>{
   const life=quote.lifecycle;if(!life)throw Error('QUOTE_FOLLOWUP_LIFECYCLE_MISSING');
@@ -542,20 +524,30 @@ export async function duplicateQuoteAction(input:{kind:'quote'|'order';id:string
  return createQuoteAction({clientEventId:input.clientEventId,customerId:input.customerId,dueDate:input.dueDate,note:'Kopie von '+source.preparation.source.number+' · Stand '+input.expectedSourceVersion,positions,specialRequests:source.preparation.specialRequests,...(input.kind==='quote'&&source.preparation.previousCalculation?{calculation:source.preparation.previousCalculation}:{})});
 
 }
+/** Reread the one confirmed request and its actually booked phases, with the same write authorization. */
+export async function readOnsiteQuoteProgressAction(input:{requestId:string;request?:import('@/lib/onsiteQuoteContract').OnsiteQuoteInput}){
+ if(!input||typeof input!=='object'||Object.keys(input).some(key=>!['requestId','request'].includes(key))||typeof input.requestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId))return {code:'VALIDATION_ERROR' as const};
+ try{const resolved=await resolveAuthorization();if(!resolved.ok)return {code:'UNAUTHENTICATED' as const};const auth=resolved.data;
+  if(!quoteCommandContext(auth).capabilities.canCreateQuote||!hasAuthorizationArea(auth,'eingang'))return {code:'FORBIDDEN' as const};
+  const names=['customer','quote','goods','order'] as const;
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>readQuoteJournals<{phase?:string;customerId?:string;quoteId?:string;intent?:string;snapshot?:unknown}>(tx,auth,[input.requestId,...names.map(name=>onsitePhaseKey(input.requestId,'proof-'+name))]));
+  const phases={customer:false,quote:false,goods:false,order:false};const facts:Partial<Record<typeof names[number],unknown>>={};
+  for(const name of names){const proofs=rows.filter(row=>row.clientEventId===onsitePhaseKey(input.requestId,'proof-'+name));if(proofs.length>1||proofs.some(row=>row.payload.phase!==name||!['QUOTE_ONSITE_PHASE_V04','QUOTE_ONSITE_REQUESTED_V04'].includes(row.eventType)))throw Error('ONSITE_PHASE_READ_INVALID');phases[name]=proofs.length===1;if(proofs.length){const request=input.request;const legacy=request?(name==='customer'?request.customer:name==='quote'?request.quote:name==='goods'?{goods:request.goods,quantities:request.quantities}:{evidence:request.evidence,handoverMode:request.handoverMode,paymentMode:request.paymentMode,due:request.confirmedOrderDueDate}):undefined;const snapshot=proofs[0].payload.snapshot??legacy;if(snapshot!==undefined&&createHash('sha256').update(canonicalJson(snapshot)).digest('hex')===proofs[0].payload.intent)facts[name]=snapshot;else if(request)throw Error('ONSITE_PHASE_SNAPSHOT_MISMATCH');}}
+  const roots=rows.filter(row=>row.clientEventId===input.requestId);if(roots.length>1||rows.length&&!roots.length||roots.some(row=>row.eventType!=='QUOTE_ONSITE_REQUESTED_V04'))throw Error('ONSITE_ROOT_READ_INVALID');
+  let progress:import('@/lib/onsiteQuoteContract').OnsiteQuoteProgress|null=null;
+  const quoteId=rows.find(row=>row.clientEventId===onsitePhaseKey(input.requestId,'proof-quote'))?.payload.quoteId;
+  if(quoteId){const read=await readQuoteCommand(quoteCommandContext(auth),{quoteId});if(read.code!=='OK')return read;progress={customerId:read.quote.customerId,quoteId:read.quote.quoteId,quoteNumber:read.quote.quoteNumber,customerName:read.quote.customerDisplayName,goodsBooked:phases.goods};}
+  return {code:'OK' as const,phases,progress,facts};
+ }catch(error){console.error('[ONSITE_PHASE_READ_FAILED]',{name:error instanceof Error?error.name:'unknown'});return {code:'UNAVAILABLE' as const};}
+}
 /** One confirmed onsite request; every mutation delegates to its existing idempotent writer. */
-export async function receiveOnsiteQuoteAction(input:{
- clientRequestId:string;
- customer:{mode:'EXISTING';customerId:string}|{mode:'NEW';data:Omit<import('@/modules/customers/public').CreateCustomerInput,'clientEventId'>};
- quote:Omit<CreateQuoteInput,'clientEventId'|'customerId'|'source'>;
- evidence:string;
- goods:Record<string,unknown>;
- quantities:Array<{position:number;received:number;note:string|null}>;
- handoverMode:'pickup'|'shipping';paymentMode:'abholung'|'vorkasse'|'rechnung';confirmedOrderDueDate:string;
-}){
+export async function receiveOnsiteQuoteAction(input:import("@/lib/onsiteQuoteContract").OnsiteQuoteInput){
  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
  if(!input||!uuid.test(input.clientRequestId)||!input.customer||!['NEW','EXISTING'].includes(input.customer.mode)||!input.quote||Object.hasOwn(input.quote,'source')||typeof input.evidence!=='string'||input.evidence.trim().length<3||!Array.isArray(input.quantities)||!input.quantities.length||input.quantities.some(row=>!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.received)||row.received<0)||new Set(input.quantities.map(row=>row.position)).size!==input.quantities.length)return {code:'VALIDATION_ERROR' as const,message:'Kunde, KV, Zusage und tatsaechlich angenommene Mengen vollstaendig pruefen.'};
- const phase=(name:string)=>{const hex=createHash('sha256').update('kreile-onsite:'+input.clientRequestId+':'+name).digest('hex');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-5'+hex.slice(13,16)+'-8'+hex.slice(17,20)+'-'+hex.slice(20,32);};
- const intent=createHash('sha256').update(JSON.stringify(input)).digest('hex');
+ const phase=(name:string)=>onsitePhaseKey(input.clientRequestId,name);
+ const digest=(value:unknown)=>createHash('sha256').update(canonicalJson(value)).digest('hex');
+ const snapshots={customer:input.customer,quote:input.quote,goods:{goods:input.goods,quantities:input.quantities},order:{evidence:input.evidence,handoverMode:input.handoverMode,paymentMode:input.paymentMode,due:input.confirmedOrderDueDate}};
+ const hashes={customer:digest(snapshots.customer),quote:digest(snapshots.quote),goods:digest(snapshots.goods),order:digest(snapshots.order)};
  let customerId:string|undefined,quoteId:string|undefined;
  try{
   const authResult=await resolveAuthorization(),denied=authorizationFailure(authResult);if(denied||!authResult.ok)return denied!;
@@ -564,37 +556,46 @@ export async function receiveOnsiteQuoteAction(input:{
   const reserved=await withPrivilegedTenantTransaction(auth,async tx=>{
    await tx.execute((await import('drizzle-orm')).sql`SELECT pg_advisory_xact_lock(hashtextextended(${'onsite:'+auth.tenantId+':'+input.clientRequestId},0))`);
    const prior=await readQuoteJournal<{intent:string}>(tx,auth,input.clientRequestId);
-   if(prior.length)return prior.length===1&&prior[0].eventType==='QUOTE_ONSITE_REQUESTED_V04'&&prior[0].payload.intent===intent;
-   await appendQuoteJournal(tx,auth,{id:phase('request-event'),type:'QUOTE_ONSITE_REQUESTED_V04',clientEventId:input.clientRequestId,correlationId:input.clientRequestId,version:null,description:'Vor-Ort-Erfassung bestaetigt',payload:{intent,quoteRequestId:phase('quote'),orderRequestId:phase('order'),customerRequestId:phase('customer')}});return true;
+   if(prior.length)return prior.length===1&&prior[0].eventType==='QUOTE_ONSITE_REQUESTED_V04';
+   await appendQuoteJournal(tx,auth,{id:phase('request-event'),type:'QUOTE_ONSITE_REQUESTED_V04',clientEventId:input.clientRequestId,correlationId:input.clientRequestId,version:null,description:'Vor-Ort-Erfassung bestaetigt',payload:{quoteRequestId:phase('quote'),orderRequestId:phase('order'),customerRequestId:phase('customer')}});return true;
   });
   if(!reserved)return {code:'CONFLICT' as const,message:'Diese Erfassungskennung wurde bereits mit anderen Eingaben verwendet. Nicht erneut buchen.'};
-  if(input.customer.mode==='EXISTING')customerId=input.customer.customerId;
+  type Proof={intent:string;customerId?:string;quoteId?:string;quoteNumber?:string;customerName?:string};
+  const readProof=async(name:keyof typeof hashes)=>withPrivilegedTenantTransaction(auth,async tx=>{const rows=await readQuoteJournal<Proof>(tx,auth,phase('proof-'+name));if(rows.length>1)throw Error('ONSITE_PHASE_AMBIGUOUS');const proof=rows[0]?.payload;if(proof&&proof.intent!==hashes[name])throw Error('ONSITE_BOOKED_PHASE_CHANGED');return proof;});
+  const customerProof=await readProof('customer');await readProof('quote');await readProof('goods');await readProof('order');
+  const finishProof=async(name:keyof typeof hashes,data:Omit<Proof,'intent'>)=>withPrivilegedTenantTransaction(auth,async tx=>{const {sql}=await import('drizzle-orm');await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'onsite-proof:'+auth.tenantId+':'+input.clientRequestId+':'+name},0))`);const rows=await readQuoteJournal<Proof>(tx,auth,phase('proof-'+name));if(rows.length){if(rows.length!==1||rows[0].payload.intent!==hashes[name])throw Error('ONSITE_BOOKED_PHASE_CHANGED');return;}await appendQuoteJournal(tx,auth,{id:phase('proof-event-'+name),type:'QUOTE_ONSITE_PHASE_V04',clientEventId:phase('proof-'+name),correlationId:input.clientRequestId,version:null,description:'Vor-Ort-Teilphase gebucht',payload:{phase:name,intent:hashes[name],snapshot:snapshots[name],...data}});});
+  if(customerProof?.customerId)customerId=customerProof.customerId;else if(input.customer.mode==='EXISTING')customerId=input.customer.customerId;
   else{
    const {createCustomerAction}=await import('@/app/actions/customers.actions');
    const customer=await createCustomerAction({...input.customer.data,clientEventId:phase('customer')});
    if(customer.code!=='OK')return {...customer,phase:'customer',requestId:input.clientRequestId};
    customerId=customer.receipt.customerId;
   }
+  await finishProof('customer',{customerId});
   const savedQuote=await readQuoteCreateReceiptAction({...input.quote,customerId,clientEventId:phase('quote')});
   // A completed outcome is recovered before any new phase; the root intent was checked above.
   if(savedQuote.code==='OK'){
    const completed=await readQuoteConversionReceiptAction({quoteId:savedQuote.quote.quoteId,clientEventId:phase('order')});
-   if(completed.code==='OK')return {...completed,replayed:true,phase:'complete' as const,quoteId:completed.quote.quoteId,customerId,requestId:input.clientRequestId};
+   if(completed.code==='OK'){await finishProof('order',{customerId,quoteId:savedQuote.quote.quoteId});return {...completed,replayed:true,phase:'complete' as const,quoteId:completed.quote.quoteId,customerId,requestId:input.clientRequestId};}
    if(completed.code!=='NOT_FOUND')return {...completed,phase:'readback',requestId:input.clientRequestId};
   }
-  const created=await createQuoteAction({...input.quote,customerId,clientEventId:phase('quote')});
+  const created=savedQuote.code==='OK'?savedQuote:await createQuoteAction({...input.quote,customerId,clientEventId:phase('quote')});
   if(created.code!=='OK')return {...created,phase:'quote',customerId,requestId:input.clientRequestId};
   quoteId=created.quote.quoteId;
-  if(input.quantities.length!==created.quote.positions.length)return {code:'VALIDATION_ERROR' as const,message:'Jede KV-Position braucht ihre angenommene Menge.',quoteId,customerId,requestId:input.clientRequestId};
+  const progress={customerId:customerId!,quoteId,quoteNumber:created.quote.quoteNumber,customerName:created.quote.customerDisplayName,goodsBooked:created.quote.lifecycle?.goods?.some(row=>row.id===phase('goods-id'))===true};
+  await finishProof('quote',progress);
+  if(input.quantities.length!==created.quote.positions.length)return {code:'VALIDATION_ERROR' as const,message:'Jede KV-Position braucht ihre angenommene Menge.',quoteId,customerId,progress,requestId:input.clientRequestId};
   const goods={...input.goods,id:phase('goods-id'),clientKey:phase('goods-key'),clientEventId:phase('goods'),quoteId,expectedQuoteVersion:1,quantities:created.quote.positions.map(position=>{const quantity=input.quantities.find(row=>row.position===position.position);return {itemId:position.id,expected:position.quantity,received:quantity?.received===position.quantity?null:quantity?.received,confirmed:quantity?.received===position.quantity,note:quantity?.note};})};
   const {saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
   const received=created.quote.lifecycle?.goods?.some(row=>row.id===phase('goods-id'))?{code:'OK' as const}:await saveGoodsReceiptAction(goods);
-  if(received.code!=='OK')return {...received,phase:'goods',quoteId,customerId,requestId:input.clientRequestId};
+  if(received.code!=='OK')return {...received,phase:'goods',quoteId,customerId,progress,requestId:input.clientRequestId};
+  await finishProof('goods',progress);progress.goodsBooked=true;
   const accepted=await changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:phase('accept'),expectedVersion:1,edition:1,evidence:input.evidence},{onsiteGoodsReceiptId:phase('goods-id')});
-  if(accepted.code!=='OK')return {...accepted,phase:'acceptance',quoteId,customerId,requestId:input.clientRequestId};
+  if(accepted.code!=='OK')return {...accepted,phase:'acceptance',quoteId,customerId,progress,requestId:input.clientRequestId};
   const result=await convertQuoteToOrderAction({quoteId,clientEventId:phase('order'),expectedVersion:2,confirmedAward:true,confirmedOrderDueDate:input.confirmedOrderDueDate,handoverMode:input.handoverMode,paymentMode:input.paymentMode,goodsReceiptId:phase('goods-id')});
-  return {...result,phase:result.code==='OK'?'complete':'order',quoteId,customerId,requestId:input.clientRequestId};
- }catch(error){console.error('[QUOTE_ONSITE_REQUEST_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Ausgang nicht sicher bestaetigt. Eingaben und Erfassungskennung behalten; gespeicherte Zwischenschritte bleiben nachvollziehbar.',customerId,quoteId,requestId:input.clientRequestId};}
+  if(result.code==='OK')await finishProof('order',progress);
+  return {...result,progress,phase:result.code==='OK'?'complete':'order',quoteId,customerId,requestId:input.clientRequestId};
+ }catch(error){console.error('[QUOTE_ONSITE_REQUEST_FAILED]',error);return {code:error instanceof Error&&error.message==='ONSITE_BOOKED_PHASE_CHANGED'?'CONFLICT' as const:'UNAVAILABLE' as const,message:'Ausgang nicht sicher bestaetigt. Eingaben und Erfassungskennung behalten; gespeicherte Zwischenschritte bleiben nachvollziehbar.',customerId,quoteId,requestId:input.clientRequestId};}
 }
 
 /** Operational workshop projection: no prices/calculation/PDFs leave this purpose-bound reader. */
@@ -603,7 +604,7 @@ export async function readWorkshopQuoteGoodsAction(){
  try{const auth=await resolveAuthorization(),denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
   if(!auth.data.permissions.includes('perm_view_leitstand'))return {code:'FORBIDDEN' as const,message:'KV-Ware ist nicht freigegeben.'};
   const context={tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canReadQuote:true,canCreateQuote:false,canUpdateQuote:false,canConvertQuote:false}};
-  const result=await listOpenQuotesCommand({...context,capabilities:{...context.capabilities,canReadQuote:true}});
+  const result=await listOpenQuotesCommand(context);
   if(result.code!=='OK')return result;
   const today=berlinCalendarDay();
   const quotes=result.quotes.flatMap(quote=>{const life=quote.lifecycle;if(quote.linkedOrderId||!life)return [];
