@@ -300,6 +300,9 @@ it('RM03 real reply Action sends the explicit response, completes root and reply
  const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
  const {getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');
  const input={targetType:'CUSTOMER' as const,targetId:fixture.customerId,clientRequestId:randomUUID(),subject:'TEST Antwort zu Ihren Fotos',body:'TEST Die sichtbare Stelle ist keine neue Reklamation.',complaintRejection:{itemId:replyId,version:1,reason:'TEST sichtbare Stelle entspricht dem vereinbarten Zustand'}};
+ const {saveIntakeDraftAction,getIntakeDraftsAction}=await import('@/app/actions/eingang.actions');
+ const draftId=randomUUID();expect(await withSession(fixture,()=>saveIntakeDraftAction({id:draftId,clientEventId:randomUUID(),art:'eingang',payload:{kind:'rekla-response',version:1,clientKey:input.clientRequestId,sourceItemId:replyId,request:input,attempted:true},lastField:null,expectedVersion:null}))).toMatchObject({code:'OK'});
+ const resumed=await withSession(fixture,()=>getIntakeDraftsAction());if(resumed.code!=='OK')throw Error('TEST RM12 draft');const storedRequest=resumed.drafts.find(draft=>draft.id===draftId)?.payload.request as typeof input;expect(storedRequest).toEqual(input);expect(JSON.stringify(storedRequest)).not.toBe(JSON.stringify(input));
  const keys=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const,before=Object.fromEntries(keys.map(key=>[key,process.env[key]])),native=globalThis.fetch;let sends=0;
  try{
   process.env.MS_GRAPH_TENANT_ID='TEST-tenant';process.env.MS_GRAPH_CLIENT_ID='TEST-client';process.env.MS_GRAPH_CLIENT_SECRET='TEST-provider-fixture';process.env.MS_GRAPH_MAILBOX='TEST-mailbox@example.invalid';
@@ -310,7 +313,7 @@ it('RM03 real reply Action sends the explicit response, completes root and reply
   expect(await sql`SELECT von,nachher->>'reason' AS reason FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${replyId}::uuid AND nachher->>'action'='reklamation.keine_reklamation'`).toEqual([{von:fixture.actorId,reason:input.complaintRejection.reason}]);
   expect(await sql`SELECT user_id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientRequestId}::uuid AND event_type='INTAKE_COMPLAINT_RESPONSE_SENT_V1'`).toEqual([{user_id:fixture.actorId}]);
   expect(await sql`SELECT message.body,thread.status FROM public.communication_messages message JOIN public.communication_threads thread ON thread.tenant_id=message.tenant_id AND thread.id=message.thread_id WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId}`).toEqual([{body:input.body,status:'sent'}]);
-  expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
+  expect(await withSession(fixture,()=>sendCustomerMailAction(storedRequest))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
   expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}))).not.toMatchObject({code:'OK'});expect(sends).toBe(1);
   expect(await withSession(fixture,()=>getIntakeMessagesAction('alle'))).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:rootId,usage:'erledigt'}),expect.objectContaining({id:replyId,usage:'erledigt'})])});
  }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}

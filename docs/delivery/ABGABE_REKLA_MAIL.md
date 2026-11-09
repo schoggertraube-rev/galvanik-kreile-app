@@ -58,3 +58,7 @@ Neuer gezielter Fall in ein34_mail_import.integration.test.ts: echte Kunden-Acti
 Nur der Microsoft-HTTP-Rand verwendet ausdrücklich synthetische TEST-Nachrichten/Foto-Bytes. Datenbank, Sitzungen, sämtliche genannten Actions, Import-Writer, Storage und erneuter Nachrichtenleser sind echt. Keine Behauptung echten Microsoft-Versands oder Hardwarekamera. Ursprünglicher Fixture-Fehler „confirm“ ohne Kandidatenbeleg wurde auf den tatsächlichen UI-Weg „manual“ geändert; keine Produktregel oder bestehende Assertion gelockert. Alle älteren Testfälle unverändert.
 
 Damit ist die zuvor nur aus TEST-Metadaten geprüfte Thread-Verbindung zusätzlich über den vollständigen tatsächlichen Originalimport belegt. Weiter offen: exakte Preview/Sicht/Pflicht-CI und PL-Abnahme, PR erst nach freiem Slot.
+
+## RM-12: echter Entwurf vor Versand und Retry
+
+RM03 speichert den tatsächlichen Antwort-Command über `saveIntakeDraftAction`, liest den bestehenden `rekla-response`-Entwurf über `getIntakeDraftsAction` neu und sendet dessen tatsächlich JSONB-umsortierten Request. Der zweite Aufruf verwendet ebenfalls den neu gelesenen Request: genau eine Versandbestätigung, beide Anliegen abgeschlossen mit Grund und echtem Login, keine Reklamationszeile, Nachrichtenansicht erneut gelesen. PASS5,48s. Nur Microsoft-HTTP bleibt isolierte TEST-Grenze; keine echte Mail nach außen behauptet. Alle bisherigen fachlichen Assertions bleiben erhalten. Keine Änderung am Writer nötig, kein zusätzlicher PR.
