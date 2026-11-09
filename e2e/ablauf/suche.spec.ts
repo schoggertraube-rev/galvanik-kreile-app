@@ -74,6 +74,30 @@ it('S9 city matches only actual customers of this tenant',async()=>{
 });
 
 const goldenCustomers=new Map<string,string>();
+
+it('S34 actual customer search normalizes the stored German phone prefix without writing a record',async()=>{
+ const customerId=await customerFixture('S34');
+ const {updateCustomerAction}=await import('@/app/actions/customers.actions');
+ expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),companyName:'TEST Nord GmbH',phone:'+49 40 000000'}))).toMatchObject({code:'OK'});
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const found=await withSession(full,()=>searchTenantAction('040 000000'));
+ expect(found,JSON.stringify(found)).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'CUSTOMER',id:customerId,matchField:'phone'})])});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
+it('S55 actual multiword search combines customer and part as AND instead of unrelated OR hits',async()=>{
+ const nord=await customerFixture('Nord'),other=await customerFixture('Ost');
+ const matched=await searchOrderFixture('Leisten',nord);
+ const wrongPart=await searchOrderFixture('Schrauben',nord);
+ const wrongCustomer=await searchOrderFixture('Leisten',other);
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const found=await withSession(full,()=>searchTenantAction('Nord Leisten'));
+ expect(found.code).toBe('OK');if(found.code!=='OK')throw Error('S55_SEARCH:'+found.code);
+ const orders=found.hits.filter(hit=>hit.type==='ORDER');
+ expect(orders.map(hit=>hit.id)).toEqual([matched.receipt.orderId]);
+ expect(orders.some(hit=>hit.id===wrongPart.receipt.orderId||hit.id===wrongCustomer.receipt.orderId)).toBe(false);
+});
 it.each([
  ['S1','Schmitt',['TEST Reiner Schmitt','TEST Sabrina Schmidt','TEST Schmied Metallbau GmbH']],
  ['S2','Schmdit',['TEST Reiner Schmitt','TEST Sabrina Schmidt','TEST Schmied Metallbau GmbH']],

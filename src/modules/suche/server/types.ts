@@ -7,6 +7,7 @@ export type SearchHitType = "ORDER" | "CUSTOMER" | (string & {});
 
 export type SearchMatchField =
   | "orderNumber"
+  | "orderRecord"
   | "title"
   | "customerName"
   | "task"
@@ -19,6 +20,7 @@ export type SearchMatchField =
   | "customerNumber"
   | "city"
   | "customerRecord"
+  | "phone"
   | "quoteNumber"
   | "invoiceNumber"
   | "note"
@@ -67,6 +69,7 @@ export type SearchCustomerDocument = {
   companyName: string | null;
   customerType: string;
   city: string | null;
+  phone?: string | null;
 };
 
 export type SearchCustomerBatch = {

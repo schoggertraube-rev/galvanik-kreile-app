@@ -31,6 +31,23 @@ function ports(overrides: Partial<SearchPorts> = {}): SearchPorts {
 }
 
 describe("Path-1 Lane-0 search contract", () => {
+  it('proves all words on the same order and names their actual sources',async()=>{
+    const boundary=ports({readOrders:async()=>[
+      {...ORDER,id:'matched',customerName:'Nord GmbH',parts:[{name:'Leisten',material:'Stahl',surfaceRequested:null}]},
+      {...ORDER,id:'wrong-customer',customerName:'Ost GmbH',parts:[{name:'Leisten',material:'Stahl',surfaceRequested:null}]},
+      {...ORDER,id:'wrong-part',customerName:'Nord GmbH',parts:[{name:'Schrauben',material:'Stahl',surfaceRequested:null}]},
+    ]});
+    const result=await searchTenant('Nord Leisten',boundary);
+    expect(result).toMatchObject({code:'OK',hits:[{id:'matched',matchField:'orderRecord',matchValue:'Nord GmbH · Leisten'}]});
+  });
+
+  it('uses the existing customer phone normalization but never treats a short code or name as a phone',async()=>{
+    const boundary=ports({readOrders:async()=>[],searchCustomers:async()=>({records:[{...CUSTOMER,phone:'+49 40 000000'}],exhaustive:true})});
+    expect(await searchTenant('040 000000',boundary)).toMatchObject({code:'OK',hits:[{id:CUSTOMER.id,matchField:'phone',matchValue:'+49 40 000000'}]});
+    // A port must not claim an unrelated phone is a proved hit.
+    expect(await searchTenant('040',boundary)).toMatchObject({code:'UNAVAILABLE'});
+    expect(await searchTenant('Nord 040',boundary)).toMatchObject({code:'UNAVAILABLE'});
+  });
   it.each(["", " ", "x", " x "]) ("does not access ports below the minimum for %j", async (query) => {
     const boundary = ports();
     await expect(searchTenant(query, boundary)).resolves.toEqual({

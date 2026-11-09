@@ -1,4 +1,5 @@
 import {foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
+import {normaliseCustomerPhone} from '@/modules/customers/public';
 import {SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
 import {
   SEARCH_MAX_HITS,
@@ -92,6 +93,8 @@ function orderMatchField(order: SearchOrderDocument, query: string): SearchMatch
   if (includesQuery(order.customerName, query)) return "customerName";
   if (includesQuery(order.task, query)) return "task";
   if (dateSearchTerms(order.dueDate).some((term) => term.includes(query))) return "dueDate";
+  const words=query.split(/\s+/).filter(Boolean);
+  if(words.length>1&&words.every(word=>orderMatchField(order,word)!==null))return 'orderRecord';
   return null;
 }
 
@@ -101,6 +104,8 @@ export function customerMatchField(customer: SearchCustomerDocument, query: stri
   if (includesQuery(customer.companyName, query)) return "companyName";
   if (includesQuery(customer.customerNumber, query)) return "customerNumber";
   if (includesQuery(customer.city, query)) return "city";
+  if(/^[+\d\s()./-]+$/.test(query)&&normaliseCustomerPhone(query).length>=4
+    &&normaliseCustomerPhone(customer.phone).includes(normaliseCustomerPhone(query)))return 'phone';
   if (includesQuery(customerRecordText(customer), query)) return "customerRecord";
   if(nameSearchAlternative(customer.name,query))return 'name';
   if(nameSearchAlternative(customer.companyName,query))return 'companyName';
@@ -116,6 +121,7 @@ function customerRecordText(customer: SearchCustomerDocument): string {
 
 const MATCH_LABEL: Record<SearchMatchField, string> = {
   orderNumber: "Auftragsnummer", title: "Auftrag", customerName: "Kunde", task: "Aufgabe",
+  orderRecord: "Auftrag", phone: "Telefon",
   part: "Teil", material: "Material", surface: "Oberfläche", dueDate: "Termin",
   name: "Kundenname", companyName: "Firma", customerNumber: "Kundennummer", city: "Ort",
   customerRecord: "Kundendatensatz", quoteNumber: "KV-Nummer", invoiceNumber: "Rechnungsnummer",
@@ -123,6 +129,11 @@ const MATCH_LABEL: Record<SearchMatchField, string> = {
 };
 
 function orderMatchValue(order: SearchOrderDocument, field: SearchMatchField, query: string): string {
+  if(field==='orderRecord')return [...new Set(query.split(/\s+/).filter(Boolean).map(word=>{
+    const match=orderMatchField(order,word);
+    if(!match||match==='orderRecord')throw Error('SEARCH_ORDER_MATCH_UNPROVEN');
+    return orderMatchValue(order,match,word);
+  }))].join(' · ');
   if (field === "orderNumber") return order.orderNumber;
   if (field === "title") return order.title;
   if (field === "customerName") return order.customerName ?? "";
@@ -141,6 +152,7 @@ function customerMatchValue(customer: SearchCustomerDocument, field: SearchMatch
   if (field === "companyName") return customer.companyName ?? "";
   if (field === "customerNumber") return customer.customerNumber ?? "";
   if (field === "city") return customer.city ?? "";
+  if (field === "phone") return customer.phone ?? "";
   if (field === "customerRecord") return customerRecordText(customer);
   throw new Error("SEARCH_CUSTOMER_MATCH_UNPROVEN");
 }
