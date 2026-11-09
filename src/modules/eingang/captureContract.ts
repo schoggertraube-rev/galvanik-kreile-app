@@ -1,4 +1,4 @@
-import type {CaseActorTrace} from "@/lib/server/quoteJournalPort";
+import type {CaseActorTrace} from "@/lib/domain/caseActorContract";
 import type { IntakeTextRecognition } from "@/lib/server/intakeTextRecognition";
 import type { CaptureKind } from "./captureRecognition";
 

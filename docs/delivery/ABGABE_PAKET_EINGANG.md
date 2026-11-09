@@ -1,3 +1,9 @@
+## Main-Abgleich nach Owner-Automerge #205, 09.11. 09:31
+
+Der vorher gepruefte #204-Kopf8673d365 hatte nach #205 einen reinen Export-Konflikt. Main6028de6c wurde auf dem Feature-Zweig eingebunden. Der in #205 bewusst entfernte, nicht aufgerufene Statistik-Export bleibt entfernt; der tatsaechlich aufgerufene Paket-Erwartungs-Port bleibt erhalten. Keine Paketfunktion neu gebaut, keine Assertion entfernt, kein Checker geaendert. Neun gezielte echte Paket-/Akteur-Faelle10,29sPASS; Typen/Scope/W4/H18/WhitespacePASS. Owner-Automerge ist eingeschaltet; neue Pflicht-CI, exakte Preview und PL-Nachkontrolle am Integrationskopf stehen noch aus. Alte Preview/Pruef-SHAs sind nur historische Nachweise. Der neue exakte Kopf wird nach dem Commit im BAULOG festgehalten.
+
+---
+
 # AP-PAKET-EINGANG — letzte PL-Korrekturrunde, noch keine Merge-Abgabe
 
 Produkt-SHA dieser letzten Runde: `0ac9f092`. Der folgende Dokumentations-Commit trägt dieselbe Umsetzung. Die frühere Preview zu `b30ccfbe` ist kein Nachweis für diesen Kopf; neue exakte READY-URL und Check-SHA werden nach dem Git-Build im PR und BAULOG belegt.
