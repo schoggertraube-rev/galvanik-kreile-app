@@ -1,4 +1,6 @@
 "use client";
+import {IntakeResultHeader,IntakeResultOriginal} from './IntakeSituation';
+import {RESULT_COPY} from '@/ui/situationCatalog';
 import {useEffect,useRef,useState} from 'react';
 import {Button,Dialog,Eingabe,Feld,Hinweis,Rueckfrage,Textfeld} from '@/ui/kr';
 import {KundeFormular,EMPTY_CUSTOMER_FORM,customerDisplayName,kundeVollstaendigkeit,kundeValidierung,type CustomerFormValue} from '@/modules/customers/public';
@@ -94,6 +96,8 @@ export function PackageOnsiteEditor({capture,ports,onCapture,onClose,onDone,onPa
  const discardBlocked=async()=>{if(work.current||!draft.current||!ports.drafts)return;if(discardReason.trim().length<3){setError(C.discardReasonMissing);return;}work.current=true;setBusy(true);try{const result=await ports.drafts.discardDraft({id:draft.current.id,expectedVersion:draft.current.version,clientEventId:discardKey.current,reason:discardReason.trim()});if(result.code!=='OK'){setError(C.blocked(result.code,missingFields()));return;}window.dispatchEvent(new Event('kreile:intake-drafts-changed'));onClose();}catch(failure){console.error('[PACKAGE_ONSITE_DISCARD_FAILED]',failure);setError(C.draftMissing);}finally{work.current=false;setBusy(false);}};
  const close=()=>{if(work.current)return;if(frozen){if(onPause)onPause();else onClose();return;}setClosePrompt(true);};
  return <><Dialog titel={C.title} groesse="breit" onSchliessen={close} fuss={<><Button text={C.close} disabled={busy} onClick={close}/><Button art="erledigen" text={busy?C.pending:frozen?C.retry:C.confirm} disabled={busy||!ready||!prefilled} onClick={()=>void save()}/></>}>
+ <IntakeResultHeader title={progress?.quoteNumber??C.title} presentation={{status:missingFields().length?'missing':'waiting',missing:missingFields(),waiting:RESULT_COPY.confirmation,facts:[{label:RESULT_COPY.customer,value:selected?.name??progress?.customerName},{label:RESULT_COPY.number,value:progress?.quoteNumber}]}} originalCount={capture.files.filter(file=>file.secured===true).length} original={<IntakeResultOriginal originals={capture.files.filter(file=>file.secured===true)} readOriginal={ports.readCaptureOriginal} onOpen={fileId=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'original',arg:capture.id+'#'+fileId}}))}/>}/>
+
  {error?<div role="alert"><Hinweis ton="warn">{error}</Hinweis>{conflict?<Button text={C.reload} disabled={busy} onClick={()=>void reloadStand()}/>:null}</div>:null}{frozen?<Hinweis>{C.frozen}</Hinweis>:null}{hasDraft&&error?<><Feld label={C.discardReason}><Textfeld value={discardReason} onChange={e=>setDiscardReason(e.target.value)}/></Feld><Button text={C.discardDraft} disabled={busy} onClick={()=>void discardBlocked()}/></>:null}
  <fieldset disabled={busy||frozen||!prefilled} style={{border:0,padding:0,margin:0}}>
  {progress?<Hinweis>{C.partial(progress.customerName,progress.quoteNumber)}<Button text={C.openCustomer} onClick={()=>ports.openCustomer(progress.customerId)}/><Button text={C.openQuote} onClick={()=>{onPause?.();window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:progress.quoteId}}));}}/></Hinweis>:null}

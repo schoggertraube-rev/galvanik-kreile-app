@@ -1,4 +1,6 @@
 'use client';
+import {IntakeResultHeader,IntakeResultOriginal} from './IntakeSituation';
+import {RESULT_COPY} from '@/ui/situationCatalog';
 import {ACTOR_COPY} from '@/ui/situationCatalog';
 import {useEffect,useRef,useState} from 'react';
 import {Button,Checkbox,Dialog,Eingabe,Feld,Hinweis,Kachel,Rueckfrage,Segment,Textfeld,Zustandskette} from '@/ui/kr';
@@ -101,6 +103,8 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
    {duplicate?<><Button data-spec-id="rechnungein.doppelt-ablegen" text="Als doppelt ablegen" art="erledigen" disabled={busy} onClick={()=>void save('doppelt')}/>{!duplicate.exact?<Button data-spec-id="rechnungein.trotzdem" text="Trotzdem erfassen" disabled={busy} onClick={()=>{if(duplicateReason.trim().length<3||duplicateReason.length>200){setErrors({duplicateReason:'Grund fehlt · 3 bis 200 Zeichen'});return;}setDuplicate(null);}}/>:null}</>:mode!=='ansicht'?<Button data-spec-id={'rechnungein.'+primaryId} art="erledigen" icon="check" text={primaryLabel} disabled={busy} onClick={primary}/>:null}
   </>}>
  <div ref={root} data-spec-id="rechnungein" aria-busy={busy} className="kr-stapel">
+ <IntakeResultHeader title={fields.nummer?RESULT_COPY.savedInvoice(fields.nummer):RESULT_COPY.invoice} presentation={{status:view.invoice&&view.invoice.zahlstatus==='bezahlt'?'done':Object.keys(invoiceFieldErrors(fields,false)).length?'missing':'waiting',missing:Object.keys(invoiceFieldErrors(fields,false)).map(key=>fieldRows.find(row=>row[0]===key)?.[2]??(key==='lieferantId'?RESULT_COPY.supplier:key)),waiting:RESULT_COPY.confirmation,facts:[{label:RESULT_COPY.supplier,value:selected?.name},{label:RESULT_COPY.number,value:fields.nummer},{label:RESULT_COPY.date,value:fields.datum},{label:RESULT_COPY.gross,value:fields.brutto,emphasis:true}]}} originalCount={view.originals.length} original={<IntakeResultOriginal originals={view.originals} readOriginal={ports.readOriginal} onOpen={fileId=>ports.openOriginal(view.item.id,fileId)}/>}/>
+
   {view.actorTrace?<section data-spec-id="rechnungein.akteure">{view.actorTrace.createdBy?<p>{(view.invoice?ACTOR_COPY.created:ACTOR_COPY.received)(view.actorTrace.createdBy.name??ACTOR_COPY.unknownLogin,new Date(view.actorTrace.createdBy.at).toLocaleString('de-DE'))}</p>:<p>{ACTOR_COPY.missingCase}</p>}{view.actorTrace.lastActor?<p>{ACTOR_COPY.last(view.actorTrace.lastActor.name??ACTOR_COPY.unknownLogin,ACTOR_COPY.action(view.actorTrace.lastActor.action))}</p>:null}</section>:null}
   <div className="ev-rweg"><Zustandskette schritte={[
    {key:'eingegangen',label:'Eingegangen',icon:'check',status:'erledigt',sub:new Intl.DateTimeFormat('de-DE').format(new Date(view.item.at))},

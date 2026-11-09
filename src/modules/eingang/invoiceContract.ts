@@ -60,6 +60,7 @@ export type InvoiceResult = {
   code: 'OK'; invoice: IncomingInvoice; replayed: boolean;
 } | { code: 'DUPLICATE'; message: string; duplicate: InvoiceDuplicate } | InvoiceFailure;
 export type InvoicePorts = {
+  readOriginal?: (input:{fileId:string;clientEventId:string})=>Promise<import('./originalContract').OriginalReadResult>;
   read: (request: { id: string }) => Promise<InvoiceReadResult>;
   save: (input: InvoiceSaveInput) => Promise<InvoiceResult>;
   status: (input: InvoiceChangeInput) => Promise<InvoiceResult>;

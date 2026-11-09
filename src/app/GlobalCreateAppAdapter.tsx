@@ -84,7 +84,7 @@ export function GlobalCreateAppAdapter() {
     },
   }),[areas,openOrder,canAction]);
   const taskCanManageMoney=hasArea('geld');
-  const invoicePorts=useMemo<InvoicePorts>(()=>({read:getIncomingInvoiceAction,save:saveIncomingInvoiceAction,status:changeIncomingInvoiceStatusAction,clarify:clarifyIncomingInvoiceAction,searchSuppliers:searchInvoiceSuppliersAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,
+  const invoicePorts=useMemo<InvoicePorts>(()=>({readOriginal:openIntakeOriginalAction,read:getIncomingInvoiceAction,save:saveIncomingInvoiceAction,status:changeIncomingInvoiceStatusAction,clarify:clarifyIncomingInvoiceAction,searchSuppliers:searchInvoiceSuppliersAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,
     openOriginal:(itemId,fileId)=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'original',arg:itemId+'#'+fileId}})),
     openTask:taskId=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'aufgabe',arg:taskId}})),
     createSupplier:async itemId=>{const source=await getIncomingInvoiceAction({id:itemId});if(source.code!=='OK')return source;requestGlobalCreate({intent:'CUSTOMER',prefill:{sourceItemId:itemId,sourceVersion:source.view.item.version,customerMode:'lieferant',name:source.view.item.sender??undefined}});return {code:'OK'};},
