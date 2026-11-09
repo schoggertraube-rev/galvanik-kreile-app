@@ -247,7 +247,7 @@ export function mapPaymentSummaryRow(
 
   if (
     !(openStateValid || (settledStateValid && (paidStateValid || partialStateValid)))
-    || row.goods_out_allowed !== (mode === "rechnung" || mode === "abholung" || status === "bezahlt")
+    || row.goods_out_allowed !== (mode === "rechnung" || status === "bezahlt")
   ) {
     throw new Error("PAYMENT_SUMMARY_STATE_INVALID");
   }

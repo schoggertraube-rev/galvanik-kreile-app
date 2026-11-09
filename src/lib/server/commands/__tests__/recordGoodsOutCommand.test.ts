@@ -107,7 +107,7 @@ function summary(paymentMode: "vorkasse" | "abholung" | "rechnung", status: "off
     payment_correlation_id: status === "offen" ? null : "55555555-5555-4555-8555-555555555555",
     payment_mode_version: 0,
     payment_version: status === "offen" ? 0 : 1,
-    goods_out_allowed: paymentMode === "rechnung" || paymentMode === "abholung" || status === "bezahlt",
+    goods_out_allowed: paymentMode === "rechnung" || status === "bezahlt",
     integrity_ok: true,
   };
 }
@@ -326,9 +326,10 @@ describe("recordGoodsOut", () => {
       execute.mockReset();
       configureSuccess({ paymentMode: "abholung", paymentStatus, mode: "abholung" });
       await expect(recordGoodsOut({ ...input, mode: "abholung" })).resolves.toMatchObject({
-        code: "OK",
-        receipt: { paymentMode: "abholung", paymentStatus },
+        code: "CONFLICT",
+        message: "Zahlung ist für den Warenausgang noch offen.",
       });
+      expect(execute.mock.calls.map(([query]) => queryText(query as Query)).join("\n")).not.toContain("UPDATE public.orders");
     }
 
     execute.mockReset();

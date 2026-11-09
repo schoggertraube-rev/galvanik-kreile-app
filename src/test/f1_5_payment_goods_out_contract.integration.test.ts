@@ -4,7 +4,9 @@ import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+const isolatedTenant=vi.hoisted(()=>'TEST-f15-'+globalThis.crypto.randomUUID());
+vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:isolatedTenant}));
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import type { AppSession } from "@/lib/server/appSession";
 import type { PaymentMode } from "@/lib/server/paymentContract";
@@ -83,7 +85,7 @@ type PaymentViewRow = {
 
 function createFixture(label: "own" | "foreign", invoiceNumber: string): PaymentFixture {
   return {
-    tenantId: `f15-${label}-${suffix}`,
+    tenantId: `TEST-f15-${label}-${suffix}`,
     userId: randomUUID(),
     customerId: `f15-${label}-customer-${suffix}`,
     orderId: `f15-${label}-order-${suffix}`,
@@ -747,7 +749,7 @@ describe("F1.5 payment and goods-out contract", () => {
     })).rejects.toBe(rollbackSignal);
   });
 
-  it("runs the real command path through the Vorkasse gate, open Abholung and invoice-less Rechnung V2", async () => {
+  it("runs the real command path through the Vorkasse gate, paid Abholung and invoice-less Rechnung V2", async () => {
     await seedCommandPrerequisites();
     const { recordGoodsOut } = await import("@/lib/server/commands/recordGoodsOutCommand");
     const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
@@ -784,6 +786,12 @@ describe("F1.5 payment and goods-out contract", () => {
 
     const pickup = await createCommandReadyOrder(`abholung-${suffix}`, "abholung", true);
     if (!pickup.invoiceId || pickup.grossAmountCents === null) throw new Error("ISSUED_INVOICE_MISSING");
+    const pickupBeforePayment = await readCommandSnapshot(pickup.orderId);
+    await expect(withRealSession("werkstatt", () => recordGoodsOut({
+      orderId: pickup.orderId, mode: "abholung", expectedVersion: pickup.version, clientEventId: randomUUID(),
+    }))).resolves.toMatchObject({code:"CONFLICT",message:"Zahlung ist für den Warenausgang noch offen."});
+    expect(await readCommandSnapshot(pickup.orderId)).toEqual(pickupBeforePayment);
+    expect(await confirmCommandPayment(pickup.invoiceId,pickup.grossAmountCents)).toMatchObject({code:"OK"});
     const pickupGoodsOut = await withRealSession("werkstatt", () => recordGoodsOut({
       orderId: pickup.orderId,
       mode: "abholung",
@@ -796,8 +804,8 @@ describe("F1.5 payment and goods-out contract", () => {
       receipt: {
         eventSchemaVersion: 1,
         paymentMode: "abholung",
-        paymentStatus: "offen",
-        openAmountCents: pickup.grossAmountCents,
+        paymentStatus: "bezahlt",
+        openAmountCents: 0,
       },
     });
     expect(await readCommandSnapshot(pickup.orderId)).toMatchObject({
@@ -817,8 +825,8 @@ describe("F1.5 payment and goods-out contract", () => {
         physicalStatus: "abgeholt",
         payment: {
           mode: "abholung",
-          status: "offen",
-          openAmountCents: pickup.grossAmountCents,
+          status: "bezahlt",
+          openAmountCents: 0,
         },
         goodsOut: { eventSchemaVersion: 1, mode: "abholung" },
       },
