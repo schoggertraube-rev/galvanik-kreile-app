@@ -38,7 +38,8 @@
     "@/modules/orders/public#ComplaintPanel",
     "@/modules/orders/public#OrderActorEvidence",
     "@/modules/orders/public#OrderActorSummary",
-    "@/modules/orders/server-public#readOrderActors"
+    "@/modules/orders/server-public#readOrderActors",
+    "@/modules/orders/server-public#readPackageOrderCustomers"
   ],
   "capabilities": [],
   "migrations": [

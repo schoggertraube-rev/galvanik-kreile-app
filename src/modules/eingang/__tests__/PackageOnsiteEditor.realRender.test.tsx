@@ -34,7 +34,7 @@ it('unlocks a validation rejection and offers durable discard with a reason for 
  const send=vi.fn(async()=>({code:'VALIDATION_ERROR',message:'TEST internal SQL diagnostic'})),discard=vi.fn(async()=>({code:'OK',drafts:[]})),close=vi.fn();
  const ports={drafts:{readDrafts:vi.fn(async()=>({code:'OK',drafts:[draft]})),saveDraft:vi.fn(),discardDraft:discard},receiveOnsiteQuote:send,listCustomers:vi.fn(),recognizeIntakeText:vi.fn(),searchIntakeCustomers:vi.fn(async()=>({code:'OK',customers:[]}))} as unknown as GlobalCreatePorts;
  render(<PackageOnsiteEditor capture={capture} ports={ports} onCapture={vi.fn()} onClose={close} onDone={vi.fn()}/>);
- fireEvent.click(await screen.findByRole('button',{name:'Mit gleicher Kennung erneut buchen'}));await screen.findByText(/Du kannst sie weiter bearbeiten/);
+ fireEvent.click(await screen.findByRole('button',{name:'Mit gleicher Kennung erneut buchen'}));await screen.findByText(/Es fehlen noch:.*Paketetikett als Original.*Inhaltsfoto als Original/);
  expect(screen.getByDisplayValue('TEST E1')).toBeEnabled();expect(screen.queryByText('TEST internal SQL diagnostic')).not.toBeInTheDocument();
  fireEvent.click(screen.getByRole('button',{name:'Entwurf verwerfen'}));expect(discard).not.toHaveBeenCalled();
  fireEvent.change(screen.getByLabelText('Grund für das Verwerfen'),{target:{value:'TEST vom Kunden zurückgezogen'}});fireEvent.click(screen.getByRole('button',{name:'Entwurf verwerfen'}));
@@ -57,6 +57,9 @@ it('shared goods inspection exposes danger and the canonical contamination reaso
  const ports={drafts:{readDrafts:vi.fn(async()=>({code:'OK',drafts:[draft]}))},receiveOnsiteQuote:vi.fn(),searchIntakeCustomers:vi.fn(async()=>({code:'OK',customers:[]}))} as unknown as GlobalCreatePorts;
  render(<PackageOnsiteEditor capture={capture} ports={ports} onCapture={vi.fn()} onClose={vi.fn()} onDone={vi.fn()}/>);
  await screen.findByText(/Kunde TEST Kundin und KV/);
+ expect(screen.queryByLabelText('Paketetikett als Original')).not.toBeInTheDocument();expect(screen.queryByLabelText('Inhaltsfoto als Original')).not.toBeInTheDocument();expect(screen.queryByLabelText('Foto der Abweichung')).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Fotos'}));
+ expect(document.querySelectorAll('input[type="file"]')).toHaveLength(3);
  fireEvent.click(screen.getByRole('button',{name:'Zustand'}));
  fireEvent.click(screen.getByRole('button',{name:'Gefahr'}));
  expect(screen.getByRole('button',{name:'Gefahr'})).toHaveAttribute('aria-pressed','true');

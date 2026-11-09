@@ -1,4 +1,5 @@
 "use client";
+import {PACKAGE_ONSITE_COPY} from '@/ui/situationCatalog';
 import type { ReactNode } from "react";
 import { Button, Eingabe, Feld, Icon, Segment } from "@/ui/kr";
 import { orderPositionUnitLabel,orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
@@ -36,11 +37,11 @@ export function GoodsInspectionForm<T extends GoodsInspectionValue>({value,order
     return <article key={item.id} data-goods-position={index+1} className="kr-kachel"><div className="kr-kachel-inhalt"><strong>{item.name}</strong><p>erwartet {item.quantity} {item.unit?orderPositionUnitLabel(item.unit):'Einheit fehlt'} · {item.surface?orderPositionSurfaceLabel(item.surface):'Oberfläche fehlt'}</p>
      <button type="button" className="kr-btn" data-spec-id={`${prefix}.position.stimmt`} aria-pressed={current.confirmed} onClick={()=>update({confirmed:!current.confirmed,received:null})}>stimmt</button>
      {!current.confirmed?<Feld label="geliefert"><Eingabe data-spec-id={`${prefix}.position.geliefert`} type="number" min="0" step="any" value={current.received??''} onChange={e=>update({received:e.target.value===''?null:Number(e.target.value)})}/></Feld>:null}
-     {!current.confirmed&&current.received!==null&&current.received!==current.expected?<Feld label="Abweichungsgrund"><Eingabe value={current.note??''} onChange={e=>update({note:e.target.value||null})}/></Feld>:null}
+     {!current.confirmed&&current.received!==null&&current.received!==current.expected?<Feld label={PACKAGE_ONSITE_COPY.deviationReason}><Eingabe value={current.note??''} onChange={e=>update({note:e.target.value||null})}/></Feld>:null}
      {item.note?<p>{item.note}</p>:null}
     </div></article>;
    })}</div>
-   {order.fromQuote?<div data-spec-id={`${prefix}.verfahren`}><Segment label="Verfahren/Termin wie im KV?" wert={value.procedure??''} optionen={[{wert:'stimmt',text:'stimmt'},{wert:'abweichend',text:'abweichend'}]} onWert={procedure=>change({procedure:procedure||null})}/>{value.procedure==='abweichend'?<Feld label="Abweichungsgrund"><Eingabe value={value.procedureNote??''} onChange={e=>change({procedureNote:e.target.value||null})}/></Feld>:null}</div>:null}
+   {order.fromQuote?<div data-spec-id={`${prefix}.verfahren`}><Segment label="Verfahren/Termin wie im KV?" wert={value.procedure??''} optionen={[{wert:'stimmt',text:'stimmt'},{wert:'abweichend',text:'abweichend'}]} onWert={procedure=>change({procedure:procedure||null})}/>{value.procedure==='abweichend'?<Feld label={PACKAGE_ONSITE_COPY.deviationReason}><Eingabe value={value.procedureNote??''} onChange={e=>change({procedureNote:e.target.value||null})}/></Feld>:null}</div>:null}
    {order.note?<p><b>Hinweise für die Werkstatt:</b> {order.note}</p>:null}
   </>)}
  </div>;

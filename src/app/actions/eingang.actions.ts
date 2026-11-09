@@ -3,6 +3,8 @@ import {PACKAGE_ASSIGN_COPY} from "@/ui/situationCatalog";
 import {quoteOperationContext,canReadQuoteForGoods} from "@/lib/server/quoteAuthorization";
 
 import {listOpenQuotesCommand,readPackageQuoteHistory} from '@/modules/quotes/server-public';
+import {readPackageOrderCustomers} from '@/modules/orders/server-public';
+import type {PackageCustomerHistory} from '@/lib/server/packageIntakeContextPort';
 import {readPackageExpectation} from '@/modules/eingang/server-public';
 import type {IntakeCaptureResult} from '@/modules/eingang/public';
 async function withPackageExpectation(result:IntakeCaptureResult):Promise<IntakeCaptureResult>{
@@ -13,7 +15,11 @@ async function withPackageExpectation(result:IntakeCaptureResult):Promise<Intake
   const canReadExpected=canReadQuoteForGoods(auth.data);
   const quotes=canReadExpected?await listOpenQuotesCommand(quoteContext,result.capture.customerId??undefined):null;
   const history=!result.capture.customerId?await readPackageQuoteHistory(auth.data,result.capture.recognition?.text??result.capture.text??''):[];
-  result.capture.packageContext=await withPrivilegedTenantTransaction(auth.data,tx=>readPackageExpectation(tx,auth.data,result.capture,quotes,history));
+  result.capture.packageContext=await withPrivilegedTenantTransaction(auth.data,async tx=>{
+   const orderHistory:PackageCustomerHistory[]=[];
+   if(!result.capture.customerId)for(const row of await readPackageOrderCustomers(tx,auth.data,result.capture.recognition?.text??result.capture.text??'')){const customer=await readCustomerProfile(tx,auth.data.tenantId,row.customerId);if(customer)orderHistory.push({...row,customerName:customer.name,source:'order'});}
+   return readPackageExpectation(tx,auth.data,result.capture,quotes,history,orderHistory);
+  });
  }catch(error){console.error('[PACKAGE_EXPECTATION_READ_FAILED]',error);result.capture.packageContext={status:'UNAVAILABLE',message:PACKAGE_ASSIGN_COPY.unavailable};}
  return result;
 }
@@ -87,7 +93,7 @@ async function syncIntakeMailbox():Promise<string|null>{
  }catch(error){console.error('[INTAKE_MAIL_SYNC_FAILED]',error);return 'Neue Mails momentan nicht abrufbar · bereits gesicherte Eingänge bleiben verfügbar.';}
 }
 import { processIntakeDeviceRequest, discardIntakeCapture, chooseIntakeCaptureKind } from "@/modules/eingang/server-public";
-export async function chooseIntakeCaptureKindAction(input: unknown) { return withPackageExpectation(await chooseIntakeCaptureKind(input)); }
+export async function chooseIntakeCaptureKindAction(input: unknown) { return chooseIntakeCaptureKind(input); }
 import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation } from "@/modules/eingang/server-public";
 import {saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,type GoodsReceiptResult} from "@/modules/eingang/server-public";
 import {parseGoodsReceiptInput} from "@/modules/eingang/public";
@@ -126,11 +132,11 @@ import { saveIntakeNote, readIntakeCapture, readIntakeNoteText, readIntakePendin
 import type { IntakeContext } from "@/modules/eingang/public";
 
 export async function saveIntakeNoteAction(input: unknown) {
-  return withPackageExpectation(await saveIntakeNote(input, readCustomerProfile));
+  return saveIntakeNote(input, readCustomerProfile);
 }
 export async function discardIntakeCaptureAction(input:unknown){return discardIntakeCapture(input);}
 export async function prepareIntakeFileAction(input: unknown) { return prepareIntakeFile(input); }
-export async function finishIntakeFileAction(fileId: string) { return withPackageExpectation(await finishIntakeFile(fileId)); }
+export async function finishIntakeFileAction(fileId: string) { return finishIntakeFile(fileId); }
 export async function getIntakePendingScopeAction() { return readIntakePendingScope(); }
 export async function getIntakeFileChangesAction(since: string, after: string | null) { return readIntakeFileChanges(since, after); }
 export async function saveIntakeDeviceRequestAction(input: unknown) {
@@ -140,7 +146,7 @@ export async function saveIntakeDeviceRequestAction(input: unknown) {
 }
 export async function getIntakeCaptureAction(itemId: string, context?: IntakeContext, options?:{packageExpectation?:boolean}) {
   const read=await readIntakeCapture(itemId, context);
-  return options?.packageExpectation===false?read:withPackageExpectation(read);
+  return options?.packageExpectation===true?withPackageExpectation(read):read;
 }
 export async function recognizeIntakeNoteAction(text: string) {
   const authorization = await resolveAuthorization();

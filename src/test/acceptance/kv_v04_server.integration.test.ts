@@ -1448,16 +1448,18 @@ it('PE-04 actual package history offers existing customers without assigning; se
  const itemId=randomUUID();const saved=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'DPD Paket mit 2 Tuergriff verchromen'}));
  if(saved.code!=='OK')throw Error(saved.message);
  expect(saved.capture.customerId).toBeNull();
- expect(saved.capture.packageContext).toMatchObject({status:'OK',customers:expect.arrayContaining([expect.objectContaining({customerId:fixture.customerId,source:'order'})])});
- expect(saved.capture.packageContext).toMatchObject({status:'OK',customers:expect.arrayContaining([expect.objectContaining({customerId:quoteCustomer.customerId,source:'quote'})])});
- expect(saved.capture.packageContext?.status==='OK'&&saved.capture.packageContext.customers.length).toBeLessThanOrEqual(3);
+ expect(saved.capture.packageContext).toBeUndefined();
+ const expected=await withSession(fixture,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:true}));if(expected.code!=='OK')throw Error(expected.message);
+ expect(expected.capture.packageContext).toMatchObject({status:'OK',customers:expect.arrayContaining([expect.objectContaining({customerId:fixture.customerId,source:'order'})])});
+ expect(expected.capture.packageContext).toMatchObject({status:'OK',customers:expect.arrayContaining([expect.objectContaining({customerId:quoteCustomer.customerId,source:'quote'})])});
+ expect(expected.capture.packageContext?.status==='OK'&&expected.capture.packageContext.customers.length).toBeLessThanOrEqual(3);
  expect((await sql`SELECT kunde_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].kunde_id).toBeNull();
  const request={itemId,version:saved.capture.version,clientEventId:randomUUID(),customerId:fixture.customerId,mode:'manual' as const};
  expect(await withSession(fixture,()=>assignIntakeCustomerAction(request))).toMatchObject({code:'OK',replayed:false});
  expect(await withSession(fixture,()=>assignIntakeCustomerAction(request))).toMatchObject({code:'OK',replayed:true});
  expect((await sql`SELECT kunde_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].kunde_id).toBe(fixture.customerId);
  expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${request.clientEventId}::uuid AND von=${fixture.actorId}`).toHaveLength(1);
- expect(await withSession(fixture,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{customerId:fixture.customerId,packageContext:{status:'OK',customers:[]}}});
+ expect(await withSession(fixture,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:true}))).toMatchObject({code:'OK',capture:{customerId:fixture.customerId,packageContext:{status:'OK',customers:[]}}});
 });
 
 it('PE-06 two actual accepted quotes remain ambiguous and a restricted capture reader receives no hidden candidates',async()=>{
@@ -1468,19 +1470,22 @@ it('PE-06 two actual accepted quotes remain ambiguous and a restricted capture r
   expect(await withSession(fixture,()=>changeQuoteLifecycleAction({quoteId:made.quote.quoteId,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST aktuelle Fassung tatsaechlich gedruckt'}))).toMatchObject({code:'OK'});
   expect(await withSession(fixture,()=>changeQuoteLifecycleAction({quoteId:made.quote.quoteId,expectedVersion:2,edition:1,clientEventId:randomUUID(),action:'accept',evidence:'TEST ausdrueckliche Zusage'}))).toMatchObject({code:'OK'});
  }
- const {saveIntakeNoteAction}=await import('@/app/actions/eingang.actions');const itemId=randomUUID();
- const read=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'DPD Paket mit 2 Halter',context:{customerId:fixture.customerId}}));
- if(read.code!=='OK')throw Error(read.message);
+ const {saveIntakeNoteAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');const itemId=randomUUID();
+ const saved=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'DPD Paket mit 2 Halter',context:{customerId:fixture.customerId}}));
+ if(saved.code!=='OK')throw Error(saved.message);
+ expect(saved.capture.packageContext).toBeUndefined();
+ const read=await withSession(fixture,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:true}));if(read.code!=='OK')throw Error(read.message);
  expect(read.capture.packageContext).toMatchObject({status:'OK',ambiguous:true,candidates:expect.arrayContaining(quoteIds.map(id=>expect.objectContaining({kind:'quote',id,state:'accepted'})))});
  if(read.capture.packageContext?.status==='OK')expect(read.capture.packageContext.candidates.every(candidate=>!Object.hasOwn(candidate,'totalNetCents'))).toBe(true);
  expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(0);
  const workshop=await createFixture(false,['eingang','kunden','auftraege'],'werkstatt');
- const {getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
- const workshopRead=await withSession(workshop,()=>getIntakeCaptureAction(itemId));
+ const workshopRead=await withSession(workshop,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:true}));
  expect(workshopRead).toMatchObject({code:'OK',capture:{packageContext:{status:'OK',ambiguous:true,candidates:expect.arrayContaining(quoteIds.map(id=>expect.objectContaining({id,state:'accepted'})))}}});
  if(workshopRead.code==='OK'&&workshopRead.capture.packageContext?.status==='OK')for(const candidate of workshopRead.capture.packageContext.candidates)expect(candidate).not.toHaveProperty('totalNetCents');
  const restricted=await createFixture(false,['eingang']);const otherId=randomUUID();
- const limited=await withSession(restricted,()=>saveIntakeNoteAction({itemId:otherId,textstand:randomUUID(),text:'DPD Paket mit 2 Halter'}));
+ const limitedSaved=await withSession(restricted,()=>saveIntakeNoteAction({itemId:otherId,textstand:randomUUID(),text:'DPD Paket mit 2 Halter'}));
+ expect(limitedSaved).toMatchObject({code:'OK'});
+ const limited=await withSession(restricted,()=>getIntakeCaptureAction(otherId,undefined,{packageExpectation:true}));
  expect(limited).toMatchObject({code:'OK',capture:{packageContext:{status:'OK',customers:[],candidates:[]}}});
  if(limited.code==='OK')expect(limited.capture.expectedOrders).toBeUndefined();
 });
@@ -1495,4 +1500,24 @@ it('PE204 customer-filtered existing quote reader excludes other customers befor
  const filtered=await withSession(first,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST auth missing');return listOpenQuotesCommand(quoteOperationContext(auth.data),first.customerId);});
  expect(filtered).toMatchObject({code:'OK',quotes:[expect.objectContaining({customerId:first.customerId})]});
  if(filtered.code==='OK')expect(filtered.quotes.every(quote=>quote.customerId===first.customerId)).toBe(true);
+});
+
+
+it.each(['admin','buero','werkstatt','developer'] as const)('PE204 final rights and unassigned candidates: %s matches main plus U-249 without amounts',async role=>{
+ const owner=await createFixture();const token='Pruefteil'+randomUUID().replaceAll('-','');
+ const {createQuoteAction,changeQuoteLifecycleAction,readWorkshopQuoteGoodsAction}=await import('@/app/actions/quotes.actions');
+ const made=await withSession(owner,()=>createQuoteAction({clientEventId:randomUUID(),customerId:owner.customerId,dueDate:'2027-04-20',note:'TEST final rights',positions:[{name:token,quantity:2,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));if(made.code!=='OK')throw Error(made.message);
+ expect(await withSession(owner,()=>changeQuoteLifecycleAction({quoteId:made.quote.quoteId,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST tatsächlicher Druck'}))).toMatchObject({code:'OK'});
+ expect(await withSession(owner,()=>changeQuoteLifecycleAction({quoteId:made.quote.quoteId,expectedVersion:2,edition:1,clientEventId:randomUUID(),action:'accept',evidence:'TEST tatsächliche Zusage'}))).toMatchObject({code:'OK'});
+ const {saveIntakeNoteAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');const itemId=randomUUID();
+ expect(await withSession(owner,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'DPD Paket '+token}))).toMatchObject({code:'OK'});
+ const reader=await createFixture(false,['eingang','kunden','auftraege'],role);
+ const candidate=await withSession(reader,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:true}));
+ const goods=await withSession(reader,()=>readWorkshopQuoteGoodsAction());
+ if(role==='developer'){expect(candidate.code).toBe('FORBIDDEN');expect(goods.code).toBe('FORBIDDEN');return;}
+ expect(candidate).toMatchObject({code:'OK',capture:{customerId:null,packageContext:{status:'OK',candidates:[expect.objectContaining({id:made.quote.quoteId,customerId:owner.customerId,state:'accepted'})]}}});
+ expect(goods).toMatchObject({code:'OK',quotes:expect.arrayContaining([expect.objectContaining({id:made.quote.quoteId})])});
+ if(candidate.code==='OK'&&candidate.capture.packageContext?.status==='OK')for(const row of candidate.capture.packageContext.candidates){expect(row).not.toHaveProperty('totalNetCents');expect(row).not.toHaveProperty('positions');}
+ expect(JSON.stringify(goods)).not.toMatch(/unitPriceCents|totalNetCents|lineTotalCents/);
+ expect((await sql`SELECT kunde_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].kunde_id).toBeNull();
 });

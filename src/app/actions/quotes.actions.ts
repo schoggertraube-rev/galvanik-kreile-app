@@ -1,5 +1,5 @@
 "use server";
-import {quoteCommandContext,quoteOperationContext,canReadQuoteForGoods} from '@/lib/server/quoteAuthorization';
+import {quoteCommandContext,quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 import {readMicrosoftGraphSentDocumentEvidence} from "@/lib/server/microsoftGraph";
@@ -602,8 +602,8 @@ export async function receiveOnsiteQuoteAction(input:import("@/lib/onsiteQuoteCo
 export async function readWorkshopQuoteGoodsAction(){
  noStore();
  try{const auth=await resolveAuthorization(),denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
-  if(!canReadQuoteForGoods(auth.data))return {code:'FORBIDDEN' as const,message:'KV-Ware ist nicht freigegeben.'};
-  const context={tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canReadQuote:canReadQuoteForGoods(auth.data),canCreateQuote:false,canUpdateQuote:false,canConvertQuote:false}};
+  if(!auth.data.permissions.includes('perm_view_leitstand'))return {code:'FORBIDDEN' as const,message:'KV-Ware ist nicht freigegeben.'};
+  const context={tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canReadQuote:true,canCreateQuote:false,canUpdateQuote:false,canConvertQuote:false}};
   const result=await listOpenQuotesCommand(context);
   if(result.code!=='OK')return result;
   const today=berlinCalendarDay();

@@ -1,4 +1,19 @@
-# AP-PAKET-EINGANG — laufender Bau, keine Merge-Abgabe
+# AP-PAKET-EINGANG — letzte PL-Korrekturrunde, noch keine Merge-Abgabe
+
+## Maßgeblicher Stand: PL-Nachtrag 09.11. „06:35“, acht Punkte
+
+1. `quoteOperationContext` bleibt unverändert (U-249). `readWorkshopQuoteGoodsAction` prüft wieder exakt die Leitstand-Berechtigung von main, ohne zusätzliche Bereichsbedingung. Neuer echter Rollenlauf für Admin/Büro/Werkstatt/Entwickler: KV-Kandidaten und Werkstatt-Warenleser erlaubt/gesperrt wie main; beide DTOs ohne Geldbeträge. Vier PASS.
+2. Ohne Kunden werden tatsächlich gelesene offene KVs durch `packagePartWords` gegen Absender-/Kundenname und Positionsnamen vorgeschlagen (maximal drei), ohne Zuordnung. Mit Kunden bleiben es ausschließlich dessen offene KVs. Neuer Rollenlauf belegt die konkrete globale KV-Kennung und unverändertes `intake_item.kunde_id`.
+3. `getIntakeCaptureAction` liest standardmäßig keine Erwartung. Nur der Dialog fordert bei Ware ausdrücklich `{ packageExpectation: true }` einmal je Version an. Speichern, Artwahl und Dateiabschluss erzeugen keine zusätzliche KV-Abfrage. Die PE04/PE06-Assertions lesen ihre Erwartung jetzt ausdrücklich; Inhalt und Rechteprüfung bleiben erhalten.
+4. `readPackageQuoteHistory` liegt ausschließlich in `quotes/server/quoteReads.ts`; die bestehende Historienabfrage inklusive geschlossener KVs bleibt erhalten, kein zweiter Offene-KV-Filter.
+5. Historische Auftragspositionen werden im Orders-Modul gelesen. Die App-Action verwendet dessen öffentlichen Port und den bestehenden öffentlichen Kundenleser und reicht das Ergebnis an die Erwartungsprojektion weiter. Keine Fremdtabellenabfrage und keine Server-Fassade aus einem anderen Modul konsumiert. Neues Exportregister im Orders-Manifest; geschützter Checker unverändert.
+6. Fotos ausschließlich über `GoodsInspectionForm`; die drei zusätzlichen Foto-Auswahlfelder im Paketeditor sind entfernt. Bestehende Originale bleiben im gemeinsamen Formular erreichbar.
+7. Unbenutzte Katalogeinträge entfernt; weiterhin benötigte Feldnamen werden jetzt für konkrete Fehlermeldungen verwendet. Beide Abweichungsgrund-Beschriftungen kommen aus dem Katalog. Statt „Prüfe deine Angaben“ nennt „Es fehlen noch: {felder}.“ die fehlenden Felder. Bestehende Render-Assertion alt: generisches Weiterbearbeiten → neu: konkrete Paketetikett-/Inhaltsfoto-Feldnamen; Freischaltung und Ausschluss des internen SQL-Textes unverändert geprüft.
+8. Bestand: `QUOTE_ONSITE_REQUESTED_V04` wird weiterhin als alter Phasenbeleg gelesen. Neue Phasen schreiben ausschließlich `QUOTE_ONSITE_PHASE_V04`; der ursprüngliche Root-Ereignistyp bleibt erhalten. Keine Ereignisse umgeschrieben oder gelöscht.
+
+Lokale Nachweise dieser Runde: sechs echte Replay-Fälle PE04/PE06 und vier Rollen PASS (6,01 s), sechs echte Komponentenfälle PASS (4,01 s), Dialog-Abfragezyklus im gezielten Lauf PASS. Typprüfung, gezielter Lint, Scope, H18, No-Fake und Whitespace grün. Geschütztes Modul-Gate: nur der bekannte Befund `DESIGN_POINTER_PAGE_BINDING` der fremden Bildquellen; keine Produkt-Modulverletzung. Keine lokale Gesamtsuite. Neue exakte CI/READY-Preview und unabhängiges PL-PASS stehen vor jeder Merge-Bitte aus; keine Behauptung einer Abnahme.
+
+Die folgenden Abschnitte dokumentieren frühere Zwischenstände; dieser Abschnitt ersetzt widersprechende Aussagen dort.
 
 ## Review-Korrektur 09.11., Nachträge 1–8
 
