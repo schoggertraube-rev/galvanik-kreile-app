@@ -4,6 +4,23 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder,customerFixture,intakeOrderFixture} from './orderFixture';
 
+it('a payment retry key cannot pay another invoice, change the booked method or impersonate the original actor',async()=>{
+ const first=await readyInvoiceOrder('Zahlung-Schlüssel-1'),second=await readyInvoiceOrder('Zahlung-Schlüssel-2');
+ const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const payment={invoiceId:first.invoice.invoiceId,amount:first.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
+ const booked=await withSession(full,()=>confirmPaymentAction(payment));
+ expect(booked).toMatchObject({code:'OK'});if(booked.code!=='OK')throw Error('PAYMENT_KEY_INITIAL:'+booked.code);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:first.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',openAmountCents:0}}});
+ expect(await withSession(full,()=>confirmPaymentAction({...structuredClone(payment),invoiceId:second.invoice.invoiceId}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>confirmPaymentAction({...structuredClone(payment),method:'karte'}))).toMatchObject({code:'CONFLICT'});
+ const other=await createFixture(['geld','auftraege']);
+ expect(await withSession(other,()=>confirmPaymentAction(structuredClone(payment)))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(payment))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:booked.receipt.eventId,confirmedBy:full.actorId}});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:second.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'offen',paidAmountCents:0,openAmountCents:second.invoice.grossAmountCents,paymentVersion:0}}});
+ expect(await sql`SELECT payment_method,payment_paid_amount_cents::integer AS paid FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.invoice.invoiceId}::uuid`).toEqual([{payment_method:'bar',paid:first.invoice.grossAmountCents}]);
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${payment.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
 it('actual payment mode changes race on one version and the same stored receipt survives a fresh read and retry',async()=>{
  const customerId=await customerFixture('Zahlungsmodus');
  const order=await intakeOrderFixture('Zahlungsmodus',customerId);
