@@ -5,6 +5,31 @@ import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
 import {storeOrderPhoto,storeIntakeGoodsPhoto} from './photoFixture';
 
+it('H8 concurrent rework requests create one linked order and preserve the rejection boundary on reread',async()=>{
+ const order=await readyInvoiceOrder('H8-Rework');
+ const photo=await storeOrderPhoto(order.orderId);
+ const {reklamationAusfuehrenAction,nacharbeitAnlegenAction,getByOrder}=await import('@/app/actions/complaints.actions');
+ const recorded=await withSession(full,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Abplatzung',description:'TEST gleichzeitige Nacharbeit',photoIds:[photo],goodsReturn:'ja'}));
+ if(recorded.code!=='OK')throw Error('H8_REWORK_RECORD:'+recorded.code);
+ const decider=await createFixture(['auftraege','entscheiden']);
+ const input={reklamationId:recorded.receipt.complaintId,version:1,bewertung:'berechtigt' as const,massnahme:'nacharbeit' as const,liefertermin:'2027-05-18'};
+ const [first,second]=await Promise.all([withSession(decider,()=>nacharbeitAnlegenAction(structuredClone(input))),withSession(decider,()=>nacharbeitAnlegenAction(structuredClone(input)))]);
+ expect(first.code).toBe('OK');expect(second.code).toBe('OK');
+ if(first.code!=='OK'||second.code!=='OK')throw Error('H8_REWORK_CONCURRENT');
+ expect(second.receipt.orderId).toBe(first.receipt.orderId);
+ expect(second.receipt.eventId).toBe(first.receipt.eventId);
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:first.receipt.orderId}))).toMatchObject({code:'OK',data:{card:{station:'angenommen'}}});
+ expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[expect.objectContaining({id:recorded.receipt.complaintId,nacharbeitAuftragId:first.receipt.orderId,stand:'massnahme_nacharbeit'})]});
+ expect(await withSession(decider,()=>nacharbeitAnlegenAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true,receipt:{orderId:first.receipt.orderId}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND nacharbeit_zu=${recorded.receipt.complaintId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT bool_and(preis_netto=0) AS free,count(*)::integer AS n FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${first.receipt.orderId}`).toEqual([{free:true,n:1}]);
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.receipt.eventId}`).toEqual([{user_id:decider.actorId}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${first.receipt.orderId}`).toEqual([{n:0}]);
+ expect(await withSession(decider,()=>reklamationAusfuehrenAction({action:'entscheiden',clientKey:randomUUID(),complaintId:recorded.receipt.complaintId,version:1,assessment:'abgelehnt',measure:'ablehnen',reason:'TEST veraltete Gegenentscheidung',creditCents:null}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[expect.objectContaining({stand:'massnahme_nacharbeit',nacharbeitAuftragId:first.receipt.orderId})]});
+});
+
 it('H7/W9 rejection is explicit, actor-bound and cannot become free rework or a credit on retry',async()=>{
  const order=await readyInvoiceOrder('H7-Rej','shipping');
  const photo=await storeOrderPhoto(order.orderId);
