@@ -4,6 +4,33 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder,customerFixture,intakeOrderFixture} from './orderFixture';
 
+it('missing free-text prices block issue until the existing price action fills them and the invoice reads exactly that amount',async()=>{
+ const setup=await readyInvoiceOrder('Freitext-Voraussetzungen');
+ const withoutMoney=await createFixture(['eingang']);
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const created=await withSession(withoutMoney,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:setup.customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',note:'TEST fehlender Freitextpreis',items:[{catalogServiceId:null,name:'TEST Freitext ohne Preis',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:null,vatRateBasisPoints:null}]}));
+ expect(created,JSON.stringify(created)).toMatchObject({code:'OK'});if(created.code!=='OK')throw Error('MISSING_PRICE_INTAKE:'+created.code);
+ const orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
+ const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,freezeOrderAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('MISSING_PRICE_HANDOFF:'+moved.code);
+ const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));if(finished.code!=='OK')throw Error('MISSING_PRICE_FINISH:'+finished.code);
+ const frozen=await withSession(full,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));if(frozen.code!=='OK')throw Error('MISSING_PRICE_FREEZE:'+frozen.code);
+ const {issueInvoiceAction,setInvoiceItemPricesAction,getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');
+ const key=randomUUID();
+ expect(await withSession(full,()=>issueInvoiceAction({orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:key}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{n:0}]);
+ const prices={orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID(),prices:[{itemId,unitPriceCents:25000}]};
+ const stored=await withSession(full,()=>setInvoiceItemPricesAction(prices));
+ expect(stored).toMatchObject({code:'OK',receipt:{actorId:full.actorId}});if(stored.code!=='OK')throw Error('MISSING_PRICE_WRITE:'+stored.code);
+ expect(await sql`SELECT (preis_netto*100)::integer AS cents FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}`).toEqual([{cents:25000}]);
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{version:stored.receipt.aggregateVersion}}});
+ const invoice=await withSession(full,()=>issueInvoiceAction({orderId,expectedVersion:stored.receipt.aggregateVersion,clientEventId:key}));
+ expect(invoice).toMatchObject({code:'OK',receipt:{netAmountCents:25000,grossAmountCents:29750}});if(invoice.code!=='OK')throw Error('MISSING_PRICE_ISSUE:'+invoice.code);
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId,clientEventId:key}))).toMatchObject({code:'OK',data:{invoiceId:invoice.receipt.invoiceId,netAmountCents:25000}});
+ expect(await withSession(full,()=>setInvoiceItemPricesAction(JSON.parse(JSON.stringify(prices))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:stored.receipt.eventId}});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${prices.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
 it('incomplete seller data consumes no invoice number and the same request succeeds after the TEST configuration is repaired',async()=>{
  const order=await readyInvoiceOrder('Rechnung-Stammdaten');
  const {cancelInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');
