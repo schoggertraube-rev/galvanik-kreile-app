@@ -5,10 +5,11 @@ import {sql,full,withSession} from './replayHarness';
 import {customerFixture} from './orderFixture';
 import {requestMailStep} from './requestMailStep';
 import {installQuoteReplyProvider} from './quoteReplyProvider';
-import {storeIntakeGoodsPhoto} from './photoFixture';
+import {storeIntakeGoodsPhoto,storeOrderPhoto} from './photoFixture';
 
-// Prefix reaches Galvanik; mandatory per-part photo, completion and outgoing chain remain open.
-it('H1 prefix T25 to Galvanik: real PDF mail, proven reply, goods and one linked order',async()=>{
+// Extends the proven prefix through completion; invoice/payment/outgoing remain
+// red until accepted quote prices survive conversion in the canonical writer.
+it('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice boundary',async()=>{
  const itemId=await requestMailStep('H1');
  const customerId=await customerFixture('H1-KV');
  const {updateCustomerAction}=await import('@/app/actions/customers.actions');
@@ -42,6 +43,9 @@ it('H1 prefix T25 to Galvanik: real PDF mail, proven reply, goods and one linked
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,iban,bic,bank_name,tax_id,invoice_vat_rate_basis_points,invoice_payment_term_days)
  SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST Ablauf Galvanik','TEST Weg 1','70176','Stuttgart','Deutschland','DE02120300000000202051','BYLADEM1001','TEST Bank','DE123456789',1900,14
  WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ // requestMailStep may already have created this run's minimal sender fixture.
+ if(!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('H1_TEST_COMPANY_ONLY');
+ await sql`UPDATE public.company_settings SET street='TEST Weg 1',zip='70176',city='Stuttgart',country='Deutschland',iban='DE02120300000000202051',bic='BYLADEM1001',bank_name='TEST Bank',tax_id='DE123456789',invoice_vat_rate_basis_points=1900,invoice_payment_term_days=14 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const pdf=await withSession(full,()=>readQuotePdfAction({quoteId:created.quote.quoteId}));
  expect(pdf.code).toBe('OK');if(pdf.code!=='OK')throw Error('H1_PDF:'+pdf.code);
  expect(pdf.pdf.subarray(0,5).toString()).toBe('%PDF-');
@@ -107,4 +111,41 @@ it('H1 prefix T25 to Galvanik: real PDF mail, proven reply, goods and one linked
  expect(await sql`SELECT station FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${converted.orderReceipt.orderId}`).toEqual([{station:'galvanik'}]);
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:converted.orderReceipt.orderId}))).toMatchObject({code:'OK',data:{card:{station:'galvanik'}}});
  expect(await withSession(full,()=>transitionWareneingangToGalvanikAction(structuredClone(handoff)))).toMatchObject({code:'OK',replayed:true});
+ if(moved.code!=='OK')throw Error('H1_HANDOFF:'+moved.code);
+ const orderId=converted.orderReceipt.orderId;
+ const {setOrderItemFinishedAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction,freezeOrderAction}=await import('@/app/actions/orders.actions');
+ let orderVersion=moved.receipt.aggregateVersion;
+ const actualParts=await sql`SELECT id FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} ORDER BY id`;
+ for(const part of actualParts){
+  const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId:part.id,expectedVersion:orderVersion,clientEventId:randomUUID(),finished:true}));
+  expect(finished,JSON.stringify(finished)).toMatchObject({code:'OK'});
+  if(finished.code!=='OK')throw Error('H1_FINISH:'+finished.code);
+  orderVersion=finished.receipt.aggregateVersion;
+ }
+ const master=await withSession(full,()=>getExtraWorkMasterDataAction());
+ expect(master.code).toBe('OK');if(master.code!=='OK')throw Error('H1_MASTER:'+master.code);
+ if(!master.data.currentRate)expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ await storeOrderPhoto(orderId);
+ const freeze={orderId,freezeId:randomUUID(),expectedVersion:orderVersion,clientEventId:randomUUID()};
+ const frozen=await withSession(full,()=>freezeOrderAction(freeze));
+ expect(frozen,JSON.stringify(frozen)).toMatchObject({code:'OK'});if(frozen.code!=='OK')throw Error('H1_FREEZE:'+frozen.code);
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{station:'fertig'}}});
+ expect(await withSession(full,()=>freezeOrderAction(structuredClone(freeze)))).toMatchObject({code:'OK',replayed:true});
+ const {issueInvoiceAction,getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');
+ const issue={orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()};
+ const issued=await withSession(full,()=>issueInvoiceAction(issue));
+ const invoiceSource=issued.code==='OK'?null:await sql.begin(async tx=>{await tx`SELECT set_config('app.tenant_id',${KREILE_TENANT_SLUG},true)`;return tx`SELECT seller_config_complete,customer_config_complete,base_prices_complete,effective_integrity_ok,invoice_payment_term_days,invoice_vat_rate_basis_points FROM private.v_invoice_issue_source_v2 WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;});
+ expect(issued,JSON.stringify({issued,invoiceSource})).toMatchObject({code:'OK'});if(issued.code!=='OK')throw Error('H1_INVOICE:'+issued.code);
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId,clientEventId:issue.clientEventId}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>issueInvoiceAction(structuredClone(issue)))).toMatchObject({code:'OK',replayed:true});
+ const {getOrderPaymentStateAction,confirmPaymentAction}=await import('@/app/actions/payments.actions');
+ const beforePay=await withSession(full,()=>getOrderPaymentStateAction({orderId}));
+ expect(beforePay).toMatchObject({code:'OK',data:{mode:'vorkasse',goodsOutAllowed:false,payment:{status:'offen'}}});
+ if(beforePay.code!=='OK'||!beforePay.data.payment)throw Error('H1_PAYMENT_READ');
+ const payment={invoiceId:issued.receipt.invoiceId,amount:beforePay.data.payment.openAmountCents,method:'ueberweisung' as const,expectedVersion:beforePay.data.payment.paymentVersion,clientEventId:randomUUID()};
+ const paid=await withSession(full,()=>confirmPaymentAction(payment));
+ expect(paid,JSON.stringify(paid)).toMatchObject({code:'OK',receipt:{confirmedBy:full.actorId,openAmountCents:0}});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId}))).toMatchObject({code:'OK',data:{goodsOutAllowed:true,payment:{status:'bezahlt',openAmountCents:0}}});
+ expect(await withSession(full,()=>confirmPaymentAction(structuredClone(payment)))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${payment.clientEventId}::uuid AND event_type='PAYMENT_CONFIRMED_V1'`).toEqual([{user_id:full.actorId}]);
 });
