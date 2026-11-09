@@ -7,6 +7,33 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import type { AppSession } from "@/lib/server/appSession";
 
+it('RM07 KV retry uses the immutable prepared PDF receipt without another provider send',async()=>{
+ const fixture=await createFixture(true,['eingang','auftraege','kunden','geld','mails']);const {createQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,iban,bic,bank_name,tax_id,invoice_vat_rate_basis_points,invoice_payment_term_days,kv_nachfass_tage) SELECT ${randomUUID()}::uuid,${KREILE_TENANT_SLUG},'TEST KV PDF','Pruefstrasse 18','70173','Stuttgart','Deutschland','DE02120300000000202051','BYLADEM1001','TEST Bank','DE999999999',1900,14,5 WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ const made=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST RM07 PDF',positions:[{name:'TEST Halter',quantity:2,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));if(made.code!=='OK')throw Error(made.message);
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ const input={targetType:'CUSTOMER' as const,targetId:fixture.customerId,clientRequestId:randomUUID(),subject:'TEST RM07 KV',body:'TEST PDF-Beleg',attachment:{kind:'QUOTE' as const,documentId:made.quote.quoteId}};
+ const keys=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const,before=Object.fromEntries(keys.map(key=>[key,process.env[key]]));let sends=0;
+ const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+ try{
+  process.env.MS_GRAPH_TENANT_ID='TEST-tenant';process.env.MS_GRAPH_CLIENT_ID='TEST-client';process.env.MS_GRAPH_CLIENT_SECRET='TEST-provider-fixture';process.env.MS_GRAPH_MAILBOX='TEST-mailbox@example.invalid';
+  vi.spyOn(globalThis,'fetch').mockImplementation(async(url)=>{
+   const target=new URL(typeof url==='string'?url:url instanceof URL?url.href:url.url);
+   if(target.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-provider-token-not-a-real-secret',expires_in:3600});
+   if(target.pathname.endsWith('/sendMail')){sends++;return Response.json({error:{code:'TEST_UNCERTAIN'}},{status:503});}
+   if(target.pathname.endsWith('/mailFolders/sentitems/messages'))return Response.json({value:[{id:'TEST-KV-sent',internetMessageId:'<TEST-kv-rm07@example.invalid>',internetMessageHeaders:[{name:'x-kreile-send-id',value:input.clientRequestId}],from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString()}]});
+   throw Error('TEST unexpected graph route');
+  });
+  expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'UNAVAILABLE',delivery:'checking'});
+  const [prepared]=await sql<{document:Record<string,unknown>}[]>`SELECT payload->'document' AS document FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_PREPARED_V1' AND correlation_id=${input.clientRequestId}::uuid`;
+  expect(prepared.document).toMatchObject({id:made.quote.quoteId,edition:1,sha256:expect.stringMatching(/^[a-f0-9]{64}$/)});
+  await sql`UPDATE public.communication_threads SET created_at=now()-interval '6 minutes' WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`;
+  expect(await withSession(fixture,()=>sendCustomerMailAction({...input}))).toMatchObject({code:'OK'});expect(sends).toBe(1);
+  expect(await sql`SELECT payload->'document' AS document FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{document:prepared.document}]);
+  expect(await withSession(fixture,()=>readQuoteAction({quoteId:made.quote.quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{sentEdition:1}}});
+ }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
+});
+
 (globalThis as typeof globalThis & { AsyncLocalStorage: typeof AsyncLocalStorage }).AsyncLocalStorage = AsyncLocalStorage;
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 

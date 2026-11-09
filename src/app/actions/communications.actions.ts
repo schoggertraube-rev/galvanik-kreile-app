@@ -83,6 +83,10 @@ export async function sendCustomerMailAction(input: TargetInput & {
  if(input.attachment){
   const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
   if(prior.code==='OK')return confirmQuoteDelivery(input,prior.document,{code:'OK',data:prior.data});
+  if(prior.code==='PENDING'){
+   const checked=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,document:prior.document,reconcileOnly:true});
+   return checked.code==='OK'?confirmQuoteDelivery(input,prior.document,checked):checked;
+  }
   if(prior.code!=='NOT_FOUND')return prior;
   const pdf=await readQuotePdfAction({quoteId:input.attachment.documentId});
   if(pdf.code!=='OK')return pdf;

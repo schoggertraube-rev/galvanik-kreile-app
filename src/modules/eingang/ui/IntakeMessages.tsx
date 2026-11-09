@@ -2,8 +2,8 @@
 import {ComplaintResponseDialog} from './ComplaintResponseDialog';
 import type {IntakeDraft} from '../draftContract';
 import type {ComplaintResponseRequest} from '../messageContract';
-import {ORDER_HANDOVER_COPY,REKLA_MAIL_COPY} from '@/ui/situationCatalog';
-import {useCallback,useEffect,useMemo,useRef,useState,type MouseEvent,type ReactNode} from 'react';
+import {ORDER_HANDOVER_COPY,REKLA_MAIL_COPY,MAIL_DELIVERY_COPY} from '@/ui/situationCatalog';
+import {useCallback,useEffect,useEffectEvent,useMemo,useRef,useState,type MouseEvent,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {Button,Dialog,Hinweis,Icon,KrApp,useKrGeraet} from '@/ui/kr';
 import {MESSAGE_FILTERS,INTAKE_CHANGED_EVENT,messageGroupId,messageTone,type MessageFilter,type IntakeMessage,type IntakeMessagesPorts,type IntakeMessagesResult,type IntakeHandoverRequest} from '../messageContract';
@@ -33,6 +33,8 @@ export function IntakeMessages({ports,initialGroup,onClose,resumeDraftId}:{ports
  const[assignments,setAssignments]=useState<Record<string,{version:number;result:AssignmentReadResult}>>({}),assignmentRequests=useRef(new Set<string>());
  const[reopenInvalid,setReopenInvalid]=useState(false),[writeError,setWriteError]=useState<string|null>(null);
  const key=(operation:string,row:IntakeMessage)=>{const id=operation+':'+row.id+':'+row.version;if(!keys.current.has(id))keys.current.set(id,crypto.randomUUID());return keys.current.get(id)!;};
+ const [photoChecks,setPhotoChecks]=useState<Record<string,{row:IntakeMessage;at:string}>>({});
+ const [photoFailed,setPhotoFailed]=useState<Record<string,boolean>>({});
  const load=useCallback(async(signal?:AbortSignal)=>{const request=++requestId.current;setLoading(true);setError(null);try{const read=await ports.list(effectiveFilter);if(request!==requestId.current||signal?.aborted)return;if(read.code!=='OK'){setError(read.message);return;}setResult(read);}catch(failure){console.error('[INTAKE_MESSAGES_UI_READ_FAILED]',failure);if(request===requestId.current&&!signal?.aborted)setError('Nachrichten konnten nicht geladen werden · Code: INTAKE_MESSAGES_UI_READ_FAILED.');}finally{if(request===requestId.current&&!signal?.aborted)setLoading(false);}},[ports,effectiveFilter]);
  useEffect(()=>{const controller=new AbortController(),timer=setTimeout(()=>void load(controller.signal),0);return()=>{clearTimeout(timer);controller.abort();};},[load]);
  useEffect(()=>{const changed=()=>void load();window.addEventListener(INTAKE_CHANGED_EVENT,changed);return()=>window.removeEventListener(INTAKE_CHANGED_EVENT,changed);},[load]);
@@ -69,11 +71,31 @@ export function IntakeMessages({ports,initialGroup,onClose,resumeDraftId}:{ports
  const requestPhotos=async(row:IntakeMessage)=>{
   if(inFlight.current||!row.customerId||!ports.requestPhotos)return;inFlight.current=true;setBusy(true);setWriteError(null);setRetry(null);
   try{const sent=await ports.requestPhotos({targetType:'CUSTOMER',targetId:row.customerId,clientRequestId:key('complaint-photos',row),subject:'',body:'',complaintPhotoRequest:{itemId:row.id,version:row.version}});
-   if(sent.code!=='OK'){fail('message'in sent?sent.message:REKLA_MAIL_COPY.unavailable,()=>void requestPhotos(row));return;}
+   if(sent.code!=='OK'){
+    if('delivery'in sent&&sent.delivery==='checking'){
+     if('retryAt'in sent&&typeof sent.retryAt==='string'&&Number.isFinite(Date.parse(sent.retryAt))){const at=sent.retryAt;setPhotoChecks(current=>({...current,[row.id]:{row,at}}));}
+     setWriteError(MAIL_DELIVERY_COPY.checking);return;
+    }
+    setPhotoChecks(current=>{const next={...current};delete next[row.id];return next;});
+    if('delivery'in sent&&sent.delivery==='failed'){keys.current.delete('complaint-photos:'+row.id+':'+row.version);setPhotoFailed(current=>({...current,[row.id]:true}));const customer=row.customerName??row.senderName??row.senderAddress;fail(customer?MAIL_DELIVERY_COPY.failed(customer):REKLA_MAIL_COPY.unavailable,()=>void requestPhotos(row));return;}
+    fail(REKLA_MAIL_COPY.unavailable,()=>void requestPhotos(row));return;
+   }
+   setPhotoChecks(current=>{const next={...current};delete next[row.id];return next;});
    setToast(REKLA_MAIL_COPY.sent);await load();
   }catch(failure){console.error('[COMPLAINT_PHOTO_REQUEST_UI_FAILED]',failure);fail(REKLA_MAIL_COPY.unavailable,()=>void requestPhotos(row));}
   finally{inFlight.current=false;setBusy(false);}
  };
+ const checkPhotoDelivery=useEffectEvent(async(now:number)=>{
+  for(const pending of Object.values(photoChecks)){
+   if(Date.parse(pending.at)>now)continue;
+   if(inFlight.current){setPhotoChecks(current=>({...current,[pending.row.id]:{...pending,at:new Date(now+1000).toISOString()}}));continue;}
+   await requestPhotos(pending.row);
+  }
+ });
+ useEffect(()=>{
+  const times=Object.values(photoChecks).map(value=>Date.parse(value.at));if(!times.length)return;
+  const timer=setTimeout(()=>void checkPhotoDelivery(Date.now()),Math.max(0,Math.min(...times)-Date.now()));return()=>clearTimeout(timer);
+ },[photoChecks]);
  const finish=async(row:IntakeMessage,kind:'info'|'erledigt')=>{
   if(inFlight.current)return;inFlight.current=true;setBusy(true);setError(null);setWriteError(null);setRetry(null);
   try{const saved=await ports.finish({items:[{itemId:row.id,version:row.version}],kind,note:null,clientEventId:key(kind,row)});if(saved.code!=='OK'){fail(saved.message,()=>void finish(row,kind));return;}setMenu(null);setToast(kind==='info'?'Als Info vermerkt':'Erledigt');await load();}
@@ -127,7 +149,7 @@ export function IntakeMessages({ports,initialGroup,onClose,resumeDraftId}:{ports
    <div className={'ev-g-blase ev-g-blase--'+(row.direction==='intern'?'notiz':row.direction==='raus'?'raus':'rein')}><div className="ev-g-kopf"><b>{row.senderName??row.customerName??row.senderAddress??'Absender fehlt'}</b><small>{time(row.at)}{row.direction==='intern'?' · intern':''}</small></div>{row.subject?<b className="ev-g-betreff">{row.subject}</b>:null}<div className="ev-g-text">{row.text??'Inhalt fehlt'}</div>{row.fileIds.map(file=><button key={file} type="button" className="ev-g-anhang" data-spec-id="nachrichten.ansehen" onClick={()=>{if(open('original',row.id+'#'+file))setError('Original konnte nicht geöffnet werden · Code: INTAKE_ORIGINAL_TARGET_NOT_MOUNTED.');}}><Icon name="file"/>Ansehen</button>)}</div>
    {photoReplies.length?<div className="ev-g-knoepfe">{photoReplies.map(reply=><div key={reply.replyId}><p>{REKLA_MAIL_COPY.received(reply.photoIds.length)}</p>{result?.areas.includes('auftraege')?<Button art="primaer" text={REKLA_MAIL_COPY.record} onClick={()=>{const target=reply.orderId?reply.orderId+'#'+reply.replyId:row.customerId+'#kundenwahl';if(open('reklamation',target,{sourceItemId:reply.replyId}))fail(ORDER_HANDOVER_COPY.targetUnavailable);}}/>:null}{ports.ReplyMailView&&ports.rejectComplaint&&result?.areas.includes('eingang')&&result.areas.includes('kunden')?<Button text={REKLA_MAIL_COPY.reject} onClick={()=>{const source=result.messages.find(value=>value.id===reply.replyId);if(source)setResponse({row:source});else fail(REKLA_MAIL_COPY.responseUnavailable);}}/>:null}<Button text={REKLA_MAIL_COPY.original} onClick={()=>{if(open('original',reply.replyId+'#'+reply.photoIds[0]))fail(ORDER_HANDOVER_COPY.targetUnavailable);}}/></div>)}</div>:row.photoParentId?<p>{REKLA_MAIL_COPY.parent}</p>:null}
    {own&&row.usage==='offen'&&row.openConcerns.includes('reklamation')&&row.channel==='mail'&&(row.photoCount??0)>0&&!row.photoParentId&&ports.ReplyMailView&&ports.rejectComplaint&&result?.areas.includes('eingang')&&result.areas.includes('kunden')?<Button text={REKLA_MAIL_COPY.reject} onClick={()=>setResponse({row})}/>:null}
-   {needsPhotos&&!photoReplies.length?<div className="ev-g-knoepfe">{row.photoRequest?<p role="status">{REKLA_MAIL_COPY.waiting(row.customerName??row.senderName??row.senderAddress??'Kunde')}</p>:ports.requestPhotos&&result?.areas.includes('eingang')&&result.areas.includes('kunden')?<><p>{REKLA_MAIL_COPY.missing}</p><Button art="primaer" text={REKLA_MAIL_COPY.request} disabled={busy} onClick={()=>void requestPhotos(row)}/></>:null}</div>:null}
+   {needsPhotos&&!photoReplies.length?<div className="ev-g-knoepfe">{row.photoRequest?<p role="status">{REKLA_MAIL_COPY.waiting(row.customerName??row.senderName??row.senderAddress??'Kunde')}</p>:photoChecks[row.id]?<p role="status">{MAIL_DELIVERY_COPY.checking}</p>:ports.requestPhotos&&result?.areas.includes('eingang')&&result.areas.includes('kunden')?<><p>{REKLA_MAIL_COPY.missing}</p><Button art="primaer" text={photoFailed[row.id]?MAIL_DELIVERY_COPY.retry:REKLA_MAIL_COPY.request} disabled={busy} onClick={()=>void requestPhotos(row)}/></>:null}</div>:null}
    {own&&row.assignment==='offen'&&row.direction==='rein'?<div className="ev-g-knoepfe">
     {!assignment?<p role="status">Zuordnung wird gelesen …</p>:assignment.code!=='OK'?<div role="alert"><Hinweis ton="warn">{assignment.message}</Hinweis><Button text="Erneut lesen" onClick={()=>void readAssignment(row)}/></div>:<>
      {proposal?<Button data-spec-id="nachrichten.vorschlag-ja" art="primaer" text={'Ja, zu '+proposal.name} disabled={busy} onClick={()=>void confirmAssignment(row,proposal.id)}/>:null}

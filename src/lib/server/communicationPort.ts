@@ -10,11 +10,17 @@ import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphConfigurationStatus,
   sendMicrosoftGraphMail,
+  readMicrosoftGraphSentMailEvidence,
   type GraphInboxMessage,
   type GraphMailAttachment,
 } from "@/lib/server/microsoftGraph";
 
 type TargetType = "CUSTOMER" | "ORDER";
+function canonicalIntent(value:unknown):string{
+ if(Array.isArray(value))return '['+value.map(canonicalIntent).join(',')+']';
+ if(value!==null&&typeof value==='object')return '{'+Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,entry])=>JSON.stringify(key)+':'+canonicalIntent(entry)).join(',')+'}';
+ return JSON.stringify(value);
+}
 export async function readComplaintGoodsReminderContext(auth:AuthorizationSnapshot,orderId:string) {
   if(!hasAuthorizationArea(auth,'kunden'))return null;
   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{complaintId:string;version:number;orderId:string;number:string;customerName:string;complaintNumber:string}>(sql`SELECT complaint_id AS "complaintId",version,nacharbeit_auftrag_id AS "orderId",rework_order_number AS number,source_customer_name AS "customerName",nummer AS "complaintNumber" FROM public.v_complaint_rework_context_v1 WHERE tenant_id=${auth.tenantId} AND nacharbeit_auftrag_id=${orderId} AND stand='massnahme_nacharbeit' AND rework_ware='erwartet'`));
@@ -27,7 +33,7 @@ export async function readComplaintGoodsReminderDates(tx:import('./privilegedDb'
     JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email' AND message.summary='Reklamation '||complaint.complaint_id||' · Begleitschein'
     WHERE complaint.tenant_id=${auth.tenantId} AND complaint.complaint_id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::text[]) AND thread.status='sent' AND thread.updated_at>=complaint.rework_ware_since GROUP BY complaint.complaint_id`);
 }
-type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string };
+type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string;delivery?:'checking'|'failed';retryAt?:string;deliveryCustomer?:string };
 type Target = { customerId: string; orderId: string | null; email: string; label: string };
 type ThreadRow = { id: string; customer_id: string | null; order_id: string | null; status: string | null; created_at: Date | string | null };
 type LinkedMessageRow = {
@@ -219,7 +225,7 @@ export async function attachInboxMessage(
 export type IntakeComplaintReply={purpose?:'no-complaint';itemId:string;version:number;graphMessageId:string;sender:string;intent:string;validate:(tx:PrivilegedTenantTransaction)=>Promise<boolean>;complete:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>;replay:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<boolean>};
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeReply?:IntakeComplaintReply },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; reconcileOnly?:true;beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeReply?:IntakeComplaintReply },
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || !/^[0-9a-f-]{36}$/i.test(input.clientRequestId) || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
@@ -229,7 +235,7 @@ export async function sendCommunicationMail(
   // mail access: target, state and version are read from the complaint itself.
   const reminder=input.complaintResult?.kind==='reminder';
   const complaintSummary=input.complaintResult?'Reklamation '+input.complaintResult.complaintId+(reminder?' · Begleitschein':' · Ergebnis'):null;
-  if(input.document&&(!input.attachment||input.document.kind!=='QUOTE'||!Number.isSafeInteger(input.document.version)||input.document.version<1||!Number.isSafeInteger(input.document.edition)||input.document.edition<1||input.document.sha256!==createHash('sha256').update(input.attachment.bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'KV-Fassung oder PDF-Nachweis ist ungültig.'};
+  if(input.document&&(!input.reconcileOnly&&!input.attachment||input.document.kind!=='QUOTE'||!Number.isSafeInteger(input.document.version)||input.document.version<1||!Number.isSafeInteger(input.document.edition)||input.document.edition<1||input.attachment&&input.document.sha256!==createHash('sha256').update(input.attachment.bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'KV-Fassung oder PDF-Nachweis ist ungültig.'};
   if(input.complaintResult){
     if(!hasAuthorizationArea(auth,'kunden')||input.targetType!=='ORDER')return {code:'FORBIDDEN',message:'Kunde informieren erfordert Kunden.'};
     const context=await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`SELECT complaint_id FROM public.v_complaint_rework_context_v1 complaint WHERE tenant_id=${auth.tenantId} AND complaint_id=${input.complaintResult!.complaintId} AND ${reminder?sql`nacharbeit_auftrag_id=${input.targetId}`:sql`source_order_id=${input.targetId}`} AND (
@@ -249,7 +255,8 @@ export async function sendCommunicationMail(
   const recipient=input.intakeReply?.sender??target.email;
   if (!/^\S+@\S+\.\S+$/.test(recipient)) return { code: "VALIDATION_ERROR", message: "Beim Kunden ist keine gültige E-Mail-Adresse hinterlegt." };
   const source = `MS_GRAPH_OUT:${input.clientRequestId}`;
-  let pending: { threadId: string; recordedAt: string; replay?: CommunicationReceipt };
+  const sendIntent=createHash('sha256').update(canonicalIntent({targetType:input.targetType,targetId:input.targetId,recipient,subject:input.subject.trim(),body:input.body.trim(),attachment:input.document?{filename:input.document.number+'.pdf',sha256:input.document.sha256}:input.attachment?{filename:input.attachment.filename,sha256:createHash('sha256').update(input.attachment.bytes).digest('hex')}:null,document:input.document??null,complaint:input.complaintResult??null,intake:input.intakeReply?{id:input.intakeReply.itemId,intent:input.intakeReply.intent}:null})).digest('hex');
+  let pending: { threadId: string; recordedAt: string; replay?: CommunicationReceipt;check?:boolean;failed?:boolean };
   try {
     pending = await withPrivilegedTenantTransaction(auth, async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${auth.tenantId}:${source}`}, 0))`);
@@ -260,7 +267,12 @@ export async function sendCommunicationMail(
       if (existing.length > 1) throw new Error("COMMUNICATION_SOURCE_AMBIGUOUS");
       if (existing[0]) {
         if (existing[0].customer_id !== target.customerId || existing[0].order_id !== target.orderId) throw new Error("COMMUNICATION_TARGET_MISMATCH");
-        if (existing[0].status !== "sent") throw new Error("COMMUNICATION_OUTCOME_UNCLEAR");
+        const prepared=await tx.execute<{intent:string}>(sql`SELECT payload->>'intent' AS intent FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_SEND_PREPARED_V1' AND payload->>'threadId'=${existing[0].id}`);
+        if(prepared.length>1||prepared.length===1&&prepared[0].intent!==sendIntent)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
+        if (existing[0].status !== "sent"){
+          if(prepared.length!==1)throw Error('COMMUNICATION_OUTCOME_UNCLEAR');
+          return {threadId:existing[0].id,recordedAt:iso(existing[0].created_at),check:true,failed:existing[0].status==='failed'};
+        }
         if(input.document){const proof=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND payload->>'threadId'=${existing[0].id} AND payload->>'intent'=${communicationDocumentIntent(input,input.document)}`);if(proof.length!==1)throw Error('COMMUNICATION_DOCUMENT_REPLAY_INTENT_MISMATCH');}
         if(input.complaintResult){
           const confirmed=await tx.execute(sql`SELECT message.id FROM public.communication_messages message JOIN public.communication_threads thread ON thread.tenant_id=message.tenant_id AND thread.id=message.thread_id
@@ -271,6 +283,7 @@ export async function sendCommunicationMail(
         if(input.intakeReply&&!await input.intakeReply.replay(tx,existing[0].id))throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         return { threadId: existing[0].id, recordedAt: iso(existing[0].created_at), replay: { threadId: existing[0].id, messageId: null, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(existing[0].created_at), replayed: true } };
       }
+      if(input.reconcileOnly)throw Error('COMMUNICATION_PREPARED_RECEIPT_MISSING');
       if(readMicrosoftGraphConfigurationStatus().code!=='READY')throw Error('COMMUNICATION_NOT_CONFIGURED');
       if(input.intakeReply&&!await input.intakeReply.validate(tx))throw Error('COMMUNICATION_INTAKE_SNAPSHOT_CHANGED');
       if(input.document&&(!input.beforePrepare||!await input.beforePrepare(tx)))throw Error('COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED');
@@ -282,6 +295,7 @@ export async function sendCommunicationMail(
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("COMMUNICATION_THREAD_INSERT_FAILED");
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,threadId,'prepared');
+      await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'COMMUNICATION_SEND_PREPARED_V1','Mailversand vorbereitet',${JSON.stringify({threadId,sendKey:input.clientRequestId,intent:sendIntent,recipient})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
       return { threadId, recordedAt: iso(rows[0].created_at) };
     });
   } catch (error) {
@@ -291,16 +305,27 @@ export async function sendCommunicationMail(
     return { code: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "CONFLICT" : "UNAVAILABLE", message: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "Der Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; zuerst im Outlook-Ausgang prüfen." : "Der Mailversand konnte nicht sicher vorbereitet werden." };
   }
   if (pending.replay) return { code: "OK", data: pending.replay };
-  const sent = await sendMicrosoftGraphMail({ to: recipient, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment, replyToMessageId: input.intakeReply?.graphMessageId??input.document?.source?.graphMessageId });
+  let reconciled:{graphMessageId:string;internetMessageId:string;sentAt:string}|null=null;
+  const checking=()=>({code:'CONFLICT' as const,delivery:'checking' as const,retryAt:new Date(Date.parse(pending.recordedAt)+300000>Date.now()?Date.parse(pending.recordedAt)+300000:Date.now()+300000).toISOString(),message:'Wird gerade geprüft'});
+  const notSent=()=>({code:'CONFLICT' as const,delivery:'failed' as const,deliveryCustomer:target.label,message:'Mail an '+target.label+' ist nicht rausgegangen - erneut senden'});
+  if(pending.failed)return notSent();
+  if(pending.check){
+    if(Date.now()<Date.parse(pending.recordedAt)+300000)return checking();
+    const proof=await readMicrosoftGraphSentMailEvidence({sendKey:input.clientRequestId,recipient,preparedAt:pending.recordedAt});
+    if(proof.code!=='OK')return checking();
+    if(proof.data.state==='not-found'){
+      try{await withPrivilegedTenantTransaction(auth,async tx=>{
+        const changed=await tx.execute(sql`UPDATE public.communication_threads SET status='failed',updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${pending.threadId} AND status='pending' RETURNING id`);
+        if(changed.length!==1)throw Error('COMMUNICATION_RECONCILE_CONCURRENT_CHANGE');
+        if(changed.length)await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'COMMUNICATION_SEND_NOT_FOUND_V1','Mailversand nicht bestätigt',${JSON.stringify({threadId:pending.threadId,sendKey:input.clientRequestId,intent:sendIntent})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
+      });}catch(error){logCommunicationFailure('COMMUNICATION_RECONCILE_FAILED',error);return checking();}
+      return notSent();
+    }
+    reconciled=proof.data;
+  }
+  const sent = reconciled?{code:'OK' as const}:await sendMicrosoftGraphMail({ to: recipient, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment, replyToMessageId: input.intakeReply?.graphMessageId??input.document?.source?.graphMessageId,sendKey:input.clientRequestId });
   if (sent.code !== "OK") {
-    await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
-      UPDATE public.communication_threads SET status='failed', updated_at=statement_timestamp()
-      WHERE tenant_id=${auth.tenantId} AND id=${pending.threadId} AND status='pending'
-    `)).catch((error) => {
-      logCommunicationFailure("COMMUNICATION_SEND_FAILURE_STATUS_WRITE_FAILED", error);
-      return undefined;
-    });
-    return sent;
+    return {...sent,delivery:'checking',retryAt:new Date(Date.parse(pending.recordedAt)+300000).toISOString()};
   }
   try {
     const messageId = randomUUID();
@@ -315,6 +340,7 @@ export async function sendCommunicationMail(
         VALUES (${messageId}, ${auth.tenantId}, ${pending.threadId}, 'outgoing', 'email', ${input.body.trim()}, ${input.intakeReply?(input.intakeReply.purpose==='no-complaint'?'Reklamation · Antwort · Eingang ':'Reklamation · Fotos anfordern · Eingang ')+input.intakeReply.itemId:complaintSummary??(input.attachment ? `Anhang: ${input.attachment.filename}` : 'Ohne Anhang')}, ${auth.userId}) RETURNING id
       `);
       if (messages.length !== 1 || messages[0]?.id !== messageId) throw new Error("COMMUNICATION_MESSAGE_INSERT_FAILED");
+      if(reconciled)await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'COMMUNICATION_SEND_RECONCILED_V1','Gesendete Mail abgeglichen',${JSON.stringify({threadId:pending.threadId,sendKey:input.clientRequestId,intent:sendIntent,...reconciled})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,pending.threadId,'sent');
       if(input.intakeReply){await input.intakeReply.complete(tx,pending.threadId);await tx.execute(sql`INSERT INTO public.events(tenant_id,id,event_type,user_id,client_event_id,event_schema_version,correlation_id,aggregate_version,status,description,payload)
        VALUES(${auth.tenantId},${randomUUID()},${input.intakeReply.purpose==='no-complaint'?'INTAKE_COMPLAINT_RESPONSE_SENT_V1':'INTAKE_COMPLAINT_PHOTO_REQUESTED_V1'},${auth.userId}::uuid,${input.clientRequestId}::uuid,1,${input.clientRequestId}::uuid,${input.intakeReply.version+1},'success',${input.intakeReply.purpose==='no-complaint'?'Keine Reklamation · Antwort gesendet':'Reklamationsfotos angefordert'},${JSON.stringify({itemId:input.intakeReply.itemId,threadId:pending.threadId,intent:input.intakeReply.intent})}::jsonb)`);}

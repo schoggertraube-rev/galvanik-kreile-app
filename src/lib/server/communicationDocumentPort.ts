@@ -28,7 +28,7 @@ export async function readCommunicationDocumentReceipt(auth:AuthorizationSnapsho
   if(!rows.length)return {code:'NOT_FOUND' as const,message:'Noch kein Versandbeleg.'};
   const row=rows[0],document=row.payload?.document;
   if(rows.length!==1||row.created_by!==auth.userId||!document||document.id!==documentId||row.order_id!==(input.targetType==='ORDER'?input.targetId:null)||input.targetType==='CUSTOMER'&&row.customer_id!==input.targetId||row.payload.intent!==communicationDocumentIntent(input,document))return {code:'CONFLICT' as const,message:'Die Versandkennung ist bereits anders belegt. Kein zweiter Versand.'};
-  if(row.status!=='sent')return {code:'CONFLICT' as const,message:'Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; Outlook-Ausgang prüfen.'};
+  if(row.status!=='sent')return {code:'PENDING' as const,document};
   if(!row.message_id||row.sent_intent!==row.payload.intent||row.body!==input.body.trim()||row.subject!==input.subject.trim())throw Error('COMMUNICATION_DOCUMENT_PROOF_INVALID');
   return {code:'OK' as const,document,data:{threadId:row.id,messageId:row.message_id,customerId:row.customer_id,orderId:row.order_id,recordedAt:row.created_at,replayed:true}};
  });}catch(error){console.error('[COMMUNICATION_DOCUMENT_RECEIPT_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Versandbeleg konnte nicht sicher gelesen werden. Nicht erneut senden.'};}

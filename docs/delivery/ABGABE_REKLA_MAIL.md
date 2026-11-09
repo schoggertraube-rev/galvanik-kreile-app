@@ -1,6 +1,18 @@
 # AP-REKLA-MAIL – Arbeitsstand, noch keine Abnahme
 
-Branch `codex/reklamation-mail`, Basis main `d25a35aa`. Noch kein PR: maximal zwei offene PRs (#203/#204). Kein Merge.
+## Aktueller Nachtrag 09.11., RM07 und RM15
+
+Weiterhin kein fertiger PR: #204 und #205 belegen die beiden PR-Plätze. Der universelle Mailwriter versieht neue Mails mit einer eigenen Versandkennung, reserviert den tatsächlichen Inhalt als Hash im vorhandenen Ereignisjournal und sendet bei 503/Timeout niemals blind erneut. Vor fünf Minuten erfolgt kein SentItems-Aufruf. Danach wird nur ein vollständiger, eindeutiger und zu Absender/Empfänger passender Treffer bestätigt; ein vollständiges leeres Ergebnis belegt „nicht gesendet“. Unvollständige, mehrdeutige oder fehlerhafte Providerantworten bleiben ungeklärt. Ein bestätigter Fehlversand behält seine Kennung; erst die erneute Nutzeraktion erhält eine neue Kennung. Bestätigte alte Fehlversuche sperren Fotoanfragen und Antworten nicht dauerhaft. Alte unbestätigte Versuche werden dadurch nicht freigegeben.
+
+Der normale Maildialog und „Fotos anfordern“ führen den Abgleich bei geöffnetem Bildschirm anhand des serverseitigen Zeitpunkts automatisch aus. Währenddessen gibt es keinen Senden-Knopf. Text und Kennung bleiben erhalten; nach bestätigter Nichtzustellung kann mit neuer Kennung erneut gesendet werden. Texte kommen aus dem Katalog, keine rohen Providerdetails. Für KVs liest der Wiederholungsweg die tatsächlich vorbereitete PDF-Fassung aus ihrem unveränderlichen Versandbeleg; keine zweite PDF-Erzeugung und kein zweiter Provider-Send.
+
+Echte lokale Action/DB-Belege: 503 → vor Frist kein Abgleich → nach Frist gefunden/nicht gefunden, inklusive JSONB-Entwurf neu lesen, Mail-/Akteurereignis und erneut gelesener Versandquittung (2 Fälle PASS4,74s). Fotoanfrage mit bestätigtem Fehlversuch → neue Kennung → genau ein erfolgreicher Quellenbeleg → echte Nachrichtenansicht „wartet“ (PASS im Dreierlauf). KV-Action → vorbereitete PDF → 503 → derselbe PDF-Beleg bestätigt → KV-SentEdition nachgelesen (PASS4,53s). Microsoft-HTTP ist ausschließlich die isolierte synthetische Testgrenze; kein echter Microsoft-Versand behauptet. Sechs Transportgrenzfälle PASS1,70s; tatsächlicher Maildialog mit automatischem Abgleich PASS2,39s, Fotooberfläche PASS3,60s. Die bisherige Rohtext-Assertion im RM01-Renderfall wurde durch den Katalogtext ersetzt; Gleichheit der Wiederholungskennung und das Neulesen bleiben unverändert geprüft.
+
+RM13/RM15: fehlendes Recht erzeugt weder Reklamation noch Erfolgsereignis; der anschließende berechtigte Vorgang verknüpft die Originalfotos und lässt die vollständige bereits abgeholte Auftragszeile unverändert (PASS4,92s). Kein Auftrag wird wieder geöffnet.
+
+**Offen, daher nicht abnahmefähig:** bestätigter Versand bei zwischenzeitlich fachlich geändertem Ursprung (einmalige PL-Frage im BAULOG05:13), Wiederaufnahme des automatischen Abgleichs nach Schließen/erneutem Öffnen, Anschluss des Antwortentwurfs und aller übrigen Maildialoge an dieselbe Abgleichanzeige, neue unabhängige Diffprüfung und Pflicht-CI/Preview. Kein Vollständigkeits- oder Livefähigkeitsanspruch.
+
+Branch `codex/reklamation-mail`. Frühere Abschnitte dokumentieren den jeweiligen damaligen Teilstand. Kein Merge.
 
 ## Gebaut
 

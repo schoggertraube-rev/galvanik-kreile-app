@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphSentDocumentEvidence,
+  readMicrosoftGraphSentMailEvidence,
   readMicrosoftGraphAttachments,
   readMicrosoftGraphMime,
   readMicrosoftGraphConfigurationStatus,
@@ -16,6 +17,19 @@ const env = {
 };
 
 afterEach(() => vi.restoreAllMocks());
+
+it.each(['found','empty','ambiguous','foreign','incomplete','missingHeaders'] as const)('RM07 Sent Items correlation is read-only and proves only an unambiguous complete result: %s',async(kind)=>{
+ const sendKey='11111111-1111-4111-8111-111111111111';
+ const row={id:'TEST-sent',internetMessageId:'<TEST-sent@example.invalid>',internetMessageHeaders:[{name:'X-Kreile-Send-Id',value:sendKey}],from:{emailAddress:{address:kind==='foreign'?'foreign@example.invalid':env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:'customer@example.invalid'}}],isDraft:false,sentDateTime:'2026-11-09T04:00:00Z'};
+ const payload={value:kind==='empty'?[]:kind==='ambiguous'?[row,row]:kind==='missingHeaders'?[{...row,internetMessageHeaders:undefined}]:[row],...(kind==='incomplete'?{'@odata.nextLink':'TEST-more'}:{})};
+ const fetchPort=vi.fn().mockResolvedValueOnce(Response.json({access_token:'TEST-token'.repeat(5)})).mockResolvedValueOnce(Response.json(payload));
+ const result=await readMicrosoftGraphSentMailEvidence({sendKey,recipient:'customer@example.invalid',preparedAt:'2026-11-09T03:59:00Z'},env,fetchPort);
+ if(kind==='found')expect(result).toMatchObject({code:'OK',data:{state:'found',graphMessageId:'TEST-sent'}});
+ else if(kind==='empty')expect(result).toEqual({code:'OK',data:{state:'not-found'}});
+ else expect(result.code).toBe('UNAVAILABLE');
+ expect(fetchPort.mock.calls[1][1]?.method).toBeUndefined();
+ expect(String(fetchPort.mock.calls[1][0])).toContain('/mailFolders/sentitems/messages?');
+});
 
 it('preserves large inline work photos and small ordinary images while excluding a signature CID',async()=>{
   const rows=[

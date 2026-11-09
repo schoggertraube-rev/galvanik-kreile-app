@@ -275,7 +275,7 @@ it('RM02/RM05 actual complaint Action consumes two original reply photos and com
  expect(await withSession(fixture,()=>getIntakeMessagesAction('alle'))).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:rootId,usage:'erledigt'}),expect.objectContaining({id:replyId,usage:'erledigt'})])});
 });
 
-async function replyMailFixture(fixture:Awaited<ReturnType<typeof createFixture>>,order:Awaited<ReturnType<typeof deliveredComplaintSource>>,attachmentMime="image/jpeg"){
+async function replyMailFixture(fixture:Awaited<ReturnType<typeof createFixture>>,order:Awaited<ReturnType<typeof deliveredComplaintSource>>,attachmentMime="image/jpeg",requested=true){
  const rootId=randomUUID(),replyId=randomUUID(),threadId=randomUUID(),requestKey=randomUUID(),rootInternet='<TEST-root-'+rootId+'@example.invalid>',photos=[randomUUID(),randomUUID()];
  for(const id of [rootId,replyId]){
   await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,vorgang_art,vorgang_id,zuordnung,einsatz,text,anliegen,anliegen_offen,absender_adresse,graph_message_id,internet_message_id,empfangen_am) VALUES(${id}::uuid,${KREILE_TENANT_SLUG},${id},'mail','rein','mailabruf',${fixture.actorId}::uuid,${fixture.customerId},'auftrag',${order.orderId},'hand','offen','TEST Blasen an Teil, Originalfotos',ARRAY['reklamation'],ARRAY['reklamation'],'TEST-rekla@example.invalid',${'TEST-graph-'+id},${id===rootId?rootInternet:'<TEST-reply-'+replyId+'@example.invalid>'},statement_timestamp())`;
@@ -289,8 +289,8 @@ async function replyMailFixture(fixture:Awaited<ReturnType<typeof createFixture>
   await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${id}::uuid,'einsatz',${randomUUID()}::uuid,${fixture.actorId},${sql.json({action:'mail_import_complete',fileIds,originalCount:fileIds.length-1,filteredAttachments:0})})`;
  }
  // Existing sent-photo-request state is a synthetic fixture; this case tests the real complaint writer, not Microsoft.
- await sql`INSERT INTO public.communication_threads(id,tenant_id,customer_id,order_id,source,subject,status,priority,category,created_by) VALUES(${threadId},${KREILE_TENANT_SLUG},${fixture.customerId},NULL,${'MS_GRAPH_OUT:'+requestKey},'TEST Fotos','sent','normal','email',${fixture.actorId})`;
- await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${rootId}::uuid,'anliegen',${requestKey}::uuid,${fixture.actorId},${sql.json({action:'reklamation.fotos_angefordert',customerId:fixture.customerId,sourceGraphId:'TEST-graph-'+rootId,threadId,originalSha256:'a'.repeat(64),intent:'TEST fixture'})})`;
+ if(requested){await sql`INSERT INTO public.communication_threads(id,tenant_id,customer_id,order_id,source,subject,status,priority,category,created_by) VALUES(${threadId},${KREILE_TENANT_SLUG},${fixture.customerId},NULL,${'MS_GRAPH_OUT:'+requestKey},'TEST Fotos','sent','normal','email',${fixture.actorId})`;
+ await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${rootId}::uuid,'anliegen',${requestKey}::uuid,${fixture.actorId},${sql.json({action:'reklamation.fotos_angefordert',customerId:fixture.customerId,sourceGraphId:'TEST-graph-'+rootId,threadId,originalSha256:'a'.repeat(64),intent:'TEST fixture'})})`;}
  return {rootId,replyId,photos};
 }
 
@@ -327,6 +327,81 @@ it('RM13 actual stale source rejection rereads and resumes the same complaint id
  expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND intake_item_id=${replyId}::uuid`).toEqual([{id:saved.receipt.complaintId}]);
  expect(await sql`SELECT user_id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientKey}::uuid AND event_type='COMPLAINT_CHANGED_V1'`).toEqual([{user_id:fixture.actorId}]);
  expect(await withSession(fixture,()=>getComplaintDialogAction({complaintId:saved.receipt.complaintId}))).toMatchObject({code:'OK',data:{complaint:{description:input.description,stand:'aufgenommen',version:1}}});
+});
+
+it('RM13/RM15 a forbidden mail complaint leaves no write; the authorized follow-up preserves the completed order',async()=>{
+ const fixture=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(fixture);
+ const {replyId,photos}=await replyMailFixture(fixture,order),denied=await createFixture(['eingang','mails','kunden']);
+ const {reklamationAusfuehrenAction,getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
+ const input={action:'aufnehmen' as const,clientKey:randomUUID(),orderId:order.orderId,intakeItemId:replyId,intakeVersion:1,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST RM15 Folgebezug nach Abholung',photoIds:photos,goodsReturn:'offen' as const};
+ const before=await sql`SELECT to_jsonb(kr_order.*) AS snapshot FROM public.orders kr_order WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ expect(before[0].snapshot.station).toBe('abgeholt');
+ expect(await withSession(denied,()=>reklamationAusfuehrenAction(input))).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND intake_item_id=${replyId}::uuid`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientKey}::uuid`).toHaveLength(0);
+ const recorded=await withSession(fixture,()=>reklamationAusfuehrenAction(input));expect(recorded.code).toBe('OK');if(recorded.code!=='OK')throw Error(recorded.message);
+ expect(await sql`SELECT to_jsonb(kr_order.*) AS snapshot FROM public.orders kr_order WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(before);
+ expect(await sql`SELECT order_id,intake_item_id::text AS intake_item_id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${recorded.receipt.complaintId}`).toEqual([{order_id:order.orderId,intake_item_id:replyId}]);
+ expect(await withSession(fixture,()=>getComplaintDialogAction({complaintId:recorded.receipt.complaintId}))).toMatchObject({code:'OK',data:{complaint:{id:recorded.receipt.complaintId}}});
+});
+
+it.each([true,false])('RM07 actual mail Action reconciles a 503 without a blind second send (found=%s)',async(found)=>{
+ const fixture=await createFixture(['eingang','kunden','mails']);
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ const input={targetType:'CUSTOMER' as const,targetId:fixture.customerId,clientRequestId:randomUUID(),subject:'TEST RM07 Abgleich',body:'TEST eindeutige Versandkennung'};
+ const {saveIntakeDraftAction,getIntakeDraftsAction}=await import('@/app/actions/eingang.actions');const draftId=randomUUID();
+ expect(await withSession(fixture,()=>saveIntakeDraftAction({id:draftId,clientEventId:randomUUID(),art:'eingang',expectedVersion:null,lastField:null,payload:{kind:'TEST-RM07',clientKey:input.clientRequestId,request:input}}))).toMatchObject({code:'OK'});
+ const resumed=await withSession(fixture,()=>getIntakeDraftsAction());if(resumed.code!=='OK')throw Error('TEST RM07 draft');const reread=resumed.drafts.find(row=>row.id===draftId)?.payload.request as typeof input;expect(reread).toEqual(input);expect(JSON.stringify(reread)).not.toBe(JSON.stringify(input));
+ const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+ const keys=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const,before=Object.fromEntries(keys.map(key=>[key,process.env[key]]));let sends=0,lookups=0;
+ try{
+  process.env.MS_GRAPH_TENANT_ID='TEST-tenant';process.env.MS_GRAPH_CLIENT_ID='TEST-client';process.env.MS_GRAPH_CLIENT_SECRET='TEST-provider-fixture';process.env.MS_GRAPH_MAILBOX='TEST-mailbox@example.invalid';
+  vi.spyOn(globalThis,'fetch').mockImplementation(async(url,options)=>{
+   const target=new URL(typeof url==='string'?url:url instanceof URL?url.href:url.url);
+   if(target.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-provider-token-not-a-real-secret',expires_in:3600});
+   if(target.hostname==='graph.microsoft.com'&&target.pathname.endsWith('/sendMail')){sends++;expect(JSON.parse(String(options?.body)).message.internetMessageHeaders).toEqual([{name:'x-kreile-send-id',value:sends===1?input.clientRequestId:expect.any(String)}]);return sends===1?new Response(null,{status:503}):new Response(null,{status:202});}
+   if(target.pathname.endsWith('/mailFolders/sentitems/messages')){lookups++;return Response.json({value:found?[{id:'TEST-real-sent',internetMessageId:'<TEST-reconcile@example.invalid>',internetMessageHeaders:[{name:'x-kreile-send-id',value:input.clientRequestId}],from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString()}]:[]});}
+   throw Error('TEST unexpected provider route '+target.pathname);
+  });
+  expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'UNAVAILABLE',delivery:'checking'});
+  expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'CONFLICT',delivery:'checking'});expect(sends).toBe(1);expect(lookups).toBe(0);
+  await sql`UPDATE public.communication_threads SET created_at=now()-interval '6 minutes' WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`;
+  const result=await withSession(fixture,()=>sendCustomerMailAction(reread));expect(sends).toBe(1);expect(lookups).toBe(1);
+  if(found){
+   expect(result).toMatchObject({code:'OK'});
+   expect(await sql`SELECT status FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`).toEqual([{status:'sent'}]);
+   expect(await sql`SELECT user_id,payload->>'graphMessageId' AS proof FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_SEND_RECONCILED_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{user_id:fixture.actorId,proof:'TEST-real-sent'}]);
+   expect(await sql`SELECT message.body FROM public.communication_messages message JOIN public.communication_threads thread ON thread.tenant_id=message.tenant_id AND thread.id=message.thread_id WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId}`).toEqual([{body:input.body}]);
+   expect(await withSession(fixture,()=>sendCustomerMailAction({...input}))).toMatchObject({code:'OK',data:{replayed:true,customerId:fixture.customerId}});expect(sends).toBe(1);
+  }else{
+   expect(result).toMatchObject({code:'CONFLICT',delivery:'failed'});
+   expect(await sql`SELECT status FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`).toEqual([{status:'failed'}]);
+   expect(await withSession(fixture,()=>sendCustomerMailAction({...input}))).toMatchObject({code:'CONFLICT',delivery:'failed'});expect(sends).toBe(1);
+   expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}))).toMatchObject({code:'OK'});expect(sends).toBe(2);
+   expect(await sql`SELECT message.id FROM public.communication_messages message JOIN public.communication_threads thread ON thread.tenant_id=message.tenant_id AND thread.id=message.thread_id WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.customer_id=${fixture.customerId} AND message.body=${input.body}`).toHaveLength(1);
+  }
+ }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
+});
+
+it('RM07 photo request retries with a new key only after proved absence and rereads waiting from its actual source receipt',async()=>{
+ const fixture=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(fixture);
+ const {rootId}=await replyMailFixture(fixture,order,'image/jpeg',false);
+ await sql`INSERT INTO public.email_templates(tenant_id,template_key,name,subject_template,body_html_template,body_text_template,variables) VALUES(${KREILE_TENANT_SLUG},${KREILE_TENANT_SLUG+':reklamation_fotos_anfordern'},'TEST Fotos','TEST Fotos für {Kunde}','<p>TEST Fotos</p>','TEST Bitte Fotos senden {Kunde}','["Kunde"]'::jsonb)`;
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions'),{getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');
+ const input={targetType:'CUSTOMER' as const,targetId:fixture.customerId,clientRequestId:randomUUID(),subject:'',body:'',complaintPhotoRequest:{itemId:rootId,version:1}};
+ const keys=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const,before=Object.fromEntries(keys.map(key=>[key,process.env[key]]));let sends=0;
+ try{
+  process.env.MS_GRAPH_TENANT_ID='TEST-tenant';process.env.MS_GRAPH_CLIENT_ID='TEST-client';process.env.MS_GRAPH_CLIENT_SECRET='TEST-provider-fixture';process.env.MS_GRAPH_MAILBOX='TEST-mailbox@example.invalid';
+  vi.spyOn(globalThis,'fetch').mockImplementation(async(url)=>{const target=new URL(typeof url==='string'?url:url instanceof URL?url.href:url.url);if(target.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-provider-token-not-a-real-secret',expires_in:3600});if(target.pathname.endsWith('/reply')){sends++;return sends===1?new Response(null,{status:503}):new Response(null,{status:202});}if(target.pathname.endsWith('/mailFolders/sentitems/messages'))return Response.json({value:[]});throw Error('TEST unexpected graph route');});
+  expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'UNAVAILABLE',delivery:'checking'});
+  expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}))).not.toMatchObject({code:'OK'});expect(sends).toBe(1);
+  const unclear=await withSession(fixture,()=>getIntakeMessagesAction('offen'));if(unclear.code!=='OK')throw Error(unclear.message);expect(unclear.messages.find(row=>row.id===rootId)?.photoRequest).toBeUndefined();
+  await sql`UPDATE public.communication_threads SET created_at=now()-interval '6 minutes' WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`;
+  expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'CONFLICT',delivery:'failed'});
+  const retryKey=randomUUID();expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:retryKey}))).toMatchObject({code:'OK'});expect(sends).toBe(2);
+  expect(await sql`SELECT von FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${rootId}::uuid AND befehl_id=${retryKey}::uuid AND nachher->>'action'='reklamation.fotos_angefordert'`).toEqual([{von:fixture.actorId}]);
+  const waiting=await withSession(fixture,()=>getIntakeMessagesAction('offen'));expect(waiting).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:rootId,photoRequest:expect.objectContaining({threadId:expect.any(String)})})])});
+ }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
 });
 
 it('RM03 real reply Action sends the explicit response, completes root and reply with reason and creates no complaint',async()=>{

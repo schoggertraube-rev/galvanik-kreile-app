@@ -228,12 +228,13 @@ export async function readMicrosoftGraphMessage(
 }
 
 export async function sendMicrosoftGraphMail(
-  input: { to: string; subject: string; body: string; attachment?: GraphMailAttachment; replyToMessageId?: string },
+  input: { to: string; subject: string; body: string; attachment?: GraphMailAttachment; replyToMessageId?: string; sendKey?:string },
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
 ): Promise<GraphResult<{ accepted: true }>> {
   const config = readConfig(env);
   if (!config) return { code: "IN_KLAERUNG", message: "Microsoft 365 ist noch nicht für die Preview verbunden." };
+  if(input.sendKey!==undefined&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.sendKey))return {code:'UNAVAILABLE',message:'Versandkennung ist ungültig.'};
   try {
     const token = await accessToken(config, fetchPort);
     const attachments = input.attachment ? [{
@@ -253,6 +254,7 @@ export async function sendMicrosoftGraphMail(
           subject: input.subject,
           body: { contentType: "Text", content: input.body },
           toRecipients: [{ emailAddress: { address: input.to } }],
+          ...(input.sendKey?{internetMessageHeaders:[{name:'x-kreile-send-id',value:input.sendKey}]}:{}),
           ...(attachments ? { attachments } : {}),
         },
         ...(!input.replyToMessageId ? { saveToSentItems: true } : {}),
@@ -264,6 +266,33 @@ export async function sendMicrosoftGraphMail(
   } catch (error) {
     return unavailable("Die E-Mail konnte nicht sicher an Microsoft 365 übergeben werden.", error);
   }
+}
+
+/** Same Sent Items transport as AF9. An incomplete or ambiguous result never proves absence. */
+export async function readMicrosoftGraphSentMailEvidence(input:{sendKey:string;recipient:string;preparedAt:string},env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{state:'found';graphMessageId:string;internetMessageId:string;sentAt:string}|{state:'not-found'}>>{
+ const config=readConfig(env);
+ if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
+ if(!/^[0-9a-f-]{36}$/i.test(input.sendKey)||!/^\S+@\S+\.\S+$/.test(input.recipient)||!Number.isFinite(Date.parse(input.preparedAt)))return {code:'UNAVAILABLE',message:'Versandbeleg ist unvollständig.'};
+ const boundedFetch:FetchPort=(url,init)=>fetchPort(url,{...init,signal:AbortSignal.timeout(10000)});
+ try{
+  const token=await accessToken(config,boundedFetch),start=new Date(Date.parse(input.preparedAt)-60000).toISOString();
+  const query=new URLSearchParams({'$top':'100','$filter':'sentDateTime ge '+start,'$select':'id,internetMessageId,internetMessageHeaders,from,toRecipients,isDraft,sentDateTime'});
+  const response=await graphGetMessage(config,token,'mailFolders/sentitems/messages?'+query,boundedFetch);
+  if(!response.ok)await providerFailure(response,'GRAPH_SENT_RECONCILE');
+  const payload=await response.json() as {value?:unknown;'@odata.nextLink'?:unknown};
+  if(!Array.isArray(payload.value)||payload['@odata.nextLink'])throw Error('GRAPH_SENT_RECONCILE_INCOMPLETE');
+  const matches=payload.value.filter((value:unknown)=>{
+   if(!value||typeof value!=='object')throw Error('GRAPH_SENT_RECONCILE_INVALID');
+   const row=value as Record<string,unknown>;
+   if(!Array.isArray(row.internetMessageHeaders))throw Error('GRAPH_SENT_HEADERS_MISSING');
+   return row.internetMessageHeaders.some((header:unknown)=>header!==null&&typeof header==='object'&&typeof (header as {name?:unknown}).name==='string'&&(header as {name:string}).name.toLowerCase()==='x-kreile-send-id'&&(header as {value?:unknown}).value===input.sendKey);
+  }) as Array<Record<string,unknown>>;
+  if(matches.length===0)return {code:'OK',data:{state:'not-found'}};
+  if(matches.length!==1)throw Error('GRAPH_SENT_RECONCILE_AMBIGUOUS');
+  const row=matches[0],from=row.from as {emailAddress?:{address?:unknown}}|undefined,recipients=Array.isArray(row.toRecipients)?row.toRecipients as Array<{emailAddress?:{address?:unknown}}>:[];
+  if(typeof row.id!=='string'||!row.id||typeof row.internetMessageId!=='string'||!/^<[^<>\s]+>$/.test(row.internetMessageId)||row.isDraft!==false||typeof row.sentDateTime!=='string'||!Number.isFinite(Date.parse(row.sentDateTime))||Date.parse(row.sentDateTime)<Date.parse(start)||typeof from?.emailAddress?.address!=='string'||from.emailAddress.address.toLowerCase()!==config.mailbox.toLowerCase()||!recipients.some(value=>typeof value.emailAddress?.address==='string'&&value.emailAddress.address.toLowerCase()===input.recipient.toLowerCase()))throw Error('GRAPH_SENT_RECONCILE_IDENTITY_INVALID');
+  return {code:'OK',data:{state:'found',graphMessageId:row.id,internetMessageId:row.internetMessageId,sentAt:new Date(row.sentDateTime).toISOString()}};
+ }catch(error){return unavailable('Der Versand wird noch geprüft.',error);}
 }
 
 export async function readMicrosoftGraphAttachments(

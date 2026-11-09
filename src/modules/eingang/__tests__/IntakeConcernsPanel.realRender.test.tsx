@@ -45,10 +45,23 @@ it('RM01 retries the same reply key and shows waiting only after the persisted v
  const ports:IntakeMessagesPorts={list,requestPhotos,select:vi.fn(),finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}};
  render(<IntakeMessages ports={ports}/>);
  fireEvent.click(await screen.findByRole('button',{name:'Fotos anfordern'}));
- await screen.findByText('Nicht gespeichert · TEST provider unavailable');
+ await screen.findByText('Nicht gespeichert · Fotoanfrage konnte nicht sicher gesendet werden · Versandbeleg prüfen.');
  expect(screen.queryByText('Wartet auf Fotos von TEST Schmidt')).toBeNull();
  fireEvent.click(screen.getByRole('button',{name:'Erneut'}));
  await screen.findByText('Wartet auf Fotos von TEST Schmidt');
  expect(requestPhotos).toHaveBeenCalledTimes(2);expect(requestPhotos.mock.calls[1][0]).toEqual(requestPhotos.mock.calls[0][0]);
  expect(screen.queryByRole('button',{name:'Fotos anfordern'})).toBeNull();expect(list).toHaveBeenCalledTimes(2);
+});
+
+it('RM07 photo UI checks automatically and offers a new-key retry only after confirmed non-delivery',async()=>{
+ const message=row('TEST-rekla-rm07',{concerns:['reklamation'],openConcerns:['reklamation'],photoCount:0});
+ const requestPhotos=vi.fn().mockImplementationOnce(async()=>({code:'UNAVAILABLE',delivery:'checking',retryAt:new Date(Date.now()+200).toISOString(),message:'TEST secret provider detail'})).mockResolvedValueOnce({code:'CONFLICT',delivery:'failed',message:'TEST secret failure detail'}).mockResolvedValueOnce({code:'OK',data:{}});
+ const list=vi.fn<IntakeMessagesPorts['list']>().mockResolvedValueOnce({code:'OK',messages:[message],areas:['mails','eingang','kunden'],currentLogin:'TEST-actor'}).mockResolvedValue({code:'OK',messages:[{...message,version:2,photoRequest:{at:'2026-11-09T04:00:00Z',threadId:'TEST-rm07-thread'}}],areas:['mails','eingang','kunden'],currentLogin:'TEST-actor'});
+ render(<IntakeMessages ports={{list,requestPhotos,select:vi.fn(),finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}}}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Fotos anfordern'}));
+ await waitFor(()=>expect(screen.getAllByText('Wird gerade geprüft').length).toBeGreaterThan(0));
+ expect(screen.queryByRole('button',{name:'Fotos anfordern'})).toBeNull();expect(screen.queryByText('TEST secret provider detail')).toBeNull();
+ const retry=await screen.findByRole('button',{name:'Erneut senden'});expect(requestPhotos).toHaveBeenCalledTimes(2);expect(requestPhotos.mock.calls[1][0]).toEqual(requestPhotos.mock.calls[0][0]);
+ fireEvent.click(retry);await screen.findByText('Wartet auf Fotos von TEST Schmidt');
+ expect(requestPhotos).toHaveBeenCalledTimes(3);expect(requestPhotos.mock.calls[2][0].clientRequestId).not.toBe(requestPhotos.mock.calls[0][0].clientRequestId);expect(list).toHaveBeenCalledTimes(2);
 });

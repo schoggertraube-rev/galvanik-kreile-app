@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {MAIL_DELIVERY_COPY,REKLA_MAIL_COPY} from '@/ui/situationCatalog';
 import { AtSign, Inbox, Loader2, MailPlus, Paperclip, Send } from "lucide-react";
 import {
   attachOutlookMailAction,
@@ -105,8 +106,28 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
   const sendLock=useRef(false);
   const pendingSend=useRef<Parameters<typeof sendCustomerMailAction>[0]|null>(null);
   const [sendUnclear,setSendUnclear]=useState(false);
+  const [sendCheckAt,setSendCheckAt]=useState<string|null>(null),[sendFailed,setSendFailed]=useState(false);
+  const sendForm=useRef<HTMLFormElement>(null);
+  const settleSend=useCallback((result:Awaited<ReturnType<typeof sendCustomerMailAction>>)=>{
+    if(result.code==='OK'){pendingSend.current=null;setSendUnclear(false);setSendFailed(false);setSendCheckAt(null);sendForm.current?.reset();setFeedback('notice'in result&&typeof result.notice==='string'&&result.notice?result.notice:'E-Mail wurde versendet und am Vorgang gespeichert.');return;}
+    if('delivery'in result&&result.delivery==='checking'){setSendUnclear(true);setSendCheckAt('retryAt'in result&&typeof result.retryAt==='string'?result.retryAt:null);setFeedback(MAIL_DELIVERY_COPY.checking);return;}
+    setSendCheckAt(null);
+    if('delivery'in result&&result.delivery==='failed'){pendingSend.current=null;setSendUnclear(false);setSendFailed(true);setFeedback('deliveryCustomer'in result&&typeof result.deliveryCustomer==='string'?MAIL_DELIVERY_COPY.failed(result.deliveryCustomer):REKLA_MAIL_COPY.unavailable);return;}
+    setFeedback(REKLA_MAIL_COPY.unavailable);
+    if(result.code==='UNAVAILABLE'||result.code==='CONFLICT')setSendUnclear(true);
+    else{pendingSend.current=null;setSendUnclear(false);}
+  },[]);
+  useEffect(()=>{
+    if(!sendCheckAt)return;const at=Date.parse(sendCheckAt);if(!Number.isFinite(at))return;
+    let active=true;const timer=setTimeout(()=>{
+      const input=pendingSend.current;if(!input||sendLock.current)return;
+      sendLock.current=true;setSendBusy(true);
+      void sendCustomerMailAction(input).then(result=>{if(active)settleSend(result);}).catch(error=>{console.error('[COMMUNICATION_RECONCILE_UNCONFIRMED]',error);if(active){setSendCheckAt(null);setFeedback(REKLA_MAIL_COPY.unavailable);}}).finally(()=>{sendLock.current=false;if(active)setSendBusy(false);});
+    },Math.max(0,at-Date.now()));
+    return()=>{active=false;clearTimeout(timer);};
+  },[sendCheckAt,settleSend]);
   const composeForm=(
-      <form className={styles.compose} onSubmit={async (event) => {
+      <form ref={sendForm} className={styles.compose} onSubmit={async (event) => {
         event.preventDefault();
         if(composer){composer.onSend();return;}
         if(sendLock.current)return;
@@ -117,17 +138,14 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
         pendingSend.current=input;sendLock.current=true;setSendBusy(true);setFeedback('');
         try{
           const result=await sendCustomerMailAction(input);
-          setFeedback(result.code==='OK'?('notice'in result&&typeof result.notice==='string'&&result.notice?result.notice:'E-Mail wurde versendet und am Vorgang gespeichert.'):result.message);
-          if(result.code==='OK'){pendingSend.current=null;setSendUnclear(false);formElement.reset();}
-          else if(result.code==='UNAVAILABLE'||result.code==='CONFLICT'){setSendUnclear(true);}
-          else{pendingSend.current=null;setSendUnclear(false);}
+          settleSend(result);
         }catch(error){console.error('[COMMUNICATION_SEND_UNCONFIRMED]',error);setSendUnclear(true);setFeedback('Ausgang ungeklärt · Eingaben und Kennung bleiben erhalten. Mit gleicher Kennung erneut versuchen.');}
         finally{sendLock.current=false;setSendBusy(false);}
       }}>
         <label>Betreff<input name="subject" required maxLength={500} value={composer?.subject} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onSubject(event.target.value):undefined} /></label>
         <label>Nachricht<textarea name="body" required maxLength={20_000} value={composer?.body} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onBody(event.target.value):undefined} /></label>
         {!composer?<label>PDF-Anhang<select name="quoteId" defaultValue="" disabled={sendBusy||sendUnclear}><option value="">Ohne Anhang</option>{matchingQuotes.map((quote) => <option key={quote.quoteId} value={quote.quoteId}>KV {quote.quoteNumber}</option>)}</select></label>:null}
-        {!composer?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden"}</button>:null}
+        {!composer&&!sendCheckAt?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{sendFailed?MAIL_DELIVERY_COPY.retry:sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden"}</button>:null}
       </form>
   );
   if(composer)return <section className={styles.panel}>{composeForm}</section>;
