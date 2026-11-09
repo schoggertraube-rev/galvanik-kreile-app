@@ -48,7 +48,6 @@ import {
   type ConvertQuoteInput,
   type CreateQuoteInput,
   type UpdateQuoteInput,
-  type QuoteCommandContext,
 } from "@/modules/quotes/server-public";
 
 type PendingMailAcceptance={input:QuoteLifecycleInput;proof:QuoteReplyProof;handoverMode:'pickup'|'shipping';paymentMode:'vorkasse'|'abholung'|'rechnung';eventId?:string;notices?:string[]};
