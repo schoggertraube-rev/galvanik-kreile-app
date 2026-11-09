@@ -30,31 +30,39 @@ it('H1 new quote revisions bind unit, position minutes and company VAT instead o
  expect(await withSession(full,()=>updateQuoteAction({quoteId,expectedVersion:2,clientEventId:randomUUID(),dueDate:'2027-05-20',note:input.note,positions:[legacyPosition]}))).toMatchObject({code:'OK',quote:{version:3,positions:[{unit:'stueck',plannedMinutes:90,vatRateBasisPoints:1900}]}});
 });
 
-it.each([700,null] as const)('H1 partial goods keep a flat amount, allocate time and resolve awarded VAT %s without a guessed default',async(initialRate)=>{
+it.each([700,null,'changed'] as const)('H1 partial goods keep a flat amount, allocate time and resolve awarded VAT %s without a guessed default',async(mode)=>{
+ const initialRate=mode==='changed'?700:mode;
  const customerId=await customerFixture('H1-Partial');
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST Teilmenge' WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
  await sql`UPDATE public.company_settings SET company_name='TEST Teilmenge',street='TEST Weg 1',zip='70176',city='Stuttgart',country='DE',iban='DE02120300000000202051',bic='BYLADEM1001',bank_name='TEST Bank',tax_id='DE123456789',invoice_vat_rate_basis_points=${initialRate},invoice_payment_term_days=14 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
- const {createQuoteAction,readQuoteAction,changeQuoteLifecycleAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
+ const {createQuoteAction,readQuoteAction,updateQuoteAction,changeQuoteLifecycleAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
  const created=await withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',note:'TEST Teilmenge',calculation:{hours:'1.0000',hourlyRateCents:10000,setupCents:0,materialCents:0},positions:[{name:'TEST Pauschalbearbeitung',quantity:4,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:1875,lineTotalCents:7500,unit:null},{name:'TEST Stückbearbeitung',quantity:2,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:1250,lineTotalCents:2500,unit:'stueck'}]}));
  if(created.code!=='OK')throw Error('H1_PARTIAL_CREATE:'+created.code);
  const quoteId=created.quote.quoteId;
- expect(await withSession(full,()=>changeQuoteLifecycleAction({quoteId,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST ausgehändigt'}))).toMatchObject({code:'OK'});
+ let acceptedVersion=3;
+ if(mode==='changed'){
+  await sql`UPDATE public.company_settings SET invoice_vat_rate_basis_points=1900 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+  const positions=created.quote.positions.map((row,index)=>({name:index===0?row.name+' neu':row.name,quantity:row.quantity,material:row.material,surfaceRequested:row.surfaceRequested,unitPriceCents:row.unitPriceCents,lineTotalCents:row.lineTotalCents,unit:row.unit??null}));
+  expect(await withSession(full,()=>updateQuoteAction({quoteId,expectedVersion:1,clientEventId:randomUUID(),dueDate:'2027-05-15',note:'TEST Teilmenge',positions}))).toMatchObject({code:'OK',quote:{version:2,positions:[{vatRateBasisPoints:1900},{vatRateBasisPoints:1900}]}});
+  acceptedVersion=4;
+ }
+ expect(await withSession(full,()=>changeQuoteLifecycleAction({quoteId,expectedVersion:acceptedVersion-2,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST ausgehändigt'}))).toMatchObject({code:'OK'});
  const operator=await createFixture(['eingang'],'werkstatt');
- expect(await withSession(operator,()=>changeQuoteLifecycleAction({quoteId,expectedVersion:2,edition:1,clientEventId:randomUUID(),action:'accept',evidence:'TEST telefonisch zugesagt'}))).toMatchObject({code:'OK'});
+ expect(await withSession(operator,()=>changeQuoteLifecycleAction({quoteId,expectedVersion:acceptedVersion-1,edition:1,clientEventId:randomUUID(),action:'accept',evidence:'TEST telefonisch zugesagt'}))).toMatchObject({code:'OK'});
  if(initialRate!==null)await sql`UPDATE public.company_settings SET invoice_vat_rate_basis_points=1900 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const quote=await withSession(full,()=>readQuoteAction({quoteId}));if(quote.code!=='OK')throw Error('H1_PARTIAL_READ:'+quote.code);
  const overview=await storeIntakeGoodsPhoto(undefined,operator),parts=await storeIntakeGoodsPhoto(overview.itemId,operator);
  const {getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
  const capture=await withSession(full,()=>getIntakeCaptureAction(overview.itemId));if(capture.code!=='OK')throw Error('H1_PARTIAL_CAPTURE');
- const goods={id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId:overview.itemId,quoteId,expectedQuoteVersion:3,sourceVersion:capture.capture.version,expectedVersion:0,mode:'erfassung' as const,command:'accept' as const,card:1,packagesReceived:1,packagesTotal:1,condition:'unauffaellig' as const,deviations:[],foundUnattended:false,foundAt:null,procedure:'stimmt' as const,procedureNote:null,photos:[{fileId:overview.fileId,kind:'uebersicht' as const},{fileId:parts.fileId,kind:'teile' as const}],location:'TEST Regal Teilmenge',quantities:quote.quote.positions.map((row,index)=>({itemId:row.id,expected:row.quantity,received:index===0?2:null,confirmed:index!==0,note:index===0?'TEST zwei von vier da':null}))};
- const award={quoteId,clientEventId:randomUUID(),expectedVersion:3,confirmedAward:true as const,confirmedOrderDueDate:'2027-05-15',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:goods.id};
+ const goods={id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId:overview.itemId,quoteId,expectedQuoteVersion:acceptedVersion,sourceVersion:capture.capture.version,expectedVersion:0,mode:'erfassung' as const,command:'accept' as const,card:1,packagesReceived:1,packagesTotal:1,condition:'unauffaellig' as const,deviations:[],foundUnattended:false,foundAt:null,procedure:'stimmt' as const,procedureNote:null,photos:[{fileId:overview.fileId,kind:'uebersicht' as const},{fileId:parts.fileId,kind:'teile' as const}],location:'TEST Regal Teilmenge',quantities:quote.quote.positions.map((row,index)=>({itemId:row.id,expected:row.quantity,received:index===0?2:null,confirmed:index!==0,note:index===0?'TEST zwei von vier da':null}))};
+ const award={quoteId,clientEventId:randomUUID(),expectedVersion:acceptedVersion,confirmedAward:true as const,confirmedOrderDueDate:'2027-05-15',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:goods.id};
  const converted=await withSession(operator,()=>convertQuoteToOrderAction(award,goods));
  expect(converted,JSON.stringify(converted)).toMatchObject({code:'OK'});if(converted.code!=='OK')throw Error('H1_PARTIAL_CONVERT:'+converted.code);
  const orderId=converted.orderReceipt.orderId;
  expect(converted.orderReceipt.items.every(row=>row.unitPriceCents===null&&row.vatRateBasisPoints===null)).toBe(true);
  const {getLiveOrderCardAction,transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction,freezeOrderAction}=await import('@/app/actions/orders.actions');
  const card=await withSession(full,()=>getLiveOrderCardAction({orderId}));
- expect(card).toMatchObject({code:'OK',data:{card:{commercialQuote:{totalNetCents:10000,vatRateBasisPoints:initialRate,plannedHours:'0.6333',hints:[{code:'FLAT_QUOTE_PARTIAL',text:'Pauschale bei Teilmenge prüfen'}],positions:[{quantity:2,lineTotalCents:7500,plannedMinutes:23,flatPartial:true},{quantity:2,lineTotalCents:2500,plannedMinutes:15}]}}}});
+ expect(card).toMatchObject({code:'OK',data:{card:{commercialQuote:{totalNetCents:10000,vatRateBasisPoints:mode==='changed'?1900:initialRate,plannedHours:'0.6333',hints:[{code:'FLAT_QUOTE_PARTIAL',text:'Pauschale bei Teilmenge prüfen'}],positions:[{quantity:2,lineTotalCents:7500,plannedMinutes:23,flatPartial:true},{quantity:2,lineTotalCents:2500,plannedMinutes:15}]}}}});
  expect(await withSession(operator,()=>convertQuoteToOrderAction(structuredClone(award),structuredClone(goods)))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND event_type='QUOTE_MINUTES_FROM_TOTAL_V1'`).toEqual([{user_id:operator.actorId}]);
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('H1_PARTIAL_MOVE');
@@ -75,6 +83,6 @@ it.each([700,null] as const)('H1 partial goods keep a flat amount, allocate time
  }
  const invoice=await withSession(full,()=>issueInvoiceAction(structuredClone(issue)));
  expect(invoice,JSON.stringify(invoice)).toMatchObject({code:'OK'});
- expect(await sql`SELECT net_amount_cents::integer AS net,vat_rate_basis_points AS vat,gross_amount_cents::integer AS gross FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{net:10000,vat:700,gross:10700}]);
+ expect(await sql`SELECT net_amount_cents::integer AS net,vat_rate_basis_points AS vat,gross_amount_cents::integer AS gross FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{net:10000,vat:mode==='changed'?1900:700,gross:mode==='changed'?11900:10700}]);
  if(initialRate===null)expect(await sql`SELECT user_id::text,payload->>'vatRateBasisPoints' AS rate FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND event_type='QUOTE_VAT_FROM_COMPANY_V1'`).toEqual([{user_id:full.actorId,rate:'700'}]);
 });

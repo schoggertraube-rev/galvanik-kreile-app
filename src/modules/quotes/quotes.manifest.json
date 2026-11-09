@@ -79,7 +79,8 @@
     "20261109205400_ablauf_quote_revision_commercial_terms.sql",
     "20261109211000_ablauf_quote_terms_revision_copies.sql",
     "20261109211400_ablauf_missing_company_vat.sql",
-    "20261109211900_ablauf_quote_binding_audit_undo.sql"
+    "20261109211900_ablauf_quote_binding_audit_undo.sql",
+    "20261109223400_ablauf_uniform_quote_revision_vat.sql"
   ],
   "viewsFunctions": [
     "private.create_quote_v1",
