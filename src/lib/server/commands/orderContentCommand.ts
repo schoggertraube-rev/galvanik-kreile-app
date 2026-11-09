@@ -122,7 +122,7 @@ type MailHandoverDependencies={
 };
 async function changeHandoverFromMail(raw:unknown,deps:MailHandoverDependencies){
  const value=raw as MailHandoverInput;
- if(Object.keys(value).sort().join(',')!==['command','sourceItemId','sourceVersion','clientEventId',...(value.orderId!==undefined?['orderId','expectedVersion']:[])].sort().join(',')||![value.sourceItemId,value.clientEventId].every(id=>typeof id==='string'&&UUID.test(id))||!Number.isSafeInteger(value.sourceVersion)||value.sourceVersion<1||value.orderId!==undefined&&(!value.orderId.trim()||value.orderId.length>128||!Number.isSafeInteger(value.expectedVersion)||value.expectedVersion!<1))return {code:'VALIDATION_ERROR' as const,message:'Original-Mail, Version und eindeutiger Auftrag fehlen.'};
+ if(Object.keys(value).sort().join(',')!==['command','sourceItemId','sourceVersion','clientEventId',...(value.orderId!==undefined?['orderId','expectedVersion']:[])].sort().join(',')||![value.sourceItemId,value.clientEventId].every(id=>typeof id==='string'&&UUID.test(id))||!Number.isSafeInteger(value.sourceVersion)||value.sourceVersion<1||value.orderId!==undefined&&(typeof value.orderId!=='string'||!value.orderId.trim()||value.orderId.length>128||!Number.isSafeInteger(value.expectedVersion)||value.expectedVersion!<1))return {code:'VALIDATION_ERROR' as const,message:'Original-Mail, Version und eindeutiger Auftrag fehlen.'};
  const authorization=await resolveAuthorization();if(!authorization.ok)return {code:'UNAUTHENTICATED' as const,message:authorization.message};
  const auth=authorization.data;if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const,message:'Mail-Übergabe benötigt Mails und Aufträge.'};
  const requestHash=hash(value);

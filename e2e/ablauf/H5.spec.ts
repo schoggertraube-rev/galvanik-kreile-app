@@ -1,9 +1,43 @@
 import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
-import {sql,full,withSession} from './replayHarness';
+import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
 import {installMailProvider} from './mailProvider';
+
+it('DA01 pickup contact save has one actor receipt, enforces areas and remains unchanged after physical handover',async()=>{
+ const order=await readyInvoiceOrder('DA01-Kontakt');
+ const {changeOrderPickupNoticeAction,getOrderPickupNoticeAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const request={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID(),name:'TEST Nora Abholung',note:'TEST Kollegin holt für den Kunden ab',source:'telefon'};
+ const changed=await withSession(full,()=>changeOrderPickupNoticeAction(request));
+ expect(changed.code).toBe('OK');if(changed.code!=='OK'||!changed.receipt||typeof changed.receipt!=='object'||!('aggregateVersion'in changed.receipt)||typeof changed.receipt.aggregateVersion!=='number')throw Error('DA01_SAVE_FAILED');
+ const version=changed.receipt.aggregateVersion;
+ expect(await withSession(full,()=>getOrderPickupNoticeAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{id:order.orderId,version,pickup_by_name:request.name,pickup_by_note:request.note,pickup_by_source:'telefon',pickup_by_login:full.actorId}});
+ expect(await withSession(full,()=>changeOrderPickupNoticeAction(structuredClone(request)))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>changeOrderPickupNoticeAction({...request,name:'TEST andere Person'}))).toMatchObject({code:'CONFLICT'});
+ const denied=await createFixture(['mails'],'werkstatt');
+ expect(await withSession(denied,()=>getOrderPickupNoticeAction({orderId:order.orderId}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(denied,()=>changeOrderPickupNoticeAction({...request,expectedVersion:version,clientEventId:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const released=await withSession(full,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:version,clientEventId:randomUUID()}));
+ expect(released.code).toBe('OK');if(released.code!=='OK')throw Error('DA01_RELEASE:'+released.code);
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt',version:released.receipt.orderVersion}}});
+ const closedKey=randomUUID();
+ expect(await withSession(full,()=>changeOrderPickupNoticeAction({...request,name:'TEST zu spät',expectedVersion:released.receipt.orderVersion,clientEventId:closedKey}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>getOrderPickupNoticeAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{pickup_by_name:request.name,pickup_by_note:request.note,version:released.receipt.orderVersion}});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${closedKey}::uuid`).toEqual([{n:0}]);
+});
+
+it('H5 malformed explicit order choices return validation without throwing or writing tasks and events',async()=>{
+ const {changeOrderPickupNoticeAction}=await import('@/app/actions/orders.actions');
+ const before=await sql`SELECT (SELECT count(*)::integer FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}) AS events,(SELECT count(*)::integer FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG}) AS tasks`;
+ for(const orderId of [42,null,{id:randomUUID()}]){
+  const request={command:'handover_from_mail',sourceItemId:randomUUID(),sourceVersion:1,clientEventId:randomUUID(),orderId,expectedVersion:1};
+  await expect(withSession(full,()=>changeOrderPickupNoticeAction(request))).resolves.toMatchObject({code:'VALIDATION_ERROR'});
+ }
+ expect(await sql`SELECT (SELECT count(*)::integer FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}) AS events,(SELECT count(*)::integer FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG}) AS tasks`).toEqual(before);
+});
 
 async function selectedPickupMail(customerId:string){
  const graphId='TEST-H5-'+randomUUID();
