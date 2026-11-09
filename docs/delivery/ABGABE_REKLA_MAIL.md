@@ -4,6 +4,46 @@ Produktstand `f33e2470` (09.11.2026). Fertig im lokalen Teilstand: bestätigter 
 
 Weiter offen: zentraler Fälligkeitslauf für RM08/R3 mit Rückhaltefenster, tatsächlicher automatischer Erinnerung und Anruf-Aufgabe; R2-Kalender/Fristen hängen noch am separaten Reservezweig. Altbelege ohne ursprünglichen Inhalt bleiben sicher gesperrt, ihre manuelle Klärung ist noch kein vollständiger Wiederaufnahmeweg. Bei mehreren/geschlossenen Reklamationen führt RM11 in die explizite bestehende Auswahl; nur genau eine offene Reklamation erlaubt direktes Anhängen. Die Datentests und gezielten Renderfälle ersetzen noch keinen abschließenden Sichtlauf des vollständigen RM-Pakets. Keine neue PR wegen der Grenze von zwei offenen PRs. Kein unabhängiges RM-PASS, keine exakte RM-CI/READY-Abgabe, kein Merge.
 
+## RM08 Dev-Testsystem, 09.11. 09:21
+
+Neue committed-bytegleiche Migration20261109061000 gemaess BAUREGELN4 auf exakt freigegebenem Dev angewandt. AbbruchprobePASS, ganze bestehende Domainzeilen und vorhandene Vorlagen unveraendert, zwei neue Fristen ausdruecklich NULL, neue Erinnerungs-Vorlage leer/unvollstaendig. Kein Versand, keine Frist erfunden, keine Automatik aktiviert. Der erste Nachweisversuch brach vor Anwendung ab: SQL-Alias source kollidierte mit einer gleichnamigen Spalte. Der mechanisch korrigierte Nachweis benutzt den ganzen Datensatz `to_jsonb(kr_domain_snapshot.*)`, nicht dessen einzelne Spalte; keine Produktlockerung.
+
+Branch106/Dev110. Keine Branch-Migration fehlt. Die4 zusaetzlichen, bereits freigegeben angewandten Migrationen stehen unten. Nur diese explizite angewandte Union ist gleichDev; nicht der Einzelbranch und nicht jede lokale Reserve. Keine vorhandenen Daten geaendert/geloescht, keine Produktion. Zentraler Lauf wartet weiterhin auf die gebuendelte Aktor-Entscheidung08:40, daher kein RM-PASS.
+
+```json
+{
+  "devOnly": true,
+  "version": "20261109061000",
+  "sha256": "52419e4e0e62331abf7a7d7385d23c1cd8f0d822f3b7ce9ad5ad300b76c90554",
+  "abortProbe": "PASS",
+  "existingDomainUnchanged": true,
+  "existingTemplatesUnchanged": true,
+  "policyDefaultNull": true,
+  "noAutomationActivated": true,
+  "counts": {
+    "public.supplier_invoice": 0,
+    "public.orders": 15,
+    "private.quotes": 2,
+    "public.intake_item": 37,
+    "public.intake_event": 122,
+    "public.events": 497,
+    "public.company_settings": 1,
+    "public.complaints": 0
+  },
+  "repoCount": 106,
+  "devCount": 110,
+  "repoEqualsDev": false,
+  "devOnlyVersions": [
+    "20261109003000",
+    "20261109030500",
+    "20261109042000",
+    "20261109074500"
+  ],
+  "missingRepoVersions": [],
+  "qualifiedAppliedUnionEqualsDev": true
+}
+```
+
 Die folgenden Einträge sind chronologische Bau-Nachweise. Ihre früheren Offenlisten werden durch diesen aktuellen Stand ersetzt und sind keine weiteren Aufträge.
 
 ## RM07 — PL-Entscheidung 09.11. 06:05 umgesetzt, Teilstand
