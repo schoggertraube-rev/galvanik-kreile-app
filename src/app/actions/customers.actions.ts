@@ -14,6 +14,7 @@ import {
 } from "@/lib/server/authorization";
 import { readCustomerSummary,readCustomerListSignals } from "@/lib/server/customerSummaryRead";
 import { readInvoiceTruth } from "@/lib/server/invoiceTruthRead";
+import {CUSTOMER_LOOKUP_COPY} from '@/ui/situationCatalog';
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {customerContactLabel,customerSortKey,kundeVollstaendigkeit,type CustomerAddressInput,type CustomerListSignals,type CustomerStoredProfile} from "@/modules/customers/public";
 import {
@@ -206,6 +207,7 @@ export async function getCustomerByIdDb(id: string): Promise<ActionResult<Custom
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
   if (!hasAuthorizationArea(authRes.data, "kunden")) return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben." };
+  if (typeof id !== 'string' || !id.trim() || id.trim() !== id || id.length > 128) return {ok:false,error:'VALIDATION_ERROR',message:CUSTOMER_LOOKUP_COPY.invalidId};
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
@@ -247,6 +249,7 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
   if (!hasAuthorizationArea(authRes.data, "kunden")) return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben." };
+  if (typeof query !== 'string') return {ok:false,error:'VALIDATION_ERROR',message:CUSTOMER_LOOKUP_COPY.invalidQuery};
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };

@@ -3,6 +3,20 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('malformed legacy customer lookups return validation instead of a thrown render error and valid lookup still works',async()=>{
+ const {createCustomerAction,searchCustomersDb,getCustomerByIdDb}=await import('@/app/actions/customers.actions');
+ const name='TEST Kunde Suchfehler '+randomUUID();
+ const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:name,phone:'+49 711 5550190'}));if(created.code!=='OK')throw Error('LOOKUP_CREATE:'+created.code);
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ for(const value of [42,{},null]){
+  expect(await withSession(full,()=>searchCustomersDb(value as unknown as string))).toMatchObject({ok:false,error:'VALIDATION_ERROR'});
+  expect(await withSession(full,()=>getCustomerByIdDb(value as unknown as string))).toMatchObject({ok:false,error:'VALIDATION_ERROR'});
+ }
+ expect(await withSession(full,()=>searchCustomersDb(name))).toMatchObject({ok:true,data:expect.arrayContaining([expect.objectContaining({id:created.receipt.customerId})])});
+ expect(await withSession(full,()=>getCustomerByIdDb(created.receipt.customerId))).toMatchObject({ok:true,data:{id:created.receipt.customerId}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
 it('supplier visibility uses the same Geld boundary in list, search and direct customer readers',async()=>{
  const {createCustomerAction,getCustomersDb,searchCustomersDb,getCustomerByIdDb,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
  const name='TEST Lieferant Grenze '+randomUUID();
