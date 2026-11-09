@@ -13,7 +13,7 @@ import { uploadIntakeOriginal } from "../intakeOriginalUpload";
 import QRCode from "qrcode";
 import Image from "next/image";
 import { getIntakeDeviceId, type IntakeDeviceRequest } from "../deviceContract";
-import {intakeStartTitle,SITUATION_COPY,CAPTURE_COPY,CAPTURE_TEXT_COPY,type IntakeQuoteCandidate} from '@/ui/situationCatalog';
+import {intakeStartTitle,SITUATION_COPY,CAPTURE_COPY,CAPTURE_TEXT_COPY,CAPTURE_ENTRY_COPY,CAPTURE_ERROR_COPY,captureFailureCopy,type IntakeQuoteCandidate} from '@/ui/situationCatalog';
 import {IntakeSituation} from "./IntakeSituation";
 import type { CaptureKind } from "../captureRecognition";
 
@@ -103,7 +103,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     return()=>{active=false;};
   },[expectationId,expectationVersion,expectationKind,hasExpectation,packageContext,readCapture]);
   const pendingNoteWrites = useRef(Promise.resolve());
-  useEffect(()=>{if(!resumeSourceId||!getCapture)return;let active=true;void getCapture(resumeSourceId).then(result=>{if(!active)return;if(result.code!=='OK'){setError(result.message);return;}setItemId(result.capture.id);setCapture(result.capture);setText(result.capture.text??'');setCameraRequested(false);}).catch(failure=>{console.error('[PACKAGE_ONSITE_CAPTURE_RESTORE_FAILED]',failure);if(active)setError(PACKAGE_ONSITE_COPY.missing);});return()=>{active=false;};},[resumeSourceId,getCapture]);
+  useEffect(()=>{if(!resumeSourceId||!getCapture)return;let active=true;void getCapture(resumeSourceId).then(result=>{if(!active)return;if(result.code!=='OK'){setError(captureFailureCopy(result.code));return;}setItemId(result.capture.id);setCapture(result.capture);setText(result.capture.text??'');setCameraRequested(false);}).catch(failure=>{console.error('[PACKAGE_ONSITE_CAPTURE_RESTORE_FAILED]',failure);if(active)setError(PACKAGE_ONSITE_COPY.missing);});return()=>{active=false;};},[resumeSourceId,getCapture]);
   useEffect(() => {
     if (!getCapture) return;
     let current = true, running = false;
@@ -138,7 +138,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
       } catch (cause) {
         if (!closing.signal.aborted) {
           console.error("[INTAKE_LIVE_READ_FAILED]", cause);
-          if (current) setLiveError("Neue Aufnahmen konnten nicht geladen werden · der letzte Stand bleibt erhalten. Code: INTAKE_LIVE_READ_FAILED.");
+          if (current) setLiveError(CAPTURE_ERROR_COPY.INTAKE_LIVE_READ_FAILED);
         }
       } finally { running = false; }
     };
@@ -157,8 +157,8 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         const read = await getCapture(itemId);
         if (!active) return;
         if (read.code === "OK") setCapture(read.capture);
-        else setError(read.message);
-      } catch (cause) { console.error("[INTAKE_CAPTURE_REFRESH_FAILED]", cause); if (active) setError("Zuordnung konnte nicht erneut gelesen werden · Original bleibt erhalten. Code: INTAKE_CAPTURE_REFRESH_FAILED."); }
+        else setError(captureFailureCopy(read.code));
+      } catch (cause) { console.error("[INTAKE_CAPTURE_REFRESH_FAILED]", cause); if (active) setError(CAPTURE_ERROR_COPY.INTAKE_CAPTURE_REFRESH_FAILED); }
     };
     window.addEventListener("kreile:intake-changed", changed);
     return () => { active = false; window.removeEventListener("kreile:intake-changed", changed); };
@@ -170,12 +170,12 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     let current = true;
     void getCreateContext().then(result => {
       if (!current) return;
-      if (result.code !== "OK") { setContextError(result.message); return; }
+      if (result.code !== "OK") { setContextError(captureFailureCopy(result.code)); return; }
       setCreateContext(result.context);
       setContextError(null);
     }).catch(cause => {
       console.error("[INTAKE_CREATE_CONTEXT_READ_FAILED]", cause);
-      if (current) setContextError("Kontext konnte nicht geladen werden. Code: INTAKE_CREATE_CONTEXT_READ_FAILED.");
+      if (current) setContextError(CAPTURE_ERROR_COPY.INTAKE_CREATE_CONTEXT_READ_FAILED);
     }).finally(() => { if (current) setContextLoading(false); });
     return () => { current = false; };
   }, [mode, getCreateContext, contextAttempt]);
@@ -185,10 +185,10 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     let current = true;
     void deviceRequest({ command: "accept", token: handoverToken, deviceId: getIntakeDeviceId() }).then(async result => {
       if (!current) return;
-      if (result.code !== "OK" || !result.requests[0]) { setError(result.code === "OK" ? "Foto-Anfrage fehlt." : result.message); return; }
+      if (result.code !== "OK" || !result.requests[0]) { setError(result.code === "OK" ? CAPTURE_ENTRY_COPY.requestMissing : captureFailureCopy(result.code)); return; }
       const request = result.requests[0]; setPhotoRequest(request); setItemId(request.itemId); setReceiving(true);
       if (getCapture) { const loaded = await getCapture(request.itemId); if (current && loaded.code === "OK") setCapture(loaded.capture); }
-    }).catch(cause => { console.error("[INTAKE_HANDOVER_ACCEPT_FAILED]", cause); if (current) setError("Foto-Anfrage konnte nicht geöffnet werden. Code: INTAKE_HANDOVER_ACCEPT_FAILED."); });
+    }).catch(cause => { console.error("[INTAKE_HANDOVER_ACCEPT_FAILED]", cause); if (current) setError(CAPTURE_ERROR_COPY.INTAKE_HANDOVER_ACCEPT_FAILED); });
     return () => { current = false; };
   }, [handoverToken, deviceRequest, getCapture]);
   useEffect(() => {
@@ -200,15 +200,15 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
       try {
         const result = await deviceRequest({ command: "refresh", ...(photoRequestId ? { requestId: photoRequestId } : {}) });
         if (!current) return;
-        if (result.code !== "OK") { setError(result.message); return; }
+        if (result.code !== "OK") { setError(captureFailureCopy(result.code)); return; }
         if (photoRequestId) {
           const updated = result.requests.find(request => request.id === photoRequestId);
           if (updated) {
             setPhotoRequest(updated);
-            if (updated.status === "abgelaufen") { setError("Übergabe abgelaufen"); setQrImage(null); setQrLink(null); }
+            if (updated.status === "abgelaufen") { setError(CAPTURE_ERROR_COPY.NOTICE_5); setQrImage(null); setQrLink(null); }
           }
         } else setPendingRequests(result.requests);
-      } catch (cause) { console.error("[INTAKE_DEVICE_REFRESH_FAILED]", cause); if (current) setError("Foto-Anfragen konnten nicht geladen werden. Code: INTAKE_DEVICE_REFRESH_FAILED."); }
+      } catch (cause) { console.error("[INTAKE_DEVICE_REFRESH_FAILED]", cause); if (current) setError(CAPTURE_ERROR_COPY.INTAKE_DEVICE_REFRESH_FAILED); }
       finally { running = false; }
     };
     void refresh(); const timer = setInterval(() => void refresh(), 3_000);
@@ -220,10 +220,10 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     deviceInFlight.current = true; setDeviceWorking(true); setError(null);
     try {
       const result = await deviceRequest({ command: "request", itemId });
-      if (result.code !== "OK" || !result.requests[0]) { setError(result.code === "OK" ? "Foto-Anfrage fehlt." : result.message); return; }
+      if (result.code !== "OK" || !result.requests[0]) { setError(result.code === "OK" ? CAPTURE_ENTRY_COPY.requestMissing : captureFailureCopy(result.code)); return; }
       setPhotoRequest(result.requests[0]);
       if (result.token) { const link = location.origin + "/rein#uebergabe:" + result.token; setQrLink(link); setQrImage(await QRCode.toDataURL(link, { width: 216, margin: 1 })); }
-    } catch (cause) { console.error("[INTAKE_PHOTOS_REQUEST_FAILED]", cause); setError("Foto-Anfrage konnte nicht angelegt werden. Code: INTAKE_PHOTOS_REQUEST_FAILED."); }
+    } catch (cause) { console.error("[INTAKE_PHOTOS_REQUEST_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_PHOTOS_REQUEST_FAILED); }
     finally { deviceInFlight.current = false; setDeviceWorking(false); }
   };
   const acceptRequest = async (requestId: string) => {
@@ -231,10 +231,10 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     deviceInFlight.current = true; setDeviceWorking(true);
     try {
       const result = await deviceRequest({ command: "accept", requestId, deviceId: getIntakeDeviceId() });
-      if (result.code !== "OK" || !result.requests[0]) { setError(result.code === "OK" ? "Foto-Anfrage fehlt." : result.message); return; }
+      if (result.code !== "OK" || !result.requests[0]) { setError(result.code === "OK" ? CAPTURE_ENTRY_COPY.requestMissing : captureFailureCopy(result.code)); return; }
       const request = result.requests[0]; setPhotoRequest(request); setItemId(request.itemId); setReceiving(true); setPendingRequests([]);
-      if (getCapture) { const loaded = await getCapture(request.itemId); if (loaded.code === "OK") setCapture(loaded.capture); else setError(loaded.message); }
-    } catch (cause) { console.error("[INTAKE_DEVICE_ACCEPT_FAILED]", cause); setError("Foto-Anfrage konnte nicht angenommen werden. Code: INTAKE_DEVICE_ACCEPT_FAILED."); }
+      if (getCapture) { const loaded = await getCapture(request.itemId); if (loaded.code === "OK") setCapture(loaded.capture); else setError(captureFailureCopy(loaded.code)); }
+    } catch (cause) { console.error("[INTAKE_DEVICE_ACCEPT_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_DEVICE_ACCEPT_FAILED); }
     finally { deviceInFlight.current = false; setDeviceWorking(false); }
   };
   const finishPhotos = async (reason: "fertig" | "abgebrochen") => {
@@ -242,10 +242,10 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     deviceInFlight.current = true; setDeviceWorking(true);
     try {
       const result = await deviceRequest({ command: "end", requestId: photoRequest.id, deviceId: getIntakeDeviceId(), reason });
-      if (result.code !== "OK" || !result.requests[0]) { setError(result.code === "OK" ? "Foto-Anfrage fehlt." : result.message); return; }
+      if (result.code !== "OK" || !result.requests[0]) { setError(result.code === "OK" ? CAPTURE_ENTRY_COPY.requestMissing : captureFailureCopy(result.code)); return; }
       if (receiving) onClose(result.requests[0].photoCount + " Fotos an den PC gesendet");
       else { setPhotoRequest(null); setQrImage(null); setQrLink(null); }
-    } catch (cause) { console.error("[INTAKE_DEVICE_FINISH_FAILED]", cause); setError("Übergabe konnte nicht beendet werden. Code: INTAKE_DEVICE_FINISH_FAILED."); }
+    } catch (cause) { console.error("[INTAKE_DEVICE_FINISH_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_DEVICE_FINISH_FAILED); }
     finally { deviceInFlight.current = false; setDeviceWorking(false); }
   };
 
@@ -274,16 +274,16 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     let current = true;
     const timer = setTimeout(() => {
       setReading(true);
-      if (!readCaptureNote) { setReading(false); setError("Lesen ist nicht verbunden. Code: INTAKE_NOTE_READ_PORT_UNAVAILABLE."); return; }
+      if (!readCaptureNote) { setReading(false); setError(CAPTURE_ERROR_COPY.INTAKE_NOTE_READ_PORT_UNAVAILABLE); return; }
       void Promise.all([readCaptureNote(text), findRecognizedCustomers(text, searchIntakeCustomers)])
         .then(([result, matched]) => {
           if (!current) return;
-          if (result.code !== "OK") { setError(result.message); return; }
-          if (matched.code !== "OK") { setError(matched.message); return; }
+          if (result.code !== "OK") { setError(captureFailureCopy(result.code)); return; }
+          if (matched.code !== "OK") { setError(captureFailureCopy(matched.code)); return; }
           setCustomers(matched.customers.map(customer => ({ id: customer.id, name: customer.companyName ?? customer.name })));
         }).catch(cause => {
           console.error("[INTAKE_NOTE_LIVE_READ_FAILED]", { name: cause instanceof Error ? cause.name : "UnknownError" });
-          if (current) setError("Lesen fehlgeschlagen · der Text bleibt erhalten. Code: INTAKE_NOTE_LIVE_READ_FAILED.");
+          if (current) setError(CAPTURE_ERROR_COPY.INTAKE_NOTE_LIVE_READ_FAILED);
         }).finally(() => { if (current) setReading(false); });
     }, 400);
     return () => { current = false; clearTimeout(timer); };
@@ -291,27 +291,27 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
 
   const saveNote = useCallback(async (): Promise<IntakeCapture | null> => {
     if (!text.trim()) return capture;
-    if (!scope) { setError("Lokale Aufnahme wird noch vorbereitet."); return null; }
+    if (!scope) { setError(CAPTURE_ERROR_COPY.NOTICE_12); return null; }
     const key = JSON.stringify([text, concerns.filter(value => !dismissed.includes(value.id)).map(value => value.id)]);
     const savingStand = textstand.current;
     await pendingNoteWrites.current;
     if (lastSaved.current === key && savedCapture.current) {
       try { await acknowledgePendingOriginal(scope, itemId, savingStand); }
-      catch (cause) { console.error("[INTAKE_NOTE_LOCAL_ACK_FAILED]", cause); setError("Notiz ist auf dem Server gespeichert · lokale Bestätigung fehlgeschlagen. Bitte erneut prüfen. Code: INTAKE_NOTE_LOCAL_ACK_FAILED."); return null; }
+      catch (cause) { console.error("[INTAKE_NOTE_LOCAL_ACK_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_NOTE_LOCAL_ACK_FAILED); return null; }
       return savedCapture.current;
     }
-    if (!saveCaptureNote) { setError("Speichern ist nicht verbunden. Code: INTAKE_NOTE_WRITE_PORT_UNAVAILABLE."); return null; }
+    if (!saveCaptureNote) { setError(CAPTURE_ERROR_COPY.INTAKE_NOTE_WRITE_PORT_UNAVAILABLE); return null; }
     const result = await saveCaptureNote({ itemId, textstand: savingStand, text, ...(createContext ? { context: { customerId: createContext.customerId } } : {}),
       concerns: concerns.filter(value => !dismissed.includes(value.id)).map(value => value.id) });
-    if (result.code !== "OK") { setError(result.message); return null; }
+    if (result.code !== "OK") { setError(captureFailureCopy(result.code)); return null; }
     setCapture(result.capture); savedCapture.current = result.capture; lastSaved.current = key;
     try { await acknowledgePendingOriginal(scope, itemId, savingStand); }
-    catch (cause) { console.error("[INTAKE_NOTE_LOCAL_ACK_FAILED]", cause); setError("Notiz ist auf dem Server gespeichert · lokale Bestätigung fehlgeschlagen. Bitte erneut prüfen. Code: INTAKE_NOTE_LOCAL_ACK_FAILED."); return null; }
+    catch (cause) { console.error("[INTAKE_NOTE_LOCAL_ACK_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_NOTE_LOCAL_ACK_FAILED); return null; }
     return result.capture;
   }, [text,capture,scope,concerns,dismissed,itemId,saveCaptureNote,createContext]);
   const upload = async (files: PendingFile[]) => {
     if (inFlight.current) return;
-    if (!scope || !ports.prepareCaptureFile || !ports.finishCaptureFile) { setError("Dateiübertragung ist nicht verbunden. Code: INTAKE_UPLOAD_PORT_UNAVAILABLE."); return; }
+    if (!scope || !ports.prepareCaptureFile || !ports.finishCaptureFile) { setError(CAPTURE_ERROR_COPY.INTAKE_UPLOAD_PORT_UNAVAILABLE); return; }
     inFlight.current = true; setBusy(true); setError(null); setPending(files); setAutomaticRetry(true);
     setProgress({ done: 0, total: files.length });
     const remaining = [...files];
@@ -322,31 +322,31 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         const sha256 = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
         await retainPendingOriginal(scope, { id: entry.id, itemId: entry.itemId, kind: "file", file: entry.file, captureOrigin: entry.captureOrigin });
         const grant = await ports.prepareCaptureFile({ itemId: entry.itemId, fileId: entry.id, name: entry.file.name, mime: entry.file.type || "application/octet-stream", bytes: entry.file.size, sha256, deviceId: getIntakeDeviceId(), captureOrigin: entry.captureOrigin });
-        if (grant.code !== "OK") { setAutomaticRetry(grant.code === "UNAVAILABLE"); setError(grant.message); return; }
+        if (grant.code !== "OK") { setAutomaticRetry(grant.code === "UNAVAILABLE"); setError(captureFailureCopy(grant.code)); return; }
         if (grant.upload) {
           const result = await uploadIntakeOriginal(grant.upload, entry.file);
           // An interrupted retry can meet the already stored immutable hash. The server verifies it.
           if (!result.ok) console.error("[INTAKE_FILE_UPLOAD_REQUIRES_VERIFICATION]", { code: "UNCONFIRMED" });
         }
         const finished = await ports.finishCaptureFile(entry.id);
-        if (finished.code !== "OK") { setAutomaticRetry(finished.code === "UNAVAILABLE"); setError(finished.message); return; }
+        if (finished.code !== "OK") { setAutomaticRetry(finished.code === "UNAVAILABLE"); setError(captureFailureCopy(finished.code)); return; }
         try { await acknowledgePendingOriginal(scope, entry.id); }
-        catch (cause) { console.error("[INTAKE_FILE_LOCAL_ACK_FAILED]", cause); setCapture(finished.capture); setError("Original ist auf dem Server gesichert · lokale Bestätigung fehlgeschlagen. Bitte erneut übertragen. Code: INTAKE_FILE_LOCAL_ACK_FAILED."); return; }
+        catch (cause) { console.error("[INTAKE_FILE_LOCAL_ACK_FAILED]", cause); setCapture(finished.capture); setError(CAPTURE_ERROR_COPY.INTAKE_FILE_LOCAL_ACK_FAILED); return; }
         setCapture(finished.capture); setItemId(finished.capture.id); remaining.shift(); setPending([...remaining]);
         setProgress({ done: files.length - remaining.length, total: files.length });
       }
     } catch (cause) {
       console.error("[INTAKE_FILE_UPLOAD_FAILED]", { name: cause instanceof Error ? cause.name : "UnknownError" });
-      setError("Übertragung unterbrochen · erneut versuchen. Dateien und Kennungen bleiben erhalten. Code: INTAKE_FILE_UPLOAD_FAILED.");
+      setError(CAPTURE_ERROR_COPY.INTAKE_FILE_UPLOAD_FAILED);
     } finally { inFlight.current = false; setBusy(false); }
   };
   const chooseFiles = (list: FileList | File[] | null) => {
     if (!list || !list.length) return;
-    if (blockedReceiver) { setError("Foto-Anfrage wird noch geöffnet · Dateien danach erneut wählen."); return; }
-    if (inFlight.current) { setError("Eine Übertragung läuft bereits · weitere Dateien bitte danach wählen."); return; }
+    if (blockedReceiver) { setError(CAPTURE_ERROR_COPY.NOTICE_18); return; }
+    if (inFlight.current) { setError(CAPTURE_ERROR_COPY.NOTICE_19); return; }
     const files = Array.from(list);
-    if (files.some(file => file.size < 1 || file.size > 150 * 1024 * 1024)) { setError("Dateien müssen 1 Byte bis 150 MB groß sein."); return; }
-    if (mode === "eingangsfoto" && files.some(file => !["image/jpeg","image/png","image/heic","image/webp"].includes(file.type.toLowerCase()))) { setError("Eingangsfoto benötigt JPG, PNG, HEIC oder WEBP."); return; }
+    if (files.some(file => file.size < 1 || file.size > 150 * 1024 * 1024)) { setError(CAPTURE_ERROR_COPY.NOTICE_20); return; }
+    if (mode === "eingangsfoto" && files.some(file => !["image/jpeg","image/png","image/heic","image/webp"].includes(file.type.toLowerCase()))) { setError(CAPTURE_ERROR_COPY.NOTICE_21); return; }
     const captureOrigin = mode === "eingangsfoto" ? "warenfoto" as const : "dokument" as const;
     const entries = files.map(file => ({ file, id: crypto.randomUUID(), itemId, captureOrigin }));
     localInput.current = true;setHidePreviousResult(false);
@@ -357,16 +357,16 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
   const takePhoto = () => {
     if (photoInFlight.current || inFlight.current || blockedReceiver) return;
     const source = video.current;
-    if (!source || source.readyState < 2 || !source.videoWidth || !source.videoHeight) { setError("Kamera ist noch nicht bereit · bitte kurz warten."); return; }
+    if (!source || source.readyState < 2 || !source.videoWidth || !source.videoHeight) { setError(CAPTURE_ERROR_COPY.NOTICE_22); return; }
     const canvas = document.createElement("canvas");
     canvas.width = source.videoWidth; canvas.height = source.videoHeight;
     const context = canvas.getContext("2d");
-    if (!context) { setError("Foto konnte nicht aufgenommen werden. Code: INTAKE_CAMERA_CANVAS_UNAVAILABLE."); return; }
+    if (!context) { setError(CAPTURE_ERROR_COPY.INTAKE_CAMERA_CANVAS_UNAVAILABLE); return; }
     context.drawImage(source, 0, 0);
     photoInFlight.current = true;
     canvas.toBlob(blob => {
       photoInFlight.current = false;
-      if (!blob) { setError("Foto konnte nicht gesichert werden. Code: INTAKE_CAMERA_BLOB_UNAVAILABLE."); return; }
+      if (!blob) { setError(CAPTURE_ERROR_COPY.INTAKE_CAMERA_BLOB_UNAVAILABLE); return; }
       setCameraRequested(false);
       chooseFiles([new File([blob], "Foto-" + new Date().toISOString().replace(/[:.]/g, "-") + ".jpg", { type: "image/jpeg", lastModified: Date.now() })]);
     }, "image/jpeg", 0.92);
@@ -375,23 +375,23 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     if (inFlight.current || deviceWorking) { setCloseRequested(true); return; }
     inFlight.current = true; setBusy(true);
     try {
-      if (pending.length) { setCloseRequested(true); setError("Übertragung ist noch offen · das Fenster schließt nach der Bestätigung."); return; }
+      if (pending.length) { setCloseRequested(true); setError(CAPTURE_ERROR_COPY.NOTICE_25); return; }
       const saved = await saveNote();
       if (text.trim() && !saved) return;
       if(mode&&(saved??capture)){
-        if(!discardCapture){setError("Kennzeichnung ist nicht verbunden. Code: INTAKE_DISCARD_PORT_UNAVAILABLE.");return;}
+        if(!discardCapture){setError(CAPTURE_ERROR_COPY.INTAKE_DISCARD_PORT_UNAVAILABLE);return;}
         const original=saved??capture!;
         const discarded=await discardCapture({itemId:original.id,version:original.version,clientEventId:discardKey.current});
-        if(discarded.code!=="OK"){setError(discarded.message);return;}
+        if(discarded.code!=="OK"){setError(captureFailureCopy(discarded.code));return;}
       }
       if (deviceRequest && photoRequest) {
         const ended = await deviceRequest({ command: "end", requestId: photoRequest.id, deviceId: getIntakeDeviceId(), reason: receiving ? "abgebrochen" : "geschlossen" });
-        if (ended.code !== "OK") { setError(ended.message); return; }
+        if (ended.code !== "OK") { setError(captureFailureCopy(ended.code)); return; }
       }
       onClose(!mode&&hasContent ? savedMessage : undefined);
     } catch (cause) {
       console.error("[INTAKE_CAPTURE_CLOSE_FAILED]", { name: cause instanceof Error ? cause.name : "UnknownError" });
-      setError("Speichern fehlgeschlagen · alle Eingaben sind noch da. Code: INTAKE_CAPTURE_CLOSE_FAILED.");
+      setError(CAPTURE_ERROR_COPY.INTAKE_CAPTURE_CLOSE_FAILED);
     } finally { inFlight.current = false; setBusy(false); }
   }, [deviceWorking,pending.length,saveNote,text,deviceRequest,photoRequest,receiving,onClose,hasContent,savedMessage,mode,capture,discardCapture]);
   useEffect(() => {
@@ -426,7 +426,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
       return;
     } catch(cause) {
       console.error("[INTAKE_PENDING_RESUME_FAILED]",cause);
-      if(current)setError("Lokale Aufnahmen werden vorbereitet · ausgewählte Dateien bleiben hier erhalten. Code: INTAKE_PENDING_RESUME_FAILED.");
+      if(current)setError(CAPTURE_ERROR_COPY.INTAKE_PENDING_RESUME_FAILED);
       if(attempt<2&&current)await new Promise<void>(resolve=>{retry=window.setTimeout(resolve,1_000);});
     } } };
     void initialize();
@@ -447,11 +447,11 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     setCustomers([]);
     const stand = textstand.current;
     earlyNote.current = { text:value,stand,dismissed:[] };
-    if (!scope) { setError("Lokale Sicherung wird vorbereitet · Text bleibt erhalten."); return; }
+    if (!scope) { setError(CAPTURE_ERROR_COPY.NOTICE_29); return; }
     pendingNoteWrites.current = pendingNoteWrites.current.then(() => value.trim()
       ? retainPendingOriginal(scope, { id: itemId, itemId, kind: "note", text: value, textstand: stand, dismissed: [] })
       : acknowledgePendingOriginal(scope, itemId))
-      .catch(cause => { console.error("[INTAKE_PENDING_NOTE_FAILED]", cause); setError("Text bleibt hier erhalten, die lokale Sicherung ist nicht verfügbar. Bitte Lesen. Code: INTAKE_PENDING_NOTE_FAILED."); });
+      .catch(cause => { console.error("[INTAKE_PENDING_NOTE_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_PENDING_NOTE_FAILED); });
   };
   const dismissConcern = (id: string) => {
     const next = [...dismissed, id]; const stand = crypto.randomUUID();
@@ -459,24 +459,24 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     localInput.current = true; earlyNote.current = {text,stand,dismissed:next};
     if (!scope) return;
     pendingNoteWrites.current = pendingNoteWrites.current.then(() => retainPendingOriginal(scope, { id: itemId, itemId, kind: "note", text, textstand: stand, dismissed: next }))
-      .catch(cause => { console.error("[INTAKE_PENDING_CONCERN_FAILED]", cause); setError("Auswahl konnte lokal nicht gesichert werden. Bitte Lesen. Code: INTAKE_PENDING_CONCERN_FAILED."); });
+      .catch(cause => { console.error("[INTAKE_PENDING_CONCERN_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_PENDING_CONCERN_FAILED); });
   };
   const modeTitle = receiving || photoRequest ? "Fotos für den PC" : mode ? { eingang: "Zettel lesen · für die Erfassung", eingangsfoto: "Eingangsfoto aufnehmen", visitenkarte: "Visitenkarte lesen", datei: "Datei lesen · für die Erfassung" }[mode] : undefined;
   const failedFile = capture?.files.some(file => file.status === "fehler") === true;
   const firstOriginal = capture?.files.find(file => file.secured === true);
   const showCamera = cameraAvailable && cameraRequested && !cameraError;
   const recognizedKind = capture?.recognition?.kind ?? (capture?.text ? "notiz" : "unklar");
-  const kindNames = { ware: "Ware", anfrage: "Anfrage oder Bestellung", rechnung: "Rechnung (Lieferant)", dokument: "Dokument", kontakt: "Kontakt", notiz: "Notiz", unklar: "unklar" };
+  const kindNames = { ware: "Ware", anfrage: "Anfrage oder Bestellung", rechnung: "Rechnung (Lieferant)", dokument: "Dokument", kontakt: "Kontakt", notiz: CAPTURE_ENTRY_COPY.noteLabel, unklar: "unklar" };
   const openObject = (target: "mailein" | "original" | "ware" | "rechnungein" | "kvware", arg: string) => {
-    if (!ports.openCaptureObject) { setError("Diese Ansicht ist in diesem Stand noch nicht verbunden · Code: INTAKE_CAPTURE_TARGET_UNAVAILABLE."); return; }
+    if (!ports.openCaptureObject) { setError(CAPTURE_ERROR_COPY.INTAKE_CAPTURE_TARGET_UNAVAILABLE); return; }
     if (!ports.openCaptureObject(target, arg)) {
-      setError("Die angeforderte Ansicht konnte nicht geöffnet werden · Original und Eingaben bleiben erhalten. Code: INTAKE_CAPTURE_TARGET_UNAVAILABLE.");
+      setError(CAPTURE_ERROR_COPY.INTAKE_CAPTURE_TARGET_UNAVAILABLE);
       console.error("[INTAKE_CAPTURE_TARGET_UNAVAILABLE]", { target });
     } else if (target === "ware" || target === "rechnungein" || target === "kvware") onClose();
   };
   const assign = async () => {
     try { const saved = await saveNote(); if (saved) openObject("mailein", saved.id + "#rein"); }
-    catch (cause) { console.error("[INTAKE_CAPTURE_ASSIGN_OPEN_FAILED]", cause); setError("Zuordnung konnte nicht geöffnet werden · Eingaben bleiben erhalten. Code: INTAKE_CAPTURE_ASSIGN_OPEN_FAILED."); }
+    catch (cause) { console.error("[INTAKE_CAPTURE_ASSIGN_OPEN_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_CAPTURE_ASSIGN_OPEN_FAILED); }
   };
   const choosePackageCustomer=async(customerId:string)=>{
     if(inFlight.current||!capture||capture.customerId)return;
@@ -485,27 +485,27 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     inFlight.current=true;setBusy(true);setError(null);
     try{const assigned=await ports.assignCaptureCustomer({itemId:capture.id,version:capture.version,clientEventId:packageAssignKeys.current.get(key)!,customerId,mode:'manual'});
       if(assigned.code!=='OK'){setError(assigned.code==='CONFLICT'?PACKAGE_ASSIGN_COPY.changed:PACKAGE_ASSIGN_COPY.failed);return;}
-      const refreshed=await getCapture(capture.id);if(refreshed.code!=='OK'){setError(refreshed.message);return;}setCapture(refreshed.capture);
+      const refreshed=await getCapture(capture.id);if(refreshed.code!=='OK'){setError(captureFailureCopy(refreshed.code));return;}setCapture(refreshed.capture);
     }catch(cause){console.error('[PACKAGE_CUSTOMER_ASSIGN_FAILED]',cause);setError(PACKAGE_ASSIGN_COPY.failed);}finally{inFlight.current=false;setBusy(false);}
   };
   const chooseKind = async (kind: Exclude<CaptureKind, "unklar">) => {
     if (!capture || inFlight.current) return;
-    if (!ports.chooseCaptureKind) { setError("Die Art des Eingangs kann nicht gespeichert werden · Code: INTAKE_KIND_PORT_MISSING."); return; }
+    if (!ports.chooseCaptureKind) { setError(CAPTURE_ERROR_COPY.INTAKE_KIND_PORT_MISSING); return; }
     inFlight.current = true; setBusy(true); setError(null); setKindWorking(kind);
     const request = capture.id + ":" + capture.version + ":" + kind;
     if (!kindKeys.current.has(request)) kindKeys.current.set(request, crypto.randomUUID());
     try {
       const result = await ports.chooseCaptureKind({ itemId: capture.id, version: capture.version, clientEventId: kindKeys.current.get(request)!, kind });
-      if (result.code !== "OK") { setError(result.message); return; }
+      if (result.code !== "OK") { setError(captureFailureCopy(result.code)); return; }
       setCapture(result.capture);
       if (kind === "anfrage") onOrder(result.capture.customerId ?? undefined, result.capture);
       else if (kind === "rechnung") {
         if (ports.canManageMoney) openObject("rechnungein", result.capture.id);
-        else onClose("Gespeichert · Büro prüft");
+        else onClose(CAPTURE_ENTRY_COPY.officeSaved);
       } else if (kind === "ware") {
         setGoodsChoice(true);
       } else openObject("mailein", result.capture.id + "#rein");
-    } catch (cause) { console.error("[INTAKE_KIND_UI_WRITE_FAILED]", cause); setError("Die Art des Eingangs wurde nicht bestätigt · Original bleibt erhalten. Code: INTAKE_KIND_UI_WRITE_FAILED."); }
+    } catch (cause) { console.error("[INTAKE_KIND_UI_WRITE_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_KIND_UI_WRITE_FAILED); }
     finally { inFlight.current = false; setBusy(false); setKindWorking(null); }
   };
   const showSituation=Boolean(!mode&&!receiving&&capture&&hasCapturedContent&&!showCamera&&!hidePreviousResult&&capture.files.some(file=>file.secured===true));
@@ -514,7 +514,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     <Button data-spec-id="rein.erfassen-aus-eingang" art={showSituation?"primaer":"erledigen"} text={showSituation?CAPTURE_COPY.order:CAPTURE_TEXT_COPY.request} onClick={() => onOrder(capture.customerId ?? undefined, capture)} />
     : recognizedKind === "kontakt" ? <Button data-spec-id="rein.kontakt-anlegen" art={showSituation?"primaer":"erledigen"} text={CAPTURE_COPY.customer} onClick={() => { const reason = onCustomer(capture); if (reason) setError(reason); }} />
     : recognizedKind === "rechnung" ? ports.canManageMoney ? <Button data-spec-id="rein.rechnung-pruefen" art="primaer" text={CAPTURE_COPY.invoice} onClick={() => openObject("rechnungein", capture.id)} />
-      : <Button data-spec-id="rein.fuers-buero" art="primaer" text={CAPTURE_COPY.office} onClick={() => onClose("Gespeichert · Büro prüft")} />
+      : <Button data-spec-id="rein.fuers-buero" art="primaer" text={CAPTURE_COPY.office} onClick={() => onClose(CAPTURE_ENTRY_COPY.officeSaved)} />
     : recognizedKind === "ware" && capture.expectedOrders?.length === 1 && capture.customerId === capture.expectedOrders[0].customerId ?
       <Button data-spec-id="rein.ware-annehmen-kunde" art="primaer" text={"Ware annehmen · " + capture.expectedOrders[0].number} onClick={() => openObject("ware", capture.expectedOrders![0].id + "#" + capture.id)} />
     : null : null;
@@ -524,9 +524,9 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     inFlight.current = true; setBusy(true); setError(null);
     try {
       const read = await getCapture(capture.id);
-      if (read.code !== "OK") { setError(read.message); return; }
+      if (read.code !== "OK") { setError(captureFailureCopy(read.code)); return; }
       setCapture(read.capture); setCameraRequested(false); setHidePreviousResult(false);
-    } catch (cause) { console.error("[INTAKE_CAPTURE_FINAL_READ_FAILED]", cause); setError("Das Ergebnis konnte nicht erneut gelesen werden · Originale bleiben erhalten. Code: INTAKE_CAPTURE_FINAL_READ_FAILED."); }
+    } catch (cause) { console.error("[INTAKE_CAPTURE_FINAL_READ_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_CAPTURE_FINAL_READ_FAILED); }
     finally { inFlight.current = false; setBusy(false); }
   };
   const adopt = () => {
@@ -535,9 +535,9 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
   return <><Dialog titel={SITUATION_COPY.header} unterzeile={modeTitle} icon="plus" groesse="breit" schliessenSpecId="rein.schliessen" onSchliessen={() => void close()} vorSchliessen={() => { void close(); return false; }}
     fuss={<>
       <Button text={CAPTURE_COPY.close} onClick={() => void close()} disabled={busy || deviceWorking} />
-      {!showSituation?<>{showCamera ? <Button data-spec-id="rein.ausloesen" icon="camera" art="primaer" text={busy ? "Wird gesichert …" : "Foto"} disabled={busy || blockedReceiver || deviceWorking || !cameraReady} onClick={takePhoto} /> : null}
+      {!showSituation?<>{showCamera ? <Button data-spec-id="rein.ausloesen" icon="camera" art="primaer" text={busy ? CAPTURE_ENTRY_COPY.photoSaving : CAPTURE_ENTRY_COPY.photo} disabled={busy || blockedReceiver || deviceWorking || !cameraReady} onClick={takePhoto} /> : null}
       {receiving ? <Button data-spec-id="rein.handy-fertig" art={showCamera ? "leise" : "erledigen"} text={CAPTURE_COPY.done} disabled={busy || deviceWorking || pending.length > 0} onClick={() => void finishPhotos("fertig")} />
-        : mode && capture && hasCapturedContent && !showCamera && !hidePreviousResult ? <Button data-spec-id={failedFile ? "rein.als-dokument" : "rein.uebernehmen"} art="erledigen" text={failedFile ? "Als Dokument übernehmen" : "Übernehmen"} disabled={busy} onClick={adopt} />
+        : mode && capture && hasCapturedContent && !showCamera && !hidePreviousResult ? <Button data-spec-id={failedFile ? "rein.als-dokument" : "rein.uebernehmen"} art="erledigen" text={failedFile ? CAPTURE_ENTRY_COPY.documentAdopt : CAPTURE_ENTRY_COPY.adopt} disabled={busy} onClick={adopt} />
           : !mode && hasContent ? <Button data-spec-id="rein.spaeter-zuordnen" text={CAPTURE_COPY.later} disabled={busy} onClick={() => void close()} /> : null}
       {firstOriginal && !showCamera && !receiving ? <Button data-spec-id="rein.original" art="leise" text={CAPTURE_COPY.original} title={firstOriginal.name}
         onClick={() => openObject("original", capture!.id + "#" + firstOriginal.id)} /> : null}
@@ -550,10 +550,10 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); chooseFiles(event.dataTransfer.files); }}
       onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); chooseFiles(event.clipboardData.files); } }}>
       {showSituation&&capture&&recognizedKind==='ware'&&!capture.customerId&&ports.receiveOnsiteQuote&&ports.canCreateQuote&&ports.canCreateCustomer&&capture.packageContext?.status==='OK'&&capture.packageContext.candidates.length===0?<Button text={PACKAGE_ONSITE_COPY.open} onClick={()=>setOnsite(true)} disabled={busy}/>:null}
-      {showSituation&&capture?<IntakeSituation readOriginal={ports.readCaptureOriginal} capture={capture} kind={recognizedKind} busy={busy} quotes={quoteCandidates} onCustomerCandidate={id=>void choosePackageCustomer(id)} onQuote={id=>openObject("kvware",id+"#"+capture.id)} primary={resultMain} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setHidePreviousResult(true);}} onKind={kind=>void chooseKind(kind)} onTask={()=>{const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}}));if(!opened){console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");setError("Aufgabe konnte nicht geöffnet werden · Code: INTAKE_TASK_TARGET_UNAVAILABLE.");}}}/>:null}
+      {showSituation&&capture?<IntakeSituation readOriginal={ports.readCaptureOriginal} capture={capture} kind={recognizedKind} busy={busy} quotes={quoteCandidates} onCustomerCandidate={id=>void choosePackageCustomer(id)} onQuote={id=>openObject("kvware",id+"#"+capture.id)} primary={resultMain} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setHidePreviousResult(true);}} onKind={kind=>void chooseKind(kind)} onTask={()=>{const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}}));if(!opened){console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");setError(CAPTURE_ERROR_COPY.INTAKE_TASK_TARGET_UNAVAILABLE);}}}/>:null}
       <div className="ev-rein-feld" hidden={showSituation} style={showSituation?{display:"none"}:undefined}>
         {!mode&&ports.actorDisplayName?.trim()?<h2>{intakeStartTitle(ports.actorDisplayName)}</h2>:null}
-        {contextLoading ? <p role="status">Kontext wird gelesen …</p> : null}
+        {contextLoading ? <p role="status">{CAPTURE_ENTRY_COPY.contextLoading}</p> : null}
         {createContext ? <div data-spec-id="rein.kontext" className="ev-rein-kontext">
           <strong>für {createContext.label}</strong>
           <Button data-spec-id="rein.kontext-entfernen" text={CAPTURE_COPY.removeContext} icon="x" onClick={() => setCreateContext(null)} />
@@ -561,22 +561,22 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         {contextError ? <div role="alert" className="kr-stapel"><Hinweis ton="warn">{contextError}</Hinweis>
           <Button text={CAPTURE_COPY.readContext} onClick={() => { setContextLoading(true); setContextAttempt(value => value + 1); }} />
         </div> : null}
-        {blockedReceiver && !error ? <p role="status">Foto-Anfrage wird geöffnet …</p> : null}
-        {closeRequested ? <p role="status">Aufnahmen werden gesichert · das Fenster schließt nach der Bestätigung.</p> : null}
+        {blockedReceiver && !error ? <p role="status">{CAPTURE_ENTRY_COPY.requestOpening}</p> : null}
+        {closeRequested ? <p role="status">{CAPTURE_ENTRY_COPY.closePending}</p> : null}
         {cameraAvailable && !receiving && pendingRequests.map(request => <Button key={request.id} text={CAPTURE_COPY.acceptDevice} onClick={() => void acceptRequest(request.id)} disabled={deviceWorking} />)}
         {receiving && photoRequest ? <p role="status">{photoRequest.photoCount} an den PC gesendet</p> : null}
         {cameraRequested && cameraAvailable ? cameraError ? <div data-spec-id={cameraError === "permission" ? "rein.zustand.teilweise" : "rein.zustand.leer"} className="kr-stapel">
-          <Hinweis ton="warn">{cameraError === "permission" ? "Kamera nicht freigegeben · im Browser erlauben oder Datei wählen" : "Keine Kamera gefunden · Datei wählen oder Notiz schreiben"}</Hinweis>
+          <Hinweis ton="warn">{cameraError === "permission" ? CAPTURE_ENTRY_COPY.cameraPermission : CAPTURE_ENTRY_COPY.cameraMissing}</Hinweis>
           <Button text={CAPTURE_COPY.file} onClick={() => input.current?.click()} />
           <Button text={CAPTURE_COPY.retry} onClick={() => setCameraAttempt(attempt => attempt + 1)} />
         </div> : <div className="ev-rein-kamera">
-          <div className="ev-sucher"><video ref={node => { video.current = node; if (node && cameraStream.current && node.srcObject !== cameraStream.current) node.srcObject = cameraStream.current; }} aria-label="Rückkamera" tabIndex={0} autoPlay playsInline muted
+          <div className="ev-sucher"><video ref={node => { video.current = node; if (node && cameraStream.current && node.srcObject !== cameraStream.current) node.srcObject = cameraStream.current; }} aria-label={CAPTURE_ENTRY_COPY.cameraLabel} tabIndex={0} autoPlay playsInline muted
             onLoadedData={event => { const node = event.currentTarget; setCameraReady(node.readyState >= 2 && node.videoWidth > 0 && node.videoHeight > 0); }} onEmptied={() => setCameraReady(false)} /></div>
-          {!cameraReady ? <p role="status">Kamera wird vorbereitet …</p> : null}
+          {!cameraReady ? <p role="status">{CAPTURE_ENTRY_COPY.cameraLoading}</p> : null}
         </div> : null}
-        <Textfeld data-spec-id="rein.notiz" aria-label="Notiz" rows={7} maxLength={20_000} placeholder="Schreib, füge ein oder zieh eine Datei hierher …" value={text}
+        <Textfeld data-spec-id="rein.notiz" aria-label={CAPTURE_ENTRY_COPY.noteLabel} rows={7} maxLength={20_000} placeholder={CAPTURE_ENTRY_COPY.notePlaceholder} value={text}
           onChange={event => changeText(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();if(text.trim()&&!busy)void saveText();}}} />
-        {text.trim() ? <Button data-spec-id="rein.notiz-lesen" text={!scope?"Wird vorbereitet …":reading ? "Wird gelesen …" : "Lesen"} disabled={busy||!scope} onClick={()=>void saveText()} /> : null}
+        {text.trim() ? <Button data-spec-id="rein.notiz-lesen" text={!scope?CAPTURE_ENTRY_COPY.preparing:reading ? CAPTURE_ENTRY_COPY.reading : CAPTURE_ENTRY_COPY.read} disabled={busy||!scope} onClick={()=>void saveText()} /> : null}
         {!mode&&!receiving&&!showCamera&&!showSituation&&capture&&hasCapturedContent&&!hidePreviousResult?<div data-spec-id="rein.textvorschlag" className="ev-rein-erkannt">
           {resultMain??<Button art="erledigen" text={CAPTURE_TEXT_COPY.assign} disabled={busy} onClick={()=>void assign()}/>}
           <Button text={CAPTURE_TEXT_COPY.other} aria-expanded={textAlternatives} disabled={busy} onClick={()=>setTextAlternatives(value=>!value)}/>
@@ -585,45 +585,45 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
             {recognizedKind!=="kontakt"?<Button text={CAPTURE_COPY.customer} disabled={busy} onClick={()=>{const reason=onCustomer(capture);if(reason)setError(reason);}}/>:null}
           </div>:null}
         </div>:null}
-        {concerns.length || customers.length ? <div aria-label="Erkannt" className="ev-rein-erkannt"><strong>ERKANNT · Vorschläge</strong>
+        {concerns.length || customers.length ? <div aria-label={CAPTURE_ENTRY_COPY.recognizedLabel} className="ev-rein-erkannt"><strong>{CAPTURE_ENTRY_COPY.recognizedHeading}</strong>
           {customers.map(customer => <span key={customer.id}>{customer.name} · Vorschlag aus dem Namen</span>)}
           {concerns.filter(value => !dismissed.includes(value.id)).map(concern => <Button key={concern.id} text={`${concern.label} ×`} onClick={() => dismissConcern(concern.id)} />)}
         </div> : null}
       </div>
       <div className="ev-rein-rechts" hidden={showSituation} style={showSituation?{display:"none"}:undefined}>
         <div className="ev-rein-karten">
-          <button type="button" className="ev-karte" data-spec-id="rein.datei" aria-label="Datei" onClick={() => input.current?.click()} disabled={busy || blockedReceiver}><Icon name="upload" /><b>Datei</b><small>Datei hierher ziehen oder auswählen</small></button>
-          {cameraAvailable ? <button type="button" className="ev-karte" data-spec-id="rein.handy" aria-label="Fotos mit Tablet/Handy" onClick={() => setCameraRequested(true)} disabled={busy}><Icon name="camera" /><b>Fotos mit Tablet/Handy</b><small>Kamera auf diesem Gerät öffnen</small></button> : deviceRequest ? <button type="button" className="ev-karte" data-spec-id="rein.handy" aria-label="Fotos mit Tablet/Handy" onClick={() => void requestPhotos()} disabled={deviceWorking || busy}><Icon name="camera" /><b>Fotos mit Tablet/Handy</b><small>Kamera öffnet auf deinem Gerät</small></button> : null}
+          <button type="button" className="ev-karte" data-spec-id="rein.datei" aria-label={CAPTURE_ENTRY_COPY.fileLabel} onClick={() => input.current?.click()} disabled={busy || blockedReceiver}><Icon name="upload" /><b>{CAPTURE_ENTRY_COPY.fileLabel}</b><small>{CAPTURE_ENTRY_COPY.fileHint}</small></button>
+          {cameraAvailable ? <button type="button" className="ev-karte" data-spec-id="rein.handy" aria-label={CAPTURE_ENTRY_COPY.cameraTile} onClick={() => setCameraRequested(true)} disabled={busy}><Icon name="camera" /><b>{CAPTURE_ENTRY_COPY.cameraTile}</b><small>{CAPTURE_ENTRY_COPY.cameraLocal}</small></button> : deviceRequest ? <button type="button" className="ev-karte" data-spec-id="rein.handy" aria-label={CAPTURE_ENTRY_COPY.cameraTile} onClick={() => void requestPhotos()} disabled={deviceWorking || busy}><Icon name="camera" /><b>{CAPTURE_ENTRY_COPY.cameraTile}</b><small>{CAPTURE_ENTRY_COPY.cameraRemote}</small></button> : null}
         </div>
         {photoRequest && !receiving ? <div data-spec-id="rein.zustand.uebergabe" className="ev-rein-qr">
-          <p>QR mit dem Handy scannen oder dort „Fotos für den PC“ antippen · 10 Minuten gültig</p>
-          {qrImage ? <Image src={qrImage} width={216} height={216} unoptimized alt="QR-Code für Fotos mit Tablet/Handy" /> : null}
-          {qrLink ? <a href={qrLink}>Fotos für den PC öffnen</a> : null}
+          <p>{CAPTURE_ENTRY_COPY.qrHint}</p>
+          {qrImage ? <Image src={qrImage} width={216} height={216} unoptimized alt={CAPTURE_ENTRY_COPY.qrLabel} /> : null}
+          {qrLink ? <a href={qrLink}>{CAPTURE_ENTRY_COPY.qrOpen}</a> : null}
           <p>{photoRequest.photoCount} Fotos am Eingang</p>
           {photoRequest.photoCount > 0 ? <Button data-spec-id="rein.fertig-lesen" text={CAPTURE_COPY.readDone} onClick={() => void finishPhotos("fertig")} disabled={deviceWorking} /> : null}
           <Button data-spec-id="rein.uebergabe-abbrechen" text={CAPTURE_COPY.cancel} onClick={() => void finishPhotos("abgebrochen")} disabled={deviceWorking} />
         </div> : null}
         <input ref={input} type="file" multiple hidden disabled={blockedReceiver||busy} onChange={event => { chooseFiles(event.target.files); event.target.value = ""; }} />
-        {!hasContent&&!mode ? <section aria-label="Ohne Vorlage" className="ev-rein-ohne"><span>Ohne Vorlage</span>
-          <Button art="leise" icon="inbox" title="Taste A" text={CAPTURE_COPY.order} disabled={contextLoading || Boolean(contextError)} data-spec-id="rein.auftrag-erfassen" onClick={() => onOrder(createContext?.customerId)} />
-          <Button art="leise" icon="user" title="Taste K" text={CAPTURE_COPY.customer} data-spec-id="rein.kunde-anlegen" onClick={() => onCustomer()} />
+        {!hasContent&&!mode ? <section aria-label={CAPTURE_ENTRY_COPY.withoutTemplate} className="ev-rein-ohne"><span>{CAPTURE_ENTRY_COPY.withoutTemplate}</span>
+          <Button art="leise" icon="inbox" title={CAPTURE_ENTRY_COPY.orderKey} text={CAPTURE_COPY.order} disabled={contextLoading || Boolean(contextError)} data-spec-id="rein.auftrag-erfassen" onClick={() => onOrder(createContext?.customerId)} />
+          <Button art="leise" icon="user" title={CAPTURE_ENTRY_COPY.customerKey} text={CAPTURE_COPY.customer} data-spec-id="rein.kunde-anlegen" onClick={() => onCustomer()} />
         </section> : null}
         {busy ? <p role="status">{kindWorking ? `Art „${kindNames[kindWorking]}“ wird gespeichert …` : `${progress.done} von ${progress.total} hochgeladen · wird übertragen und geprüft …`}</p> : null}
         {capture&&hasCapturedContent&&!hidePreviousResult ? <div data-spec-id={capture.files.some(file => file.status === "fehler") ? "rein.zustand.fehler" : capture.files.some(file => ["wartet", "laeuft"].includes(file.status)) ? "rein.zustand.laden" : "rein.zustand.erkannt"}>
-          <strong>{capture.files.some(file => file.status === "fehler") ? capture.files.every(file => file.secured === true) ? "Nicht lesbar · Original gesichert" : "Original noch nicht gesichert" : capture.files.some(file => ["wartet", "laeuft"].includes(file.status)) ? "Wird gelesen · Original gesichert" : mode === "eingangsfoto" ? "Eingangsfoto gesichert" : (capture.recognition?.source === "hand" ? "Gewählt · " : "Erkannt · ") + kindNames[recognizedKind]}</strong>
-          {!mode && !receiving && recognizedKind === "unklar" && !busy ? <section data-spec-id="rein.was-ist-das" className="kr-stapel"><h3>Was ist das?</h3><div className="ev-rein-karten">
-            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.auftrag" onClick={() => void chooseKind("anfrage")}><Icon name="inbox"/><b>Auftrag/KV</b></button>
-            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.ware" onClick={() => void chooseKind("ware")}><Icon name="box"/><b>Ware</b></button>
-            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.rechnung" onClick={() => void chooseKind("rechnung")}><Icon name="file"/><b>Eingangsrechnung</b></button>
-            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.dokument" onClick={() => void chooseKind(capture.files.length ? "dokument" : "notiz")}><Icon name="file"/><b>Dokument/Notiz zum Kunden</b></button>
+          <strong>{capture.files.some(file => file.status === "fehler") ? capture.files.every(file => file.secured === true) ? CAPTURE_ENTRY_COPY.unreadableSecured : CAPTURE_ENTRY_COPY.originalMissing : capture.files.some(file => ["wartet", "laeuft"].includes(file.status)) ? CAPTURE_ENTRY_COPY.readingSecured : mode === "eingangsfoto" ? CAPTURE_ENTRY_COPY.entryPhotoSecured : (capture.recognition?.source === "hand" ? "Gewählt · " : "Erkannt · ") + kindNames[recognizedKind]}</strong>
+          {!mode && !receiving && recognizedKind === "unklar" && !busy ? <section data-spec-id="rein.was-ist-das" className="kr-stapel"><h3>{CAPTURE_ENTRY_COPY.whatIsIt}</h3><div className="ev-rein-karten">
+            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.auftrag" onClick={() => void chooseKind("anfrage")}><Icon name="inbox"/><b>{SITUATION_COPY.kindLabels.anfrage}</b></button>
+            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.ware" onClick={() => void chooseKind("ware")}><Icon name="box"/><b>{SITUATION_COPY.kindLabels.ware}</b></button>
+            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.rechnung" onClick={() => void chooseKind("rechnung")}><Icon name="file"/><b>{SITUATION_COPY.kindLabels.rechnung}</b></button>
+            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.dokument" onClick={() => void chooseKind(capture.files.length ? "dokument" : "notiz")}><Icon name="file"/><b>{SITUATION_COPY.kindLabels.dokument}</b></button>
           </div></section> : null}
           {capture.recognition?.text ? <p className="ev-rein-original">{capture.recognition.text}</p> : null}
-          {capture.files.map(file => <div key={file.id}><p>{file.name} · {file.secured === true ? "Original gesichert" : "Übertragung offen"}</p>
+          {capture.files.map(file => <div key={file.id}><p>{file.name} · {file.secured === true ? CAPTURE_ENTRY_COPY.originalSecured : CAPTURE_ENTRY_COPY.uploadOpen}</p>
             {file.secured === true ? <Button data-spec-id={"rein.original." + file.id} art="leise" text={file.name + " anzeigen"} onClick={() => openObject("original", capture.id + "#" + file.id)} /> : null}
           </div>)}
-          {!mode && (recognizedKind === "unklar" || recognizedKind === "ware") && Boolean(capture.expectedOrders?.length) ? <section data-spec-id="rein.erwartet" className="kr-stapel"><h3>Erwartete Ware</h3>
-            {goodsChoice ? <p role="status">Auftrag für die erwartete Ware wählen</p> : null}
-            {capture.expectedOrders!.map(order => <Button key={order.id} data-spec-id="rein.erwartet-waehlen" text={order.number + " · " + (order.customerName ?? "Kunde fehlt") + " · " + (order.title ?? "Titel fehlt")}
+          {!mode && (recognizedKind === "unklar" || recognizedKind === "ware") && Boolean(capture.expectedOrders?.length) ? <section data-spec-id="rein.erwartet" className="kr-stapel"><h3>{CAPTURE_ENTRY_COPY.expectedGoods}</h3>
+            {goodsChoice ? <p role="status">{CAPTURE_ENTRY_COPY.chooseExpected}</p> : null}
+            {capture.expectedOrders!.map(order => <Button key={order.id} data-spec-id="rein.erwartet-waehlen" text={order.number + " · " + (order.customerName ?? CAPTURE_ENTRY_COPY.missingCustomer) + " · " + (order.title ?? CAPTURE_ENTRY_COPY.missingTitle)}
               onClick={() => openObject("ware", order.id + "#" + capture.id)} />)}
           </section> : null}
           {cameraAvailable && capture.files.length > 0 && !busy ? <div className="kr-stapel">

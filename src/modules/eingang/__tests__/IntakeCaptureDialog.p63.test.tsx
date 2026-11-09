@@ -124,3 +124,17 @@ it.each(['photo-text','typed-text','unsecured-text','discarded-text'])('E1 photo
  const edit=screen.queryByRole('button',{name:'Text ändern'});
  if(source==='photo-text'){expect(edit).toBeEnabled();fireEvent.click(edit!);expect(onEdit).toHaveBeenCalledOnce();}else expect(edit).toBeNull();
 });
+
+it('E1 server rejection stays in the dialog without leaking raw server text',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+ const save=vi.fn(async()=>({code:'FORBIDDEN',message:'TEST RAW INTERNAL MESSAGE MUST NOT BE SHOWN'}));
+ const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-failure'})),saveCaptureNote:save} as unknown as GlobalCreatePorts;
+ render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());
+ const input=screen.getByRole('textbox',{name:'Notiz'});fireEvent.change(input,{target:{value:'TEST preserved note'}});
+ fireEvent.click(screen.getByRole('button',{name:'Lesen'}));
+ await screen.findByText(/Dir fehlt die Freigabe/);
+ expect(screen.queryByText(/TEST RAW INTERNAL MESSAGE/)).toBeNull();
+ expect(input).toHaveValue('TEST preserved note');expect(screen.getByRole('button',{name:'Lesen'})).toBeEnabled();
+});
