@@ -57,4 +57,3 @@ export async function storeItemPhoto(orderId:string,itemId:string){
  if(finalized.code!=='OK'||!finalized.data.receipt.receiptId)throw Error('TEST_ITEM_PHOTO_FINALIZE:'+finalized.code);
  return finalized.data.receipt.receiptId;
 }
-
