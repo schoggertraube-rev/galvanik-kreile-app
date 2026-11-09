@@ -13,8 +13,9 @@ function today(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin
 const fieldRows=[['nummer','rechnungsnummer','Rechnungsnummer','text'],['datum','rechnungsdatum','Rechnungsdatum','date'],['netto','netto','Netto','text'],['ust','ust','USt','text'],['brutto','brutto','Brutto','text'],['faelligAm','faellig','Fällig am','date'],['iban','iban','IBAN','text']] as const;
 
 /** 3.8 is a projection of the canonical intake/original and its one supplier_invoice. */
-export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial:InvoiceView;ports:InvoicePorts;onClose:()=>void;onMessage:(text:string,taskId?:string)=>void}){
+export function IncomingInvoiceDialog({initial,ports,onClose,onMessage,onAutomaticReady}:{initial:InvoiceView;ports:InvoicePorts;onClose:()=>void;onMessage:(text:string,taskId?:string)=>void;onAutomaticReady?:()=>void}){
  const [view,setView]=useState(initial),[fields,setFields]=useState({...initial.fields}),[selected,setSelected]=useState<InvoiceSupplier|null>(initial.supplier);
+ const currentFields=useRef(fields);useEffect(()=>{currentFields.current=fields;},[fields]);
  const [mode,setMode]=useState<Mode>(initial.canRebook?'neu_ablegen':initial.invoice?.zahlstatus==='unklar'?'klaeren':initial.invoice?.zahlstatus==='offen'?'bezahlt_markieren':initial.invoice?'ansicht':'pruefen');
  const [supplierQuery,setSupplierQuery]=useState(initial.supplier?.name??''),[suppliers,setSuppliers]=useState<InvoiceSupplier[]>([]),[searching,setSearching]=useState(false);
  const [initialPaidDate]=useState(today),[paidDate,setPaidDate]=useState(initialPaidDate),[reason,setReason]=useState(''),[outcome,setOutcome]=useState<Outcome|' '>(' '),[correct,setCorrect]=useState(false);
@@ -37,10 +38,11 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
  useEffect(()=>{
   const refresh=async(event:Event)=>{try{const detail=(event as CustomEvent<{itemId?:string;customerId?:string;customerName?:string}>).detail;const result=await ports.read({id:initial.item.id});if(result.code!=='OK'){setMessage(belegFailureCopy(result.code));return;}
    setView(result.view);setUncertain(result.view.uncertain);setSelected(result.view.supplier);setSupplierQuery(result.view.supplier?.name??'');setFields(current=>({...current,lieferantId:result.view.supplier?.id??current.lieferantId}));
+   if(detail?.itemId===initial.item.id&&detail.customerId===result.view.supplier?.id&&!result.view.invoice&&result.view.automation?.state==='ready'&&(Object.keys(result.view.fields) as Array<keyof InvoiceFields>).every(key=>key==='lieferantId'||currentFields.current[key]===result.view.fields[key]))onAutomaticReady?.();
    if(detail?.itemId===initial.item.id&&detail.customerId&&detail.customerName&&result.view.invoice&&!result.view.invoice.lieferant_id){const found=await ports.searchSuppliers(detail.customerName);if(found.code==='OK'){const supplier=found.suppliers.find(value=>value.id===detail.customerId);if(supplier){setSelected(supplier);setSupplierQuery(supplier.name);setFields(current=>({...current,lieferantId:supplier.id}));setCorrect(true);setOutcome('offen');}}}
   }catch(error){console.error('[INVOICE_RETURN_READ_FAILED]',error);setMessage('Lieferant konnte nicht neu gelesen werden · Fehlercode: INVOICE_RETURN_READ_FAILED.');}};
   window.addEventListener(INTAKE_CHANGED_EVENT,refresh);return()=>window.removeEventListener(INTAKE_CHANGED_EVENT,refresh);
- },[initial.item.id,ports]);
+ },[initial.item.id,ports,onAutomaticReady]);
  const chooseSupplier=(supplier:InvoiceSupplier)=>{if(view.invoice&&!view.invoice.lieferant_id){setCorrect(true);setOutcome('offen');}setSelected(supplier);setSupplierQuery(supplier.name);setSuppliers([]);setFields(current=>{
   const next={...current,lieferantId:supplier.id};if(!next.faelligAm&&invoiceDate(next.datum)&&supplier.paymentTermDays!==null){const date=new Date(next.datum+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+supplier.paymentTermDays);next.faelligAm=date.toISOString().slice(0,10);}return next;
  });};

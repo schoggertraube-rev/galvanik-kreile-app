@@ -2,6 +2,7 @@ import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
 import {IncomingInvoiceDialog} from '../IncomingInvoiceDialog';
 import type {InvoicePorts,InvoiceView} from '../../invoiceContract';
+import {INTAKE_CHANGED_EVENT} from '../../messageContract';
 
 afterEach(cleanup);
 it('BA14 real editor rereads after conflict without losing entered invoice fields',async()=>{
@@ -20,4 +21,16 @@ it('BA14 real editor rereads after conflict without losing entered invoice field
  await waitFor(()=>expect(save).toHaveBeenCalledTimes(2));
  expect(save.mock.calls[1][0]).toMatchObject({version:2,clientKey:save.mock.calls[0][0].clientKey,fields:initial.fields});
  await waitFor(()=>expect(onClose).toHaveBeenCalledOnce());
+});
+
+it.each([false,true])('BA07 supplier return resumes only safely recognized unchanged fields (edited=%s)',async(edited)=>{
+ const fields={lieferantId:'',nummer:'TEST-42',datum:'2026-11-08',faelligAm:'2026-11-22',netto:'100.00',ust:'19.00',brutto:'119.00',iban:'',ibanGeprueft:false};
+ const initial:InvoiceView={item:{id:'TEST-source',version:1,at:'2026-11-09T01:00:00Z',channel:'datei',sender:null},invoice:null,supplier:null,originals:[],fileId:'TEST-original',fields,uncertain:0,conflict:null,duplicate:null,automation:{state:'incomplete',missing:['Lieferant fehlt']}};
+ const read=vi.fn().mockResolvedValue({code:'OK',view:{...initial,item:{...initial.item,version:2},supplier:{id:'TEST-supplier',name:'TEST Lieferant',iban:null,paymentTermDays:14},fields:{...fields,lieferantId:'TEST-supplier'},automation:{state:'ready',missing:[]}}}),resume=vi.fn();
+ render(<IncomingInvoiceDialog initial={initial} ports={{read,searchSuppliers:vi.fn().mockResolvedValue({code:'OK',suppliers:[]})} as unknown as InvoicePorts} onClose={vi.fn()} onMessage={vi.fn()} onAutomaticReady={resume}/>);
+ if(edited)fireEvent.change(screen.getByDisplayValue('TEST-42'),{target:{value:'TEST eigene Nummer'}});
+ window.dispatchEvent(new CustomEvent(INTAKE_CHANGED_EVENT,{detail:{itemId:'TEST-source',customerId:'TEST-supplier',customerName:'TEST Lieferant'}}));
+ await waitFor(()=>expect(screen.getByDisplayValue('TEST Lieferant')).toBeInTheDocument());
+ expect(resume).toHaveBeenCalledTimes(edited?0:1);
+ if(edited)expect(screen.getByDisplayValue('TEST eigene Nummer')).toBeInTheDocument();
 });
