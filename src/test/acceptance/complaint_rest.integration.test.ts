@@ -321,7 +321,7 @@ it('RM13 actual stale source rejection rereads and resumes the same complaint id
  expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND intake_item_id=${replyId}::uuid`).toHaveLength(0);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientKey}::uuid AND event_type='COMPLAINT_CHANGED_V1'`).toHaveLength(0);
  const fresh=await withSession(fixture,()=>getComplaintDialogAction({orderId:order.orderId,sourceItemId:replyId}));
- expect(fresh).toMatchObject({code:'OK',data:{initial:{intakeVersion:1,photoIds:photos}}});if(fresh.code!=='OK')throw Error('TEST RM13 reread');
+ expect(fresh).toMatchObject({code:'OK',data:{initial:{intakeVersion:1,photoIds:photos}}});if(fresh.code!=='OK'||!('data'in fresh))throw Error('TEST RM13 reread');
  const saved=await withSession(fixture,()=>reklamationAusfuehrenAction({...input,intakeVersion:fresh.data.initial.intakeVersion}));
  expect(saved.code).toBe('OK');if(saved.code!=='OK')throw Error(saved.message);
  expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND intake_item_id=${replyId}::uuid`).toEqual([{id:saved.receipt.complaintId}]);
