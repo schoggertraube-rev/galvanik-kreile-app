@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import {hasAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {evaluateOrderPriority} from '@/lib/priority';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -97,8 +97,8 @@ export type CustomerSummary = CustomerStoredProfile & {
   orderCount: number;
   wareImHausCount: number;
   wareImHaus: boolean;
-  invoiceRevenueCents: number;
-  invoiceOpenCents: number;
+  invoiceRevenueCents?: number;
+  invoiceOpenCents?: number;
   agreements: CustomerAgreementSummary[];
   agreementSlotsAvailable: number;
   orders: CustomerSummaryOrder[];
@@ -384,8 +384,7 @@ function mapSummary(
     orderCount: row.order_count,
     wareImHausCount: row.ware_im_haus_count,
     wareImHaus: row.ware_im_haus,
-    invoiceRevenueCents,
-    invoiceOpenCents,
+    ...(hasAuthorizationArea(authorization,'geld')?{invoiceRevenueCents,invoiceOpenCents}:{}),
     agreements,
     agreementSlotsAvailable,
     orders,
@@ -420,6 +419,7 @@ export async function readCustomerSummary(
           FROM public.invoices invoice
           WHERE invoice.tenant_id = summary.tenant_id
             AND invoice.customer_id = summary.id
+            AND ${hasAuthorizationArea(authorization,'geld')}
         ) billing ON true
         WHERE summary.id = ${input.customerId}
         LIMIT 2

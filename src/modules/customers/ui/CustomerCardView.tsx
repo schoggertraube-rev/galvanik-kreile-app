@@ -298,7 +298,7 @@ export function CustomerCardView({
     <KartenBlock label="Kundenstand"><Fakten zeilen={[
       { k: "Aufträge gesamt", v: card.orderCount },
       { k: "Ware im Haus", v: card.wareImHausCount },
-      ...(canManageMoney?[{ k: "Umsatz aus Rechnungen", v: euro(card.invoiceRevenueCents) },{ k: "Offene Posten", v: euro(card.invoiceOpenCents) }]:[]),
+      ...(canManageMoney&&typeof card.invoiceRevenueCents==='number'&&typeof card.invoiceOpenCents==='number'?[{ k: "Umsatz aus Rechnungen", v: euro(card.invoiceRevenueCents) },{ k: "Offene Posten", v: euro(card.invoiceOpenCents) }]:[]),
       { k: "Klassifikation", v: card.classification ?? "Nicht hinterlegt" },
     ]} /></KartenBlock>
     <KartenBlock label="Kontaktverlauf"><Verlauf eintraege={[
