@@ -18,5 +18,5 @@ export function quoteCommandContext(authorization: AuthorizationSnapshot) {
 
 /** Existing operational quote purpose; exposes no financial edit grant. */
 export function quoteOperationContext(auth:AuthorizationSnapshot){
- const context=quoteCommandContext(auth);return {...context,capabilities:{...context.capabilities,canReadQuote:hasAuthorizationArea(auth,'auftraege')&&auth.permissions.includes('perm_view_leitstand'),canDecideQuote:true,canConvertQuote:true}};
+ const context=quoteCommandContext(auth);return {...context,capabilities:{...context.capabilities,canReadQuote:true,canDecideQuote:true,canConvertQuote:true}};
 }

@@ -10,7 +10,8 @@ async function withPackageExpectation(result:IntakeCaptureResult):Promise<Intake
  try{
   const auth=await resolveAuthorization();if(!auth.ok)return result;
   const quoteContext=quoteOperationContext(auth.data);
-  const quotes=quoteContext.capabilities.canReadQuote?await listOpenQuotesCommand(quoteContext):null;
+  const canReadExpected=hasAuthorizationArea(auth.data,'auftraege')&&auth.data.permissions.includes('perm_view_leitstand');
+  const quotes=canReadExpected?await listOpenQuotesCommand(quoteContext):null;
   const history=!result.capture.customerId?await readPackageQuoteHistory(auth.data,result.capture.recognition?.text??result.capture.text??''):[];
   result.capture.packageContext=await withPrivilegedTenantTransaction(auth.data,tx=>readPackageExpectation(tx,auth.data,result.capture,quotes,history));
  }catch(error){console.error('[PACKAGE_EXPECTATION_READ_FAILED]',error);result.capture.packageContext={status:'UNAVAILABLE',message:PACKAGE_ASSIGN_COPY.unavailable};}
