@@ -34,3 +34,23 @@ it('H2 cash pickup requires the actual payment receipt before release and both r
  expect(await withSession(full,()=>recordGoodsOutAction(structuredClone(release)))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:released.receipt.eventId}});
  for(const clientKey of [mode.clientEventId,payment.clientEventId,release.clientEventId])expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientKey}::uuid`).toEqual([{user_id:full.actorId}]);
 });
+
+it('H2 a historical unpaid pickup remains visible and its old receipt replays without silently creating a payment',async()=>{
+ const order=await readyInvoiceOrder('H2-Althistorie');
+ const {setPaymentModeAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ expect(await withSession(full,()=>setPaymentModeAction({orderId:order.orderId,paymentMode:'abholung',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ // Synthetic INITIAL history under the former rule, not an alternate product release writer.
+ const oldVersion=order.version+1,eventId=randomUUID(),clientEventId=randomUUID(),correlationId=randomUUID();
+ const payload={gateAllowed:true,mode:'abholung',openAmountCents:order.invoice.grossAmountCents,orderId:order.orderId,orderVersion:oldVersion,paymentMode:'abholung',paymentStatus:'offen'};
+ await sql.begin(async tx=>{
+  await tx`UPDATE public.orders SET station='abgeholt',current_station='abgeholt',current_station_id='abgeholt',status='abgeholt',version=${oldVersion} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+  await tx`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,payload,status,station,client_event_id,event_schema_version,correlation_id,aggregate_version,from_station,created_at) VALUES(${eventId},${KREILE_TENANT_SLUG},${order.orderId},'ORDER_PICKED_UP_V1','TEST historische Abholung vor U-254',${full.actorId}::uuid,${tx.json(payload)}::jsonb,'success','abgeholt',${clientEventId}::uuid,1,${correlationId}::uuid,${oldVersion},'fertig',statement_timestamp() AT TIME ZONE 'UTC')`;
+ });
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{physicalStatus:'abgeholt',goodsOutAllowed:false,payment:{mode:'abholung',status:'offen',openAmountCents:order.invoice.grossAmountCents},goodsOut:{eventId,actorId:full.actorId,eventSchemaVersion:1}}});
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const oldRequest={orderId:order.orderId,mode:'abholung' as const,expectedVersion:order.version,clientEventId};
+ expect(await withSession(full,()=>recordGoodsOutAction(structuredClone(oldRequest)))).toMatchObject({code:'OK',replayed:true,receipt:{eventId,orderVersion:oldVersion}});
+ expect(await withSession(full,()=>recordGoodsOutAction({...oldRequest,expectedVersion:oldVersion,clientEventId:randomUUID()}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT payment_status,payment_paid_amount_cents::integer AS paid,payment_open_amount_cents::integer AS open FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{payment_status:'offen',paid:0,open:order.invoice.grossAmountCents}]);
+ expect(await sql`SELECT id::text,user_id::text,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_PICKED_UP_V1'`).toEqual([{id:eventId,user_id:full.actorId,payload}]);
+});
