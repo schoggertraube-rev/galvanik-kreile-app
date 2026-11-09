@@ -50,3 +50,11 @@ Typen und gezielter ESLint nach mechanischer Typ-/Renderkorrektur grün. H18 PAS
 Dev-Migrationsnachtrag: eigener RM-Stand104, zusätzlich genehmigte SA-Rechtemigration ergibt Union105=Dev105; keine Einzelbranch-Parität104=Dev mehr behauptet. Keine weitere Migration dieses Schritts.
 
 Noch offen vor Paket-Abgabe: exakte Git-Preview, einmalige Sicht, Pflicht-CI und PL-Diffprüfung. Maximal zwei offene PRs: dieser Produktstand wird nur auf eigenem Zweig gepusht, kein dritter PR. RM03-Editor und Entwurfswiederaufnahme sind gebaut; vollständige Paket-Abnahme wird erst mit den offenen Nachweisen gemeldet.
+
+## RM02 – tatsächlicher Originalimport und Storage-Rückweg
+
+Neuer gezielter Fall in ein34_mail_import.integration.test.ts: echte Kunden-Action → echter MIME-Import → manuelle tatsächliche Kundenzuordnung → echte Fotoanfrage mit Versandbeleg → tatsächlicher Import der Antwort mit zwei Fotooriginalen → ursprüngliches Anliegen samt geerbtem bestätigtem Kunden erneut gelesen. MIME-Header und alle drei Antwortdateien werden über echte lokale Storage-Uploads gesichert und anschließend als echte Bytes heruntergeladen; SHA256 jeder Datei stimmt, MIME-Bytes bleiben exakt. Eine Fotoanfrage, eine Antwortquelle, drei Originaldateien, gleiche Importkennung ohne neuen Provideraufruf/Datei. PASS6,38s.
+
+Nur der Microsoft-HTTP-Rand verwendet ausdrücklich synthetische TEST-Nachrichten/Foto-Bytes. Datenbank, Sitzungen, sämtliche genannten Actions, Import-Writer, Storage und erneuter Nachrichtenleser sind echt. Keine Behauptung echten Microsoft-Versands oder Hardwarekamera. Ursprünglicher Fixture-Fehler „confirm“ ohne Kandidatenbeleg wurde auf den tatsächlichen UI-Weg „manual“ geändert; keine Produktregel oder bestehende Assertion gelockert. Alle älteren Testfälle unverändert.
+
+Damit ist die zuvor nur aus TEST-Metadaten geprüfte Thread-Verbindung zusätzlich über den vollständigen tatsächlichen Originalimport belegt. Weiter offen: exakte Preview/Sicht/Pflicht-CI und PL-Abnahme, PR erst nach freiem Slot.
