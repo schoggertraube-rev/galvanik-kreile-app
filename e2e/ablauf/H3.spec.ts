@@ -90,7 +90,7 @@ it('H3 Rechnung auf Ziel / direct personal intake stays in wareneingang until ex
   await sql`INSERT INTO public.customers(id,tenant_id,customer_number,name,company_name,type,contact_person,email,phone,street,house_number,zip_code,city,country,payment_preference,ziel_freigeschaltet,ziel_tage,source,first_name,last_name,salutation)
     VALUES(${customerId},${KREILE_TENANT_SLUG},${'TEST-H3-'+customerId},'TEST H3 Firma','TEST H3 Firma GmbH','business','TEST H3 Person',${'TEST-H3-'+customerId+'@example.invalid'},'+49 711 5550189','TEST Weg','1','70176','Stuttgart','DE','rechnung',true,14,'manual','TEST','Person','ohne')`;
   const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
-  const {getLiveOrderCardAction,transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,setExtraWorkHourlyRateAction,freezeOrderAction}=await import('@/app/actions/orders.actions');
+  const {getLiveOrderCardAction,transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,setExtraWorkHourlyRateAction,getExtraWorkMasterDataAction,freezeOrderAction}=await import('@/app/actions/orders.actions');
   const input={geprueft:true,clientEventId,customer:{mode:'EXISTING' as const,customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'shipping',paymentMode:'rechnung',note:'TEST H3 Rechnung auf Ziel',items:[{catalogServiceId:null,name:'TEST H3 Trompete',quantity:4,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:2500,vatRateBasisPoints:1900}]};
   const created=await withSession(full,()=>createOrderIntakeAction(input));
   expect(created.code).toBe('OK');
@@ -113,11 +113,15 @@ it('H3 Rechnung auf Ziel / direct personal intake stays in wareneingang until ex
   const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:handoff.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));
   expect(finished.code).toBe('OK');
   if(finished.code!=='OK')throw Error('H3_ITEM_FINISH:'+finished.code);
-  const rate=await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}));
-  expect(rate.code).toBe('OK');
+  const master=await withSession(full,()=>getExtraWorkMasterDataAction());
+  expect(master.code).toBe('OK');if(master.code!=='OK')throw Error('H3_RATE_READ:'+master.code);
+  if(!master.data.currentRate){
+   const rate=await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}));
+   expect(rate.code).toBe('OK');
+  }
   // BAUPLAN werkstattregel.pflichtfoto (U-090): finishing the order, unlike
   // marking a part complete, must be refused without a photo linked to that part.
   const freeze=await withSession(full,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));
-  expect(freeze).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Foto fehlt')});
+  expect(freeze).toMatchObject({code:'VALIDATION_ERROR',message:'Nimm für jedes Teil ein Foto auf, bevor Du den Auftrag fertig meldest.'});
   expect(await sql`SELECT station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{station:'galvanik',version:finished.receipt.aggregateVersion}]);
 });

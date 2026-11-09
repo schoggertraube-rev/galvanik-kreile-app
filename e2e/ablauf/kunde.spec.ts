@@ -65,10 +65,12 @@ it('a former customer creation receipt cannot expose a contact later converted t
  const converted=await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),customerType:'lieferant',paymentPreference:null,vatId:null,billingEmail:null,handoverPreference:null}));
  expect(converted,JSON.stringify(converted)).toMatchObject({code:'OK',customer:{customerType:'lieferant'}});
  const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const customerCountBefore=await sql`SELECT count(*)::integer AS n FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  expect(await withSession(operational,()=>createCustomerAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(operational,()=>readCustomerCreateReceiptAction(structuredClone(input)))).toMatchObject({code:'FORBIDDEN'});
  expect(await sql`SELECT type FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{type:'lieferant'}]);
- expect(await sql`SELECT count(*)::integer AS n FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(customerCountBefore);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
 });
 

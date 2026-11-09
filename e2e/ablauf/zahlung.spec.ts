@@ -32,6 +32,8 @@ it('missing free-text prices block issue until the existing price action fills t
  const orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
  const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,freezeOrderAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('MISSING_PRICE_HANDOFF:'+moved.code);
+ const {storeItemPhoto}=await import('./photoFixture');
+ await storeItemPhoto(orderId,itemId);
  const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));if(finished.code!=='OK')throw Error('MISSING_PRICE_FINISH:'+finished.code);
  const frozen=await withSession(full,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));if(frozen.code!=='OK')throw Error('MISSING_PRICE_FREEZE:'+frozen.code);
  const {issueInvoiceAction,setInvoiceItemPricesAction,getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');

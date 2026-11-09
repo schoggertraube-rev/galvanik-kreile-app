@@ -3,7 +3,7 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture} from './orderFixture';
-import {storeIntakeGoodsPhoto,storeOrderPhoto} from './photoFixture';
+import {storeIntakeGoodsPhoto,storeOrderPhoto,storeItemPhoto} from './photoFixture';
 
 it('H1 new quote revisions bind unit, position minutes and company VAT instead of reading later settings',async()=>{
  const customerId=await customerFixture('H1-Terms');
@@ -71,6 +71,7 @@ it.each([700,null,'changed'] as const)('H1 partial goods keep a flat amount, all
  const master=await withSession(full,()=>getExtraWorkMasterDataAction());if(master.code!=='OK')throw Error('H1_PARTIAL_MASTER');
  if(!master.data.currentRate)expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  await storeOrderPhoto(orderId);
+ for(const item of converted.orderReceipt.items)await storeItemPhoto(orderId,item.id);
  const frozen=await withSession(full,()=>freezeOrderAction({orderId,expectedVersion:version,freezeId:randomUUID(),clientEventId:randomUUID()}));if(frozen.code!=='OK')throw Error('H1_PARTIAL_FREEZE');
  const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
  const issue={orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()};
