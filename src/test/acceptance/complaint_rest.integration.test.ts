@@ -378,9 +378,17 @@ it.each([true,false])('RM07 actual mail Action reconciles a 503 without a blind 
   expect(await withSession(withoutMail,()=>getMicrosoftGraphStatusAction({targetType:input.targetType,targetId:input.targetId}))).toMatchObject({code:'FORBIDDEN'});
   const [prepared]=await sql`SELECT id,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_SEND_PREPARED_V1' AND correlation_id=${input.clientRequestId}::uuid`;
   await sql`UPDATE public.events SET payload=payload-'request' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.id}`;
+  const historical=await withSession(fixture,()=>getMicrosoftGraphStatusAction({targetType:input.targetType,targetId:input.targetId}));
+  expect(historical).toMatchObject({code:'OK',recovery:{request:input,retryAt:expect.any(String)}});
+  if(historical.code!=='OK'||!('recovery'in historical)||!historical.recovery?.request)throw Error('TEST historical complete snapshot recovery missing');
+  const historicalRequest=historical.recovery.request;
+  // Missing content still stays locked; an altered body cannot borrow the original send identity.
+  await sql`UPDATE public.events SET payload=payload-'message' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.id}`;
   expect(await withSession(fixture,()=>getMicrosoftGraphStatusAction({targetType:input.targetType,targetId:input.targetId}))).toMatchObject({code:'OK',recovery:{request:null,retryAt:expect.any(String)}});
-  await sql`UPDATE public.events SET payload=${sql.json(prepared.payload)}::jsonb WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.id}`;
-  const result=await withSession(fixture,()=>sendCustomerMailAction(persisted));expect(sends).toBe(1);expect(lookups).toBe(1);
+  await sql`UPDATE public.events SET payload=jsonb_set(${sql.json(prepared.payload)}::jsonb-'request','{message,body}',to_jsonb('TEST altered body'::text)) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.id}`;
+  expect(await withSession(fixture,()=>getMicrosoftGraphStatusAction({targetType:input.targetType,targetId:input.targetId}))).toMatchObject({code:'OK',recovery:{request:null,retryAt:expect.any(String)}});
+  await sql`UPDATE public.events SET payload=${sql.json(prepared.payload)}::jsonb-'request' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.id}`;
+  const result=await withSession(fixture,()=>sendCustomerMailAction(historicalRequest));expect(sends).toBe(1);expect(lookups).toBe(1);
   if(found){
    expect(result).toMatchObject({code:'OK'});
    expect(await sql`SELECT status FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`).toEqual([{status:'sent'}]);

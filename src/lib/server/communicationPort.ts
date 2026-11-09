@@ -21,6 +21,10 @@ export function canonicalIntent(value:unknown):string{
  if(value!==null&&typeof value==='object')return '{'+Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,entry])=>JSON.stringify(key)+':'+canonicalIntent(entry)).join(',')+'}';
  return JSON.stringify(value);
 }
+/** One canonical send identity for writes and evidence-bound historical reads. */
+function outgoingMailIntent(value:{targetType:TargetType;targetId:string;recipient:string;subject:string;body:string;attachment:unknown;document:unknown;complaint:unknown;intake:unknown}):string {
+ return createHash('sha256').update(canonicalIntent(value)).digest('hex');
+}
 /** Existing complaint mail journal, scoped to its original actor and actual complaint. */
 export async function readPendingComplaintMail(auth:AuthorizationSnapshot,complaintId:string){
  if(!hasAuthorizationArea(auth,'kunden'))return null;
@@ -119,15 +123,26 @@ export async function readPendingCustomerMail(auth:AuthorizationSnapshot,input:{
  if(!validTarget(input?.targetType,input?.targetId))return {code:'VALIDATION_ERROR' as const,message:'Mail-Zuordnung ist ungültig.'};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   if(!await readCommunicationTargetInTransaction(tx,auth,input.targetType,input.targetId))return {code:'NOT_FOUND' as const,message:'Mail-Zuordnung fehlt.'};
-  const rows=await tx.execute<{request:RecoverableCustomerMail|null;sendKey:string;retryAt:string}>(sql`
-   SELECT prepared.payload->'request' AS request,prepared.payload->>'sendKey' AS "sendKey",(thread.created_at+interval '5 minutes')::text AS "retryAt"
+  const rows=await tx.execute<{request:RecoverableCustomerMail|null;sendKey:string;retryAt:string;message:unknown;intent:string|null;recipient:string|null;source:string;preparedActor:string|null}>(sql`
+   SELECT prepared.payload->'request' AS request,prepared.payload->>'sendKey' AS "sendKey",(thread.created_at+interval '5 minutes')::text AS "retryAt",prepared.payload->'message' AS message,prepared.payload->>'intent' AS intent,prepared.payload->>'recipient' AS recipient,thread.source,prepared.user_id::text AS "preparedActor"
    FROM public.communication_threads thread LEFT JOIN public.events prepared ON prepared.tenant_id=thread.tenant_id AND prepared.event_type='COMMUNICATION_SEND_PREPARED_V1' AND prepared.payload->>'threadId'=thread.id::text
    WHERE thread.tenant_id=${auth.tenantId} AND thread.created_by=${auth.userId}::uuid AND thread.status='pending' AND thread.source LIKE 'MS_GRAPH_OUT:%'
    AND ${input.targetType==='ORDER'?sql`thread.order_id=${input.targetId}`:sql`thread.customer_id=${input.targetId} AND thread.order_id IS NULL`}
    AND (prepared.payload->'complaint' IS NULL OR prepared.payload->'complaint'='null'::jsonb) AND prepared.payload->'intake' IS NULL
    ORDER BY thread.created_at,thread.id LIMIT 1`);
   if(!rows.length)return {code:'OK' as const,recovery:null};
-  const row=rows[0],request=row.request;
+  const row=rows[0];let request=row.request;
+  // Older canonical receipts may contain the original message but predate the request envelope.
+  // Accept only the complete persisted content whose exact current send identity matches the stored hash.
+  // An attachment or any unknown/missing original value cannot pass this no-attachment identity check.
+  const message=row.message;
+  if(request==null&&message&&typeof message==='object'&&!Array.isArray(message)&&row.preparedActor===auth.userId&&row.source==='MS_GRAPH_OUT:'+row.sendKey&&/^[0-9a-f-]{36}$/i.test(row.sendKey)&&typeof row.recipient==='string'&&/^\S+@\S+\.\S+$/.test(row.recipient)){
+   const content=message as Record<string,unknown>;
+   if(typeof content.subject==='string'&&content.subject.trim()&&content.subject.length<=500&&typeof content.body==='string'&&content.body.trim()&&content.body.length<=20000){
+    const candidate={targetType:input.targetType,targetId:input.targetId,clientRequestId:row.sendKey,subject:content.subject,body:content.body};
+    if(row.intent===outgoingMailIntent({targetType:input.targetType,targetId:input.targetId,recipient:row.recipient,subject:content.subject.trim(),body:content.body.trim(),attachment:null,document:null,complaint:null,intake:null}))request=candidate;
+   }
+  }
   const safe=request&&request.targetType===input.targetType&&request.targetId===input.targetId&&request.clientRequestId===row.sendKey&&typeof request.subject==='string'&&typeof request.body==='string';
   return {code:'OK' as const,recovery:{request:safe?request:null,retryAt:iso(row.retryAt)}};
  });}catch(error){logCommunicationFailure('COMMUNICATION_RECOVERY_READ_FAILED',error);return {code:'UNAVAILABLE' as const,message:'Versand konnte nicht sicher nachgelesen werden.'};}
@@ -297,7 +312,7 @@ export async function sendCommunicationMail(
   }catch(error){logCommunicationFailure('COMMUNICATION_RECIPIENT_RECOVERY_FAILED',error);return {code:'UNAVAILABLE',message:'Ursprünglicher Empfänger konnte nicht sicher geprüft werden.'};}
   if (!/^\S+@\S+\.\S+$/.test(recipient)) return { code: "VALIDATION_ERROR", message: "Beim Kunden ist keine gültige E-Mail-Adresse hinterlegt." };
   const source = `MS_GRAPH_OUT:${input.clientRequestId}`;
-  const sendIntent=createHash('sha256').update(canonicalIntent({targetType:input.targetType,targetId:input.targetId,recipient,subject:input.subject.trim(),body:input.body.trim(),attachment:input.document?{filename:input.document.number+'.pdf',sha256:input.document.sha256}:input.attachment?{filename:input.attachment.filename,sha256:createHash('sha256').update(input.attachment.bytes).digest('hex')}:null,document:input.document??null,complaint:input.complaintResult??null,intake:input.intakeReply?{id:input.intakeReply.itemId,intent:input.intakeReply.intent}:null})).digest('hex');
+  const sendIntent=outgoingMailIntent({targetType:input.targetType,targetId:input.targetId,recipient,subject:input.subject.trim(),body:input.body.trim(),attachment:input.document?{filename:input.document.number+'.pdf',sha256:input.document.sha256}:input.attachment?{filename:input.attachment.filename,sha256:createHash('sha256').update(input.attachment.bytes).digest('hex')}:null,document:input.document??null,complaint:input.complaintResult??null,intake:input.intakeReply?{id:input.intakeReply.itemId,intent:input.intakeReply.intent}:null});
   let pending: { threadId: string; recordedAt: string; replay?: CommunicationReceipt;check?:boolean;failed?:boolean };
   try {
     pending = await withPrivilegedTenantTransaction(auth, async (tx) => {
