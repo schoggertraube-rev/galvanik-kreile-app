@@ -1,0 +1,321 @@
+import {randomUUID,createHash} from 'node:crypto';
+import {expect,it} from 'vitest';
+import {KREILE_TENANT_SLUG} from '@/lib/tenant';
+import {sql,full,withSession,createFixture} from './replayHarness';
+import {readyInvoiceOrder,customerFixture,intakeOrderFixture} from './orderFixture';
+
+it('a real login without Geld cannot read financial receipts or mutate invoice prices and payment modes',async()=>{
+ const order=await readyInvoiceOrder('Geld-Lesegrenze');
+ const actor=await createFixture(['auftraege']);
+ const {getInvoiceSummariesAction,getInvoiceReceiptAction,setInvoiceItemPricesAction}=await import('@/app/actions/invoices.actions');
+ const {getOrderPaymentStateAction,setPaymentModeAction}=await import('@/app/actions/payments.actions');
+ const before=await sql`SELECT payment_mode,payment_mode_version,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ const modeKey=randomUUID(),priceKey=randomUUID();
+ const results=[
+  await withSession(actor,()=>getInvoiceSummariesAction()),
+  await withSession(actor,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:order.issueInput.clientEventId})),
+  await withSession(actor,()=>getOrderPaymentStateAction({orderId:order.orderId})),
+  await withSession(actor,()=>setPaymentModeAction({orderId:order.orderId,paymentMode:'vorkasse',expectedVersion:0,clientEventId:modeKey})),
+  await withSession(actor,()=>setInvoiceItemPricesAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:priceKey,prices:[{itemId:order.items[0].id,unitPriceCents:12345}]})),
+ ];
+ for(const result of results){expect(result.code).toBe('FORBIDDEN');expect(result).not.toHaveProperty('data');expect(result).not.toHaveProperty('receipt');}
+ expect(await sql`SELECT payment_mode,payment_mode_version,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(before);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array([modeKey,priceKey])}::uuid[])`).toEqual([{n:0}]);
+});
+
+it('missing free-text prices block issue until the existing price action fills them and the invoice reads exactly that amount',async()=>{
+ const setup=await readyInvoiceOrder('Freitext-Voraussetzungen');
+ const withoutMoney=await createFixture(['eingang']);
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const created=await withSession(withoutMoney,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:setup.customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',note:'TEST fehlender Freitextpreis',items:[{catalogServiceId:null,name:'TEST Freitext ohne Preis',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:null,vatRateBasisPoints:null}]}));
+ expect(created,JSON.stringify(created)).toMatchObject({code:'OK'});if(created.code!=='OK')throw Error('MISSING_PRICE_INTAKE:'+created.code);
+ const orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
+ const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,freezeOrderAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('MISSING_PRICE_HANDOFF:'+moved.code);
+ const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));if(finished.code!=='OK')throw Error('MISSING_PRICE_FINISH:'+finished.code);
+ const frozen=await withSession(full,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));if(frozen.code!=='OK')throw Error('MISSING_PRICE_FREEZE:'+frozen.code);
+ const {issueInvoiceAction,setInvoiceItemPricesAction,getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');
+ const key=randomUUID();
+ expect(await withSession(full,()=>issueInvoiceAction({orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:key}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{n:0}]);
+ const prices={orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID(),prices:[{itemId,unitPriceCents:25000}]};
+ const stored=await withSession(full,()=>setInvoiceItemPricesAction(prices));
+ expect(stored).toMatchObject({code:'OK',receipt:{actorId:full.actorId}});if(stored.code!=='OK')throw Error('MISSING_PRICE_WRITE:'+stored.code);
+ expect(await sql`SELECT (preis_netto*100)::integer AS cents FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}`).toEqual([{cents:25000}]);
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{version:stored.receipt.aggregateVersion}}});
+ const invoice=await withSession(full,()=>issueInvoiceAction({orderId,expectedVersion:stored.receipt.aggregateVersion,clientEventId:key}));
+ expect(invoice).toMatchObject({code:'OK',receipt:{netAmountCents:25000,grossAmountCents:29750}});if(invoice.code!=='OK')throw Error('MISSING_PRICE_ISSUE:'+invoice.code);
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId,clientEventId:key}))).toMatchObject({code:'OK',data:{invoiceId:invoice.receipt.invoiceId,netAmountCents:25000}});
+ expect(await withSession(full,()=>setInvoiceItemPricesAction(JSON.parse(JSON.stringify(prices))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:stored.receipt.eventId}});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${prices.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
+it('incomplete seller data consumes no invoice number and the same request succeeds after the TEST configuration is repaired',async()=>{
+ const order=await readyInvoiceOrder('Rechnung-Stammdaten');
+ const {cancelInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');
+ expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST Ersatzrechnung vorbereiten',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ // Only this isolated TEST tenant's fixture is made incomplete; the invoice action is never mocked.
+ await sql`UPDATE public.company_settings SET street='' WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));if(card.code!=='OK')throw Error('MASTER_DATA_CARD:'+card.code);
+ const request={orderId:order.orderId,expectedVersion:card.data.card.version,clientEventId:randomUUID()};
+ const counters=await sql`SELECT * FROM private.invoice_number_sequences WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(full,()=>issueInvoiceAction(request))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT * FROM private.invoice_number_sequences WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(counters);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientEventId}::uuid`).toEqual([{n:0}]);
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:request.clientEventId}))).toMatchObject({code:'OK',data:null});
+ await sql`UPDATE public.company_settings SET street='TEST Weg 1' WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const issued=await withSession(full,()=>issueInvoiceAction(structuredClone(request)));
+ expect(issued).toMatchObject({code:'OK'});if(issued.code!=='OK')throw Error('MASTER_DATA_RETRY:'+issued.code);
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:request.clientEventId}))).toMatchObject({code:'OK',data:{invoiceId:issued.receipt.invoiceId}});
+ expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:issued.receipt.invoiceId}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:2}]);
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
+it('a payment retry key cannot pay another invoice, change the booked method or impersonate the original actor',async()=>{
+ const first=await readyInvoiceOrder('Zahlung-Schlüssel-1'),second=await readyInvoiceOrder('Zahlung-Schlüssel-2');
+ const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const payment={invoiceId:first.invoice.invoiceId,amount:first.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
+ const booked=await withSession(full,()=>confirmPaymentAction(payment));
+ expect(booked).toMatchObject({code:'OK'});if(booked.code!=='OK')throw Error('PAYMENT_KEY_INITIAL:'+booked.code);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:first.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',openAmountCents:0}}});
+ expect(await withSession(full,()=>confirmPaymentAction({...structuredClone(payment),invoiceId:second.invoice.invoiceId}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>confirmPaymentAction({...structuredClone(payment),method:'karte'}))).toMatchObject({code:'CONFLICT'});
+ const other=await createFixture(['geld','auftraege']);
+ expect(await withSession(other,()=>confirmPaymentAction(structuredClone(payment)))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(payment))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:booked.receipt.eventId,confirmedBy:full.actorId}});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:second.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'offen',paidAmountCents:0,openAmountCents:second.invoice.grossAmountCents,paymentVersion:0}}});
+ expect(await sql`SELECT payment_method,payment_paid_amount_cents::integer AS paid FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.invoice.invoiceId}::uuid`).toEqual([{payment_method:'bar',paid:first.invoice.grossAmountCents}]);
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${payment.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
+it('actual payment mode changes race on one version and the same stored receipt survives a fresh read and retry',async()=>{
+ const customerId=await customerFixture('Zahlungsmodus');
+ const order=await intakeOrderFixture('Zahlungsmodus',customerId);
+ const orderId=order.receipt.orderId;
+ const {setPaymentModeAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const requests=[{orderId,paymentMode:'abholung' as const,expectedVersion:0,clientEventId:randomUUID()},{orderId,paymentMode:'vorkasse' as const,expectedVersion:0,clientEventId:randomUUID()}];
+ const result=await Promise.all(requests.map(input=>withSession(full,()=>setPaymentModeAction(structuredClone(input)))));
+ expect(result.map(value=>value.code).sort()).toEqual(['CONFLICT','OK']);
+ const index=result.findIndex(value=>value.code==='OK'),winner=result[index];if(winner.code!=='OK')throw Error('MODE_WINNER');
+ expect(winner.receipt).toMatchObject({changedBy:full.actorId,paymentModeVersion:1,paymentMode:requests[index].paymentMode});
+ expect(await sql`SELECT payment_mode,payment_mode_version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{payment_mode:requests[index].paymentMode,payment_mode_version:1}]);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId}))).toMatchObject({code:'OK',data:{mode:requests[index].paymentMode,paymentModeVersion:1,goodsOutAllowed:false}});
+ expect(await withSession(full,()=>setPaymentModeAction(JSON.parse(JSON.stringify(requests[index]))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:winner.receipt.eventId}});
+ expect(await sql`SELECT client_event_id::text,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array(requests.map(input=>input.clientEventId))}::uuid[])`).toEqual([{client_event_id:requests[index].clientEventId,user_id:full.actorId}]);
+ const denied=await createFixture(['auftraege']);
+ expect(await withSession(denied,()=>setPaymentModeAction({...requests[1-index],expectedVersion:1,clientEventId:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT payment_mode_version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{payment_mode_version:1}]);
+});
+
+it('H8 payment racing cancellation has one winner and never leaves a paid cancelled invoice',async()=>{
+ const order=await readyInvoiceOrder('Zahlung-gegen-Storno');
+ const {cancelInvoiceAction,getInvoiceSummariesAction}=await import('@/app/actions/invoices.actions');
+ const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const cancellation={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST gleichzeitiges Storno',clientEventId:randomUUID()};
+ const payment={invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
+ const [cancelled,paid]=await Promise.all([withSession(full,()=>cancelInvoiceAction(structuredClone(cancellation))),withSession(full,()=>confirmPaymentAction(structuredClone(payment)))]);
+ expect([cancelled.code,paid.code].sort()).toEqual(['CONFLICT','OK']);
+ const [row]=await sql`SELECT status,payment_status,payment_paid_amount_cents::integer AS paid,cancel_event_id::text FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`;
+ const summary=await withSession(full,()=>getInvoiceSummariesAction());
+ expect(summary).toMatchObject({code:'OK',data:expect.arrayContaining([expect.objectContaining({invoiceId:order.invoice.invoiceId,status:row.status})])});
+ if(cancelled.code==='OK'){
+  expect(row).toMatchObject({status:'cancelled',payment_status:'offen',paid:0,cancel_event_id:cancelled.receipt.eventId});
+  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(cancellation))))).toMatchObject({code:'OK',replayed:true});
+  expect(await withSession(full,()=>confirmPaymentAction(structuredClone(payment)))).toMatchObject({code:'CONFLICT'});
+ }else{
+  expect(row).toMatchObject({status:'issued',payment_status:'bezahlt',paid:order.invoice.grossAmountCents,cancel_event_id:null});
+  expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',openAmountCents:0}}});
+  expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(payment))))).toMatchObject({code:'OK',replayed:true});
+  expect(await withSession(full,()=>cancelInvoiceAction(structuredClone(cancellation)))).toMatchObject({code:'CONFLICT'});
+ }
+ const winningKey=cancelled.code==='OK'?cancellation.clientEventId:payment.clientEventId;
+ expect(await sql`SELECT client_event_id::text,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array([cancellation.clientEventId,payment.clientEventId])}::uuid[])`).toEqual([{client_event_id:winningKey,user_id:full.actorId}]);
+});
+
+it('L5 an issued invoice blocks both price supplementation and order content edits without changing its source',async()=>{
+ const order=await readyInvoiceOrder('Preis-nach-Rechnung');
+ const {setInvoiceItemPricesAction}=await import('@/app/actions/invoices.actions');
+ const {getLiveOrderCardAction,changeOrderContentAction}=await import('@/app/actions/orders.actions');
+ const prices={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID(),prices:[{itemId:order.items[0].id,unitPriceCents:25000}]};
+ const before=await sql`SELECT preis_netto FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`;
+ expect(await withSession(full,()=>setInvoiceItemPricesAction(prices))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT preis_netto FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual(before);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${prices.clientEventId}::uuid`).toEqual([{n:0}]);
+ const contentKey=randomUUID();
+ expect(await withSession(full,()=>changeOrderContentAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:contentKey,note:'TEST nachträgliche Änderung',items:[{id:order.items[0].id,catalogServiceId:null,name:'TEST geänderter Preis',quantity:1,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:25000,vatRateBasisPoints:1900}]}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{version:order.version,station:'fertig'}}});
+ expect(await sql`SELECT preis_netto FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual(before);
+ expect(await sql`SELECT net_amount_cents::integer AS net,pdf_sha256 FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{net:order.invoice.netAmountCents,pdf_sha256:order.invoice.pdfSha256}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${contentKey}::uuid`).toEqual([{n:0}]);
+});
+
+it('the real PDF route downloads the stored original and cancellation unchanged and enforces Geld',async()=>{
+ const order=await readyInvoiceOrder('Rechnungs-PDF');
+ const {GET}=await import('@/app/api/invoices/[invoiceId]/pdf/route');
+ const request=(kind:string)=>new Request('http://127.0.0.1/api/invoices/'+order.invoice.invoiceId+'/pdf?kind='+kind);
+ const context=()=>({params:Promise.resolve({invoiceId:order.invoice.invoiceId})});
+ const original=await withSession(full,()=>GET(request('original'),context()));
+ expect(original.status).toBe(200);
+ expect(original.headers.get('content-type')).toBe('application/pdf');
+ expect(original.headers.get('cache-control')).toBe('private, no-store');
+ const originalBytes=Buffer.from(await original.arrayBuffer());
+ expect(originalBytes.subarray(0,5).toString()).toBe('%PDF-');
+ expect(createHash('sha256').update(originalBytes).digest('hex')).toBe(order.invoice.pdfSha256);
+ expect((await withSession(full,()=>GET(request('cancellation'),context()))).status).toBe(404);
+ const denied=await createFixture(['auftraege']);
+ expect((await withSession(denied,()=>GET(request('original'),context()))).status).toBe(403);
+ const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const cancellation=await withSession(full,()=>cancelInvoiceAction({invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST PDF-Storno',clientEventId:randomUUID()}));
+ expect(cancellation).toMatchObject({code:'OK'});if(cancellation.code!=='OK')throw Error('PDF_CANCEL:'+cancellation.code);
+ const cancelled=await withSession(full,()=>GET(request('cancellation'),context()));
+ expect(cancelled.status).toBe(200);
+ expect(cancelled.headers.get('content-disposition')).toContain('-STORNO.pdf');
+ const cancelledBytes=Buffer.from(await cancelled.arrayBuffer());
+ expect(cancelledBytes.subarray(0,5).toString()).toBe('%PDF-');
+ expect(createHash('sha256').update(cancelledBytes).digest('hex')).toBe(cancellation.receipt.cancellationPdfSha256);
+ const originalAgain=await withSession(full,()=>GET(request('original'),context()));
+ expect(originalAgain.status).toBe(200);
+ expect(Buffer.from(await originalAgain.arrayBuffer())).toEqual(originalBytes);
+ expect((await withSession(denied,()=>GET(request('cancellation'),context()))).status).toBe(403);
+});
+
+it('invoice cancellation rejects missing rights, a missing reason and an existing payment without changing the invoice or audit',async()=>{
+ const order=await readyInvoiceOrder('Storno-Sperren');
+ const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const denied=await createFixture(['auftraege']);
+ const base={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST Storno',clientEventId:randomUUID()};
+ expect(await withSession(denied,()=>cancelInvoiceAction(base))).toMatchObject({code:'FORBIDDEN'});
+ const emptyKey=randomUUID();
+ expect(await withSession(full,()=>cancelInvoiceAction({...base,clientEventId:emptyKey,reason:''}))).toMatchObject({code:'VALIDATION_ERROR'});
+ const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const paid=await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,clientEventId:randomUUID()}));
+ expect(paid).toMatchObject({code:'OK'});
+ const before=await sql`SELECT status,aggregate_version,pdf_sha256,pdf_content,payment_status,payment_version,payment_paid_amount_cents,cancel_event_id FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`;
+ const paidKey=randomUUID();
+ expect(await withSession(full,()=>cancelInvoiceAction({...base,clientEventId:paidKey}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT status,aggregate_version,pdf_sha256,pdf_content,payment_status,payment_version,payment_paid_amount_cents,cancel_event_id FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual(before);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',paidAmountCents:order.invoice.grossAmountCents,openAmountCents:0}}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array([base.clientEventId,emptyKey,paidKey])}::uuid[])`).toEqual([{n:0}]);
+});
+
+it('invoice cancellation keeps the original, replays once and permits one replacement while rejecting payment on the cancelled invoice',async()=>{
+ const order=await readyInvoiceOrder('Storno-Neuausstellung');
+ const {cancelInvoiceAction,getInvoiceCancellationReceiptAction,issueInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const original=await sql`SELECT pdf_sha256,pdf_content FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`;
+ const input={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST falsche Rechnungsangabe',clientEventId:randomUUID()};
+ const results=await Promise.all([withSession(full,()=>cancelInvoiceAction(structuredClone(input))),withSession(full,()=>cancelInvoiceAction(structuredClone(input)))]);
+ expect(results.map(result=>result.code)).toEqual(['OK','OK']);
+ expect(results.filter(result=>result.code==='OK'&&!result.replayed)).toHaveLength(1);
+ const cancelled=results[0];if(cancelled.code!=='OK')throw Error('CANCEL_FAILED:'+cancelled.code);
+ expect(await withSession(full,()=>getInvoiceCancellationReceiptAction({invoiceId:input.invoiceId,clientEventId:input.clientEventId}))).toMatchObject({code:'OK',data:{status:'cancelled',cancelledBy:full.actorId,reason:input.reason}});
+ expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:cancelled.receipt.eventId}});
+ expect(await sql`SELECT pdf_sha256,pdf_content FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual(original);
+ expect(await sql`SELECT status,aggregate_version,cancellation_pdf_content IS NOT NULL AS has_pdf FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{status:'cancelled',aggregate_version:2,has_pdf:true}]);
+ const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
+ const payment={invoiceId:input.invoiceId,amount:order.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
+ // The existing payment contract classifies an invoice state changed by cancellation as a conflict.
+ expect(await withSession(full,()=>confirmPaymentAction(payment))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${payment.clientEventId}::uuid`).toEqual([{n:0}]);
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));if(card.code!=='OK')throw Error('CANCEL_CARD:'+card.code);
+ const replacement={orderId:order.orderId,expectedVersion:card.data.card.version,clientEventId:randomUUID()};
+ const issued=await withSession(full,()=>issueInvoiceAction(replacement));
+ expect(issued).toMatchObject({code:'OK'});if(issued.code!=='OK')throw Error('REPLACEMENT:'+issued.code);
+ expect(issued.receipt.invoiceNumber).not.toBe(order.invoice.invoiceNumber);
+ expect(await withSession(full,()=>issueInvoiceAction(structuredClone(replacement)))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:issued.receipt.invoiceId}});
+ expect(await sql`SELECT status FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} ORDER BY invoice_number`).toEqual([{status:'cancelled'},{status:'issued'}]);
+ for(const key of [input.clientEventId,replacement.clientEventId])expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
+it('H8 same-key concurrent invoice, cash payment and pickup each commit once and replay after real readback',async()=>{
+ const order=await readyInvoiceOrder('H8-same-key','pickup',true);
+ expect(order.issuanceResults.map(row=>row.code)).toEqual(['OK','OK']);
+ expect(order.issuanceResults.filter(row=>row.code==='OK'&&!row.replayed)).toHaveLength(1);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:1}]);
+ const {getInvoiceReceiptAction,issueInvoiceAction}=await import('@/app/actions/invoices.actions');
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:order.issueInput.clientEventId}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(order.issueInput))))).toMatchObject({code:'OK',replayed:true});
+ const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const payment={invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
+ const payments=await Promise.all([structuredClone(payment),JSON.parse(JSON.stringify(payment))].map(input=>withSession(full,()=>confirmPaymentAction(input))));
+ expect(payments.map(row=>row.code)).toEqual(['OK','OK']);
+ expect(payments.filter(row=>row.code==='OK'&&!row.replayed)).toHaveLength(1);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',paymentVersion:1,paidAmountCents:order.invoice.grossAmountCents,openAmountCents:0}}});
+ expect(await withSession(full,()=>confirmPaymentAction(structuredClone(payment)))).toMatchObject({code:'OK',replayed:true});
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));
+ expect(card.code).toBe('OK');if(card.code!=='OK')throw Error('H8_PICKUP_READ:'+card.code);
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const pickup={orderId:order.orderId,mode:'abholung' as const,expectedVersion:card.data.card.version,clientEventId:randomUUID()};
+ const released=await Promise.all([structuredClone(pickup),JSON.parse(JSON.stringify(pickup))].map(input=>withSession(full,()=>recordGoodsOutAction(input))));
+ expect(released.map(row=>row.code)).toEqual(['OK','OK']);
+ expect(released.filter(row=>row.code==='OK'&&!row.replayed)).toHaveLength(1);
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt'}}});
+ expect(await withSession(full,()=>recordGoodsOutAction(structuredClone(pickup)))).toMatchObject({code:'OK',replayed:true});
+ for(const key of [order.issueInput.clientEventId,payment.clientEventId,pickup.clientEventId])expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
+it('AF-A4 cash payment remains booked when goods-out conflicts; reread then releases once',async()=>{
+ const order=await readyInvoiceOrder('AF-A4');
+ const {confirmPaymentAction,getOrderPaymentStateAction,setPaymentModeAction}=await import('@/app/actions/payments.actions');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const payment={invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
+ const paid=await withSession(full,()=>confirmPaymentAction(payment));
+ expect(paid.code).toBe('OK');if(paid.code!=='OK')throw Error('AF_A4_PAY:'+paid.code);
+ const outKey=randomUUID();
+ expect(await withSession(full,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:order.version-1,clientEventId:outKey}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT payment_status,payment_open_amount_cents,payment_paid_amount_cents,payment_method FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{payment_status:'bezahlt',payment_open_amount_cents:0,payment_paid_amount_cents:order.invoice.grossAmountCents,payment_method:'bar'}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${outKey}::uuid`).toEqual([{n:0}]);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',openAmountCents:0},goodsOutAllowed:true}});
+ expect(await withSession(full,()=>confirmPaymentAction(structuredClone(payment)))).toMatchObject({code:'OK',replayed:true});
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));
+ expect(card.code).toBe('OK');if(card.code!=='OK')throw Error('AF_A4_CARD:'+card.code);
+ const out={orderId:order.orderId,mode:'abholung' as const,expectedVersion:card.data.card.version,clientEventId:outKey};
+ const released=await withSession(full,()=>recordGoodsOutAction(out));
+ expect(released.code).toBe('OK');if(released.code!=='OK')throw Error('AF_A4_OUT:'+released.code);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{physicalStatus:'abgeholt',payment:{status:'bezahlt'},goodsOutAllowed:false}});
+ expect(await withSession(full,()=>recordGoodsOutAction(structuredClone(out)))).toMatchObject({code:'OK',replayed:true});
+ const modeKey=randomUUID();
+ expect(await withSession(full,()=>setPaymentModeAction({orderId:order.orderId,paymentMode:'vorkasse',expectedVersion:0,clientEventId:modeKey}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT payment_mode,payment_mode_version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{payment_mode:'rechnung',payment_mode_version:0}]);
+ for(const key of [payment.clientEventId,outKey])expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toEqual([{user_id:full.actorId}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${modeKey}::uuid`).toEqual([{n:0}]);
+});
+
+it('H8 concurrent partial payments on one version book once; real reread pays the remaining balance once',async()=>{
+ const order=await readyInvoiceOrder('Zahlung-parallel');
+ const other=await createFixture(['auftraege','geld']);
+ const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const half=Math.floor(order.invoice.grossAmountCents/2);
+ const inputs=[randomUUID(),randomUUID()].map(clientEventId=>({invoiceId:order.invoice.invoiceId,amount:half,method:'ueberweisung' as const,expectedVersion:0,clientEventId}));
+ const results=await Promise.all([withSession(full,()=>confirmPaymentAction(inputs[0])),withSession(other,()=>confirmPaymentAction(inputs[1]))]);
+ expect(results.map(result=>result.code).sort()).toEqual(['CONFLICT','OK']);
+ expect(await sql`SELECT payment_status,payment_open_amount_cents,payment_paid_amount_cents,payment_version FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{payment_status:'teilbezahlt',payment_open_amount_cents:order.invoice.grossAmountCents-half,payment_paid_amount_cents:half,payment_version:1}]);
+ const event=await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array(inputs.map(input=>input.clientEventId))}::uuid[])`;
+ expect(event).toEqual([{user_id:results[0].code==='OK'?full.actorId:other.actorId}]);
+ const read=await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}));
+ expect(read.code).toBe('OK');if(read.code!=='OK'||!read.data.payment)throw Error('PAYMENT_REREAD:'+read.code);
+ const remainder={invoiceId:order.invoice.invoiceId,amount:read.data.payment.openAmountCents,method:'ueberweisung' as const,expectedVersion:read.data.payment.paymentVersion,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>confirmPaymentAction(remainder))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',paidAmountCents:order.invoice.grossAmountCents,paymentVersion:2}}});
+ expect(await withSession(full,()=>confirmPaymentAction(structuredClone(remainder)))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${remainder.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
+it('payment rejection paths do not change the invoice: missing right, overpayment, stale version, zero and negative',async()=>{
+ const order=await readyInvoiceOrder('Zahlung-Ablehnung');
+ const limited=await createFixture(['auftraege']);
+ const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const before=await sql`SELECT payment_status,payment_version,payment_open_amount_cents,payment_paid_amount_cents FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`;
+ const base={invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0};
+ const attempts=[{actor:limited,patch:{},code:'FORBIDDEN'},{actor:full,patch:{amount:order.invoice.grossAmountCents+1},code:'VALIDATION_ERROR'},{actor:full,patch:{expectedVersion:1},code:'CONFLICT'},{actor:full,patch:{amount:0},code:'VALIDATION_ERROR'},{actor:full,patch:{amount:-1},code:'VALIDATION_ERROR'}];
+ const keys:string[]=[];
+ for(const attempt of attempts){const key=randomUUID();keys.push(key);expect(await withSession(attempt.actor,()=>confirmPaymentAction({...base,...attempt.patch,clientEventId:key}))).toMatchObject({code:attempt.code});}
+ expect(await sql`SELECT payment_status,payment_version,payment_open_amount_cents,payment_paid_amount_cents FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual(before);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array(keys)}::uuid[])`).toEqual([{n:0}]);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'offen',openAmountCents:order.invoice.grossAmountCents,paymentVersion:0}}});
+});

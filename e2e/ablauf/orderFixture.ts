@@ -17,7 +17,7 @@ export async function intakeOrderFixture(label:string,customerId:string,handover
 }
 
 /** Synthetic initial state for later boundaries, using the actual order writers. */
-export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'shipping'='pickup'){
+export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'shipping'='pickup',concurrentIssue=false){
  const customerId=await customerFixture(label);
  const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,setExtraWorkHourlyRateAction,freezeOrderAction,getExtraWorkMasterDataAction}=await import('@/app/actions/orders.actions');
  const created=await intakeOrderFixture(label,customerId,handoverMode);
@@ -39,7 +39,8 @@ export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'ship
  WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
  const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
  const issueInput={orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()};
- const issued=await withSession(full,()=>issueInvoiceAction(issueInput));
+ const issuanceResults=await Promise.all(Array.from({length:concurrentIssue?2:1},()=>withSession(full,()=>issueInvoiceAction(structuredClone(issueInput)))));
+ const issued=issuanceResults[0];
  if(issued.code!=='OK')throw Error('FIXTURE_INVOICE:'+issued.code+':'+('message'in issued?issued.message:''));
- return {customerId,orderId,invoice:issued.receipt,version:issued.receipt.orderVersion,issueInput,items:created.receipt.items};
+ return {customerId,orderId,invoice:issued.receipt,version:issued.receipt.orderVersion,issueInput,items:created.receipt.items,issuanceResults};
 }

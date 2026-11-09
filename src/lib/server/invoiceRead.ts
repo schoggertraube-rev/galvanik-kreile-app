@@ -530,6 +530,7 @@ export async function readInvoicePdf(
             WHERE invoice.id = ${invoiceId}::uuid
               AND invoice.tenant_id = ${authorization.tenantId}
               AND invoice.contract_version = 1
+              AND invoice.status = 'cancelled'
             LIMIT 2
           `);
       if (rows.length > 1) throw new Error("INVOICE_READ_PDF_AMBIGUOUS");
