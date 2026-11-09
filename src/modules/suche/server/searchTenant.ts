@@ -1,3 +1,4 @@
+import {foldSearchText} from '@/lib/domain/searchText';
 import {
   SEARCH_MAX_HITS,
   SEARCH_MAX_HITS_PER_TYPE,
@@ -15,7 +16,7 @@ const INVALID_QUERY_MESSAGE = "Suchbegriff ist ungültig oder zu lang.";
 const UNAVAILABLE_MESSAGE = "Die internen Bestände konnten nicht sicher durchsucht werden.";
 
 function normalizedText(value: string): string {
-  return value.trim().toLocaleLowerCase("de-DE");
+  return foldSearchText(value);
 }
 
 function validRequired(value: unknown): value is string {
