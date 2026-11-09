@@ -66,7 +66,7 @@ Replay-Datenbank und ausdrücklich synthetische Daten; sie behaupten keine Provi
 - Bestehende Rollen-Abfragen im Test: ungültige Option `exact` entfernt; die vollständigen zugänglichen Namen bleiben unverändert geprüft.
 - Die sieben generierten Browserfälle wurden **nicht** verändert.
 
-## Noch offen vor Abnahme
+## Historischer Zwischenstand vor dem oben dokumentierten Schlusslauf
 
 - PL 12:00 hat beide Punkte entschieden: persönlicher Titel, kompakte echte Foto/Datei-Werkzeuge und Textfeld im selben E1; die einzelne S13-Zeile ersetzt die alte Box. Diese Korrektur ist umgesetzt und wird als ein gemeinsamer Kopf geprüft.
 - Abschließender Sichtabgleich dieser Entscheidung; vorhandene Bilder belegen Funktion und zeigen die Layoutabweichungen ausdrücklich.
@@ -84,7 +84,7 @@ Der vorhandene Dialog bleibt verantwortlich für Escape, Hintergrundklick und de
 
 Bewusst offen: **Sprechen** wird nach ausdrücklichem PL-Entscheid nicht als Knopf gezeigt und nicht simuliert; ein Transkriptions-Port fehlt. PL informiert die Owner. Die Beispiel-/Vernetzungs-Demos des HTML-Referenzwerkzeugs werden nicht als Produktfunktionen eingebaut.
 
-Lokale Datenbank weiterhin nicht erreichbar nach einem begrenzten Wiederanlaufversuch; keine neuen DB-Schleifen. Die bereits nachgewiesenen Server-Schreibwege bleiben unverändert. Der letzte tatsächliche Git-Preview-Sichtlauf und der Dev-Zweisitzungs-Rundweg stehen oben; unabhängige Abnahme bleibt erforderlich.
+Lokale Datenbank war beim letzten geprüften Stand nach einem begrenzten Wiederanlaufversuch nicht erreichbar; keine neuen DB-Schleifen. Die bereits nachgewiesenen Server-Schreibwege bleiben unverändert. Der letzte tatsächliche Git-Preview-Sichtlauf und der Dev-Zweisitzungs-Rundweg stehen oben; unabhängige Abnahme bleibt erforderlich.
 
 ## Nachführung des bestehenden globalen Fluss-Tests
 
@@ -96,4 +96,4 @@ Am Kandidaten 77306434 sind quality, Fresh-Replay, agentur und Ratchet grün; h1
 
 ## Gerätewechsel: Ursache vor der Datenbank
 
-Ein echter Zwei-Sitzungs-Vorlauf auf Dev (synthetische TEST-Notiz, noch kein Foto übertragen) zeigte: Ein Desktopfenster mit 1220 px wurde durch `(max-width: 1279px)` als Kameragerät behandelt. Damit öffnete Foto die lokale Kamera statt der vorgesehenen Handy-Übergabe. Die bestehende Geräteerkennung nutzt jetzt das tatsächliche grobe Eingabegerät (`pointer: coarse`) statt die Fensterbreite. Ein gezielter Komponentenfall belegt einen schmalen Desktop mit bestehendem Gerätewechsel-Port. Kein neuer Anbieter oder Kamerapfad. Der vollständige Zwei-Sitzungs-Foto-Nachweis bleibt bis zum tatsächlichen erneuten Lauf offen; keine physische Handy-Kamera behauptet.
+Ein echter Zwei-Sitzungs-Vorlauf auf Dev (synthetische TEST-Notiz, noch kein Foto übertragen) zeigte: Ein Desktopfenster mit 1220 px wurde durch `(max-width: 1279px)` als Kameragerät behandelt. Damit öffnete Foto die lokale Kamera statt der vorgesehenen Handy-Übergabe. Die bestehende Geräteerkennung nutzt jetzt das tatsächliche grobe Eingabegerät (`pointer: coarse`) statt die Fensterbreite. Ein gezielter Komponentenfall belegt einen schmalen Desktop mit bestehendem Gerätewechsel-Port. Kein neuer Anbieter oder Kamerapfad. Der oben dokumentierte erfolgreiche Nachlauf ersetzt diesen Vorlauf. Die übrigen Gerätefehlerfälle bleiben E3; keine physische Handy-Kamera behauptet.
