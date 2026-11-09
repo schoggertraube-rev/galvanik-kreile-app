@@ -1,4 +1,5 @@
 import 'server-only';
+import {BELEG_AUTO_COPY as C} from '@/ui/situationCatalog';
 import {invoiceAutomaticReadiness} from '../invoiceAutomation';
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
@@ -63,10 +64,10 @@ async function supplier(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapsho
  return {id:value.id,name:value.name,iban:value.iban,paymentTermDays:value.paymentTermDays};
 }
 async function duplicate(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,fields:InvoiceFields,excludeId?:string):Promise<InvoiceDuplicate|null>{
- if(!fields.lieferantId||!fields.nummer.trim())return null;
+ if(!fields.lieferantId||!fields.nummer.trim()&&(!invoiceDate(fields.datum)||invoiceCents(fields.brutto)===null))return null;
  const rows=await tx.execute<InvoiceDuplicate>(sql`SELECT id::text,nummer AS number,nummer_intern AS "internalNumber",datum::text AS date,brutto::text AS gross,
   (datum=${invoiceDate(fields.datum)?fields.datum:null}::date AND brutto=${invoiceCents(fields.brutto)===null?null:invoiceDecimal(invoiceCents(fields.brutto)!)}::numeric) AS exact
-  FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId} AND lieferant_id=${fields.lieferantId} AND nummer=${fields.nummer.trim()}
+  FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId} AND lieferant_id=${fields.lieferantId} AND ((${fields.nummer.trim()}<>'' AND nummer=${fields.nummer.trim()}) OR (${fields.nummer.trim()}='' AND datum=${invoiceDate(fields.datum)?fields.datum:null}::date AND brutto=${invoiceCents(fields.brutto)===null?null:invoiceDecimal(invoiceCents(fields.brutto)!)}::numeric))
   AND zahlstatus NOT IN ('doppelt','ungueltig') AND (${excludeId??null}::uuid IS NULL OR id<>${excludeId??null}::uuid)
   ORDER BY (datum=${invoiceDate(fields.datum)?fields.datum:null}::date AND brutto=${invoiceCents(fields.brutto)===null?null:invoiceDecimal(invoiceCents(fields.brutto)!)}::numeric) DESC NULLS LAST,erfasst_am,id LIMIT 1`);
  return rows.length?{...rows[0],exact:rows[0].exact===true}:null;
@@ -79,9 +80,10 @@ export async function readIncomingInvoice(input:unknown,deps:InvoiceDependencies
  });}catch(error){const result=failure(error);return result.code==='DUPLICATE'?{code:'CONFLICT',message:result.message}:result;}
 }
 async function readInvoiceView(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,deps:InvoiceDependencies){
-  const invoice=await findInvoice(tx,auth,id)??await findInvoice(tx,auth,id,true);
-  const row=await source(tx,auth,invoice?.item_id??id);
-  const originals=await tx.execute<{id:string;name:string;mime:string;sha256:string}>(sql`SELECT file.id::text,file.dateiname AS name,file.mime,file.sha256 FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml'
+  let invoice=await findInvoice(tx,auth,id)??await findInvoice(tx,auth,id,true);
+  let row=await source(tx,auth,invoice?.item_id??id);
+  if(!invoice&&row.vorgang_art==='rechnung'&&uuid(row.vorgang_id)){invoice=await findInvoice(tx,auth,row.vorgang_id);if(invoice)row=await source(tx,auth,invoice.item_id);}
+  const originals=await tx.execute<{id:string;name:string;mime:string;sha256:string;itemId:string}>(sql`SELECT file.id::text,file.dateiname AS name,file.mime,file.sha256,file.item_id::text AS "itemId" FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND (file.item_id=${row.id}::uuid OR EXISTS(SELECT 1 FROM public.intake_event linked WHERE linked.tenant_id=file.tenant_id AND linked.item_id=file.item_id AND linked.art='einsatz' AND linked.nachher->>'command'='rechnung.original_zugeordnet' AND linked.nachher->>'invoiceId'=${invoice?.id??null} AND linked.nachher->'originalIds' ? file.id::text)) AND file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml'
    AND EXISTS(SELECT 1 FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id AND event.art='original_gespeichert' AND event.nachher->>'fileId'=file.id::text) ORDER BY file.reihenfolge,file.id`);
   const primaryFileId=invoice?.file_id??originals[0]?.id??null;
   const selected=await supplier(tx,auth,invoice?(invoice.lieferant_id??''):(row.kunde_id??''),deps);
@@ -110,7 +112,7 @@ async function readInvoiceView(tx:PrivilegedTenantTransaction,auth:Authorization
 }
 
 function validSave(input:unknown):input is InvoiceSaveInput{
- return object(input)&&keys(input,['itemId','fileId','version','clientKey','fields','status','paidDate','proofFileId','duplicateId','duplicateReason','unclearReason',...(input.automatic===true?['automatic']:[])])
+ return object(input)&&keys(input,['itemId','fileId','version','clientKey','fields','status','paidDate','proofFileId','duplicateId','duplicateReason','unclearReason',...(input.automatic===true?['automatic']:[]),...(input.attachOriginal===true?['attachOriginal']:[])])
   &&uuid(input.itemId)&&uuid(input.fileId)&&uuid(input.clientKey)&&Number.isSafeInteger(input.version)&&Number(input.version)>=1&&invoiceFieldShape(input.fields)
   &&['offen','bezahlt','unklar','doppelt'].includes(String(input.status))&&optionalText(input.paidDate,10)
   &&(input.proofFileId===null||uuid(input.proofFileId))&&(input.duplicateId===null||uuid(input.duplicateId))&&optionalText(input.duplicateReason,200)&&optionalText(input.unclearReason,200);
@@ -141,11 +143,11 @@ async function verifyDuplicate(tx:PrivilegedTenantTransaction,auth:Authorization
  }else if(existing&&(existing.exact||!reason?.trim()))throw new Rejected({code:'DUPLICATE',message:'Rechnung gibt es schon',duplicate:existing});
  if(reason!==null&&(reason.trim().length<3||reason.trim().length>200))reject('VALIDATION_ERROR','Begründung braucht 3 bis 200 Zeichen.',{duplicateReason:'Grund fehlt'});
 }
-async function record(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,row:Source,key:string,command:string,intent:unknown,before:IncomingInvoice|null,after:IncomingInvoice,deps:InvoiceDependencies){
+async function record(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,row:Source,key:string,command:string,intent:unknown,before:IncomingInvoice|null,after:IncomingInvoice,deps:InvoiceDependencies,originalIds?:string[]){
  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES
   (${auth.tenantId},${row.id}::uuid,'einsatz',${key}::uuid,${auth.userId},${JSON.stringify(before)}::jsonb,
-   ${JSON.stringify({command,intent,invoiceId:after.id,invoiceVersion:after.version,invoice:after})}::jsonb)`);
- const historyId=randomUUID(),text='Rechnung '+after.nummer_intern+' erfasst · '+after.zahlstatus+(after.faellig_am?' · fällig '+after.faellig_am:'')+(after.unklar_grund&&after.zahlstatus==='unklar'?' · '+after.unklar_grund:'');
+   ${JSON.stringify({command,intent,invoiceId:after.id,invoiceVersion:after.version,invoice:after,...(originalIds?{originalIds}:{})})}::jsonb)`);
+ const historyId=randomUUID(),text=command==='rechnung.original_zugeordnet'?C.originalLinked(after.nummer_intern):'Rechnung '+after.nummer_intern+' erfasst · '+after.zahlstatus+(after.faellig_am?' · fällig '+after.faellig_am:'')+(after.unklar_grund&&after.zahlstatus==='unklar'?' · '+after.unklar_grund:'');
  const result=await writeIntakeNoteInTransaction(tx,auth,{itemId:historyId,textstand:historyId,text,concerns:[],context:after.lieferant_id?{customerId:after.lieferant_id}:undefined},deps.readCustomer);
  if(result)throw new Rejected(result);
  await tx.execute(sql`UPDATE public.intake_item SET verweis_item=${row.id}::uuid WHERE tenant_id=${auth.tenantId} AND id=${historyId}::uuid`);
@@ -159,11 +161,30 @@ async function replay(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
  if(!invoice||invoice.version!==events[0].nachher.invoiceVersion)reject('CONFLICT','Rechnung wurde inzwischen geändert. Bitte neu lesen.');
  return {code:'OK' as const,invoice,replayed:true};
 }
+/** Adds immutable original references to one existing invoice, never a second booking. */
+async function attachDuplicateOriginal(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,row:Source,input:InvoiceSaveInput,deps:InvoiceDependencies){
+ if(input.status!=='doppelt'||input.automatic||input.paidDate!==null||input.proofFileId!==null||input.unclearReason!==null)reject('VALIDATION_ERROR','Originalzuordnung verändert keine Buchungs- oder Zahlungsangaben.');
+ const {view}=await readInvoiceView(tx,auth,row.id,deps);
+ if(!view.duplicate||input.duplicateId!==view.duplicate.id||!isDeepStrictEqual(input.fields,view.fields)||!row.kunde_id||row.zuordnung==='offen'||row.kunde_id!==view.supplier?.id||view.fileId!==input.fileId)reject('VALIDATION_ERROR','Aussteller und vorhandenen Beleg eindeutig bestätigen.');
+ const originals=await tx.execute<{id:string}>(sql`SELECT file.id::text FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.art<>'mime' AND file.mime<>'message/rfc822' AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=file.tenant_id AND receipt.item_id=file.item_id AND receipt.art='original_gespeichert' AND receipt.nachher->>'fileId'=file.id::text AND receipt.nachher->>'sha256'=file.sha256) ORDER BY file.id`);
+ if(!originals.some(file=>file.id===input.fileId))reject('VALIDATION_ERROR','Gesichertes Original fehlt.');
+ const identityFields=view.fields.nummer.trim()?['rechnung.nummer']:['rechnung.datum','rechnung.betrag'];
+ const suggestions=await tx.execute<{feld:string;wert:unknown}>(sql`SELECT feld,wert FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${row.id}::uuid AND (file_id=${input.fileId}::uuid OR file_id IS NULL) AND status<>'verworfen' AND (sicherheit='sicher' OR geprueft_am IS NOT NULL) AND feld=ANY(ARRAY[${sql.join(identityFields.map(field=>sql`${field}`),sql`, `)}]::text[])`);
+ const stable=identityFields.every(field=>suggestions.some(value=>value.feld===field&&(field==='rechnung.nummer'?value.wert===view.fields.nummer:field==='rechnung.datum'?value.wert===view.fields.datum:object(value.wert)&&invoiceCents(String(value.wert.brutto))===invoiceCents(view.fields.brutto))));if(!stable)reject('VALIDATION_ERROR','Belegidentität ist nicht sicher erkannt · am Original prüfen.');
+ const matches=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId} AND lieferant_id=${row.kunde_id} AND zahlstatus NOT IN ('doppelt','ungueltig') AND ((${view.fields.nummer.trim()}<>'' AND nummer=${view.fields.nummer.trim()}) OR (${view.fields.nummer.trim()}='' AND datum=${invoiceDate(view.fields.datum)?view.fields.datum:null}::date AND brutto=${invoiceCents(view.fields.brutto)===null?null:invoiceDecimal(invoiceCents(view.fields.brutto)!)}::numeric)) FOR UPDATE`);
+ if(matches.length!==1||matches[0].id!==input.duplicateId)reject('CONFLICT','Mehrere passende Belege · vorhandenen Beleg eindeutig klären.');
+ const before=await findInvoice(tx,auth,matches[0].id,false,true);if(!before)reject('NOT_FOUND','Vorhandener Beleg fehlt.');
+ await tx.execute(sql`UPDATE public.supplier_invoice SET version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${before.id}::uuid AND version=${before.version}`);
+ const concerns=row.anliegen_offen.filter(value=>value!=='rechnung');
+ const pending=await tx.execute(sql`SELECT id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND antwort_auf_item=${row.id}::uuid AND sendestatus IN ('entwurf','sendet','unklar','fehler') LIMIT 1`);
+ await tx.execute(sql`UPDATE public.intake_item SET vorgang_art='rechnung',vorgang_id=${before.id},einsatz=${concerns.length||pending.length?'offen':'erledigt'},anliegen_offen=ARRAY[${sql.join(concerns.map(value=>sql`${value}`),sql`, `)}]::text[],version=version+1,geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp(),einsatz_aktion='rechnung.original_zugeordnet',einsatz_von=${auth.userId}::uuid,einsatz_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid AND version=${row.version}`);
+ const after=await findInvoice(tx,auth,before.id);if(!after)throw Error('INVOICE_REFERENCE_READBACK_FAILED');await record(tx,auth,row,input.clientKey,'rechnung.original_zugeordnet',input,before,after,deps,originals.map(file=>file.id));return {code:'OK' as const,invoice:after,replayed:false};
+}
 /** All four commands compose existing customer/task/history writers in this transaction. */
 export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies):Promise<InvoiceResult>{
  if(!validSave(input))return {code:'VALIDATION_ERROR',message:'Rechnungsangaben oder Eingangsstand sind ungültig.'};
  try{const auth=await authorization();return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const row=await source(tx,auth,input.itemId,true),command=input.status==='unklar'?'rechnung.unklar':'rechnung.erfassen';
+  const row=await source(tx,auth,input.itemId,true),command=input.attachOriginal?'rechnung.original_zugeordnet':input.status==='unklar'?'rechnung.unklar':'rechnung.erfassen';
   const repeated=await replay(tx,auth,row,input.clientKey,command,input);if(repeated)return repeated;
   if(input.automatic){
    const read=await readInvoiceView(tx,auth,row.id,deps),view=read.view;
@@ -175,6 +196,7 @@ export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies
   if(await findInvoice(tx,auth,row.id,true))reject('CONFLICT','Dieser Eingang hat bereits eine Rechnung.');
   if(row.einsatz!=='offen'||row.aussortiert)reject('CONFLICT','Eingang ist nicht mehr offen.');
   if(row.vorgang_id)reject('CONFLICT','Eingang ist bereits einem anderen Vorgang zugeordnet.');
+  if(input.attachOriginal)return attachDuplicateOriginal(tx,auth,row,input,deps);
   const originals=await tx.execute(sql`SELECT file.id FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.id=${input.fileId}::uuid AND EXISTS(SELECT 1 FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id AND event.art='original_gespeichert' AND event.nachher->>'fileId'=file.id::text)`);
   if(originals.length!==1)reject('VALIDATION_ERROR','Gesichertes Original dieser Rechnung fehlt.');
   const missingSupplier=input.status==='offen'&&!input.fields.lieferantId;

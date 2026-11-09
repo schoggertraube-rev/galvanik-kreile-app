@@ -175,3 +175,24 @@ it('BA02 actual undo and rebook preserve one canonical invoice and both historic
  expect(await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}))).toMatchObject({code:'OK',view:{canUndo:true,canRebook:false,invoice:{id:saved.invoice.id,zahlstatus:'offen',brutto:'238.00'}}});
  expect(await sql`SELECT einsatz,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual([{einsatz:'erledigt',anliegen_offen:[]}]);
 });
+
+it('BA04 duplicate source links its secured original to the same invoice and opens both original owners without a second booking',async()=>{
+ const {getIncomingInvoiceAction,saveIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
+ const first=await secureSource();const initial=await withSession(first.fixture,()=>getIncomingInvoiceAction({id:first.itemId}));if(initial.code!=='OK')throw Error(initial.message);
+ const booked=await withSession(first.fixture,()=>saveIncomingInvoiceAction({itemId:first.itemId,fileId:first.fileId,version:1,clientKey:randomUUID(),automatic:true,fields:initial.view.fields,status:'offen',paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null}));if(booked.code!=='OK')throw Error(booked.message);
+ const second=await secureSource();await sql`UPDATE public.intake_item SET kunde_id=${first.fixture.customerId} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second.itemId}::uuid`;
+ const duplicate=await withSession(second.fixture,()=>getIncomingInvoiceAction({id:second.itemId}));expect(duplicate).toMatchObject({code:'OK',view:{duplicate:{id:booked.invoice.id},automation:{state:'duplicate'}}});if(duplicate.code!=='OK')throw Error(duplicate.message);
+ const input={attachOriginal:true,itemId:second.itemId,fileId:second.fileId,version:duplicate.view.item.version,clientKey:randomUUID(),fields:duplicate.view.fields,status:'doppelt',paidDate:null,proofFileId:null,duplicateId:booked.invoice.id,duplicateReason:null,unclearReason:null};
+ expect(await withSession(second.fixture,()=>saveIncomingInvoiceAction(input))).toMatchObject({code:'OK',invoice:{id:booked.invoice.id,zahlstatus:'offen',brutto:'119.00',version:2}});
+ expect(await withSession(second.fixture,()=>saveIncomingInvoiceAction(input))).toMatchObject({code:'OK',replayed:true,invoice:{id:booked.invoice.id}});
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=ANY(${[first.itemId,second.itemId]}::uuid[])`).toHaveLength(1);
+ expect(await sql`SELECT von,nachher->'originalIds' AS originals FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${second.itemId}::uuid AND nachher->>'command'='rechnung.original_zugeordnet'`).toEqual([{von:second.fixture.actorId,originals:[second.fileId]}]);
+ expect(await sql`SELECT id::text,item_id::text FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=ANY(${[first.fileId,second.fileId]}::uuid[]) ORDER BY id`).toEqual([{id:first.fileId,item_id:first.itemId},{id:second.fileId,item_id:second.itemId}].sort((a,b)=>a.id.localeCompare(b.id)));
+ for(const id of [booked.invoice.id,second.itemId])expect(await withSession(second.fixture,()=>getIncomingInvoiceAction({id}))).toMatchObject({code:'OK',view:{invoice:{id:booked.invoice.id,zahlstatus:'offen'},originals:expect.arrayContaining([expect.objectContaining({id:first.fileId,itemId:first.itemId}),expect.objectContaining({id:second.fileId,itemId:second.itemId})])}});
+ expect(await sql`SELECT einsatz,vorgang_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second.itemId}::uuid`).toEqual([{einsatz:'erledigt',vorgang_id:booked.invoice.id}]);
+ const fallback=await secureSource();await sql`UPDATE public.intake_item SET kunde_id=${first.fixture.customerId} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fallback.itemId}::uuid`;await sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${fallback.itemId}::uuid AND feld='rechnung.nummer'`;
+ const fallbackView=await withSession(fallback.fixture,()=>getIncomingInvoiceAction({id:fallback.itemId}));expect(fallbackView).toMatchObject({code:'OK',view:{fields:{nummer:''},duplicate:{id:booked.invoice.id}}});if(fallbackView.code!=='OK')throw Error(fallbackView.message);
+ expect(await withSession(fallback.fixture,()=>saveIncomingInvoiceAction({...input,itemId:fallback.itemId,fileId:fallback.fileId,version:fallbackView.view.item.version,clientKey:randomUUID(),fields:fallbackView.view.fields}))).toMatchObject({code:'OK',invoice:{id:booked.invoice.id,version:3}});
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND lieferant_id=${first.fixture.customerId}`).toHaveLength(1);
+
+});
