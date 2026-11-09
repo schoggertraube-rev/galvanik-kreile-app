@@ -275,14 +275,14 @@ it('RM02/RM05 actual complaint Action consumes two original reply photos and com
  expect(await withSession(fixture,()=>getIntakeMessagesAction('alle'))).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:rootId,usage:'erledigt'}),expect.objectContaining({id:replyId,usage:'erledigt'})])});
 });
 
-async function replyMailFixture(fixture:Awaited<ReturnType<typeof createFixture>>,order:Awaited<ReturnType<typeof deliveredComplaintSource>>){
+async function replyMailFixture(fixture:Awaited<ReturnType<typeof createFixture>>,order:Awaited<ReturnType<typeof deliveredComplaintSource>>,attachmentMime="image/jpeg"){
  const rootId=randomUUID(),replyId=randomUUID(),threadId=randomUUID(),requestKey=randomUUID(),rootInternet='<TEST-root-'+rootId+'@example.invalid>',photos=[randomUUID(),randomUUID()];
  for(const id of [rootId,replyId]){
   await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,vorgang_art,vorgang_id,zuordnung,einsatz,text,anliegen,anliegen_offen,absender_adresse,graph_message_id,internet_message_id,empfangen_am) VALUES(${id}::uuid,${KREILE_TENANT_SLUG},${id},'mail','rein','mailabruf',${fixture.actorId}::uuid,${fixture.customerId},'auftrag',${order.orderId},'hand','offen','TEST Blasen an Teil, Originalfotos',ARRAY['reklamation'],ARRAY['reklamation'],'TEST-rekla@example.invalid',${'TEST-graph-'+id},${id===rootId?rootInternet:'<TEST-reply-'+replyId+'@example.invalid>'},statement_timestamp())`;
   const mimeId=randomUUID(),mimeHash=(id===rootId?'a':'b').repeat(64),fileIds=[mimeId,...(id===replyId?photos:[])];
   for(const [index,fileId]of fileIds.entries()){
    const hash=index?String(index).repeat(64):mimeHash;
-   await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${fileId}::uuid,${KREILE_TENANT_SLUG},${id}::uuid,${fileId},${index?'foto':'mime'},${index?'TEST Foto.jpg':'TEST Original.eml'},${index?'image/jpeg':'message/rfc822'},32,${hash},${KREILE_TENANT_SLUG+'/'+hash},now(),${fixture.actorId}::uuid,${index+1},true,false,'fertig')`;
+   await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${fileId}::uuid,${KREILE_TENANT_SLUG},${id}::uuid,${fileId},${index?(attachmentMime.startsWith('image/')?'foto':'anhang'):'mime'},${index?(attachmentMime==='application/pdf'?'TEST Original.pdf':attachmentMime==='video/mp4'?'TEST Original.mp4':'TEST Foto.jpg'):'TEST Original.eml'},${index?attachmentMime:'message/rfc822'},32,${hash},${KREILE_TENANT_SLUG+'/'+hash},now(),${fixture.actorId}::uuid,${index+1},true,false,'fertig')`;
    await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${id}::uuid,'original_gespeichert',${fileId}::uuid,${fixture.actorId},${sql.json({fileId,sha256:hash,bytes:32})})`;
   }
   await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${id}::uuid,'angelegt',${randomUUID()}::uuid,${fixture.actorId},${sql.json({kanal:'mail',...(id===replyId?{complaintThreadParent:rootId}:{}),replyChain:{source:'original_mime',originalSha256:mimeHash,status:id===replyId?'present':'missing',inReplyTo:id===replyId?[rootInternet]:[],references:[]}})})`;
@@ -293,6 +293,23 @@ async function replyMailFixture(fixture:Awaited<ReturnType<typeof createFixture>
  await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${rootId}::uuid,'anliegen',${requestKey}::uuid,${fixture.actorId},${sql.json({action:'reklamation.fotos_angefordert',customerId:fixture.customerId,sourceGraphId:'TEST-graph-'+rootId,threadId,originalSha256:'a'.repeat(64),intent:'TEST fixture'})})`;
  return {rootId,replyId,photos};
 }
+
+it.each(['application/pdf','video/mp4'])('RM10 %s original remains readable but never counts as complaint photo',async(mime)=>{
+ const fixture=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(fixture);
+ const {rootId,replyId,photos}=await replyMailFixture(fixture,order,mime);
+ const {reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
+ const {getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');
+ const clientKey=randomUUID();
+ const result=await withSession(fixture,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey,orderId:order.orderId,intakeItemId:replyId,intakeVersion:1,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST RM10 Original ist kein Foto',photoIds:photos,goodsReturn:'offen'}));
+ expect(result).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND intake_item_id=${replyId}::uuid`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientKey}::uuid AND event_type='COMPLAINT_CHANGED_V1'`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=ANY(${photos}::uuid[]) AND mime=${mime}`).toHaveLength(2);
+ const messages=await withSession(fixture,()=>getIntakeMessagesAction('offen'));
+ expect(messages).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:rootId,usage:'offen'}),expect.objectContaining({id:replyId,usage:'offen',photoCount:0})])});
+ if(messages.code!=='OK')throw Error(messages.message);
+ expect(messages.messages.find(row=>row.id===rootId)?.photoReplies??[]).toHaveLength(0);
+});
 
 it('RM03 real reply Action sends the explicit response, completes root and reply with reason and creates no complaint',async()=>{
  const fixture=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(fixture);
