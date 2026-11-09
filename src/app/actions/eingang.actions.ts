@@ -1,6 +1,6 @@
 "use server";
 import {PACKAGE_ASSIGN_COPY} from "@/ui/situationCatalog";
-import {quoteCommandContext} from "@/lib/server/quoteAuthorization";
+import {quoteOperationContext} from "@/lib/server/quoteAuthorization";
 
 import {listOpenQuotesCommand,readPackageQuoteHistory} from '@/modules/quotes/server-public';
 import {readPackageExpectation} from '@/modules/eingang/server-public';
@@ -9,7 +9,7 @@ async function withPackageExpectation(result:IntakeCaptureResult):Promise<Intake
  if(result.code!=='OK'||result.capture.recognition?.kind!=='ware')return result;
  try{
   const auth=await resolveAuthorization();if(!auth.ok)return result;
-  const quoteContext=quoteCommandContext(auth.data);
+  const quoteContext=quoteOperationContext(auth.data);
   const quotes=quoteContext.capabilities.canReadQuote?await listOpenQuotesCommand(quoteContext):null;
   const history=!result.capture.customerId?await readPackageQuoteHistory(auth.data,result.capture.recognition?.text??result.capture.text??''):[];
   result.capture.packageContext=await withPrivilegedTenantTransaction(auth.data,tx=>readPackageExpectation(tx,auth.data,result.capture,quotes,history));

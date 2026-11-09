@@ -1,5 +1,5 @@
 "use server";
-import {quoteCommandContext} from '@/lib/server/quoteAuthorization';
+import {quoteCommandContext,quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 import {readMicrosoftGraphSentDocumentEvidence} from "@/lib/server/microsoftGraph";
@@ -54,8 +54,6 @@ import {
 type PendingMailAcceptance={input:QuoteLifecycleInput;proof:QuoteReplyProof;handoverMode:'pickup'|'shipping';paymentMode:'vorkasse'|'abholung'|'rechnung';eventId?:string;notices?:string[]};
 function mailOrderKey(requestId:string){const bytes=createHash('sha256').update('quote-mail-order:'+requestId).digest().subarray(0,16);bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const h=bytes.toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;}
 
-/** U-249 is an operational decision grant, never an edit/financial grant. */
-function quoteOperationContext(auth:AuthorizationSnapshot):QuoteCommandContext{const context=quoteCommandContext(auth);return {...context,capabilities:{...context.capabilities,canReadQuote:true,canDecideQuote:true,canConvertQuote:true}};}
 function quoteFollowupBinding(auth:AuthorizationSnapshot,operationalCancel=false):QuoteFollowupBinding{
  return async(tx,{quote,action,phase})=>{
   const life=quote.lifecycle;if(!life)throw Error('QUOTE_FOLLOWUP_LIFECYCLE_MISSING');
