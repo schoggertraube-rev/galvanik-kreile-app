@@ -365,9 +365,10 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
       }
       const pendingItemCount = itemRows.filter((item) => item.current_station_id === SOURCE_STATION).length;
       const missingPhotos=await tx.execute<{id:string}>(sql`SELECT item.id FROM public.items item WHERE item.tenant_id=${authorization.data.tenantId} AND item.order_id=${order.id}
-        AND NOT EXISTS(SELECT 1 FROM public.scan_uploads photo WHERE photo.tenant_id=item.tenant_id AND photo.linked_order_id=item.order_id AND photo.linked_customer_id=item.customer_id
-          AND item.photo_ids ? photo.id::text AND photo.status='secured' AND photo.file_type IN ('image/jpeg','image/png','image/webp')
-          AND length(trim(photo.original_storage_path))>0 AND photo.original_hash ~ '^[0-9a-f]{64}$' AND photo.original_secured_at IS NOT NULL AND photo.original_size_bytes>0)`);
+        AND NOT EXISTS(SELECT 1 FROM private.v_evidence_records_v2 photo WHERE photo.tenant_id=item.tenant_id
+          AND photo.source_kind='ORDER_STATION_ATTACHMENT' AND photo.integrity_ok=true AND photo.original_state='VERIFIED'
+          AND photo.original_mime_type IN ('image/jpeg','image/png','image/webp')
+          AND photo.target_links @> jsonb_build_array(jsonb_build_object('targetType','ORDER','targetId',item.order_id),jsonb_build_object('targetType','ORDER_ITEM','targetId',item.id)))`);
       if(missingPhotos.length)return {code:'VALIDATION_ERROR',message:ORDER_ITEM_PHOTO_COPY.required};
 
       const rateRows = await tx.execute<RateRow>(sql`

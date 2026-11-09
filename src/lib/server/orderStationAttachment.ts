@@ -56,6 +56,10 @@ const INTAKE_WORKFLOW: AttachmentWorkflow = {
   downloadName: "wareneingang-original",
 };
 
+function photoItemStations(workflow:AttachmentWorkflow):string[]{
+  return [workflow.station,workflow.key==='HANDOFF'?'fertig':workflow.station];
+}
+
 export type OrderStationAttachmentMime = keyof typeof MIME_EXTENSION;
 export type OrderStationAttachmentConflictReason =
   | "IDEMPOTENCY_MISMATCH"
@@ -644,7 +648,7 @@ async function reservationGraphIsCurrent(
           AND i.order_id = ${reservation.order_id}
           AND i.tenant_id = ${authorization.tenantId}
           AND i.customer_id = ${reservation.customer_id}
-          AND i.current_station_id = ${workflow.station}
+          AND i.current_station_id IN (${photoItemStations(workflow)[0]},${photoItemStations(workflow)[1]})
       )
       AND NOT EXISTS (
         SELECT 1 FROM public.items corrupt_item
@@ -652,7 +656,8 @@ async function reservationGraphIsCurrent(
           AND (
             corrupt_item.tenant_id IS DISTINCT FROM ${authorization.tenantId}
             OR corrupt_item.customer_id IS DISTINCT FROM ${reservation.customer_id}
-            OR corrupt_item.current_station_id IS DISTINCT FROM ${workflow.station}
+            OR corrupt_item.current_station_id IS NULL
+            OR corrupt_item.current_station_id NOT IN (${photoItemStations(workflow)[0]},${photoItemStations(workflow)[1]})
           )
       )
       AND EXISTS (
@@ -669,7 +674,8 @@ async function reservationGraphIsCurrent(
           AND event.client_event_id IS NOT NULL
           AND event.correlation_id IS NOT NULL
           AND event.event_schema_version = 1
-          AND event.aggregate_version = ${reservation.order_version}
+          AND (event.aggregate_version = ${reservation.order_version}
+            OR (${workflow.key==='HANDOFF'} AND event.aggregate_version > 0 AND event.aggregate_version < ${reservation.order_version}))
           AND (event.from_station IS NOT DISTINCT FROM ${workflow.fromStation}
             OR (${workflow.key==='HANDOFF'} AND event.from_station='wareneingang'))
           AND event.station = ${workflow.station}
@@ -727,7 +733,7 @@ async function lockReservationGraphIsCurrent(
     || items.some((item) => item.order_id !== reservation.order_id
       || item.tenant_id !== authorization.tenantId
       || item.customer_id !== reservation.customer_id
-      || item.current_station_id !== workflow.station)
+      || item.current_station_id===null || !photoItemStations(workflow).includes(item.current_station_id))
   ) return false;
 
   return reservationGraphIsCurrent(tx, authorization, reservation, workflow);
@@ -900,7 +906,7 @@ async function reserveAttachmentForWorkflow(
         items.some((item) => item.order_id !== order.id
           || item.tenant_id !== authorization.tenantId
           || item.customer_id !== order.customer_id
-          || item.current_station_id !== workflow.station)
+          || item.current_station_id===null || !photoItemStations(workflow).includes(item.current_station_id))
         || items.filter((item) => item.id === input.itemId).length !== 1
       ) return { terminal: { code: "VALIDATION_ERROR", message: "Teilezuordnung ist ungültig." } as const };
 
@@ -913,7 +919,13 @@ async function reserveAttachmentForWorkflow(
         LEFT JOIN public.app_users actor ON actor.id = event.user_id
         WHERE event.tenant_id = ${authorization.tenantId}
           AND event.order_id = ${order.id}
-          AND event.aggregate_version = ${input.expectedVersion}
+          AND event.aggregate_version = (
+            SELECT max(prior.aggregate_version) FROM public.events prior
+            WHERE prior.tenant_id=${authorization.tenantId} AND prior.order_id=${order.id}
+              AND prior.event_type=${workflow.eventType}
+              AND prior.aggregate_version<=${input.expectedVersion}
+              AND (${workflow.key==='HANDOFF'} OR prior.aggregate_version=${input.expectedVersion})
+          )
           AND event.event_type = ${workflow.eventType}
         LIMIT 2
       `);
@@ -923,7 +935,8 @@ async function reserveAttachmentForWorkflow(
         || event.tenant_id !== authorization.tenantId
         || event.order_id !== order.id || event.item_id !== null
         || !validUuid(event.client_event_id) || !validUuid(event.correlation_id)
-        || event.event_schema_version !== 1 || event.aggregate_version !== input.expectedVersion
+        || event.event_schema_version !== 1 || typeof event.aggregate_version!=='number' || !Number.isSafeInteger(event.aggregate_version) || event.aggregate_version<1
+        || !(event.aggregate_version === input.expectedVersion || workflow.key==='HANDOFF'&&event.aggregate_version<input.expectedVersion)
         // Existing originals keep their historical event; new handoffs use angenommen.
         || !(event.from_station === workflow.fromStation || workflow.key==='HANDOFF'&&event.from_station==='wareneingang') || event.station !== workflow.station
         || event.status !== "success" || !validUuid(event.actor_id)
