@@ -1,0 +1,61 @@
+import {randomUUID} from 'node:crypto';
+import {expect,it,vi} from 'vitest';
+import {KREILE_TENANT_SLUG} from '@/lib/tenant';
+import {sql,full,withSession,createFixture} from './replayHarness';
+import {customerFixture} from './orderFixture';
+import {requestMailStep} from './requestMailStep';
+
+it('W16 actual mail send preserves the open concern and rejects changed contents on the same request key',async()=>{
+ const itemId=await requestMailStep('W16');
+ const customerId=await customerFixture('W16');
+ const {getIntakeCaptureAction,assignIntakeCustomerAction,finishIntakeUseAction}=await import('@/app/actions/eingang.actions');
+ const initial=await withSession(full,()=>getIntakeCaptureAction(itemId));if(initial.code!=='OK')throw Error('W16_INITIAL');
+ expect(await withSession(full,()=>assignIntakeCustomerAction({itemId,version:initial.capture.version,customerId,clientEventId:randomUUID(),mode:'manual'}))).toMatchObject({code:'OK'});
+ const before=await sql`SELECT version,einsatz,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`;
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ const needle='TEST-W16-'+randomUUID();
+ const request={targetType:'CUSTOMER' as const,targetId:customerId,clientRequestId:randomUUID(),subject:needle,body:needle+' Bitte sende die fehlenden Angaben.'};
+ const sent=await withSession(full,()=>sendCustomerMailAction(request));
+ expect(sent,JSON.stringify(sent)).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('W16_SEND:'+sent.code);
+ expect(await sql`SELECT status,created_by FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${sent.data.threadId}::uuid`).toEqual([{status:'sent',created_by:full.actorId}]);
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ expect(await withSession(full,()=>searchTenantAction(needle))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'MAIL',id:sent.data.threadId})])});
+ expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(request)))).toMatchObject({code:'OK',data:{replayed:true,threadId:sent.data.threadId}});
+ expect(await withSession(full,()=>sendCustomerMailAction({...structuredClone(request),body:needle+' Geänderter Inhalt'}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT body,created_by FROM public.communication_messages WHERE tenant_id=${KREILE_TENANT_SLUG} AND thread_id=${sent.data.threadId}::uuid AND direction='outgoing'`).toEqual([{body:request.body,created_by:full.actorId}]);
+ expect(await sql`SELECT version,einsatz,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual(before);
+ expect(await withSession(full,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{usage:'offen',openConcerns:['kv_anfrage']}});
+ const doneKey=randomUUID();
+ expect(await withSession(full,()=>finishIntakeUseAction({items:[{itemId,version:before[0].version}],clientEventId:doneKey,kind:'erledigt',note:'TEST Antwort ersetzt den KV nicht'}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${doneKey}::uuid`).toEqual([{n:0}]);
+ expect(await sql`SELECT user_id::text,event_type FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${request.clientRequestId}::uuid`).toEqual([{user_id:full.actorId,event_type:'COMMUNICATION_MAIL_SENT_V1'}]);
+ const denied=await createFixture(['kunden']);
+ expect(await withSession(denied,()=>sendCustomerMailAction({...request,clientRequestId:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
+ const sends=vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&init?.method==='POST');
+ expect(sends).toHaveLength(1);
+});
+
+it('mail provider failure retains a visible failed dispatch and prevents a second send on an unclear request',async()=>{
+ await requestMailStep('MAIL-failure');
+ const customerId=await customerFixture('MAIL-failure');
+ const provider=vi.mocked(globalThis.fetch).getMockImplementation();if(!provider)throw Error('MAIL_FAILURE_PROVIDER_REQUIRED');
+ let attempts=0;
+ vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>{
+  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+  if(url.hostname==='graph.microsoft.com'&&init?.method==='POST'){attempts++;return Response.json({error:{code:'TEST_PROVIDER_UNAVAILABLE'}},{status:503});}
+  return provider(input,init);
+ });
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ const needle='TEST-FAILED-'+randomUUID();
+ const request={targetType:'CUSTOMER' as const,targetId:customerId,clientRequestId:randomUUID(),subject:needle,body:needle+' Erneut nur nach geklärtem Versand.'};
+ expect(await withSession(full,()=>sendCustomerMailAction(request))).toMatchObject({code:'UNAVAILABLE'});
+ const [dispatch]=await sql`SELECT id::text,status,created_by FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+request.clientRequestId}`;
+ expect(dispatch).toMatchObject({status:'failed',created_by:full.actorId});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.communication_messages WHERE tenant_id=${KREILE_TENANT_SLUG} AND thread_id=${dispatch.id}::uuid AND direction='outgoing'`).toEqual([{n:0}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${request.clientRequestId}::uuid`).toEqual([{n:0}]);
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ expect(await withSession(full,()=>searchTenantAction(needle))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'MAIL',id:dispatch.id,status:'failed'})])});
+ expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(request)))).toMatchObject({code:'CONFLICT'});
+ expect(attempts).toBe(1);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+request.clientRequestId}`).toEqual([{n:1}]);
+});

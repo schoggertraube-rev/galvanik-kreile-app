@@ -1,4 +1,5 @@
 /** One presentation catalogue. Facts are projections of existing readers, never stored here. */
+export const MAIL_REQUEST_CONFLICT_COPY='Diese Anfragekennung gehört zu einer anderen Nachricht. Öffne den gespeicherten Versand.';
 export const INTAKE_PENDING_WORKFLOW_COPY={quoteRequest:'Lege zuerst den KV zur Anfrage an'} as const;
 export type SituationCommand='open-order'|'receive-quote'|'open-assignment'|'open-task'|'receive-order'|'convert-quote'|'save-blocked-goods'|'prepare-quote'|'preview-quote-change'|'request-photos'|'save-document'|'open-document'|'undo-document'|'undo-order'|'open-quote'|'create-customer';
 export type SituationCandidate={id:string;kind:'customer'|'quote'|'order';label:string;reason:string};

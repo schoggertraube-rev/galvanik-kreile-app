@@ -5,6 +5,7 @@ import {appendCommunicationDocument,communicationDocumentIntent,type Communicati
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {hasAuthorizationArea} from '@/lib/server/authorization';
+import {MAIL_REQUEST_CONFLICT_COPY} from '@/ui/situationCatalog';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {
   listMicrosoftGraphInbox,
@@ -259,10 +260,10 @@ export async function sendCommunicationMail(
         if (existing[0].customer_id !== target.customerId || existing[0].order_id !== target.orderId) throw new Error("COMMUNICATION_TARGET_MISMATCH");
         if (existing[0].status !== "sent") throw new Error("COMMUNICATION_OUTCOME_UNCLEAR");
         if(input.document){const proof=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND payload->>'threadId'=${existing[0].id} AND payload->>'intent'=${communicationDocumentIntent(input,input.document)}`);if(proof.length!==1)throw Error('COMMUNICATION_DOCUMENT_REPLAY_INTENT_MISMATCH');}
-        if(input.complaintResult){
+        {
           const confirmed=await tx.execute(sql`SELECT message.id FROM public.communication_messages message JOIN public.communication_threads thread ON thread.tenant_id=message.tenant_id AND thread.id=message.thread_id
             WHERE message.tenant_id=${auth.tenantId} AND message.thread_id=${existing[0].id} AND message.direction='outgoing' AND message.channel='email'
-            AND message.summary=${complaintSummary} AND message.body=${input.body.trim()} AND thread.subject=${input.subject.trim()}`);
+            AND (${complaintSummary===null} OR message.summary=${complaintSummary}) AND message.body=${input.body.trim()} AND thread.subject=${input.subject.trim()}`);
           if(confirmed.length!==1)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         }
         return { threadId: existing[0].id, recordedAt: iso(existing[0].created_at), replay: { threadId: existing[0].id, messageId: null, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(existing[0].created_at), replayed: true } };
@@ -283,6 +284,7 @@ export async function sendCommunicationMail(
     logCommunicationFailure("COMMUNICATION_SEND_PREPARE_FAILED", error);
     if(error instanceof Error&&error.message==='COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED')return {code:'VALIDATION_ERROR',message:'KV wurde seit der PDF-Erstellung geändert. Es wurde nichts gesendet. Aktuellen KV erneut wählen.'};
     if(error instanceof Error&&error.message==='COMMUNICATION_NOT_CONFIGURED')return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
+    if(error instanceof Error&&error.message==='COMMUNICATION_REPLAY_INTENT_MISMATCH')return {code:'CONFLICT',message:MAIL_REQUEST_CONFLICT_COPY};
     return { code: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "CONFLICT" : "UNAVAILABLE", message: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "Der Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; zuerst im Outlook-Ausgang prüfen." : "Der Mailversand konnte nicht sicher vorbereitet werden." };
   }
   if (pending.replay) return { code: "OK", data: pending.replay };
@@ -311,6 +313,13 @@ export async function sendCommunicationMail(
       `);
       if (messages.length !== 1 || messages[0]?.id !== messageId) throw new Error("COMMUNICATION_MESSAGE_INSERT_FAILED");
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,pending.threadId,'sent');
+      else{
+        const bytes=createHash('sha256').update('communication-mail-sent:'+auth.tenantId+':'+input.clientRequestId).digest();
+        bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
+        const h=bytes.subarray(0,16).toString('hex'),key=`${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+        await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
+          VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_SENT_V1','E-Mail versendet',${JSON.stringify({threadId:pending.threadId,messageId,customerId:target.customerId,orderId:target.orderId,contentSha256:createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex')})}::jsonb,'success',${auth.userId},${key}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC')`);
+      }
     });
     return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: false } };
   } catch (error) {
