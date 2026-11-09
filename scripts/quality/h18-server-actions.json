@@ -7,7 +7,8 @@
       "src/test/acceptance/beleg_auto_readiness.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#changeIncomingInvoiceStatusAction": [
-      "src/test/h18_invoice_actions.integration.test.ts"
+      "src/test/h18_invoice_actions.integration.test.ts",
+      "src/test/acceptance/beleg_auto_readiness.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#clarifyIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"

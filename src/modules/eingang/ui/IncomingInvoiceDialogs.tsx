@@ -16,14 +16,14 @@ export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoiceP
   try{const result=await ports.read({id});if(current!==generation.current)return;
    if(result.code!=='OK'){if(result.code==='FORBIDDEN'){setMessage({text:'Recht Geld fehlt'});return;}setFailure(result.message);return;}
    const view=result.view;
-   if(!view.invoice&&view.automation?.state==='ready'&&view.fileId){
+   if(!view.invoice&&['ready','duplicate'].includes(view.automation?.state??'')&&view.fileId){
     const operation=view.item.id+':'+view.item.version;if(!autoKeys.current.has(operation))autoKeys.current.set(operation,crypto.randomUUID());
-    let pending=automatic.current.get(operation);if(!pending){pending=ports.save({automatic:true,itemId:view.item.id,fileId:view.fileId,version:view.item.version,clientKey:autoKeys.current.get(operation)!,fields:view.fields,status:'offen',paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null});automatic.current.set(operation,pending);}
+    let pending=automatic.current.get(operation);if(!pending){pending=ports.save({...(view.automation?.state==='duplicate'?{attachOriginal:true as const}:{automatic:true as const}),itemId:view.item.id,fileId:view.fileId,version:view.item.version,clientKey:autoKeys.current.get(operation)!,fields:view.fields,status:view.automation?.state==='duplicate'?'doppelt':'offen',paidDate:null,proofFileId:null,duplicateId:view.automation?.state==='duplicate'?view.duplicate?.id??null:null,duplicateReason:null,unclearReason:null});automatic.current.set(operation,pending);}
     let saved:Awaited<ReturnType<InvoicePorts['save']>>;try{saved=await pending;}catch(error){automatic.current.delete(operation);throw error;}if(current!==generation.current)return;
     if(saved.code!=='OK'){automatic.current.delete(operation);setFailure('message' in saved?saved.message:C.failed);return;}
     const fresh=await ports.read({id:saved.invoice.id});if(current!==generation.current)return;
     if(fresh.code!=='OK'){setFailure(fresh.message);return;}
-    setMessage({text:C.saved,invoice:{id:saved.invoice.id,version:saved.invoice.version}});setEntry(null);if(location.hash.startsWith('#rechnungein:'))history.replaceState(history.state,'',location.pathname+location.search);refresh.current();return;
+    setMessage(view.automation?.state==='duplicate'?{text:C.exists}:{text:C.saved,invoice:{id:saved.invoice.id,version:saved.invoice.version}});setEntry(null);if(location.hash.startsWith('#rechnungein:'))history.replaceState(history.state,'',location.pathname+location.search);refresh.current();return;
    }
    setEntry({key:crypto.randomUUID(),view:result.view});
   }catch(error){console.error('[INVOICE_DIALOG_OPEN_FAILED]',error);if(current===generation.current)setFailure('Rechnung konnte nicht gelesen werden · Fehlercode: INVOICE_DIALOG_OPEN_FAILED.');}

@@ -27,7 +27,7 @@ export type IncomingInvoice = {
   aufgabe_id: string | null; ungueltig_grund: string | null;
   erfasst_von: string; erfasst_am: string; version: number;
 };
-export type InvoiceOriginal = { id: string; name: string; mime: string; sha256: string };
+export type InvoiceOriginal = { itemId?:string;id: string; name: string; mime: string; sha256: string };
 export type InvoiceDuplicate = {
   id: string; number: string | null; internalNumber: string;
   date: string | null; gross: string | null; exact: boolean;
@@ -47,7 +47,7 @@ export type InvoiceFailure = {
 };
 export type InvoiceReadResult = { code: 'OK'; view: InvoiceView } | InvoiceFailure;
 export type InvoiceSaveInput = {
-  automatic?: true;
+  automatic?: true;attachOriginal?:true;
   itemId: string; fileId: string; version: number; clientKey: string;
   fields: InvoiceFields; status: Exclude<IncomingInvoiceStatus, 'ungueltig'>;
   paidDate: string | null; proofFileId: string | null;
