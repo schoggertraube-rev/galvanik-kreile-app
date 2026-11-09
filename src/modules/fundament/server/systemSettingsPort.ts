@@ -15,6 +15,8 @@ import {
 } from "@/lib/auth/authorizationContract";
 import type {
   CompanySettingsInput,
+  ComplaintPhotoPolicy,
+  ComplaintPhotoPolicyInput,
   CompanySettingsSnapshot,
   ShippingSettings,
   CreateManagedUserInput,
@@ -135,6 +137,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
       const featureRows = await tx.execute<TenantFeatureRow>(sql`SELECT feature_id, enabled FROM public.tenant_features WHERE tenant = ${context.tenantId} ORDER BY feature_id`);
       const company = companies[0];
       return {
+        photoPolicy:await readComplaintPhotoPolicy(tx,context.tenantId),
         company: company ? {
           companyName: company.company_name, street: company.street, zip: company.zip,
           city: company.city, country: company.country, taxId: company.tax_id,
@@ -213,6 +216,7 @@ export async function readCompanyDocumentSettings(context: CompanyDocumentContex
 }
 
 export async function updateCompanySettings(context: SystemSettingsContext, input: unknown) {
+  if(input&&typeof input==='object'&&'command'in input)return changeComplaintPhotoPolicy(context,input);
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Firmendaten dürfen nicht geändert werden." };
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind ungültig." };
   const value = input as Record<string, unknown>;
@@ -483,4 +487,29 @@ export async function changeOwnPin(context: { tenantId: string; actorId: string 
     logSystemSettingsPortFailure("OWN_PIN_WRITE_FAILED", error);
     return { code: "UNAVAILABLE" as const, message: "Code konnte nicht sicher gespeichert werden. Fehlercode: OWN_PIN_WRITE_FAILED." };
   }
+}
+
+export async function readComplaintPhotoPolicy(tx:PrivilegedTenantTransaction,tenantId:string):Promise<ComplaintPhotoPolicy|null>{
+ const rows=await tx.execute<ComplaintPhotoPolicy>(sql`SELECT rekla_fotos_erinnerung_tage AS "reminderDays",rekla_fotos_anruf_tage AS "callDays",to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt" FROM public.company_settings WHERE tenant_id=${tenantId}`);
+ if(rows.length>1)throw Error('COMPLAINT_PHOTO_POLICY_AMBIGUOUS');return rows[0]??null;
+}
+const day=(value:unknown)=>value===null||typeof value==='number'&&Number.isInteger(value)&&value>=0&&value<=3650;
+export async function changeComplaintPhotoPolicy(context:SystemSettingsContext,input:unknown){
+ if(context.canManageCompany!==true)return {code:'FORBIDDEN' as const,message:'Fristen sind nicht freigegeben.'};
+ if(!input||typeof input!=='object'||Array.isArray(input))return {code:'VALIDATION_ERROR' as const,message:'Fristen sind ungültig.'};
+ const raw=input as Record<string,unknown>;
+ if(Object.keys(raw).sort().join(',')!=='callDays,clientEventId,command,expectedUpdatedAt,reminderDays'||raw.command!=='complaint-photo-policy'||!day(raw.reminderDays)||!day(raw.callDays)||typeof raw.expectedUpdatedAt!=='string'||!Number.isFinite(Date.parse(raw.expectedUpdatedAt))||typeof raw.clientEventId!=='string'||!UUID.test(raw.clientEventId))return {code:'VALIDATION_ERROR' as const,message:'Fristen sind ungültig.'};
+ const value=raw as ComplaintPhotoPolicyInput;
+ try{return await withPrivilegedTenantTransaction(context,async tx=>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'complaint-photo-policy:'+context.tenantId},0))`);
+  await tx.execute(sql`SELECT id FROM public.company_settings WHERE tenant_id=${context.tenantId} FOR UPDATE`);
+  const current=await readComplaintPhotoPolicy(tx,context.tenantId);if(!current)return {code:'NOT_FOUND' as const,message:'Firmendaten fehlen.'};
+  const receipt=await tx.execute<{payload:{actorId:string;after:ComplaintPhotoPolicy}}>(sql`SELECT payload FROM public.ui_events WHERE tenant_id=${context.tenantId} AND event_type='complaint_photo_policy_changed' AND payload->>'clientEventId'=${value.clientEventId}`);
+  if(receipt.length){if(receipt.length!==1||receipt[0].payload.actorId!==context.actorId||receipt[0].payload.after.reminderDays!==value.reminderDays||receipt[0].payload.after.callDays!==value.callDays||current.reminderDays!==value.reminderDays||current.callDays!==value.callDays)return {code:'CONFLICT' as const,message:'Diese Kennung gehört zu anderen Fristen.'};return {code:'OK' as const,photoPolicy:current,replayed:true};}
+  if(current.updatedAt!==value.expectedUpdatedAt)return {code:'CONFLICT' as const,message:'Fristen wurden inzwischen geändert. Neu laden.'};
+  await tx.execute(sql`UPDATE public.company_settings SET rekla_fotos_erinnerung_tage=${value.reminderDays},rekla_fotos_anruf_tage=${value.callDays},updated_at=statement_timestamp() WHERE tenant_id=${context.tenantId}`);
+  const after=await readComplaintPhotoPolicy(tx,context.tenantId);if(!after)throw Error('COMPLAINT_PHOTO_POLICY_READBACK_FAILED');
+  await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'complaint_photo_policy_changed',${JSON.stringify({actorId:context.actorId,clientEventId:value.clientEventId,before:current,after})}::jsonb)`);
+  return {code:'OK' as const,photoPolicy:after,replayed:false};
+ });}catch(error){console.error('[COMPLAINT_PHOTO_POLICY_FAILED]',{errorName:error instanceof Error?error.name:'UnknownError'});return {code:'UNAVAILABLE' as const,message:'Fristen konnten nicht sicher gespeichert werden.'};}
 }

@@ -11,6 +11,8 @@ export type CompanySettingsInput = {
   companyName: string; street: string; zip: string; city: string; country: string;
   taxId: string; iban: string; bic: string; bankName: string; paymentTermDays: number; logoUrl: string;
 };
+export type ComplaintPhotoPolicy={reminderDays:number|null;callDays:number|null;updatedAt:string};
+export type ComplaintPhotoPolicyInput={command:'complaint-photo-policy';reminderDays:number|null;callDays:number|null;expectedUpdatedAt:string;clientEventId:string};
 export type CompanySettingsSnapshot = {
   [Key in keyof CompanySettingsInput]: CompanySettingsInput[Key] | null;
 };
@@ -51,6 +53,7 @@ export type SetUserAreaInput = {
 };
 export type SystemSettingsSnapshot = {
   company: CompanySettingsSnapshot;
+  photoPolicy?:ComplaintPhotoPolicy|null;
   extraWorkHourlyRate: { rateId: string | null; hourlyRateCents: number | null; version: number };
   users: ManagedUser[];
   capabilities: { canManageCompany: boolean; canManageLogins: boolean; canManageSystem: boolean };

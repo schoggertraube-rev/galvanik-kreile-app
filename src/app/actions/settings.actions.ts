@@ -13,7 +13,7 @@ import {
   updateManagedUser,
 } from "@/modules/fundament/server-public";
 import { listCatalogServices, saveCatalogService } from "@/modules/katalog/server-public";
-import type { CompanySettingsInput, CreateManagedUserInput, SetUserAreaInput, UpdateManagedUserInput } from "@/modules/fundament/public";
+import type { ComplaintPhotoPolicyInput, CompanySettingsInput, CreateManagedUserInput, SetUserAreaInput, UpdateManagedUserInput } from "@/modules/fundament/public";
 import type { SalesStageFeatureId } from "@/modules/fundament/public";
 import type { SaveCatalogServiceInput } from "@/modules/katalog/public";
 import { setAppSession, SESSION_TTL_MS } from "@/lib/server/appSession";
@@ -108,6 +108,7 @@ export async function readSettingsAction() {
     code: "OK" as const,
     snapshot: {
       ...settings.snapshot,
+      photoPolicy:canManageCompany?settings.snapshot.photoPolicy:null,
       company: canManageCompany ? settings.snapshot.company : { companyName: "", street: "", zip: "", city: "", country: "", taxId: "", iban: "", bic: "", bankName: "", paymentTermDays: 0, logoUrl: "" },
       numberRanges: canManageCompany ? settings.snapshot.numberRanges : [],
       users: canManageLogins
@@ -134,7 +135,7 @@ export async function saveSalesStageFeatureAction(input: { featureId: SalesStage
   return result;
 }
 
-export async function saveCompanySettingsAction(input: CompanySettingsInput) {
+export async function saveCompanySettingsAction(input: CompanySettingsInput|ComplaintPhotoPolicyInput) {
   const resolved = await settingsContext();
   if (!resolved?.authorization.areas?.includes("einstellungen")) return { code: "FORBIDDEN" as const, message: "Firmendaten dürfen nicht geändert werden." };
   const result = await updateCompanySettings(resolved.context, input);

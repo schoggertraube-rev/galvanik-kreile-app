@@ -131,3 +131,5 @@ export function complaintFailureCopy(code:string):string{
  };
  return copy[code]??'Du prüfst den ungeklärten Ausgang und versuchst es mit derselben Kennung erneut. Deine Eingaben bleiben erhalten.';
 }
+
+export const COMPLAINT_PHOTO_POLICY_COPY={title:'Fotos zur Reklamation',reminder:'Fotos-Erinnerung nach',call:'Anruf nach',unit:'Arbeitstage',save:'Fristen speichern',saving:'Wird gespeichert …',saved:'Fristen gespeichert.',reload:'Stand neu laden',reloaded:'Stand neu gelesen · deine Eingaben sind noch da.',companyMissing:'Speichere zuerst die Firmendaten.',invalid:'Gib ganze Arbeitstage ein oder lass die Frist leer.',missing:(label:string)=>'Frist '+label+' ist nicht eingestellt - in den Einstellungen festlegen',failure:(code:string)=>code==='FORBIDDEN'?'Dir fehlt das Recht für die Einstellungen.':code==='CONFLICT'?'Die Einstellungen wurden geändert. Lies den Stand neu; deine Eingaben bleiben erhalten.':'Nicht gespeichert · deine Eingaben bleiben erhalten.'} as const;

@@ -1,0 +1,20 @@
+import {cleanup,fireEvent,render,screen} from '@testing-library/react';
+import {afterEach,expect,it,vi} from 'vitest';
+const actions=vi.hoisted(()=>({read:vi.fn(),save:vi.fn()}));
+vi.mock('@/app/actions/settings.actions',()=>({readSettingsAction:actions.read,saveCompanySettingsAction:actions.save}));
+import {ComplaintPhotoPolicyEditor} from '../ComplaintPhotoPolicyEditor';
+afterEach(()=>{cleanup();vi.clearAllMocks();});
+it('RM08 empty stages are explicit, a conflict preserves fields and reread retries the same request against the actual new version',async()=>{
+ const old='2026-11-09T06:00:00.000000Z',next='2026-11-09T06:01:00.000000Z';
+ actions.save.mockResolvedValueOnce({code:'CONFLICT',message:'TEST internal SQL diagnostic'}).mockResolvedValue({code:'OK',photoPolicy:{reminderDays:3,callDays:5,updatedAt:next}});
+ actions.read.mockResolvedValue({code:'OK',snapshot:{photoPolicy:{reminderDays:1,callDays:2,updatedAt:next}}});
+ render(<ComplaintPhotoPolicyEditor initial={{reminderDays:null,callDays:null,updatedAt:old}}/>);
+ expect(screen.getByText('Frist Fotos-Erinnerung nach ist nicht eingestellt - in den Einstellungen festlegen')).toBeVisible();expect(screen.getByText('Frist Anruf nach ist nicht eingestellt - in den Einstellungen festlegen')).toBeVisible();
+ fireEvent.change(screen.getByLabelText('Fotos-Erinnerung nach · Arbeitstage'),{target:{value:'3'}});fireEvent.change(screen.getByLabelText('Anruf nach · Arbeitstage'),{target:{value:'5'}});
+ fireEvent.click(screen.getByRole('button',{name:'Fristen speichern'}));
+ await screen.findByText('Die Einstellungen wurden geändert. Lies den Stand neu; deine Eingaben bleiben erhalten.');expect(screen.queryByText('TEST internal SQL diagnostic')).toBeNull();
+ const original=actions.save.mock.calls[0][0];fireEvent.click(screen.getByRole('button',{name:'Stand neu laden'}));await screen.findByText('Stand neu gelesen · deine Eingaben sind noch da.');
+ expect(screen.getByLabelText('Fotos-Erinnerung nach · Arbeitstage')).toHaveValue(3);expect(screen.getByLabelText('Anruf nach · Arbeitstage')).toHaveValue(5);
+ const save=screen.getByRole('button',{name:'Fristen speichern'});fireEvent.click(save);fireEvent.click(save);await screen.findByText('Fristen gespeichert.');
+ expect(actions.save).toHaveBeenCalledTimes(2);expect(actions.save.mock.calls[1][0]).toEqual({...original,expectedUpdatedAt:next});
+});
