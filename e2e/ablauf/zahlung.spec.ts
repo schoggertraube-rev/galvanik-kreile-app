@@ -2,7 +2,26 @@ import {randomUUID,createHash} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
-import {readyInvoiceOrder} from './orderFixture';
+import {readyInvoiceOrder,customerFixture,intakeOrderFixture} from './orderFixture';
+
+it('actual payment mode changes race on one version and the same stored receipt survives a fresh read and retry',async()=>{
+ const customerId=await customerFixture('Zahlungsmodus');
+ const order=await intakeOrderFixture('Zahlungsmodus',customerId);
+ const orderId=order.receipt.orderId;
+ const {setPaymentModeAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const requests=[{orderId,paymentMode:'abholung' as const,expectedVersion:0,clientEventId:randomUUID()},{orderId,paymentMode:'vorkasse' as const,expectedVersion:0,clientEventId:randomUUID()}];
+ const result=await Promise.all(requests.map(input=>withSession(full,()=>setPaymentModeAction(structuredClone(input)))));
+ expect(result.map(value=>value.code).sort()).toEqual(['CONFLICT','OK']);
+ const index=result.findIndex(value=>value.code==='OK'),winner=result[index];if(winner.code!=='OK')throw Error('MODE_WINNER');
+ expect(winner.receipt).toMatchObject({changedBy:full.actorId,paymentModeVersion:1,paymentMode:requests[index].paymentMode});
+ expect(await sql`SELECT payment_mode,payment_mode_version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{payment_mode:requests[index].paymentMode,payment_mode_version:1}]);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId}))).toMatchObject({code:'OK',data:{mode:requests[index].paymentMode,paymentModeVersion:1,goodsOutAllowed:false}});
+ expect(await withSession(full,()=>setPaymentModeAction(JSON.parse(JSON.stringify(requests[index]))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:winner.receipt.eventId}});
+ expect(await sql`SELECT client_event_id::text,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array(requests.map(input=>input.clientEventId))}::uuid[])`).toEqual([{client_event_id:requests[index].clientEventId,user_id:full.actorId}]);
+ const denied=await createFixture(['auftraege']);
+ expect(await withSession(denied,()=>setPaymentModeAction({...requests[1-index],expectedVersion:1,clientEventId:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT payment_mode_version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{payment_mode_version:1}]);
+});
 
 it('H8 payment racing cancellation has one winner and never leaves a paid cancelled invoice',async()=>{
  const order=await readyInvoiceOrder('Zahlung-gegen-Storno');
