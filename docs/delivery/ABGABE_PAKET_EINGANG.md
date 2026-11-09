@@ -15,6 +15,8 @@ Produkt-SHA dieser letzten Runde: `0ac9f092`. Der folgende Dokumentations-Commit
 
 Lokale Nachweise dieser Runde: sechs echte Replay-Fälle PE04/PE06 und vier Rollen PASS (6,01 s), sechs echte Komponentenfälle PASS (4,01 s), Dialog-Abfragezyklus im gezielten Lauf PASS. Typprüfung, gezielter Lint, Scope, H18, No-Fake und Whitespace grün. Geschütztes Modul-Gate: nur der bekannte Befund `DESIGN_POINTER_PAGE_BINDING` der fremden Bildquellen; keine Produkt-Modulverletzung. Keine lokale Gesamtsuite. Neue exakte CI/READY-Preview und unabhängiges PL-PASS stehen vor jeder Merge-Bitte aus; keine Behauptung einer Abnahme.
 
+CI-Nachtrag zum Kopf3581ea9d: W4 verweigert die noch nicht deklarierte View `private.v_quotes_v1` in `quoteReads.ts`. Die enge Inventar-Nachführung liegt dem PL als gesammelte Frage vor; Checker und Inventar wurden nicht eigenmächtig geändert. H18 hatte genau eine Erwartungs-Assertion nach Notizspeichern: dieselbe KV-/Nacharbeitserwartung wird jetzt nach dem ausdrücklichen Leseaufruf geprüft. Lokal blockiert dessen Suite-Vorbedingung am bewusst strengen Migrationsgleichstand (110 lokale gegenüber105 Branch-Migrationen aus separater Reservearbeit); kein Ledger manipuliert und kein Testinhalt abgeschwächt. Typen/Lint/Whitespace für die mechanische Folgearbeit geprüft. Kunden-Pflichtfelder nennen nun ebenfalls konkret die fehlenden Angaben, statt im allgemeinen Ausnahmezweig zu verschwinden.
+
 Die folgenden Abschnitte dokumentieren frühere Zwischenstände; dieser Abschnitt ersetzt widersprechende Aussagen dort.
 
 ## Review-Korrektur 09.11., Nachträge 1–8

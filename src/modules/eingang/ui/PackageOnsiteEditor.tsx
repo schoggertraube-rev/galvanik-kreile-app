@@ -68,7 +68,8 @@ export function PackageOnsiteEditor({capture,ports,onCapture,onClose,onDone,onPa
  };
  const save=async()=>{if(work.current||!ready||!ports.receiveOnsiteQuote||!ports.drafts)return;work.current=true;setBusy(true);setError(null);try{
   let rebuilt=false;if(!pending.current){rebuilt=true;
-   if(!selected&&!progress&&(!kundeVollstaendigkeit(customer,{geld:true}).vollstaendig||Object.keys(kundeValidierung(customer)).length||search!=='ready'||candidates.some(row=>row.duplicateMatch?.kind==='exact')||candidates.length&&!newConfirmed))throw Error(C.duplicate+' '+kundeVollstaendigkeit(customer,{geld:true}).text);
+   if(!selected&&!progress&&(!kundeVollstaendigkeit(customer,{geld:true}).vollstaendig||Object.keys(kundeValidierung(customer)).length)){setError(C.missingFields(missingFields()));return;}
+   if(!selected&&!progress&&(search!=='ready'||candidates.some(row=>row.duplicateMatch?.kind==='exact')||candidates.length&&!newConfirmed)){setError(C.duplicate);return;}
    if(positions.length<1||positions.length>20||!awardChecked||evidence.trim().length<3||!/^\d{4}-\d{2}-\d{2}$/.test(due)||!location.trim()||!Number.isSafeInteger(Number(packages))||Number(packages)<1||!(GOODS_RECEIPT_CONDITIONS as readonly string[]).includes(condition)||((condition==='abweichung'||condition==='gefahr')&&(!deviations.length||!damagePhoto||damagePhoto===label||damagePhoto===content))||!label||!content||label===content||!handover||!payment||!allowed.includes(payment)||positions.some(row=>row.name.trim().length<2||!Number.isSafeInteger(Number(row.quantity))||Number(row.quantity)<1||!row.surfaceRequested||!Number.isSafeInteger(row.unitPriceCents)||row.unitPriceCents===null||row.unitPriceCents<0)){setError(C.missingFields(missingFields()));return;}
    const fresh=await ports.getCapture?.(capture.id);if(fresh?.code!=='OK')throw Error(fresh&&'message'in fresh?fresh.message:C.missing);
    const {customerType,salutation,paymentTermDays,handoverPreference,...fields}=customer;

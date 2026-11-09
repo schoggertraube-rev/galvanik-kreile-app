@@ -25,7 +25,7 @@ it('never creates a customer or books anything merely by opening a new capture',
  const send=vi.fn(),draftSave=vi.fn();const ports={drafts:{readDrafts:vi.fn(async()=>({code:'OK',drafts:[]})),saveDraft:draftSave,discardDraft:vi.fn()},receiveOnsiteQuote:send,recognizeIntakeText:vi.fn(async()=>({code:'OK',data:{fields:[],positions:[]}})),searchIntakeCustomers:vi.fn(async()=>({code:'OK',customers:[]})),createCustomer:vi.fn()} as unknown as GlobalCreatePorts;
  const close=vi.fn();render(<PackageOnsiteEditor capture={capture} ports={ports} onCapture={vi.fn()} onClose={close} onDone={vi.fn()}/>);
  const book=await screen.findByRole('button',{name:'Auftrag anlegen'});await waitFor(()=>expect(book).toBeEnabled());fireEvent.click(book);
- await screen.findByRole('alert');expect(send).not.toHaveBeenCalled();expect(draftSave).not.toHaveBeenCalled();expect(ports.createCustomer).not.toHaveBeenCalled();
+ await screen.findByRole('alert');expect(screen.getByRole('alert')).toHaveTextContent(/Es fehlen noch:.*Paketetikett als Original.*Inhaltsfoto als Original/);expect(send).not.toHaveBeenCalled();expect(draftSave).not.toHaveBeenCalled();expect(ports.createCustomer).not.toHaveBeenCalled();
  fireEvent.click(screen.getByRole('button',{name:'Zurück zur Erfassung'}));await screen.findByRole('button',{name:'Weiter bearbeiten'});expect(close).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'Weiter bearbeiten'}));expect(close).not.toHaveBeenCalled();
 });
 

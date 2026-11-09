@@ -837,7 +837,10 @@ it('4c accepts still-open return goods for canonical rework and atomically cance
   const {saveIntakeNoteAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
   const packageRead=await withSession(fixture,()=>saveIntakeNoteAction({itemId:randomUUID(),textstand:randomUUID(),text:'DPD Paket Ruecksendung Nacharbeit',context:{customerId:fixture.customerId}}));
   if(packageRead.code!=='OK')throw Error(packageRead.message);
-  expect(packageRead.capture.packageContext).toMatchObject({status:'OK',candidates:expect.arrayContaining([expect.objectContaining({id:rework.receipt.orderId,kind:'order',state:'rework'})])});
+  expect(packageRead.capture.packageContext).toBeUndefined();
+  const expectation=await withSession(fixture,()=>getIntakeCaptureAction(packageRead.capture.id,undefined,{packageExpectation:true}));
+  if(expectation.code!=='OK')throw Error(expectation.message);
+  expect(expectation.capture.packageContext).toMatchObject({status:'OK',candidates:expect.arrayContaining([expect.objectContaining({id:rework.receipt.orderId,kind:'order',state:'rework'})])});
   await complaintWrite(fixture,{action:'abschliessen',clientKey:randomUUID(),complaintId:received.complaintId,version:2,kind:'zurueckgezogen',note:'TEST keine Teile zurückgesendet',sentThreadId:null});
   const [stopped]=await sql`SELECT ware,ohne_ware_grund FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${rework.receipt.orderId}`;
   expect(stopped).toEqual({ware:'storniert',ohne_ware_grund:'TEST keine Teile zurückgesendet'});
