@@ -6,11 +6,48 @@ Produktstand vor dieser Fortschreibung: e212310e auf codex/beleg-auto-main, fris
 
 Umgesetzt: sichere automatische Ablage im vorhandenen Rechnungswriter, Ruecknahme/Neuablage derselben Zeile, eindeutige identische Originale anhaengen, Nachrichten-Hauptaktion/Erkennungsausloesung, optionale Bemerkung/Person/Fahrzeug mit bestehenden Listen, JSONB-Retry und bearbeitbare Ablehnung. Keine automatische Zahlung.
 
-BA08: Client und Server erlauben ausdruecklich bezahlt ohne erfundene Faelligkeit. Offen/automatisch brauchen sie weiterhin. Neue Migration 20261109074500_supplier_paid_without_due.sql aendert nur diese Fallunterscheidung; weitere Pflichtfelder/Zahlungsdatum/Originalschutz bleiben. Lokale Abbruchprobe und unveraenderte bestehende Zeilen belegt. Nach Main-Nachzug echter Action->DB->Ansicht->JSONB-Retry 4,40s PASS; SQL offen-ohne-Faelligkeit/bezahlt-ohne-Nummer weiter abgewiesen. Sieben Editorfaelle 0,879s PASS. Keine Dev-Anwendung/Paritaet behauptet: lokale DB ist genehmigte Branch-Union113.
+BA08: Client und Server erlauben ausdruecklich bezahlt ohne erfundene Faelligkeit. Offen/automatisch brauchen sie weiterhin. Neue Migration 20261109074500_supplier_paid_without_due.sql aendert nur diese Fallunterscheidung; weitere Pflichtfelder/Zahlungsdatum/Originalschutz bleiben. Lokale Abbruchprobe und unveraenderte bestehende Zeilen belegt. Nach Main-Nachzug echter Action->DB->Ansicht->JSONB-Retry 4,40s PASS; SQL offen-ohne-Faelligkeit/bezahlt-ohne-Nummer weiter abgewiesen. Sieben Editorfaelle 0,879s PASS. Dev-Anwendung siehe Nachweis unten; lokale DB ist genehmigte Branch-Union113.
 
 BA14: Nachweis-Vorbereitung/-Fertigstellung und geworfener Uebertragungsfehler bleiben im Dialog, gleiche Datei/Kennung und Eingaben erhalten. Fehler einschliesslich Suche/Rueckkehr/Oeffnen nutzen vorhandenen Situationskatalog, technische Ursachen bleiben im Log. Drei gezielte Nachweis-Retryfaelle 0,687s PASS. Keine Assertion entfernt, Netzwerkfall ergaenzt.
 
-Offen, NICHT mergefaehig: BA09 Zahlungsart-Hinweis/Datum, BA10 unsichere Dublette anderer Aussteller, BA11 neues Foto am selben Eingang (gesammelte Produktfrage08:49 an PL). BA12 kein vorhandener Export-/Abschlussstatus; kein neuer Export gebaut. Ausserdem Dev-Migrationsnachweis, finaler Sichtlauf, exakte READY-Preview, Pflicht-CI, unabhaengiges PL-PASS. Zwei andere PRs offen, kein neuer PR. Keine echte OCR/Provider/Kamera als getestet ausgegeben, isolierte TEST-Fixtures.
+Offen, NICHT mergefaehig: BA09 Zahlungsart-Hinweis/Datum, BA10 unsichere Dublette anderer Aussteller, BA11 neues Foto am selben Eingang (gesammelte Produktfrage08:49 an PL). BA12 kein vorhandener Export-/Abschlussstatus; kein neuer Export gebaut. Ausserdem finaler Sichtlauf, exakte READY-Preview, Pflicht-CI, unabhaengiges PL-PASS. Zwei andere PRs offen, kein neuer PR. Keine echte OCR/Provider/Kamera als getestet ausgegeben, isolierte TEST-Fixtures.
+
+## Dev-Migrationsnachweis 09.11., 09:19
+
+Auf dem nach BAUREGELN Abschnitt4 ausdruecklich freigegebenen Dev-Testsystem wurde ausschliesslich die bereits lokal gepruefte, committed-bytegleiche neue Nachfolgemigration74500 angewandt. Vorher Abbruchprobe; danach vorhandene Rechnungen/Auftraege/KVs/Eingaenge/Ereignisse/Firmendaten/Reklamationen im selben Repeatable-Read-Lauf unveraendert. Kein Produktionszugriff und keine vorhandenen Daten geaendert/geloescht.
+
+Dieser Branch hat106 Migrationen, Dev109. Keine fehlt. Die3 zusaetzlichen Dev-Migrationen sind bereits angewandte andere freigegebene Pakete: RM-Fotovorlage8222500, Ausgangsfristen9003000 und Paket-Warenhinweis9042000. Nur diese explizite angewandte Union ist gleich Dev; weder Einzelbranch-Paritaet noch die Anwendung anderer lokaler Reserve-Migrationen wird behauptet.
+
+```json
+{
+  "devOnly": true,
+  "version": "20261109074500",
+  "sha256": "60b8ad884f20c0a51fb88b3c23bfe2e515133bf6bb68f62efcd83ec6f5caa3d2",
+  "abortProbe": "PASS",
+  "existingDomainUnchanged": true,
+  "counts": {
+    "public.supplier_invoice": 0,
+    "public.orders": 15,
+    "private.quotes": 2,
+    "public.intake_item": 37,
+    "public.intake_event": 122,
+    "public.events": 497,
+    "public.company_settings": 1,
+    "public.complaints": 0
+  },
+  "repoCount": 106,
+  "devCount": 109,
+  "repoEqualsDev": false,
+  "devOnlyVersions": [
+    "20261108222500",
+    "20261109003000",
+    "20261109042000"
+  ],
+  "missingRepoVersions": [],
+  "qualifiedAppliedUnionEqualsDev": true,
+  "unappliedOtherBranchMigrationsNotClaimed": true
+}
+```
 
 ## Historische Teilnachweise
 
