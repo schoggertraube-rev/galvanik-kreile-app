@@ -4,12 +4,12 @@ import {readComplaintPhotoReplyRelations,readComplaintPhotoParentCandidates} fro
 import {readComplaintPhotoWaiting,readComplaintPhotoDelivery} from '@/lib/server/communicationPort';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization} from '@/lib/server/authorization';
-import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
 import {MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult} from '../messageContract';
 
 /** One projection of intake_item; no communications/phone_notes shadow inbox. */
-export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string):Promise<IntakeMessagesResult>{
+export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string,readPhotoPolicy?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{reminderDays:number|null;callDays:number|null}|null>):Promise<IntakeMessagesResult>{
  if(sourceItemId!==undefined&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceItemId))return {code:'VALIDATION_ERROR',message:'Originalantwort ist ungültig.'};
  if(!MESSAGE_FILTERS.includes(filter as MessageFilter))return {code:'VALIDATION_ERROR',message:'Nachrichtenfilter ist ungültig.'};
  try{
@@ -52,7 +52,8 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
    const parentCandidates=await readComplaintPhotoParentCandidates(tx,auth,messages.filter(row=>!row.photoParentId&&(row.photoCount??0)>0).map(row=>row.id));
    for(const candidate of parentCandidates){const reply=messages.find(row=>row.id===candidate.replyId);if(reply)(reply.photoParentCandidates??=[]).push({id:candidate.rootId,version:candidate.rootVersion,title:candidate.title});}
    const actors=await readIntakeActorTraces(tx,auth,messages.map(row=>row.id));
-   return {code:'OK' as const,messages:messages.map(row=>({...row,actorTrace:actors.get(row.id)})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
+   const photoPolicy=readPhotoPolicy?await readPhotoPolicy(tx,auth.tenantId):undefined;
+   return {code:'OK' as const,...(photoPolicy!==undefined?{photoPolicy}:{}),messages:messages.map(row=>({...row,actorTrace:actors.get(row.id)})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
   });
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }

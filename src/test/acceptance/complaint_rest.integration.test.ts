@@ -648,3 +648,13 @@ it('RM09 same-address unthreaded photos stay a proposal until explicit versioned
  expect(await sql`SELECT intake_item_id::text AS source FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${result.complaintId}`).toEqual([{source:replyId}]);
  expect(await sql`SELECT einsatz FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${rootId}::uuid`).toEqual([{einsatz:'erledigt'}]);
 });
+
+
+it('RM08 waiting photo card reads the actual nullable company policy without granting company-settings access',async()=>{
+ const fixture=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(fixture);await replyMailFixture(fixture,order);
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST Foto-Fristen' WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ await sql`UPDATE public.company_settings SET rekla_fotos_erinnerung_tage=NULL,rekla_fotos_anruf_tage=0 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');expect(await withSession(fixture,()=>getIntakeMessagesAction('offen'))).toMatchObject({code:'OK',photoPolicy:{reminderDays:null,callDays:0}});
+ const {SALES_STAGE_FEATURES}=await import('@/modules/fundament/public');for(const feature of SALES_STAGE_FEATURES)await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES(${KREILE_TENANT_SLUG},${feature.id},${feature.defaultEnabled}) ON CONFLICT(tenant,feature_id) DO NOTHING`;
+ const {readSettingsAction,saveCompanySettingsAction}=await import('@/app/actions/settings.actions');expect(await withSession(fixture,()=>readSettingsAction())).toMatchObject({code:'OK',snapshot:{photoPolicy:null}});expect(await withSession(fixture,()=>saveCompanySettingsAction({command:'complaint-photo-policy',reminderDays:1,callDays:2,expectedUpdatedAt:new Date().toISOString(),clientEventId:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
+});

@@ -45,7 +45,8 @@
     "@/modules/fundament/server-public#readQuoteSettings",
     "@/modules/fundament/server-public#readQuoteSettingsInTransaction",
     "@/modules/fundament/server-public#saveQuoteSettings",
-    "@/modules/fundament/server-public#QuoteCalculationSettings"
+    "@/modules/fundament/server-public#QuoteCalculationSettings",
+    "@/modules/fundament/server-public#readComplaintPhotoPolicy"
   ],
   "capabilities": [
     "product-actors:fail-closed-status",

@@ -127,3 +127,10 @@ it('RM09 presents same-address photos without assignment and confirms only the e
  render(<IntakeMessages ports={ports}/>);const confirm=await screen.findByRole('button',{name:'Als Fotoantwort zu TEST ursprüngliche Mail zuordnen'});expect(select).not.toHaveBeenCalled();expect(screen.getByRole('button',{name:'Neues Anliegen'})).toBeEnabled();
  fireEvent.click(confirm);fireEvent.click(confirm);await waitFor(()=>expect(select).toHaveBeenCalledOnce());expect(select).toHaveBeenCalledWith({itemId:message.id,version:1,clientEventId:expect.any(String),concern:'reklamation',photoParent:{itemId:'TEST-parent',version:3}});expect(ports.assignment.assign).not.toHaveBeenCalled();expect(ports.finish).not.toHaveBeenCalled();
 });
+
+
+it('RM08 waiting card honestly exposes an unset deadline and never treats explicit zero as missing',async()=>{
+ const message=row('TEST-wait-policy',{concerns:['reklamation'],openConcerns:['reklamation'],photoCount:0,photoRequest:{at:'2026-11-09T04:00:00Z',threadId:'TEST-thread'}});
+ render(<IntakeMessages ports={{list:vi.fn().mockResolvedValue({code:'OK',messages:[message],photoPolicy:{reminderDays:null,callDays:0},areas:['mails','eingang'],currentLogin:'TEST-actor'}),select:vi.fn(),finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}}}/>);
+ await screen.findByText('Frist Fotos-Erinnerung nach ist nicht eingestellt - in den Einstellungen festlegen');expect(screen.queryByText('Frist Anruf nach ist nicht eingestellt - in den Einstellungen festlegen')).toBeNull();
+});
