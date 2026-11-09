@@ -11,7 +11,7 @@ async function withPackageExpectation(result:IntakeCaptureResult):Promise<Intake
   const auth=await resolveAuthorization();if(!auth.ok)return result;
   const quoteContext=quoteOperationContext(auth.data);
   const canReadExpected=canReadQuoteForGoods(auth.data);
-  const quotes=canReadExpected?await listOpenQuotesCommand(quoteContext):null;
+  const quotes=canReadExpected?await listOpenQuotesCommand(quoteContext,result.capture.customerId??undefined):null;
   const history=!result.capture.customerId?await readPackageQuoteHistory(auth.data,result.capture.recognition?.text??result.capture.text??''):[];
   result.capture.packageContext=await withPrivilegedTenantTransaction(auth.data,tx=>readPackageExpectation(tx,auth.data,result.capture,quotes,history));
  }catch(error){console.error('[PACKAGE_EXPECTATION_READ_FAILED]',error);result.capture.packageContext={status:'UNAVAILABLE',message:PACKAGE_ASSIGN_COPY.unavailable};}
@@ -138,8 +138,9 @@ export async function saveIntakeDeviceRequestAction(input: unknown) {
   const fingerprint = session ? createHash("sha256").update(JSON.stringify(["intake-device", session.tenantId, session.userId, session.issuedAt])).digest("hex") : null;
   return processIntakeDeviceRequest(input, fingerprint);
 }
-export async function getIntakeCaptureAction(itemId: string, context?: IntakeContext) {
-  return withPackageExpectation(await readIntakeCapture(itemId, context));
+export async function getIntakeCaptureAction(itemId: string, context?: IntakeContext, options?:{packageExpectation?:boolean}) {
+  const read=await readIntakeCapture(itemId, context);
+  return options?.packageExpectation===false?read:withPackageExpectation(read);
 }
 export async function recognizeIntakeNoteAction(text: string) {
   const authorization = await resolveAuthorization();

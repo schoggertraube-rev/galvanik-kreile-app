@@ -1484,3 +1484,15 @@ it('PE-06 two actual accepted quotes remain ambiguous and a restricted capture r
  expect(limited).toMatchObject({code:'OK',capture:{packageContext:{status:'OK',customers:[],candidates:[]}}});
  if(limited.code==='OK')expect(limited.capture.expectedOrders).toBeUndefined();
 });
+
+it('PE204 customer-filtered existing quote reader excludes other customers before its limit',async()=>{
+ const first=await createFixture(),second=await createFixture();
+ const {createQuoteAction}=await import('@/app/actions/quotes.actions');
+ for(const fixture of [first,second])expect(await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST PE204 customer scope',positions:[{name:'TEST Paketfilter',quantity:2,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}))).toMatchObject({code:'OK'});
+ const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const {quoteOperationContext}=await import('@/lib/server/quoteAuthorization');
+ const {listOpenQuotesCommand}=await import('@/modules/quotes/server-public');
+ const filtered=await withSession(first,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST auth missing');return listOpenQuotesCommand(quoteOperationContext(auth.data),first.customerId);});
+ expect(filtered).toMatchObject({code:'OK',quotes:[expect.objectContaining({customerId:first.customerId})]});
+ if(filtered.code==='OK')expect(filtered.quotes.every(quote=>quote.customerId===first.customerId)).toBe(true);
+});

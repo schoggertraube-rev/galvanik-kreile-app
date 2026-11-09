@@ -25,7 +25,8 @@ const subscribeDevice = (changed: () => void) => { const query = matchMedia(CAME
 const deviceSnapshot = () => matchMedia(CAMERA_DEVICE_QUERY).matches;
 const serverDeviceSnapshot = () => false;
 export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode, onAdopt, onClose, onOrder, onCustomer }: Props) {
-  const { readCaptureNote, searchIntakeCustomers, getCaptureScope, getCapture, deviceRequest, saveCaptureNote, discardCapture } = ports;
+  const { readCaptureNote, searchIntakeCustomers, getCaptureScope, getCapture:readCapture, deviceRequest, saveCaptureNote, discardCapture } = ports;
+  const getCapture=useMemo(()=>readCapture?async(id:string)=>readCapture(id,undefined,{packageExpectation:false}):undefined,[readCapture]);
   const [onsite,setOnsite]=useState(Boolean(resumeSourceId));
   const [itemId, setItemId] = useState(() => crypto.randomUUID());
   const [scope, setScope] = useState<string | null>(null);
@@ -83,6 +84,24 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
   const textstand = useRef(crypto.randomUUID());
   const lastSaved = useRef("");
   const savedCapture = useRef<IntakeCapture | null>(null);
+  const expectationVersions=useRef(new Map<string,Promise<IntakeCapture['packageContext']>>());
+  const packageContext=capture?.packageContext;
+  const expectationId=capture?.id,expectationVersion=capture?.version,expectationKind=capture?.recognition?.kind,hasExpectation=Boolean(capture?.packageContext);
+  useEffect(()=>{
+    if(!expectationId||expectationVersion===undefined||expectationKind!=='ware'||!readCapture)return;
+    const key=expectationId+':'+expectationVersion;
+    if(hasExpectation){expectationVersions.current.set(key,Promise.resolve(packageContext));return;}
+    let request=expectationVersions.current.get(key);
+    if(!request){request=readCapture(expectationId,undefined,{packageExpectation:true}).then(result=>{
+      if(result.code!=='OK'||result.capture.id!==expectationId||result.capture.version!==expectationVersion)throw Error('PACKAGE_EXPECTATION_VERSION_CHANGED');
+      return result.capture.packageContext;
+    });expectationVersions.current.set(key,request);}
+    let active=true;
+    void request.then(context=>{
+      if(active)setCapture(current=>current?.id===expectationId&&current.version===expectationVersion?{...current,packageContext:context}:current);
+    }).catch(failure=>{console.error('[PACKAGE_EXPECTATION_REFRESH_FAILED]',failure);if(active)setError(PACKAGE_ASSIGN_COPY.unavailable);});
+    return()=>{active=false;};
+  },[expectationId,expectationVersion,expectationKind,hasExpectation,packageContext,readCapture]);
   const pendingNoteWrites = useRef(Promise.resolve());
   useEffect(()=>{if(!resumeSourceId||!getCapture)return;let active=true;void getCapture(resumeSourceId).then(result=>{if(!active)return;if(result.code!=='OK'){setError(result.message);return;}setItemId(result.capture.id);setCapture(result.capture);setText(result.capture.text??'');setCameraRequested(false);setSituationRequested(true);}).catch(failure=>{console.error('[PACKAGE_ONSITE_CAPTURE_RESTORE_FAILED]',failure);if(active)setError(PACKAGE_ONSITE_COPY.missing);});return()=>{active=false;};},[resumeSourceId,getCapture]);
   useEffect(() => {
@@ -105,7 +124,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
           if (changes.some(change => change.itemId === itemId)) {
             const loaded = await getCapture(itemId);
             if (loaded.code !== "OK") throw new Error(loaded.message);
-            if (current) setCapture(loaded.capture);
+            if (current) setCapture(previous=>previous?.id===loaded.capture.id&&previous.version===loaded.capture.version?{...loaded.capture,packageContext:previous.packageContext}:loaded.capture);
           }
           if (!current) return;
           const last = changes.at(-1);

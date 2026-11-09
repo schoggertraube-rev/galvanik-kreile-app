@@ -1,8 +1,14 @@
 # AP-PAKET-EINGANG — laufender Bau, keine Merge-Abgabe
 
-## Review-Korrektur 09.11., Produktstand efe09b2f
+## Review-Korrektur 09.11., Nachträge 1–8
 
-**Nicht mergefähig:** PL-Nachträge 1–6 und 8 sind umgesetzt; Punkt 7 wartet auf die im BAULOG 04:16 einmal gestellte Präzisierung. Eine globale KV-Liste bei zugeordnetem Kunden kommentarlos zu entfernen würde die belegten PE01/PE06-Kandidaten verlieren. Keine fachliche Eigenentscheidung an dieser Stelle.
+**Noch keine Merge-Bitte:** Alle acht PL-Nachträge einschließlich der Präzisierung PL05:05 sind lokal umgesetzt. Die neue unabhängige Prüfung und die Pflicht-CI am neuen Kandidaten stehen aus.
+
+Punkt7 nutzt denselben offenen KV-Leser mit optionalem Kundenfilter vor dem Limit. Bei zugeordnetem Kunden werden ausschließlich dessen KVs geladen, ohne Zuordnung die globale Liste nur für Ware. Der Erfassungsdialog liest Paket-Erwartungen einmal je Version; der Datei-Abfragezyklus fordert ausschließlich den Erfassungsstand ohne KV-Abfrage an. Das pro Dialog gehaltene Ergebnis wird nur derselben unveränderten Version wieder zugeordnet. Keine zweite Tabelle und kein weiterer KV-Leser.
+
+Neue echte Replay-Prüfung des Kundenfilters sowie die unveränderten PE04/PE06-Fälle: drei PASS5,21s. Tatsächlicher Erfassungsdialog mit Datei-Abfragezyklus und Zuordnungsereignis: genau eine Erwartungsabfrage je Version, weitere Leseaufrufe ohne KV-Abfrage (PASS3,08s). Der erste SQL-Versuch zeigte den tatsächlichen text-Typ der bestehenden customer_id-Projektion; Parameter auf denselben Typ korrigiert. Die unveränderten Kernfälle sind danach grün. Der neue Render-Test initialisiert erst den lokalen Capture-Scope und verwaltet beide vorhandenen Intervall-Callbacks, keine Produktumgehung.
+
+Der neue Phasenleser ist im bestehenden Capability-Register nachgetragen. Dies behebt den einzigen quality-Befund am vorherigen Kandidaten (`EXPORTED_FN_NOT_IN_REGISTRY`); no-fake lokal grün, kein Checker geändert.
 
 - Eine gemeinsame `GoodsInspectionForm` und kanonische Abweichungsgründe einschließlich Gefahr. Keine eigene Zustandsauswahl im Paketeditor. Fotoaktionen öffnen den bestehenden Originalweg.
 - `canReadQuoteForGoods` vereinheitlicht die beiden Warenleser. Der U249-Zweck erlaubt weiter aktiven Logins die bestehenden operativen Entscheidungen ohne Geldzugriff; finanzielle Leser bleiben getrennt.

@@ -216,7 +216,7 @@ export type GlobalCreatePorts = {
   canReadMails?: boolean;
   deviceRequest?: (input: IntakeDeviceCommand) => Promise<IntakeDeviceResult>;
   assignCaptureCustomer?: (input: import("./assignmentContract").AssignmentInput) => Promise<import("./assignmentContract").AssignmentResult>;
-  getCapture?: (id: string) => Promise<IntakeCaptureResult>;
+  getCapture?: (id: string,context?:import('./captureContract').IntakeContext,options?:{packageExpectation?:boolean}) => Promise<IntakeCaptureResult>;
   getCaptureScope?: () => Promise<{ code: "OK"; scope: string } | { code: "FORBIDDEN"; message: string }>;
   saveCaptureNote?: (input: IntakeNoteInput) => Promise<IntakeCaptureResult>;
   readCaptureOriginal?: (input:{fileId:string;clientEventId:string}) => Promise<import("./originalContract").OriginalReadResult>;
