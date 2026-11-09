@@ -1046,6 +1046,9 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       if(commercial){
         const rate=commercial.vatRateBasisPoints??source.invoice_vat_rate_basis_points;
         if(rate===null)return {code:'VALIDATION_ERROR',message:QUOTE_COMMERCIAL_SOURCE_COPY.missingVat};
+        // This invoice contract has one VAT rate: never replace an awarded
+        // position's different rate with today's company setting.
+        if(commercial.positions.some(row=>row.vatRateBasisPoints!=null&&row.vatRateBasisPoints!==rate))return {code:'VALIDATION_ERROR',message:'Stammdaten für die Rechnungsausgabe sind unvollständig.'};
         source.base_lines=commercial.positions.map(row=>{
           const quantity=row.unit===null?1:row.quantity;
           return {itemId:row.itemId,name:row.name,quantity,unitNetAmountCents:row.lineTotalCents/quantity,lineNetAmountCents:row.lineTotalCents};
