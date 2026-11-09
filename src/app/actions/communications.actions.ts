@@ -133,7 +133,7 @@ export async function importOutlookMailAction(graphMessageId:string){
 /** Resume only the original actor's immutable prepared request, never a fresh send intent. */
 async function preparedIntakeReply(auth:import('@/lib/server/authorization').AuthorizationSnapshot,input:unknown,clientKey:string,itemId:string,purpose:'photo-request'|'no-complaint'){
  const requestIntent=createHash('sha256').update(canonicalJson(input)).digest('hex');
- const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{snapshot:{requestIntent:string;source:Awaited<ReturnType<typeof readComplaintPhotoMailSource>>;subject:string;body:string}}>(sql`
+ const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{snapshot:{requestIntent:string;source:Awaited<ReturnType<typeof readComplaintPhotoMailSource>>&{parent?:{id:string;version:number}|null};subject:string;body:string}}>(sql`
  SELECT prepared.payload->'intake'->'snapshot' AS snapshot FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
  WHERE prepared.tenant_id=${auth.tenantId} AND prepared.user_id=${auth.userId}::uuid AND prepared.event_type='COMMUNICATION_SEND_PREPARED_V1' AND prepared.correlation_id=${clientKey}::uuid
  AND thread.source='MS_GRAPH_OUT:'||${clientKey} AND thread.created_by=${auth.userId}::uuid AND prepared.payload->'intake'->>'itemId'=${itemId} AND prepared.payload->'intake'->>'purpose'=${purpose}`));
@@ -176,10 +176,10 @@ async function sendComplaintRejection(auth:import('@/lib/server/authorization').
   const prepared=await preparedIntakeReply(auth,input,input.clientRequestId,request.itemId,'no-complaint');
   const source=prepared.prior?.source??await withPrivilegedTenantTransaction(auth,tx=>readComplaintRejectionSource(tx,auth,{...request,clientRequestId:input.clientRequestId}));
   if(input.targetType!=='CUSTOMER'||input.targetId!==source.customerId)return {code:'FORBIDDEN' as const,message:'Die Antwort gehört zu einem anderen Kunden.'};
-  const intent=createHash('sha256').update(JSON.stringify({itemId:request.itemId,version:request.version,customerId:source.customerId,graphId:source.graphId,originalSha256:source.originalSha256,subject:input.subject.trim(),body:input.body.trim(),reason:request.reason.trim()})).digest('hex');
+  const intent=createHash('sha256').update(JSON.stringify({itemId:request.itemId,version:request.version,customerId:source.customerId,graphId:source.graphId,originalSha256:source.originalSha256,...('parent'in source?{parent:source.parent}:{}),subject:input.subject.trim(),body:input.body.trim(),reason:request.reason.trim()})).digest('hex');
   return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:source.customerId!,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,intakeReply:{snapshot:{requestIntent:prepared.requestIntent,source,subject:input.subject,body:input.body},purpose:'no-complaint',itemId:request.itemId,version:request.version,graphMessageId:source.graphId!,sender:source.sender!,intent,
    validate:tx=>prepareComplaintRejection(tx,auth,{...request,clientRequestId:input.clientRequestId,intent}),
-   complete:(tx,threadId)=>completeIntakeComplaintRejection(tx,auth,{itemId:request.itemId,version:request.version,clientKey:input.clientRequestId,customerId:source.customerId!,orderId:null,threadId,reason:request.reason.trim(),intent}),
+   complete:(tx,threadId)=>completeIntakeComplaintRejection(tx,auth,{itemId:request.itemId,version:request.version,clientKey:input.clientRequestId,customerId:source.customerId!,orderId:null,threadId,reason:request.reason.trim(),intent,expectedParent:source.parent??null}),
    replay:(tx,threadId)=>complaintRejectionReplay(tx,auth,{itemId:request.itemId,clientRequestId:input.clientRequestId,threadId,intent})}});
  }catch(error){console.error('[COMPLAINT_RESPONSE_FAILED]',{code:error instanceof Error?error.message:'UNKNOWN'});return {code:'CONFLICT' as const,message:'Antwort oder Anliegen ist inzwischen geändert · kein erneuter Versand bestätigt.'};}
 }

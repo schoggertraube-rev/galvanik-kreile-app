@@ -110,3 +110,16 @@ it('starts capture only with a secured canonical mail source and keeps a failed 
  fireEvent.click(screen.getByRole('button',{name:'KV anlegen'}));
  await waitFor(()=>expect(actions.request).toHaveBeenCalledWith({intent:'QUOTE',prefill:{sourceItemId:'TEST-intake',customerQuery:'test@example.invalid',note:'TEST Auftrag'}}));
 });
+
+it('RM07 source-changed receipt requires reload and rejects another form submit',async()=>{
+ cleanup();vi.clearAllMocks();actions.getStatus.mockResolvedValue({code:'OK'});actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});actions.listGlobal.mockResolvedValue({code:'OK',data:[]});
+ actions.send.mockResolvedValue({code:'OK',data:{sourceChanged:true,deliveryCustomer:'TEST Schmidt'}});
+ render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer"/>);
+ const send=await screen.findByRole('button',{name:'Versenden'});const form=send.closest('form')!;
+ fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:'TEST Quelle'}});fireEvent.change(screen.getByRole('textbox',{name:'Nachricht'}),{target:{value:'TEST Antwort'}});
+ fireEvent.submit(form);
+ await screen.findByText('Die Mail an TEST Schmidt ist rausgegangen. Der Vorgang wurde inzwischen geändert – lies ihn neu, die Mail steht im Verlauf.');
+ expect(screen.getByRole('button',{name:'Neu laden'})).toBeEnabled();expect(screen.queryByRole('button',{name:'Versenden'})).toBeNull();
+ fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:'TEST anderer Text'}});fireEvent.change(screen.getByRole('textbox',{name:'Nachricht'}),{target:{value:'TEST nicht erneut senden'}});
+ fireEvent.submit(form);expect(actions.send).toHaveBeenCalledOnce();
+});

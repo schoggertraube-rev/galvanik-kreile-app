@@ -131,7 +131,7 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
       <form ref={sendForm} className={styles.compose} onSubmit={async (event) => {
         event.preventDefault();
         if(composer){composer.onSend();return;}
-        if(sendLock.current)return;
+        if(sendLock.current||sendSourceChanged)return;
         const formElement=event.currentTarget,form=new FormData(formElement);
         if(pendingSend.current&&(pendingSend.current.targetType!==targetType||pendingSend.current.targetId!==targetId)){setFeedback('Vorherigen Versand zuerst am ursprünglichen Vorgang prüfen.');return;}
         const quoteId=String(form.get('quoteId')??'');

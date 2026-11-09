@@ -5,7 +5,7 @@ import { hasAuthorizationArea, type AuthorizationSnapshot } from '@/lib/server/a
 import type { PrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 
 /** The complaint command calls this existing-module effect in its own transaction. */
-async function completeComplaintSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientKey:string;complaintId?:string;number?:string;customerId:string;orderId:string|null;threadId?:string;reason?:string;intent?:string}) {
+async function completeComplaintSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientKey:string;complaintId?:string;number?:string;customerId:string;orderId:string|null;threadId?:string;reason?:string;intent?:string;expectedParent?:{id:string;version:number}|null}) {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${input.itemId},0))`);
   const rows=await tx.execute<{version:number;kanal:string;erstellt_von:string;kunde_id:string|null;vorgang_id:string|null;vorgang_art:string|null;einsatz:string;anliegen_offen:string[]}>(sql`SELECT version,kanal,erstellt_von::text,kunde_id,vorgang_id,vorgang_art,einsatz,anliegen_offen FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid FOR UPDATE`);
   const row=rows[0];
@@ -15,6 +15,7 @@ async function completeComplaintSource(tx:PrivilegedTenantTransaction,auth:Autho
   if(row.kunde_id&&row.kunde_id!==input.customerId||input.complaintId&&row.vorgang_id&&(row.vorgang_art!=='auftrag'||row.vorgang_id!==input.orderId))throw Error('COMPLAINT_SOURCE_TARGET_MISMATCH');
   const relations=await readComplaintPhotoReplyRelations(tx,auth,[input.itemId],true);
   const parent=relations.find(value=>value.replyId===input.itemId);
+  if(input.expectedParent!==undefined&&(input.expectedParent===null?!!parent:!parent||parent.rootId!==input.expectedParent.id||parent.rootVersion!==input.expectedParent.version))throw Error('COMPLAINT_RESPONSE_PARENT_CHANGED');
   const [origin]=await tx.execute<{parentId:string|null}>(sql`SELECT nachher->>'complaintThreadParent' AS "parentId" FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${input.itemId}::uuid AND art='angelegt' ORDER BY zeit,id LIMIT 1`);
   if(origin?.parentId&&parent?.rootId!==origin.parentId)throw Error('COMPLAINT_REPLY_THREAD_CHANGED');
   if(parent){
@@ -35,4 +36,4 @@ async function completeComplaintSource(tx:PrivilegedTenantTransaction,auth:Autho
 }
 
 export async function recordIntakeComplaintEffect(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientKey:string;complaintId:string;number:string;customerId:string;orderId:string}){return completeComplaintSource(tx,auth,input);}
-export async function completeIntakeComplaintRejection(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientKey:string;customerId:string;orderId:string|null;threadId:string;reason:string;intent:string}){return completeComplaintSource(tx,auth,input);}
+export async function completeIntakeComplaintRejection(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientKey:string;customerId:string;orderId:string|null;threadId:string;reason:string;intent:string;expectedParent?:{id:string;version:number}|null}){return completeComplaintSource(tx,auth,input);}

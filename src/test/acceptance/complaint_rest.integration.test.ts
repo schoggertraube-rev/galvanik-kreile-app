@@ -468,3 +468,28 @@ it.each([false,true])('RM07 confirmed photo send preserves immutable proof after
   expect(await withSession(fixture,()=>sendCustomerMailAction({...reread,subject:'TEST anderer Inhalt unter alter Kennung'}))).toMatchObject({code:'VALIDATION_ERROR'});expect(sends).toBe(1);
  }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
 });
+
+it('RM07 response preserves both sources when the parent changes during confirmed delivery',async()=>{
+ const fixture=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(fixture);
+ const {rootId,replyId}=await replyMailFixture(fixture,order);
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ const {getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');
+ const input={targetType:'CUSTOMER' as const,targetId:fixture.customerId,clientRequestId:randomUUID(),subject:'TEST Antwort zu Ihren Fotos',body:'TEST Die sichtbare Stelle ist keine neue Reklamation.',complaintRejection:{itemId:replyId,version:1,reason:'TEST sichtbare Stelle entspricht dem vereinbarten Zustand'}};
+ const {saveIntakeDraftAction,getIntakeDraftsAction}=await import('@/app/actions/eingang.actions');
+ const draftId=randomUUID();expect(await withSession(fixture,()=>saveIntakeDraftAction({id:draftId,clientEventId:randomUUID(),art:'eingang',payload:{kind:'rekla-response',version:1,clientKey:input.clientRequestId,sourceItemId:replyId,request:input,attempted:true},lastField:null,expectedVersion:null}))).toMatchObject({code:'OK'});
+ const resumed=await withSession(fixture,()=>getIntakeDraftsAction());if(resumed.code!=='OK')throw Error('TEST RM12 draft');const storedRequest=resumed.drafts.find(draft=>draft.id===draftId)?.payload.request as typeof input;expect(storedRequest).toEqual(input);expect(JSON.stringify(storedRequest)).not.toBe(JSON.stringify(input));
+ const keys=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const,before=Object.fromEntries(keys.map(key=>[key,process.env[key]])),native=globalThis.fetch;let sends=0;
+ try{
+  process.env.MS_GRAPH_TENANT_ID='TEST-tenant';process.env.MS_GRAPH_CLIENT_ID='TEST-client';process.env.MS_GRAPH_CLIENT_SECRET='TEST-provider-fixture';process.env.MS_GRAPH_MAILBOX='TEST-mailbox@example.invalid';
+  vi.spyOn(globalThis,'fetch').mockImplementation(async(url,options)=>{const target=new URL(typeof url==='string'?url:url instanceof URL?url.href:url.url);if(target.hostname==='login.microsoftonline.com')return new Response(JSON.stringify({access_token:'TEST-provider-token-not-a-real-secret',expires_in:3600}),{status:200,headers:{'content-type':'application/json'}});if(target.hostname==='graph.microsoft.com'&&target.pathname.endsWith('/reply')){sends++;await sql`UPDATE public.intake_item SET version=version+1,text='TEST parent foreign change' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${rootId}::uuid`;return new Response(null,{status:202});}return native(url,options);});
+  const sent=await withSession(fixture,()=>sendCustomerMailAction(input));expect(sent).toMatchObject({code:'OK'});
+  expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND intake_item_id=${replyId}::uuid`).toHaveLength(0);
+  expect(await sql`SELECT id::text,einsatz,anliegen_offen,version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=ANY(${[rootId,replyId]}::uuid[]) ORDER BY id`).toEqual([rootId,replyId].sort().map(id=>({id,einsatz:'offen',anliegen_offen:['reklamation'],version:id===rootId?2:1})));
+  expect(sent).toMatchObject({code:'OK',data:{sourceChanged:true}});
+  expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${replyId}::uuid AND nachher->>'action'='reklamation.keine_reklamation'`).toHaveLength(0);
+  expect(await sql`SELECT message.body,thread.status FROM public.communication_messages message JOIN public.communication_threads thread ON thread.tenant_id=message.tenant_id AND thread.id=message.thread_id WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId}`).toEqual([{body:input.body,status:'sent'}]);
+  expect(await withSession(fixture,()=>sendCustomerMailAction(storedRequest))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
+  expect(await withSession(fixture,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}))).not.toMatchObject({code:'OK'});expect(sends).toBe(1);
+  expect(await withSession(fixture,()=>getIntakeMessagesAction('alle'))).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:rootId,usage:'offen'}),expect.objectContaining({id:replyId,usage:'offen'})])});
+ }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
+});

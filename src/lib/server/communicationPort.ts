@@ -350,7 +350,7 @@ export async function sendCommunicationMail(
        VALUES(${auth.tenantId},${randomUUID()},${input.intakeReply.purpose==='no-complaint'?'INTAKE_COMPLAINT_RESPONSE_SENT_V1':'INTAKE_COMPLAINT_PHOTO_REQUESTED_V1'},${auth.userId}::uuid,${input.clientRequestId}::uuid,1,${input.clientRequestId}::uuid,${input.intakeReply.version+1},'success',${input.intakeReply.purpose==='no-complaint'?'Keine Reklamation · Antwort gesendet':'Reklamationsfotos angefordert'},${JSON.stringify({itemId:input.intakeReply.itemId,threadId:pending.threadId,intent:input.intakeReply.intent})}::jsonb)`);
        }catch(error){
         const code=error instanceof Error?error.message:'';
-        if(!['COMPLAINT_PHOTO_MAIL_VERSION_CONFLICT','COMPLAINT_PHOTO_MAIL_SOURCE_INVALID','COMPLAINT_PHOTO_MAIL_PHOTOS_ALREADY_PRESENT','COMPLAINT_RESPONSE_SOURCE_CHANGED','COMPLAINT_RESPONSE_VERSION_CONFLICT','COMPLAINT_SOURCE_CHANGED','COMPLAINT_SOURCE_TARGET_MISMATCH','COMPLAINT_RESPONSE_ROOT_COMPLETED'].includes(code))throw error;
+        if(!['COMPLAINT_PHOTO_MAIL_VERSION_CONFLICT','COMPLAINT_PHOTO_MAIL_SOURCE_INVALID','COMPLAINT_PHOTO_MAIL_PHOTOS_ALREADY_PRESENT','COMPLAINT_RESPONSE_SOURCE_CHANGED','COMPLAINT_RESPONSE_VERSION_CONFLICT','COMPLAINT_SOURCE_CHANGED','COMPLAINT_SOURCE_TARGET_MISMATCH','COMPLAINT_RESPONSE_ROOT_COMPLETED','COMPLAINT_RESPONSE_PARENT_CHANGED'].includes(code))throw error;
         await tx.execute(sql`ROLLBACK TO SAVEPOINT communication_domain_completion`);sourceChanged=true;logCommunicationFailure('COMMUNICATION_SOURCE_CHANGED_AFTER_SEND',error);
        }
        await tx.execute(sql`RELEASE SAVEPOINT communication_domain_completion`);

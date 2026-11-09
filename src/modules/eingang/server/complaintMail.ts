@@ -86,10 +86,12 @@ export async function readComplaintRejectionSource(tx:PrivilegedTenantTransactio
  const source=await readComplaintMailBase(tx,auth,input);
  const proof=await tx.execute(sql`SELECT id FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${input.itemId}::uuid AND art='anliegen' AND befehl_id=${input.clientRequestId}::uuid AND von=${auth.userId} AND nachher->>'action'='reklamation.keine_reklamation'`);
  if(!proof.length&&(source.usage!=='offen'||!source.open.includes('reklamation')||source.version!==input.version))throw Error('COMPLAINT_RESPONSE_SOURCE_CHANGED');
- if(!proof.length){const parents=await readComplaintPhotoReplyRelations(tx,auth,[input.itemId],true);for(const parent of parents.filter(row=>row.replyId===input.itemId)){const [root]=await tx.execute<{usage:string;open:string[]}>(sql`SELECT einsatz AS usage,anliegen_offen AS open FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${parent.rootId}::uuid FOR UPDATE`);if(!root||root.usage!=='offen'||!root.open.includes('reklamation'))throw Error('COMPLAINT_RESPONSE_ROOT_COMPLETED');}}
+ const parents=await readComplaintPhotoReplyRelations(tx,auth,[input.itemId],true);
+ if(!proof.length){for(const parent of parents.filter(row=>row.replyId===input.itemId)){const [root]=await tx.execute<{usage:string;open:string[]}>(sql`SELECT einsatz AS usage,anliegen_offen AS open FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${parent.rootId}::uuid FOR UPDATE`);if(!root||root.usage!=='offen'||!root.open.includes('reklamation'))throw Error('COMPLAINT_RESPONSE_ROOT_COMPLETED');}}
  const photos=await tx.execute(sql`SELECT file.id FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${input.itemId}::uuid AND file.mime LIKE 'image/%' AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=file.tenant_id AND receipt.item_id=file.item_id AND receipt.art='original_gespeichert' AND receipt.nachher->>'fileId'=file.id::text AND receipt.nachher->>'sha256'=file.sha256)`);
  if(!photos.length)throw Error('COMPLAINT_RESPONSE_PHOTOS_MISSING');
- return source;
+ const parent=parents.find(row=>row.replyId===input.itemId);
+ return {...source,parent:parent?{id:parent.rootId,version:parent.rootVersion}:null};
 }
 export async function prepareComplaintRejection(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;clientRequestId:string;intent:string}){
  const source=await readComplaintRejectionSource(tx,auth,input);
