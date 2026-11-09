@@ -128,13 +128,34 @@ describe('4.8 real component interactions (isolated TEST ports; server effects h
     vi.mocked(ports.write).mockResolvedValue({code:'UNAVAILABLE',message:'TEST Offline'});
     const save=await screen.findByRole('button',{name:'Reklamation aufnehmen'});
     fireEvent.click(screen.getByRole('checkbox'));fireEvent.change(screen.getByRole('combobox'),{target:{value:'Blasen'}});fireEvent.click(save);
-    expect(await screen.findByText(/Speicherergebnis unklar · alle Eingaben sind noch da · TEST Offline/)).toBeInTheDocument();
+    expect(await screen.findByText(/Du prüfst den ungeklärten Ausgang/)).toBeInTheDocument();
     const first=vi.mocked(ports.write).mock.calls[0][0];
     expect(screen.getByRole('spinbutton')).toBeDisabled();
     fireEvent.click(screen.getAllByRole('button',{name:'Erneut'})[0]);
     await waitFor(()=>expect(ports.write).toHaveBeenCalledTimes(2));
     expect(vi.mocked(ports.write).mock.calls[1][0]).toEqual(first);
     expect(onClose).not.toHaveBeenCalled();expect(screen.getByRole('spinbutton')).toHaveValue(3);
+  });
+  it('RM13 conflict rereads actual context without losing editable input or closing',async()=>{
+    const data={...base,initial:{...base.initial,intakeItemId:'TEST-source',intakeVersion:1}};
+    const {ports,onClose}=setup(data);
+    vi.mocked(ports.write).mockResolvedValue({code:'CONFLICT',message:'TEST private conflict detail'});
+    await screen.findByRole('button',{name:'Reklamation aufnehmen'});
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.change(screen.getByRole('combobox'),{target:{value:'Blasen'}});
+    fireEvent.change(screen.getByRole('textbox',{name:'Beschreibung'}),{target:{value:'TEST eigene Eingabe'}});
+    fireEvent.click(screen.getByRole('button',{name:'Reklamation aufnehmen'}));
+    const reload=await screen.findByRole('button',{name:'Neu laden · Eingaben behalten'});
+    expect(screen.queryByText(/TEST private conflict detail/)).not.toBeInTheDocument();
+    vi.mocked(ports.read).mockResolvedValue({code:'OK',data:{...data,initial:{...data.initial,intakeVersion:2}}});
+    fireEvent.click(reload);
+    await waitFor(()=>expect(screen.queryByRole('button',{name:'Neu laden · Eingaben behalten'})).not.toBeInTheDocument());
+    expect(screen.getByRole('textbox',{name:'Beschreibung'})).toHaveValue('TEST eigene Eingabe');
+    expect(screen.getByRole('spinbutton')).not.toBeDisabled();
+    fireEvent.click(screen.getByRole('button',{name:'Reklamation aufnehmen'}));
+    await waitFor(()=>expect(ports.write).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(ports.write).mock.calls[1][0]).toMatchObject({intakeVersion:2,description:'TEST eigene Eingabe'});
+    expect(onClose).not.toHaveBeenCalled();
   });
   it('Esc on an edited description opens only the discard layer, and discard writes no row',async()=>{
     const {ports,onClose}=setup();
@@ -195,8 +216,8 @@ it('opens the reminder in the existing composer, retains edits on failure and re
  expect(ports.read).toHaveBeenCalledWith({reminderOrderId:'TEST-rework'});
  fireEvent.change(body,{target:{value:'TEST eigene Nachricht'}});
  fireEvent.click(screen.getByRole('button',{name:'Begleitschein senden'}));
- expect(await screen.findByText(/TEST network unclear/)).toBeInTheDocument();expect(body).toHaveValue('TEST eigene Nachricht');expect(body).toBeDisabled();
- const original=send.mock.calls[0][0];expect(original).toMatchObject({complaintId:'TEST-complaint',orderId:'TEST-rework',version:2,body:'TEST eigene Nachricht'});
+ expect(await screen.findByText(/Du prüfst den ungeklärten Ausgang/)).toBeInTheDocument();expect(body).toHaveValue('TEST eigene Nachricht');expect(body).toBeDisabled();
+ expect(screen.queryByText(/TEST network unclear/)).not.toBeInTheDocument();const original=send.mock.calls[0][0];expect(original).toMatchObject({complaintId:'TEST-complaint',orderId:'TEST-rework',version:2,body:'TEST eigene Nachricht'});
  fireEvent.click(screen.getAllByRole('button',{name:'Erneut'})[0]);
  expect(await screen.findByText('Begleitschein gesendet · Erinnerung ruht für 5 Arbeitstage')).toBeInTheDocument();
  expect(send.mock.calls[1][0]).toEqual(original);expect(ports.write).not.toHaveBeenCalled();expect(ports.sendResult).not.toHaveBeenCalled();expect(refreshed).toHaveBeenCalledTimes(1);

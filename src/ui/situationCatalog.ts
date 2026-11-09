@@ -107,3 +107,14 @@ export const ORDER_HANDOVER_COPY={
 };
 
 export const REKLA_MAIL_COPY={received:(n:number)=>n+' Originalfotos zur Reklamation sind da.',record:'Reklamation anlegen',parent:'Fotoantwort gehört zum ursprünglichen Reklamationsanliegen.',original:'Foto-Original öffnen',reject:'Keine Reklamation · antworten',responseTitle:'Antwort zur Reklamation',responseReason:'Grund für den Abschluss',responseSubject:(subject:string)=>'Antwort: '+subject,responseSent:'Antwort gesendet · Anliegen mit Grund erledigt.',responseSaved:'Antwortentwurf gespeichert · in Der Tag weiterbearbeiten.',responseRetry:'Mit gleicher Kennung erneut versuchen',responseSend:'Antwort senden und Anliegen abschließen',responseSaving:'Wird gesendet …',responseInvalid:'Betreff, Nachricht und konkreten Grund ergänzen.',responseUnavailable:'Antwort konnte nicht sicher bestätigt werden · Eingaben sind erhalten.',responseBack:'Entwurf speichern und schließen',request:'Fotos anfordern',waiting:(customer:string)=>'Wartet auf Fotos von '+customer,sent:'Fotos angefordert · Versandbeleg gespeichert.',unavailable:'Fotoanfrage konnte nicht sicher gesendet werden · Versandbeleg prüfen.',missing:'Du forderst die fehlenden Fotos zur Reklamation an.'} as const;
+
+export function complaintFailureCopy(code:string):string{
+ const copy:Record<string,string>={
+  UNAUTHENTICATED:'Du meldest dich erneut an. Deine Eingaben bleiben erhalten.',
+  FORBIDDEN:'Du brauchst das Recht für diese Reklamationsaktion. Deine Eingaben bleiben erhalten.',
+  VALIDATION_ERROR:'Du korrigierst die offenen Angaben. Deine Eingaben bleiben erhalten.',
+  CONFLICT:'Du lädst die Reklamation neu und prüfst den aktuellen Stand. Deine Eingaben bleiben erhalten.',
+  NOT_FOUND:'Du lädst die Reklamation erneut. Deine Eingaben bleiben erhalten.',
+ };
+ return copy[code]??'Du prüfst den ungeklärten Ausgang und versuchst es mit derselben Kennung erneut. Deine Eingaben bleiben erhalten.';
+}

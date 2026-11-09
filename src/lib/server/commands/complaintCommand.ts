@@ -131,6 +131,7 @@ export async function executeComplaint(input:unknown,sourceEffect:ComplaintSourc
     });
   } catch(error) {
     console.error('[COMPLAINT_COMMAND_FAILED]',error instanceof Error?error.message:error);
+    if(error instanceof Error&&error.message==='COMPLAINT_SOURCE_CHANGED')return {code:'CONFLICT',message:'Das Reklamationsanliegen wurde inzwischen geändert. Lade es neu; deine Eingaben bleiben erhalten.'};
     return error instanceof Rejected?error.result:{code:'UNAVAILABLE',message:'Nicht gespeichert · alle Eingaben sind noch da. Fehlercode: COMPLAINT_COMMAND_FAILED.'};
   }
 }

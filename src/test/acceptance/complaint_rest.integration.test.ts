@@ -311,6 +311,24 @@ it.each(['application/pdf','video/mp4'])('RM10 %s original remains readable but 
  expect(messages.messages.find(row=>row.id===rootId)?.photoReplies??[]).toHaveLength(0);
 });
 
+it('RM13 actual stale source rejection rereads and resumes the same complaint identity once',async()=>{
+ const fixture=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(fixture);
+ const {replyId,photos}=await replyMailFixture(fixture,order);
+ const {reklamationAusfuehrenAction,getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
+ const clientKey=randomUUID();
+ const input={action:'aufnehmen' as const,clientKey,orderId:order.orderId,intakeItemId:replyId,intakeVersion:2,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST RM13 Eingabe bleibt erhalten',photoIds:photos,goodsReturn:'offen' as const};
+ expect(await withSession(fixture,()=>reklamationAusfuehrenAction(input))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND intake_item_id=${replyId}::uuid`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientKey}::uuid AND event_type='COMPLAINT_CHANGED_V1'`).toHaveLength(0);
+ const fresh=await withSession(fixture,()=>getComplaintDialogAction({orderId:order.orderId,sourceItemId:replyId}));
+ expect(fresh).toMatchObject({code:'OK',data:{initial:{intakeVersion:1,photoIds:photos}}});if(fresh.code!=='OK')throw Error('TEST RM13 reread');
+ const saved=await withSession(fixture,()=>reklamationAusfuehrenAction({...input,intakeVersion:fresh.data.initial.intakeVersion}));
+ expect(saved.code).toBe('OK');if(saved.code!=='OK')throw Error(saved.message);
+ expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND intake_item_id=${replyId}::uuid`).toEqual([{id:saved.receipt.complaintId}]);
+ expect(await sql`SELECT user_id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientKey}::uuid AND event_type='COMPLAINT_CHANGED_V1'`).toEqual([{user_id:fixture.actorId}]);
+ expect(await withSession(fixture,()=>getComplaintDialogAction({complaintId:saved.receipt.complaintId}))).toMatchObject({code:'OK',data:{complaint:{description:input.description,stand:'aufgenommen',version:1}}});
+});
+
 it('RM03 real reply Action sends the explicit response, completes root and reply with reason and creates no complaint',async()=>{
  const fixture=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(fixture);
  const {rootId,replyId}=await replyMailFixture(fixture,order);
