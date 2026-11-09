@@ -5,7 +5,7 @@ import {sql,full,withSession} from './replayHarness';
 export async function customerFixture(label:string){
  const customerId=randomUUID();
  await sql`INSERT INTO public.customers(id,tenant_id,customer_number,name,company_name,type,contact_person,email,phone,street,house_number,zip_code,city,country,payment_preference,ziel_freigeschaltet,ziel_tage,source,first_name,last_name,salutation)
- VALUES(${customerId},${KREILE_TENANT_SLUG},${'TEST-'+customerId},${'TEST '+label+' Firma'},${'TEST '+label+' Firma GmbH'},'business','TEST Person',${'TEST-'+customerId+'@example.invalid'},'+49 711 5550189','TEST Weg','1','70176','Stuttgart','DE','rechnung',true,14,'manual','TEST','Person','ohne')`;
+ VALUES(${customerId},${KREILE_TENANT_SLUG},${'TEST-'+label+'-'+customerId},${'TEST '+label+' Firma'},${'TEST '+label+' Firma GmbH'},'business','TEST Person',${'TEST-'+customerId+'@example.invalid'},'+49 711 5550189','TEST Weg','1','70176','Stuttgart','DE','rechnung',true,14,'manual','TEST','Person','ohne')`;
  return customerId;
 }
 

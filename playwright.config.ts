@@ -2,7 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: ['**/ablauf/**'], // Server chains run in the existing Replay acceptance job.
+  // These chains run with real Server Actions in the existing Replay acceptance job.
+  testIgnore: ['**/ablauf/**'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
