@@ -44,3 +44,13 @@ Der Rechnungsleser folgt dem vorhandenen Vorgangsverweis und zeigt Originale aus
 Echter BA04-Replay PASS5,10s: eine Rechnung, zwei Originale mit unveränderten Besitzern, Akteur-/Zuordnungsereignis, gleicher Schlüssel ohne zweiten Verweis, erneutes Lesen über Rechnungs-ID und neue Eingangs-ID. Zusätzlich fehlende Nummer: eindeutiger Aussteller/Datum/Brutto-Treffer verweist auf dieselbe eine Rechnung. Neuer UI-Fall PASS2,07s: vorhandener Writer mit attachOriginal, kein zweites Buchen/kein Zwischeneditor/kein falsches Rechnungs-Rückgängig. Typen/Lint grün; Modul-Gate nur fremde DESIGN_POINTER_PAGE_BINDING. Neue Rückgängig-Aktion ist am bestehenden H18-Statuswriter mit echtem BA-Test belegt, keine Ausnahme erweitert.
 
 Noch offen: Erkennungsauslösung, optionale Listen/Zusatzangaben, echte Sicht/Preview/CI/Planungsprüfung. Keine Vollabnahme behauptet.
+
+## Erkennungsauslösung und Nachrichten-Hauptaktion
+
+Im bestehenden Capture löst eine vollständig gesicherte, fertig erkannte Rechnung mit Recht Geld die bereits gebaute einzige Rechnungsroute automatisch aus. Kein Klick auf die Erfassung nötig. Kein Wechsel bei ungesichertem/laufendem Original, Gerätetransfer, nicht gespeichertem Text, fehlendem Recht oder ausdrücklich anderem Erfassungsmodus. Pro Quellversion ein Versuch, keine Schleife. Die Route prüft erneut tatsächliche Server-Readiness; nur dann automatische Buchung, sonst vorhandene Ergänzung.
+
+Nachrichten zeigen „Rechnung {nr} ablegen“, mit sicherem tatsächlichem Nummern-Beleg aus Original/Suggestion. Ohne Nummer nur „Rechnung ablegen“, keine Ersatznummer. Dynamische Texte im zentralen Katalog, bestehender rechnungein-Zielvertrag unverändert.
+
+Zwei neue gezielte Capture-Renderfälle PASS3,38s (Recht Geld/ohne Recht, genau eine bestehende Route, Original bleibt). Echter BA05-Lesetest PASS4,38s (Original→persistierte sichere Nummer→Nachrichtenansicht, keine Schreibnebenwirkung); eigener Modul-Unitfall PASS für dynamische Nummer/fehlende Nummer und denselben Zielvertrag. Bestehende Assertions nicht verändert oder entfernt; nur Fälle ergänzt. Typen/gezielter Lint grün. Kein unbeaufsichtigter Mail-Cron behauptet: die vorhandene Erkennungs-/Erfassungskette ist angebunden.
+
+Offen vor Vollabgabe: optionale Bemerkung/Mitarbeiter/Fahrzeug (gebündelter Vorschlag im BAULOG01:07), endgültige Preview/Sicht/Pflicht-CI/PL-Prüfung. Maximal zwei PRs bleiben eingehalten, kein Merge.

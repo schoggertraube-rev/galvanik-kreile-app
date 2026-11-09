@@ -1,3 +1,4 @@
+import {BELEG_AUTO_COPY} from '@/ui/situationCatalog';
 import type {AccessArea} from '@/lib/auth/authorizationContract';
 import type {IconName} from '@/ui/kr';
 import {INTAKE_CONCERN_AREAS,type IntakeSelectableConcern} from './intakeLifecycleContract';
@@ -14,7 +15,7 @@ export const CONCERN_OPTIONS:readonly ConcernOption[]=[
  {concern:'abholung',id:'abholung_eintragen',text:'Übergabe eintragen',icon:'truck',target:'termin',context:'openOrder'},
  {concern:'nachfrage',id:'status_senden',text:'Status senden',icon:'mail',target:'status_senden',context:'openOrder'},
  {concern:'kv_anfrage',id:'kv_erstellen',text:'Auftrag oder KV erfassen',icon:'inbox',target:'eingang',context:'any'},
- {concern:'rechnung',id:'rechnungein',text:'Eingangsrechnung erfassen',icon:'receipt',target:'rechnungein',context:'invoice'},
+ {concern:'rechnung',id:'rechnungein',text:BELEG_AUTO_COPY.invoiceAction(),icon:'receipt',target:'rechnungein',context:'invoice'},
  {concern:'rueckruf',id:'rueckruf_anlegen',text:'Rückruf anlegen',icon:'phone',target:'aufgabe',context:'any'},
  {concern:'frist',id:'frist_anlegen',text:'Frist anlegen',icon:'calendar',target:'aufgabe',context:'letter'},
  {concern:'aufgabe',id:'aufgabe_anlegen',text:'Aufgabe anlegen',icon:'check',target:'aufgabe',context:'internal'},
@@ -27,5 +28,5 @@ export function concernOptions(row:IntakeMessage,areas:readonly AccessArea[]){
  const match:Record<Context,boolean>={any:true,order,openOrder:open,quote:row.orderKind==='kv'&&row.orderId!==null,
   goods:open&&(row.goods==='erwartet'||row.goods==='teilweise'),invoice:row.customerType==='lieferant'||row.concerns.includes('rechnung'),letter:row.concerns.includes('frist'),internal:row.channel==='notiz'&&row.direction==='intern'};
  const reasons:Record<Context,string>={any:'',order:'braucht einen Auftrag',openOrder:'braucht einen offenen Auftrag',quote:'braucht einen offenen KV',goods:'braucht einen Auftrag mit erwarteter Ware',invoice:'braucht einen Lieferanten oder eine erkannte Rechnung',letter:'braucht eine Brief- oder Fristsache',internal:'braucht eine interne Notiz'};
- return CONCERN_OPTIONS.filter(option=>INTAKE_CONCERN_AREAS[option.concern].every(area=>areas.includes(area))).map(option=>({...option,reason:match[option.context]||option.concern==='abholung'&&row.channel==='mail'&&row.customerId!==null?null:reasons[option.context]}));
+ return CONCERN_OPTIONS.filter(option=>INTAKE_CONCERN_AREAS[option.concern].every(area=>areas.includes(area))).map(option=>({...option,...(option.concern==='rechnung'?{text:BELEG_AUTO_COPY.invoiceAction(row.invoiceNumber)}:{}),reason:match[option.context]||option.concern==='abholung'&&row.channel==='mail'&&row.customerId!==null?null:reasons[option.context]}));
 }
