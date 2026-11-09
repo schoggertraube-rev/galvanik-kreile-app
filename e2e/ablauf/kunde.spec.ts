@@ -3,6 +3,32 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('agreement retries cannot move customer or reason and an old replay never reactivates replaced financial terms',async()=>{
+ const {createCustomerAction,saveCustomerAgreementAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const customers:string[]=[];
+ for(const suffix of ['A','B']){
+  const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST Absprache Schlüssel '+suffix+' '+randomUUID(),phone:'+49 711 5550190'}));
+  if(created.code!=='OK')throw Error('ABS_KEY_CUSTOMER:'+created.code);customers.push(created.receipt.customerId);
+ }
+ const input={clientKey:randomUUID(),customerId:customers[0],type:'ausgabe_ohne_zahlung' as const,reason:'TEST ursprünglicher Grund'};
+ const first=await withSession(full,()=>saveCustomerAgreementAction(input));if(first.code!=='OK')throw Error('ABS_KEY_INITIAL:'+first.code);
+ for(const changed of [{...input,customerId:customers[1]},{...input,reason:'TEST anderer Grund'}])expect(await withSession(full,()=>saveCustomerAgreementAction(changed))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customers[1]}`).toEqual([{n:0}]);
+ const update={clientKey:randomUUID(),customerId:customers[0],type:'zahlungsziel' as const,targetDays:14,reason:'TEST neue Absprache',version:first.agreement.version};
+ const current=await withSession(full,()=>saveCustomerAgreementAction(update));if(current.code!=='OK')throw Error('ABS_KEY_UPDATE:'+current.code);
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:customers[0]}))).toMatchObject({code:'OK',data:{agreements:expect.arrayContaining([expect.objectContaining({id:current.agreement.id})])}});
+ const oldReplay=await withSession(full,()=>saveCustomerAgreementAction(JSON.parse(JSON.stringify(input))));
+ expect(oldReplay).toMatchObject({code:'OK',replayed:true,agreement:{id:first.agreement.id,revokedBy:full.actorId,version:2}});
+ if(oldReplay.code!=='OK')throw Error('ABS_KEY_OLD_REPLAY:'+oldReplay.code);
+ expect(oldReplay.agreement.revokedAt).not.toBeNull();
+ expect(await sql`SELECT id::text FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customers[0]} AND widerrufen_am IS NULL`).toEqual([{id:current.agreement.id}]);
+ const operational=await createFixture(['kunden'],'werkstatt');
+ const hidden=await withSession(operational,()=>getCustomerSummaryAction({customerId:customers[0]}));
+ expect(hidden.code).toBe('OK');if(hidden.code!=='OK')throw Error('ABS_KEY_HIDDEN:'+hidden.code);
+ expect(hidden.data.agreements.some(agreement=>agreement.money)).toBe(false);
+ for(const key of [input.clientKey,update.clientKey])expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toEqual([{user_id:full.actorId}]);
+});
+
 it('concurrent agreement replacements on one version keep one winner and preserve the superseded agreement as history',async()=>{
  const {createCustomerAction,saveCustomerAgreementAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
  const customer=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST Absprache parallel '+randomUUID(),phone:'+49 711 5550190'}));
