@@ -3,6 +3,8 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import {ORDER_LIFECYCLE_STATUS} from '@/modules/orders/public';
+import {ORDER_TERMINAL_COPY} from '@/ui/situationCatalog';
 
 const EVENT_TYPE = "ORDER_PROMISED_DUE_DATE_CHANGED_V1" as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -183,8 +185,8 @@ export async function changeOrderPromisedDueDate(
           : { code: "CONFLICT" as const, message: "Anfragekennung wurde bereits anders verwendet." };
       }
 
-      const orders = await tx.execute<{ id: string; version: number }>(sql`
-        SELECT id, version
+      const orders = await tx.execute<{ id: string; version: number; station: string }>(sql`
+        SELECT id, version, station
         FROM public.orders
         WHERE tenant_id = ${authorization.data.tenantId}
           AND id = ${input.orderId}
@@ -193,6 +195,11 @@ export async function changeOrderPromisedDueDate(
       const order = orders[0];
       if (orders.length !== 1 || !order) {
         return { code: "NOT_FOUND" as const, message: "Auftrag nicht verfügbar." };
+      }
+      // The same row lock serializes this change with physical release.
+      // An earlier exact receipt may still replay; a new change cannot revive it.
+      if (order.station === ORDER_LIFECYCLE_STATUS.ABGEHOLT) {
+        return {code:'CONFLICT' as const,message:ORDER_TERMINAL_COPY.dateLocked};
       }
       if (order.version !== input.expectedVersion) {
         return { code: "CONFLICT" as const, message: "Auftrag wurde bereits geändert." };
