@@ -265,3 +265,27 @@ it('RM01 real source reply Action persists mail, event and waiting view exactly 
   expect(sends).toBe(1);
  }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
 });
+
+
+it.each([false,true])('RM07 reminder preserves confirmed delivery after goods arrive (reconcile=%s)',async reconcile=>{
+ const fixture=await createFixture(),sender=await createFixture(['kunden']);const source=await createOrder(fixture,'TEST-RM07-REMINDER','rechnung');const complaint=await createReworkComplaint(fixture,source);
+ const {nacharbeitAnlegenAction,sendeNacharbeitBegleitscheinAction,getByOrder}=await import('@/app/actions/complaints.actions');
+ const work=await withSession(fixture,()=>nacharbeitAnlegenAction({reklamationId:complaint.complaintId,version:1,bewertung:'berechtigt',massnahme:'nacharbeit',liefertermin:'2027-05-18'}));if(work.code!=='OK')throw Error(work.message);
+ const input={complaintId:complaint.complaintId,version:2,orderId:work.receipt.orderId,clientKey:randomUUID(),subject:'TEST Begleitschein',body:'TEST Bitte Ware senden'};
+ const keys=['MS_GRAPH_TENANT_ID','MS_GRAPH_CLIENT_ID','MS_GRAPH_CLIENT_SECRET','MS_GRAPH_MAILBOX'] as const,before=Object.fromEntries(keys.map(key=>[key,process.env[key]]));let sends=0;
+ // A synthetic concurrent arrival changes the source fact, without changing the complaint version.
+ const arrived=()=>sql`UPDATE public.orders SET ware='da',ware_seit=statement_timestamp() WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${work.receipt.orderId}`;
+ try{
+  process.env.MS_GRAPH_TENANT_ID='TEST-tenant';process.env.MS_GRAPH_CLIENT_ID='TEST-client';process.env.MS_GRAPH_CLIENT_SECRET='TEST-provider-fixture';process.env.MS_GRAPH_MAILBOX='TEST-mailbox@example.invalid';
+  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+  vi.spyOn(globalThis,'fetch').mockImplementation(async url=>{const target=new URL(typeof url==='string'?url:url instanceof URL?url.href:url.url);if(target.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-provider-token-not-a-real-secret',expires_in:3600});if(target.pathname.endsWith('/sendMail')){sends++;if(!reconcile)await arrived();return new Response(null,{status:reconcile?503:202});}if(target.pathname.endsWith('/mailFolders/sentitems/messages'))return Response.json({value:[{id:'TEST-confirmed-reminder',internetMessageId:'<TEST-reminder@example.invalid>',internetMessageHeaders:[{name:'x-kreile-send-id',value:input.clientKey}],from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString()}]});throw Error('TEST unexpected graph route');});
+  const initial=await withSession(sender,()=>sendeNacharbeitBegleitscheinAction(input));if(reconcile){expect(initial).toMatchObject({code:'UNAVAILABLE',delivery:'checking'});await arrived();await sql`UPDATE public.communication_threads SET created_at=now()-interval '6 minutes' WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientKey}`;}
+  const [prepared]=await sql<{request:{key:string;version:number;subject:string;body:string}}[]>`SELECT jsonb_build_object('key',event.payload->>'sendKey','version',(event.payload->'complaint'->>'version')::int,'subject',event.payload->'message'->>'subject','body',event.payload->'message'->>'body') AS request FROM public.events event JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->>'threadId' WHERE event.tenant_id=${KREILE_TENANT_SLUG} AND event.event_type='COMMUNICATION_SEND_PREPARED_V1' AND event.correlation_id=${input.clientKey}::uuid`;
+  const retry={...input,clientKey:prepared.request.key,version:prepared.request.version,subject:prepared.request.subject,body:prepared.request.body};
+  const result=reconcile?await withSession(sender,()=>sendeNacharbeitBegleitscheinAction(retry)):initial;expect(result).toMatchObject({code:'OK',data:{sourceChanged:true}});expect(sends).toBe(1);
+  const view=await withSession(sender,()=>getByOrder(source.orderId));expect(view).toMatchObject({code:'OK',complaints:expect.arrayContaining([expect.objectContaining({id:complaint.complaintId,version:2,stand:'massnahme_nacharbeit'})])});if(view.code==='OK')expect(view.complaints.find(row=>row.id===complaint.complaintId)).not.toHaveProperty('goodsReminderSentAt');
+  expect(await sql`SELECT ware FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${work.receipt.orderId}`).toEqual([{ware:'da'}]);
+  expect(await sql`SELECT message.body FROM public.communication_messages message JOIN public.communication_threads thread ON thread.tenant_id=message.tenant_id AND thread.id=message.thread_id WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.source=${'MS_GRAPH_OUT:'+input.clientKey} AND thread.status='sent'`).toEqual([{body:input.body}]);
+  expect(await withSession(sender,()=>sendeNacharbeitBegleitscheinAction(retry))).toMatchObject({code:'OK',data:{sourceChanged:true,replayed:true}});expect(sends).toBe(1);
+ }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
+});

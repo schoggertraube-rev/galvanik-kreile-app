@@ -40,12 +40,13 @@ export function IntakeMessages({ports,initialGroup,onClose,resumeDraftId}:{ports
   for(const row of messages){
    const state=row.photoDelivery;if(!state||row.photoRequest||state.state==='source-changed')continue;
    if(state.state==='failed'){setPhotoFailed(current=>({...current,[row.id]:true}));keys.current.delete('complaint-photos:'+row.id+':'+row.version);setPhotoChecks(current=>{const next={...current};delete next[row.id];return next;});continue;}
-   if(!state.clientRequestId||state.version!==row.version)continue;
-   keys.current.set('complaint-photos:'+row.id+':'+row.version,state.clientRequestId);
-   setPhotoChecks(current=>({...current,[row.id]:{row,at:state.retryAt}}));
+   if(!state.clientRequestId)continue;
+   const original={...row,version:state.version,customerId:state.deliveryCustomerId??row.customerId};
+   keys.current.set('complaint-photos:'+row.id+':'+state.version,state.clientRequestId);
+   setPhotoChecks(current=>({...current,[row.id]:{row:original,at:state.retryAt}}));
   }
  },[]);
- const load=useCallback(async(signal?:AbortSignal)=>{const request=++requestId.current;setLoading(true);setError(null);try{const read=await ports.list(effectiveFilter);if(request!==requestId.current||signal?.aborted)return;if(read.code!=='OK'){setError(read.message);return;}restorePhotoDelivery(read.messages);setResult(read);}catch(failure){console.error('[INTAKE_MESSAGES_UI_READ_FAILED]',failure);if(request===requestId.current&&!signal?.aborted)setError('Nachrichten konnten nicht geladen werden · Code: INTAKE_MESSAGES_UI_READ_FAILED.');}finally{if(request===requestId.current&&!signal?.aborted)setLoading(false);}},[ports,effectiveFilter,restorePhotoDelivery]);
+ const load=useCallback(async(signal?:AbortSignal)=>{const request=++requestId.current;setLoading(true);setError(null);try{const read=await ports.list(effectiveFilter);if(request!==requestId.current||signal?.aborted)return;if(read.code!=='OK'){setError(read.message);return;}restorePhotoDelivery(read.messages);setResult(read);return read;}catch(failure){console.error('[INTAKE_MESSAGES_UI_READ_FAILED]',failure);if(request===requestId.current&&!signal?.aborted)setError('Nachrichten konnten nicht geladen werden · Code: INTAKE_MESSAGES_UI_READ_FAILED.');}finally{if(request===requestId.current&&!signal?.aborted)setLoading(false);}},[ports,effectiveFilter,restorePhotoDelivery]);
  useEffect(()=>{const controller=new AbortController(),timer=setTimeout(()=>void load(controller.signal),0);return()=>{clearTimeout(timer);controller.abort();};},[load]);
  useEffect(()=>{const changed=()=>void load();window.addEventListener(INTAKE_CHANGED_EVENT,changed);return()=>window.removeEventListener(INTAKE_CHANGED_EVENT,changed);},[load]);
  useEffect(()=>{return()=>{if(longPress.current)clearTimeout(longPress.current);};},[]);
@@ -91,7 +92,7 @@ export function IntakeMessages({ports,initialGroup,onClose,resumeDraftId}:{ports
     fail(REKLA_MAIL_COPY.unavailable,()=>void requestPhotos(row));return;
    }
    setPhotoChecks(current=>{const next={...current};delete next[row.id];return next;});
-   if('data'in sent&&sent.data&&typeof sent.data==='object'&&'sourceChanged'in sent.data&&sent.data.sourceChanged===true){setWriteError(MAIL_DELIVERY_COPY.sourceChanged(row.customerName??row.senderName??row.senderAddress??''));setRetry(null);return;}
+   if('data'in sent&&sent.data&&typeof sent.data==='object'&&'sourceChanged'in sent.data&&sent.data.sourceChanged===true){setRetry(null);const updated=await load();if(!updated?.messages.some(message=>message.id===row.id&&message.photoDelivery?.state==='source-changed'))setWriteError(MAIL_DELIVERY_COPY.sourceChanged('deliveryCustomer'in sent.data&&typeof sent.data.deliveryCustomer==='string'?sent.data.deliveryCustomer:row.customerName??row.senderName??row.senderAddress??''));return;}
    setToast(REKLA_MAIL_COPY.sent);await load();
   }catch(failure){console.error('[COMPLAINT_PHOTO_REQUEST_UI_FAILED]',failure);fail(REKLA_MAIL_COPY.unavailable,()=>void requestPhotos(row));}
   finally{inFlight.current=false;setBusy(false);}

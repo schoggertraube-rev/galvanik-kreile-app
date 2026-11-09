@@ -23,7 +23,7 @@ export type ComplaintPorts = {
   openPhoto:(photoId:string,sourceItemId:string|null,orderId:string)=>Promise<void>;
   addPhoto:(orderId:string,file:File)=>Promise<{code:'OK';id:string}|{code:string;message:string}>;
   sendResult:(input:{complaintId:string;version:number;clientKey:string;subject:string;body:string})=>Promise<ComplaintWriteResult>;
-  sendReminder?:(input:{complaintId:string;version:number;orderId:string;clientKey:string;subject:string;body:string})=>Promise<{code:'OK'}|{code:string;message:string}>;
+  sendReminder?:(input:{complaintId:string;version:number;orderId:string;clientKey:string;subject:string;body:string})=>Promise<{code:'OK';data?:{sourceChanged?:boolean;deliveryCustomer?:string}}|{code:string;message:string;delivery?:'checking'|'failed'|'source-changed';retryAt?:string;deliveryCustomer?:string}>;
   ResultMail?:ComponentType<{orderId:string;subject:string;body:string;onSubject:(value:string)=>void;onBody:(value:string)=>void;onSend:()=>void;busy:boolean}>;
 };
 export const COMPLAINT_CHANGED_EVENT='kreile:complaint-changed';

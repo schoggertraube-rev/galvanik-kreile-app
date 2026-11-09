@@ -10,7 +10,7 @@ export type ComplaintCommand =
   | (Identity & { action: 'wieder_oeffnen'; reason: string });
 export type ComplaintWriteResult =
   | { code: 'OK'; receipt: { complaintId: string; number: string; state: ComplaintState; version: number; eventId: string }; replayed: boolean }
-  | { code: 'UNAUTHENTICATED' | 'FORBIDDEN' | 'VALIDATION_ERROR' | 'NOT_FOUND' | 'CONFLICT' | 'UNAVAILABLE'; message: string };
+  | { code: 'UNAUTHENTICATED' | 'FORBIDDEN' | 'VALIDATION_ERROR' | 'NOT_FOUND' | 'CONFLICT' | 'UNAVAILABLE'; message: string;delivery?:'checking'|'failed'|'source-changed';retryAt?:string;deliveryCustomer?:string;sentThreadId?:string };
 
 export const complaintUuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const text = (value: unknown, min: number, max: number): value is string => typeof value === 'string' && value.trim() === value && value.length >= min && value.length <= max;

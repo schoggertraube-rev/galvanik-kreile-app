@@ -76,3 +76,13 @@ it.each([true,false])('RM07 reopened photo view recovers its actual server key b
  expect(requestPhotos).toHaveBeenCalledTimes(found?1:2);expect(requestPhotos.mock.calls[0][0]).toMatchObject({clientRequestId:oldKey,complaintPhotoRequest:{itemId:message.id,version:1}});
  if(!found)expect(requestPhotos.mock.calls[1][0].clientRequestId).not.toBe(oldKey);
 });
+
+it('RM07 reopening after reassignment reconciles the original version and recipient, then reads the confirmed conflict',async()=>{
+ const oldKey=crypto.randomUUID(),message=row('TEST-photo-changed',{version:2,customerId:'TEST-new-customer',customerName:'TEST neue Zuordnung',concerns:['reklamation'],openConcerns:['reklamation'],photoCount:0,photoDelivery:{state:'checking',clientRequestId:oldKey,version:1,deliveryCustomerId:'TEST-original-customer',deliveryCustomer:'TEST ursprünglicher Kunde',retryAt:new Date(Date.now()+150).toISOString()}});
+ const requestPhotos=vi.fn().mockResolvedValue({code:'OK',data:{sourceChanged:true,deliveryCustomer:'TEST ursprünglicher Kunde'}});
+ const list=vi.fn<IntakeMessagesPorts['list']>().mockResolvedValueOnce({code:'OK',messages:[message],areas:['mails','eingang','kunden'],currentLogin:'TEST-actor'}).mockResolvedValue({code:'OK',messages:[{...message,photoDelivery:{...message.photoDelivery!,state:'source-changed'}}],areas:['mails','eingang','kunden'],currentLogin:'TEST-actor'});
+ render(<IntakeMessages ports={{list,requestPhotos,select:vi.fn(),finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}}}/>);
+ await screen.findByText('Die Mail an TEST ursprünglicher Kunde ist rausgegangen. Der Vorgang wurde inzwischen geändert – lies ihn neu, die Mail steht im Verlauf.');
+ expect(requestPhotos).toHaveBeenCalledOnce();expect(requestPhotos).toHaveBeenCalledWith(expect.objectContaining({targetId:'TEST-original-customer',clientRequestId:oldKey,complaintPhotoRequest:{itemId:message.id,version:1}}));
+ expect(list).toHaveBeenCalledTimes(2);expect(screen.queryByText('Wird gerade geprüft')).toBeNull();expect(screen.queryByRole('button',{name:'Fotos anfordern'})).toBeNull();expect(screen.getByRole('button',{name:'Neu laden'})).toBeEnabled();
+});

@@ -30,8 +30,11 @@ export async function sendeReklamationErgebnisAction(input:{complaintId:string;v
  const rows=await readComplaints({complaintId:input?.complaintId});if(rows.code!=='OK')return rows;
  const complaint=rows.complaints[0];if(!complaint)return {code:'NOT_FOUND',message:'Reklamation nicht verfügbar.'};
  const result=await sendCommunicationMail(authorization.data,{targetType:'ORDER',targetId:complaint.orderId,clientRequestId:input.clientKey,subject:input.subject,body:input.body,complaintResult:{complaintId:complaint.id,version:input.version}});
- if(result.code!=='OK')return {code:result.code==='IN_KLAERUNG'?'UNAVAILABLE':result.code,message:result.message};
- return executeComplaint({action:'abschliessen',clientKey:input.clientKey,complaintId:complaint.id,version:input.version,kind:'mail',note:null,sentThreadId:result.data.threadId},recordIntakeComplaintEffect);
+ if(result.code!=='OK')return {...result,code:result.code==='IN_KLAERUNG'?'UNAVAILABLE':result.code};
+ const changed=()=>({code:'CONFLICT' as const,message:'COMMUNICATION_SOURCE_CHANGED',delivery:'source-changed' as const,deliveryCustomer:complaint.customerName??undefined,sentThreadId:result.data.threadId});
+ if(result.data.sourceChanged)return changed();
+ const completed=await executeComplaint({action:'abschliessen',clientKey:input.clientKey,complaintId:complaint.id,version:input.version,kind:'mail',note:null,sentThreadId:result.data.threadId},recordIntakeComplaintEffect);
+ return completed.code==='CONFLICT'?changed():completed;
 }
 
 export async function getComplaintDialogAction(request:ComplaintRequest):Promise<{code:'OK';data:ComplaintDialogData}|{code:string;message:string}> {
