@@ -54,3 +54,7 @@ Nachrichten zeigen „Rechnung {nr} ablegen“, mit sicherem tatsächlichem Numm
 Zwei neue gezielte Capture-Renderfälle PASS3,38s (Recht Geld/ohne Recht, genau eine bestehende Route, Original bleibt). Echter BA05-Lesetest PASS4,38s (Original→persistierte sichere Nummer→Nachrichtenansicht, keine Schreibnebenwirkung); eigener Modul-Unitfall PASS für dynamische Nummer/fehlende Nummer und denselben Zielvertrag. Bestehende Assertions nicht verändert oder entfernt; nur Fälle ergänzt. Typen/gezielter Lint grün. Kein unbeaufsichtigter Mail-Cron behauptet: die vorhandene Erkennungs-/Erfassungskette ist angebunden.
 
 Offen vor Vollabgabe: optionale Bemerkung/Mitarbeiter/Fahrzeug (gebündelter Vorschlag im BAULOG01:07), endgültige Preview/Sicht/Pflicht-CI/PL-Prüfung. Maximal zwei PRs bleiben eingehalten, kein Merge.
+
+## BA-13: tatsächliche JSONB-Wiederaufnahme
+
+Die bestehenden positiven Wiederholungsprüfungen wurden verschärft: Anlegen, Rückgängig und Neuablage senden nicht mehr dasselbe JS-Objekt erneut, sondern lesen den tatsächlich gespeicherten Command aus `intake_event.nachher.intent` als JSONB und rufen damit erneut die echten Server-Actions auf. Die umsortierte Schlüsselreihenfolge wird explizit nachgewiesen. Beide realen Fälle PASS5,48s, die Ein-Zeilen-/Ereignis-/Ansichtsprüfungen bleiben erhalten. Vorhandene Produktlogik vergleicht strukturierte JSON-Inhalte, keine unsortierten JSON-Zeichenketten; keine Produkt-/Regeländerung nötig. Kein weiterer PR bei zwei offenen Korrektur-PRs.
