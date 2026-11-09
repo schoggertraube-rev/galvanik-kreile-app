@@ -1,8 +1,57 @@
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
+
+it('the real PDF route downloads the stored original and cancellation unchanged and enforces Geld',async()=>{
+ const order=await readyInvoiceOrder('Rechnungs-PDF');
+ const {GET}=await import('@/app/api/invoices/[invoiceId]/pdf/route');
+ const request=(kind:string)=>new Request('http://127.0.0.1/api/invoices/'+order.invoice.invoiceId+'/pdf?kind='+kind);
+ const context=()=>({params:Promise.resolve({invoiceId:order.invoice.invoiceId})});
+ const original=await withSession(full,()=>GET(request('original'),context()));
+ expect(original.status).toBe(200);
+ expect(original.headers.get('content-type')).toBe('application/pdf');
+ expect(original.headers.get('cache-control')).toBe('private, no-store');
+ const originalBytes=Buffer.from(await original.arrayBuffer());
+ expect(originalBytes.subarray(0,5).toString()).toBe('%PDF-');
+ expect(createHash('sha256').update(originalBytes).digest('hex')).toBe(order.invoice.pdfSha256);
+ expect((await withSession(full,()=>GET(request('cancellation'),context()))).status).toBe(404);
+ const denied=await createFixture(['auftraege']);
+ expect((await withSession(denied,()=>GET(request('original'),context()))).status).toBe(403);
+ const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const cancellation=await withSession(full,()=>cancelInvoiceAction({invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST PDF-Storno',clientEventId:randomUUID()}));
+ expect(cancellation).toMatchObject({code:'OK'});if(cancellation.code!=='OK')throw Error('PDF_CANCEL:'+cancellation.code);
+ const cancelled=await withSession(full,()=>GET(request('cancellation'),context()));
+ expect(cancelled.status).toBe(200);
+ expect(cancelled.headers.get('content-disposition')).toContain('-STORNO.pdf');
+ const cancelledBytes=Buffer.from(await cancelled.arrayBuffer());
+ expect(cancelledBytes.subarray(0,5).toString()).toBe('%PDF-');
+ expect(createHash('sha256').update(cancelledBytes).digest('hex')).toBe(cancellation.receipt.cancellationPdfSha256);
+ const originalAgain=await withSession(full,()=>GET(request('original'),context()));
+ expect(originalAgain.status).toBe(200);
+ expect(Buffer.from(await originalAgain.arrayBuffer())).toEqual(originalBytes);
+ expect((await withSession(denied,()=>GET(request('cancellation'),context()))).status).toBe(403);
+});
+
+it('invoice cancellation rejects missing rights, a missing reason and an existing payment without changing the invoice or audit',async()=>{
+ const order=await readyInvoiceOrder('Storno-Sperren');
+ const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const denied=await createFixture(['auftraege']);
+ const base={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST Storno',clientEventId:randomUUID()};
+ expect(await withSession(denied,()=>cancelInvoiceAction(base))).toMatchObject({code:'FORBIDDEN'});
+ const emptyKey=randomUUID();
+ expect(await withSession(full,()=>cancelInvoiceAction({...base,clientEventId:emptyKey,reason:''}))).toMatchObject({code:'VALIDATION_ERROR'});
+ const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const paid=await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,clientEventId:randomUUID()}));
+ expect(paid).toMatchObject({code:'OK'});
+ const before=await sql`SELECT status,aggregate_version,pdf_sha256,pdf_content,payment_status,payment_version,payment_paid_amount_cents,cancel_event_id FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`;
+ const paidKey=randomUUID();
+ expect(await withSession(full,()=>cancelInvoiceAction({...base,clientEventId:paidKey}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT status,aggregate_version,pdf_sha256,pdf_content,payment_status,payment_version,payment_paid_amount_cents,cancel_event_id FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual(before);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',paidAmountCents:order.invoice.grossAmountCents,openAmountCents:0}}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array([base.clientEventId,emptyKey,paidKey])}::uuid[])`).toEqual([{n:0}]);
+});
 
 it('invoice cancellation keeps the original, replays once and permits one replacement while rejecting payment on the cancelled invoice',async()=>{
  const order=await readyInvoiceOrder('Storno-Neuausstellung');
