@@ -1,5 +1,5 @@
 'use client';
-import {ACTOR_COPY,BELEG_AUTO_COPY as C} from '@/ui/situationCatalog';
+import {ACTOR_COPY,BELEG_AUTO_COPY as C,belegFailureCopy} from '@/ui/situationCatalog';
 import {useEffect,useRef,useState} from 'react';
 import {Button,Checkbox,Dialog,Eingabe,Feld,Hinweis,Kachel,Rueckfrage,Segment,Textfeld,Zustandskette} from '@/ui/kr';
 import {invoiceDate,invoiceFieldErrors,invoiceWarnings,type InvoiceFields,type InvoicePorts,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
@@ -29,13 +29,13 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
   if(supplierQuery.trim().length<2||selected&&supplierQuery===selected.name)return;
   let active=true;const timer=setTimeout(async()=>{
    setSearching(true);
-   try{const result=await ports.searchSuppliers(supplierQuery);if(!active)return;if(result.code==='OK')setSuppliers(result.suppliers);else setMessage(result.message);}
+   try{const result=await ports.searchSuppliers(supplierQuery);if(!active)return;if(result.code==='OK')setSuppliers(result.suppliers);else setMessage(belegFailureCopy(result.code));}
    catch(error){console.error('[INVOICE_SUPPLIER_SEARCH_CLIENT_FAILED]',error);if(active)setMessage('Lieferantensuche fehlgeschlagen · Fehlercode: INVOICE_SUPPLIER_SEARCH_CLIENT_FAILED.');}
    finally{if(active)setSearching(false);}
   },250);return()=>{active=false;clearTimeout(timer);};
  },[supplierQuery,selected,ports]);
  useEffect(()=>{
-  const refresh=async(event:Event)=>{try{const detail=(event as CustomEvent<{itemId?:string;customerId?:string;customerName?:string}>).detail;const result=await ports.read({id:initial.item.id});if(result.code!=='OK'){setMessage(result.message);return;}
+  const refresh=async(event:Event)=>{try{const detail=(event as CustomEvent<{itemId?:string;customerId?:string;customerName?:string}>).detail;const result=await ports.read({id:initial.item.id});if(result.code!=='OK'){setMessage(belegFailureCopy(result.code));return;}
    setView(result.view);setUncertain(result.view.uncertain);setSelected(result.view.supplier);setSupplierQuery(result.view.supplier?.name??'');setFields(current=>({...current,lieferantId:result.view.supplier?.id??current.lieferantId}));
    if(detail?.itemId===initial.item.id&&detail.customerId&&detail.customerName&&result.view.invoice&&!result.view.invoice.lieferant_id){const found=await ports.searchSuppliers(detail.customerName);if(found.code==='OK'){const supplier=found.suppliers.find(value=>value.id===detail.customerId);if(supplier){setSelected(supplier);setSupplierQuery(supplier.name);setFields(current=>({...current,lieferantId:supplier.id}));setCorrect(true);setOutcome('offen');}}}
   }catch(error){console.error('[INVOICE_RETURN_READ_FAILED]',error);setMessage('Lieferant konnte nicht neu gelesen werden · Fehlercode: INVOICE_RETURN_READ_FAILED.');}};
@@ -81,7 +81,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
     :await ports.save({...((status==='doppelt')?{attachOriginal:true as const}:{}),itemId:view.item.id,fileId:view.fileId,version:view.item.version,clientKey:key.current,fields,status:status as Exclude<typeof status,'ungueltig'>,
      paidDate:status==='bezahlt'?paidDate:null,proofFileId:status==='bezahlt'?proofFileId:null,duplicateId:status==='doppelt'?duplicate?.id??null:null,duplicateReason:duplicateReason.trim()||null,unclearReason:status==='unklar'?reason.trim():null});
    if(result.code==='DUPLICATE'){setDuplicate(result.duplicate);return;}
-   if(result.code!=='OK'){setErrors(result.fields??{});setMessage('Nicht gespeichert · alle Eingaben sind noch da · '+result.message);setRetry(true);return;}
+   if(result.code!=='OK'){setErrors(result.fields??{});setMessage(belegFailureCopy(result.code));setRetry(true);return;}
    const text=mode==='rueckgaengig'?C.undone:mode==='neu_ablegen'?C.rebooked:result.invoice.unklar_grund==='Lieferant fehlt'?'Lieferant fehlt · Aufgabe angelegt':mode==='klaeren'?'Rechnung geklärt · '+status:mode==='bezahlt_markieren'?'Als bezahlt markiert':status==='doppelt'?'Als doppelt abgelegt · Eingang erledigt':status==='unklar'?'Eingangsrechnung unklar · Aufgabe für Recht Geld':status==='bezahlt'?'Eingangsrechnung erfasst · bezahlt':'Eingangsrechnung erfasst · fällig '+dateLabel(result.invoice.faellig_am??'');
    onMessage(text,result.invoice.aufgabe_id??undefined);onClose();window.dispatchEvent(new Event(INTAKE_CHANGED_EVENT));
   }catch(error){console.error('[INCOMING_INVOICE_SAVE_CLIENT_FAILED]',error);setMessage('Nicht gespeichert · alle Eingaben sind noch da · Fehlercode: INCOMING_INVOICE_SAVE_CLIENT_FAILED.');setRetry(true);}
@@ -118,14 +118,14 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
   {view.duplicate&&!duplicate?<div data-spec-id="rechnungein.dublette-hinweis"><Hinweis ton="warn">Rechnung {fields.nummer} von {selected?.name??'Lieferant fehlt'} gibt es schon ({view.duplicate.internalNumber})</Hinweis></div>:null}
   {duplicate?<div data-spec-id="rechnungein.zustand.dublette"><Hinweis ton="warn">Rechnung {duplicate.number} von {selected?.name??'Lieferant fehlt'} gibt es schon ({duplicate.internalNumber})</Hinweis>
    {!duplicate.exact?<Feld label="Grund für die zweite Erfassung" fehler={errors.duplicateReason}><Eingabe data-spec-id="rechnungein.dublette_grund" maxLength={200} value={duplicateReason} onChange={event=>setDuplicateReason(event.target.value)}/></Feld>:null}</div>:null}
-  {retry?<div data-spec-id="rechnungein.zustand.fehler"><p>Nicht gespeichert · alle Eingaben sind noch da</p><Button data-spec-id="rechnungein.erneut" text="Erneut" onClick={()=>{setRetry(false);setMessage(null);}} disabled={busy}/></div>:null}
+  {retry?<div data-spec-id="rechnungein.zustand.fehler"><p>Nicht gespeichert · alle Eingaben sind noch da</p><Button data-spec-id="rechnungein.erneut" text="Neu laden · Eingaben behalten" onClick={()=>{if(working.current)return;working.current=true;setBusy(true);void ports.read({id:view.item.id}).then(result=>{if(result.code!=='OK'){setMessage(belegFailureCopy(result.code));return;}setView(result.view);setRetry(false);setMessage(null);}).catch(error=>{console.error('[INVOICE_RETRY_READ_FAILED]',{name:error instanceof Error?error.name:'unknown'});setMessage(belegFailureCopy('UNAVAILABLE'));}).finally(()=>{working.current=false;setBusy(false);});}} disabled={busy}/></div>:null}
   <div className="r38-raster"><Kachel titel="Original" icon="file">{view.originals.map(file=><button key={file.id} className="kr-zeile" type="button" data-spec-id="rechnungein.original" onClick={()=>ports.openOriginal(file.itemId??view.item.id,file.id)}><span><b>{file.name||'Beleg'}</b><small>gesichert · unverändert</small></span></button>)}{!view.originals.length?<Hinweis ton="warn">Original fehlt</Hinweis>:null}</Kachel>
    <section aria-label="Rechnung"><h3 className="kr-block-label">1 · Rechnung</h3><div className="kr-form">
     <Feld label="Lieferant" voll fehler={errors.lieferantId}><Eingabe data-invoice-field="lieferantId" data-spec-id="rechnungein.lieferant" required value={supplierQuery} disabled={busy} readOnly={readOnly||!!view.invoice&&!missingSupplier&&mode!=='neu_ablegen'} onChange={event=>{setSupplierQuery(event.target.value);setSelected(null);update('lieferantId','');}}/>
      {searching?<span role="status">Lieferant wird gesucht …</span>:null}
     </Feld>
     {!readOnly&&!selected&&(!view.invoice||missingSupplier||mode==='neu_ablegen')?<div className="kr-voll">{suppliers.map(value=><Button key={value.id} text={value.name+' · übernehmen'} onClick={()=>chooseSupplier(value)}/>)}<Button data-spec-id="rechnungein.lieferant-anlegen" text="Lieferant anlegen" onClick={()=>{
-     void ports.createSupplier(view.item.id).then(result=>{if(result.code!=='OK')setMessage(result.message);}).catch(error=>{console.error('[INVOICE_CREATE_SUPPLIER_OPEN_FAILED]',error);setMessage('Lieferant kann nicht geöffnet werden · Fehlercode: INVOICE_CREATE_SUPPLIER_OPEN_FAILED.');});
+     void ports.createSupplier(view.item.id).then(result=>{if(result.code!=='OK')setMessage(belegFailureCopy(result.code));}).catch(error=>{console.error('[INVOICE_CREATE_SUPPLIER_OPEN_FAILED]',error);setMessage('Lieferant kann nicht geöffnet werden · Fehlercode: INVOICE_CREATE_SUPPLIER_OPEN_FAILED.');});
     }}/></div>:null}
     {fieldRows.map(([field,id,label,type])=><Feld key={field} label={label} className={errors[field]?'kr-feld--fehler':undefined}><Eingabe data-invoice-field={field} data-spec-id={'rechnungein.'+id} type={type} required={field!=='iban'&&!readOnly} readOnly={readOnly||field==='iban'&&!!view.invoice} disabled={busy} value={fields[field]} aria-invalid={!!errors[field]} aria-describedby={errors[field]?'invoice-error-'+id:undefined} inputMode={['netto','ust','brutto'].includes(field)?'decimal':undefined} onChange={event=>update(field,event.target.value)}/>{errors[field]?<span id={'invoice-error-'+id} className="kr-feld-fehler" data-spec-id={'rechnungein.'+id+'.fehler'}>{errors[field]}</span>:null}</Feld>)}
    </div></section></div>

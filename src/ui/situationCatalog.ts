@@ -119,3 +119,16 @@ export const ORDER_HANDOVER_COPY={
 };
 
 export const BELEG_AUTO_COPY={invoiceAction:(nr?:string|null)=>nr?'Rechnung '+nr+' ablegen':'Rechnung ablegen',targetUnavailable:'Rechnungsablage konnte nicht geöffnet werden · Original bleibt erhalten. Code: INVOICE_AUTOMATIC_TARGET_UNAVAILABLE.',exists:'Liegt schon · Original am vorhandenen Beleg.',originalLinked:(nr:string)=>'Original zu '+nr+' zugeordnet',undo:'Rückgängig',undoReason:'Grund für die Rücknahme',undoConfirm:'Ablage zurücknehmen',undone:'Ablage zurückgenommen · Original wieder im Eingang.',automaticUndoReason:'Automatische Erkennung zurückgenommen',rebook:'Ergänzen und neu ablegen',rebooked:'Beleg mit ergänzten Angaben neu abgelegt.',back:'Zurück',retry:'Mit gleicher Kennung erneut versuchen',saved:'Erkannt, abgelegt und verbucht.',saving:'Beleg wird geprüft und abgelegt …',failed:'Nicht abgelegt · Original und Eingaben sind erhalten.'} as const;
+
+/** Public invoice failure codes only; provider/database messages never enter the dialog. */
+export function belegFailureCopy(code:string):string{
+ const copies:Record<string,string>={
+  UNAUTHENTICATED:'Du meldest dich erneut an. Dein Original bleibt erhalten.',
+  FORBIDDEN:'Du brauchst das Recht Geld. Dein Original bleibt erhalten.',
+  NOT_FOUND:'Du lädst den Beleg neu. Dein Original wird nicht gelöscht.',
+  VALIDATION_ERROR:'Du prüfst die offenen Angaben und versuchst es erneut. Deine Eingaben bleiben erhalten.',
+  CONFLICT:'Du lädst den aktuellen Beleg neu und prüfst ihn. Dein Original bleibt erhalten.',
+  DUPLICATE:'Du öffnest den vorhandenen Beleg. Es wurde nichts doppelt gebucht.',
+ };
+ return copies[code]??'Du versuchst es erneut. Dein Original und deine Eingaben bleiben erhalten.';
+}
