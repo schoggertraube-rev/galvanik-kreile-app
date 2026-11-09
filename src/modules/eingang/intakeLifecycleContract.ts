@@ -15,7 +15,7 @@ export function intakeHandoverDirective(text:string){
  return {mode:pickup?'pickup' as const:'shipping' as const,forFuture:/\bab jetzt immer\b|\bkuenftig immer\b|\bkünftig immer\b/u.test(normalized)};
 }
 export function intakeInvoiceReviewRequired(concerns:readonly string[],kind:string|null,id:string|null){return concerns.includes('rechnung')&&!(kind==='rechnung'&&id);}
-export type IntakeSelectionInput={itemId:string;version:number;clientEventId:string;concern:IntakeSelectableConcern};
+export type IntakeSelectionInput={itemId:string;version:number;clientEventId:string;concern:IntakeSelectableConcern;photoParent?:{itemId:string;version:number}};
 export type IntakeUseInput={items:Array<{itemId:string;version:number}>;clientEventId:string;kind:'info'|'erledigt'|'reklamation_ohne_fotos';note:string|null};
 export type IntakeReopenInput={itemId:string;version:number;clientEventId:string;reason:string};
 export type IntakeUseResult={code:'OK';captures:IntakeCapture[]}|{code:'INVOICE_REVIEW_REQUIRED';itemId:string;message:string}|Exclude<IntakeCaptureResult,{code:'OK'}>;

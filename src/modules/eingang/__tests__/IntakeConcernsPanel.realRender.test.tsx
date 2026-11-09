@@ -118,3 +118,12 @@ it('RM14 offers the same task dialog with an intake reference and no implicit as
  const opened=vi.fn((event:Event)=>event.preventDefault());window.addEventListener('kreile:oeffne',opened);
  try{render(<IntakeMessages ports={ports}/>);fireEvent.click(await screen.findByRole('button',{name:'Reklamation übergeben'}));expect((opened.mock.calls[0][0] as CustomEvent).detail.taskRequest).toEqual({reference:{type:'eingang',id:message.id},kind:'aufgabe',handover:'complaint'});expect(screen.queryByRole('button',{name:'Reklamation anlegen'})).toBeNull();expect(ports.finish).not.toHaveBeenCalled();}finally{window.removeEventListener('kreile:oeffne',opened);}
 });
+
+
+it('RM09 presents same-address photos without assignment and confirms only the explicitly clicked original',async()=>{
+ const message=row('TEST-unthreaded-photo',{concerns:['reklamation'],openConcerns:['reklamation'],photoCount:2,photoParentCandidates:[{id:'TEST-parent',version:3,title:'TEST ursprüngliche Mail'}]});
+ const select=vi.fn<IntakeMessagesPorts['select']>().mockResolvedValue({code:'OK',capture:{id:message.id,version:2,text:message.text,customerId:message.customerId,orderId:null,assignment:'hand',usage:'offen',concerns:['reklamation'],files:[]}});
+ const ports:IntakeMessagesPorts={list:vi.fn().mockResolvedValue({code:'OK',messages:[message],areas:['mails','eingang','auftraege'],currentLogin:'TEST-actor'}),select,finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}};
+ render(<IntakeMessages ports={ports}/>);const confirm=await screen.findByRole('button',{name:'Als Fotoantwort zu TEST ursprüngliche Mail zuordnen'});expect(select).not.toHaveBeenCalled();expect(screen.getByRole('button',{name:'Neues Anliegen'})).toBeEnabled();
+ fireEvent.click(confirm);fireEvent.click(confirm);await waitFor(()=>expect(select).toHaveBeenCalledOnce());expect(select).toHaveBeenCalledWith({itemId:message.id,version:1,clientEventId:expect.any(String),concern:'reklamation',photoParent:{itemId:'TEST-parent',version:3}});expect(ports.assignment.assign).not.toHaveBeenCalled();expect(ports.finish).not.toHaveBeenCalled();
+});

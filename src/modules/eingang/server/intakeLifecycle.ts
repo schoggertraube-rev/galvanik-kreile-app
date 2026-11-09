@@ -1,4 +1,5 @@
 import 'server-only';
+import {readComplaintPhotoParentCandidates} from './complaintMail';
 import {sql} from 'drizzle-orm';
 import {isDeepStrictEqual} from 'node:util';
 import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
@@ -40,19 +41,21 @@ async function event(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,r
 }
 /** M6 persists the selected concern before the caller opens its existing target. */
 export async function selectIntakeConcern(input:unknown):Promise<IntakeCaptureResult>{
- if(!record(input)||!keys(input,'clientEventId,concern,itemId,version')||!identity(input)||!uuid(input.clientEventId)||typeof input.concern!=='string'||!Object.hasOwn(INTAKE_CONCERN_AREAS,input.concern))return {code:'VALIDATION_ERROR',message:'Anliegen oder Eingangsstand ist ungültig.'};
+ if(!record(input)||!keys(input,'photoParent'in input?'clientEventId,concern,itemId,photoParent,version':'clientEventId,concern,itemId,version')||!identity(input)||!uuid(input.clientEventId)||typeof input.concern!=='string'||!Object.hasOwn(INTAKE_CONCERN_AREAS,input.concern))return {code:'VALIDATION_ERROR',message:'Anliegen oder Eingangsstand ist ungültig.'};
+ if('photoParent'in input&&(input.concern!=='reklamation'||!record(input.photoParent)||!keys(input.photoParent,'itemId,version')||!identity(input.photoParent)||input.photoParent.itemId===input.itemId))return {code:'VALIDATION_ERROR',message:'Foto-Zuordnung ist ungültig.'};
  const value=input as IntakeSelectionInput;
  try{const auth=await session();await withPrivilegedTenantTransaction(auth,async tx=>{
   const row=await source(tx,auth,value.itemId);
   if(INTAKE_CONCERN_AREAS[value.concern].some(area=>!hasAuthorizationArea(auth,area)))reject('FORBIDDEN','Das gewählte Anliegen ist für diesen Login nicht freigegeben.');
-  const intent={command:'eingang.anliegen',concern:value.concern,version:value.version};
+  const intent={command:'eingang.anliegen',concern:value.concern,version:value.version,...(value.photoParent?{photoParent:value.photoParent}:{})};
   if(await repeated(tx,auth,row,value.clientEventId,'anliegen',intent))return;
   if(row.version!==value.version)reject('CONFLICT','Eingang wurde inzwischen geändert · bitte neu lesen.');
   if(row.einsatz!=='offen')reject('CONFLICT','Eingang ist bereits erledigt · zuerst mit Grund wieder öffnen.');
+  let photoProof:object={};if(value.photoParent){const root=await source(tx,auth,value.photoParent.itemId);if(root.version!==value.photoParent.version)reject('CONFLICT','Das Foto-Anliegen wurde inzwischen geändert.');const candidates=await readComplaintPhotoParentCandidates(tx,auth,[row.id]),candidate=candidates.find(item=>item.rootId===root.id);if(!candidate)reject('CONFLICT','Dieses Foto-Anliegen ist nicht mehr eindeutig verfügbar.');photoProof={action:'reklamation.fotoantwort_zugeordnet',rootId:root.id,rootHash:candidate.rootHash,replyHash:candidate.replyHash};}
   const concerns=[value.concern,...row.anliegen_offen.filter(id=>id!=='lesen'&&id!==value.concern)];
   await tx.execute(sql`UPDATE public.intake_item SET anliegen=${strings(concerns)},anliegen_offen=${strings(concerns)},anliegen_haupt=${value.concern},version=version+1,
    geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid AND version=${value.version}`);
-  await event(tx,auth,row,value.clientEventId,'anliegen',intent,{anliegen:concerns,anliegen_offen:concerns,einsatz:'offen'});
+  await event(tx,auth,row,value.clientEventId,'anliegen',intent,{anliegen:concerns,anliegen_offen:concerns,einsatz:'offen',...photoProof});
  });return await intakeCaptureSnapshot(auth,value.itemId);}catch(error){return failure(error);}
 }
 /** Info/Erledigt never clears an unresolved business decision, including in batches. */

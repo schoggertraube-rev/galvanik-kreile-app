@@ -60,8 +60,10 @@ export async function readComplaintPhotoReplyRelations(tx:PrivilegedTenantTransa
  FROM public.intake_item root JOIN public.intake_item reply ON reply.tenant_id=root.tenant_id AND reply.id<>root.id AND reply.kunde_id=root.kunde_id
  JOIN public.intake_event original ON original.tenant_id=reply.tenant_id AND original.item_id=reply.id AND original.art='angelegt'
  WHERE root.tenant_id=${auth.tenantId} AND root.kanal='mail' AND reply.kanal='mail' AND root.richtung='rein' AND reply.richtung='rein' AND (${includeCompleted} OR root.einsatz='offen' AND root.anliegen_offen @> ARRAY['reklamation']::text[])
- AND root.internet_message_id IS NOT NULL AND original.nachher->'replyChain'->>'source'='original_mime' AND original.nachher->'replyChain'->>'status'='present'
+ AND (root.internet_message_id IS NOT NULL AND original.nachher->'replyChain'->>'source'='original_mime' AND original.nachher->'replyChain'->>'status'='present'
  AND (original.nachher->'replyChain'->'inReplyTo' ? root.internet_message_id OR original.nachher->'replyChain'->'references' ? root.internet_message_id)
+ OR EXISTS(SELECT 1 FROM public.intake_event manual WHERE manual.tenant_id=reply.tenant_id AND manual.item_id=reply.id AND manual.art='anliegen' AND manual.nachher->>'action'='reklamation.fotoantwort_zugeordnet' AND manual.nachher->>'rootId'=root.id::text AND manual.nachher->>'replyHash'=original.nachher->'replyChain'->>'originalSha256'
+ AND EXISTS(SELECT 1 FROM public.intake_file root_mime JOIN public.intake_event proof ON proof.tenant_id=root_mime.tenant_id AND proof.item_id=root_mime.item_id AND proof.art='original_gespeichert' AND proof.nachher->>'fileId'=root_mime.id::text AND proof.nachher->>'sha256'=root_mime.sha256 WHERE root_mime.tenant_id=root.tenant_id AND root_mime.item_id=root.id AND root_mime.art='mime' AND root_mime.sha256=manual.nachher->>'rootHash')))
  AND EXISTS(SELECT 1 FROM public.intake_file mime JOIN public.intake_event secured ON secured.tenant_id=mime.tenant_id AND secured.item_id=mime.item_id AND secured.art='original_gespeichert' AND secured.nachher->>'fileId'=mime.id::text AND secured.nachher->>'sha256'=mime.sha256
    WHERE mime.tenant_id=reply.tenant_id AND mime.item_id=reply.id AND mime.art='mime' AND mime.sha256=original.nachher->'replyChain'->>'originalSha256'
    AND EXISTS(SELECT 1 FROM public.intake_event complete WHERE complete.tenant_id=mime.tenant_id AND complete.item_id=mime.item_id AND complete.nachher->>'action'='mail_import_complete' AND complete.nachher->'fileIds' ? mime.id::text))
@@ -100,4 +102,26 @@ export async function prepareComplaintRejection(tx:PrivilegedTenantTransaction,a
 }
 export async function complaintRejectionReplay(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;clientRequestId:string;intent:string;threadId:string}){
  const rows=await tx.execute(sql`SELECT id FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${input.itemId}::uuid AND befehl_id=${input.clientRequestId}::uuid AND von=${auth.userId} AND nachher->>'action'='reklamation.keine_reklamation' AND nachher->>'intent'=${input.intent} AND nachher->>'threadId'=${input.threadId}`);return rows.length===1;
+}
+
+
+/** Same-address photos are suggestions only; only an explicit journal command establishes their relation. */
+export async function readComplaintPhotoParentCandidates(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]){
+ if(!ids.length||!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'eingang'))return [];
+ const rows=await tx.execute<{replyId:string;rootId:string;rootVersion:number;title:string|null;rootHash:string;replyHash:string}>(sql`
+ SELECT reply.id::text AS "replyId",root.id::text AS "rootId",root.version AS "rootVersion",coalesce(root.betreff,left(root.text,160)) AS title,root_mime.sha256 AS "rootHash",reply_mime.sha256 AS "replyHash"
+ FROM public.intake_item reply JOIN public.intake_item root ON root.tenant_id=reply.tenant_id AND root.id<>reply.id AND root.kunde_id=reply.kunde_id AND lower(root.absender_adresse)=lower(reply.absender_adresse)
+ JOIN public.intake_file root_mime ON root_mime.tenant_id=root.tenant_id AND root_mime.item_id=root.id AND root_mime.art='mime'
+ JOIN public.intake_file reply_mime ON reply_mime.tenant_id=reply.tenant_id AND reply_mime.item_id=reply.id AND reply_mime.art='mime'
+ WHERE reply.tenant_id=${auth.tenantId} AND reply.id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}::uuid`),sql`, `)}]) AND reply.kanal='mail' AND reply.richtung='rein' AND reply.einsatz='offen' AND root.kanal='mail' AND root.richtung='rein' AND root.einsatz='offen' AND root.anliegen_offen @> ARRAY['reklamation']::text[]
+ AND (reply.vorgang_id IS NULL OR reply.vorgang_art='auftrag' AND root.vorgang_art='auftrag' AND reply.vorgang_id=root.vorgang_id)
+ AND NOT EXISTS(SELECT 1 FROM public.intake_event chosen WHERE chosen.tenant_id=reply.tenant_id AND chosen.item_id=reply.id AND chosen.nachher->>'action'='reklamation.fotoantwort_zugeordnet')
+ AND EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=reply.tenant_id AND original.item_id=reply.id AND original.art='angelegt' AND original.nachher->'replyChain'->>'source'='original_mime' AND original.nachher->'replyChain'->>'status'='missing' AND original.nachher->'replyChain'->>'originalSha256'=reply_mime.sha256)
+ AND EXISTS(SELECT 1 FROM public.intake_event complete WHERE complete.tenant_id=reply.tenant_id AND complete.item_id=reply.id AND complete.nachher->>'action'='mail_import_complete' AND complete.nachher->'fileIds' ? reply_mime.id::text)
+ AND EXISTS(SELECT 1 FROM public.intake_file photo JOIN public.intake_event proof ON proof.tenant_id=photo.tenant_id AND proof.item_id=photo.item_id AND proof.art='original_gespeichert' AND proof.nachher->>'fileId'=photo.id::text AND proof.nachher->>'sha256'=photo.sha256 WHERE photo.tenant_id=reply.tenant_id AND photo.item_id=reply.id AND photo.mime LIKE 'image/%' AND EXISTS(SELECT 1 FROM public.intake_event complete WHERE complete.tenant_id=photo.tenant_id AND complete.item_id=photo.item_id AND complete.nachher->>'action'='mail_import_complete' AND complete.nachher->'fileIds' ? photo.id::text))
+ AND EXISTS(SELECT 1 FROM public.intake_event proof WHERE proof.tenant_id=root.tenant_id AND proof.item_id=root.id AND proof.art='original_gespeichert' AND proof.nachher->>'fileId'=root_mime.id::text AND proof.nachher->>'sha256'=root_mime.sha256)
+ AND EXISTS(SELECT 1 FROM public.intake_event proof WHERE proof.tenant_id=reply.tenant_id AND proof.item_id=reply.id AND proof.art='original_gespeichert' AND proof.nachher->>'fileId'=reply_mime.id::text AND proof.nachher->>'sha256'=reply_mime.sha256)
+ ORDER BY reply.id,root.empfangen_am,root.id`);
+ const waiting=await readComplaintPhotoWaiting(tx,auth,rows.map(row=>row.rootId));
+ return rows.filter((row,index)=>waiting.has(row.rootId)&&rows.slice(0,index).filter(other=>other.replyId===row.replyId&&waiting.has(other.rootId)).length<3);
 }
