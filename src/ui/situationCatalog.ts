@@ -138,3 +138,21 @@ export function captureFailureCopy(code:string){
  const text=code==='FORBIDDEN'?'Dir fehlt die Freigabe für diesen Schritt. Deine Eingaben bleiben hier.':code==='CONFLICT'?'Der Eingang wurde inzwischen geändert. Lies ihn erneut; deine Eingaben bleiben hier.':code==='VALIDATION_ERROR'?'Ergänz die fehlenden Angaben und versuch es erneut. Deine Eingaben bleiben hier.':'Du kannst es erneut versuchen. Deine Eingaben und Originale bleiben hier.';
  return text+' Code: '+code;
 }
+
+export const CAPTURE_STATUS_COPY={
+ saved:(canReadMails:boolean)=>canReadMails?'Gespeichert · wartet unter Nachrichten › Zuordnen':'Gespeichert · Büro ordnet zu',
+ modes:{handover:'Fotos für den PC',eingang:'Zettel lesen · für die Erfassung',eingangsfoto:'Eingangsfoto aufnehmen',visitenkarte:'Visitenkarte lesen',datei:'Datei lesen · für die Erfassung'},
+ adopted:(photo:boolean,failed:boolean)=>photo?'Eingangsfoto übernommen':failed?'Als Dokument übernommen · ohne Vorschläge':'Übernommen · erkannt markiert',
+ kinds:{ware:'Ware',anfrage:'Anfrage oder Bestellung',rechnung:'Rechnung (Lieferant)',dokument:'Dokument',kontakt:'Kontakt',notiz:'Notiz',unklar:'unklar'},
+ context:(name:string)=>'für '+name,
+ customerProposal:(name:string)=>name+' · Vorschlag aus dem Namen',
+ dismissConcern:(label:string)=>label+' ×',
+ photoSent:(count:number)=>count+' an den PC gesendet',
+ photoCount:(count:number)=>count+' Fotos am Eingang',
+ savingKind:(kind:string)=>'Art „'+kind+'“ wird gespeichert …',
+ uploadProgress:(done:number,total:number)=>done+' von '+total+' hochgeladen · wird übertragen und geprüft …',
+ recognized:(chosen:boolean,kind:string)=>(chosen?'Gewählt · ':'Erkannt · ')+kind,
+ original:(name:string)=>name+' anzeigen',
+ expectedOrder:(number:string,customer:string|null|undefined,title:string|null|undefined)=>number+' · '+(customer??CAPTURE_ENTRY_COPY.missingCustomer)+' · '+(title??CAPTURE_ENTRY_COPY.missingTitle),
+ receiveGoods:(number:string)=>'Ware annehmen · '+number,
+} as const;

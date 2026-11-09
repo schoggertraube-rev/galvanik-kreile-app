@@ -138,3 +138,22 @@ it('E1 server rejection stays in the dialog without leaking raw server text',asy
  expect(screen.queryByText(/TEST RAW INTERNAL MESSAGE/)).toBeNull();
  expect(input).toHaveValue('TEST preserved note');expect(screen.getByRole('button',{name:'Lesen'})).toBeEnabled();
 });
+
+it.each(['order','customer'] as const)('E1 %s hands off the latest saved text once, rather than an older capture',async action=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+ const save=vi.fn(async(input)=>({code:'OK',capture:{id:input.itemId,version:1,text:input.text,customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],recognition:{kind:'anfrage',text:input.text},files:[]}}));
+ const ports={getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-e1-handoff'})),saveCaptureNote:save} as unknown as GlobalCreatePorts;
+ const onOrder=vi.fn(),onCustomer=vi.fn();render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={onOrder} onCustomer={onCustomer}/>);
+ await waitFor(()=>expect(ports.getCaptureScope).toHaveBeenCalled());
+ const input=screen.getByRole('textbox',{name:'Notiz'});fireEvent.change(input,{target:{value:'TEST Anfrage old'}});fireEvent.click(screen.getByRole('button',{name:'Lesen'}));
+ await screen.findByRole('button',{name:'Anfrage übernehmen'});
+ fireEvent.change(input,{target:{value:'TEST Anfrage latest preserved text'}});
+ if(action==='customer')fireEvent.click(screen.getByRole('button',{name:'Anders'}));
+ const button=screen.getByRole('button',{name:action==='order'?'Anfrage übernehmen':'Kunde anlegen'});fireEvent.click(button);fireEvent.click(button);
+ const called=action==='order'?onOrder:onCustomer;
+ await waitFor(()=>expect(called).toHaveBeenCalledOnce());
+ expect(save).toHaveBeenCalledTimes(2);
+ const latest=expect.objectContaining({id:save.mock.calls[1][0].itemId,text:'TEST Anfrage latest preserved text'});
+ if(action==='order')expect(onOrder).toHaveBeenCalledWith(undefined,latest);else expect(onCustomer).toHaveBeenCalledWith(latest);
+});

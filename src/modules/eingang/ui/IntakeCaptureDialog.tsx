@@ -13,7 +13,7 @@ import { uploadIntakeOriginal } from "../intakeOriginalUpload";
 import QRCode from "qrcode";
 import Image from "next/image";
 import { getIntakeDeviceId, type IntakeDeviceRequest } from "../deviceContract";
-import {intakeStartTitle,SITUATION_COPY,CAPTURE_COPY,CAPTURE_TEXT_COPY,CAPTURE_ENTRY_COPY,CAPTURE_ERROR_COPY,captureFailureCopy,type IntakeQuoteCandidate} from '@/ui/situationCatalog';
+import {intakeStartTitle,SITUATION_COPY,CAPTURE_COPY,CAPTURE_TEXT_COPY,CAPTURE_ENTRY_COPY,CAPTURE_ERROR_COPY,CAPTURE_STATUS_COPY,captureFailureCopy,type IntakeQuoteCandidate} from '@/ui/situationCatalog';
 import {IntakeSituation} from "./IntakeSituation";
 import type { CaptureKind } from "../captureRecognition";
 
@@ -163,7 +163,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     window.addEventListener("kreile:intake-changed", changed);
     return () => { active = false; window.removeEventListener("kreile:intake-changed", changed); };
   }, [getCapture, itemId, capturedId]);
-  const savedMessage = ports.canReadMails ? "Gespeichert · wartet unter Nachrichten › Zuordnen" : "Gespeichert · Büro ordnet zu";
+  const savedMessage = CAPTURE_STATUS_COPY.saved(Boolean(ports.canReadMails));
 
   useEffect(() => {
     if (mode || !getCreateContext) return;
@@ -461,12 +461,12 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     pendingNoteWrites.current = pendingNoteWrites.current.then(() => retainPendingOriginal(scope, { id: itemId, itemId, kind: "note", text, textstand: stand, dismissed: next }))
       .catch(cause => { console.error("[INTAKE_PENDING_CONCERN_FAILED]", cause); setError(CAPTURE_ERROR_COPY.INTAKE_PENDING_CONCERN_FAILED); });
   };
-  const modeTitle = receiving || photoRequest ? "Fotos für den PC" : mode ? { eingang: "Zettel lesen · für die Erfassung", eingangsfoto: "Eingangsfoto aufnehmen", visitenkarte: "Visitenkarte lesen", datei: "Datei lesen · für die Erfassung" }[mode] : undefined;
+  const modeTitle = receiving || photoRequest ? CAPTURE_STATUS_COPY.modes.handover : mode ? CAPTURE_STATUS_COPY.modes[mode] : undefined;
   const failedFile = capture?.files.some(file => file.status === "fehler") === true;
   const firstOriginal = capture?.files.find(file => file.secured === true);
   const showCamera = cameraAvailable && cameraRequested && !cameraError;
   const recognizedKind = capture?.recognition?.kind ?? (capture?.text ? "notiz" : "unklar");
-  const kindNames = { ware: "Ware", anfrage: "Anfrage oder Bestellung", rechnung: "Rechnung (Lieferant)", dokument: "Dokument", kontakt: "Kontakt", notiz: CAPTURE_ENTRY_COPY.noteLabel, unklar: "unklar" };
+  const kindNames = CAPTURE_STATUS_COPY.kinds;
   const openObject = (target: "mailein" | "original" | "ware" | "rechnungein" | "kvware", arg: string) => {
     if (!ports.openCaptureObject) { setError(CAPTURE_ERROR_COPY.INTAKE_CAPTURE_TARGET_UNAVAILABLE); return; }
     if (!ports.openCaptureObject(target, arg)) {
@@ -510,13 +510,24 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
   };
   const showSituation=Boolean(!mode&&!receiving&&capture&&hasCapturedContent&&!showCamera&&!hidePreviousResult&&capture.files.some(file=>file.secured===true));
   const saveText=async()=>{if(inFlight.current)return;inFlight.current=true;setBusy(true);try{await saveNote();}catch(cause){console.error("[INTAKE_NOTE_SAVE_FAILED]",cause);setError(CAPTURE_TEXT_COPY.saveFailed);}finally{inFlight.current=false;setBusy(false);}};
+  const runTextAction=async(action:'order'|'customer')=>{
+    if(inFlight.current)return;
+    inFlight.current=true;setBusy(true);setError(null);
+    try{
+      const current=await saveNote();
+      if(!current)return;
+      if(action==='order')onOrder(current.customerId??undefined,current);
+      else{const reason=onCustomer(current);if(reason)setError(reason);}
+    }catch(cause){console.error('[INTAKE_TEXT_ACTION_FAILED]',cause);setError(CAPTURE_TEXT_COPY.saveFailed);}
+    finally{inFlight.current=false;setBusy(false);}
+  };
   const resultMain = capture && hasCapturedContent && !mode && !receiving && !busy && !showCamera && !hidePreviousResult ? recognizedKind === "anfrage" ?
-    <Button data-spec-id="rein.erfassen-aus-eingang" art={showSituation?"primaer":"erledigen"} text={showSituation?CAPTURE_COPY.order:CAPTURE_TEXT_COPY.request} onClick={() => onOrder(capture.customerId ?? undefined, capture)} />
-    : recognizedKind === "kontakt" ? <Button data-spec-id="rein.kontakt-anlegen" art={showSituation?"primaer":"erledigen"} text={CAPTURE_COPY.customer} onClick={() => { const reason = onCustomer(capture); if (reason) setError(reason); }} />
+    <Button data-spec-id="rein.erfassen-aus-eingang" art={showSituation?"primaer":"erledigen"} text={showSituation?CAPTURE_COPY.order:CAPTURE_TEXT_COPY.request} onClick={() => showSituation?onOrder(capture.customerId ?? undefined, capture):void runTextAction('order')} />
+    : recognizedKind === "kontakt" ? <Button data-spec-id="rein.kontakt-anlegen" art={showSituation?"primaer":"erledigen"} text={CAPTURE_COPY.customer} onClick={() => { if(!showSituation){void runTextAction('customer');return;}const reason = onCustomer(capture); if (reason) setError(reason); }} />
     : recognizedKind === "rechnung" ? ports.canManageMoney ? <Button data-spec-id="rein.rechnung-pruefen" art="primaer" text={CAPTURE_COPY.invoice} onClick={() => openObject("rechnungein", capture.id)} />
       : <Button data-spec-id="rein.fuers-buero" art="primaer" text={CAPTURE_COPY.office} onClick={() => onClose(CAPTURE_ENTRY_COPY.officeSaved)} />
     : recognizedKind === "ware" && capture.expectedOrders?.length === 1 && capture.customerId === capture.expectedOrders[0].customerId ?
-      <Button data-spec-id="rein.ware-annehmen-kunde" art="primaer" text={"Ware annehmen · " + capture.expectedOrders[0].number} onClick={() => openObject("ware", capture.expectedOrders![0].id + "#" + capture.id)} />
+      <Button data-spec-id="rein.ware-annehmen-kunde" art="primaer" text={CAPTURE_STATUS_COPY.receiveGoods(capture.expectedOrders[0].number)} onClick={() => openObject("ware", capture.expectedOrders![0].id + "#" + capture.id)} />
     : null : null;
   const anotherPage = () => { setCameraReady(false); setCameraAttempt(value => value + 1); setCameraRequested(true); setHidePreviousResult(true); };
   const finishReading = async () => {
@@ -530,7 +541,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     finally { inFlight.current = false; setBusy(false); }
   };
   const adopt = () => {
-    if (capture && !busy) onAdopt?.(capture, mode === "eingangsfoto" ? "Eingangsfoto übernommen" : failedFile ? "Als Dokument übernommen · ohne Vorschläge" : "Übernommen · erkannt markiert");
+    if (capture && !busy) onAdopt?.(capture, CAPTURE_STATUS_COPY.adopted(mode === "eingangsfoto",Boolean(failedFile)));
   };
   return <><Dialog titel={SITUATION_COPY.header} unterzeile={modeTitle} icon="plus" groesse="breit" schliessenSpecId="rein.schliessen" onSchliessen={() => void close()} vorSchliessen={() => { void close(); return false; }}
     fuss={<>
@@ -555,7 +566,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         {!mode&&ports.actorDisplayName?.trim()?<h2>{intakeStartTitle(ports.actorDisplayName)}</h2>:null}
         {contextLoading ? <p role="status">{CAPTURE_ENTRY_COPY.contextLoading}</p> : null}
         {createContext ? <div data-spec-id="rein.kontext" className="ev-rein-kontext">
-          <strong>für {createContext.label}</strong>
+          <strong>{CAPTURE_STATUS_COPY.context(createContext.label)}</strong>
           <Button data-spec-id="rein.kontext-entfernen" text={CAPTURE_COPY.removeContext} icon="x" onClick={() => setCreateContext(null)} />
         </div> : null}
         {contextError ? <div role="alert" className="kr-stapel"><Hinweis ton="warn">{contextError}</Hinweis>
@@ -564,7 +575,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         {blockedReceiver && !error ? <p role="status">{CAPTURE_ENTRY_COPY.requestOpening}</p> : null}
         {closeRequested ? <p role="status">{CAPTURE_ENTRY_COPY.closePending}</p> : null}
         {cameraAvailable && !receiving && pendingRequests.map(request => <Button key={request.id} text={CAPTURE_COPY.acceptDevice} onClick={() => void acceptRequest(request.id)} disabled={deviceWorking} />)}
-        {receiving && photoRequest ? <p role="status">{photoRequest.photoCount} an den PC gesendet</p> : null}
+        {receiving && photoRequest ? <p role="status">{CAPTURE_STATUS_COPY.photoSent(photoRequest.photoCount)}</p> : null}
         {cameraRequested && cameraAvailable ? cameraError ? <div data-spec-id={cameraError === "permission" ? "rein.zustand.teilweise" : "rein.zustand.leer"} className="kr-stapel">
           <Hinweis ton="warn">{cameraError === "permission" ? CAPTURE_ENTRY_COPY.cameraPermission : CAPTURE_ENTRY_COPY.cameraMissing}</Hinweis>
           <Button text={CAPTURE_COPY.file} onClick={() => input.current?.click()} />
@@ -581,13 +592,13 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
           {resultMain??<Button art="erledigen" text={CAPTURE_TEXT_COPY.assign} disabled={busy} onClick={()=>void assign()}/>}
           <Button text={CAPTURE_TEXT_COPY.other} aria-expanded={textAlternatives} disabled={busy} onClick={()=>setTextAlternatives(value=>!value)}/>
           {textAlternatives?<div role="group" aria-label={CAPTURE_TEXT_COPY.other}>
-            {recognizedKind!=="anfrage"?<Button text={CAPTURE_TEXT_COPY.request} disabled={busy} onClick={()=>onOrder(capture.customerId??undefined,capture)}/>:null}
-            {recognizedKind!=="kontakt"?<Button text={CAPTURE_COPY.customer} disabled={busy} onClick={()=>{const reason=onCustomer(capture);if(reason)setError(reason);}}/>:null}
+            {recognizedKind!=="anfrage"?<Button text={CAPTURE_TEXT_COPY.request} disabled={busy} onClick={()=>void runTextAction('order')}/>:null}
+            {recognizedKind!=="kontakt"?<Button text={CAPTURE_COPY.customer} disabled={busy} onClick={()=>void runTextAction('customer')}/>:null}
           </div>:null}
         </div>:null}
         {concerns.length || customers.length ? <div aria-label={CAPTURE_ENTRY_COPY.recognizedLabel} className="ev-rein-erkannt"><strong>{CAPTURE_ENTRY_COPY.recognizedHeading}</strong>
-          {customers.map(customer => <span key={customer.id}>{customer.name} · Vorschlag aus dem Namen</span>)}
-          {concerns.filter(value => !dismissed.includes(value.id)).map(concern => <Button key={concern.id} text={`${concern.label} ×`} onClick={() => dismissConcern(concern.id)} />)}
+          {customers.map(customer => <span key={customer.id}>{CAPTURE_STATUS_COPY.customerProposal(customer.name)}</span>)}
+          {concerns.filter(value => !dismissed.includes(value.id)).map(concern => <Button key={concern.id} text={CAPTURE_STATUS_COPY.dismissConcern(concern.label)} onClick={() => dismissConcern(concern.id)} />)}
         </div> : null}
       </div>
       <div className="ev-rein-rechts" hidden={showSituation} style={showSituation?{display:"none"}:undefined}>
@@ -599,7 +610,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
           <p>{CAPTURE_ENTRY_COPY.qrHint}</p>
           {qrImage ? <Image src={qrImage} width={216} height={216} unoptimized alt={CAPTURE_ENTRY_COPY.qrLabel} /> : null}
           {qrLink ? <a href={qrLink}>{CAPTURE_ENTRY_COPY.qrOpen}</a> : null}
-          <p>{photoRequest.photoCount} Fotos am Eingang</p>
+          <p>{CAPTURE_STATUS_COPY.photoCount(photoRequest.photoCount)}</p>
           {photoRequest.photoCount > 0 ? <Button data-spec-id="rein.fertig-lesen" text={CAPTURE_COPY.readDone} onClick={() => void finishPhotos("fertig")} disabled={deviceWorking} /> : null}
           <Button data-spec-id="rein.uebergabe-abbrechen" text={CAPTURE_COPY.cancel} onClick={() => void finishPhotos("abgebrochen")} disabled={deviceWorking} />
         </div> : null}
@@ -608,9 +619,9 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
           <Button art="leise" icon="inbox" title={CAPTURE_ENTRY_COPY.orderKey} text={CAPTURE_COPY.order} disabled={contextLoading || Boolean(contextError)} data-spec-id="rein.auftrag-erfassen" onClick={() => onOrder(createContext?.customerId)} />
           <Button art="leise" icon="user" title={CAPTURE_ENTRY_COPY.customerKey} text={CAPTURE_COPY.customer} data-spec-id="rein.kunde-anlegen" onClick={() => onCustomer()} />
         </section> : null}
-        {busy ? <p role="status">{kindWorking ? `Art „${kindNames[kindWorking]}“ wird gespeichert …` : `${progress.done} von ${progress.total} hochgeladen · wird übertragen und geprüft …`}</p> : null}
+        {busy ? <p role="status">{kindWorking ? CAPTURE_STATUS_COPY.savingKind(kindNames[kindWorking]) : CAPTURE_STATUS_COPY.uploadProgress(progress.done,progress.total)}</p> : null}
         {capture&&hasCapturedContent&&!hidePreviousResult ? <div data-spec-id={capture.files.some(file => file.status === "fehler") ? "rein.zustand.fehler" : capture.files.some(file => ["wartet", "laeuft"].includes(file.status)) ? "rein.zustand.laden" : "rein.zustand.erkannt"}>
-          <strong>{capture.files.some(file => file.status === "fehler") ? capture.files.every(file => file.secured === true) ? CAPTURE_ENTRY_COPY.unreadableSecured : CAPTURE_ENTRY_COPY.originalMissing : capture.files.some(file => ["wartet", "laeuft"].includes(file.status)) ? CAPTURE_ENTRY_COPY.readingSecured : mode === "eingangsfoto" ? CAPTURE_ENTRY_COPY.entryPhotoSecured : (capture.recognition?.source === "hand" ? "Gewählt · " : "Erkannt · ") + kindNames[recognizedKind]}</strong>
+          <strong>{capture.files.some(file => file.status === "fehler") ? capture.files.every(file => file.secured === true) ? CAPTURE_ENTRY_COPY.unreadableSecured : CAPTURE_ENTRY_COPY.originalMissing : capture.files.some(file => ["wartet", "laeuft"].includes(file.status)) ? CAPTURE_ENTRY_COPY.readingSecured : mode === "eingangsfoto" ? CAPTURE_ENTRY_COPY.entryPhotoSecured : CAPTURE_STATUS_COPY.recognized(capture.recognition?.source === "hand",kindNames[recognizedKind])}</strong>
           {!mode && !receiving && recognizedKind === "unklar" && !busy ? <section data-spec-id="rein.was-ist-das" className="kr-stapel"><h3>{CAPTURE_ENTRY_COPY.whatIsIt}</h3><div className="ev-rein-karten">
             <button type="button" className="ev-karte" data-spec-id="rein.was-ist.auftrag" onClick={() => void chooseKind("anfrage")}><Icon name="inbox"/><b>{SITUATION_COPY.kindLabels.anfrage}</b></button>
             <button type="button" className="ev-karte" data-spec-id="rein.was-ist.ware" onClick={() => void chooseKind("ware")}><Icon name="box"/><b>{SITUATION_COPY.kindLabels.ware}</b></button>
@@ -619,11 +630,11 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
           </div></section> : null}
           {capture.recognition?.text ? <p className="ev-rein-original">{capture.recognition.text}</p> : null}
           {capture.files.map(file => <div key={file.id}><p>{file.name} · {file.secured === true ? CAPTURE_ENTRY_COPY.originalSecured : CAPTURE_ENTRY_COPY.uploadOpen}</p>
-            {file.secured === true ? <Button data-spec-id={"rein.original." + file.id} art="leise" text={file.name + " anzeigen"} onClick={() => openObject("original", capture.id + "#" + file.id)} /> : null}
+            {file.secured === true ? <Button data-spec-id={"rein.original." + file.id} art="leise" text={CAPTURE_STATUS_COPY.original(file.name)} onClick={() => openObject("original", capture.id + "#" + file.id)} /> : null}
           </div>)}
           {!mode && (recognizedKind === "unklar" || recognizedKind === "ware") && Boolean(capture.expectedOrders?.length) ? <section data-spec-id="rein.erwartet" className="kr-stapel"><h3>{CAPTURE_ENTRY_COPY.expectedGoods}</h3>
             {goodsChoice ? <p role="status">{CAPTURE_ENTRY_COPY.chooseExpected}</p> : null}
-            {capture.expectedOrders!.map(order => <Button key={order.id} data-spec-id="rein.erwartet-waehlen" text={order.number + " · " + (order.customerName ?? CAPTURE_ENTRY_COPY.missingCustomer) + " · " + (order.title ?? CAPTURE_ENTRY_COPY.missingTitle)}
+            {capture.expectedOrders!.map(order => <Button key={order.id} data-spec-id="rein.erwartet-waehlen" text={CAPTURE_STATUS_COPY.expectedOrder(order.number,order.customerName,order.title)}
               onClick={() => openObject("ware", order.id + "#" + capture.id)} />)}
           </section> : null}
           {cameraAvailable && capture.files.length > 0 && !busy ? <div className="kr-stapel">
