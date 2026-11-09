@@ -1,4 +1,5 @@
 'use client';
+import {REKLA_MAIL_COPY} from '@/ui/situationCatalog';
 import{useCallback,useEffect,useRef,useState}from'react';
 import{Button,Dialog,Feld,Eingabe,Textfeld,Segment,FormRaster,Hinweis,Rueckfrage}from'@/ui/kr';
 import{ACCESS_AREAS,type AccessArea}from'@/lib/auth/authorizationContract';
@@ -11,8 +12,9 @@ const AREA_NAMES:Record<AccessArea,string>={auftraege:'Aufträge',eingang:'Einga
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const dateLabel=(date:string)=>new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'short',day:'2-digit',month:'2-digit'}).format(new Date(date+'T12:00:00Z')).replace(/^(\p{L}+)\.,?\s/u,'$1 ');
 function initial(data:Data,request:TaskOpenRequest):Draft{
+ const handover='handover'in request&&request.handover==='complaint';
  const task=data.task,kind=task?.art??('kind'in request?request.kind:undefined)??'aufgabe';
- return {kind,title:task?.titel??(kind==='aufgabe'?'':TASK_KIND_LABELS[kind]+(data.reference.label?' '+data.reference.label:'')),dueDate:task?.faellig_am??today(),time:task?.uhrzeit??'',recipient:task?.fuer_bereich?'bereich:'+task.fuer_bereich:task?.fuer_login&&task.fuer_login!==data.currentLogin?'login:'+task.fuer_login:task?'ich':kind==='frist'||kind==='rechnung'?'bereich:geld':'ich',note:task?.notiz??''};
+ return {kind,title:task?.titel??(handover?REKLA_MAIL_COPY.handoverTitle(data.reference.label):kind==='aufgabe'?'':TASK_KIND_LABELS[kind]+(data.reference.label?' '+data.reference.label:'')),dueDate:task?.faellig_am??today(),time:task?.uhrzeit??'',recipient:!task&&handover?'':task?.fuer_bereich?'bereich:'+task.fuer_bereich:task?.fuer_login&&task.fuer_login!==data.currentLogin?'login:'+task.fuer_login:task?'ich':kind==='frist'||kind==='rechnung'?'bereich:geld':'ich',note:task?.notiz??''};
 }
 export function TaskDialog({request,ports,onClose,onMessage}:{request:TaskOpenRequest;ports:TaskPorts;onClose:()=>void;onMessage:(message:string)=>void}){
  const[data,setData]=useState<Data|null>(null),[draft,setDraft]=useState<Draft|null>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[gaps,setGaps]=useState<Record<string,string>>({}),[closePrompt,setClosePrompt]=useState(false);
@@ -24,6 +26,8 @@ export function TaskDialog({request,ports,onClose,onMessage}:{request:TaskOpenRe
   finally{setLoading(false);}
  },[ports,request]);
  useEffect(()=>{const timer=setTimeout(()=>void load(),0);return()=>clearTimeout(timer);},[load]);
+ const handover='handover'in request&&request.handover==='complaint';
+ const selectedPerson=data?.recipients?.find(person=>'login:'+person.id===draft?.recipient);
  const dirty=!!draft&&JSON.stringify(draft)!==JSON.stringify(baseline);
  const close=()=>{if(working.current)return;if(dirty){setClosePrompt(true);return;}onClose();};
  const change=(patch:Partial<Draft>)=>{if(working.current||pending.current)return;setDraft(value=>value?{...value,...patch}:value);setGaps({});setError(null);};
@@ -66,15 +70,15 @@ export function TaskDialog({request,ports,onClose,onMessage}:{request:TaskOpenRe
   <Button text="Abbrechen" data-spec-id="aufgabe.abbrechen" onClick={close}/>
   {draft?.kind==='rueckruf'&&data?.reference.phone?<a className="kr-btn" data-spec-id="aufgabe.anrufen" href={'tel:'+data.reference.phone}>Anrufen</a>:null}
   {data?.task&&data.canEdit?<Button text={busy?'Wird gespeichert …':'Speichern'} data-spec-id="aufgabe.aendern-speichern" onClick={()=>void perform('save')}/>:null}
-  {data?.task?.art==='rechnung'&&ports.canManageMoney?<Button text="Klären" icon="check" art="erledigen" disabled={!ports.openInvoice||busy} data-spec-id="aufgabe.rechnung-klaeren" onClick={()=>{if(data.task?.bezug_typ==='eingangsrechnung'&&data.task.bezug_id)ports.openInvoice?.(data.task.bezug_id);}}/>:data?.canComplete?<Button text={busy?'Wird gespeichert …':'Erledigt'} icon="check" art="erledigen" data-spec-id="aufgabe.erledigt" onClick={()=>void perform('complete')}/>:data&&!data.task?<Button text={busy?'Wird gespeichert …':'Auf Der Tag'} icon="check" art="erledigen" data-spec-id="aufgabe.speichern" onClick={()=>void perform('save')}/>:null}
+  {data?.task?.art==='rechnung'&&ports.canManageMoney?<Button text="Klären" icon="check" art="erledigen" disabled={!ports.openInvoice||busy} data-spec-id="aufgabe.rechnung-klaeren" onClick={()=>{if(data.task?.bezug_typ==='eingangsrechnung'&&data.task.bezug_id)ports.openInvoice?.(data.task.bezug_id);}}/>:data?.canComplete?<Button text={busy?'Wird gespeichert …':'Erledigt'} icon="check" art="erledigen" data-spec-id="aufgabe.erledigt" onClick={()=>void perform('complete')}/>:data&&!data.task?<Button text={busy?'Wird gespeichert …':handover&&selectedPerson?REKLA_MAIL_COPY.handoverTo(selectedPerson.name??'Name fehlt'):'Auf Der Tag'} icon="check" art="erledigen" data-spec-id="aufgabe.speichern" onClick={()=>void perform('save')}/>:null}
  </>}><div data-spec-id="aufgabe" className="kr-stapel" onFocusCapture={event=>{const id=(event.target as HTMLElement).closest<HTMLElement>('[data-spec-id]')?.dataset.specId;if(id&&id!=='aufgabe')lastField.current=id;}}>
   {loading?<p role="status">Aufgabe wird geladen …</p>:null}
-  {data&&draft?<><Feld label={required('Art')}><div data-spec-id="aufgabe.art"><Segment label="Art" wert={draft.kind} optionen={TASK_KINDS.filter(kind=>kind!=='rechnung'||ports.canManageMoney||draft.kind==='rechnung').map(kind=>({wert:kind,text:TASK_KIND_LABELS[kind],gesperrt:readonly||data.task?.art==='rechnung'||kind==='rechnung'}))} onWert={kind=>change({kind,recipient:kind==='frist'?'bereich:geld':'ich'})}/></div></Feld>
+  {data&&draft?<><Feld label={required('Art')}><div data-spec-id="aufgabe.art"><Segment label="Art" wert={draft.kind} optionen={TASK_KINDS.filter(kind=>kind!=='rechnung'||ports.canManageMoney||draft.kind==='rechnung').map(kind=>({wert:kind,text:TASK_KIND_LABELS[kind],gesperrt:readonly||handover||data.task?.art==='rechnung'||kind==='rechnung'}))} onWert={kind=>change({kind,recipient:kind==='frist'?'bereich:geld':'ich'})}/></div></Feld>
    <FormRaster><Feld label={required('Was ist zu tun?')} fehler={gaps.title}><Eingabe data-spec-id="aufgabe.titel" value={draft.title} maxLength={120} disabled={readonly} onChange={event=>change({title:event.target.value})}/></Feld>
     <Feld label={required('Fällig')} fehler={gaps.dueDate}><Eingabe data-spec-id="aufgabe.faellig" type="date" value={draft.dueDate} disabled={readonly} onChange={event=>change({dueDate:event.target.value})}/></Feld>
     {draft.kind==='rueckruf'?<Feld label="Uhrzeit" fehler={gaps.time}><Eingabe data-spec-id="aufgabe.uhrzeit" type="time" value={draft.time} disabled={readonly} onChange={event=>change({time:event.target.value})}/></Feld>:null}
     <Feld label={required('Für')} fehler={gaps.recipient}><select className="kr-auswahl" data-spec-id="aufgabe.fuer" value={draft.recipient} disabled={readonly} onChange={event=>change({recipient:event.target.value})}>
-     <option value="ich">ich</option>{ACCESS_AREAS.filter(area=>area!=='statistik_alle').map(area=><option key={area} value={'bereich:'+area}>alle mit Recht {AREA_NAMES[area]}</option>)}{draft.recipient.startsWith('login:')?<option value={draft.recipient}>Login {draft.recipient.slice(6)}</option>:null}
+     {handover?<><option value="">{REKLA_MAIL_COPY.choosePerson}</option>{data.recipients?.map(person=><option key={person.id} value={'login:'+person.id}>{person.name??'Name fehlt'}</option>)}</>:<><option value="ich">ich</option>{ACCESS_AREAS.filter(area=>area!=='statistik_alle').map(area=><option key={area} value={'bereich:'+area}>alle mit Recht {AREA_NAMES[area]}</option>)}{draft.recipient.startsWith('login:')?<option value={draft.recipient}>Login {draft.recipient.slice(6)}</option>:null}</>}
     </select></Feld>
    </FormRaster>
    <div><b>Bezug</b><p data-spec-id="aufgabe.bezug">{data.canOpenReference&&ports.referenceTargets.includes(data.reference.type)?<button type="button" className="kr-link" onClick={()=>ports.openReference(data.reference)}>{data.reference.label??'Bezeichnung fehlt'}</button>:data.reference.type==='allgemein'?'allgemein':data.reference.label??'Bezug nicht verfügbar'}</p></div>

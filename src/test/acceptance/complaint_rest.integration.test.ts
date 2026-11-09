@@ -568,3 +568,24 @@ it('RM06 unthreaded photos keep their original while the employee explicitly sel
  expect(await withSession(fixture,()=>reklamationAusfuehrenAction(reread))).toMatchObject({code:'OK',replayed:true});
  const {getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');expect(await withSession(fixture,()=>getIntakeMessagesAction('alle'))).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:replyId,orderId:order.orderId,usage:'erledigt',fileIds:expect.arrayContaining(photos)})])});
 });
+
+
+it('RM14 mail-only employee delegates to an explicitly chosen person through the existing task Action without changing complaint rights',async()=>{
+ const owner=await createFixture(['eingang','auftraege','kunden','geld','kassieren','entscheiden','mails']),order=await deliveredComplaintSource(owner),{replyId,photos}=await replyMailFixture(owner,order,'image/jpeg',false);
+ const employee=await createFixture(['eingang','mails']),person=await createFixture(['eingang','mails','auftraege']);
+ const before=await sql`SELECT to_jsonb(source.*) AS row FROM public.intake_item source WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${replyId}::uuid`;
+ const {getIntakeTaskAction,saveIntakeTaskAction,saveIntakeDraftAction,getIntakeDraftsAction}=await import('@/app/actions/eingang.actions');
+ const view=await withSession(employee,()=>getIntakeTaskAction({reference:{type:'eingang',id:replyId},kind:'aufgabe',handover:'complaint'}));expect(view).toMatchObject({code:'OK',recipients:expect.arrayContaining([expect.objectContaining({id:person.actorId})]),reference:{type:'eingang',id:replyId}});if(view.code!=='OK')throw Error(view.message);
+ expect(JSON.stringify(view)).not.toContain('pin_hash');expect(JSON.stringify(view)).not.toContain('short_code');
+ const request:import('@/modules/tasks/public').TaskSaveInput={clientKey:randomUUID(),version:0,kind:'aufgabe',title:'TEST Reklamation an konkrete Person übergeben',dueDate:'2027-05-18',time:null,forLogin:person.actorId,forArea:null,reference:{type:'eingang',id:replyId},note:'TEST Bitte Originalfotos prüfen'};
+ const result=await withSession(employee,()=>saveIntakeTaskAction(request));expect(result).toMatchObject({code:'OK',task:{fuer_login:person.actorId,bezug_typ:'eingang',bezug_id:replyId,erstellt_von:employee.actorId}});if(result.code!=='OK')throw Error(result.message);
+ expect(await sql`SELECT fuer_login::text AS recipient,bezug_id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${result.task.id}::uuid`).toEqual([{recipient:person.actorId,bezug_id:replyId}]);
+ const task=await withSession(person,()=>getIntakeTaskAction({taskId:result.task.id}));expect(task).toMatchObject({code:'OK',canEdit:true,task:{fuer_login:person.actorId},reference:{id:replyId}});
+ const draftId=randomUUID();expect(await withSession(employee,()=>saveIntakeDraftAction({id:draftId,clientEventId:randomUUID(),art:'eingang',expectedVersion:null,lastField:null,payload:{kind:'TEST-RM14',clientKey:request.clientKey,request}}))).toMatchObject({code:'OK'});
+ const drafts=await withSession(employee,()=>getIntakeDraftsAction());if(drafts.code!=='OK')throw Error(drafts.message);const reread=drafts.drafts.find(row=>row.id===draftId)?.payload.request;
+ expect(await withSession(employee,()=>saveIntakeTaskAction(reread))).toMatchObject({code:'OK',replayed:true,task:{id:result.task.id}});
+ expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${request.clientKey}::uuid`).toHaveLength(1);
+ expect(await sql`SELECT item.id FROM public.intake_item item JOIN public.intake_event event ON event.tenant_id=item.tenant_id AND event.item_id=item.id WHERE item.tenant_id=${KREILE_TENANT_SLUG} AND item.verweis_item=${replyId}::uuid AND event.nachher->>'action'='aufgabe.angelegt' AND event.nachher->>'taskId'=${result.task.id}`).toHaveLength(1);
+ expect(await sql`SELECT to_jsonb(source.*) AS row FROM public.intake_item source WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${replyId}::uuid`).toEqual(before);
+ const {reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');expect(await withSession(employee,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:replyId,intakeVersion:1,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST denied',photoIds:photos,goodsReturn:'offen'}))).toMatchObject({code:'FORBIDDEN'});
+});

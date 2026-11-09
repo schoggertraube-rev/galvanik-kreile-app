@@ -156,7 +156,8 @@ export async function completeTask(input:unknown,deps:Dependencies):Promise<Task
 }
 export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
  if(!request||typeof request!=='object'||Array.isArray(request)||('taskId'in request?!taskUuid(request.taskId):!validTaskReference(request.reference)))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};
- if('taskId'in request?Object.keys(request).join(',')!=='taskId':Object.keys(request).some(key=>!['reference','kind','itemId'].includes(key))||request.kind!==undefined&&!TASK_KINDS.includes(request.kind)||request.itemId!==undefined&&!taskUuid(request.itemId))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf enthält ungültige Felder.'};
+ if('taskId'in request?Object.keys(request).join(',')!=='taskId':Object.keys(request).some(key=>!['reference','kind','itemId','handover'].includes(key))||request.kind!==undefined&&!TASK_KINDS.includes(request.kind)||request.itemId!==undefined&&!taskUuid(request.itemId))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf enthält ungültige Felder.'};
+ if('handover'in request&&(request.handover!=='complaint'||!('reference'in request)||request.reference.type!=='eingang'||request.kind!=='aufgabe'||request.itemId!==undefined))return {code:'VALIDATION_ERROR',message:'Übergabebezug ist ungültig.'};
  const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   const task='taskId'in request?await find(tx,auth,request.taskId):null;
@@ -164,7 +165,8 @@ export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
   const reference=await context(tx,auth,task?{type:task.bezug_typ,id:task.bezug_id}:(request as Exclude<TaskOpenRequest,{taskId:string}>).reference,!task);
   // Aufgaben sind je Mandant für jeden Login lesbar; Bezug und Schreibknöpfe prüfen ihre eigenen Rechte.
   const canEdit=task?task.status==='offen'&&allowed(auth,task):true;
-  return {code:'OK',task,reference,currentLogin:auth.userId,canEdit,canComplete:!!task&&canEdit&&task.art!=='rechnung',canOpenReference:reference.type==='allgemein'||reference.label!==null};
+  const recipients='handover'in request?await tx.execute<{id:string;name:string|null}>(sql`SELECT id::text,full_name AS name FROM private.v_task_recipients_v1 WHERE tenant_id=${auth.tenantId} AND active ORDER BY full_name,id`):undefined;
+  return {code:'OK',task,reference,currentLogin:auth.userId,canEdit,...(recipients?{recipients:[...recipients]}:{}),canComplete:!!task&&canEdit&&task.art!=='rechnung',canOpenReference:reference.type==='allgemein'||reference.label!==null};
  });}catch(error){return resultError(error);}
 }
 

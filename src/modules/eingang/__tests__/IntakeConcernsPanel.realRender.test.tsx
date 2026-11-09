@@ -110,3 +110,11 @@ it.each([null,'TEST-order'])('RM06 photo original opens one complaint flow with 
  expect(ports.select).not.toHaveBeenCalled();expect(ports.finish).not.toHaveBeenCalled();expect(ports.assignment.assign).not.toHaveBeenCalled();
  }finally{window.removeEventListener('kreile:oeffne',opened);}
 });
+
+
+it('RM14 offers the same task dialog with an intake reference and no implicit assignee without complaint rights',async()=>{
+ const message=row('TEST-handover-rekla',{concerns:['reklamation'],openConcerns:['reklamation'],photoCount:2});
+ const ports:IntakeMessagesPorts={list:vi.fn().mockResolvedValue({code:'OK',messages:[message],areas:['mails','eingang'],currentLogin:'TEST-actor'}),select:vi.fn(),finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}};
+ const opened=vi.fn((event:Event)=>event.preventDefault());window.addEventListener('kreile:oeffne',opened);
+ try{render(<IntakeMessages ports={ports}/>);fireEvent.click(await screen.findByRole('button',{name:'Reklamation übergeben'}));expect((opened.mock.calls[0][0] as CustomEvent).detail.taskRequest).toEqual({reference:{type:'eingang',id:message.id},kind:'aufgabe',handover:'complaint'});expect(screen.queryByRole('button',{name:'Reklamation anlegen'})).toBeNull();expect(ports.finish).not.toHaveBeenCalled();}finally{window.removeEventListener('kreile:oeffne',opened);}
+});
