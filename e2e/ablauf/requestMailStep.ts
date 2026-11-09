@@ -15,6 +15,7 @@ export async function requestMailStep(chain:string) {
       return Response.json({ access_token: 'TEST-H1-provider-token'.repeat(3) });
     }
     if (url.hostname === 'graph.microsoft.com') {
+      if(init?.method==='POST'&&(url.pathname.endsWith('/reply')||url.pathname.endsWith('/sendMail')))return new Response(null,{status:202});
       if (url.pathname.endsWith('/$value')) return new Response(mime.toString('utf8'));
       if (url.pathname.endsWith('/attachments')) return Response.json({ value: [] });
       return Response.json({ id: graphId, internetMessageId: internetId, subject: 'TEST Kostenvoranschlag',
