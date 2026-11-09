@@ -908,7 +908,13 @@ async function readInitialPaymentState(
   }
 }
 
-export async function createInvoice(input: unknown): Promise<CreateInvoiceResult> {
+/** Shared lock order for standalone issuance and issuance composed with goods-out. */
+export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantId:string,input:{clientEventId:string;orderId:string}):Promise<void>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0))`);
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:order:' || ${tenantId} || ':' || ${input.orderId}, 0))`);
+}
+
+export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Rechnungsanfrage." };
   }
@@ -934,17 +940,8 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
   const actorId = authorization.data.userId;
 
   try {
-    return await withPrivilegedTenantTransaction(authorization.data, async (tx) => {
-      await tx.execute(sql`
-        SELECT pg_advisory_xact_lock(
-          hashtextextended('f1:invoice:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0)
-        )
-      `);
-      await tx.execute(sql`
-        SELECT pg_advisory_xact_lock(
-          hashtextextended('f1:invoice:order:' || ${tenantId} || ':' || ${input.orderId}, 0)
-        )
-      `);
+    const write=async(tx:PrivilegedTenantTransaction):Promise<CreateInvoiceResult>=>{
+      await lockInvoiceCreation(tx,tenantId,input);
 
       const replayRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
       if (replayRows.length > 0) {
@@ -1225,7 +1222,8 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       ) throw new Error("INVOICE_RECEIPT_MISMATCH");
 
       return { code: "OK", receipt, replayed: false };
-    });
+    };
+    return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
   } catch (error) {
     const cause = error && typeof error === "object" && "cause" in error
       ? (error as { cause?: { code?: unknown; constraint_name?: unknown } }).cause

@@ -77,7 +77,7 @@ const openRow = {
 
 const orderPaidRow = {
   ...paidRow,
-  customer_overdue: false,
+  customer_overdue_invoice_ids: [],
   order_version: 4,
   station: "fertig",
   current_station: "fertig",
@@ -243,7 +243,7 @@ describe("readPaymentSummary", () => {
       expect.objectContaining({ text: expect.stringContaining("invoice.status") }),
       paidRow.order_id,
     ]);
-    expect(execute.mock.calls[0]?.[0].text).toContain("AS customer_overdue");
+    expect(execute.mock.calls[0]?.[0].text).toContain("AS customer_overdue_invoice_ids");
   });
 
   it("returns Rechnung without an invoice and without inventing payment values", async () => {
@@ -263,6 +263,7 @@ describe("readPaymentSummary", () => {
         paymentActorId: null,
         goodsOut: null,
         goodsOutAllowed: true,
+        customerDeliveryBlock:{blocked:false,reason:'overdue_invoice',invoiceIds:[]},
       },
     });
   });

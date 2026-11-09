@@ -62,5 +62,5 @@ it('L5 released order cannot be released again with a fresh key and current vers
  expect(await withSession(full,()=>recordGoodsOutAction({...input,expectedVersion:read.data.card.version,clientEventId:secondKey}))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await sql`SELECT station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{station:'abgeholt',version:released.receipt.orderVersion}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${secondKey}::uuid`).toEqual([{n:0}]);
- expect(await withSession(full,()=>recordGoodsOutAction(input))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:released.receipt.eventId}});
+ expect(await withSession(full,()=>recordGoodsOutAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:released.receipt.eventId}});
 });

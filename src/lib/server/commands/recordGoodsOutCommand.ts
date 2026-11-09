@@ -642,7 +642,15 @@ export async function authorizeGoodsOutInput(input: unknown): Promise<
   return {code: 'AUTHORIZED', input, authorization};
 }
 
-export async function recordGoodsOut(candidate: unknown): Promise<RecordGoodsOutResult> {
+type GoodsOutComposition={
+  beforeOrderLock:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
+  beforeWrite:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<Exclude<RecordGoodsOutResult,{code:'OK'}>|null>;
+};
+class GoodsOutRejected extends Error{
+  constructor(readonly result:Exclude<RecordGoodsOutResult,{code:'OK'}>){super('GOODS_OUT_REJECTED');}
+}
+
+export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutComposition): Promise<RecordGoodsOutResult> {
   const authorized = await authorizeGoodsOutInput(candidate);
   if (authorized.code !== 'AUTHORIZED') return authorized;
   const {input, authorization} = authorized;
@@ -650,7 +658,7 @@ export async function recordGoodsOut(candidate: unknown): Promise<RecordGoodsOut
   const actorId = authorization.data.userId;
 
   try {
-    return await withPrivilegedTenantTransaction(authorization.data, async (tx) => {
+    const write=async(tx:PrivilegedTenantTransaction):Promise<RecordGoodsOutResult>=>{
       await tx.execute(sql`
         SELECT pg_advisory_xact_lock(
           hashtextextended('f1:goods-out:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0)
@@ -682,6 +690,9 @@ export async function recordGoodsOut(candidate: unknown): Promise<RecordGoodsOut
         return { code: "OK", receipt, replayed: true };
       }
 
+      // Invoice advisory locks must precede the shared order-row lock to avoid
+      // deadlock with a simultaneous standalone invoice action.
+      await composition?.beforeOrderLock(tx,authorization.data);
       const orders = await readOrder(tx, tenantId, input.orderId, true);
       const order = orders[0];
       if (orders.length !== 1 || !order || order.tenant_id !== tenantId) {
@@ -758,6 +769,8 @@ export async function recordGoodsOut(candidate: unknown): Promise<RecordGoodsOut
         return { code: "CONFLICT", message: "Ausgabe ist noch nicht freigegeben. Zahlung oder Abschluss fehlt." };
       }
 
+      const preparation=await composition?.beforeWrite(tx,authorization.data);
+      if(preparation)return preparation;
       const invoices = await readActiveInvoice(tx, tenantId, order.id);
       if (invoices.length > 1) {
         return { code: "CONFLICT", message: "Warenausgang erfordert eine gültige Rechnung." };
@@ -1003,8 +1016,14 @@ export async function recordGoodsOut(candidate: unknown): Promise<RecordGoodsOut
       ) throw new Error("GOODS_OUT_READBACK_INVALID");
 
       return { code: "OK", receipt, replayed: false };
+    };
+    return await withPrivilegedTenantTransaction(authorization.data,async tx=>{
+      const result=await write(tx);
+      if(result.code!=='OK')throw new GoodsOutRejected(result);
+      return result;
     });
   } catch (error: unknown) {
+    if(error instanceof GoodsOutRejected)return error.result;
     logDatabaseFailure(error);
     return { code: "UNAVAILABLE", message: "Warenausgang konnte nicht sicher gebucht werden." };
   }

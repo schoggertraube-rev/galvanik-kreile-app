@@ -21,19 +21,18 @@ export async function recordGoodsOutAction(
   // Validate and authorize before the composed invoice writer can change data.
   const authorized = await authorizeGoodsOutInput(input);
   if (authorized.code !== "AUTHORIZED") return authorized;
-  if (input.agreement && input.agreement.type !== "sammelrechnung") {
-    const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
-    const invoice = await createInvoice({
-      orderId: input.orderId,
-      expectedVersion: input.expectedVersion,
-      clientEventId: invoiceClientEventId(input.clientEventId),
-      agreement: input.agreement,
-    });
-    if (invoice.code !== "OK") {
-      return { code: invoice.code, message: invoice.message };
-    }
-  }
-  const result = await recordGoodsOut(input);
+  const invoiceInput=input.agreement&&input.agreement.type!=='sammelrechnung'?{
+    orderId:input.orderId,expectedVersion:input.expectedVersion,
+    clientEventId:invoiceClientEventId(input.clientEventId),agreement:input.agreement,
+  }:null;
+  const invoicePort=invoiceInput?await import("@/lib/server/commands/immutableInvoiceCommand"):null;
+  const result = await recordGoodsOut(input,invoiceInput&&invoicePort?{
+    beforeOrderLock:(tx,auth)=>invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput),
+    beforeWrite:async tx=>{
+      const invoice=await invoicePort.createInvoice(invoiceInput,tx);
+      return invoice.code==='OK'?null:{code:invoice.code,message:invoice.message};
+    },
+  }:undefined);
   if (result.code === "OK") {
     revalidatePath("/");
     revalidatePath("/warendurchlauf");
