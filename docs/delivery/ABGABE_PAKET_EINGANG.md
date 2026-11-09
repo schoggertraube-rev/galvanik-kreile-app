@@ -1,5 +1,21 @@
 # AP-PAKET-EINGANG — laufender Bau, keine Merge-Abgabe
 
+## Review-Korrektur 09.11., Produktstand efe09b2f
+
+**Nicht mergefähig:** PL-Nachträge 1–6 und 8 sind umgesetzt; Punkt 7 wartet auf die im BAULOG 04:16 einmal gestellte Präzisierung. Eine globale KV-Liste bei zugeordnetem Kunden kommentarlos zu entfernen würde die belegten PE01/PE06-Kandidaten verlieren. Keine fachliche Eigenentscheidung an dieser Stelle.
+
+- Eine gemeinsame `GoodsInspectionForm` und kanonische Abweichungsgründe einschließlich Gefahr. Keine eigene Zustandsauswahl im Paketeditor. Fotoaktionen öffnen den bestehenden Originalweg.
+- `canReadQuoteForGoods` vereinheitlicht die beiden Warenleser. Der U249-Zweck erlaubt weiter aktiven Logins die bestehenden operativen Entscheidungen ohne Geldzugriff; finanzielle Leser bleiben getrennt.
+- Browser und OrderIntake importieren den reinen Zahlungs-Vertrag direkt. Der Server-Re-Export entfällt.
+- Erwartete Aufträge kommen aus `v_intake_expected_goods_v1`; die additive Migration ergänzt Grund und Stornokennzeichen.
+- Teilphasen heißen `QUOTE_ONSITE_PHASE_V04`, der Root behält seinen Ereignistyp. „Stand neu lesen“ liest tatsächliche, loginbezogene Phasenbelege und den Entwurf. Bereits gebuchte Fakten bleiben gesperrt; lokale ungebuchte Mengen bleiben erhalten.
+
+Neun echte Replay-Fälle für Vor-Ort-Rundweg, Phasenlesen, Rechte und Paketmehrdeutigkeit: PASS13,12s. Neue gemeinsame Gefahr-/Konflikt-Renderfälle PASS3,76s; Mengenbestätigung und Bearbeitung im gemeinsamen Formular PASS3,55s. Die bestehende Assertion „Angenommene Menge · TEST Teil“ verwendet jetzt das gemeinsame Formular: „Inhalt“ öffnen → „geliefert“. Ihre Prüfungen auf Bearbeitbarkeit und den tatsächlichen Wert1 bleiben erhalten. Keine übrige fachliche Assertion entfernt. Typen, gezielter Lint, Scope und H18 sind grün; die neue Lese-Action ist mit echtem DB-Test klassifiziert, keine zusätzliche Ausnahme.
+
+Migration `20261109042000`: SHA256 `2b44ed2b0b8ad62ffb0715ba50d81c8d83ffdf8cc3b83ba20b218cb93ff29469`. Lokal und auf der freigegebenen Dev mit Abbruchprobe angewandt. Acht Domänentabellen blieben unverändert; Dev hat107 Migrationen, gleich der freigegebenen Union. Dieser Zweig hat105; die zwei weiteren Dev-Migrationen gehören RM und R2. Kein falscher Branch-Gleichstand behauptet.
+
+Lokales Modul-Gate ist ausschließlich wegen33 vorhandener ignorierter Referenzbilder zusätzlich zu den162 Sollbildern rot (`DESIGN_POINTER_PAGE_BINDING`). Diese fremden Dateien und der Checker bleiben unverändert; der normale Gitbaum wird in CI geprüft. Noch keine CI-/READY-Behauptung für diesen neuen Kopf. Der früher geprüfte READY-Stand b0854515 ist ein Vergleichsstand und keine Vorschau dieser Korrektur.
+
 Frisch von Owner-main d25a35aa, Branch codex/paket-eingang. Nur der freigegebene Paket-Durchstich, kein Umbau des allgemeinen roten Plus. Seitenhoheit bindet Durchstich_KV_2026-11-08b; der ältere Dateiname im Paketkopf ist im BAULOG gemeldet.
 
 ## Fertiger Schritt PE-04 und Anschluss PE-02
