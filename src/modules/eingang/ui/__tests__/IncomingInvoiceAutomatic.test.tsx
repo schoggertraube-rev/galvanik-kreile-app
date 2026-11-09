@@ -2,7 +2,7 @@ import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
 import type {ReactNode} from 'react';
 import type {InvoicePorts} from '../../invoiceContract';
-vi.mock('@/ui/kr',()=>({Button:()=>null,Dialog:({children}:{children:ReactNode})=><section role="dialog">{children}</section>,Hinweis:({children}:{children:ReactNode})=><p>{children}</p>,KrApp:({children}:{children:ReactNode})=>children,Toast:({text,aktion}:{text:string;aktion?:{text:string;onClick:()=>void}})=><div role="status">{text}{aktion?<button onClick={aktion.onClick}>{aktion.text}</button>:null}</div>,useKrGeraet:()=> 'desktop'}));
+vi.mock('@/ui/kr',()=>({Button:({text,onClick}:{text:string;onClick:()=>void})=><button onClick={onClick}>{text}</button>,Dialog:({children,fuss}:{children:ReactNode;fuss?:ReactNode})=><section role="dialog">{children}{fuss}</section>,Hinweis:({children}:{children:ReactNode})=><p>{children}</p>,KrApp:({children}:{children:ReactNode})=>children,Toast:({text,aktion}:{text:string;aktion?:{text:string;onClick:()=>void}})=><div role="status">{text}{aktion?<button onClick={aktion.onClick}>{aktion.text}</button>:null}</div>,useKrGeraet:()=> 'desktop'}));
 vi.mock('../IncomingInvoiceDialog',()=>({IncomingInvoiceDialog:()=> <section role="dialog">TEST manueller Editor</section>}));
 import {IncomingInvoiceDialogs} from '../IncomingInvoiceDialogs';
 afterEach(cleanup);
@@ -26,4 +26,17 @@ it('duplicate source attaches through the existing invoice writer without bookin
  const read=vi.fn().mockResolvedValueOnce({code:'OK',view:{item:{id:'TEST-second-source',version:1},fileId:'TEST-second-original',invoice:null,fields,duplicate:{id:'TEST-existing-invoice'},automation:{state:'duplicate',missing:[]}}}).mockResolvedValueOnce({code:'OK',view:{invoice:{id:'TEST-existing-invoice',version:2}}});
  const save=vi.fn().mockResolvedValue({code:'OK',invoice:{id:'TEST-existing-invoice',version:2,zahlstatus:'offen'},replayed:false});render(<IncomingInvoiceDialogs ports={{read,save} as unknown as InvoicePorts} allowed onRefresh={vi.fn()}/>);
  window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'rechnungein',arg:'TEST-second-source'}}));await screen.findByText('Liegt schon · Original am vorhandenen Beleg.');expect(save).toHaveBeenCalledOnce();expect(save).toHaveBeenCalledWith(expect.objectContaining({attachOriginal:true,status:'doppelt',duplicateId:'TEST-existing-invoice'}));expect(save.mock.calls[0][0]).not.toHaveProperty('automatic');expect(screen.queryByRole('button',{name:'Rückgängig'})).not.toBeInTheDocument();expect(screen.queryByText('TEST manueller Editor')).not.toBeInTheDocument();
+});
+
+it('BA14 automatic rejection stays visible with a retry and never renders raw server detail',async()=>{
+ const fields={lieferantId:'TEST-supplier',nummer:'TEST-42',datum:'2026-11-08',faelligAm:'2026-11-22',netto:'100.00',ust:'19.00',brutto:'119.00',iban:'',ibanGeprueft:false};
+ const view={item:{id:'TEST-source',version:1},fileId:'TEST-original',invoice:null,fields,automation:{state:'ready',missing:[]}};
+ const read=vi.fn().mockResolvedValue({code:'OK',view}),save=vi.fn().mockResolvedValue({code:'VALIDATION_ERROR',message:'TEST private SQL/provider detail'});
+ render(<IncomingInvoiceDialogs ports={{read,save} as unknown as InvoicePorts} allowed onRefresh={vi.fn()}/>);
+ window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'rechnungein',arg:'TEST-source'}}));
+ await screen.findByText('Du prüfst die offenen Angaben und versuchst es erneut. Deine Eingaben bleiben erhalten.');
+ expect(screen.queryByText('TEST private SQL/provider detail')).not.toBeInTheDocument();
+ const key=save.mock.calls[0][0].clientKey;
+ fireEvent.click(screen.getByRole('button',{name:'Mit gleicher Kennung erneut versuchen'}));
+ await waitFor(()=>expect(save).toHaveBeenCalledTimes(2));expect(save.mock.calls[1][0].clientKey).toBe(key);
 });

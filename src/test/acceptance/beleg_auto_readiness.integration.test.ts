@@ -202,3 +202,20 @@ it('BA05 reads the direct invoice action label from secure source evidence, neve
  const read=await withSession(fixture,()=>getIntakeMessagesAction('offen'));expect(read).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:itemId,invoiceNumber:'TEST-BA-42'})])});if(read.code!=='OK')throw Error(read.message);
  expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toHaveLength(0);
 });
+
+it('BA14 rejected stale booking leaves the source editable and a fresh reread books exactly once',async()=>{
+ const {fixture,itemId,fileId}=await secureSource();
+ const {getIncomingInvoiceAction,saveIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
+ const initial=await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}));if(initial.code!=='OK')throw Error(initial.message);
+ const input={itemId,fileId,version:initial.view.item.version+1,clientKey:randomUUID(),automatic:true,fields:initial.view.fields,status:'offen',paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null};
+ const before=await sql`SELECT version,einsatz FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`;
+ expect(await withSession(fixture,()=>saveIncomingInvoiceAction(input))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT version,einsatz FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual(before);
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND befehl_id=${input.clientKey}::uuid`).toHaveLength(0);
+ const reread=await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}));expect(reread).toMatchObject({code:'OK',view:{invoice:null,automation:{state:'ready'}}});if(reread.code!=='OK')throw Error(reread.message);
+ const saved=await withSession(fixture,()=>saveIncomingInvoiceAction({...input,version:reread.view.item.version}));expect(saved.code).toBe('OK');if(saved.code!=='OK')throw Error(saved.message);
+ expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid`).toEqual([{id:saved.invoice.id}]);
+ expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND befehl_id=${input.clientKey}::uuid`).toHaveLength(1);
+ expect(await withSession(fixture,()=>getIncomingInvoiceAction({id:itemId}))).toMatchObject({code:'OK',view:{invoice:{id:saved.invoice.id},automation:{state:'stored'}}});
+});
