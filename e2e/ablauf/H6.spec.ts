@@ -20,7 +20,7 @@ it('H6 operational acceptance works for actual logins without Geld and hides all
   expect(await sql`SELECT zugesagt_fassung FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`).toEqual([{zugesagt_fassung:1}]);
   expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{user_id:actor.actorId}]);
   expect(await withSession(full,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:3,lifecycle:{acceptedEdition:1}}});
-  expect(await withSession(actor,()=>changeQuoteLifecycleAction(input))).toMatchObject({code:'OK',replayed:true});
+  expect(await withSession(actor,()=>changeQuoteLifecycleAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true});
   expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{n:1}]);
  }
 });
@@ -49,12 +49,43 @@ it('H6 conditional acceptance, fresh edition, stale reply, current acceptance an
  const accept={quoteId,expectedVersion:5,edition:2,clientEventId:acceptedKey,action:'accept' as const,evidence:'TEST H6 aktuelle Fassung telefonisch zugesagt'};
  expect(await withSession(full,()=>changeQuoteLifecycleAction(accept))).toMatchObject({code:'OK',quote:{version:6,lifecycle:{acceptedEdition:2}}});
  expect(await withSession(full,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:6,lifecycle:{acceptedEdition:2}}});
- expect(await withSession(full,()=>changeQuoteLifecycleAction(accept))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>changeQuoteLifecycleAction(structuredClone(accept)))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${acceptedKey}::uuid`).toEqual([{n:1}]);
  expect(await withSession(full,()=>updateQuoteAction({quoteId,expectedVersion:6,clientEventId:randomUUID(),dueDate:'2027-05-20',note:'TEST H6',positions:[changed]}))).toMatchObject({code:'OK',quote:{version:7,lifecycle:{edition:2,acceptedEdition:2}}});
  expect(await withSession(full,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:7,dueDate:'2027-05-20',lifecycle:{edition:2,acceptedEdition:2}}});
  const premature=await withSession(full,()=>convertQuoteToOrderAction({quoteId,clientEventId:randomUUID(),expectedVersion:7,confirmedAward:true,confirmedOrderDueDate:'2027-05-20',handoverMode:'pickup',paymentMode:'rechnung'}));
  expect(premature.code,'H6/W1: acceptance without goods must never create an order').not.toBe('OK');
  expect(await sql`SELECT linked_order_id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`).toEqual([{linked_order_id:null}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId}`).toEqual([{n:0}]);
+});
+
+it('H6 expired quote cannot be accepted; real extension restores sending and acceptance, decline remains final',async()=>{
+ const customerId=await customerFixture('H6-time');
+ const {createQuoteAction,readQuoteAction,changeQuoteLifecycleAction}=await import('@/app/actions/quotes.actions');
+ const create=()=>withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',validUntil:'2025-01-01',note:'TEST expired quote',positions:[{name:'TEST expiration part',quantity:1,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:2500,lineTotalCents:2500}]}));
+ const created=await create();
+ expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('H6_EXPIRED_CREATE:'+created.code);
+ const quoteId=created.quote.quoteId;
+ expect(await withSession(full,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:1,validUntil:'2025-01-01',lifecycle:{stage:'abgelaufen'}}});
+ const blocked={quoteId,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'accept' as const,evidence:'TEST late phone acceptance'};
+ expect(await withSession(full,()=>changeQuoteLifecycleAction(blocked))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT version,zugesagt_fassung FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`).toEqual([{version:1,zugesagt_fassung:null}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${blocked.clientEventId}::uuid`).toEqual([{n:0}]);
+ const extend={quoteId,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'extend' as const,validUntil:'2027-05-01',evidence:'TEST customer agrees extension'};
+ expect(await withSession(full,()=>changeQuoteLifecycleAction(extend))).toMatchObject({code:'OK',quote:{version:2,validUntil:'2027-05-01'}});
+ expect(await withSession(full,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:2,validUntil:'2027-05-01',lifecycle:{acceptedEdition:null}}});
+ expect(await withSession(full,()=>changeQuoteLifecycleAction(structuredClone(extend)))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT user_id::text,payload->>'action' AS action,payload->>'previousValidUntil' AS previous FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${extend.clientEventId}::uuid`).toEqual([{user_id:full.actorId,action:'extend',previous:'2025-01-01'}]);
+ expect(await withSession(full,()=>changeQuoteLifecycleAction({quoteId,expectedVersion:2,edition:1,clientEventId:randomUUID(),action:'sent',channel:'druck',evidence:'TEST renewed quote handed over'}))).toMatchObject({code:'OK',quote:{version:3}});
+ expect(await withSession(full,()=>changeQuoteLifecycleAction({...blocked,expectedVersion:3}))).toMatchObject({code:'OK',quote:{version:4,lifecycle:{acceptedEdition:1}}});
+ expect(await withSession(full,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:4,lifecycle:{acceptedEdition:1}}});
+ expect(await withSession(full,()=>changeQuoteLifecycleAction(structuredClone({...blocked,expectedVersion:3})))).toMatchObject({code:'OK',replayed:true});
+ const other=await create();expect(other.code).toBe('OK');if(other.code!=='OK')throw Error('H6_DECLINE_CREATE:'+other.code);
+ const reject={quoteId:other.quote.quoteId,expectedVersion:1,edition:1,clientEventId:randomUUID(),action:'reject' as const,reason:'TEST customer declines expired quote'};
+ expect(await withSession(full,()=>changeQuoteLifecycleAction(reject))).toMatchObject({code:'OK',quote:{version:2,lifecycle:{stage:'abgesagt'}}});
+ expect(await withSession(full,()=>readQuoteAction({quoteId:reject.quoteId}))).toMatchObject({code:'OK',quote:{version:2,lifecycle:{stage:'abgesagt'}}});
+ expect(await withSession(full,()=>changeQuoteLifecycleAction(structuredClone(reject)))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT user_id::text,payload->>'action' AS action FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${reject.clientEventId}::uuid`).toEqual([{user_id:full.actorId,action:'reject'}]);
+ expect(await withSession(full,()=>changeQuoteLifecycleAction({...extend,quoteId:reject.quoteId,expectedVersion:2,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
  expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId}`).toEqual([{n:0}]);
 });
