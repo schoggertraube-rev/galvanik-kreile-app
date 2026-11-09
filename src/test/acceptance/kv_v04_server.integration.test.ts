@@ -882,10 +882,23 @@ it.each([false,true])('U246 onsite request existing/new customer %s uses the rea
  const persisted=await withSession(fixture,()=>saveIntakeDraftAction({id:input.clientRequestId,clientEventId:randomUUID(),art:'eingang',payload:{kind:'package-onsite',version:1,clientKey:input.clientRequestId,sourceItemId:itemId,request:input},lastField:null,expectedVersion:null}));
  expect(persisted).toMatchObject({code:'OK',drafts:expect.arrayContaining([expect.objectContaining({id:input.clientRequestId,payload:expect.objectContaining({request:input})})])});
  const resumed=await withSession(fixture,()=>getIntakeDraftsAction());if(resumed.code!=='OK')throw Error('TEST_DRAFT_RESUME');const storedRequest=resumed.drafts.find(row=>row.id===input.clientRequestId)?.payload.request as typeof input;expect(storedRequest).toEqual(input);expect(JSON.stringify(storedRequest)).not.toBe(JSON.stringify(input));
+ if(newCustomer){
+  const bad={...storedRequest,quantities:storedRequest.quantities.map(row=>({...row,received:1,note:null}))};
+  const rejected=await withSession(fixture,()=>receiveOnsiteQuoteAction(bad));expect(rejected).toMatchObject({code:'VALIDATION_ERROR',phase:'goods',progress:{quoteId:expect.any(String),customerId:expect.any(String)}});
+  if(!('progress'in rejected)||!rejected.progress)throw Error('TEST partial progress');
+  const currentDraft=resumed.drafts.find(row=>row.id===input.clientRequestId)!;
+  expect(await withSession(fixture,()=>saveIntakeDraftAction({id:currentDraft.id,clientEventId:randomUUID(),art:'eingang',payload:{...currentDraft.payload,request:bad,progress:rejected.progress},lastField:null,expectedVersion:currentDraft.version}))).toMatchObject({code:'OK'});
+  const restarted=await withSession(fixture,()=>getIntakeDraftsAction());if(restarted.code!=='OK')throw Error('TEST partial resume');const actual=restarted.drafts.find(row=>row.id===input.clientRequestId)!;
+  expect(actual.payload.progress).toEqual(rejected.progress);Object.assign(storedRequest,actual.payload.request,{quantities:input.quantities});
+  expect(await sql`SELECT id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${rejected.progress.customerId}`).toHaveLength(1);
+ }
+ if(newCustomer){const rejectedOrder=await withSession(fixture,()=>receiveOnsiteQuoteAction({...storedRequest,paymentMode:'rechnung'}));expect(rejectedOrder).toMatchObject({code:'VALIDATION_ERROR',progress:{goodsBooked:true}});}
  const received=await withSession(fixture,()=>receiveOnsiteQuoteAction(newCustomer?storedRequest:input));
  expect(received,JSON.stringify(received)).toMatchObject({code:'OK'});
  if(received.code!=='OK'||!('orderReceipt'in received))throw Error('TEST_ONSITE_ACTION:'+received.code+':'+('message'in received?received.message:''));
  const orderId=received.orderReceipt.orderId;
+ if(newCustomer){expect(await sql`SELECT id FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${received.quote.customerId}`).toHaveLength(1);expect(await sql`SELECT id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${received.quote.customerId}`).toHaveLength(1);expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${received.quote.customerId}`).toHaveLength(1);}
+
  if(newCustomer){const {readQuoteAction}=await import('@/app/actions/quotes.actions');expect(await withSession(fixture,()=>readQuoteAction({quoteId:received.quote.quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{goods:[{expectedPositions:[{position:2,quantity:2}]}]}}});}
 
  expect(await withSession(fixture,()=>receiveOnsiteQuoteAction(newCustomer?input:storedRequest))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId}});
@@ -895,7 +908,8 @@ it.each([false,true])('U246 onsite request existing/new customer %s uses the rea
  const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
  expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{commercialQuote:{plannedHours:newCustomer?null:'3.0000',totalNetCents:3000,positions:[{quantity:3,lineTotalCents:3000}]}}}});
  expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[]});
- expect(await withSession(fixture,()=>discardIntakeDraftAction({id:input.clientRequestId,clientEventId:randomUUID(),reason:'TEST Auftrag erfolgreich übernommen',expectedVersion:persisted.code==='OK'?persisted.drafts.find(row=>row.id===input.clientRequestId)!.version:-1}))).toMatchObject({code:'OK'});
+ const finishDraft=await withSession(fixture,()=>getIntakeDraftsAction());if(finishDraft.code!=='OK')throw Error('TEST final draft');
+ expect(await withSession(fixture,()=>discardIntakeDraftAction({id:input.clientRequestId,clientEventId:randomUUID(),reason:'TEST Auftrag erfolgreich übernommen',expectedVersion:finishDraft.drafts.find(row=>row.id===input.clientRequestId)!.version}))).toMatchObject({code:'OK'});
  expect(await sql`SELECT payload->>'reason' AS reason FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='INTAKE_DRAFT_DISCARDED_V1' AND payload->>'draftId'=${input.clientRequestId} AND user_id=${fixture.actorId}::uuid`).toEqual([{reason:'TEST Auftrag erfolgreich übernommen'}]);
  const remaining=await withSession(fixture,()=>getIntakeDraftsAction());if(remaining.code!=='OK')throw Error('TEST_ONSITE_DRAFT_READ');expect(remaining.drafts.some(row=>row.id===input.clientRequestId)).toBe(false);
 

@@ -40,3 +40,13 @@ it('unlocks a validation rejection and offers durable discard with a reason for 
  fireEvent.change(screen.getByLabelText('Grund für das Verwerfen'),{target:{value:'TEST vom Kunden zurückgezogen'}});fireEvent.click(screen.getByRole('button',{name:'Entwurf verwerfen'}));
  await waitFor(()=>expect(discard).toHaveBeenCalledWith(expect.objectContaining({id:'TEST-root',expectedVersion:4,reason:'TEST vom Kunden zurückgezogen'})));await waitFor(()=>expect(close).toHaveBeenCalledOnce());
 });
+
+it('resumes booked customer and quote as locked facts while received quantities remain editable',async()=>{
+ const progress={customerId:'TEST-customer',quoteId:'TEST-quote',quoteNumber:'TEST-KV-7',customerName:'TEST Kundin',goodsBooked:false};
+ const draft={id:'TEST-root',art:'eingang',version:3,payload:{kind:'package-onsite',version:1,clientKey:'TEST-root',sourceItemId:capture.id,request,progress}};
+ const openCustomer=vi.fn();const ports={drafts:{readDrafts:vi.fn(async()=>({code:'OK',drafts:[draft]})),saveDraft:vi.fn(),discardDraft:vi.fn()},receiveOnsiteQuote:vi.fn(),listCustomers:vi.fn(),recognizeIntakeText:vi.fn(),searchIntakeCustomers:vi.fn(async()=>({code:'OK',customers:[]})),openCustomer} as unknown as GlobalCreatePorts;
+ render(<PackageOnsiteEditor capture={capture} ports={ports} onCapture={vi.fn()} onClose={vi.fn()} onDone={vi.fn()}/>);
+ await screen.findByText('Kunde TEST Kundin und KV TEST-KV-7 sind angelegt - korrigiere Ware/Menge und lege den Auftrag an.');
+ expect(screen.getByDisplayValue('TEST Teil')).toBeDisabled();const received=screen.getByLabelText('Angenommene Menge · TEST Teil');expect(received).toBeEnabled();fireEvent.change(received,{target:{value:'1'}});expect(received).toHaveValue(1);
+ fireEvent.click(screen.getByRole('button',{name:'Kundenkarte öffnen'}));expect(openCustomer).toHaveBeenCalledWith('TEST-customer');expect(ports.receiveOnsiteQuote).not.toHaveBeenCalled();
+});

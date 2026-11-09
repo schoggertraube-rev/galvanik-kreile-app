@@ -8,3 +8,5 @@ export type OnsiteQuoteInput={
  quantities:Array<{position:number;received:number;note:string|null}>;
  handoverMode:'pickup'|'shipping';paymentMode:'abholung'|'vorkasse'|'rechnung';confirmedOrderDueDate:string;
 };
+
+export type OnsiteQuoteProgress={customerId:string;quoteId:string;quoteNumber:string;customerName:string;goodsBooked?:boolean};

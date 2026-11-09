@@ -201,7 +201,7 @@ export type GlobalCreateDirectIntakeResult =
   | Failure;
 
 export type GlobalCreatePorts = {
-  receiveOnsiteQuote?: (input:import("@/lib/onsiteQuoteContract").OnsiteQuoteInput)=>Promise<{code:string;message?:string;orderReceipt?:{orderId:string;orderNumber:string}}>;
+  receiveOnsiteQuote?: (input:import("@/lib/onsiteQuoteContract").OnsiteQuoteInput)=>Promise<{code:string;message?:string;progress?:import("@/lib/onsiteQuoteContract").OnsiteQuoteProgress;orderReceipt?:{orderId:string;orderNumber:string}}>;
   readIntakeOrderSource?: (orderId: string) => Promise<{ code: "OK"; source: {
     orderNumber: string; customerId: string; customerQuery: string; intakeSource?: DirectIntakeInput["intakeSource"] | null;
     items: Array<Omit<DirectIntakeInput["items"][number], "executionRequested"> & { executionRequested?: IntakeExecution | null }>;
