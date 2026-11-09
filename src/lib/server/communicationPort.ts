@@ -21,9 +21,24 @@ export function canonicalIntent(value:unknown):string{
  if(value!==null&&typeof value==='object')return '{'+Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,entry])=>JSON.stringify(key)+':'+canonicalIntent(entry)).join(',')+'}';
  return JSON.stringify(value);
 }
+/** Existing complaint mail journal, scoped to its original actor and actual complaint. */
+export async function readPendingComplaintMail(auth:AuthorizationSnapshot,complaintId:string){
+ if(!hasAuthorizationArea(auth,'kunden'))return null;
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<{sendKey:string;version:number;kind:string|null;subject:string|null;body:string|null;orderId:string;retryAt:string}>(sql`
+   SELECT prepared.payload->>'sendKey' AS "sendKey",(prepared.payload->'complaint'->>'version')::integer AS version,prepared.payload->'complaint'->>'kind' AS kind,
+    prepared.payload->'message'->>'subject' AS subject,prepared.payload->'message'->>'body' AS body,thread.order_id AS "orderId",(thread.created_at+interval '5 minutes')::text AS "retryAt"
+   FROM public.communication_threads thread JOIN public.events prepared ON prepared.tenant_id=thread.tenant_id AND prepared.event_type='COMMUNICATION_SEND_PREPARED_V1' AND prepared.payload->>'threadId'=thread.id::text
+   JOIN public.v_complaint_rework_context_v1 complaint ON complaint.tenant_id=thread.tenant_id AND complaint.complaint_id=${complaintId} AND complaint.customer_id=thread.customer_id
+   WHERE thread.tenant_id=${auth.tenantId} AND thread.created_by=${auth.userId}::uuid AND thread.status='pending' AND thread.source='MS_GRAPH_OUT:'||(prepared.payload->>'sendKey') AND prepared.payload->'complaint'->>'complaintId'=${complaintId}
+   ORDER BY thread.created_at,thread.id LIMIT 1`);
+  const row=rows[0];if(!row)return null;
+  return {kind:row.kind==='reminder'?'reminder' as const:'result' as const,retryAt:iso(row.retryAt),request:row.subject&&row.body?{complaintId,version:row.version,clientKey:row.sendKey,subject:row.subject,body:row.body,...(row.kind==='reminder'?{orderId:row.orderId}:{})}:null};
+ });
+}
 export async function readComplaintGoodsReminderContext(auth:AuthorizationSnapshot,orderId:string) {
   if(!hasAuthorizationArea(auth,'kunden'))return null;
-  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{complaintId:string;version:number;orderId:string;number:string;customerName:string;complaintNumber:string}>(sql`SELECT complaint_id AS "complaintId",version,nacharbeit_auftrag_id AS "orderId",rework_order_number AS number,source_customer_name AS "customerName",nummer AS "complaintNumber" FROM public.v_complaint_rework_context_v1 WHERE tenant_id=${auth.tenantId} AND nacharbeit_auftrag_id=${orderId} AND stand='massnahme_nacharbeit' AND rework_ware='erwartet'`));
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{complaintId:string;version:number;orderId:string;number:string;customerName:string;complaintNumber:string}>(sql`SELECT complaint_id AS "complaintId",version,nacharbeit_auftrag_id AS "orderId",rework_order_number AS number,source_customer_name AS "customerName",nummer AS "complaintNumber" FROM public.v_complaint_rework_context_v1 WHERE tenant_id=${auth.tenantId} AND nacharbeit_auftrag_id=${orderId} AND (stand='massnahme_nacharbeit' AND rework_ware='erwartet' OR EXISTS(SELECT 1 FROM public.communication_threads thread JOIN public.events prepared ON prepared.tenant_id=thread.tenant_id AND prepared.event_type='COMMUNICATION_SEND_PREPARED_V1' AND prepared.payload->>'threadId'=thread.id::text WHERE thread.tenant_id=${auth.tenantId} AND thread.created_by=${auth.userId}::uuid AND thread.order_id=${orderId} AND thread.status='pending' AND prepared.payload->'complaint'->>'complaintId'=complaint_id AND prepared.payload->'complaint'->>'kind'='reminder'))`));
   return rows.length===1?rows[0]:null;
 }
 export async function readComplaintGoodsReminderDates(tx:import('./privilegedDb').PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]) {

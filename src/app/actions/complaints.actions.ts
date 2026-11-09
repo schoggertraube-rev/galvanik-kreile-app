@@ -3,7 +3,7 @@ import {unstable_noStore as noStore} from "next/cache";
 import {readComplaints,executeComplaint,readComplaintOrderSource,readComplaintOrderChoices} from "@/modules/complaints/server-public";
 import {recordIntakeComplaintEffect} from "@/modules/eingang/server-public";
 import {resolveAuthorization,hasAuthorizationArea} from '@/lib/server/authorization';
-import {sendCommunicationMail,readComplaintGoodsReminderContext} from '@/lib/server/communicationPort';
+import {sendCommunicationMail,readComplaintGoodsReminderContext,readPendingComplaintMail} from '@/lib/server/communicationPort';
 import {readComplaintResultMail,readComplaintGoodsMail} from '@/lib/server/commands/emailTemplateCommand';
 import {COMPLAINT_DEFECTS,type ComplaintWriteResult,type ComplaintRequest,type ComplaintDialogData} from '@/modules/complaints/public';
 import {readIntakeCapture} from '@/modules/eingang/server-public';
@@ -79,7 +79,8 @@ export async function getComplaintDialogAction(request:ComplaintRequest):Promise
    try{resultMail=await readComplaintResultMail(authorization.data,{'Kunde':source.customerName,'RK-Nummer':complaint.nummer,Ergebnis:resultLabel,'Begründung':complaint.begruendung??''});}
    catch(error){console.error('[COMPLAINT_RESULT_TEMPLATE_FAILED]',error);}
   }
-  return {code:'OK',data:{complaint,source:{id:source.id,number:source.number,customerName:source.customerName,items:source.items.map(item=>({id:item.id,name:item.name,quantity:item.quantity,unit:item.unit}))},initial,suggestedDate,resultMail,rework:complaint?.nacharbeitAuftragId&&complaint.reworkStation?{station:complaint.reworkStation,goods:complaint.reworkGoods??null}:null}};
+  const mailRecovery=complaint?await readPendingComplaintMail(authorization.data,complaint.id):null;
+  return {code:'OK',data:{mailRecovery,complaint,source:{id:source.id,number:source.number,customerName:source.customerName,items:source.items.map(item=>({id:item.id,name:item.name,quantity:item.quantity,unit:item.unit}))},initial,suggestedDate,resultMail,rework:complaint?.nacharbeitAuftragId&&complaint.reworkStation?{station:complaint.reworkStation,goods:complaint.reworkGoods??null}:null}};
  }catch(error){console.error('[COMPLAINT_DIALOG_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Reklamation konnte nicht geladen werden. Code: COMPLAINT_DIALOG_READ_FAILED.'};}
 }
 

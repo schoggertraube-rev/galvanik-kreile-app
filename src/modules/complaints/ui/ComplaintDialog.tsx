@@ -19,11 +19,15 @@ const amount=(s:string)=>/^\d+(?:[,.]\d{1,2})?$/.test(s.trim())?Math.round(Numbe
 export function ComplaintDialog({request,ports,onClose,onMessage}:{request:ComplaintRequest;ports:ComplaintPorts;onClose:()=>void;onMessage:(text:string)=>void}) {
   const [data,setData]=useState<ComplaintDialogData|null>(null),[draft,setDraft]=useState<Draft|null>(null),[baseline,setBaseline]=useState(''),[error,setError]=useState<string|null>(null),[mode,setMode]=useState<Mode>('reminderOrderId'in request?'reminder':'daten'),[gaps,setGaps]=useState<Record<string,string>>({}),[closePrompt,setClosePrompt]=useState(false),[busy,setBusy]=useState(false),[photoBusy,setPhotoBusy]=useState(false),[unclear,setUnclear]=useState(false);
   const [mailCheckAt,setMailCheckAt]=useState<string|null>(null),[mailReload,setMailReload]=useState(false),[mailRetry,setMailRetry]=useState(false);
+  const restoredMail=useRef<NonNullable<ComplaintDialogData['mailRecovery']>['request']>(null);
   const nextComplaint=useRef<string|null>(null);
   const working=useRef(false),key=useRef(crypto.randomUUID()),pending=useRef<null|(()=>Promise<void>)>(null),fileInput=useRef<HTMLInputElement>(null),root=useRef<HTMLDivElement>(null);
   const can=(area:typeof ports.areas[number])=>ports.areas.includes(area);
   const load=useCallback(async()=>{
-    try {const result=await ports.read(request);if(result.code!=='OK'||!('data'in result)){setError(complaintFailureCopy(result.code));return;}const value=initial(result.data);setData(result.data);setDraft(value);setBaseline(JSON.stringify(value));setError(null);setMailCheckAt(null);setMailReload(false);setMailRetry(false);setUnclear(false);pending.current=null;key.current=crypto.randomUUID();}
+    try {const result=await ports.read(request);if(result.code!=='OK'||!('data'in result)){setError(complaintFailureCopy(result.code));return;}const value=initial(result.data);setData(result.data);setDraft(value);setBaseline(JSON.stringify(value));setError(null);setMailCheckAt(null);setMailReload(false);setMailRetry(false);setUnclear(false);pending.current=null;key.current=crypto.randomUUID();
+      const recovery=result.data.mailRecovery;restoredMail.current=recovery?.request??null;
+      if(recovery){setMode(recovery.kind==='reminder'?'reminder':'mail');setUnclear(true);setError(recovery.request?MAIL_DELIVERY_COPY.checking:MAIL_DELIVERY_COPY.recoveryMissing);setMailCheckAt(recovery.request?recovery.retryAt:null);setMailReload(!recovery.request);if(recovery.request){key.current=recovery.request.clientKey;const restored={...value,subject:recovery.request.subject,body:recovery.request.body};setDraft(restored);setBaseline(JSON.stringify(restored));}}
+    }
     catch(cause){console.error('[COMPLAINT_DIALOG_READ_FAILED]',cause);setError('Reklamation konnte nicht geladen werden. Code: COMPLAINT_DIALOG_READ_FAILED.');}
   },[ports,request]);
   useEffect(()=>{const timer=setTimeout(()=>void load(),0);return()=>clearTimeout(timer);},[load]);
@@ -39,7 +43,7 @@ export function ComplaintDialog({request,ports,onClose,onMessage}:{request:Compl
     complete(text.replace('{nummer}',result.receipt.number));
   };
   const save=()=>{
-    if(!data||!draft||working.current||mailCheckAt||mailReload)return;
+    if(!data||!draft||working.current||mailCheckAt&&!restoredMail.current||mailReload)return;
     if(pending.current){void run(pending.current);return;}
     const complaint=data.complaint;
     if(!complaint){
@@ -52,7 +56,7 @@ export function ComplaintDialog({request,ports,onClose,onMessage}:{request:Compl
       void run(()=>write(input,'Reklamation {nummer} aufgenommen · Meister entscheidet'));return;
     }
     if(!Number.isSafeInteger(complaint.version)||Number(complaint.version)<1){setError('Bearbeitungsstand fehlt · Reklamation neu laden. Es wurde nichts gesendet; alle Eingaben sind noch da.');return;}
-    const identity={clientKey:key.current,complaintId:complaint.id,version:complaint.version!};
+    const identity=restoredMail.current?{clientKey:restoredMail.current.clientKey,complaintId:restoredMail.current.complaintId,version:restoredMail.current.version}:{clientKey:key.current,complaintId:complaint.id,version:complaint.version!};
     if(mode==='zurueckziehen'||mode==='abschliessen'||mode==='wieder'){
       const max=mode==='wieder'?200:500;if(draft.note.trim().length<3||draft.note.trim().length>max){missing({[mode==='wieder'?'grund':'notiz']:(mode==='wieder'?'Grund':'Notiz')+` muss 3–${max} Zeichen haben.`});return;}
       const input:ComplaintCommand=mode==='wieder'?{...identity,action:'wieder_oeffnen',reason:draft.note.trim()}:{...identity,action:'abschliessen',kind:mode==='zurueckziehen'?'zurueckgezogen':'ohne_mail',note:draft.note.trim(),sentThreadId:null};
@@ -64,12 +68,12 @@ export function ComplaintDialog({request,ports,onClose,onMessage}:{request:Compl
     }
     if(mode==='mail'||mode==='reminder'){
       if(!draft.subject.trim()||!draft.body.trim()){missing({mail:'Betreff und Nachricht fehlen.'});return;}
-      void run(async()=>{const result=mode==='reminder'?ports.sendReminder?await ports.sendReminder({...identity,orderId:complaint.nacharbeitAuftragId!,subject:draft.subject,body:draft.body}):{code:'UNAVAILABLE',message:'Begleitschein-Versand ist nicht verfügbar.'}:await ports.sendResult({...identity,subject:draft.subject,body:draft.body});
+      void run(async()=>{const result=mode==='reminder'?ports.sendReminder?await ports.sendReminder({...identity,orderId:restoredMail.current?.orderId??complaint.nacharbeitAuftragId!,subject:draft.subject,body:draft.body}):{code:'UNAVAILABLE',message:'Begleitschein-Versand ist nicht verfügbar.'}:await ports.sendResult({...identity,subject:draft.subject,body:draft.body});
        const changed='delivery'in result&&result.delivery==='source-changed'||'data'in result&&result.data?.sourceChanged===true;
        if(changed){setMailCheckAt(null);setMailReload(true);setUnclear(false);pending.current=null;const customer='deliveryCustomer'in result&&typeof result.deliveryCustomer==='string'?result.deliveryCustomer:'data'in result&&result.data?.deliveryCustomer?result.data.deliveryCustomer:data.source.customerName;setError(MAIL_DELIVERY_COPY.sourceChanged(customer));return;}
        if('delivery'in result&&result.delivery==='checking'){setUnclear(true);setMailCheckAt('retryAt'in result&&typeof result.retryAt==='string'?result.retryAt:null);setError(MAIL_DELIVERY_COPY.checking);return;}
        setMailCheckAt(null);
-       if('delivery'in result&&result.delivery==='failed'){setUnclear(false);pending.current=null;key.current=crypto.randomUUID();setMailRetry(true);setError(MAIL_DELIVERY_COPY.failed('deliveryCustomer'in result&&typeof result.deliveryCustomer==='string'?result.deliveryCustomer:data.source.customerName));return;}
+       if('delivery'in result&&result.delivery==='failed'){setUnclear(false);pending.current=null;restoredMail.current=null;key.current=crypto.randomUUID();setMailRetry(true);setError(MAIL_DELIVERY_COPY.failed('deliveryCustomer'in result&&typeof result.deliveryCustomer==='string'?result.deliveryCustomer:data.source.customerName));return;}
        if(result.code!=='OK'){setUnclear(result.code==='UNAVAILABLE');if(result.code!=='UNAVAILABLE')pending.current=null;setError(complaintFailureCopy(result.code));return;}complete(mode==='reminder'?'Begleitschein gesendet · Erinnerung ruht für 5 Arbeitstage':'Reklamation abgeschlossen');});return;
     }
     const errors:Record<string,string>={};
@@ -88,7 +92,7 @@ export function ComplaintDialog({request,ports,onClose,onMessage}:{request:Compl
     const assessment=draft.assessment as 'berechtigt'|'kulanz'|'abgelehnt';
     void run(()=>write({...identity,action:'entscheiden',assessment,measure:assessment==='abgelehnt'?'ablehnen':'gutschrift',reason:draft.reason.trim()||null,creditCents:assessment==='abgelehnt'?null:amount(draft.credit)},assessment==='abgelehnt'?'Entschieden · abgelehnt':'Entschieden · Gutschrift'));
   };
-  const checkMail=useEffectEvent(()=>{if(pending.current&&!working.current)void run(pending.current);});
+  const checkMail=useEffectEvent(()=>{if(working.current)return;if(pending.current)void run(pending.current);else if(restoredMail.current)save();});
   useEffect(()=>{if(!mailCheckAt)return;const at=Date.parse(mailCheckAt);if(!Number.isFinite(at))return;const timer=setTimeout(()=>checkMail(),Math.max(0,at-Date.now()));return()=>clearTimeout(timer);},[mailCheckAt]);
   if(!data||!draft)return <Dialog titel="Reklamation" icon="alert" groesse="breit" onSchliessen={onClose}><Zustand art={error?'fehler':'laedt'} text={error??'Reklamation wird geladen …'} aktion={error?{text:'Erneut',onClick:()=>void load()}:undefined}/></Dialog>;
   const ResultMail=ports.ResultMail;

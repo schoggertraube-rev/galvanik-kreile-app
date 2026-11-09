@@ -268,3 +268,17 @@ it('RM07 result source conflict offers reload rather than claiming the complaint
  expect(screen.queryByText('TEST internal failure')).toBeNull();expect(screen.queryByRole('button',{name:'Erneut'})).toBeNull();expect(onClose).not.toHaveBeenCalled();expect(onMessage).not.toHaveBeenCalled();expect(ports.write).not.toHaveBeenCalled();
  fireEvent.click(screen.getByRole('button',{name:'Neu laden'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));expect(send).toHaveBeenCalledOnce();
 });
+
+
+it.each(['result','reminder'] as const)('RM07 fully reopened %s dialog recovers original version and message before reconciliation',async kind=>{
+ const request={complaintId:'TEST-complaint',version:2,clientKey:crypto.randomUUID(),subject:'TEST Originalbetreff',body:'TEST Ursprünglicher Inhalt',...(kind==='reminder'?{orderId:'TEST-rework'}:{})};
+ const data:ComplaintDialogData={...base,complaint:{id:'TEST-complaint',customerId:'TEST-customer',orderId:base.source.id,itemId:null,legacyPositionId:null,reason:'TEST defect',stationId:null,description:'TEST',photoIds:[],createdAt:'2026-10-12T08:00:00Z',resolvedAt:null,resolution:null,status:'open',stand:kind==='result'?'abgeschlossen':'massnahme_nacharbeit',nummer:'RK-TEST',version:3,nacharbeitAuftragId:'TEST-rework'},resultMail:{subject:'TEST heutige Vorlage',body:'TEST geänderte Vorlage'},rework:{station:'angenommen',goods:'da'},mailRecovery:{kind,request,retryAt:new Date(Date.now()+200).toISOString()}};
+ const send=vi.fn().mockResolvedValue({code:'CONFLICT',delivery:'source-changed',deliveryCustomer:'TEST Kunde',message:'TEST raw conflict'});
+ const ports:ComplaintPorts={areas:['kunden'],read:vi.fn(async()=>({code:'OK' as const,data})),write:vi.fn(),rework:vi.fn(),openOrder:vi.fn(),openPhoto:vi.fn(),addPhoto:vi.fn(),sendResult:send,sendReminder:send,ResultMail:p=><label>TEST wiederhergestellt<textarea value={p.body} disabled={p.busy} onChange={e=>p.onBody(e.target.value)}/></label>};
+ const onClose=vi.fn();const old=render(<ComplaintDialog request={{complaintId:'TEST-complaint'}} ports={ports} onClose={onClose} onMessage={vi.fn()}/>);old.unmount();
+ render(<ComplaintDialog request={kind==='result'?{complaintId:'TEST-complaint'}:{reminderOrderId:'TEST-rework'}} ports={ports} onClose={onClose} onMessage={vi.fn()}/>);
+ const body=await screen.findByRole('textbox',{name:'TEST wiederhergestellt'});expect(body).toHaveValue(request.body);expect(body).toBeDisabled();
+ expect(screen.queryByRole('button',{name:'Senden'})).toBeNull();expect(screen.queryByRole('button',{name:'Begleitschein senden'})).toBeNull();
+ await screen.findByText('Die Mail an TEST Kunde ist rausgegangen. Der Vorgang wurde inzwischen geändert – lies ihn neu, die Mail steht im Verlauf.');
+ expect(send).toHaveBeenCalledExactlyOnceWith(request);expect(ports.write).not.toHaveBeenCalled();expect(onClose).not.toHaveBeenCalled();
+});
