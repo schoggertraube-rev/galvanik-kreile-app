@@ -22,4 +22,10 @@ Keine neuen DB-Schreibwege; die vorhandenen Writer und Verträge bleiben unverä
 
 Die drei Köpfe lesen weiterhin dieselben Daten: KV-Teile/Termin/Arbeitszeit aus dem vorhandenen KV-Leser; Rechnungsbetrag über den vorhandenen Cent-Vertrag formatiert. Keine geschätzten Preise oder Ersatzzahlen. Verwaiste alte Kopf-/Thumbnail-Stile und ein nicht konsumierter optionaler Link wurden aus dem ersetzten Ergebnisrenderer entfernt. Typprüfung und gezieltes Lint dieses Standes sind grün.
 
-Noch ausdrücklich nicht fertig: Zusatzangaben als echte antippbare Chips vollständig durchbinden, abschließende Original-/Faktenansicht prüfen und nach E1-Merge dessen alte separate Capture-Ergebnisprojektion ohne Verlust der sieben Fehler-Auswege in die gemeinsame Ansicht integrieren. Deshalb bleibt dieser PR Entwurf, unabhängig von grünen Einzelchecks.
+Noch ausdrücklich nicht fertig: abschließende Original-/Faktenansicht prüfen und nach E1-Merge dessen alte separate Capture-Ergebnisprojektion ohne Verlust der sieben Fehler-Auswege in die gemeinsame Ansicht integrieren. Deshalb bleibt dieser PR Entwurf, unabhängig von grünen Einzelchecks.
+
+## Zusatzangaben und Fehlertexte
+
+Die Chips öffnen dieselbe Kundenkarte bzw. dasselbe Packstücke-Feld; der IBAN-Chip fokussiert das bestehende bearbeitbare Feld. Busy-/Readonly-Grenzen bleiben wirksam. Der bisherige doppelte Kundenknopf im Paket-Zwischenstand wird durch genau den einen Chip ersetzt; er verwendet die gespeicherte Quittungs-Kunden-ID vor einem lokalen Auswahlstand. Ein gezielter Fehlerfall dieses Umbaus wurde im Produkt behoben; die unveränderte Abnahme für gesperrte Kundendaten und weiter editierbare Mengen ist danach grün.
+
+Die Waren-/Rechnungseditoren verwenden die identische Fehlercode-Abbildung aus dem E1-Katalog statt roher Servermeldungen. Ein gezielter tatsächlicher Renderer-Fall prüft sichtbaren Fehlerausweg und dass ein synthetischer SQL-Fehlertext niemals angezeigt wird. Dieser Fall, Typprüfung und Lint sind grün. Keine Serveraktion oder ihr Eingabevertrag wurde verändert.

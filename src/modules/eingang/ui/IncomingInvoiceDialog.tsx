@@ -1,6 +1,6 @@
 'use client';
 import {IntakeResultHeader,IntakeResultOriginal} from './IntakeSituation';
-import {RESULT_COPY} from '@/ui/situationCatalog';
+import {RESULT_COPY,captureFailureCopy} from '@/ui/situationCatalog';
 import {ACTOR_COPY} from '@/ui/situationCatalog';
 import {useEffect,useRef,useState} from 'react';
 import {Button,Checkbox,Dialog,Eingabe,Feld,Hinweis,Kachel,Rueckfrage,Segment,Textfeld,Zustandskette} from '@/ui/kr';
@@ -31,13 +31,13 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
   if(supplierQuery.trim().length<2||selected&&supplierQuery===selected.name)return;
   let active=true;const timer=setTimeout(async()=>{
    setSearching(true);
-   try{const result=await ports.searchSuppliers(supplierQuery);if(!active)return;if(result.code==='OK')setSuppliers(result.suppliers);else setMessage(result.message);}
+   try{const result=await ports.searchSuppliers(supplierQuery);if(!active)return;if(result.code==='OK')setSuppliers(result.suppliers);else setMessage(captureFailureCopy(result.code));}
    catch(error){console.error('[INVOICE_SUPPLIER_SEARCH_CLIENT_FAILED]',error);if(active)setMessage('Lieferantensuche fehlgeschlagen · Fehlercode: INVOICE_SUPPLIER_SEARCH_CLIENT_FAILED.');}
    finally{if(active)setSearching(false);}
   },250);return()=>{active=false;clearTimeout(timer);};
  },[supplierQuery,selected,ports]);
  useEffect(()=>{
-  const refresh=async(event:Event)=>{try{const detail=(event as CustomEvent<{itemId?:string;customerId?:string;customerName?:string}>).detail;const result=await ports.read({id:initial.item.id});if(result.code!=='OK'){setMessage(result.message);return;}
+  const refresh=async(event:Event)=>{try{const detail=(event as CustomEvent<{itemId?:string;customerId?:string;customerName?:string}>).detail;const result=await ports.read({id:initial.item.id});if(result.code!=='OK'){setMessage(captureFailureCopy(result.code));return;}
    setView(result.view);setUncertain(result.view.uncertain);setSelected(result.view.supplier);setSupplierQuery(result.view.supplier?.name??'');setFields(current=>({...current,lieferantId:result.view.supplier?.id??current.lieferantId}));
    if(detail?.itemId===initial.item.id&&detail.customerId&&detail.customerName&&result.view.invoice&&!result.view.invoice.lieferant_id){const found=await ports.searchSuppliers(detail.customerName);if(found.code==='OK'){const supplier=found.suppliers.find(value=>value.id===detail.customerId);if(supplier){setSelected(supplier);setSupplierQuery(supplier.name);setFields(current=>({...current,lieferantId:supplier.id}));setCorrect(true);setOutcome('offen');}}}
   }catch(error){console.error('[INVOICE_RETURN_READ_FAILED]',error);setMessage('Lieferant konnte nicht neu gelesen werden · Fehlercode: INVOICE_RETURN_READ_FAILED.');}};
@@ -57,9 +57,9 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
    if(file){if(file.size<1||file.size>150*1024*1024)throw Error('INVOICE_PROOF_SIZE_INVALID');const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());pendingProof.current={file,id:crypto.randomUUID(),sha256:[...new Uint8Array(digest)].map(value=>value.toString(16).padStart(2,'0')).join('')};}
    const pending=pendingProof.current;if(!pending)throw Error('INVOICE_PROOF_MISSING');
    const grant=await ports.prepareFile({itemId:view.item.id,fileId:pending.id,name:pending.file.name,mime:pending.file.type||'application/octet-stream',bytes:pending.file.size,sha256:pending.sha256});
-   if(grant.code!=='OK'){setMessage(grant.message);setProofRetry(true);return;}
+   if(grant.code!=='OK'){setMessage(captureFailureCopy(grant.code));setProofRetry(true);return;}
    if(grant.upload)await uploadIntakeOriginal(grant.upload,pending.file);
-   const finished=await ports.finishFile(pending.id);if(finished.code!=='OK'){setMessage(finished.message);setProofRetry(true);return;}
+   const finished=await ports.finishFile(pending.id);if(finished.code!=='OK'){setMessage(captureFailureCopy(finished.code));setProofRetry(true);return;}
    setProofFileId(pending.id);setProofName(pending.file.name);setView(current=>({...current,item:{...current.item,version:finished.capture.version}}));pendingProof.current=null;
   }catch(error){console.error('[INVOICE_PROOF_UPLOAD_FAILED]',{code:error instanceof Error?error.name:'INVOICE_PROOF_UPLOAD_FAILED'});setMessage('Nachweis nicht sicher gespeichert · Eingaben bleiben erhalten · Fehlercode: INVOICE_PROOF_UPLOAD_FAILED.');setProofRetry(true);}
   finally{working.current=false;setBusy(false);setUploading(false);}
@@ -83,7 +83,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
     :await ports.save({itemId:view.item.id,fileId:view.fileId,version:view.item.version,clientKey:key.current,fields,status:status as Exclude<typeof status,'ungueltig'>,
      paidDate:status==='bezahlt'?paidDate:null,proofFileId:status==='bezahlt'?proofFileId:null,duplicateId:status==='doppelt'?duplicate?.id??null:null,duplicateReason:duplicateReason.trim()||null,unclearReason:status==='unklar'?reason.trim():null});
    if(result.code==='DUPLICATE'){setDuplicate(result.duplicate);return;}
-   if(result.code!=='OK'){setErrors(result.fields??{});setMessage('Nicht gespeichert · alle Eingaben sind noch da · '+result.message);setRetry(true);return;}
+   if(result.code!=='OK'){setErrors(result.fields??{});setMessage(captureFailureCopy(result.code));setRetry(true);return;}
    const text=result.invoice.unklar_grund==='Lieferant fehlt'?'Lieferant fehlt · Aufgabe angelegt':mode==='klaeren'?'Rechnung geklärt · '+status:mode==='bezahlt_markieren'?'Als bezahlt markiert':status==='doppelt'?'Als doppelt abgelegt · Eingang erledigt':status==='unklar'?'Eingangsrechnung unklar · Aufgabe für Recht Geld':status==='bezahlt'?'Eingangsrechnung erfasst · bezahlt':'Eingangsrechnung erfasst · fällig '+dateLabel(result.invoice.faellig_am??'');
    onMessage(text,result.invoice.aufgabe_id??undefined);onClose();window.dispatchEvent(new Event(INTAKE_CHANGED_EVENT));
   }catch(error){console.error('[INCOMING_INVOICE_SAVE_CLIENT_FAILED]',error);setMessage('Nicht gespeichert · alle Eingaben sind noch da · Fehlercode: INCOMING_INVOICE_SAVE_CLIENT_FAILED.');setRetry(true);}
@@ -104,7 +104,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
    {duplicate?<><Button data-spec-id="rechnungein.doppelt-ablegen" text="Als doppelt ablegen" art="erledigen" disabled={busy} onClick={()=>void save('doppelt')}/>{!duplicate.exact?<Button data-spec-id="rechnungein.trotzdem" text="Trotzdem erfassen" disabled={busy} onClick={()=>{if(duplicateReason.trim().length<3||duplicateReason.length>200){setErrors({duplicateReason:'Grund fehlt · 3 bis 200 Zeichen'});return;}setDuplicate(null);}}/>:null}</>:mode!=='ansicht'?<Button data-spec-id={'rechnungein.'+primaryId} art="erledigen" icon="check" text={primaryLabel} disabled={busy} onClick={primary}/>:null}
   </>}>
  <div ref={root} data-spec-id="rechnungein" aria-busy={busy} className="kr-stapel">
- <IntakeResultHeader title={fields.nummer?RESULT_COPY.savedInvoice(fields.nummer):RESULT_COPY.invoice} presentation={{status:view.invoice&&view.invoice.zahlstatus==='bezahlt'?'done':Object.keys(invoiceFieldErrors(fields,false)).length?'missing':'waiting',missing:Object.keys(invoiceFieldErrors(fields,false)).map(key=>fieldRows.find(row=>row[0]===key)?.[2]??(key==='lieferantId'?RESULT_COPY.supplier:key)),waiting:RESULT_COPY.confirmation,facts:[{label:RESULT_COPY.supplier,value:selected?.name},{label:RESULT_COPY.number,value:fields.nummer},{label:RESULT_COPY.date,value:fields.datum},{label:RESULT_COPY.gross,value:resultGross===null?null:new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(resultGross/100),emphasis:true}]}} originalCount={view.originals.length} original={<IntakeResultOriginal originals={view.originals} readOriginal={ports.readOriginal} onOpen={fileId=>ports.openOriginal(view.item.id,fileId)}/>}/>
+ <IntakeResultHeader chips={!readOnly&&fields.iban.trim()?[{id:'iban',label:RESULT_COPY.iban,disabled:busy,onSelect:()=>root.current?.querySelector<HTMLInputElement>('[data-invoice-field="iban"]')?.focus()}]:[]} title={fields.nummer?RESULT_COPY.savedInvoice(fields.nummer):RESULT_COPY.invoice} presentation={{status:view.invoice&&view.invoice.zahlstatus==='bezahlt'?'done':Object.keys(invoiceFieldErrors(fields,false)).length?'missing':'waiting',missing:Object.keys(invoiceFieldErrors(fields,false)).map(key=>fieldRows.find(row=>row[0]===key)?.[2]??(key==='lieferantId'?RESULT_COPY.supplier:key)),waiting:RESULT_COPY.confirmation,facts:[{label:RESULT_COPY.supplier,value:selected?.name},{label:RESULT_COPY.number,value:fields.nummer},{label:RESULT_COPY.date,value:fields.datum},{label:RESULT_COPY.gross,value:resultGross===null?null:new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(resultGross/100),emphasis:true}]}} originalCount={view.originals.length} original={<IntakeResultOriginal originals={view.originals} readOriginal={ports.readOriginal} onOpen={fileId=>ports.openOriginal(view.item.id,fileId)}/>}/>
 
   {view.actorTrace?<section data-spec-id="rechnungein.akteure">{view.actorTrace.createdBy?<p>{(view.invoice?ACTOR_COPY.created:ACTOR_COPY.received)(view.actorTrace.createdBy.name??ACTOR_COPY.unknownLogin,new Date(view.actorTrace.createdBy.at).toLocaleString('de-DE'))}</p>:<p>{ACTOR_COPY.missingCase}</p>}{view.actorTrace.lastActor?<p>{ACTOR_COPY.last(view.actorTrace.lastActor.name??ACTOR_COPY.unknownLogin,ACTOR_COPY.action(view.actorTrace.lastActor.action))}</p>:null}</section>:null}
   <div className="ev-rweg"><Zustandskette schritte={[
@@ -128,7 +128,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
      {searching?<span role="status">Lieferant wird gesucht …</span>:null}
     </Feld>
     {!readOnly&&!selected&&(!view.invoice||missingSupplier)?<div className="kr-voll">{suppliers.map(value=><Button key={value.id} text={value.name+' · übernehmen'} onClick={()=>chooseSupplier(value)}/>)}<Button data-spec-id="rechnungein.lieferant-anlegen" text="Lieferant anlegen" onClick={()=>{
-     void ports.createSupplier(view.item.id).then(result=>{if(result.code!=='OK')setMessage(result.message);}).catch(error=>{console.error('[INVOICE_CREATE_SUPPLIER_OPEN_FAILED]',error);setMessage('Lieferant kann nicht geöffnet werden · Fehlercode: INVOICE_CREATE_SUPPLIER_OPEN_FAILED.');});
+     void ports.createSupplier(view.item.id).then(result=>{if(result.code!=='OK')setMessage(captureFailureCopy(result.code));}).catch(error=>{console.error('[INVOICE_CREATE_SUPPLIER_OPEN_FAILED]',error);setMessage('Lieferant kann nicht geöffnet werden · Fehlercode: INVOICE_CREATE_SUPPLIER_OPEN_FAILED.');});
     }}/></div>:null}
     {fieldRows.map(([field,id,label,type])=><Feld key={field} label={label} className={errors[field]?'kr-feld--fehler':undefined}><Eingabe data-invoice-field={field} data-spec-id={'rechnungein.'+id} type={type} required={field!=='iban'&&!readOnly} readOnly={readOnly||field==='iban'&&!!view.invoice} disabled={busy} value={fields[field]} aria-invalid={!!errors[field]} aria-describedby={errors[field]?'invoice-error-'+id:undefined} inputMode={['netto','ust','brutto'].includes(field)?'decimal':undefined} onChange={event=>update(field,event.target.value)}/>{errors[field]?<span id={'invoice-error-'+id} className="kr-feld-fehler" data-spec-id={'rechnungein.'+id+'.fehler'}>{errors[field]}</span>:null}</Feld>)}
    </div></section></div>

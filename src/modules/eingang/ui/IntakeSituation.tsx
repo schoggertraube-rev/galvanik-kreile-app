@@ -17,10 +17,10 @@ export function IntakeResultOriginal({originals,readOriginal,onOpen}:{originals:
 }
 
 /** One factual result layout for capture and its existing editors; no state is stored here. */
-export function IntakeResultHeader({title,presentation,original,originalCount,children,footer}:{title:string;presentation:SituationResultPresentation;original:ReactNode;originalCount:number;children?:ReactNode;footer?:ReactNode}){
+export function IntakeResultHeader({title,presentation,original,originalCount,children,footer,chips=[]}:{title:string;presentation:SituationResultPresentation;original:ReactNode;originalCount:number;children?:ReactNode;footer?:ReactNode;chips?:Array<{id:string;label:string;onSelect:()=>void;disabled?:boolean}>}){
  const facts=presentation.facts.filter((fact):fact is typeof fact&{value:string}=>typeof fact.value==='string'&&Boolean(fact.value.trim()));
  const status=presentation.status==='done'?RESULT_COPY.done:presentation.status==='missing'?RESULT_COPY.missing(presentation.missing):RESULT_COPY.waiting(presentation.waiting??RESULT_COPY.confirmation);
- return <div className={styles.result} data-no-original={originalCount===0}>{originalCount>0?<div className={styles.source}>{original}</div>:null}<div className={styles.resultContent}><span className={styles.status} data-result-status={presentation.status}>{status}</span><h2>{title}</h2>{facts.length?<dl className={styles.facts}>{facts.map(fact=><div key={fact.label}><dt>{fact.label}</dt><dd className={fact.emphasis?styles.emphasis:undefined}>{fact.value}</dd></div>)}</dl>:null}{children}</div>{footer?<footer className={styles.resultFooter}>{footer}</footer>:null}</div>;
+ return <div className={styles.result} data-no-original={originalCount===0}>{originalCount>0?<div className={styles.source}>{original}</div>:null}<div className={styles.resultContent}><span className={styles.status} data-result-status={presentation.status}>{status}</span><h2>{title}</h2>{facts.length?<dl className={styles.facts}>{facts.map(fact=><div key={fact.label}><dt>{fact.label}</dt><dd className={fact.emphasis?styles.emphasis:undefined}>{fact.value}</dd></div>)}</dl>:null}{chips.length?<div className={styles.resultChips}>{chips.map(chip=><button type="button" key={chip.id} onClick={chip.onSelect} disabled={chip.disabled}>{chip.label}</button>)}</div>:null}{children}</div>{footer?<footer className={styles.resultFooter}>{footer}</footer>:null}</div>;
 }
 
 /** Uses secured originals and server candidates only; never guesses an order. */

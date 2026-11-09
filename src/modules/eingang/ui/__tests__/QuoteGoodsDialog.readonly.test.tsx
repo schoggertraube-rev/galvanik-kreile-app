@@ -44,3 +44,7 @@ it('PE condition photo stays in the single existing content camera after the req
  expect(document.querySelectorAll('input[type=file][capture=environment]')).toHaveLength(2);
  expect(ports.save).not.toHaveBeenCalled();expect(ports.convert).not.toHaveBeenCalled();
 });
+
+it('E2 maps server read failures through the catalogue and never exposes raw server messages',async()=>{
+ const ports:QuoteGoodsPorts={read:vi.fn(async()=>({code:'UNAVAILABLE' as const,message:'TEST SQL SELECT private_table password=NOT_A_REAL_SECRET'})),scope:async()=>({code:'OK',scope:'TEST-scope'}),capture:vi.fn(),device:vi.fn(),prepareFile:vi.fn(),finishFile:vi.fn(),original:vi.fn(),save:vi.fn(),convert:vi.fn()};render(<QuoteGoodsDialog quoteId={quote.quoteId} ports={ports} onClose={vi.fn()} onOriginal={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()} onMessage={vi.fn()} onQuote={vi.fn()}/>);expect(await screen.findByRole('status')).toHaveTextContent('Deine Eingaben und Originale bleiben hier');expect(screen.queryByText(/SELECT private_table/)).toBeNull();expect(ports.save).not.toHaveBeenCalled();expect(ports.convert).not.toHaveBeenCalled();
+});

@@ -46,3 +46,7 @@ it('E2 opens the first actual original and counts the remaining originals withou
 it('E2 excludes an unsecured upload from first-original selection and page count',()=>{
  const open=vi.fn();render(<IntakeSituation capture={{...capture,files:[{...capture.files[0],id:'TEST-pending',secured:false},...capture.files,{...capture.files[0],id:'TEST-next'}]}} kind="ware" busy={false} primary={null} onAssign={vi.fn()} onOriginal={open} onOrder={vi.fn()} onMore={vi.fn()} onEdit={vi.fn()} onKind={vi.fn()}/>);expect(screen.getByText('+1')).toBeVisible();fireEvent.click(screen.getByRole('button',{name:'Original ansehen · TEST-Etikett.png'}));expect(open).toHaveBeenCalledExactlyOnceWith('TEST-original');
 });
+
+it('E2 additional chips remain real controls and respect the existing busy guard',()=>{
+ const choose=vi.fn(),blocked=vi.fn();render(<IntakeResultHeader title="TEST Zusatzangaben" originalCount={0} original={null} presentation={{status:'waiting',missing:[],waiting:'deine Bestätigung',facts:[]}} chips={[{id:'edit',label:'TEST Packstücke ändern',onSelect:choose},{id:'blocked',label:'TEST gesperrt',onSelect:blocked,disabled:true}]}/>);fireEvent.click(screen.getByRole('button',{name:'TEST Packstücke ändern'}));expect(choose).toHaveBeenCalledOnce();expect(screen.getByRole('button',{name:'TEST gesperrt'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'TEST gesperrt'}));expect(blocked).not.toHaveBeenCalled();
+});

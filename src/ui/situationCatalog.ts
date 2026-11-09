@@ -1,6 +1,6 @@
 export type SituationResultFact={label:string;value:string|null|undefined;emphasis?:boolean};
 export type SituationResultPresentation=Pick<SituationPresentation,'status'|'missing'|'waiting'|'facts'>;
-export const RESULT_COPY={done:'Erledigt',missing:(fields:readonly string[])=>'Fehlt noch: '+fields.join(', '),waiting:(reason:string)=>'Wartet: '+reason,originals:(additional:number)=>'+'+additional,confirmation:'deine Bestätigung',recognition:'Erkennung',assignment:'Zuordnung',customer:'Kunde',price:'Preis',supplier:'Aussteller',number:'Nummer',date:'Datum',gross:'Brutto',original:'Original ansehen',savedInvoice:(number:string)=>'Rechnung '+number,invoice:'Eingangsrechnung'} as const;
+export const RESULT_COPY={done:'Erledigt',missing:(fields:readonly string[])=>'Fehlt noch: '+fields.join(', '),waiting:(reason:string)=>'Wartet: '+reason,originals:(additional:number)=>'+'+additional,confirmation:'deine Bestätigung',recognition:'Erkennung',assignment:'Zuordnung',customer:'Kunde',price:'Preis',supplier:'Aussteller',number:'Nummer',date:'Datum',gross:'Brutto',iban:'IBAN',original:'Original ansehen',savedInvoice:(number:string)=>'Rechnung '+number,invoice:'Eingangsrechnung'} as const;
 /** One presentation catalogue. Facts are projections of existing readers, never stored here. */
 export type SituationCommand='open-order'|'receive-quote'|'open-assignment'|'open-task'|'receive-order'|'convert-quote'|'save-blocked-goods'|'prepare-quote'|'preview-quote-change'|'request-photos'|'save-document'|'open-document'|'undo-document'|'undo-order'|'open-quote'|'create-customer';
 export type SituationCandidate={id:string;kind:'customer'|'quote'|'order';label:string;reason:string};
@@ -130,3 +130,8 @@ export const PACKAGE_ONSITE_COPY={partial:(name:string,nr:string)=>'Kunde '+name
 
 export const QUOTE_POSITION_COPY={title:'Positionen',position:(n:number)=>'Position '+n,remove:(n:number)=>'Position '+n+' entfernen',name:'Teil / Leistung',placeholder:'Katalog oder Freitext',quantity:'Menge',material:'Material',surface:'Oberfläche',choose:'Bitte wählen',unit:'Einheit',price:'Preis netto (€)',add:'Position hinzufügen'} as const;
 export const PACKAGE_ASSIGN_COPY={notConnected:'Kundenzuordnung ist nicht verbunden · Original bleibt erhalten.',changed:'Kunde wurde inzwischen zugeordnet · neu lesen.',failed:'Zuordnung nicht bestätigt · Original und Auswahl bleiben erhalten.',unavailable:PACKAGE_UNAVAILABLE_COPY} as const;
+
+export function captureFailureCopy(code:string){
+ const text=code==='FORBIDDEN'?'Dir fehlt die Freigabe für diesen Schritt. Deine Eingaben bleiben hier.':code==='CONFLICT'?'Der Eingang wurde inzwischen geändert. Lies ihn erneut; deine Eingaben bleiben hier.':code==='VALIDATION_ERROR'?'Ergänz die fehlenden Angaben und versuch es erneut. Deine Eingaben bleiben hier.':'Du kannst es erneut versuchen. Deine Eingaben und Originale bleiben hier.';
+ return text+' Code: '+code;
+}
