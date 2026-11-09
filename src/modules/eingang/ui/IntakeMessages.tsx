@@ -2,14 +2,14 @@
 import {ComplaintResponseDialog} from './ComplaintResponseDialog';
 import type {IntakeDraft} from '../draftContract';
 import type {ComplaintResponseRequest} from '../messageContract';
-import {ORDER_HANDOVER_COPY,REKLA_MAIL_COPY,MAIL_DELIVERY_COPY} from '@/ui/situationCatalog';
+import {ORDER_HANDOVER_COPY,REKLA_MAIL_COPY,MAIL_DELIVERY_COPY,PHOTOLESS_CLOSE_COPY,complaintFailureCopy} from '@/ui/situationCatalog';
 import {useCallback,useEffect,useEffectEvent,useMemo,useRef,useState,type MouseEvent,type ReactNode} from 'react';
 import {ACTOR_COPY} from '@/ui/situationCatalog';
 import {createPortal} from 'react-dom';
-import {Button,Dialog,Hinweis,Icon,KrApp,useKrGeraet} from '@/ui/kr';
+import {Button,Dialog,Hinweis,Icon,KrApp,useKrGeraet,Feld,Textfeld} from '@/ui/kr';
 import {MESSAGE_FILTERS,INTAKE_CHANGED_EVENT,messageGroupId,messageTone,type MessageFilter,type IntakeMessage,type IntakeMessagesPorts,type IntakeMessagesResult,type IntakeHandoverRequest} from '../messageContract';
 import {concernOptions,type ConcernOption} from '../concernMenuContract';
-import {intakeRequiredEffect} from '../intakeLifecycleContract';
+import {intakeRequiredEffect,INTAKE_CONCERN_AREAS} from '../intakeLifecycleContract';
 import {ConcernMenu} from './ConcernMenu';
 import {IntakeConcernsPanel} from './IntakeConcernsPanel';
 import concernStyles from './IntakeConcernsPanel.module.css';
@@ -35,6 +35,7 @@ export function IntakeMessages({ports,initialGroup,onClose,resumeDraftId}:{ports
  const[reopenInvalid,setReopenInvalid]=useState(false),[writeError,setWriteError]=useState<string|null>(null);
  const key=(operation:string,row:IntakeMessage)=>{const id=operation+':'+row.id+':'+row.version;if(!keys.current.has(id))keys.current.set(id,crypto.randomUUID());return keys.current.get(id)!;};
  const [photoChecks,setPhotoChecks]=useState<Record<string,{row:IntakeMessage;at:string}>>({});
+ const [photoClose,setPhotoClose]=useState<{row:IntakeMessage;reason:string;key:string;error:string|null}|null>(null);
  const [photoFailed,setPhotoFailed]=useState<Record<string,boolean>>({});
  const restorePhotoDelivery=useCallback((messages:IntakeMessage[])=>{
   for(const row of messages){
@@ -97,6 +98,11 @@ export function IntakeMessages({ports,initialGroup,onClose,resumeDraftId}:{ports
   }catch(failure){console.error('[COMPLAINT_PHOTO_REQUEST_UI_FAILED]',failure);fail(REKLA_MAIL_COPY.unavailable,()=>void requestPhotos(row));}
   finally{inFlight.current=false;setBusy(false);}
  };
+ const closePhotoless=async()=>{
+  if(!photoClose||inFlight.current)return;if(photoClose.reason.trim().length<3){setPhotoClose({...photoClose,error:PHOTOLESS_CLOSE_COPY.missing});return;}
+  inFlight.current=true;setBusy(true);try{const changed=await ports.finish({items:[{itemId:photoClose.row.id,version:photoClose.row.version}],clientEventId:photoClose.key,kind:'reklamation_ohne_fotos',note:photoClose.reason.trim()});if(changed.code!=='OK'){setPhotoClose(current=>current?{...current,error:complaintFailureCopy(changed.code)}:null);return;}setPhotoClose(null);await load();setToast(PHOTOLESS_CLOSE_COPY.done);}catch(error){console.error('[PHOTOLESS_CLOSE_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});setPhotoClose(current=>current?{...current,error:complaintFailureCopy('UNAVAILABLE')}:null);}finally{inFlight.current=false;setBusy(false);}
+ };
+ const reloadPhotoless=async()=>{if(!photoClose||inFlight.current)return;inFlight.current=true;setBusy(true);try{const refreshed=await load(),current=refreshed?.messages.find(row=>row.id===photoClose.row.id);if(current?.usage==='offen'&&current.openConcerns.includes('reklamation'))setPhotoClose({...photoClose,row:current,key:crypto.randomUUID(),error:null});else if(refreshed){setPhotoClose(null);setToast(PHOTOLESS_CLOSE_COPY.reloaded);}else setPhotoClose(state=>state?{...state,error:complaintFailureCopy('UNAVAILABLE')}:null);}finally{inFlight.current=false;setBusy(false);}};
  const checkPhotoDelivery=useEffectEvent(async(now:number)=>{
   for(const pending of Object.values(photoChecks)){
    if(Date.parse(pending.at)>now)continue;
@@ -162,6 +168,7 @@ export function IntakeMessages({ports,initialGroup,onClose,resumeDraftId}:{ports
    {photoReplies.length?<div className="ev-g-knoepfe">{photoReplies.map(reply=><div key={reply.replyId}><p>{REKLA_MAIL_COPY.received(reply.photoIds.length)}</p>{result?.areas.includes('auftraege')?<Button art="primaer" text={REKLA_MAIL_COPY.record} onClick={()=>{const target=reply.orderId?reply.orderId+'#'+reply.replyId:row.customerId+'#kundenwahl';if(open('reklamation',target,{sourceItemId:reply.replyId}))fail(ORDER_HANDOVER_COPY.targetUnavailable);}}/>:null}{ports.ReplyMailView&&ports.rejectComplaint&&result?.areas.includes('eingang')&&result.areas.includes('kunden')?<Button text={REKLA_MAIL_COPY.reject} onClick={()=>{const source=result.messages.find(value=>value.id===reply.replyId);if(source)setResponse({row:source});else fail(REKLA_MAIL_COPY.responseUnavailable);}}/>:null}<Button text={REKLA_MAIL_COPY.original} onClick={()=>{if(open('original',reply.replyId+'#'+reply.photoIds[0]))fail(ORDER_HANDOVER_COPY.targetUnavailable);}}/></div>)}</div>:row.photoParentId?<p>{REKLA_MAIL_COPY.parent}</p>:null}
    {own&&row.usage==='offen'&&row.openConcerns.includes('reklamation')&&row.channel==='mail'&&(row.photoCount??0)>0&&!row.photoParentId&&ports.ReplyMailView&&ports.rejectComplaint&&result?.areas.includes('eingang')&&result.areas.includes('kunden')?<Button text={REKLA_MAIL_COPY.reject} onClick={()=>setResponse({row})}/>:null}
    {needsPhotos&&!photoReplies.length?<div className="ev-g-knoepfe">{row.photoDelivery?.state==='source-changed'?<><p role="status">{MAIL_DELIVERY_COPY.sourceChanged(row.photoDelivery.deliveryCustomer??row.customerName??row.senderName??row.senderAddress??'')}</p><Button text={MAIL_DELIVERY_COPY.reload} onClick={()=>void load()}/></>:row.photoRequest?<p role="status">{REKLA_MAIL_COPY.waiting(row.customerName??row.senderName??row.senderAddress??'Kunde')}</p>:photoChecks[row.id]||!photoFailed[row.id]&&row.photoDelivery?.state==='checking'?<p role="status">{MAIL_DELIVERY_COPY.checking}</p>:ports.requestPhotos&&result?.areas.includes('eingang')&&result.areas.includes('kunden')?<><p>{REKLA_MAIL_COPY.missing}</p><Button art="primaer" text={photoFailed[row.id]?MAIL_DELIVERY_COPY.retry:REKLA_MAIL_COPY.request} disabled={busy} onClick={()=>void requestPhotos(row)}/></>:null}</div>:null}
+   {needsPhotos&&!photoReplies.length&&result&&INTAKE_CONCERN_AREAS.reklamation.every(area=>result.areas.includes(area))?<Button text={PHOTOLESS_CLOSE_COPY.open} disabled={busy} onClick={()=>setPhotoClose({row,reason:'',key:crypto.randomUUID(),error:null})}/>:null}
    {own&&row.assignment==='offen'&&row.direction==='rein'?<div className="ev-g-knoepfe">
     {!assignment?<p role="status">Zuordnung wird gelesen …</p>:assignment.code!=='OK'?<div role="alert"><Hinweis ton="warn">{assignment.message}</Hinweis><Button text="Erneut lesen" onClick={()=>void readAssignment(row)}/></div>:<>
      {proposal?<Button data-spec-id="nachrichten.vorschlag-ja" art="primaer" text={'Ja, zu '+proposal.name} disabled={busy} onClick={()=>void confirmAssignment(row,proposal.id)}/>:null}
@@ -184,6 +191,7 @@ export function IntakeMessages({ports,initialGroup,onClose,resumeDraftId}:{ports
   {menu&&menuMessage&&result?createPortal(<KrApp geraet={device} portal><ConcernMenu message={menuMessage} areas={result.areas} anchor={menu} busy={busy} error={visibleError} onSelect={option=>void choose(menuMessage,option)} onInfo={()=>void finish(menuMessage,'info')} onNoBusiness={()=>noBusiness(menuMessage)} onClose={()=>{setMenu(null);setError(null);setWriteError(null);setRetry(null);}}/></KrApp>,document.body):null}
   {handoverChoice?<Dialog titel={ORDER_HANDOVER_COPY.chooseOrder} onSchliessen={()=>{if(!busy)setHandoverChoice(null);}} meldung={visibleError?{ton:'fehler',text:visibleError}:null}>{handoverChoice.choices.map(choice=><Button key={choice.id} text={ORDER_HANDOVER_COPY.choose(choice.number??choice.id)} disabled={busy} onClick={()=>void runHandover({...handoverChoice.request,orderId:choice.id,expectedVersion:choice.version})}/>)}</Dialog>:null}
   {reopening?<Dialog titel="Wieder öffnen" onSchliessen={()=>{if(!busy){setReopening(null);setWriteError(null);setRetry(null);}}} meldung={visibleError?{ton:'fehler',text:visibleError}:null} fuss={<><Button text="Zurück" disabled={busy} onClick={()=>{setReopening(null);setWriteError(null);setRetry(null);}}/><Button data-spec-id="nachrichten.wieder-speichern" art="primaer" text={busy?'Wird gespeichert …':'Wieder öffnen'} disabled={busy} onClick={()=>{setWriteError(null);void reopen();}}/></>}><div data-spec-id="nachrichten.zustand.wieder"><label>Grund<input className="kr-input" data-spec-id="nachrichten.grund" aria-invalid={reopenInvalid} aria-describedby={reopenInvalid?'nachrichten.grund.fehler':undefined} minLength={3} maxLength={200} value={reason} onChange={event=>{setReason(event.target.value);setReopenInvalid(false);setError(null);}}/></label>{reopenInvalid?<span id="nachrichten.grund.fehler" data-spec-id="nachrichten.grund.fehler" role="alert">{visibleError}</span>:null}</div></Dialog>:null}
+  {photoClose?<Dialog titel={PHOTOLESS_CLOSE_COPY.open} onSchliessen={()=>{if(!busy)setPhotoClose(null);}} meldung={photoClose.error?{ton:'fehler',text:photoClose.error}:null} fuss={<><Button text={PHOTOLESS_CLOSE_COPY.cancel} disabled={busy} onClick={()=>setPhotoClose(null)}/>{photoClose.error?<Button text={PHOTOLESS_CLOSE_COPY.reload} disabled={busy} onClick={()=>void reloadPhotoless()}/>:null}<Button text={busy?PHOTOLESS_CLOSE_COPY.pending:PHOTOLESS_CLOSE_COPY.save} disabled={busy} onClick={()=>void closePhotoless()}/></>}><Feld label={PHOTOLESS_CLOSE_COPY.reason}><Textfeld value={photoClose.reason} maxLength={2000} disabled={busy} onChange={e=>setPhotoClose({...photoClose,reason:e.target.value,error:null})}/></Feld></Dialog>:null}
   {response?<ComplaintResponseDialog key={response.row.id} row={response.row} ports={ports} restored={response.restored} onClose={message=>{setResponse(null);if(message)setToast(message);}} onSent={()=>{setResponse(null);setToast(REKLA_MAIL_COPY.responseSent);void load();}}/>:null}
  </section>;
 }

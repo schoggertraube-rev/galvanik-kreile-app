@@ -133,3 +133,5 @@ export function complaintFailureCopy(code:string):string{
 }
 
 export const COMPLAINT_PHOTO_POLICY_COPY={title:'Fotos zur Reklamation',reminder:'Fotos-Erinnerung nach',call:'Anruf nach',unit:'Arbeitstage',save:'Fristen speichern',saving:'Wird gespeichert …',saved:'Fristen gespeichert.',reload:'Stand neu laden',reloaded:'Stand neu gelesen · deine Eingaben sind noch da.',companyMissing:'Speichere zuerst die Firmendaten.',invalid:'Gib ganze Arbeitstage ein oder lass die Frist leer.',missing:(label:string)=>'Frist '+label+' ist nicht eingestellt - in den Einstellungen festlegen',failure:(code:string)=>code==='FORBIDDEN'?'Dir fehlt das Recht für die Einstellungen.':code==='CONFLICT'?'Die Einstellungen wurden geändert. Lies den Stand neu; deine Eingaben bleiben erhalten.':'Nicht gespeichert · deine Eingaben bleiben erhalten.'} as const;
+
+export const PHOTOLESS_CLOSE_COPY={open:'Ohne Fotos schließen',reason:'Grund',save:'Schließen',cancel:'Weiter bearbeiten',pending:'Wird geschlossen …',done:'Reklamationsanliegen ohne Fotos geschlossen.',missing:'Nenne einen konkreten Grund.',reload:'Stand neu laden',reloaded:'Stand neu gelesen.'} as const;

@@ -16,7 +16,7 @@ export function intakeHandoverDirective(text:string){
 }
 export function intakeInvoiceReviewRequired(concerns:readonly string[],kind:string|null,id:string|null){return concerns.includes('rechnung')&&!(kind==='rechnung'&&id);}
 export type IntakeSelectionInput={itemId:string;version:number;clientEventId:string;concern:IntakeSelectableConcern};
-export type IntakeUseInput={items:Array<{itemId:string;version:number}>;clientEventId:string;kind:'info'|'erledigt';note:string|null};
+export type IntakeUseInput={items:Array<{itemId:string;version:number}>;clientEventId:string;kind:'info'|'erledigt'|'reklamation_ohne_fotos';note:string|null};
 export type IntakeReopenInput={itemId:string;version:number;clientEventId:string;reason:string};
 export type IntakeUseResult={code:'OK';captures:IntakeCapture[]}|{code:'INVOICE_REVIEW_REQUIRED';itemId:string;message:string}|Exclude<IntakeCaptureResult,{code:'OK'}>;
 

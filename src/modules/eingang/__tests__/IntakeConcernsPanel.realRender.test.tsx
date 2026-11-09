@@ -86,3 +86,15 @@ it('RM07 reopening after reassignment reconciles the original version and recipi
  expect(requestPhotos).toHaveBeenCalledOnce();expect(requestPhotos).toHaveBeenCalledWith(expect.objectContaining({targetId:'TEST-original-customer',clientRequestId:oldKey,complaintPhotoRequest:{itemId:message.id,version:1}}));
  expect(list).toHaveBeenCalledTimes(2);expect(screen.queryByText('Wird gerade geprüft')).toBeNull();expect(screen.queryByRole('button',{name:'Fotos anfordern'})).toBeNull();expect(screen.getByRole('button',{name:'Neu laden'})).toBeEnabled();
 });
+
+it('RM08 photo-less close requires a reason, retains it after rejection and uses the existing lifecycle port',async()=>{
+ const message=row('TEST-close-no-photos',{concerns:['reklamation','aufgabe'],openConcerns:['reklamation','aufgabe'],photoCount:0});
+ const finish=vi.fn().mockResolvedValueOnce({code:'CONFLICT',message:'TEST hidden SQL'}).mockResolvedValue({code:'OK',captures:[]});
+ const list=vi.fn<IntakeMessagesPorts['list']>().mockResolvedValue({code:'OK',messages:[message],areas:['mails','eingang','kunden','auftraege'],currentLogin:'TEST-actor'});
+ render(<IntakeMessages ports={{list,finish,select:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}}}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Ohne Fotos schließen'}));fireEvent.click(screen.getByText('Schließen',{selector:'footer button'}));
+ await screen.findByText('Nenne einen konkreten Grund.');expect(finish).not.toHaveBeenCalled();fireEvent.change(screen.getByLabelText('Grund'),{target:{value:'TEST Kunde liefert keine Fotos'}});
+ fireEvent.click(screen.getByText('Schließen',{selector:'footer button'}));await screen.findByRole('button',{name:'Stand neu laden'});expect(screen.queryByText('TEST hidden SQL')).toBeNull();expect(screen.getByDisplayValue('TEST Kunde liefert keine Fotos')).toBeEnabled();
+ fireEvent.click(screen.getByText('Schließen',{selector:'footer button'}));await screen.findByText('Reklamationsanliegen ohne Fotos geschlossen.');
+ expect(finish).toHaveBeenCalledTimes(2);expect(finish.mock.calls[1][0]).toEqual(finish.mock.calls[0][0]);expect(finish.mock.calls[0][0]).toMatchObject({items:[{itemId:message.id,version:1}],kind:'reklamation_ohne_fotos',note:'TEST Kunde liefert keine Fotos'});
+});

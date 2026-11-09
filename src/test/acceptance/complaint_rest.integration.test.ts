@@ -516,3 +516,20 @@ it.each([false,true,null])('RM07 result Action retains confirmed mail and a fore
   expect(await withSession(fixture,()=>sendeReklamationErgebnisAction(reread))).toMatchObject(reconcile===null?{code:'OK',replayed:true}:{code:'CONFLICT',delivery:'source-changed'});expect(sends).toBe(1);
  }finally{vi.restoreAllMocks();for(const key of keys){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
 });
+
+
+it.each([false,true])('RM08 closes only the photo-less concern through the existing lifecycle Action (other concern=%s)',async keepOther=>{
+ const fixture=await createFixture(['eingang','kunden','mails','auftraege','geld','kassieren']),denied=await createFixture(['eingang','kunden','mails']),order=await deliveredComplaintSource(fixture);const {rootId}=await replyMailFixture(fixture,order,'image/jpeg',false);
+ const before=await sql`SELECT * FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ await sql`UPDATE public.intake_item SET anliegen_offen=${sql.array(keepOther?['reklamation','aufgabe']:['reklamation'])}::text[] WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${rootId}::uuid`;
+ const {finishIntakeUseAction,getIntakeCaptureAction,saveIntakeDraftAction,getIntakeDraftsAction}=await import('@/app/actions/eingang.actions');const input={items:[{itemId:rootId,version:1}],clientEventId:randomUUID(),kind:'reklamation_ohne_fotos' as const,note:'TEST Kunde hat trotz Erinnerung keine Fotos gesendet'};
+ const photos=await replyMailFixture(fixture,order);expect(await withSession(fixture,()=>finishIntakeUseAction({...input,items:[{itemId:photos.replyId,version:1}],clientEventId:randomUUID()}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(fixture,()=>finishIntakeUseAction({...input,note:''}))).toMatchObject({code:'VALIDATION_ERROR'});expect(await withSession(denied,()=>finishIntakeUseAction(input))).toMatchObject({code:'FORBIDDEN'});
+ const draftId=randomUUID();expect(await withSession(fixture,()=>saveIntakeDraftAction({id:draftId,clientEventId:randomUUID(),expectedVersion:null,lastField:null,art:'eingang',payload:{kind:'TEST-RM08-CLOSE',clientKey:input.clientEventId,request:input}}))).toMatchObject({code:'OK'});
+ const saved=await withSession(fixture,()=>getIntakeDraftsAction());if(saved.code!=='OK')throw Error(saved.message);const reread=saved.drafts.find(row=>row.id===draftId)?.payload.request as typeof input;
+ expect(await withSession(fixture,()=>finishIntakeUseAction(reread))).toMatchObject({code:'OK'});
+ expect(await withSession(fixture,()=>getIntakeCaptureAction(rootId))).toMatchObject({code:'OK',capture:{version:2,usage:keepOther?'offen':'erledigt',openConcerns:keepOther?['aufgabe']:[]}});
+ expect(await sql`SELECT nachher->>'action' AS action,nachher->>'vermerk' AS reason FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${rootId}::uuid AND befehl_id=${input.clientEventId}::uuid`).toEqual([{action:'reklamation.ohne_fotos_geschlossen',reason:input.note}]);
+ expect(await withSession(fixture,()=>finishIntakeUseAction(reread))).toMatchObject({code:'OK'});expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${rootId}::uuid AND befehl_id=${input.clientEventId}::uuid`).toHaveLength(1);
+ expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND intake_item_id=${rootId}::uuid`).toHaveLength(0);expect(await sql`SELECT * FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(before);
+});

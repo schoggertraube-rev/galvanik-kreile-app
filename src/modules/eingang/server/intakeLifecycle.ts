@@ -57,16 +57,26 @@ export async function selectIntakeConcern(input:unknown):Promise<IntakeCaptureRe
 }
 /** Info/Erledigt never clears an unresolved business decision, including in batches. */
 export async function finishIntakeUse(input:unknown):Promise<IntakeUseResult>{
- if(!record(input)||!keys(input,'clientEventId,items,kind,note')||!uuid(input.clientEventId)||!['info','erledigt'].includes(String(input.kind))
+ if(!record(input)||!keys(input,'clientEventId,items,kind,note')||!uuid(input.clientEventId)||!['info','erledigt','reklamation_ohne_fotos'].includes(String(input.kind))
   ||!(input.note===null||typeof input.note==='string'&&input.note.length<=2000)||!Array.isArray(input.items)||!input.items.length||input.items.length>100
   ||input.items.some(item=>!record(item)||!keys(item,'itemId,version')||!identity(item))||new Set(input.items.map(item=>item.itemId)).size!==input.items.length)return {code:'VALIDATION_ERROR',message:'Eingänge oder Vermerk sind ungültig.'};
  const value=input as IntakeUseInput;
+ if(value.kind==='reklamation_ohne_fotos'&&(value.items.length!==1||!value.note||value.note.trim().length<3))return {code:'VALIDATION_ERROR',message:'Ein Anliegen und ein konkreter Grund sind erforderlich.'};
  try{const auth=await session();await withPrivilegedTenantTransaction(auth,async tx=>{
   for(const item of [...value.items].sort((a,b)=>a.itemId.localeCompare(b.itemId))){
    const row=await source(tx,auth,item.itemId),intent={command:'eingang.einsatz_erledigen',kind:value.kind,note:value.note,version:item.version};
    if(await repeated(tx,auth,row,value.clientEventId,'einsatz',intent))continue;
    if(row.version!==item.version)reject('CONFLICT','Ein Eingang wurde inzwischen geändert · nichts gespeichert.');
    if(row.einsatz!=='offen')reject('CONFLICT','Ein Eingang ist bereits erledigt · nichts gespeichert.');
+   if(value.kind==='reklamation_ohne_fotos'){
+    if(!INTAKE_CONCERN_AREAS.reklamation.every(area=>hasAuthorizationArea(auth,area)))reject('FORBIDDEN','Reklamation schließen benötigt das bestehende Reklamationsrecht.');
+    if(!row.anliegen_offen.includes('reklamation'))reject('CONFLICT','Das Reklamationsanliegen ist nicht mehr offen.');
+    const photos=await tx.execute(sql`SELECT file.id FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.mime LIKE 'image/%' AND EXISTS(SELECT 1 FROM public.intake_event secured WHERE secured.tenant_id=file.tenant_id AND secured.item_id=file.item_id AND secured.art='original_gespeichert' AND secured.nachher->>'fileId'=file.id::text AND secured.nachher->>'sha256'=file.sha256) LIMIT 1`);
+    if(photos.length)reject('VALIDATION_ERROR','Fotos sind vorhanden · Reklamation bearbeiten.');
+    const concerns=row.anliegen_offen.filter(concern=>concern!=='reklamation'),usage=concerns.length?'offen':'erledigt';
+    await tx.execute(sql`UPDATE public.intake_item SET anliegen_offen=${strings(concerns)},einsatz=${usage},einsatz_aktion=CASE WHEN ${usage}='erledigt' THEN 'erledigt' ELSE einsatz_aktion END,einsatz_vermerk=${value.note!.trim()},einsatz_am=statement_timestamp(),einsatz_von=${auth.userId}::uuid,geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp(),version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid AND version=${item.version}`);
+    await event(tx,auth,row,value.clientEventId,'einsatz',intent,{action:'reklamation.ohne_fotos_geschlossen',einsatz:usage,anliegen_offen:concerns,vermerk:value.note!.trim()});continue;
+   }
    if(intakeInvoiceReviewRequired(row.anliegen,row.vorgang_art,row.vorgang_id))throw new InvoiceReviewRequired(row.id);
    const required=intakeRequiredEffect(row.anliegen_offen);if(required)reject('VALIDATION_ERROR',required+' · Eingang bleibt offen.');
    await tx.execute(sql`UPDATE public.intake_item SET einsatz=${value.kind},anliegen_offen='{}'::text[],einsatz_aktion=${value.kind},einsatz_vermerk=${value.note},einsatz_am=statement_timestamp(),einsatz_von=${auth.userId}::uuid,
