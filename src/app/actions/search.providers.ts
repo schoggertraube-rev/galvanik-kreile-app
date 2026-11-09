@@ -86,7 +86,7 @@ export function buildSearchProviders(authorization: AuthorizationSnapshot, reads
       },
     });
   }
-  if (authorization.permissions.includes("perm_view_prices")) {
+  if (hasAuthorizationArea(authorization,'geld')) {
     providers.push({
       id: "invoices",
       label: "Rechnungen",
