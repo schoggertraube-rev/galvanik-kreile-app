@@ -54,12 +54,12 @@ it.each([false,true])('BA07 supplier return resumes only safely recognized uncha
 });
 
 
-it.each(['prepare','finish'])('BA14 proof %s rejection stays inside the dialog, keeps fields and retries the same original',async stage=>{
+it.each(['prepare','finish','network'])('BA14 proof %s rejection stays inside the dialog, keeps fields and retries the same original',async stage=>{
  const {webcrypto}=await import('node:crypto');vi.stubGlobal('crypto',webcrypto);
  try{
  const initial:InvoiceView={item:{id:'TEST-source',version:1,at:'2026-11-09T01:00:00Z',channel:'datei',sender:null},invoice:null,supplier:{id:'TEST-supplier',name:'TEST Lieferant',iban:null,paymentTermDays:null},originals:[],fileId:'TEST-original',fields:{lieferantId:'TEST-supplier',nummer:'TEST-42',datum:'2026-11-08',faelligAm:'2026-11-22',netto:'100.00',ust:'19.00',brutto:'119.00',iban:'',ibanGeprueft:false},uncertain:0,conflict:null,duplicate:null};
  const prepare=vi.fn().mockResolvedValue({code:'OK',fileId:'TEST-proof',upload:null}),finish=vi.fn().mockResolvedValue({code:'OK',capture:{version:2}});
- if(stage==='prepare')prepare.mockResolvedValueOnce({code:'CONFLICT',message:'TEST SQL private upload detail'});else finish.mockResolvedValueOnce({code:'CONFLICT',message:'TEST SQL private upload detail'});
+ if(stage==='prepare')prepare.mockResolvedValueOnce({code:'CONFLICT',message:'TEST SQL private upload detail'});else if(stage==='finish')finish.mockResolvedValueOnce({code:'CONFLICT',message:'TEST SQL private upload detail'});else prepare.mockRejectedValueOnce(new Error('TEST SQL private upload detail'));
  const ports={prepareFile:prepare,finishFile:finish,searchSuppliers:vi.fn().mockResolvedValue({code:'OK',suppliers:[]})} as unknown as InvoicePorts;
  const {container}=render(<IncomingInvoiceDialog initial={initial} ports={ports} onClose={vi.fn()} onMessage={vi.fn()}/>);
  fireEvent.click(screen.getByRole('button',{name:'Ist schon bezahlt'}));

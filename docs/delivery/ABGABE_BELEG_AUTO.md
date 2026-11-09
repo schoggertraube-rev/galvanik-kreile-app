@@ -1,3 +1,19 @@
+# AP-BELEG-AUTO - Arbeitsstand, noch keine Abnahme
+
+## Massgeblicher Stand 09.11., 08:58
+
+Produktstand vor dieser Fortschreibung: e212310e auf codex/beleg-auto-main, frisch von main 0e85c86a. Eigene BA-Commits wurden uebernommen; Main-Akteur-Leser, Felder und Anzeigen bleiben erhalten. Altzweig gesichert. Scope und Typpruefung PASS. Die folgenden aelteren Abschnitte sind historische Teilnachweise, keine aktuelle Fertigmeldung.
+
+Umgesetzt: sichere automatische Ablage im vorhandenen Rechnungswriter, Ruecknahme/Neuablage derselben Zeile, eindeutige identische Originale anhaengen, Nachrichten-Hauptaktion/Erkennungsausloesung, optionale Bemerkung/Person/Fahrzeug mit bestehenden Listen, JSONB-Retry und bearbeitbare Ablehnung. Keine automatische Zahlung.
+
+BA08: Client und Server erlauben ausdruecklich bezahlt ohne erfundene Faelligkeit. Offen/automatisch brauchen sie weiterhin. Neue Migration 20261109074500_supplier_paid_without_due.sql aendert nur diese Fallunterscheidung; weitere Pflichtfelder/Zahlungsdatum/Originalschutz bleiben. Lokale Abbruchprobe und unveraenderte bestehende Zeilen belegt. Nach Main-Nachzug echter Action->DB->Ansicht->JSONB-Retry 4,40s PASS; SQL offen-ohne-Faelligkeit/bezahlt-ohne-Nummer weiter abgewiesen. Sieben Editorfaelle 0,879s PASS. Keine Dev-Anwendung/Paritaet behauptet: lokale DB ist genehmigte Branch-Union113.
+
+BA14: Nachweis-Vorbereitung/-Fertigstellung und geworfener Uebertragungsfehler bleiben im Dialog, gleiche Datei/Kennung und Eingaben erhalten. Fehler einschliesslich Suche/Rueckkehr/Oeffnen nutzen vorhandenen Situationskatalog, technische Ursachen bleiben im Log. Drei gezielte Nachweis-Retryfaelle 0,687s PASS. Keine Assertion entfernt, Netzwerkfall ergaenzt.
+
+Offen, NICHT mergefaehig: BA09 Zahlungsart-Hinweis/Datum, BA10 unsichere Dublette anderer Aussteller, BA11 neues Foto am selben Eingang (gesammelte Produktfrage08:49 an PL). BA12 kein vorhandener Export-/Abschlussstatus; kein neuer Export gebaut. Ausserdem Dev-Migrationsnachweis, finaler Sichtlauf, exakte READY-Preview, Pflicht-CI, unabhaengiges PL-PASS. Zwei andere PRs offen, kein neuer PR. Keine echte OCR/Provider/Kamera als getestet ausgegeben, isolierte TEST-Fixtures.
+
+## Historische Teilnachweise
+
 # AP-BELEG-AUTO – vorbereitete Server-Lesestelle
 
 Branch codex/beleg-auto, frisch von main d25a35aa. Kein PR (zwei andere PRs offen); keine Auto-Buchung oder Oberfläche gebaut.

@@ -11,10 +11,10 @@ export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoiceP
  const [message,setMessage]=useState<{text:string;taskId?:string;invoice?:{id:string;version:number}}|null>(null),device=useKrGeraet(),generation=useRef(0),autoKeys=useRef(new Map<string,string>()),automatic=useRef(new Map<string,Promise<Awaited<ReturnType<InvoicePorts['save']>>>>());
  const refresh=useRef(onRefresh),lastOpen=useRef<string|null>(null),undoing=useRef(false);useEffect(()=>{refresh.current=onRefresh;},[onRefresh]);
  const open=useCallback(async(arg:string)=>{
-  if(!allowed){setMessage({text:'Recht Geld fehlt'});return;}
+  if(!allowed){setMessage({text:belegFailureCopy('FORBIDDEN')});return;}
   lastOpen.current=arg;const id=arg.split('#',2)[0];if(!id)return;const current=++generation.current;setLoading(true);setFailure(null);
   try{const result=await ports.read({id});if(current!==generation.current)return;
-   if(result.code!=='OK'){if(result.code==='FORBIDDEN'){setMessage({text:'Recht Geld fehlt'});return;}setFailure(belegFailureCopy(result.code));return;}
+   if(result.code!=='OK'){if(result.code==='FORBIDDEN'){setMessage({text:belegFailureCopy('FORBIDDEN')});return;}setFailure(belegFailureCopy(result.code));return;}
    const view=result.view;
    if(!view.invoice&&['ready','duplicate'].includes(view.automation?.state??'')&&view.fileId){
     const operation=view.item.id+':'+view.item.version;if(!autoKeys.current.has(operation))autoKeys.current.set(operation,crypto.randomUUID());
