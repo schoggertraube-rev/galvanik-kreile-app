@@ -59,7 +59,7 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
    if(existing.length>1)throw Error('INTAKE_MAIL_IDENTITY_AMBIGUOUS');
    if(existing[0])return {itemId:existing[0].id,replayed:true};
    const previous=readPrevious?await readPrevious(tx,auth,mail.id):null;
-   const id=intakeMailIdentity(auth.tenantId+':graph:'+mail.id),concerns=recognizeNoteConcerns(mail.subject+'\n'+mail.body).map(row=>row.id);
+   const id=intakeMailIdentity(auth.tenantId+':graph:'+mail.id),concerns=recognizeNoteConcerns(mail.subject+'\n'+mail.body,'mail').map(row=>row.id);
    const concernArray=sql`ARRAY[${sql.join(concerns.map(value=>sql`${value}`),sql`, `)}]::text[]`;
    await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,empfangen_am,absender_name,absender_adresse,betreff,text,gruppe_adresse,graph_message_id,internet_message_id,anliegen,anliegen_offen,kunde_id,vorgang_art,vorgang_id,zuordnung)
     VALUES(${id}::uuid,${auth.tenantId},${'graph:'+mail.id},'mail','rein','mailabruf',${auth.userId}::uuid,${mail.receivedAt}::timestamptz,${mail.senderName},${mail.senderAddress},${mail.subject},${mail.body},${mail.senderAddress.trim().toLowerCase()},${mail.id},${mail.internetMessageId},${concernArray},${concernArray},${previous?.customerId??null},${previous?.orderId?'auftrag':null},${previous?.orderId??null},${previous?.customerId?'hand':'offen'})`);

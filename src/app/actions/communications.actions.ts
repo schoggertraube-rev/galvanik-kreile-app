@@ -73,6 +73,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
  const authorizationResult=await authorization();
  if(!authorizationResult.ok)return {code:'UNAUTHENTICATED' as const,message:authorizationResult.message};
  const auth=authorizationResult.data;
+ if(!input||typeof input!=='object')return sendCommunicationMail(auth,input);
  let attachment,document:CommunicationDocument|undefined;
  if(input.attachment){
   const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);

@@ -75,7 +75,12 @@
     "supabase/migrations/20261108060000_kv_date_preserves_edition.sql",
     "20261108151002_kv_conversion_undo.sql",
     "20261108165057_quote_decline_write_guard.sql",
-    "20261108170039_quote_complaint_source.sql"
+    "20261108170039_quote_complaint_source.sql",
+    "20261109205400_ablauf_quote_revision_commercial_terms.sql",
+    "20261109211000_ablauf_quote_terms_revision_copies.sql",
+    "20261109211400_ablauf_missing_company_vat.sql",
+    "20261109211900_ablauf_quote_binding_audit_undo.sql",
+    "20261109223400_ablauf_uniform_quote_revision_vat.sql"
   ],
   "viewsFunctions": [
     "private.create_quote_v1",
@@ -107,6 +112,8 @@
     "emits": [
       "QUOTE_AWARDED_V1",
       "QUOTE_CREATED_V1",
+      "QUOTE_VAT_FROM_COMPANY_V1",
+      "QUOTE_MINUTES_FROM_TOTAL_V1",
       "QUOTE_UPDATED_V1",
       "QUOTE_LIFECYCLE_V04",
       "QUOTE_CALCULATION_V04",

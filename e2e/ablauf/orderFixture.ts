@@ -9,13 +9,18 @@ export async function customerFixture(label:string){
  return customerId;
 }
 
+export async function intakeOrderFixture(label:string,customerId:string,handoverMode:'pickup'|'shipping'='pickup'){
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode,paymentMode:'rechnung',note:'TEST '+label,items:[{catalogServiceId:null,name:'TEST '+label+' Teil',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
+ if(created.code!=='OK')throw Error('FIXTURE_ORDER:'+created.code);
+ return created;
+}
+
 /** Synthetic initial state for later boundaries, using the actual order writers. */
 export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'shipping'='pickup'){
  const customerId=await customerFixture(label);
- const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
  const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,setExtraWorkHourlyRateAction,freezeOrderAction,getExtraWorkMasterDataAction}=await import('@/app/actions/orders.actions');
- const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode,paymentMode:'rechnung',note:'TEST '+label,items:[{catalogServiceId:null,name:'TEST '+label+' Teil',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
- if(created.code!=='OK')throw Error('FIXTURE_ORDER:'+created.code);
+ const created=await intakeOrderFixture(label,customerId,handoverMode);
  const orderId=created.receipt.orderId;
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));
  if(moved.code!=='OK')throw Error('FIXTURE_HANDOFF:'+moved.code);

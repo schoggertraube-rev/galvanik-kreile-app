@@ -15,6 +15,8 @@ export type QuoteCommandContext = {
 };
 
 export type QuotePositionInput = {
+  unit?: string | null;
+  plannedMinutes?: number | null;
   name: string;
   quantity: number;
   material: string | null;
@@ -65,6 +67,7 @@ export type UpdateQuoteInput = {
 };
 
 export type QuotePosition = QuotePositionInput & {
+  vatRateBasisPoints?: 0 | 700 | 1900 | null;
   id: string;
   position: number;
   lineTotalCents: number;
