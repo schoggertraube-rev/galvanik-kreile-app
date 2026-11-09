@@ -4,7 +4,7 @@ import {RESULT_COPY} from '@/ui/situationCatalog';
 import {ACTOR_COPY} from '@/ui/situationCatalog';
 import {useEffect,useRef,useState} from 'react';
 import {Button,Checkbox,Dialog,Eingabe,Feld,Hinweis,Kachel,Rueckfrage,Segment,Textfeld,Zustandskette} from '@/ui/kr';
-import {invoiceDate,invoiceFieldErrors,invoiceWarnings,type InvoiceFields,type InvoicePorts,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
+import {invoiceCents,invoiceDate,invoiceFieldErrors,invoiceWarnings,type InvoiceFields,type InvoicePorts,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
 import {INTAKE_CHANGED_EVENT} from '../messageContract';
 import {uploadIntakeOriginal} from '../intakeOriginalUpload';
 
@@ -92,6 +92,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
  const missingSupplier=!!view.invoice&&!view.invoice.lieferant_id&&view.invoice.unklar_grund==='Lieferant fehlt';
  const readOnly=mode==='ansicht'||mode==='bezahlt_markieren'||mode==='klaeren'&&!correct&&!missingSupplier;
  const warnings=invoiceWarnings(fields,selected),due=dateLabel(fields.faelligAm),primaryLabel=uploading?'Nachweis wird gesichert …':busy?'Wird erfasst …':mode==='klaeren'?'Klärung speichern':mode==='bezahlt_markieren'?'Als bezahlt markieren':mode==='unklar'?'Als unklar erfassen':mode==='bezahlt'?'Erfassen · bezahlt':due?'Erfassen · fällig '+due:'Erfassen';
+ const resultGross=invoiceCents(fields.brutto);
  const primaryId=mode==='klaeren'?'klaerung-speichern':mode==='bezahlt_markieren'?'als-bezahlt':mode==='unklar'?'unklar-speichern':mode==='bezahlt'?'bezahlt-speichern':'offen';
  const primary=()=>void save(mode==='klaeren'?(outcome===' '?'offen':outcome):mode==='bezahlt'||mode==='bezahlt_markieren'?'bezahlt':mode==='unklar'?'unklar':'offen');
  return <><Dialog titel="Rechnung prüfen" icon="file" groesse="breit" schliessenSpecId="rechnungein.schliessen" onSchliessen={close} vorSchliessen={()=>!working.current}
@@ -103,7 +104,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
    {duplicate?<><Button data-spec-id="rechnungein.doppelt-ablegen" text="Als doppelt ablegen" art="erledigen" disabled={busy} onClick={()=>void save('doppelt')}/>{!duplicate.exact?<Button data-spec-id="rechnungein.trotzdem" text="Trotzdem erfassen" disabled={busy} onClick={()=>{if(duplicateReason.trim().length<3||duplicateReason.length>200){setErrors({duplicateReason:'Grund fehlt · 3 bis 200 Zeichen'});return;}setDuplicate(null);}}/>:null}</>:mode!=='ansicht'?<Button data-spec-id={'rechnungein.'+primaryId} art="erledigen" icon="check" text={primaryLabel} disabled={busy} onClick={primary}/>:null}
   </>}>
  <div ref={root} data-spec-id="rechnungein" aria-busy={busy} className="kr-stapel">
- <IntakeResultHeader title={fields.nummer?RESULT_COPY.savedInvoice(fields.nummer):RESULT_COPY.invoice} presentation={{status:view.invoice&&view.invoice.zahlstatus==='bezahlt'?'done':Object.keys(invoiceFieldErrors(fields,false)).length?'missing':'waiting',missing:Object.keys(invoiceFieldErrors(fields,false)).map(key=>fieldRows.find(row=>row[0]===key)?.[2]??(key==='lieferantId'?RESULT_COPY.supplier:key)),waiting:RESULT_COPY.confirmation,facts:[{label:RESULT_COPY.supplier,value:selected?.name},{label:RESULT_COPY.number,value:fields.nummer},{label:RESULT_COPY.date,value:fields.datum},{label:RESULT_COPY.gross,value:fields.brutto,emphasis:true}]}} originalCount={view.originals.length} original={<IntakeResultOriginal originals={view.originals} readOriginal={ports.readOriginal} onOpen={fileId=>ports.openOriginal(view.item.id,fileId)}/>}/>
+ <IntakeResultHeader title={fields.nummer?RESULT_COPY.savedInvoice(fields.nummer):RESULT_COPY.invoice} presentation={{status:view.invoice&&view.invoice.zahlstatus==='bezahlt'?'done':Object.keys(invoiceFieldErrors(fields,false)).length?'missing':'waiting',missing:Object.keys(invoiceFieldErrors(fields,false)).map(key=>fieldRows.find(row=>row[0]===key)?.[2]??(key==='lieferantId'?RESULT_COPY.supplier:key)),waiting:RESULT_COPY.confirmation,facts:[{label:RESULT_COPY.supplier,value:selected?.name},{label:RESULT_COPY.number,value:fields.nummer},{label:RESULT_COPY.date,value:fields.datum},{label:RESULT_COPY.gross,value:resultGross===null?null:new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(resultGross/100),emphasis:true}]}} originalCount={view.originals.length} original={<IntakeResultOriginal originals={view.originals} readOriginal={ports.readOriginal} onOpen={fileId=>ports.openOriginal(view.item.id,fileId)}/>}/>
 
   {view.actorTrace?<section data-spec-id="rechnungein.akteure">{view.actorTrace.createdBy?<p>{(view.invoice?ACTOR_COPY.created:ACTOR_COPY.received)(view.actorTrace.createdBy.name??ACTOR_COPY.unknownLogin,new Date(view.actorTrace.createdBy.at).toLocaleString('de-DE'))}</p>:<p>{ACTOR_COPY.missingCase}</p>}{view.actorTrace.lastActor?<p>{ACTOR_COPY.last(view.actorTrace.lastActor.name??ACTOR_COPY.unknownLogin,ACTOR_COPY.action(view.actorTrace.lastActor.action))}</p>:null}</section>:null}
   <div className="ev-rweg"><Zustandskette schritte={[

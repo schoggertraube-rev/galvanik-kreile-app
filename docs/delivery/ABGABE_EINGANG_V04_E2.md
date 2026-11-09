@@ -17,3 +17,9 @@ Ein Ergebnislayout im bestehenden IntakeSituation.tsx wird von Capture und den K
 Dieser Zweig startet unabhängig von main. E1 (#206) muss vor der finalen Abnahme integriert werden; dessen Rückbau/Text/OCR-Regeln dürfen beim Zusammenführen nicht verloren gehen. Kein fertiger Sicht-PASS, kein unabhängiger PL-PASS und keine Merge-Bitte. Die Preview entsteht ausschließlich aus Git. Original-/Faktenabgleich 1220/768/390, vollständige genaue CI und bestehende Fehlerwege werden am endgültigen Kandidaten dokumentiert.
 
 Keine neuen DB-Schreibwege; die vorhandenen Writer und Verträge bleiben unverändert. Die lokale Datenbankstörung wird nicht durch Wiederholungsschleifen umgangen. Kein Dev-Migrations-Gleichstand oder Provider-Erfolg behauptet.
+
+## Lokale Verfeinerung vor finalem Kandidaten
+
+Die drei Köpfe lesen weiterhin dieselben Daten: KV-Teile/Termin/Arbeitszeit aus dem vorhandenen KV-Leser; Rechnungsbetrag über den vorhandenen Cent-Vertrag formatiert. Keine geschätzten Preise oder Ersatzzahlen. Verwaiste alte Kopf-/Thumbnail-Stile und ein nicht konsumierter optionaler Link wurden aus dem ersetzten Ergebnisrenderer entfernt. Typprüfung und gezieltes Lint dieses Standes sind grün.
+
+Noch ausdrücklich nicht fertig: Zusatzangaben als echte antippbare Chips vollständig durchbinden, abschließende Original-/Faktenansicht prüfen und nach E1-Merge dessen alte separate Capture-Ergebnisprojektion ohne Verlust der sieben Fehler-Auswege in die gemeinsame Ansicht integrieren. Deshalb bleibt dieser PR Entwurf, unabhängig von grünen Einzelchecks.
