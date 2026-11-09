@@ -22,6 +22,31 @@ async function selectedPickupMail(customerId:string){
  return {id:mail.id,version:selected.capture.version};
 }
 
+it('H5 a late pickup request preserves the physical release and creates one readable callback with its original',async()=>{
+ const order=await readyInvoiceOrder('H5-ausgegeben','shipping'),mail=await selectedPickupMail(order.customerId);
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const release={orderId:order.orderId,mode:'versand' as const,expectedVersion:order.version,clientEventId:randomUUID()};
+ const released=await withSession(full,()=>recordGoodsOutAction(release));
+ expect(released.code).toBe('OK');if(released.code!=='OK')throw Error('H5_CLOSED_RELEASE:'+released.code);
+ const request={command:'handover_from_mail' as const,sourceItemId:mail.id,sourceVersion:mail.version,orderId:order.orderId,expectedVersion:released.receipt.orderVersion,clientEventId:randomUUID()};
+ const {changeOrderPickupNoticeAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const result=await withSession(full,()=>changeOrderPickupNoticeAction(request));
+ expect(result).toMatchObject({code:'OK',receipt:{outcome:'call_customer',handoverMode:'shipping',requestedHandoverMode:'pickup'}});
+ if(result.code!=='OK'||!result.receipt||typeof result.receipt!=='object'||!('taskId'in result.receipt)||typeof result.receipt.taskId!=='string')throw Error('H5_CLOSED_CALLBACK_MISSING');
+ const taskId=result.receipt.taskId;
+ const {getIntakeTaskAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId}))).toMatchObject({code:'OK',task:{art:'rueckruf',status:'offen',bezug_id:order.orderId},reference:{type:'auftrag',id:order.orderId}});
+ expect(await withSession(full,()=>getIntakeCaptureAction(mail.id))).toMatchObject({code:'OK',capture:{id:mail.id}});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt',handoverMode:'shipping',handoverNotice:{taskId,taskState:'offen'}}}});
+ const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{physicalStatus:'abgeholt',goodsOut:{eventId:released.receipt.eventId}}});
+ expect(await withSession(full,()=>recordGoodsOutAction(structuredClone(release)))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:released.receipt.eventId}});
+ expect(await withSession(full,()=>changeOrderPickupNoticeAction(structuredClone(request)))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT id::text,erstellt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${request.clientEventId}::uuid`).toEqual([{id:taskId,erstellt_von:full.actorId}]);
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientEventId}::uuid AND event_type='ORDER_HANDOVER_MAIL_V1'`).toEqual([{user_id:full.actorId}]);
+ expect(await sql`SELECT station,handover_mode FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{station:'abgeholt',handover_mode:'shipping'}]);
+});
+
 it('H5 actual customer assignment and concern selection precede a pickup change from mail',async()=>{
  const order=await readyInvoiceOrder('H5','shipping'),mail=await selectedPickupMail(order.customerId);
  const {getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');
