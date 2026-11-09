@@ -1,4 +1,5 @@
 "use client";
+import resultStyles from './IntakeSituation.module.css';
 import {IntakeResultHeader,IntakeResultOriginal} from './IntakeSituation';
 import {RESULT_COPY} from '@/ui/situationCatalog';
 import {useEffect,useRef,useState} from 'react';
@@ -96,7 +97,7 @@ export function PackageOnsiteEditor({capture,ports,onCapture,onClose,onDone,onPa
  const discardBlocked=async()=>{if(work.current||!draft.current||!ports.drafts)return;if(discardReason.trim().length<3){setError(C.discardReasonMissing);return;}work.current=true;setBusy(true);try{const result=await ports.drafts.discardDraft({id:draft.current.id,expectedVersion:draft.current.version,clientEventId:discardKey.current,reason:discardReason.trim()});if(result.code!=='OK'){setError(C.blocked(result.code,missingFields()));return;}window.dispatchEvent(new Event('kreile:intake-drafts-changed'));onClose();}catch(failure){console.error('[PACKAGE_ONSITE_DISCARD_FAILED]',failure);setError(C.draftMissing);}finally{work.current=false;setBusy(false);}};
  const close=()=>{if(work.current)return;if(frozen){if(onPause)onPause();else onClose();return;}setClosePrompt(true);};
  const resultCustomerId=progress?.customerId??selected?.id;
- return <><Dialog titel={C.title} groesse="breit" onSchliessen={close} fuss={<><Button text={C.close} disabled={busy} onClick={close}/><Button art="erledigen" text={busy?C.pending:frozen?C.retry:C.confirm} disabled={busy||!ready||!prefilled} onClick={()=>void save()}/></>}>
+ return <><div className={resultStyles.resultPage}><Dialog titel={C.title} groesse="breit" onSchliessen={close} fuss={<><Button text={C.close} disabled={busy} onClick={close}/><Button art="erledigen" text={busy?C.pending:frozen?C.retry:C.confirm} disabled={busy||!ready||!prefilled} onClick={()=>void save()}/></>}>
  <IntakeResultHeader chips={resultCustomerId?[{id:'customer',label:C.openCustomer,disabled:busy,onSelect:()=>ports.openCustomer(resultCustomerId)}]:[]} title={progress?.quoteNumber??C.title} presentation={{status:missingFields().length?'missing':'waiting',missing:missingFields(),waiting:RESULT_COPY.confirmation,facts:[{label:RESULT_COPY.customer,value:progress?.customerName??selected?.name},{label:RESULT_COPY.number,value:progress?.quoteNumber}]}} originalCount={capture.files.filter(file=>file.secured===true).length} original={<IntakeResultOriginal originals={capture.files.filter(file=>file.secured===true)} readOriginal={ports.readCaptureOriginal} onOpen={fileId=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'original',arg:capture.id+'#'+fileId}}))}/>}/>
 
  {error?<div role="alert"><Hinweis ton="warn">{error}</Hinweis>{conflict?<Button text={C.reload} disabled={busy} onClick={()=>void reloadStand()}/>:null}</div>:null}{frozen?<Hinweis>{C.frozen}</Hinweis>:null}{hasDraft&&error?<><Feld label={C.discardReason}><Textfeld value={discardReason} onChange={e=>setDiscardReason(e.target.value)}/></Feld><Button text={C.discardDraft} disabled={busy} onClick={()=>void discardBlocked()}/></>:null}
@@ -114,5 +115,5 @@ export function PackageOnsiteEditor({capture,ports,onCapture,onClose,onDone,onPa
  </fieldset>
  <Feld label={C.handover}><select value={handover} onChange={e=>selectHandover(e.target.value as typeof handover)}><option value="">{C.choose}</option><option value="pickup">{C.pickup}</option><option value="shipping">{C.shipping}</option></select></Feld>
  <Feld label={C.payment}><select value={payment} onChange={e=>setPayment(e.target.value as typeof payment)}><option value="">{C.choose}</option>{allowed.map(mode=><option key={mode} value={mode}>{mode==='vorkasse'?C.advance:mode==='abholung'?C.cash:C.invoice}</option>)}</select></Feld>
- </fieldset></Dialog>{closePrompt?<Rueckfrage felder={[C.title]} beschaeftigt={busy} onVerwerfen={onClose} onWeiter={()=>setClosePrompt(false)}/>:null}</>;
+ </fieldset></Dialog></div>{closePrompt?<Rueckfrage felder={[C.title]} beschaeftigt={busy} onVerwerfen={onClose} onWeiter={()=>setClosePrompt(false)}/>:null}</>;
 }

@@ -29,3 +29,9 @@ Noch ausdrücklich nicht fertig: abschließende Original-/Faktenansicht prüfen 
 Die Chips öffnen dieselbe Kundenkarte bzw. dasselbe Packstücke-Feld; der IBAN-Chip fokussiert das bestehende bearbeitbare Feld. Busy-/Readonly-Grenzen bleiben wirksam. Der bisherige doppelte Kundenknopf im Paket-Zwischenstand wird durch genau den einen Chip ersetzt; er verwendet die gespeicherte Quittungs-Kunden-ID vor einem lokalen Auswahlstand. Ein gezielter Fehlerfall dieses Umbaus wurde im Produkt behoben; die unveränderte Abnahme für gesperrte Kundendaten und weiter editierbare Mengen ist danach grün.
 
 Die Waren-/Rechnungseditoren verwenden die identische Fehlercode-Abbildung aus dem E1-Katalog statt roher Servermeldungen. Ein gezielter tatsächlicher Renderer-Fall prüft sichtbaren Fehlerausweg und dass ein synthetischer SQL-Fehlertext niemals angezeigt wird. Dieser Fall, Typprüfung und Lint sind grün. Keine Serveraktion oder ihr Eingabevertrag wurde verändert.
+
+## Einheitliche Capture-Projektion und Objekttitel
+
+Die vorhandenen Wiederholungs-/Original-/Zuordnungs-Auswege werden genau einmal in die Ergebnisansicht eingehängt; im bisherigen rechten Bereich erscheinen sie nur außerhalb der Situationsansicht. Der gespeicherte Wortlaut bleibt einmal im vorhandenen Gelesener-Text-Bereich erreichbar. Der gezielte echte Rendererfall prüft die eine Recovery-Projektion, erhaltenen Wortlaut und unveränderte Rückrufaktionen; grün.
+
+Die Ergebnisüberschrift nennt den tatsächlichen Gegenstand; Erklärung und Handlung bleiben darunter. Der vorhandene serverseitige KV-Kandidat wird nicht mehr still als bereits versendet ausgegeben: fehlende Versandinformation bleibt unbekannt. Zwei gezielte Katalogfälle hierzu sind grün. Die vier vorhandenen Dialoge erhalten ausschließlich lokal begrenzte Ergebnis-Geometrie mit Inhaltshöhe. Keine globale Dialogänderung. E1-Zusammenführung muss diese rein technische Einhängung erhalten; endgültige Sicht/PL-Abnahme weiter offen.

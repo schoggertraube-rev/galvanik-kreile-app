@@ -18,3 +18,10 @@
 .resultFooter{grid-column:1/-1;border-top:1px solid #d9e5d4;padding-top:14px;display:flex;justify-content:flex-end;gap:10px}.resultFooter .main{margin:0}.resultFooter .main>div{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
 
 .resultChips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.resultChips button{min-height:48px;border:1px solid #d9e5d4;border-radius:999px;background:#f6f9f4;color:#315f4a;padding:8px 13px;font:14px/1.4 system-ui;cursor:pointer}.resultChips button:disabled{cursor:default;opacity:.6}
+
+.root{width:100%;box-sizing:border-box}.root .resultContent :global(.ev-rein-original){min-height:0;height:auto;max-height:none;white-space:pre-wrap;margin:12px 0;padding:0;border:0;background:transparent;overflow:visible}
+
+.resultPage>:global(.kr-ebene){align-items:flex-start;padding-top:min(5vh,40px)}
+.resultPage>:global(.kr-ebene)>:global(.kr-dialog){width:min(1110px,calc(100vw - 30px));height:auto;min-height:0;max-height:calc(100dvh - 30px);display:flex;flex-direction:column;border-radius:18px;background:#fcfdfb;color:#20352f;overflow:hidden}
+.resultPage>:global(.kr-ebene)>:global(.kr-dialog)>:global(.kr-dialog-inhalt),.resultPage>:global(.kr-ebene)>:global(.kr-dialog--karte)>div:not(:global(.kr-streifen)){flex:0 1 auto;min-height:0;overflow:auto}
+@media(max-width:500px){.resultPage>:global(.kr-ebene){padding-top:12px}.resultPage>:global(.kr-ebene)>:global(.kr-dialog){max-height:calc(100dvh - 24px)}}

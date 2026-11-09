@@ -1,4 +1,5 @@
 'use client';
+import resultStyles from './IntakeSituation.module.css';
 import {IntakeResultHeader,IntakeResultOriginal} from './IntakeSituation';
 import {RESULT_COPY,captureFailureCopy} from '@/ui/situationCatalog';
 import {ACTOR_COPY} from '@/ui/situationCatalog';
@@ -95,7 +96,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
  const resultGross=invoiceCents(fields.brutto);
  const primaryId=mode==='klaeren'?'klaerung-speichern':mode==='bezahlt_markieren'?'als-bezahlt':mode==='unklar'?'unklar-speichern':mode==='bezahlt'?'bezahlt-speichern':'offen';
  const primary=()=>void save(mode==='klaeren'?(outcome===' '?'offen':outcome):mode==='bezahlt'||mode==='bezahlt_markieren'?'bezahlt':mode==='unklar'?'unklar':'offen');
- return <><Dialog titel="Rechnung prüfen" icon="file" groesse="breit" schliessenSpecId="rechnungein.schliessen" onSchliessen={close} vorSchliessen={()=>!working.current}
+ return <><div className={resultStyles.resultPage}><Dialog titel="Rechnung prüfen" icon="file" groesse="breit" schliessenSpecId="rechnungein.schliessen" onSchliessen={close} vorSchliessen={()=>!working.current}
   unterzeile={mode==='klaeren'?'Rechnung klären':mode==='bezahlt_markieren'?'Eingangsrechnung · als bezahlt markieren':undefined}
   meldung={message?{text:message,ton:'fehler'}:null}
   fuss={<><Button data-spec-id={mode==='klaeren'?'rechnungein.klaeren-abbrechen':'rechnungein.abbrechen'} text={mode==='ansicht'?'Schließen':'Abbrechen'} onClick={close} disabled={busy}/>
@@ -142,6 +143,6 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
    <Button data-spec-id="rechnungein.nachweis" art="sekundaer" text={uploading?'Wird gesichert …':'Nachweis'} disabled={busy} onClick={()=>proofInput.current?.click()}/>{proofName?<p role="status">{proofName} · gesichert</p>:null}
    {proofRetry?<Button text="Nachweis erneut sichern" disabled={busy} onClick={()=>void uploadProof()}/>:null}
   </div>:null}
- </div></Dialog>
+ </div></Dialog></div>
  {discard?<Rueckfrage felder={[...fieldRows.filter(([field])=>fields[field]!==initial.fields[field]).map(([, ,label])=>label),...(fields.lieferantId!==initial.fields.lieferantId?['Lieferant']:[]),...(reason?['Grund']:[]),...(duplicateReason?['Grund für die zweite Erfassung']:[]),...(outcome!==' '?['Ergebnis']:[])]} beschaeftigt={busy} onVerwerfen={onClose} onWeiter={()=>setDiscard(false)}/>:null}</>;
 }
