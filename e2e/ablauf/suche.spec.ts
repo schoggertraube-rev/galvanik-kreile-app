@@ -2,7 +2,60 @@ import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
-import {customerFixture} from './orderFixture';
+import {customerFixture,readyInvoiceOrder} from './orderFixture';
+
+async function searchOrderFixture(label:string,customerId:string){
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',note:'TEST '+label,items:[{catalogServiceId:null,name:'TEST '+label+' Teil',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
+ expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('SEARCH_INITIAL_ORDER:'+created.code);
+ return created;
+}
+
+it('S5/S6 search exact stored order and customer numbers through the actual action without creating data',async()=>{
+ const customerId=await customerFixture('S5-S6');
+ const created=await searchOrderFixture('S5-S6',customerId);
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const customer=await withSession(full,()=>getCustomerSummaryAction({customerId}));
+ expect(customer.code).toBe('OK');if(customer.code!=='OK'||!customer.data.customerNumber)throw Error('S6_CUSTOMER_NUMBER');
+ const before=await sql`SELECT (SELECT count(*)::integer FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG}) AS orders,(SELECT count(*)::integer FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}) AS events`;
+ const order=await withSession(full,()=>searchTenantAction(created.receipt.orderNumber));
+ expect(order).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'ORDER',id:created.receipt.orderId,matchField:'orderNumber'})])});
+ const found=await withSession(full,()=>searchTenantAction(customer.data.customerNumber!));
+ expect(found).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'CUSTOMER',id:customerId,matchField:'customerNumber'})])});
+ expect(await sql`SELECT (SELECT count(*)::integer FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG}) AS orders,(SELECT count(*)::integer FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}) AS events`).toEqual(before);
+});
+
+it('S7 chrom is grounded in the actual stored part surface and never invents a customer relation',async()=>{
+ const customerId=await customerFixture('S7');
+ const created=await searchOrderFixture('S7',customerId);
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const result=await withSession(full,()=>searchTenantAction('chrom'));
+ expect(result,JSON.stringify(result)).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'ORDER',id:created.receipt.orderId,matchField:'surface'})])});
+ expect(await sql`SELECT surface_requested FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId}`).toEqual([{surface_requested:'verchromen'}]);
+});
+
+it('S11 actual issued invoice is searchable with Geld and absent from hits and searched sources without Geld',async()=>{
+ const ready=await readyInvoiceOrder('S11');
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ expect(await withSession(full,()=>searchTenantAction(ready.invoice.invoiceNumber)))
+  .toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'INVOICE',id:ready.invoice.invoiceId})])});
+ const worker=await createFixture(['auftraege'],'werkstatt');
+ const restricted=await withSession(worker,()=>searchTenantAction(ready.invoice.invoiceNumber));
+ expect(restricted).toMatchObject({code:'OK',hits:[]});
+ if(restricted.code!=='OK')throw Error('S11_RESTRICTED_SEARCH:'+restricted.code);
+ expect(restricted.checkedSources).not.toContain('Rechnungen');
+ expect(restricted.checkedSources).not.toContain('Mails');
+ expect(JSON.stringify(restricted.hits)).not.toContain(ready.invoice.invoiceId);
+});
+
+it('S10 no match returns an honest empty result and writes no order or event',async()=>{
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const before=await sql`SELECT (SELECT count(*)::integer FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG}) AS orders,(SELECT count(*)::integer FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}) AS events`;
+ expect(await withSession(full,()=>searchTenantAction('TEST-Zylinder-'+randomUUID())))
+  .toMatchObject({code:'OK',hits:[],coverage:{returnedHits:0,matchingHitsAtLeast:0,truncated:false}});
+ expect(await sql`SELECT (SELECT count(*)::integer FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG}) AS orders,(SELECT count(*)::integer FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}) AS events`).toEqual(before);
+});
 
 it('S4 actual search finds Kunde Süd from Sued and ignores the legal form without inventing a customer',async()=>{
  const customerId=await customerFixture('S4');
