@@ -4,6 +4,25 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder,customerFixture,intakeOrderFixture} from './orderFixture';
 
+it('a real login without Geld cannot read financial receipts or mutate invoice prices and payment modes',async()=>{
+ const order=await readyInvoiceOrder('Geld-Lesegrenze');
+ const actor=await createFixture(['auftraege']);
+ const {getInvoiceSummariesAction,getInvoiceReceiptAction,setInvoiceItemPricesAction}=await import('@/app/actions/invoices.actions');
+ const {getOrderPaymentStateAction,setPaymentModeAction}=await import('@/app/actions/payments.actions');
+ const before=await sql`SELECT payment_mode,payment_mode_version,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ const modeKey=randomUUID(),priceKey=randomUUID();
+ const results=[
+  await withSession(actor,()=>getInvoiceSummariesAction()),
+  await withSession(actor,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:order.issueInput.clientEventId})),
+  await withSession(actor,()=>getOrderPaymentStateAction({orderId:order.orderId})),
+  await withSession(actor,()=>setPaymentModeAction({orderId:order.orderId,paymentMode:'vorkasse',expectedVersion:0,clientEventId:modeKey})),
+  await withSession(actor,()=>setInvoiceItemPricesAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:priceKey,prices:[{itemId:order.items[0].id,unitPriceCents:12345}]})),
+ ];
+ for(const result of results){expect(result.code).toBe('FORBIDDEN');expect(result).not.toHaveProperty('data');expect(result).not.toHaveProperty('receipt');}
+ expect(await sql`SELECT payment_mode,payment_mode_version,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(before);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array([modeKey,priceKey])}::uuid[])`).toEqual([{n:0}]);
+});
+
 it('missing free-text prices block issue until the existing price action fills them and the invoice reads exactly that amount',async()=>{
  const setup=await readyInvoiceOrder('Freitext-Voraussetzungen');
  const withoutMoney=await createFixture(['eingang']);
