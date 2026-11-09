@@ -5,6 +5,29 @@ import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
 import {storeOrderPhoto,storeIntakeGoodsPhoto} from './photoFixture';
 
+it('RA-09 partial rework copies only the complained quantity and leaves the delivered source unchanged',async()=>{
+ const order=await readyInvoiceOrder('RA09','pickup',3);
+ const photo=await storeOrderPhoto(order.orderId);
+ const {reklamationAusfuehrenAction,nacharbeitAnlegenAction,getByOrder}=await import('@/app/actions/complaints.actions');
+ const sourceBefore=await sql`SELECT id,quantity::float8 AS quantity,preis_netto::text AS price FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`;
+ expect(sourceBefore).toHaveLength(1);expect(sourceBefore[0].quantity).toBe(3);
+ const oversizedKey=randomUUID();
+ const input={action:'aufnehmen' as const,clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Abplatzung',description:'TEST nur eines von drei Teilen betroffen',photoIds:[photo],goodsReturn:'ja' as const};
+ expect(await withSession(full,()=>reklamationAusfuehrenAction({...structuredClone(input),clientKey:oversizedKey,parts:[{position_id:order.items[0].id,menge:4}]}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${oversizedKey}::uuid`).toEqual([{n:0}]);
+ const recorded=await withSession(full,()=>reklamationAusfuehrenAction(input));
+ if(recorded.code!=='OK')throw Error('RA09_RECORD:'+recorded.code);
+ const decider=await createFixture(['auftraege','entscheiden']);
+ const request={reklamationId:recorded.receipt.complaintId,version:1,bewertung:'berechtigt' as const,massnahme:'nacharbeit' as const,liefertermin:'2027-05-18'};
+ const rework=await withSession(decider,()=>nacharbeitAnlegenAction(request));
+ expect(rework.code).toBe('OK');if(rework.code!=='OK')throw Error('RA09_REWORK:'+rework.code);
+ expect(await sql`SELECT quantity::float8 AS quantity,preis_netto::text AS price FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${rework.receipt.orderId}`).toEqual([{quantity:1,price:'0.00'}]);
+ expect(await sql`SELECT id,quantity::float8 AS quantity,preis_netto::text AS price FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual(sourceBefore);
+ expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[expect.objectContaining({id:recorded.receipt.complaintId,teile:[{position_id:order.items[0].id,menge:1}],nacharbeitAuftragId:rework.receipt.orderId})]});
+ expect(await withSession(decider,()=>nacharbeitAnlegenAction(structuredClone(request)))).toMatchObject({code:'OK',replayed:true,receipt:{orderId:rework.receipt.orderId}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND nacharbeit_zu=${recorded.receipt.complaintId}`).toEqual([{n:1}]);
+});
+
 it('H8 concurrent rework requests create one linked order and preserve the rejection boundary on reread',async()=>{
  const order=await readyInvoiceOrder('H8-Rework');
  const photo=await storeOrderPhoto(order.orderId);
