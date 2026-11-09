@@ -25,3 +25,27 @@ it('L3 real customer actions authenticate from the cookie and withhold billing v
  expect(await withSession(denied,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'FORBIDDEN'});
  expect(await sql`SELECT count(*)::integer AS n FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{n:1}]);
 });
+
+it('customer edits survive real rereads and concurrent retries; rejected money edits leave no row or event',async()=>{
+ const {createCustomerAction,updateCustomerAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST Kundenänderung '+randomUUID().slice(0,8),phone:'+49 711 5550190'}));
+ if(created.code!=='OK')throw Error('CUSTOMER_EDIT_SEED:'+created.code);
+ const customerId=created.receipt.customerId;
+ const operational=await createFixture(['kunden'],'werkstatt');
+ const input={customerId,clientEventId:randomUUID(),phone:'+49 711 5550299',notes:'TEST Rückruf am Nachmittag'};
+ const results=await Promise.all([withSession(operational,()=>updateCustomerAction(structuredClone(input))),withSession(operational,()=>updateCustomerAction(structuredClone(input)))]);
+ expect(results.map(result=>result.code)).toEqual(['OK','OK']);
+ const read=await withSession(operational,()=>getCustomerSummaryAction({customerId}));
+ expect(read).toMatchObject({code:'OK',data:{id:customerId,phone:input.phone}});
+ expect(await withSession(operational,()=>updateCustomerAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT phone,notes FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{phone:input.phone,notes:input.notes}]);
+ expect(await sql`SELECT user_id::text,event_type FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{user_id:operational.actorId,event_type:'CUSTOMER_UPDATED_V1'}]);
+ const rejectedKey=randomUUID();
+ const before=await sql`SELECT payment_preference,zahlungsziel_tage FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`;
+ expect(await withSession(operational,()=>updateCustomerAction({customerId,clientEventId:rejectedKey,paymentPreference:'bar',phone:'+49 711 5550999'}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT payment_preference,zahlungsziel_tage FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual(before);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${rejectedKey}::uuid`).toEqual([{n:0}]);
+ expect(await withSession(operational,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{phone:input.phone}});
+ expect(await withSession(operational,()=>updateCustomerAction({...structuredClone(input),phone:'+49 711 5550888'}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(operational,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{phone:input.phone}});
+});
