@@ -237,3 +237,10 @@ it('E1 replacing the old proposal box preserves excluded concerns from an existi
  await waitFor(()=>expect(save).toHaveBeenCalledOnce());expect(save.mock.calls[0][0]).toMatchObject({itemId:id,textstand:stand,text,concerns:['rueckruf']});
  expect(screen.queryByText('ERKANNT · Vorschläge')).toBeNull();expect(screen.queryByRole('button',{name:/×/})).toBeNull();expect(screen.getByRole('textbox',{name:'Notiz'})).toHaveValue(text);
 });
+
+it('GW narrow desktop still requests the existing phone handover rather than selecting a camera by width',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn((query:string)=>({matches:query.includes('max-width'),addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json([])));
+ const deviceRequest=vi.fn(async()=>({code:'OK',requests:[]}));const ports={actorDisplayName:'TEST Rolf',getCaptureScope:vi.fn(async()=>({code:'OK',scope:'TEST-gw-narrow-desktop'})),deviceRequest} as unknown as GlobalCreatePorts;
+ render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);fireEvent.click(screen.getByRole('button',{name:'Foto'}));await waitFor(()=>expect(deviceRequest).toHaveBeenCalledWith(expect.objectContaining({command:'request'})));
+});

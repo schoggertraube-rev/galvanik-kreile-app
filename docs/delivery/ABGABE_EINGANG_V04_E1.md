@@ -75,3 +75,7 @@ Die Modus-Aufnahme erwartet nach dem freigegebenen gemeinsamen Kopf „Neuer Ein
 ## CI-Befund F01 nach Startaufbau
 
 Am Kandidaten 77306434 sind quality, Fresh-Replay, agentur und Ratchet grün; h16 meldet genau F01 rot, 280 andere Browserfälle grün. Ursache: Beim Ersetzen der großen Datei-Kachel entfiel der sichtbare Ziehen-Hinweis, obwohl derselbe Drop-Handler erhalten blieb. Der vorhandene Katalogtext wird jetzt kompakt neben Datei angezeigt. Kein generierter Fall, keine Rotliste und keine Assertion wird abgeschwächt. Der gezielte Startaufbau-Test prüft den Hinweis zusätzlich.
+
+## Gerätewechsel: Ursache vor der Datenbank
+
+Ein echter Zwei-Sitzungs-Vorlauf auf Dev (synthetische TEST-Notiz, noch kein Foto übertragen) zeigte: Ein Desktopfenster mit 1220 px wurde durch `(max-width: 1279px)` als Kameragerät behandelt. Damit öffnete Foto die lokale Kamera statt der vorgesehenen Handy-Übergabe. Die bestehende Geräteerkennung nutzt jetzt das tatsächliche grobe Eingabegerät (`pointer: coarse`) statt die Fensterbreite. Ein gezielter Komponentenfall belegt einen schmalen Desktop mit bestehendem Gerätewechsel-Port. Kein neuer Anbieter oder Kamerapfad. Der vollständige Zwei-Sitzungs-Foto-Nachweis bleibt bis zum tatsächlichen erneuten Lauf offen; keine physische Handy-Kamera behauptet.

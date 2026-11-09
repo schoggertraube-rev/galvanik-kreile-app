@@ -21,7 +21,7 @@ import type { CaptureKind } from "../captureRecognition";
 type Props = { resumeSourceId?:string|null; ports: GlobalCreatePorts; handoverToken?: string | null; mode?:"eingang"|"datei"|"eingangsfoto"|"visitenkarte"; onClose: (message?: string) => void;
   onAdopt?:(capture:IntakeCapture,message:string)=>void; onOrder: (customerId?: string, capture?: IntakeCapture) => void; onCustomer: (capture?: IntakeCapture) => void | string };
 type PendingFile = { file: File; id: string; itemId: string; captureOrigin: "warenfoto" | "dokument" };
-const CAMERA_DEVICE_QUERY = "(max-width: 1279px), (pointer: coarse)";
+const CAMERA_DEVICE_QUERY = "(pointer: coarse)";
 const subscribeDevice = (changed: () => void) => { const query = matchMedia(CAMERA_DEVICE_QUERY); query.addEventListener("change", changed); return () => query.removeEventListener("change", changed); };
 const deviceSnapshot = () => matchMedia(CAMERA_DEVICE_QUERY).matches;
 const serverDeviceSnapshot = () => false;
