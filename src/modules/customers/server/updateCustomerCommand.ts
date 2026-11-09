@@ -43,11 +43,16 @@ export async function updateCustomerInTransaction(tx:PrivilegedTenantTransaction
       };
       if (fields.payment_preference === "rechnung" && !current.invoiceTermsEnabled) return { code: "VALIDATION_ERROR" as const, message: "Ziel nicht freigeschaltet." };
       const intentSha256 = createHash("sha256").update(JSON.stringify({ customerId, fields }), "utf8").digest("hex");
+      // The existing RPC can reject a later list entry after updating earlier entries.
+      // Keep its non-OK result atomic also when this port shares a caller's transaction.
+      await tx.execute(sql`SAVEPOINT kreile_customer_update_command`);
       const rows = await tx.execute<{ result_code: string; replayed: boolean }>(sql`
         SELECT * FROM private.update_customer_v1(${context.tenantId},${context.userId}::uuid,${String(raw.clientEventId)}::uuid,
           ${customerId},${intentSha256},${JSON.stringify(fields)}::jsonb)
       `);
       const result = rows.length === 1 ? rows[0] : null;
+      if (!result || result.result_code !== 'OK') await tx.execute(sql`ROLLBACK TO SAVEPOINT kreile_customer_update_command`);
+      await tx.execute(sql`RELEASE SAVEPOINT kreile_customer_update_command`);
       if (!result) throw new Error("CUSTOMER_UPDATE_RESULT_INVALID");
       if (result.result_code === "FORBIDDEN") return { code: "FORBIDDEN" as const, message: "Diese Änderung ist nicht erlaubt." };
       if (result.result_code === "CONFLICT") return { code: "CONFLICT" as const, message: "Anfragekennung wurde bereits anders verwendet." };
