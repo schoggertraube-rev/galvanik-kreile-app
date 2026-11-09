@@ -15,7 +15,7 @@ it('H3 existing order-card part photo path must satisfy the completion gate with
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));
  expect(moved.code).toBe('OK');if(moved.code!=='OK')throw Error('H3_EXISTING_MOVE:'+moved.code);
  // These are the exact ports passed to OrderStationAttachmentPanel by OrderCardAppAdapter.
- const {reserveGalvanikHandoffAttachmentAction,finalizeGalvanikHandoffAttachmentAction,getGalvanikHandoffAttachmentsAction}=await import('@/app/warendurchlauf/actions');
+ const {reserveGalvanikHandoffAttachmentAction,finalizeGalvanikHandoffAttachmentAction,getGalvanikHandoffAttachmentsAction,getGalvanikHandoffAttachmentOriginalAction}=await import('@/app/warendurchlauf/actions');
  const contentSha256=createHash('sha256').update(TEST_PHOTO_BYTES).digest('hex');
  const reserve=await withSession(full,()=>reserveGalvanikHandoffAttachmentAction({orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientRequestId:randomUUID(),mimeType:'image/png',fileBytes:TEST_PHOTO_BYTES.length,contentSha256}));
  expect(reserve,JSON.stringify(reserve)).toMatchObject({code:'OK'});if(reserve.code!=='OK'||!reserve.data.upload)throw Error('H3_EXISTING_RESERVE:'+reserve.code);
@@ -25,7 +25,13 @@ it('H3 existing order-card part photo path must satisfy the completion gate with
  expect(upload.ok).toBe(true);
  const finalized=await withSession(full,()=>finalizeGalvanikHandoffAttachmentAction({reservationId:reserve.data.receipt.reservationId}));
  expect(finalized,JSON.stringify(finalized)).toMatchObject({code:'OK',data:{receipt:{state:'FINALIZED',contentSha256,actorId:full.actorId}}});
- expect(await withSession(full,()=>getGalvanikHandoffAttachmentsAction({orderId,itemId}))).toMatchObject({code:'OK'});
+ if(finalized.code!=='OK'||!finalized.data.receipt.receiptId)throw Error('H3_EXISTING_FINALIZED');
+ expect(await withSession(full,()=>getGalvanikHandoffAttachmentsAction({orderId,itemId}))).toMatchObject({code:'OK',data:{receipts:expect.arrayContaining([expect.objectContaining({state:'FINALIZED',contentSha256})]),evidenceRecords:expect.arrayContaining([expect.objectContaining({original:expect.objectContaining({state:'VERIFIED',hash:contentSha256}),targets:expect.arrayContaining([{targetType:'ORDER_ITEM',targetId:itemId}])})])}});
+ const original=await withSession(full,()=>getGalvanikHandoffAttachmentOriginalAction({receiptId:finalized.data.receipt.receiptId!}));
+ expect(original.code).toBe('OK');if(original.code!=='OK')throw Error('H3_EXISTING_ORIGINAL:'+original.code);
+ expect(new URL(original.data.downloadUrl).hostname).toBe('127.0.0.1');
+ const downloaded=await fetch(original.data.downloadUrl);expect(downloaded.ok).toBe(true);
+ expect(createHash('sha256').update(new Uint8Array(await downloaded.arrayBuffer())).digest('hex')).toBe(contentSha256);
  expect(await sql`SELECT count(*)::integer AS n FROM private.evidence_domain_links WHERE tenant_id=${KREILE_TENANT_SLUG} AND target_type='ORDER_ITEM' AND target_id=${itemId}`).toEqual([{n:1}]);
  const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));
  expect(finished.code).toBe('OK');if(finished.code!=='OK')throw Error('H3_EXISTING_FINISH:'+finished.code);
