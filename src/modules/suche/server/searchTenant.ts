@@ -1,4 +1,5 @@
-import {foldSearchText} from '@/lib/domain/searchText';
+import {foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
+import {SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
 import {
   SEARCH_MAX_HITS,
   SEARCH_MAX_HITS_PER_TYPE,
@@ -101,6 +102,8 @@ export function customerMatchField(customer: SearchCustomerDocument, query: stri
   if (includesQuery(customer.customerNumber, query)) return "customerNumber";
   if (includesQuery(customer.city, query)) return "city";
   if (includesQuery(customerRecordText(customer), query)) return "customerRecord";
+  if(nameSearchAlternative(customer.name,query))return 'name';
+  if(nameSearchAlternative(customer.companyName,query))return 'companyName';
   return null;
 }
 
@@ -155,12 +158,15 @@ function toOrderHit(order: SearchOrderDocument, matchField: SearchMatchField, qu
   };
 }
 
-function toCustomerHit(customer: SearchCustomerDocument, matchField: SearchMatchField): SearchHit {
+function toCustomerHit(customer: SearchCustomerDocument, matchField: SearchMatchField,query:string): SearchHit {
+  const value=customerMatchValue(customer,matchField);
+  const alternative=includesQuery(value,query)?null:nameSearchAlternative(value,query);
   return {
+    ...(alternative?{matchKind:alternative}:{}),
     type: "CUSTOMER", id: customer.id, title: customer.companyName ?? customer.name,
     subtitle: [customer.customerNumber, customer.city].filter(Boolean).join(" · "), status: customer.customerType,
-    matchField, source: "Kundenstamm", matchLabel: MATCH_LABEL[matchField],
-    matchValue: customerMatchValue(customer, matchField),
+    matchField, source: "Kundenstamm", matchLabel: alternative?SEARCH_NAME_MATCH_COPY[alternative]:MATCH_LABEL[matchField],
+    matchValue: value,
     context: [customer.companyName ?? customer.name, customer.customerNumber, customer.city].filter(Boolean).join(" · "),
     href: `/customers/${encodeURIComponent(customer.id)}`,
     actionLabel: "Kundenkarte öffnen",
@@ -168,7 +174,8 @@ function toCustomerHit(customer: SearchCustomerDocument, matchField: SearchMatch
 }
 
 function stableHits(hits: SearchHit[]): SearchHit[] {
-  return hits.sort((left, right) => left.title.localeCompare(right.title, "de-DE", { sensitivity: "base" }) || left.id.localeCompare(right.id));
+  const rank=(hit:SearchHit)=>hit.matchKind==='phonetic'?1:hit.matchKind==='spelling'?2:0;
+  return hits.sort((left, right) => rank(left)-rank(right)||left.title.localeCompare(right.title, "de-DE", { sensitivity: "base" }) || left.id.localeCompare(right.id));
 }
 
 function assertProvider(provider: import("./types").SearchProvider): void {
@@ -241,7 +248,7 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
       assertCustomer(customer);
       const matchField = customerMatchField(customer, loweredQuery);
       if (!matchField) throw new Error("SEARCH_CUSTOMER_MATCH_UNPROVEN");
-      if (!customerHits.has(customer.id)) customerHits.set(customer.id, toCustomerHit(customer, matchField));
+      if (!customerHits.has(customer.id)) customerHits.set(customer.id, toCustomerHit(customer, matchField,loweredQuery));
     }
     const providerHits: SearchHit[] = [];
     let providerMatchingHits = 0;

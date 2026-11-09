@@ -73,6 +73,7 @@ it('S9 city matches only actual customers of this tenant',async()=>{
  expect(found.hits.some(row=>row.id===foreign||row.id===other)).toBe(false);
 });
 
+const goldenCustomers=new Map<string,string>();
 it.each([
  ['S1','Schmitt',['TEST Reiner Schmitt','TEST Sabrina Schmidt','TEST Schmied Metallbau GmbH']],
  ['S2','Schmdit',['TEST Reiner Schmitt','TEST Sabrina Schmidt','TEST Schmied Metallbau GmbH']],
@@ -81,8 +82,13 @@ it.each([
  const ids:string[]=[];
  const {updateCustomerAction}=await import('@/app/actions/customers.actions');
  for(const [index,name] of names.entries()){
-  const customerId=await customerFixture(caseId+'-'+index);ids.push(customerId);
-  expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),companyName:name}))).toMatchObject({code:'OK'});
+  let customerId=goldenCustomers.get(name);
+  if(!customerId){
+   customerId=await customerFixture(caseId+'-'+index);
+   expect(await withSession(full,()=>updateCustomerAction({customerId:customerId!,clientEventId:randomUUID(),companyName:name}))).toMatchObject({code:'OK'});
+   goldenCustomers.set(name,customerId);
+  }
+  ids.push(customerId);
  }
  const {searchTenantAction}=await import('@/app/actions/search.actions');
  const found=await withSession(full,()=>searchTenantAction(query));

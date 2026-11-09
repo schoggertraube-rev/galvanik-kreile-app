@@ -27,6 +27,7 @@ export type SearchMatchField =
 export type SearchSource = "Auftragsbestand" | "Kundenstamm" | (string & {});
 
 export type SearchHit = {
+  matchKind?:'phonetic'|'spelling';
   type: SearchHitType;
   id: string;
   title: string;
