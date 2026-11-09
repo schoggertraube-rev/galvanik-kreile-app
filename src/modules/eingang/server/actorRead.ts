@@ -2,8 +2,8 @@ import 'server-only';
 import {sql} from 'drizzle-orm';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {actorStatisticsScope,readActorNames,type ActorStatisticRow} from '@/lib/server/quoteJournalPort';
-import type {CaseActorTrace,CaseActorEvidence} from '@/lib/server/quoteJournalPort';
+import {readActorNames} from '@/lib/server/caseActorRead';
+import type {CaseActorTrace,CaseActorEvidence} from '@/lib/domain/caseActorContract';
 
 /** Called after the owner has checked capture/invoice visibility; original audit rows stay here. */
 export async function readIntakeActorTraces(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[],invoiceId?:string){
@@ -20,17 +20,4 @@ export async function readIntakeActorTraces(tx:PrivilegedTenantTransaction,auth:
  const names=await readActorNames(tx,auth.tenantId,rows.flatMap(row=>[row.createdBy?.userId,row.lastActor?.userId].filter((id):id is string=>!!id)));
  const named=(actor:CaseActorEvidence|null)=>actor?{...actor,name:actor.userId?names.get(actor.userId)??null:null}:null;
  return new Map(rows.map(row=>[row.id,{createdBy:named(row.createdBy),lastActor:named(row.lastActor)}]));
-}
-
-export async function readIntakeActorStatistics(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:unknown){
- const scope=actorStatisticsScope(auth,input);if(scope.code!=='OK')return scope;
- const rows=await tx.execute<ActorStatisticRow>(sql`SELECT CASE WHEN event.von ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN lower(event.von) END AS "userId",NULL::text AS name,
-  CASE WHEN event.nachher->>'invoiceId' IS NOT NULL THEN 'beleg' ELSE 'eingang' END AS kind,
-  coalesce(event.nachher->>'command',event.nachher->>'action',event.art) AS action,count(*)::integer AS events,count(DISTINCT coalesce(event.nachher->>'invoiceId',event.item_id::text))::integer AS cases
-  FROM public.intake_event event
-  WHERE event.tenant_id=${auth.tenantId} AND (${scope.all} OR lower(event.von)=${auth.userId})
-  AND event.zeit>=(${scope.from}::date::timestamp AT TIME ZONE 'Europe/Berlin') AND event.zeit<((${scope.through}::date+1)::timestamp AT TIME ZONE 'Europe/Berlin')
-  GROUP BY "userId",kind,coalesce(event.nachher->>'command',event.nachher->>'action',event.art) ORDER BY "userId",kind,action`);
- const names=await readActorNames(tx,auth.tenantId,rows.flatMap(row=>row.userId?[row.userId]:[]));
- return {code:'OK' as const,rows:rows.map(row=>({...row,name:row.userId?names.get(row.userId)??null:null}))};
 }
