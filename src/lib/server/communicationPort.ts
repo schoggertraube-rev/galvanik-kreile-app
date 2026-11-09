@@ -97,6 +97,27 @@ export async function readCommunicationImportContext(tx:PrivilegedTenantTransact
  return {customerId:target.customerId,orderId:target.orderId};
 }
 
+/** Recover only this actor's unresolved outgoing request; never reconstruct missing content. */
+export type RecoverableCustomerMail={targetType:TargetType;targetId:string;clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE';documentId:string};complaintRejection?:{itemId:string;version:number;reason:string};complaintPhotoRequest?:{itemId:string;version:number}};
+export async function readPendingCustomerMail(auth:AuthorizationSnapshot,input:{targetType:TargetType;targetId:string}){
+ if(!canRead(auth))return {code:'FORBIDDEN' as const,message:'E-Mails sind nicht freigegeben.'};
+ if(!validTarget(input?.targetType,input?.targetId))return {code:'VALIDATION_ERROR' as const,message:'Mail-Zuordnung ist ungültig.'};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  if(!await readCommunicationTargetInTransaction(tx,auth,input.targetType,input.targetId))return {code:'NOT_FOUND' as const,message:'Mail-Zuordnung fehlt.'};
+  const rows=await tx.execute<{request:RecoverableCustomerMail|null;sendKey:string;retryAt:string}>(sql`
+   SELECT prepared.payload->'request' AS request,prepared.payload->>'sendKey' AS "sendKey",(thread.created_at+interval '5 minutes')::text AS "retryAt"
+   FROM public.communication_threads thread LEFT JOIN public.events prepared ON prepared.tenant_id=thread.tenant_id AND prepared.event_type='COMMUNICATION_SEND_PREPARED_V1' AND prepared.payload->>'threadId'=thread.id::text
+   WHERE thread.tenant_id=${auth.tenantId} AND thread.created_by=${auth.userId}::uuid AND thread.status='pending' AND thread.source LIKE 'MS_GRAPH_OUT:%'
+   AND ${input.targetType==='ORDER'?sql`thread.order_id=${input.targetId}`:sql`thread.customer_id=${input.targetId} AND thread.order_id IS NULL`}
+   AND (prepared.payload->'complaint' IS NULL OR prepared.payload->'complaint'='null'::jsonb) AND prepared.payload->'intake' IS NULL
+   ORDER BY thread.created_at,thread.id LIMIT 1`);
+  if(!rows.length)return {code:'OK' as const,recovery:null};
+  const row=rows[0],request=row.request;
+  const safe=request&&request.targetType===input.targetType&&request.targetId===input.targetId&&request.clientRequestId===row.sendKey&&typeof request.subject==='string'&&typeof request.body==='string';
+  return {code:'OK' as const,recovery:{request:safe?request:null,retryAt:iso(row.retryAt)}};
+ });}catch(error){logCommunicationFailure('COMMUNICATION_RECOVERY_READ_FAILED',error);return {code:'UNAVAILABLE' as const,message:'Versand konnte nicht sicher nachgelesen werden.'};}
+}
+
 export async function readCommunicationInbox(auth: AuthorizationSnapshot): Promise<Result<GraphInboxMessage[]>> {
   if (!canRead(auth)) return { code: "FORBIDDEN", message: "Der Outlook-Eingang ist für diese Rolle nicht freigegeben." };
   return listMicrosoftGraphInbox();
@@ -225,7 +246,7 @@ export async function attachInboxMessage(
 export type IntakeComplaintReply={purpose?:'no-complaint';itemId:string;version:number;graphMessageId:string;sender:string;intent:string;snapshot?:unknown;validate:(tx:PrivilegedTenantTransaction)=>Promise<boolean>;complete:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>;replay:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<boolean>};
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; reconcileOnly?:true;beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeReply?:IntakeComplaintReply },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; reconcileOnly?:true;recoveryRequest?:RecoverableCustomerMail;beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeReply?:IntakeComplaintReply },
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || !/^[0-9a-f-]{36}$/i.test(input.clientRequestId) || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
@@ -296,7 +317,7 @@ export async function sendCommunicationMail(
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("COMMUNICATION_THREAD_INSERT_FAILED");
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,threadId,'prepared');
-      await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'COMMUNICATION_SEND_PREPARED_V1','Mailversand vorbereitet',${JSON.stringify({threadId,sendKey:input.clientRequestId,intent:sendIntent,recipient,customerName:target.label,message:{subject:input.subject.trim(),body:input.body.trim()},complaint:input.complaintResult??null,...(input.intakeReply?{intake:{itemId:input.intakeReply.itemId,version:input.intakeReply.version,purpose:input.intakeReply.purpose??'photo-request',graphMessageId:input.intakeReply.graphMessageId,snapshot:input.intakeReply.snapshot}}:{})})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
+      await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at) VALUES(${randomUUID()}::uuid,${auth.tenantId},'COMMUNICATION_SEND_PREPARED_V1','Mailversand vorbereitet',${JSON.stringify({threadId,sendKey:input.clientRequestId,intent:sendIntent,recipient,customerName:target.label,...(input.recoveryRequest?{request:input.recoveryRequest}:{}),message:{subject:input.subject.trim(),body:input.body.trim()},complaint:input.complaintResult??null,...(input.intakeReply?{intake:{itemId:input.intakeReply.itemId,version:input.intakeReply.version,purpose:input.intakeReply.purpose??'photo-request',graphMessageId:input.intakeReply.graphMessageId,snapshot:input.intakeReply.snapshot}}:{})})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
       return { threadId, recordedAt: iso(rows[0].created_at) };
     });
   } catch (error) {

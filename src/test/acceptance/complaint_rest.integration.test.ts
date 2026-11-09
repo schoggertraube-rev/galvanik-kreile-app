@@ -347,7 +347,7 @@ it('RM13/RM15 a forbidden mail complaint leaves no write; the authorized follow-
 
 it.each([true,false])('RM07 actual mail Action reconciles a 503 without a blind second send (found=%s)',async(found)=>{
  const fixture=await createFixture(['eingang','kunden','mails']);
- const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ const {sendCustomerMailAction,getMicrosoftGraphStatusAction}=await import('@/app/actions/communications.actions');
  const input={targetType:'CUSTOMER' as const,targetId:fixture.customerId,clientRequestId:randomUUID(),subject:'TEST RM07 Abgleich',body:'TEST eindeutige Versandkennung'};
  const {saveIntakeDraftAction,getIntakeDraftsAction}=await import('@/app/actions/eingang.actions');const draftId=randomUUID();
  expect(await withSession(fixture,()=>saveIntakeDraftAction({id:draftId,clientEventId:randomUUID(),art:'eingang',expectedVersion:null,lastField:null,payload:{kind:'TEST-RM07',clientKey:input.clientRequestId,request:input}}))).toMatchObject({code:'OK'});
@@ -366,7 +366,19 @@ it.each([true,false])('RM07 actual mail Action reconciles a 503 without a blind 
   expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'UNAVAILABLE',delivery:'checking'});
   expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'CONFLICT',delivery:'checking'});expect(sends).toBe(1);expect(lookups).toBe(0);
   await sql`UPDATE public.communication_threads SET created_at=now()-interval '6 minutes' WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`;
-  const result=await withSession(fixture,()=>sendCustomerMailAction(reread));expect(sends).toBe(1);expect(lookups).toBe(1);
+  const reopened=await withSession(fixture,()=>getMicrosoftGraphStatusAction({targetType:input.targetType,targetId:input.targetId}));
+  expect(reopened).toMatchObject({code:'OK',recovery:{request:input,retryAt:expect.any(String)}});
+  if(reopened.code!=='OK'||!('recovery' in reopened)||!reopened.recovery?.request)throw Error('TEST actual pending recovery missing');
+  const persisted=reopened.recovery.request;expect(persisted).toEqual(reread);
+  const other=await createFixture(['eingang','kunden','mails']);
+  expect(await withSession(other,()=>getMicrosoftGraphStatusAction({targetType:input.targetType,targetId:input.targetId}))).toMatchObject({code:'OK',recovery:null});
+  const withoutMail=await createFixture(['kunden']);
+  expect(await withSession(withoutMail,()=>getMicrosoftGraphStatusAction({targetType:input.targetType,targetId:input.targetId}))).toMatchObject({code:'FORBIDDEN'});
+  const [prepared]=await sql`SELECT id,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_SEND_PREPARED_V1' AND correlation_id=${input.clientRequestId}::uuid`;
+  await sql`UPDATE public.events SET payload=payload-'request' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.id}`;
+  expect(await withSession(fixture,()=>getMicrosoftGraphStatusAction({targetType:input.targetType,targetId:input.targetId}))).toMatchObject({code:'OK',recovery:{request:null,retryAt:expect.any(String)}});
+  await sql`UPDATE public.events SET payload=${sql.json(prepared.payload)}::jsonb WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.id}`;
+  const result=await withSession(fixture,()=>sendCustomerMailAction(persisted));expect(sends).toBe(1);expect(lookups).toBe(1);
   if(found){
    expect(result).toMatchObject({code:'OK'});
    expect(await sql`SELECT status FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`).toEqual([{status:'sent'}]);

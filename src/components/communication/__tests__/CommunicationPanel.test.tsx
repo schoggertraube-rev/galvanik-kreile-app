@@ -123,3 +123,33 @@ it('RM07 source-changed receipt requires reload and rejects another form submit'
  fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:'TEST anderer Text'}});fireEvent.change(screen.getByRole('textbox',{name:'Nachricht'}),{target:{value:'TEST nicht erneut senden'}});
  fireEvent.submit(form);expect(actions.send).toHaveBeenCalledOnce();
 });
+
+
+it('restores the actual composer after full unmount and reconciles the persisted original request without sending again',async()=>{
+ cleanup();vi.clearAllMocks();actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});actions.listGlobal.mockResolvedValue({code:'OK',data:[]});
+ const request={targetType:'CUSTOMER',targetId:'TEST-customer',clientRequestId:crypto.randomUUID(),subject:'TEST gespeicherter Betreff',body:'TEST gespeicherte Nachricht'};
+ actions.getStatus.mockResolvedValue({code:'OK'});
+ actions.send.mockResolvedValueOnce({code:'UNAVAILABLE',delivery:'checking',retryAt:new Date(Date.now()+60000).toISOString()});
+ const first=render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer"/>);
+ const send=await screen.findByRole('button',{name:'Versenden'});
+ fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:request.subject}});fireEvent.change(screen.getByRole('textbox',{name:'Nachricht'}),{target:{value:request.body}});
+ fireEvent.click(send);await screen.findByText('Wird gerade geprüft');first.unmount();
+ // Simulate the actual server journal read after losing every component/ref state.
+ actions.getStatus.mockResolvedValue({code:'OK',recovery:{request,retryAt:new Date(Date.now()+100).toISOString()}});
+ actions.send.mockResolvedValueOnce({code:'OK',data:{replayed:true}});
+ render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer"/>);
+ await screen.findByDisplayValue(request.body);expect(screen.getByDisplayValue(request.body)).toBeDisabled();
+ expect(screen.queryByRole('button',{name:'Versenden'})).not.toBeInTheDocument();
+ await screen.findByText('E-Mail wurde versendet und am Vorgang gespeichert.');
+ expect(actions.send).toHaveBeenCalledTimes(2);expect(actions.send.mock.calls[1][0]).toEqual(request);
+ expect(actions.getStatus).toHaveBeenLastCalledWith({targetType:'CUSTOMER',targetId:'TEST-customer'});
+});
+
+it('keeps a legacy unresolved send locked when its original message cannot be safely recovered',async()=>{
+ cleanup();vi.clearAllMocks();actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});actions.listGlobal.mockResolvedValue({code:'OK',data:[]});
+ actions.getStatus.mockResolvedValue({code:'OK',recovery:{request:null,retryAt:new Date().toISOString()}});
+ render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer"/>);
+ await screen.findByText('Der ursprüngliche Mailinhalt fehlt im Versandbeleg. Sende nicht erneut und lass den Versand klären.');expect(screen.getByRole('button',{name:'Neu laden'})).toBeEnabled();
+ expect(screen.queryByRole('button',{name:'Versenden'})).not.toBeInTheDocument();
+ fireEvent.submit(screen.getByRole('textbox',{name:'Betreff'}).closest('form')!);expect(actions.send).not.toHaveBeenCalled();
+});

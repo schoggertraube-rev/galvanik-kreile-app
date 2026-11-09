@@ -37,6 +37,15 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
   const [sendBusy, setSendBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
 
+  const sendLock=useRef(false);
+  const pendingSend=useRef<Parameters<typeof sendCustomerMailAction>[0]|null>(null);
+  const [sendSourceChanged,setSendSourceChanged]=useState(false);
+  const [sendUnclear,setSendUnclear]=useState(false);
+  const [sendCheckAt,setSendCheckAt]=useState<string|null>(null),[sendFailed,setSendFailed]=useState(false);
+  const sendForm=useRef<HTMLFormElement>(null);
+  const [recoveryMissing,setRecoveryMissing]=useState(false);
+  const [restoredMail,setRestoredMail]=useState<Parameters<typeof sendCustomerMailAction>[0]|null>(null);
+
   const matchingQuotes = useMemo(() => quotes.filter((quote) => targetType === "CUSTOMER"
     ? quote.customerId === targetId
     : quote.linkedOrderId === targetId), [quotes, targetId, targetType]);
@@ -45,7 +54,7 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
     if(composer)return;
     let active = true;
     const load = async () => {
-      const status = await getMicrosoftGraphStatusAction();
+      const status = await getMicrosoftGraphStatusAction({targetType,targetId});
       if (!active) return;
       if (status.code === "IN_KLAERUNG") {
         setState("in-klärung");
@@ -56,6 +65,11 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
         setState("error");
         setMessage(status.message);
         return;
+      }
+      if('recovery' in status&&status.recovery){
+        const recovery=status.recovery;pendingSend.current=recovery.request;
+        setSendUnclear(true);setRecoveryMissing(!recovery.request);setSendCheckAt(recovery.request?recovery.retryAt:null);setFeedback(recovery.request?MAIL_DELIVERY_COPY.checking:MAIL_DELIVERY_COPY.recoveryMissing);
+        setRestoredMail(recovery.request);
       }
       const [mail, quoteResult] = await Promise.all([
         targetType === "ORDER"
@@ -103,12 +117,13 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
     finally{setBusyId(null);}
   };
 
-  const sendLock=useRef(false);
-  const pendingSend=useRef<Parameters<typeof sendCustomerMailAction>[0]|null>(null);
-  const [sendSourceChanged,setSendSourceChanged]=useState(false);
-  const [sendUnclear,setSendUnclear]=useState(false);
-  const [sendCheckAt,setSendCheckAt]=useState<string|null>(null),[sendFailed,setSendFailed]=useState(false);
-  const sendForm=useRef<HTMLFormElement>(null);
+  useEffect(()=>{
+    if(!restoredMail||!sendForm.current)return;
+    const form=sendForm.current;
+    for(const [name,value] of [['subject',restoredMail.subject],['body',restoredMail.body],['quoteId',restoredMail.attachment?.documentId??'']]){
+      const field=form.elements.namedItem(name);if(field instanceof HTMLInputElement||field instanceof HTMLTextAreaElement||field instanceof HTMLSelectElement)field.value=value;
+    }
+  },[restoredMail,state]);
   const settleSend=useCallback((result:Awaited<ReturnType<typeof sendCustomerMailAction>>)=>{
     if(result.code==='OK'){pendingSend.current=null;setSendUnclear(false);setSendFailed(false);setSendCheckAt(null);sendForm.current?.reset();setSendSourceChanged(result.data.sourceChanged===true);setFeedback(result.data.sourceChanged?(result.data.deliveryCustomer?MAIL_DELIVERY_COPY.sourceChanged(result.data.deliveryCustomer):REKLA_MAIL_COPY.unavailable):'notice'in result&&typeof result.notice==='string'&&result.notice?result.notice:'E-Mail wurde versendet und am Vorgang gespeichert.');return;}
     if('delivery'in result&&result.delivery==='checking'){setSendUnclear(true);setSendCheckAt('retryAt'in result&&typeof result.retryAt==='string'?result.retryAt:null);setFeedback(MAIL_DELIVERY_COPY.checking);return;}
@@ -131,7 +146,7 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
       <form ref={sendForm} className={styles.compose} onSubmit={async (event) => {
         event.preventDefault();
         if(composer){composer.onSend();return;}
-        if(sendLock.current||sendSourceChanged)return;
+        if(sendLock.current||sendSourceChanged||recoveryMissing)return;
         const formElement=event.currentTarget,form=new FormData(formElement);
         if(pendingSend.current&&(pendingSend.current.targetType!==targetType||pendingSend.current.targetId!==targetId)){setFeedback('Vorherigen Versand zuerst am ursprünglichen Vorgang prüfen.');return;}
         const quoteId=String(form.get('quoteId')??'');
@@ -146,8 +161,8 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
         <label>Betreff<input name="subject" required maxLength={500} value={composer?.subject} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onSubject(event.target.value):undefined} /></label>
         <label>Nachricht<textarea name="body" required maxLength={20_000} value={composer?.body} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onBody(event.target.value):undefined} /></label>
         {!composer?<label>PDF-Anhang<select name="quoteId" defaultValue="" disabled={sendBusy||sendUnclear}><option value="">Ohne Anhang</option>{matchingQuotes.map((quote) => <option key={quote.quoteId} value={quote.quoteId}>KV {quote.quoteNumber}</option>)}</select></label>:null}
-        {!composer&&sendSourceChanged?<button type="button" onClick={()=>window.location.reload()}>{MAIL_DELIVERY_COPY.reload}</button>:null}
-        {!composer&&!sendCheckAt&&!sendSourceChanged?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{sendFailed?MAIL_DELIVERY_COPY.retry:sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden"}</button>:null}
+        {!composer&&(sendSourceChanged||recoveryMissing)?<button type="button" onClick={()=>window.location.reload()}>{MAIL_DELIVERY_COPY.reload}</button>:null}
+        {!composer&&!sendCheckAt&&!sendSourceChanged&&!recoveryMissing?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{sendFailed?MAIL_DELIVERY_COPY.retry:sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden"}</button>:null}
       </form>
   );
   if(composer)return <section className={styles.panel}>{composeForm}</section>;

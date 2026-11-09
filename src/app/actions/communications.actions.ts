@@ -10,6 +10,7 @@ import { resolveAuthorization,hasAuthorizationArea } from "@/lib/server/authoriz
 import {
   attachInboxMessage,
   readCommunicationInbox,
+  readPendingCustomerMail,
   readLinkedCommunicationMessages,
   sendCommunicationMail,
   readCommunicationTargetInTransaction,
@@ -29,14 +30,16 @@ async function authorization() {
   return resolveAuthorization();
 }
 
-export async function getMicrosoftGraphStatusAction() {
+export async function getMicrosoftGraphStatusAction(input?:TargetInput) {
   noStore();
   const authorizationResult = await authorization();
   if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
   const auth = authorizationResult.data;
   if (!auth.areas?.includes("mails")) return { code: "FORBIDDEN" as const, message: "Microsoft 365 ist für dieses Profil nicht freigegeben." };
+  const pending=input?await readPendingCustomerMail(auth,input):null;
+  if(pending&&pending.code!=='OK')return pending;
   return readMicrosoftGraphConfigurationStatus().code === "READY"
-    ? { code: "OK" as const }
+    ? { code: "OK" as const,...(pending?.code==='OK'?{recovery:pending.recovery}:{}) }
     : { code: "IN_KLAERUNG" as const, message: "Microsoft 365 · In Klärung. Die Preview-Zugangsdaten sind noch nicht vollständig verbunden." };
 }
 
@@ -103,7 +106,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
    document.source={itemId:source.itemId,graphMessageId:source.message.id};
   }
  }
- const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,document,beforePrepare:document?tx=>lockQuoteDeliverySnapshot(tx,auth.tenantId,document!):undefined});
+ const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,document,recoveryRequest:input,beforePrepare:document?tx=>lockQuoteDeliverySnapshot(tx,auth.tenantId,document!):undefined});
  return sent.code==='OK'&&document?confirmQuoteDelivery(auth,input,document,sent):sent;
 }
 
