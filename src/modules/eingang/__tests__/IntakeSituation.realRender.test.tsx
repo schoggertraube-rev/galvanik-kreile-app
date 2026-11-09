@@ -1,4 +1,4 @@
-import {cleanup,fireEvent,render,screen} from '@testing-library/react';
+import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
 import {IntakeSituation,IntakeResultHeader,IntakeResultOriginal} from '../ui/IntakeSituation';
 import type {IntakeCapture} from '../captureContract';
@@ -53,4 +53,23 @@ it('E2 additional chips remain real controls and respect the existing busy guard
 
 it('E2 keeps existing recovery controls inside the one result and exposes the stored wording once',()=>{
  const retry=vi.fn(),task=vi.fn();const {container}=render(<IntakeSituation capture={{...capture,text:'TEST erhaltener Wortlaut'}} kind="notiz" busy={false} primary={null} onAssign={vi.fn()} onOriginal={vi.fn()} onOrder={vi.fn()} onMore={vi.fn()} onEdit={vi.fn()} onKind={vi.fn()} onTask={task} details={<section data-spec-id="TEST-recovery"><button onClick={retry}>TEST erneut übertragen</button></section>}/>);expect(container.querySelectorAll('[data-spec-id="rein.situation"]')).toHaveLength(1);expect(container.querySelector('[data-spec-id="rein.situation"] [data-spec-id="TEST-recovery"]')).not.toBeNull();expect(screen.getAllByText('TEST erhaltener Wortlaut')).toHaveLength(1);fireEvent.click(screen.getByRole('button',{name:'TEST erneut übertragen'}));expect(retry).toHaveBeenCalledOnce();fireEvent.click(screen.getByRole('button',{name:'Aufgabe anlegen'}));expect(task).toHaveBeenCalledOnce();
+});
+
+it('E2 ignores a late original preview after changing capture and retains the correct original route on read failure',async()=>{
+ let finishFirst!:(value:import('../originalContract').OriginalReadResult)=>void;
+ const firstRead=new Promise<import('../originalContract').OriginalReadResult>(resolve=>{finishFirst=resolve;});
+ const read=vi.fn().mockImplementationOnce(()=>firstRead).mockRejectedValueOnce(new Error('TEST original unavailable'));
+ const logged=vi.spyOn(console,'error').mockImplementation(()=>{}),open=vi.fn();
+ try{
+  const view=render(<IntakeResultOriginal originals={[{id:'TEST-old',name:'TEST altes Foto',mime:'image/png'}]} readOriginal={read} onOpen={open}/>);
+  await waitFor(()=>expect(read).toHaveBeenCalledTimes(1));
+  view.rerender(<IntakeResultOriginal originals={[{id:'TEST-current',name:'TEST aktuelles Foto',mime:'image/png'}]} readOriginal={read} onOpen={open}/>);
+  await waitFor(()=>expect(logged).toHaveBeenCalledWith('[INTAKE_RESULT_ORIGINAL_READ_FAILED]','Error'));
+  await act(async()=>finishFirst({code:'OK',original:{id:'TEST-old',itemId:'TEST-old-capture',name:'TEST altes Foto',mime:'image/png',bytes:1,sha256:'TEST',customerId:null,orderId:null,previewable:true,url:'https://example.invalid/TEST-old.png',downloadUrl:null,restricted:false}}));
+  expect(screen.queryByRole('img',{name:'TEST altes Foto'})).toBeNull();
+  expect(screen.queryByText(/TEST original unavailable/)).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'Original ansehen · TEST aktuelles Foto'}));
+  expect(open).toHaveBeenCalledExactlyOnceWith('TEST-current');
+  expect(read.mock.calls.map(([input])=>input.fileId)).toEqual(['TEST-old','TEST-current']);
+ }finally{logged.mockRestore();}
 });
