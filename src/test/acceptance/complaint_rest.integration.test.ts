@@ -1,3 +1,4 @@
+import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import {seedSyntheticComplaintPhoto} from '@/test/fixtures/complaintPhoto';
 // @vitest-environment node
 // @vitest-environment node
@@ -147,6 +148,7 @@ async function deliveredComplaintSource(fixture:Fixture,mode:'abholung'|'versand
     FROM private.extra_work_hourly_rates WHERE tenant_id=${KREILE_TENANT_SLUG}`;
   expect(await withSession(fixture,()=>transitionWareneingangToGalvanikAction({orderId:order.orderId,expectedVersion:1,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await withSession(fixture,()=>setOrderItemFinishedAction({orderId:order.orderId,itemId:order.items[0].id,expectedVersion:2,clientEventId:randomUUID(),finished:true}))).toMatchObject({code:'OK'});
+  await seedSyntheticItemPhotos(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,orderId:order.orderId});
   expect(await withSession(fixture,()=>freezeOrderAction({orderId:order.orderId,freezeId:randomUUID(),expectedVersion:3,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await withSession(fixture,()=>recordGoodsOutAction({orderId:order.orderId,mode,expectedVersion:4,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   return order;

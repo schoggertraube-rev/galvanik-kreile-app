@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
@@ -319,6 +320,7 @@ async function createCommandReadyOrder(
     WHERE id = ${itemId} AND order_id = ${intake.receipt.orderId} AND tenant_id = ${COMMAND_TENANT}
   `;
   const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
+  await seedSyntheticItemPhotos(sql,{tenantId:COMMAND_TENANT,actorId:COMMAND_USERS.admin,orderId:intake.receipt.orderId});
   const frozen = await withRealSession("admin", () => freezeOrder({
     orderId: intake.receipt.orderId,
     freezeId: randomUUID(),

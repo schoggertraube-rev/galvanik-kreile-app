@@ -1,3 +1,4 @@
+import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
@@ -399,6 +400,7 @@ describe("F1.3 DB-/Command-Vertragsintegration (Session-Port isoliert; kein Real
     const clientEventId = randomUUID();
     firstFreezeId = freezeId;
     firstFreezeClientEventId = clientEventId;
+    await seedSyntheticItemPhotos(sql,{tenantId:TENANT,actorId:ADMIN_ID,orderId:orderId});
     const frozen = await freezeOrder({ orderId, freezeId, expectedVersion: orderVersion, clientEventId });
     expect(frozen.code).toBe("OK");
     if (frozen.code !== "OK") throw new Error("freeze failed");
@@ -428,6 +430,7 @@ describe("F1.3 DB-/Command-Vertragsintegration (Session-Port isoliert; kein Real
       freeze: { freezeId, totalAmountCents: 15_000, lineCount: 1 },
     });
     expect(reload.data.items[0]?.extraWork[0]).toMatchObject({ amountCents: 15_000, frozen: true });
+    await seedSyntheticItemPhotos(sql,{tenantId:TENANT,actorId:ADMIN_ID,orderId:orderId});
     await expect(freezeOrder({ orderId, freezeId, expectedVersion: orderVersion, clientEventId })).resolves.toEqual({
       code: "OK",
       receipt: frozen.receipt,
@@ -508,6 +511,7 @@ describe("F1.3 DB-/Command-Vertragsintegration (Session-Port isoliert; kein Real
 
     const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
     const secondFreezeId = randomUUID();
+    await seedSyntheticItemPhotos(sql,{tenantId:TENANT,actorId:ADMIN_ID,orderId:orderId});
     const refrozen = await freezeOrder({
       orderId,
       freezeId: secondFreezeId,

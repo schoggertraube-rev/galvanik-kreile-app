@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -410,6 +411,7 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
 
     setSession(USERS.admin, "admin");
     const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
+    await seedSyntheticItemPhotos(sql,{tenantId:TENANT,actorId:USERS.admin,orderId:orderId});
     const frozen = await freezeOrder({
       orderId,
       freezeId: FREEZE_ID,

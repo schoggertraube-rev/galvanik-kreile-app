@@ -24,6 +24,8 @@ export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'ship
  const orderId=created.receipt.orderId;
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));
  if(moved.code!=='OK')throw Error('FIXTURE_HANDOFF:'+moved.code);
+ const {storeItemPhoto}=await import('./photoFixture');
+ for(const item of created.receipt.items)await storeItemPhoto(orderId,item.id);
  const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId:created.receipt.items[0].id,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));
  if(finished.code!=='OK')throw Error('FIXTURE_PART:'+finished.code);
  const master=await withSession(full,()=>getExtraWorkMasterDataAction());

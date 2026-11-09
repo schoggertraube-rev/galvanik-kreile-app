@@ -5,7 +5,7 @@ import {sql,full,withSession} from './replayHarness';
 import {customerFixture} from './orderFixture';
 import {requestMailStep} from './requestMailStep';
 import {installQuoteReplyProvider} from './quoteReplyProvider';
-import {storeIntakeGoodsPhoto,storeOrderPhoto} from './photoFixture';
+import {storeIntakeGoodsPhoto,storeOrderPhoto,storeItemPhoto} from './photoFixture';
 
 // Extends the proven prefix through completion; invoice/payment/outgoing remain
 // red until accepted quote prices survive conversion in the canonical writer.
@@ -126,6 +126,7 @@ it('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice bound
  expect(master.code).toBe('OK');if(master.code!=='OK')throw Error('H1_MASTER:'+master.code);
  if(!master.data.currentRate)expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  await storeOrderPhoto(orderId);
+ for(const item of converted.receipt.items)await storeItemPhoto(orderId,item.id);
  const freeze={orderId,freezeId:randomUUID(),expectedVersion:orderVersion,clientEventId:randomUUID()};
  const frozen=await withSession(full,()=>freezeOrderAction(freeze));
  expect(frozen,JSON.stringify(frozen)).toMatchObject({code:'OK'});if(frozen.code!=='OK')throw Error('H1_FREEZE:'+frozen.code);
