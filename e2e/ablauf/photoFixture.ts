@@ -18,3 +18,24 @@ export async function storeOrderPhoto(orderId:string){
  if(finalized.code!=='OK')throw Error('TEST_PHOTO_FINALIZE:'+finalized.code);
  return attachmentId;
 }
+
+/** Existing intake upload controls; real HTTP Storage, TEST namespace only. */
+export async function storeIntakeGoodsPhoto(itemId=randomUUID()){
+ const fileId=randomUUID();
+ const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6p0AAAAASUVORK5CYII=','base64');
+ const sha256=createHash('sha256').update(bytes).digest('hex');
+ const {prepareIntakeFileAction,finishIntakeFileAction}=await import('@/app/actions/eingang.actions');
+ const grant=await withSession(full,()=>prepareIntakeFileAction({itemId,fileId,name:'TEST-KV-Warenfoto.png',mime:'image/png',bytes:bytes.length,sha256,captureOrigin:'warenfoto'}));
+ if(grant.code!=='OK')throw Error('H8_GOODS_PHOTO_GRANT:'+grant.code);
+ // Content-addressed storage may already contain these exact TEST bytes.
+ if(grant.upload){
+ const url=new URL('/storage/v1/object/upload/sign/'+grant.upload.bucket+'/'+grant.upload.path,process.env.NEXT_PUBLIC_SUPABASE_URL);
+ if(url.hostname!=='127.0.0.1')throw Error('H8_GOODS_PHOTO_LOOPBACK_REQUIRED');
+ url.searchParams.set('token',grant.upload.token);
+ const response=await fetch(url,{method:'PUT',headers:{'content-type':'image/png','x-upsert':'false'},body:new Blob([new Uint8Array(bytes).buffer],{type:'image/png'})});
+ if(!response.ok)throw Error('H8_GOODS_PHOTO_UPLOAD:'+response.status);
+ }
+ const finished=await withSession(full,()=>finishIntakeFileAction(fileId));
+ if(finished.code!=='OK'||!finished.capture.files.some(file=>file.id===fileId&&file.secured))throw Error('H8_GOODS_PHOTO_FINALIZE:'+finished.code);
+ return {itemId,fileId};
+}

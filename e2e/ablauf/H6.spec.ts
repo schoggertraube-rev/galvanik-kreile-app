@@ -3,6 +3,39 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture} from './orderFixture';
+import {storeIntakeGoodsPhoto} from './photoFixture';
+
+it('H8 accepted quote plus real photographed goods converts concurrently to one order and one goods receipt',async()=>{
+ const customerId=await customerFixture('H8-KV');
+ const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
+ const created=await withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',note:'TEST gleichzeitige KV-Auftragsanlage',positions:[{name:'TEST H8 Teil',quantity:2,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:2500,lineTotalCents:5000}]}));
+ if(created.code!=='OK')throw Error('H8_QUOTE_CREATE:'+created.code);
+ const quoteId=created.quote.quoteId;
+ expect(await withSession(full,()=>changeQuoteLifecycleAction({quoteId,expectedVersion:1,edition:1,action:'sent',channel:'druck',evidence:'TEST ausgehändigt',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>changeQuoteLifecycleAction({quoteId,expectedVersion:2,edition:1,action:'accept',evidence:'TEST zugesagt',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const first=await storeIntakeGoodsPhoto();
+ const second=await storeIntakeGoodsPhoto(first.itemId);
+ const [source]=await sql`SELECT version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.itemId}::uuid`;
+ const current=await withSession(full,()=>readQuoteAction({quoteId}));
+ if(current.code!=='OK')throw Error('H8_QUOTE_REREAD:'+current.code);
+ const goods={id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId:first.itemId,quoteId,expectedQuoteVersion:current.quote.version,sourceVersion:source.version,expectedVersion:0,mode:'erfassung' as const,command:'accept' as const,card:1,packagesReceived:1,packagesTotal:1,condition:'unauffaellig' as const,deviations:[],foundUnattended:false,foundAt:null,procedure:'stimmt' as const,procedureNote:null,photos:[{fileId:first.fileId,kind:'uebersicht' as const},{fileId:second.fileId,kind:'teile' as const}],quantities:current.quote.positions.map(position=>({itemId:position.id,expected:position.quantity,received:null,confirmed:true,note:null})),location:'TEST Regal H8'};
+ const award={quoteId,clientEventId:randomUUID(),expectedVersion:current.quote.version,confirmedAward:true as const,confirmedOrderDueDate:'2027-05-15',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:goods.id};
+ const results=await Promise.all([withSession(full,()=>convertQuoteToOrderAction(structuredClone(award),structuredClone(goods))),withSession(full,()=>convertQuoteToOrderAction(structuredClone(award),structuredClone(goods)))]);
+ expect(results.map(result=>result.code),JSON.stringify(results)).toEqual(['OK','OK']);
+ const converted=results[0];if(converted.code!=='OK'||results[1].code!=='OK')throw Error('H8_CONVERSION');
+ const orderId=converted.orderReceipt.orderId;
+ expect(results[1].orderReceipt.orderId).toBe(orderId);
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{station:'angenommen'}}});
+ expect(await withSession(full,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:orderId,lifecycle:{goods:[expect.objectContaining({id:goods.id,orderId})]}}});
+ expect(await withSession(full,()=>convertQuoteToOrderAction(structuredClone(award),structuredClone(goods)))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT auftrag_id,kv_fassung FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid`).toEqual([{auftrag_id:orderId,kv_fassung:1}]);
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${award.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${first.itemId}::uuid AND art='ware' AND befehl_id=${goods.clientEventId}::uuid`).toEqual([{n:1}]);
+ expect(await withSession(full,()=>convertQuoteToOrderAction(structuredClone(award),{...structuredClone(goods),location:'TEST anderer Ort'}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT lagerort FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${goods.id}::uuid`).toEqual([{lagerort:goods.location}]);
+});
 
 it('H6 sending creates one linked followup and operational acceptance closes it without Geld',async()=>{
  const customerId=await customerFixture('H6-task');
