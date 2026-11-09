@@ -185,6 +185,7 @@ function configureSuccess(options: {
     const text = queryText(query);
     if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
     if (text.includes("FROM public.events audit")) return Promise.resolve([]);
+    if (text.includes("FROM public.complaints")) return Promise.resolve([]);
     if (text.includes("FROM public.events")) {
       eventReads += 1;
       return Promise.resolve(eventReads === 1 ? [] : [{
@@ -361,6 +362,7 @@ describe("recordGoodsOut", () => {
         const text = queryText(query);
         if (text.includes("pg_advisory_xact_lock") || text.includes("FROM public.events")) return Promise.resolve([]);
         if (text.includes("FROM public.orders")) return Promise.resolve([{ ...finishedOrder, payment_mode: "vorkasse" }]);
+        if (text.includes("FROM public.complaints")) return Promise.resolve([]);
         if (text.includes("FROM public.invoices")) return Promise.resolve([]);
         throw new Error(`Unexpected SQL: ${text}`);
       });
@@ -394,6 +396,7 @@ describe("recordGoodsOut", () => {
       .mockImplementationOnce(() => Promise.resolve([]))
       .mockImplementationOnce(() => Promise.resolve([finishedOrder]))
       .mockImplementationOnce(() => Promise.resolve([])) // No overdue customer debt.
+      .mockImplementationOnce(() => Promise.resolve([])) // No open complaint.
       .mockImplementationOnce(() => Promise.resolve([invoice]))
       .mockImplementationOnce(() => Promise.resolve([summary("vorkasse", "bezahlt")]))
       .mockImplementationOnce(() => Promise.resolve([{

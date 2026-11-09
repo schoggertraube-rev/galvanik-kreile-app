@@ -139,6 +139,7 @@ const canonicalIntakeRow = {
 describe("readPaymentSummary", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    execute.mockResolvedValue([]); // The additional complaint reader has a genuine empty result.
     withTransaction.mockImplementation(async (_authorization, work) => work({ execute }));
   });
 

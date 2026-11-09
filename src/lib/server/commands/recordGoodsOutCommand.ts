@@ -1,4 +1,6 @@
 import "server-only";
+import {readOpenOrderComplaint} from '@/lib/server/orderReleaseRead';
+import {COMPLAINT_ORDER_COPY} from '@/ui/situationCatalog';
 
 import { randomUUID } from "node:crypto";
 import { GOODS_OUT_DEBT_COPY } from "@/ui/situationCatalog";
@@ -746,6 +748,8 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
         return { code: "CONFLICT", message: GOODS_OUT_DEBT_COPY.noLongerBlocked };
       }
 
+      const pendingComplaint=await readOpenOrderComplaint(tx,tenantId,order.id);
+      if(pendingComplaint)return {code:'CONFLICT',message:COMPLAINT_ORDER_COPY.releaseBlocked(pendingComplaint.number)};
       const agreement = input.agreement === undefined
         ? null
         : await readEffectiveCustomerAgreement(tx, {

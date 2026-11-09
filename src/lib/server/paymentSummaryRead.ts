@@ -1,4 +1,5 @@
 import "server-only";
+import {readOpenOrderComplaint} from './orderReleaseRead';
 
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -102,7 +103,8 @@ export async function getPaymentState(
       if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
       if (!Array.isArray(rows[0].customer_overdue_invoice_ids) || rows[0].customer_overdue_invoice_ids.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id))) throw new Error("ORDER_CUSTOMER_DEBT_STATE_INVALID");
       const mapped = mapOrderPaymentStateRow(rows[0], authorization);
-      return { ...mapped, customerDeliveryBlock:{blocked:rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
+      const complaint=await readOpenOrderComplaint(tx,authorization.tenantId,mapped.orderId);
+      return { ...mapped,goodsOutAllowed:mapped.goodsOutAllowed&&complaint===null, customerDeliveryBlock:{blocked:rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
     });
     return data
       ? { code: "OK", data }
