@@ -1,8 +1,29 @@
 import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
-import {sql,full,withSession} from './replayHarness';
+import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture} from './orderFixture';
+
+it('H6 operational acceptance works for actual logins without Geld and hides all price fields',async()=>{
+ const customerId=await customerFixture('H6-op');
+ const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ for(const role of ['werkstatt','buero','readonly','admin'] as const){
+  const actor=await createFixture([],role);
+  const created=await withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',note:'TEST U249 '+role,positions:[{name:'TEST U249 Teil',quantity:1,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:13700,lineTotalCents:13700}]}));
+  expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('U249_CREATE:'+created.code);
+  const quoteId=created.quote.quoteId;
+  expect(await withSession(full,()=>changeQuoteLifecycleAction({quoteId,expectedVersion:1,edition:1,action:'sent',channel:'druck',evidence:'TEST persönlich übergeben',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const input={quoteId,expectedVersion:2,edition:1,action:'accept' as const,evidence:'TEST telefonische Zusage für '+role,clientEventId:randomUUID()};
+  const accepted=await withSession(actor,()=>changeQuoteLifecycleAction(input));
+  expect(accepted.code,role).toBe('OK');if(accepted.code!=='OK')throw Error('U249_ACCEPT:'+role+':'+accepted.code);
+  expect(accepted.quote).toMatchObject({totalNetCents:null,positions:[{unitPriceCents:null,lineTotalCents:null}],lifecycle:{acceptedEdition:1,calculation:null}});
+  expect(await sql`SELECT zugesagt_fassung FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`).toEqual([{zugesagt_fassung:1}]);
+  expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{user_id:actor.actorId}]);
+  expect(await withSession(full,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:3,lifecycle:{acceptedEdition:1}}});
+  expect(await withSession(actor,()=>changeQuoteLifecycleAction(input))).toMatchObject({code:'OK',replayed:true});
+  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{n:1}]);
+ }
+});
 
 it('H6 conditional acceptance, fresh edition, stale reply, current acceptance and date-only change use the real quote actions',async()=>{
  const customerId=await customerFixture('H6');
