@@ -5,6 +5,46 @@ import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
 import {storeOrderPhoto,storeIntakeGoodsPhoto} from './photoFixture';
 
+it('H7/W9 rejection is explicit, actor-bound and cannot become free rework or a credit on retry',async()=>{
+ const order=await readyInvoiceOrder('H7-Rej','shipping');
+ const photo=await storeOrderPhoto(order.orderId);
+ const {reklamationAusfuehrenAction,nacharbeitAnlegenAction,getByOrder}=await import('@/app/actions/complaints.actions');
+ const recorded=await withSession(full,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Transportschaden',description:'TEST abgelehnter Rückversand',photoIds:[photo],goodsReturn:'ja'}));
+ expect(recorded.code).toBe('OK');if(recorded.code!=='OK')throw Error('H7_REJECT_RECORD:'+recorded.code);
+ const decision={action:'entscheiden' as const,clientKey:randomUUID(),complaintId:recorded.receipt.complaintId,version:1,assessment:'abgelehnt' as const,measure:'ablehnen' as const,reason:'TEST dokumentierter Fremdschaden',creditCents:null};
+ expect(await withSession(full,()=>reklamationAusfuehrenAction(structuredClone(decision)))).toMatchObject({code:'FORBIDDEN'});
+ const decider=await createFixture(['auftraege','entscheiden','geld']);
+ const rejected=await withSession(decider,()=>reklamationAusfuehrenAction(decision));
+ expect(rejected,JSON.stringify(rejected)).toMatchObject({code:'OK',receipt:{state:'kunde_informieren',version:2}});
+ expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[expect.objectContaining({id:recorded.receipt.complaintId,stand:'kunde_informieren',bewertung:'abgelehnt',massnahme:'ablehnen',nacharbeitAuftragId:null})]});
+ expect(await withSession(decider,()=>reklamationAusfuehrenAction(JSON.parse(JSON.stringify(decision))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(decider,()=>nacharbeitAnlegenAction({reklamationId:recorded.receipt.complaintId,version:2,bewertung:'berechtigt',massnahme:'nacharbeit',liefertermin:'2027-05-18'}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(decider,()=>reklamationAusfuehrenAction({action:'gutschrift',clientKey:randomUUID(),complaintId:recorded.receipt.complaintId,version:2,creditCents:1000,creditNumber:'TEST-UNZULAESSIG'}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND nacharbeit_zu=${recorded.receipt.complaintId}`).toEqual([{n:0}]);
+ expect(await sql`SELECT nacharbeit_auftrag_id,gutschrift_betrag,gutschrift_nr,begruendung FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${recorded.receipt.complaintId}`).toEqual([{nacharbeit_auftrag_id:null,gutschrift_betrag:null,gutschrift_nr:null,begruendung:decision.reason}]);
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${decision.clientKey}::uuid`).toEqual([{user_id:decider.actorId}]);
+ const {createQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const paidQuote={clientEventId:randomUUID(),sourceComplaintId:recorded.receipt.complaintId,customerId:order.customerId,dueDate:'2027-05-18',note:'TEST bezahlte Bearbeitung nach Ablehnung',positions:[{name:'TEST berechnete Bearbeitung',quantity:1,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:2500,lineTotalCents:2500}]};
+ expect(await withSession(full,()=>createQuoteAction({...paidQuote,positions:[{...paidQuote.positions[0],unitPriceCents:0,lineTotalCents:0}]}))).toMatchObject({code:'VALIDATION_ERROR'});
+ const quote=await withSession(full,()=>createQuoteAction(paidQuote));
+ expect(quote.code).toBe('OK');if(quote.code!=='OK')throw Error('H7_PAID_QUOTE:'+quote.code);
+ expect(await withSession(full,()=>readQuoteAction({quoteId:quote.quote.quoteId}))).toMatchObject({code:'OK',quote:{sourceComplaintId:recorded.receipt.complaintId,totalNetCents:2500}});
+ expect(await withSession(full,()=>createQuoteAction(structuredClone(paidQuote)))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>createQuoteAction({...paidQuote,sourceComplaintId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT count(*)::integer AS n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND quelle_reklamation_id=${recorded.receipt.complaintId}`).toEqual([{n:1}]);
+ const close={action:'abschliessen' as const,clientKey:randomUUID(),complaintId:recorded.receipt.complaintId,version:2,kind:'ohne_mail' as const,note:'TEST telefonisch über Ablehnung informiert',sentThreadId:null};
+ expect(await withSession(decider,()=>reklamationAusfuehrenAction(close))).toMatchObject({code:'OK',receipt:{state:'abgeschlossen',version:3}});
+ expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[expect.objectContaining({id:recorded.receipt.complaintId,stand:'abgeschlossen'})]});
+ expect(await withSession(decider,()=>reklamationAusfuehrenAction(structuredClone(close)))).toMatchObject({code:'OK',replayed:true});
+ const reopen={action:'wieder_oeffnen' as const,clientKey:randomUUID(),complaintId:recorded.receipt.complaintId,version:3,reason:'TEST Kunde legt einen neuen Befund vor'};
+ expect(await withSession(full,()=>reklamationAusfuehrenAction(structuredClone(reopen)))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(decider,()=>reklamationAusfuehrenAction({...reopen,reason:''}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(decider,()=>reklamationAusfuehrenAction(reopen))).toMatchObject({code:'OK',receipt:{state:'aufgenommen',version:4}});
+ expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[expect.objectContaining({id:recorded.receipt.complaintId,stand:'aufgenommen'})]});
+ expect(await withSession(decider,()=>reklamationAusfuehrenAction(JSON.parse(JSON.stringify(reopen))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT client_event_id::text,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id IN (${close.clientKey}::uuid,${reopen.clientKey}::uuid) ORDER BY client_event_id`).toEqual([close.clientKey,reopen.clientKey].sort().map(client_event_id=>({client_event_id,user_id:decider.actorId})));
+});
+
 it('RA-02 W7/W8 counter complaint before handover requires an actual photo, persists once, and keeps goods in-house',async()=>{
  const order=await readyInvoiceOrder('RA-02');
  const {getComplaintDialogAction,reklamationAusfuehrenAction,getByOrder,getComplaints}=await import('@/app/actions/complaints.actions');
