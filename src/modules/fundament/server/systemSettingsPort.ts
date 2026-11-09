@@ -1,3 +1,5 @@
+import {isDeepStrictEqual} from 'node:util';
+import {dispatchPolicyValid} from "../dispatchPolicy";
 import "server-only";
 
 import bcrypt from "bcryptjs";
@@ -39,10 +41,11 @@ type CompanyRow = { company_name: string; street: string | null; zip: string | n
 
 export async function readShippingSettingsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string):Promise<ShippingSettings|null>{
  const rows=await tx.execute<ShippingSettings>(sql`SELECT versand_dienst AS service,versand_nummer_format AS "numberPattern",versand_nummer_hinweis AS "numberHint",
-   versand_verfolgung_url AS "trackingUrl",versand_label_api AS "labelApi",to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
+   versand_verfolgung_url AS "trackingUrl",versand_label_api AS "labelApi",ausgang_regeln AS "dispatchPolicy",to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
    FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 2`);
  if(!rows.length)return null;
  if(rows.length!==1||!rows[0]||typeof rows[0].service!=="string"||!rows[0].service.trim())throw Error('SHIPPING_SETTINGS_INVALID');
+ if(rows[0].dispatchPolicy!==null&&!dispatchPolicyValid(rows[0].dispatchPolicy))throw Error("DISPATCH_POLICY_INVALID");
  return rows[0];
 }
 export async function readShippingSettings(context:CompanyDocumentContext){
@@ -55,11 +58,12 @@ export async function updateShippingSettings(context:SystemSettingsContext,input
  if(context.canManageCompany!==true)return {code:"FORBIDDEN" as const,message:"Versandangaben dürfen nicht geändert werden."};
  if(!input||typeof input!=="object"||Array.isArray(input))return {code:"VALIDATION_ERROR" as const,message:"Versandangaben fehlen."};
  const value=input as Record<string,unknown>;
- if(Object.keys(value).sort().join(',')!=="expectedUpdatedAt,numberHint,numberPattern,service,trackingUrl"
+ if(Object.keys(value).sort().join(',')!==['expectedUpdatedAt','numberHint','numberPattern','service','trackingUrl',...('dispatchPolicy' in value?['dispatchPolicy']:[])].sort().join(',')
   ||typeof value.service!=="string"||value.service!==value.service.trim()||value.service.length<1||value.service.length>40
   ||typeof value.numberPattern!=="string"||value.numberPattern.length>160||typeof value.numberHint!=="string"||value.numberHint.length>160
   ||!(value.trackingUrl===null||typeof value.trackingUrl==="string"&&value.trackingUrl.length<=1000)
   ||typeof value.expectedUpdatedAt!=="string"||!Number.isFinite(Date.parse(value.expectedUpdatedAt)))return {code:"VALIDATION_ERROR" as const,message:"Versandangaben sind ungültig."};
+ if('dispatchPolicy' in value&&value.dispatchPolicy!==null&&!dispatchPolicyValid(value.dispatchPolicy))return {code:'VALIDATION_ERROR' as const,message:'Fristen, Kalender oder Dienstschluss sind unvollständig oder ungültig · Eingaben bleiben erhalten.'};
  try{
   if(value.numberPattern)new RegExp(value.numberPattern);
   if(value.trackingUrl){const url=new URL((value.trackingUrl as string).replace('{nr}','0'));if(url.protocol!=="https:"||!(value.trackingUrl as string).includes('{nr}'))return {code:"VALIDATION_ERROR" as const,message:"Sendungsverfolgung benötigt eine HTTPS-Adresse mit {nr}."};}
@@ -68,14 +72,14 @@ export async function updateShippingSettings(context:SystemSettingsContext,input
   return await withPrivilegedTenantTransaction(context,async tx=>{
    const current=await readShippingSettingsInTransaction(tx,context.tenantId);
    if(!current)return {code:"NOT_FOUND" as const,message:"Firmendaten müssen zuerst gespeichert werden."};
-   const identical=current.service===value.service&&current.numberPattern===value.numberPattern&&current.numberHint===value.numberHint&&current.trackingUrl===value.trackingUrl;
+   const identical=current.service===value.service&&current.numberPattern===value.numberPattern&&current.numberHint===value.numberHint&&current.trackingUrl===value.trackingUrl&&(!('dispatchPolicy' in value)||isDeepStrictEqual(current.dispatchPolicy,value.dispatchPolicy));
    if(identical)return {code:"OK" as const,settings:current,replayed:true};
    if(current.updatedAt!==value.expectedUpdatedAt)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte abgleichen.",current};
    const changed=await tx.execute(sql`UPDATE public.company_settings SET versand_dienst=${value.service},versand_nummer_format=${value.numberPattern},
-     versand_nummer_hinweis=${value.numberHint},versand_verfolgung_url=${value.trackingUrl},updated_at=statement_timestamp()
+     versand_nummer_hinweis=${value.numberHint},versand_verfolgung_url=${value.trackingUrl},ausgang_regeln=${('dispatchPolicy' in value?value.dispatchPolicy:current.dispatchPolicy)===null?null:JSON.stringify('dispatchPolicy' in value?value.dispatchPolicy:current.dispatchPolicy)}::jsonb,updated_at=statement_timestamp()
      WHERE tenant_id=${context.tenantId} AND updated_at=${value.expectedUpdatedAt}::timestamptz RETURNING id`);
    if(changed.length!==1)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte erneut abgleichen.",current:await readShippingSettingsInTransaction(tx,context.tenantId)};
-   await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'shipping_settings_updated',${JSON.stringify({actorId:context.actorId,before:current,after:{service:value.service,numberPattern:value.numberPattern,numberHint:value.numberHint,trackingUrl:value.trackingUrl}})}::jsonb)`);
+   await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'shipping_settings_updated',${JSON.stringify({actorId:context.actorId,before:current,after:{service:value.service,numberPattern:value.numberPattern,numberHint:value.numberHint,trackingUrl:value.trackingUrl,dispatchPolicy:'dispatchPolicy' in value?value.dispatchPolicy:current.dispatchPolicy}})}::jsonb)`);
    return {code:"OK" as const,settings:await readShippingSettingsInTransaction(tx,context.tenantId),replayed:false};
   });
  }catch(error){logSystemSettingsPortFailure('SHIPPING_SETTINGS_WRITE_FAILED',error);return {code:"UNAVAILABLE" as const,message:"Versandangaben konnten nicht gespeichert werden. Fehlercode: SHIPPING_SETTINGS_WRITE_FAILED."};}

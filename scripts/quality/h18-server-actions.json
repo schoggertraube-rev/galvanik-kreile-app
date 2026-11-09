@@ -201,7 +201,8 @@
       "src/test/h18_order_admin_actions.integration.test.ts"
     ],
     "src/app/actions/settings.actions.ts#saveShippingSettingsAction": [
-      "src/test/h18_order_admin_actions.integration.test.ts"
+      "src/test/h18_order_admin_actions.integration.test.ts",
+      "src/test/acceptance/output_dispatch_settings.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#createIntakeContinuationAction": [
       "src/test/h18_customer_actions.integration.test.ts"

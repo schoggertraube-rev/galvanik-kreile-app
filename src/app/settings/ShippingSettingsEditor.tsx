@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readShippingSettingsAction, saveShippingSettingsAction } from "@/app/actions/settings.actions";
-import type { ShippingSettings } from "@/modules/fundament/public";
+import {DispatchPolicyFields,type DispatchPolicy,type ShippingSettings } from "@/modules/fundament/public";
 import styles from "./settings.module.css";
 
 type Fields = Pick<ShippingSettings, "service" | "numberPattern" | "numberHint" | "trackingUrl">;
@@ -13,6 +13,7 @@ const fields = (value: ShippingSettings): Fields => ({
 
 /** The existing company row and its version remain the only shipping configuration. */
 export function ShippingSettingsEditor() {
+  const [policy,setPolicy]=useState<DispatchPolicy|null>(null),[policyDirty,setPolicyDirty]=useState(false);
   const [saved, setSaved] = useState<ShippingSettings | null>(null);
   const [draft, setDraft] = useState<Fields | null>(null);
   const [conflict, setConflict] = useState<ShippingSettings | null>(null);
@@ -35,7 +36,7 @@ export function ShippingSettingsEditor() {
         return;
       }
       if (result.code !== "OK") { setError(result.message); return; }
-      setSaved(result.settings); setDraft(fields(result.settings)); setConflict(null);
+      setSaved(result.settings);setPolicy(result.settings.dispatchPolicy??null);setPolicyDirty(false); setDraft(fields(result.settings)); setConflict(null);
     } catch (failure) {
       console.error("[SHIPPING_EDITOR_READ_FAILED]", failure);
       if (request === readId.current && !signal?.aborted) setError("Versandangaben konnten nicht geladen werden · Fehlercode: SHIPPING_EDITOR_READ_FAILED.");
@@ -50,7 +51,7 @@ export function ShippingSettingsEditor() {
   const save = async () => {
     if (writing.current || !saved || !draft || conflict) return;
     writing.current = true; setBusy(true); setError(null); setMessage(null);
-    const input = { ...draft, expectedUpdatedAt: saved.updatedAt };
+    const input = { ...draft,...(policyDirty?{dispatchPolicy:policy}:{}), expectedUpdatedAt: saved.updatedAt };
     try {
       const result = await saveShippingSettingsAction(input);
       if (result.code !== "OK") {
@@ -60,10 +61,10 @@ export function ShippingSettingsEditor() {
       if (!result.settings) throw new Error("SHIPPING_EDITOR_SAVE_RECEIPT_MISSING");
       const read = await readShippingSettingsAction();
       if (read.code !== "OK") { setError("Versandangaben gespeichert; erneutes Lesen fehlgeschlagen · " + read.message); return; }
-      if (JSON.stringify(fields(read.settings)) !== JSON.stringify(fields(result.settings))) {
+      if (JSON.stringify(fields(read.settings)) !== JSON.stringify(fields(result.settings))||JSON.stringify(read.settings.dispatchPolicy)!==JSON.stringify(result.settings.dispatchPolicy)) {
         setConflict(read.settings); setError("Versandangaben wurden erneut geändert · gespeicherten Stand mit Ihren Eingaben abgleichen."); return;
       }
-      setSaved(read.settings); setDraft(fields(read.settings)); setMessage("Versandangaben gespeichert.");
+      setSaved(read.settings);setPolicy(read.settings.dispatchPolicy??null);setPolicyDirty(false); setDraft(fields(read.settings)); setMessage("Versandangaben gespeichert.");
     } catch (failure) {
       console.error("[SHIPPING_EDITOR_WRITE_FAILED]", failure);
       setError("Versandangaben nicht sicher bestätigt · Ihre Eingaben sind noch da · Fehlercode: SHIPPING_EDITOR_WRITE_FAILED.");
@@ -90,13 +91,13 @@ export function ShippingSettingsEditor() {
       {field("numberPattern", "Format der Sendungsnummer", 160)}
       {field("numberHint", "Hinweis zur Sendungsnummer", 160)}
       {field("trackingUrl", "Sendungsverfolgung (HTTPS-Adresse mit {nr})", 1000)}
-    </div><button type="button" disabled={busy || loading || Boolean(conflict)} onClick={() => void save()}>{busy ? "Versandangaben werden gespeichert …" : "Versandangaben speichern"}</button></> : null}
+    </div><DispatchPolicyFields value={policy} disabled={busy||loading} onChange={value=>{setPolicy(value);setPolicyDirty(true);setMessage(null);}}/><button type="button" disabled={busy || loading || Boolean(conflict)} onClick={() => void save()}>{busy ? "Versandangaben werden gespeichert …" : "Versandangaben speichern"}</button></> : null}
     {error ? <p role="alert">{error}</p> : null}
     {!saved && !loading ? <button type="button" onClick={() => void load()}>Versandangaben erneut lesen</button> : null}
     {conflict ? <div role="region" aria-label="Geänderter Versandstand"><p>Aktuell gespeichert:</p><dl>
       <dt>Versanddienst</dt><dd>{conflict.service}</dd><dt>Format der Sendungsnummer</dt><dd>{conflict.numberPattern || "keine Formatprüfung"}</dd>
       <dt>Hinweis zur Sendungsnummer</dt><dd>{conflict.numberHint || "kein Hinweis eingetragen"}</dd><dt>Sendungsverfolgung</dt><dd>{conflict.trackingUrl || "kein Link eingetragen"}</dd>
-    </dl><button type="button" onClick={() => { setSaved(conflict); setDraft(fields(conflict)); setConflict(null); setError(null); }}>Gespeicherten Stand übernehmen</button>
+    </dl><button type="button" onClick={() => { setSaved(conflict);setPolicy(conflict.dispatchPolicy??null);setPolicyDirty(false); setDraft(fields(conflict)); setConflict(null); setError(null); }}>Gespeicherten Stand übernehmen</button>
       <button type="button" onClick={() => { setSaved(conflict); setConflict(null); setError(null); }}>Meine Eingaben nach Abgleich beibehalten</button></div> : null}
     {message ? <p role="status">{message}</p> : null}
   </section>;

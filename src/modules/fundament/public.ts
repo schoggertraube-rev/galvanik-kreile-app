@@ -15,6 +15,7 @@ export type CompanySettingsSnapshot = {
   [Key in keyof CompanySettingsInput]: CompanySettingsInput[Key] | null;
 };
 export type ShippingSettings = {
+  dispatchPolicy?:import("./dispatchPolicy").DispatchPolicy|null;
   service:string;numberPattern:string;numberHint:string;trackingUrl:string|null;labelApi:string|null;updatedAt:string;
 };
 export type ManagedUser = {
@@ -57,3 +58,7 @@ export type SystemSettingsSnapshot = {
   numberRanges: Array<{ label: string; pattern: string }>;
   features: import("./featureCatalog").SalesStageFeature[];
 };
+
+export {emptyDispatchPolicy,dispatchPolicyValid,DISPATCH_DAY_FIELDS} from "./dispatchPolicy";
+export type {DispatchPolicy} from "./dispatchPolicy";
+export {DispatchPolicyFields} from "./ui/DispatchPolicyFields";
