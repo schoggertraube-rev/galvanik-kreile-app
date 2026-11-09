@@ -73,6 +73,23 @@ it('S9 city matches only actual customers of this tenant',async()=>{
  expect(found.hits.some(row=>row.id===foreign||row.id===other)).toBe(false);
 });
 
+it.each([
+ ['S1','Schmitt',['TEST Reiner Schmitt','TEST Sabrina Schmidt','TEST Schmied Metallbau GmbH']],
+ ['S2','Schmdit',['TEST Reiner Schmitt','TEST Sabrina Schmidt','TEST Schmied Metallbau GmbH']],
+ ['S3','Mayr',['TEST Maier Oberflächen AG']],
+] as const)('%s actual customer search finds the specified phonetic or spelling alternatives for %s',async(caseId,query,names)=>{
+ const ids:string[]=[];
+ const {updateCustomerAction}=await import('@/app/actions/customers.actions');
+ for(const [index,name] of names.entries()){
+  const customerId=await customerFixture(caseId+'-'+index);ids.push(customerId);
+  expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),companyName:name}))).toMatchObject({code:'OK'});
+ }
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const found=await withSession(full,()=>searchTenantAction(query));
+ expect(found.code).toBe('OK');if(found.code!=='OK')throw Error(caseId+'_SEARCH:'+found.code);
+ expect(found.hits.filter(hit=>hit.type==='CUSTOMER').map(hit=>hit.id).sort()).toEqual([...ids].sort());
+});
+
 it('S4 actual search finds Kunde Süd from Sued and ignores the legal form without inventing a customer',async()=>{
  const customerId=await customerFixture('S4');
  const {updateCustomerAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
