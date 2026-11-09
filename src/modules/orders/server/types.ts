@@ -118,7 +118,7 @@ export type OrderCardActionReceipt = {
 export type OrderCardActionFeedback =
   | { kind: "idle" | "submitting"; message: string; operation?:"responsibility" }
   | { kind: "success"; message: string; receipt: OrderCardActionReceipt }
-  | { kind: "conflict" | "error"; message: string; operation?:"responsibility" };
+  | { kind: "conflict" | "error"; message: string; code?:string; operation?:"responsibility" };
 export type OrderCardActionAvailability = {
   visible: boolean;
   enabled: boolean;

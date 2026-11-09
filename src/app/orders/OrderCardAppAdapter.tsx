@@ -379,6 +379,7 @@ export function OrderCardAppAdapter({
       setFeedback({
         kind: result.code === "CONFLICT" ? "conflict" : "error",
         operation,
+        code:result.code,
         message:
           operation === "responsibility" ? ACTOR_COPY.assignmentError(result.code) : result.code === "CONFLICT"
             ? `${result.message} Der Auftrag wurde neu geladen.`

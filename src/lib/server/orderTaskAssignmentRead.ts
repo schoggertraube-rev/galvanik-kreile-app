@@ -296,6 +296,20 @@ export async function readOrderResponsibilityForToday(tx:PrivilegedTenantTransac
  if(!unique.length)return new Map<string,string|null>();
  const rows=await tx.execute<{id:string;userId:string|null;assignmentOk:boolean|null}>(sql`SELECT orders.id,assignment.assigned_to::text AS "userId",assignment.integrity_ok AS "assignmentOk" FROM public.orders orders LEFT JOIN private.v_order_task_assignment_v1 assignment ON assignment.tenant_id=orders.tenant_id AND assignment.order_id=orders.id AND assignment.active=true WHERE orders.tenant_id=${auth.tenantId} AND orders.id IN (${sql.join(unique.map(id=>sql`${id}`),sql`, `)})`);
  const invalid=rows.filter(row=>row.assignmentOk===false);
- for(const row of invalid){console.error('[TODAY_ASSIGNMENT_RECEIPT_INVALID]',{orderId:row.id});await tx.execute(sql`SAVEPOINT today_assignment_diagnostic`);try{await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${auth.tenantId},'today_assignment_read_failed',${JSON.stringify({code:'TODAY_ASSIGNMENT_RECEIPT_INVALID',orderId:row.id,actorId:auth.userId})}::jsonb)`);await tx.execute(sql`RELEASE SAVEPOINT today_assignment_diagnostic`);}catch(error){await tx.execute(sql`ROLLBACK TO SAVEPOINT today_assignment_diagnostic`);await tx.execute(sql`RELEASE SAVEPOINT today_assignment_diagnostic`);console.error('[TODAY_ASSIGNMENT_DIAGNOSTIC_FAILED]',error);}}
+ for(const row of invalid)await recordInvalidOrderAssignmentForToday(tx,auth,row.id);
  return new Map(rows.filter(row=>row.assignmentOk!==false).map(row=>[row.id,row.userId]));
+}
+
+/** One shared diagnostic for both personal and delegated home rows, at most once per Berlin day. */
+export async function recordInvalidOrderAssignmentForToday(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string){
+ console.error('[TODAY_ASSIGNMENT_RECEIPT_INVALID]',{orderId});
+ await tx.execute(sql`SAVEPOINT today_assignment_diagnostic`);
+ try{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('today-assignment-diagnostic:'||${auth.tenantId}||':'||${orderId},0))`);
+  await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload)
+   SELECT ${auth.tenantId},'today_assignment_read_failed',${JSON.stringify({code:'TODAY_ASSIGNMENT_RECEIPT_INVALID',orderId,actorId:auth.userId})}::jsonb
+   WHERE NOT EXISTS(SELECT 1 FROM public.ui_events prior WHERE prior.tenant_id=${auth.tenantId} AND prior.event_type='today_assignment_read_failed' AND prior.payload->>'orderId'=${orderId}
+    AND (prior.created_at AT TIME ZONE 'Europe/Berlin')::date=(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date)`);
+  await tx.execute(sql`RELEASE SAVEPOINT today_assignment_diagnostic`);
+ }catch(error){await tx.execute(sql`ROLLBACK TO SAVEPOINT today_assignment_diagnostic`);await tx.execute(sql`RELEASE SAVEPOINT today_assignment_diagnostic`);console.error('[TODAY_ASSIGNMENT_DIAGNOSTIC_FAILED]',error);}
 }

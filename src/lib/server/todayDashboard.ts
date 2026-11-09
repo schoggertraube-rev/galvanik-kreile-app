@@ -1,5 +1,5 @@
 import "server-only";
-import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentRead";
+import {readOrderResponsibilityForToday,recordInvalidOrderAssignmentForToday} from "@/lib/server/orderTaskAssignmentRead";
 
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -61,7 +61,7 @@ type InvoiceRow = { id: string; invoice_number: string; order_id: string; custom
 type PrepaymentRow = { order_id: string; order_number: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; invoice_id: string | null; open_amount_cents: number | string | null; payment_status: string | null; station: string; goods_out_event_count: number | string };
 type UserRow = { id: string; full_name: string };
 type GraphThreadRow = { source: string };
-type AssignmentRow = { order_id: string; assigned_to_name: string; current_order_version: number };
+type AssignmentRow = { integrity_ok:boolean;order_id: string; assigned_to_name: string; current_order_version: number };
 type CollectionRow = { id: string; customer_name: string; monat: Date | string; order_count: number | string };
 
 const DEFAULT_FIELDS: TodayVisibleField[] = ["today", "assign", "money", "bundle"];
@@ -175,15 +175,15 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
         `) : Promise.resolve([]),
         graphAllowed ? tx.execute<GraphThreadRow>(sql`SELECT source FROM public.communication_threads WHERE tenant_id=${auth.tenantId} AND source LIKE 'MS_GRAPH_IN:%'`) : Promise.resolve([]),
         ordersAllowed ? tx.execute<AssignmentRow>(sql`
-          SELECT order_id, assigned_to_name, current_order_version
+          SELECT order_id, assigned_to_name, current_order_version, integrity_ok
           FROM private.v_order_task_assignment_v1
           WHERE tenant_id=${auth.tenantId}
-            AND integrity_ok=true
             AND assigned_by=${auth.userId}::uuid
             AND active=true
         `) : Promise.resolve([]),
       ]);
-      return { preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignments };
+      for(const row of assignments)if(!row.integrity_ok)await recordInvalidOrderAssignmentForToday(tx,auth,row.order_id);
+      return { preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignments:assignments.filter(row=>row.integrity_ok) };
     }),
     ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints():Promise.resolve({code:'OK' as const,complaints:[]}),
     moneyAllowed&&ordersAllowed?readQuoteFollowups():Promise.resolve({code:'OK' as const,tasks:[]}),

@@ -361,5 +361,9 @@ it('SA correction keeps the creator distinct from responsibility and offers taki
 
 it('SA correction maps an unavailable assignment code through the catalog without rendering a server diagnostic',()=>{
  render(<OrderCardView state={{kind:'data',card:{...card,actors:{currentLoginId:'TEST-a',createdBy:null,lastActor:null,responsible:null,assignmentUnavailable:true,assignmentReadError:'UNAVAILABLE'}}}} actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);
- expect(screen.getByText('Du kannst die Zuständigkeit gerade nicht laden oder speichern. Versuche es erneut.')).toBeInTheDocument();expect(screen.queryByText('UNAVAILABLE')).not.toBeInTheDocument();
+ expect(screen.getByText('Zuständigkeit gerade nicht lesbar - lade den Auftrag neu.')).toBeInTheDocument();expect(screen.queryByText('Noch niemand zuständig')).not.toBeInTheDocument();expect(screen.queryByText('UNAVAILABLE')).not.toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Neu laden'}));expect(actions.onReload).toHaveBeenCalled();
+});
+
+it('SA review gives a validation rejection a reload exit beside the responsibility action',()=>{
+ const reload=vi.fn();render(<OrderCardView state={{kind:'data',card:{...card,actors:{currentLoginId:'TEST-a',createdBy:null,lastActor:null,responsible:null,assignmentUnavailable:false}}}} actions={{...actions,onReload:reload,feedback:{kind:'error',operation:'responsibility',code:'VALIDATION_ERROR',message:'Der Auftrag hat sich inzwischen geändert. Lade ihn neu und übernimm ihn dann.'}}} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);fireEvent.click(screen.getByRole('button',{name:'Neu laden'}));expect(reload).toHaveBeenCalledOnce();
 });
