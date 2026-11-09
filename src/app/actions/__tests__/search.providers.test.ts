@@ -11,6 +11,7 @@ const authorization: AuthorizationSnapshot = {
   role: "admin",
   permissions: ["perm_view_leitstand", "perm_view_prices"],
   active: true,
+  areas:['geld','mails','auftraege'],
 };
 
 const quote: QuoteReadback = {
