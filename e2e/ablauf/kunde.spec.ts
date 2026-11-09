@@ -3,6 +3,25 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('a former customer creation receipt cannot expose a contact later converted to supplier without Geld',async()=>{
+ const {createCustomerAction,readCustomerCreateReceiptAction,updateCustomerAction}=await import('@/app/actions/customers.actions');
+ const operational=await createFixture(['kunden','eingang'],'werkstatt');
+ const input={clientEventId:randomUUID(),customerType:'business' as const,companyName:'TEST späterer Lieferant '+randomUUID(),phone:'+49 711 5550190'};
+ const created=await withSession(operational,()=>createCustomerAction(input));
+ expect(created,JSON.stringify(created)).toMatchObject({code:'OK'});if(created.code!=='OK')throw Error('SUPPLIER_REPLAY_CREATE:'+created.code);
+ const customerId=created.receipt.customerId;
+ expect(await withSession(operational,()=>readCustomerCreateReceiptAction(structuredClone(input)))).toMatchObject({code:'OK',customer:{customerType:'business'}});
+ // The existing type-change form explicitly clears these four incompatible fields after confirmation.
+ const converted=await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),customerType:'lieferant',paymentPreference:null,vatId:null,billingEmail:null,handoverPreference:null}));
+ expect(converted,JSON.stringify(converted)).toMatchObject({code:'OK',customer:{customerType:'lieferant'}});
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(operational,()=>createCustomerAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(operational,()=>readCustomerCreateReceiptAction(structuredClone(input)))).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT type FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{type:'lieferant'}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
 it('malformed legacy customer lookups return validation instead of a thrown render error and valid lookup still works',async()=>{
  const {createCustomerAction,searchCustomersDb,getCustomerByIdDb}=await import('@/app/actions/customers.actions');
  const name='TEST Kunde Suchfehler '+randomUUID();
