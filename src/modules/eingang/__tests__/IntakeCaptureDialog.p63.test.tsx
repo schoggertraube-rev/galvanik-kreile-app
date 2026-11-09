@@ -221,7 +221,7 @@ it('E1 start shell has one personal heading and compact real photo/file actions,
  const {container}=render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
  expect(screen.getAllByRole('heading',{name:'Hey Rolf, was kann ich für dich tun?'})).toHaveLength(1);
  expect(screen.getByRole('dialog',{name:'Hey Rolf, was kann ich für dich tun?'})).toBeVisible();
- expect(screen.getByRole('button',{name:'Foto'})).toBeEnabled();expect(screen.getByRole('button',{name:'Datei'})).toBeEnabled();expect(screen.queryByRole('button',{name:/Sprechen|Mikrofon/})).toBeNull();
+ expect(screen.getByRole('button',{name:'Foto'})).toBeEnabled();expect(screen.getByRole('button',{name:'Datei'})).toBeEnabled();expect(screen.getByText('Datei hierher ziehen',{exact:false})).toBeVisible();expect(screen.queryByRole('button',{name:/Sprechen|Mikrofon/})).toBeNull();
  expect(container.querySelector('.ev-rein-karten')).toBeNull();expect(screen.getByRole('button',{name:'Auftrag oder KV erfassen'})).toBeEnabled();expect(screen.getByRole('button',{name:'Kunde anlegen'})).toBeEnabled();
 });
 

@@ -71,3 +71,7 @@ Lokale Datenbank weiterhin nicht erreichbar nach einem begrenzten Wiederanlaufve
 ## Nachführung des bestehenden globalen Fluss-Tests
 
 Die Modus-Aufnahme erwartet nach dem freigegebenen gemeinsamen Kopf „Neuer Eingang“ statt „Zettel lesen · für die Erfassung“. Alle Prüfungen zu Datei-Werkzeug, zwei Ebenen, Escape-Rückkehr und getrenntem Mailweg bleiben erhalten. Dieser konkrete RealRender-Fall ist lokal grün (1,05 s). Der einmalige Lauf der ganzen Datei bestand 88 von 89 Fällen; ein unberührter PositionZeile-Fall erreichte bei belastetem Rechner das unveränderte 5-Sekunden-Limit. Keine Timeout-Erhöhung und keine Assertion entfernt.
+
+## CI-Befund F01 nach Startaufbau
+
+Am Kandidaten 77306434 sind quality, Fresh-Replay, agentur und Ratchet grün; h16 meldet genau F01 rot, 280 andere Browserfälle grün. Ursache: Beim Ersetzen der großen Datei-Kachel entfiel der sichtbare Ziehen-Hinweis, obwohl derselbe Drop-Handler erhalten blieb. Der vorhandene Katalogtext wird jetzt kompakt neben Datei angezeigt. Kein generierter Fall, keine Rotliste und keine Assertion wird abgeschwächt. Der gezielte Startaufbau-Test prüft den Hinweis zusätzlich.

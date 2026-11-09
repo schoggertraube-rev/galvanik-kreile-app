@@ -618,6 +618,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         <div className={styles.tools}>
           {!showCamera&&(cameraAvailable||deviceRequest)?<Button data-spec-id="rein.handy" icon="camera" text={CAPTURE_ENTRY_COPY.photo} label={CAPTURE_ENTRY_COPY.cameraTile} disabled={busy||deviceWorking||blockedReceiver} onClick={requestOriginal}/>:null}
           <Button data-spec-id="rein.datei" icon="upload" text={CAPTURE_ENTRY_COPY.fileLabel} disabled={busy||blockedReceiver} onClick={()=>input.current?.click()}/>
+          <small>{CAPTURE_ENTRY_COPY.fileHint}</small>
           {text.trim() ? <Button data-spec-id="rein.notiz-lesen" text={!scope?CAPTURE_ENTRY_COPY.preparing:reading ? CAPTURE_ENTRY_COPY.reading : CAPTURE_ENTRY_COPY.read} disabled={busy||!scope} onClick={()=>void saveText()} /> : null}
         </div>
         {!mode&&!receiving&&!showCamera&&!showSituation&&capture&&hasCapturedContent&&!hidePreviousResult?<div data-spec-id="rein.textvorschlag" className={styles.proposal}>
