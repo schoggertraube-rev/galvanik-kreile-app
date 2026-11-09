@@ -1,4 +1,5 @@
 [
+  {"datum":"2026-11-09","pr":209,"seite":"auftrag","punkte":["Überfällige Rechnungen sperren die Warenausgabe. Eine Ausnahme braucht das Recht Entscheiden und einen dokumentierten Grund."],"ziel":"/orders"},
   {"datum":"2026-11-05","pr":175,"seite":"rechnungein","punkte":["Vorschau: Über Neu erfassen Eingangsrechnungen mit Original prüfen.","Vorschau: Fehlende Lieferanten über eine Aufgabe ergänzen."],"ziel":"rein"},
   {"datum":"2026-11-05","pr":173,"seite":"nachrichten","punkte":["Vorschau: Nachrichten lassen sich einem Kunden zuordnen, erledigen und mit Grund wieder öffnen.","Vorschau: Aufgaben bleiben mit ihrem Anlass und dem Verlauf verbunden.","Vorschau: Ein geöffnetes Original einem Kunden zuordnen und zur erhaltenen Erfassung zurückkehren.","Nach einem Speicherfehler kehrt Erneut zur erhaltenen Aufgabe zurück. Erst Auf Der Tag speichert erneut."],"ziel":"/nachrichten"},
   {"datum":"2026-11-04","pr":172,"seite":"rein","punkte":["Vorbereitung für Nachrichten und Teilen an die App."],"ziel":"rein"},
