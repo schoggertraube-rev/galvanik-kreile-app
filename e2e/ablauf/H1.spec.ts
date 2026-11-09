@@ -21,7 +21,7 @@ it('H1 prefix T25 to KV: original mail creates one linked quote; the concern clo
  const noBusinessKey=randomUUID();
  expect(await withSession(full,()=>setIntakeNoBusinessAction({itemId,version:source.capture.version,clientEventId:noBusinessKey,reason:'info'}))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${noBusinessKey}::uuid`).toEqual([{n:0}]);
- const {createQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const {createQuoteAction,readQuoteAction,readQuotePdfAction}=await import('@/app/actions/quotes.actions');
  const input={clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',note:'TEST H1 KV aus echtem Original',positions:[{name:'TEST Trompete',quantity:4,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:2500,lineTotalCents:10000}],source:{itemId,version:source.capture.version,message:true}};
  const created=await withSession(full,()=>createQuoteAction(input));
  expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('H1_KV:'+created.code);
@@ -30,8 +30,17 @@ it('H1 prefix T25 to KV: original mail creates one linked quote; the concern clo
  expect(await sql`SELECT von::text,nachher->>'action' AS action FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${input.clientEventId}::uuid`).toEqual([{von:full.actorId,action:'kv.angelegt'}]);
  expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:1}});
  expect(await withSession(full,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{usage:'erledigt',openConcerns:[]}});
- expect(await withSession(full,()=>createQuoteAction(input))).toMatchObject({code:'OK',replayed:true,quote:{quoteId:created.quote.quoteId}});
+ expect(await withSession(full,()=>createQuoteAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true,quote:{quoteId:created.quote.quoteId}});
  expect(await withSession(full,()=>createQuoteAction({...input,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
  expect(await sql`SELECT count(*)::integer AS n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId}`).toEqual([{n:1}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId}`).toEqual([{n:0}]);
+ // Synthetic company fixture only; PDF itself uses the actual action, reads and renderer.
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,iban,bic,bank_name,tax_id,invoice_vat_rate_basis_points,invoice_payment_term_days)
+ SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST Ablauf Galvanik','TEST Weg 1','70176','Stuttgart','Deutschland','DE02120300000000202051','BYLADEM1001','TEST Bank','DE123456789',1900,14
+ WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ const pdf=await withSession(full,()=>readQuotePdfAction({quoteId:created.quote.quoteId}));
+ expect(pdf.code).toBe('OK');if(pdf.code!=='OK')throw Error('H1_PDF:'+pdf.code);
+ expect(pdf.pdf.subarray(0,5).toString()).toBe('%PDF-');
+ expect(pdf.document).toMatchObject({id:created.quote.quoteId,customerId,version:1,edition:1,linkedOrderId:null});
+ expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:1,lifecycle:{sentEdition:null}}});
 });
