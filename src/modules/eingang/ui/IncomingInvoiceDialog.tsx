@@ -58,9 +58,9 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage,onAutomat
    if(file){if(file.size<1||file.size>150*1024*1024)throw Error('INVOICE_PROOF_SIZE_INVALID');const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());pendingProof.current={file,id:crypto.randomUUID(),sha256:[...new Uint8Array(digest)].map(value=>value.toString(16).padStart(2,'0')).join('')};}
    const pending=pendingProof.current;if(!pending)throw Error('INVOICE_PROOF_MISSING');
    const grant=await ports.prepareFile({itemId:view.item.id,fileId:pending.id,name:pending.file.name,mime:pending.file.type||'application/octet-stream',bytes:pending.file.size,sha256:pending.sha256});
-   if(grant.code!=='OK'){setMessage(grant.message);setProofRetry(true);return;}
+   if(grant.code!=='OK'){setMessage(belegFailureCopy(grant.code));setProofRetry(true);return;}
    if(grant.upload)await uploadIntakeOriginal(grant.upload,pending.file);
-   const finished=await ports.finishFile(pending.id);if(finished.code!=='OK'){setMessage(finished.message);setProofRetry(true);return;}
+   const finished=await ports.finishFile(pending.id);if(finished.code!=='OK'){setMessage(belegFailureCopy(finished.code));setProofRetry(true);return;}
    setProofFileId(pending.id);setProofName(pending.file.name);setView(current=>({...current,item:{...current.item,version:finished.capture.version}}));pendingProof.current=null;
   }catch(error){console.error('[INVOICE_PROOF_UPLOAD_FAILED]',{code:error instanceof Error?error.name:'INVOICE_PROOF_UPLOAD_FAILED'});setMessage('Nachweis nicht sicher gespeichert · Eingaben bleiben erhalten · Fehlercode: INVOICE_PROOF_UPLOAD_FAILED.');setProofRetry(true);}
   finally{working.current=false;setBusy(false);setUploading(false);}
