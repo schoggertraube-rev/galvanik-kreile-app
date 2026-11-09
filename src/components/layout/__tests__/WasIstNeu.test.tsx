@@ -16,7 +16,7 @@ describe('AP-NEU P52 reading marker and real navigation boundary',()=>{
   expect(screen.getByRole('dialog').closest('.kr-app')).toBe(first.container.firstElementChild);
   expect(document.body.querySelectorAll('.kr-app')).toHaveLength(1);
   expect(screen.getByRole('button',{name:/^Was ist neu(?: · \d+ ungelesen)?$/})).not.toHaveTextContent(String(entries.length));
-  expect(within(screen.getByRole('dialog')).getAllByRole('heading',{level:3})[0]).toHaveTextContent('#175');
+  expect(within(screen.getByRole('dialog')).getAllByRole('heading',{level:3})[0]).toHaveTextContent('#'+entries[0].pr);
   const marker=localStorage.getItem('kreile:was-ist-neu:synthetic-public-login-A');expect(marker).toBeTruthy();first.unmount();
   render(<WasIstNeu {...props} loginHandle="synthetic-public-login-B"/>);expect(screen.getByRole('button',{name:/Was ist neu/})).toHaveTextContent(String(entries.length));
   expect(localStorage.getItem('kreile:was-ist-neu:synthetic-public-login-B')).toBeNull();
@@ -28,7 +28,8 @@ describe('AP-NEU P52 reading marker and real navigation boundary',()=>{
   navigate.mockReturnValue(true);fireEvent.click(screen.getByRole('button',{name:/Vorschau: Nachrichten lassen/}));expect(screen.queryByRole('dialog')).toBeNull();
  });
  it('keeps the header usable with blocked storage and counts only the last seven days',()=>{
-  vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-12T12:00:00Z'));
+  const newest=entries.map(entry=>Date.parse(entry.datum+'T12:00:00Z')).sort((a,b)=>b-a)[0];
+  vi.useFakeTimers();vi.setSystemTime(new Date(newest+8*24*60*60*1000));
   vi.spyOn(Storage.prototype,'getItem').mockImplementation(()=>{throw new DOMException('blocked','SecurityError');});
   vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new DOMException('blocked','SecurityError');});
   const warning=vi.spyOn(console,'warn').mockImplementation(()=>{});
