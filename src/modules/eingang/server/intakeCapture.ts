@@ -1,3 +1,4 @@
+import {readIntakeActorTraces} from './actorRead';
 import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -70,6 +71,7 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
         WHERE o.tenant_id=${auth.tenantId} AND o.ware IN ('erwartet','teilweise')
         ORDER BY (o.customer_id=${row.kunde_id}) DESC NULLS LAST, o.ware_seit ASC NULLS LAST, o.id LIMIT 8`);
     }
+    capture.actorTrace=(await readIntakeActorTraces(tx,auth,[itemId])).get(itemId);
     return { code: "OK", capture };
   });
 }

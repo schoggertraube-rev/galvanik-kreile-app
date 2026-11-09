@@ -152,6 +152,13 @@ it('AF4 returns declined goods through the existing port and rereads its persist
  expect(returnGoods).toHaveBeenCalledTimes(2);expect(returnGoods.mock.calls[1][0]).toEqual(returnGoods.mock.calls[0][0]);expect(returnGoods.mock.calls[0][0]).toEqual({quoteId:quote.quoteId,receiptId:goods.id,expectedQuoteVersion:2,expectedVersion:1,clientEventId:expect.any(String),reason:receipt.reason});
  expect(screen.getByText(/4 Stück.*TEST Regal.*TEST Phillip/)).toBeVisible();expect(screen.getByText(receipt.reason)).toBeVisible();expect(screen.queryByRole('button',{name:'Ware an TEST Schmidt zurückgeben · TEST Regal'})).toBeNull();
 });
+
+it('AK shows the actual quote creator and latest decision actor without exposing financial facts',async()=>{
+ const edge={eventId:'TEST-actor-event',userId:'TEST-ada',name:'TEST Ada',at:'2026-11-08T12:00:00Z',action:'QUOTE_CREATED_V1',mailSender:null};
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:{...quote,totalNetCents:null,actorTrace:{createdBy:edge,lastActor:{...edge,userId:'TEST-bea',name:'TEST Bea',action:'QUOTE_LIFECYCLE_V04:accept'}}},canOperate:true,canEdit:false}),change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ expect(await screen.findByText(/Angelegt von TEST Ada/)).toBeVisible();expect(screen.getByText('Zuletzt: TEST Bea · Zusage übernommen')).toBeVisible();expect(screen.queryByText('40,00 € netto')).toBeNull();
+});
+
 it('AF18 requires explicit confirmation before replacing an accepted edition, retains invalidated evidence',async()=>{
  const accepted={...quote,lifecycle:{...quote.lifecycle!,acceptedEdition:1,acceptedAt:'2026-11-08T10:00:00Z',acceptanceEvidence:'TEST alte verbindliche Zusage'}};
  const candidate={quoteId:quote.quoteId,expectedVersion:2,dueDate:quote.dueDate,note:quote.note,positions:quote.positions.map(({name,quantity,material,surfaceRequested,unitPriceCents})=>({name,quantity,material,surfaceRequested,unitPriceCents:unitPriceCents!+100}))};
@@ -181,4 +188,9 @@ it('AF5 shows physical discrepancy, retains a failed reason and retries the same
  fireEvent.click(screen.getAllByRole('button',{name:'Abweichung geklärt'}).at(-1)!);await screen.findByText('Abweichung geklärt · die ursprünglichen Prüfdaten bleiben im Verlauf.');
  expect(clarify).toHaveBeenCalledTimes(2);expect(clarify.mock.calls[1][0]).toEqual(clarify.mock.calls[0][0]);expect(clarify.mock.calls[0][0]).toEqual({command:'clarify',quoteId:quote.quoteId,receiptId:'TEST-goods',expectedVersion:1,expectedQuoteVersion:2,clientEventId:expect.any(String),reason:'TEST Kunde bestätigt'});
  expect(screen.getByText('TEST Fach 3 · 2 von 3 Packstücke · TEST Schaden')).toBeVisible();
+});
+
+it('AK does not silently hide a missing legacy creation event or invent an actor',async()=>{
+ render(<QuoteCard quoteId={quote.quoteId} ports={{read:async()=>({code:'OK',quote:{...quote,actorTrace:{createdBy:null,lastActor:null}},canEdit:false}),change:vi.fn(),prepare:vi.fn(),update:vi.fn()}} onClose={vi.fn()} onCustomer={vi.fn()} onOrder={vi.fn()}/>);
+ expect(await screen.findByText('Für diesen Vorgang fehlt ein belegtes Anlageereignis.')).toBeVisible();expect(screen.queryByText(/Angelegt von System/)).toBeNull();
 });

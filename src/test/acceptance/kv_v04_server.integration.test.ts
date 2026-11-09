@@ -1020,6 +1020,7 @@ it('U249: a login without area rights extends and accepts through the same write
  expect(await withSession(operator,()=>changeQuoteLifecycleAction({...accept,evidence:'TEST anderer Wortlaut'}))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(operator,()=>changeQuoteLifecycleAction({action:'sent',quoteId:input.quoteId,expectedVersion:4,edition:1,clientEventId:randomUUID(),channel:'druck',evidence:'TEST nicht erlaubt'}))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(operator,()=>readQuoteAction({quoteId:input.quoteId}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(operator,()=>readQuoteAction({quoteId:input.quoteId,purpose:'operations'}))).toMatchObject({code:'OK',quote:{totalNetCents:null,actorTrace:{createdBy:{userId:owner.actorId},lastActor:{userId:operator.actorId,action:'QUOTE_LIFECYCLE_V04:accept'}}}});
  expect((await sql`SELECT status,erledigt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${task.id}::uuid`)[0]).toMatchObject({status:'erledigt',erledigt_von:operator.actorId});
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${operator.actorId}::uuid AND event_type='QUOTE_FOLLOWUP_COMPLETED_V1' AND payload->>'taskId'=${task.id}`).toHaveLength(1);
  expect(await sql`SELECT bereich FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${operator.actorId}::uuid`).toHaveLength(0);
@@ -1169,6 +1170,83 @@ it('reply targets use the real source customer without money rights or financial
  expect((await sql`SELECT version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0].version).toBe(source.capture.version);
 });
 
+it('AK order: two actual logins retain creator and last actor, take through existing assignment writer and read own statistics',async()=>{
+ const first=await createFixture(),second=await createFixture();
+ const {createOrderIntake}=await import('@/lib/server/commands/orderIntakeCommand');
+ const created=await withSession(first,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:first.customerId},dueDate:'2027-04-20',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',items:[{catalogServiceId:null,name:'TEST AK Halter',quantity:1,material:null,surfaceRequested:'verchromen',executionRequested:'offen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:'TEST AK actor projection'}));
+ if(created.code!=='OK')throw Error(created.message);const orderId=created.receipt.orderId;
+ const {getLiveOrderCardAction,assignOrderTaskAction}=await import('@/app/actions/orders.actions');
+ expect(await withSession(second,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{actors:{createdBy:{userId:first.actorId,action:'ORDER_INTAKE_CREATED_V1'},lastActor:{userId:first.actorId},responsible:{userId:first.actorId,source:'first-event'},currentLoginId:second.actorId}}}});
+ const request={orderId,assigneeUserId:second.actorId,expectedVersion:1,clientEventId:randomUUID()};
+ const taken=await withSession(second,()=>assignOrderTaskAction(request));expect(taken).toMatchObject({code:'OK',replayed:false});
+ expect(await withSession(second,()=>assignOrderTaskAction(request))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND client_event_id=${request.clientEventId}::uuid AND user_id=${second.actorId}::uuid`).toHaveLength(1);
+ expect((await sql`SELECT assigned_to::text,active FROM private.order_task_assignment_state WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`)[0]).toMatchObject({assigned_to:second.actorId,active:true});
+ const {writeActorAudit}=await import('@/test/fixtures/writeActorAudit');
+ const auditEvents=await sql<{user_id:string|null;status:string}[]>`SELECT user_id::text,status FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND client_event_id=${request.clientEventId}::uuid`;
+ expect(writeActorAudit({before:{responsible:first.actorId},after:{responsible:second.actorId},actorId:second.actorId,events:auditEvents})).toEqual({code:'OK'});
+
+ expect(await withSession(first,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{actors:{createdBy:{userId:first.actorId},lastActor:{userId:second.actorId,action:'ORDER_TASK_ASSIGNED_V1'},responsible:{userId:second.actorId,source:'assignment'}}}}});
+ const {readActorStatistics}=await import('@/lib/server/quoteJournalPort');const {readIntakeActorStatistics}=await import('@/modules/eingang/server-public');const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const getActorStatistics=async(input:unknown)=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK statistics session');return readActorStatistics(auth.data,input,readIntakeActorStatistics);};
+ const {readOrderResponsibilityForToday}=await import('@/lib/server/orderTaskAssignmentRead');
+ const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
+ const responsibility=await withSession(second,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK responsibility auth');return withPrivilegedTenantTransaction(auth.data,tx=>readOrderResponsibilityForToday(tx,auth.data,[orderId]));});
+ expect(responsibility.get(orderId)).toBe(second.actorId);
+ const stats=await withSession(second,async()=>{const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(new Date());return getActorStatistics({from:today,through:today});});
+ expect(stats).toMatchObject({code:'OK',userId:second.actorId,rows:expect.arrayContaining([expect.objectContaining({kind:'order',action:'ORDER_TASK_ASSIGNED_V1',events:1,cases:1})])});
+ const all=async(actor:Fixture)=>withSession(actor,async()=>{const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(new Date());return getActorStatistics({from:today,through:today,all:true});});
+ expect(await all(second)).toMatchObject({code:'FORBIDDEN'});
+ const adminDenied=await createFixture(true,['auftraege'],'admin');
+ expect(await all(adminDenied)).toMatchObject({code:'FORBIDDEN'});
+ const admin=await createFixture(true,['auftraege','statistik_alle'],'admin');
+ expect(await all(admin)).toMatchObject({code:'OK',userId:null,rows:expect.arrayContaining([expect.objectContaining({userId:first.actorId,action:'ORDER_INTAKE_CREATED_V1'}),expect.objectContaining({userId:second.actorId,action:'ORDER_TASK_ASSIGNED_V1'})])});
+
+});
+
+it('AK intake: save and change through real note Actions retain both logged-in actors and read them in capture and mail view',async()=>{
+ const first=await createFixture(true,['eingang','kunden','mails']),second=await createFixture(true,['eingang','kunden','mails']);
+ const {saveIntakeNoteAction,getIntakeCaptureAction,getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');
+ const itemId=randomUUID();
+ expect(await withSession(first,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST AK Originalnotiz',context:{customerId:first.customerId}}))).toMatchObject({code:'OK'});
+ expect(await withSession(second,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST AK Notiz nach Gespraech geaendert',context:{customerId:first.customerId}}))).toMatchObject({code:'OK'});
+ const trace={createdBy:{userId:first.actorId},lastActor:{userId:second.actorId,action:'INTAKE:original_gespeichert'}};
+ expect(await withSession(first,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{id:itemId,actorTrace:trace}});
+ expect(await withSession(second,()=>getIntakeMessagesAction('alle'))).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:itemId,actorTrace:expect.objectContaining({createdBy:expect.objectContaining(trace.createdBy),lastActor:expect.objectContaining(trace.lastActor)})})])});
+});
+
+it('AK invoice: the real invoice creator is distinct from the original importer and the actual card rereads the recorded actor',async()=>{
+ const importer=await createFixture(),creator=await createFixture(),itemId=randomUUID(),fileId=randomUUID();
+ await sql`UPDATE public.customers SET type='lieferant',name='TEST AK Lieferant',iban=NULL,zahlungsziel_tage=14,payment_preference=NULL,vat_id=NULL,billing_email=NULL,handover_preference=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${importer.customerId}`;
+ // Explicit isolated secured-original metadata fixture; no Storage/upload proof is claimed.
+ await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,zuordnung,anliegen,anliegen_offen) VALUES(${itemId}::uuid,${KREILE_TENANT_SLUG},${itemId},'notiz','rein','app',${importer.actorId}::uuid,${importer.customerId},'hand',ARRAY['rechnung'],ARRAY['rechnung'])`;
+ await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${fileId},'anhang','TEST AK Rechnung.jpg','image/jpeg',32,${'f'.repeat(64)},${KREILE_TENANT_SLUG+'/'+'f'.repeat(64)},now(),${importer.actorId}::uuid,1,true,false,'fertig')`;
+ await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'original_gespeichert',${randomUUID()}::uuid,${importer.actorId},${sql.json({fileId,sha256:'f'.repeat(64)})})`;
+ const {saveIncomingInvoiceAction,getIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
+ const saved=await withSession(creator,()=>saveIncomingInvoiceAction({itemId,fileId,version:1,clientKey:randomUUID(),fields:{lieferantId:importer.customerId,nummer:'TEST AK '+itemId,datum:'2026-11-01',netto:'10,00',ust:'1,90',brutto:'11,90',faelligAm:'2026-11-15',iban:'DE02120300000000202051',ibanGeprueft:true},status:'offen',paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null}));
+ if(saved.code!=='OK')throw Error('TEST AK invoice '+JSON.stringify(saved));
+ expect((await sql`SELECT erfasst_von::text FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.invoice.id}::uuid`)[0]).toMatchObject({erfasst_von:creator.actorId});
+ expect(await withSession(importer,()=>getIncomingInvoiceAction({id:saved.invoice.id}))).toMatchObject({code:'OK',view:{invoice:{id:saved.invoice.id},actorTrace:{createdBy:{userId:creator.actorId,action:'rechnung.erfassen'},lastActor:{userId:creator.actorId}}}});
+});
+
+it('AK-02: quote followups sort the creator first for each login and retain every other persons task',async()=>{
+ const a=await createFixture(),b=await createFixture();
+ const {createQuoteAction,changeQuoteLifecycleAction,readQuoteDefaultsAction}=await import('@/app/actions/quotes.actions');
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,updated_at) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST AK settings',statement_timestamp() WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ const defaults=await withSession(a,()=>readQuoteDefaultsAction());if(defaults.code!=='OK')throw Error('TEST AK quote defaults');const {saveQuoteSettingsAction}=await import('@/app/actions/settings.actions');
+ expect(await withSession(a,()=>saveQuoteSettingsAction({clientEventId:randomUUID(),expectedUpdatedAt:defaults.settings.updatedAt,setupCents:defaults.settings.setupCents,materialCents:defaults.settings.materialCents,followupDays:5,validityDays:defaults.settings.validityDays}))).toMatchObject({code:'OK'});
+ const ids:string[]=[];
+ for(const actor of [a,b]){
+  const result=await withSession(actor,()=>createQuoteAction({clientEventId:randomUUID(),customerId:actor.customerId,dueDate:'2027-04-20',note:'TEST AK followup',positions:[{name:'TEST AK Halter',quantity:1,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
+  if(result.code!=='OK')throw Error('TEST AK followup '+result.message);ids.push(result.quote.quoteId);
+  expect(await withSession(actor,()=>changeQuoteLifecycleAction({action:'sent',quoteId:result.quote.quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck',evidence:'TEST AK tatsaechlich persoenlich ausgehaendigt'}))).toMatchObject({code:'OK'});
+ }
+ const {readQuoteFollowupTasksForToday}=await import('@/modules/tasks/server-public');const {resolveAuthorization}=await import('@/lib/server/authorization');const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
+ const read=async(actor:Fixture)=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK task auth');return withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data,'2030-12-31'));});
+ const mineA=await read(a),mineB=await read(b);expect(mineA).toHaveLength(2);expect(mineB).toHaveLength(2);
+ expect(mineA[0]).toMatchObject({quoteId:ids[0],isMine:true});expect(mineB[0]).toMatchObject({quoteId:ids[1],isMine:true});expect(new Set(mineA.map(row=>row.id))).toEqual(new Set(mineB.map(row=>row.id)));
+});
+
 it.each([false,true,'partial','operational'] as const)('AF-6: two package receipts preserve every source; damaged secondary blocks the whole conversion: %s',async(damaged)=>{
  const fixture=await createFixture();
  const {createQuoteAction,changeQuoteLifecycleAction,convertQuoteToOrderAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
@@ -1307,4 +1385,20 @@ it.each(['early','label','two','future','delivered'] as const)('AF19 real mail h
   expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{id:orderId,handoverMode:'pickup',handoverNotice:{originalItemId:itemId}}}});
  }
 
+});
+
+it('AK-04 real replay gate rejects an actual changed row without an event; rollback preserves the fixture',async()=>{
+ const fixture=await createFixture();const {writeActorAudit}=await import('@/test/fixtures/writeActorAudit');
+ const [before]=await sql`SELECT name FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+ const rollback=new Error('TEST AK04 ROLLBACK');
+ await expect(sql.begin(async tx=>{
+  const [clock]=await tx`SELECT clock_timestamp() AS at`;
+  await tx`UPDATE public.customers SET name='TEST AK04 intentionally unaudited' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+  const [after]=await tx`SELECT name FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+  const events=await tx<{user_id:string|null;status:string}[]>`SELECT user_id::text,status FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND created_at>=${clock.at}`;
+  expect(after.name).toBe('TEST AK04 intentionally unaudited');
+  expect(writeActorAudit({before,after,actorId:fixture.actorId,events})).toEqual({code:'WRITE_WITHOUT_LOGIN_EVENT'});
+  throw rollback;
+ })).rejects.toBe(rollback);
+ expect((await sql`SELECT name FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`)[0]).toEqual(before);
 });

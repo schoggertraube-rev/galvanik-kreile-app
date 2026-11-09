@@ -35,7 +35,10 @@
     "@/modules/orders/public#getUrgency",
     "@/modules/orders/public#isOrderLifecycleStatus",
     "@/modules/orders/server-public#nacharbeitAnlegen",
-    "@/modules/orders/public#ComplaintPanel"
+    "@/modules/orders/public#ComplaintPanel",
+    "@/modules/orders/public#OrderActorEvidence",
+    "@/modules/orders/public#OrderActorSummary",
+    "@/modules/orders/server-public#readOrderActors"
   ],
   "capabilities": [],
   "migrations": [

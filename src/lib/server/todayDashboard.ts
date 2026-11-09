@@ -1,4 +1,5 @@
 import "server-only";
+import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentRead";
 
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -99,7 +100,7 @@ function toPositiveInteger(value: number | string) {
   return Number.isSafeInteger(normalized) && normalized > 0 ? normalized : null;
 }
 
-export type TodayQuoteFollowup={id:string;title:string;dueDate:string;quoteId:string;quoteNumber:string;customerName:string};
+export type TodayQuoteFollowup={isMine?:boolean;id:string;title:string;dueDate:string;quoteId:string;quoteNumber:string;customerName:string};
 export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>): Promise<TodayDashboard> {
   const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
   const graphAllowed = hasAuthorizationArea(auth, "mails");
@@ -252,6 +253,11 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const bundle = [...surfaces.entries()].filter(([, group]) => group.length >= 2).sort((a, b) => b[1].length - a[1].length)[0];
   if (STAGE2_TODAY_FEATURES.has("bundle") && bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
+  const ownTaskKeys=new Set(quoteFollowups.tasks.filter(task=>task.isMine===true).map(task=>'task:'+task.id));
+  const ownComplaintIds=new Set(complaints.complaints.filter(complaint=>complaint.actorTrace?.createdBy?.userId===auth.userId).map(complaint=>complaint.id));
+  const responsible=await withPrivilegedTenantTransaction(auth,tx=>readOrderResponsibilityForToday(tx,auth,items.flatMap(item=>item.orderId?[item.orderId]:[])));
+  const mine=(item:TodayItem)=>ownTaskKeys.has(item.key)||item.kind==='complaint'&&item.target?.screen==='reklamation'&&ownComplaintIds.has(item.target.arg)||item.kind!=='complaint'&&!!item.orderId&&responsible.get(item.orderId)===auth.userId;
+  items.sort((left,right)=>Number(mine(right))-Number(mine(left)));
   return {
     items,
     collectionNotices,

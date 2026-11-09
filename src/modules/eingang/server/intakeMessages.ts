@@ -1,3 +1,4 @@
+import {readIntakeActorTraces} from './actorRead';
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization} from '@/lib/server/authorization';
@@ -39,7 +40,8 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
      AND (source.kunde_id IS NOT NULL AND candidate.kunde_id=source.kunde_id OR source.kunde_id IS NULL AND candidate.kunde_id IS NULL
       AND (source.gruppe_adresse IS NOT NULL AND candidate.gruppe_adresse=source.gruppe_adresse OR candidate.id=source.id)))
     ORDER BY coalesce(source.empfangen_am,source.erstellt_am),source.id`);
-   return {code:'OK' as const,messages:[...messages],areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
+   const actors=await readIntakeActorTraces(tx,auth,messages.map(row=>row.id));
+   return {code:'OK' as const,messages:messages.map(row=>({...row,actorTrace:actors.get(row.id)})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
   });
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }
