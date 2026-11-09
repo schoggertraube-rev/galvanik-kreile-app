@@ -10,7 +10,7 @@ export type IntakeSelectableConcern=keyof typeof INTAKE_CONCERN_AREAS;
 export function intakeHandoverDirective(text:string){
  const normalized=text.toLocaleLowerCase('de-DE').replace(/\s+/gu,' ');
  if(/\b(?:nicht|kein|keine|keinen|falls|wenn|vielleicht|könnte|koennte)\b/u.test(normalized)||/^\s*>/mu.test(text)||/(?:\bam .{1,100} schrieb\b|\b(?:from|von):)/iu.test(text))return null;
- const pickup=/\b(?:hole(?:n)? (?:ich|wir|sie) (?:es |das |die (?:ware|teile) )?(?:selbst )?ab|ich hole (?:es |das |die (?:ware|teile) )?ab|abholen|abholung)\b/u.test(normalized);
+ const pickup=/\b(?:hole(?:n)? (?:ich|wir|sie) (?:es |das |die (?:ware|teile) )?(?:selbst )?ab|ich hole (?:es |das |die (?:ware|teile) )?(?:selbst )?ab|abholen|abholung)\b/u.test(normalized);
  const shipping=/\b(?:versenden|verschicken|versand|zusenden)\b/u.test(normalized);
  if(pickup===shipping)return null;
  return {mode:pickup?'pickup' as const:'shipping' as const,forFuture:/\bab jetzt immer\b|\bkuenftig immer\b|\bkünftig immer\b/u.test(normalized)};

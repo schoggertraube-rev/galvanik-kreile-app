@@ -4,3 +4,4 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import '../../../e2e/ablauf/H1.spec';
 import '../../../e2e/ablauf/H2.spec';
+import '../../../e2e/ablauf/H5.spec';
