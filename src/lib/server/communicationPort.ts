@@ -318,3 +318,9 @@ export async function sendCommunicationMail(
     return { code: "UNAVAILABLE", message: "Microsoft 365 hat die Mail angenommen, die lokale Vorgangskopie ist aber noch nicht sicher bestätigt. Nicht erneut senden." };
   }
 }
+
+/** Individual invoice information needs an actual accepted-send receipt, never a draft or a phone note. */
+export async function readInvoiceSentProofInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,invoiceId:string){
+ if(!hasAuthorizationArea(auth,'geld'))return null;
+ const [proof]=await tx.execute<{at:string}>(sql`SELECT event.created_at::text AS at FROM public.events event JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->>'threadId' AND thread.status='sent' WHERE event.tenant_id=${auth.tenantId} AND event.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND event.status='success' AND event.user_id IS NOT NULL AND event.payload->'document'->>'kind'='INVOICE' AND event.payload->'document'->>'id'=${invoiceId} AND event.payload->'document'->>'sha256' ~ '^[0-9a-f]{64}$' AND EXISTS(SELECT 1 FROM public.communication_messages message WHERE message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email') ORDER BY event.created_at DESC,event.id DESC LIMIT 1`);return proof?.at??null;
+}

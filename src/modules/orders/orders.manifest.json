@@ -35,7 +35,12 @@
     "@/modules/orders/public#getUrgency",
     "@/modules/orders/public#isOrderLifecycleStatus",
     "@/modules/orders/server-public#nacharbeitAnlegen",
-    "@/modules/orders/public#ComplaintPanel"
+    "@/modules/orders/public#ComplaintPanel",
+    "@/modules/orders/public#deriveFinishedDispatch",
+    "@/modules/orders/public#sortFinishedDispatch",
+    "@/modules/orders/public#FinishedDispatch",
+    "@/modules/orders/public#FinishedDispatchFacts",
+    "@/modules/orders/server-public#readFinishedDispatch"
   ],
   "capabilities": [],
   "migrations": [
@@ -47,7 +52,8 @@
   "ownsTables": [
     "public.orders",
     "public.items",
-    "public.events"
+    "public.events",
+    "public.shipments"
   ],
   "storagePurposes": [],
   "events": {

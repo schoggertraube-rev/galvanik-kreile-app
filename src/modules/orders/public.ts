@@ -40,3 +40,6 @@ export {
 } from "./server/types";
 
 export {ComplaintPanel} from '@/modules/complaints/public';
+
+export {deriveFinishedDispatch,sortFinishedDispatch} from './domain/finishedDispatch';
+export type {FinishedDispatchFacts,FinishedDispatch} from './domain/finishedDispatch';
