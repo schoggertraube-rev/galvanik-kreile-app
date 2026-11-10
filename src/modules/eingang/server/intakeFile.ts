@@ -13,18 +13,19 @@ import { captureRecognition } from "../captureRecognition";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUCKET = "scans";
 type Failure = Exclude<IntakeCaptureResult, { code: "OK" }>;
-type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument" };
+type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument"; aufgenommen_von:string };
 async function fileAuthorization(){const result=await resolveAuthorization();if(!result.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung ist nicht verfügbar.'};if(!hasAuthorizationArea(result.data,'eingang')&&!hasAuthorizationArea(result.data,'geld'))return {code:'FORBIDDEN' as const,message:'Originale benötigen Eingang oder einen Rechnungsbezug mit Geld.'};return result.data;}
 function recognitionClaimKey(attempt:string){const bytes=createHash('sha1').update('intake-recognition-start-v1:'+attempt).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const hex=bytes.subarray(0,16).toString('hex');return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;}
 function inputFile(value: unknown): value is IntakeFileInput {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
-  return Object.keys(item).every(key => ["itemId", "fileId", "name", "mime", "bytes", "sha256", "deviceId", "captureOrigin"].includes(key))
+  return Object.keys(item).every(key => ["itemId", "fileId", "name", "mime", "bytes", "sha256", "deviceId", "captureOrigin", "deviceCapturedAt"].includes(key))
     && typeof item.itemId === "string" && UUID.test(item.itemId) && typeof item.fileId === "string" && UUID.test(item.fileId)
     && typeof item.name === "string" && item.name.trim().length > 0 && item.name.length <= 255 && !/[\u0000-\u001f]/.test(item.name)
     && typeof item.mime === "string" && /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(item.mime) && item.mime.length <= 128
     && typeof item.bytes === "number" && Number.isSafeInteger(item.bytes) && item.bytes > 0 && item.bytes <= 150 * 1024 * 1024
     && typeof item.sha256 === "string" && /^[0-9a-f]{64}$/.test(item.sha256)
+    && (item.deviceCapturedAt===undefined||typeof item.deviceCapturedAt==="string"&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(item.deviceCapturedAt)&&Number.isFinite(Date.parse(item.deviceCapturedAt))&&new Date(item.deviceCapturedAt).toISOString()===item.deviceCapturedAt)
     && (item.deviceId === undefined || typeof item.deviceId === "string" && UUID.test(item.deviceId))
     && (item.captureOrigin === undefined || item.captureOrigin === "warenfoto" || item.captureOrigin === "dokument");
 }
@@ -51,10 +52,17 @@ export async function prepareIntakeFile(input: unknown, ensureOriginal=false): P
           ${input.name},${input.mime},${input.bytes},${input.sha256},${auth.tenantId + "/" + input.sha256},statement_timestamp(),${auth.userId}::uuid,${input.deviceId ?? null},
           coalesce(max(reihenfolge),0)+1,false,'wartet',false,${input.captureOrigin ?? "dokument"} FROM public.intake_file WHERE tenant_id=${auth.tenantId} AND item_id=${input.itemId}::uuid
         ON CONFLICT (tenant_id,client_key) DO NOTHING`);
-      const files = await tx.execute<FileRow>(sql`SELECT id::text,item_id::text,dateiname,mime,bytes::text,sha256,speicherpfad,erkennung_status,aufgenommen_auf,aufnahme_herkunft FROM public.intake_file
+      const files = await tx.execute<FileRow>(sql`SELECT id::text,item_id::text,dateiname,mime,bytes::text,sha256,speicherpfad,erkennung_status,aufgenommen_auf,aufnahme_herkunft,aufgenommen_von::text FROM public.intake_file
         WHERE tenant_id=${auth.tenantId} AND client_key=${input.fileId}`);
       const row = files[0];
       if (files.length !== 1 || row.item_id !== input.itemId || row.dateiname !== input.name || row.mime !== input.mime || Number(row.bytes) !== input.bytes || row.sha256 !== input.sha256 || row.aufgenommen_auf !== (input.deviceId ?? null) || row.aufnahme_herkunft !== (input.captureOrigin ?? "dokument")) throw new Error("INTAKE_FILE_CLIENT_KEY_CONFLICT");
+      if(input.deviceCapturedAt!==undefined){
+        if(row.aufgenommen_von!==auth.userId)return {code:"FORBIDDEN" as const,message:"Anfragekennung wurde bereits anders verwendet."};
+        const origin={action:"offline_original_captured",fileId:input.fileId,sha256:input.sha256,deviceCapturedAt:input.deviceCapturedAt,deviceId:input.deviceId??null};
+        const prior=await tx.execute<{nachher:typeof origin}>(sql`SELECT nachher FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${input.itemId}::uuid AND art='einsatz' AND befehl_id=${input.fileId}::uuid`);
+        if(prior.length){if(prior.length!==1||prior[0].nachher.action!==origin.action||prior[0].nachher.fileId!==origin.fileId||prior[0].nachher.sha256!==origin.sha256||prior[0].nachher.deviceCapturedAt!==origin.deviceCapturedAt||prior[0].nachher.deviceId!==origin.deviceId)return {code:"CONFLICT" as const,message:"Anfragekennung wurde bereits anders verwendet."};}
+        else{const saved=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${auth.tenantId},${input.itemId}::uuid,'einsatz',${input.fileId}::uuid,${auth.userId},${JSON.stringify(origin)}::jsonb) RETURNING id`);if(saved.length!==1)throw Error("INTAKE_DEVICE_ORIGIN_NOT_SAVED");}
+      }
       return row;
     });
     if('code' in pending)return pending;
@@ -75,7 +83,7 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
   if ("code" in auth) return auth;
   const claimKey=recognitionClaimKey(retryKey??fileId);let claimOwned=false;
   try {
-    const files = await withPrivilegedTenantTransaction(auth, tx => tx.execute<FileRow&{kanal:string;invoice_context:boolean}>(sql`SELECT file.id::text,file.item_id::text,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.erkennung_status,file.aufgenommen_auf,file.aufnahme_herkunft,source.kanal,(source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid`));
+    const files = await withPrivilegedTenantTransaction(auth, tx => tx.execute<FileRow&{kanal:string;invoice_context:boolean}>(sql`SELECT file.id::text,file.item_id::text,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.erkennung_status,file.aufgenommen_auf,file.aufnahme_herkunft,file.aufgenommen_von::text,source.kanal,(source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid`));
     if (files.length !== 1) return { code: "NOT_FOUND", message: "Datei wurde nicht gefunden." };
     const file = files[0];
     const mailOriginal=file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml'),invoiceAccess=hasAuthorizationArea(auth,'geld')&&file.invoice_context===true&&!mailOriginal;

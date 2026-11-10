@@ -24,7 +24,7 @@ export type IntakeNoteInput = {
   itemId: string; textstand: string; text: string; context?: IntakeContext; concerns?: string[];
 };
 export type IntakeNoteReading = { recognition: IntakeTextRecognition; concerns: IntakeConcern[] };
-export type IntakeFileInput = { itemId: string; fileId: string; name: string; mime: string; bytes: number; sha256: string; deviceId?: string; captureOrigin?: "warenfoto" | "dokument" };
+export type IntakeFileInput = { itemId: string; fileId: string; name: string; mime: string; bytes: number; sha256: string; deviceId?: string; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument" };
 export type IntakeFileGrant = { code: "OK"; upload: { bucket: string; path: string; token: string; url: string } | null }
   | Exclude<IntakeCaptureResult, { code: "OK" }>;
 

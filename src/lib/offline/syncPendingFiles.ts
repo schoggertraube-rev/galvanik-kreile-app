@@ -16,7 +16,7 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
    try{
     const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await entry.file.arrayBuffer())),byte=>byte.toString(16).padStart(2,'0')).join('');
     if(ports.currentScope()!==scope)break;
-    const grant=await ports.prepare({itemId:entry.itemId,fileId:entry.id,name:entry.file.name,mime:entry.file.type||'application/octet-stream',bytes:entry.file.size,sha256,...(entry.deviceId?{deviceId:entry.deviceId}:{}),...(entry.captureOrigin?{captureOrigin:entry.captureOrigin}:{})},scope);
+    const grant=await ports.prepare({itemId:entry.itemId,fileId:entry.id,name:entry.file.name,mime:entry.file.type||'application/octet-stream',bytes:entry.file.size,sha256,...(entry.deviceId?{deviceId:entry.deviceId}:{}),...(entry.deviceCapturedAt?{deviceCapturedAt:entry.deviceCapturedAt}:{}),...(entry.captureOrigin?{captureOrigin:entry.captureOrigin}:{})},scope);
     if(grant.code!=='OK'){outcome.blocked++;continue;}
     if(grant.upload)await ports.upload(grant.upload,entry.file);
     if(ports.currentScope()!==scope)break;
