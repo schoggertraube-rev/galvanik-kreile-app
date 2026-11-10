@@ -73,9 +73,8 @@ export function useSync() {
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const {offlineScope,status,hasArea}=usePermissions();
+  const {offlineScope,status}=usePermissions();
   const scope=status==="authenticated"?offlineScope:null;
-  const canSyncOriginals=hasArea("eingang");
   const isOnline = useSyncExternalStore(subscribeToNetworkStatus, getOnlineSnapshot, () => true);
   const outboxItems = useSyncExternalStore(subscribeToOutbox, ()=>getOutboxSnapshot(scope), () => EMPTY_OUTBOX);
 
@@ -83,18 +82,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     activeScope=scope;
     const refresh=()=>{void refreshOutboxSnapshot(scope);};
     refresh();window.addEventListener('kreile-pending-changed',refresh);
-    if(scope&&isOnline&&canSyncOriginals)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope}).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
+    if(scope&&isOnline)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope}).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     return ()=>{window.removeEventListener('kreile-pending-changed',refresh);if(activeScope===scope)activeScope=null;};
-  }, [scope,isOnline,canSyncOriginals]);
+  }, [scope,isOnline]);
 
   const syncNow = useCallback(async () => {
-    // CONTAINMENT (OFFLINE-48H-001): No real server sync transport exists yet.
-    // The previous implementation deleted outbox items after a fake 600ms delay
-    // WITHOUT transmitting them to the server, causing silent data loss on
-    // reconnect. Until a real, verified sync transport is implemented, syncNow
-    // must NEVER remove or mutate outbox items. It only refreshes the snapshot
-    // so the UI reflects the pending, still-intact items.
-    if (!isOnline) return;
+    // Retry the same canonical queue; each command checks its current server
+    // rights. Customer/order notes do not require the Eingang area on the client.
+    if (!isOnline||!scope||activeScope!==scope) return;
+    await syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope});
     await refreshOutboxSnapshot(scope);
   }, [isOnline,scope]);
 

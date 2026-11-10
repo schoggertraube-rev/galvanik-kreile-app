@@ -208,10 +208,10 @@ export async function writeIntakeNoteInTransaction(
   if (selected.some(id => !recognized.some(value => value.id === id))) return failure("VALIDATION_ERROR", "Anliegen passt nicht zur erkannten Notiz.");
   const selectedSql = sql`ARRAY[${sql.join(selected.map(value => sql`${value}`), sql`, `)}]::text[]`;
 
-  const repeated = await tx.execute<{ text: string;device_captured_at:string|null;expected_version:number|null }>(sql`SELECT nachher->>'text' AS text,nachher->>'deviceCapturedAt' AS device_captured_at,(nachher->>'expectedVersion')::integer AS expected_version FROM public.intake_event
+  const repeated = await tx.execute<{ text: string;actor:string;device_captured_at:string|null;expected_version:number|null }>(sql`SELECT von::text AS actor,nachher->>'text' AS text,nachher->>'deviceCapturedAt' AS device_captured_at,(nachher->>'expectedVersion')::integer AS expected_version FROM public.intake_event
     WHERE tenant_id=${auth.tenantId} AND item_id=${note.itemId}::uuid AND art='original_gespeichert' AND befehl_id=${note.textstand}::uuid`);
   if (repeated.length) {
-    return repeated.length === 1 && repeated[0].text === note.text && (note.deviceCapturedAt===undefined||repeated[0].device_captured_at===note.deviceCapturedAt) && (note.expectedVersion===undefined||repeated[0].expected_version===note.expectedVersion) && JSON.stringify(existing[0]?.anliegen) === JSON.stringify(selected)
+    return repeated.length === 1 && repeated[0].text === note.text && ((note.expectedVersion===undefined&&note.deviceCapturedAt===undefined)||repeated[0].actor===auth.userId) && (note.deviceCapturedAt===undefined||repeated[0].device_captured_at===note.deviceCapturedAt) && (note.expectedVersion===undefined||repeated[0].expected_version===note.expectedVersion) && JSON.stringify(existing[0]?.anliegen) === JSON.stringify(selected)
       ? null : failure("CONFLICT", "Textstand wurde bereits anders verwendet. Eingaben bleiben erhalten.");
   }
   if(note.expectedVersion!==undefined&&(existing[0]?.version??0)!==note.expectedVersion)return failure("CONFLICT","Textstand wurde bereits anders verwendet. Eingaben bleiben erhalten.");
