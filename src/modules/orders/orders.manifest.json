@@ -58,7 +58,8 @@
     "supabase/migrations/20261110003450_ablauf_cash_pickup_requires_payment.sql",
     "supabase/migrations/20261110010200_ablauf_historical_callback_receipt.sql",
     "supabase/migrations/20261110022114_ablauf_canonical_release_projection.sql",
-    "supabase/migrations/20261110085921_order_print_jobs.sql"
+    "supabase/migrations/20261110085921_order_print_jobs.sql",
+    "supabase/migrations/20261110093116_order_print_jobs_no_delete.sql"
   ],
   "viewsFunctions": [
     "private.guard_goods_out_debt_override_v1",
