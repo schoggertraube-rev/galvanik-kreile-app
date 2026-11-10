@@ -45,6 +45,28 @@ async function prepare(label:string){
  const plan=await proposal(first.orderId);expect(plan).toMatchObject({stage:'E3',state:'DUE'});if(!plan.due||!plan.clientKey)throw Error('CALL_DUE');
  return {first,second,request:{customerId:first.customerId,handover:'pickup' as const,dueDate:plan.due,clientKey:plan.clientKey}};
 }
+it('E4 uses the existing sender only after individual eligibility and starts the final interval at the actual sent receipt',async()=>{
+ const {first,request}=await prepare('E4-Lagerfrist');
+ const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('E4_CALL_CREATE');
+ const task=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));if(task.code!=='OK'||!task.task)throw Error('E4_CALL_READ');
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:created.taskId,version:task.task!.version,note:'TEST nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK'||!settings.settings.dispatchPolicy)throw Error('E4_SETTINGS');
+ const recipient=await createFixture(['auftraege'],'buero');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy,storageAfterDays:0,finalStageAfterLetterDays:3,finalStageRecipientId:recipient.actorId}}))).toMatchObject({code:'OK'});
+ const before=await withSession(full,()=>getOrdersDb());if(!before.ok)throw Error('E4_QUEUE');
+ const letter=before.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter;
+ expect(letter).toMatchObject({state:'DUE',sentAt:null,finalStage:{state:'WAIT',due:null}});if(!letter)throw Error('E4_LETTER');
+ const input={targetType:'CUSTOMER' as const,targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST Lagerfrist-Schreiben',body:'TEST Bitte melde Dich wegen Deiner fertigen Ware.',collectionReminder:{stage:'E4' as const,handover:'pickup' as const,dueDate:letter.due,clientKey:letter.clientKey}};
+ const denied=await createFixture(['auftraege'],'werkstatt');expect(await withSession(denied,()=>sendCustomerMailAction(input))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(full,()=>sendCustomerMailAction({...input,collectionReminder:{...input.collectionReminder,clientKey:randomUUID()}}))).toMatchObject({code:'CONFLICT'});
+ const sent=await withSession(full,()=>sendCustomerMailAction(input));expect(sent).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('E4_SEND:'+sent.code);
+ expect(await sql`SELECT user_id::text,payload->'meta'->>'stage' AS stage FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'threadId'=${sent.data.threadId}`).toEqual([{user_id:full.actorId,stage:'E4'}]);
+ const after=await withSession(full,()=>getOrdersDb());expect(after.ok&&after.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter).toMatchObject({state:'SENT',threadId:sent.data.threadId,finalStage:{state:'WAIT',recipientId:recipient.actorId}});
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'threadId'=${sent.data.threadId}`).toEqual([{n:1}]);
+ await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'threadId'=${sent.data.threadId}`;
+ const damaged=await withSession(full,()=>getOrdersDb());expect(damaged.ok&&damaged.data.find(row=>row.id===first.orderId)?.finishedDispatch?.state).toBe('unavailable');
+});
 it('E3 creates one real visible callback for the collective cohort; mandatory reached result stops the ladder with actor, fresh retry and original history',async()=>{
  const {first,second,request}=await prepare('E3-Erreicht');
  const operator=await createFixture(['mails','auftraege'],'buero');

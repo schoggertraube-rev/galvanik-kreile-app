@@ -4,6 +4,7 @@
   "owner": "Path-1 Orders (Auftragskarte V8)",
   "publicExports": [
     "@/modules/orders/public#InitialDispatchReminderPlan",
+    "@/modules/orders/public#StorageEligibility",
     "@/modules/orders/public#ORDER_ACCOUNTING_STATUS",
     "@/modules/orders/public#ORDER_LIFECYCLE_STATUS",
     "@/modules/orders/public#ORDER_LIFECYCLE_STATUS_SEQUENCE",

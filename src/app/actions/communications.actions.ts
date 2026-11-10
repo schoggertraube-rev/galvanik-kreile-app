@@ -74,7 +74,7 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Extr
 }
 
 export async function sendCustomerMailAction(input: TargetInput & {
- clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2';handover:'pickup'|'shipping';dueDate:string};
+ clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string};
 }){
  try{
  const authorizationResult=await authorization();
@@ -84,17 +84,18 @@ export async function sendCustomerMailAction(input: TargetInput & {
  if(input.collectionReminder){
   const request=input.collectionReminder;
   if(input.targetType!=='CUSTOMER'||input.attachment||!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
-  if(!request||Object.keys(request).sort().join(',')!=='dueDate,handover,stage'||!['E1','E2'].includes(request.stage)||!['pickup','shipping'].includes(request.handover)||!/^\d{4}-\d{2}-\d{2}$/.test(request.dueDate)||!Number.isFinite(Date.parse(request.dueDate))||typeof input.subject!=='string'||typeof input.body!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientRequestId))return {code:'VALIDATION_ERROR' as const,message:COLLECTION_REMINDER_COPY.invalid};
+  if(!request||Object.keys(request).sort().join(',')!==(request.stage==='E4'?'clientKey,dueDate,handover,stage':'dueDate,handover,stage')||!['E1','E2','E4'].includes(request.stage)||!['pickup','shipping'].includes(request.handover)||!/^\d{4}-\d{2}-\d{2}$/.test(request.dueDate)||!Number.isFinite(Date.parse(request.dueDate))||typeof input.subject!=='string'||typeof input.body!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientRequestId)||(request.stage==='E4'&&(typeof request.clientKey!=='string'||!/^[0-9a-f-]{36}$/.test(request.clientKey))))return {code:'VALIDATION_ERROR' as const,message:COLLECTION_REMINDER_COPY.invalid};
   const prior=await readCollectionReminderReceipt(auth,{...input,collectionReminder:request});if(prior.code!=='NOT_FOUND')return prior;
   const [{getOrdersDb},{readShippingSettings,readShippingSettingsInTransaction}]=await Promise.all([import('@/app/actions/orders.actions'),import('@/modules/fundament/server-public')]);
   const [orders,settings]=await Promise.all([getOrdersDb(),readShippingSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true})]);
   if(!orders.ok||settings.code!=='OK')return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.unavailable};
   const candidates=orders.data.filter(order=>order.customerId===input.targetId&&order.station==='fertig'&&order.finishedDispatch?.handover===request.handover);
-  const proposal=candidates.find(order=>order.finishedDispatch?.reminder?.stage===request.stage&&order.finishedDispatch.reminder.state==='DUE'&&order.finishedDispatch.reminder.due===request.dueDate)?.finishedDispatch?.reminder;
+  const storageLetter=request.stage==='E4'?candidates.find(order=>order.finishedDispatch?.storage?.letter?.clientKey===request.clientKey)?.finishedDispatch?.storage?.letter:undefined;
+  const proposal=request.stage==='E4'&&storageLetter?{...storageLetter,stage:'E4' as const,requiresResponseCheck:candidates.some(order=>storageLetter.orderIds.includes(order.id)&&order.finishedDispatch?.reminder?.requiresResponseCheck!==false),needsNotice:[]}:candidates.find(order=>order.finishedDispatch?.reminder?.stage===request.stage&&order.finishedDispatch.reminder.state==='DUE'&&order.finishedDispatch.reminder.due===request.dueDate)?.finishedDispatch?.reminder;
   if(!proposal||proposal.stage!==request.stage||proposal.state!=='DUE'||proposal.due!==request.dueDate||!proposal.clientKey||proposal.requiresResponseCheck||proposal.needsNotice.length)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.notReady};
   if(settings.settings.dispatchPolicy?.holdMinutes!==0)return {code:'IN_KLAERUNG' as const,message:COLLECTION_REMINDER_COPY.holdUnavailable};
   const members=candidates.filter(order=>proposal.orderIds.includes(order.id));
-  const meta:CollectionReminderMeta={stage:request.stage,customerId:input.targetId,handover:request.handover,dueDate:request.dueDate,stageKey:proposal.clientKey,intent:collectionReminderIntent({...input,collectionReminder:request}),orders:members.map(order=>({id:order.id,number:order.orderNumber,version:order.version}))};
+  const meta:CollectionReminderMeta={stage:request.stage,customerId:input.targetId,handover:request.handover,dueDate:request.dueDate,stageKey:proposal.clientKey,intent:collectionReminderIntent({...input,collectionReminder:request}),orders:members.map(order=>({id:order.id,number:order.orderNumber,version:order.version})),...(storageLetter?{storageOrigin:{callTaskId:storageLetter.callTaskId,freezes:storageLetter.freezes}}:{})};
   const prefix=DISPATCH_NOTICE_COPY.collective(meta.orders.map(order=>order.number))+'\n\n';
   return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:prefix+input.body.trim(),collectionReminder:meta,beforePrepare:async tx=>(await readShippingSettingsInTransaction(tx,auth.tenantId))?.updatedAt===settings.settings.updatedAt});
  }
