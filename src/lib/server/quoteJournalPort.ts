@@ -8,7 +8,8 @@ export function onsitePhaseKey(requestId:string,name:string){
 
 import {sql} from 'drizzle-orm';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
-import type {CommunicationDocument} from './communicationDocumentPort';
+import type {CommunicationDocument as AnyCommunicationDocument} from './communicationDocumentPort';
+type CommunicationDocument=Extract<AnyCommunicationDocument,{kind:'QUOTE'}>;
 
 type Actor={tenantId:string;userId:string};
 export async function quoteHasPreparedDocument(tx:PrivilegedTenantTransaction,tenantId:string,quoteId:string,edition:number){
@@ -17,7 +18,7 @@ export async function quoteHasPreparedDocument(tx:PrivilegedTenantTransaction,te
 export async function readQuoteSentDocument(tx:PrivilegedTenantTransaction,actor:Actor,requestId:string,quoteId:string){
  const rows=await tx.execute<{document:CommunicationDocument;sentAt:string;threadId:string}>(sql`SELECT sent.payload->'document' AS document,sent.created_at::text AS "sentAt",thread.id::text AS "threadId" FROM public.events sent
  JOIN public.communication_threads thread ON thread.tenant_id=sent.tenant_id AND thread.id::text=sent.payload->>'threadId' AND thread.source=${'MS_GRAPH_OUT:'+requestId} AND thread.status='sent' AND thread.created_by=${actor.userId}::uuid
- WHERE sent.tenant_id=${actor.tenantId} AND sent.user_id=${actor.userId}::uuid AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.correlation_id=${requestId}::uuid AND sent.payload->'document'->>'id'=${quoteId}`);
+ WHERE sent.tenant_id=${actor.tenantId} AND sent.user_id=${actor.userId}::uuid AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.correlation_id=${requestId}::uuid AND sent.payload->'document'->>'kind'='QUOTE' AND sent.payload->'document'->>'id'=${quoteId}`);
  return rows.length===1?rows[0]:null;
 }
 /** Shared audit/rate facts stay behind the core port; modules retain their own rows. */

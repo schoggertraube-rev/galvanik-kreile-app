@@ -1,6 +1,69 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
+import {withPrivilegedTenantTransaction} from './privilegedDb';
+import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {createHash,randomUUID} from 'node:crypto';
+
+type ReadyContext={id:string;version:number;freeze_id:string};
+export async function readReadyNotificationContext(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){
+ const rows=await tx.execute<ReadyContext>(sql`SELECT orders.id,orders.version,freeze_state.freeze_id::text
+  FROM public.orders orders JOIN private.v_order_freeze_state_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id
+  WHERE orders.tenant_id=${tenantId} AND orders.id=${orderId} AND orders.station='fertig'
+   AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig'
+   AND freeze_state.active AND freeze_state.integrity_ok FOR UPDATE OF orders`);
+ return rows.length===1?rows[0]:null;
+}
+
+type InformedReceipt={eventId:string;orderId:string;freezeId:string;actorId:string;channel:'mail'|'telefon';recordedAt:string;threadId:string|null};
+/** One immutable source for customer notification, separate from financial release. */
+export async function appendOrderInformed(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientEventId:string;channel:'mail'|'telefon';threadId?:string;intent:string}){
+ const context=await readReadyNotificationContext(tx,auth.tenantId,input.orderId);
+ if(!context)throw Error('ORDER_NOTIFICATION_NOT_READY');
+ const receipt:InformedReceipt={eventId:randomUUID(),orderId:input.orderId,freezeId:context.freeze_id,actorId:auth.userId,channel:input.channel,recordedAt:new Date().toISOString(),threadId:input.threadId??null};
+ await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
+ VALUES(${receipt.eventId},${auth.tenantId},${input.orderId},'ORDER_CUSTOMER_INFORMED_V1','Kunde informiert',${JSON.stringify({intent:input.intent,receipt})}::jsonb,'success',${auth.userId}::uuid,${input.clientEventId}::uuid,${input.clientEventId}::uuid,1,${receipt.recordedAt}::timestamptz)`);
+ return receipt;
+}
+
+export async function markOrderInformedByPhone(auth:AuthorizationSnapshot,input:{orderId:string;expectedVersion:number;clientEventId:string}){
+ if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const,message:'Aufträge sind nicht freigegeben.'};
+ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+ if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).sort().join(',')!=='clientEventId,expectedVersion,orderId'||!uuid.test(input.orderId)||!uuid.test(input.clientEventId)||!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<1)return {code:'VALIDATION_ERROR' as const,message:'Auftragsstand oder Kennung ungültig.'};
+ const intent=createHash('sha256').update(JSON.stringify([input.orderId,input.expectedVersion,'telefon'])).digest('hex');
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':'+input.clientEventId},0))`);
+  const prior=await tx.execute<{event_type:string;user_id:string;order_id:string;payload:{intent:string;receipt:InformedReceipt}}>(sql`SELECT event_type,user_id::text,order_id,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${input.clientEventId}::uuid`);
+  if(prior.length){const event=prior[0];if(prior.length!==1||event.event_type!=='ORDER_CUSTOMER_INFORMED_V1'||event.user_id!==auth.userId||event.order_id!==input.orderId||event.payload.intent!==intent||event.payload.receipt.channel!=='telefon')return {code:'CONFLICT' as const,message:'Diese Kennung wurde bereits anders verwendet.'};return {code:'OK' as const,receipt:event.payload.receipt,replayed:true};}
+  const context=await readReadyNotificationContext(tx,auth.tenantId,input.orderId);
+  if(!context||context.version!==input.expectedVersion)return {code:'CONFLICT' as const,message:'Der Auftrag ist nicht mehr in diesem Fertig-Stand.'};
+  const receipt=await appendOrderInformed(tx,auth,{...input,channel:'telefon',intent});
+  return {code:'OK' as const,receipt,replayed:false};
+ });}catch(error){console.error('[ORDER_PHONE_NOTIFICATION_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Telefonbescheid konnte nicht sicher gespeichert werden.'};}
+}
+
+export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:string){
+ if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<{payload:{receipt:InformedReceipt};user_id:string;created_at:string}>(sql`SELECT event.payload,event.user_id::text,event.created_at::text
+   FROM public.events event JOIN private.v_order_freeze_state_v1 freeze_state ON freeze_state.tenant_id=event.tenant_id AND freeze_state.order_id=event.order_id
+   WHERE event.tenant_id=${auth.tenantId} AND event.order_id=${orderId} AND event.event_type='ORDER_CUSTOMER_INFORMED_V1' AND event.status='success'
+    AND freeze_state.active AND freeze_state.integrity_ok AND event.payload->'receipt'->>'freezeId'=freeze_state.freeze_id::text
+    AND event.payload->'receipt'->>'actorId'=event.user_id::text AND event.payload->'receipt'->>'orderId'=event.order_id
+    AND event.payload->'receipt'->>'eventId'=event.id::text
+    AND (event.payload->'receipt'->>'channel'='telefon' AND event.payload->'receipt'->'threadId'='null'::jsonb OR
+     event.payload->'receipt'->>'channel'='mail' AND EXISTS(SELECT 1 FROM public.communication_threads thread
+      JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email'
+      JOIN public.events sent ON sent.tenant_id=thread.tenant_id AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.payload->>'threadId'=thread.id::text
+      WHERE thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->'receipt'->>'threadId' AND thread.status='sent'
+       AND sent.payload->'document'->>'kind'='INVOICE' AND sent.payload->'document'->>'orderId'=event.order_id AND sent.payload->>'intent'=event.payload->>'intent'))
+   ORDER BY event.created_at DESC,event.id DESC LIMIT 1`);
+  const order=await tx.execute<{station:string;allowed:boolean}>(sql`SELECT station,private.order_release_allowed_v1(tenant_id,id) AS allowed FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${orderId}`);
+  if(order.length!==1)return {code:'NOT_FOUND' as const};
+  const informed=rows[0]?.payload.receipt??null;
+  return {code:'OK' as const,informed,ampel:order[0].station==='fertig'?(informed?(order[0].allowed?'gruen':'gelb'):'rot'):null};
+ });}catch(error){console.error('[ORDER_NOTIFICATION_READ_FAILED]',error);return {code:'UNAVAILABLE' as const};}
+}
 
 /** Existing complaint rows are the release block; no stored second flag. */
 export async function readOpenOrderComplaint(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){

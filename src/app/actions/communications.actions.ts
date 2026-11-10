@@ -17,6 +17,10 @@ import { readMicrosoftGraphConfigurationStatus } from "@/lib/server/microsoftGra
 import { changeQuoteLifecycleAction, readQuotePdfAction } from "@/app/actions/quotes.actions";
 import {linkImportedMail,readLinkedIntakeMails,readIntakeMailImportReceipt} from '@/modules/eingang/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
+import {sql} from 'drizzle-orm';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {readInvoicePdf} from '@/lib/server/invoiceRead';
+import {readReadyNotificationContext} from '@/lib/server/orderReleaseRead';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
 
@@ -59,7 +63,7 @@ export async function attachOutlookMailAction(input: TargetInput & { graphMessag
   return correspondence.code==='OK'?{...correspondence,data:{...correspondence.data,attachmentsImported:imported.originalCount,attachmentsSkipped:imported.filteredAttachments}}:correspondence;
 }
 
-async function confirmQuoteDelivery(input:{clientRequestId:string},document:CommunicationDocument,data:Awaited<ReturnType<typeof sendCommunicationMail>> & {code:'OK'}){
+async function confirmQuoteDelivery(input:{clientRequestId:string},document:Extract<CommunicationDocument,{kind:'QUOTE'}>,data:Awaited<ReturnType<typeof sendCommunicationMail>> & {code:'OK'}){
  const marked=await changeQuoteLifecycleAction({action:'sent',quoteId:document.id,clientEventId:input.clientRequestId,expectedVersion:document.version,edition:document.edition,channel:'mail',evidence:'Versandbeleg '+data.data.threadId+' · PDF SHA-256 '+document.sha256},{actualMail:true});
  const current=marked.code==='OK'?marked.quote.lifecycle:null;
  const notices=marked.code==='OK'?[...(marked.notices??[])]:[];
@@ -68,7 +72,7 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Comm
 }
 
 export async function sendCustomerMailAction(input: TargetInput & {
- clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE';documentId:string};
+ clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};
 }){
  const authorizationResult=await authorization();
  if(!authorizationResult.ok)return {code:'UNAUTHENTICATED' as const,message:authorizationResult.message};
@@ -77,8 +81,19 @@ export async function sendCustomerMailAction(input: TargetInput & {
  let attachment,document:CommunicationDocument|undefined;
  if(input.attachment){
   const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
-  if(prior.code==='OK')return confirmQuoteDelivery(input,prior.document,{code:'OK',data:prior.data});
+  if(prior.code==='OK'){
+   if(prior.document.kind!==input.attachment.kind)return {code:'CONFLICT' as const,message:'Die Versandkennung gehört zu einer anderen Belegart.'};
+   return prior.document.kind==='QUOTE'?confirmQuoteDelivery(input,prior.document,{code:'OK',data:prior.data}):{code:'OK' as const,data:prior.data};
+  }
   if(prior.code!=='NOT_FOUND')return prior;
+  if(input.attachment.kind==='INVOICE'){
+   const pdf=await readInvoicePdf(auth,input.attachment.documentId,'original');if(pdf.code!=='OK')return pdf;
+   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;order_id:string;customer_id:string;aggregate_version:number}>(sql`SELECT id::text,order_id,customer_id,aggregate_version FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${input.attachment!.documentId}::uuid AND status='issued' AND contract_version=1 AND pdf_sha256=${pdf.data.pdfSha256}`));
+   const invoice=rows[0];
+   if(rows.length!==1||!(input.targetType==='ORDER'?invoice.order_id===input.targetId:invoice.customer_id===input.targetId))return {code:'FORBIDDEN' as const,message:'Die Rechnung gehört nicht zu diesem Kunden oder Auftrag.'};
+   attachment={filename:pdf.data.invoiceNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.data.pdf)};
+   document={kind:'INVOICE',id:invoice.id,orderId:invoice.order_id,number:pdf.data.invoiceNumber,version:invoice.aggregate_version,sha256:pdf.data.pdfSha256};
+  }else{
   const pdf=await readQuotePdfAction({quoteId:input.attachment.documentId});
   if(pdf.code!=='OK')return pdf;
   const belongs=input.targetType==='CUSTOMER'?pdf.document.customerId===input.targetId:pdf.document.linkedOrderId===input.targetId;
@@ -91,9 +106,16 @@ export async function sendCustomerMailAction(input: TargetInput & {
    if(source.code!=='OK')return {...source,message:'KV-Ursprungsnachricht konnte nicht sicher gelesen werden. Es wurde nichts gesendet. '+source.message};
    document.source={itemId:source.itemId,graphMessageId:source.message.id};
   }
+  }
  }
- const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,document,beforePrepare:document?tx=>lockQuoteDeliverySnapshot(tx,auth.tenantId,document!):undefined});
- return sent.code==='OK'&&document?confirmQuoteDelivery(input,document,sent):sent;
+ const snapshot=document;
+ const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,document,beforePrepare:snapshot?async tx=>{
+  if(snapshot.kind==='QUOTE')return lockQuoteDeliverySnapshot(tx,auth.tenantId,snapshot);
+  if(!await readReadyNotificationContext(tx,auth.tenantId,snapshot.orderId))return false;
+  const rows=await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${snapshot.id}::uuid AND order_id=${snapshot.orderId} AND status='issued' AND aggregate_version=${snapshot.version} AND pdf_sha256=${snapshot.sha256} FOR UPDATE`);
+  return rows.length===1;
+ }:undefined});
+ return sent.code==='OK'&&document?.kind==='QUOTE'?confirmQuoteDelivery(input,document,sent):sent;
 }
 
 import {importIntakeGraphMail} from '@/modules/eingang/server-public';

@@ -217,7 +217,7 @@ async function resolveOrderCardAuthorization(): Promise<
 
 export async function getLiveOrderCardAction(
   input: { orderId: string },
-): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[]; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>> }>> {
+): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>> }>> {
   noStore();
   try {
     const authorization = await resolveOrderCardAuthorization();
@@ -247,7 +247,9 @@ export async function getLiveOrderCardAction(
     const {readOrderActors}=await import('@/modules/orders/server-public');
     const actors=await readOrderActors(authorization.data,{orderId:input.orderId,version:card.data.version});
     const manualShipping=card.data.handoverMode==='shipping'?await readManualShippingForOrder(authorization.data,input.orderId):undefined;
-    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,...(manualShipping?{manualShipping}:{}) } };
+    const {readOrderInformed}=await import('@/lib/server/orderReleaseRead');
+    const customerInformed=await readOrderInformed(authorization.data,input.orderId);
+    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,
@@ -260,6 +262,13 @@ export async function getLiveOrderCardAction(
 async function manualShippingPorts(){
  const [{readCustomerProfile},{readShippingSettingsInTransaction}]=await Promise.all([import('@/modules/customers/server-public'),import('@/modules/fundament/server-public')]);
  return {readCustomer:readCustomerProfile,readSettings:readShippingSettingsInTransaction};
+}
+export async function markOrderInformedByPhoneAction(input:{orderId:string;expectedVersion:number;clientEventId:string}){
+ const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
+ const {markOrderInformedByPhone}=await import('@/lib/server/orderReleaseRead');
+ const result=await markOrderInformedByPhone(auth.data,input);
+ if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
+ return result;
 }
 async function readManualShippingForOrder(auth:AuthorizationSnapshot,orderId:unknown){
  const {readManualShipping}=await import('@/modules/orders/server-public');
