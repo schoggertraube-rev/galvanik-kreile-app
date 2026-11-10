@@ -3,6 +3,32 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('customer metrics read actual paid invoices once, isolate customers and hide finance without Geld',async()=>{
+ const {readyInvoiceOrder}=await import('./orderFixture');
+ const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
+ const first=await readyInvoiceOrder('Kennzahl-1');
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'OK',data:{classification:null,kennzahlen:{averagePaymentDays:{id:'KZ-ZAHLUNGSDAUER',value:null,invoiceCount:0},classification:{value:null,state:'missing_thresholds',reason:'Grenzen für die Einstufung eintragen'}}}});
+ const payment={invoiceId:first.invoice.invoiceId,amount:first.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>confirmPaymentAction(payment))).toMatchObject({code:'OK'});
+ const second=await readyInvoiceOrder('Kennzahl-2');
+ expect(await withSession(full,()=>confirmPaymentAction({...payment,invoiceId:second.invoice.invoiceId,amount:second.invoice.grossAmountCents,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const operational=await createFixture(['kunden'],'werkstatt');
+ const events=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{period:{timeZone:'Europe/Berlin'},averagePaymentDays:{value:0,invoiceCount:1},overdue:{invoiceCount:0,openAmountCents:0}}}});
+ const restricted=await withSession(operational,()=>getCustomerSummaryAction({customerId:first.customerId}));
+ expect(restricted.code).toBe('OK');if(restricted.code!=='OK')throw Error('METRIC_READ:'+restricted.code);
+ expect(restricted.data.kennzahlen).not.toHaveProperty('averagePaymentDays');
+ expect(restricted.data.kennzahlen).not.toHaveProperty('overdue');
+ expect(restricted.data).not.toHaveProperty('invoiceRevenueCents');
+ expect(await sql`SELECT classification FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.customerId}`).toEqual([{classification:'B'}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(events);
+ expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(payment))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{averagePaymentDays:{value:0,invoiceCount:1}}}});
+ const financeOnly=await createFixture(['geld']);
+ expect(await withSession(financeOnly,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'FORBIDDEN'});
+});
+
 it('editing visible customer notes without Geld never removes hidden financial or typed agreements',async()=>{
  const {createCustomerAction,saveCustomerAgreementAction,updateCustomerAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
  const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST verborgene Absprache '+randomUUID(),phone:'+49 711 5550190'}));if(created.code!=='OK')throw Error('ABS_HIDDEN_CUSTOMER:'+created.code);

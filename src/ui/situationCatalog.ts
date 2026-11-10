@@ -144,3 +144,4 @@ export const GOODS_OUT_DEBT_COPY = {
     : 'Du kannst die Ware noch nicht herausgeben: Eine Rechnung des Kunden ist überfällig. Lass die Zahlung im Büro buchen.',
 } as const;
 export const ORDER_ITEM_PHOTO_COPY={required:'Nimm für jedes Teil ein Foto auf, bevor Du den Auftrag fertig meldest.'} as const;
+export const CUSTOMER_METRICS_COPY={classificationMissing:'Grenzen für die Einstufung eintragen'} as const;

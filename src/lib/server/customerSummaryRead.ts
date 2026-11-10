@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import { overdueInvoiceCondition } from "@/lib/server/paymentContract";
+import {CUSTOMER_METRICS_COPY} from '@/ui/situationCatalog';
 import {evaluateOrderPriority} from '@/lib/priority';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -73,6 +74,7 @@ export type CustomerSummaryOrder = {
 };
 
 export type CustomerSummary = CustomerStoredProfile & {
+  kennzahlen?:CustomerKennzahlen;
   hints?:CustomerHint[];
   id: string;
   customerNumber: string | null;
@@ -104,6 +106,47 @@ export type CustomerSummary = CustomerStoredProfile & {
   agreementSlotsAvailable: number;
   orders: CustomerSummaryOrder[];
 };
+
+export type CustomerKennzahlen={
+  period:{from:string;to:string;timeZone:'Europe/Berlin'};
+  asOf:string;
+  averagePaymentDays?:{id:'KZ-ZAHLUNGSDAUER';value:number|null;invoiceCount:number};
+  overdue?:{invoiceCount:number;openAmountCents:number};
+  classification:{value:null;state:'missing_thresholds';reason:string};
+};
+
+/** The customer picture's single metrics port. No search-answer or persisted rollup. */
+async function readCustomerKennzahlen(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string):Promise<CustomerKennzahlen>{
+ const money=hasAuthorizationArea(auth,'geld');
+ const rows=await tx.execute<{from_date:string;to_date:string;as_of:Date|string;paid_count:number;payment_days:string|number|null;overdue_count:number;overdue_open:string|number}>(sql`
+  SELECT calendar.from_date::text,calendar.to_date::text,statement_timestamp() AS as_of,
+         paid.invoice_count AS paid_count,paid.average_days AS payment_days,
+         overdue.invoice_count AS overdue_count,overdue.open_amount AS overdue_open
+  FROM (SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-interval '12 months')::date AS from_date,
+               (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date AS to_date) calendar
+  CROSS JOIN LATERAL (
+   SELECT count(*)::integer AS invoice_count,
+          avg((invoice.payment_paid_at AT TIME ZONE 'Europe/Berlin')::date-(invoice.issued_at AT TIME ZONE 'Europe/Berlin')::date) AS average_days
+   FROM public.invoices invoice
+   WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId}
+     AND invoice.contract_version=1 AND invoice.status='issued' AND invoice.payment_status='bezahlt'
+     AND (invoice.issued_at AT TIME ZONE 'Europe/Berlin')::date BETWEEN calendar.from_date AND calendar.to_date
+     AND ${money}
+  ) paid
+  CROSS JOIN LATERAL (
+   SELECT count(*)::integer AS invoice_count,coalesce(sum(invoice.payment_open_amount_cents),0)::bigint AS open_amount
+   FROM public.invoices invoice
+   WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId} AND ${overdueInvoiceCondition()} AND ${money}
+  ) overdue
+ `);
+ const row=rows[0];if(rows.length!==1||!row)throw Error('CUSTOMER_METRICS_RESULT_INVALID');
+ const average=row.payment_days===null?null:Number(row.payment_days),open=Number(row.overdue_open);
+ if(!Number.isSafeInteger(row.paid_count)||row.paid_count<0||!Number.isSafeInteger(row.overdue_count)||row.overdue_count<0||!Number.isSafeInteger(open)||open<0||(row.paid_count===0)!==(average===null)||average!==null&&!Number.isFinite(average))throw Error('CUSTOMER_METRICS_VALUES_INVALID');
+ return {period:{from:row.from_date,to:row.to_date,timeZone:'Europe/Berlin'},asOf:toIso(row.as_of),
+  ...(money?{averagePaymentDays:{id:'KZ-ZAHLUNGSDAUER' as const,value:average,invoiceCount:row.paid_count},overdue:{invoiceCount:row.overdue_count,openAmountCents:open}}:{}),
+  classification:{value:null,state:'missing_thresholds',reason:CUSTOMER_METRICS_COPY.classificationMissing},
+ };
+}
 
 export type CustomerSummaryReadResult =
   | { code: "OK"; data: CustomerSummary }
@@ -437,7 +480,10 @@ export async function readCustomerSummary(
          hasAuthorizationArea(authorization, "geld"),
        );
        const agreementSlotsAvailable = await readCustomerAgreementSlots(tx, authorization.tenantId, input.customerId);
-       return mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable);
+       const summary=mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable);
+       summary.kennzahlen=await readCustomerKennzahlen(tx,authorization,input.customerId);
+       summary.classification=summary.kennzahlen.classification.value;
+       return summary;
     });
     if(data){const signals=await readCustomerListSignals(authorization,[input.customerId]);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;}
     return data
