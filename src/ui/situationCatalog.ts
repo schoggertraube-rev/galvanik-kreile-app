@@ -217,3 +217,6 @@ export const COLLECTION_REMINDER_COPY={
  proofUnavailable:'Der Original-Versandbeleg konnte nicht sicher gelesen werden.',
  preparedConflict:'Die Sammelerinnerung wurde bereits vorbereitet oder der Auftrag hat sich geändert. Lies den aktuellen Ausgang neu.',
 };
+export const ORDER_ITEM_COMPLETION_COPY = {
+  alreadyChanged: 'Der Teilstatus hat sich bereits geändert. Öffne den Auftrag erneut.',
+};
