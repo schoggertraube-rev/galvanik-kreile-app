@@ -190,7 +190,7 @@ type OrderCardActionResult<T> = OrderCardReadResult<T> | {
 
 async function resolveOrderCardAuthorization(): Promise<
   | { ok: true; data: AuthorizationSnapshot }
-  | { ok: false; result: OrderCardActionResult<never> }
+  | { ok: false; result: Exclude<OrderCardActionResult<never>,{code:'OK'}> }
 > {
   let authorization;
   try {
@@ -217,7 +217,7 @@ async function resolveOrderCardAuthorization(): Promise<
 
 export async function getLiveOrderCardAction(
   input: { orderId: string },
-): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[] }>> {
+): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[]; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>> }>> {
   noStore();
   try {
     const authorization = await resolveOrderCardAuthorization();
@@ -246,7 +246,8 @@ export async function getLiveOrderCardAction(
     if (evidence.code !== "OK") return evidence;
     const {readOrderActors}=await import('@/modules/orders/server-public');
     const actors=await readOrderActors(authorization.data,{orderId:input.orderId,version:card.data.version});
-    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data } };
+    const manualShipping=card.data.handoverMode==='shipping'?await readManualShippingForOrder(authorization.data,input.orderId):undefined;
+    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,
@@ -254,6 +255,26 @@ export async function getLiveOrderCardAction(
     });
     return { code: "UNAVAILABLE", message: "Auftragskarte ist derzeit nicht verfügbar." };
   }
+}
+
+async function manualShippingPorts(){
+ const [{readCustomerProfile},{readShippingSettingsInTransaction}]=await Promise.all([import('@/modules/customers/server-public'),import('@/modules/fundament/server-public')]);
+ return {readCustomer:readCustomerProfile,readSettings:readShippingSettingsInTransaction};
+}
+async function readManualShippingForOrder(auth:AuthorizationSnapshot,orderId:unknown){
+ const {readManualShipping}=await import('@/modules/orders/server-public');
+ return readManualShipping(auth,orderId,await manualShippingPorts());
+}
+export async function getManualShippingAction(input:{orderId:string}){
+ const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
+ return readManualShippingForOrder(auth.data,input?.orderId);
+}
+export async function saveManualTrackingAction(input:unknown){
+ const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
+ const {saveManualTracking}=await import('@/modules/orders/server-public');
+ const result=await saveManualTracking(auth.data,input,await manualShippingPorts());
+ if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
+ return result;
 }
 
 export async function getExtraWorkMasterDataAction(): Promise<OrderCardActionResult<ExtraWorkMasterData>> {

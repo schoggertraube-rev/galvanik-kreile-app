@@ -145,3 +145,18 @@ export const GOODS_OUT_DEBT_COPY = {
 } as const;
 export const ORDER_ITEM_PHOTO_COPY={required:'Nimm für jedes Teil ein Foto auf, bevor Du den Auftrag fertig meldest.'} as const;
 export const CUSTOMER_METRICS_COPY={classificationMissing:'Grenzen für die Einstufung eintragen'} as const;
+export const MANUAL_SHIPPING_FIELDS={name:'Name / Firma',street:'Straße',houseNumber:'Hausnummer',zipCode:'PLZ',city:'Ort',country:'Land',phone:'Telefon',email:'E-Mail',reference:'Referenz'} as const;
+export const MANUAL_SHIPPING_HANDOVER_LABEL='Paket mit manuell übernommener Sendungsnummer übergeben';
+export const MANUAL_SHIPPING_COPY={
+ SHIPPING_FORBIDDEN:'Du hast für diesen Versand keine Freigabe.',ORDER_ID_INVALID:'Wähle den Auftrag erneut.',ORDER_NOT_FOUND:'Der Auftrag ist nicht verfügbar. Lade ihn erneut.',
+ ORDER_NOT_SHIPPING:'Dieser Auftrag wird abgeholt. Öffne die Abholkarte.',SHIPPING_SETTINGS_MISSING:'Trag den Versanddienst in den Einstellungen ein.',
+ MANUAL_SHIPPING_READ_FAILED:'Die Versanddaten konnten nicht geladen werden. Versuch es erneut.',TRACKING_INPUT_INVALID:'Prüf die Sendungsnummer und öffne das Paket erneut.',
+ TRACKING_KEY_CONFLICT:'Diese Buchungskennung gehört zu einer anderen Änderung. Lade das Paket erneut.',TRACKING_PATTERN_INVALID:'Korrigiere das Nummernmuster in den Versand-Einstellungen.',TRACKING_PATTERN_MISSING:'Trag das Nummernmuster in den Versand-Einstellungen ein. Die Nummer bleibt ungebucht.',
+ TRACKING_FORMAT_CONFIRMATION_REQUIRED:'Die Nummer sieht nicht nach dem eingestellten Versanddienst aus. Du kannst sie ausdrücklich trotzdem übernehmen.',
+ SHIPPING_RELEASE_BLOCKED:'Das Paket darf noch nicht raus. Öffne die Zahlung oder die Ausgabesperre am Auftrag.',TRACKING_ALREADY_ASSIGNED:'Die Nummer gehört schon zu einem anderen Paket. Öffne dieses Paket.',
+ SHIPMENT_CHANGED:'Das Paket wurde inzwischen geändert. Lade es neu; deine Nummer bleibt zum Abgleichen erhalten.',SHIPMENT_ALREADY_RELEASED:'Das Paket wurde bereits übergeben oder storniert. Die Nummer bleibt im Verlauf.',
+ TRACKING_CHANGE_REASON_REQUIRED:'Gib an, warum du die Sendungsnummer änderst.',MANUAL_TRACKING_WRITE_FAILED:'Die Nummer konnte nicht gespeichert werden. Versuch es mit derselben Buchungskennung erneut.',
+ SHIPPING_ADDRESS_INCOMPLETE:'Ergänze die fehlende Lieferanschrift in der Kundenkarte. Die Sendungsnummer bleibt ungebucht.',
+ SHIPMENT_PROVIDER_LABEL_EXISTS:'Das Paket hat schon ein Etikett vom Versanddienst. Storniere es über den bestehenden Etikettweg, bevor du die Nummer ersetzt.',
+ SHIPMENT_CARRIER_CHANGED:'Der Versanddienst des Pakets weicht von den Einstellungen ab. Öffne das Paket und kläre den Versanddienst vor der Änderung.'
+} as const;

@@ -39,7 +39,9 @@
     "@/modules/orders/public#OrderActorEvidence",
     "@/modules/orders/public#OrderActorSummary",
     "@/modules/orders/server-public#readOrderActors",
-    "@/modules/orders/server-public#readPackageOrderCustomers"
+    "@/modules/orders/server-public#readPackageOrderCustomers",
+    "@/modules/orders/server-public#readManualShipping",
+    "@/modules/orders/server-public#saveManualTracking"
   ],
   "capabilities": [],
   "migrations": [
@@ -48,24 +50,29 @@
     "supabase/migrations/20261108200232_af19_immutable_mail_handover_lineage.sql",
     "supabase/migrations/20261109225533_ablauf_goods_out_override_immutable.sql",
     "supabase/migrations/20261110003450_ablauf_cash_pickup_requires_payment.sql",
-    "supabase/migrations/20261110010200_ablauf_historical_callback_receipt.sql"
+    "supabase/migrations/20261110010200_ablauf_historical_callback_receipt.sql",
+    "supabase/migrations/20261110022114_ablauf_canonical_release_projection.sql"
   ],
   "viewsFunctions": [
-    "private.guard_goods_out_debt_override_v1"
+    "private.guard_goods_out_debt_override_v1",
+    "private.invoice_is_overdue_v1",
+    "private.order_release_allowed_v1"
   ],
   "ownsTables": [
     "public.orders",
     "public.items",
-    "public.events"
+    "public.events",
+    "public.shipments"
   ],
   "storagePurposes": [],
   "events": {
-    "emits": [],
+    "emits": ["SHIPMENT_MANUAL_TRACKING_SET_V1","SHIPMENT_HANDED_OVER_V1"],
     "consumes": []
   },
   "config": {},
   "dependencies": [
     "customers",
-    "complaints"
+    "complaints",
+    "fundament"
   ]
 }

@@ -1,6 +1,6 @@
 import "server-only";
 import {readOpenOrderComplaint} from '@/lib/server/orderReleaseRead';
-import {COMPLAINT_ORDER_COPY} from '@/ui/situationCatalog';
+import {COMPLAINT_ORDER_COPY,MANUAL_SHIPPING_HANDOVER_LABEL} from '@/ui/situationCatalog';
 
 import { randomUUID } from "node:crypto";
 import { GOODS_OUT_DEBT_COPY } from "@/ui/situationCatalog";
@@ -1028,6 +1028,30 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
         || !await orderMatchesReceipt(tx,persistedOrders[0], receipt, tenantId)
       ) throw new Error("GOODS_OUT_READBACK_INVALID");
 
+      if(input.mode==='versand'){
+        // A typed manual-tracking receipt proves which parcels this real
+        // physical release hands over. A label alone never reaches this code.
+        const parcels=await tx.execute<{id:string;tracking_number:string;carrier:string}>(sql`
+          UPDATE public.shipments shipment SET status='shipped',shipped_at=${receipt.occurredAt}::timestamptz,
+            updated_at=${receipt.occurredAt}::timestamptz
+          WHERE shipment.tenant_id=${tenantId} AND shipment.order_id=${order.id}
+            AND shipment.status='created' AND shipment.shipped_at IS NULL
+            AND EXISTS(SELECT 1 FROM public.events proof
+              WHERE proof.tenant_id=shipment.tenant_id AND proof.order_id=shipment.order_id
+                AND proof.event_type='SHIPMENT_MANUAL_TRACKING_SET_V1' AND proof.status='success'
+                AND proof.user_id IS NOT NULL AND proof.payload->'receipt'->>'shipmentId'=shipment.id::text
+                AND proof.payload->'receipt'->>'trackingNumber'=shipment.tracking_number
+                AND proof.payload->'receipt'->>'carrier'=shipment.carrier)
+          RETURNING shipment.id::text,shipment.tracking_number,shipment.carrier
+        `);
+        for(const parcel of parcels)await tx.execute(sql`
+          INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,payload,status,
+            client_event_id,event_schema_version,correlation_id,aggregate_version,station,created_at)
+          VALUES(${randomUUID()},${tenantId},${order.id},'SHIPMENT_HANDED_OVER_V1',${MANUAL_SHIPPING_HANDOVER_LABEL},${actorId}::uuid,
+            ${JSON.stringify({shipmentId:parcel.id,trackingNumber:parcel.tracking_number,carrier:parcel.carrier,goodsOutEventId:receipt.eventId,source:'manual_tracking'})}::jsonb,
+            'success',${randomUUID()}::uuid,1,${receipt.correlationId}::uuid,${receipt.orderVersion},'abgeholt',${receipt.occurredAt}::timestamptz AT TIME ZONE 'UTC')
+        `);
+      }
       return { code: "OK", receipt, replayed: false };
     };
     return await withPrivilegedTenantTransaction(authorization.data,async tx=>{

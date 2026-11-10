@@ -184,6 +184,7 @@ function configureSuccess(options: {
   execute.mockImplementation((query: Query) => {
     const text = queryText(query);
     if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+    if (text.includes("UPDATE public.shipments")) return Promise.resolve([]);
     if (text.includes("FROM public.events audit")) return Promise.resolve([]);
     if (text.includes("FROM public.complaints")) return Promise.resolve([]);
     if (text.includes("FROM public.events")) {
