@@ -57,8 +57,8 @@ export default async function RootLayout({
         <ServiceWorkerRegister />
         <ClientActionErrorBanner />
         <Suspense fallback={null}>
-          <SyncProvider>
-            <PermissionsProvider initialAuthState={authState}>
+          <PermissionsProvider initialAuthState={authState}>
+            <SyncProvider>
               <DiagnosticsProvider>
                 <FeatureFlagProvider>
                   <KreileAppShell loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>
@@ -67,8 +67,8 @@ export default async function RootLayout({
                 </FeatureFlagProvider>
                 {isAdmin && <DiagnosticsWidget />}
               </DiagnosticsProvider>
-            </PermissionsProvider>
-          </SyncProvider>
+            </SyncProvider>
+          </PermissionsProvider>
         </Suspense>
       </body>
     </html>

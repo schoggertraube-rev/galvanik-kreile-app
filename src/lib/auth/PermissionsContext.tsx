@@ -32,6 +32,7 @@ export function deriveInitials(displayName: string): string {
  */
 interface AuthState {
   role: string | null;
+  offlineScope: string | null;
   areas: AccessArea[];
   permissions: string[];
   actions: AuthorizationActionGrants;
@@ -58,6 +59,7 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
   if (initial.status === "authenticated") {
     return {
       role: initial.user.role,
+      offlineScope: initial.user.offlineScope ?? null,
       areas: [...initial.user.areas],
       permissions: [...initial.user.permissions],
       actions: { ...DENIED_ACTIONS, ...initial.user.actions },
@@ -69,6 +71,7 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
   }
   return {
     role: null,
+    offlineScope: null,
     areas: [],
     permissions: [],
     actions: { ...DENIED_ACTIONS },
@@ -81,6 +84,7 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
 
 const PermissionsContext = createContext<PermissionsContextType>({
   role: null,
+    offlineScope: null,
   areas: [],
   permissions: [],
   actions: { ...DENIED_ACTIONS },
@@ -134,6 +138,7 @@ export function PermissionsProvider({
       if (result.ok) {
         setAuthState({
           role: result.data.role,
+          offlineScope: result.data.offlineScope ?? null,
           areas: [...result.data.areas],
           permissions: [...result.data.permissions],
           actions: { ...result.data.actions },
@@ -145,6 +150,7 @@ export function PermissionsProvider({
       } else if (result.status === "unauthenticated") {
         setAuthState({
           role: null,
+    offlineScope: null,
           areas: [],
           permissions: [],
           actions: { ...DENIED_ACTIONS },
@@ -159,6 +165,7 @@ export function PermissionsProvider({
       } else {
         setAuthState({
           role: null,
+    offlineScope: null,
           areas: [],
           permissions: [],
           actions: { ...DENIED_ACTIONS },
@@ -178,6 +185,7 @@ export function PermissionsProvider({
       console.error("Failed to load permissions", err);
       setAuthState({
         role: null,
+    offlineScope: null,
         areas: [],
         permissions: [],
         actions: { ...DENIED_ACTIONS },

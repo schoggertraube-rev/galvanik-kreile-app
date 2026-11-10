@@ -1,6 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import { offlinePartition } from "@/lib/server/offlinePartition";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
@@ -33,6 +34,7 @@ export type ClientAuthorizationResult =
       ok: true;
       data: {
         displayName: string;
+        offlineScope?: string;
         role: AppRole;
         areas: readonly AccessArea[];
         permissions: readonly PermissionKey[];
@@ -66,6 +68,8 @@ export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizat
     ok: true,
     data: {
       displayName: result.data.displayName,
+      // Local partition only, never a credential; preserves existing intake originals.
+      offlineScope: offlinePartition(result.data),
       role: result.data.role,
       areas: result.data.areas ?? [],
       permissions: result.data.permissions,
