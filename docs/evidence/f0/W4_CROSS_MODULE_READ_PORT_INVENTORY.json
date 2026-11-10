@@ -14,9 +14,6 @@
     "public.scan_uploads"
   ],
   "readPorts": {
-    "src/app/actions/communications.actions.ts": [
-      "private.v_order_freeze_state_v1"
-    ],
     "src/lib/server/cardSearchRead.ts": [
       "private.v_card_search_documents_v1"
     ],
@@ -71,6 +68,9 @@
     "src/lib/server/communicationDeliveryPort.ts": [
       "private.v_intake_delivery_evidence_v1"
     ],
+    "src/lib/server/communicationDocumentPort.ts": [
+      "private.v_order_freeze_state_v1"
+    ],
     "src/lib/server/communicationPort.ts": [
       "public.v_complaint_rework_context_v1"
     ],
@@ -82,6 +82,9 @@
     ],
     "src/lib/server/dispatchCallPort.ts": [
       "private.v_order_freeze_state_v1"
+    ],
+    "src/lib/server/dispatchReplyEffectsPort.ts": [
+      "private.v_intake_reply_evidence_v1"
     ],
     "src/lib/server/dispatchReplyPort.ts": [
       "private.v_intake_reply_evidence_v1"
