@@ -235,7 +235,8 @@
       "src/test/acceptance/ein34_mail_import.integration.test.ts"
     ],
     "src/app/actions/communications.actions.ts#importOutlookMailAction": [
-      "src/test/acceptance/ein34_mail_import.integration.test.ts"
+      "src/test/acceptance/ein34_mail_import.integration.test.ts",
+      "src/test/acceptance/dispatch_bounce.integration.test.ts"
     ],
     "src/app/actions/communications.actions.ts#attachOutlookMailAction": [
       "src/test/acceptance/ein34_mail_import.integration.test.ts"
@@ -259,7 +260,8 @@
       "src/test/acceptance/kv_v04_server.integration.test.ts",
       "src/test/acceptance/order_notification.integration.test.ts",
       "src/test/acceptance/dispatch_collective.integration.test.ts",
-      "src/test/acceptance/collection_reminder.integration.test.ts"
+      "src/test/acceptance/collection_reminder.integration.test.ts",
+      "src/test/acceptance/dispatch_bounce.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#prepareQuoteCopyAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"
@@ -304,7 +306,8 @@
       "src/test/acceptance/order_notification.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#createDispatchCallTaskAction": [
-      "src/test/acceptance/dispatch_call.integration.test.ts"
+      "src/test/acceptance/dispatch_call.integration.test.ts",
+      "src/test/acceptance/dispatch_bounce.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

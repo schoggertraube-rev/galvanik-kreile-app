@@ -5,7 +5,7 @@ import {withPrivilegedTenantTransaction} from './privilegedDb';
 import {readMicrosoftGraphSentMailReference} from './microsoftGraph';
 
 export type DispatchResponseCheck={state:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAILABLE';proofs:Array<{itemId:string;threadId:string;graphMessageId:string;originalSha256:string;receivedAt:string}>};
-type Original={itemId:string;message:{senderAddress:string;receivedAt:string;replyChain?:{source?:string;status?:string;originalSha256?:string;inReplyTo?:string[]}}};
+type Original={itemId:string;message:{senderAddress:string;receivedAt:string;replyChain?:{source?:string;status?:string;originalSha256?:string;inReplyTo?:string[]};deliveryReport?:{status:string}}};
 export type DispatchResponsePorts={readLinked:(auth:AuthorizationSnapshot,target:{targetType:'CUSTOMER';targetId:string})=>Promise<{code:string;data?:Array<{id:string;receivedAt:string}>}>;readOriginal:(auth:AuthorizationSnapshot,input:{graphMessageId:string})=>Promise<{code:string}&Partial<Original>>};
 
 /** Incoming MIME and the exact Sent-Items request header bind the reaction to the real notice. */
@@ -19,6 +19,7 @@ export async function readDispatchResponses(auth:AuthorizationSnapshot,input:{cu
   for(const mail of linked.data){
    if(Date.parse(mail.receivedAt)<Date.parse(input.oldestNoticeAt))continue;
    const original=await ports.readOriginal(auth,{graphMessageId:mail.id});if(original.code!=='OK'||!original.itemId||!original.message)throw Error('DISPATCH_RESPONSE_ORIGINAL_MISSING');
+   if(original.message.deliveryReport){if(original.message.deliveryReport.status==='invalid')throw Error('DISPATCH_DELIVERY_REPORT_UNCLEAR');continue;}
    const chain=original.message.replyChain;
    if(chain?.status==='missing')continue;
    if(!chain||chain.source!=='original_mime'||chain.status!=='present'||!Array.isArray(chain.inReplyTo)||chain.inReplyTo.length!==1||!chain.originalSha256||!/^[a-f0-9]{64}$/.test(chain.originalSha256))throw Error('DISPATCH_RESPONSE_REFERENCE_UNCLEAR');

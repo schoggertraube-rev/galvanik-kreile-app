@@ -4,7 +4,7 @@ import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {createHash} from "node:crypto";
 import {readCommunicationDocumentReceipt,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
-import { resolveAuthorization,hasAuthorizationArea } from "@/lib/server/authorization";
+import { resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   attachInboxMessage,
   readCommunicationInbox,
@@ -157,6 +157,12 @@ export async function sendCustomerMailAction(input: TargetInput & {
 }
 
 import {importIntakeGraphMail} from '@/modules/eingang/server-public';
+import {qualifyImportedDeliveryFailure} from '@/lib/server/communicationDeliveryPort';
+async function withDeliveryFailure<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T){
+ if(result.code!=='OK'||!result.itemId)return result;
+ const qualified=await qualifyImportedDeliveryFailure(auth,result.itemId,customerId=>linkImportedMail(auth,{itemId:result.itemId!,targetType:'CUSTOMER',targetId:customerId},readCommunicationTargetInTransaction,readCustomerProfile));
+ return qualified.code==='OK'?result:{...qualified,itemId:result.itemId};
+}
 import {readMicrosoftGraphAttachments,readMicrosoftGraphMime,readMicrosoftGraphMessage,type GraphInboxMessage} from '@/lib/server/microsoftGraph';
 async function importIntakeMessage(auth:Parameters<typeof importIntakeGraphMail>[0],mail:GraphInboxMessage){
  const [mime,files]=await Promise.all([readMicrosoftGraphMime(mail.id),readMicrosoftGraphAttachments(mail.id)]);
@@ -173,8 +179,8 @@ export async function importOutlookMailAction(graphMessageId:string){
  if(!hasAuthorizationArea(authorization.data,'eingang')||!hasAuthorizationArea(authorization.data,'mails'))return {code:'FORBIDDEN' as const,message:'Mail-Import benötigt Eingang und Mails.'};
  if(typeof graphMessageId!=='string'||!graphMessageId||graphMessageId.length>1024)return {code:'VALIDATION_ERROR' as const,message:'Mailkennung ungültig.'};
  const saved=await readIntakeMailImportReceipt(authorization.data,{graphMessageId});
- if(saved.code!=='NOT_FOUND')return saved;
+ if(saved.code!=='NOT_FOUND')return withDeliveryFailure(authorization.data,saved);
  const mail=await readMicrosoftGraphMessage(graphMessageId);
  if(mail.code!=='OK')return mail;
- return importIntakeMessage(authorization.data,mail.data);
+ return withDeliveryFailure(authorization.data,await importIntakeMessage(authorization.data,mail.data));
 }

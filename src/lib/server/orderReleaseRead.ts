@@ -5,6 +5,7 @@ import {withPrivilegedTenantTransaction} from './privilegedDb';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import {createHash,randomUUID} from 'node:crypto';
 import {overdueInvoiceCondition} from './paymentContract';
+import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
 
 type ReadyContext={id:string;version:number;freeze_id:string};
 export async function readReadyNotificationContext(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){
@@ -74,12 +75,17 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
    LEFT JOIN private.v_order_frozen_receipts_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok
    WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${orderId}`);
   if(order.length!==1)return {code:'NOT_FOUND' as const};
-  const informed=rows.at(-1)?.payload.receipt??null,firstInformed=rows[0]?.payload.receipt??null;
+  const failures=await readCommunicationDeliveryFailures(tx,auth,rows.flatMap(row=>row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]));
+  const failedThreads=new Set(failures.map(proof=>proof.threadId));
+  const delivered=rows.filter(row=>row.payload.receipt.channel==='telefon'||!row.payload.receipt.threadId||!failedThreads.has(row.payload.receipt.threadId));
+  const informed=delivered.at(-1)?.payload.receipt??null,firstInformed=delivered[0]?.payload.receipt??null;
+  const latest=rows.at(-1)?.payload.receipt;
+  const failedDelivery=latest?.threadId?failures.find(proof=>proof.threadId===latest.threadId)??null:null;
   const current=order[0],complaint=await readOpenOrderComplaint(tx,auth.tenantId,orderId);
   const blockReason=current.allowed?null:!current.frozen_at?'not_frozen':complaint?'open_complaint':current.debt_ids.length?'overdue_invoice':!current.payment_allowed?'payment':null;
   const ampel:'rot'|'gelb'|'gruen'|null=current.station==='fertig'?(informed?(current.allowed?'gruen':'gelb'):'rot'):null;
   return {code:'OK' as const,informed,firstInformed,mailThreadIds:[...new Set(rows.flatMap(row=>row.payload.receipt.channel==='mail'&&row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]))],ampel,
-   orderVersion:current.version,handover:current.handover_mode,releaseAllowed:current.allowed,frozenAt:current.frozen_at,invoiceState:current.invoice_state,
+   orderVersion:current.version,handover:current.handover_mode,releaseAllowed:current.allowed,frozenAt:current.frozen_at,invoiceState:current.invoice_state,responseSince:rows[0]?.payload.receipt.recordedAt??null,failedDelivery:failedDelivery?{threadId:failedDelivery.threadId,recordedAt:failedDelivery.recordedAt}:null,
    blockReason,complaintIds:complaint?.complaintIds??[],overdueInvoiceIds:hasAuthorizationArea(auth,'geld')?current.debt_ids:undefined};
  });}catch(error){console.error('[ORDER_NOTIFICATION_READ_FAILED]',error);return {code:'UNAVAILABLE' as const};}
 }

@@ -161,6 +161,13 @@ export const MANUAL_SHIPPING_COPY={
  SHIPMENT_CARRIER_CHANGED:'Der Versanddienst des Pakets weicht von den Einstellungen ab. Öffne das Paket und kläre den Versanddienst vor der Änderung.'
 } as const;
 export const DISPATCH_NOTICE_COPY={collective:(orders:readonly string[])=>'Deine fertigen Aufträge: '+orders.join(', ')};
+export const DELIVERY_FAILURE_COPY={
+ recorded:'Unzustellbarkeit aus gesichertem Mail-Original belegt',
+ forbidden:'Für dieses Mail-Original brauchst Du die Freigabe für Eingang und Mails.',
+ unclear:'Das Original ist gesichert. Ordne die Rückmeldung der ursprünglichen Ausgangsmail zu; ich rate die Zuordnung nicht.',
+ assignment:'Das Original ist einem anderen Vorgang zugeordnet. Öffne es und kläre die Zuordnung zur Ausgangsmail.',
+ unavailable:'Das Original bleibt erhalten. Die Unzustellbarkeit konnte ich noch nicht belegen; öffne es oder versuche den Abgleich erneut.'
+};
 export const DISPATCH_CALL_COPY={
  title:'Ruf den Kunden wegen seiner fertigen Ware an',note:'Sprich mit dem Kunden über diese fertigen Aufträge: ',
  created:'Gemeinsamer Anruf zu fertiger Ware vorbereitet',resultRecorded:'Ergebnis des gemeinsamen Anrufs festgehalten',

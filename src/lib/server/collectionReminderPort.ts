@@ -4,6 +4,7 @@ import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
+import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
 
 export type CollectionReminderRequest={targetId:string;clientRequestId:string;subject:string;body:string;collectionReminder:{stage:'E1'|'E2';handover:'pickup'|'shipping';dueDate:string}};
 export type CollectionReminderMeta={stage:'E1'|'E2';customerId:string;handover:'pickup'|'shipping';dueDate:string;stageKey:string;intent:string;orders:Array<{id:string;number:string;version:number}>};
@@ -59,6 +60,7 @@ export async function readCollectionReminderHistory(auth:AuthorizationSnapshot,c
   const relevant=rows.filter(row=>row.payload.meta.orders.some(member=>orderIds.includes(member.id)));
   if(new Set(relevant.map(row=>row.prepared_id)).size!==relevant.length)throw Error('COLLECTION_HISTORY_PROOF_AMBIGUOUS');
   if(relevant.some(row=>row.sent_at&&(row.proof_ok!==true||row.status!=='sent'||row.sent_intent!==row.payload.meta.intent||!row.body||hash(row.body)!==row.payload.bodySha256)))throw Error('COLLECTION_HISTORY_PROOF_INVALID');
-  return relevant.map(row=>({stage:row.payload.meta.stage,sentAt:row.sent_at?new Date(row.sent_at).toISOString():null,threadId:row.payload.threadId}));
+  const failures=await readCommunicationDeliveryFailures(tx,auth,relevant.map(row=>row.payload.threadId));
+  return relevant.map(row=>({stage:row.payload.meta.stage,sentAt:row.sent_at?new Date(row.sent_at).toISOString():null,threadId:row.payload.threadId,deliveryFailedAt:failures.find(proof=>proof.threadId===row.payload.threadId)?.recordedAt??null}));
  });
 }

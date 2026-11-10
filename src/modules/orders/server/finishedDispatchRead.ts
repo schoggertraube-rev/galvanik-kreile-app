@@ -18,7 +18,7 @@ export type FinishedDispatch={orderId:string;version:number;handover:'pickup'|'s
 export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,orders:readonly OperationalOrder[],policy:DispatchPolicy|null,ports?:{readHasMail?:(customerId:string)=>Promise<boolean>;readResponses:(input:{customerId:string;noticeThreadIds:string[];oldestNoticeAt:string})=>Promise<DispatchResponseCheck>}){
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
  const result:FinishedDispatch[]=[];
- const groups=new Map<string,{customerId:string;handover:'pickup'|'shipping';members:DispatchNoticeMember[];threads:Set<string>}>();
+ const groups=new Map<string,{customerId:string;handover:'pickup'|'shipping';members:DispatchNoticeMember[];threads:Set<string>;deliveryFailedAt:string|null;responseSince:string|null}>();
  for(const order of orders.filter(row=>row.station==='fertig')){
   const notification=await readOrderInformed(auth,order.id);
   if(notification.code!=='OK'||notification.orderVersion!==order.version){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['INFORMED_RECEIPT_UNAVAILABLE'],unavailable:true});continue;}
@@ -27,7 +27,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   result.push({orderId:order.id,version:order.version,handover:notification.handover,color:notification.ampel,releaseAllowed:notification.releaseAllowed,
    informedAt:notification.informed?.recordedAt??null,channel:notification.informed?.channel??null,blockReason:notification.blockReason,
    workingDays,gaps:[...(!notification.handover?['HANDOVER_MISSING']:[]),...(policy===null?['BUSINESS_CALENDAR_SETTINGS_MISSING']:[])]});
-  if(notification.handover){const key=JSON.stringify([order.customerId,notification.handover]);const group=groups.get(key)??{customerId:order.customerId,handover:notification.handover,members:[],threads:new Set<string>()};group.members.push({orderId:order.id,orderNumber:order.orderNumber,noticeAt:notification.firstInformed?.recordedAt??null,readyAt:notification.frozenAt});for(const id of notification.mailThreadIds)group.threads.add(id);groups.set(key,group);}
+  if(notification.handover){const key=JSON.stringify([order.customerId,notification.handover]);const group=groups.get(key)??{customerId:order.customerId,handover:notification.handover,members:[],threads:new Set<string>(),deliveryFailedAt:null,responseSince:null};group.members.push({orderId:order.id,orderNumber:order.orderNumber,noticeAt:notification.firstInformed?.recordedAt??null,readyAt:notification.frozenAt});for(const id of notification.mailThreadIds)group.threads.add(id);if(notification.failedDelivery&&(!group.deliveryFailedAt||notification.failedDelivery.recordedAt<group.deliveryFailedAt))group.deliveryFailedAt=notification.failedDelivery.recordedAt;if(notification.responseSince&&(!group.responseSince||notification.responseSince<group.responseSince))group.responseSince=notification.responseSince;groups.set(key,group);}
  }
  for(const group of groups.values()){
   const failGroup=()=>{for(const row of result.filter(item=>group.members.some(member=>member.orderId===item.orderId))){row.unavailable=true;row.reminder=undefined;row.storage=undefined;row.gaps.push('COLLECTION_PROOF_UNAVAILABLE');}};
@@ -42,8 +42,9 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   if(call){plan.callTaskId=call.taskId;plan.stage='E3';plan.clientKey=call.stageKey;plan.due=call.due;plan.state='DUE';}
   if(call?.result==='reached'&&!call.cohortChanged)plan.state='STOPPED';
   if(noMail&&!group.threads.size){plan.requiresResponseCheck=false;plan.responseState='NONE';}
-  if(plan.state==='DUE'&&ports&&plan.oldestNoticeAt&&group.threads.size){
-   const reaction=await ports.readResponses({customerId:group.customerId,noticeThreadIds:[...group.threads],oldestNoticeAt:plan.oldestNoticeAt});
+  const responseSince=group.responseSince??plan.oldestNoticeAt??group.deliveryFailedAt??history.filter(row=>row.deliveryFailedAt).at(-1)?.deliveryFailedAt;
+  if(plan.state==='DUE'&&ports&&responseSince&&group.threads.size){
+   const reaction=await ports.readResponses({customerId:group.customerId,noticeThreadIds:[...group.threads],oldestNoticeAt:responseSince});
    plan.responseState=reaction.state;plan.requiresResponseCheck=reaction.state!=='NONE';
    if(reaction.state==='REPLIED')plan.state='STOPPED';else if(reaction.state==='UNAVAILABLE')plan.state='RECONCILE_RESPONSE';
   }
