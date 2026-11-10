@@ -52,6 +52,8 @@ async function prepareWithoutMail(label:string){
 
 it('E4 preview renders a real customer/sender PDF without invoice-only settings, writes nothing and rejects missing address or rights',async()=>{
  const {order,request,plan}=await prepareLetter('Lagerfrist-Vorschau');
+ const [originalSettings]=await sql`SELECT tax_id,iban,bic,bank_name,invoice_payment_term_days,logo_url FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ try {
  // TEST configuration: postal letters do not require banking, tax identifiers or an invoice logo.
  await sql`UPDATE public.company_settings SET tax_id=NULL,iban=NULL,bic=NULL,bank_name=NULL,invoice_payment_term_days=NULL,logo_url=NULL WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const before=await sql`SELECT (SELECT count(*) FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG})::int AS events,(SELECT count(*) FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG})::int AS tasks`;
@@ -66,6 +68,9 @@ it('E4 preview renders a real customer/sender PDF without invoice-only settings,
  const denied=await createFixture(['auftraege'],'werkstatt');expect(await withSession(denied,()=>previewStorageLetterAction(request))).toMatchObject({code:'FORBIDDEN'});
  await sql`UPDATE public.customers SET zip_code=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
  expect(await withSession(full,()=>previewStorageLetterAction(request))).toMatchObject({code:'VALIDATION_ERROR'});
+ } finally {
+  await sql`UPDATE public.company_settings SET tax_id=${originalSettings.tax_id},iban=${originalSettings.iban},bic=${originalSettings.bic},bank_name=${originalSettings.bank_name},invoice_payment_term_days=${originalSettings.invoice_payment_term_days},logo_url=${originalSettings.logo_url} WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ }
 });
 it('postal E4 secures one original and one task; only the explicit posting date advances E5, with fresh retry and no mail call',async()=>{
  const {order,request,plan}=await prepareLetter('Lagerfrist-Post');
