@@ -52,10 +52,10 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('resumes real scoped originals 
    await p.retainPendingOriginal(scope,{id:'${ids.document}',itemId:'${ids.item}',kind:'file',file:new File(['TEST immutable bytes'],'TEST.bin',{type:'application/octet-stream'}),captureOrigin:'dokument',deviceId:null});
    const png=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6p0AAAAASUVORK5CYII='),c=>c.charCodeAt(0));
    await p.retainPendingOriginal(scope,{id:'${ids.photo}',itemId:'${ids.item}',kind:'file',file:new File([png],'TEST.png',{type:'image/png'}),captureOrigin:'warenfoto',deviceId:null});
-   await p.retainPendingOriginal(scope,{id:'${ids.legacy}',itemId:'${ids.item}',kind:'file',file:new File(['TEST old'],'TEST-old.bin',{type:'application/octet-stream'})});
+   await new Promise((resolve,reject)=>{const r=indexedDB.open('kreile-pending-originals-v1-'+scope,1);r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,t=db.transaction('originals','readwrite');t.objectStore('originals').put({id:'${ids.legacy}',oldCommand:'TEST unknown',payload:{keep:'TEST unchanged'}});t.oncomplete=()=>{db.close();resolve();};};});
    const [a,b]=await Promise.all([p.syncPendingFiles(scope,window.TESTports),p.syncPendingFiles(scope,window.TESTports)]);
    const rows=await p.readPendingEntries(scope);
-   if(a.secured!==2||a.acknowledged!==1||b.acknowledged!==1||rows.length!==2||rows.some(x=>x.id==='${ids.document}'))throw Error('TEST_SYNC_ACK_OR_PHOTO');
+   if(a.secured!==2||a.acknowledged!==1||b.acknowledged!==1||rows.length!==2||rows.some(x=>x.id==='${ids.document}')||!rows.some(x=>x.id==='${ids.legacy}'&&x.kind==='quarantine'))throw Error('TEST_SYNC_ACK_OR_PHOTO');
    return {secured:a.secured,acknowledged:a.acknowledged,retained:rows.length};
   }`);
   expect(result).toContain('"secured": 2');expect(api).toEqual({prepare:2,finish:2});
