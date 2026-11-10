@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import {appendProductionCompletion} from '@/lib/server/productionSnapshotPort';
+import {appendProductionCompletion,appendFrozenProductionExtraWork} from '@/lib/server/productionSnapshotPort';
 
 const EVENT_TYPE = "ORDER_FROZEN_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
@@ -543,6 +543,7 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
       ) throw new Error("ORDER_FROZEN_LINE_INSERT_MISMATCH");
 
       await appendProductionCompletion(tx,authorization.data.tenantId,order.id,event.event_id,itemRows.map(item=>item.id));
+      await appendFrozenProductionExtraWork(tx,authorization.data.tenantId,order.id,event.event_id);
       const receiptRows = await tx.execute<ReceiptRow>(sql`
         SELECT *
         FROM private.v_order_frozen_receipts_v1

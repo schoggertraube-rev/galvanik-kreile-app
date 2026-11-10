@@ -12,7 +12,7 @@ import {
 import { type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {intakeHandoverDirective} from '@/modules/eingang/public';
 import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY} from '@/ui/situationCatalog';
-import {appendProductionCompletion,appendProductionReversals} from '@/lib/server/productionSnapshotPort';
+import {appendProductionCompletion,appendProductionPricing,appendProductionReversals} from '@/lib/server/productionSnapshotPort';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const VAT = new Set([0, 700, 1900]);
@@ -295,6 +295,7 @@ export async function changeOrderContent(input: ChangeOrderContentInput): Promis
       const payload = JSON.stringify({ requestHash, note, items: normalized.map(({ surface, ...item }, index) => ({ ...item, surfaceRequested: surface, position: index + 1 })) });
       const events = await tx.execute<EventRow>(sql`INSERT INTO public.events (id, tenant_id, order_id, event_type, description, payload, status, user_id, station, client_event_id, event_schema_version, aggregate_version) VALUES (${eventId}, ${auth.data.tenantId}, ${input.orderId}, 'ORDER_CONTENT_CHANGED_V1', 'Auftragsinhalt geändert', ${payload}::jsonb, 'success', ${auth.data.userId}::uuid, ${order.station}, ${input.clientEventId}::uuid, 1, ${updated[0]!.version}) RETURNING id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id`);
       if (events.length !== 1 || !events[0]) throw new Error("ORDER_CONTENT_EVENT_MISSING");
+      await appendProductionPricing(tx,auth.data.tenantId,input.orderId,events[0].id);
       return { code: "OK" as const, receipt: receipt(events[0]), replayed: false };
     });
   } catch {

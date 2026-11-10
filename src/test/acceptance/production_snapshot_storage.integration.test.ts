@@ -8,7 +8,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
-import {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,changeOrderContentAction,getLiveOrderCardAction,freezeOrderAction,reopenFrozenOrderAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction} from '@/app/actions/orders.actions';
+import {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,changeOrderContentAction,getLiveOrderCardAction,freezeOrderAction,reopenFrozenOrderAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction,configureExtraWorkCatalogPositionAction,changeOrderItemExtraWorkAction} from '@/app/actions/orders.actions';
 import {storeItemPhoto} from '../../../e2e/ablauf/photoFixture';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('PRODUCTION_SNAPSHOT_LOOPBACK_REQUIRED');
 
@@ -40,6 +40,38 @@ it('snapshot storage accepts an actual finish source, rejects mutation/foreign s
  await expect(sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,reverses_event_id) SELECT e.id,e.tenant_id,e.order_id,e.item_id,e.created_at,-1,p.quantity,p.unit,9999,p.rework,p.valuation,p.price_source,p.event_id FROM public.events e JOIN private.order_production_snapshots p ON p.event_id=${eventId} WHERE e.id=${reopen.receipt.eventId}`).rejects.toThrow('ORDER_PRODUCTION_REVERSAL_SOURCE_INVALID');
 
  expect(await sql`SELECT sum(direction*net_cents)::int AS net FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{net:0}]);
+});
+
+it('extra work counts only from the real frozen line and reversal keeps that amount after a rate change',async()=>{
+ const customer=await customerFixture('Mehrarbeit-KW'),created=await intakeOrderFixture('Mehrarbeit-KW',customer),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
+ const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('EXTRA_MOVE');
+ const positionId=randomUUID();
+ expect(await withSession(full,()=>configureExtraWorkCatalogPositionAction({positionId,expectedVersion:0,name:'TEST Zusatzarbeit',standardMinutes:60,active:true,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const initialMaster=await withSession(full,()=>getExtraWorkMasterDataAction());if(initialMaster.code!=='OK')throw Error('EXTRA_INITIAL_MASTER');
+ expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:initialMaster.data.currentRate?.version??0,hourlyRateCents:5000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const extra=await withSession(full,()=>changeOrderItemExtraWorkAction({lineId:randomUUID(),orderId,itemId,catalogPositionId:positionId,minutes:60,active:true,expectedLineVersion:0,expectedOrderVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID()}));if(extra.code!=='OK')throw Error('EXTRA_WRITE');
+ await storeItemPhoto(orderId,itemId);
+ const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:extra.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));if(finished.code!=='OK')throw Error('EXTRA_FINISH');
+ expect(await sql`SELECT component,net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{component:'base',net_cents:10000}]);
+ const master=await withSession(full,()=>getExtraWorkMasterDataAction());if(master.code!=='OK')throw Error('EXTRA_MASTER');
+ const rate=await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:master.data.currentRate?.version??0,hourlyRateCents:6000,clientEventId:randomUUID()}));if(rate.code!=='OK')throw Error('EXTRA_RATE');
+ const freezeInput={orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()};
+ const fault='test_extra_capture_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.order_id='${orderId}' AND NEW.component='extra' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON private.order_production_snapshots FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
+ try{
+  expect(await withSession(full,()=>freezeOrderAction(freezeInput))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT version,station FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{version:finished.receipt.aggregateVersion,station:'galvanik'}]);
+  expect(await sql`SELECT id FROM private.order_freezes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${freezeInput.freezeId}::uuid`).toHaveLength(0);
+ }finally{await sql.unsafe(`DROP TRIGGER ${fault} ON private.order_production_snapshots`);await sql.unsafe(`DROP FUNCTION private.${fault}()`);}
+ const frozen=await withSession(full,()=>freezeOrderAction(JSON.parse(JSON.stringify(freezeInput))));if(frozen.code!=='OK')throw Error('EXTRA_FREEZE');
+ expect(await sql`SELECT component,net_cents::int,origin_event_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND component='extra'`).toEqual([{component:'extra',net_cents:6000,origin_event_id:finished.receipt.eventId}]);
+ expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:rate.receipt.aggregateVersion,hourlyRateCents:9000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const request={orderId,expectedVersion:frozen.receipt.aggregateVersion,reason:'TEST eingefrorene Mehrarbeit zurücknehmen',clientEventId:randomUUID()};
+ const reopened=await withSession(full,()=>reopenFrozenOrderAction(request));if(reopened.code!=='OK')throw Error('EXTRA_REOPEN');
+ expect(await withSession(full,()=>reopenFrozenOrderAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT component,net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${reopened.receipt.eventId} ORDER BY component`).toEqual([{component:'base',net_cents:10000},{component:'extra',net_cents:6000}]);
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{station:'galvanik'}}});
 });
 it('the actual full-freeze correction reverses a prior item completion once without pricing it again',async()=>{
  const customer=await customerFixture('Gesamt-Ruecknahme'),created=await intakeOrderFixture('Gesamt-Ruecknahme',customer),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
@@ -74,4 +106,10 @@ it('completion without a price remains possible; a missing snapshot receipt roll
  expect(await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT quantity::text,net_cents,valuation FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{quantity:'3.000',net_cents:null,valuation:'captured'}]);
  const card=await withSession(full,()=>getLiveOrderCardAction({orderId})); if(card.code!=='OK')throw Error(JSON.stringify(card)); expect(card).toMatchObject({code:'OK',data:{card:{items:[expect.objectContaining({id:itemId,finished:true})]}}});
+ const priceInput={orderId,expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID(),note:'TEST Preis nach Fertig erfasst',items:[{id:itemId,catalogServiceId:null,name:'TEST Preis offen',quantity:3,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:2000,vatRateBasisPoints:1900 as const}]};
+ const priced=await withSession(full,()=>changeOrderContentAction(priceInput));if(priced.code!=='OK')throw Error('LATE_PRICE');
+ expect(await withSession(full,()=>changeOrderContentAction(JSON.parse(JSON.stringify(priceInput))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT event_id,net_cents::int,origin_event_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND component='pricing'`).toEqual([{event_id:priced.receipt.eventId,net_cents:6000,origin_event_id:finished.receipt.eventId}]);
+ const reopened=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:priced.receipt.aggregateVersion,clientEventId:randomUUID(),finished:false}));if(reopened.code!=='OK')throw Error('LATE_PRICE_REOPEN');
+ expect(await sql`SELECT component,net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${reopened.receipt.eventId} ORDER BY component`).toEqual([{component:'base',net_cents:null},{component:'pricing',net_cents:6000}]);
 });

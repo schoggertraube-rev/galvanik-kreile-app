@@ -59,7 +59,8 @@
       "src/test/h18_order_admin_actions.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#changeOrderContentAction": [
-      "src/test/h18_order_admin_actions.integration.test.ts"
+      "src/test/h18_order_admin_actions.integration.test.ts",
+      "src/test/acceptance/production_snapshot_storage.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#changeOrderItemExtraWorkAction": [
       "src/test/h18_order_admin_actions.integration.test.ts"
