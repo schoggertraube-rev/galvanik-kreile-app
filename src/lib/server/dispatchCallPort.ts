@@ -93,8 +93,10 @@ export async function recordDispatchCallResult(tx:PrivilegedTenantTransaction,au
  if(input.callResult==='reached')for(const orderId of [...created.payload.meta.orderIds].sort()){
   await appendOrderInformed(tx,auth,{orderId,clientEventId:randomUUID(),channel:'telefon',intent:'dispatch-call:'+record.id+':'+(record.version+1)});
  }
- await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at)
- VALUES(${randomUUID()},${auth.tenantId},'ORDER_COLLECTION_CALL_RESULT_V1',${DISPATCH_CALL_COPY.resultRecorded},'success',${auth.userId}::uuid,${randomUUID()}::uuid,${created.correlation_id}::uuid,1,${JSON.stringify({taskId:record.id,result:input.callResult??'noLongerNeeded',version:record.version+1,note:input.note?.trim()||null,meta:created.payload.meta,...(goodsOutProofs?{goodsOutProofs}:{})})}::jsonb,statement_timestamp())`);
+ const resultId=randomUUID();
+ const saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at)
+ VALUES(${resultId},${auth.tenantId},'ORDER_COLLECTION_CALL_RESULT_V1',${DISPATCH_CALL_COPY.resultRecorded},'success',${auth.userId}::uuid,${randomUUID()}::uuid,${created.correlation_id}::uuid,1,${JSON.stringify({taskId:record.id,result:input.callResult??'noLongerNeeded',version:record.version+1,note:input.note?.trim()||null,meta:created.payload.meta,...(goodsOutProofs?{goodsOutProofs}:{})})}::jsonb,statement_timestamp()) RETURNING id`);
+ if(saved.length!==1||saved[0].id!==resultId)throw Error('DISPATCH_CALL_RESULT_NOT_SAVED');
 }
 
 export async function readDispatchCallRequirement(auth:AuthorizationSnapshot,taskId:string){
@@ -162,8 +164,10 @@ export async function createDispatchCall(auth:AuthorizationSnapshot,input:Reques
   if(orders.length!==plan.orderIds.length||orders.some(row=>row.customer_id!==input.customerId||row.handover_mode!==input.handover||[row.station,row.current_station,row.current_station_id,row.status].some(state=>state!=='fertig')||versions.find(order=>order.id===row.id)?.version!==row.version))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
   const meta:CallMeta={customerId:input.customerId,handover:input.handover,due:input.dueDate,stageKey,orderIds:plan.orderIds,orderNumbers:plan.orderNumbers,freezes:orders.map(row=>({orderId:row.id,freezeId:row.freeze_id}))};
   const taskId=await createTask(tx,{orderId:record?.bezug_id??anchorOrderId,clientKey:stageKey,title:DISPATCH_CALL_COPY.title,note:DISPATCH_CALL_COPY.note+plan.orderNumbers.join(', '),...(record?{taskId:record.id,version:record.version}:{})});
-  await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at)
-   VALUES(${randomUUID()},${auth.tenantId},${existing?'ORDER_COLLECTION_CALL_UPDATED_V1':'ORDER_COLLECTION_CALL_CREATED_V1'},${DISPATCH_CALL_COPY.created},'success',${auth.userId}::uuid,${existing?randomUUID():stageKey}::uuid,${existing?.correlation_id??randomUUID()}::uuid,1,${JSON.stringify({meta,taskId})}::jsonb,statement_timestamp())`);
+  const eventId=randomUUID();
+  const saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at)
+   VALUES(${eventId},${auth.tenantId},${existing?'ORDER_COLLECTION_CALL_UPDATED_V1':'ORDER_COLLECTION_CALL_CREATED_V1'},${DISPATCH_CALL_COPY.created},'success',${auth.userId}::uuid,${existing?randomUUID():stageKey}::uuid,${existing?.correlation_id??randomUUID()}::uuid,1,${JSON.stringify({meta,taskId})}::jsonb,statement_timestamp()) RETURNING id`);
+  if(saved.length!==1||saved[0].id!==eventId)throw Error('DISPATCH_CALL_SOURCE_NOT_SAVED');
   return {code:'OK' as const,taskId,replayed:false};
  });}catch(error){console.error('[DISPATCH_CALL_CREATE_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};}
 }

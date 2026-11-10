@@ -6,7 +6,11 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
-import {getLiveOrderCardAction,markOrderInformedByPhoneAction} from '@/app/actions/orders.actions';
+import {getLiveOrderCardAction,markOrderInformedByPhoneAction,getOrdersDb} from '@/app/actions/orders.actions';
+import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
+import {updateCustomerAction} from '@/app/actions/customers.actions';
+import {emptyDispatchPolicy} from '@/modules/fundament/public';
+import {createDispatchCallTaskAction,getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingang.actions';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 const DATABASE_URL=process.env.DATABASE_URL,EXPECTED_DATABASE_URL=process.env.H18_EXPECTED_DATABASE_URL;
 if(!DATABASE_URL||DATABASE_URL!==EXPECTED_DATABASE_URL||new URL(DATABASE_URL).hostname!=='127.0.0.1')throw Error('ORDER_NOTIFICATION_LOOPBACK_REQUIRED');
@@ -125,4 +129,41 @@ it('a damaged newest TEST notice is unavailable instead of silently falling back
  VALUES(${id},${KREILE_TENANT_SLUG},${order.orderId},'ORDER_CUSTOMER_INFORMED_V1','TEST damaged receipt',${sql.json(payload)}::jsonb,'success',${full.actorId}::uuid,${key}::uuid,${key}::uuid,1,statement_timestamp())`;
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{code:'UNAVAILABLE'}}});
  expect(await withSession(full,()=>markOrderInformedByPhoneAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:key}))).toMatchObject({code:'UNAVAILABLE'});
+});
+
+it.each(['created','result'] as const)('an omitted call %s receipt rolls back its whole task effect and supports a fresh recovery',async(fault)=>{
+ const order=await readyInvoiceOrder('Anruf-Quittung-'+fault);
+ expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('CALL_FAULT_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:emptyDispatchPolicy()}))).toMatchObject({code:'OK'});
+ async function plan(){const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('CALL_FAULT_QUEUE');return queue.data.find(row=>row.id===order.orderId)!.finishedDispatch!.reminder!;}
+ const initial=await plan(),request={customerId:order.customerId,handover:'pickup' as const,dueDate:initial.due!,clientKey:initial.clientKey!};
+ let taskId:string|null=null,version=0;
+ if(fault==='result'){const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('CALL_FAULT_PREPARE');taskId=created.taskId;const read=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));if(read.code!=='OK'||!read.task)throw Error('CALL_FAULT_TASK');version=read.task.version;}
+ const completion={taskId:taskId!,version,note:'TEST Kunde erreicht',callResult:'reached' as const},name='test_call_receipt_'+randomUUID().replaceAll('-','');
+ const eventType=fault==='created'?'ORDER_COLLECTION_CALL_CREATED_V1':'ORDER_COLLECTION_CALL_RESULT_V1';
+ await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id = '${KREILE_TENANT_SLUG}' AND NEW.event_type = '${eventType}' AND NEW.payload->'meta'->>'customerId' = '${order.customerId}' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ try{
+  await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
+  const result=fault==='created'?await withSession(full,()=>createDispatchCallTaskAction(request)):await withSession(full,()=>completeIntakeTaskAction(completion));expect(result).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type=${eventType} AND payload->'meta'->>'customerId'=${order.customerId}`).toHaveLength(0);
+  if(fault==='created')expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${request.clientKey}::uuid`).toHaveLength(0);
+  else{
+   expect(await sql`SELECT status,version,erledigt_am FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${taskId}::uuid`).toEqual([{status:'offen',version,erledigt_am:null}]);
+   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toHaveLength(0);
+  }
+  expect(await plan()).toMatchObject({state:fault==='created'?'DUE':'CALL_PENDING'});
+ }finally{
+  await sql.unsafe(`DROP TRIGGER IF EXISTS ${name} ON public.events`);
+  await sql.unsafe(`DROP FUNCTION private.${name}()`);
+ }
+ if(fault==='created'){
+  const recovered=await withSession(full,()=>createDispatchCallTaskAction(JSON.parse(JSON.stringify(request))));if(recovered.code!=='OK')throw Error('CALL_CREATED_RECOVERY');
+  expect(await withSession(full,()=>createDispatchCallTaskAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',taskId:recovered.taskId,replayed:true});
+  expect(await plan()).toMatchObject({state:'CALL_PENDING',callTaskId:recovered.taskId});
+ }else{
+  expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(completion))))).toMatchObject({code:'OK',replayed:false});
+  expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(completion))))).toMatchObject({code:'OK',replayed:true});
+  expect(await plan()).toMatchObject({state:'STOPPED',callTaskId:taskId});
+ }
 });
