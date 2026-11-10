@@ -95,4 +95,10 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  expect(limited.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'REPLIED',requiresResponseCheck:false});
  expect(limited.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'NOT_CHECKED',requiresResponseCheck:true});
  expect(lookups).toBe(beforeLookup);expect(requests).toHaveLength(3);
+ // The recorded reaction is idempotent and remains conditional on its actual immutable receipt.
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1'`).toEqual([{n:1}]);
+ await sql`UPDATE public.events SET payload=jsonb_set(payload,'{receipt,actorId}',to_jsonb(${randomUUID()}::text)) WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1'`;
+ const corrupted=await withSession(operational,()=>getOrdersDb());if(!corrupted.ok)throw Error('COHORT_CORRUPTED_RECEIPT_READ');
+ expect(corrupted.data.find(row=>row.id===first.orderId)?.finishedDispatch).toMatchObject({unavailable:true,gaps:expect.arrayContaining(['COLLECTION_PROOF_UNAVAILABLE'])});
+ expect(lookups).toBe(beforeLookup);
 });

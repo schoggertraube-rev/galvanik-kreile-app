@@ -72,6 +72,36 @@ it('E4 preview renders a real customer/sender PDF without invoice-only settings,
   await sql`UPDATE public.company_settings SET tax_id=${originalSettings.tax_id},iban=${originalSettings.iban},bic=${originalSettings.bic},bank_name=${originalSettings.bank_name},invoice_payment_term_days=${originalSettings.invoice_payment_term_days},logo_url=${originalSettings.logo_url} WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  }
 });
+it('an original customer reply ends the exact open postal task without inventing post dispatch and replays without Outlook',async()=>{
+ const {order,request,plan}=await prepareLetter('Antwort beendet Brief');
+ const [originalCustomer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+ expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
+ const prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('REPLY_POST_PREPARE:'+prepared.code);
+ expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:originalCustomer.email}))).toMatchObject({code:'OK'});
+ const [notice]=await sql`SELECT thread.source,customer.email FROM public.events event JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->'receipt'->>'threadId' JOIN public.customers customer ON customer.tenant_id=event.tenant_id AND customer.id=${order.customerId} WHERE event.tenant_id=${KREILE_TENANT_SLUG} AND event.order_id=${order.orderId} AND event.event_type='ORDER_CUSTOMER_INFORMED_V1' LIMIT 1`;
+ const requestId=notice.source.replace('MS_GRAPH_OUT:',''),reference='<TEST-reply-post@example.invalid>';
+ let graphCalls=0;
+ vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>{
+  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-reply-post-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'){
+   graphCalls++;
+   if(url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:[{id:'TEST-post-original-sent',internetMessageId:reference,from:{emailAddress:{address:'TEST-mailbox@example.invalid'}},toRecipients:[{emailAddress:{address:notice.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:requestId}]}]});
+   if(url.pathname.endsWith('/attachments'))return Response.json({value:[]});
+   if(url.pathname.endsWith('/$value'))return new Response('Message-ID: <TEST-post-reply@example.invalid>\r\nFrom: '+notice.email+'\r\nIn-Reply-To: '+reference+'\r\nSubject: TEST Antwort\r\n\r\nTEST ich melde mich.');
+   return Response.json({id:'TEST-post-reply',internetMessageId:'<TEST-post-reply@example.invalid>',subject:'TEST Antwort',from:{emailAddress:{name:'TEST Kunde',address:notice.email}},receivedDateTime:new Date(Date.now()+100).toISOString(),bodyPreview:'TEST Antwort',body:{contentType:'text',content:'TEST ich melde mich.'},hasAttachments:false});
+  }
+  return nativeFetch(input,init);
+ });
+ const {attachOutlookMailAction}=await import('@/app/actions/communications.actions');
+ expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:order.customerId,graphMessageId:'TEST-post-reply'}))).toMatchObject({code:'OK'});
+ expect((await plan())?.reminder).toMatchObject({responseState:'REPLIED'});
+ const task=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));
+ expect(task).toMatchObject({code:'OK',task:{status:'erledigt'},postalLetter:{state:'ENDED_BY_REPLY',document:{sha256:prepared.document.sha256}}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'documentId'=${prepared.document.id}`).toEqual([{n:0}]);
+ const before=graphCalls;vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='graph.microsoft.com'){graphCalls++;throw Error('TEST_OUTLOOK_OFFLINE');}return nativeFetch(input,init);});
+ expect((await plan())?.reminder).toMatchObject({responseState:'REPLIED'});expect(graphCalls).toBe(before);
+});
 it('postal E4 secures one original and one task; only the explicit posting date advances E5, with fresh retry and no mail call',async()=>{
  const {order,request,plan}=await prepareLetter('Lagerfrist-Post');
  expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
