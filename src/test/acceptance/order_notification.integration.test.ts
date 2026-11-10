@@ -168,6 +168,22 @@ it.each(['created','result'] as const)('an omitted call %s receipt rolls back it
  }
 });
 
+it('K15 K7 informed ware remains red when another historical invoice is overdue',async()=>{
+ const order=await readyInvoiceOrder('TEST K15 Liefersperre');
+ expect(await withSession(full,()=>markOrderInformedByPhoneAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ // Explicit isolated historical fixture, as in H4; the new ware, its payment,
+ // phone evidence and both reads use the actual product commands and ports.
+ const {intakeOrderFixture}=await import('../../../e2e/ablauf/orderFixture');
+ const old=await intakeOrderFixture('TEST K15 Altbeleg',order.customerId),invoiceId=randomUUID();
+ await sql`INSERT INTO public.invoices(id,tenant_id,order_id,customer_id,invoice_number,amount_total,status,due_date,gross_amount_cents,payment_contract_version,payment_mode,payment_status,payment_open_amount_cents,payment_paid_amount_cents,payment_currency,payment_version)
+ VALUES(${invoiceId}::uuid,${KREILE_TENANT_SLUG},${old.receipt.orderId},${order.customerId},'R-2025-0001',119.00,'issued',(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1,11900,1,'rechnung','offen',11900,0,'EUR',0)`;
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{ampel:'rot',blockReason:'overdue_invoice',informed:{channel:'telefon'}}}});
+ const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('K15_DEBT_QUEUE');
+ expect(queue.data.find(row=>row.id===order.orderId)?.finishedDispatch).toMatchObject({color:'rot',releaseAllowed:false,blockReason:'overdue_invoice'});
+});
+
 it('K7 informed complained ware is red while ordinary unpaid pickup remains yellow',async()=>{
  const order=await readyInvoiceOrder('TEST K7 Ampel');
  expect(await withSession(full,()=>markOrderInformedByPhoneAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});

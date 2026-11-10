@@ -682,6 +682,29 @@ it('PL12:06 a missed pickup uses the existing mail sender and final task, while 
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_COLLECTION_CALL_RESULT_V1') AND payload->'meta'->'orderIds' @> ${sql.json([order.orderId])}`).toHaveLength(0);
 });
 
+it.each([false,true])('K15 K3 call completion excludes A with a paused or expired appointment (expired=%s)',async(expired)=>{
+ const {order,second,callTaskId}=await prepareLetter('TEST K15 Termin-Grenze',false,true);if(!second)throw Error('K15_SECOND');
+ const input={orderId:order.orderId,expectedVersion:order.version,previousEventId:null,date:new Date(Date.now()+2*86400000).toISOString().slice(0,10),channel:'telefon' as const,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>setOrderPickupAppointmentAction(input))).toMatchObject({code:'OK'});
+ const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('K15_TERM_QUEUE');
+ const appointment=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.pickupAppointment;if(!appointment?.resumeOn)throw Error('K15_RESUME');
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  vi.setSystemTime(new Date((expired?appointment.resumeOn:input.date)+'T12:00:00Z'));
+  const fresh=await withSession(full,()=>getOrdersDb());if(!fresh.ok)throw Error('K15_TERM_RELOAD');
+  const a=fresh.data.find(row=>row.id===order.orderId)?.finishedDispatch;
+  expect(a?.reminder).toMatchObject({state:expired?'APPOINTMENT_EXPIRED':'PAUSED'});
+  if(!expired)expect(a?.collectionSend).toBeUndefined();else expect(a?.storage?.letter).toMatchObject({state:'DUE',appointmentEventId:appointment.eventId});
+  const task=await withSession(full,()=>getIntakeTaskAction({taskId:callTaskId}));if(task.code!=='OK'||!task.task)throw Error('K15_CALL_TASK');
+  const result={taskId:callTaskId,version:task.task.version,note:'TEST nur B nicht erreicht',callResult:'notReached' as const};
+  expect(await withSession(full,()=>completeIntakeTaskAction(result))).toMatchObject({code:'OK'});
+  expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(result))))).toMatchObject({code:'OK',replayed:true});
+  const after=await withSession(full,()=>getOrdersDb());if(!after.ok)throw Error('K15_CALL_RELOAD');
+  expect(after.data.find(row=>row.id===second.orderId)?.finishedDispatch?.storage).toMatchObject({state:'DUE'});
+  expect(after.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder?.state).toBe(expired?'APPOINTMENT_EXPIRED':'PAUSED');
+ }finally{vi.useRealTimers();}
+});
+
 it.each(['call','post','final'] as const)('K3 appointment for A keeps B in its existing %s path without inventing dispatch',async(kind)=>{
  const {order,second,request,callTaskId}=await prepareLetter('TEST K3 Teil-Termin '+kind,kind!=='call',true);if(!second)throw Error('K3_SECOND');
  let original:Extract<Awaited<ReturnType<typeof prepareStoragePostalLetterAction>>,{code:'OK'}>|undefined;
