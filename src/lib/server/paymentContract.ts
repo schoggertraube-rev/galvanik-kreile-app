@@ -411,7 +411,7 @@ export function mapOrderPaymentStateRow(
       || (eventSchemaVersion !== 1 && eventSchemaVersion !== 2 && eventSchemaVersion !== 3 && eventSchemaVersion !== 4)
       || (isRework && eventSchemaVersion !== 4)
       || (!isRework && eventSchemaVersion === 4)
-      || goodsOutOrderVersion !== orderVersion
+      || goodsOutOrderVersion < 1 || goodsOutOrderVersion > orderVersion
       || typeof row.goods_out_actor_id !== "string"
       || !UUID_PATTERN.test(row.goods_out_actor_id)
       || typeof row.goods_out_occurred_at !== "string"

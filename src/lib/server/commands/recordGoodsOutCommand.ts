@@ -502,14 +502,20 @@ function receiptMatchesIntent(
         && receiptAgreement.type === input.agreement.type);
 }
 
-function orderMatchesReceipt(order: LockedOrder, receipt: GoodsOutReceipt, tenantId: string): boolean {
-  return order.tenant_id === tenantId
+async function orderMatchesReceipt(tx:PrivilegedTenantTransaction,order: LockedOrder, receipt: GoodsOutReceipt, tenantId: string): Promise<boolean> {
+  const currentVersion=toNonNegativeInteger(order.version);
+  const physicalMatches=order.tenant_id === tenantId
     && order.id === receipt.orderId
-    && toNonNegativeInteger(order.version) === receipt.orderVersion
     && order.station === TARGET_STATION
     && order.current_station === TARGET_STATION
     && order.current_station_id === TARGET_STATION
     && order.status === TARGET_STATION;
+  if(!physicalMatches||currentVersion===null||currentVersion<receipt.orderVersion)return false;
+  if(currentVersion===receipt.orderVersion)return true;
+  // The existing canonical port proves every historical callback-only advance.
+  // Never accept a changed version just because the order still looks released.
+  const verified=await tx.execute<{order_id:string}>(sql`SELECT order_id FROM private.v_goods_out_ui_state_v1 WHERE tenant_id=${tenantId} AND order_id=${order.id} AND order_version=${currentVersion} AND goods_out_order_version=${receipt.orderVersion} AND goods_out_event_id=${receipt.eventId} AND integrity_ok=true LIMIT 2`);
+  return verified.length===1&&verified[0]?.order_id===order.id;
 }
 
 function paymentAuthorization(authorization: AuthorizationSnapshot): AuthorizationSnapshot {
@@ -686,7 +692,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
         const orders = await readOrder(tx, tenantId, receipt.orderId, false);
-        if (orders.length !== 1 || !orders[0] || !orderMatchesReceipt(orders[0], receipt, tenantId)) {
+        if (orders.length !== 1 || !orders[0] || !await orderMatchesReceipt(tx,orders[0], receipt, tenantId)) {
           throw new Error("GOODS_OUT_REPLAY_READBACK_INVALID");
         }
         return { code: "OK", receipt, replayed: true };
@@ -1016,7 +1022,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
       const receipt = await readReleaseAudit(tx, tenantId, parseEvent(persistedEvents[0], tenantId));
       if (
         !receiptMatchesIntent(receipt, input, actorId)
-        || !orderMatchesReceipt(persistedOrders[0], receipt, tenantId)
+        || !await orderMatchesReceipt(tx,persistedOrders[0], receipt, tenantId)
       ) throw new Error("GOODS_OUT_READBACK_INVALID");
 
       return { code: "OK", receipt, replayed: false };

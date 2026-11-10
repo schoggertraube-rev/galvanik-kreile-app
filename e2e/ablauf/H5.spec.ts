@@ -56,6 +56,37 @@ async function selectedPickupMail(customerId:string){
  return {id:mail.id,version:selected.capture.version};
 }
 
+it.each([true,false])('H5 historical callback version advances are readable only with their complete task lineage: %s',async(validLineage)=>{
+ const order=await readyInvoiceOrder('H5-Altbeleg','shipping'),mail=await selectedPickupMail(order.customerId);
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const release={orderId:order.orderId,mode:'versand' as const,expectedVersion:order.version,clientEventId:randomUUID()};
+ const released=await withSession(full,()=>recordGoodsOutAction(release));if(released.code!=='OK')throw Error('H5_HISTORY_RELEASE:'+released.code);
+ const {changeOrderPickupNoticeAction}=await import('@/app/actions/orders.actions');
+ const request={command:'handover_from_mail' as const,sourceItemId:mail.id,sourceVersion:mail.version,orderId:order.orderId,expectedVersion:released.receipt.orderVersion,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>changeOrderPickupNoticeAction(request))).toMatchObject({code:'OK',receipt:{outcome:'call_customer'}});
+ // Synthetic INITIAL history exactly as the former callback writer persisted it.
+ // No product repair rewrites these rows; subsequent calls are actual read/retry ports.
+ const oldVersion=released.receipt.orderVersion+1;
+ await sql.begin(async tx=>{
+  await tx`UPDATE public.orders SET version=${oldVersion} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+  await tx`UPDATE public.events SET aggregate_version=${oldVersion},payload=jsonb_set(payload,'{receipt,orderVersion}',to_jsonb(${oldVersion}::integer)) WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientEventId}::uuid`;
+  if(!validLineage)await tx`UPDATE public.events SET payload=jsonb_set(payload,'{receipt,taskId}',to_jsonb(${randomUUID()}::text)) WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientEventId}::uuid`;
+ });
+ const before=await sql`SELECT version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ const eventsBefore=await sql`SELECT id::text,payload,aggregate_version FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} ORDER BY id`;
+ const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const read=await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}));
+ if(validLineage){
+  expect(read).toMatchObject({code:'OK',data:{orderVersion:oldVersion,physicalStatus:'abgeholt',goodsOut:{eventId:released.receipt.eventId,orderVersion:released.receipt.orderVersion}}});
+  expect(await withSession(full,()=>recordGoodsOutAction(structuredClone(release)))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:released.receipt.eventId}});
+ }else{
+  expect(read.code).not.toBe('OK');
+  expect((await withSession(full,()=>recordGoodsOutAction(structuredClone(release)))).code).not.toBe('OK');
+ }
+ expect(await sql`SELECT version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(before);
+ expect(await sql`SELECT id::text,payload,aggregate_version FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} ORDER BY id`).toEqual(eventsBefore);
+});
+
 it('H5 a late pickup request preserves the physical release and creates one readable callback with its original',async()=>{
  const order=await readyInvoiceOrder('H5-ausgegeben','shipping'),mail=await selectedPickupMail(order.customerId);
  const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');

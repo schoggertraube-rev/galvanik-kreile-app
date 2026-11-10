@@ -58,6 +58,7 @@
       "private.v_order_task_assignment_receipts_v1"
     ],
     "src/lib/server/commands/recordGoodsOutCommand.ts": [
+      "private.v_goods_out_ui_state_v1",
       "private.v_payment_summary_v1",
       "public.v_complaint_rework_context_v1"
     ],
