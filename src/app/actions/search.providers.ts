@@ -1,6 +1,7 @@
 import "server-only";
 
-import {hasAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import type { ImmutableInvoiceSummary, ReadInvoiceSummariesResult } from "@/lib/server/invoiceRead";
 import type { ListOpenQuotesResult, QuoteReadback } from "@/modules/quotes/public";
 import type { SearchHit, SearchMatchField, SearchProvider } from "@/modules/suche/public";

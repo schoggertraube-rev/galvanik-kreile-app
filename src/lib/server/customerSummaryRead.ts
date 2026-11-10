@@ -1,7 +1,8 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import {hasAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import { overdueInvoiceCondition } from "@/lib/server/paymentContract";
 import {evaluateOrderPriority} from '@/lib/priority';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
@@ -21,7 +22,6 @@ const AGREEMENT_TYPES = new Set<string>(CUSTOMER_AGREEMENT_TYPES);
 
 /** One batched projection for the list and card; hidden money/mail reasons never leave this port. */
 export async function readCustomerListSignals(auth:AuthorizationSnapshot,customerIds:readonly string[]):Promise<Map<string,CustomerListSignals>> {
-  const {hasAuthorizationArea}=await import('@/lib/server/authorization');
   if(!hasAuthorizationArea(auth,'kunden'))throw Error('CUSTOMER_SIGNALS_FORBIDDEN');
   if(!customerIds.length)return new Map();
   if(customerIds.some(id=>typeof id!=='string'||!id||id.length>128))throw Error('CUSTOMER_SIGNALS_IDS_INVALID');
