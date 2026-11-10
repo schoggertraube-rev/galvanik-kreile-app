@@ -37,4 +37,3 @@ it('the real weekly action reconstructs explicitly synthetic legacy history once
  expect(await withSession(reader,()=>getProductionWeekAction(JSON.parse(JSON.stringify({onDate:berlinDate}))))).toEqual(old);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_PRODUCTION_HISTORY_REBUILT_V1'`).toHaveLength(1);
 });
-
