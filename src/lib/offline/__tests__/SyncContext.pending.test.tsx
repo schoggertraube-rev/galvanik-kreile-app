@@ -3,7 +3,9 @@ import {cleanup,render,screen,waitFor} from '@testing-library/react';
 import {SyncProvider,useSync} from '../SyncContext';
 const state=vi.hoisted(()=>({scope:'a'.repeat(64),status:'authenticated'}));
 const ports=vi.hoisted(()=>({read:vi.fn(),retain:vi.fn()}));
-vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:state.scope,status:state.status})}));
+vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:state.scope,status:state.status,hasArea:()=>false})}));
+vi.mock('@/app/actions/eingang.actions',()=>({prepareIntakeFileAction:vi.fn(),finishIntakeFileAction:vi.fn()}));
+vi.mock('@/modules/eingang/public',()=>({uploadIntakeOriginal:vi.fn()}));
 vi.mock('../pendingStore',()=>({readPendingEntries:ports.read,retainQuarantinedPending:ports.retain}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 function Count(){const {outboxItems}=useSync();return <output data-testid="pending">{outboxItems.length}</output>;}

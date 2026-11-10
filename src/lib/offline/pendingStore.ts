@@ -1,5 +1,5 @@
 // Only unacknowledged uploads, as specified by eingang.geraete. Server remains authoritative.
-export type PendingOriginal = { id: string; itemId: string; kind: "file"; file: File; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
+export type PendingOriginal = { id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
   | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[] };
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingEntry=PendingOriginal|PendingQuarantine;

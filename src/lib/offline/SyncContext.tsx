@@ -4,6 +4,9 @@ import React, { createContext, useContext, useEffect, useCallback, useSyncExtern
 import type { OfflineOutboxItem } from "./OfflineOutbox";
 import {readPendingEntries,retainQuarantinedPending} from "./pendingStore";
 import {usePermissions} from "@/lib/auth/PermissionsContext";
+import {syncPendingFiles} from './syncPendingFiles';
+import {prepareIntakeFileAction,finishIntakeFileAction} from '@/app/actions/eingang.actions';
+import {uploadIntakeOriginal} from '@/modules/eingang/public';
 import { createId } from "@paralleldrive/cuid2";
 
 interface SyncContextValue {
@@ -70,7 +73,7 @@ export function useSync() {
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const {offlineScope,status}=usePermissions();
+  const {offlineScope,status,hasArea}=usePermissions();
   const scope=status==="authenticated"?offlineScope:null;
   const isOnline = useSyncExternalStore(subscribeToNetworkStatus, getOnlineSnapshot, () => true);
   const outboxItems = useSyncExternalStore(subscribeToOutbox, ()=>getOutboxSnapshot(scope), () => EMPTY_OUTBOX);
@@ -79,8 +82,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     activeScope=scope;
     const refresh=()=>{void refreshOutboxSnapshot(scope);};
     refresh();window.addEventListener('kreile-pending-changed',refresh);
+    if(scope&&isOnline&&hasArea('eingang'))void syncPendingFiles(scope,{prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope}).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     return ()=>{window.removeEventListener('kreile-pending-changed',refresh);if(activeScope===scope)activeScope=null;};
-  }, [scope,isOnline]);
+  }, [scope,isOnline,hasArea]);
 
   const syncNow = useCallback(async () => {
     // CONTAINMENT (OFFLINE-48H-001): No real server sync transport exists yet.

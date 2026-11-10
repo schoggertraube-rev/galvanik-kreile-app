@@ -1,4 +1,5 @@
 "use server";
+import {offlinePartition} from "@/lib/server/offlinePartition";
 import {PACKAGE_ASSIGN_COPY} from "@/ui/situationCatalog";
 import {quoteOperationContext,canReadQuoteForGoods} from "@/lib/server/quoteAuthorization";
 
@@ -188,8 +189,18 @@ export async function saveIntakeNoteAction(input: unknown) {
   return saveIntakeNote(input, readCustomerProfile);
 }
 export async function discardIntakeCaptureAction(input:unknown){return discardIntakeCapture(input);}
-export async function prepareIntakeFileAction(input: unknown) { return prepareIntakeFile(input); }
-export async function finishIntakeFileAction(fileId: string) { return finishIntakeFile(fileId); }
+async function matchesPendingActor(scope:string|undefined){
+ if(scope===undefined)return true;
+ const auth=await resolveAuthorization();return auth.ok&&offlinePartition(auth.data)===scope;
+}
+export async function prepareIntakeFileAction(input: unknown,pendingScope?:string) {
+ if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
+ return prepareIntakeFile(input);
+}
+export async function finishIntakeFileAction(fileId: string,pendingScope?:string) {
+ if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
+ return finishIntakeFile(fileId);
+}
 export async function getIntakePendingScopeAction() { return readIntakePendingScope(); }
 export async function getIntakeFileChangesAction(since: string, after: string | null) { return readIntakeFileChanges(since, after); }
 export async function saveIntakeDeviceRequestAction(input: unknown) {
