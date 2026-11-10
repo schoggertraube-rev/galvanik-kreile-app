@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
-import {readyInvoiceOrder} from './orderFixture';
+import {readyInvoiceOrder,intakeOrderFixture} from './orderFixture';
 import {storeOrderPhoto,storeIntakeGoodsPhoto,storeItemPhoto} from './photoFixture';
 
 it('RA-09 partial rework copies only the complained quantity and leaves the delivered source unchanged',async()=>{
@@ -134,7 +134,7 @@ it('RA-02 W7/W8 counter complaint before handover requires an actual photo, pers
  expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${outKey}::uuid`).toEqual([{user_id:full.actorId}]);
 });
 
-it('H7 rework segment: decision, return, galvanik, finish and release close the complaint without an invoice',async()=>{
+it('H7 RA-08 rework segment: decision, return, galvanik, finish and release close the complaint without an invoice',async()=>{
  const order=await readyInvoiceOrder('H7-Na');
  const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
  expect(await withSession(full,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:order.version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
@@ -176,6 +176,16 @@ it('H7 rework segment: decision, return, galvanik, finish and release close the 
  expect(await withSession(full,()=>getProductionWeekAction())).toMatchObject({code:'OK',data:{netCents:beforeReworkWeek.data.netCents}});
  const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
  expect((await withSession(full,()=>issueInvoiceAction({orderId:rework.receipt.orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()}))).code).toBe('VALIDATION_ERROR');
+ // RA-08: an isolated synthetic historical debt remains real debt, but is not
+ // a reason to retain the customer's free rework.
+ const oldOrder=await intakeOrderFixture('RA08 historische Forderung',order.customerId),debt=randomUUID();
+ await sql`INSERT INTO public.invoices(id,tenant_id,order_id,customer_id,invoice_number,amount_total,status,due_date,gross_amount_cents,payment_contract_version,payment_mode,payment_status,payment_open_amount_cents,payment_paid_amount_cents,payment_currency,payment_version)
+ VALUES(${debt}::uuid,${KREILE_TENANT_SLUG},${oldOrder.receipt.orderId},${order.customerId},'R-2024-RA08',119,'issued',(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1,11900,1,'rechnung','offen',11900,0,'EUR',0)`;
+ const {markOrderInformedByPhoneAction}=await import('@/app/actions/orders.actions');
+ expect(await withSession(full,()=>markOrderInformedByPhoneAction({orderId:rework.receipt.orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:rework.receipt.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{releaseAllowed:true,ampel:'gruen',overdueInvoiceIds:[debt]}}});
+ const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:rework.receipt.orderId}))).toMatchObject({code:'OK',data:{customerDeliveryBlock:{blocked:false,invoiceIds:[debt]}}});
  const out=await withSession(full,()=>recordGoodsOutAction({orderId:rework.receipt.orderId,mode:'abholung',expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()}));
  expect(out.code).toBe('OK');if(out.code!=='OK')throw Error('H7_REWORK_OUT:'+out.code);
  expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[{stand:'abgeschlossen'}]});
@@ -183,4 +193,5 @@ it('H7 rework segment: decision, return, galvanik, finish and release close the 
  expect(await withSession(full,()=>recordGoodsOutAction({orderId:out.receipt.orderId,mode:out.receipt.mode,expectedVersion:out.receipt.expectedVersion,clientEventId:out.receipt.clientEventId}))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${out.receipt.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${rework.receipt.orderId}`).toEqual([{n:0}]);
+ expect(await sql`SELECT payment_open_amount_cents::int AS open FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${debt}::uuid`).toEqual([{open:11900}]);
 });

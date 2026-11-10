@@ -732,7 +732,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
 
       // This decision uses invoice facts even when the actor cannot see money.
       // Do not use the visibility-filtered customer-hints projection as a gate.
-      const overdueInvoices = await tx.execute<{ id: string; invoice_number: string }>(sql`
+      const overdueInvoices = isRework ? [] : await tx.execute<{ id: string; invoice_number: string }>(sql`
         SELECT invoice.id::text, invoice.invoice_number
         FROM public.invoices invoice
         WHERE invoice.tenant_id = ${tenantId}
