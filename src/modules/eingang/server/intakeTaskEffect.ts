@@ -27,9 +27,10 @@ export async function recordIntakeTaskEffect(tx:PrivilegedTenantTransaction,auth
    geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp(),version=version+1
    WHERE tenant_id=${auth.tenantId} AND id=${targetItem}::uuid AND version=${source.version} RETURNING id`);
   if(changed.length!==1)throw Error('TASK_SOURCE_WRITE_CONFLICT');
-  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher)
+  const history=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher)
    VALUES(${auth.tenantId},${targetItem}::uuid,'anliegen',${input.key}::uuid,${auth.userId},${JSON.stringify(source)}::jsonb,
-    ${JSON.stringify({action:'aufgabe.'+input.action,taskId:input.taskId,anliegenOffen:concerns,einsatz:usage})}::jsonb)`);
+    ${JSON.stringify({action:'aufgabe.'+input.action,taskId:input.taskId,anliegenOffen:concerns,einsatz:usage})}::jsonb) RETURNING id`);
+  if(history.length!==1)throw Error('TASK_SOURCE_HISTORY_MISSING');
   return;
  }
  const text=input.action==='erledigt'?(input.note??'Aufgabe „'+input.title+'“ erledigt'):'Aufgabe „'+input.title+'“ '+input.action+(input.note?'\n'+input.note:'');
@@ -38,6 +39,7 @@ export async function recordIntakeTaskEffect(tx:PrivilegedTenantTransaction,auth
  if(failure)throw Error('TASK_HISTORY_'+failure.code);
  if(input.reference.type==='eingang')await tx.execute(sql`UPDATE public.intake_item SET verweis_item=${input.reference.id}::uuid WHERE tenant_id=${auth.tenantId} AND id=${input.key}::uuid`);
  targetItem=input.key;
- await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
-  VALUES(${auth.tenantId},${targetItem}::uuid,'einsatz',${input.key}::uuid,${auth.userId},${JSON.stringify({action:'aufgabe.'+input.action,taskId:input.taskId,bezugTyp:input.reference.type,bezugId:input.reference.id})}::jsonb)`);
+ const history=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+  VALUES(${auth.tenantId},${targetItem}::uuid,'einsatz',${input.key}::uuid,${auth.userId},${JSON.stringify({action:'aufgabe.'+input.action,taskId:input.taskId,bezugTyp:input.reference.type,bezugId:input.reference.id})}::jsonb) RETURNING id`);
+ if(history.length!==1)throw Error('TASK_HISTORY_MISSING');
 }

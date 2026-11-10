@@ -124,6 +124,54 @@ it('discard preserves the old original and creates a new generation; physical ha
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'documentId'=${replacement.document.id}`).toEqual([{n:0}]);
  expect(await withSession(full,()=>getIntakeTaskAction({taskId:replacement.taskId}))).toMatchObject({code:'OK',postalLetter:{state:'VOIDED'}});
 });
+it('competing postal completion and discard preserve exactly one outcome, actor and original across fresh retries',async()=>{
+ const {request,plan}=await prepareWithoutMail('Post-Abschluss-Rennen');
+ const prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('POSTAL_RACE_PREPARE');
+ const read=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));if(read.code!=='OK'||!read.task)throw Error('POSTAL_RACE_TASK');
+ const base={taskId:prepared.taskId,version:read.task.version,note:'TEST konkurrierender Abschluss'};
+ const posted={...base,postalResult:{kind:'posted' as const,postedOn:berlinCalendarDay(),documentSha256:prepared.document.sha256}};
+ const discarded={...base,postalResult:{kind:'discarded' as const,reason:'TEST Brief wird verworfen',documentSha256:prepared.document.sha256}};
+ const denied=await createFixture(['auftraege'],'werkstatt');
+ expect(await withSession(denied,()=>completeIntakeTaskAction(structuredClone(posted)))).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT status,version FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.taskId}::uuid`).toEqual([{status:'offen',version:base.version}]);
+ const results=await Promise.all([withSession(full,()=>completeIntakeTaskAction(structuredClone(posted))),withSession(full,()=>completeIntakeTaskAction(structuredClone(discarded)))]);
+ expect(results.map(result=>result.code).sort()).toEqual(['CONFLICT','OK']);
+ const postedWon=results[0].code==='OK',winner=postedWon?posted:discarded,loser=postedWon?discarded:posted;
+ const outcomes=await sql`SELECT event_type,user_id::text,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN ('ORDER_COLLECTION_REMINDER_SENT_V1','ORDER_STORAGE_LETTER_VOIDED_V1') AND payload->>'documentId'=${prepared.document.id}`;
+ expect(outcomes).toHaveLength(1);expect(outcomes[0]).toMatchObject({event_type:postedWon?'ORDER_COLLECTION_REMINDER_SENT_V1':'ORDER_STORAGE_LETTER_VOIDED_V1',user_id:full.actorId,payload:{taskId:prepared.taskId,taskVersion:base.version+1,documentSha256:prepared.document.sha256}});
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}))).toMatchObject({code:'OK',task:{status:'erledigt',version:base.version+1},postalLetter:{state:postedWon?'POSTED':'VOIDED',document:{sha256:prepared.document.sha256}}});
+ expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(winner))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(loser))))).toMatchObject({code:'CONFLICT'});
+ const other=await createFixture(['auftraege','mails']);
+ expect(await withSession(other,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(winner))))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN ('ORDER_COLLECTION_REMINDER_SENT_V1','ORDER_STORAGE_LETTER_VOIDED_V1') AND payload->>'documentId'=${prepared.document.id}`).toEqual([{n:1}]);
+ const state=(await plan())!.finishedDispatch!.storage!.letter!;
+ expect(state).toMatchObject(postedWon?{state:'SENT',postalDocumentId:prepared.document.id,finalStage:{state:'DUE'}}:{state:'DUE',sentAt:null,finalStage:{due:null}});
+});
+it('a rejected postal task history rolls back the dispatch receipt and completion, then the same request can recover',async()=>{
+ const {request,plan}=await prepareWithoutMail('Post-Historie-Rollback');
+ const prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('POSTAL_ROLLBACK_PREPARE');
+ const read=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));if(read.code!=='OK'||!read.task)throw Error('POSTAL_ROLLBACK_TASK');
+ const input={taskId:prepared.taskId,version:read.task.version,note:'TEST Versand mit Historie',postalResult:{kind:'posted' as const,postedOn:berlinCalendarDay(),documentSha256:prepared.document.sha256}};
+ const name='test_postal_'+randomUUID().replaceAll('-','');
+ // Real DB failure, restricted to this synthetic task; neither action nor persistence is mocked.
+ await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id = '${KREILE_TENANT_SLUG}' AND NEW.nachher->>'taskId' = '${prepared.taskId}' AND NEW.nachher->>'action' = 'aufgabe.erledigt' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ try{
+  await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON public.intake_event FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
+  expect(await withSession(full,()=>completeIntakeTaskAction(structuredClone(input)))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT status,version,erledigt_am FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.taskId}::uuid`).toEqual([{status:'offen',version:input.version,erledigt_am:null}]);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'documentId'=${prepared.document.id}`).toHaveLength(0);
+  expect((await plan())!.finishedDispatch!.storage!.letter).toMatchObject({state:'WAIT_FOR_POST',sentAt:null,finalStage:{due:null}});
+  expect(await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}))).toMatchObject({code:'OK',postalLetter:{state:'WAIT_FOR_POST',document:{sha256:prepared.document.sha256}}});
+ }finally{
+  await sql.unsafe(`DROP TRIGGER IF EXISTS ${name} ON public.intake_event`);
+  await sql.unsafe(`DROP FUNCTION private.${name}()`);
+ }
+ expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:false});
+ expect((await plan())!.finishedDispatch!.storage!.letter).toMatchObject({state:'SENT',postalDocumentId:prepared.document.id,finalStage:{state:'DUE'}});
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'documentId'=${prepared.document.id}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::int AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND nachher->>'taskId'=${prepared.taskId} AND nachher->>'action'='aufgabe.erledigt'`).toEqual([{n:1}]);
+});
 it('a matching ordinary task cannot be adopted as a qualified E5 task',async()=>{
  const {order,request,plan}=await prepareWithoutMail('Post-E5-Zweckbindung');
  const prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('PURPOSE_POSTAL');
