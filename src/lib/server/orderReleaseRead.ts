@@ -46,19 +46,20 @@ export async function markOrderInformedByPhone(auth:AuthorizationSnapshot,input:
 export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:string){
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const rows=await tx.execute<{payload:{receipt:InformedReceipt};user_id:string;created_at:string}>(sql`SELECT event.payload,event.user_id::text,event.created_at::text
-   FROM public.events event JOIN private.v_order_freeze_state_v1 freeze_state ON freeze_state.tenant_id=event.tenant_id AND freeze_state.order_id=event.order_id
-   WHERE event.tenant_id=${auth.tenantId} AND event.order_id=${orderId} AND event.event_type='ORDER_CUSTOMER_INFORMED_V1' AND event.status='success'
-    AND freeze_state.active AND freeze_state.integrity_ok AND event.payload->'receipt'->>'freezeId'=freeze_state.freeze_id::text
-    AND event.payload->'receipt'->>'actorId'=event.user_id::text AND event.payload->'receipt'->>'orderId'=event.order_id
-    AND event.payload->'receipt'->>'eventId'=event.id::text
+  const rows=await tx.execute<{payload:{receipt:InformedReceipt};proof_ok:boolean}>(sql`SELECT event.payload,
+    (event.payload->'receipt'->>'actorId'=event.user_id::text AND event.payload->'receipt'->>'orderId'=event.order_id
+    AND event.payload->'receipt'->>'eventId'=event.id::text AND event.event_schema_version=1
     AND (event.payload->'receipt'->>'channel'='telefon' AND event.payload->'receipt'->'threadId'='null'::jsonb OR
      event.payload->'receipt'->>'channel'='mail' AND EXISTS(SELECT 1 FROM public.communication_threads thread
       JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email'
       JOIN public.events sent ON sent.tenant_id=thread.tenant_id AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.payload->>'threadId'=thread.id::text
       WHERE thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->'receipt'->>'threadId' AND thread.status='sent'
-       AND sent.payload->'document'->>'kind'='INVOICE' AND sent.payload->'document'->>'orderId'=event.order_id AND sent.payload->>'intent'=event.payload->>'intent'))
+       AND sent.payload->'document'->>'kind'='INVOICE' AND sent.payload->'document'->>'orderId'=event.order_id AND sent.payload->>'intent'=event.payload->>'intent'))) AS proof_ok
+   FROM public.events event JOIN private.v_order_freeze_state_v1 freeze_state ON freeze_state.tenant_id=event.tenant_id AND freeze_state.order_id=event.order_id
+   WHERE event.tenant_id=${auth.tenantId} AND event.order_id=${orderId} AND event.event_type='ORDER_CUSTOMER_INFORMED_V1' AND event.status='success'
+    AND freeze_state.active AND freeze_state.integrity_ok AND event.payload->'receipt'->>'freezeId'=freeze_state.freeze_id::text
    ORDER BY event.created_at DESC,event.id DESC LIMIT 1`);
+  if(rows[0]&&(rows[0].proof_ok!==true||!Number.isFinite(Date.parse(rows[0].payload.receipt.recordedAt))))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
   const order=await tx.execute<{station:string;version:number;handover_mode:'pickup'|'shipping'|null;allowed:boolean;invoice_state:string;payment_allowed:boolean|null;frozen_at:string|null;debt_ids:string[]}>(sql`SELECT orders.station,orders.version,orders.handover_mode,private.order_release_allowed_v1(orders.tenant_id,orders.id) AS allowed,
    state.invoice_state,state.payment_goods_out_allowed AS payment_allowed,freeze_state.frozen_at::text,
    ARRAY(SELECT invoice.id::text FROM public.invoices invoice WHERE invoice.tenant_id=orders.tenant_id AND invoice.customer_id=orders.customer_id AND ${overdueInvoiceCondition()} ORDER BY invoice.id) AS debt_ids

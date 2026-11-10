@@ -95,3 +95,15 @@ it('Fertig existing operational consumer reads one notification/release projecti
  expect(await withSession(full,()=>saveShippingSettingsAction({...input,dispatchPolicy:{...policy,holidays:['2026-02-30']}}))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await withSession(full,()=>saveShippingSettingsAction({...input,dispatchPolicy:{...policy,reminderDays:5}}))).toMatchObject({code:'CONFLICT'});
 });
+
+it('a damaged newest TEST notice is unavailable instead of silently falling back to an older green receipt',async()=>{
+ const order=await readyInvoiceOrder('S1-Beleg-Defekt');
+ const saved=await withSession(full,()=>markOrderInformedByPhoneAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()}));
+ if(saved.code!=='OK')throw Error('NOTICE_CORRUPTION_SETUP');
+ const id=randomUUID(),key=randomUUID();
+ // Isolated synthetic damaged history; never an alternate product writer or changed original event.
+ const payload={intent:'TEST-corrupt-notice',receipt:{...saved.receipt,eventId:id,actorId:randomUUID()}};
+ await sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
+ VALUES(${id},${KREILE_TENANT_SLUG},${order.orderId},'ORDER_CUSTOMER_INFORMED_V1','TEST damaged receipt',${sql.json(payload)}::jsonb,'success',${full.actorId}::uuid,${key}::uuid,${key}::uuid,1,statement_timestamp())`;
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{code:'UNAVAILABLE'}}});
+});

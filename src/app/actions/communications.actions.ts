@@ -74,6 +74,7 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Extr
 export async function sendCustomerMailAction(input: TargetInput & {
  clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};
 }){
+ try{
  const authorizationResult=await authorization();
  if(!authorizationResult.ok)return {code:'UNAUTHENTICATED' as const,message:authorizationResult.message};
  const auth=authorizationResult.data;
@@ -116,6 +117,10 @@ export async function sendCustomerMailAction(input: TargetInput & {
   return rows.length===1;
  }:undefined});
  return sent.code==='OK'&&document?.kind==='QUOTE'?confirmQuoteDelivery(input,document,sent):sent;
+ }catch(error){
+  console.error('[CUSTOMER_MAIL_ACTION_FAILED]',{errorName:error instanceof Error?error.name:'UnknownError',reason:error instanceof Error&&/^[A-Z][A-Z0-9_:-]{1,150}$/.test(error.message)?error.message:'DATABASE_OR_INTERNAL_FAILURE'});
+  return {code:'UNAVAILABLE' as const,message:'Der Versand konnte nicht sicher bestätigt werden. Behalte Deine Eingaben und sende nicht erneut, bevor der Ausgang geklärt ist.'};
+ }
 }
 
 import {importIntakeGraphMail} from '@/modules/eingang/server-public';
