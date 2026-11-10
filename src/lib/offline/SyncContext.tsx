@@ -75,6 +75,7 @@ export function useSync() {
 export function SyncProvider({ children }: { children: React.ReactNode }) {
   const {offlineScope,status,hasArea}=usePermissions();
   const scope=status==="authenticated"?offlineScope:null;
+  const canSyncOriginals=hasArea("eingang");
   const isOnline = useSyncExternalStore(subscribeToNetworkStatus, getOnlineSnapshot, () => true);
   const outboxItems = useSyncExternalStore(subscribeToOutbox, ()=>getOutboxSnapshot(scope), () => EMPTY_OUTBOX);
 
@@ -82,9 +83,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     activeScope=scope;
     const refresh=()=>{void refreshOutboxSnapshot(scope);};
     refresh();window.addEventListener('kreile-pending-changed',refresh);
-    if(scope&&isOnline&&hasArea('eingang'))void syncPendingFiles(scope,{prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope}).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
+    if(scope&&isOnline&&canSyncOriginals)void syncPendingFiles(scope,{prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope}).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     return ()=>{window.removeEventListener('kreile-pending-changed',refresh);if(activeScope===scope)activeScope=null;};
-  }, [scope,isOnline,hasArea]);
+  }, [scope,isOnline,canSyncOriginals]);
 
   const syncNow = useCallback(async () => {
     // CONTAINMENT (OFFLINE-48H-001): No real server sync transport exists yet.
