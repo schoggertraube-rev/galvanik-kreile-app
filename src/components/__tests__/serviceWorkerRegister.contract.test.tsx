@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { render, waitFor } from "@testing-library/react";
@@ -31,6 +32,26 @@ describe("ServiceWorkerRegister contract", () => {
       expect(register).toHaveBeenCalledTimes(1);
     });
     expect(register).toHaveBeenCalledWith("/sw.js");
+  });
+
+  it("reuses the attempt across StrictMode and a root remount", async () => {
+    const register = vi.fn().mockResolvedValue({scope:"/"});
+    Object.defineProperty(navigator,"serviceWorker",{configurable:true,value:{register}});
+    const first=render(<StrictMode><ServiceWorkerRegister /></StrictMode>);
+    await waitFor(()=>expect(register).toHaveBeenCalledTimes(1));
+    first.unmount();
+    render(<ServiceWorkerRegister />);
+    await waitFor(()=>expect(register).toHaveBeenCalledTimes(1));
+  });
+
+  it("allows a later mount to recover a rejected registration", async () => {
+    const register=vi.fn().mockRejectedValueOnce(new Error("TEST offline install")).mockResolvedValue({scope:"/"});
+    vi.spyOn(console,"error").mockImplementation(()=>{});
+    Object.defineProperty(navigator,"serviceWorker",{configurable:true,value:{register}});
+    const first=render(<ServiceWorkerRegister />);
+    await waitFor(()=>expect(console.error).toHaveBeenCalled());first.unmount();
+    render(<ServiceWorkerRegister />);
+    await waitFor(()=>expect(register).toHaveBeenCalledTimes(2));
   });
 
   it("keeps exactly one active root registrar and no shell registrar", () => {
