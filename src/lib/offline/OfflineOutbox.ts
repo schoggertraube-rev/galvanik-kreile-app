@@ -63,18 +63,14 @@ export const offlineOutbox = {
   },
 
   async getAllItems(): Promise<OfflineOutboxItem[]> {
-    try {
-      const db = await getDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readonly");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result as OfflineOutboxItem[]);
-        req.onerror = () => reject(req.error);
-      });
-    } catch {
-      return [];
-    }
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const req = tx.objectStore(STORE_NAME).getAll();
+      tx.oncomplete = () => { db.close(); resolve(req.result as OfflineOutboxItem[]); };
+      tx.onabort = () => { db.close(); reject(tx.error ?? new Error("OFFLINE_READ_ABORTED")); };
+      tx.onerror = () => { /* onabort owns the final outcome */ };
+    });
   },
 
   async removeItem(id: string): Promise<void> {

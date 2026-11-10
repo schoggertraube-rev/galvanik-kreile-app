@@ -22,3 +22,8 @@ it.each(['legacy','outbox'] as const)('%s does not acknowledge a rolled-back off
  tx.error=null;const retry=write();await new Promise<void>(resolve=>queueMicrotask(()=>queueMicrotask(resolve)));
  tx.oncomplete?.();await retry;expect(db.close).toHaveBeenCalledTimes(2);
 });
+
+it('does not misreport unavailable pending storage as an empty outbox',async()=>{
+ vi.stubGlobal('indexedDB',{open:()=>{const opened={error:new Error('TEST storage unavailable'),onerror:null as null|(()=>void)};queueMicrotask(()=>opened.onerror?.());return opened;}});
+ await expect(offlineOutbox.getAllItems()).rejects.toThrow('TEST storage unavailable');
+});
