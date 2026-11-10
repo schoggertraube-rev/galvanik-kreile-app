@@ -42,7 +42,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   const failGroup=()=>{for(const row of result.filter(item=>group.members.some(member=>member.orderId===item.orderId))){row.unavailable=true;row.reminder=undefined;row.storage=undefined;row.gaps.push('COLLECTION_PROOF_UNAVAILABLE');}};
   let history:Awaited<ReturnType<typeof readCollectionReminderHistory>>;
   try{history=await readCollectionReminderHistory(auth,group.customerId,group.handover,group.members.map(member=>member.orderId));}catch(error){console.error('[DISPATCH_HISTORY_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');failGroup();continue;}
-  for(const row of history)if(row.sentAt)group.threads.add(row.threadId);
+  for(const row of history)if(row.sentAt&&row.threadId)group.threads.add(row.threadId);
   let noMail=false;
   try{if(ports?.readHasMail)noMail=!await ports.readHasMail(group.customerId);}catch(error){console.error('[DISPATCH_CUSTOMER_MAIL_READ_FAILED]',error instanceof Error?error.name:'UnknownError');failGroup();continue;}
   const initial=planInitialDispatchReminder({tenantId:auth.tenantId,...group,today:berlinCalendarDay(),noMail},policy,history);
@@ -74,7 +74,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   const fresh=pendingMembers.filter(member=>!assigned.has(member.orderId));
   if(fresh.length)cohorts.push({members:fresh,call:activeCalls.find(call=>call.result===null&&call.freezes.some(proof=>fresh.some(member=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId)))});
   for(const {members,call} of cohorts){
-  const activeHistory=history.filter(row=>members.some(member=>row.orderIds.includes(member.orderId)&&(!row.sentAt||Date.parse(row.sentAt)>=Date.parse(member.noticeAt??member.readyAt??''))));
+  const activeHistory=history.filter(row=>members.some(member=>row.orderIds.includes(member.orderId)&&(row.postalDocumentId?row.storageOrigin?.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId):!row.sentAt||Date.parse(row.sentAt)>=Date.parse(member.noticeAt??member.readyAt??''))));
   const plan=planInitialDispatchReminder({tenantId:auth.tenantId,...group,members,deliveryFailedAt:members.flatMap(member=>member.deliveryFailedAt?[member.deliveryFailedAt]:[]).sort()[0]??null,today:berlinCalendarDay(),noMail},policy,activeHistory);
   if(call){plan.callTaskId=call.taskId;plan.stage='E3';plan.clientKey=call.stageKey;plan.due=call.due;plan.state='DUE';}
   if(reaction){plan.responseState=reaction.state==='REPLIED'?'NONE':reaction.state;plan.requiresResponseCheck=plan.responseState!=='NONE';if(reaction.state==='UNAVAILABLE')plan.state='RECONCILE_RESPONSE';}
@@ -86,18 +86,20 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
     const unsent:FinishedDispatch[]=[];let storageUnavailable=false;
     for(const member of members){
      const row=result.find(item=>item.orderId===member.orderId);if(!row)continue;
-     row.storage=storageEligibility(member.noticeAt,call.recordedAt,berlinCalendarDay(),policy);
-     const letters=activeHistory.filter(item=>item.stage==='E4'&&item.orderIds.includes(member.orderId)&&item.storageOrigin?.callTaskId===call.taskId&&item.storageOrigin.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId));
+     row.storage=storageEligibility(member.noticeAt,call.recordedAt,berlinCalendarDay(),policy,noMail);
+     const letters=activeHistory.filter(item=>item.stage==='E4'&&!item.voidId&&item.orderIds.includes(member.orderId)&&item.storageOrigin?.callTaskId===call.taskId&&item.storageOrigin.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId));
      const letter=letters.at(-1);
      if(letter){
-      row.storage.letter={state:letter.sentAt&&!letter.deliveryFailedAt?'SENT':'RECONCILE_MAIL',clientKey:letter.stageKey,orderIds:letter.orderIds,due:letter.dueDate,sentAt:letter.sentAt,threadId:letter.threadId,callTaskId:call.taskId,freezes:letter.storageOrigin!.freezes,finalStage:finalStorageStage(letter.deliveryFailedAt?null:letter.sentAt,berlinCalendarDay(),policy)};
+      row.storage.letter={state:letter.sentAt&&!letter.deliveryFailedAt?'SENT':letter.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:letter.stageKey,orderIds:letter.orderIds,due:letter.dueDate,sentAt:letter.sentAt,threadId:letter.threadId,...(letter.postalDocumentId?{postalDocumentId:letter.postalDocumentId,postalTaskId:letter.postalTaskId}:{}),callTaskId:call.taskId,freezes:letter.storageOrigin!.freezes,finalStage:finalStorageStage(letter.deliveryFailedAt?null:letter.sentAt,berlinCalendarDay(),policy)};
       try{const final=await readStorageFinalTaskState(auth,letter.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}
       catch(error){console.error('[STORAGE_FINAL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();storageUnavailable=true;break;}
      }
      else if(row.storage.state==='DUE')unsent.push(row);
     }
     if(!storageUnavailable&&unsent.length){
-     const orderIds=unsent.map(row=>row.orderId).sort(),clientKey=storageLetterKey(auth.tenantId,group.customerId,group.handover,call.stageKey,orderIds);
+     const orderIds=unsent.map(row=>row.orderId).sort();
+     const voidId=activeHistory.filter(row=>row.voidId&&row.storageOrigin?.callTaskId===call.taskId&&row.orderIds.some(id=>orderIds.includes(id))).at(-1)?.voidId;
+     const clientKey=storageLetterKey(auth.tenantId,group.customerId,group.handover,call.stageKey+(voidId?':void:'+voidId:''),orderIds);
      const due=unsent.map(row=>row.storage!.eligibleOn!).sort().at(-1)!;
      const freezes=call.freezes.filter(proof=>orderIds.includes(proof.orderId));
      for(const row of unsent)row.storage!.letter={state:'DUE',clientKey,orderIds,due,sentAt:null,threadId:null,callTaskId:call.taskId,freezes,finalStage:finalStorageStage(null,berlinCalendarDay(),policy)};

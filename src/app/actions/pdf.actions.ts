@@ -11,6 +11,8 @@ import {storageLetterRequestValid,readStorageLetterPreview} from '@/lib/server/s
 import {createStorageLetterPdfDocument} from '@/lib/pdf/StorageLetterDocument';
 import {createHash} from 'node:crypto';
 import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
+import {readStoragePostalReceipt,prepareStoragePostalLetter} from '@/lib/server/storagePostalPort';
+import {customerCountryLabel} from '@/modules/customers/public';
 
 export async function previewStorageLetterAction(input:unknown){
  const {resolveAuthorization,hasAuthorizationArea}=await import('@/lib/server/authorization');
@@ -26,6 +28,24 @@ export async function previewStorageLetterAction(input:unknown){
   if(!pdf.length)throw Error('STORAGE_LETTER_PDF_EMPTY');
   return {code:'OK' as const,data:{...preview.data,pdfBase64:pdf.toString('base64'),pdfSha256:createHash('sha256').update(pdf).digest('hex'),filename:'Lagerfrist-'+input.clientKey+'.pdf',sent:false as const}};
  }catch(error){console.error('[STORAGE_LETTER_PREVIEW_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
+}
+export async function prepareStoragePostalLetterAction(input:unknown){
+ const {resolveAuthorization,hasAuthorizationArea}=await import('@/lib/server/authorization');
+ const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:auth.message};
+ if(!hasAuthorizationArea(auth.data,'auftraege')||!hasAuthorizationArea(auth.data,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
+ if(!storageLetterRequestValid(input))return {code:'VALIDATION_ERROR' as const,message:COLLECTION_REMINDER_COPY.invalid};
+ const prior=await readStoragePostalReceipt(auth.data,input);if(prior.code!=='NOT_FOUND')return prior;
+ const preview=await previewStorageLetterAction(input);if(preview.code!=='OK')return preview;
+ if(preview.data.channel!=='postal')return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.postalMailPresent};
+ try{
+  const [{createOrderHandoverTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+  const data=preview.data,pdf=Buffer.from(await renderToBuffer(createStorageLetterPdfDocument(data.snapshot,false)));
+  const meta:import('@/lib/server/collectionReminderPort').CollectionReminderMeta={stage:'E4',customerId:input.customerId,handover:input.handover,dueDate:data.snapshot.date,stageKey:data.clientKey,intent:createHash('sha256').update(JSON.stringify([data.clientKey,data.snapshot.body])).digest('hex'),orders:data.orders,storageOrigin:{callTaskId:data.callTaskId,freezes:data.freezes}};
+  return prepareStoragePostalLetter(auth.data,input,meta,data.snapshot,pdf,data.settingsUpdatedAt,{customerCurrent:async tx=>{
+   const customer=await readCustomerProfile(tx,auth.data.tenantId,input.customerId,true),r=data.snapshot.recipient;
+   return !!customer&&!customer.email?.trim()&&customer.name===r.name&&[customer.street,customer.houseNumber].filter(Boolean).join(' ')===r.street&&customer.zipCode===r.zip&&customer.city===r.city&&customerCountryLabel(customer.country)===r.country;
+  },createTask:(tx,value)=>createOrderHandoverTask(tx,auth.data,value,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)})});
+ }catch(error){console.error('[STORAGE_POSTAL_LETTER_PREPARE_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
 }
 
 type OrderLabelRow = {

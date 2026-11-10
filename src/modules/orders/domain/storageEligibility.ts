@@ -2,7 +2,7 @@ import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
 import type {DispatchPolicy} from '@/modules/fundament/public';
 import {createHash} from 'node:crypto';
 
-export type StorageEligibility={state:'NEEDS_SETTING'|'WAIT'|'DUE';eligibleOn:string|null;missingSettings:string[];callResultAt:string;letter?:{state:'DUE'|'SENT'|'RECONCILE_MAIL';clientKey:string;orderIds:string[];due:string;sentAt:string|null;threadId:string|null;callTaskId:string;freezes:Array<{orderId:string;freezeId:string}>;finalStage:{state:'NEEDS_SETTING'|'WAIT'|'DUE'|'TASK_PENDING'|'COMPLETED';due:string|null;recipientId:string|null;missingSettings:string[];taskId?:string}}};
+export type StorageEligibility={state:'NEEDS_SETTING'|'WAIT'|'DUE';eligibleOn:string|null;missingSettings:string[];callResultAt:string;letter?:{state:'DUE'|'SENT'|'RECONCILE_MAIL'|'WAIT_FOR_POST';clientKey:string;orderIds:string[];due:string;sentAt:string|null;threadId:string|null;postalDocumentId?:string;postalTaskId?:string;callTaskId:string;freezes:Array<{orderId:string;freezeId:string}>;finalStage:{state:'NEEDS_SETTING'|'WAIT'|'DUE'|'TASK_PENDING'|'COMPLETED';due:string|null;recipientId:string|null;missingSettings:string[];taskId?:string}}};
 /** A final interval starts only at a qualified dispatch receipt, never draft creation or a call. */
 export function finalStorageStage(sentAt:string|null,today:string,policy:DispatchPolicy|null){
  const missingSettings=[...(policy?.finalStageAfterLetterDays==null?['finalStageAfterLetterDays']:[]),...(!policy?.finalStageRecipientId?['finalStageRecipientId']:[])];
@@ -18,7 +18,13 @@ export function storageLetterKey(tenantId:string,customerId:string,handover:stri
  return hex.slice(0,8)+'-'+hex.slice(8,12)+'-5'+hex.slice(13,16)+'-8'+hex.slice(17,20)+'-'+hex.slice(20,32);
 }
 /** PL06:00: each order keeps its own complete notice-to-E4 interval. No storage fee/deadline is inferred. */
-export function storageEligibility(noticeAt:string|null,callResultAt:string,today:string,policy:DispatchPolicy|null):StorageEligibility{
+export function storageEligibility(noticeAt:string|null,callResultAt:string,today:string,policy:DispatchPolicy|null,noMail=false):StorageEligibility{
+ if(noMail){
+  if(policy?.storageAfterDays==null)return {state:'NEEDS_SETTING',eligibleOn:null,missingSettings:['storageAfterDays'],callResultAt};
+  if(!Number.isFinite(Date.parse(callResultAt)))throw Error('STORAGE_CALL_TIME_INVALID');
+  const eligibleOn=plusWorkingDays(berlinCalendarDay(new Date(callResultAt)),policy.storageAfterDays,policy.holidays);if(!eligibleOn)throw Error('STORAGE_ELIGIBILITY_CALENDAR_INVALID');
+  return {state:eligibleOn>today?'WAIT':'DUE',eligibleOn,missingSettings:[],callResultAt};
+ }
  const fields=['reminderDays','secondReminderDays','callAfterDays','storageAfterDays'] as const;
  const missing=fields.filter(key=>policy?.[key]===null||policy?.[key]===undefined);
  const base:StorageEligibility={state:'NEEDS_SETTING',eligibleOn:null,missingSettings:missing,callResultAt};

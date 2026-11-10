@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "ef759eb7271d572ab344f5c64a604335805587d8fe76f15dfa98d63ffae4ec72",
+  "inventorySha256": "325576d295888735cc263ead6de0b37ef42631256c9a694b981073f137a77855",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -37,7 +37,8 @@
     ],
     "src/app/actions/goodsOut.actions.ts#recordGoodsOutAction": [
       "src/test/h18_workshop_actions.integration.test.ts",
-      "src/test/acceptance/dispatch_call.integration.test.ts"
+      "src/test/acceptance/dispatch_call.integration.test.ts",
+      "src/test/acceptance/storage_letter.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#convertQuoteToOrderAction": [
       "src/test/h18_quote_actions.integration.test.ts"
@@ -185,7 +186,8 @@
     ],
     "src/app/actions/eingang.actions.ts#completeIntakeTaskAction": [
       "src/test/h18_customer_actions.integration.test.ts",
-      "src/test/acceptance/dispatch_call.integration.test.ts"
+      "src/test/acceptance/dispatch_call.integration.test.ts",
+      "src/test/acceptance/storage_letter.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#assignIntakeCustomerAction": [
       "src/test/h18_customer_actions.integration.test.ts"
@@ -313,6 +315,9 @@
       "src/test/acceptance/dispatch_call.integration.test.ts"
     ],
     "src/app/actions/pdf.actions.ts#previewStorageLetterAction": [
+      "src/test/acceptance/storage_letter.integration.test.ts"
+    ],
+    "src/app/actions/pdf.actions.ts#prepareStoragePostalLetterAction": [
       "src/test/acceptance/storage_letter.integration.test.ts"
     ]
   },

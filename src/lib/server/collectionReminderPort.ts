@@ -5,9 +5,11 @@ import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
+import {readPostalCollectionHistory} from './storagePostalPort';
 
 export type CollectionReminderRequest={targetId:string;clientRequestId:string;subject:string;body:string;collectionReminder:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string}};
 export type CollectionReminderMeta={stage:'E1'|'E2'|'E4';customerId:string;handover:'pickup'|'shipping';dueDate:string;stageKey:string;intent:string;orders:Array<{id:string;number:string;version:number}>;storageOrigin?:{callTaskId:string;freezes:Array<{orderId:string;freezeId:string}>}};
+export type CollectionReminderHistoryEntry={stage:'E1'|'E2'|'E4';stageKey:string;dueDate:string;storageOrigin?:CollectionReminderMeta['storageOrigin'];sentAt:string|null;threadId:string|null;orderIds:string[];deliveryFailedAt:string|null;postalDocumentId?:string;postalTaskId?:string;voidId?:string};
 export function collectionReminderIntent(input:CollectionReminderRequest){return createHash('sha256').update(JSON.stringify([input.targetId,input.subject.trim(),input.body.trim(),input.collectionReminder.stage,input.collectionReminder.handover,input.collectionReminder.dueDate,...(input.collectionReminder.stage==='E4'?[input.collectionReminder.clientKey]:[])])).digest('hex');}
 const hash=(body:string)=>createHash('sha256').update(body.trim()).digest('hex');
 
@@ -53,7 +55,7 @@ export async function appendCollectionReminderSent(tx:PrivilegedTenantTransactio
  VALUES(${randomUUID()},${auth.tenantId},'ORDER_COLLECTION_REMINDER_SENT_V1','Sammelerinnerung an Microsoft 365 übergeben','success',${auth.userId}::uuid,${randomUUID()}::uuid,${requestId}::uuid,1,${JSON.stringify({threadId,messageId,intent:meta.intent,meta})}::jsonb,statement_timestamp())`);
 }
 
-export async function readCollectionReminderHistory(auth:AuthorizationSnapshot,customerId:string,handover:'pickup'|'shipping',orderIds:readonly string[]){
+export async function readCollectionReminderHistory(auth:AuthorizationSnapshot,customerId:string,handover:'pickup'|'shipping',orderIds:readonly string[]):Promise<CollectionReminderHistoryEntry[]>{
  return withPrivilegedTenantTransaction(auth,async tx=>{
   const rows=await tx.execute<{prepared_id:string;payload:{meta:CollectionReminderMeta;threadId:string;bodySha256:string};sent_at:string|null;sent_intent:string|null;body:string|null;status:string;proof_ok:boolean}>(sql`SELECT prepared.id::text AS prepared_id,prepared.payload,thread.status,(sent.created_at AT TIME ZONE 'UTC')::text AS sent_at,sent.payload->>'intent' AS sent_intent,message.body,
     (prepared.status='success' AND prepared.event_schema_version=1 AND sent.status='success' AND sent.event_schema_version=1 AND prepared.user_id=thread.created_by AND sent.user_id=prepared.user_id AND sent.correlation_id=prepared.correlation_id
@@ -67,6 +69,6 @@ export async function readCollectionReminderHistory(auth:AuthorizationSnapshot,c
   if(relevant.some(row=>row.payload.meta.stage==='E4'&&(!row.payload.meta.storageOrigin||!Array.isArray(row.payload.meta.storageOrigin.freezes)||row.payload.meta.storageOrigin.freezes.length!==row.payload.meta.orders.length||row.payload.meta.orders.some(order=>!row.payload.meta.storageOrigin!.freezes.some(proof=>proof.orderId===order.id&&typeof proof.freezeId==='string')))))throw Error('STORAGE_LETTER_HISTORY_ORIGIN_INVALID');
   if(relevant.some(row=>row.sent_at&&(row.proof_ok!==true||row.status!=='sent'||row.sent_intent!==row.payload.meta.intent||!row.body||hash(row.body)!==row.payload.bodySha256)))throw Error('COLLECTION_HISTORY_PROOF_INVALID');
   const failures=await readCommunicationDeliveryFailures(tx,auth,relevant.map(row=>row.payload.threadId));
-  return relevant.map(row=>({stage:row.payload.meta.stage,stageKey:row.payload.meta.stageKey,dueDate:row.payload.meta.dueDate,storageOrigin:row.payload.meta.storageOrigin,sentAt:row.sent_at?new Date(row.sent_at).toISOString():null,threadId:row.payload.threadId,orderIds:row.payload.meta.orders.map(member=>member.id),deliveryFailedAt:failures.find(proof=>proof.threadId===row.payload.threadId)?.recordedAt??null}));
+  return [...relevant.map(row=>({stage:row.payload.meta.stage,stageKey:row.payload.meta.stageKey,dueDate:row.payload.meta.dueDate,storageOrigin:row.payload.meta.storageOrigin,sentAt:row.sent_at?new Date(row.sent_at).toISOString():null,threadId:row.payload.threadId,orderIds:row.payload.meta.orders.map(member=>member.id),deliveryFailedAt:failures.find(proof=>proof.threadId===row.payload.threadId)?.recordedAt??null})),...await readPostalCollectionHistory(tx,auth,customerId,handover,orderIds)];
  });
 }

@@ -22,3 +22,9 @@ it('final storage stage requires the actual letter dispatch, an explicit interva
  expect(storageLetterKey('TEST-tenant','TEST-customer','pickup','TEST-call',['a','b'])).toBe(storageLetterKey('TEST-tenant','TEST-customer','pickup','TEST-call',['b','a']));
  expect(storageLetterKey('TEST-tenant','TEST-customer','pickup','TEST-call',['a'])).not.toBe(storageLetterKey('TEST-tenant','TEST-customer','pickup','TEST-call',['a','b']));
 });
+it('PL09:01 without mail uses only the actual unsuccessful call and its configured interval',()=>{
+ const policy={...emptyDispatchPolicy(),storageAfterDays:1,holidays:['2026-11-11']};
+ expect(storageEligibility(null,'2026-11-10T10:00:00Z','2026-11-10',policy,true)).toMatchObject({state:'WAIT',eligibleOn:'2026-11-12',missingSettings:[]});
+ expect(storageEligibility(null,'2026-11-10T10:00:00Z','2026-11-12',policy,true)).toMatchObject({state:'DUE',eligibleOn:'2026-11-12'});
+ expect(storageEligibility(null,'2026-11-10T10:00:00Z','2026-11-12',emptyDispatchPolicy(),true)).toMatchObject({state:'NEEDS_SETTING',missingSettings:['storageAfterDays']});
+});

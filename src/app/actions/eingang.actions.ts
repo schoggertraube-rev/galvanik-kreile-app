@@ -43,13 +43,15 @@ import {saveTask,completeTask,readTask,createMissingGoodsTask,createOrderHandove
 import {createDispatchCall,recordDispatchCallResult,readDispatchCallRequirement,protectDispatchCallTask,readCompletedDispatchCallReceipt} from '@/lib/server/dispatchCallPort';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {createStorageFinalTask,readStorageFinalTaskReceipt,protectStorageFinalTask} from '@/lib/server/storageFinalStagePort';
+import {recordStoragePostalResult,readStoragePostalTask,protectStoragePostalTask} from '@/lib/server/storagePostalPort';
 import type {TaskOpenRequest} from '@/modules/tasks/public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
-const taskEffects={beforeComplete:recordDispatchCallResult,effect:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>{
+const taskEffects={beforeComplete:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:import('@/modules/tasks/public').TaskRecord,input:import('@/modules/tasks/public').TaskCompleteInput)=>{const blocked=await recordDispatchCallResult(tx,auth,task,input);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,input);},effect:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>{
  const blocked=await protectDispatchCallTask(tx,auth,input);if(blocked)return blocked;
  const storageBlocked=await protectStorageFinalTask(tx,auth,input);if(storageBlocked)return storageBlocked;
+ await protectStoragePostalTask(tx,auth,input);
  return recordIntakeTaskEffect(tx,auth,input,readCustomerProfile);
 }};
 import {createInvoiceClarificationTask,resolveInvoiceClarificationTask} from '@/modules/tasks/server-public';
@@ -85,7 +87,7 @@ export async function completeIntakeTaskAction(input:unknown){
   if(!orders.ok)return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
   const taskId='taskId' in input?input.taskId:null;
   const answered=orders.data.filter(order=>order.finishedDispatch?.reminder?.state==='STOPPED'||order.finishedDispatch?.reminder?.state==='CALL_NOT_REACHED'&&order.finishedDispatch.reminder.callTaskId!==taskId).map(order=>({id:order.id,version:order.version}));
-  return completeTask(input,{...taskEffects,beforeComplete:(tx,auth,task,value)=>recordDispatchCallResult(tx,auth,task,value,answered)});
+  return completeTask(input,{...taskEffects,beforeComplete:async(tx,auth,task,value)=>{const blocked=await recordDispatchCallResult(tx,auth,task,value,answered);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,value);}});
  }
  return completeTask(input,taskEffects);
 }
@@ -118,7 +120,7 @@ export async function createStorageFinalTaskAction(input:{customerId:string;hand
 export async function getIntakeTaskAction(input:TaskOpenRequest){
  const result=await readTask(input);if(result.code!=='OK'||!result.task)return result;
  const auth=await resolveAuthorization();if(!auth.ok)return result;
- try{const call=await readDispatchCallRequirement(auth.data,result.task.id);return {...result,...(call?{dispatchCall:call}:{})};}
+ try{const call=await readDispatchCallRequirement(auth.data,result.task.id),postal=await readStoragePostalTask(auth.data,result.task.id);return {...result,...(call?{dispatchCall:call}:{}),...(postal?{postalLetter:postal}:{})};}
  catch(error){console.error('[DISPATCH_CALL_REQUIREMENT_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};}
 }
 import {readOpenIntakeMails} from '@/modules/eingang/server-public';

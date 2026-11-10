@@ -5,14 +5,17 @@ import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
 import {handedOverProofs} from './dispatchCallPort';
+import {verifyPostalDispatch,finishPostalTaskAfterGoodsOut} from './storagePostalPort';
 import type {StorageEligibility} from '@/modules/orders/public';
 import {COLLECTION_REMINDER_COPY as copy} from '@/ui/situationCatalog';
 
 type Letter=NonNullable<StorageEligibility['letter']>;
-type Meta={customerId:string;handover:string;letterKey:string;threadId:string;recipientId:string;due:string;orders:Array<{id:string;number:string;version:number}>;freezes:Letter['freezes']};
+type Meta={customerId:string;handover:string;letterKey:string;threadId:string|null;postalDocumentId?:string;recipientId:string;due:string;orders:Array<{id:string;number:string;version:number}>;freezes:Letter['freezes']};
 type Source={payload:{meta:Meta;taskId:string};user_id:string;proof_ok:boolean};
 function finalKey(letterKey:string){const h=createHash('sha256').update('storage-final:'+letterKey).digest('hex');return h.slice(0,8)+'-'+h.slice(8,12)+'-5'+h.slice(13,16)+'-8'+h.slice(17,20)+'-'+h.slice(20,32);}
-async function verifyLetter(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,origin:{threadId:string;customerId:string;letterKey:string}){
+async function verifyLetter(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,origin:{threadId:string|null;postalDocumentId?:string;customerId:string;letterKey:string}){
+ if(origin.postalDocumentId){if(origin.threadId!==null)throw Error('STORAGE_LETTER_CHANNEL_INVALID');return verifyPostalDispatch(tx,auth,{customerId:origin.customerId,letterKey:origin.letterKey,documentId:origin.postalDocumentId});}
+ if(!origin.threadId)throw Error('STORAGE_LETTER_SOURCE_MISSING');
   const proof=await tx.execute(sql`SELECT sent.id FROM public.events sent JOIN public.events prepared ON prepared.tenant_id=sent.tenant_id AND prepared.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND prepared.payload->>'threadId'=${origin.threadId} AND prepared.payload->'meta'=sent.payload->'meta' AND prepared.correlation_id=sent.correlation_id AND prepared.user_id=sent.user_id AND prepared.status='success' AND prepared.event_schema_version=1
    JOIN public.communication_threads thread ON thread.tenant_id=sent.tenant_id AND thread.id=${origin.threadId}::uuid AND thread.status='sent' AND thread.customer_id=${origin.customerId} AND thread.created_by=sent.user_id AND thread.source='MS_GRAPH_OUT:'||sent.correlation_id::text
    JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.id::text=sent.payload->>'messageId' AND message.direction='outgoing' AND message.channel='email' AND encode(sha256(convert_to(message.body,'UTF8')),'hex')=prepared.payload->>'bodySha256'
@@ -55,11 +58,12 @@ export async function protectStorageFinalTask(tx:PrivilegedTenantTransaction,aut
 }
 export async function lockStorageFinalTasksForGoodsOut(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string){
  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':storage-final-order:'+orderId},0))`);
- const rows=await tx.execute<{id:string;letter_key:string}>(sql`SELECT task.id::text,event.correlation_id::text AS letter_key FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND event.payload->'meta'->'orders' @> ${JSON.stringify([{id:orderId}])}::jsonb ORDER BY task.id FOR UPDATE OF task`);
- return rows.map(row=>({id:row.id,letter_key:row.letter_key}));
+ const rows=await tx.execute<{id:string;letter_key:string;kind:'final'|'postal'}>(sql`SELECT task.id::text,event.correlation_id::text AS letter_key,CASE WHEN event.event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' THEN 'final' ELSE 'postal' END AS kind FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND (event.event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' OR event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.payload->>'channel'='post') AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND event.payload->'meta'->'orders' @> ${JSON.stringify([{id:orderId}])}::jsonb ORDER BY task.id FOR UPDATE OF task`);
+ return rows.map(row=>({id:row.id,letter_key:row.letter_key,kind:row.kind}));
 }
-export async function finishStorageFinalTasksAfterGoodsOut(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,sources:ReadonlyArray<{id:string;letter_key:string}>,complete:(input:{taskId:string;orderId:string;clientKey:string})=>Promise<void>){
+export async function finishStorageFinalTasksAfterGoodsOut(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,sources:ReadonlyArray<{id:string;letter_key:string;kind:'final'|'postal'}>,complete:(input:{taskId:string;orderId:string;clientKey:string})=>Promise<void>){
  for(const source of sources){
+  if(source.kind==='postal'){await finishPostalTaskAfterGoodsOut(tx,auth,{taskId:source.id,letterKey:source.letter_key},complete);continue;}
   const created=await receipt(tx,auth,source.letter_key);if(!created||created.payload.taskId!==source.id)throw Error('STORAGE_FINAL_CLOSE_SOURCE_INVALID');
   const meta=created.payload.meta,proofs=await handedOverProofs(tx,auth,meta.orders.map(order=>order.id));if(!proofs)continue;
   await complete({taskId:source.id,orderId:meta.orders[0].id,clientKey:finalKey(meta.letterKey)});
@@ -68,17 +72,20 @@ export async function finishStorageFinalTasksAfterGoodsOut(tx:PrivilegedTenantTr
 }
 export async function createStorageFinalTask(auth:AuthorizationSnapshot,input:{customerId:string;handover:string;clientKey:string},letter:Letter,orders:Meta['orders'],settingsUpdatedAt:string,createTask:(tx:PrivilegedTenantTransaction,input:{orderId:string;clientKey:string;title:string;note:string;kind:'aufgabe';forLogin:string;dueDate:string})=>Promise<string>){
  if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const,message:copy.forbidden};
- if(letter.state!=='SENT'||letter.clientKey!==input.clientKey||letter.finalStage.state!=='DUE'||!letter.finalStage.recipientId||!letter.finalStage.due||!letter.threadId||!orders.length)return {code:'CONFLICT' as const,message:copy.notReady};
+ if(letter.state!=='SENT'||letter.clientKey!==input.clientKey||letter.finalStage.state!=='DUE'||!letter.finalStage.recipientId||!letter.finalStage.due||!letter.threadId&&!letter.postalDocumentId||!orders.length)return {code:'CONFLICT' as const,message:copy.notReady};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':storage-final:'+input.clientKey},0))`);
   const prior=await receipt(tx,auth,input.clientKey);if(prior){if(prior.user_id!==auth.userId)return {code:'CONFLICT' as const,message:copy.keyConflict};return {code:'OK' as const,taskId:prior.payload.taskId,replayed:true};}
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'task:'+auth.tenantId+':'+finalKey(input.clientKey)},0))`);
+  const occupied=await tx.execute(sql`SELECT id FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${finalKey(input.clientKey)}::uuid`);
+  if(occupied.length)return {code:'CONFLICT' as const,message:copy.keyConflict};
   // Shared with goods-out before its task scan: a newly committed task cannot escape that scan.
   for(const order of [...orders].sort((a,b)=>a.id.localeCompare(b.id)))await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':storage-final-order:'+order.id},0))`);
   const settings=await tx.execute(sql`SELECT id FROM public.company_settings WHERE tenant_id=${auth.tenantId} AND updated_at=${settingsUpdatedAt}::timestamptz FOR SHARE`);if(settings.length!==1)throw Error('STORAGE_FINAL_SETTINGS_CHANGED');
-  await verifyLetter(tx,auth,{threadId:letter.threadId!,customerId:input.customerId,letterKey:input.clientKey});
+  await verifyLetter(tx,auth,{threadId:letter.threadId,postalDocumentId:letter.postalDocumentId,customerId:input.customerId,letterKey:input.clientKey});
   const current=await tx.execute<{id:string;version:number;freeze_id:string}>(sql`SELECT o.id,o.version,f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${auth.tenantId} AND o.customer_id=${input.customerId} AND o.handover_mode=${input.handover} AND o.id=ANY(ARRAY[${sql.join(orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig' ORDER BY o.id FOR UPDATE OF o`);
   if(current.length!==orders.length||current.some(row=>orders.find(order=>order.id===row.id)?.version!==row.version||!letter.freezes.some(f=>f.orderId===row.id&&f.freezeId===row.freeze_id)))throw Error('STORAGE_FINAL_ORDERS_CHANGED');
-  const members=[...orders].sort((a,b)=>a.id.localeCompare(b.id)),meta:Meta={customerId:input.customerId,handover:input.handover,letterKey:input.clientKey,threadId:letter.threadId!,recipientId:letter.finalStage.recipientId!,due:letter.finalStage.due!,orders:members,freezes:letter.freezes};
+  const members=[...orders].sort((a,b)=>a.id.localeCompare(b.id)),meta:Meta={customerId:input.customerId,handover:input.handover,letterKey:input.clientKey,threadId:letter.threadId,...(letter.postalDocumentId?{postalDocumentId:letter.postalDocumentId}:{}),recipientId:letter.finalStage.recipientId!,due:letter.finalStage.due!,orders:members,freezes:letter.freezes};
   const taskId=await createTask(tx,{orderId:members[0].id,clientKey:finalKey(input.clientKey),title:copy.finalTaskTitle,note:copy.finalTaskNote(members.map(order=>order.number)),kind:'aufgabe',forLogin:meta.recipientId,dueDate:meta.due});
   await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at) VALUES(${randomUUID()},${auth.tenantId},'ORDER_STORAGE_FINAL_TASK_CREATED_V1',${copy.finalTaskTitle},'success',${auth.userId}::uuid,${finalKey(input.clientKey)}::uuid,${input.clientKey}::uuid,1,${JSON.stringify({meta,taskId})}::jsonb,statement_timestamp())`);
   return {code:'OK' as const,taskId,replayed:false};
