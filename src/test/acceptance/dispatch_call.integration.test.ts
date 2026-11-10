@@ -69,7 +69,11 @@ it('E4 uses the existing sender only after individual eligibility and starts the
  const finalSettings=await withSession(full,()=>readShippingSettingsAction());if(finalSettings.code!=='OK'||!finalSettings.settings.dispatchPolicy)throw Error('E5_CURRENT_SETTINGS');
  expect(await withSession(full,()=>saveShippingSettingsAction({service:finalSettings.settings.service,numberPattern:finalSettings.settings.numberPattern,numberHint:finalSettings.settings.numberHint,trackingUrl:finalSettings.settings.trackingUrl,expectedUpdatedAt:finalSettings.settings.updatedAt,dispatchPolicy:{...finalSettings.settings.dispatchPolicy,finalStageAfterLetterDays:0}}))).toMatchObject({code:'OK'});
  expect(await withSession(denied,()=>createStorageFinalTaskAction(finalRequest))).toMatchObject({code:'FORBIDDEN'});
- const attempts=await Promise.all([withSession(full,()=>createStorageFinalTaskAction(finalRequest)),withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))]);
+ // The promised original deadline survives the later setting change (PL 12:06).
+ expect(await withSession(full,()=>createStorageFinalTaskAction(finalRequest))).toMatchObject({code:'CONFLICT'});
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(Date.now()+7*24*60*60*1000);
+ let attempts;
+ try{attempts=await Promise.all([withSession(full,()=>createStorageFinalTaskAction(finalRequest)),withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))]);}finally{vi.useRealTimers();}
  for(const attempt of attempts)expect(attempt).toMatchObject({code:'OK'});const finalTask=attempts[0];if(finalTask.code!=='OK')throw Error('E5_CREATE');
  expect(attempts[1]).toMatchObject({taskId:finalTask.taskId});
  const pending=await withSession(full,()=>getOrdersDb());expect(pending.ok&&pending.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'TASK_PENDING',taskId:finalTask.taskId});

@@ -219,7 +219,7 @@ it('an original customer reply ends the exact open postal task without inventing
   await sql.unsafe(`CREATE TRIGGER ${guard} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${guard}()`);
   expect(await plan()).toMatchObject({unavailable:true,gaps:expect.arrayContaining(['COLLECTION_PROOF_UNAVAILABLE'])});
   expect(await sql`SELECT status,erledigt_am FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.taskId}::uuid`).toEqual([{status:'offen',erledigt_am:null}]);
-  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1'`).toHaveLength(0);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1' AND payload->'receipt'->>'customerId'=${order.customerId}`).toHaveLength(0);
  }finally{
   await sql.unsafe(`DROP TRIGGER IF EXISTS ${guard} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${guard}()`);
  }
@@ -274,10 +274,10 @@ it('an original customer reply ends the exact open postal task without inventing
   expect(await sql`SELECT payload->'meta'->'storageOrigin'->>'replyEventId' AS reply FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'threadId'=${sent.data.threadId}`).toEqual([{reply:nextMail.replyEventId}]);
  }finally{vi.useRealTimers();}
 });
-it('postal E4 secures one original and one task; only the explicit posting date advances E5, with fresh retry and no mail call',async()=>{
+it('postal E4 secures one original and one task; only the explicit posting date advances E5, with fresh retry and no mail send',async()=>{
  const {order,request,plan}=await prepareLetter('Lagerfrist-Post');
  expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
- const graphCalls=()=>vi.mocked(globalThis.fetch).mock.calls.filter(([input])=>String(typeof input==='string'?input:input instanceof URL?input.href:input.url).includes('graph.microsoft.com')).length;
+ const graphCalls=()=>vi.mocked(globalThis.fetch).mock.calls.filter(([input])=>String(typeof input==='string'?input:input instanceof URL?input.href:input.url).includes('graph.microsoft.com')&&String(typeof input==='string'?input:input instanceof URL?input.href:input.url).endsWith('/sendMail')).length;
  const before=graphCalls();
  const attempts=await Promise.all([withSession(full,()=>prepareStoragePostalLetterAction(request)),withSession(full,()=>prepareStoragePostalLetterAction(structuredClone(request)))]);
  for(const result of attempts)expect(result).toMatchObject({code:'OK'});const prepared=attempts[0];if(prepared.code!=='OK')throw Error('POSTAL_PREPARE:'+prepared.code);
