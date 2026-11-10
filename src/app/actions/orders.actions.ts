@@ -217,7 +217,7 @@ async function resolveOrderCardAuthorization(): Promise<
 
 export async function getLiveOrderCardAction(
   input: { orderId: string },
-): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>> }>> {
+): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>>; pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>> }>> {
   noStore();
   try {
     const authorization = await resolveOrderCardAuthorization();
@@ -252,7 +252,9 @@ export async function getLiveOrderCardAction(
     if(customerInformed.code==='OK'&&customerInformed.orderVersion!==card.data.version)return {code:'UNAVAILABLE',message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'};
     const {readOrderPrintQueue}=await import('@/modules/orders/server-public');
     const printQueue=await readOrderPrintQueue(authorization.data,input.orderId);
-    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,...(manualShipping?{manualShipping}:{}) } };
+    const {readOrderPickupAppointment}=await import('@/lib/server/pickupAppointmentPort');
+    const pickupAppointment=await readOrderPickupAppointment(authorization.data,input.orderId);
+    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,
@@ -270,6 +272,13 @@ export async function markOrderInformedByPhoneAction(input:{orderId:string;expec
  const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
  const {markOrderInformedByPhone}=await import('@/lib/server/orderReleaseRead');
  const result=await markOrderInformedByPhone(auth.data,input);
+ if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
+ return result;
+}
+export async function setOrderPickupAppointmentAction(input:unknown){
+ const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
+ const {setOrderPickupAppointment}=await import('@/lib/server/pickupAppointmentPort');
+ const result=await setOrderPickupAppointment(auth.data,input);
  if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
  return result;
 }

@@ -168,6 +168,13 @@ export const DELIVERY_FAILURE_COPY={
  assignment:'Das Original ist einem anderen Vorgang zugeordnet. Öffne es und kläre die Zuordnung zur Ausgangsmail.',
  unavailable:'Das Original bleibt erhalten. Die Unzustellbarkeit konnte ich noch nicht belegen; öffne es oder versuche den Abgleich erneut.'
 };
+export const PICKUP_APPOINTMENT_COPY={
+ invalid:'Trage den vereinbarten Abholtermin mit dem aktuellen Auftragsstand ein. Deine Eingaben bleiben erhalten.',
+ changed:'Der Fertig-Stand oder der Abholtermin hat sich geändert. Öffne den Auftrag erneut; Deine Eingaben bleiben erhalten.',
+ forbidden:'Für den Abholtermin brauchst Du die Freigabe für Aufträge.',
+ unavailable:'Der Abholtermin konnte nicht sicher gespeichert werden. Deine Eingaben bleiben erhalten; versuche es erneut.',
+ recorded:(date:string)=>'Abholtermin vereinbart '+date,
+};
 export const DISPATCH_CALL_COPY={
  title:'Ruf den Kunden wegen seiner fertigen Ware an',note:'Sprich mit dem Kunden über diese fertigen Aufträge: ',
  created:'Gemeinsamer Anruf zu fertiger Ware vorbereitet',resultRecorded:'Ergebnis des gemeinsamen Anrufs festgehalten',

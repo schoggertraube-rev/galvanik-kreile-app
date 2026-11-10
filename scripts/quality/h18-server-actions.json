@@ -1,7 +1,10 @@
 {
   "version": 1,
-  "inventorySha256": "325576d295888735cc263ead6de0b37ef42631256c9a694b981073f137a77855",
+  "inventorySha256": "0403707d686e05ce8656b036dfbff838fbe1324683153cb4a4691bde09c74ae7",
   "testedWriteActions": {
+    "src/app/actions/orders.actions.ts#setOrderPickupAppointmentAction": [
+      "src/test/acceptance/pickup_appointment.integration.test.ts"
+    ],
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
     ],
