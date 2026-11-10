@@ -320,7 +320,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         const bytes = await entry.file.arrayBuffer();
         const digest = await crypto.subtle.digest("SHA-256", bytes);
         const sha256 = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
-        await retainPendingOriginal(scope, { id: entry.id, itemId: entry.itemId, kind: "file", file: entry.file, captureOrigin: entry.captureOrigin });
+        await retainPendingOriginal(scope, { id: entry.id, itemId: entry.itemId, kind: "file", file: entry.file, captureOrigin: entry.captureOrigin, deviceId:getIntakeDeviceId() });
         const grant = await ports.prepareCaptureFile({ itemId: entry.itemId, fileId: entry.id, name: entry.file.name, mime: entry.file.type || "application/octet-stream", bytes: entry.file.size, sha256, deviceId: getIntakeDeviceId(), captureOrigin: entry.captureOrigin });
         if (grant.code !== "OK") { setAutomaticRetry(grant.code === "UNAVAILABLE"); setError(grant.message); return; }
         if (grant.upload) {
