@@ -65,7 +65,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   if(answered.size<group.members.length&&ports&&responseSince&&group.threads.size){
    reaction=await ports.readResponses({customerId:group.customerId,noticeThreadIds:[...group.threads],oldestNoticeAt:responseSince});
    if(reaction.state==='REPLIED')for(const member of group.members){
-    const proof=reaction.proofs.find(proof=>proof.orderIds.includes(member.orderId)&&Date.parse(proof.receivedAt)>=Date.parse(member.noticeAt??member.readyAt??''));
+    const proof=reaction.proofs.find(proof=>proof.freezes.some(source=>source.orderId===member.orderId&&source.freezeId===member.freezeId)&&Date.parse(proof.receivedAt)>=Date.parse(member.noticeAt??member.readyAt??''));
     if(proof&&!answered.has(member.orderId))answered.set(member.orderId,{mail:proof});
    }
   }
