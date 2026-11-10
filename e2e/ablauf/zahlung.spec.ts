@@ -4,6 +4,19 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder,customerFixture,intakeOrderFixture} from './orderFixture';
 
+it('invoice issue retries from another actual finance actor are a key conflict and leave the original immutable',async()=>{
+ const order=await readyInvoiceOrder('Rechnung-Akteur');
+ const other=await createFixture(['auftraege','geld']);
+ const {issueInvoiceAction,getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');
+ const original=await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:order.issueInput.clientEventId}));
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(other,()=>issueInvoiceAction(JSON.parse(JSON.stringify(order.issueInput))))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:order.issueInput.clientEventId}))).toEqual(original);
+ expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(order.issueInput))))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:order.invoice.invoiceId,issuedBy:full.actorId}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
 it('a real login without Geld cannot read financial receipts or mutate invoice prices and payment modes',async()=>{
  const order=await readyInvoiceOrder('Geld-Lesegrenze');
  const actor=await createFixture(['auftraege']);

@@ -951,8 +951,11 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         if (replayRows.length !== 1 || !replayRows[0]) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
-        const receipt = mapReceipt(replayRows[0], tenantId, actorId);
-        return receiptMatchesIntent(receipt, input)
+        // Validate the complete persisted original before comparing the caller.
+        // A valid receipt owned by another actor is a key conflict, not an outage;
+        // damaged receipts still fail the unchanged integrity validator.
+        const receipt = mapReceipt(replayRows[0], tenantId, replayRows[0].actor_id);
+        return receipt.issuedBy === actorId && receiptMatchesIntent(receipt, input)
           ? { code: "OK", receipt, replayed: true }
           : { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
       }
