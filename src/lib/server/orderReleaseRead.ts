@@ -4,6 +4,7 @@ import type {PrivilegedTenantTransaction} from './privilegedDb';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import {createHash,randomUUID} from 'node:crypto';
+import {overdueInvoiceCondition} from './paymentContract';
 
 type ReadyContext={id:string;version:number;freeze_id:string};
 export async function readReadyNotificationContext(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){
@@ -58,10 +59,20 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
       WHERE thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->'receipt'->>'threadId' AND thread.status='sent'
        AND sent.payload->'document'->>'kind'='INVOICE' AND sent.payload->'document'->>'orderId'=event.order_id AND sent.payload->>'intent'=event.payload->>'intent'))
    ORDER BY event.created_at DESC,event.id DESC LIMIT 1`);
-  const order=await tx.execute<{station:string;allowed:boolean}>(sql`SELECT station,private.order_release_allowed_v1(tenant_id,id) AS allowed FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${orderId}`);
+  const order=await tx.execute<{station:string;version:number;handover_mode:'pickup'|'shipping'|null;allowed:boolean;invoice_state:string;payment_allowed:boolean|null;frozen_at:string|null;debt_ids:string[]}>(sql`SELECT orders.station,orders.version,orders.handover_mode,private.order_release_allowed_v1(orders.tenant_id,orders.id) AS allowed,
+   state.invoice_state,state.payment_goods_out_allowed AS payment_allowed,freeze_state.frozen_at::text,
+   ARRAY(SELECT invoice.id::text FROM public.invoices invoice WHERE invoice.tenant_id=orders.tenant_id AND invoice.customer_id=orders.customer_id AND ${overdueInvoiceCondition()} ORDER BY invoice.id) AS debt_ids
+   FROM public.orders orders JOIN private.v_goods_out_ui_state_v1 state ON state.tenant_id=orders.tenant_id AND state.order_id=orders.id AND state.integrity_ok
+   LEFT JOIN private.v_order_frozen_receipts_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok
+   WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${orderId}`);
   if(order.length!==1)return {code:'NOT_FOUND' as const};
   const informed=rows[0]?.payload.receipt??null;
-  return {code:'OK' as const,informed,ampel:order[0].station==='fertig'?(informed?(order[0].allowed?'gruen':'gelb'):'rot'):null};
+  const current=order[0],complaint=await readOpenOrderComplaint(tx,auth.tenantId,orderId);
+  const blockReason=current.allowed?null:!current.frozen_at?'not_frozen':complaint?'open_complaint':current.debt_ids.length?'overdue_invoice':!current.payment_allowed?'payment':null;
+  const ampel:'rot'|'gelb'|'gruen'|null=current.station==='fertig'?(informed?(current.allowed?'gruen':'gelb'):'rot'):null;
+  return {code:'OK' as const,informed,ampel,
+   orderVersion:current.version,handover:current.handover_mode,releaseAllowed:current.allowed,frozenAt:current.frozen_at,invoiceState:current.invoice_state,
+   blockReason,complaintIds:complaint?.complaintIds??[],overdueInvoiceIds:hasAuthorizationArea(auth,'geld')?current.debt_ids:undefined};
  });}catch(error){console.error('[ORDER_NOTIFICATION_READ_FAILED]',error);return {code:'UNAVAILABLE' as const};}
 }
 

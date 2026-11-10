@@ -18,6 +18,7 @@ export type OperationalOrderItem = {
 };
 
 export type OperationalOrder = {
+  finishedDispatch?:{state:'available'|'unavailable';rank?:number;handover?:'pickup'|'shipping'|null;color?:'rot'|'gelb'|'gruen'|null;releaseAllowed?:boolean;informedAt?:string|null;channel?:'mail'|'telefon'|null;blockReason?:string|null;workingDays?:number|null;gaps?:string[]};
   ausgabeFrei?:boolean;
   id: string;
   version: number;

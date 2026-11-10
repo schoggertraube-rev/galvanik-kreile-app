@@ -67,3 +67,31 @@ it('S1 existing real mail pipeline counts only a confirmed invoice notice, not o
  expect(sends).toBe(before);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toEqual([{n:1}]);
 });
+
+it('Fertig existing operational consumer reads one notification/release projection, separates pickup/shipping and ranks releasable rows first without prices',async()=>{
+ const red=await readyInvoiceOrder('Fertig-Rot','pickup'),green=await readyInvoiceOrder('Fertig-Gruen','shipping');
+ const operator=await createFixture(['auftraege'],'werkstatt');
+ expect(await withSession(operator,()=>markOrderInformedByPhoneAction({orderId:green.orderId,expectedVersion:green.version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const {getOrdersDb}=await import('@/app/actions/orders.actions');
+ const read=await withSession(operator,()=>getOrdersDb());
+ expect(read).toMatchObject({ok:true});if(!read.ok)throw Error('FINISHED_QUEUE_READ');
+ const rows=read.data;
+ const pickup=rows.find(row=>row.id===red.orderId)?.finishedDispatch,shipping=rows.find(row=>row.id===green.orderId)?.finishedDispatch;
+ expect(pickup).toMatchObject({state:'available',handover:'pickup',color:'rot',workingDays:null,gaps:['BUSINESS_CALENDAR_SETTINGS_MISSING']});
+ expect(shipping).toMatchObject({state:'available',handover:'shipping',color:'gruen',channel:'telefon',releaseAllowed:true});
+ expect(shipping!.rank!).toBeLessThan(pickup!.rank!);
+ expect(JSON.stringify([pickup,shipping])).not.toMatch(/Cents|Amount|invoiceNumber/);
+ const {readShippingSettingsAction,saveShippingSettingsAction}=await import('@/app/actions/settings.actions');
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('DISPATCH_SETTINGS_READ');
+ const {emptyDispatchPolicy}=await import('@/modules/fundament/public');
+ const policy={...emptyDispatchPolicy(),holidays:['2026-12-24']};
+ const input={service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:policy};
+ expect(await withSession(full,()=>saveShippingSettingsAction(input))).toMatchObject({code:'OK',replayed:false,settings:{dispatchPolicy:policy}});
+ expect(await sql`SELECT ausgang_regeln FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{ausgang_regeln:policy}]);
+ const configured=await withSession(operator,()=>getOrdersDb());if(!configured.ok)throw Error('FINISHED_CONFIGURED_READ');
+ expect(configured.data.find(row=>row.id===green.orderId)?.finishedDispatch).toMatchObject({state:'available',workingDays:0,gaps:[]});
+ expect(await withSession(full,()=>saveShippingSettingsAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT payload->>'actorId' AS actor FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='shipping_settings_updated' ORDER BY created_at DESC LIMIT 1`).toEqual([{actor:full.actorId}]);
+ expect(await withSession(full,()=>saveShippingSettingsAction({...input,dispatchPolicy:{...policy,holidays:['2026-02-30']}}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(full,()=>saveShippingSettingsAction({...input,dispatchPolicy:{...policy,reminderDays:5}}))).toMatchObject({code:'CONFLICT'});
+});

@@ -41,7 +41,8 @@
     "@/modules/orders/server-public#readOrderActors",
     "@/modules/orders/server-public#readPackageOrderCustomers",
     "@/modules/orders/server-public#readManualShipping",
-    "@/modules/orders/server-public#saveManualTracking"
+    "@/modules/orders/server-public#saveManualTracking",
+    "@/modules/orders/server-public#readFinishedDispatchQueue"
   ],
   "capabilities": [],
   "migrations": [

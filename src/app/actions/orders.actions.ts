@@ -249,6 +249,7 @@ export async function getLiveOrderCardAction(
     const manualShipping=card.data.handoverMode==='shipping'?await readManualShippingForOrder(authorization.data,input.orderId):undefined;
     const {readOrderInformed}=await import('@/lib/server/orderReleaseRead');
     const customerInformed=await readOrderInformed(authorization.data,input.orderId);
+    if(customerInformed.code==='OK'&&customerInformed.orderVersion!==card.data.version)return {code:'UNAVAILABLE',message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'};
     return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
@@ -427,10 +428,18 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
       getOperationalOrders(authorization.data),
     ]);
     const cardReads = await Promise.all(orders.map((order) => readLiveOrderCard(authorization.data, { orderId: order.id })));
+    const finished=orders.some(order=>order.station==='fertig')?await (async()=>{
+     const [{readFinishedDispatchQueue},{readShippingSettings}]=await Promise.all([import('@/modules/orders/server-public'),import('@/modules/fundament/server-public')]);
+     const settings=await readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true});
+     if(settings.code==='UNAVAILABLE')return {code:'UNAVAILABLE' as const};
+     return readFinishedDispatchQueue(authorization.data,orders,settings.code==='OK'?settings.settings.dispatchPolicy?.holidays??null:null);
+    })():{code:'OK' as const,rows:[]};
+    const projections=new Map(finished.code==='OK'?finished.rows.map((row,rank)=>[row.orderId,{state:'available' as const,rank,...row}]):[]);
     const data: OrderResponse[] = orders.map((order, index) => {
       const cardRead = cardReads[index];
       return {
         ...order,
+        ...(order.station==='fertig'?{finishedDispatch:projections.get(order.id)??{state:'unavailable' as const}}:{}),
         cardReadErrorCode: cardRead?.code === "OK"
           ? null
           : cardRead?.code === "UNAVAILABLE"

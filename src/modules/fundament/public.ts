@@ -1,4 +1,6 @@
 /** Browser-safe product-profile contract for the App Router composition seam. */
+export {emptyDispatchPolicy,dispatchPolicyValid,DISPATCH_DAY_FIELDS} from './dispatchPolicy';
+export type {DispatchPolicy} from './dispatchPolicy';
 export type { StartUserDto as ProductStartProfile } from "@/lib/auth/userDtos";
 export { SystemAdminView } from "./ui/SystemAdminView";
 export type { SystemAdminViewProps } from "./ui/SystemAdminView";
@@ -15,6 +17,7 @@ export type CompanySettingsSnapshot = {
   [Key in keyof CompanySettingsInput]: CompanySettingsInput[Key] | null;
 };
 export type ShippingSettings = {
+  dispatchPolicy?:import('./dispatchPolicy').DispatchPolicy|null;
   service:string;numberPattern:string;numberHint:string;trackingUrl:string|null;labelApi:string|null;updatedAt:string;
 };
 export type ManagedUser = {

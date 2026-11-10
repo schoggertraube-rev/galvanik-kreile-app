@@ -67,18 +67,20 @@ export function isWorkingDay(value: string): boolean {
   return weekday !== 0 && weekday !== 6 && !nationwideGermanHolidays(day.year).has(dayOrdinal);
 }
 
-export function plusWorkingDays(value: string, count: number): string | null {
+export function plusWorkingDays(value: string, count: number, additionalHolidays: readonly string[] = []): string | null {
   const day = parseDay(value);
-  if (!day || !Number.isSafeInteger(count) || count < 0) return null;
+  if (!day || !Number.isSafeInteger(count) || count < 0 || !Array.isArray(additionalHolidays) || !additionalHolidays.every(value=>typeof value==='string'&&parseDay(value)!==null)) return null;
+  const closedDays=new Set(additionalHolidays);
+  const working=(value:string)=>isWorkingDay(value)&&!closedDays.has(value);
   let current = ordinal(day);
   if (count === 0) {
-    while (!isWorkingDay(formatDay(fromOrdinal(current)))) current += 1;
+    while (!working(formatDay(fromOrdinal(current)))) current += 1;
     return formatDay(fromOrdinal(current));
   }
   let remaining = count;
   while (remaining > 0) {
     current += 1;
-    if (isWorkingDay(formatDay(fromOrdinal(current)))) remaining -= 1;
+    if (working(formatDay(fromOrdinal(current)))) remaining -= 1;
   }
   return formatDay(fromOrdinal(current));
 }
@@ -91,20 +93,22 @@ export function previousWorkingDay(value: string): string | null {
   return formatDay(fromOrdinal(current));
 }
 
-export function workingDaysBetween(from: string, to: string): number | null {
+export function workingDaysBetween(from: string, to: string, additionalHolidays: readonly string[] = []): number | null {
   const fromDay = parseDay(from);
   const toDay = parseDay(to);
-  if (!fromDay || !toDay) return null;
+  if (!fromDay || !toDay || !Array.isArray(additionalHolidays) || !additionalHolidays.every(value=>typeof value==='string'&&parseDay(value)!==null)) return null;
+  const closedDays=new Set(additionalHolidays);
   const start = ordinal(fromDay);
   const end = ordinal(toDay);
   if (start === end) return 0;
   if (end < start) {
-    const reverse = workingDaysBetween(to, from);
+    const reverse = workingDaysBetween(to, from,additionalHolidays);
     return reverse === null ? null : -reverse;
   }
   let total = 0;
   for (let current = start + 1; current <= end; current += 1) {
-    if (isWorkingDay(formatDay(fromOrdinal(current)))) total += 1;
+    const value=formatDay(fromOrdinal(current));
+    if (isWorkingDay(value)&&!closedDays.has(value)) total += 1;
   }
   return total;
 }
