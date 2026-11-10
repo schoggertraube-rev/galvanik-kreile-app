@@ -25,7 +25,19 @@ async function transaction<T>(scope: string, mode: IDBTransactionMode, work: (st
   });
 }
 export async function retainPendingOriginal(scope: string, original: PendingOriginal): Promise<void> { await transaction(scope, "readwrite", store => store.put(original)); }
-export async function readPendingEntries(scope:string):Promise<PendingEntry[]> {return transaction(scope,"readonly",store=>store.getAll());}
+export async function readPendingEntries(scope:string):Promise<PendingEntry[]> {
+ const rows=await transaction<unknown[]>(scope,"readonly",store=>store.getAll());
+ return rows.map(value=>{
+  if(!value||typeof value!=="object"||Array.isArray(value)||!("id" in value)||typeof value.id!=="string")throw new Error("INTAKE_PENDING_MALFORMED_ENTRY");
+  const row=value as Record<string,unknown>;
+  const original=row as unknown as PendingOriginal;
+  const isOriginal=typeof row.itemId==="string"&&(row.kind==="note"&&typeof row.text==="string"&&typeof row.textstand==="string"&&Array.isArray(row.dismissed)&&row.dismissed.every(item=>typeof item==="string")||row.kind==="file"&&typeof row.file==="object"&&row.file!==null&&typeof (row.file as File).arrayBuffer==="function"&&typeof (row.file as File).name==="string");
+  if(isOriginal)return original;
+  if(row.kind==="quarantine"&&typeof row.capturedAt==="string"&&row.payload&&typeof row.payload==="object"&&!Array.isArray(row.payload))return row as unknown as PendingQuarantine;
+  // Read-only quarantine projection: preserve the exact unknown record in its original store.
+  return {id:row.id as string,kind:"quarantine",capturedAt:"",payload:row};
+ });
+}
 export async function retainQuarantinedPending(scope:string,entry:PendingQuarantine):Promise<void>{await transaction(scope,"readwrite",store=>store.put(entry));}
 export async function readPendingOriginals(scope: string): Promise<PendingOriginal[]> {return (await readPendingEntries(scope)).filter((entry):entry is PendingOriginal=>entry.kind==="file"||entry.kind==="note");}
 export async function acknowledgePendingOriginal(scope: string, id: string, textstand?: string): Promise<void> {
