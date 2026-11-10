@@ -8,10 +8,10 @@ import {readReadyNotificationContext} from './orderReleaseRead';
 import {PICKUP_APPOINTMENT_COPY as copy} from '@/ui/situationCatalog';
 import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
 import type {DispatchPolicy} from '@/modules/fundament/public';
-import {readLatestReplyForFreeze,replyDefersToAppointment} from './dispatchReplyPort';
+import {readDispatchReplyReceipt,readLatestReplyForFreeze,replyCoversFreezes,replyDefersToAppointment} from './dispatchReplyPort';
 
 const uuid=/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
-export type StorageOrigin={callTaskId?:string;appointmentEventId?:string;freezes:Array<{orderId:string;freezeId:string}>};
+export type StorageOrigin={callTaskId?:string;appointmentEventId?:string;replyEventId?:string;freezes:Array<{orderId:string;freezeId:string}>};
 export function pickupStorageDue(date:string,policy:DispatchPolicy|null|undefined){
  if(!policy||policy.storageAfterDays==null)return null;
  const pause=plusWorkingDays(date,1,policy.holidays),storage=plusWorkingDays(date,policy.storageAfterDays,policy.holidays);
@@ -19,8 +19,13 @@ export function pickupStorageDue(date:string,policy:DispatchPolicy|null|undefine
  return pause>storage?pause:storage;
 }
 export async function qualifyStorageOrigin(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,origin:StorageOrigin){
- if(!!origin.callTaskId===!!origin.appointmentEventId)throw Error('STORAGE_ORIGIN_NOT_UNIQUE');
- if(origin.callTaskId&&!uuid.test(origin.callTaskId)||origin.appointmentEventId&&!uuid.test(origin.appointmentEventId))throw Error('STORAGE_ORIGIN_ID_INVALID');
+ const identities=[origin.callTaskId,origin.appointmentEventId,origin.replyEventId].filter(Boolean);
+ if(identities.length!==1)throw Error('STORAGE_ORIGIN_NOT_UNIQUE');
+ if(identities.some(id=>!uuid.test(id!)))throw Error('STORAGE_ORIGIN_ID_INVALID');
+ if(origin.replyEventId){
+  const reply=await readDispatchReplyReceipt(tx,auth,origin.replyEventId);
+  if(!replyCoversFreezes(reply,origin.freezes))throw Error('STORAGE_REPLY_FREEZE_INVALID');
+ }
  if(origin.appointmentEventId){
   const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,origin.appointmentEventId);
   if(origin.freezes.length!==1||origin.freezes[0].orderId!==appointment.orderId||origin.freezes[0].freezeId!==appointment.freezeId)throw Error('STORAGE_APPOINTMENT_FREEZE_INVALID');
@@ -30,6 +35,11 @@ export async function storageOriginIsCurrent(tx:PrivilegedTenantTransaction,auth
  await qualifyStorageOrigin(tx,auth,origin);
  for(const proof of origin.freezes){const appointment=await readOrderPickupAppointmentInTransaction(tx,auth,proof.orderId);
   const reply=await readLatestReplyForFreeze(tx,auth,proof.orderId,proof.freezeId);
+  if(origin.replyEventId){
+   if(!reply||reply.eventId!==origin.replyEventId||appointment&&replyDefersToAppointment(reply,appointment))return false;
+   if(!validDay(eligibleOn)||eligibleOn<berlinCalendarDay(new Date(reply.proof.receivedAt))||eligibleOn>berlinCalendarDay())return false;
+   continue;
+  }
   if(reply&&(!appointment||!replyDefersToAppointment(reply,appointment)))return false;
   if(origin.appointmentEventId){
    if(appointment?.eventId!==origin.appointmentEventId)return false;
