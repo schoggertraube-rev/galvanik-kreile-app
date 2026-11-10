@@ -6,6 +6,17 @@ import {readDispatchResponses} from './dispatchResponsePort';
 import type {DispatchReplyReceipt} from './dispatchReplyPort';
 import type {DispatchResponsePorts,DispatchResponseCheck} from './dispatchResponsePort';
 
+/** Reply qualification needs Mails, not the separate Eingang import capability. */
+export async function readImportedDispatchReplyEvidence(auth:AuthorizationSnapshot,input:{graphMessageId:string;customerId:string}):Promise<{code:'OK';itemId:string}|{code:'NOT_FOUND'|'FORBIDDEN'|'UNAVAILABLE'}>{
+ if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN'};
+ try{
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{item_id:string}>(sql`SELECT item_id::text FROM private.v_intake_reply_evidence_v1 WHERE tenant_id=${auth.tenantId} AND graph_message_id=${input.graphMessageId} AND customer_id=${input.customerId}`));
+  if(!rows.length)return {code:'NOT_FOUND'};
+  if(rows.length!==1)throw Error('DISPATCH_REPLY_EVIDENCE_AMBIGUOUS');
+  return {code:'OK',itemId:rows[0].item_id};
+ }catch(error){console.error('[DISPATCH_REPLY_EVIDENCE_READ_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});return {code:'UNAVAILABLE'};}
+}
+
 /** Invoked only by the real mail import/assignment command, under its actor. */
 export async function recordImportedDispatchReplies(auth:AuthorizationSnapshot,itemId:string,ports:{readLinked:DispatchResponsePorts['readLinked'];record:(input:{customerId:string;handover:'pickup'|'shipping';proof:DispatchResponseCheck['proofs'][number]})=>Promise<DispatchReplyReceipt>}){
  if(!hasAuthorizationArea(auth,'mails'))throw Error('DISPATCH_REPLY_FORBIDDEN');

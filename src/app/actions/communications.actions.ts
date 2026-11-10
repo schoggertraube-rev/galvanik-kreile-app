@@ -92,7 +92,12 @@ export async function sendCustomerMailAction(input: TargetInput & {
   // a write command under the sender, never an effect of opening the list.
   const linked=await readLinkedIntakeMails(auth,{targetType:'CUSTOMER',targetId:input.targetId});
   if(linked.code!=='OK')return linked;
-  for(const mail of linked.data){const original=await readIntakeMailImportReceipt(auth,{graphMessageId:mail.id});if(original.code!=='OK')return original;const checked=await withDispatchReply(auth,original,true);if(checked.code!=='OK')return checked;}
+  for(const mail of linked.data){
+   const original=await readImportedDispatchReplyEvidence(auth,{graphMessageId:mail.id,customerId:input.targetId});
+   if(original.code==='NOT_FOUND')continue;
+   if(original.code!=='OK')return {code:original.code,message:COLLECTION_REMINDER_COPY.proofUnavailable};
+   const checked=await withDispatchReply(auth,original,true);if(checked.code!=='OK')return checked;
+  }
 
   const [{getOrdersDb},{readShippingSettings,readShippingSettingsInTransaction}]=await Promise.all([import('@/app/actions/orders.actions'),import('@/modules/fundament/server-public')]);
   const [orders,settings]=await Promise.all([getOrdersDb(),readShippingSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true})]);
@@ -183,7 +188,7 @@ import {finishFinalTasksForReply} from '@/lib/server/storageFinalStagePort';
 import {readShippingSettings} from '@/modules/fundament/server-public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 import {completeCollectionTaskForReply,restrictCollectionTaskForReply,createOrderHandoverTask} from '@/modules/tasks/server-public';
-import {recordImportedDispatchReplies} from '@/lib/server/dispatchReplyEffectsPort';
+import {recordImportedDispatchReplies,readImportedDispatchReplyEvidence} from '@/lib/server/dispatchReplyEffectsPort';
 import {qualifyImportedDeliveryFailure} from '@/lib/server/communicationDeliveryPort';
 async function withDeliveryFailure<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T,deferReply=false){
  if(result.code!=='OK'||!result.itemId)return result;
