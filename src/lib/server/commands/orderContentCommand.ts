@@ -312,7 +312,7 @@ export async function setOrderItemFinished(input: SetOrderItemFinishedInput): Pr
       const replay = await tx.execute<EventRow>(sql`SELECT id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id FROM public.events WHERE tenant_id=${auth.data.tenantId} AND client_event_id=${input.clientEventId}::uuid LIMIT 2`);
       if (replay.length) {
         const row = replay[0]; const payload = row?.payload as { requestHash?: unknown } | null;
-        return replay.length === 1 && row && row.event_type === "ORDER_ITEM_FINISHED_CHANGED_V1" && row.order_id === input.orderId && payload?.requestHash === requestHash
+        return replay.length === 1 && row && row.user_id === auth.data.userId && row.event_type === "ORDER_ITEM_FINISHED_CHANGED_V1" && row.order_id === input.orderId && payload?.requestHash === requestHash
           ? { code: "OK" as const, receipt: receipt(row), replayed: true }
           : { code: "CONFLICT" as const, message: "Anfragekennung wurde bereits anders verwendet." };
       }
