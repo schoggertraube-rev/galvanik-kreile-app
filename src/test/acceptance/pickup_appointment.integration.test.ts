@@ -8,6 +8,16 @@ import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarn
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {setOrderPickupAppointmentAction,getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
+import {getOrdersDb} from '@/app/actions/orders.actions';
+import {updateCustomerAction} from '@/app/actions/customers.actions';
+import {createDispatchCallTaskAction} from '@/app/actions/eingang.actions';
+import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
+import {emptyDispatchPolicy} from '@/modules/fundament/public';
+import {resolveAuthorization} from '@/lib/server/authorization';
+import {createDispatchCall} from '@/lib/server/dispatchCallPort';
+import {createOrderHandoverTask} from '@/modules/tasks/server-public';
+import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
+import {readCustomerProfile} from '@/modules/customers/server-public';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('PICKUP_APPOINTMENT_LOOPBACK_REQUIRED');
 
 it('a separate actual appointment preserves the production date, records actor/channel and supports fresh retry and competing updates',async()=>{
@@ -34,4 +44,23 @@ it('a separate actual appointment preserves the production date, records actor/c
  const shipping=await readyInvoiceOrder('Abholtermin-Versand','shipping');
  expect(await withSession(full,()=>setOrderPickupAppointmentAction({...input,orderId:shipping.orderId,expectedVersion:shipping.version,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${shipping.orderId} AND event_type='ORDER_PICKUP_APPOINTMENT_SET_V1'`).toHaveLength(0);
+});
+it('a stale call proposal cannot recreate a callback after an actual pickup agreement has paused its group',async()=>{
+ const order=await readyInvoiceOrder('Abholtermin-Anrufrennen');
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('CALL_RACE_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),holidays:[]}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
+ const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('CALL_RACE_QUEUE');
+ const plan=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder;
+ expect(plan).toMatchObject({stage:'E3',state:'DUE'});if(!plan?.clientKey||!plan.due)throw Error('CALL_RACE_PROPOSAL');
+ expect(await withSession(full,()=>setOrderPickupAppointmentAction({orderId:order.orderId,expectedVersion:order.version,previousEventId:null,date:'2027-06-10',channel:'telefon',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const request={customerId:order.customerId,handover:'pickup' as const,dueDate:plan.due,clientKey:plan.clientKey};
+ // The real UI composition can have read its proposal before the agreement
+ // commits. Resume that exact server command with its captured real readback.
+ const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('CALL_RACE_AUTH');
+ expect(await createDispatchCall(auth.data,request,plan,queue.data.filter(row=>row.id===order.orderId),(tx,input)=>createOrderHandoverTask(tx,auth.data,input,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>createDispatchCallTaskAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->'meta'->'orderIds' @> ${sql.json([order.orderId])}`).toHaveLength(0);
+ const refreshed=await withSession(full,()=>getOrdersDb());if(!refreshed.ok)throw Error('CALL_RACE_REFRESH');
+ expect(refreshed.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'PAUSED',clientKey:null});
 });

@@ -7,6 +7,7 @@ import type {TaskCompleteInput,TaskRecord,TaskFailure} from '@/modules/tasks/pub
 import type {InitialDispatchReminderPlan} from '@/modules/orders/public';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {appendOrderInformed} from './orderReleaseRead';
+import {readOrderPickupAppointmentInTransaction} from './pickupAppointmentPort';
 
 type CallMeta={customerId:string;handover:'pickup'|'shipping';due:string;stageKey:string;orderIds:string[];orderNumbers:string[];freezes:Array<{orderId:string;freezeId:string}>};
 type Created={payload:{meta:CallMeta;taskId:string};user_id:string;correlation_id:string;originalOrderIds?:string[]};
@@ -162,6 +163,9 @@ export async function createDispatchCall(auth:AuthorizationSnapshot,input:Reques
   if(occupied.length&&!existing)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
   const orders=await tx.execute<{id:string;version:number;customer_id:string;handover_mode:string;station:string;current_station:string;current_station_id:string;status:string;freeze_id:string}>(sql`SELECT o.id,o.version,o.customer_id,o.handover_mode,o.station,o.current_station,o.current_station_id,o.status,f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${auth.tenantId} AND o.id=ANY(ARRAY[${sql.join(plan.orderIds.map(id=>sql`${id}`),sql`, `)}]::text[]) ORDER BY o.id FOR UPDATE OF o`);
   if(orders.length!==plan.orderIds.length||orders.some(row=>row.customer_id!==input.customerId||row.handover_mode!==input.handover||[row.station,row.current_station,row.current_station_id,row.status].some(state=>state!=='fertig')||versions.find(order=>order.id===row.id)?.version!==row.version))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+  // The proposal may predate an agreement without changing order.version.
+  // Recheck its separate receipt under the same order lock before task creation.
+  for(const order of orders)if(await readOrderPickupAppointmentInTransaction(tx,auth,order.id))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
   const meta:CallMeta={customerId:input.customerId,handover:input.handover,due:input.dueDate,stageKey,orderIds:plan.orderIds,orderNumbers:plan.orderNumbers,freezes:orders.map(row=>({orderId:row.id,freezeId:row.freeze_id}))};
   const taskId=await createTask(tx,{orderId:record?.bezug_id??anchorOrderId,clientKey:stageKey,title:DISPATCH_CALL_COPY.title,note:DISPATCH_CALL_COPY.note+plan.orderNumbers.join(', '),...(record?{taskId:record.id,version:record.version}:{})});
   const eventId=randomUUID();
