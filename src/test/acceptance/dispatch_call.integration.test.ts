@@ -63,6 +63,9 @@ it('not reached remains explicit without inventing a storage deadline; generic t
  const stranger=await createFixture(['auftraege'],'buero');
  await sql`UPDATE public.events SET payload=jsonb_set(payload,'{result}','"reached"'::jsonb),user_id=${stranger.actorId}::uuid WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${created.taskId}`;
  queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.state).toBe('unavailable');
+ await sql`UPDATE public.events SET payload=jsonb_set(payload,'{result}','"notReached"'::jsonb),user_id=${full.actorId}::uuid,status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${created.taskId}`;
+ queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.state).toBe('unavailable');
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}))).toMatchObject({code:'UNAVAILABLE'});
 });
 it('a later ready order refreshes the same open task through its owner writer before an outcome can cover the enlarged cohort',async()=>{
  const {first,request}=await prepare('E3-Gruppe');const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('CALL_GROUP_CREATE');
