@@ -152,6 +152,17 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
    }else if(due&&due<=berlinCalendarDay())row.storage.letter={state:'DUE',clientKey:storageLetterKey(auth.tenantId,order.customerId,'pickup',appointment.eventId+(voidId?':void:'+voidId:''),[row.orderId]),orderIds:[row.orderId],due,sentAt:null,threadId:null,appointmentEventId:appointment.eventId,freezes:[{orderId:row.orderId,freezeId:member.freezeId}],finalStage:finalStorageStage(null,berlinCalendarDay(),policy)};
    continue;
   }
+  // A paused member no longer belongs to the pending cohort. Keep its real
+  // original and completed task visible without restarting the old ladder.
+  if(!row.storage){
+   const order=orders.find(item=>item.id===row.orderId)!,member=groups.get(JSON.stringify([order.customerId,'pickup']))?.members.find(item=>item.orderId===row.orderId);
+   row.storage={state:'WAIT',eligibleOn:appointment.resumeOn,missingSettings:[],appointmentEventId:appointment.eventId};
+   const original=(histories.get(JSON.stringify([order.customerId,'pickup']))??[]).filter(item=>item.stage==='E4'&&item.storageOrigin?.freezes.some(proof=>proof.orderId===row.orderId&&proof.freezeId===member?.freezeId)).at(-1);
+   if(original){
+    row.storage.letter={state:original.sentAt&&!original.deliveryFailedAt?'SENT':original.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:original.stageKey,orderIds:original.orderIds,due:original.dueDate,sentAt:original.sentAt,threadId:original.threadId,...(original.postalDocumentId?{postalDocumentId:original.postalDocumentId,postalTaskId:original.postalTaskId}:{}),callTaskId:original.storageOrigin?.callTaskId,appointmentEventId:original.storageOrigin?.appointmentEventId,replyEventId:original.storageOrigin?.replyEventId,freezes:original.storageOrigin!.freezes,finalStage:finalStorageStage(original.deliveryFailedAt?null:original.sentAt,berlinCalendarDay(),policy,original.storageDeadline??{date:'',due:null})};
+    try{const final=await readStorageFinalTaskState(auth,original.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}catch(error){console.error('[PAUSED_ORIGINAL_READ_FAILED]',error);row.unavailable=true;row.storage=undefined;continue;}
+   }
+  }
   if(row.storage){row.storage.state='WAIT';if(row.storage.letter){const original=row.storage.letter.finalStage;row.storage.letter.finalStage={...original,state:original.taskId?original.state:'WAIT',due:original.taskId?original.due:appointment.resumeOn,pausedUntil:appointment.resumeOn};if('positionProposal'in row.storage.letter.finalStage)row.storage.letter.finalStage.positionProposal=null;}}
  }
  for(const row of result){const stage=row.storage?.letter?.finalStage;if(stage&&hasAuthorizationArea(auth,'geld')&&['DUE','TASK_PENDING'].includes(stage.state))stage.positionProposal=policy?.storageWeeklyCents==null?null:{name:STORAGE_CHARGE_COPY.name,unit:STORAGE_CHARGE_COPY.unit,unitPriceCents:policy.storageWeeklyCents,quantity:null,automatic:false};}

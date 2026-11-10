@@ -680,5 +680,5 @@ it.each(['call','post','final'] as const)('K3 appointment for A keeps B in its e
   expect(b?.storage?.letter?.postalDocumentId).not.toBe(original!.document.id);
  }
  expect(await withSession(operator,()=>setOrderPickupAppointmentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
- expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'channel'='post'`).toHaveLength(kind==='final'?1:0);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'channel'='post' AND payload->'meta'->>'customerId'=${order.customerId}`).toHaveLength(kind==='final'?1:0);
 });
