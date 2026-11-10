@@ -11,6 +11,8 @@ describe('German name evidence, without customer aliases or guessed records',()=
   expect(nameSearchAlternative('TEST Sabrina Schmidt','Schmitt')).toBe('phonetic');
   expect(nameSearchAlternative('TEST Maier Oberflächen AG','Mayr')).toBe('phonetic');
   expect(nameSearchAlternative('TEST Sabrina Schmidt','Schmdit')).toBe('spelling');
+  expect(nameSearchAlternative('TEST Reiner Schmitt','Schmdit')).toBe('spelling');
+  expect(nameSearchAlternative('TEST Schmied Metallbau GmbH','Schmdit')).toBe('spelling');
   expect(nameSearchAlternative('TEST Andere Firma','Schmitt')).toBeNull();
   expect(nameSearchAlternative('TEST Schmidt','gmbh')).toBeNull();
   expect(nameSearchAlternative('TEST Schmidt','1234')).toBeNull();

@@ -1,8 +1,4 @@
 {
-  "S2": {
-    "paket": "AP-ABLAUF-PRUEFUNG",
-    "grund": "Ein Fixversuch: echte Suche Schmdit findet Schmidt, noch nicht dessen gesamte Klangfamilie Schmitt/Schmied. Replay-Assertion bleibt unverändert rot; kein Gesamt-Suche-PASS."
-  },
   "E25": {
     "paket": "AP-EIN",
     "grund": "Endversion-Angleich U-242: Zahlungsbedingung wählen ersetzt fehlt: Zahlungsbedingung",

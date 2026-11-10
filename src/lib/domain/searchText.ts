@@ -51,7 +51,10 @@ export function nameSearchAlternative(name:string|null,query:string):NameSearchA
  const words=foldSearchText(name).match(/[a-z]+/g)??[];
  const code=cologneSearchCode(word);
  if(code&&words.some(candidate=>!LEGAL_NAME_WORDS.has(candidate)&&cologneSearchCode(candidate)===code))return 'phonetic';
- return words.some(candidate=>!LEGAL_NAME_WORDS.has(candidate)&&oneSpellingEdit(candidate,word))?'spelling':null;
+ // A transposed query can split a phonetic family (Schmdit:8622, Schmidt:862).
+ // Prove spelling alternatives through the same canonical code, without aliases or a second search.
+ const correctedCodes=new Set(Array.from({length:word.length-1},(_,at)=>cologneSearchCode(word.slice(0,at)+word[at+1]+word[at]+word.slice(at+2))));
+ return words.some(candidate=>!LEGAL_NAME_WORDS.has(candidate)&&(oneSpellingEdit(candidate,word)||correctedCodes.has(cologneSearchCode(candidate))))?'spelling':null;
 }
 
 /** Safe broad SQL preselection; only nameSearchAlternative can prove a hit. */
