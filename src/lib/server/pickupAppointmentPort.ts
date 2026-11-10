@@ -61,7 +61,7 @@ export async function readOrderPickupAppointment(auth:AuthorizationSnapshot,orde
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   const receipt=await latest(tx,auth,orderId);
   if(!receipt)return {code:'OK' as const,appointment:null};
-  const current=await tx.execute<{freeze_id:string}>(sql`SELECT f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${auth.tenantId} AND o.id=${orderId} AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig'`);
+  const current=await tx.execute<{freeze_id:string}>(sql`SELECT f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${auth.tenantId} AND o.id=${orderId} AND o.handover_mode='pickup' AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig'`);
   return {code:'OK' as const,appointment:current[0]?.freeze_id===receipt.freezeId?receipt:null};
  });}catch(error){console.error('[PICKUP_APPOINTMENT_READ_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const};}
 }
