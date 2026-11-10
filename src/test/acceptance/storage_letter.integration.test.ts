@@ -95,6 +95,16 @@ it('an original customer reply ends the exact open postal task without inventing
  });
  const {attachOutlookMailAction}=await import('@/app/actions/communications.actions');
  expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:order.customerId,graphMessageId:'TEST-post-reply'}))).toMatchObject({code:'OK'});
+ const guard='test_reply_end_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${guard}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='ORDER_COLLECTION_TASK_ENDED_FOR_REPLY_V1' AND NEW.payload->>'taskId'='${prepared.taskId}' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ try{
+  await sql.unsafe(`CREATE TRIGGER ${guard} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${guard}()`);
+  expect(await plan()).toMatchObject({unavailable:true,gaps:expect.arrayContaining(['COLLECTION_PROOF_UNAVAILABLE'])});
+  expect(await sql`SELECT status,erledigt_am FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.taskId}::uuid`).toEqual([{status:'offen',erledigt_am:null}]);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1'`).toHaveLength(0);
+ }finally{
+  await sql.unsafe(`DROP TRIGGER IF EXISTS ${guard} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${guard}()`);
+ }
  expect((await plan())?.reminder).toMatchObject({responseState:'REPLIED'});
  const task=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));
  expect(task).toMatchObject({code:'OK',task:{status:'erledigt'},postalLetter:{state:'ENDED_BY_REPLY',document:{sha256:prepared.document.sha256}}});
