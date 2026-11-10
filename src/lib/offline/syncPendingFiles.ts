@@ -10,7 +10,13 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
  const existing=running.get(scope);if(existing)return existing;
  const work=(async()=>{
   const outcome={secured:0,acknowledged:0,blocked:0};
-  for(const entry of await readPendingOriginals(scope)){
+  // IndexedDB getAll follows random UUID keys. Replay known capture times in
+  // their original order so a later file cannot create the note's base first.
+  const entries=await readPendingOriginals(scope);
+  const timed=entries.filter(entry=>entry.deviceCapturedAt&&Number.isFinite(Date.parse(entry.deviceCapturedAt)))
+   .sort((a,b)=>Date.parse(a.deviceCapturedAt!)-Date.parse(b.deviceCapturedAt!));
+  let cursor=0;
+  for(const entry of entries.map(entry=>entry.deviceCapturedAt&&Number.isFinite(Date.parse(entry.deviceCapturedAt))?timed[cursor++]:entry)){
    if(ports.currentScope()!==scope)break;
    if(entry.kind==='note'){
     if(entry.expectedVersion===undefined||!entry.deviceCapturedAt)continue;

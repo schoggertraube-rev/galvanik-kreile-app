@@ -1,11 +1,12 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {cleanup,render,screen,waitFor} from '@testing-library/react';
+import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {SyncProvider,useSync} from '../SyncContext';
 const state=vi.hoisted(()=>({scope:'a'.repeat(64),status:'authenticated'}));
-const ports=vi.hoisted(()=>({read:vi.fn(),retain:vi.fn()}));
+const ports=vi.hoisted(()=>({read:vi.fn(),retain:vi.fn(),sync:vi.fn(async(..._args:unknown[])=>({secured:0,acknowledged:0,blocked:1}))}));
 vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:state.scope,status:state.status,hasArea:()=>false})}));
 vi.mock('@/app/actions/eingang.actions',()=>({prepareIntakeFileAction:vi.fn(),finishIntakeFileAction:vi.fn(),saveIntakeNoteAction:vi.fn()}));
 vi.mock('@/modules/eingang/public',()=>({uploadIntakeOriginal:vi.fn()}));
+vi.mock('../syncPendingFiles',()=>({syncPendingFiles:ports.sync}));
 vi.mock('../pendingStore',()=>({readPendingEntries:ports.read,retainQuarantinedPending:ports.retain}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 function Count(){const {outboxItems}=useSync();return <output data-testid="pending">{outboxItems.length}</output>;}
@@ -30,4 +31,15 @@ it('does not show the previous login queue or let a late prior read overwrite a 
  await waitFor(()=>expect(screen.getByTestId('pending')).toHaveTextContent('0'));
  state.status='unauthenticated';view.rerender(<SyncProvider><Count/></SyncProvider>);
  expect(screen.getByTestId('pending')).toHaveTextContent('0');
+});
+
+function Retry(){const {syncNow}=useSync();return <button onClick={()=>void syncNow()}>TEST retry</button>;}
+it('manual retry uses the real scoped transport instead of reporting a snapshot refresh as sync',async()=>{
+ state.scope='e'.repeat(64);state.status='authenticated';ports.read.mockResolvedValue([{id:'TEST-note',kind:'note',itemId:'TEST-item'}]);
+ render(<SyncProvider><Count/><Retry/></SyncProvider>);
+ await waitFor(()=>expect(ports.sync).toHaveBeenCalledTimes(1));
+ fireEvent.click(screen.getByText('TEST retry'));
+ await waitFor(()=>expect(ports.sync).toHaveBeenCalledTimes(2));
+ expect(ports.sync.mock.calls[1][0]).toBe(state.scope);
+ expect(screen.getByTestId('pending')).toHaveTextContent('1');
 });

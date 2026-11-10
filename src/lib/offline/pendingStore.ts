@@ -33,9 +33,11 @@ export async function retainPendingOriginal(scope: string, original: PendingOrig
    const deviceCapturedAt=same?previous?.deviceCapturedAt:new Date().toISOString();
    const expectedVersion=same&&previous?.kind==='note'?previous.expectedVersion:original.kind==='note'?original.expectedVersion:undefined;
    if(previous&&previous.kind!==original.kind){tx.abort();return;}
+   // The first file is the original. A retry must never replace its bytes or
+   // provenance while it still awaits the server receipt.
+   if(original.kind==='file'&&previous?.kind==='file'){store.put(previous);return;}
    const value={...original};delete value.deviceCapturedAt;
    if(value.kind==='note'){delete value.expectedVersion;if(expectedVersion!==undefined)value.expectedVersion=expectedVersion;}
-   if(value.kind==='file'&&previous?.kind==='file'){delete value.deviceId;if(previous.deviceId!==undefined)value.deviceId=previous.deviceId;}
    if(deviceCapturedAt)value.deviceCapturedAt=deviceCapturedAt;
    store.put(value);};
   tx.oncomplete=()=>{connection.close();window.dispatchEvent(new Event("kreile-pending-changed"));resolve();};
