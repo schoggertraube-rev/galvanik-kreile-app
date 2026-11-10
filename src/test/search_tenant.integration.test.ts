@@ -70,6 +70,7 @@ beforeAll(async () => {
       (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'auftraege', ${userId}::uuid),
       (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'eingang', ${userId}::uuid),
       (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'kunden', ${userId}::uuid),
+      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'mails', ${userId}::uuid),
       (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'geld', ${userId}::uuid)
     ON CONFLICT (tenant_id, user_id, bereich) DO UPDATE SET
       granted_by = EXCLUDED.granted_by
