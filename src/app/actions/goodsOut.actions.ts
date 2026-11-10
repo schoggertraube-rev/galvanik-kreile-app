@@ -31,7 +31,7 @@ export async function recordGoodsOutAction(
   const {recordStoragePostalResult}=await import('@/lib/server/storagePostalPort');
   const {retireOrderPrintJobsAfterGoodsOut}=await import('@/modules/orders/server-public');
   let callTaskIds:string[]|null=null;
-  let finalTasks:Awaited<ReturnType<typeof lockStorageFinalTasksForGoodsOut>>=[];
+  let finalTasks:Awaited<ReturnType<typeof lockStorageFinalTasksForGoodsOut>>|null=null;
   const result = await recordGoodsOut(input,{
     beforeOrderLock:async(tx,auth)=>{if(invoiceInput&&invoicePort)await invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput);callTaskIds=await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);finalTasks=await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId);},
     ...(invoiceInput&&invoicePort?{beforeWrite:async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction)=>{
@@ -42,7 +42,7 @@ export async function recordGoodsOutAction(
     afterWrite:async(tx,auth)=>{
      const tasks=callTaskIds??await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);
      await finishDispatchCallsAfterGoodsOut(tx,auth,tasks,(id,note)=>completeOrderCallbackTask(tx,auth,id,note,{beforeComplete:recordDispatchCallResult,effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
-     await finishStorageFinalTasksAfterGoodsOut(tx,auth,finalTasks,request=>completeStorageTaskAfterGoodsOut(tx,auth,request,{beforeComplete:recordStoragePostalResult,effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
+     await finishStorageFinalTasksAfterGoodsOut(tx,auth,finalTasks??await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId),request=>completeStorageTaskAfterGoodsOut(tx,auth,request,{beforeComplete:recordStoragePostalResult,effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
      await retireOrderPrintJobsAfterGoodsOut(tx,auth,{orderId:input.orderId,clientEventId:input.clientEventId});
     }
   });

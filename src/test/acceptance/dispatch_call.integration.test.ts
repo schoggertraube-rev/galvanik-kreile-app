@@ -107,8 +107,8 @@ it('E4 uses the existing sender only after individual eligibility and starts the
  const operator=await createFixture(['auftraege','geld'],'buero');
  const goodsOut={orderId:later.orderId,mode:'abholung' as const,expectedVersion:secondOrder.version,clientEventId:randomUUID()};
  await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${secondFinal.taskId}`;
- expect(await withSession(operator,()=>recordGoodsOutAction(goodsOut))).toMatchObject({code:'UNAVAILABLE'});
- expect(await sql`SELECT station FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${later.orderId}`).toEqual([{station:'fertig'}]);
+ expect(await withSession(operator,()=>recordGoodsOutAction(goodsOut))).toMatchObject({code:'OK'});
+ expect(await sql`SELECT station FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${later.orderId}`).toEqual([{station:'abgeholt'}]);
  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${secondFinal.taskId}::uuid`).toEqual([{status:'offen'}]);
  await sql`UPDATE public.events SET status='success' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${secondFinal.taskId}`;
  expect(await withSession(operator,()=>recordGoodsOutAction(structuredClone(goodsOut)))).toMatchObject({code:'OK'});
