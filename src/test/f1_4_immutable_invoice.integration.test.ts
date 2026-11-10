@@ -468,8 +468,8 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       session_zone: SESSION_TIME_ZONE,
     }]);
 
-    // An invalid VAT configuration is unreachable in the database itself, so
-    // the command is never forced into an artificially impossible state.
+    // Unsupported VAT rates remain database errors. Missing VAT is deliberately
+    // storable since PL09.11.21:45; issuance must reject it without writing.
     const vatConfigGuard = async (value: number | null): Promise<string> => {
       try {
         await sql.unsafe(
@@ -484,7 +484,9 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     };
     expect(await vatConfigGuard(0)).toBe("23514");
     expect(await vatConfigGuard(1000)).toBe("23514");
-    expect(await vatConfigGuard(null)).toBe("23502");
+    expect(await vatConfigGuard(null)).toBe("ACCEPTED");
+    expect(await sql`SELECT invoice_vat_rate_basis_points FROM public.company_settings WHERE id = ${SETTINGS_ID} AND tenant_id = ${TENANT_ID}`).toEqual([{invoice_vat_rate_basis_points:null}]);
+    await sql`UPDATE public.company_settings SET invoice_vat_rate_basis_points = 1900 WHERE id = ${SETTINGS_ID} AND tenant_id = ${TENANT_ID}`;
     const [vatUnchanged] = await sql<{ invoice_vat_rate_basis_points: number }[]>`
       SELECT invoice_vat_rate_basis_points
       FROM public.company_settings
@@ -514,6 +516,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     );
 
     const masterFields = [
+      { table: "company_settings", id: SETTINGS_ID, column: "invoice_vat_rate_basis_points", variants: [{label:"null",value:null as string | number | null}] },
       { table: "company_settings", id: SETTINGS_ID, column: "company_name", variants: REQUIRED_TEXT_VARIANTS },
       { table: "company_settings", id: SETTINGS_ID, column: "street", variants: NULLABLE_TEXT_VARIANTS },
       { table: "company_settings", id: SETTINGS_ID, column: "zip", variants: NULLABLE_TEXT_VARIANTS },
