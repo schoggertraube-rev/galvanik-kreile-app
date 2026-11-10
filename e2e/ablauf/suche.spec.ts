@@ -4,12 +4,60 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture,readyInvoiceOrder} from './orderFixture';
 
+it('S20 search finds the actual contact person with a grounded match without changing data',async()=>{
+ const customerId=await customerFixture('S20'),needle='TEST Buchhaltung '+randomUUID();
+ const {updateCustomerAction}=await import('@/app/actions/customers.actions');
+ expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),contactPerson:needle}))).toMatchObject({code:'OK'});
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ expect(await withSession(full,()=>searchTenantAction(needle))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'CUSTOMER',id:customerId,matchField:'contactPerson',matchValue:needle})])});
+ const worker=await createFixture(['auftraege'],'werkstatt');
+ const restricted=await withSession(worker,()=>searchTenantAction(needle));
+ // Operational search already permits customer lookup without Kunden editing rights.
+ expect(restricted).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'CUSTOMER',id:customerId,matchField:'contactPerson',matchValue:needle})])});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
 async function searchOrderFixture(label:string,customerId:string){
  const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
  const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',note:'TEST '+label,items:[{catalogServiceId:null,name:'TEST '+label+' Teil',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
  expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('SEARCH_INITIAL_ORDER:'+created.code);
  return created;
 }
+
+it('S22 exact customer email remains a proven customer hit instead of disappearing after the read port',async()=>{
+ const customerId=await customerFixture('S22');
+ const email='TEST-'+customerId+'@example.invalid';
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(full,()=>searchTenantAction(email))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'CUSTOMER',id:customerId,matchField:'email',matchValue:email})])});
+ expect(await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{email}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
+it('S23/S31 actual order dates and surface prefixes stay grounded in the stored order',async()=>{
+ const customerId=await customerFixture('S23-S31');
+ const created=await searchOrderFixture('S23-S31',customerId);
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ for(const query of ['15.05.2027','2027-05-15'])expect(await withSession(full,()=>searchTenantAction(query))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'ORDER',id:created.receipt.orderId,matchField:'dueDate',matchValue:query})])});
+ expect(await withSession(full,()=>searchTenantAction('ver'))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'ORDER',id:created.receipt.orderId,matchField:'surface',matchValue:'Verchromen'})])});
+ expect(await sql`SELECT due_date::date::text AS due_date FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.receipt.orderId}`).toEqual([{due_date:'2027-05-15'}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
+it('S17 stored part instructions are searchable with their original evidence',async()=>{
+ const customerId=await customerFixture('S17');
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const note='TEST Gewinde M6 abdecken '+randomUUID();
+ const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',note,items:[{catalogServiceId:null,name:'TEST Griffe',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
+ if(created.code!=='OK')throw Error('S17_INTAKE:'+created.code);
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ expect(await withSession(full,()=>searchTenantAction('Gewinde M6'))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'ORDER',id:created.receipt.orderId,matchField:'partNote',matchValue:note})])});
+ expect(await sql`SELECT internal_notes FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId}`).toEqual([{internal_notes:note}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
 
 it('search preserves proven order hits when a separate customer source cannot read an isolated legacy row',async()=>{
  const needle='49'+Date.now().toString();
@@ -24,6 +72,29 @@ it('search preserves proven order hits when a separate customer source cannot re
  expect(found.checkedSources).toContain('Auftragsbestand');
  expect(found.checkedSources).not.toContain('Kundenstamm');
  expect(found.hits.some(hit=>hit.type==='CUSTOMER')).toBe(false);
+});
+
+it('search preserves the customer hit and reports incomplete coverage when an actual legacy order cannot be read',async()=>{
+ const needle='TEST Altauftrag '+randomUUID();
+ const customerId=await customerFixture(needle);
+ const order=await searchOrderFixture('TEST beschädigtes Altdatum',customerId);
+ const [original]=await sql`SELECT title FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.receipt.orderId}`;
+ // Isolated historical TEST state, with the real DB guards still enabled.
+ try {
+ await sql`UPDATE public.orders SET title='' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.receipt.orderId}`;
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const result=await withSession(full,()=>searchTenantAction(needle));
+ expect(result).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'CUSTOMER',id:customerId})]),failedSources:['Auftragsbestand'],coverage:{truncated:true}});
+ if(result.code!=='OK')throw Error('SEARCH_PARTIAL_ORDER:'+result.code);
+ expect(result.checkedSources).toContain('Kundenstamm');
+ expect(result.checkedSources).not.toContain('Auftragsbestand');
+ expect(result.hits.some(hit=>hit.type==='ORDER')).toBe(false);
+ expect(await sql`SELECT title FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.receipt.orderId}`).toEqual([{title:''}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+ } finally {
+  await sql`UPDATE public.orders SET title=${original.title} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.receipt.orderId}`;
+ }
 });
 
 it('S5/S6 search exact stored order and customer numbers through the actual action without creating data',async()=>{

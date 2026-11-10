@@ -12,6 +12,7 @@ export type SearchMatchField =
   | "customerName"
   | "task"
   | "part"
+  | "partNote"
   | "material"
   | "surface"
   | "dueDate"
@@ -21,6 +22,8 @@ export type SearchMatchField =
   | "city"
   | "customerRecord"
   | "phone"
+  | "contactPerson"
+  | "email"
   | "quoteNumber"
   | "invoiceNumber"
   | "note"
@@ -46,6 +49,7 @@ export type SearchHit = {
 
 export type SearchOrderPart = {
   name: string;
+  internalNotes?: string | null;
   material: string | null;
   surfaceRequested: string | null;
 };
@@ -70,6 +74,8 @@ export type SearchCustomerDocument = {
   customerType: string;
   city: string | null;
   phone?: string | null;
+  contactPerson?: string | null;
+  email?: string | null;
 };
 
 export type SearchCustomerBatch = {

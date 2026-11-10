@@ -1072,6 +1072,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         || !source.seller_config_complete
         || !source.customer_config_complete
         || !source.base_prices_complete
+        || source.invoice_vat_rate_basis_points === null
       ) {
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
