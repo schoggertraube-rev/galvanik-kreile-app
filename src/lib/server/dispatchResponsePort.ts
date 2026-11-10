@@ -29,11 +29,12 @@ export async function readDispatchResponses(auth:AuthorizationSnapshot,input:{cu
    });
    if(!original)continue;
    const chain=original.reply_chain;
+   if(!chain||chain.status==='missing')continue;
    if(!original.proof_ok)throw Error('DISPATCH_RESPONSE_ORIGINAL_MISSING');
-   if(chain?.status==='missing')continue;
    if(!original.proof_ok||!chain||chain.source!=='original_mime'||chain.status!=='present'||!Array.isArray(chain.inReplyTo)||chain.inReplyTo.length!==1||!chain.originalSha256||!/^[a-f0-9]{64}$/.test(chain.originalSha256)||!mail.senderAddress)throw Error('DISPATCH_RESPONSE_REFERENCE_UNCLEAR');
    const sent=await readMicrosoftGraphSentMailReference(chain.inReplyTo[0],mail.senderAddress);
-   if(sent.code!=='OK'||!sent.data.clientRequestId)throw Error('DISPATCH_RESPONSE_SENT_REFERENCE_UNCLEAR');
+   if(sent.code!=='OK')throw Error('DISPATCH_RESPONSE_SENT_REFERENCE_UNCLEAR');
+   if(!sent.data.clientRequestId)continue;
    const thread=threads.find(row=>row.source==='MS_GRAPH_OUT:'+sent.data.clientRequestId);
    if(thread){
     const freezes=await withPrivilegedTenantTransaction(auth,tx=>readDispatchResponseScope(tx,auth,thread.id));

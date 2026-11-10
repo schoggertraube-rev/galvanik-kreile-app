@@ -2,7 +2,7 @@
 
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {freezeStorageDeadline} from '@/lib/server/storageDeadline';
-import {createHash} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
 import {readCommunicationDocumentReceipt,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -58,12 +58,12 @@ export async function listOutlookInboxAction(input?: TargetInput) {
 export async function attachOutlookMailAction(input: TargetInput & { graphMessageId: string }) {
   const authorizationResult = await authorization();
   if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
-  const imported=await importOutlookMailAction(input?.graphMessageId);
+  const imported=await importOutlookMailAction(input?.graphMessageId,{deferDispatchReply:true});
   if(imported.code!=='OK')return imported;
   const linked=await linkImportedMail(authorizationResult.data,{itemId:imported.itemId,targetType:input.targetType,targetId:input.targetId},readCommunicationTargetInTransaction,readCustomerProfile);
   if(linked.code!=='OK')return linked;
-  const replyChecked=await withDispatchReply(authorizationResult.data,imported);if(replyChecked.code!=='OK')return replyChecked;
   const correspondence=await attachInboxMessage(authorizationResult.data,input,imported.message);
+  if(correspondence.code==='OK')await withDispatchReply(authorizationResult.data,imported);
   return correspondence.code==='OK'?{...correspondence,data:{...correspondence.data,attachmentsImported:imported.originalCount,attachmentsSkipped:imported.filteredAttachments}}:correspondence;
 }
 
@@ -92,7 +92,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   // a write command under the sender, never an effect of opening the list.
   const linked=await readLinkedIntakeMails(auth,{targetType:'CUSTOMER',targetId:input.targetId});
   if(linked.code!=='OK')return linked;
-  for(const mail of linked.data){const original=await readIntakeMailImportReceipt(auth,{graphMessageId:mail.id});if(original.code!=='OK')return original;const checked=await withDispatchReply(auth,original);if(checked.code!=='OK')return checked;}
+  for(const mail of linked.data){const original=await readIntakeMailImportReceipt(auth,{graphMessageId:mail.id});if(original.code!=='OK')return original;const checked=await withDispatchReply(auth,original,true);if(checked.code!=='OK')return checked;}
 
   const [{getOrdersDb},{readShippingSettings,readShippingSettingsInTransaction}]=await Promise.all([import('@/app/actions/orders.actions'),import('@/modules/fundament/server-public')]);
   const [orders,settings]=await Promise.all([getOrdersDb(),readShippingSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true})]);
@@ -185,12 +185,12 @@ import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 import {completeCollectionTaskForReply,restrictCollectionTaskForReply,createOrderHandoverTask} from '@/modules/tasks/server-public';
 import {recordImportedDispatchReplies} from '@/lib/server/dispatchReplyEffectsPort';
 import {qualifyImportedDeliveryFailure} from '@/lib/server/communicationDeliveryPort';
-async function withDeliveryFailure<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T){
+async function withDeliveryFailure<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T,deferReply=false){
  if(result.code!=='OK'||!result.itemId)return result;
  const qualified=await qualifyImportedDeliveryFailure(auth,result.itemId,customerId=>linkImportedMail(auth,{itemId:result.itemId!,targetType:'CUSTOMER',targetId:customerId},readCommunicationTargetInTransaction,readCustomerProfile));
- return qualified.code==='OK'?withDispatchReply(auth,result):{...qualified,itemId:result.itemId};
+ return qualified.code==='OK'?(deferReply?result:withDispatchReply(auth,result)):{...qualified,itemId:result.itemId};
 }
-async function withDispatchReply<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T){
+async function withDispatchReply<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T,strict=false){
  if(result.code!=='OK'||!result.itemId)return result;
  try{
  const settings=await readShippingSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true});
@@ -201,7 +201,16 @@ async function withDispatchReply<T extends {code:string;itemId?:string}>(auth:Au
  createTask:(writeTx,value)=>createOrderHandoverTask(writeTx,auth,value,{effect:(effectTx,actor,effect)=>recordIntakeTaskEffect(effectTx,actor,effect,readCustomerProfile)})
  });await finishFinalTasksForReply(tx,auth,receipt,complete,restrict);}});
  await recordImportedDispatchReplies(auth,result.itemId,{readLinked:readLinkedIntakeMails,record});return result;}
- catch(error){console.error('[IMPORTED_DISPATCH_REPLY_FAILED]',{name:error instanceof Error?error.name:'UnknownError',reason:error instanceof Error&&/^[A-Z_]+$/.test(error.message)?error.message:'DATABASE_OR_PROVIDER_FAILURE'});return {code:'UNAVAILABLE' as const,itemId:result.itemId,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
+ catch(error){
+  const reason=error instanceof Error&&/^[A-Z_]+$/.test(error.message)?error.message:'DATABASE_OR_PROVIDER_FAILURE';
+  console.error('[IMPORTED_DISPATCH_REPLY_FAILED]',{name:error instanceof Error?error.name:'UnknownError',reason});
+  try{await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,user_id,payload,status,client_event_id,correlation_id,event_schema_version,created_at)
+   VALUES(${randomUUID()},${auth.tenantId},'DISPATCH_REPLY_RETRY_REQUIRED_V1','DISPATCH_REPLY_RETRY_REQUIRED_V1',${auth.userId}::uuid,${JSON.stringify({itemId:result.itemId,reason})}::jsonb,'success',${randomUUID()}::uuid,${result.itemId}::uuid,1,statement_timestamp())`));}
+  catch(markerError){console.error('[DISPATCH_REPLY_RETRY_MARKER_FAILED]',{name:markerError instanceof Error?markerError.name:'UnknownError'});}
+  // Every next assignment and reminder reads the same linked original again.
+  // Reaction uncertainty can block a reminder, never invalidate its saved mail.
+  return strict?{code:'UNAVAILABLE' as const,itemId:result.itemId,message:COLLECTION_REMINDER_COPY.proofUnavailable}:result;
+ }
 }
 import {readMicrosoftGraphAttachments,readMicrosoftGraphMime,readMicrosoftGraphMessage,type GraphInboxMessage} from '@/lib/server/microsoftGraph';
 async function importIntakeMessage(auth:Parameters<typeof importIntakeGraphMail>[0],mail:GraphInboxMessage){
@@ -213,14 +222,14 @@ async function importIntakeMessage(auth:Parameters<typeof importIntakeGraphMail>
  const saved=await readIntakeMailImportReceipt(auth,{itemId:result.itemId});
  return saved.code==='OK'?{...saved,replayed:result.replayed}:saved;
 }
-export async function importOutlookMailAction(graphMessageId:string){
+export async function importOutlookMailAction(graphMessageId:string,options?:{deferDispatchReply?:boolean}){
  const authorization=await resolveAuthorization();
  if(!authorization.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung nicht verfügbar.'};
  if(!hasAuthorizationArea(authorization.data,'eingang')||!hasAuthorizationArea(authorization.data,'mails'))return {code:'FORBIDDEN' as const,message:'Mail-Import benötigt Eingang und Mails.'};
  if(typeof graphMessageId!=='string'||!graphMessageId||graphMessageId.length>1024)return {code:'VALIDATION_ERROR' as const,message:'Mailkennung ungültig.'};
  const saved=await readIntakeMailImportReceipt(authorization.data,{graphMessageId});
- if(saved.code!=='NOT_FOUND')return withDeliveryFailure(authorization.data,saved);
+ if(saved.code!=='NOT_FOUND')return withDeliveryFailure(authorization.data,saved,options?.deferDispatchReply===true);
  const mail=await readMicrosoftGraphMessage(graphMessageId);
  if(mail.code!=='OK')return mail;
- return withDeliveryFailure(authorization.data,await importIntakeMessage(authorization.data,mail.data));
+ return withDeliveryFailure(authorization.data,await importIntakeMessage(authorization.data,mail.data),options?.deferDispatchReply===true);
 }

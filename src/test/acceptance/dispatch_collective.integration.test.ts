@@ -11,6 +11,47 @@ import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 const DATABASE_URL=process.env.DATABASE_URL,EXPECTED_DATABASE_URL=process.env.H18_EXPECTED_DATABASE_URL;
 if(!DATABASE_URL||DATABASE_URL!==EXPECTED_DATABASE_URL||new URL(DATABASE_URL).hostname!=='127.0.0.1')throw Error('DISPATCH_COLLECTIVE_LOOPBACK_REQUIRED');
 
+it('K10 saves a real Outlook reply before reaction checking; an unbound Outlook reference never becomes an app reaction or blocks E1/E2',async()=>{
+ const order=await readyInvoiceOrder('K10-Outlook-Antwort');
+ const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+ let outage=true,sends=0;
+ const graphId='TEST-K10-reply-'+randomUUID(),messageId='<'+graphId+'@example.invalid>',reference='<TEST-non-app-outlook@example.invalid>';
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-K10-provider-token'.repeat(3),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;return new Response(null,{status:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return outage?new Response(null,{status:503}):Response.json({value:[{id:'TEST-K10-non-app-original',internetMessageId:reference,from:{emailAddress:{address:'TEST-mailbox@example.invalid'}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[]}]});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/attachments'))return Response.json({value:[]});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/$value'))return new Response('Message-ID: '+messageId+'\r\nFrom: '+customer.email+'\r\nIn-Reply-To: '+reference+'\r\nSubject: TEST Outlook Antwort\r\n\r\nTEST Antwort auf eine andere Outlook-Mail.');
+  if(url.hostname==='graph.microsoft.com')return Response.json({id:graphId,internetMessageId:messageId,subject:'TEST Outlook Antwort',from:{emailAddress:{name:'TEST Kunde',address:customer.email}},receivedDateTime:new Date(Date.now()+100).toISOString(),bodyPreview:'TEST Antwort',body:{contentType:'text',content:'TEST Antwort auf eine andere Outlook-Mail.'},hasAttachments:false});
+  return nativeFetch(input,init);
+ });
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,subject:'TEST Fertig',body:'TEST Ware fertig',clientRequestId:randomUUID(),expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ const {attachOutlookMailAction,listOutlookInboxAction}=await import('@/app/actions/communications.actions');
+ const attachment={targetType:'CUSTOMER' as const,targetId:order.customerId,graphMessageId:graphId};
+ expect(await withSession(full,()=>attachOutlookMailAction(attachment))).toMatchObject({code:'OK'});
+ const attached=await withSession(full,()=>listOutlookInboxAction({targetType:'CUSTOMER',targetId:order.customerId}));
+ expect(attached.code).toBe('OK');if(attached.code!=='OK')throw Error('K10_SAVED_READ');expect(attached.data.some(message=>message.id===graphId)).toBe(true);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='DISPATCH_REPLY_RETRY_REQUIRED_V1'`).toHaveLength(1);
+ outage=false;
+ const retryInput=JSON.parse(JSON.stringify(attachment));
+ expect(await withSession(full,()=>attachOutlookMailAction(retryInput))).toMatchObject({code:'OK'});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_REPLIED_V1'`).toHaveLength(0);
+ const {readShippingSettingsAction,saveShippingSettingsAction}=await import('@/app/actions/settings.actions');
+ const {emptyDispatchPolicy}=await import('@/modules/fundament/public');
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('K10_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),reminderDays:0,secondReminderDays:0,callAfterDays:0,holdMinutes:0}}))).toMatchObject({code:'OK'});
+ const {getOrdersDb}=await import('@/app/actions/orders.actions');
+ for(const stage of ['E1','E2'] as const){
+  const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('K10_QUEUE');
+  const reminder=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder;
+  expect(reminder).toMatchObject({stage,state:'DUE'});if(!reminder?.due)throw Error('K10_DUE');
+  const dueDate=reminder.due;
+  expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:order.customerId,subject:'TEST Erinnerung',body:'TEST Abholung',clientRequestId:randomUUID(),collectionReminder:{stage,handover:'pickup',dueDate}}))).toMatchObject({code:'OK'});
+ }
+ expect(sends).toBe(3);
+});
+
 it('E06 one actual invoice mail includes the ready cohort and original PDFs, preserves the oldest per-order notice and replays its original cohort',async()=>{
  const requests:Array<{body:{content:string};attachments:Array<{name:string;contentBytes:string}>;internetMessageHeaders?:Array<{name:string;value:string}>}>=[];
  let replySender='',replyTo='',replyKey='',lookups=0;
