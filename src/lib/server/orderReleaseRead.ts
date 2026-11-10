@@ -23,8 +23,9 @@ export async function appendOrderInformed(tx:PrivilegedTenantTransaction,auth:Au
  const context=await readReadyNotificationContext(tx,auth.tenantId,input.orderId);
  if(!context)throw Error('ORDER_NOTIFICATION_NOT_READY');
  const receipt:InformedReceipt={eventId:randomUUID(),orderId:input.orderId,freezeId:context.freeze_id,actorId:auth.userId,channel:input.channel,recordedAt:new Date().toISOString(),threadId:input.threadId??null};
- await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
- VALUES(${receipt.eventId},${auth.tenantId},${input.orderId},'ORDER_CUSTOMER_INFORMED_V1','Kunde informiert',${JSON.stringify({intent:input.intent,receipt})}::jsonb,'success',${auth.userId}::uuid,${input.clientEventId}::uuid,${input.clientEventId}::uuid,1,${receipt.recordedAt}::timestamptz)`);
+ const saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
+ VALUES(${receipt.eventId},${auth.tenantId},${input.orderId},'ORDER_CUSTOMER_INFORMED_V1','Kunde informiert',${JSON.stringify({intent:input.intent,receipt})}::jsonb,'success',${auth.userId}::uuid,${input.clientEventId}::uuid,${input.clientEventId}::uuid,1,${receipt.recordedAt}::timestamptz) RETURNING id`);
+ if(saved.length!==1||saved[0].id!==receipt.eventId)throw Error('ORDER_NOTIFICATION_RECEIPT_NOT_SAVED');
  return receipt;
 }
 

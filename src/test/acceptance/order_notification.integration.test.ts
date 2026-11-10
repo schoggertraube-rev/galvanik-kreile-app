@@ -96,6 +96,23 @@ it('Fertig existing operational consumer reads one notification/release projecti
  expect(await withSession(full,()=>saveShippingSettingsAction({...input,dispatchPolicy:{...policy,reminderDays:5}}))).toMatchObject({code:'CONFLICT'});
 });
 
+it('an omitted phone receipt never reports success or informs the card; a fresh same-key retry recovers',async()=>{
+ const order=await readyInvoiceOrder('S1-Quittung-fehlt'),input={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()},name='test_notice_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id = '${KREILE_TENANT_SLUG}' AND NEW.client_event_id = '${input.clientEventId}'::uuid AND NEW.event_type = 'ORDER_CUSTOMER_INFORMED_V1' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ try{
+  await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
+  expect(await withSession(full,()=>markOrderInformedByPhoneAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(0);
+  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{code:'OK',informed:null,ampel:'rot'}}});
+ }finally{
+  await sql.unsafe(`DROP TRIGGER IF EXISTS ${name} ON public.events`);
+  await sql.unsafe(`DROP FUNCTION private.${name}()`);
+ }
+ const saved=await withSession(full,()=>markOrderInformedByPhoneAction(JSON.parse(JSON.stringify(input))));expect(saved).toMatchObject({code:'OK',replayed:false});if(saved.code!=='OK')throw Error('PHONE_RECOVERY');
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{code:'OK',informed:{eventId:saved.receipt.eventId,actorId:full.actorId,channel:'telefon'}}}});
+ expect(await withSession(full,()=>markOrderInformedByPhoneAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:saved.receipt.eventId}});
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{n:1}]);
+});
 it('a damaged newest TEST notice is unavailable instead of silently falling back to an older green receipt',async()=>{
  const order=await readyInvoiceOrder('S1-Beleg-Defekt');
  const saved=await withSession(full,()=>markOrderInformedByPhoneAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()}));
