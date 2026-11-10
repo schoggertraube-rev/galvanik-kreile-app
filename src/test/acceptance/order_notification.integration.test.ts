@@ -57,7 +57,7 @@ it('S1 existing real mail pipeline counts only a confirmed invoice notice, not o
  expect(await withSession(full,()=>sendCustomerMailAction(base))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{informed:null,ampel:'rot'}}});
  fail=true;
- const failed={...base,clientRequestId:randomUUID(),attachment:{kind:'INVOICE' as const,documentId:order.invoice.invoiceId}};
+ const failed={...base,clientRequestId:randomUUID(),expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE' as const,documentId:order.invoice.invoiceId}};
  const rejected=await withSession(full,()=>sendCustomerMailAction(failed));expect(rejected.code).not.toBe('OK');
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toEqual([{n:0}]);
  fail=false;

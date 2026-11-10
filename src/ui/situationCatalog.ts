@@ -225,6 +225,12 @@ export const ORDER_ITEM_COMPLETION_COPY = {
   alreadyChanged: 'Der Teilstatus hat sich bereits geändert. Öffne den Auftrag erneut.',
 };
 
-export const INVOICE_DELIVERY_COPY={alreadySent:(number:string,date:string)=>`Rechnung ${number} wurde schon am ${date} gesendet.`};
+export const INVOICE_DELIVERY_COPY={
+ alreadySent:(number:string,date:string)=>`Rechnung ${number} wurde schon am ${date} gesendet.`,
+ expectedListMissing:'Lade die angezeigte Belegliste erneut. Es wurde nichts gesendet.',
+ listChanged:(number:string,added:boolean)=>`Die Liste hat sich geändert – ${number} ist ${added?'dazugekommen':'weggefallen'}.`,
+ 'rechnung.senden_sammel':(numbers:readonly string[],customer:string)=>`Rechnungen ${numbers.join(', ')} an ${customer} senden`,
+ 'rechnung.senden_einzel':(number:string,amount:string,customer:string)=>`Rechnung ${number} über ${amount} an ${customer} senden`
+};
 
 export const GOODS_OUT_FOLLOWUP_COPY={incomplete:(order:string)=>`Erinnerungsbeleg zu ${order} unvollständig – Übergabe ist gespeichert`};

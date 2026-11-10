@@ -35,7 +35,7 @@ async function configure(){const read=await withSession(full,()=>readShippingSet
 it('E03 imports one secured original, binds the actual failed outgoing mail and immediately proposes the one callback; retry works without Outlook',async()=>{
  const state=provider(),order=await readyInvoiceOrder('E03-Zurück');
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;state.recipient=customer.email;
- const sent=await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:state.requestId,subject:'TEST Fertig',body:'TEST Ware fertig',attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}));if(sent.code!=='OK')throw Error('BOUNCE_SEND');
+ const sent=await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:state.requestId,subject:'TEST Fertig',body:'TEST Ware fertig',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}));if(sent.code!=='OK')throw Error('BOUNCE_SEND');
  await configure();state.mime=mime(state.originalId,state.recipient);
  const imported=await withSession(full,()=>importOutlookMailAction(state.graphId));expect(imported).toMatchObject({code:'OK'});if(imported.code!=='OK')throw Error('BOUNCE_IMPORT:'+imported.code);
  expect(await sql`SELECT kunde_id,zuordnung FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${imported.itemId}::uuid`).toEqual([{kunde_id:order.customerId,zuordnung:'hand'}]);
@@ -51,7 +51,7 @@ it('E03 imports one secured original, binds the actual failed outgoing mail and 
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DELIVERY_FAILED_V1'`).toEqual([{n:1}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.communication_messages WHERE tenant_id=${KREILE_TENANT_SLUG} AND direction='incoming'`).toEqual([{n:0}]);
  state.blocked=false;expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:'TEST-corrected@example.invalid'}))).toMatchObject({code:'OK'});
- const corrected=await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST korrigierte Adresse',body:'TEST Ware fertig',attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}));if(corrected.code!=='OK')throw Error('BOUNCE_CORRECTED');
+ const corrected=await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST korrigierte Adresse',body:'TEST Ware fertig',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}));if(corrected.code!=='OK')throw Error('BOUNCE_CORRECTED');
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{informed:{threadId:corrected.data.threadId},failedDelivery:null}}});
  await sql`UPDATE public.intake_event SET nachher=jsonb_set(nachher,'{deliveryReport,originalSha256}',to_jsonb(repeat('0',64))) WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND art='angelegt'`;
  const broken=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));expect(broken.code==='OK'&&broken.data.customerInformed?.code).toBe('UNAVAILABLE');
@@ -60,7 +60,7 @@ it('E03 imports one secured original, binds the actual failed outgoing mail and 
 it('human subjects, delayed reports and the wrong failed recipient do not become a failed-delivery fact or a customer reply',async()=>{
  const state=provider(),order=await readyInvoiceOrder('E03-Grenzen');
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;state.recipient=customer.email;
- expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:state.requestId,subject:'TEST Fertig',body:'TEST Ware fertig',attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});await configure();
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:state.requestId,subject:'TEST Fertig',body:'TEST Ware fertig',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});await configure();
  state.mime='Subject: TEST Unzustellbar\r\nMessage-ID: <TEST-human@example.invalid>\r\n\r\nTEST Action: failed';
  expect(await withSession(full,()=>importOutlookMailAction(state.graphId))).toMatchObject({code:'OK'});expect(state.lookups).toBe(0);
  state.graphId='TEST-delayed-'+randomUUID();state.mime=mime(state.originalId,state.recipient,'delayed','4.2.0');

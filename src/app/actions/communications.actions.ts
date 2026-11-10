@@ -3,7 +3,7 @@
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {freezeStorageDeadline} from '@/lib/server/storageDeadline';
 import {createHash} from "node:crypto";
-import {readCommunicationDocumentReceipt,invoiceAlreadySent,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
+import {readCommunicationDocumentReceipt,readInvoiceMailCohort,assertInvoiceMailCohort,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
@@ -23,7 +23,7 @@ import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {readReadyNotificationContext} from '@/lib/server/orderReleaseRead';
 import {readCollectionReminderReceipt,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
-import {DISPATCH_NOTICE_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
+import {INVOICE_DELIVERY_COPY,DISPATCH_NOTICE_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
 
@@ -76,7 +76,7 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Extr
 }
 
 export async function sendCustomerMailAction(input: TargetInput & {
- clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string};
+ clientRequestId:string;subject:string;body:string;expectedInvoiceIds?:string[];attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string};
 }){
  try{
  const authorizationResult=await authorization();
@@ -108,11 +108,14 @@ export async function sendCustomerMailAction(input: TargetInput & {
   return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:prefix+input.body.trim()+(meta.storageDeadline?.due?'\n\n'+COLLECTION_REMINDER_COPY.letterDeadline(meta.storageDeadline.due):''),collectionReminder:meta,beforePrepare:async tx=>(await readShippingSettingsInTransaction(tx,auth.tenantId))?.updatedAt===settings.settings.updatedAt});
  }
  let attachment,document:CommunicationDocument|undefined;
+ let invoiceGroup:{customerId:string;handover:string|null}|undefined;
+ if(input.attachment?.kind==='INVOICE'&&(!Array.isArray(input.expectedInvoiceIds)||!input.expectedInvoiceIds.length||input.expectedInvoiceIds.length>101||new Set(input.expectedInvoiceIds).size!==input.expectedInvoiceIds.length||input.expectedInvoiceIds.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))||!input.expectedInvoiceIds.includes(input.attachment.documentId)))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing};
  const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
  if(input.attachment){
   const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
   if(prior.code==='OK'){
    if(prior.document.kind!==input.attachment.kind)return {code:'CONFLICT' as const,message:'Die Versandkennung gehört zu einer anderen Belegart.'};
+   if(prior.document.kind==='INVOICE'&&JSON.stringify([prior.document.id,...prior.document.bundle?.map(row=>row.id)??[]].sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing};
    return prior.document.kind==='QUOTE'?confirmQuoteDelivery(input,prior.document,{code:'OK',data:prior.data}):{code:'OK' as const,data:prior.data};
   }
   if(prior.code!=='NOT_FOUND')return prior;
@@ -123,13 +126,8 @@ export async function sendCustomerMailAction(input: TargetInput & {
    if(rows.length!==1||!(input.targetType==='ORDER'?invoice.order_id===input.targetId:invoice.customer_id===input.targetId))return {code:'FORBIDDEN' as const,message:'Die Rechnung gehört nicht zu diesem Kunden oder Auftrag.'};
    attachment={filename:pdf.data.invoiceNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.data.pdf)};
    document={kind:'INVOICE',id:invoice.id,orderId:invoice.order_id,orderNumber:invoice.order_number,number:pdf.data.invoiceNumber,version:invoice.aggregate_version,sha256:pdf.data.pdfSha256};
-   const others=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;order_id:string;order_number:string;aggregate_version:number}>(sql`SELECT invoice.id::text,invoice.order_id,orders.order_number,invoice.aggregate_version FROM public.invoices invoice
-    JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
-    JOIN private.v_order_freeze_state_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok
-    WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${invoice.customer_id} AND invoice.status='issued' AND invoice.contract_version=1 AND invoice.id<>${invoice.id}::uuid
-     AND NOT ${invoiceAlreadySent(auth.tenantId,sql`invoice.id`)}
-     AND orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig' AND orders.handover_mode=${invoice.handover_mode}
-    ORDER BY orders.order_number,invoice.id LIMIT 101`));
+   invoiceGroup={customerId:invoice.customer_id,handover:invoice.handover_mode};
+   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode))).filter(row=>row.id!==invoice.id);
    if(others.length>100)return {code:'VALIDATION_ERROR' as const,message:'Zu viele offene Belege für eine einzelne Sammel-Mail. Es wurde nichts gesendet.'};
    for(const other of others){
     const original=await readInvoicePdf(auth,other.id,'original');if(original.code!=='OK')return original;
@@ -159,7 +157,10 @@ export async function sendCustomerMailAction(input: TargetInput & {
    const rows=await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid AND order_id=${invoice.orderId} AND status='issued' AND aggregate_version=${invoice.version} AND pdf_sha256=${invoice.sha256} FOR UPDATE`);
    if(rows.length!==1)return false;
    await assertInvoiceNotSent(tx,auth.tenantId,invoice);
-  }return true;
+  }
+  if(!invoiceGroup)throw Error('INVOICE_GROUP_MISSING');
+  await assertInvoiceMailCohort(tx,auth.tenantId,invoiceGroup,input.expectedInvoiceIds!,[snapshot.id,...snapshot.bundle?.map(row=>row.id)??[]]);
+  return true;
  }:undefined});
  return sent.code==='OK'&&document?.kind==='QUOTE'?confirmQuoteDelivery(input,document,sent):sent;
  }catch(error){

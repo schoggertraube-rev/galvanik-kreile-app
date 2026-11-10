@@ -77,3 +77,23 @@ export async function assertInvoiceNotSent(tx:PrivilegedTenantTransaction,tenant
   AND ${invoiceSentMembership(sql`${invoice.id}`)} ORDER BY sent.created_at,sent.id LIMIT 1`);
  if(rows.length)throw new InvoiceAlreadySent(invoice.number,rows[0].sent_on);
 }
+
+export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null){
+ return tx.execute<{id:string;order_id:string;order_number:string;invoice_number:string;aggregate_version:number}>(sql`SELECT invoice.id::text,invoice.order_id,orders.order_number,invoice.invoice_number,invoice.aggregate_version FROM public.invoices invoice
+  JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
+  JOIN private.v_order_freeze_state_v1 frozen ON frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active AND frozen.integrity_ok
+  WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId} AND invoice.status='issued' AND invoice.contract_version=1
+   AND NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} AND orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig' AND orders.handover_mode=${handover}
+  ORDER BY orders.order_number,invoice.id LIMIT 102`);
+}
+export class InvoiceMailListChanged extends Error{
+ constructor(readonly number:string,readonly added:boolean){super('INVOICE_MAIL_LIST_CHANGED');}
+}
+export async function assertInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,group:{customerId:string;handover:string|null},expected:readonly string[],prepared:readonly string[]){
+ const current=await readInvoiceMailCohort(tx,tenantId,group.customerId,group.handover);
+ const added=current.find(row=>!expected.includes(row.id)),removed=expected.find(id=>!current.some(row=>row.id===id));
+ const unprepared=current.find(row=>expected.includes(row.id)&&!prepared.includes(row.id));
+ if(added||unprepared)throw new InvoiceMailListChanged((added??unprepared)!.invoice_number,true);
+ if(removed){const [invoice]=await tx.execute<{invoice_number:string}>(sql`SELECT invoice_number FROM public.invoices WHERE tenant_id=${tenantId} AND customer_id=${group.customerId} AND id=${removed}::uuid`);if(!invoice)throw Error('INVOICE_EXPECTED_LIST_INVALID');throw new InvoiceMailListChanged(invoice.invoice_number,false);}
+ if(expected.length!==prepared.length)throw Error('INVOICE_EXPECTED_LIST_INVALID');
+}

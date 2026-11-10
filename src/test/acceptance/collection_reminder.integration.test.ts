@@ -23,7 +23,7 @@ it('E1/E2 actual approval uses the single sender, one group proof and original r
  const bodies:string[]=[];
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-collection-token'.repeat(3),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){bodies.push(JSON.parse(String(init?.body)).message.body.content);return new Response(null,{status:202});}return nativeFetch(input,init);});
  const first=await readyInvoiceOrder('E1-Erster'),second=await readyInvoiceOrder('E1-Zweiter','pickup',false,first.customerId);
- expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:first.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertigmeldung',attachment:{kind:'INVOICE',documentId:first.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:first.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertigmeldung',expectedInvoiceIds:[first.invoice.invoiceId,second.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:first.invoice.invoiceId}}))).toMatchObject({code:'OK'});
  expect(await configure()).toMatchObject({code:'OK'});
  const planned=await proposal(first.orderId);expect(planned).toMatchObject({stage:'E1',state:'DUE',requiresResponseCheck:false});if(!planned.due)throw Error('COLLECTION_DUE');
  const operator=await createFixture(['mails','auftraege'],'buero');
@@ -50,7 +50,7 @@ it('E1/E2 actual approval uses the single sender, one group proof and original r
 it('an existing generic mail cannot become a qualified reminder just by reusing its key and identical body',async()=>{
  let sends=0;vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-purpose-token'.repeat(3),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;void init;return new Response(null,{status:202});}return nativeFetch(input,init);});
  const order=await readyInvoiceOrder('E1-Zweckbindung');
- expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertig',attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertig',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
  expect(await configure()).toMatchObject({code:'OK'});const planned=await proposal(order.orderId);if(!planned.due)throw Error('PURPOSE_DUE');
  const clientRequestId=randomUUID(),body='TEST Bitte abholen.',subject='TEST Erinnerung';
  const [row]=await sql`SELECT order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
@@ -67,7 +67,7 @@ it('failed E1 does not advance and a second key cannot duplicate an uncertain ou
  let attempts=0,fail=false;
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-collection-failure-token'.repeat(3),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){attempts++;void init;return new Response(null,{status:fail?503:202});}return nativeFetch(input,init);});
  const order=await readyInvoiceOrder('E1-Fehler');
- expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertig',attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertig',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
  expect(await configure(0,5)).toMatchObject({code:'OK'});
  const due=(await proposal(order.orderId)).due;if(!due)throw Error('COLLECTION_FAILURE_DUE');
  const input={targetType:'CUSTOMER' as const,targetId:order.customerId,clientRequestId:randomUUID(),subject:'TEST Erinnerung',body:'TEST Erinnerung ohne Gebühren.',collectionReminder:{stage:'E1' as const,handover:'pickup' as const,dueDate:due}};
