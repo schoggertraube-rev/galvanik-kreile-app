@@ -226,3 +226,5 @@ export const ORDER_ITEM_COMPLETION_COPY = {
 };
 
 export const INVOICE_DELIVERY_COPY={alreadySent:(number:string,date:string)=>`Rechnung ${number} wurde schon am ${date} gesendet.`};
+
+export const GOODS_OUT_FOLLOWUP_COPY={incomplete:(order:string)=>`Erinnerungsbeleg zu ${order} unvollständig – Übergabe ist gespeichert`};

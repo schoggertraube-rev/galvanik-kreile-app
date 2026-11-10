@@ -1,3 +1,6 @@
+import {handedOverProofs} from '@/lib/server/dispatchCallPort';
+import {readClarificationArea} from '@/lib/server/authorization';
+import {GOODS_OUT_FOLLOWUP_COPY} from '@/ui/situationCatalog';
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
 import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
 import {collectionTaskHasReplySource,collectionTaskReplyRemainder,readCollectionTaskCurrentOrder} from '@/lib/server/dispatchReplyPort';
@@ -253,4 +256,21 @@ export async function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransact
  const candidates=tasks.filter(task=>taskUuid(task.bezug_id)&&allowed(auth,task));
  const facts=await readQuoteFollowupFacts(tx,auth.tenantId,[...new Set(candidates.map(task=>task.bezug_id!))]);
  return candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];if(!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');return [{id:task.id,title:task.titel,dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,isMine:task.fuer_login===auth.userId}];}).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
+}
+
+/** Only the persisted physical command can create this normal shared clarification task. */
+export async function createGoodsOutClarificationTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;eventId:string},deps:Dependencies){
+ if(!hasAuthorizationArea(auth,'auftraege')||!taskUuid(input.eventId)||!validTaskReference({type:'auftrag',id:input.orderId}))reject('FORBIDDEN','Übergabebeleg fehlt.');
+ const proofs=await handedOverProofs(tx,auth,[input.orderId]);
+ if(!proofs?.some(proof=>proof.eventId===input.eventId))reject('CONFLICT','Übergabebeleg fehlt.');
+ const key=eventKey(input.eventId,0,'goods-out-followup');
+ await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${key},0))`);
+ const prior=await tx.execute<{id:string;art:string;bezug_typ:string;bezug_id:string;erstellt_von:string}>(sql`SELECT id::text,art,bezug_typ,bezug_id,erstellt_von::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid FOR UPDATE`);
+ if(prior.length){const task=prior[0];if(prior.length!==1||task.art!=='aufgabe'||task.bezug_typ!=='auftrag'||task.bezug_id!==input.orderId||task.erstellt_von!==auth.userId)reject('CONFLICT','Aufgabenkennung gehört zu einem anderen Vorgang.');return task.id;}
+ const reference=await context(tx,auth,{type:'auftrag',id:input.orderId});
+ if(!reference.label)reject('NOT_FOUND','Auftragsnummer fehlt.');
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ const title=GOODS_OUT_FOLLOWUP_COPY.incomplete(reference.label);
+ const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:input.orderId},note:title};
+ return (await persistTask(tx,auth,value,deps)).task.id;
 }

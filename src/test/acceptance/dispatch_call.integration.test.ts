@@ -240,10 +240,26 @@ it('handing over the remaining goods completes the existing callback atomically 
  const task=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));expect(task).toMatchObject({code:'OK',task:{status:'offen'},dispatchCall:{orderIds:[second.orderId]}});
  const release={orderId:second.orderId,expectedVersion:second.version,mode:'abholung' as const,clientEventId:randomUUID()};
  await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${created.taskId}`;
- expect(await withSession(full,()=>recordGoodsOutAction(release))).toMatchObject({code:'UNAVAILABLE'});
- expect(await sql`SELECT station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second.orderId}`).toEqual([{station:'fertig',version:second.version}]);
- expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${release.clientEventId}::uuid`).toEqual([{n:0}]);
+ expect(await withSession(full,()=>recordGoodsOutAction(release))).toMatchObject({code:'OK'});
+ expect(await sql`SELECT station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second.orderId}`).toEqual([{station:'abgeholt',version:second.version+1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${release.clientEventId}::uuid`).toEqual([{n:1}]);
+ const warnings=await sql`SELECT id::text,fuer_bereich,erstellt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${second.orderId} AND titel LIKE 'Erinnerungsbeleg zu %'`;
+ expect(warnings).toEqual([{id:expect.any(String),fuer_bereich:'geld',erstellt_von:full.actorId}]);
  await sql`UPDATE public.events SET status='success' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${created.taskId}`;
+ // Live area policy changes do not duplicate or silently reassign the original warning.
+ await createFixture(['entscheiden'],'meister');
+ const {resolveAuthorization,readClarificationArea}=await import('@/lib/server/authorization');
+ const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
+ expect(await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('K6_AUTH');return withPrivilegedTenantTransaction(auth.data,tx=>readClarificationArea(tx,auth.data.tenantId));})).toBe('entscheiden');
+ // A real PostgreSQL exception aborts only the follow-up savepoint, not the physical fact.
+ const guard='test_goodsout_followup_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${guard}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND NEW.payload->>'taskId'='${created.taskId}' THEN RAISE EXCEPTION 'TEST_K6_FOLLOWUP_SQL_ERROR'; END IF; RETURN NEW; END $$`);
+ try{await sql.unsafe(`CREATE TRIGGER ${guard} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${guard}()`);
+  expect(await withSession(full,()=>recordGoodsOutAction(JSON.parse(JSON.stringify(release))))).toMatchObject({code:'OK',replayed:true});
+  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.taskId}::uuid`).toEqual([{status:'offen'}]);
+  expect(await sql`SELECT id::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${second.orderId} AND titel LIKE 'Erinnerungsbeleg zu %'`).toEqual([{id:warnings[0].id}]);
+ }finally{await sql.unsafe(`DROP TRIGGER IF EXISTS ${guard} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${guard}()`);}
+
  expect(await withSession(full,()=>recordGoodsOutAction(release))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}))).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:full.actorId},dispatchCall:{required:false,result:'noLongerNeeded'}});
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${created.taskId}`).toEqual([{n:1}]);

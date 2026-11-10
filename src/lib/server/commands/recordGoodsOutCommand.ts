@@ -20,6 +20,7 @@ import {
 import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   withPrivilegedTenantTransaction,
+  withTenantSavepoint,
   type PrivilegedTenantTransaction,
 } from "@/lib/server/privilegedDb";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
@@ -655,6 +656,7 @@ type GoodsOutComposition={
   beforeOrderLock?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
   beforeWrite?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<Exclude<RecordGoodsOutResult,{code:'OK'}>|null>;
   afterWrite?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
+  afterWriteFailure?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:GoodsOutReceipt)=>Promise<void>;
 };
 class GoodsOutRejected extends Error{
   constructor(readonly result:Exclude<RecordGoodsOutResult,{code:'OK'}>){super('GOODS_OUT_REJECTED');}
@@ -1058,7 +1060,14 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
     return await withPrivilegedTenantTransaction(authorization.data,async tx=>{
       const result=await write(tx);
       if(result.code!=='OK')throw new GoodsOutRejected(result);
-      await composition?.afterWrite?.(tx,authorization.data);
+      if(composition?.afterWrite){
+       try{await withTenantSavepoint(tx,nested=>composition.afterWrite!(nested,authorization.data));}
+       catch(error){
+        console.error('[GOODS_OUT_FOLLOWUP_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});
+        if(!composition.afterWriteFailure)throw error;
+        await composition.afterWriteFailure(tx,authorization.data,result.receipt);
+       }
+      }
       return result;
     });
   } catch (error: unknown) {
