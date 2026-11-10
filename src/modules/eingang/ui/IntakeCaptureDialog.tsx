@@ -449,7 +449,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     earlyNote.current = { text:value,stand,dismissed:[] };
     if (!scope) { setError("Lokale Sicherung wird vorbereitet · Text bleibt erhalten."); return; }
     pendingNoteWrites.current = pendingNoteWrites.current.then(() => value.trim()
-      ? retainPendingOriginal(scope, { id: itemId, itemId, kind: "note", text: value, textstand: stand, dismissed: [] })
+      ? retainPendingOriginal(scope, { id: itemId, itemId, kind: "note", text: value, textstand: stand, dismissed: [],expectedVersion:capture?.id===itemId?capture.version:0,...(createContext?{context:{customerId:createContext.customerId}}:{}) })
       : acknowledgePendingOriginal(scope, itemId))
       .catch(cause => { console.error("[INTAKE_PENDING_NOTE_FAILED]", cause); setError("Text bleibt hier erhalten, die lokale Sicherung ist nicht verfügbar. Bitte Lesen. Code: INTAKE_PENDING_NOTE_FAILED."); });
   };
@@ -458,7 +458,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     setDismissed(next); textstand.current = stand;
     localInput.current = true; earlyNote.current = {text,stand,dismissed:next};
     if (!scope) return;
-    pendingNoteWrites.current = pendingNoteWrites.current.then(() => retainPendingOriginal(scope, { id: itemId, itemId, kind: "note", text, textstand: stand, dismissed: next }))
+    pendingNoteWrites.current = pendingNoteWrites.current.then(() => retainPendingOriginal(scope, { id: itemId, itemId, kind: "note", text, textstand: stand, dismissed: next,expectedVersion:capture?.id===itemId?capture.version:0,...(createContext?{context:{customerId:createContext.customerId}}:{}) }))
       .catch(cause => { console.error("[INTAKE_PENDING_CONCERN_FAILED]", cause); setError("Auswahl konnte lokal nicht gesichert werden. Bitte Lesen. Code: INTAKE_PENDING_CONCERN_FAILED."); });
   };
   const modeTitle = receiving || photoRequest ? "Fotos für den PC" : mode ? { eingang: "Zettel lesen · für die Erfassung", eingangsfoto: "Eingangsfoto aufnehmen", visitenkarte: "Visitenkarte lesen", datei: "Datei lesen · für die Erfassung" }[mode] : undefined;

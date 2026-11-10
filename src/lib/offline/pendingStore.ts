@@ -1,6 +1,6 @@
 // Only unacknowledged uploads, as specified by eingang.geraete. Server remains authoritative.
 export type PendingOriginal = { id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
-  | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[] };
+  | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} };
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingEntry=PendingOriginal|PendingQuarantine;
 const STORE = "originals";
@@ -25,11 +25,19 @@ async function transaction<T>(scope: string, mode: IDBTransactionMode, work: (st
   });
 }
 export async function retainPendingOriginal(scope: string, original: PendingOriginal): Promise<void> {
- if(original.kind!=="file"){await transaction(scope,"readwrite",store=>store.put(original));return;}
  const connection=await database(scope);
  return new Promise((resolve,reject)=>{
   const tx=connection.transaction(STORE,"readwrite"),store=tx.objectStore(STORE),read=store.get(original.id);
-  read.onsuccess=()=>{const previous=read.result as PendingOriginal|undefined;const deviceCapturedAt=previous?.kind==="file"?previous.deviceCapturedAt:new Date().toISOString();store.put({...original,...(deviceCapturedAt?{deviceCapturedAt}:{})});};
+  read.onsuccess=()=>{const previous=read.result as PendingOriginal|undefined;
+   const same=original.kind==='file'?previous?.kind==='file':previous?.kind==='note'&&previous.textstand===original.textstand;
+   const deviceCapturedAt=same?previous?.deviceCapturedAt:new Date().toISOString();
+   const expectedVersion=same&&previous?.kind==='note'?previous.expectedVersion:original.kind==='note'?original.expectedVersion:undefined;
+   if(previous&&previous.kind!==original.kind){tx.abort();return;}
+   const value={...original};delete value.deviceCapturedAt;
+   if(value.kind==='note'){delete value.expectedVersion;if(expectedVersion!==undefined)value.expectedVersion=expectedVersion;}
+   if(value.kind==='file'&&previous?.kind==='file'){delete value.deviceId;if(previous.deviceId!==undefined)value.deviceId=previous.deviceId;}
+   if(deviceCapturedAt)value.deviceCapturedAt=deviceCapturedAt;
+   store.put(value);};
   tx.oncomplete=()=>{connection.close();window.dispatchEvent(new Event("kreile-pending-changed"));resolve();};
   tx.onabort=()=>{connection.close();reject(new Error("INTAKE_PENDING_STORAGE_ABORTED"));};
  });

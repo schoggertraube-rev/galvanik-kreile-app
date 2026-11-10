@@ -1,7 +1,8 @@
 import {readPendingOriginals,acknowledgePendingOriginal} from './pendingStore';
-import type {prepareIntakeFileAction,finishIntakeFileAction} from '@/app/actions/eingang.actions';
+import type {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
+import {recognizeNoteConcerns} from '@/lib/domain/noteConcerns';
 import type {uploadIntakeOriginal} from '@/modules/eingang/public';
-type Ports={prepare:typeof prepareIntakeFileAction;finish:typeof finishIntakeFileAction;upload:typeof uploadIntakeOriginal;currentScope:()=>string|null};
+type Ports={saveNote:typeof saveIntakeNoteAction;prepare:typeof prepareIntakeFileAction;finish:typeof finishIntakeFileAction;upload:typeof uploadIntakeOriginal;currentScope:()=>string|null};
 type Outcome={secured:number;acknowledged:number;blocked:number};
 const running=new Map<string,Promise<Outcome>>();
 /** Reuses the original registration, immutable-byte upload and secured-original receipt. */
@@ -11,6 +12,18 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
   const outcome={secured:0,acknowledged:0,blocked:0};
   for(const entry of await readPendingOriginals(scope)){
    if(ports.currentScope()!==scope)break;
+   if(entry.kind==='note'){
+    if(entry.expectedVersion===undefined||!entry.deviceCapturedAt)continue;
+    try{
+     const concerns=recognizeNoteConcerns(entry.text).map(item=>item.id).filter(id=>!entry.dismissed.includes(id));
+     const saved=await ports.saveNote({itemId:entry.itemId,textstand:entry.textstand,text:entry.text,concerns,expectedVersion:entry.expectedVersion,deviceCapturedAt:entry.deviceCapturedAt,...(entry.context?{context:entry.context}:{})},scope);
+     if(saved.code!=='OK'||saved.capture.text!==entry.text){outcome.blocked++;continue;}
+     outcome.secured++;
+     if(ports.currentScope()!==scope)break;
+     await acknowledgePendingOriginal(scope,entry.id,entry.textstand);outcome.acknowledged++;
+    }catch(error){outcome.blocked++;console.error('[OFFLINE_NOTE_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
+    continue;
+   }
    // Historical fingerprints are not guessed; the existing capture dialog can resume them.
    if(entry.kind!=='file'||!Object.hasOwn(entry,'deviceId'))continue;
    try{

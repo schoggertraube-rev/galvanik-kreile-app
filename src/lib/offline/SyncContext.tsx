@@ -5,7 +5,7 @@ import type { OfflineOutboxItem } from "./OfflineOutbox";
 import {readPendingEntries,retainQuarantinedPending} from "./pendingStore";
 import {usePermissions} from "@/lib/auth/PermissionsContext";
 import {syncPendingFiles} from './syncPendingFiles';
-import {prepareIntakeFileAction,finishIntakeFileAction} from '@/app/actions/eingang.actions';
+import {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
 import {uploadIntakeOriginal} from '@/modules/eingang/public';
 import { createId } from "@paralleldrive/cuid2";
 
@@ -83,7 +83,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     activeScope=scope;
     const refresh=()=>{void refreshOutboxSnapshot(scope);};
     refresh();window.addEventListener('kreile-pending-changed',refresh);
-    if(scope&&isOnline&&canSyncOriginals)void syncPendingFiles(scope,{prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope}).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
+    if(scope&&isOnline&&canSyncOriginals)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope}).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     return ()=>{window.removeEventListener('kreile-pending-changed',refresh);if(activeScope===scope)activeScope=null;};
   }, [scope,isOnline,canSyncOriginals]);
 

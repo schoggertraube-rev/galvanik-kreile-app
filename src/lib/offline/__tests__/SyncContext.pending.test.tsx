@@ -4,7 +4,7 @@ import {SyncProvider,useSync} from '../SyncContext';
 const state=vi.hoisted(()=>({scope:'a'.repeat(64),status:'authenticated'}));
 const ports=vi.hoisted(()=>({read:vi.fn(),retain:vi.fn()}));
 vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:state.scope,status:state.status,hasArea:()=>false})}));
-vi.mock('@/app/actions/eingang.actions',()=>({prepareIntakeFileAction:vi.fn(),finishIntakeFileAction:vi.fn()}));
+vi.mock('@/app/actions/eingang.actions',()=>({prepareIntakeFileAction:vi.fn(),finishIntakeFileAction:vi.fn(),saveIntakeNoteAction:vi.fn()}));
 vi.mock('@/modules/eingang/public',()=>({uploadIntakeOriginal:vi.fn()}));
 vi.mock('../pendingStore',()=>({readPendingEntries:ports.read,retainQuarantinedPending:ports.retain}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
