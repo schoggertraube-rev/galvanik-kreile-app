@@ -167,3 +167,16 @@ it.each(['created','result'] as const)('an omitted call %s receipt rolls back it
   expect(await plan()).toMatchObject({state:'STOPPED',callTaskId:taskId});
  }
 });
+
+it('K7 informed complained ware is red while ordinary unpaid pickup remains yellow',async()=>{
+ const order=await readyInvoiceOrder('TEST K7 Ampel');
+ expect(await withSession(full,()=>markOrderInformedByPhoneAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const {setPaymentModeAction}=await import('@/app/actions/payments.actions');
+ expect(await withSession(full,()=>setPaymentModeAction({orderId:order.orderId,paymentMode:'abholung',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{ampel:'gelb',blockReason:'payment'}}});
+ const {seedSyntheticComplaintPhoto}=await import('@/test/fixtures/complaintPhoto');
+ const {reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
+ const photos=await seedSyntheticComplaintPhoto(sql,{tenantId:KREILE_TENANT_SLUG,actorId:full.actorId,customerId:order.customerId,orderId:order.orderId});
+ expect(await withSession(full,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST K7 reklamierte Ware',photoIds:photos,goodsReturn:'offen'}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{ampel:'rot',blockReason:'open_complaint'}}});
+});

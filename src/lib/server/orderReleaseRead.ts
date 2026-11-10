@@ -84,7 +84,7 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
   const failedDelivery=latest?.threadId?failures.find(proof=>proof.threadId===latest.threadId)??null:null;
   const current=order[0],complaint=await readOpenOrderComplaint(tx,auth.tenantId,orderId);
   const blockReason=current.allowed?null:!current.frozen_at?'not_frozen':complaint?'open_complaint':current.debt_ids.length?'overdue_invoice':!current.payment_allowed?'payment':null;
-  const ampel:'rot'|'gelb'|'gruen'|null=current.station==='fertig'?(informed?(current.allowed?'gruen':'gelb'):'rot'):null;
+  const ampel:'rot'|'gelb'|'gruen'|null=current.station==='fertig'?(!informed||complaint||current.debt_ids.length?'rot':current.allowed?'gruen':'gelb'):null;
   return {code:'OK' as const,informed,firstInformed,mailThreadIds:[...new Set(rows.flatMap(row=>row.payload.receipt.channel==='mail'&&row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]))],ampel,
    orderVersion:current.version,handover:current.handover_mode,releaseAllowed:current.allowed,frozenAt:current.frozen_at,freezeId:current.freeze_id,invoiceState:current.invoice_state,responseSince:rows[0]?.payload.receipt.recordedAt??null,failedDelivery:failedDelivery?{threadId:failedDelivery.threadId,recordedAt:failedDelivery.recordedAt}:null,
    blockReason,complaintIds:complaint?.complaintIds??[],overdueInvoiceIds:hasAuthorizationArea(auth,'geld')?current.debt_ids:undefined};
