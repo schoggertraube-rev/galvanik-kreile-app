@@ -55,10 +55,12 @@ export const IndexedDBHelper = {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction("write_queue", "readwrite");
       const store = transaction.objectStore("write_queue");
-      const request = store.add(action);
+      store.add(action);
 
-      request.onsuccess = () => resolve(action);
-      request.onerror = () => reject(request.error);
+      // IndexedDB acknowledges durability at transaction completion, not request success.
+      transaction.oncomplete = () => { db.close(); resolve(action); };
+      transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("OFFLINE_WRITE_ABORTED")); };
+      transaction.onerror = () => { /* onabort owns the final outcome */ };
     });
   },
 

@@ -54,9 +54,11 @@ export const offlineOutbox = {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
-      const req = store.put(item);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
+      store.put(item);
+      // A successful request can still be rolled back by the transaction.
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onabort = () => { db.close(); reject(tx.error ?? new Error("OFFLINE_WRITE_ABORTED")); };
+      tx.onerror = () => { /* onabort owns the final outcome */ };
     });
   },
 
