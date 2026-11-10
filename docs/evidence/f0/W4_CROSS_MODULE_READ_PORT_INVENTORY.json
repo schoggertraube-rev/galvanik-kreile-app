@@ -170,6 +170,9 @@
     "src/lib/server/storageFinalStagePort.ts": [
       "private.v_order_freeze_state_v1"
     ],
+    "src/lib/server/storageLetterRead.ts": [
+      "private.v_goods_out_ui_state_v1"
+    ],
     "src/lib/server/storagePostalPort.ts": [
       "private.v_order_freeze_state_v1"
     ],

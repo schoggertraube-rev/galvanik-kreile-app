@@ -130,6 +130,26 @@ it('a reply to A atomically replaces the unposted A+B PDF with B, preserving ori
  expect(await withSession(operator,()=>getIntakeTaskAction({taskId:letter.postalTaskId!}))).toMatchObject({code:'OK',postalLetter:{state:'POSTED'}});
 });
 
+it('K13 a letter with amounts is denied in full without money rights and sent intact with money rights',async()=>{
+ const {order,request,plan}=await prepareLetter('K13 Geldrecht');
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('K13_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,storageWeeklyCents:2500}}))).toMatchObject({code:'OK'});
+ const operator=await createFixture(['mails','auftraege'],'buero');
+ const due=(await plan())!.storage!.letter!;
+ const mail={targetType:'CUSTOMER' as const,targetId:order.customerId,clientRequestId:randomUUID(),subject:'TEST ignored',body:'TEST ignored',collectionReminder:{stage:'E4' as const,handover:'pickup' as const,dueDate:due.due,clientKey:due.clientKey}};
+ const before=await sql`SELECT count(*)::int AS n FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(operator,()=>sendCustomerMailAction(mail))).toMatchObject({code:'FORBIDDEN',message:expect.stringContaining('enthält Beträge – senden kann ')});
+ expect(await withSession(operator,()=>previewStorageLetterAction(request))).toMatchObject({code:'FORBIDDEN'});
+ const queue=await withSession(operator,()=>getOrdersDb());if(!queue.ok)throw Error('K13_QUEUE');
+ expect(queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.collectionSend).toMatchObject({allowed:false,requiresMoney:true});
+ expect(await sql`SELECT count(*)::int AS n FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+ const preview=await withSession(full,()=>previewStorageLetterAction(request));if(preview.code!=='OK')throw Error('K13_FULL_PREVIEW:'+preview.code);
+ expect(preview.data.snapshot.body).toContain('25,00');expect(preview.data.snapshot.body).toContain('Offen sind ');
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(mail))))).toMatchObject({code:'OK'});
+ const [sent]=await sql`SELECT message.body FROM public.communication_threads thread JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.source=${'MS_GRAPH_OUT:'+mail.clientRequestId}`;
+ expect(sent.body).toBe(preview.data.snapshot.body);
+});
+
 it('K14 collective originals use plural order references and one qualified reminder sentence',async()=>{
  const {order,second,request,plan}=await prepareLetter('K14 Mehrzahl',true,true);
  if(!second)throw Error('K14_SECOND_ORDER');

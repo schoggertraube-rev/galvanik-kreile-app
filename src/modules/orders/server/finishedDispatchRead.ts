@@ -13,9 +13,10 @@ import {readDispatchCalls} from '@/lib/server/dispatchCallPort';
 import {readRecordedDispatchReplies,replyDefersToAppointment,type DispatchReplyReceipt} from '@/lib/server/dispatchReplyPort';
 import {storageEligibility,storageLetterKey,finalStorageStage,type StorageEligibility} from '../domain/storageEligibility';
 import {COLLECTION_REMINDER_COPY,STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
+import {readCollectionMoneyAccess} from '@/lib/server/storageLetterRead';
 import {readStorageFinalTaskState} from '@/lib/server/storageFinalStagePort';
 
-export type FinishedDispatch={orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;pickupAppointment?:PickupAppointmentProjection;unavailable?:true};
+export type FinishedDispatch={collectionSend?:{allowed:boolean;requiresMoney:boolean;message:string|null};orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;pickupAppointment?:PickupAppointmentProjection;unavailable?:true};
 
 /** Enrich existing operational rows; never a second saved queue or release rule. */
 export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,orders:readonly OperationalOrder[],policy:DispatchPolicy|null,ports?:{readHasMail?:(customerId:string)=>Promise<boolean>}){
@@ -166,6 +167,18 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   if(row.storage){row.storage.state='WAIT';if(row.storage.letter){const original=row.storage.letter.finalStage;row.storage.letter.finalStage={...original,state:original.taskId?original.state:'WAIT',due:original.taskId?original.due:appointment.resumeOn,pausedUntil:appointment.resumeOn};if('positionProposal'in row.storage.letter.finalStage)row.storage.letter.finalStage.positionProposal=null;}}
  }
  for(const row of result){const stage=row.storage?.letter?.finalStage;if(stage&&hasAuthorizationArea(auth,'geld')&&['DUE','TASK_PENDING'].includes(stage.state))stage.positionProposal=policy?.storageWeeklyCents==null?null:{name:STORAGE_CHARGE_COPY.name,unit:STORAGE_CHARGE_COPY.unit,unitPriceCents:policy.storageWeeklyCents,quantity:null,automatic:false};}
+ for(const row of result){
+  const letter=row.storage?.letter,reminder=row.reminder;
+  const stage=letter?.state==='DUE'?'E4':reminder?.state==='DUE'&&(reminder.stage==='E1'||reminder.stage==='E2')?reminder.stage:null;
+  if(!stage)continue;
+  const ids=stage==='E4'?letter!.orderIds:reminder!.orderIds;
+  if(!hasAuthorizationArea(auth,'mails')){row.collectionSend={allowed:false,requiresMoney:false,message:COLLECTION_REMINDER_COPY.forbidden};continue;}
+  try{
+   const access=await readCollectionMoneyAccess(auth,ids,{dispatchPolicy:policy},stage);
+   const customer=orders.find(order=>order.id===row.orderId)?.customerName;
+   row.collectionSend={allowed:access.sendAllowed,requiresMoney:access.required,message:!access.sendAllowed&&access.roles.length?COLLECTION_REMINDER_COPY.moneyRequired(customer??'',access.roles.join(', ')):null};
+  }catch(error){console.error('[COLLECTION_SEND_ACCESS_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');row.collectionSend={allowed:false,requiresMoney:false,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
+ }
  const due=new Map(orders.map(order=>[order.id,order.dueDate||'9999-12-31']));
  result.sort((a,b)=>Number(b.color==='gruen')-Number(a.color==='gruen')||(due.get(a.orderId)??'9999').localeCompare(due.get(b.orderId)??'9999')||a.orderId.localeCompare(b.orderId));
  return {code:'OK' as const,rows:result};

@@ -42,6 +42,8 @@ it('K10 saves a real Outlook reply before reaction checking; an unbound Outlook 
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('K10_SETTINGS');
  expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),reminderDays:0,secondReminderDays:0,callAfterDays:0,holdMinutes:0}}))).toMatchObject({code:'OK'});
  const {getOrdersDb}=await import('@/app/actions/orders.actions');
+ const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  const reminderOperator=await createFixture(['mails','auftraege'],'buero');
  for(const stage of ['E1','E2'] as const){
   const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('K10_QUEUE');

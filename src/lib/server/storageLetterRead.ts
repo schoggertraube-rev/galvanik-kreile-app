@@ -11,6 +11,27 @@ import {readCollectionReminderHistory} from './collectionReminderPort';
 import {readDispatchCalls} from './dispatchCallPort';
 import {getPaymentState} from './paymentSummaryRead';
 import {CUSTOMER_COLLECTION_COPY,type CollectionCustomerFacts,COLLECTION_REMINDER_COPY as copy} from '@/ui/situationCatalog';
+import {sql} from 'drizzle-orm';
+import {withPrivilegedTenantTransaction} from './privilegedDb';
+import {isAppRole,normalizeAccessAreasForRole,ROLE_LABELS,type AccessArea} from '@/lib/auth/authorizationContract';
+
+/** Only a permission requirement leaves this reader; prices remain in the money port. */
+export async function readCollectionMoneyAccess(auth:AuthorizationSnapshot,orderIds:readonly string[],settings:Pick<ShippingSettings,'dispatchPolicy'>,stage:'E1'|'E2'|'E4'){
+ if(!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))throw Error('COLLECTION_MONEY_ACCESS_FORBIDDEN');
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<{order_id:string;invoice_id:string|null;payment_open_amount_cents:number|null}>(sql`SELECT order_id,invoice_id,payment_open_amount_cents FROM private.v_goods_out_ui_state_v1 WHERE tenant_id=${auth.tenantId} AND order_id=ANY(ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[])`);
+  if(rows.length!==new Set(orderIds).size||!rows.length)throw Error('COLLECTION_MONEY_SOURCE_MISSING');
+  const payment=rows.every(row=>row.invoice_id&&row.payment_open_amount_cents!==null)&&rows.some(row=>Number(row.payment_open_amount_cents)>0);
+  const required=payment||stage==='E4'&&settings.dispatchPolicy?.storageWeeklyCents!=null;
+  const sendAllowed=!required||hasAuthorizationArea(auth,'geld');
+  let roles:string[]=[];
+  if(required){
+   const users=await tx.execute<{role:string;areas:AccessArea[]}>(sql`SELECT users.role,ARRAY(SELECT rights.bereich FROM public.app_user_rights rights WHERE rights.tenant_id=users.tenant_id AND rights.user_id=users.id) AS areas FROM public.app_users users WHERE users.tenant_id=${auth.tenantId} AND users.active=true`);
+   roles=[...new Set(users.filter(user=>isAppRole(user.role)&&normalizeAccessAreasForRole(user.role,user.areas).includes('geld')).map(user=>ROLE_LABELS[user.role as keyof typeof ROLE_LABELS]))].sort();
+  }
+  return {required,sendAllowed,roles};
+ });
+}
 
 export type StorageLetterRequest={customerId:string;handover:'pickup'|'shipping';clientKey:string};
 export function storageLetterRequestValid(input:unknown):input is StorageLetterRequest{
@@ -29,6 +50,8 @@ export async function readStorageLetterPreview(auth:AuthorizationSnapshot,input:
  try{
   const [customer,sender]=await Promise.all([ports.readCustomer(),ports.readCompany()]);
   if(!customer)return {code:'NOT_FOUND' as const,message:copy.letterAddressMissing};
+  const access=await readCollectionMoneyAccess(auth,members.map(order=>order.id),settings,'E4');
+  if(!access.sendAllowed)return {code:'FORBIDDEN' as const,message:access.roles.length?copy.moneyRequired(customer.name,access.roles.join(', ')):copy.forbidden};
   const country=customer.country,zip=customer.zipCode;
   if(!customer.name?.trim()||!customer.street?.trim()||!zip?.trim()||!customer.city?.trim()||!country?.trim()||country==='andere'||customerFieldError('country',{...EMPTY_CUSTOMER_FORM,country})||customerFieldError('zipCode',{...EMPTY_CUSTOMER_FORM,country,zipCode:zip}))return {code:'VALIDATION_ERROR' as const,message:copy.letterAddressMissing};
   if(sender.code!=='OK')return {code:sender.code==='FORBIDDEN'?'FORBIDDEN' as const:'VALIDATION_ERROR' as const,message:copy.letterSenderMissing};

@@ -191,6 +191,7 @@ export const DISPATCH_CALL_COPY={
  session:'Melde Dich erneut an; Deine Eingaben bleiben erhalten.',invalid:'Öffne den Anruf aus der Liste der fertigen Aufträge erneut.'
 };
 export const COLLECTION_REMINDER_COPY={
+  moneyRequired:(customer:string,roles:string)=>'Schreiben an '+customer+' enthält Beträge – senden kann '+roles,
   letterTitle:'Lagerfrist-Schreiben',
   letterDraft:'Entwurf · noch nicht versendet',
   letterDeadline:(date:string)=>'Die zugesagte Lagerfrist endet am '+date.split('-').reverse().join('.')+'.',
@@ -257,7 +258,8 @@ export const CUSTOMER_COLLECTION_COPY={
   }
   if(stage==='E2')lines.push('Bitte holen Sie sie ab oder antworten Sie auf diese Mail mit einem Abholtermin.');
   const deadline=customerDay(facts.deadline);if(stage==='E4'&&deadline)lines.push('Bitte holen Sie die Teile bis '+deadline+' ab.');
-  const financial=stage==='E4'?CUSTOMER_COLLECTION_COPY['kunde.abholung.lagergeld_satz'](facts.storageAmount,facts.storageUnit):CUSTOMER_COLLECTION_COPY['kunde.zahlung_zeile'](facts.openAmount);if(financial)lines.push(financial);
+  const payment=CUSTOMER_COLLECTION_COPY['kunde.zahlung_zeile'](facts.openAmount);if(payment)lines.push(payment);
+  const storage=stage==='E4'?CUSTOMER_COLLECTION_COPY['kunde.abholung.lagergeld_satz'](facts.storageAmount,facts.storageUnit):'';if(storage)lines.push(storage);
   if(facts.company?.trim())lines.push('Mit freundlichen Grüßen '+facts.company.trim());
   const key=stage==='E1'?'kunde.abholung.e1':stage==='E2'?'kunde.abholung.e2':'kunde.abholung.lagerfrist';return {subject:CUSTOMER_COLLECTION_COPY[key].subject(facts.members.map(member=>member.number).join(', ')),body:lines.join('\n\n')};
  }
