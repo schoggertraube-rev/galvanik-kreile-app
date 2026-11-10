@@ -9,7 +9,7 @@ import type {StorageLetterSnapshot} from '@/lib/pdf/StorageLetterDocument';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {handedOverProofs} from './dispatchCallPort';
 import {COLLECTION_REMINDER_COPY as copy} from '@/ui/situationCatalog';
-import {readOrderPickupAppointmentInTransaction,readPickupAppointmentReceiptInTransaction} from './pickupAppointmentPort';
+import {readOrderPickupAppointmentInTransaction,readPickupAppointmentReceiptInTransaction,qualifyStorageOrigin,storageOriginIsCurrent} from './pickupAppointmentPort';
 
 type Document={id:string;snapshot:StorageLetterSnapshot;snapshotSha256:string;pdfBase64:string;sha256:string};
 type Payload={channel:'post';meta:CollectionReminderMeta;document:Document;taskId:string;title:string;note:string};
@@ -24,6 +24,7 @@ async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
  if(!rows.length)return null;if(rows.length!==1||!rows[0].proof_ok)throw Error('POSTAL_LETTER_SOURCE_INVALID');
  const row=rows[0],p=row.payload,d=p.document;
  if(d.id!==row.id||!p.meta.storageOrigin||snapshotHash(d.snapshot)!==d.snapshotSha256||JSON.stringify(d.snapshot.orderNumbers)!==JSON.stringify(p.meta.orders.map(order=>order.number)))throw Error('POSTAL_LETTER_DOCUMENT_INVALID');
+ await qualifyStorageOrigin(tx,auth,p.meta.storageOrigin);
  const bytes=Buffer.from(d.pdfBase64,'base64');if(bytes.toString('base64')!==d.pdfBase64||bytes.subarray(0,5).toString()!=='%PDF-'||createHash('sha256').update(bytes).digest('hex')!==d.sha256)throw Error('POSTAL_LETTER_PDF_INVALID');
  const tasks=await tx.execute<TaskState>(sql`SELECT id::text,client_key::text,art,bezug_typ,bezug_id,erstellt_von::text,titel,notiz,fuer_bereich,fuer_login::text,status,version,erledigt_von::text,erledigt_notiz FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${p.taskId}::uuid`);
  const task=tasks[0];if(tasks.length!==1||task.client_key!==letterKey||task.art!=='aufgabe'||task.bezug_typ!=='auftrag'||task.bezug_id!==p.meta.orders[0]?.id||task.erstellt_von!==row.user_id||task.titel!==p.title||task.notiz!==p.note||task.fuer_bereich!=='auftraege'||task.fuer_login!==null)throw Error('POSTAL_LETTER_TASK_INVALID');
@@ -85,7 +86,7 @@ export async function prepareStoragePostalLetter(auth:AuthorizationSnapshot,inpu
   for(const order of meta.orders)await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':storage-final-order:'+order.id},0))`);
   const orders=await tx.execute<{id:string;version:number;freeze_id:string}>(sql`SELECT o.id,o.version,f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${auth.tenantId} AND o.customer_id=${input.customerId} AND o.handover_mode=${input.handover} AND o.id=ANY(ARRAY[${sql.join(meta.orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig' ORDER BY o.id FOR UPDATE OF o`);
   if(orders.length!==meta.orders.length||orders.some(order=>meta.orders.find(member=>member.id===order.id)?.version!==order.version||!meta.storageOrigin?.freezes.some(f=>f.orderId===order.id&&f.freezeId===order.freeze_id)))throw Error('POSTAL_LETTER_COHORT_CHANGED');
-  for(const order of orders)if(await readOrderPickupAppointmentInTransaction(tx,auth,order.id))return {code:'CONFLICT' as const,message:copy.postalProtected};
+  if(!meta.storageOrigin||!await storageOriginIsCurrent(tx,auth,meta.storageOrigin,meta.dueDate))return {code:'CONFLICT' as const,message:copy.postalProtected};
   const settings=await tx.execute(sql`SELECT id FROM public.company_settings WHERE tenant_id=${auth.tenantId} AND updated_at=${settingsUpdatedAt}::timestamptz FOR SHARE`);if(settings.length!==1||!await ports.customerCurrent(tx))throw Error('POSTAL_LETTER_PROFILE_CHANGED');
   const id=randomUUID(),title=copy.postalTaskTitle(snapshot.recipient.name),note=copy.postalTaskNote([snapshot.recipient.name,snapshot.recipient.street,snapshot.recipient.zip+' '+snapshot.recipient.city,snapshot.recipient.country],snapshot.orderNumbers);
   const taskId=await ports.createTask(tx,{orderId:meta.orders[0].id,clientKey:input.clientKey,title,note,kind:'aufgabe',dueDate:snapshot.date});
@@ -116,7 +117,7 @@ export async function recordStoragePostalResult(tx:PrivilegedTenantTransaction,a
  if(read.outcome){const saved=read.outcome.payload;if(read.outcome.user_id!==auth.userId||saved.taskVersion!==input.version+1||saved.note!==(input.note?.trim()||null)||(value?.kind==='posted'?saved.postedOn!==value.postedOn:saved.reason!==(value?.kind==='discarded'?value.reason:'goodsOut')))return fail('CONFLICT',copy.keyConflict);return;}
  if(task.version!==input.version)return fail('CONFLICT',copy.postalProtected);
  if(value?.kind==='posted'){
-  for(const order of original.meta.orders)if(await readOrderPickupAppointmentInTransaction(tx,auth,order.id))return fail('CONFLICT',copy.postalProtected);
+  for(const order of original.meta.orders){const appointment=await readOrderPickupAppointmentInTransaction(tx,auth,order.id);if(appointment&&appointment.eventId!==original.meta.storageOrigin?.appointmentEventId)return fail('CONFLICT',copy.postalProtected);}
   const current=await tx.execute(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(original.meta.orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) AND station='fertig' AND status='fertig' AND current_station='fertig' AND current_station_id='fertig' ORDER BY id FOR UPDATE`);
   if(current.length!==original.meta.orders.length)return fail('CONFLICT',copy.postalProtected);
  }

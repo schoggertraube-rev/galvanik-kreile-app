@@ -19,6 +19,7 @@ import {markOrderInformedByPhoneAction,setOrderPickupAppointmentAction} from '@/
 import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
 import {emptyDispatchPolicy} from '@/modules/fundament/public';
 import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
+import {pickupStorageDue} from '@/lib/server/pickupAppointmentPort';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('STORAGE_LETTER_LOOPBACK_REQUIRED');
 
 async function prepareLetter(label:string){
@@ -378,4 +379,58 @@ it('PL12:06 freezes the actual mail original deadline and preserves its fresh re
  expect(queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'WAIT',due:proof.deadline.due});
  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{n:1}]);
+});
+it('PL12:06 a missed actual pickup agreement starts E4 through postal original and E5 without inventing a call',async()=>{
+ const order=await readyInvoiceOrder('Verpasster-Termin');
+ expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('MISSED_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),holidays:[],storageAfterDays:0,finalStageAfterLetterDays:0,finalStageRecipientId:full.actorId}}))).toMatchObject({code:'OK'});
+ const past=new Date(berlinCalendarDay()+'T12:00:00Z');past.setUTCDate(past.getUTCDate()-7);
+ const agreement=await withSession(full,()=>setOrderPickupAppointmentAction({orderId:order.orderId,expectedVersion:order.version,previousEventId:null,date:past.toISOString().slice(0,10),channel:'telefon',clientEventId:randomUUID()}));if(agreement.code!=='OK')throw Error('MISSED_AGREEMENT');
+ async function current(){const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('MISSED_QUEUE');return queue.data.find(row=>row.id===order.orderId)!;}
+ const row=await current(),letter=row.finishedDispatch?.storage?.letter;
+ expect(row.finishedDispatch?.storage).toMatchObject({state:'DUE',appointmentEventId:agreement.receipt.eventId});
+ expect(letter).toMatchObject({state:'DUE',appointmentEventId:agreement.receipt.eventId});expect(letter).not.toHaveProperty('callTaskId');if(!letter)throw Error('MISSED_LETTER');
+ let request={customerId:order.customerId,handover:'pickup' as const,clientKey:letter.clientKey};
+ let prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));expect(prepared.code).toBe('OK');if(prepared.code!=='OK')throw Error('MISSED_ORIGINAL');
+ const first=prepared,firstTask=await withSession(full,()=>getIntakeTaskAction({taskId:first.taskId}));if(firstTask.code!=='OK'||!firstTask.task)throw Error('MISSED_FIRST_TASK');const firstVersion=firstTask.task.version;
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:first.taskId,version:firstVersion,note:'TEST Adresse korrigieren',postalResult:{kind:'discarded',documentSha256:first.document.sha256,reason:'TEST Adresse korrigieren'}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),street:'TEST Neuer Weg'}))).toMatchObject({code:'OK'});
+ const replacement=(await current()).finishedDispatch?.storage?.letter;expect(replacement?.state).toBe('DUE');expect(replacement?.clientKey).not.toBe(request.clientKey);if(!replacement)throw Error('MISSED_REPLACEMENT');
+ request={...request,clientKey:replacement.clientKey};prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('MISSED_REPLACEMENT_ORIGINAL');
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:first.taskId}))).toMatchObject({code:'OK',postalLetter:{state:'VOIDED',document:{sha256:first.document.sha256}}});
+ expect(await sql`SELECT payload->'meta'->'storageOrigin' AS origin FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.document.id}`).toEqual([{origin:{appointmentEventId:agreement.receipt.eventId,freezes:letter.freezes}}]);
+ const task=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));if(task.code!=='OK'||!task.task)throw Error('MISSED_POST_TASK');const version=task.task.version;
+ const post={taskId:prepared.taskId,version,note:'TEST echter Postversand',postalResult:{kind:'posted' as const,postedOn:berlinCalendarDay(),documentSha256:prepared.document.sha256}};
+ expect(await withSession(full,()=>completeIntakeTaskAction(post))).toMatchObject({code:'OK'});
+ expect((await current()).finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'DUE'});
+ const final=await withSession(full,()=>createStorageFinalTaskAction(request));expect(final.code).toBe('OK');if(final.code!=='OK')throw Error('MISSED_FINAL');
+ expect(await withSession(full,()=>createStorageFinalTaskAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',replayed:true,taskId:final.taskId});
+ expect((await current()).finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'TASK_PENDING',taskId:final.taskId});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_COLLECTION_CALL_RESULT_V1') AND payload->'meta'->'orderIds' @> ${sql.json([order.orderId])}`).toHaveLength(0);
+});
+it('PL12:06 missed-appointment eligibility observes both working-day boundaries without defaults',()=>{
+ const policy={...emptyDispatchPolicy(),holidays:['2026-11-09'],storageAfterDays:0};
+ expect(pickupStorageDue('2026-11-06',policy)).toBe('2026-11-10');
+ expect(pickupStorageDue('2026-11-06',{...policy,storageAfterDays:3})).toBe('2026-11-12');
+ expect(pickupStorageDue('2026-11-06',{...policy,storageAfterDays:null})).toBeNull();
+ expect(pickupStorageDue('2026-11-06',null)).toBeNull();
+});
+it('PL12:06 a missed pickup uses the existing mail sender and final task, while a newer agreement invalidates the old proposal',async()=>{
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-missed-appointment-token'.repeat(4),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail'))return new Response(null,{status:202});return nativeFetch(input,init);});
+ const order=await readyInvoiceOrder('Verpasster-Termin-Mail'),settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('MISSED_MAIL_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),holidays:[],storageAfterDays:0,finalStageAfterLetterDays:0,finalStageRecipientId:full.actorId,holdMinutes:0}}))).toMatchObject({code:'OK'});
+ const past=new Date(berlinCalendarDay()+'T12:00:00Z');past.setUTCDate(past.getUTCDate()-7);
+ const agreement=await withSession(full,()=>setOrderPickupAppointmentAction({orderId:order.orderId,expectedVersion:order.version,previousEventId:null,date:past.toISOString().slice(0,10),channel:'persoenlich',clientEventId:randomUUID()}));if(agreement.code!=='OK')throw Error('MISSED_MAIL_AGREEMENT');
+ const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('MISSED_MAIL_QUEUE');const letter=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.storage?.letter;if(!letter)throw Error('MISSED_MAIL_LETTER');
+ const request={targetType:'CUSTOMER' as const,targetId:order.customerId,clientRequestId:randomUUID(),subject:'TEST Lagerfrist nach vereinbartem Termin',body:'TEST Bitte melde Dich zur Übergabe.',collectionReminder:{stage:'E4' as const,handover:'pickup' as const,dueDate:letter.due,clientKey:letter.clientKey}};
+ expect(await withSession(full,()=>sendCustomerMailAction(request))).toMatchObject({code:'OK'});
+ expect(await sql`SELECT payload->'meta'->'storageOrigin' AS origin FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${request.clientRequestId}::uuid`).toEqual([{origin:{appointmentEventId:agreement.receipt.eventId,freezes:letter.freezes}}]);
+ const final=await withSession(full,()=>createStorageFinalTaskAction({customerId:order.customerId,handover:'pickup',clientKey:letter.clientKey}));expect(final.code).toBe('OK');if(final.code!=='OK')throw Error('MISSED_MAIL_FINAL');
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',data:{replayed:true}});
+ const future=new Date();future.setUTCDate(future.getUTCDate()+14);
+ expect(await withSession(full,()=>setOrderPickupAppointmentAction({orderId:order.orderId,expectedVersion:order.version,previousEventId:agreement.receipt.eventId,date:future.toISOString().slice(0,10),channel:'telefon',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>sendCustomerMailAction({...request,clientRequestId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${final.taskId}::uuid`).toEqual([{status:'erledigt'}]);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_COLLECTION_CALL_RESULT_V1') AND payload->'meta'->'orderIds' @> ${sql.json([order.orderId])}`).toHaveLength(0);
 });

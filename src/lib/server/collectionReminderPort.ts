@@ -1,4 +1,5 @@
 import 'server-only';
+import {qualifyStorageOrigin,storageOriginIsCurrent,type StorageOrigin} from './pickupAppointmentPort';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
@@ -8,7 +9,7 @@ import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
 import {readPostalCollectionHistory} from './storagePostalPort';
 
 export type CollectionReminderRequest={targetId:string;clientRequestId:string;subject:string;body:string;collectionReminder:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string}};
-export type CollectionReminderMeta={stage:'E1'|'E2'|'E4';customerId:string;handover:'pickup'|'shipping';dueDate:string;stageKey:string;intent:string;orders:Array<{id:string;number:string;version:number}>;storageDeadline?:{date:string;due:string|null};storageOrigin?:{callTaskId:string;freezes:Array<{orderId:string;freezeId:string}>}};
+export type CollectionReminderMeta={stage:'E1'|'E2'|'E4';customerId:string;handover:'pickup'|'shipping';dueDate:string;stageKey:string;intent:string;orders:Array<{id:string;number:string;version:number}>;storageDeadline?:{date:string;due:string|null};storageOrigin?:StorageOrigin};
 export type CollectionReminderHistoryEntry={stage:'E1'|'E2'|'E4';stageKey:string;dueDate:string;storageDeadline?:CollectionReminderMeta['storageDeadline'];storageOrigin?:CollectionReminderMeta['storageOrigin'];sentAt:string|null;threadId:string|null;orderIds:string[];deliveryFailedAt:string|null;postalDocumentId?:string;postalTaskId?:string;voidId?:string};
 export function collectionReminderIntent(input:CollectionReminderRequest){return createHash('sha256').update(JSON.stringify([input.targetId,input.subject.trim(),input.body.trim(),input.collectionReminder.stage,input.collectionReminder.handover,input.collectionReminder.dueDate,...(input.collectionReminder.stage==='E4'?[input.collectionReminder.clientKey]:[])])).digest('hex');}
 const hash=(body:string)=>createHash('sha256').update(body.trim()).digest('hex');
@@ -38,7 +39,7 @@ export async function prepareCollectionReminder(tx:PrivilegedTenantTransaction,a
   const orders=await tx.execute<{id:string;order_number:string;version:number;customer_id:string;handover_mode:string;station:string;current_station:string;current_station_id:string;status:string}>(sql`SELECT id,order_number,version,customer_id,handover_mode,station,current_station,current_station_id,status FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(meta.orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) ORDER BY id FOR UPDATE`);
  if(orders.length!==meta.orders.length||orders.some(order=>order.customer_id!==meta.customerId||order.handover_mode!==meta.handover||[order.station,order.current_station,order.current_station_id,order.status].some(state=>state!=='fertig')||order.version!==meta.orders.find(member=>member.id===order.id)?.version||order.order_number!==meta.orders.find(member=>member.id===order.id)?.number))throw Error('COLLECTION_REMINDER_COHORT_CHANGED');
  if(meta.stage==='E4'){
-  if(!meta.storageOrigin||meta.storageOrigin.freezes.length!==meta.orders.length)throw Error('STORAGE_LETTER_ORIGIN_MISSING');
+  if(!meta.storageOrigin||meta.storageOrigin.freezes.length!==meta.orders.length||!await storageOriginIsCurrent(tx,auth,meta.storageOrigin,meta.dueDate))throw Error('STORAGE_LETTER_ORIGIN_MISSING');
   const current=await tx.execute<{order_id:string;freeze_id:string}>(sql`SELECT order_id,freeze_id::text FROM private.v_order_freeze_state_v1 WHERE tenant_id=${auth.tenantId} AND order_id=ANY(ARRAY[${sql.join(meta.orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) AND active AND integrity_ok`);
   if(current.length!==meta.orders.length||current.some(row=>!meta.storageOrigin!.freezes.some(proof=>proof.orderId===row.order_id&&proof.freezeId===row.freeze_id)))throw Error('STORAGE_LETTER_CYCLE_CHANGED');
  }
@@ -68,6 +69,7 @@ export async function readCollectionReminderHistory(auth:AuthorizationSnapshot,c
   if(new Set(relevant.map(row=>row.prepared_id)).size!==relevant.length)throw Error('COLLECTION_HISTORY_PROOF_AMBIGUOUS');
   if(relevant.some(row=>row.payload.meta.stage==='E4'&&(!row.payload.meta.storageOrigin||!Array.isArray(row.payload.meta.storageOrigin.freezes)||row.payload.meta.storageOrigin.freezes.length!==row.payload.meta.orders.length||row.payload.meta.orders.some(order=>!row.payload.meta.storageOrigin!.freezes.some(proof=>proof.orderId===order.id&&typeof proof.freezeId==='string')))))throw Error('STORAGE_LETTER_HISTORY_ORIGIN_INVALID');
   if(relevant.some(row=>row.sent_at&&(row.proof_ok!==true||row.status!=='sent'||row.sent_intent!==row.payload.meta.intent||!row.body||hash(row.body)!==row.payload.bodySha256)))throw Error('COLLECTION_HISTORY_PROOF_INVALID');
+  for(const row of relevant)if(row.payload.meta.stage==='E4')await qualifyStorageOrigin(tx,auth,row.payload.meta.storageOrigin!);
   const failures=await readCommunicationDeliveryFailures(tx,auth,relevant.map(row=>row.payload.threadId));
   return [...relevant.map(row=>({stage:row.payload.meta.stage,stageKey:row.payload.meta.stageKey,dueDate:row.payload.meta.dueDate,storageDeadline:row.payload.meta.storageDeadline,storageOrigin:row.payload.meta.storageOrigin,sentAt:row.sent_at?new Date(row.sent_at).toISOString():null,threadId:row.payload.threadId,orderIds:row.payload.meta.orders.map(member=>member.id),deliveryFailedAt:failures.find(proof=>proof.threadId===row.payload.threadId)?.recordedAt??null})),...await readPostalCollectionHistory(tx,auth,customerId,handover,orderIds)];
  });
