@@ -10,7 +10,7 @@ import {sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablau
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 import {getOrdersDb} from '@/app/actions/orders.actions';
-import {createDispatchCallTaskAction,createStorageFinalTaskAction,getIntakeTaskAction,completeIntakeTaskAction,saveIntakeTaskAction} from '@/app/actions/eingang.actions';
+import {createDispatchCallTaskAction,createStorageFinalTaskAction,getIntakeTaskAction,completeIntakeTaskAction,saveIntakeTaskAction,saveIntakeNoteAction,getIntakeCaptureAction} from '@/app/actions/eingang.actions';
 import {previewStorageLetterAction,prepareStoragePostalLetterAction} from '@/app/actions/pdf.actions';
 import {updateCustomerAction} from '@/app/actions/customers.actions';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
@@ -148,29 +148,73 @@ it('competing postal completion and discard preserve exactly one outcome, actor 
  const state=(await plan())!.finishedDispatch!.storage!.letter!;
  expect(state).toMatchObject(postedWon?{state:'SENT',postalDocumentId:prepared.document.id,finalStage:{state:'DUE'}}:{state:'DUE',sentAt:null,finalStage:{due:null}});
 });
-it('a rejected postal task history rolls back the dispatch receipt and completion, then the same request can recover',async()=>{
+it.each(['task history','dispatch receipt'] as const)('a rejected postal %s rolls back the dispatch receipt and completion, then the same request can recover',async(rejected)=>{
  const {request,plan}=await prepareWithoutMail('Post-Historie-Rollback');
  const prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('POSTAL_ROLLBACK_PREPARE');
  const read=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));if(read.code!=='OK'||!read.task)throw Error('POSTAL_ROLLBACK_TASK');
  const input={taskId:prepared.taskId,version:read.task.version,note:'TEST Versand mit Historie',postalResult:{kind:'posted' as const,postedOn:berlinCalendarDay(),documentSha256:prepared.document.sha256}};
  const name='test_postal_'+randomUUID().replaceAll('-','');
  // Real DB failure, restricted to this synthetic task; neither action nor persistence is mocked.
- await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id = '${KREILE_TENANT_SLUG}' AND NEW.nachher->>'taskId' = '${prepared.taskId}' AND NEW.nachher->>'action' = 'aufgabe.erledigt' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ const table=rejected==='task history'?'intake_event':'events';
+ const matches=rejected==='task history'?`NEW.nachher->>'taskId' = '${prepared.taskId}' AND NEW.nachher->>'action' = 'aufgabe.erledigt'`:`NEW.event_type = 'ORDER_COLLECTION_REMINDER_SENT_V1' AND NEW.payload->>'documentId' = '${prepared.document.id}'`;
+ await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id = '${KREILE_TENANT_SLUG}' AND ${matches} THEN RETURN NULL; END IF; RETURN NEW; END $$`);
  try{
-  await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON public.intake_event FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
+  await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON public.${table} FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
   expect(await withSession(full,()=>completeIntakeTaskAction(structuredClone(input)))).toMatchObject({code:'UNAVAILABLE'});
   expect(await sql`SELECT status,version,erledigt_am FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.taskId}::uuid`).toEqual([{status:'offen',version:input.version,erledigt_am:null}]);
   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'documentId'=${prepared.document.id}`).toHaveLength(0);
   expect((await plan())!.finishedDispatch!.storage!.letter).toMatchObject({state:'WAIT_FOR_POST',sentAt:null,finalStage:{due:null}});
   expect(await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}))).toMatchObject({code:'OK',postalLetter:{state:'WAIT_FOR_POST',document:{sha256:prepared.document.sha256}}});
  }finally{
-  await sql.unsafe(`DROP TRIGGER IF EXISTS ${name} ON public.intake_event`);
+  await sql.unsafe(`DROP TRIGGER IF EXISTS ${name} ON public.${table}`);
   await sql.unsafe(`DROP FUNCTION private.${name}()`);
  }
  expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:false});
  expect((await plan())!.finishedDispatch!.storage!.letter).toMatchObject({state:'SENT',postalDocumentId:prepared.document.id,finalStage:{state:'DUE'}});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'documentId'=${prepared.document.id}`).toEqual([{n:1}]);
  expect(await sql`SELECT count(*)::int AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND nachher->>'taskId'=${prepared.taskId} AND nachher->>'action'='aufgabe.erledigt'`).toEqual([{n:1}]);
+});
+it('a missing source-task history keeps the concern open and rolls back the task before a fresh recovery',async()=>{
+ const itemId=randomUUID(),capture=await withSession(full,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST bitte Aufgabe mit belegtem Ursprung erledigen',concerns:['aufgabe']}));
+ if(capture.code!=='OK')throw Error('SOURCE_HISTORY_CAPTURE');
+ const input={clientKey:randomUUID(),version:0,kind:'aufgabe' as const,title:'TEST ursprüngliches Anliegen erledigen',dueDate:berlinCalendarDay(),time:null,forLogin:full.actorId,forArea:null,reference:{type:'eingang' as const,id:itemId},note:null,itemId,itemVersion:capture.capture.version};
+ const name='test_task_source_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id = '${KREILE_TENANT_SLUG}' AND NEW.item_id = '${itemId}'::uuid AND NEW.nachher->>'action' = 'aufgabe.angelegt' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ try{
+  await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON public.intake_event FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
+  expect(await withSession(full,()=>saveIntakeTaskAction(structuredClone(input)))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${input.clientKey}::uuid`).toHaveLength(0);
+  expect(await sql`SELECT version,einsatz,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual([{version:capture.capture.version,einsatz:'offen',anliegen_offen:['aufgabe']}]);
+  expect(await withSession(full,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{usage:'offen',openConcerns:['aufgabe'],version:capture.capture.version}});
+ }finally{
+  await sql.unsafe(`DROP TRIGGER IF EXISTS ${name} ON public.intake_event`);
+  await sql.unsafe(`DROP FUNCTION private.${name}()`);
+ }
+ const saved=await withSession(full,()=>saveIntakeTaskAction(JSON.parse(JSON.stringify(input))));if(saved.code!=='OK')throw Error('SOURCE_HISTORY_RECOVERY:'+saved.code);
+ expect(await withSession(full,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{usage:'erledigt',openConcerns:[]}});
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:saved.task.id}))).toMatchObject({code:'OK',task:{status:'offen',titel:input.title}});
+ expect(await withSession(full,()=>saveIntakeTaskAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',task:{id:saved.task.id},replayed:true});
+ expect(await sql`SELECT count(*)::int AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND nachher->>'action'='aufgabe.angelegt'`).toEqual([{n:1}]);
+});
+it('an omitted postal original receipt rolls back its task and history, preserving a usable same-key retry',async()=>{
+ const {request,plan}=await prepareWithoutMail('Post-Original-Rollback');
+ const before=await sql`SELECT (SELECT count(*) FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG})::int AS tasks,(SELECT count(*) FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG})::int AS history`;
+ const name='test_postal_original_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id = '${KREILE_TENANT_SLUG}' AND NEW.client_event_id = '${request.clientKey}'::uuid AND NEW.event_type = 'ORDER_COLLECTION_REMINDER_PREPARED_V1' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ try{
+  await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
+  expect(await withSession(full,()=>prepareStoragePostalLetterAction(structuredClone(request)))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT (SELECT count(*) FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG})::int AS tasks,(SELECT count(*) FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG})::int AS history`).toEqual(before);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientKey}::uuid`).toHaveLength(0);
+  expect((await plan())!.finishedDispatch!.storage!.letter).toMatchObject({state:'DUE',sentAt:null,clientKey:request.clientKey,finalStage:{due:null}});
+ }finally{
+  await sql.unsafe(`DROP TRIGGER IF EXISTS ${name} ON public.events`);
+  await sql.unsafe(`DROP FUNCTION private.${name}()`);
+ }
+ const recovered=await withSession(full,()=>prepareStoragePostalLetterAction(JSON.parse(JSON.stringify(request))));if(recovered.code!=='OK')throw Error('POSTAL_ORIGINAL_RECOVERY:'+recovered.code);
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:recovered.taskId}))).toMatchObject({code:'OK',postalLetter:{state:'WAIT_FOR_POST',document:{sha256:recovered.document.sha256}}});
+ expect(await withSession(full,()=>prepareStoragePostalLetterAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',taskId:recovered.taskId,replayed:true});
+ expect(await sql`SELECT count(*)::int AS n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${request.clientKey}::uuid`).toEqual([{n:1}]);
 });
 it('a matching ordinary task cannot be adopted as a qualified E5 task',async()=>{
  const {order,request,plan}=await prepareWithoutMail('Post-E5-Zweckbindung');
