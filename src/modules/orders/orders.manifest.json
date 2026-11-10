@@ -46,7 +46,8 @@
     "@/modules/orders/server-public#saveManualTracking",
     "@/modules/orders/server-public#readFinishedDispatchQueue",
     "@/modules/orders/server-public#createInitialOrderPrintJobs",
-    "@/modules/orders/server-public#retireOrderPrintJobsAfterGoodsOut"
+    "@/modules/orders/server-public#retireOrderPrintJobsAfterGoodsOut",
+    "@/modules/orders/server-public#readOrderPrintQueue"
   ],
   "capabilities": [],
   "migrations": [

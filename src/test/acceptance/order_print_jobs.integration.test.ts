@@ -8,6 +8,7 @@ import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {createOrderIntakeAction} from '@/app/actions/eingang.actions';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
+import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('PRINT_JOBS_LOOPBACK_REQUIRED');
 function request(customerId:string){return {geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING' as const,customerId},dueDate:'2027-05-15',termStatus:'bestaetigt' as const,intakeSource:'persoenlich' as const,handoverMode:'pickup' as const,paymentMode:'rechnung' as const,note:'TEST automatische Laufzettel',items:[1,2].map(quantity=>({catalogServiceId:null,name:'TEST Teil '+quantity,quantity,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen' as const,unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900 as const}))};}
 
@@ -30,6 +31,7 @@ it('DR-03/10 canonical order creation atomically queues overall and position she
  }
  expect(await withSession(full,()=>createOrderIntakeAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT count(*)::int AS n FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${first.receipt.orderId}`).toEqual([{n:3}]);
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:first.receipt.orderId}));expect(card).toMatchObject({code:'OK',data:{printQueue:{code:'OK',state:'WAITING',jobs:expect.arrayContaining([{id:expect.any(String),itemId:null,sheetKind:'gesamt',status:'wartet',attempts:0}])}}});
 });
 
 it('DR-03 missing queue receipt rolls back order, symbol, jobs and intake receipt; same-key recovery remains possible',async()=>{
@@ -62,6 +64,7 @@ it('DR-05/09 physical output retires waiting sheets with its real receipt and re
  const next=await withSession(full,()=>createOrderIntakeAction(request(ready.customerId)));if(next.code!=='OK')throw Error('PRINT_SYMBOL_REUSE');
  expect(await sql`SELECT print_symbol_slot,print_symbol_generation,print_symbol_active FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${next.receipt.orderId}`).toEqual([before]);
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${ready.orderId} AND event_type='ORDER_PRINT_JOBS_RETIRED_V1'`).toEqual([{n:1}]);
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:ready.orderId}))).toMatchObject({code:'OK',data:{printQueue:{code:'OK',state:'RETIRED'}}});
 });
 
 it('DR-08 the forty-first active order receives a symbol-letter generation without changing any existing order',async()=>{
@@ -84,4 +87,16 @@ it('a corrupted sheet original blocks intake replay rather than replacing or dup
  expect(await withSession(full,()=>createOrderIntakeAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
  expect(await sql`SELECT payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId} AND event_type='ORDER_PRINT_JOBS_QUEUED_V1'`).toEqual([source]);
  expect(await sql`SELECT count(*)::int AS n FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId}`).toEqual([{n:3}]);
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:created.receipt.orderId}))).toMatchObject({code:'OK',data:{card:{id:created.receipt.orderId},printQueue:{code:'UNAVAILABLE'}}});
+});
+
+it('a sheet bound to a foreign position is rejected by the shared original reader without hiding the order',async()=>{
+ const customerId=await customerFixture('Druck-Fremdposition'),input=request(customerId);
+ const first=await withSession(full,()=>createOrderIntakeAction(input)),second=await withSession(full,()=>createOrderIntakeAction(request(customerId)));
+ if(first.code!=='OK'||second.code!=='OK')throw Error('PRINT_FOREIGN_FIXTURE');
+ const [job]=await sql`SELECT id::text FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${first.receipt.orderId} AND sheet_kind='position' ORDER BY id LIMIT 1`;
+ await sql`UPDATE public.print_jobs SET item_id=${second.receipt.items[0].id} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${job.id}::uuid`;
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:first.receipt.orderId}))).toMatchObject({code:'OK',data:{card:{id:first.receipt.orderId},printQueue:{code:'UNAVAILABLE'}}});
+ expect(await withSession(full,()=>createOrderIntakeAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:second.receipt.orderId}))).toMatchObject({code:'OK',data:{printQueue:{code:'OK',state:'WAITING'}}});
 });

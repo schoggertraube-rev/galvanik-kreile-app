@@ -2,7 +2,8 @@ import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
-import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {hasAuthorizationArea} from '@/lib/server/authorization';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 function automaticKey(orderId:string,version:number){
@@ -12,18 +13,36 @@ function automaticKey(orderId:string,version:number){
 type Position={id:string;name:string;quantity:string;unit:string|null;surface:string|null;execution:string};
 type Order={id:string;number:string;customerId:string;customerName:string;dueDate:string|null;handover:string|null;version:number;slot:number|null;generation:number|null;active:boolean};
 
+async function readInitialQueue(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,expectedCount?:number){
+ const requestKey=automaticKey(orderId,1);
+ const sources=await tx.execute<{user_id:string;valid:boolean;payload:{orderId:string;orderVersion:number;jobIds:string[];snapshotSha256:string;symbol:{slot:number;generation:number}}}>(sql`SELECT user_id::text,payload,(status='success' AND event_schema_version=1) AS valid FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_PRINT_JOBS_QUEUED_V1' AND client_event_id=${requestKey}::uuid AND order_id=${orderId}`);
+ const jobs=await tx.execute<{id:string;created_by:string;snapshot:{positions:Position[]};status:'wartet'|'gedruckt'|'fehlgeschlagen'|'storniert';attempts:number;sheet_kind:'gesamt'|'position';kind:string;item_id:string|null}>(sql`SELECT id::text,created_by::text,snapshot,status,attempts,sheet_kind,kind,item_id FROM public.print_jobs WHERE tenant_id=${auth.tenantId} AND order_id=${orderId} AND request_key=${requestKey}::uuid AND content_version=1 ORDER BY id`);
+ if(!sources.length&&!jobs.length)return null;
+ const source=sources[0];
+ if(sources.length!==1||!source.valid||source.payload.orderId!==orderId||source.payload.orderVersion!==1||!Array.isArray(source.payload.jobIds)||!jobs.length||expectedCount!==undefined&&jobs.length!==expectedCount||jobs.some(job=>job.created_by!==source.user_id||createHash('sha256').update(canonicalJson(job.snapshot)).digest('hex')!==source.payload.snapshotSha256)||JSON.stringify(jobs.map(job=>job.id))!==JSON.stringify([...source.payload.jobIds].sort()))throw Error('ORDER_PRINT_INITIAL_RECEIPT_INVALID');
+ const positions=jobs[0].snapshot.positions;
+ if(!Array.isArray(positions)||jobs.some(job=>job.kind!=='laufzettel')||jobs.filter(job=>job.sheet_kind==='gesamt'&&job.item_id===null).length!==1||JSON.stringify(jobs.filter(job=>job.sheet_kind==='position').map(job=>job.item_id).sort())!==JSON.stringify(positions.map(position=>position.id).sort()))throw Error('ORDER_PRINT_SHEET_MEMBERS_INVALID');
+ return {symbol:source.payload.symbol,jobs};
+}
+
+/** The existing order card reads the same stored queue and its original receipt. */
+export async function readOrderPrintQueue(auth:AuthorizationSnapshot,orderId:string){
+ if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const queue=await readInitialQueue(tx,auth,orderId);
+  if(!queue)return {code:'OK' as const,state:'NOT_QUEUED' as const,jobs:[]};
+  const state=queue.jobs.every(job=>job.status==='storniert')?'RETIRED':queue.jobs.some(job=>job.status==='fehlgeschlagen')?'FAILED':queue.jobs.every(job=>job.status==='gedruckt')?'PRINTED':'WAITING';
+  return {code:'OK' as const,state,symbol:queue.symbol,jobs:queue.jobs.map(job=>({id:job.id,itemId:job.item_id,sheetKind:job.sheet_kind,status:job.status,attempts:job.attempts}))};
+ });}catch(error){console.error('[ORDER_PRINT_QUEUE_READ_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const};}
+}
+
 /** Part of the canonical order transaction. It queues real work; it never reports a print. */
 export async function createInitialOrderPrintJobs(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,customerName:string,itemIds:readonly string[]){
  const orders=await tx.execute<Order>(sql`SELECT o.id,o.order_number AS number,o.customer_id AS "customerId",${customerName}::text AS "customerName",o.due_date::date::text AS "dueDate",o.handover_mode AS handover,o.version,o.print_symbol_slot AS slot,o.print_symbol_generation AS generation,o.print_symbol_active AS active
   FROM public.orders o WHERE o.tenant_id=${auth.tenantId} AND o.id=${orderId} FOR UPDATE OF o`);
  if(orders.length!==1)throw Error('ORDER_PRINT_ORDER_MISSING');
  const order=orders[0],requestKey=automaticKey(order.id,1);
- const existing=await tx.execute<{user_id:string;payload:{orderId:string;orderVersion:number;jobIds:string[];snapshotSha256:string}}>(sql`SELECT user_id::text,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_PRINT_JOBS_QUEUED_V1' AND client_event_id=${requestKey}::uuid AND status='success' AND event_schema_version=1 AND order_id=${order.id}`);
- if(existing.length){
-  const original=existing[0],jobs=await tx.execute<{id:string;created_by:string;snapshot:unknown}>(sql`SELECT id::text,created_by::text,snapshot FROM public.print_jobs WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} AND request_key=${requestKey}::uuid AND content_version=1 ORDER BY id`);
-  if(existing.length!==1||original.payload.orderId!==order.id||original.payload.orderVersion!==1||!Array.isArray(original.payload.jobIds)||jobs.length!==itemIds.length+1||jobs.some(job=>job.created_by!==original.user_id||createHash('sha256').update(canonicalJson(job.snapshot)).digest('hex')!==original.payload.snapshotSha256)||JSON.stringify(jobs.map(job=>job.id))!==JSON.stringify([...original.payload.jobIds].sort()))throw Error('ORDER_PRINT_INITIAL_RECEIPT_INVALID');
-  return;
- }
+ if(await readInitialQueue(tx,auth,order.id,itemIds.length+1))return;
  if(order.version!==1)throw Error('ORDER_PRINT_INITIAL_VERSION_CHANGED');
  const rows=await tx.execute<Position>(sql`SELECT id,name,quantity::text,unit,surface_requested AS surface,execution_requested AS execution FROM public.items WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} ORDER BY id`);
  if(!rows.length||new Set(itemIds).size!==itemIds.length||rows.length!==itemIds.length||itemIds.some(id=>!rows.some(row=>row.id===id)))throw Error('ORDER_PRINT_POSITIONS_MISSING');

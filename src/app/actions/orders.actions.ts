@@ -217,7 +217,7 @@ async function resolveOrderCardAuthorization(): Promise<
 
 export async function getLiveOrderCardAction(
   input: { orderId: string },
-): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>> }>> {
+): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>> }>> {
   noStore();
   try {
     const authorization = await resolveOrderCardAuthorization();
@@ -250,7 +250,9 @@ export async function getLiveOrderCardAction(
     const {readOrderInformed}=await import('@/lib/server/orderReleaseRead');
     const customerInformed=await readOrderInformed(authorization.data,input.orderId);
     if(customerInformed.code==='OK'&&customerInformed.orderVersion!==card.data.version)return {code:'UNAVAILABLE',message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'};
-    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,...(manualShipping?{manualShipping}:{}) } };
+    const {readOrderPrintQueue}=await import('@/modules/orders/server-public');
+    const printQueue=await readOrderPrintQueue(authorization.data,input.orderId);
+    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,
