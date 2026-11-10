@@ -51,17 +51,24 @@ export async function appendProductionPricing(tx:PrivilegedTenantTransaction,ten
  const origins=await tx.execute<{has_quote:boolean}>(sql`SELECT EXISTS(SELECT 1 FROM private.quote_conversion_receipts receipt WHERE receipt.tenant_id=orders.tenant_id AND receipt.order_id=orders.id) AS has_quote FROM public.orders WHERE tenant_id=${tenantId} AND id=${orderId}`);
  if(origins.length!==1)throw Error('PRODUCTION_PRICING_ORDER_MISSING');
  const quote=origins[0].has_quote?await readOrderCommercialQuote(tx,tenantId,orderId):null;
- const rows=await tx.execute<{event_id:string;item_id:string;quantity:string;net_cents:string|null}>(sql`SELECT base.event_id,base.item_id,base.quantity::text,round(round(item.preis_netto*100)::bigint*base.quantity)::text AS net_cents
+ const rows=await tx.execute<{event_id:string;item_id:string;quantity:string;net_cents:string|null;previous_net:string|null}>(sql`SELECT base.event_id,base.item_id,base.quantity::text,
+ CASE WHEN base.net_cents IS NULL AND pricing.total IS NULL THEN NULL ELSE coalesce(base.net_cents,0)+coalesce(pricing.total,0) END::text AS previous_net,
+ round(round(item.preis_netto*100)::bigint*base.quantity)::text AS net_cents
  FROM private.order_production_snapshots base JOIN public.items item ON item.tenant_id=base.tenant_id AND item.order_id=base.order_id AND item.id=base.item_id
- WHERE base.tenant_id=${tenantId} AND base.valuation='captured' AND base.order_id=${orderId} AND base.component='base' AND base.direction=1 AND base.net_cents IS NULL
- AND NOT EXISTS(SELECT 1 FROM private.order_production_snapshots other WHERE other.item_id=base.item_id AND (other.reverses_event_id=base.event_id AND other.component='base' OR other.origin_event_id=base.event_id AND other.component='pricing')) ORDER BY base.item_id`);
+ LEFT JOIN LATERAL (SELECT sum(p.net_cents)::bigint AS total FROM private.order_production_snapshots p
+  WHERE p.tenant_id=base.tenant_id AND p.item_id=base.item_id AND p.origin_event_id=base.event_id AND p.component='pricing' AND p.direction=1) pricing ON true
+ WHERE base.tenant_id=${tenantId} AND base.valuation='captured' AND base.order_id=${orderId} AND base.component='base' AND base.direction=1 AND NOT base.rework
+ AND NOT EXISTS(SELECT 1 FROM private.order_production_snapshots other WHERE other.tenant_id=base.tenant_id AND other.item_id=base.item_id AND other.reverses_event_id=base.event_id AND other.component='base') ORDER BY base.item_id`);
  for(const row of rows){
   const priced=quote?.positions.find(position=>position.itemId===row.item_id);
   if(quote&&!priced)throw Error('PRODUCTION_PRICING_QUOTE_ITEM_MISSING');
   if(!priced&&row.net_cents===null)continue;
   const amount=priced?sql`round(${priced.lineTotalCents}::numeric*${row.quantity}::numeric/${priced.quantity}::numeric)::bigint`:sql`${row.net_cents}::bigint`;
+  const [change]=await tx.execute<{delta:string}>(sql`SELECT ((${amount})-coalesce(${row.previous_net}::bigint,0))::text AS delta`);
+  if(!change||!Number.isSafeInteger(Number(change.delta)))throw Error('PRODUCTION_PRICING_DELTA_INVALID');
+  if(row.previous_net!==null&&Number(change.delta)===0)continue;
   const saved=await tx.execute<{event_id:string}>(sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,component,origin_event_id)
-   SELECT event.id,base.tenant_id,base.order_id,base.item_id,event.created_at,1,base.quantity,base.unit,${amount},base.rework,'captured',${JSON.stringify(quote?{kind:'quote',quoteId:quote.quoteId,edition:quote.edition}:{kind:'item',pricingEventId:eventId})}::jsonb,'pricing',base.event_id
+   SELECT event.id,base.tenant_id,base.order_id,base.item_id,event.created_at,1,base.quantity,base.unit,${change.delta}::bigint,base.rework,'captured',${JSON.stringify(quote?{kind:'quote',quoteId:quote.quoteId,edition:quote.edition}:{kind:'item',pricingEventId:eventId})}::jsonb,'pricing',base.event_id
    FROM private.order_production_snapshots base JOIN public.events event ON event.tenant_id=base.tenant_id AND event.order_id=base.order_id AND event.id=${eventId}
    WHERE base.tenant_id=${tenantId} AND base.event_id=${row.event_id} AND base.item_id=${row.item_id} AND base.component='base' RETURNING event_id`);
   if(saved.length!==1||saved[0].event_id!==eventId)throw Error('PRODUCTION_PRICING_NOT_SAVED');

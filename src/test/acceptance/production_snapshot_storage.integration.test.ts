@@ -14,6 +14,42 @@ import {getProductionWeekAction} from '@/app/actions/orders.actions';
 import {setInvoiceItemPricesAction} from '@/app/actions/invoices.actions';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('PRODUCTION_SNAPSHOT_LOOPBACK_REQUIRED');
 
+it('K15 an already priced finished item records only its later price delta in the other week',async()=>{
+ const customer=await customerFixture('K15 Preiswoche'),created=await intakeOrderFixture('K15 Preiswoche',customer),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
+ const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('K15_MOVE');
+ // Isolated TEST clock boundary, not a reconstructed snapshot: the real finish
+ // writer still creates and validates both its event and captured value.
+ const clock='test_production_clock_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${clock}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.order_id='${orderId}' AND NEW.event_type='ORDER_ITEM_FINISHED_CHANGED_V1' AND NEW.payload->>'finished'='true' THEN NEW.created_at='2026-10-05 12:00:00'; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${clock} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${clock}()`);
+ let finished:Awaited<ReturnType<typeof setOrderItemFinishedAction>>;
+ try{finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));}
+ finally{await sql.unsafe(`DROP TRIGGER ${clock} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${clock}()`);}
+ if(finished!.code!=='OK')throw Error('K15_FINISH');
+ const before=await withSession(full,()=>getProductionWeekAction());if(before.code!=='OK')throw Error('K15_WEEK');
+ const input={orderId,expectedVersion:finished!.receipt.aggregateVersion,clientEventId:randomUUID(),note:'TEST Preis in anderer Woche',items:[{id:itemId,catalogServiceId:null,name:'TEST Preiswoche',quantity:1,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:20000,vatRateBasisPoints:1900 as const}]};
+ const changed=await withSession(full,()=>changeOrderContentAction(input));if(changed.code!=='OK')throw Error('K15_PRICE:'+changed.code);
+ expect(await sql`SELECT net_cents::int,origin_event_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${changed.receipt.eventId} AND component='pricing'`).toEqual([{net_cents:10000,origin_event_id:finished!.receipt.eventId}]);
+ expect(await withSession(full,()=>getProductionWeekAction({onDate:'2026-10-05'}))).toMatchObject({code:'OK',data:{netCents:10000}});
+ expect(await withSession(full,()=>getProductionWeekAction())).toMatchObject({code:'OK',data:{netCents:before.data.netCents+10000}});
+ expect(await withSession(full,()=>changeOrderContentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ const lower={...input,expectedVersion:changed.receipt.aggregateVersion,clientEventId:randomUUID(),note:'TEST Preis gesenkt',items:[{...input.items[0],unitPriceCents:5000}]};
+ const lowered=await withSession(full,()=>changeOrderContentAction(lower));if(lowered.code!=='OK')throw Error('K15_LOWER:'+lowered.code);
+ expect(await sql`SELECT net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${lowered.receipt.eventId} AND component='pricing'`).toEqual([{net_cents:-15000}]);
+ const reopen={orderId,itemId,expectedVersion:lowered.receipt.aggregateVersion,clientEventId:randomUUID(),finished:false};
+ const reopened=await withSession(full,()=>setOrderItemFinishedAction(reopen));if(reopened.code!=='OK')throw Error('K15_REOPEN:'+reopened.code);
+ expect(await sql`SELECT component,net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${reopened.receipt.eventId} ORDER BY component,net_cents`).toEqual([{component:'base',net_cents:10000},{component:'pricing',net_cents:-15000},{component:'pricing',net_cents:10000}]);
+ expect(await withSession(full,()=>getProductionWeekAction())).toMatchObject({code:'OK',data:{netCents:before.data.netCents-10000}});
+ expect(await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(reopen))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT count(*)::int AS n FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${reopened.receipt.eventId} AND component='pricing' AND direction=-1`).toEqual([{n:2}]);
+ expect(await sql`SELECT sum(direction*net_cents)::int AS net FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{net:0}]);
+ await expect(sql`INSERT INTO private.order_production_snapshots SELECT * FROM private.order_production_snapshots WHERE event_id=${reopened.receipt.eventId} AND component='pricing' LIMIT 1`).rejects.toThrow('order_production_one_reversal');
+ await expect(sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,reverses_event_id,component,origin_event_id)
+ SELECT event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,${randomUUID()},component,origin_event_id FROM private.order_production_snapshots WHERE event_id=${reopened.receipt.eventId} AND component='pricing' LIMIT 1`).rejects.toThrow('ORDER_PRODUCTION_REVERSAL_SOURCE_INVALID');
+
+
+});
+
 it('snapshot storage accepts an actual finish source, rejects mutation/foreign source/double counting and reverses its exact original facts',async()=>{
  const customer=await customerFixture('Produktionsbeleg'),created=await intakeOrderFixture('Produktionsbeleg',customer),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('PRODUCTION_MOVE');
@@ -22,7 +58,7 @@ it('snapshot storage accepts an actual finish source, rejects mutation/foreign s
  expect(await sql`SELECT quantity::text,net_cents::int,direction FROM private.order_production_snapshots WHERE event_id=${eventId}`).toEqual([{quantity:'1.000',net_cents:10000,direction:1}]);
  await expect(sql`UPDATE private.order_production_snapshots SET net_cents=20000 WHERE event_id=${eventId}`).rejects.toThrow();
  await expect(sql`DELETE FROM private.order_production_snapshots WHERE event_id=${eventId}`).rejects.toThrow();
- await expect(sql`INSERT INTO private.order_production_snapshots SELECT event_id,'TEST-wrong-tenant',order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,reverses_event_id FROM private.order_production_snapshots WHERE event_id=${eventId}`).rejects.toThrow('ORDER_PRODUCTION_EVENT_SOURCE_INVALID');
+ await expect(sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,reverses_event_id) SELECT event_id,'TEST-wrong-tenant',order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,reverses_event_id FROM private.order_production_snapshots WHERE event_id=${eventId}`).rejects.toThrow('ORDER_PRODUCTION_EVENT_SOURCE_INVALID');
  await expect(sql`INSERT INTO private.order_production_snapshots SELECT * FROM private.order_production_snapshots WHERE event_id=${eventId}`).rejects.toThrow('ORDER_PRODUCTION_ALREADY_COUNTED');
  const changed=await withSession(full,()=>changeOrderContentAction({orderId,expectedVersion:finish.receipt.aggregateVersion,clientEventId:randomUUID(),note:'TEST heutige Menge/Preis sind anders',items:[{id:itemId,catalogServiceId:null,name:'TEST Produktionsbeleg Teil',quantity:2,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:20000,vatRateBasisPoints:1900}]}));if(changed.code!=='OK')throw Error('PRODUCTION_CONTENT_CHANGED');
  const reopenInput={orderId,itemId,expectedVersion:changed.receipt.aggregateVersion,clientEventId:randomUUID(),finished:false};
@@ -38,7 +74,8 @@ it('snapshot storage accepts an actual finish source, rejects mutation/foreign s
  const reopen=await withSession(full,()=>setOrderItemFinishedAction(reopenInput));if(reopen.code!=='OK')throw Error('PRODUCTION_REOPEN');
  expect(await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(reopenInput))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:reopen.receipt.eventId}});
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{version:reopen.receipt.aggregateVersion,items:[expect.objectContaining({id:itemId,finished:false})]}}});
- expect(await sql`SELECT quantity::text,net_cents::int,direction,reverses_event_id FROM private.order_production_snapshots WHERE event_id=${reopen.receipt.eventId}`).toEqual([{quantity:'1.000',net_cents:10000,direction:-1,reverses_event_id:eventId}]);
+ expect(await sql`SELECT quantity::text,net_cents::int,direction,reverses_event_id FROM private.order_production_snapshots WHERE event_id=${reopen.receipt.eventId} AND component='base'`).toEqual([{quantity:'1.000',net_cents:10000,direction:-1,reverses_event_id:eventId}]);
+ expect(await sql`SELECT net_cents::int,direction,reverses_event_id FROM private.order_production_snapshots WHERE event_id=${reopen.receipt.eventId} AND component='pricing'`).toEqual([{net_cents:10000,direction:-1,reverses_event_id:changed.receipt.eventId}]);
  await expect(sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,reverses_event_id) SELECT e.id,e.tenant_id,e.order_id,e.item_id,e.created_at,-1,p.quantity,p.unit,9999,p.rework,p.valuation,p.price_source,p.event_id FROM public.events e JOIN private.order_production_snapshots p ON p.event_id=${eventId} WHERE e.id=${reopen.receipt.eventId}`).rejects.toThrow('ORDER_PRODUCTION_REVERSAL_SOURCE_INVALID');
 
  expect(await sql`SELECT sum(direction*net_cents)::int AS net FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{net:0}]);
