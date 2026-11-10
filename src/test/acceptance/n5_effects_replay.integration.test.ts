@@ -84,6 +84,35 @@ it('S02 existing payment, pickup, shipping and sending retain exactly one effect
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${unknown.clientRequestId}::uuid`).toHaveLength(0);
 },120000);
 
+it.each([false,true])('S02 an in-flight invoice bundle stays excluded after another click (responseLost=%s)',async(responseLost)=>{
+ const a=await readyInvoiceOrder('N5 Beleggruppe A'),b=await readyInvoiceOrder('N5 Beleggruppe B','pickup',false,a.customerId);
+ let sends=0,unblock!:()=>void,entered!:()=>void;
+ const waiting=new Promise<void>(resolve=>{unblock=resolve;}),sent=new Promise<void>(resolve=>{entered=resolve;});
+ const attachments:string[][]=[];
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-N5-bundle-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){
+   sends++;attachments.push(JSON.parse(String(init?.body)).message.attachments.map((file:{name:string})=>file.name));
+   if(sends===1){entered();await waiting;if(responseLost)throw Error('TEST accepted bundle, response lost');}
+   return new Response(null,{status:202});
+  }
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:[]});
+  return nativeFetch(request,init);
+ });
+ const input={targetType:'ORDER' as const,targetId:a.orderId,subject:'TEST Gruppe',body:'TEST Originale',clientRequestId:randomUUID(),attachment:{kind:'INVOICE' as const,documentId:a.invoice.invoiceId},expectedInvoiceIds:[a.invoice.invoiceId,b.invoice.invoiceId]};
+ const first=withSession(full,()=>sendCustomerMailAction(fresh(input)));await sent;
+ try{
+  expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),targetId:b.orderId,clientRequestId:randomUUID(),attachment:{kind:'INVOICE',documentId:b.invoice.invoiceId}}))).toMatchObject({code:'CONFLICT'});
+  expect(sends).toBe(1);
+ }finally{unblock();}
+ expect(await first).toMatchObject({code:responseLost?'UNAVAILABLE':'OK'});
+ const c=await readyInvoiceOrder('N5 Beleggruppe C','pickup',false,a.customerId);
+ expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),targetId:c.orderId,clientRequestId:randomUUID(),attachment:{kind:'INVOICE',documentId:c.invoice.invoiceId},expectedInvoiceIds:[c.invoice.invoiceId]}))).toMatchObject({code:'OK'});
+ expect(attachments).toEqual([[a.invoice.invoiceNumber+'.pdf',b.invoice.invoiceNumber+'.pdf'],[c.invoice.invoiceNumber+'.pdf']]);
+ expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),clientRequestId:randomUUID(),expectedInvoiceIds:[a.invoice.invoiceId]}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(2);
+},120000);
+
 it.each([false,true])('S02 confirmed resend requires ten minutes and reserves one actor-bound effect (aged=%s)',async(aged)=>{
  const order=await readyInvoiceOrder('N5 Bestaetigtes-Neusenden');
  const [customer]=await sql`SELECT name FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;

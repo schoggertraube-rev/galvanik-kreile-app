@@ -72,6 +72,17 @@ export function invoiceAlreadySent(tenantId:string,invoiceId:SQL){
   AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.status='success'
   AND ${invoiceSentMembership(invoiceId)})`;
 }
+/** The existing prepared original protects every member of an in-flight bundle. */
+function invoiceMailUnresolved(tenantId:string,invoiceId:SQL){
+ return sql`EXISTS(SELECT 1 FROM public.events sent
+  LEFT JOIN public.communication_threads thread ON thread.tenant_id=sent.tenant_id AND thread.id::text=sent.payload->>'threadId'
+  WHERE sent.tenant_id=${tenantId} AND sent.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1' AND sent.status='success'
+   AND ${invoiceSentMembership(invoiceId)}
+   AND (thread.status IS DISTINCT FROM 'sent' OR NOT EXISTS(SELECT 1 FROM public.events completed
+    WHERE completed.tenant_id=sent.tenant_id AND completed.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND completed.status='success'
+     AND completed.user_id=sent.user_id AND completed.payload->>'threadId'=sent.payload->>'threadId'
+     AND completed.payload->'document'=sent.payload->'document' AND completed.payload->>'intent'=sent.payload->>'intent')))`;
+}
 export class InvoiceAlreadySent extends Error{
  constructor(readonly number:string,readonly sentOn:string){super('INVOICE_ALREADY_SENT');}
 }
@@ -80,6 +91,8 @@ export async function assertInvoiceNotSent(tx:PrivilegedTenantTransaction,tenant
   WHERE sent.tenant_id=${tenantId} AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.status='success'
   AND ${invoiceSentMembership(sql`${invoice.id}`)} ORDER BY sent.created_at,sent.id LIMIT 1`);
  if(rows.length)throw new InvoiceAlreadySent(invoice.number,rows[0].sent_on);
+ const pending=await tx.execute<{blocked:boolean}>(sql`SELECT ${invoiceMailUnresolved(tenantId,sql`${invoice.id}`)} AS blocked`);
+ if(pending.length!==1||pending[0].blocked)throw Error('COMMUNICATION_OUTCOME_UNCLEAR');
 }
 
 export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]=[]){
@@ -87,6 +100,7 @@ export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenan
   JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
   JOIN private.v_order_freeze_state_v1 frozen ON frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active AND frozen.integrity_ok
   WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId} AND invoice.status='issued' AND invoice.contract_version=1
+   AND NOT ${invoiceMailUnresolved(tenantId,sql`invoice.id`)}
    AND (NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} OR invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[])) AND orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig' AND orders.handover_mode=${handover}
   ORDER BY orders.order_number,invoice.id LIMIT 102`);
 }
