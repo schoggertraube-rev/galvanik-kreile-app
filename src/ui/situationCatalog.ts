@@ -175,6 +175,7 @@ export const PICKUP_APPOINTMENT_COPY={
  unavailable:'Der Abholtermin konnte nicht sicher gespeichert werden. Deine Eingaben bleiben erhalten; versuche es erneut.',
  recorded:(date:string)=>'Abholtermin vereinbart '+date,
 };
+export const STORAGE_CHARGE_COPY={name:'Lagergeld',unit:'Woche',forbidden:'Für den Lagergeldbetrag brauchst Du die Freigabe für Geld. Die übrigen Angaben bleiben erhalten.'};
 export const DISPATCH_CALL_COPY={
  title:'Ruf den Kunden wegen seiner fertigen Ware an',note:'Sprich mit dem Kunden über diese fertigen Aufträge: ',
  created:'Gemeinsamer Anruf zu fertiger Ware vorbereitet',resultRecorded:'Ergebnis des gemeinsamen Anrufs festgehalten',

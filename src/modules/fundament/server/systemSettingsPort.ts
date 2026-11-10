@@ -1,5 +1,6 @@
 import {isDeepStrictEqual} from 'node:util';
 import {dispatchPolicyValid} from '../dispatchPolicy';
+import {STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
 import "server-only";
 
 import bcrypt from "bcryptjs";
@@ -35,6 +36,7 @@ export type SystemSettingsContext = {
   canManageCompany?: boolean;
   canManageLogins?: boolean;
   canManageSystem?: boolean;
+  canManageFinancial?: boolean;
 };
 export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean };
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null };
@@ -82,19 +84,22 @@ export async function updateShippingSettings(context:SystemSettingsContext,input
   return await withPrivilegedTenantTransaction(context,async tx=>{
    const current=await readShippingSettingsInTransaction(tx,context.tenantId);
    if(!current)return {code:"NOT_FOUND" as const,message:"Firmendaten müssen zuerst gespeichert werden."};
-   const identical=current.service===value.service&&current.numberPattern===value.numberPattern&&current.numberHint===value.numberHint&&current.trackingUrl===value.trackingUrl&&(!('dispatchPolicy' in value)||isDeepStrictEqual(current.dispatchPolicy,value.dispatchPolicy));
+   const submitted=value.dispatchPolicy as import('../dispatchPolicy').DispatchPolicy|null|undefined;
+   if(context.canManageFinancial!==true&&(submitted&&'storageWeeklyCents'in submitted||submitted===null&&current.dispatchPolicy?.storageWeeklyCents!=null))return {code:'FORBIDDEN' as const,message:STORAGE_CHARGE_COPY.forbidden};
+   const policy=submitted&& !('storageWeeklyCents'in submitted)&&current.dispatchPolicy?.storageWeeklyCents!==undefined?{...submitted,storageWeeklyCents:current.dispatchPolicy.storageWeeklyCents}:submitted;
+   const effectivePolicy='dispatchPolicy'in value?policy:current.dispatchPolicy;
+   const identical=current.service===value.service&&current.numberPattern===value.numberPattern&&current.numberHint===value.numberHint&&current.trackingUrl===value.trackingUrl&&isDeepStrictEqual(current.dispatchPolicy,effectivePolicy);
    if(identical)return {code:"OK" as const,settings:current,replayed:true};
    if(current.updatedAt!==value.expectedUpdatedAt)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte abgleichen.",current};
-   const policy=value.dispatchPolicy as import('../dispatchPolicy').DispatchPolicy|null|undefined;
    if(policy?.finalStageRecipientId){
     const recipient=await tx.execute(sql`SELECT id FROM public.app_users WHERE tenant_id=${context.tenantId} AND id=${policy.finalStageRecipientId}::uuid AND active=true FOR SHARE`);
     if(recipient.length!==1)return {code:'VALIDATION_ERROR' as const,message:'Empfänger für die letzte Stufe ist kein aktiver Login · Eingaben bleiben erhalten.'};
    }
    const changed=await tx.execute(sql`UPDATE public.company_settings SET versand_dienst=${value.service},versand_nummer_format=${value.numberPattern},
-     versand_nummer_hinweis=${value.numberHint},versand_verfolgung_url=${value.trackingUrl},ausgang_regeln=${('dispatchPolicy' in value?value.dispatchPolicy:current.dispatchPolicy)===null?null:JSON.stringify('dispatchPolicy' in value?value.dispatchPolicy:current.dispatchPolicy)}::jsonb,updated_at=statement_timestamp()
+     versand_nummer_hinweis=${value.numberHint},versand_verfolgung_url=${value.trackingUrl},ausgang_regeln=${effectivePolicy===null?null:JSON.stringify(effectivePolicy)}::jsonb,updated_at=statement_timestamp()
      WHERE tenant_id=${context.tenantId} AND updated_at=${value.expectedUpdatedAt}::timestamptz RETURNING id`);
    if(changed.length!==1)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte erneut abgleichen.",current:await readShippingSettingsInTransaction(tx,context.tenantId)};
-   await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'shipping_settings_updated',${JSON.stringify({actorId:context.actorId,before:current,after:{service:value.service,numberPattern:value.numberPattern,numberHint:value.numberHint,trackingUrl:value.trackingUrl,dispatchPolicy:'dispatchPolicy' in value?value.dispatchPolicy:current.dispatchPolicy}})}::jsonb)`);
+   await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'shipping_settings_updated',${JSON.stringify({actorId:context.actorId,before:current,after:{service:value.service,numberPattern:value.numberPattern,numberHint:value.numberHint,trackingUrl:value.trackingUrl,dispatchPolicy:effectivePolicy}})}::jsonb)`);
    return {code:"OK" as const,settings:await readShippingSettingsInTransaction(tx,context.tenantId),replayed:false};
   });
  }catch(error){logSystemSettingsPortFailure('SHIPPING_SETTINGS_WRITE_FAILED',error);return {code:"UNAVAILABLE" as const,message:"Versandangaben konnten nicht gespeichert werden. Fehlercode: SHIPPING_SETTINGS_WRITE_FAILED."};}

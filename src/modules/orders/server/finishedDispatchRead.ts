@@ -10,7 +10,7 @@ import type {DispatchResponseCheck} from '@/lib/server/dispatchResponsePort';
 import {readCollectionReminderHistory} from '@/lib/server/collectionReminderPort';
 import {readDispatchCalls} from '@/lib/server/dispatchCallPort';
 import {storageEligibility,storageLetterKey,finalStorageStage,type StorageEligibility} from '../domain/storageEligibility';
-import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
+import {COLLECTION_REMINDER_COPY,STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
 import {readStorageFinalTaskState} from '@/lib/server/storageFinalStagePort';
 
 export type FinishedDispatch={orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;unavailable?:true};
@@ -93,6 +93,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
       row.storage.letter={state:letter.sentAt&&!letter.deliveryFailedAt?'SENT':letter.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:letter.stageKey,orderIds:letter.orderIds,due:letter.dueDate,sentAt:letter.sentAt,threadId:letter.threadId,...(letter.postalDocumentId?{postalDocumentId:letter.postalDocumentId,postalTaskId:letter.postalTaskId}:{}),callTaskId:call.taskId,freezes:letter.storageOrigin!.freezes,finalStage:finalStorageStage(letter.deliveryFailedAt?null:letter.sentAt,berlinCalendarDay(),policy)};
       try{const final=await readStorageFinalTaskState(auth,letter.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}
       catch(error){console.error('[STORAGE_FINAL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();storageUnavailable=true;break;}
+      if(hasAuthorizationArea(auth,'geld')&&['DUE','TASK_PENDING'].includes(row.storage.letter.finalStage.state))row.storage.letter.finalStage.positionProposal=policy?.storageWeeklyCents==null?null:{name:STORAGE_CHARGE_COPY.name,unit:STORAGE_CHARGE_COPY.unit,unitPriceCents:policy.storageWeeklyCents,quantity:null,automatic:false};
      }
      else if(row.storage.state==='DUE')unsent.push(row);
     }

@@ -249,3 +249,32 @@ it('PL10:03 an actual S1 phone notice without mail waits for callAfterDays; reac
  expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(result))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT count(*)::int AS n FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${order.customerId}`).toEqual([{n:0}]);
 });
+
+it('PL10:03 storage weekly rate is explicit, protected and preserved by operational edits; E5 proposes but never books it',async()=>{
+ const {order,request,plan}=await prepareWithoutMail('Lagergeld-Vorschlag');
+ const prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('STORAGE_RATE_LETTER');
+ const read=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));if(read.code!=='OK'||!read.task)throw Error('STORAGE_RATE_POST_TASK');
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:prepared.taskId,version:read.task!.version,note:'TEST versendet',postalResult:{kind:'posted',postedOn:berlinCalendarDay(),documentSha256:prepared.document.sha256}}))).toMatchObject({code:'OK'});
+ async function settings(){const result=await withSession(full,()=>readShippingSettingsAction());if(result.code!=='OK')throw Error('STORAGE_RATE_SETTINGS');return result.settings;}
+ function input(current:Awaited<ReturnType<typeof settings>>,policy=current.dispatchPolicy){return {service:current.service,numberPattern:current.numberPattern,numberHint:current.numberHint,trackingUrl:current.trackingUrl,expectedUpdatedAt:current.updatedAt,dispatchPolicy:policy};}
+ const original=await settings();
+ for(const storageWeeklyCents of [-1,12.5])expect(await withSession(full,()=>saveShippingSettingsAction(input(original,{...original.dispatchPolicy!,storageWeeklyCents})))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect((await settings()).updatedAt).toBe(original.updatedAt);
+ expect(await withSession(full,()=>saveShippingSettingsAction(input(original,{...original.dispatchPolicy!,storageWeeklyCents:1250})))).toMatchObject({code:'OK'});
+ expect((await settings()).dispatchPolicy?.storageWeeklyCents).toBe(1250);
+ expect((await plan())!.finishedDispatch!.storage!.letter!.finalStage.positionProposal).toEqual({name:'Lagergeld',unit:'Woche',unitPriceCents:1250,quantity:null,automatic:false});
+ const operator=await createFixture(['auftraege','einstellungen'],'buero'),visible=await withSession(operator,()=>readShippingSettingsAction());if(visible.code!=='OK')throw Error('STORAGE_RATE_OPERATIONAL');
+ expect(visible.settings.dispatchPolicy).not.toHaveProperty('storageWeeklyCents');
+ const edited=await withSession(operator,()=>saveShippingSettingsAction({...input(visible.settings),numberHint:'TEST anderer Versandhinweis'}));expect(edited).toMatchObject({code:'OK'});if(edited.code!=='OK')throw Error('STORAGE_RATE_EDIT');
+ expect(edited.settings?.dispatchPolicy).not.toHaveProperty('storageWeeklyCents');expect((await settings()).dispatchPolicy?.storageWeeklyCents).toBe(1250);
+ const forbiddenInput=input(await settings(),{...original.dispatchPolicy!,storageWeeklyCents:0});
+ const denied=await withSession(operator,()=>saveShippingSettingsAction(forbiddenInput));expect(denied).toMatchObject({code:'FORBIDDEN'});
+ const hiddenRateClear={...forbiddenInput,dispatchPolicy:null};expect(await withSession(operator,()=>saveShippingSettingsAction(hiddenRateClear))).toMatchObject({code:'FORBIDDEN'});
+ const stale=await withSession(operator,()=>saveShippingSettingsAction({...input(visible.settings),numberHint:'TEST veralteter Stand'}));expect(stale).toMatchObject({code:'CONFLICT'});if(stale.code==='CONFLICT')expect(stale.current?.dispatchPolicy).not.toHaveProperty('storageWeeklyCents');
+ const queue=await withSession(operator,()=>getOrdersDb());if(!queue.ok)throw Error('STORAGE_RATE_NO_MONEY_QUEUE');expect(queue.data.find(row=>row.id===order.orderId)!.finishedDispatch!.storage!.letter!.finalStage).not.toHaveProperty('positionProposal');
+ const before=await sql`SELECT (SELECT count(*) FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId})::int AS items,(SELECT count(*) FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId})::int AS invoices`;
+ const current=await settings();expect(await withSession(full,()=>saveShippingSettingsAction(input(current,{...current.dispatchPolicy!,storageWeeklyCents:null})))).toMatchObject({code:'OK'});
+ expect((await plan())!.finishedDispatch!.storage!.letter!.finalStage).toMatchObject({state:'DUE',positionProposal:null});
+ expect(await withSession(full,()=>createStorageFinalTaskAction(request))).toMatchObject({code:'OK'});
+ expect(await sql`SELECT (SELECT count(*) FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId})::int AS items,(SELECT count(*) FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId})::int AS invoices`).toEqual(before);
+});

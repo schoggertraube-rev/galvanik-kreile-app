@@ -2,7 +2,7 @@ import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
 import type {DispatchPolicy} from '@/modules/fundament/public';
 import {createHash} from 'node:crypto';
 
-export type StorageEligibility={state:'NEEDS_SETTING'|'WAIT'|'DUE';eligibleOn:string|null;missingSettings:string[];callResultAt:string;letter?:{state:'DUE'|'SENT'|'RECONCILE_MAIL'|'WAIT_FOR_POST';clientKey:string;orderIds:string[];due:string;sentAt:string|null;threadId:string|null;postalDocumentId?:string;postalTaskId?:string;callTaskId:string;freezes:Array<{orderId:string;freezeId:string}>;finalStage:{state:'NEEDS_SETTING'|'WAIT'|'DUE'|'TASK_PENDING'|'COMPLETED';due:string|null;recipientId:string|null;missingSettings:string[];taskId?:string}}};
+export type StorageEligibility={state:'NEEDS_SETTING'|'WAIT'|'DUE';eligibleOn:string|null;missingSettings:string[];callResultAt:string;letter?:{state:'DUE'|'SENT'|'RECONCILE_MAIL'|'WAIT_FOR_POST';clientKey:string;orderIds:string[];due:string;sentAt:string|null;threadId:string|null;postalDocumentId?:string;postalTaskId?:string;callTaskId:string;freezes:Array<{orderId:string;freezeId:string}>;finalStage:{state:'NEEDS_SETTING'|'WAIT'|'DUE'|'TASK_PENDING'|'COMPLETED';due:string|null;recipientId:string|null;missingSettings:string[];taskId?:string;positionProposal?:{name:string;unit:string;unitPriceCents:number;quantity:null;automatic:false}|null}}};
 /** A final interval starts only at a qualified dispatch receipt, never draft creation or a call. */
 export function finalStorageStage(sentAt:string|null,today:string,policy:DispatchPolicy|null){
  const missingSettings=[...(policy?.finalStageAfterLetterDays==null?['finalStageAfterLetterDays']:[]),...(!policy?.finalStageRecipientId?['finalStageRecipientId']:[])];
