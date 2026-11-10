@@ -55,6 +55,13 @@ export async function readStorageFinalTaskState(auth:AuthorizationSnapshot,lette
   return {taskId:source.payload.taskId,status:rows[0].status,recipientId:source.payload.meta.recipientId,due:source.payload.meta.due};
  });
 }
+/** Resolve the qualified remaining ware, retaining the original task and original letter. */
+export async function readFinalTaskCurrentOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string){
+ const rows=await tx.execute<{key:string}>(sql`SELECT correlation_id::text AS key FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${taskId}`);
+ if(rows.length!==1)throw Error('FINAL_TASK_REFERENCE_SOURCE_INVALID');
+ const current=await receipt(tx,auth,rows[0].key);if(!current?.payload.meta.orders.length)throw Error('FINAL_TASK_REFERENCE_EMPTY');
+ return current.payload.meta.orders[0].id;
+}
 export async function finishFinalTasksForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,appointment:{eventId:string;orderId:string;freezeId:string;date:string},complete:(taskId:string,note:string)=>Promise<void>){
  const rows=await tx.execute<{key:string}>(sql`SELECT event.correlation_id::text AS key FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND event.event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND event.payload->'meta'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb ORDER BY task.id FOR UPDATE OF task NOWAIT`);
  for(const row of rows){

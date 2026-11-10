@@ -1,6 +1,6 @@
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
 import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
-import {collectionTaskHasReplySource,collectionTaskReplyRemainder} from '@/lib/server/dispatchReplyPort';
+import {collectionTaskHasReplySource,collectionTaskReplyRemainder,readCollectionTaskCurrentOrder} from '@/lib/server/dispatchReplyPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import 'server-only';
@@ -67,6 +67,13 @@ async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnap
   if(before&&(before.client_key!==value.clientKey||!replyRestriction&&!allowed(auth,before)))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
   if(!before&&value.version!==0)reject('CONFLICT','Aufgabenstand ist nicht mehr aktuell.');
   if(before&&before.status!=='offen')reject('CONFLICT','Aufgabe ist bereits erledigt.');
+  if(before&&before.bezug_typ==='auftrag'&&value.reference.type==='auftrag'&&before.bezug_id!==value.reference.id){
+   const currentOrder=await readCollectionTaskCurrentOrder(tx,auth,before.id);
+   if(currentOrder!==value.reference.id)reject('CONFLICT','Der ursprüngliche Bezug der Aufgabe bleibt erhalten.');
+   // The dialog opens the current ware; only this qualified display reference maps
+   // back to the immutable task provenance for the one existing writer.
+   value={...value,reference:{type:'auftrag',id:before.bezug_id}};
+  }
   if(before&&!value.taskId){if(before.erstellt_von===auth.userId&&same(before,value))return {code:'OK',task:before,replayed:true};reject('CONFLICT','Diese Anfragekennung gehört zu einer anderen Aufgabe.');}
   if(before&&before.version===value.version+1&&same(before,value))return {code:'OK',task:before,replayed:true};
   if(before&&before.version!==value.version)reject('CONFLICT','Aufgabe wurde inzwischen geändert · Eingaben bleiben erhalten.');
@@ -211,7 +218,8 @@ export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   const task='taskId'in request?await find(tx,auth,request.taskId):null;
   if('taskId'in request&&!task)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
-  const reference=await context(tx,auth,task?{type:task.bezug_typ,id:task.bezug_id}:(request as Exclude<TaskOpenRequest,{taskId:string}>).reference,!task);
+  const currentOrder=task?.bezug_typ==='auftrag'?await readCollectionTaskCurrentOrder(tx,auth,task.id):null;
+  const reference=await context(tx,auth,task?{type:task.bezug_typ,id:currentOrder??task.bezug_id}:(request as Exclude<TaskOpenRequest,{taskId:string}>).reference,!task);
   // Aufgaben sind je Mandant für jeden Login lesbar; Bezug und Schreibknöpfe prüfen ihre eigenen Rechte.
   const canEdit=task?task.status==='offen'&&allowed(auth,task):true;
   return {code:'OK',task,reference,currentLogin:auth.userId,canEdit,canComplete:!!task&&canEdit&&task.art!=='rechnung',canOpenReference:reference.type==='allgemein'||reference.label!==null};

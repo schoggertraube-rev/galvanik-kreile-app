@@ -131,3 +131,11 @@ export async function qualifyReplyRestriction(tx:PrivilegedTenantTransaction,aut
  const key=(values:Proof['freezes'])=>values.map(proof=>proof.orderId+':'+proof.freezeId).sort();
  if(!expected.length||expected.length===before.length||JSON.stringify(key(expected))!==JSON.stringify(key(after)))throw Error('REPLY_TASK_RESTRICTION_INVALID');
 }
+/** A hint selects the existing qualified reader; it never determines the task's scope itself. */
+export async function readCollectionTaskCurrentOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string){
+ if(!hasAuthorizationArea(auth,'auftraege'))return null;
+ const rows=await tx.execute<{event_type:string}>(sql`SELECT event_type FROM public.events WHERE tenant_id=${auth.tenantId} AND payload->>'taskId'=${taskId} AND payload->>'replyEventId' IS NOT NULL AND event_type IN ('ORDER_COLLECTION_CALL_UPDATED_V1','ORDER_STORAGE_FINAL_TASK_UPDATED_V1') ORDER BY created_at DESC,id DESC LIMIT 1`);
+ if(!rows.length)return null;
+ if(rows[0].event_type==='ORDER_COLLECTION_CALL_UPDATED_V1'){const {readDispatchTaskCurrentOrder}=await import('./dispatchCallPort');return readDispatchTaskCurrentOrder(tx,auth,taskId);}
+ const {readFinalTaskCurrentOrder}=await import('./storageFinalStagePort');return readFinalTaskCurrentOrder(tx,auth,taskId);
+}

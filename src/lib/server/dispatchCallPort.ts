@@ -146,6 +146,13 @@ export async function readDispatchCallRequirement(auth:AuthorizationSnapshot,tas
   return {required:state.result===null,result:state.result,recordedAt:state.recordedAt,orderIds:created.payload.meta.orderIds,orderNumbers:created.payload.meta.orderNumbers};
  });
 }
+/** Current ware of the original task; the stored historical reference stays immutable. */
+export async function readDispatchTaskCurrentOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string){
+ const created=await source(tx,auth,taskId);if(!created)throw Error('DISPATCH_TASK_REFERENCE_MISSING');
+ await qualifiedTaskState(tx,auth,created);
+ if(!created.payload.meta.orderIds.length)throw Error('DISPATCH_TASK_REFERENCE_EMPTY');
+ return created.payload.meta.orderIds[0];
+}
 
 /** Generic task editing must not erase the cohort or convert a mandatory-result call. */
 export async function protectDispatchCallTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;action:string;kind:string;title:string;note:string|null}):Promise<void|TaskFailure>{

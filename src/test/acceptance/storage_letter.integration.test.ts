@@ -84,7 +84,7 @@ it.each(['reply','goodsOut'] as const)('a reply to A narrows the shared E5 task 
  const queue=await withSession(operator,()=>getOrdersDb());if(!queue.ok)throw Error('PARTIAL_FINAL_QUEUE');
  expect(queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'REPLIED'});
  expect(await sql`SELECT payload->'meta'->'orders'->0->>'id' AS id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_UPDATED_V1' AND payload->>'taskId'=${final.taskId}`).toEqual([{id:second!.orderId}]);
- expect(await withSession(operator,()=>getIntakeTaskAction({taskId:final.taskId}))).toMatchObject({code:'OK',task:{status:'offen'}});
+ expect(await withSession(operator,()=>getIntakeTaskAction({taskId:final.taskId}))).toMatchObject({code:'OK',task:{status:'offen'},reference:{type:'auftrag',id:second!.orderId}});
  expect(await withSession(full,()=>getIntakeTaskAction({taskId:original.taskId}))).toMatchObject({code:'OK',postalLetter:{state:'POSTED',document:{sha256:original.document.sha256}}});
  await plan();expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_UPDATED_V1' AND payload->>'taskId'=${final.taskId}`).toEqual([{n:1}]);
  if(ending==='reply'){
@@ -179,6 +179,13 @@ it.each([false,true])('an original reply ends or narrows the actual callback wit
   expect(queue.data.find(row=>row.id===second!.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'CALL_PENDING',callTaskId});
   const [remainingOrder]=await sql`SELECT order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second!.orderId}`;
   expect(await sql`SELECT notiz FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${callTaskId}::uuid`).toEqual([{notiz:expect.stringContaining(remainingOrder.order_number)}]);
+  const opened=await withSession(full,()=>getIntakeTaskAction({taskId:callTaskId}));expect(opened).toMatchObject({code:'OK',reference:{type:'auftrag',id:second!.orderId}});if(opened.code!=='OK'||!opened.task)throw Error('PARTIAL_CALLBACK_OPEN');
+  const before=opened.task,input={taskId:before.id,clientKey:before.client_key,version:before.version,kind:before.art,title:before.titel,dueDate:before.faellig_am,time:before.uhrzeit,forLogin:before.fuer_login,forArea:before.fuer_bereich,reference:{type:opened.reference.type,id:opened.reference.id},note:before.notiz};
+  expect(await withSession(full,()=>saveIntakeTaskAction(input))).toMatchObject({code:'OK'});
+  expect(await withSession(full,()=>saveIntakeTaskAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+  expect(await sql`SELECT bezug_id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${callTaskId}::uuid`).toEqual([{bezug_id:before.bezug_id}]);
+  expect(await withSession(full,()=>getIntakeTaskAction({taskId:callTaskId}))).toMatchObject({code:'OK',reference:{id:second!.orderId}});
+  expect(await withSession(full,()=>saveIntakeTaskAction({...input,version:before.version+1,reference:{type:'auftrag',id:randomUUID()}}))).toMatchObject({code:'CONFLICT'});
  }else expect(await sql`SELECT user_id::text AS actor,payload->>'taskId' AS task FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_TASK_ENDED_FOR_REPLY_V1' AND payload->>'taskId'=${callTaskId}`).toEqual([{actor:full.actorId,task:callTaskId}]);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${callTaskId}`).toHaveLength(0);
  expect((await plan())?.reminder).toMatchObject({responseState:'REPLIED'});
