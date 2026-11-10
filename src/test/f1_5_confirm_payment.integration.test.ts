@@ -351,9 +351,13 @@ describe("F1.5 confirmPayment real command integration — AUTH_ADAPTER_SYNTHETI
       amount: 4_000,
       method: "ueberweisung" as const,
       expectedVersion: 0,
+      expectedOpenAmountCents:10_000,
       clientEventId: CLIENT_EVENTS.partial,
     };
     setSession(USERS.buero, "buero");
+    const beforePartial=await snapshot(INVOICES.happy);
+    expect(await confirmPayment({...partialInput,expectedOpenAmountCents:9_000})).toMatchObject({code:"CONFLICT",currentOpenAmountCents:10_000});
+    expect(await snapshot(INVOICES.happy)).toEqual(beforePartial);
     const partial = await confirmPayment(partialInput);
     expect(partial.code).toBe("OK");
     if (partial.code !== "OK") throw new Error("F1_5_PARTIAL_PAYMENT_FAILED:" + partial.code);
@@ -378,6 +382,9 @@ describe("F1.5 confirmPayment real command integration — AUTH_ADAPTER_SYNTHETI
     });
     expect(partial.receipt.confirmedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
+    expect(await confirmPayment({...partialInput,clientEventId:"c857e3a6-125d-4d3a-8587-5b34ff51d511",expectedVersion:1})).toMatchObject({code:"CONFLICT",currentOpenAmountCents:6_000});
+    expect(await confirmPayment({...partialInput,expectedOpenAmountCents:6_000})).toMatchObject({code:"CONFLICT"});
+    expect(await confirmPayment(JSON.parse(JSON.stringify(partialInput)))).toMatchObject({code:"OK",replayed:true,receipt:{eventId:partial.receipt.eventId}});
     const partialState = await snapshot(INVOICES.happy);
     expect(partialState.invoice).toMatchObject({
       payment_status: "teilbezahlt",

@@ -35,6 +35,8 @@ export type ConfirmPaymentInput = {
   amount: number;
   method: PaymentMethod;
   expectedVersion: number;
+  /** Explicit displayed balance; older callers remain guarded by expectedVersion. */
+  expectedOpenAmountCents?: number;
   clientEventId: string;
 };
 
@@ -67,7 +69,7 @@ export type ConfirmPaymentResult =
   | { code: "UNAUTHENTICATED"; message: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "NOT_FOUND"; message: string }
-  | { code: "CONFLICT"; message: string }
+  | { code: "CONFLICT"; message: string; currentOpenAmountCents?: number }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
@@ -162,7 +164,7 @@ function toIsoInstant(value: unknown): string | null {
 function isValidInput(input: unknown): input is ConfirmPaymentInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const value = input as Record<string, unknown>;
-  const expectedKeys = ["amount", "clientEventId", "expectedVersion", "invoiceId", "method"];
+  const expectedKeys = ["amount", "clientEventId", "expectedVersion", "invoiceId", "method", ...(Object.hasOwn(value,"expectedOpenAmountCents")?["expectedOpenAmountCents"]:[])].sort();
   const actualKeys = Object.keys(value).sort();
   return actualKeys.length === expectedKeys.length
     && actualKeys.every((key, index) => key === expectedKeys[index])
@@ -178,6 +180,7 @@ function isValidInput(input: unknown): input is ConfirmPaymentInput {
     && Number.isSafeInteger(value.expectedVersion)
     && value.expectedVersion >= 0
     && value.expectedVersion < MAX_INT4
+    && (!Object.hasOwn(value,"expectedOpenAmountCents") || typeof value.expectedOpenAmountCents==="number" && Number.isSafeInteger(value.expectedOpenAmountCents) && value.expectedOpenAmountCents>=0 && value.expectedOpenAmountCents<=MAX_INT4)
     && isPaymentMethod(value.method);
 }
 
@@ -337,6 +340,7 @@ function receiptMatchesIntent(
   actorId: string,
 ): boolean {
   return receipt.invoiceId === input.invoiceId
+    && (input.expectedOpenAmountCents===undefined || input.expectedOpenAmountCents===receipt.openAmountCents+receipt.amountCents)
     && receipt.amountCents === input.amount
     && receipt.method === input.method
     && receipt.expectedVersion === input.expectedVersion
@@ -559,8 +563,11 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
       if (!current) {
         return { code: "VALIDATION_ERROR", message: "Zahlungsvertrag der Rechnung ist nicht verfügbar." };
       }
+      if (input.expectedOpenAmountCents!==undefined && current.openAmountCents!==input.expectedOpenAmountCents) {
+        return {code:"CONFLICT",message:"Zahlungsstand wurde bereits geändert.",currentOpenAmountCents:current.openAmountCents};
+      }
       if (current.paymentVersion !== input.expectedVersion) {
-        return { code: "CONFLICT", message: "Zahlungsstand wurde bereits geändert." };
+        return { code: "CONFLICT", message: "Zahlungsstand wurde bereits geändert.", currentOpenAmountCents:current.openAmountCents };
       }
       if (input.amount > current.openAmountCents) {
         return { code: "VALIDATION_ERROR", message: "Zahlungsbetrag übersteigt den offenen Betrag." };
