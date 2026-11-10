@@ -306,7 +306,7 @@ it.each([4,3,5])('KV-06 books actual quantity %i atomically, with proportional p
  const fixture=await createFixture();
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
  const {saveIntakeNoteAction,saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
- const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST Ware vor Zusage',calculation:{hours:'4',hourlyRateCents:1000,setupCents:0,materialCents:0},specialRequests:'TEST alte Halter erhalten',positions:[{name:'TEST Weber-Trompeten',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000,unit:'stueck'}]}));
+ const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST Ware vor Zusage',calculation:{hours:'4',hourlyRateCents:1000,setupCents:0,materialCents:0},specialRequests:'TEST alte Halter erhalten',positions:[{name:'TEST Weber-Trompeten',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
  if(created.code!=='OK')throw Error('TEST_EARLY_GOODS_QUOTE:'+created.code);
  const quoteId=created.quote.quoteId,itemId=randomUUID();
  const capture=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST Warenfotos zu bestehendem Vorgang',context:{customerId:fixture.customerId}}));
