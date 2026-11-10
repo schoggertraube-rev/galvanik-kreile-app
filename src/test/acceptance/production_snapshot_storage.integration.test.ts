@@ -1,6 +1,6 @@
 // @vitest-environment node
-// Positive capture is synthetic schema setup; reversal uses the actual existing command.
-// Positive production capture, historical backfill and the weekly reader remain unfinished.
+// Completion and reversal use the actual existing commands and persisted receipts.
+// Historical backfill, deferred pricing, frozen extra work and weekly reader remain unfinished.
 import {vi,it,expect} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -17,7 +17,6 @@ it('snapshot storage accepts an actual finish source, rejects mutation/foreign s
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('PRODUCTION_MOVE');
  const finish=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));if(finish.code!=='OK')throw Error('PRODUCTION_FINISH');
  const eventId=finish.receipt.eventId;
- await sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source) SELECT id,tenant_id,order_id,item_id,created_at,1,1,'Stück',10000,false,'captured','{"test":"schema-only"}'::jsonb FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${eventId}`;
  expect(await sql`SELECT quantity::text,net_cents::int,direction FROM private.order_production_snapshots WHERE event_id=${eventId}`).toEqual([{quantity:'1.000',net_cents:10000,direction:1}]);
  await expect(sql`UPDATE private.order_production_snapshots SET net_cents=20000 WHERE event_id=${eventId}`).rejects.toThrow();
  await expect(sql`DELETE FROM private.order_production_snapshots WHERE event_id=${eventId}`).rejects.toThrow();
@@ -47,14 +46,32 @@ it('the actual full-freeze correction reverses a prior item completion once with
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('FULL_REVERSE_MOVE');
  await storeItemPhoto(orderId,itemId);
  const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));if(finished.code!=='OK')throw Error('FULL_REVERSE_FINISH');
- // Explicit schema setup while positive capture awaits the valuation decision.
- await sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source) SELECT id,tenant_id,order_id,item_id,created_at,1,1,'Stück',10000,false,'captured','{"test":"schema-only"}'::jsonb FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${finished.receipt.eventId}`;
  const master=await withSession(full,()=>getExtraWorkMasterDataAction());if(master.code!=='OK')throw Error('FULL_REVERSE_MASTER');
  if(!master.data.currentRate)expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  const frozen=await withSession(full,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));if(frozen.code!=='OK')throw Error('FULL_REVERSE_FREEZE');
+ expect(await sql`SELECT event_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND direction=1`).toEqual([{event_id:finished.receipt.eventId}]);
  const request={orderId,expectedVersion:frozen.receipt.aggregateVersion,reason:'TEST Gesamtfertig mit Originalwert zurücknehmen',clientEventId:randomUUID()};
  const reopened=await withSession(full,()=>reopenFrozenOrderAction(request));expect(reopened.code).toBe('OK');if(reopened.code!=='OK')throw Error('FULL_REVERSE_REOPEN');
  expect(await withSession(full,()=>reopenFrozenOrderAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:reopened.receipt.eventId}});
  expect(await sql`SELECT direction,net_cents::int,reverses_event_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${reopened.receipt.eventId}`).toEqual([{direction:-1,net_cents:10000,reverses_event_id:finished.receipt.eventId}]);
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{station:'galvanik',version:reopened.receipt.aggregateVersion,items:[expect.objectContaining({id:itemId,finished:false})]}}});
+});
+
+it('completion without a price remains possible; a missing snapshot receipt rolls the real finish back and fresh retry saves exactly once',async()=>{
+ const customer=await customerFixture('Ohne-Preis'),created=await intakeOrderFixture('Ohne-Preis',customer),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
+ const changed=await withSession(full,()=>changeOrderContentAction({orderId,expectedVersion:1,clientEventId:randomUUID(),note:'TEST noch ohne Preis',items:[{id:itemId,catalogServiceId:null,name:'TEST Preis offen',quantity:3,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:null,vatRateBasisPoints:null}]}));if(changed.code!=='OK')throw Error('UNPRICED_CONTENT');
+ const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:changed.receipt.aggregateVersion,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('UNPRICED_MOVE');
+ const input={orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true};
+ const name='test_production_capture_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.order_id='${orderId}' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON private.order_production_snapshots FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
+ try{
+  expect(await withSession(full,()=>setOrderItemFinishedAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{version:moved.receipt.aggregateVersion}]);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(0);
+ }finally{await sql.unsafe(`DROP TRIGGER ${name} ON private.order_production_snapshots`);await sql.unsafe(`DROP FUNCTION private.${name}()`);}
+ const finished=await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(input))));if(finished.code!=='OK')throw Error('UNPRICED_FINISH');
+ expect(await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT quantity::text,net_cents,valuation FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{quantity:'3.000',net_cents:null,valuation:'captured'}]);
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId})); if(card.code!=='OK')throw Error(JSON.stringify(card)); expect(card).toMatchObject({code:'OK',data:{card:{items:[expect.objectContaining({id:itemId,finished:true})]}}});
 });
