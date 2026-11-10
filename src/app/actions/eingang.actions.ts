@@ -3,7 +3,9 @@ import {PACKAGE_ASSIGN_COPY} from "@/ui/situationCatalog";
 import {quoteOperationContext,canReadQuoteForGoods} from "@/lib/server/quoteAuthorization";
 
 import {listOpenQuotesCommand,readPackageQuoteHistory} from '@/modules/quotes/server-public';
-import {readPackageOrderCustomers} from '@/modules/orders/server-public';
+import {readPackageOrderCustomers,createInitialOrderPrintJobs} from '@/modules/orders/server-public';
+import type {OrderIntakeTransactionBinding} from '@/lib/server/commands/orderIntakeCommand';
+const queueOrderPrints:OrderIntakeTransactionBinding['after']=(tx,auth,receipt)=>createInitialOrderPrintJobs(tx,auth,receipt.orderId,receipt.customerDisplayName);
 import type {PackageCustomerHistory} from '@/lib/server/packageIntakeContextPort';
 import {readPackageExpectation} from '@/modules/eingang/server-public';
 import type {IntakeCaptureResult} from '@/modules/eingang/public';
@@ -220,7 +222,7 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
   const customerId = existingCustomerId(input);
   const authorization = await resolveAuthorization();
   if (!customerId || !authorization.ok || !hasAuthorizationArea(authorization.data, "eingang") || (input as {customer?:{changes?:unknown}})?.customer?.changes) {
-    return erfasseAuftragAusEingangCommand(input,undefined,createCustomerInTransaction,updateCustomerInTransaction,after);
+    return erfasseAuftragAusEingangCommand(input,undefined,createCustomerInTransaction,updateCustomerInTransaction,after,queueOrderPrints);
   }
   const customer = await readCustomerOrderReadinessCommand(authorization.data, {
     customerId,
@@ -239,13 +241,13 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
       missing: readiness.issues.map((issue) => issue.field),
     };
   }
-  return erfasseAuftragAusEingangCommand(input, { customerId, readiness },undefined,undefined,after);
+  return erfasseAuftragAusEingangCommand(input, { customerId, readiness },undefined,undefined,after,queueOrderPrints);
 }
 
 export async function createOrderIntakeAction(input:unknown){
   const authorization=await resolveAuthorization();
   if(!authorization.ok)return {code:"UNAUTHENTICATED" as const,message:authorization.message};
-  const result=await createOrderIntake(input,createCustomerInTransaction);
+  const result=await createOrderIntake(input,createCustomerInTransaction,{before:async()=>undefined,after:queueOrderPrints});
   return result.code==="OK"?{...result,receipt:presentOrderIntakeReceipt(result.receipt,hasAuthorizationArea(authorization.data,"geld"))}:result;
 }
 

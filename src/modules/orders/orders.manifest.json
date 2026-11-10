@@ -44,7 +44,9 @@
     "@/modules/orders/server-public#readPackageOrderCustomers",
     "@/modules/orders/server-public#readManualShipping",
     "@/modules/orders/server-public#saveManualTracking",
-    "@/modules/orders/server-public#readFinishedDispatchQueue"
+    "@/modules/orders/server-public#readFinishedDispatchQueue",
+    "@/modules/orders/server-public#createInitialOrderPrintJobs",
+    "@/modules/orders/server-public#retireOrderPrintJobsAfterGoodsOut"
   ],
   "capabilities": [],
   "migrations": [
@@ -54,7 +56,8 @@
     "supabase/migrations/20261109225533_ablauf_goods_out_override_immutable.sql",
     "supabase/migrations/20261110003450_ablauf_cash_pickup_requires_payment.sql",
     "supabase/migrations/20261110010200_ablauf_historical_callback_receipt.sql",
-    "supabase/migrations/20261110022114_ablauf_canonical_release_projection.sql"
+    "supabase/migrations/20261110022114_ablauf_canonical_release_projection.sql",
+    "supabase/migrations/20261110085921_order_print_jobs.sql"
   ],
   "viewsFunctions": [
     "private.guard_goods_out_debt_override_v1",
@@ -65,11 +68,12 @@
     "public.orders",
     "public.items",
     "public.events",
-    "public.shipments"
+    "public.shipments",
+    "public.print_jobs"
   ],
   "storagePurposes": [],
   "events": {
-    "emits": ["SHIPMENT_MANUAL_TRACKING_SET_V1","SHIPMENT_HANDED_OVER_V1","ORDER_CUSTOMER_INFORMED_V1"],
+    "emits": ["SHIPMENT_MANUAL_TRACKING_SET_V1","SHIPMENT_HANDED_OVER_V1","ORDER_CUSTOMER_INFORMED_V1","ORDER_PRINT_JOBS_QUEUED_V1","ORDER_PRINT_JOBS_RETIRED_V1"],
     "consumes": ["ORDER_COLLECTION_REMINDER_PREPARED_V1","ORDER_COLLECTION_REMINDER_SENT_V1","ORDER_COLLECTION_CALL_CREATED_V1","ORDER_COLLECTION_CALL_UPDATED_V1","ORDER_COLLECTION_CALL_RESULT_V1"]
   },
   "config": {},

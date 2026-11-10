@@ -8,6 +8,7 @@ import {
 import {
   createOrderIntake,
   type OrderIntakeCustomerInput,
+  type OrderIntakeTransactionBinding,
   type CustomerWriter,type CustomerUpdater,
   type OrderIntakeItemInput,
   type OrderIntakeSource,
@@ -156,6 +157,7 @@ export async function erfasseAuftragAusEingangCommand(
   customerPreflight?: EingangCustomerPreflight,
   customerWriter?:CustomerWriter,customerUpdater?:CustomerUpdater,
   afterResponse?:(task:()=>Promise<void>)=>void,
+  afterOrderCreated?:OrderIntakeTransactionBinding['after'],
 ): Promise<ErfasseAuftragResult> {
   const normalized = normalizeInput(input);
   if (!normalized) {
@@ -170,6 +172,7 @@ export async function erfasseAuftragAusEingangCommand(
   const inquiry=normalized.intakeSource!==undefined&&["anfrage_mail","anfrage_telefon"].includes(normalized.intakeSource);
   if(goods&&!normalized.geprueft||inquiry&&normalized.geprueft)return {code:"VALIDATION_ERROR",message:goods?"Ware, Menge und Zustand gemeinsam prüfen.":"Bei einer Anfrage ist noch keine Ware geprüft."};
   const binding=createIntakeOrderBinding({clientEventId:normalized.clientKey,customerId:normalized.customer.mode==="EXISTING"?normalized.customer.customerId:null,note:normalized.text,telefonNotiz:normalized.telefonNotiz,sources:normalized.sourceCaptures,draftId:normalized.draftId});
+  if(afterOrderCreated){const after=binding.after;binding.after=async(tx,auth,receipt)=>{await after(tx,auth,receipt);await afterOrderCreated(tx,auth,receipt);};}
   const order = await createOrderIntake({
     geprueft: normalized.geprueft,
     ...(normalized.wishDate!==undefined?{wishDate:normalized.wishDate}:{}),...(normalized.termOrigin!==undefined?{termOrigin:normalized.termOrigin}:{}),...(normalized.processingWeeks!==undefined?{processingWeeks:normalized.processingWeeks}:{}),
