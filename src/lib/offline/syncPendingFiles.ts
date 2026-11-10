@@ -16,7 +16,13 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
   const timed=entries.filter(entry=>entry.deviceCapturedAt&&Number.isFinite(Date.parse(entry.deviceCapturedAt)))
    .sort((a,b)=>Date.parse(a.deviceCapturedAt!)-Date.parse(b.deviceCapturedAt!));
   let cursor=0;
-  for(const entry of entries.map(entry=>entry.deviceCapturedAt&&Number.isFinite(Date.parse(entry.deviceCapturedAt))?timed[cursor++]:entry)){
+  const ordered=entries.map(entry=>entry.deviceCapturedAt&&Number.isFinite(Date.parse(entry.deviceCapturedAt))?timed[cursor++]:entry);
+  const hasSequence=(entry:typeof entries[number])=>typeof entry.queueSequence==='number'&&Number.isSafeInteger(entry.queueSequence)&&entry.queueSequence>0;
+  const sequenced=ordered.filter(hasSequence).sort((a,b)=>a.queueSequence!-b.queueSequence!);
+  let sequenceCursor=0;
+  // Keep legacy entries in their existing time-based slots; never invent a
+  // historical sequence. Newly captured originals retain their actual order.
+  for(const entry of ordered.map(entry=>hasSequence(entry)?sequenced[sequenceCursor++]:entry)){
    if(ports.currentScope()!==scope)break;
    if(entry.kind==='note'){
     if(entry.expectedVersion===undefined||!entry.deviceCapturedAt)continue;
