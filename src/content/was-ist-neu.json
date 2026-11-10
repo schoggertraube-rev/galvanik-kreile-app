@@ -4,10 +4,6 @@
     "pr": 211,
     "seite": "auftrag",
     "punkte": [
-      "Antworten und vereinbarte Abholtermine führen die offenen Rückruf-, Post- und Lageraufgaben passend weiter. Bereits gesicherte Originale bleiben erhalten.",
-      "Antwortet ein Kunde nur zu einem Teil seiner Ware, betreffen die weiteren Aufgaben und das noch nicht versandte Schreiben nur die übrige Ware.",
-      "Lagerfristen bleiben an das tatsächlich gesendete Schreiben gebunden, auch wenn später Einstellungen geändert werden.",
-      "Wochenwerte zählen fertig gemeldete Teile einmal; eine Rücknahme zieht den ursprünglichen Wert ab. Unbewertete Teile bleiben als solche erkennbar.",
       "Eine Zahlungsbestätigung prüft den angezeigten Restbetrag. Hat er sich geändert, wird nichts zusätzlich gebucht.",
       "Offene lokale Aufnahmen werden für die aktuelle Anmeldung gezählt. Ein Speicherfehler wird nicht als leere Warteschlange ausgegeben."
     ],
