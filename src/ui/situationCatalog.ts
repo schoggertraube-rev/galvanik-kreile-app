@@ -183,6 +183,10 @@ export const DISPATCH_CALL_COPY={
  session:'Melde Dich erneut an; Deine Eingaben bleiben erhalten.',invalid:'Öffne den Anruf aus der Liste der fertigen Aufträge erneut.'
 };
 export const COLLECTION_REMINDER_COPY={
+  finalTaskTitle:'Lagergeld oder Einlagerung vorschlagen',
+  finalTaskNote:(numbers:readonly string[])=>'Lagerfrist-Schreiben zu '+numbers.join(', ')+' · Lagergeld nur als Positionsvorschlag; noch nichts berechnet.',
+  finalRecipientMissing:'Empfänger für die letzte Stufe eintragen.',
+  finalTaskProtected:'Diese Aufgabe gehört zum Lagerfrist-Schreiben. Empfänger und Auftragsbezug bleiben erhalten.',
  forbidden:'Sammelerinnerung benötigt Mails und Aufträge sowie einen Kundenbezug.',
  invalid:'Erinnerungsstufe, Frist oder Versandkennung fehlt.',
  unavailable:'Aufträge oder Fristen konnten nicht sicher gelesen werden.',

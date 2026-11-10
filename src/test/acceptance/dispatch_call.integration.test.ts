@@ -8,7 +8,7 @@ import {sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablau
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 import {getOrdersDb} from '@/app/actions/orders.actions';
-import {completeIntakeTaskAction,createDispatchCallTaskAction,getIntakeTaskAction,saveIntakeTaskAction} from '@/app/actions/eingang.actions';
+import {completeIntakeTaskAction,createDispatchCallTaskAction,createStorageFinalTaskAction,getIntakeTaskAction,saveIntakeTaskAction} from '@/app/actions/eingang.actions';
 import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
 import {emptyDispatchPolicy} from '@/modules/fundament/public';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
@@ -64,8 +64,29 @@ it('E4 uses the existing sender only after individual eligibility and starts the
  const after=await withSession(full,()=>getOrdersDb());expect(after.ok&&after.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter).toMatchObject({state:'SENT',threadId:sent.data.threadId,finalStage:{state:'WAIT',recipientId:recipient.actorId}});
  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'threadId'=${sent.data.threadId}`).toEqual([{n:1}]);
+ const finalRequest={customerId:first.customerId,handover:'pickup' as const,clientKey:letter.clientKey};
+ expect(await withSession(full,()=>createStorageFinalTaskAction(finalRequest))).toMatchObject({code:'CONFLICT'});
+ const finalSettings=await withSession(full,()=>readShippingSettingsAction());if(finalSettings.code!=='OK'||!finalSettings.settings.dispatchPolicy)throw Error('E5_CURRENT_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:finalSettings.settings.service,numberPattern:finalSettings.settings.numberPattern,numberHint:finalSettings.settings.numberHint,trackingUrl:finalSettings.settings.trackingUrl,expectedUpdatedAt:finalSettings.settings.updatedAt,dispatchPolicy:{...finalSettings.settings.dispatchPolicy,finalStageAfterLetterDays:0}}))).toMatchObject({code:'OK'});
+ expect(await withSession(denied,()=>createStorageFinalTaskAction(finalRequest))).toMatchObject({code:'FORBIDDEN'});
+ const attempts=await Promise.all([withSession(full,()=>createStorageFinalTaskAction(finalRequest)),withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))]);
+ for(const attempt of attempts)expect(attempt).toMatchObject({code:'OK'});const finalTask=attempts[0];if(finalTask.code!=='OK')throw Error('E5_CREATE');
+ expect(attempts[1]).toMatchObject({taskId:finalTask.taskId});
+ const pending=await withSession(full,()=>getOrdersDb());expect(pending.ok&&pending.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'TASK_PENDING',taskId:finalTask.taskId});
+ expect(await sql`SELECT art,fuer_login::text,erstellt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${finalTask.taskId}::uuid`).toEqual([{art:'aufgabe',fuer_login:recipient.actorId,erstellt_von:full.actorId}]);
+ const taskRead=await withSession(recipient,()=>getIntakeTaskAction({taskId:finalTask.taskId}));expect(taskRead).toMatchObject({code:'OK',canComplete:true,task:{status:'offen',fuer_login:recipient.actorId}});if(taskRead.code!=='OK'||!taskRead.task)throw Error('E5_TASK_READ');
+ expect(await withSession(full,()=>createStorageFinalTaskAction(JSON.parse(JSON.stringify(finalRequest))))).toMatchObject({code:'OK',taskId:finalTask.taskId,replayed:true});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${finalTask.taskId}`).toEqual([{user_id:full.actorId}]);
+ const edit={taskId:finalTask.taskId,clientKey:taskRead.task.client_key,version:taskRead.task.version,kind:'aufgabe',title:taskRead.task.titel,dueDate:taskRead.task.faellig_am,time:null,forLogin:full.actorId,forArea:null,reference:{type:'auftrag',id:taskRead.task.bezug_id},note:taskRead.task.notiz};
+ expect(await withSession(full,()=>saveIntakeTaskAction(edit))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT fuer_login::text,version FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${finalTask.taskId}::uuid`).toEqual([{fuer_login:recipient.actorId,version:taskRead.task.version}]);
+ expect(await withSession(recipient,()=>completeIntakeTaskAction({taskId:finalTask.taskId,version:taskRead.task!.version,note:'TEST Einlagerung vorschlagen'}))).toMatchObject({code:'OK'});
+ const completed=await withSession(full,()=>getOrdersDb());expect(completed.ok&&completed.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'COMPLETED',taskId:finalTask.taskId});
+ expect(await withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))).toMatchObject({code:'OK',taskId:finalTask.taskId,replayed:true});
  await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'threadId'=${sent.data.threadId}`;
  const damaged=await withSession(full,()=>getOrdersDb());expect(damaged.ok&&damaged.data.find(row=>row.id===first.orderId)?.finishedDispatch?.state).toBe('unavailable');
+ expect(await withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))).toMatchObject({code:'UNAVAILABLE'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${first.orderId}`).toEqual([{n:1}]);
 });
 it('E3 creates one real visible callback for the collective cohort; mandatory reached result stops the ladder with actor, fresh retry and original history',async()=>{
  const {first,second,request}=await prepare('E3-Erreicht');

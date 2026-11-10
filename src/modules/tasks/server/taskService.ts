@@ -98,10 +98,10 @@ export async function createMissingGoodsTask(tx:PrivilegedTenantTransaction,auth
 }
 
 /** U252: the checked order/mail command creates a normal visible callback task. */
-export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string;taskId?:string;version?:number},deps:Dependencies){
+export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string;taskId?:string;version?:number;kind?:'aufgabe';forLogin?:string;dueDate?:string},deps:Dependencies){
  if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))reject('FORBIDDEN','Übergabe klären benötigt Mails und Aufträge.');
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
- const value:TaskSaveInput={clientKey:input.clientKey,version:input.version??0,...(input.taskId?{taskId:input.taskId}:{}),kind:'rueckruf',title:input.title,dueDate:clock.today,time:null,forLogin:null,forArea:'auftraege',reference:{type:'auftrag',id:input.orderId},note:input.note};
+ const value:TaskSaveInput={clientKey:input.clientKey,version:input.version??0,...(input.taskId?{taskId:input.taskId}:{}),kind:input.kind??'rueckruf',title:input.title,dueDate:input.dueDate??clock.today,time:null,forLogin:input.forLogin??null,forArea:input.forLogin?null:'auftraege',reference:{type:'auftrag',id:input.orderId},note:input.note};
  const errors=taskValidation(value);if(Object.keys(errors).length)reject('VALIDATION_ERROR','Rückruf-Aufgabe ist unvollständig.');
  return (await persistTask(tx,auth,value,deps)).task.id;
 }

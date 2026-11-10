@@ -42,12 +42,14 @@ export async function reopenIntakeAction(input:unknown){return reopenIntake(inpu
 import {saveTask,completeTask,readTask,createMissingGoodsTask,createOrderHandoverTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
 import {createDispatchCall,recordDispatchCallResult,readDispatchCallRequirement,protectDispatchCallTask,readCompletedDispatchCallReceipt} from '@/lib/server/dispatchCallPort';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
+import {createStorageFinalTask,readStorageFinalTaskReceipt,protectStorageFinalTask} from '@/lib/server/storageFinalStagePort';
 import type {TaskOpenRequest} from '@/modules/tasks/public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 const taskEffects={beforeComplete:recordDispatchCallResult,effect:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>{
  const blocked=await protectDispatchCallTask(tx,auth,input);if(blocked)return blocked;
+ const storageBlocked=await protectStorageFinalTask(tx,auth,input);if(storageBlocked)return storageBlocked;
  return recordIntakeTaskEffect(tx,auth,input,readCustomerProfile);
 }};
 import {createInvoiceClarificationTask,resolveInvoiceClarificationTask} from '@/modules/tasks/server-public';
@@ -97,6 +99,20 @@ export async function createDispatchCallTaskAction(input:{customerId:string;hand
  if(!plan)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
  const members=candidates.filter(order=>plan.orderIds.includes(order.id));
  return createDispatchCall(auth.data,input,plan,members,(tx,request)=>createOrderHandoverTask(tx,auth.data,request,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
+}
+export async function createStorageFinalTaskAction(input:{customerId:string;handover:'pickup'|'shipping';clientKey:string}){
+ const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:DISPATCH_CALL_COPY.session};
+ if(!hasAuthorizationArea(auth.data,'mails')||!hasAuthorizationArea(auth.data,'auftraege'))return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
+ if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).sort().join(',')!=='clientKey,customerId,handover'||typeof input.customerId!=='string'||!input.customerId.trim()||input.customerId.length>128||!['pickup','shipping'].includes(input.handover)||typeof input.clientKey!=='string'||!/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(input.clientKey))return {code:'VALIDATION_ERROR' as const,message:DISPATCH_CALL_COPY.invalid};
+ const prior=await readStorageFinalTaskReceipt(auth.data,input);if(prior.code!=='NOT_FOUND')return prior;
+ const [{getOrdersDb},{readShippingSettings}]=await Promise.all([import('@/app/actions/orders.actions'),import('@/modules/fundament/server-public')]);
+ const [orders,settings]=await Promise.all([getOrdersDb(),readShippingSettings({tenantId:auth.data.tenantId,actorId:auth.data.userId,canRead:true})]);
+ if(!orders.ok||settings.code!=='OK')return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
+ const candidates=orders.data.filter(order=>order.customerId===input.customerId&&order.station==='fertig'&&order.finishedDispatch?.handover===input.handover);
+ const letter=candidates.find(order=>order.finishedDispatch?.storage?.letter?.clientKey===input.clientKey)?.finishedDispatch?.storage?.letter;
+ if(!letter||candidates.some(order=>letter.orderIds.includes(order.id)&&order.finishedDispatch?.reminder?.requiresResponseCheck!==false))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+ const members=candidates.filter(order=>letter.orderIds.includes(order.id));
+ return createStorageFinalTask(auth.data,input,letter,members.map(order=>({id:order.id,number:order.orderNumber,version:order.version})),settings.settings.updatedAt,(tx,request)=>createOrderHandoverTask(tx,auth.data,request,taskEffects));
 }
 export async function getIntakeTaskAction(input:TaskOpenRequest){
  const result=await readTask(input);if(result.code!=='OK'||!result.task)return result;

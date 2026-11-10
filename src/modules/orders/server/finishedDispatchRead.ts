@@ -11,6 +11,7 @@ import {readCollectionReminderHistory} from '@/lib/server/collectionReminderPort
 import {readDispatchCalls} from '@/lib/server/dispatchCallPort';
 import {storageEligibility,storageLetterKey,finalStorageStage,type StorageEligibility} from '../domain/storageEligibility';
 import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
+import {readStorageFinalTaskState} from '@/lib/server/storageFinalStagePort';
 
 export type FinishedDispatch={orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;unavailable?:true};
 
@@ -73,16 +74,20 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
    const changed=JSON.stringify([...call.orderIds].sort())!==JSON.stringify(members.map(member=>member.orderId).sort());
    plan.state=changed&&call.result?'RECONCILE_RESPONSE':call.result==='notReached'?'CALL_NOT_REACHED':'CALL_PENDING';
    if(call.result==='notReached'&&call.recordedAt&&!changed){
-    const unsent:FinishedDispatch[]=[];
+    const unsent:FinishedDispatch[]=[];let storageUnavailable=false;
     for(const member of members){
      const row=result.find(item=>item.orderId===member.orderId);if(!row)continue;
      row.storage=storageEligibility(member.noticeAt,call.recordedAt,berlinCalendarDay(),policy);
      const letters=activeHistory.filter(item=>item.stage==='E4'&&item.orderIds.includes(member.orderId)&&item.storageOrigin?.callTaskId===call.taskId&&item.storageOrigin.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId));
      const letter=letters.at(-1);
-     if(letter){row.storage.letter={state:letter.sentAt&&!letter.deliveryFailedAt?'SENT':'RECONCILE_MAIL',clientKey:letter.stageKey,orderIds:letter.orderIds,due:letter.dueDate,sentAt:letter.sentAt,threadId:letter.threadId,callTaskId:call.taskId,freezes:letter.storageOrigin!.freezes,finalStage:finalStorageStage(letter.deliveryFailedAt?null:letter.sentAt,berlinCalendarDay(),policy)};}
+     if(letter){
+      row.storage.letter={state:letter.sentAt&&!letter.deliveryFailedAt?'SENT':'RECONCILE_MAIL',clientKey:letter.stageKey,orderIds:letter.orderIds,due:letter.dueDate,sentAt:letter.sentAt,threadId:letter.threadId,callTaskId:call.taskId,freezes:letter.storageOrigin!.freezes,finalStage:finalStorageStage(letter.deliveryFailedAt?null:letter.sentAt,berlinCalendarDay(),policy)};
+      try{const final=await readStorageFinalTaskState(auth,letter.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}
+      catch(error){console.error('[STORAGE_FINAL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();storageUnavailable=true;break;}
+     }
      else if(row.storage.state==='DUE')unsent.push(row);
     }
-    if(unsent.length){
+    if(!storageUnavailable&&unsent.length){
      const orderIds=unsent.map(row=>row.orderId).sort(),clientKey=storageLetterKey(auth.tenantId,group.customerId,group.handover,call.stageKey,orderIds);
      const due=unsent.map(row=>row.storage!.eligibleOn!).sort().at(-1)!;
      const freezes=call.freezes.filter(proof=>orderIds.includes(proof.orderId));
@@ -90,7 +95,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
     }
    }
   }
-  for(const member of members){const row=result.find(item=>item.orderId===member.orderId);if(row)row.reminder=plan;}
+  for(const member of members){const row=result.find(item=>item.orderId===member.orderId);if(row&&!row.unavailable)row.reminder=plan;}
  }
  const due=new Map(orders.map(order=>[order.id,order.dueDate||'9999-12-31']));
  result.sort((a,b)=>Number(b.color==='gruen')-Number(a.color==='gruen')||(due.get(a.orderId)??'9999').localeCompare(due.get(b.orderId)??'9999')||a.orderId.localeCompare(b.orderId));
