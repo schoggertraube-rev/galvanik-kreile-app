@@ -1,18 +1,55 @@
 // Only unacknowledged uploads, as specified by eingang.geraete. Server remains authoritative.
-export type PendingOriginal = { id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
-  | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} };
+export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
+  | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number};
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingEntry=PendingOriginal|PendingQuarantine;
 const STORE = "originals";
+const SHELL_STORE = "shellMetadata";
 async function database(scope: string): Promise<IDBDatabase> {
   if (!/^[0-9a-f]{64}$/.test(scope)) throw new Error("INTAKE_PENDING_SCOPE_REQUIRED");
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(`kreile-pending-originals-v1-${scope}`, 1);
-    request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE, { keyPath: "id" }); };
-    request.onsuccess = () => resolve(request.result);
+    const request = indexedDB.open(`kreile-pending-originals-v1-${scope}`, 2);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE, { keyPath: "id" });
+      if (!request.result.objectStoreNames.contains(SHELL_STORE)) request.result.createObjectStore(SHELL_STORE);
+    };
+    request.onsuccess = () => {request.result.onversionchange=()=>request.result.close();resolve(request.result);};
     request.onerror = () => reject(new Error("INTAKE_PENDING_STORAGE_UNAVAILABLE"));
     request.onblocked = () => reject(new Error("INTAKE_PENDING_STORAGE_BLOCKED"));
   });
+}
+export type PendingShellMetadata={scope:string|null;cacheGeneration:number;updatedAt:string};
+type ShellRead={code:'EMPTY'}|{code:'QUARANTINE'}|{code:'OK';metadata:PendingShellMetadata};
+function shellMetadata(value:unknown,scope:string):value is PendingShellMetadata{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const row=value as Record<string,unknown>;
+ return Object.keys(row).length===3&&(row.scope===scope||row.scope===null)&&typeof row.cacheGeneration==='number'&&Number.isSafeInteger(row.cacheGeneration)&&row.cacheGeneration>0&&typeof row.updatedAt==='string'&&Number.isFinite(Date.parse(row.updatedAt));
+}
+export async function readPendingShellMetadata(scope:string):Promise<ShellRead>{
+ const connection=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=connection.transaction(SHELL_STORE,'readonly'),read=tx.objectStore(SHELL_STORE).get('active');
+  tx.oncomplete=()=>{connection.close();resolve(read.result===undefined?{code:'EMPTY'}:shellMetadata(read.result,scope)?{code:'OK',metadata:read.result}:{code:'QUARANTINE'});};
+  tx.onabort=()=>{connection.close();reject(Error('OFFLINE_SHELL_METADATA_READ_ABORTED'));};
+ });
+}
+/** CAS invalidates late warm responses; it grants no identity or permission. */
+export async function changePendingShellMetadata(scope:string,expectedGeneration:number|null,active:boolean):Promise<{code:'STALE'|'QUARANTINE'}|{code:'OK';metadata:PendingShellMetadata}>{
+ const connection=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=connection.transaction(SHELL_STORE,'readwrite'),store=tx.objectStore(SHELL_STORE),read=store.get('active');
+  let result:{code:'STALE'|'QUARANTINE'}|{code:'OK';metadata:PendingShellMetadata}={code:'STALE'};
+  read.onsuccess=()=>{
+   const previous:unknown=read.result;
+   if(previous!==undefined&&!shellMetadata(previous,scope)){result={code:'QUARANTINE'};return;}
+   const generation=previous===undefined?null:(previous as PendingShellMetadata).cacheGeneration;
+   if(generation!==expectedGeneration||generation===Number.MAX_SAFE_INTEGER)return;
+   const metadata={scope:active?scope:null,cacheGeneration:(generation??0)+1,updatedAt:new Date().toISOString()};
+   store.put(metadata,'active');result={code:'OK',metadata};
+  };
+  tx.oncomplete=()=>{connection.close();resolve(result);};
+  tx.onabort=()=>{connection.close();reject(Error('OFFLINE_SHELL_METADATA_WRITE_ABORTED'));};
+ });
 }
 async function transaction<T>(scope: string, mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const connection = await database(scope);
@@ -39,7 +76,14 @@ export async function retainPendingOriginal(scope: string, original: PendingOrig
    const value={...original};delete value.deviceCapturedAt;
    if(value.kind==='note'){delete value.expectedVersion;if(expectedVersion!==undefined)value.expectedVersion=expectedVersion;}
    if(deviceCapturedAt)value.deviceCapturedAt=deviceCapturedAt;
-   store.put(value);};
+   // Assign order in the same serialized IDB transaction as the original.
+   // Device clocks can tie or move backwards; UUID order is not capture order.
+   if(same){if(previous?.queueSequence!==undefined)value.queueSequence=previous.queueSequence;else delete value.queueSequence;store.put(value);return;}
+   const queued=store.getAll();queued.onsuccess=()=>{
+    const maximum=(queued.result as Array<{queueSequence?:unknown}>).reduce((max,row)=>typeof row.queueSequence==='number'&&Number.isSafeInteger(row.queueSequence)&&row.queueSequence>max?row.queueSequence:max,0);
+    if(maximum>=Number.MAX_SAFE_INTEGER){tx.abort();return;}
+    value.queueSequence=maximum+1;store.put(value);
+   };};
   tx.oncomplete=()=>{connection.close();window.dispatchEvent(new Event("kreile-pending-changed"));resolve();};
   tx.onabort=()=>{connection.close();reject(new Error("INTAKE_PENDING_STORAGE_ABORTED"));};
  });
