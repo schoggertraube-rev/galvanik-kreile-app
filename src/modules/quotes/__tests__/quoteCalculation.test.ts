@@ -1,10 +1,10 @@
 import {describe,expect,it} from 'vitest';
 import {calculateQuote,scaleQuoteCalculation,scaleQuotePositions,nextQuoteEdition,quoteAcceptanceIsCurrent} from '../quoteCalculation';
 
-it('keeps an explicit flat quote position whole on partial goods and distributes legacy total minutes by net value',()=>{
+it('scales a unitless quote position on partial goods and distributes legacy total minutes by net value',()=>{
  const calculation={hours:'1.0000',hourlyRateCents:10000,setupCents:0,materialCents:0};
  const result=scaleQuotePositions(calculation,[{position:1,quantity:4,lineTotalCents:7500,unit:null,plannedMinutes:null},{position:2,quantity:2,lineTotalCents:2500,unit:'stueck',plannedMinutes:null}],[{position:1,quantity:2},{position:2,quantity:2}]);
- expect(result).toMatchObject({code:'OK',totalNetCents:10000,positions:[{position:1,lineTotalCents:7500,plannedMinutes:23},{position:2,lineTotalCents:2500,plannedMinutes:15}],legacyMinutesAllocated:true});
+ expect(result).toMatchObject({code:'OK',totalNetCents:6250,positions:[{position:1,lineTotalCents:3750,plannedMinutes:23},{position:2,lineTotalCents:2500,plannedMinutes:15}],legacyMinutesAllocated:true});
 });
 
 it('assigns the remainder minute to the largest original net position and honors explicitly stored minutes',()=>{

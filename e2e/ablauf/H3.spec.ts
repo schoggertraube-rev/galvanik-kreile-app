@@ -99,7 +99,7 @@ it('H3 Rechnung auf Ziel / direct personal intake stays in wareneingang until ex
   expect(await sql`SELECT station,version,payment_mode,handover_mode,ware,geprueft FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{station:'angenommen',version:1,payment_mode:'rechnung',handover_mode:'shipping',ware:'da',geprueft:true}]);
   expect(await sql`SELECT event_type,station,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND client_event_id=${clientEventId}`).toEqual([{event_type:'ORDER_INTAKE_CREATED_V1',station:'wareneingang',user_id:full.actorId}]);
   expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{id:orderId,station:'angenommen',version:1}}});
-  expect(await withSession(full,()=>createOrderIntakeAction(input))).toMatchObject({code:'OK',replayed:true,receipt:{orderId}});
+  expect(await withSession(full,()=>createOrderIntakeAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true,receipt:{orderId}});
   expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND source_ref=${clientEventId}`).toEqual([{n:1}]);
   const handoffKey=randomUUID();
   const handoff=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:handoffKey}));
