@@ -42,15 +42,15 @@ it.each([false,true])('E03 imports one secured original, binds the actual failed
  expect(await sql`SELECT kunde_id,zuordnung FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${imported.itemId}::uuid`).toEqual([{kunde_id:order.customerId,zuordnung:'hand'}]);
  const originalHash=createHash('sha256').update(state.mime).digest('hex');
  expect(await sql`SELECT sha256 FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND mime='message/rfc822'`).toEqual([{sha256:originalHash}]);
- expect(await sql`SELECT user_id::text,payload->>'threadId' AS thread,payload->>'originalSha256' AS sha FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DELIVERY_FAILED_V1'`).toEqual([{user_id:full.actorId,thread:sent.data.threadId,sha:originalHash}]);
+ expect(await sql`SELECT user_id::text,payload->>'threadId' AS thread,payload->>'originalSha256' AS sha FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DELIVERY_FAILED_V1' AND payload->>'itemId'=${imported.itemId}`).toEqual([{user_id:full.actorId,thread:sent.data.threadId,sha:originalHash}]);
  const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));expect(card).toMatchObject({code:'OK',data:{customerInformed:{informed:null,ampel:'rot',failedDelivery:{threadId:sent.data.threadId}}}});
  const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('BOUNCE_QUEUE');const plan=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder;
  expect(plan).toMatchObject({stage:'E3',state:'DUE',requiresResponseCheck:false,needsNotice:[]});if(!plan?.due)throw Error('BOUNCE_DUE');
  expect(await withSession(full,()=>createDispatchCallTaskAction({customerId:order.customerId,handover:'pickup',dueDate:plan.due!,clientKey:plan.clientKey!}))).toMatchObject({code:'OK'});
  state.blocked=true;const before=state.fetches;
  expect(await withSession(full,()=>importOutlookMailAction(state.graphId))).toMatchObject({code:'OK',itemId:imported.itemId,replayed:true});expect(state.fetches).toBe(before);
- expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DELIVERY_FAILED_V1'`).toEqual([{n:1}]);
- expect(await sql`SELECT count(*)::integer AS n FROM public.communication_messages WHERE tenant_id=${KREILE_TENANT_SLUG} AND direction='incoming'`).toEqual([{n:0}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DELIVERY_FAILED_V1' AND payload->>'itemId'=${imported.itemId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.communication_messages WHERE tenant_id=${KREILE_TENANT_SLUG} AND direction='incoming' AND thread_id IN (SELECT id FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${order.customerId})`).toEqual([{n:0}]);
  state.blocked=false;const sendCount=state.sends;
  const retryInput={targetType:'ORDER' as const,targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST korrigierte Adresse',body:'TEST Ware fertig',expectedInvoiceIds,attachment:{kind:'INVOICE' as const,documentId:order.invoice.invoiceId}};
  expect(await withSession(full,()=>sendCustomerMailAction(retryInput))).toMatchObject({code:'CONFLICT'});expect(state.sends).toBe(sendCount);
