@@ -5,7 +5,7 @@ import {quoteOperationContext,canReadQuoteForGoods} from "@/lib/server/quoteAuth
 import {listOpenQuotesCommand,readPackageQuoteHistory} from '@/modules/quotes/server-public';
 import {readPackageOrderCustomers,createInitialOrderPrintJobs} from '@/modules/orders/server-public';
 import type {OrderIntakeTransactionBinding} from '@/lib/server/commands/orderIntakeCommand';
-const queueOrderPrints:OrderIntakeTransactionBinding['after']=(tx,auth,receipt)=>createInitialOrderPrintJobs(tx,auth,receipt.orderId,receipt.customerDisplayName);
+const queueOrderPrints:OrderIntakeTransactionBinding['after']=(tx,auth,receipt)=>createInitialOrderPrintJobs(tx,auth,receipt.orderId,receipt.customerDisplayName,receipt.items.map(item=>item.id));
 import type {PackageCustomerHistory} from '@/lib/server/packageIntakeContextPort';
 import {readPackageExpectation} from '@/modules/eingang/server-public';
 import type {IntakeCaptureResult} from '@/modules/eingang/public';

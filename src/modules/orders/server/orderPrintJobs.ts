@@ -3,6 +3,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 function automaticKey(orderId:string,version:number){
  const h=createHash('sha256').update(JSON.stringify(['order-print',orderId,version])).digest('hex');
@@ -12,20 +13,22 @@ type Position={id:string;name:string;quantity:string;unit:string|null;surface:st
 type Order={id:string;number:string;customerId:string;customerName:string;dueDate:string|null;handover:string|null;version:number;slot:number|null;generation:number|null;active:boolean};
 
 /** Part of the canonical order transaction. It queues real work; it never reports a print. */
-export async function createInitialOrderPrintJobs(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,customerName:string){
- const orders=await tx.execute<Order>(sql`SELECT o.id,o.order_number AS number,o.customer_id AS "customerId",${customerName}::text AS "customerName",o.due_date::text AS "dueDate",o.handover_mode AS handover,o.version,o.print_symbol_slot AS slot,o.print_symbol_generation AS generation,o.print_symbol_active AS active
+export async function createInitialOrderPrintJobs(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,customerName:string,itemIds:readonly string[]){
+ const orders=await tx.execute<Order>(sql`SELECT o.id,o.order_number AS number,o.customer_id AS "customerId",${customerName}::text AS "customerName",o.due_date::date::text AS "dueDate",o.handover_mode AS handover,o.version,o.print_symbol_slot AS slot,o.print_symbol_generation AS generation,o.print_symbol_active AS active
   FROM public.orders o WHERE o.tenant_id=${auth.tenantId} AND o.id=${orderId} FOR UPDATE OF o`);
  if(orders.length!==1)throw Error('ORDER_PRINT_ORDER_MISSING');
  const order=orders[0],requestKey=automaticKey(order.id,1);
- const existing=await tx.execute<{user_id:string;payload:{orderId:string;orderVersion:number;jobIds:string[]}}>(sql`SELECT user_id::text,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_PRINT_JOBS_QUEUED_V1' AND client_event_id=${requestKey}::uuid AND status='success' AND event_schema_version=1 AND order_id=${order.id}`);
+ const existing=await tx.execute<{user_id:string;payload:{orderId:string;orderVersion:number;jobIds:string[];snapshotSha256:string}}>(sql`SELECT user_id::text,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_PRINT_JOBS_QUEUED_V1' AND client_event_id=${requestKey}::uuid AND status='success' AND event_schema_version=1 AND order_id=${order.id}`);
  if(existing.length){
-  const original=existing[0],jobs=await tx.execute<{id:string;created_by:string}>(sql`SELECT id::text,created_by::text FROM public.print_jobs WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} AND request_key=${requestKey}::uuid AND content_version=1 ORDER BY id`);
-  if(existing.length!==1||original.payload.orderId!==order.id||original.payload.orderVersion!==1||!Array.isArray(original.payload.jobIds)||!jobs.length||jobs.some(job=>job.created_by!==original.user_id)||JSON.stringify(jobs.map(job=>job.id))!==JSON.stringify([...original.payload.jobIds].sort()))throw Error('ORDER_PRINT_INITIAL_RECEIPT_INVALID');
+  const original=existing[0],jobs=await tx.execute<{id:string;created_by:string;snapshot:unknown}>(sql`SELECT id::text,created_by::text,snapshot FROM public.print_jobs WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} AND request_key=${requestKey}::uuid AND content_version=1 ORDER BY id`);
+  if(existing.length!==1||original.payload.orderId!==order.id||original.payload.orderVersion!==1||!Array.isArray(original.payload.jobIds)||jobs.length!==itemIds.length+1||jobs.some(job=>job.created_by!==original.user_id||createHash('sha256').update(canonicalJson(job.snapshot)).digest('hex')!==original.payload.snapshotSha256)||JSON.stringify(jobs.map(job=>job.id))!==JSON.stringify([...original.payload.jobIds].sort()))throw Error('ORDER_PRINT_INITIAL_RECEIPT_INVALID');
   return;
  }
  if(order.version!==1)throw Error('ORDER_PRINT_INITIAL_VERSION_CHANGED');
- const positions=await tx.execute<Position>(sql`SELECT id,name,quantity::text,unit,surface_requested AS surface,execution_requested AS execution FROM public.items WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} ORDER BY id`);
- if(!positions.length)throw Error('ORDER_PRINT_POSITIONS_MISSING');
+ const rows=await tx.execute<Position>(sql`SELECT id,name,quantity::text,unit,surface_requested AS surface,execution_requested AS execution FROM public.items WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} ORDER BY id`);
+ if(!rows.length||new Set(itemIds).size!==itemIds.length||rows.length!==itemIds.length||itemIds.some(id=>!rows.some(row=>row.id===id)))throw Error('ORDER_PRINT_POSITIONS_MISSING');
+ // Sheet numbering follows the canonical intake receipt, never random UUID sorting.
+ const positions=itemIds.map(id=>rows.find(row=>row.id===id)!);
  // One tenant lock also protects the exhausted-pool symbol+letter namespace.
  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':order-print-symbol'},0))`);
  if(order.slot!==null||order.generation!==null||order.active)throw Error('ORDER_PRINT_SYMBOL_ALREADY_BOUND');
@@ -45,9 +48,9 @@ export async function createInitialOrderPrintJobs(tx:PrivilegedTenantTransaction
   if(saved.length!==1||saved[0].id!==id)throw Error('ORDER_PRINT_JOB_NOT_SAVED');
   jobs.push(id);
  }
- const eventId=randomUUID();
+ const eventId=randomUUID(),snapshotSha256=createHash('sha256').update(canonicalJson(snapshot)).digest('hex');
  const receipt=await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,status,user_id,client_event_id,correlation_id,event_schema_version,aggregate_version,payload)
-  VALUES(${eventId},${auth.tenantId},${order.id},'ORDER_PRINT_JOBS_QUEUED_V1','success',${auth.userId}::uuid,${requestKey}::uuid,${requestKey}::uuid,1,${order.version},${JSON.stringify({orderId:order.id,orderVersion:order.version,symbol:{slot,generation},jobIds:jobs})}::jsonb) RETURNING id`);
+  VALUES(${eventId},${auth.tenantId},${order.id},'ORDER_PRINT_JOBS_QUEUED_V1','success',${auth.userId}::uuid,${requestKey}::uuid,${requestKey}::uuid,1,${order.version},${JSON.stringify({orderId:order.id,orderVersion:order.version,symbol:{slot,generation},jobIds:jobs,snapshotSha256})}::jsonb) RETURNING id`);
  if(receipt.length!==1)throw Error('ORDER_PRINT_RECEIPT_NOT_SAVED');
 }
 

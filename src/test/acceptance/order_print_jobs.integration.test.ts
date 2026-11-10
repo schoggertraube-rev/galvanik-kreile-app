@@ -24,7 +24,7 @@ it('DR-03/10 canonical order creation atomically queues overall and position she
   const jobs=await sql`SELECT id::text,item_id,sheet_kind,status,attempts,created_by::text,snapshot FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.id} ORDER BY sheet_kind,item_id`;
   expect(jobs).toHaveLength(3);expect(jobs.filter(job=>job.sheet_kind==='gesamt')).toHaveLength(1);
   expect(jobs.filter(job=>job.sheet_kind==='position').map(job=>job.item_id).sort()).toEqual((await sql`SELECT id FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.id} ORDER BY id`).map(item=>item.id));
-  for(const job of jobs)expect(job).toMatchObject({status:'wartet',attempts:0,created_by:full.actorId,snapshot:{orderId:order.id,customerId,symbol:{slot:order.print_symbol_slot,generation:order.print_symbol_generation}}});
+  for(const job of jobs){expect(job).toMatchObject({status:'wartet',attempts:0,created_by:full.actorId,snapshot:{orderId:order.id,customerId,dueDate:input.dueDate,symbol:{slot:order.print_symbol_slot,generation:order.print_symbol_generation}}});expect(job.snapshot.positions.map((position:{quantity:string})=>Number(position.quantity))).toEqual([1,2]);}
   const receipts=await sql`SELECT user_id::text,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.id} AND event_type='ORDER_PRINT_JOBS_QUEUED_V1'`;
   expect(receipts).toHaveLength(1);expect(receipts[0].user_id).toBe(full.actorId);expect(receipts[0].payload.jobIds.sort()).toEqual(jobs.map(job=>job.id).sort());
  }
@@ -75,3 +75,13 @@ it('DR-08 the forty-first active order receives a symbol-letter generation witho
  expect(after.filter(row=>row.generation===0)).toHaveLength(40);expect(after.filter(row=>row.generation===1)).toHaveLength(1);
  for(const original of before)expect(after.find(row=>row.id===original.id)).toEqual(original);
 },120000);
+
+it('a corrupted sheet original blocks intake replay rather than replacing or duplicating its print source',async()=>{
+ const customerId=await customerFixture('Druck-Original'),input=request(customerId),created=await withSession(full,()=>createOrderIntakeAction(input));if(created.code!=='OK')throw Error('PRINT_ORIGINAL_FIXTURE');
+ const [source]=await sql`SELECT payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId} AND event_type='ORDER_PRINT_JOBS_QUEUED_V1'`;
+ const [job]=await sql`SELECT id::text FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId} ORDER BY id LIMIT 1`;
+ await sql`UPDATE public.print_jobs SET snapshot=jsonb_set(snapshot,'{customerName}',to_jsonb(${'TEST manipulierter Name'}::text)) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${job.id}::uuid`;
+ expect(await withSession(full,()=>createOrderIntakeAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
+ expect(await sql`SELECT payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId} AND event_type='ORDER_PRINT_JOBS_QUEUED_V1'`).toEqual([source]);
+ expect(await sql`SELECT count(*)::int AS n FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId}`).toEqual([{n:3}]);
+});
