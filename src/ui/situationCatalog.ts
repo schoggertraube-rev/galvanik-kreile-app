@@ -238,7 +238,7 @@ export type CollectionCustomerFacts={name?:string|null;company?:string|null;memb
 const customerDay=(value:string|null|undefined)=>value&&/^\d{4}-\d{2}-\d{2}/.test(value)?value.slice(0,10).split('-').reverse().join('.'):null;
 export const CUSTOMER_COLLECTION_COPY={
  'kunde.abholung.e1':{subject:(order:string)=>'Abholbereit: '+(order.includes(', ')?'Aufträge ':'Auftrag ')+order},
- 'kunde.abholung.e2':{subject:(order:string)=>'Erinnerung: Auftrag '+order+' wartet auf Abholung'},
+ 'kunde.abholung.e2':{subject:(order:string)=>order.includes(', ')?'Erinnerung: Aufträge '+order+' warten auf Abholung':'Erinnerung: Auftrag '+order+' wartet auf Abholung'},
  'kunde.abholung.lagerfrist':{subject:(order:string)=>'Lagerfrist für Ihre Teile aus '+(order.includes(', ')?'den Aufträgen ':'Auftrag ')+order},
  'kunde.abholung.lagergeld_satz':(amount?:string|null,unit?:string|null)=>amount&&unit?'Danach berechnen wir Lagergeld von '+amount+' je '+unit+'.':'',
  'kunde.zahlung_zeile':(amount?:string|null)=>amount?'Offen sind '+amount+'; bitte bringen Sie den Betrag zur Abholung mit.':'',

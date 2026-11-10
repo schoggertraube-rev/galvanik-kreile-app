@@ -44,6 +44,14 @@ it('K15 an already priced finished item records only its later price delta in th
  expect(await sql`SELECT count(*)::int AS n FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${reopened.receipt.eventId} AND component='pricing' AND direction=-1`).toEqual([{n:2}]);
  expect(await sql`SELECT sum(direction*net_cents)::int AS net FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{net:0}]);
  await expect(sql`INSERT INTO private.order_production_snapshots SELECT * FROM private.order_production_snapshots WHERE event_id=${reopened.receipt.eventId} AND component='pricing' LIMIT 1`).rejects.toThrow('order_production_one_reversal');
+ const finishedAgain=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:reopened.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));if(finishedAgain.code!=='OK')throw Error('K15_NEXT_FINISH');
+ const reopenedAgain=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:finishedAgain.receipt.aggregateVersion,clientEventId:randomUUID(),finished:false}));if(reopenedAgain.code!=='OK')throw Error('K15_NEXT_REOPEN');
+ await expect(sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,reverses_event_id,component,origin_event_id)
+  SELECT source.id,negative.tenant_id,negative.order_id,negative.item_id,source.created_at,negative.direction,negative.quantity,negative.unit,negative.net_cents,negative.rework,negative.valuation,negative.price_source,negative.reverses_event_id,negative.component,negative.origin_event_id
+  FROM private.order_production_snapshots negative JOIN public.events source ON source.tenant_id=negative.tenant_id AND source.order_id=negative.order_id AND source.id=${reopenedAgain.receipt.eventId}
+  WHERE negative.event_id=${reopened.receipt.eventId} AND negative.component='pricing' LIMIT 1`).rejects.toThrow('order_production_one_reversal');
+ expect(await sql`SELECT sum(direction*net_cents)::int AS net FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{net:0}]);
+
  await expect(sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,reverses_event_id,component,origin_event_id)
  SELECT event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,${randomUUID()},component,origin_event_id FROM private.order_production_snapshots WHERE event_id=${reopened.receipt.eventId} AND component='pricing' LIMIT 1`).rejects.toThrow('ORDER_PRODUCTION_REVERSAL_SOURCE_INVALID');
 

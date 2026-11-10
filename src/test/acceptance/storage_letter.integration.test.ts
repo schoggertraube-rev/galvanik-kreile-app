@@ -163,6 +163,7 @@ it('K14 collective originals use plural order references and one qualified remin
  expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:order.customerId,clientRequestId:randomUUID(),subject:'TEST ignored',body:'TEST ignored',collectionReminder:{stage:'E4',handover:'pickup',dueDate:due.due,clientKey:due.clientKey}}))).toMatchObject({code:'OK'});
  const originals=await sql`SELECT thread.subject,message.body FROM public.events event JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->>'threadId' JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' WHERE event.tenant_id=${KREILE_TENANT_SLUG} AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.payload->'meta'->>'customerId'=${order.customerId} ORDER BY event.created_at`;
  expect(originals[0].subject).toBe('Abholbereit: Aufträge '+numbers);
+ expect(originals[1].subject).toBe('Erinnerung: Aufträge '+numbers+' warten auf Abholung');
  expect(originals.at(-1)?.subject).toBe('Lagerfrist für Ihre Teile aus den Aufträgen '+numbers);
  expect(originals.at(-1)?.body).toBe(preview.data.snapshot.body);
 });
