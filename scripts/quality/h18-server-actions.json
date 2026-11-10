@@ -80,10 +80,12 @@
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#reopenFrozenOrderAction": [
-      "src/test/h18_order_admin_actions.integration.test.ts"
+      "src/test/h18_order_admin_actions.integration.test.ts",
+      "src/test/acceptance/production_snapshot_storage.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#setOrderItemFinishedAction": [
-      "src/test/h18_workshop_actions.integration.test.ts"
+      "src/test/h18_workshop_actions.integration.test.ts",
+      "src/test/acceptance/production_snapshot_storage.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#transitionWareneingangToGalvanikAction": [
       "src/test/h18_workshop_actions.integration.test.ts",

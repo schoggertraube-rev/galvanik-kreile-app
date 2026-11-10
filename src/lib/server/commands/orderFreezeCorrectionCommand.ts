@@ -1,4 +1,5 @@
 import "server-only";
+import {appendProductionReversals} from '@/lib/server/productionSnapshotPort';
 
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
@@ -176,7 +177,8 @@ export async function reopenFrozenOrder(
   let authorization;
   try {
     authorization = await resolveAuthorization();
-  } catch {
+  } catch(error) {
+    console.error('[ORDER_FREEZE_CORRECTION_WRITE_FAILED]',error instanceof Error?error.message:'UnknownError');
     return { code: "UNAVAILABLE", message: "Freeze-Korrektur ist derzeit nicht verfügbar." };
   }
   if (!authorization.ok) {
@@ -385,6 +387,7 @@ export async function reopenFrozenOrder(
       if (eventRows.length !== 1 || !eventId || !UUID_PATTERN.test(eventId)) {
         throw new Error("ORDER_FREEZE_CORRECTION_EVENT_INVALID");
       }
+      await appendProductionReversals(tx,authorization.data.tenantId,eventId,itemRows.map(item=>item.id));
 
       const correctionRows = await tx.execute<{ id: string }>(sql`
         INSERT INTO private.order_freeze_corrections (

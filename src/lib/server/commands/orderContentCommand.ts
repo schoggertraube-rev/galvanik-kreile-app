@@ -12,6 +12,7 @@ import {
 import { type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {intakeHandoverDirective} from '@/modules/eingang/public';
 import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY} from '@/ui/situationCatalog';
+import {appendProductionReversals} from '@/lib/server/productionSnapshotPort';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const VAT = new Set([0, 700, 1900]);
@@ -333,9 +334,11 @@ export async function setOrderItemFinished(input: SetOrderItemFinishedInput): Pr
       const eventId = randomUUID(); const payload = JSON.stringify({ requestHash, itemId: input.itemId, finished: input.finished });
       const events = await tx.execute<EventRow>(sql`INSERT INTO public.events (id, tenant_id, order_id, item_id, event_type, description, payload, status, user_id, station, client_event_id, event_schema_version, aggregate_version) VALUES (${eventId}, ${auth.data.tenantId}, ${input.orderId}, ${input.itemId}, 'ORDER_ITEM_FINISHED_CHANGED_V1', ${input.finished ? "Teil fertig gemeldet" : "Teil wieder geöffnet"}, ${payload}::jsonb, 'success', ${auth.data.userId}::uuid, ${order.station}, ${input.clientEventId}::uuid, 1, ${updated[0]!.version}) RETURNING id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id`);
       if (events.length !== 1 || !events[0]) throw new Error("ORDER_ITEM_FINISHED_EVENT_MISSING");
+      if(!input.finished)await appendProductionReversals(tx,auth.data.tenantId,events[0].id,[input.itemId]);
       return { code: "OK" as const, receipt: receipt(events[0]), replayed: false };
     });
-  } catch {
+  } catch(error) {
+    console.error('[ORDER_ITEM_FINISHED_WRITE_FAILED]',error instanceof Error?error.message:'UnknownError');
     return { code: "UNAVAILABLE", message: "Teilstatus konnte nicht sicher gespeichert werden." };
   }
 }
