@@ -160,7 +160,7 @@ export const MANUAL_SHIPPING_COPY={
  SHIPMENT_PROVIDER_LABEL_EXISTS:'Das Paket hat schon ein Etikett vom Versanddienst. Storniere es über den bestehenden Etikettweg, bevor du die Nummer ersetzt.',
  SHIPMENT_CARRIER_CHANGED:'Der Versanddienst des Pakets weicht von den Einstellungen ab. Öffne das Paket und kläre den Versanddienst vor der Änderung.'
 } as const;
-export const DISPATCH_NOTICE_COPY={collective:(orders:readonly string[])=>'Deine fertigen Aufträge: '+orders.join(', ')};
+export const DISPATCH_NOTICE_COPY={legacyCollective:(orders:readonly string[])=>'Deine fertigen Aufträge: '+orders.join(', '),collective:(orders:readonly string[])=>'Ihre fertigen Aufträge: '+orders.join(', ')};
 export const DELIVERY_FAILURE_COPY={
  recorded:'Unzustellbarkeit aus gesichertem Mail-Original belegt',
  forbidden:'Für dieses Mail-Original brauchst Du die Freigabe für Eingang und Mails.',
@@ -177,7 +177,6 @@ export const PICKUP_APPOINTMENT_COPY={
 };
 export const STORAGE_CHARGE_COPY={name:'Lagergeld',unit:'Woche',forbidden:'Für den Lagergeldbetrag brauchst Du die Freigabe für Geld. Die übrigen Angaben bleiben erhalten.'};
 export const DISPATCH_CALL_COPY={
- appointmentAgreed:(date:string)=>'Abholtermin vereinbart am '+date.split('-').reverse().join('.')+' · Anrufaufgabe entfällt.',
  title:'Ruf den Kunden wegen seiner fertigen Ware an',note:'Sprich mit dem Kunden über diese fertigen Aufträge: ',
  created:'Gemeinsamer Anruf zu fertiger Ware vorbereitet',resultRecorded:'Ergebnis des gemeinsamen Anrufs festgehalten',
  resultMissing:'Halte fest, ob Du den Kunden erreicht hast. Deine Notiz bleibt erhalten.',
@@ -192,8 +191,6 @@ export const DISPATCH_CALL_COPY={
  session:'Melde Dich erneut an; Deine Eingaben bleiben erhalten.',invalid:'Öffne den Anruf aus der Liste der fertigen Aufträge erneut.'
 };
 export const COLLECTION_REMINDER_COPY={
- replyReceived:(customer:string,date:string)=>customer+' hat am '+date.split('-').reverse().join('.')+' geantwortet – Anruf und Brief entfallen.',
- appointmentAgreed:(date:string)=>'Abholtermin vereinbart am '+date.split('-').reverse().join('.')+' · bisherige Lageraufgabe entfällt.',
   letterTitle:'Lagerfrist-Schreiben',
   letterDraft:'Entwurf · noch nicht versendet',
   letterDeadline:(date:string)=>'Die zugesagte Lagerfrist endet am '+date.split('-').reverse().join('.')+'.',
@@ -234,3 +231,28 @@ export const INVOICE_DELIVERY_COPY={
 };
 
 export const GOODS_OUT_FOLLOWUP_COPY={incomplete:(order:string)=>`Erinnerungsbeleg zu ${order} unvollständig – Übergabe ist gespeichert`};
+
+/** PL K8: customer-facing originals use Sie; absent facts remove the whole sentence. */
+export type CollectionCustomerFacts={name?:string|null;company?:string|null;members:Array<{number:string;quantity?:number|null;finishedDate?:string|null;e1Date?:string|null;e2Date?:string|null;callDate?:string|null}>;deadline?:string|null;storageAmount?:string|null;storageUnit?:string|null;openAmount?:string|null};
+const customerDay=(value:string|null|undefined)=>value&&/^\d{4}-\d{2}-\d{2}/.test(value)?value.slice(0,10).split('-').reverse().join('.'):null;
+export const CUSTOMER_COLLECTION_COPY={
+ 'kunde.abholung.e1':{subject:(order:string)=>'Abholbereit: Auftrag '+order},
+ 'kunde.abholung.e2':{subject:(order:string)=>'Erinnerung: Auftrag '+order+' wartet auf Abholung'},
+ 'kunde.abholung.lagerfrist':{subject:(order:string)=>'Lagerfrist für Ihre Teile aus Auftrag '+order},
+ 'kunde.abholung.lagergeld_satz':(amount?:string|null,unit?:string|null)=>amount&&unit?'Danach berechnen wir Lagergeld von '+amount+' je '+unit+'.':'',
+ 'kunde.zahlung_zeile':(amount?:string|null)=>amount?'Offen sind '+amount+'; bitte bringen Sie den Betrag zur Abholung mit.':'',
+ 'notiz.abholung.antwort':(customer:string,date:string)=>customer+' hat am '+customerDay(date)+' geantwortet – Anruf und Brief entfallen.',
+ 'notiz.abholung.termin':(customer:string,date:string)=>'Abholtermin '+customerDay(date)+' mit '+customer+' vereinbart – Anruf und Brief entfallen.',
+ render:(stage:'E1'|'E2'|'E4',facts:CollectionCustomerFacts)=>{
+  const lines:string[]=[];if(facts.name?.trim())lines.push('Guten Tag '+facts.name.trim()+',');
+  for(const member of facts.members){const day=customerDay(member.finishedDate),quantity=member.quantity;
+   if(member.number&&day&&quantity!=null&&Number.isFinite(quantity)&&quantity>0)lines.push('Ihre '+quantity+' Teile aus Auftrag '+member.number+(stage==='E1'?' sind fertig und liegen seit '+day+' zur Abholung bereit.':stage==='E2'?' liegen seit '+day+' bei uns.':' liegen seit '+day+' zur Abholung bereit.'));
+   if(stage==='E4'){const e1=customerDay(member.e1Date),e2=customerDay(member.e2Date),call=customerDay(member.callDate);if(e1&&e2&&call)lines.push('Wir haben Sie am '+e1+' und '+e2+' erinnert und am '+call+' versucht, Sie telefonisch zu erreichen.');}
+  }
+  if(stage==='E2')lines.push('Bitte holen Sie sie ab oder antworten Sie auf diese Mail mit einem Abholtermin.');
+  const deadline=customerDay(facts.deadline);if(stage==='E4'&&deadline)lines.push('Bitte holen Sie die Teile bis '+deadline+' ab.');
+  const financial=stage==='E4'?CUSTOMER_COLLECTION_COPY['kunde.abholung.lagergeld_satz'](facts.storageAmount,facts.storageUnit):CUSTOMER_COLLECTION_COPY['kunde.zahlung_zeile'](facts.openAmount);if(financial)lines.push(financial);
+  if(facts.company?.trim())lines.push('Mit freundlichen Grüßen '+facts.company.trim());
+  const key=stage==='E1'?'kunde.abholung.e1':stage==='E2'?'kunde.abholung.e2':'kunde.abholung.lagerfrist';return {subject:CUSTOMER_COLLECTION_COPY[key].subject(facts.members.map(member=>member.number).join(', ')),body:lines.join('\n\n')};
+ }
+};

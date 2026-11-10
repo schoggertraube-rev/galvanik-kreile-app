@@ -9,7 +9,7 @@ import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
 import {readPostalCollectionHistory} from './storagePostalPort';
 
 export type CollectionReminderRequest={targetId:string;clientRequestId:string;subject:string;body:string;collectionReminder:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string}};
-export type CollectionReminderMeta={stage:'E1'|'E2'|'E4';customerId:string;handover:'pickup'|'shipping';dueDate:string;stageKey:string;intent:string;orders:Array<{id:string;number:string;version:number}>;storageDeadline?:{date:string;due:string|null};storageOrigin?:StorageOrigin;replacesForReply?:{documentId:string;replyEventId:string};replacesForAppointment?:{documentId:string;appointmentEventId:string}};
+export type CollectionReminderMeta={customerMessage?:{subject:string;body:string};stage:'E1'|'E2'|'E4';customerId:string;handover:'pickup'|'shipping';dueDate:string;stageKey:string;intent:string;orders:Array<{id:string;number:string;version:number}>;storageDeadline?:{date:string;due:string|null};storageOrigin?:StorageOrigin;replacesForReply?:{documentId:string;replyEventId:string};replacesForAppointment?:{documentId:string;appointmentEventId:string}};
 export type CollectionReminderHistoryEntry={stage:'E1'|'E2'|'E4';stageKey:string;dueDate:string;storageDeadline?:CollectionReminderMeta['storageDeadline'];storageOrigin?:CollectionReminderMeta['storageOrigin'];sentAt:string|null;threadId:string|null;orderIds:string[];deliveryFailedAt:string|null;postalDocumentId?:string;postalTaskId?:string;voidId?:string};
 export function collectionReminderIntent(input:CollectionReminderRequest){return createHash('sha256').update(JSON.stringify([input.targetId,input.subject.trim(),input.body.trim(),input.collectionReminder.stage,input.collectionReminder.handover,input.collectionReminder.dueDate,...(input.collectionReminder.stage==='E4'?[input.collectionReminder.clientKey]:[])])).digest('hex');}
 const hash=(body:string)=>createHash('sha256').update(body.trim()).digest('hex');
@@ -26,7 +26,7 @@ export async function readCollectionReminderReceipt(auth:AuthorizationSnapshot,i
   if(!rows.length)return {code:'NOT_FOUND' as const};
   const row=rows[0];if(rows.length!==1||row.user_id!==auth.userId||row.payload.meta.intent!==collectionReminderIntent(input))return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.keyConflict};
   if(row.status!=='sent')return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
-  if(row.proof_ok!==true||!row.message_id||!row.sent_body||hash(row.sent_body)!==row.payload.bodySha256||row.sent_subject!==input.subject.trim()||row.sent_intent!==row.payload.meta.intent)throw Error('COLLECTION_REMINDER_RECEIPT_INVALID');
+  if(row.proof_ok!==true||!row.message_id||!row.sent_body||hash(row.sent_body)!==row.payload.bodySha256||row.sent_subject!==(row.payload.meta.customerMessage?.subject??input.subject.trim())||row.sent_intent!==row.payload.meta.intent)throw Error('COLLECTION_REMINDER_RECEIPT_INVALID');
   return {code:'OK' as const,data:{threadId:row.payload.threadId,messageId:row.message_id,customerId:input.targetId,orderId:null,recordedAt:new Date(row.recorded_at).toISOString(),replayed:true}};
  });}catch(error){console.error('[COLLECTION_REMINDER_RECEIPT_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
 }

@@ -143,3 +143,8 @@ export async function readAppointmentPostalContext(tx:PrivilegedTenantTransactio
  const rows=await tx.execute<{taskId:string}>(sql`SELECT task.id::text AS "taskId" FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.payload->>'channel'='post' AND event.payload->'meta'->'storageOrigin'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb`);
  return {customerId:order.customer_id,sourceTaskId:rows[0]?.taskId};
 }
+
+export async function readPickupCustomerName(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string){
+ const rows=await tx.execute<{customer_id:string}>(sql`SELECT customer_id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${orderId}`);
+ if(rows.length!==1)throw Error('APPOINTMENT_CUSTOMER_ORDER_MISSING');const {readCustomerProfile}=await import('./customerSummaryRead');const customer=await readCustomerProfile(tx,auth.tenantId,rows[0].customer_id);if(!customer?.name?.trim())throw Error('APPOINTMENT_CUSTOMER_NAME_MISSING');return customer.name;
+}

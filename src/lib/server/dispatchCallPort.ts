@@ -1,4 +1,6 @@
 import 'server-only';
+import {CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
+import {readPickupCustomerName} from './pickupAppointmentPort';
 import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
@@ -94,7 +96,7 @@ export async function finishDispatchCallsForAppointment(tx:PrivilegedTenantTrans
    const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,correlation_id,payload) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_CALL_UPDATED_V1',${changed.note},'success',${auth.userId}::uuid,1,${created.correlation_id}::uuid,${JSON.stringify({taskId:row.id,appointmentEventId:appointment.eventId,version:changed.version,meta})}::jsonb) RETURNING id`);
    if(saved.length!==1||saved[0].id!==id)throw Error('APPOINTMENT_CALL_RESTRICTION_NOT_SAVED');continue;
   }
-  const note=DISPATCH_CALL_COPY.appointmentAgreed(appointment.date);
+  const note=CUSTOMER_COLLECTION_COPY['notiz.abholung.termin'](await readPickupCustomerName(tx,auth,appointment.orderId),appointment.date);
   await complete(row.id,note);
   const closed=await task(tx,auth,row.id);if(!closed||closed.status!=='erledigt'||closed.erledigt_von!==auth.userId||closed.erledigt_notiz!==note)throw Error('APPOINTMENT_CALL_TASK_NOT_CLOSED');
   const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,payload,created_at) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1',${note},'success',${auth.userId}::uuid,1,${JSON.stringify({appointmentEventId:appointment.eventId,taskId:row.id,version:closed.version,note,meta:created.payload.meta})}::jsonb,statement_timestamp()) RETURNING id`);

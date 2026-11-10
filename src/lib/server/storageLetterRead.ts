@@ -6,7 +6,11 @@ import type {OperationalOrder} from '@/lib/types/operationalOrder';
 import type {StorageLetterSnapshot} from '@/lib/pdf/StorageLetterDocument';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {freezeStorageDeadline} from './storageDeadline';
-import {COLLECTION_REMINDER_COPY as copy} from '@/ui/situationCatalog';
+import {readOrderInformed} from './orderReleaseRead';
+import {readCollectionReminderHistory} from './collectionReminderPort';
+import {readDispatchCalls} from './dispatchCallPort';
+import {getPaymentState} from './paymentSummaryRead';
+import {CUSTOMER_COLLECTION_COPY,type CollectionCustomerFacts,COLLECTION_REMINDER_COPY as copy} from '@/ui/situationCatalog';
 
 export type StorageLetterRequest={customerId:string;handover:'pickup'|'shipping';clientKey:string};
 export function storageLetterRequestValid(input:unknown):input is StorageLetterRequest{
@@ -28,9 +32,28 @@ export async function readStorageLetterPreview(auth:AuthorizationSnapshot,input:
   const country=customer.country,zip=customer.zipCode;
   if(!customer.name?.trim()||!customer.street?.trim()||!zip?.trim()||!customer.city?.trim()||!country?.trim()||country==='andere'||customerFieldError('country',{...EMPTY_CUSTOMER_FORM,country})||customerFieldError('zipCode',{...EMPTY_CUSTOMER_FORM,country,zipCode:zip}))return {code:'VALIDATION_ERROR' as const,message:copy.letterAddressMissing};
   if(sender.code!=='OK')return {code:sender.code==='FORBIDDEN'?'FORBIDDEN' as const:'VALIDATION_ERROR' as const,message:copy.letterSenderMissing};
-  const deadline=freezeStorageDeadline(settings.dispatchPolicy),numbers=members.map(order=>order.orderNumber),snapshot:StorageLetterSnapshot={date:berlinCalendarDay(),deadline,company:sender.company,
+  const deadline=freezeStorageDeadline(settings.dispatchPolicy),numbers=members.map(order=>order.orderNumber),customerText=await readCollectionCustomerFacts(auth,members,settings,{name:customer.name,company:sender.company.companyName},deadline.due),snapshot:StorageLetterSnapshot={date:berlinCalendarDay(),deadline,company:sender.company,
    recipient:{name:customer.name,street:[customer.street,customer.houseNumber].filter(Boolean).join(' '),zip,city:customer.city,country:customerCountryLabel(country)},
-   orderNumbers:numbers,body:copy.letterBody(numbers,settings.dispatchPolicy?.finalStageAfterLetterDays??null)+(deadline.due?' '+copy.letterDeadline(deadline.due):'')};
+   orderNumbers:numbers,customerText,body:CUSTOMER_COLLECTION_COPY.render('E4',customerText).body};
   return {code:'OK' as const,data:{snapshot,clientKey:letter.clientKey,channel:customer.email?.trim()?'mail' as const:'postal' as const,orders:members.map(order=>({id:order.id,version:order.version,number:order.orderNumber})),callTaskId:letter.callTaskId,appointmentEventId:letter.appointmentEventId,replyEventId:letter.replyEventId,freezes:letter.freezes,settingsUpdatedAt:settings.updatedAt}};
  }catch(error){console.error('[STORAGE_LETTER_PREVIEW_READ_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:copy.proofUnavailable};}
+}
+
+/** Only qualified existing sources fill customer sentences; no current date is a substitute for a missing event. */
+export async function readCollectionCustomerFacts(auth:AuthorizationSnapshot,members:readonly OperationalOrder[],settings:ShippingSettings,profile:{name:string|null;company:string|null},deadline:string|null):Promise<CollectionCustomerFacts>{
+ if(!members.length)throw Error('CUSTOMER_TEXT_EMPTY_GROUP');
+ const first=members[0],handover=first.finishedDispatch?.handover;if(!handover)throw Error('CUSTOMER_TEXT_HANDOVER_MISSING');
+ const ids=members.map(order=>order.id),[history,calls]=await Promise.all([readCollectionReminderHistory(auth,first.customerId,handover,ids),readDispatchCalls(auth,first.customerId,handover,ids)]);
+ const facts:CollectionCustomerFacts={name:profile.name,company:profile.company,deadline,members:[]};let open=0,allPayments=true;
+ for(const order of members){
+  const informed=await readOrderInformed(auth,order.id);if(informed.code!=='OK')throw Error('CUSTOMER_TEXT_FINISHED_SOURCE_UNAVAILABLE');
+  const sent=(stage:'E1'|'E2')=>history.filter(row=>row.stage===stage&&row.orderIds.includes(order.id)&&row.sentAt&&informed.frozenAt&&Date.parse(row.sentAt)>=Date.parse(informed.firstInformed?.recordedAt??informed.frozenAt)&&!row.deliveryFailedAt&&!row.voidId).sort((a,b)=>a.sentAt!.localeCompare(b.sentAt!)).at(-1)?.sentAt;
+  const call=calls.find(row=>row.orderIds.includes(order.id)&&row.freezes.some(proof=>proof.orderId===order.id&&proof.freezeId===informed.freezeId)&&row.result==='notReached'&&row.recordedAt);
+  facts.members.push({number:order.orderNumber,quantity:order.parts.length?order.parts.reduce((sum,part)=>sum+part.quantity,0):null,finishedDate:informed.frozenAt?berlinCalendarDay(new Date(informed.frozenAt)):null,e1Date:sent('E1')?berlinCalendarDay(new Date(sent('E1')!)):null,e2Date:sent('E2')?berlinCalendarDay(new Date(sent('E2')!)):null,callDate:call?.recordedAt?berlinCalendarDay(new Date(call.recordedAt)):null});
+  if(hasAuthorizationArea(auth,'geld')){const payment=await getPaymentState(auth,order.id);if(payment.code!=='OK'||!payment.data.payment)allPayments=false;else open+=payment.data.payment.openAmountCents;}else allPayments=false;
+ }
+ const money=(cents:number)=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(cents/100);
+ if(allPayments&&open>0)facts.openAmount=money(open);
+ if(hasAuthorizationArea(auth,'geld')&&settings.dispatchPolicy?.storageWeeklyCents!=null){facts.storageAmount=money(settings.dispatchPolicy.storageWeeklyCents);facts.storageUnit='Woche';}
+ return facts;
 }

@@ -1,4 +1,6 @@
 import 'server-only';
+import {CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
+import {readPickupCustomerName} from './pickupAppointmentPort';
 import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,qualifyReplyRestriction,type DispatchReplyReceipt} from './dispatchReplyPort';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
@@ -74,7 +76,7 @@ export async function finishFinalTasksForAppointment(tx:PrivilegedTenantTransact
    const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,correlation_id,payload) VALUES(${id},${auth.tenantId},'ORDER_STORAGE_FINAL_TASK_UPDATED_V1',${changed.note},'success',${auth.userId}::uuid,1,${row.key}::uuid,${JSON.stringify({taskId:original.payload.taskId,appointmentEventId:appointment.eventId,version:changed.version,meta})}::jsonb) RETURNING id`);
    if(saved.length!==1||saved[0].id!==id)throw Error('APPOINTMENT_FINAL_RESTRICTION_NOT_SAVED');continue;
   }
-  const note=copy.appointmentAgreed(appointment.date);await complete(original.payload.taskId,note);
+  const note=CUSTOMER_COLLECTION_COPY['notiz.abholung.termin'](await readPickupCustomerName(tx,auth,appointment.orderId),appointment.date);await complete(original.payload.taskId,note);
   const closed=await tx.execute<{version:number}>(sql`SELECT version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${original.payload.taskId}::uuid AND status='erledigt' AND erledigt_von=${auth.userId}::uuid AND erledigt_notiz=${note}`);if(closed.length!==1)throw Error('FINAL_APPOINTMENT_TASK_NOT_ENDED');
   const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,payload,created_at) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1',${note},'success',${auth.userId}::uuid,1,${JSON.stringify({appointmentEventId:appointment.eventId,taskId:original.payload.taskId,version:closed[0].version,note,letterKey:row.key})}::jsonb,statement_timestamp()) RETURNING id`);
   if(saved.length!==1||saved[0].id!==id)throw Error('FINAL_APPOINTMENT_END_NOT_SAVED');

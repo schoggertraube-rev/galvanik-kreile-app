@@ -1,4 +1,8 @@
 import 'server-only';
+import {CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
+import {readPickupCustomerName} from './pickupAppointmentPort';
+import {restrictStorageLetterSnapshot} from './storageDeadline';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,postalReplyReplacementProved,postalAppointmentReplacementProved,qualifyReplyRestriction,type DispatchReplyReceipt} from './dispatchReplyPort';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
@@ -18,7 +22,7 @@ type Payload={channel:'post';meta:CollectionReminderMeta;document:Document;taskI
 type Source={id:string;payload:Payload;user_id:string;proof_ok:boolean};
 const fail=(code:TaskFailure['code'],message:string):TaskFailure=>({code,message});
 const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
-function snapshotHash(value:StorageLetterSnapshot){const c=value.company,r=value.recipient;return digest(JSON.stringify([value.date,c.companyName,c.street,c.zip,c.city,c.country,r.name,r.street,r.zip,r.city,r.country,value.orderNumbers,value.body,...(value.deadline?[value.deadline.date,value.deadline.due]:[])]));}
+function snapshotHash(value:StorageLetterSnapshot){const c=value.company,r=value.recipient;return digest(JSON.stringify([value.date,c.companyName,c.street,c.zip,c.city,c.country,r.name,r.street,r.zip,r.city,r.country,value.orderNumbers,value.body,...(value.deadline?[value.deadline.date,value.deadline.due]:[]),...(value.customerText?[canonicalJson(value.customerText)]:[])]));}
 function postedDayValid(value:unknown,earliest:string):value is string{return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value+'T12:00:00Z').toISOString().slice(0,10)===value&&value>=earliest&&value<=berlinCalendarDay();}
 type TaskState={id:string;client_key:string;art:string;bezug_typ:string;bezug_id:string;erstellt_von:string;titel:string;notiz:string;fuer_bereich:string;fuer_login:string|null;status:string;version:number;erledigt_von:string|null;erledigt_notiz:string|null};
 async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,letterKey:string){
@@ -31,18 +35,18 @@ async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
   const link=p.meta.replacesForReply,originals=await tx.execute<{payload:Payload}>(sql`SELECT payload FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${link.documentId} AND event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND status='success' AND event_schema_version=1 AND payload->>'channel'='post'`);
   const before=originals[0]?.payload;if(originals.length!==1||!before?.meta.storageOrigin||before.meta.customerId!==p.meta.customerId||before.meta.handover!==p.meta.handover)throw Error('POSTAL_REPLACEMENT_ORIGIN_INVALID');
   await qualifyReplyRestriction(tx,auth,link.replyEventId,before.meta.storageOrigin.freezes,p.meta.storageOrigin.freezes);
-  const remaining=before.meta.orders.filter(order=>p.meta.storageOrigin!.freezes.some(proof=>proof.orderId===order.id)),prefix=copy.letterBody(before.document.snapshot.orderNumbers,null);
-  const expected={...before.document.snapshot,orderNumbers:remaining.map(order=>order.number),body:copy.letterBody(remaining.map(order=>order.number),null)+before.document.snapshot.body.slice(prefix.length)};
-  if(!before.document.snapshot.body.startsWith(prefix)||snapshotHash(expected)!==d.snapshotSha256||JSON.stringify(remaining)!==JSON.stringify(p.meta.orders)||p.meta.stageKey!==storageLetterKey(auth.tenantId,p.meta.customerId,p.meta.handover,before.meta.stageKey+':reply:'+link.replyEventId,remaining.map(order=>order.id))||p.meta.storageOrigin.callTaskId!==before.meta.storageOrigin.callTaskId||p.meta.storageOrigin.appointmentEventId!==before.meta.storageOrigin.appointmentEventId||p.meta.storageOrigin.replyEventId!==before.meta.storageOrigin.replyEventId)throw Error('POSTAL_REPLACEMENT_SCOPE_INVALID');
+  const remaining=before.meta.orders.filter(order=>p.meta.storageOrigin!.freezes.some(proof=>proof.orderId===order.id));
+  const expected=restrictStorageLetterSnapshot(before.document.snapshot,remaining.map(order=>order.number));
+  if(snapshotHash(expected)!==d.snapshotSha256||JSON.stringify(remaining)!==JSON.stringify(p.meta.orders)||p.meta.stageKey!==storageLetterKey(auth.tenantId,p.meta.customerId,p.meta.handover,before.meta.stageKey+':reply:'+link.replyEventId,remaining.map(order=>order.id))||p.meta.storageOrigin.callTaskId!==before.meta.storageOrigin.callTaskId||p.meta.storageOrigin.appointmentEventId!==before.meta.storageOrigin.appointmentEventId||p.meta.storageOrigin.replyEventId!==before.meta.storageOrigin.replyEventId)throw Error('POSTAL_REPLACEMENT_SCOPE_INVALID');
   const ended=await readReplyTaskEnd(tx,auth,before.taskId);if(!ended||ended.reply.eventId!==link.replyEventId||ended.payload.documentId!==before.document.id||ended.payload.documentSha256!==before.document.sha256)throw Error('POSTAL_REPLACEMENT_END_MISSING');
  }
  if(p.meta.replacesForAppointment){
   const link=p.meta.replacesForAppointment,originals=await tx.execute<{payload:Payload}>(sql`SELECT payload FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${link.documentId} AND event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND status='success' AND event_schema_version=1 AND payload->>'channel'='post'`);
   const before=originals[0]?.payload;if(originals.length!==1||!before?.meta.storageOrigin||before.meta.customerId!==p.meta.customerId||before.meta.handover!==p.meta.handover)throw Error('POSTAL_REPLACEMENT_ORIGIN_INVALID');
   await qualifyAppointmentRestriction(tx,auth,link.appointmentEventId,before.meta.storageOrigin.freezes,p.meta.storageOrigin.freezes);
-  const remaining=before.meta.orders.filter(order=>p.meta.storageOrigin!.freezes.some(proof=>proof.orderId===order.id)),prefix=copy.letterBody(before.document.snapshot.orderNumbers,null);
-  const expected={...before.document.snapshot,orderNumbers:remaining.map(order=>order.number),body:copy.letterBody(remaining.map(order=>order.number),null)+before.document.snapshot.body.slice(prefix.length)};
-  if(!before.document.snapshot.body.startsWith(prefix)||snapshotHash(expected)!==d.snapshotSha256||JSON.stringify(remaining)!==JSON.stringify(p.meta.orders)||p.meta.stageKey!==storageLetterKey(auth.tenantId,p.meta.customerId,p.meta.handover,before.meta.stageKey+':appointment:'+link.appointmentEventId,remaining.map(order=>order.id))||p.meta.storageOrigin.callTaskId!==before.meta.storageOrigin.callTaskId||p.meta.storageOrigin.appointmentEventId!==before.meta.storageOrigin.appointmentEventId||p.meta.storageOrigin.replyEventId!==before.meta.storageOrigin.replyEventId)throw Error('POSTAL_REPLACEMENT_SCOPE_INVALID');
+  const remaining=before.meta.orders.filter(order=>p.meta.storageOrigin!.freezes.some(proof=>proof.orderId===order.id));
+  const expected=restrictStorageLetterSnapshot(before.document.snapshot,remaining.map(order=>order.number));
+  if(snapshotHash(expected)!==d.snapshotSha256||JSON.stringify(remaining)!==JSON.stringify(p.meta.orders)||p.meta.stageKey!==storageLetterKey(auth.tenantId,p.meta.customerId,p.meta.handover,before.meta.stageKey+':appointment:'+link.appointmentEventId,remaining.map(order=>order.id))||p.meta.storageOrigin.callTaskId!==before.meta.storageOrigin.callTaskId||p.meta.storageOrigin.appointmentEventId!==before.meta.storageOrigin.appointmentEventId||p.meta.storageOrigin.replyEventId!==before.meta.storageOrigin.replyEventId)throw Error('POSTAL_REPLACEMENT_SCOPE_INVALID');
   const receipt=await readPickupAppointmentReceiptInTransaction(tx,auth,link.appointmentEventId);
   const ended=await tx.execute<{user_id:string;proof_ok:boolean;payload:{documentId:string;documentSha256:string}}>(sql`SELECT event.user_id::text,event.payload,(task.status='erledigt' AND task.erledigt_von=event.user_id AND task.version=(event.payload->>'version')::integer AND task.erledigt_notiz=event.payload->>'note') AS proof_ok FROM public.events event JOIN public.tasks task ON task.tenant_id=event.tenant_id AND task.id::text=event.payload->>'taskId' WHERE event.tenant_id=${auth.tenantId} AND event.event_type='ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1' AND event.status='success' AND event.event_schema_version=1 AND event.payload->>'taskId'=${before.taskId} AND event.payload->>'appointmentEventId'=${link.appointmentEventId}`);
   if(ended.length!==1||!ended[0].proof_ok||ended[0].user_id!==receipt.actorId||ended[0].payload.documentId!==before.document.id||ended[0].payload.documentSha256!==before.document.sha256)throw Error('POSTAL_REPLACEMENT_APPOINTMENT_END_MISSING');
@@ -88,15 +92,15 @@ export async function finishPostalTasksForAppointment(tx:PrivilegedTenantTransac
   if(remaining.length){
    const orders=original.payload.meta.orders.filter(order=>remaining.some(proof=>proof.orderId===order.id));await qualifyAppointmentRestriction(tx,auth,appointment.eventId,freezes,remaining);
    await tx.execute(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) ORDER BY id FOR UPDATE NOWAIT`);
-   const before=original.payload.document.snapshot,prefix=copy.letterBody(before.orderNumbers,null);if(!before.body.startsWith(prefix))throw Error('POSTAL_REPLACEMENT_TEMPLATE_UNAVAILABLE');
-   const numbers=orders.map(order=>order.number),snapshot={...before,orderNumbers:numbers,body:copy.letterBody(numbers,null)+before.body.slice(prefix.length)};
+   const before=original.payload.document.snapshot;
+   const numbers=orders.map(order=>order.number),snapshot=restrictStorageLetterSnapshot(before,numbers);
    const customerId=original.payload.meta.customerId,handover=original.payload.meta.handover,key=storageLetterKey(auth.tenantId,customerId,handover,row.key+':appointment:'+appointment.eventId,orders.map(order=>order.id));
    const meta:CollectionReminderMeta={...original.payload.meta,stageKey:key,intent:digest(JSON.stringify([key,snapshot.body])),orders,storageOrigin:{...original.payload.meta.storageOrigin!,freezes:remaining},replacesForReply:undefined,replacesForAppointment:{documentId:original.payload.document.id,appointmentEventId:appointment.eventId}};
    const [{renderToBuffer},{createStorageLetterPdfDocument}]=await Promise.all([import('@react-pdf/renderer'),import('@/lib/pdf/StorageLetterDocument')]);const pdf=Buffer.from(await renderToBuffer(createStorageLetterPdfDocument(snapshot,false)));
    const prepared=await prepareStoragePostalLetter(auth,{customerId,handover,clientKey:key},meta,snapshot,pdf,replacement.settingsUpdatedAt,{customerCurrent:writeTx=>replacement.customerCurrent(writeTx,snapshot),createTask:replacement.createTask},tx,{taskId:original.task.id,appointmentEventId:appointment.eventId});
    if(prepared.code!=='OK'||!await postalAppointmentReplacementProved(tx,auth,original.task.id,appointment.eventId))throw Error('POSTAL_APPOINTMENT_REPLACEMENT_NOT_SAVED');
   }
-  const note=copy.appointmentAgreed(appointment.date);await complete(original.task.id,note);
+  const note=CUSTOMER_COLLECTION_COPY['notiz.abholung.termin'](await readPickupCustomerName(tx,auth,appointment.orderId),appointment.date);await complete(original.task.id,note);
   const closed=await tx.execute<{version:number}>(sql`SELECT version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${original.task.id}::uuid AND status='erledigt' AND erledigt_von=${auth.userId}::uuid AND erledigt_notiz=${note}`);if(closed.length!==1)throw Error('POSTAL_APPOINTMENT_TASK_NOT_ENDED');
   const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,payload,created_at) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1',${note},'success',${auth.userId}::uuid,1,${JSON.stringify({appointmentEventId:appointment.eventId,taskId:original.task.id,version:closed[0].version,note,documentId:original.payload.document.id,documentSha256:original.payload.document.sha256})}::jsonb,statement_timestamp()) RETURNING id`);
   if(saved.length!==1||saved[0].id!==id)throw Error('POSTAL_APPOINTMENT_END_NOT_SAVED');
@@ -122,9 +126,8 @@ export async function finishPostalTasksForReply(tx:PrivilegedTenantTransaction,a
    const orders=original.payload.meta.orders.filter(order=>remaining.some(proof=>proof.orderId===order.id));
    await qualifyReplyRestriction(tx,auth,reply.eventId,freezes,remaining);
    await tx.execute(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) ORDER BY id FOR UPDATE NOWAIT`);
-   const before=original.payload.document.snapshot,prefix=copy.letterBody(before.orderNumbers,null);
-   if(!before.body.startsWith(prefix))throw Error('POSTAL_REPLACEMENT_TEMPLATE_UNAVAILABLE');
-   const numbers=orders.map(order=>order.number),snapshot={...before,orderNumbers:numbers,body:copy.letterBody(numbers,null)+before.body.slice(prefix.length)};
+   const before=original.payload.document.snapshot;
+   const numbers=orders.map(order=>order.number),snapshot=restrictStorageLetterSnapshot(before,numbers);
    const key=storageLetterKey(auth.tenantId,reply.customerId,reply.handover,row.key+':reply:'+reply.eventId,orders.map(order=>order.id));
    const meta:CollectionReminderMeta={...original.payload.meta,stageKey:key,intent:digest(JSON.stringify([key,snapshot.body])),orders,storageOrigin:{...original.payload.meta.storageOrigin!,freezes:remaining},replacesForAppointment:undefined,replacesForReply:{documentId:original.payload.document.id,replyEventId:reply.eventId}};
    const [{renderToBuffer},{createStorageLetterPdfDocument}]=await Promise.all([import('@react-pdf/renderer'),import('@/lib/pdf/StorageLetterDocument')]);

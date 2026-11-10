@@ -1,4 +1,5 @@
 import 'server-only';
+import {CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
@@ -46,7 +47,7 @@ export async function recordDispatchReply(auth:AuthorizationSnapshot,input:{cust
   if(previous.length){if(previous.length!==1)throw Error('DISPATCH_REPLY_KEY_CONFLICT');const receipt=await readDispatchReplyReceipt(tx,auth,previous[0].id);await ports.afterRecord(tx,receipt);return receipt;}
   const name=await ports.readCustomerName(tx);if(!name.trim())throw Error('DISPATCH_REPLY_CUSTOMER_MISSING');
   const date=berlinCalendarDay(new Date(input.proof.receivedAt));
-  const receipt:DispatchReplyReceipt={eventId:randomUUID(),...input,actorId:auth.userId,recordedAt:new Date().toISOString(),note:COLLECTION_REMINDER_COPY.replyReceived(name,date)};
+  const receipt:DispatchReplyReceipt={eventId:randomUUID(),...input,actorId:auth.userId,recordedAt:new Date().toISOString(),note:CUSTOMER_COLLECTION_COPY['notiz.abholung.antwort'](name,date)};
   await qualify(tx,auth,receipt);
   const saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,created_at,payload)
    VALUES(${receipt.eventId},${auth.tenantId},'ORDER_COLLECTION_REPLY_RECORDED_V1',${receipt.note},'success',${auth.userId}::uuid,${key}::uuid,${key}::uuid,1,${receipt.recordedAt}::timestamptz,${JSON.stringify({receipt,sha256:hash(receipt)})}::jsonb) RETURNING id`);
