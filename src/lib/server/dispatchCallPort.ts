@@ -28,7 +28,7 @@ async function task(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id
 }
 function validTask(record:CallTask,created:Created){return record.client_key===created.payload.meta.stageKey&&record.art==='rueckruf'&&record.bezug_typ==='auftrag'&&record.bezug_id!==null&&(created.originalOrderIds??created.payload.meta.orderIds).includes(record.bezug_id)&&record.erstellt_von===created.user_id;}
 
-async function handedOverProofs(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderIds:readonly string[]){
+export async function handedOverProofs(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderIds:readonly string[]){
  const rows=await tx.execute<{orderId:string;eventId:string}>(sql`SELECT orders.id AS "orderId",proof.id::text AS "eventId" FROM public.orders orders
   JOIN LATERAL(SELECT event.id FROM public.events event WHERE event.tenant_id=orders.tenant_id AND event.order_id=orders.id
    AND event.event_type IN ('ORDER_PICKED_UP_V1','ORDER_PICKED_UP_V2','ORDER_PICKED_UP_V3','ORDER_PICKED_UP_V4') AND event.status='success' AND event.user_id IS NOT NULL

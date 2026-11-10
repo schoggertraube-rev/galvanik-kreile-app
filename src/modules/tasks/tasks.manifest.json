@@ -32,6 +32,7 @@
     "@/modules/tasks/server-public#readQuoteFollowupTasksForToday",
     "@/modules/tasks/server-public#QuoteFollowupRequest",
     "@/modules/tasks/server-public#createOrderHandoverTask",
+    "@/modules/tasks/server-public#completeStorageTaskAfterGoodsOut",
     "@/modules/tasks/server-public#readOrderHandoverTaskState"
   ],
   "capabilities": [
@@ -39,9 +40,12 @@
     "aufgabe:erledigen"
   ],
   "migrations": [
-    "20261104012000_ein4_nachrichten.sql"
+    "20261110083000_storage_final_task_context.sql",
+    "20261104012000_ein4_nachrichten.sql",
+    "20261110083300_storage_final_missing_goods_proof.sql"
   ],
   "viewsFunctions": [
+    "private.v_storage_final_task_context_v1",
     "private.v_task_contexts_v1",
     "private.v_task_recipients_v1"
   ],

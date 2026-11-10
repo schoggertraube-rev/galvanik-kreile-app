@@ -5,3 +5,4 @@ export {createOrderHandoverTask,readOrderHandoverTaskState} from './server/taskS
 
 export type {QuoteFollowupRequest} from './server/taskService';
 export {completeOrderCallbackTask} from './server/taskService';
+export {completeStorageTaskAfterGoodsOut} from './server/taskService';

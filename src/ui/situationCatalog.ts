@@ -187,6 +187,7 @@ export const COLLECTION_REMINDER_COPY={
   finalTaskNote:(numbers:readonly string[])=>'Lagerfrist-Schreiben zu '+numbers.join(', ')+' · Lagergeld nur als Positionsvorschlag; noch nichts berechnet.',
   finalRecipientMissing:'Empfänger für die letzte Stufe eintragen.',
   finalTaskProtected:'Diese Aufgabe gehört zum Lagerfrist-Schreiben. Empfänger und Auftragsbezug bleiben erhalten.',
+  finalTaskGoodsGone:'Die Ware ist bereits übergeben. Die Lageraufgabe entfällt.',
  forbidden:'Sammelerinnerung benötigt Mails und Aufträge sowie einen Kundenbezug.',
  invalid:'Erinnerungsstufe, Frist oder Versandkennung fehlt.',
  unavailable:'Aufträge oder Fristen konnten nicht sicher gelesen werden.',

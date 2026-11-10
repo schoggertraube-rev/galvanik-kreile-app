@@ -27,9 +27,11 @@ export async function recordGoodsOutAction(
   }:null;
   const invoicePort=invoiceInput?await import("@/lib/server/commands/immutableInvoiceCommand"):null;
   const [{lockDispatchCallsForGoodsOut,finishDispatchCallsAfterGoodsOut,recordDispatchCallResult},{completeOrderCallbackTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/lib/server/dispatchCallPort'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+  const [{lockStorageFinalTasksForGoodsOut,finishStorageFinalTasksAfterGoodsOut},{completeStorageTaskAfterGoodsOut}]=await Promise.all([import('@/lib/server/storageFinalStagePort'),import('@/modules/tasks/server-public')]);
   let callTaskIds:string[]|null=null;
+  let finalTasks:Awaited<ReturnType<typeof lockStorageFinalTasksForGoodsOut>>=[];
   const result = await recordGoodsOut(input,{
-    beforeOrderLock:async(tx,auth)=>{if(invoiceInput&&invoicePort)await invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput);callTaskIds=await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);},
+    beforeOrderLock:async(tx,auth)=>{if(invoiceInput&&invoicePort)await invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput);callTaskIds=await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);finalTasks=await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId);},
     ...(invoiceInput&&invoicePort?{beforeWrite:async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction)=>{
       const invoice=await invoicePort.createInvoice(invoiceInput,tx);
       return invoice.code==='OK'?null:{code:invoice.code,message:invoice.message};
@@ -37,6 +39,7 @@ export async function recordGoodsOutAction(
     afterWrite:async(tx,auth)=>{
      const tasks=callTaskIds??await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);
      await finishDispatchCallsAfterGoodsOut(tx,auth,tasks,(id,note)=>completeOrderCallbackTask(tx,auth,id,note,{beforeComplete:recordDispatchCallResult,effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
+     await finishStorageFinalTasksAfterGoodsOut(tx,auth,finalTasks,request=>completeStorageTaskAfterGoodsOut(tx,auth,request,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
     }
   });
   if (result.code === "OK") {

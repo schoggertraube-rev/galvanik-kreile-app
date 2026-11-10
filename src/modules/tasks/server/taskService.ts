@@ -1,6 +1,6 @@
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
-import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
+import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
@@ -124,10 +124,11 @@ export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransact
  return (await persistTask(tx,auth,value,deps,true,true)).task.id;
 }
 /** Shared completion writer. Invoice tasks remain inaccessible to the normal completion action. */
-async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]}):Promise<Extract<TaskResult,{code:'OK'}>>{
+async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string}):Promise<Extract<TaskResult,{code:'OK'}>>{
   const before=await find(tx,auth,value.taskId,true);if(!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
   const operationalQuote=quoteOperation&&before.art==='aufgabe'&&before.bezug_typ==='kv'&&before.bezug_id===quoteOperation.quoteId&&quoteOperation.keys.includes(before.client_key);
-  if(!allowed(auth,before)&&!operationalQuote)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
+  const operationalStorage=storageOperation&&hasAuthorizationArea(auth,'auftraege')&&before.art==='aufgabe'&&before.bezug_typ==='auftrag'&&before.bezug_id===storageOperation.orderId&&before.client_key===storageOperation.clientKey;
+  if(!allowed(auth,before)&&!operationalQuote&&!operationalStorage)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
   if(before.art==='rechnung'&&(!invoiceId||before.bezug_typ!=='eingangsrechnung'||before.bezug_id!==invoiceId||!hasAuthorizationArea(auth,'geld')))reject('FORBIDDEN','Rechnung klären wird ausschließlich in der Eingangsrechnung erledigt.');
   const note=value.note?.trim()||null;
   const completion=await deps.beforeComplete?.(tx,auth,before,value);if(completion)throw new Rejected(completion);
@@ -163,6 +164,16 @@ export async function completeOrderCallbackTask(tx:PrivilegedTenantTransaction,a
  const before=await find(tx,auth,taskId,true);if(!before||before.art!=='rueckruf'||before.bezug_typ!=='auftrag')reject('NOT_FOUND',DISPATCH_CALL_COPY.notCall);
  if(before.status==='erledigt')return;
  await finishTask(tx,auth,{taskId,version:before.version,note},deps);
+}
+/** Only a qualified goods-out composition supplies this fixed source key, never the task dialog. */
+export async function completeStorageTaskAfterGoodsOut(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;orderId:string;clientKey:string},deps:Dependencies):Promise<void>{
+ if(!hasAuthorizationArea(auth,'auftraege'))reject('FORBIDDEN',DISPATCH_CALL_COPY.forbidden);
+ const before=await find(tx,auth,input.taskId,true);
+ if(!before||before.art!=='aufgabe'||before.bezug_typ!=='auftrag'||before.bezug_id!==input.orderId||before.client_key!==input.clientKey)reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ const source=await tx.execute(sql`SELECT task_id FROM private.v_storage_final_task_context_v1 WHERE tenant_id=${auth.tenantId} AND task_id=${before.id} AND client_key=${before.client_key} AND creator_id=${before.erstellt_von} AND order_id=${input.orderId} AND integrity_ok AND goods_out_complete`);
+ if(source.length!==1)reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ if(before.status==='erledigt')return;
+ await finishTask(tx,auth,{taskId:before.id,version:before.version,note:COLLECTION_REMINDER_COPY.finalTaskGoodsGone},deps,undefined,undefined,input);
 }
 export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
  if(!request||typeof request!=='object'||Array.isArray(request)||('taskId'in request?!taskUuid(request.taskId):!validTaskReference(request.reference)))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};
