@@ -35,6 +35,7 @@ it('S02 existing payment, pickup, shipping and sending retain exactly one effect
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
   if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-N5-external-provider-token'.repeat(3),expires_in:3600});
   if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;if(unclear)throw Error('TEST external response lost after dispatch');return new Response(null,{status:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:[]});
   return nativeFetch(input,init);
  });
  const mail={targetType:'ORDER' as const,targetId:pickup.orderId,subject:'TEST N5 Nachricht',body:'TEST Genau ein Originalversand.',clientRequestId:randomUUID()};
@@ -83,12 +84,46 @@ it('S02 existing payment, pickup, shipping and sending retain exactly one effect
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${unknown.clientRequestId}::uuid`).toHaveLength(0);
 },120000);
 
+it('S02 Sent Items closes an uncertain ordinary send without another external effect',async()=>{
+ const order=await readyInvoiceOrder('N5 Sent-Items-Abgleich');
+ const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+ const input={targetType:'CUSTOMER' as const,targetId:order.customerId,subject:'TEST N5 Abgleich',body:'TEST Original bleibt gleich',clientRequestId:randomUUID()};
+ let sends=0,scans=0;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-N5-proof-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;throw Error('TEST accepted, response lost');}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages')){
+   scans++;
+   if(!url.searchParams.has('$skiptoken')&&!url.searchParams.get('$filter')?.startsWith('internetMessageId')){const next=new URL(url);next.searchParams.set('$skiptoken','TEST');return Response.json({value:[],'@odata.nextLink':next.href});}
+   return Response.json({value:[{id:'TEST-original-sent',internetMessageId:'<TEST-N5-original@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:input.clientRequestId}]}]});
+  }
+  return nativeFetch(request,init);
+ });
+ expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});
+ const failure='test_n5_sent_receipt_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${failure}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='COMMUNICATION_MAIL_SENT_V1' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${failure} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${failure}()`);
+ try{
+  expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),clientRequestId:randomUUID()}))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT status FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`).toEqual([{status:'failed'}]);
+  expect(await sql`SELECT message.id FROM public.communication_messages message JOIN public.communication_threads thread ON thread.id=message.thread_id AND thread.tenant_id=message.tenant_id WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId}`).toHaveLength(0);
+ }finally{await sql.unsafe(`DROP TRIGGER ${failure} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${failure}()`);}
+ const recovered=await withSession(full,()=>sendCustomerMailAction({...fresh(input),clientRequestId:randomUUID()}));expect(recovered).toMatchObject({code:'OK',data:{replayed:true}});
+ expect(sends).toBe(1);expect(scans).toBe(6);
+ expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);expect(scans).toBe(6);
+ const rows=await sql`SELECT thread.status,count(message.id)::int AS n FROM public.communication_threads thread LEFT JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId} GROUP BY thread.status`;
+ expect(rows).toEqual([{status:'sent',n:1}]);
+ expect(await sql`SELECT payload->'sentItemsEvidence'->>'internetMessageId' AS original FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{original:'<TEST-N5-original@example.invalid>'}]);
+},120000);
+
 it('S02 H15 a fresh click key cannot resend the same unresolved external mail after reload',async()=>{
  const order=await readyInvoiceOrder('N5-Unklar-Neuladen');let sends=0,lost=true;
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
   if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-N5-external-provider-token'.repeat(3),expires_in:3600});
   if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;if(lost)throw Error('TEST external effect accepted but response lost');return new Response(null,{status:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:[]});
   return nativeFetch(input,init);
  });
  const input={targetType:'CUSTOMER' as const,targetId:order.customerId,subject:'TEST N5 original',body:'TEST identical external intent after reload.',clientRequestId:randomUUID()};

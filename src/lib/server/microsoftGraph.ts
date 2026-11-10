@@ -268,6 +268,47 @@ export async function sendMicrosoftGraphMail(
   }
 }
 
+/** Resolve an uncertain send by its immutable provider header, never by subject. */
+export async function readMicrosoftGraphSentMailByRequest(input:{clientRequestId:string;recipient:string;preparedAt:string},env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null}|{notFound:true}>>{
+ const config=readConfig(env);if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht verbunden.'};
+ if(!/^[0-9a-f-]{36}$/i.test(input.clientRequestId)||!Number.isFinite(Date.parse(input.preparedAt)))return {code:'UNAVAILABLE',message:'Versandbeleg fehlt.'};
+ const bounded:FetchPort=(request,init)=>fetchPort(request,{...init,signal:AbortSignal.timeout(10000)});
+ try{
+  const token=await accessToken(config,bounded),select='id,internetMessageId,internetMessageHeaders';
+  const query=new URLSearchParams({'$top':'100','$select':select,'$filter':'sentDateTime ge '+new Date(Date.parse(input.preparedAt)-60000).toISOString()});
+  let endpoint=`${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/mailFolders/sentitems/messages?${query}`;
+  const matches:string[]=[],seen=new Set<string>();
+  for(let page=0;page<10;page++){
+   if(seen.has(endpoint))throw Error('GRAPH_SENT_SCAN_CYCLE');seen.add(endpoint);
+   const response=await bounded(endpoint,{headers:{authorization:`Bearer ${token}`},cache:'no-store'});if(!response.ok)await providerFailure(response,'GRAPH_SENT_INTENT_SCAN');
+   const payload=await response.json() as {value?:unknown;'@odata.nextLink'?:unknown};if(!Array.isArray(payload.value))throw Error('GRAPH_SENT_SCAN_INVALID');
+   for(const value of payload.value){
+    let row=value as Record<string,unknown>;if(!row||typeof row.id!=='string'||!row.id)throw Error('GRAPH_SENT_SCAN_ITEM_INVALID');
+    if(!Array.isArray(row.internetMessageHeaders)){
+     const detail=await graphGetMessage(config,token,'messages/'+encodeURIComponent(row.id)+'?'+new URLSearchParams({'$select':select}),bounded);
+     if(!detail.ok)await providerFailure(detail,'GRAPH_SENT_INTENT_DETAIL');row=await detail.json() as Record<string,unknown>;
+    }
+    if(!Array.isArray(row.internetMessageHeaders))throw Error('GRAPH_SENT_SCAN_HEADERS_MISSING');
+    const matched=row.internetMessageHeaders.filter((header:unknown)=>header&&typeof header==='object'&&'name'in header&&typeof header.name==='string'&&header.name.toLowerCase()==='x-kreile-request-id'&&'value'in header&&header.value===input.clientRequestId);
+    if(matched.length){if(matched.length!==1||typeof row.internetMessageId!=='string')throw Error('GRAPH_SENT_SCAN_REFERENCE_INVALID');matches.push(row.internetMessageId);}
+   }
+   if(!payload['@odata.nextLink']){
+    if(matches.length>1)throw Error('GRAPH_SENT_SCAN_AMBIGUOUS');
+    if(!matches.length)return {code:'OK',data:{notFound:true}};
+    const proof=await readMicrosoftGraphSentMailReference(matches[0],input.recipient,env,bounded);
+    if(proof.code!=='OK')return proof;
+    if(proof.data.clientRequestId!==input.clientRequestId)throw Error('GRAPH_SENT_SCAN_REQUEST_MISMATCH');
+    return proof;
+   }
+   if(typeof payload['@odata.nextLink']!=='string')throw Error('GRAPH_SENT_SCAN_NEXT_INVALID');
+   const next=new URL(payload['@odata.nextLink']);
+   if(next.origin!=='https://graph.microsoft.com'||decodeURIComponent(next.pathname).toLowerCase()!==(`/v1.0/users/${config.mailbox}/mailFolders/sentitems/messages`).toLowerCase())throw Error('GRAPH_SENT_SCAN_NEXT_FOREIGN');
+   endpoint=next.href;
+  }
+  throw Error('GRAPH_SENT_SCAN_INCOMPLETE');
+ }catch(error){return unavailable('Der Postausgang konnte nicht vollständig abgeglichen werden.',error);}
+}
+
 /** Read-only provider proof: a reply reference is tied to our immutable request header, never its subject. */
 export async function readMicrosoftGraphSentMailReference(internetMessageId:string,replySender:string,env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null}>>{
  const config=readConfig(env);if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht verbunden.'};
