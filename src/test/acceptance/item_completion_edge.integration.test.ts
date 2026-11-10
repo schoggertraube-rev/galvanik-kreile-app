@@ -25,8 +25,8 @@ it('a finished edge happens once; fresh retry preserves its receipt and reopenin
   expect(await sql`SELECT version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{ version: first.receipt.aggregateVersion }]);
   const reopened = await withSession(full, () => setOrderItemFinishedAction({ ...input, finished: false, expectedVersion: first.receipt.aggregateVersion, clientEventId: randomUUID() }));
   expect(reopened.code).toBe('OK'); if (reopened.code !== 'OK') throw Error('REOPEN_FAILED');
-  const second = await withSession(full, () => setOrderItemFinishedAction({ ...input, expectedVersion: reopened.receipt.aggregateVersion, clientEventId: randomUUID() }));
-  expect(second.code).toBe('OK');
+  const second = await Promise.all([1, 2].map(() => withSession(full, () => setOrderItemFinishedAction({ ...input, expectedVersion: reopened.receipt.aggregateVersion, clientEventId: randomUUID() }))));
+  expect(second.map(result => result.code).sort()).toEqual(['CONFLICT', 'OK']);
   expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND event_type='ORDER_ITEM_FINISHED_CHANGED_V1'`).toEqual([{ n: 3 }]);
   expect(await withSession(full, () => getLiveOrderCardAction({ orderId }))).toMatchObject({ code: 'OK', data: { card: { items: [expect.objectContaining({ id: itemId, finished: true })] } } });
 });
