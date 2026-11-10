@@ -8,6 +8,7 @@ import {handedOverProofs} from './dispatchCallPort';
 import {verifyPostalDispatch,finishPostalTaskAfterGoodsOut} from './storagePostalPort';
 import type {StorageEligibility} from '@/modules/orders/public';
 import {COLLECTION_REMINDER_COPY as copy} from '@/ui/situationCatalog';
+import {readOrderPickupAppointmentInTransaction,readPickupAppointmentReceiptInTransaction} from './pickupAppointmentPort';
 
 type Letter=NonNullable<StorageEligibility['letter']>;
 type Meta={customerId:string;handover:string;letterKey:string;threadId:string|null;postalDocumentId?:string;recipientId:string;due:string;orders:Array<{id:string;number:string;version:number}>;freezes:Letter['freezes']};
@@ -40,10 +41,22 @@ export async function readStorageFinalTaskState(auth:AuthorizationSnapshot,lette
  if(!hasAuthorizationArea(auth,'auftraege'))throw Error('STORAGE_FINAL_READ_FORBIDDEN');
  return withPrivilegedTenantTransaction(auth,async tx=>{
   const source=await receipt(tx,auth,letterKey);if(!source)return null;
-  const rows=await tx.execute<{status:'offen'|'erledigt'}>(sql`SELECT status FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${source.payload.taskId}::uuid`);
+  const rows=await tx.execute<{status:'offen'|'erledigt';version:number;actor:string|null;note:string|null}>(sql`SELECT status,version,erledigt_von::text AS actor,erledigt_notiz AS note FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${source.payload.taskId}::uuid`);
   if(rows.length!==1)throw Error('STORAGE_FINAL_TASK_MISSING');
+  const ends=await tx.execute<{user_id:string;payload:{appointmentEventId:string;version:number;note:string;letterKey:string}}>(sql`SELECT user_id::text,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1' AND status='success' AND event_schema_version=1 AND payload->>'taskId'=${source.payload.taskId}`);
+  if(ends.length){const end=ends[0];if(ends.length!==1||rows[0].status!=='erledigt'||rows[0].actor!==end.user_id||rows[0].note!==end.payload.note||rows[0].version!==end.payload.version||end.payload.letterKey!==letterKey)throw Error('STORAGE_FINAL_APPOINTMENT_END_INVALID');const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,end.payload.appointmentEventId);if(appointment.actorId!==end.user_id||!source.payload.meta.freezes.some(proof=>proof.orderId===appointment.orderId&&proof.freezeId===appointment.freezeId))throw Error('STORAGE_FINAL_APPOINTMENT_SOURCE_INVALID');}
   return {taskId:source.payload.taskId,status:rows[0].status,recipientId:source.payload.meta.recipientId,due:source.payload.meta.due};
  });
+}
+export async function finishFinalTasksForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,appointment:{eventId:string;orderId:string;freezeId:string;date:string},complete:(taskId:string,note:string)=>Promise<void>){
+ const rows=await tx.execute<{key:string}>(sql`SELECT event.correlation_id::text AS key FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND event.event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND event.payload->'meta'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb ORDER BY task.id FOR UPDATE OF task NOWAIT`);
+ for(const row of rows){
+  const original=await receipt(tx,auth,row.key);if(!original)throw Error('FINAL_APPOINTMENT_SOURCE_MISSING');
+  const note=copy.appointmentAgreed(appointment.date);await complete(original.payload.taskId,note);
+  const closed=await tx.execute<{version:number}>(sql`SELECT version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${original.payload.taskId}::uuid AND status='erledigt' AND erledigt_von=${auth.userId}::uuid AND erledigt_notiz=${note}`);if(closed.length!==1)throw Error('FINAL_APPOINTMENT_TASK_NOT_ENDED');
+  const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,payload,created_at) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1',${note},'success',${auth.userId}::uuid,1,${JSON.stringify({appointmentEventId:appointment.eventId,taskId:original.payload.taskId,version:closed[0].version,note,letterKey:row.key})}::jsonb,statement_timestamp()) RETURNING id`);
+  if(saved.length!==1||saved[0].id!==id)throw Error('FINAL_APPOINTMENT_END_NOT_SAVED');
+ }
 }
 export async function protectStorageFinalTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;action:string}){
  if(input.action!=='geaendert')return;
@@ -85,6 +98,7 @@ export async function createStorageFinalTask(auth:AuthorizationSnapshot,input:{c
   await verifyLetter(tx,auth,{threadId:letter.threadId,postalDocumentId:letter.postalDocumentId,customerId:input.customerId,letterKey:input.clientKey});
   const current=await tx.execute<{id:string;version:number;freeze_id:string}>(sql`SELECT o.id,o.version,f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${auth.tenantId} AND o.customer_id=${input.customerId} AND o.handover_mode=${input.handover} AND o.id=ANY(ARRAY[${sql.join(orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig' ORDER BY o.id FOR UPDATE OF o`);
   if(current.length!==orders.length||current.some(row=>orders.find(order=>order.id===row.id)?.version!==row.version||!letter.freezes.some(f=>f.orderId===row.id&&f.freezeId===row.freeze_id)))throw Error('STORAGE_FINAL_ORDERS_CHANGED');
+  for(const order of current)if(await readOrderPickupAppointmentInTransaction(tx,auth,order.id))return {code:'CONFLICT' as const,message:copy.notReady};
   const members=[...orders].sort((a,b)=>a.id.localeCompare(b.id)),meta:Meta={customerId:input.customerId,handover:input.handover,letterKey:input.clientKey,threadId:letter.threadId,...(letter.postalDocumentId?{postalDocumentId:letter.postalDocumentId}:{}),recipientId:letter.finalStage.recipientId!,due:letter.finalStage.due!,orders:members,freezes:letter.freezes};
   const taskId=await createTask(tx,{orderId:members[0].id,clientKey:finalKey(input.clientKey),title:copy.finalTaskTitle,note:copy.finalTaskNote(members.map(order=>order.number)),kind:'aufgabe',forLogin:meta.recipientId,dueDate:meta.due});
   await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at) VALUES(${randomUUID()},${auth.tenantId},'ORDER_STORAGE_FINAL_TASK_CREATED_V1',${copy.finalTaskTitle},'success',${auth.userId}::uuid,${finalKey(input.clientKey)}::uuid,${input.clientKey}::uuid,1,${JSON.stringify({meta,taskId})}::jsonb,statement_timestamp())`);

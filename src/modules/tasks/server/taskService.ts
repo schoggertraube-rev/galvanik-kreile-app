@@ -1,4 +1,5 @@
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
+import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import 'server-only';
@@ -175,6 +176,15 @@ export async function completeStorageTaskAfterGoodsOut(tx:PrivilegedTenantTransa
  if(source.length!==1)reject('CONFLICT',DISPATCH_CALL_COPY.changed);
  if(before.status==='erledigt')return;
  await finishTask(tx,auth,{taskId:before.id,version:before.version,note:COLLECTION_REMINDER_COPY.finalTaskGoodsGone},deps,undefined,undefined,input);
+}
+/** A real appointment can end its original storage task, including an assigned task.
+ * The ordinary task action receives no additional rights. */
+export async function completeStorageTaskForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;appointmentEventId:string;note:string},deps:Dependencies):Promise<void>{
+ if(!hasAuthorizationArea(auth,'auftraege'))reject('FORBIDDEN',DISPATCH_CALL_COPY.forbidden);
+ const before=await find(tx,auth,input.taskId,true);
+ if(!before||before.art!=='aufgabe'||before.bezug_typ!=='auftrag'||!before.bezug_id||!await storageTaskHasAppointmentSource(tx,auth,before.id,input.appointmentEventId))reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ if(before.status==='erledigt')return;
+ await finishTask(tx,auth,{taskId:before.id,version:before.version,note:input.note},deps,undefined,undefined,{orderId:before.bezug_id,clientKey:before.client_key});
 }
 export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
  if(!request||typeof request!=='object'||Array.isArray(request)||('taskId'in request?!taskUuid(request.taskId):!validTaskReference(request.reference)))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};

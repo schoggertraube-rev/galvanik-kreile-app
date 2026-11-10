@@ -62,6 +62,15 @@ export async function readPickupAppointmentReceiptInTransaction(tx:PrivilegedTen
  if(rows.length!==1)throw Error('PICKUP_APPOINTMENT_PROOF_MISSING');
  return qualify(rows[0]);
 }
+/** Root evidence port: task modules never query another module's event table. */
+export async function storageTaskHasAppointmentSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string,eventId:string){
+ if(!hasAuthorizationArea(auth,'auftraege'))return false;
+ const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,eventId);if(appointment.actorId!==auth.userId)return false;
+ const source=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND status='success' AND event_schema_version=1 AND payload->>'taskId'=${taskId} AND (
+  event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND payload->>'channel'='post' AND payload->'meta'->'storageOrigin'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb
+  OR event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->'meta'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb)`);
+ return source.length===1;
+}
 export async function readOrderPickupAppointment(auth:AuthorizationSnapshot,orderId:string){
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
  if(typeof orderId!=='string'||!uuid.test(orderId))return {code:'VALIDATION_ERROR' as const};

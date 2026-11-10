@@ -291,17 +291,32 @@ it.each(['unposted','posted'] as const)('an actual pickup agreement pauses the %
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('APPOINTMENT_CALENDAR');
  expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,holidays:[day(3)]}}))).toMatchObject({code:'OK'});
  const current=await plan(),input={orderId:order.orderId,expectedVersion:current!.version,previousEventId:null,date:day(0),channel:'telefon' as const,clientEventId:randomUUID()};
- const agreement=await withSession(full,()=>setOrderPickupAppointmentAction(input));if(agreement.code!=='OK')throw Error('APPOINTMENT_SET');
- const paused=await plan();expect(paused!.finishedDispatch).toMatchObject({pickupAppointment:{eventId:agreement.receipt.eventId,date:day(0),resumeOn:day(4),paused:true},reminder:{state:'PAUSED',due:day(4),clientKey:null},storage:{state:'WAIT',letter:{postalDocumentId:prepared.document.id,finalStage:{state:stage==='posted'?'TASK_PENDING':'WAIT',pausedUntil:day(4)}}}});
+ const actor=await createFixture(['auftraege'],'werkstatt');
+ const ordinary=await withSession(full,()=>saveIntakeTaskAction({clientKey:randomUUID(),version:0,kind:'aufgabe',title:'TEST normale Aufgabe bleibt offen',dueDate:berlinCalendarDay(),time:null,forLogin:full.actorId,forArea:null,reference:{type:'auftrag',id:order.orderId},note:null}));if(ordinary.code!=='OK')throw Error('APPOINTMENT_ORDINARY_TASK');
+ const original=await sql`SELECT payload->'document' AS document FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.document.id}`;
+ const endedTask=finalTaskId??prepared.taskId,name='test_post_appointment_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1' AND NEW.payload->>'taskId'='${endedTask}' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
+ try{
+  expect(await withSession(actor,()=>setOrderPickupAppointmentAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${endedTask}::uuid`).toEqual([{status:'offen'}]);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(0);
+ }finally{await sql.unsafe(`DROP TRIGGER ${name} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${name}()`);}
+ const agreement=await withSession(actor,()=>setOrderPickupAppointmentAction(JSON.parse(JSON.stringify(input))));if(agreement.code!=='OK')throw Error('APPOINTMENT_SET');
+ expect(await sql`SELECT status,erledigt_von::text AS actor FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${endedTask}::uuid`).toEqual([{status:'erledigt',actor:actor.actorId}]);
+ expect(await sql`SELECT payload->'document' AS document FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.document.id}`).toEqual(original);
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:ordinary.task.id}))).toMatchObject({code:'OK',task:{status:'offen'}});
+ expect(await withSession(actor,()=>setOrderPickupAppointmentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ const paused=await plan();expect(paused!.finishedDispatch).toMatchObject({pickupAppointment:{eventId:agreement.receipt.eventId,date:day(0),resumeOn:day(4),paused:true},reminder:{state:'PAUSED',due:day(4),clientKey:null},storage:{state:'WAIT'}});
  if(stage==='posted'){
-  expect(paused!.finishedDispatch!.storage!.letter!.finalStage).toMatchObject({taskId:finalTaskId,due:post.postalResult.postedOn});
+  expect(paused!.finishedDispatch!.storage!.letter!.finalStage).toMatchObject({state:'COMPLETED',taskId:finalTaskId,due:post.postalResult.postedOn});
   expect(await withSession(full,()=>createStorageFinalTaskAction(request))).toMatchObject({code:'OK',taskId:finalTaskId,replayed:true});
  }else expect(await withSession(full,()=>createStorageFinalTaskAction(request))).toMatchObject({code:'CONFLICT'});
  if(stage==='unposted'){
   expect(await withSession(full,()=>completeIntakeTaskAction(post))).toMatchObject({code:'CONFLICT'});
-  expect(await sql`SELECT status,version FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.taskId}::uuid`).toEqual([{status:'offen',version:post.version}]);
+  expect(await sql`SELECT status,version FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.taskId}::uuid`).toEqual([{status:'erledigt',version:post.version+1}]);
  }
- expect(await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}))).toMatchObject({code:'OK',postalLetter:{state:stage==='posted'?'POSTED':'WAIT_FOR_POST',document:{sha256:prepared.document.sha256}}});
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}))).toMatchObject({code:'OK',postalLetter:{state:stage==='posted'?'POSTED':'ENDED_BY_APPOINTMENT',document:{sha256:prepared.document.sha256}}});
  if(stage==='unposted'){
   expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:'TEST-anderer-eingang@example.invalid'}))).toMatchObject({code:'OK'});
   const extra=await readyInvoiceOrder('Andere-Ware-ohne-Termin','pickup',false,order.customerId);
