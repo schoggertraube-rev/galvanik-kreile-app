@@ -34,6 +34,7 @@
     "@/modules/tasks/server-public#createOrderHandoverTask",
     "@/modules/tasks/server-public#completeStorageTaskAfterGoodsOut",
     "@/modules/tasks/server-public#completeStorageTaskForAppointment",
+    "@/modules/tasks/server-public#completeCollectionTaskForReply",
     "@/modules/tasks/server-public#readOrderHandoverTaskState"
   ],
   "capabilities": [

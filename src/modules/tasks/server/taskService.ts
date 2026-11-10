@@ -1,5 +1,6 @@
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
 import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
+import {collectionTaskHasReplySource} from '@/lib/server/dispatchReplyPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import 'server-only';
@@ -125,11 +126,12 @@ export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransact
  return (await persistTask(tx,auth,value,deps,true,true)).task.id;
 }
 /** Shared completion writer. Invoice tasks remain inaccessible to the normal completion action. */
-async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string}):Promise<Extract<TaskResult,{code:'OK'}>>{
+async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string},replyEventId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
   const before=await find(tx,auth,value.taskId,true);if(!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
   const operationalQuote=quoteOperation&&before.art==='aufgabe'&&before.bezug_typ==='kv'&&before.bezug_id===quoteOperation.quoteId&&quoteOperation.keys.includes(before.client_key);
   const operationalStorage=storageOperation&&hasAuthorizationArea(auth,'auftraege')&&before.art==='aufgabe'&&before.bezug_typ==='auftrag'&&before.bezug_id===storageOperation.orderId&&before.client_key===storageOperation.clientKey;
-  if(!allowed(auth,before)&&!operationalQuote&&!operationalStorage)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
+  const operationalReply=replyEventId&&hasAuthorizationArea(auth,'auftraege')&&['aufgabe','rueckruf'].includes(before.art)&&before.bezug_typ==='auftrag'&&await collectionTaskHasReplySource(tx,auth,before.id,replyEventId);
+  if(!allowed(auth,before)&&!operationalQuote&&!operationalStorage&&!operationalReply)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
   if(before.art==='rechnung'&&(!invoiceId||before.bezug_typ!=='eingangsrechnung'||before.bezug_id!==invoiceId||!hasAuthorizationArea(auth,'geld')))reject('FORBIDDEN','Rechnung klären wird ausschließlich in der Eingangsrechnung erledigt.');
   const note=value.note?.trim()||null;
   const completion=await deps.beforeComplete?.(tx,auth,before,value);if(completion)throw new Rejected(completion);
@@ -185,6 +187,14 @@ export async function completeStorageTaskForAppointment(tx:PrivilegedTenantTrans
  if(!before||before.art!=='aufgabe'||before.bezug_typ!=='auftrag'||!before.bezug_id||!await storageTaskHasAppointmentSource(tx,auth,before.id,input.appointmentEventId))reject('CONFLICT',DISPATCH_CALL_COPY.changed);
  if(before.status==='erledigt')return;
  await finishTask(tx,auth,{taskId:before.id,version:before.version,note:input.note},deps,undefined,undefined,{orderId:before.bezug_id,clientKey:before.client_key});
+}
+/** Only a qualified original reply can end this original collection task. */
+export async function completeCollectionTaskForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;replyEventId:string;note:string},deps:Dependencies):Promise<void>{
+ if(!hasAuthorizationArea(auth,'auftraege')||!await collectionTaskHasReplySource(tx,auth,input.taskId,input.replyEventId))reject('FORBIDDEN',DISPATCH_CALL_COPY.forbidden);
+ const before=await find(tx,auth,input.taskId,true);
+ if(!before||!['aufgabe','rueckruf'].includes(before.art)||before.bezug_typ!=='auftrag')reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ if(before.status==='erledigt')return;
+ await finishTask(tx,auth,{taskId:before.id,version:before.version,note:input.note},deps,undefined,undefined,undefined,input.replyEventId);
 }
 export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
  if(!request||typeof request!=='object'||Array.isArray(request)||('taskId'in request?!taskUuid(request.taskId):!validTaskReference(request.reference)))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};

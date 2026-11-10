@@ -7,3 +7,4 @@ export type {QuoteFollowupRequest} from './server/taskService';
 export {completeOrderCallbackTask} from './server/taskService';
 export {completeStorageTaskAfterGoodsOut} from './server/taskService';
 export {completeStorageTaskForAppointment} from './server/taskService';
+export {completeCollectionTaskForReply} from './server/taskService';

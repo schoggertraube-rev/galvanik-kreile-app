@@ -1,4 +1,5 @@
 import 'server-only';
+import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,type DispatchReplyReceipt} from './dispatchReplyPort';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
@@ -45,6 +46,8 @@ export async function readStorageFinalTaskState(auth:AuthorizationSnapshot,lette
   if(rows.length!==1)throw Error('STORAGE_FINAL_TASK_MISSING');
   const ends=await tx.execute<{user_id:string;payload:{appointmentEventId:string;version:number;note:string;letterKey:string}}>(sql`SELECT user_id::text,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1' AND status='success' AND event_schema_version=1 AND payload->>'taskId'=${source.payload.taskId}`);
   if(ends.length){const end=ends[0];if(ends.length!==1||rows[0].status!=='erledigt'||rows[0].actor!==end.user_id||rows[0].note!==end.payload.note||rows[0].version!==end.payload.version||end.payload.letterKey!==letterKey)throw Error('STORAGE_FINAL_APPOINTMENT_END_INVALID');const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,end.payload.appointmentEventId);if(appointment.actorId!==end.user_id||!source.payload.meta.freezes.some(proof=>proof.orderId===appointment.orderId&&proof.freezeId===appointment.freezeId))throw Error('STORAGE_FINAL_APPOINTMENT_SOURCE_INVALID');}
+  const replyEnd=await readReplyTaskEnd(tx,auth,source.payload.taskId);
+  if(replyEnd&&(ends.length||replyEnd.payload.letterKey!==letterKey||replyEnd.reply.customerId!==source.payload.meta.customerId||replyEnd.reply.handover!==source.payload.meta.handover||!replyCoversFreezes(replyEnd.reply,source.payload.meta.freezes)))throw Error('STORAGE_FINAL_REPLY_END_INVALID');
   return {taskId:source.payload.taskId,status:rows[0].status,recipientId:source.payload.meta.recipientId,due:source.payload.meta.due};
  });
 }
@@ -56,6 +59,16 @@ export async function finishFinalTasksForAppointment(tx:PrivilegedTenantTransact
   const closed=await tx.execute<{version:number}>(sql`SELECT version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${original.payload.taskId}::uuid AND status='erledigt' AND erledigt_von=${auth.userId}::uuid AND erledigt_notiz=${note}`);if(closed.length!==1)throw Error('FINAL_APPOINTMENT_TASK_NOT_ENDED');
   const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,payload,created_at) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1',${note},'success',${auth.userId}::uuid,1,${JSON.stringify({appointmentEventId:appointment.eventId,taskId:original.payload.taskId,version:closed[0].version,note,letterKey:row.key})}::jsonb,statement_timestamp()) RETURNING id`);
   if(saved.length!==1||saved[0].id!==id)throw Error('FINAL_APPOINTMENT_END_NOT_SAVED');
+ }
+}
+export async function finishFinalTasksForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,complete:(taskId:string,note:string)=>Promise<void>){
+ const rows=await tx.execute<{key:string}>(sql`SELECT event.correlation_id::text AS key FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND event.event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND event.payload->'meta'->>'customerId'=${reply.customerId} AND event.payload->'meta'->>'handover'=${reply.handover} ORDER BY task.id FOR UPDATE OF task NOWAIT`);
+ for(const row of rows){
+  const original=await receipt(tx,auth,row.key);if(!original)throw Error('FINAL_REPLY_SOURCE_MISSING');
+  const freezes=original.payload.meta.freezes;
+  if(!freezes.some(proof=>reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId)))continue;
+  if(!replyCoversFreezes(reply,freezes))throw Error('DISPATCH_REPLY_PARTIAL_TASK_SCOPE_UNDECIDED');
+  await complete(original.payload.taskId,reply.note);await recordReplyTaskEnd(tx,auth,reply,{taskId:original.payload.taskId,letterKey:row.key});
  }
 }
 export async function protectStorageFinalTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;action:string}){

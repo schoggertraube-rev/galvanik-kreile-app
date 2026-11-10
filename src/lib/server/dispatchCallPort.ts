@@ -8,6 +8,7 @@ import type {InitialDispatchReminderPlan} from '@/modules/orders/public';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {appendOrderInformed} from './orderReleaseRead';
 import {readOrderPickupAppointmentInTransaction,readPickupAppointmentReceiptInTransaction} from './pickupAppointmentPort';
+import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,readLatestReplyForFreeze,type DispatchReplyReceipt} from './dispatchReplyPort';
 
 type CallMeta={customerId:string;handover:'pickup'|'shipping';due:string;stageKey:string;orderIds:string[];orderNumbers:string[];freezes:Array<{orderId:string;freezeId:string}>};
 type Created={payload:{meta:CallMeta;taskId:string};user_id:string;correlation_id:string;originalOrderIds?:string[]};
@@ -60,6 +61,8 @@ async function qualifiedTaskState(tx:PrivilegedTenantTransaction,auth:Authorizat
  const results=await tx.execute<{payload:{result:'reached'|'notReached'|'noLongerNeeded';version:number;note:string|null;goodsOutProofs?:Array<{orderId:string;eventId:string}>};user_id:string;proof_ok:boolean}>(sql`SELECT payload,user_id::text,
   (status='success' AND event_schema_version=1 AND payload->'meta'=${JSON.stringify(created.payload.meta)}::jsonb AND correlation_id=${created.correlation_id}::uuid) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${record.id}`);
  const clock={stageKey:created.payload.meta.stageKey,due:created.payload.meta.due};
+ const replyEnd=await readReplyTaskEnd(tx,auth,record.id);
+ if(replyEnd){if(results.length||replyEnd.reply.customerId!==created.payload.meta.customerId||replyEnd.reply.handover!==created.payload.meta.handover||!replyCoversFreezes(replyEnd.reply,created.payload.meta.freezes)||JSON.stringify(replyEnd.payload.meta)!==JSON.stringify(created.payload.meta))throw Error('DISPATCH_CALL_REPLY_END_INVALID');return {taskId:record.id,result:'reply' as const,recordedAt:record.erledigt_am,...clock};}
  if(record.status==='offen'){if(results.length)throw Error('DISPATCH_CALL_OPEN_WITH_RESULT');return {taskId:record.id,result:null,recordedAt:null,...clock};}
  const ended=await tx.execute<{payload:{appointmentEventId:string;taskId:string;version:number;note:string;meta:CallMeta};user_id:string;proof_ok:boolean}>(sql`SELECT payload,user_id::text,(status='success' AND event_schema_version=1) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1' AND payload->>'taskId'=${record.id}`);
  if(ended.length){
@@ -88,6 +91,16 @@ export async function finishDispatchCallsForAppointment(tx:PrivilegedTenantTrans
   const closed=await task(tx,auth,row.id);if(!closed||closed.status!=='erledigt'||closed.erledigt_von!==auth.userId||closed.erledigt_notiz!==note)throw Error('APPOINTMENT_CALL_TASK_NOT_CLOSED');
   const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,payload,created_at) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1',${note},'success',${auth.userId}::uuid,1,${JSON.stringify({appointmentEventId:appointment.eventId,taskId:row.id,version:closed.version,note,meta:created.payload.meta})}::jsonb,statement_timestamp()) RETURNING id`);
   if(saved.length!==1||saved[0].id!==id)throw Error('APPOINTMENT_CALL_CLOSE_RECEIPT_NOT_SAVED');
+ }
+}
+export async function finishDispatchCallsForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,complete:(taskId:string,note:string)=>Promise<void>){
+ const rows=await tx.execute<{id:string}>(sql`SELECT task.id::text FROM public.tasks task WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND EXISTS(SELECT 1 FROM public.events source WHERE source.tenant_id=task.tenant_id AND source.event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND source.payload->>'taskId'=task.id::text AND source.payload->'meta'->>'customerId'=${reply.customerId} AND source.payload->'meta'->>'handover'=${reply.handover}) ORDER BY task.id FOR UPDATE NOWAIT`);
+ for(const row of rows){
+  const created=await source(tx,auth,row.id);if(!created)throw Error('DISPATCH_REPLY_CALL_SOURCE_MISSING');
+  if(!created.payload.meta.freezes.some(proof=>reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId)))continue;
+  if(!replyCoversFreezes(reply,created.payload.meta.freezes))throw Error('DISPATCH_REPLY_PARTIAL_TASK_SCOPE_UNDECIDED');
+  if((await qualifiedTaskState(tx,auth,created)).result!==null)throw Error('DISPATCH_REPLY_CALL_NOT_OPEN');
+  await complete(row.id,reply.note);await recordReplyTaskEnd(tx,auth,reply,{taskId:row.id,meta:created.payload.meta});
  }
 }
 
@@ -187,6 +200,7 @@ export async function createDispatchCall(auth:AuthorizationSnapshot,input:Reques
   // The proposal may predate an agreement without changing order.version.
   // Recheck its separate receipt under the same order lock before task creation.
   for(const order of orders)if(await readOrderPickupAppointmentInTransaction(tx,auth,order.id))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+  for(const order of orders)if(await readLatestReplyForFreeze(tx,auth,order.id,order.freeze_id))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
   const meta:CallMeta={customerId:input.customerId,handover:input.handover,due:input.dueDate,stageKey,orderIds:plan.orderIds,orderNumbers:plan.orderNumbers,freezes:orders.map(row=>({orderId:row.id,freezeId:row.freeze_id}))};
   const taskId=await createTask(tx,{orderId:record?.bezug_id??anchorOrderId,clientKey:stageKey,title:DISPATCH_CALL_COPY.title,note:DISPATCH_CALL_COPY.note+plan.orderNumbers.join(', '),...(record?{taskId:record.id,version:record.version}:{})});
   const eventId=randomUUID();

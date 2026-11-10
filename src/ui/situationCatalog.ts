@@ -192,6 +192,7 @@ export const DISPATCH_CALL_COPY={
  session:'Melde Dich erneut an; Deine Eingaben bleiben erhalten.',invalid:'Öffne den Anruf aus der Liste der fertigen Aufträge erneut.'
 };
 export const COLLECTION_REMINDER_COPY={
+ replyReceived:(customer:string,date:string)=>customer+' hat am '+date.split('-').reverse().join('.')+' geantwortet – Anruf und Brief entfallen.',
  appointmentAgreed:(date:string)=>'Abholtermin vereinbart am '+date.split('-').reverse().join('.')+' · bisherige Lageraufgabe entfällt.',
   letterTitle:'Lagerfrist-Schreiben',
   letterDraft:'Entwurf · noch nicht versendet',

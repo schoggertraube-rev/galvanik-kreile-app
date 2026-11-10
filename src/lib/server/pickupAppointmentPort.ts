@@ -8,6 +8,7 @@ import {readReadyNotificationContext} from './orderReleaseRead';
 import {PICKUP_APPOINTMENT_COPY as copy} from '@/ui/situationCatalog';
 import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
 import type {DispatchPolicy} from '@/modules/fundament/public';
+import {readLatestReplyForFreeze,replyDefersToAppointment} from './dispatchReplyPort';
 
 const uuid=/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
 export type StorageOrigin={callTaskId?:string;appointmentEventId?:string;freezes:Array<{orderId:string;freezeId:string}>};
@@ -28,6 +29,8 @@ export async function qualifyStorageOrigin(tx:PrivilegedTenantTransaction,auth:A
 export async function storageOriginIsCurrent(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,origin:StorageOrigin,eligibleOn:string){
  await qualifyStorageOrigin(tx,auth,origin);
  for(const proof of origin.freezes){const appointment=await readOrderPickupAppointmentInTransaction(tx,auth,proof.orderId);
+  const reply=await readLatestReplyForFreeze(tx,auth,proof.orderId,proof.freezeId);
+  if(reply&&(!appointment||!replyDefersToAppointment(reply,appointment)))return false;
   if(origin.appointmentEventId){
    if(appointment?.eventId!==origin.appointmentEventId)return false;
    // eligibleOn comes from the canonical operational proposal, not the UI.

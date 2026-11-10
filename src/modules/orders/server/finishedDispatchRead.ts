@@ -10,6 +10,7 @@ import {planInitialDispatchReminder,type DispatchNoticeMember,type InitialDispat
 import type {DispatchResponseCheck} from '@/lib/server/dispatchResponsePort';
 import {readCollectionReminderHistory} from '@/lib/server/collectionReminderPort';
 import {readDispatchCalls} from '@/lib/server/dispatchCallPort';
+import {readRecordedDispatchReplies,type DispatchReplyReceipt} from '@/lib/server/dispatchReplyPort';
 import {storageEligibility,storageLetterKey,finalStorageStage,type StorageEligibility} from '../domain/storageEligibility';
 import {COLLECTION_REMINDER_COPY,STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
 import {readStorageFinalTaskState} from '@/lib/server/storageFinalStagePort';
@@ -17,7 +18,7 @@ import {readStorageFinalTaskState} from '@/lib/server/storageFinalStagePort';
 export type FinishedDispatch={orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;pickupAppointment?:PickupAppointmentProjection;unavailable?:true};
 
 /** Enrich existing operational rows; never a second saved queue or release rule. */
-export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,orders:readonly OperationalOrder[],policy:DispatchPolicy|null,ports?:{readHasMail?:(customerId:string)=>Promise<boolean>;readResponses:(input:{customerId:string;noticeThreadIds:string[];oldestNoticeAt:string})=>Promise<DispatchResponseCheck>}){
+export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,orders:readonly OperationalOrder[],policy:DispatchPolicy|null,ports?:{readHasMail?:(customerId:string)=>Promise<boolean>;readResponses:(input:{customerId:string;noticeThreadIds:string[];oldestNoticeAt:string})=>Promise<DispatchResponseCheck>;recordReply?:(input:{customerId:string;handover:'pickup'|'shipping';proof:DispatchResponseCheck['proofs'][number]})=>Promise<DispatchReplyReceipt>}){
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
  const result:FinishedDispatch[]=[];
  const appointments=new Map<string,NonNullable<FinishedDispatch['pickupAppointment']>>();
@@ -60,10 +61,18 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   try{calls=await readDispatchCalls(auth,group.customerId,group.handover,initial.orderIds);}catch(error){console.error('[DISPATCH_CALL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();continue;}
   const answered=new Map<string,{call?:typeof calls[number];mail?:DispatchResponseCheck['proofs'][number]}>();
   for(const member of group.members){const call=calls.find(call=>call.result==='reached'&&member.freezeId&&call.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId));if(call)answered.set(member.orderId,{call});}
+  try{
+   const saved=await readRecordedDispatchReplies(auth,group.customerId,group.handover);
+   for(const member of group.members){const reply=saved.filter(reply=>reply.proof.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId)&&Date.parse(reply.proof.receivedAt)>=Date.parse(member.noticeAt??member.readyAt??'')).sort((a,b)=>Date.parse(b.proof.receivedAt)-Date.parse(a.proof.receivedAt))[0];if(reply&&!answered.has(member.orderId))answered.set(member.orderId,{mail:reply.proof});}
+  }catch(error){console.error('[DISPATCH_RECORDED_REPLY_UNAVAILABLE]',error instanceof Error?error.message:'UnknownError');failGroup();continue;}
   let reaction:DispatchResponseCheck|undefined;
   const responseSince=group.responseSince??initial.oldestNoticeAt??group.deliveryFailedAt??history.filter(row=>row.deliveryFailedAt).at(-1)?.deliveryFailedAt;
   if(answered.size<group.members.length&&ports&&responseSince&&group.threads.size){
    reaction=await ports.readResponses({customerId:group.customerId,noticeThreadIds:[...group.threads],oldestNoticeAt:responseSince});
+   if(reaction.state==='REPLIED'&&ports.recordReply){
+    try{for(const proof of reaction.proofs)if(group.members.some(member=>proof.freezes.some(source=>source.orderId===member.orderId&&source.freezeId===member.freezeId)))await ports.recordReply({customerId:group.customerId,handover:group.handover,proof});}
+    catch(error){console.error('[DISPATCH_REPLY_TASK_FOLLOWUP_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();continue;}
+   }
    if(reaction.state==='REPLIED')for(const member of group.members){
     const proof=reaction.proofs.find(proof=>proof.freezes.some(source=>source.orderId===member.orderId&&source.freezeId===member.freezeId)&&Date.parse(proof.receivedAt)>=Date.parse(member.noticeAt??member.readyAt??''));
     if(proof&&!answered.has(member.orderId))answered.set(member.orderId,{mail:proof});
@@ -73,7 +82,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
    const row=result.find(item=>item.orderId===member.orderId);if(row)row.reminder={...initial,stage:answer.call?'E3':initial.stage,state:'STOPPED',needsNotice:[],orderIds:answer.call?.orderIds??answer.mail!.orderIds,orderNumbers:answer.call?.orderNumbers??group.members.filter(item=>answer.mail!.orderIds.includes(item.orderId)).map(item=>item.orderNumber),clientKey:answer.call?.stageKey??null,due:answer.call?.due??null,callTaskId:answer.call?.taskId,requiresResponseCheck:false,responseState:answer.mail?'REPLIED':'NONE'};
   }
   const pendingMembers=group.members.filter(member=>!answered.has(member.orderId));if(!pendingMembers.length)continue;
-  const activeCalls=calls.filter(call=>call.result!=='reached'&&call.freezes.some(proof=>pendingMembers.some(member=>member.orderId===proof.orderId&&member.freezeId===proof.freezeId)));
+  const activeCalls=calls.filter(call=>(call.result===null||call.result==='notReached')&&call.freezes.some(proof=>pendingMembers.some(member=>member.orderId===proof.orderId&&member.freezeId===proof.freezeId)));
   // A completed unsuccessful call covers its original ware only. New ware must not hide old letters.
   const assigned=new Set<string>();
   const cohorts:Array<{members:DispatchNoticeMember[];call:typeof calls[number]|undefined}>=[];
