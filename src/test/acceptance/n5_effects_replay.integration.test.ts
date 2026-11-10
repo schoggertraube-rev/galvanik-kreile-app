@@ -84,6 +84,26 @@ it('S02 existing payment, pickup, shipping and sending retain exactly one effect
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${unknown.clientRequestId}::uuid`).toHaveLength(0);
 },120000);
 
+it('S02 A1 recovers the original invoice bundle from Sent Items after a new click key',async()=>{
+ const a=await readyInvoiceOrder('N5 A1 Original A'),b=await readyInvoiceOrder('N5 A1 Original B','pickup',false,a.customerId);
+ const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${a.customerId}`;
+ const input={targetType:'ORDER' as const,targetId:a.orderId,subject:'TEST N5 A1',body:'TEST gleiche Originalgruppe',clientRequestId:randomUUID(),attachment:{kind:'INVOICE' as const,documentId:a.invoice.invoiceId},expectedInvoiceIds:[a.invoice.invoiceId,b.invoice.invoiceId]};
+ let sends=0;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-N5-A1-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;throw Error('TEST A1 original accepted, response lost');}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:[{id:'TEST-A1-Sent',internetMessageId:'<TEST-A1@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:input.clientRequestId}]}]});
+  return nativeFetch(request,init);
+ });
+ expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});
+ const retry={...fresh(input),clientRequestId:randomUUID()};
+ expect(await withSession(full,()=>sendCustomerMailAction(retry))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
+ expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{n:1}]);
+ expect(await sql`SELECT order_id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND order_id IN(${a.orderId},${b.orderId}) ORDER BY order_id`).toEqual([a.orderId,b.orderId].sort().map(order_id=>({order_id})));
+},120000);
+
 it.each([false,true])('S02 an in-flight invoice bundle stays excluded after another click (responseLost=%s)',async(responseLost)=>{
  const a=await readyInvoiceOrder('N5 Beleggruppe A'),b=await readyInvoiceOrder('N5 Beleggruppe B','pickup',false,a.customerId);
  let sends=0,unblock!:()=>void,entered!:()=>void;

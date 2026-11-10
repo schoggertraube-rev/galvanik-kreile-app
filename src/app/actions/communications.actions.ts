@@ -124,6 +124,27 @@ export async function sendCustomerMailAction(input: TargetInput & {
  const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
  if(input.attachment){
   const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
+  if(prior.code==='PENDING'){
+   const original=prior.document;
+   if(input.confirmedResend&&input.clientRequestId!==prior.originalRequestId)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
+   if(original.kind!=='INVOICE'||input.attachment.kind!=='INVOICE')return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
+   const invoices=[original,...original.bundle??[]];
+   if(JSON.stringify(invoices.map(row=>row.id).sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'CONFLICT' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.number)};
+   const originals:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
+   for(const invoice of invoices){
+    const pdf=await readInvoicePdf(auth,invoice.id,'original');if(pdf.code!=='OK')return pdf;
+    if(pdf.data.pdfSha256!==invoice.sha256)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};
+    originals.push({filename:invoice.number+'.pdf',contentType:'application/pdf',bytes:new Uint8Array(pdf.data.pdf)});
+   }
+   return sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,document:original,attachment:originals[0],additionalAttachments:originals.slice(1),beforePrepare:async tx=>{
+    for(const invoice of invoices.slice().sort((a,b)=>a.orderId.localeCompare(b.orderId))){
+     if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;
+     const locked=await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid AND status='issued' AND aggregate_version=${invoice.version} AND pdf_sha256=${invoice.sha256} FOR UPDATE`);
+     if(locked.length!==1)return false;
+    }
+    return true;
+   }});
+  }
   if(prior.code==='OK'){
    if(prior.document.kind!==input.attachment.kind)return {code:'CONFLICT' as const,message:'Die Versandkennung gehört zu einer anderen Belegart.'};
    if(prior.document.kind==='INVOICE'&&JSON.stringify([prior.document.id,...prior.document.bundle?.map(row=>row.id)??[]].sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(prior.document.number)};

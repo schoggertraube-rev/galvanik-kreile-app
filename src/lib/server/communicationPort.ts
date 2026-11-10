@@ -276,7 +276,7 @@ export async function sendCommunicationMail(
           WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND payload->>'threadId'=${existing[0].id} AND correlation_id=${input.clientRequestId}::uuid`);
         if(prepared.length>1||prepared.length===1&&(prepared[0].user_id!==auth.userId||prepared[0].intent!==intentHash||prepared[0].content!==contentSha256))throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         if (existing[0].status !== "sent") {
-          if(prepared.length!==1||input.document||input.collectionReminder||input.complaintResult)throw new Error("COMMUNICATION_OUTCOME_UNCLEAR");
+          if(prepared.length!==1||input.collectionReminder||input.complaintResult)throw new Error("COMMUNICATION_OUTCOME_UNCLEAR");
           return {threadId:existing[0].id,recordedAt:iso(existing[0].created_at),recovery:true as const};
         }
         if(input.collectionReminder){
@@ -351,7 +351,8 @@ export async function sendCommunicationMail(
          WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND prepared.correlation_id=${input.clientRequestId}::uuid
           AND prepared.user_id=${auth.userId}::uuid AND prepared.payload->>'intentHash'=${intentHash} AND prepared.payload->>'contentSha256'=${contentSha256}
           AND thread.status IN('pending','failed') AND thread.id=${pending.threadId} FOR UPDATE OF thread`);
-        if(state.length!==1||!state[0].eligible||state[0].used)return {available:false};
+        if(state.length!==1||!state[0].eligible||state[0].used||input.document&&!hasAuthorizationArea(auth,'geld'))return {available:false};
+        if(input.document&&(!input.beforePrepare||!await input.beforePrepare(tx,target.email)))return {available:false};
         if(!input.confirmedResend)return {available:true};
         const rows=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
           VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_RESEND_CONFIRMED_V1','Versand unklar',${JSON.stringify({threadId:pending.threadId,originalRequestId:input.clientRequestId,intentHash,reason:'nicht_im_postausgang_gefunden'})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp()) RETURNING id`);

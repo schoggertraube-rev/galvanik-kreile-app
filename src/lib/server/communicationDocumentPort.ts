@@ -43,19 +43,22 @@ export async function appendCommunicationDocument(tx:PrivilegedTenantTransaction
 export async function readCommunicationDocumentReceipt(auth:AuthorizationSnapshot,input:Intent,documentId:string){
  if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:'E-Mails sind nicht freigegeben.'};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const rows=await tx.execute<{id:string;status:string;customer_id:string;order_id:string|null;created_at:string;created_by:string;subject:string;payload:{document:CommunicationDocument;intent:string};message_id:string|null;body:string|null;sent_intent:string|null}>(sql`
-   SELECT thread.id::text,thread.status,thread.customer_id,thread.order_id,thread.created_at::text,thread.created_by::text,thread.subject,prepared.payload,
+  const rows=await tx.execute<{id:string;status:string;customer_id:string;order_id:string|null;created_at:string;created_by:string;prepared_by:string;subject:string;request_id:string;payload:{document:CommunicationDocument;intent:string};message_id:string|null;body:string|null;sent_intent:string|null}>(sql`
+   SELECT thread.id::text,thread.status,thread.customer_id,thread.order_id,thread.created_at::text,thread.created_by::text,prepared.user_id::text AS prepared_by,thread.subject,prepared.correlation_id::text AS request_id,prepared.payload,
     message.id::text AS message_id,message.body,sent.payload->>'intent' AS sent_intent
    FROM public.communication_threads thread
    LEFT JOIN public.events prepared ON prepared.tenant_id=thread.tenant_id AND prepared.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1' AND prepared.client_event_id=thread.id
    LEFT JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing'
    LEFT JOIN public.events sent ON sent.tenant_id=thread.tenant_id AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.payload->>'threadId'=thread.id::text
-   WHERE thread.tenant_id=${auth.tenantId} AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId}`);
+   WHERE thread.tenant_id=${auth.tenantId} AND (thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId}
+    OR thread.source LIKE 'MS_GRAPH_OUT:%' AND thread.status IN('pending','failed') AND thread.created_by=${auth.userId}::uuid
+     AND prepared.payload->'document'->>'id'=${documentId} AND (thread.order_id=${input.targetType==='ORDER'?input.targetId:null} OR ${input.targetType==='CUSTOMER'} AND thread.order_id IS NULL AND thread.customer_id=${input.targetId})) LIMIT 2`);
   if(!rows.length)return {code:'NOT_FOUND' as const,message:'Noch kein Versandbeleg.'};
   const row=rows[0],document=row.payload?.document;
   const legacy=!!document&&document.kind==='INVOICE'&&!!document.bundle?.length&&row.payload.intent===communicationDocumentIntent(input,document,true);
-  if(rows.length!==1||row.created_by!==auth.userId||!document||document.id!==documentId||row.order_id!==(input.targetType==='ORDER'?input.targetId:null)||input.targetType==='CUSTOMER'&&row.customer_id!==input.targetId||row.payload.intent!==communicationDocumentIntent(input,document,legacy))return {code:'CONFLICT' as const,message:'Die Versandkennung ist bereits anders belegt. Kein zweiter Versand.'};
-  if(row.status!=='sent')return {code:'CONFLICT' as const,message:'Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; Outlook-Ausgang prüfen.'};
+  if(rows.length!==1||row.created_by!==auth.userId||row.prepared_by!==auth.userId||!document||document.id!==documentId||row.order_id!==(input.targetType==='ORDER'?input.targetId:null)||input.targetType==='CUSTOMER'&&row.customer_id!==input.targetId||row.payload.intent!==communicationDocumentIntent(input,document,legacy))return {code:'CONFLICT' as const,message:'Die Versandkennung ist bereits anders belegt. Kein zweiter Versand.'};
+  if(row.status!=='sent'&&!/^[0-9a-f-]{36}$/i.test(row.request_id))return {code:'CONFLICT' as const,message:'Die Versandkennung ist bereits anders belegt. Kein zweiter Versand.'};
+  if(row.status!=='sent')return {code:'PENDING' as const,document,originalRequestId:row.request_id};
   if(!row.message_id||row.sent_intent!==row.payload.intent||row.body!==communicationDocumentBody(input.body,document,legacy)||row.subject!==input.subject.trim())throw Error('COMMUNICATION_DOCUMENT_PROOF_INVALID');
   return {code:'OK' as const,document,data:{threadId:row.id,messageId:row.message_id,customerId:row.customer_id,orderId:row.order_id,recordedAt:row.created_at,replayed:true}};
  });}catch(error){console.error('[COMMUNICATION_DOCUMENT_RECEIPT_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Versandbeleg konnte nicht sicher gelesen werden. Nicht erneut senden.'};}
