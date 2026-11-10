@@ -16,6 +16,25 @@ import {updateCustomerAction} from '@/app/actions/customers.actions';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('DISPATCH_CALL_LOOPBACK_REQUIRED');
 async function proposal(id:string){const result=await withSession(full,()=>getOrdersDb());if(!result.ok)throw Error('CALL_QUEUE');const plan=result.data.find(row=>row.id===id)?.finishedDispatch?.reminder;if(!plan)throw Error('CALL_PLAN');return plan;}
+it('E5 settings persist an explicit final interval and active tenant login with actor, read-back and fresh retry',async()=>{
+ await readyInvoiceOrder('E5-Einstellungen');
+ const recipient=await createFixture(['auftraege'],'buero');
+ const read=await withSession(full,()=>readShippingSettingsAction());if(read.code!=='OK')throw Error('E5_SETTINGS_READ');
+ const input={service:read.settings.service,numberPattern:read.settings.numberPattern,numberHint:read.settings.numberHint,trackingUrl:read.settings.trackingUrl,expectedUpdatedAt:read.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),finalStageAfterLetterDays:3,finalStageRecipientId:recipient.actorId}};
+ expect(await withSession(full,()=>saveShippingSettingsAction(input))).toMatchObject({code:'OK',replayed:false});
+ expect(await sql`SELECT ausgang_regeln->>'finalStageAfterLetterDays' AS days,ausgang_regeln->>'finalStageRecipientId' AS recipient FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{days:'3',recipient:recipient.actorId}]);
+ expect(await sql`SELECT payload->>'actorId' AS actor FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='shipping_settings_updated'`).toEqual([{actor:full.actorId}]);
+ const after=await withSession(full,()=>readShippingSettingsAction());expect(after).toMatchObject({code:'OK',settings:{dispatchPolicy:input.dispatchPolicy}});if(after.code!=='OK')throw Error('E5_SETTINGS_AFTER');
+ expect(await withSession(full,()=>saveShippingSettingsAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ const absent={...input,expectedUpdatedAt:after.settings.updatedAt,dispatchPolicy:{...input.dispatchPolicy,finalStageRecipientId:randomUUID()}};
+ expect(await withSession(full,()=>saveShippingSettingsAction(absent))).toMatchObject({code:'VALIDATION_ERROR'});
+ await sql`UPDATE public.app_users SET active=false WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${recipient.actorId}::uuid`;
+ expect(await withSession(full,()=>saveShippingSettingsAction({...absent,dispatchPolicy:{...input.dispatchPolicy,finalStageAfterLetterDays:4}}))).toMatchObject({code:'VALIDATION_ERROR'});
+ const denied=await createFixture(['auftraege'],'werkstatt');expect(await withSession(denied,()=>saveShippingSettingsAction(absent))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(full,()=>saveShippingSettingsAction({...input,expectedUpdatedAt:after.settings.updatedAt,dispatchPolicy:{...input.dispatchPolicy,finalStageAfterLetterDays:null,finalStageRecipientId:null}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>readShippingSettingsAction())).toMatchObject({code:'OK',settings:{dispatchPolicy:{finalStageAfterLetterDays:null,finalStageRecipientId:null}}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='shipping_settings_updated'`).toEqual([{n:2}]);
+});
 async function prepare(label:string){
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-call-token'.repeat(4),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail'))return new Response(null,{status:202});return nativeFetch(input,init);});
  const first=await readyInvoiceOrder(label),second=await readyInvoiceOrder(label+'-2','pickup',false,first.customerId);

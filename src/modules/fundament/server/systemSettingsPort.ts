@@ -75,6 +75,11 @@ export async function updateShippingSettings(context:SystemSettingsContext,input
    const identical=current.service===value.service&&current.numberPattern===value.numberPattern&&current.numberHint===value.numberHint&&current.trackingUrl===value.trackingUrl&&(!('dispatchPolicy' in value)||isDeepStrictEqual(current.dispatchPolicy,value.dispatchPolicy));
    if(identical)return {code:"OK" as const,settings:current,replayed:true};
    if(current.updatedAt!==value.expectedUpdatedAt)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte abgleichen.",current};
+   const policy=value.dispatchPolicy as import('../dispatchPolicy').DispatchPolicy|null|undefined;
+   if(policy?.finalStageRecipientId){
+    const recipient=await tx.execute(sql`SELECT id FROM public.app_users WHERE tenant_id=${context.tenantId} AND id=${policy.finalStageRecipientId}::uuid AND active=true FOR SHARE`);
+    if(recipient.length!==1)return {code:'VALIDATION_ERROR' as const,message:'Empfänger für die letzte Stufe ist kein aktiver Login · Eingaben bleiben erhalten.'};
+   }
    const changed=await tx.execute(sql`UPDATE public.company_settings SET versand_dienst=${value.service},versand_nummer_format=${value.numberPattern},
      versand_nummer_hinweis=${value.numberHint},versand_verfolgung_url=${value.trackingUrl},ausgang_regeln=${('dispatchPolicy' in value?value.dispatchPolicy:current.dispatchPolicy)===null?null:JSON.stringify('dispatchPolicy' in value?value.dispatchPolicy:current.dispatchPolicy)}::jsonb,updated_at=statement_timestamp()
      WHERE tenant_id=${context.tenantId} AND updated_at=${value.expectedUpdatedAt}::timestamptz RETURNING id`);
