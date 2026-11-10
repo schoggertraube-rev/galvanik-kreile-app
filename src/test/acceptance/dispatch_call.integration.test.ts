@@ -74,8 +74,13 @@ it('E4 uses the existing sender only after individual eligibility and starts the
  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(Date.now()+7*24*60*60*1000);
  let attempts;
  try{attempts=await Promise.all([withSession(full,()=>createStorageFinalTaskAction(finalRequest)),withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))]);}finally{vi.useRealTimers();}
- for(const attempt of attempts)expect(attempt).toMatchObject({code:'OK'});const finalTask=attempts[0];if(finalTask.code!=='OK')throw Error('E5_CREATE');
+ for(const attempt of attempts){if(attempt.code!=='OK')throw Error('E5_EXACT_FAILURE:'+JSON.stringify({attempt,queue:await withSession(full,()=>getOrdersDb())}));expect(attempt).toMatchObject({code:'OK'});}const finalTask=attempts[0];if(finalTask.code!=='OK')throw Error('E5_CREATE');
  expect(attempts[1]).toMatchObject({taskId:finalTask.taskId});
+ const currentQueue=await withSession(full,()=>getOrdersDb());if(!currentQueue.ok)throw Error('E5_RETRY_QUEUE');const currentLetter=currentQueue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.storage?.letter;if(!currentLetter)throw Error('E5_RETRY_LETTER');expect(currentLetter.finalStage.state).toBe('TASK_PENDING');
+ // Deterministic second caller: the first check ran before creation, but its
+ // later actual reader now sees TASK_PENDING. The qualified receipt wins.
+ const raced=await withSession(full,async()=>{const [{resolveAuthorization},{createStorageFinalTask}]=await Promise.all([import('@/lib/server/authorization'),import('@/lib/server/storageFinalStagePort')]);const actor=await resolveAuthorization();if(!actor.ok)throw Error('E5_RETRY_AUTH');return createStorageFinalTask(actor.data,JSON.parse(JSON.stringify(finalRequest)),JSON.parse(JSON.stringify(currentLetter)),[],finalSettings.settings.updatedAt,async()=>{throw Error('E5_RETRY_MUST_NOT_CREATE');});});expect(raced).toMatchObject({code:'OK',taskId:finalTask.taskId,replayed:true});
+
  const pending=await withSession(full,()=>getOrdersDb());expect(pending.ok&&pending.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'TASK_PENDING',taskId:finalTask.taskId});
  expect(await sql`SELECT art,fuer_login::text,erstellt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${finalTask.taskId}::uuid`).toEqual([{art:'aufgabe',fuer_login:recipient.actorId,erstellt_von:full.actorId}]);
  const taskRead=await withSession(recipient,()=>getIntakeTaskAction({taskId:finalTask.taskId}));expect(taskRead).toMatchObject({code:'OK',canComplete:true,task:{status:'offen',fuer_login:recipient.actorId}});if(taskRead.code!=='OK'||!taskRead.task)throw Error('E5_TASK_READ');

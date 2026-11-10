@@ -122,10 +122,10 @@ export async function finishStorageFinalTasksAfterGoodsOut(tx:PrivilegedTenantTr
 }
 export async function createStorageFinalTask(auth:AuthorizationSnapshot,input:{customerId:string;handover:string;clientKey:string},letter:Letter,orders:Meta['orders'],settingsUpdatedAt:string,createTask:(tx:PrivilegedTenantTransaction,input:{orderId:string;clientKey:string;title:string;note:string;kind:'aufgabe';forLogin:string;dueDate:string})=>Promise<string>){
  if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const,message:copy.forbidden};
- if(letter.state!=='SENT'||letter.clientKey!==input.clientKey||letter.finalStage.state!=='DUE'||!letter.finalStage.recipientId||!letter.finalStage.due||!letter.threadId&&!letter.postalDocumentId||!orders.length)return {code:'CONFLICT' as const,message:copy.notReady};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':storage-final:'+input.clientKey},0))`);
   const prior=await receipt(tx,auth,input.clientKey);if(prior){if(prior.user_id!==auth.userId)return {code:'CONFLICT' as const,message:copy.keyConflict};return {code:'OK' as const,taskId:prior.payload.taskId,replayed:true};}
+  if(letter.state!=='SENT'||letter.clientKey!==input.clientKey||letter.finalStage.state!=='DUE'||!letter.finalStage.recipientId||!letter.finalStage.due||!letter.threadId&&!letter.postalDocumentId||!orders.length)return {code:'CONFLICT' as const,message:copy.notReady};
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'task:'+auth.tenantId+':'+finalKey(input.clientKey)},0))`);
   const occupied=await tx.execute(sql`SELECT id FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${finalKey(input.clientKey)}::uuid`);
   if(occupied.length)return {code:'CONFLICT' as const,message:copy.keyConflict};
