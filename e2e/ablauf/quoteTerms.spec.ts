@@ -2,6 +2,25 @@ import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
+
+it('H8 quote creation retry cannot switch customer, price or actor and rereads the one stored quote',async()=>{
+ const {customerFixture}=await import('./orderFixture');
+ const first=await customerFixture('KV-Key-1'),second=await customerFixture('KV-Key-2');
+ const {createQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const input={clientEventId:randomUUID(),customerId:first,dueDate:'2027-05-15',note:'TEST eindeutiger KV-Auftrag',positions:[{name:'TEST KV-Teil',quantity:1,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:2500,lineTotalCents:2500}]};
+ const created=await withSession(full,()=>createQuoteAction(input));
+ if(created.code!=='OK')throw Error('QUOTE_KEY_INITIAL:'+created.code);
+ const snapshot=await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId}));
+ expect(snapshot).toMatchObject({code:'OK',quote:{customerId:first,totalNetCents:2500}});
+ expect(await withSession(full,()=>createQuoteAction({...structuredClone(input),customerId:second}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>createQuoteAction({...structuredClone(input),positions:[{...input.positions[0],unitPriceCents:3500,lineTotalCents:3500}]}))).toMatchObject({code:'CONFLICT'});
+ const other=await createFixture(['eingang','mails','kunden','auftraege','geld','einstellungen']);
+ expect(await withSession(other,()=>createQuoteAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>createQuoteAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,quote:{quoteId:created.quote.quoteId,customerId:first,totalNetCents:2500}});
+ expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toEqual(snapshot);
+ expect(await sql`SELECT count(*)::integer AS n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id IN (${first},${second})`).toEqual([{n:1}]);
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+});
 import {customerFixture} from './orderFixture';
 import {storeIntakeGoodsPhoto,storeOrderPhoto,storeItemPhoto} from './photoFixture';
 

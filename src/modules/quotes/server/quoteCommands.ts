@@ -344,7 +344,7 @@ function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
   };
 }
 
-function diagnostic(error: unknown, key: "message" | "details" | "hint"): string | null {
+function diagnostic(error: unknown, key: "message" | "details" | "hint" | "code" | "constraint_name"): string | null {
   if (!error || typeof error !== "object") return null;
   const record = error as Record<string, unknown>;
   const source = record.cause && typeof record.cause === "object" ? record.cause as Record<string, unknown> : record;
@@ -435,6 +435,12 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
   } catch (error) {
     console.error("quote_create_command_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
     if (error instanceof QuoteSourceFailure) return error.result;
+    // The event key is tenant-wide, while the original receipt is actor-bound.
+    // A different actor must get a conflict after rollback, never a second KV
+    // or a misleading temporary-outage response. Other constraints stay errors.
+    if (diagnostic(error, "code") === "23505" && diagnostic(error, "constraint_name") === "events_tenant_client_event_uidx") {
+      return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
+    }
     return { code: "UNAVAILABLE", message: "KV konnte nicht sicher gespeichert werden." };
   }
 }

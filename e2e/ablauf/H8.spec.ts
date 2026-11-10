@@ -4,6 +4,27 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
 
+it('H8 released orders remain reachable through search, customer history and their immutable invoice receipt',async()=>{
+ const order=await readyInvoiceOrder('H8-Verknuepfung');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const request={orderId:order.orderId,mode:'abholung' as const,expectedVersion:order.version,clientEventId:randomUUID()};
+ const released=await withSession(full,()=>recordGoodsOutAction(request));
+ if(released.code!=='OK')throw Error('H8_LINK_RELEASE:'+released.code);
+ const events=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const {getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}))).toMatchObject({code:'OK',data:{wareImHaus:false,wareImHausCount:0,orders:expect.arrayContaining([expect.objectContaining({id:order.orderId,station:'abgeholt',version:released.receipt.orderVersion})])}});
+ const [stored]=await sql`SELECT order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ expect(await withSession(full,()=>searchTenantAction(stored.order_number))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'ORDER',id:order.orderId,href:'/orders/'+order.orderId})])});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt',version:released.receipt.orderVersion}}});
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:order.issueInput.clientEventId}))).toMatchObject({code:'OK',data:{invoiceId:order.invoice.invoiceId,invoiceNumber:order.invoice.invoiceNumber}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(events);
+ expect(await withSession(full,()=>recordGoodsOutAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:released.receipt.eventId}});
+ expect(await sql`SELECT customer_id,station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{customer_id:order.customerId,station:'abgeholt',version:released.receipt.orderVersion}]);
+});
+
 it('H8 L5 a physically released order cannot be finished again, returned to Galvanik or invoiced twice',async()=>{
  const order=await readyInvoiceOrder('H8-Folgesperren');
  const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
