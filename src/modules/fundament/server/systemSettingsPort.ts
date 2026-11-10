@@ -99,7 +99,8 @@ export async function updateShippingSettings(context:SystemSettingsContext,input
      versand_nummer_hinweis=${value.numberHint},versand_verfolgung_url=${value.trackingUrl},ausgang_regeln=${effectivePolicy===null?null:JSON.stringify(effectivePolicy)}::jsonb,updated_at=statement_timestamp()
      WHERE tenant_id=${context.tenantId} AND updated_at=${value.expectedUpdatedAt}::timestamptz RETURNING id`);
    if(changed.length!==1)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte erneut abgleichen.",current:await readShippingSettingsInTransaction(tx,context.tenantId)};
-   await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'shipping_settings_updated',${JSON.stringify({actorId:context.actorId,before:current,after:{service:value.service,numberPattern:value.numberPattern,numberHint:value.numberHint,trackingUrl:value.trackingUrl,dispatchPolicy:effectivePolicy}})}::jsonb)`);
+   const audit=await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'shipping_settings_updated',${JSON.stringify({actorId:context.actorId,before:current,after:{service:value.service,numberPattern:value.numberPattern,numberHint:value.numberHint,trackingUrl:value.trackingUrl,dispatchPolicy:effectivePolicy}})}::jsonb) RETURNING id`);
+   if(audit.length!==1)throw Error('SHIPPING_SETTINGS_EVENT_NOT_SAVED');
    return {code:"OK" as const,settings:await readShippingSettingsInTransaction(tx,context.tenantId),replayed:false};
   });
  }catch(error){logSystemSettingsPortFailure('SHIPPING_SETTINGS_WRITE_FAILED',error);return {code:"UNAVAILABLE" as const,message:"Versandangaben konnten nicht gespeichert werden. Fehlercode: SHIPPING_SETTINGS_WRITE_FAILED."};}

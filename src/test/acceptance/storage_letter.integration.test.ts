@@ -314,3 +314,22 @@ it.each(['unposted','posted'] as const)('an actual pickup agreement pauses the %
   expect((await plan())!.finishedDispatch!.reminder).toMatchObject({state:'PAUSED',due:day(4)});
  }
 });
+
+it('the configured storage rate and its actual audit receipt commit together or roll back for a recoverable retry',async()=>{
+ await readyInvoiceOrder('Lagergeld-Audit');
+ const before=await withSession(full,()=>readShippingSettingsAction());if(before.code!=='OK')throw Error('STORAGE_AUDIT_SETTINGS');
+ const input={service:before.settings.service,numberPattern:before.settings.numberPattern,numberHint:before.settings.numberHint,trackingUrl:before.settings.trackingUrl,expectedUpdatedAt:before.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),storageWeeklyCents:700}},name='test_storage_audit_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id = '${KREILE_TENANT_SLUG}' AND NEW.event_type = 'shipping_settings_updated' AND NEW.payload->'after'->'dispatchPolicy'->>'storageWeeklyCents' = '700' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ try{
+  await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON public.ui_events FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
+  expect(await withSession(full,()=>saveShippingSettingsAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await withSession(full,()=>readShippingSettingsAction())).toEqual(before);
+  expect(await sql`SELECT id FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='shipping_settings_updated' AND payload->'after'->'dispatchPolicy'->>'storageWeeklyCents'='700'`).toHaveLength(0);
+ }finally{
+  await sql.unsafe(`DROP TRIGGER IF EXISTS ${name} ON public.ui_events`);
+  await sql.unsafe(`DROP FUNCTION private.${name}()`);
+ }
+ expect(await withSession(full,()=>saveShippingSettingsAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:false,settings:{dispatchPolicy:{storageWeeklyCents:700}}});
+ expect(await withSession(full,()=>saveShippingSettingsAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT payload->>'actorId' AS actor FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='shipping_settings_updated' AND payload->'after'->'dispatchPolicy'->>'storageWeeklyCents'='700'`).toEqual([{actor:full.actorId}]);
+});
