@@ -250,10 +250,17 @@ export async function sendCommunicationMail(
   });
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
   if (!/^\S+@\S+\.\S+$/.test(target.email)) return { code: "VALIDATION_ERROR", message: "Beim Kunden ist keine gültige E-Mail-Adresse hinterlegt." };
+  // PL23:01: reserve the external intent independently of a composer UUID.
+  // The body remains outside the business log; its hash binds a same-key retry.
+  const originals=input.document?[{id:input.document.id,sha256:input.document.sha256},...bundle.map(document=>({id:document.id,sha256:document.sha256}))]:[input.attachment,...input.additionalAttachments??[]].filter((attachment):attachment is GraphMailAttachment=>!!attachment).map(attachment=>({id:null,sha256:createHash('sha256').update(attachment.bytes).digest('hex')}));
+  originals.sort((a,b)=>String(a.id??a.sha256).localeCompare(String(b.id??b.sha256)));
+  const intentHash=createHash('sha256').update(JSON.stringify([target.email.trim().toLowerCase(),input.subject.trim(),input.targetType,input.targetId,target.customerId,target.orderId,originals])).digest('hex');
+  const contentSha256=createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex');
   const source = `MS_GRAPH_OUT:${input.clientRequestId}`;
   let pending: { threadId: string; recordedAt: string; replay?: CommunicationReceipt };
   try {
     pending = await withPrivilegedTenantTransaction(auth, async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${auth.tenantId}:mail-intent:${intentHash}`},0))`);
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${auth.tenantId}:${source}`}, 0))`);
       const existing = await tx.execute<ThreadRow>(sql`
         SELECT id, customer_id, order_id, status, created_at,created_by::text FROM public.communication_threads
@@ -262,6 +269,10 @@ export async function sendCommunicationMail(
       if (existing.length > 1) throw new Error("COMMUNICATION_SOURCE_AMBIGUOUS");
       if (existing[0]) {
         if (existing[0].customer_id !== target.customerId || existing[0].order_id !== target.orderId) throw new Error("COMMUNICATION_TARGET_MISMATCH");
+        if(existing[0].created_by!==auth.userId)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
+        const prepared=await tx.execute<{user_id:string;intent:string;content:string}>(sql`SELECT user_id::text,payload->>'intentHash' AS intent,payload->>'contentSha256' AS content FROM public.events
+          WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND payload->>'threadId'=${existing[0].id} AND correlation_id=${input.clientRequestId}::uuid`);
+        if(prepared.length>1||prepared.length===1&&(prepared[0].user_id!==auth.userId||prepared[0].intent!==intentHash||prepared[0].content!==contentSha256))throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         if (existing[0].status !== "sent") throw new Error("COMMUNICATION_OUTCOME_UNCLEAR");
         if(input.collectionReminder){
          if(existing[0].created_by!==auth.userId)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
@@ -277,6 +288,13 @@ export async function sendCommunicationMail(
           return { threadId: existing[0].id, recordedAt: iso(existing[0].created_at), replay: { threadId: existing[0].id, messageId: confirmed[0].id, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(existing[0].created_at), replayed: true } };
         }
       }
+      const unresolved=await tx.execute(sql`SELECT prepared.id FROM public.events prepared
+        LEFT JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
+        WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND prepared.payload->>'intentHash'=${intentHash}
+          AND (thread.status IS DISTINCT FROM 'sent' OR NOT EXISTS(SELECT 1 FROM public.events sent
+            WHERE sent.tenant_id=prepared.tenant_id AND sent.event_type IN('COMMUNICATION_MAIL_SENT_V1','COMMUNICATION_DOCUMENT_SENT_V1')
+              AND sent.user_id=prepared.user_id AND sent.payload->>'threadId'=prepared.payload->>'threadId')) LIMIT 1`);
+      if(unresolved.length)throw Error('COMMUNICATION_OUTCOME_UNCLEAR');
       if(readMicrosoftGraphConfigurationStatus().code!=='READY')throw Error('COMMUNICATION_NOT_CONFIGURED');
       if((input.document&&!input.beforePrepare)||(input.beforePrepare&&!await input.beforePrepare(tx,target.email)))throw Error('COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED');
       const threadId = randomUUID();
@@ -286,6 +304,11 @@ export async function sendCommunicationMail(
         RETURNING id, customer_id, order_id, status, created_at
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("COMMUNICATION_THREAD_INSERT_FAILED");
+      const prepBytes=createHash('sha256').update('communication-mail-prepared:'+auth.tenantId+':'+input.clientRequestId).digest();prepBytes[6]=(prepBytes[6]&15)|80;prepBytes[8]=(prepBytes[8]&63)|128;
+      const hex=prepBytes.subarray(0,16).toString('hex'),prepareKey=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+      const proof=await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
+        VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_PREPARED_V1','COMMUNICATION_MAIL_PREPARED_V1',${JSON.stringify({threadId,clientRequestId:input.clientRequestId.toLowerCase(),targetType:input.targetType,targetId:input.targetId,customerId:target.customerId,orderId:target.orderId,recipient:target.email,intentHash,contentSha256,documents:originals})}::jsonb,'success',${auth.userId}::uuid,${prepareKey}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp()) RETURNING id`);
+      if(proof.length!==1)throw Error('COMMUNICATION_MAIL_PREPARE_PROOF_MISSING');
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,threadId,'prepared');
       if(input.collectionReminder)await prepareCollectionReminder(tx,auth,input.collectionReminder,{threadId,clientRequestId:input.clientRequestId,body:input.body});
       return { threadId, recordedAt: iso(rows[0].created_at) };

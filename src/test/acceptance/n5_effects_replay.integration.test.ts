@@ -82,3 +82,39 @@ it('S02 existing payment, pickup, shipping and sending retain exactly one effect
  expect(sends).toBe(2);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${unknown.clientRequestId}::uuid`).toHaveLength(0);
 },120000);
+
+it('S02 H15 a fresh click key cannot resend the same unresolved external mail after reload',async()=>{
+ const order=await readyInvoiceOrder('N5-Unklar-Neuladen');let sends=0,lost=true;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-N5-external-provider-token'.repeat(3),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;if(lost)throw Error('TEST external effect accepted but response lost');return new Response(null,{status:202});}
+  return nativeFetch(input,init);
+ });
+ const input={targetType:'CUSTOMER' as const,targetId:order.customerId,subject:'TEST N5 original',body:'TEST identical external intent after reload.',clientRequestId:randomUUID()};
+ const guard='test_mail_prepare_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${guard}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND NEW.correlation_id='${input.clientRequestId}'::uuid THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${guard} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${guard}()`);
+ try{
+  expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});
+  expect(sends).toBe(0);
+  expect(await sql`SELECT id FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`).toHaveLength(0);
+ }finally{await sql.unsafe(`DROP TRIGGER ${guard} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${guard}()`);}
+ expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});
+ const stored=await sql`SELECT id::text,status FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientRequestId}`;
+ expect(stored).toHaveLength(1);expect(stored[0].status).toBe('failed');
+ const reservation=await sql`SELECT id,payload,user_id::text AS actor FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND correlation_id=${input.clientRequestId}::uuid`;
+ expect(reservation).toHaveLength(1);expect(reservation[0].actor).toBe(full.actorId);
+ expect(reservation[0].payload).toMatchObject({threadId:stored[0].id,targetId:order.customerId,intentHash:expect.stringMatching(/^[0-9a-f]{64}$/),documents:[]});
+ expect(JSON.stringify(reservation[0].payload)).not.toContain(input.body);
+ await expect(sql`UPDATE public.events SET payload=payload||jsonb_build_object('intentHash',repeat('a',64)) WHERE id=${reservation[0].id}`).rejects.toThrow(/append-only/);
+ await expect(sql`DELETE FROM public.events WHERE id=${reservation[0].id}`).rejects.toThrow(/append-only/);
+ expect(await sql`SELECT payload FROM public.events WHERE id=${reservation[0].id}`).toEqual([{payload:reservation[0].payload}]);
+ expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(1);
+ // A reload/new composer loses the in-memory request ref. It must not turn
+ // uncertainty into an additional external effect with a different UUID.
+ lost=false;
+ const afterReload=await withSession(full,()=>sendCustomerMailAction({...fresh(input),clientRequestId:randomUUID()}));
+ expect({code:afterReload.code,sends}).toEqual({code:'CONFLICT',sends:1});
+ expect(await sql`SELECT id FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${order.customerId}`).toHaveLength(1);
+},120000);
