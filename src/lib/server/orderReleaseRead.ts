@@ -34,8 +34,13 @@ export async function markOrderInformedByPhone(auth:AuthorizationSnapshot,input:
  const intent=createHash('sha256').update(JSON.stringify([input.orderId,input.expectedVersion,'telefon'])).digest('hex');
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':'+input.clientEventId},0))`);
-  const prior=await tx.execute<{event_type:string;user_id:string;order_id:string;payload:{intent:string;receipt:InformedReceipt}}>(sql`SELECT event_type,user_id::text,order_id,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${input.clientEventId}::uuid`);
-  if(prior.length){const event=prior[0];if(prior.length!==1||event.event_type!=='ORDER_CUSTOMER_INFORMED_V1'||event.user_id!==auth.userId||event.order_id!==input.orderId||event.payload.intent!==intent||event.payload.receipt.channel!=='telefon')return {code:'CONFLICT' as const,message:'Diese Kennung wurde bereits anders verwendet.'};return {code:'OK' as const,receipt:event.payload.receipt,replayed:true};}
+  const prior=await tx.execute<{id:string;event_type:string;user_id:string;order_id:string;payload:{intent:string;receipt:InformedReceipt}}>(sql`SELECT id::text,event_type,user_id::text,order_id,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${input.clientEventId}::uuid`);
+  if(prior.length){
+   const event=prior[0];if(prior.length!==1||event.event_type!=='ORDER_CUSTOMER_INFORMED_V1'||event.user_id!==auth.userId||event.order_id!==input.orderId||event.payload.intent!==intent)return {code:'CONFLICT' as const,message:'Diese Kennung wurde bereits anders verwendet.'};
+   const receipt=event.payload.receipt;
+   if(!receipt||receipt.eventId!==event.id||receipt.actorId!==event.user_id||receipt.orderId!==event.order_id||receipt.channel!=='telefon'||receipt.threadId!==null||!uuid.test(receipt.freezeId)||!Number.isFinite(Date.parse(receipt.recordedAt)))throw Error('ORDER_PHONE_NOTIFICATION_RECEIPT_INVALID');
+   return {code:'OK' as const,receipt,replayed:true};
+  }
   const context=await readReadyNotificationContext(tx,auth.tenantId,input.orderId);
   if(!context||context.version!==input.expectedVersion)return {code:'CONFLICT' as const,message:'Der Auftrag ist nicht mehr in diesem Fertig-Stand.'};
   const receipt=await appendOrderInformed(tx,auth,{...input,channel:'telefon',intent});

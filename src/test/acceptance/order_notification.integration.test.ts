@@ -102,8 +102,10 @@ it('a damaged newest TEST notice is unavailable instead of silently falling back
  if(saved.code!=='OK')throw Error('NOTICE_CORRUPTION_SETUP');
  const id=randomUUID(),key=randomUUID();
  // Isolated synthetic damaged history; never an alternate product writer or changed original event.
- const payload={intent:'TEST-corrupt-notice',receipt:{...saved.receipt,eventId:id,actorId:randomUUID()}};
+ const [original]=await sql`SELECT payload->>'intent' AS intent FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.receipt.eventId}`;
+ const payload={intent:original.intent,receipt:{...saved.receipt,eventId:id,actorId:randomUUID()}};
  await sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
  VALUES(${id},${KREILE_TENANT_SLUG},${order.orderId},'ORDER_CUSTOMER_INFORMED_V1','TEST damaged receipt',${sql.json(payload)}::jsonb,'success',${full.actorId}::uuid,${key}::uuid,${key}::uuid,1,statement_timestamp())`;
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{code:'UNAVAILABLE'}}});
+ expect(await withSession(full,()=>markOrderInformedByPhoneAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:key}))).toMatchObject({code:'UNAVAILABLE'});
 });
