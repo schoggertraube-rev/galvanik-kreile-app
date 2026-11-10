@@ -13,9 +13,9 @@ it('E06 keeps the oldest open notice clock and every member when a later order j
  expect(planInitialDispatchReminder({...input,today:'2026-11-10'},policy)).toMatchObject({state:'WAIT'});
 });
 
-it('a pickup agreement removes only its own reminder clock while collective contact still names all ware',()=>{
+it('a pickup agreement removes only its own reminder clock and collective contact names only the remaining ware',()=>{
  const input={tenantId:'TEST-tenant',customerId:'TEST-customer',handover:'pickup' as const,today:'2026-11-11',members:[{orderId:'TEST-agreed',orderNumber:'TEST-A1',noticeAt:'2026-11-02T10:00:00Z'},{orderId:'TEST-open',orderNumber:'TEST-A2',noticeAt:'2026-11-10T10:00:00Z'}],pausedOrderIds:['TEST-agreed']};
  const plan=planInitialDispatchReminder(input,{...emptyDispatchPolicy(),reminderDays:2});
- expect(plan).toMatchObject({state:'WAIT',due:'2026-11-12',anchorOrderId:'TEST-open',orderIds:['TEST-agreed','TEST-open'],orderNumbers:['TEST-A1','TEST-A2'],needsNotice:[]});
+ expect(plan).toMatchObject({state:'WAIT',due:'2026-11-12',anchorOrderId:'TEST-open',orderIds:['TEST-open'],orderNumbers:['TEST-A2'],needsNotice:[]});
  expect(planInitialDispatchReminder({...input,pausedOrderIds:['TEST-agreed','TEST-open']},{...emptyDispatchPolicy(),reminderDays:2})).toMatchObject({clientKey:null,due:null});
 });
