@@ -7,6 +7,7 @@ const { withTransaction, execute } = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/server/orderReleaseRead", () => ({readOpenOrderComplaint:async()=>null}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
 vi.mock("drizzle-orm", () => ({
   sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }),

@@ -36,9 +36,12 @@ describe("order content command", () => {
       .mockResolvedValueOnce([{ id: "order-1", customer_id: "customer-1", version: 1, station: "angenommen", status: "in_progress" }])
       .mockResolvedValueOnce([{ id: itemId, catalog_service_id: serviceId }])
       .mockResolvedValueOnce([{ id: serviceId, name: "Vernickeln", surface: "vernickeln", unit: "stueck", net_price_cents: 1250, vat_rate_basis_points: 1900, active: true }])
+      .mockResolvedValueOnce([{valid:true}]) // Previously qualified production-history marker.
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ version: 2 }])
-      .mockResolvedValueOnce([{ id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", user_id: actor, aggregate_version: 2, created_at: "2026-10-27T04:00:00.000Z", payload: {}, event_type: "ORDER_CONTENT_CHANGED_V1", order_id: "order-1" }]);
+      .mockResolvedValueOnce([{ id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", user_id: actor, aggregate_version: 2, created_at: "2026-10-27T04:00:00.000Z", payload: {}, event_type: "ORDER_CONTENT_CHANGED_V1", order_id: "order-1" }])
+      .mockResolvedValueOnce([{has_quote:false}])
+      .mockResolvedValueOnce([]); // No previously unpriced completed position to value.
 
     const result = await changeOrderContent({
       orderId: "order-1", expectedVersion: 1, clientEventId, note: "Sichtflächen schützen",
@@ -46,7 +49,7 @@ describe("order content command", () => {
     });
 
     expect(result).toMatchObject({ code: "OK", replayed: false, receipt: { aggregateVersion: 2, actorId: actor } });
-    expect(execute).toHaveBeenCalledTimes(8);
+    expect(execute).toHaveBeenCalledTimes(11);
   });
 
   it("fails closed without order write permission", async () => {
