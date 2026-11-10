@@ -73,7 +73,13 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  const originalFreezes=await sql`SELECT order_id AS "orderId",id::text AS "freezeId" FROM private.order_freezes WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id IN (${second.orderId},${companion.orderId}) ORDER BY order_id`;
  expect(response.proofs).toHaveLength(1);
  expect(response.proofs[0].freezes.slice().sort((a,b)=>a.orderId.localeCompare(b.orderId))).toEqual([...originalFreezes]);
+ const replyEvents=await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1'`;
+ expect(replyEvents).toEqual([{user_id:full.actorId}]);
+ const [beforeRead]=await sql`SELECT count(*)::int AS count FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const beforeReadGraph=lookups;
  const reacted=await withSession(full,()=>getOrdersDb());if(!reacted.ok)throw Error('COHORT_REACTION_READ');
+ expect(await sql`SELECT count(*)::int AS count FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual([beforeRead]);
+ expect(lookups).toBe(beforeReadGraph);
  expect(reacted.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED',automaticSend:false});
  expect(await sql`SELECT station FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.orderId}`).toEqual([{station:'fertig'}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND graph_message_id='TEST-collective-reply' AND kunde_id=${first.customerId}`).toEqual([{n:1}]);
@@ -90,11 +96,11 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  replyKey='TEST-invalid-header';
  const uncertain=await withSession(full,()=>getOrdersDb());if(!uncertain.ok)throw Error('COHORT_UNCERTAIN_READ');
  expect(uncertain.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED'});
- expect(uncertain.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'RECONCILE_RESPONSE',responseState:'UNAVAILABLE',requiresResponseCheck:true});
+ expect(uncertain.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'DUE',responseState:'NONE',requiresResponseCheck:false});
  const operational=await createFixture(['auftraege'],'werkstatt'),beforeLookup=lookups;
  const limited=await withSession(operational,()=>getOrdersDb());if(!limited.ok)throw Error('COHORT_LIMITED_READ');
  expect(limited.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'REPLIED',requiresResponseCheck:false});
- expect(limited.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'NOT_CHECKED',requiresResponseCheck:true});
+ expect(limited.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'NONE',requiresResponseCheck:false});
  expect(lookups).toBe(beforeLookup);expect(requests).toHaveLength(3);
  // The recorded reaction is idempotent and remains conditional on its actual immutable receipt.
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1'`).toEqual([{n:1}]);

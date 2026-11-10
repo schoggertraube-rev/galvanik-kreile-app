@@ -51,7 +51,7 @@ async function prepareWithoutMail(label:string){
  const due=await plan();expect(due?.finishedDispatch?.storage).toMatchObject({state:'DUE'});
  const request={customerId:order.customerId,handover:'pickup' as const,clientKey:due!.finishedDispatch!.storage!.letter!.clientKey};return {order,request,plan};
 }
-async function attachReplyToOriginalNotice(order:{orderId:string;customerId:string},identity:string){
+async function attachReplyToOriginalNotice(order:{orderId:string;customerId:string},identity:string,expected:'OK'|'UNAVAILABLE'='OK'){
  const [notice]=await sql`SELECT thread.source,customer.email FROM public.events event JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->'receipt'->>'threadId' JOIN public.customers customer ON customer.tenant_id=event.tenant_id AND customer.id=${order.customerId} WHERE event.tenant_id=${KREILE_TENANT_SLUG} AND event.order_id=${order.orderId} AND event.event_type='ORDER_CUSTOMER_INFORMED_V1' LIMIT 1`;
  const reference='<TEST-sent-'+order.orderId+'@example.invalid>';
  const notices=await sql`SELECT thread.source,event.order_id FROM public.events event JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->'receipt'->>'threadId' WHERE event.tenant_id=${KREILE_TENANT_SLUG} AND event.event_type='ORDER_CUSTOMER_INFORMED_V1' AND thread.customer_id=${order.customerId}`;
@@ -66,7 +66,7 @@ async function attachReplyToOriginalNotice(order:{orderId:string;customerId:stri
   }return nativeFetch(input,init);
  });
  const {attachOutlookMailAction}=await import('@/app/actions/communications.actions');
- expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:order.customerId,graphMessageId:identity}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:order.customerId,graphMessageId:identity}))).toMatchObject({code:expected});
 }
 it.each(['reply','goodsOut'] as const)('a reply to A narrows the shared E5 task to B, preserves the posted original and finishes through %s',async(ending)=>{
  const {order,second,request,plan}=await prepareLetter('Teilantwort finale Aufgabe',true,true);
@@ -95,7 +95,7 @@ it.each(['reply','goodsOut'] as const)('a reply to A narrows the shared E5 task 
   expect(await withSession(full,()=>recordGoodsOutAction({orderId:second!.orderId,mode:'abholung',expectedVersion:current.version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await sql`SELECT station FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{station:'fertig'}]);
  }
- expect(await sql`SELECT status,erledigt_von::text AS actor FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${final.taskId}::uuid`).toEqual([{status:'erledigt',actor:ending==='reply'?operator.actorId:full.actorId}]);
+ expect(await sql`SELECT status,erledigt_von::text AS actor FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${final.taskId}::uuid`).toEqual([{status:'erledigt',actor:full.actorId}]);
  expect(await withSession(operator,()=>getIntakeTaskAction({taskId:final.taskId}))).toMatchObject({code:'OK',task:{status:'erledigt'}});
 });
 it('a reply to A atomically replaces the unposted A+B PDF with B, preserving originals and rolling back a missing replacement receipt',async()=>{
@@ -104,16 +104,17 @@ it('a reply to A atomically replaces the unposted A+B PDF with B, preserving ori
  expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
  const original=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(original.code!=='OK')throw Error('PARTIAL_POST_ORIGINAL:'+original.code);
  expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:customer.email}))).toMatchObject({code:'OK'});
- await attachReplyToOriginalNotice(order,'TEST-partial-post-'+order.orderId);
+
  const guard='test_reply_replace_'+randomUUID().replaceAll('-','');
  await sql.unsafe(`CREATE FUNCTION private.${guard}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND NEW.payload->'meta'->'replacesForReply'->>'documentId'='${original.document.id}' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
  try{
   await sql.unsafe(`CREATE TRIGGER ${guard} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${guard}()`);
-  expect(await plan()).toMatchObject({unavailable:true});
+  await attachReplyToOriginalNotice(order,'TEST-partial-post-'+order.orderId,'UNAVAILABLE');
   expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${original.taskId}::uuid`).toEqual([{status:'offen'}]);
   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1' AND payload->'receipt'->>'customerId'=${order.customerId}`).toHaveLength(0);
   expect(await sql`SELECT count(*)::integer AS n FROM public.tasks task WHERE tenant_id=${KREILE_TENANT_SLUG} AND art='aufgabe' AND bezug_id IN (${order.orderId},${second!.orderId})`).toEqual([{n:1}]);
  }finally{await sql.unsafe(`DROP TRIGGER IF EXISTS ${guard} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${guard}()`);}
+ await attachReplyToOriginalNotice(order,'TEST-partial-post-'+order.orderId);
  const operator=await createFixture(['auftraege','mails'],'werkstatt');
  const read=await withSession(operator,()=>getOrdersDb());if(!read.ok)throw Error('PARTIAL_POST_QUEUE');
  expect(read.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'REPLIED'});
@@ -212,17 +213,18 @@ it('an original customer reply ends the exact open postal task without inventing
   return nativeFetch(input,init);
  });
  const {attachOutlookMailAction}=await import('@/app/actions/communications.actions');
- expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:order.customerId,graphMessageId:'TEST-post-reply'}))).toMatchObject({code:'OK'});
+ const replyInput={targetType:'CUSTOMER' as const,targetId:order.customerId,graphMessageId:'TEST-post-reply'};
  const guard='test_reply_end_'+randomUUID().replaceAll('-','');
  await sql.unsafe(`CREATE FUNCTION private.${guard}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='ORDER_COLLECTION_TASK_ENDED_FOR_REPLY_V1' AND NEW.payload->>'taskId'='${prepared.taskId}' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
  try{
   await sql.unsafe(`CREATE TRIGGER ${guard} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${guard}()`);
-  expect(await plan()).toMatchObject({unavailable:true,gaps:expect.arrayContaining(['COLLECTION_PROOF_UNAVAILABLE'])});
+  expect(await withSession(full,()=>attachOutlookMailAction(JSON.parse(JSON.stringify(replyInput))))).toMatchObject({code:'UNAVAILABLE'});
   expect(await sql`SELECT status,erledigt_am FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.taskId}::uuid`).toEqual([{status:'offen',erledigt_am:null}]);
   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1' AND payload->'receipt'->>'customerId'=${order.customerId}`).toHaveLength(0);
  }finally{
   await sql.unsafe(`DROP TRIGGER IF EXISTS ${guard} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${guard}()`);
  }
+ expect(await withSession(full,()=>attachOutlookMailAction(JSON.parse(JSON.stringify(replyInput))))).toMatchObject({code:'OK'});
  expect((await plan())?.reminder).toMatchObject({responseState:'REPLIED'});
  const task=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));
  expect(task).toMatchObject({code:'OK',task:{status:'erledigt'},postalLetter:{state:'ENDED_BY_REPLY',document:{sha256:prepared.document.sha256}}});
@@ -261,7 +263,7 @@ it('an original customer reply ends the exact open postal task without inventing
   expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:order.customerId,graphMessageId:'TEST-final-reply'}))).toMatchObject({code:'OK'});
   const reacted=await withSession(operational,()=>getOrdersDb());if(!reacted.ok)throw Error('REPLY_FINAL_READ');
   expect(reacted.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'REPLIED'});
-  expect(await sql`SELECT status,erledigt_von::text AS actor FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${final.taskId}::uuid`).toEqual([{status:'erledigt',actor:operational.actorId}]);
+  expect(await sql`SELECT status,erledigt_von::text AS actor FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${final.taskId}::uuid`).toEqual([{status:'erledigt',actor:full.actorId}]);
   expect(await withSession(operational,()=>getIntakeTaskAction({taskId:final.taskId}))).toMatchObject({code:'OK',task:{status:'erledigt'}});
   vi.setSystemTime(future+7*24*60*60*1000);
   const nextMail=(await plan())?.storage?.letter;if(!nextMail)throw Error('REPLY_NEXT_MAIL_PROPOSAL');

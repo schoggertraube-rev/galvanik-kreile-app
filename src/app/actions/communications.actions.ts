@@ -62,6 +62,7 @@ export async function attachOutlookMailAction(input: TargetInput & { graphMessag
   if(imported.code!=='OK')return imported;
   const linked=await linkImportedMail(authorizationResult.data,{itemId:imported.itemId,targetType:input.targetType,targetId:input.targetId},readCommunicationTargetInTransaction,readCustomerProfile);
   if(linked.code!=='OK')return linked;
+  const replyChecked=await withDispatchReply(authorizationResult.data,imported);if(replyChecked.code!=='OK')return replyChecked;
   const correspondence=await attachInboxMessage(authorizationResult.data,input,imported.message);
   return correspondence.code==='OK'?{...correspondence,data:{...correspondence.data,attachmentsImported:imported.originalCount,attachmentsSkipped:imported.filteredAttachments}}:correspondence;
 }
@@ -87,6 +88,12 @@ export async function sendCustomerMailAction(input: TargetInput & {
   if(input.targetType!=='CUSTOMER'||input.attachment||!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
   if(!request||Object.keys(request).sort().join(',')!==(request.stage==='E4'?'clientKey,dueDate,handover,stage':'dueDate,handover,stage')||!['E1','E2','E4'].includes(request.stage)||!['pickup','shipping'].includes(request.handover)||!/^\d{4}-\d{2}-\d{2}$/.test(request.dueDate)||!Number.isFinite(Date.parse(request.dueDate))||typeof input.subject!=='string'||typeof input.body!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientRequestId)||(request.stage==='E4'&&(typeof request.clientKey!=='string'||!/^[0-9a-f-]{36}$/.test(request.clientKey))))return {code:'VALIDATION_ERROR' as const,message:COLLECTION_REMINDER_COPY.invalid};
   const prior=await readCollectionReminderReceipt(auth,{...input,collectionReminder:request});if(prior.code!=='NOT_FOUND')return prior;
+  // An explicit send also synchronizes the already imported originals. It is
+  // a write command under the sender, never an effect of opening the list.
+  const linked=await readLinkedIntakeMails(auth,{targetType:'CUSTOMER',targetId:input.targetId});
+  if(linked.code!=='OK')return linked;
+  for(const mail of linked.data){const original=await readIntakeMailImportReceipt(auth,{graphMessageId:mail.id});if(original.code!=='OK')return original;const checked=await withDispatchReply(auth,original);if(checked.code!=='OK')return checked;}
+
   const [{getOrdersDb},{readShippingSettings,readShippingSettingsInTransaction}]=await Promise.all([import('@/app/actions/orders.actions'),import('@/modules/fundament/server-public')]);
   const [orders,settings]=await Promise.all([getOrdersDb(),readShippingSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true})]);
   if(!orders.ok||settings.code!=='OK')return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.unavailable};
@@ -162,11 +169,32 @@ export async function sendCustomerMailAction(input: TargetInput & {
 }
 
 import {importIntakeGraphMail} from '@/modules/eingang/server-public';
+import {recordDispatchReply} from '@/lib/server/dispatchReplyPort';
+import {finishDispatchCallsForReply} from '@/lib/server/dispatchCallPort';
+import {finishPostalTasksForReply} from '@/lib/server/storagePostalPort';
+import {finishFinalTasksForReply} from '@/lib/server/storageFinalStagePort';
+import {readShippingSettings} from '@/modules/fundament/server-public';
+import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
+import {completeCollectionTaskForReply,restrictCollectionTaskForReply,createOrderHandoverTask} from '@/modules/tasks/server-public';
+import {recordImportedDispatchReplies} from '@/lib/server/dispatchReplyEffectsPort';
 import {qualifyImportedDeliveryFailure} from '@/lib/server/communicationDeliveryPort';
 async function withDeliveryFailure<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T){
  if(result.code!=='OK'||!result.itemId)return result;
  const qualified=await qualifyImportedDeliveryFailure(auth,result.itemId,customerId=>linkImportedMail(auth,{itemId:result.itemId!,targetType:'CUSTOMER',targetId:customerId},readCommunicationTargetInTransaction,readCustomerProfile));
- return qualified.code==='OK'?result:{...qualified,itemId:result.itemId};
+ return qualified.code==='OK'?withDispatchReply(auth,result):{...qualified,itemId:result.itemId};
+}
+async function withDispatchReply<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T){
+ if(result.code!=='OK'||!result.itemId)return result;
+ try{
+ const settings=await readShippingSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true});
+ if(settings.code==='UNAVAILABLE')throw Error('DISPATCH_REPLY_SETTINGS_UNAVAILABLE');
+ const record=(input:Parameters<typeof recordDispatchReply>[1])=>recordDispatchReply(auth,input,{readCustomerName:async tx=>{const customer=await readCustomerProfile(tx,auth.tenantId,input.customerId);if(!customer)throw Error('DISPATCH_REPLY_CUSTOMER_MISSING');return customer.name;},afterRecord:async(tx,receipt)=>{const complete=(taskId:string,note:string)=>completeCollectionTaskForReply(tx,auth,{taskId,replyEventId:receipt.eventId,note},{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});const restrict=(taskId:string)=>restrictCollectionTaskForReply(tx,auth,{taskId,replyEventId:receipt.eventId},{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});await finishDispatchCallsForReply(tx,auth,receipt,complete,restrict);await finishPostalTasksForReply(tx,auth,receipt,complete,{
+ settingsUpdatedAt:settings.code==='OK'?settings.settings.updatedAt:'',
+ customerCurrent:async(writeTx,snapshot)=>{const customer=await readCustomerProfile(writeTx,auth.tenantId,receipt.customerId,true);const {customerCountryLabel}=await import('@/modules/customers/public');const r=snapshot.recipient;return !!customer&&customer.name===r.name&&[customer.street,customer.houseNumber].filter(Boolean).join(' ')===r.street&&customer.zipCode===r.zip&&customer.city===r.city&&customerCountryLabel(customer.country)===r.country;},
+ createTask:(writeTx,value)=>createOrderHandoverTask(writeTx,auth,value,{effect:(effectTx,actor,effect)=>recordIntakeTaskEffect(effectTx,actor,effect,readCustomerProfile)})
+ });await finishFinalTasksForReply(tx,auth,receipt,complete,restrict);}});
+ await recordImportedDispatchReplies(auth,result.itemId,{readLinked:readLinkedIntakeMails,record});return result;}
+ catch(error){console.error('[IMPORTED_DISPATCH_REPLY_FAILED]',{name:error instanceof Error?error.name:'UnknownError',reason:error instanceof Error&&/^[A-Z_]+$/.test(error.message)?error.message:'DATABASE_OR_PROVIDER_FAILURE'});return {code:'UNAVAILABLE' as const,itemId:result.itemId,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
 }
 import {readMicrosoftGraphAttachments,readMicrosoftGraphMime,readMicrosoftGraphMessage,type GraphInboxMessage} from '@/lib/server/microsoftGraph';
 async function importIntakeMessage(auth:Parameters<typeof importIntakeGraphMail>[0],mail:GraphInboxMessage){
