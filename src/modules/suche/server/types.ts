@@ -12,6 +12,7 @@ export type SearchMatchField =
   | "customerName"
   | "task"
   | "part"
+  | "partNote"
   | "material"
   | "surface"
   | "dueDate"
@@ -48,6 +49,7 @@ export type SearchHit = {
 
 export type SearchOrderPart = {
   name: string;
+  internalNotes?: string | null;
   material: string | null;
   surfaceRequested: string | null;
 };

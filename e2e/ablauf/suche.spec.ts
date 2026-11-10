@@ -46,6 +46,19 @@ it('S23/S31 actual order dates and surface prefixes stay grounded in the stored 
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
 });
 
+it('S17 stored part instructions are searchable with their original evidence',async()=>{
+ const customerId=await customerFixture('S17');
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const note='TEST Gewinde M6 abdecken '+randomUUID();
+ const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',note,items:[{catalogServiceId:null,name:'TEST Griffe',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
+ if(created.code!=='OK')throw Error('S17_INTAKE:'+created.code);
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ expect(await withSession(full,()=>searchTenantAction('Gewinde M6'))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'ORDER',id:created.receipt.orderId,matchField:'partNote',matchValue:note})])});
+ expect(await sql`SELECT internal_notes FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId}`).toEqual([{internal_notes:note}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
 it('search preserves proven order hits when a separate customer source cannot read an isolated legacy row',async()=>{
  const needle='49'+Date.now().toString();
  const customerId=await customerFixture('PARTIAL');
@@ -59,6 +72,29 @@ it('search preserves proven order hits when a separate customer source cannot re
  expect(found.checkedSources).toContain('Auftragsbestand');
  expect(found.checkedSources).not.toContain('Kundenstamm');
  expect(found.hits.some(hit=>hit.type==='CUSTOMER')).toBe(false);
+});
+
+it('search preserves the customer hit and reports incomplete coverage when an actual legacy order cannot be read',async()=>{
+ const needle='TEST Altauftrag '+randomUUID();
+ const customerId=await customerFixture(needle);
+ const order=await searchOrderFixture('TEST beschädigtes Altdatum',customerId);
+ const [original]=await sql`SELECT title FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.receipt.orderId}`;
+ // Isolated historical TEST state, with the real DB guards still enabled.
+ try {
+ await sql`UPDATE public.orders SET title='' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.receipt.orderId}`;
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const result=await withSession(full,()=>searchTenantAction(needle));
+ expect(result).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'CUSTOMER',id:customerId})]),failedSources:['Auftragsbestand'],coverage:{truncated:true}});
+ if(result.code!=='OK')throw Error('SEARCH_PARTIAL_ORDER:'+result.code);
+ expect(result.checkedSources).toContain('Kundenstamm');
+ expect(result.checkedSources).not.toContain('Auftragsbestand');
+ expect(result.hits.some(hit=>hit.type==='ORDER')).toBe(false);
+ expect(await sql`SELECT title FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.receipt.orderId}`).toEqual([{title:''}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+ } finally {
+  await sql`UPDATE public.orders SET title=${original.title} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.receipt.orderId}`;
+ }
 });
 
 it('S5/S6 search exact stored order and customer numbers through the actual action without creating data',async()=>{

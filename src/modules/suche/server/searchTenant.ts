@@ -69,7 +69,8 @@ function assertOrder(document: SearchOrderDocument): void {
   ) throw new Error("SEARCH_ORDER_DOCUMENT_INVALID");
   dateSearchTerms(document.dueDate);
   for (const part of document.parts) {
-    if (!part || !validRequired(part.name) || !validOptional(part.material) || !validOptional(part.surfaceRequested)) {
+    if (!part || !validRequired(part.name) || !validOptional(part.material) || !validOptional(part.surfaceRequested)
+      || (part.internalNotes !== undefined && part.internalNotes !== null && typeof part.internalNotes !== 'string')) {
       throw new Error("SEARCH_ORDER_DOCUMENT_INVALID");
     }
   }
@@ -91,6 +92,7 @@ function orderMatchField(order: SearchOrderDocument, query: string): SearchMatch
     if (includesQuery(part.name, query)) return "part";
     if (includesQuery(part.material, query)) return "material";
     if (includesQuery(part.surfaceRequested, query)) return "surface";
+    if (includesQuery(part.internalNotes ?? null, query)) return "partNote";
   }
   if (includesQuery(order.title, query)) return "title";
   if (includesQuery(order.customerName, query)) return "customerName";
@@ -127,7 +129,7 @@ function customerRecordText(customer: SearchCustomerDocument): string {
 const MATCH_LABEL: Record<SearchMatchField, string> = {
   orderNumber: "Auftragsnummer", title: "Auftrag", customerName: "Kunde", task: "Aufgabe",
   orderRecord: "Auftrag", phone: "Telefon", contactPerson: "Ansprechpartner", email: "E-Mail",
-  part: "Teil", material: "Material", surface: "Oberfläche", dueDate: "Termin",
+  part: "Teil", partNote: "Teilhinweis", material: "Material", surface: "Oberfläche", dueDate: "Termin",
   name: "Kundenname", companyName: "Firma", customerNumber: "Kundennummer", city: "Ort",
   customerRecord: "Kundendatensatz", quoteNumber: "KV-Nummer", invoiceNumber: "Rechnungsnummer",
   note: "Notiz", position: "Position",
@@ -148,6 +150,7 @@ function orderMatchValue(order: SearchOrderDocument, field: SearchMatchField, qu
     if (field === "part" && includesQuery(part.name, query)) return part.name;
     if (field === "material" && includesQuery(part.material, query)) return part.material ?? "";
     if (field === "surface" && includesQuery(part.surfaceRequested, query)) return part.surfaceRequested ?? "";
+    if (field === "partNote" && includesQuery(part.internalNotes ?? null, query)) return part.internalNotes ?? "";
   }
   throw new Error("SEARCH_ORDER_MATCH_UNPROVEN");
 }
