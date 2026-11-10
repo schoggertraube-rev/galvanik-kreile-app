@@ -21,6 +21,7 @@ export type SearchMatchField =
   | "city"
   | "customerRecord"
   | "phone"
+  | "contactPerson"
   | "quoteNumber"
   | "invoiceNumber"
   | "note"
@@ -70,6 +71,7 @@ export type SearchCustomerDocument = {
   customerType: string;
   city: string | null;
   phone?: string | null;
+  contactPerson?: string | null;
 };
 
 export type SearchCustomerBatch = {

@@ -80,6 +80,7 @@ function assertCustomer(document: SearchCustomerDocument): void {
     !document || !validRequired(document.id) || !validOptional(document.customerNumber)
     || !validRequired(document.name) || !validOptional(document.companyName)
     || !validRequired(document.customerType) || !validOptional(document.city)
+    || (document.contactPerson !== undefined && !validOptional(document.contactPerson))
   ) throw new Error("SEARCH_CUSTOMER_DOCUMENT_INVALID");
 }
 
@@ -105,6 +106,7 @@ export function customerMatchField(customer: SearchCustomerDocument, query: stri
   if (includesQuery(customer.companyName, query)) return "companyName";
   if (includesQuery(customer.customerNumber, query)) return "customerNumber";
   if (includesQuery(customer.city, query)) return "city";
+  if (includesQuery(customer.contactPerson ?? null, query)) return "contactPerson";
   if(/^[+\d\s()./-]+$/.test(query)&&normaliseCustomerPhone(query).length>=4
     &&normaliseCustomerPhone(customer.phone).includes(normaliseCustomerPhone(query)))return 'phone';
   if (includesQuery(customerRecordText(customer), query)) return "customerRecord";
@@ -113,16 +115,16 @@ export function customerMatchField(customer: SearchCustomerDocument, query: stri
   return null;
 }
 
-/** Mirrors Postgres concat_ws(' ', name, company_name, customer_number, city). */
+/** Uses only fields delivered by the existing customer read port. */
 function customerRecordText(customer: SearchCustomerDocument): string {
-  return [customer.name, customer.companyName, customer.customerNumber, customer.city]
+  return [customer.name, customer.companyName, customer.customerNumber, customer.city, customer.contactPerson ?? null]
     .filter((value): value is string => value !== null)
     .join(" ");
 }
 
 const MATCH_LABEL: Record<SearchMatchField, string> = {
   orderNumber: "Auftragsnummer", title: "Auftrag", customerName: "Kunde", task: "Aufgabe",
-  orderRecord: "Auftrag", phone: "Telefon",
+  orderRecord: "Auftrag", phone: "Telefon", contactPerson: "Ansprechpartner",
   part: "Teil", material: "Material", surface: "Oberfläche", dueDate: "Termin",
   name: "Kundenname", companyName: "Firma", customerNumber: "Kundennummer", city: "Ort",
   customerRecord: "Kundendatensatz", quoteNumber: "KV-Nummer", invoiceNumber: "Rechnungsnummer",
@@ -154,6 +156,7 @@ function customerMatchValue(customer: SearchCustomerDocument, field: SearchMatch
   if (field === "customerNumber") return customer.customerNumber ?? "";
   if (field === "city") return customer.city ?? "";
   if (field === "phone") return customer.phone ?? "";
+  if (field === "contactPerson") return customer.contactPerson ?? "";
   if (field === "customerRecord") return customerRecordText(customer);
   throw new Error("SEARCH_CUSTOMER_MATCH_UNPROVEN");
 }

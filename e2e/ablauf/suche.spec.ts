@@ -4,6 +4,20 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture,readyInvoiceOrder} from './orderFixture';
 
+it('S20 search finds the actual contact person with a grounded match without changing data',async()=>{
+ const customerId=await customerFixture('S20'),needle='TEST Buchhaltung '+randomUUID();
+ const {updateCustomerAction}=await import('@/app/actions/customers.actions');
+ expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),contactPerson:needle}))).toMatchObject({code:'OK'});
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ expect(await withSession(full,()=>searchTenantAction(needle))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'CUSTOMER',id:customerId,matchField:'contactPerson',matchValue:needle})])});
+ const worker=await createFixture(['auftraege'],'werkstatt');
+ const restricted=await withSession(worker,()=>searchTenantAction(needle));
+ // Operational search already permits customer lookup without Kunden editing rights.
+ expect(restricted).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'CUSTOMER',id:customerId,matchField:'contactPerson',matchValue:needle})])});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
 async function searchOrderFixture(label:string,customerId:string){
  const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
  const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',note:'TEST '+label,items:[{catalogServiceId:null,name:'TEST '+label+' Teil',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
