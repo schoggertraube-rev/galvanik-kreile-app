@@ -66,8 +66,8 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:first.customerId,graphMessageId:'TEST-collective-reply'}))).toMatchObject({code:'OK'});
  const {resolveAuthorization}=await import('@/lib/server/authorization');
  const {readDispatchResponses}=await import('@/lib/server/dispatchResponsePort');
- const {readLinkedIntakeMails,readIntakeMailImportReceipt}=await import('@/modules/eingang/server-public');
- const response=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('REPLY_SCOPE_AUTH');return readDispatchResponses(auth.data,{customerId:first.customerId,noticeThreadIds:[sent.data.threadId],oldestNoticeAt:original.recordedAt},{readLinked:readLinkedIntakeMails,readOriginal:async(actor,identity)=>{const original=await readIntakeMailImportReceipt(actor,identity);return original.code==='OK'?original:{code:original.code};}});});
+ const {readLinkedIntakeMails}=await import('@/modules/eingang/server-public');
+ const response=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('REPLY_SCOPE_AUTH');return readDispatchResponses(auth.data,{customerId:first.customerId,noticeThreadIds:[sent.data.threadId],oldestNoticeAt:original.recordedAt},{readLinked:readLinkedIntakeMails});});
  expect(response.state).toBe('REPLIED');
  const originalFreezes=await sql`SELECT order_id AS "orderId",id::text AS "freezeId" FROM private.order_freezes WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id IN (${first.orderId},${second.orderId}) ORDER BY order_id`;
  expect(response.proofs).toHaveLength(1);

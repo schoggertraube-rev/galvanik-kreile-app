@@ -19,7 +19,7 @@ export async function readStorageLetterPreview(auth:AuthorizationSnapshot,input:
  if(!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:copy.forbidden};
  const candidates=orders.filter(order=>order.customerId===input.customerId&&order.station==='fertig'&&order.finishedDispatch?.handover===input.handover);
  const letter=candidates.find(order=>order.finishedDispatch?.storage?.letter?.clientKey===input.clientKey)?.finishedDispatch?.storage?.letter;
- if(!letter||letter.state!=='DUE'||candidates.some(order=>letter.orderIds.includes(order.id)&&(order.finishedDispatch?.reminder?.requiresResponseCheck!==false||order.finishedDispatch?.pickupAppointment!==undefined&&letter.appointmentEventId!==order.finishedDispatch.pickupAppointment.eventId)))return {code:'CONFLICT' as const,message:copy.notReady};
+ if(!letter||letter.state!=='DUE'||candidates.some(order=>letter.orderIds.includes(order.id)&&(order.finishedDispatch?.reminder?.requiresResponseCheck!==false||order.finishedDispatch?.pickupAppointment!==undefined&&!letter.replyEventId&&letter.appointmentEventId!==order.finishedDispatch.pickupAppointment.eventId)))return {code:'CONFLICT' as const,message:copy.notReady};
  const members=candidates.filter(order=>letter.orderIds.includes(order.id)).sort((a,b)=>a.id.localeCompare(b.id));
  if(members.length!==letter.orderIds.length)return {code:'CONFLICT' as const,message:copy.notReady};
  try{
@@ -31,6 +31,6 @@ export async function readStorageLetterPreview(auth:AuthorizationSnapshot,input:
   const deadline=freezeStorageDeadline(settings.dispatchPolicy),numbers=members.map(order=>order.orderNumber),snapshot:StorageLetterSnapshot={date:berlinCalendarDay(),deadline,company:sender.company,
    recipient:{name:customer.name,street:[customer.street,customer.houseNumber].filter(Boolean).join(' '),zip,city:customer.city,country:customerCountryLabel(country)},
    orderNumbers:numbers,body:copy.letterBody(numbers,settings.dispatchPolicy?.finalStageAfterLetterDays??null)+(deadline.due?' '+copy.letterDeadline(deadline.due):'')};
-  return {code:'OK' as const,data:{snapshot,clientKey:letter.clientKey,channel:customer.email?.trim()?'mail' as const:'postal' as const,orders:members.map(order=>({id:order.id,version:order.version,number:order.orderNumber})),callTaskId:letter.callTaskId,appointmentEventId:letter.appointmentEventId,freezes:letter.freezes,settingsUpdatedAt:settings.updatedAt}};
+  return {code:'OK' as const,data:{snapshot,clientKey:letter.clientKey,channel:customer.email?.trim()?'mail' as const:'postal' as const,orders:members.map(order=>({id:order.id,version:order.version,number:order.orderNumber})),callTaskId:letter.callTaskId,appointmentEventId:letter.appointmentEventId,replyEventId:letter.replyEventId,freezes:letter.freezes,settingsUpdatedAt:settings.updatedAt}};
  }catch(error){console.error('[STORAGE_LETTER_PREVIEW_READ_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:copy.proofUnavailable};}
 }

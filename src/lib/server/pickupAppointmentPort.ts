@@ -110,7 +110,8 @@ export async function storageTaskHasAppointmentSource(tx:PrivilegedTenantTransac
  const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,eventId);if(appointment.actorId!==auth.userId)return false;
  const source=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND status='success' AND event_schema_version=1 AND payload->>'taskId'=${taskId} AND (
   event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND payload->>'channel'='post' AND payload->'meta'->'storageOrigin'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb
-  OR event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->'meta'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb)`);
+  OR event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->'meta'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb
+   AND NOT EXISTS(SELECT 1 FROM public.events narrowed WHERE narrowed.tenant_id=${auth.tenantId} AND narrowed.event_type='ORDER_STORAGE_FINAL_TASK_UPDATED_V1' AND narrowed.payload->>'taskId'=${taskId} AND NOT narrowed.payload->'meta'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb))`);
  return source.length===1;
 }
 export async function readOrderPickupAppointment(auth:AuthorizationSnapshot,orderId:string){

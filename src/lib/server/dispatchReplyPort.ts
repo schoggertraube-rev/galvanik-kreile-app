@@ -5,7 +5,7 @@ import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 import {readDispatchResponseScope,type DispatchResponseCheck} from './dispatchResponsePort';
-import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
+import {COLLECTION_REMINDER_COPY,DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 
 type Proof=DispatchResponseCheck['proofs'][number];
@@ -96,7 +96,38 @@ export async function collectionTaskHasReplySource(tx:PrivilegedTenantTransactio
  if(!hasAuthorizationArea(auth,'auftraege'))return false;
  const receipt=await readDispatchReplyReceipt(tx,auth,eventId);
  const sources=await tx.execute<{payload:{meta:{customerId:string;handover:string;freezes?:Proof['freezes'];storageOrigin?:{freezes:Proof['freezes']}}}}>(sql`SELECT payload FROM public.events WHERE tenant_id=${auth.tenantId} AND status='success' AND event_schema_version=1 AND payload->>'taskId'=${taskId}
- AND (event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_COLLECTION_CALL_UPDATED_V1','ORDER_STORAGE_FINAL_TASK_CREATED_V1') OR event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND payload->>'channel'='post') ORDER BY created_at DESC,id DESC LIMIT 1`);
+ AND (event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_COLLECTION_CALL_UPDATED_V1','ORDER_STORAGE_FINAL_TASK_CREATED_V1','ORDER_STORAGE_FINAL_TASK_UPDATED_V1') OR event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND payload->>'channel'='post') ORDER BY created_at DESC,id DESC LIMIT 1`);
  const meta=sources[0]?.payload.meta,freezes=meta?.storageOrigin?.freezes??meta?.freezes;
- return !!meta&&meta.customerId===receipt.customerId&&meta.handover===receipt.handover&&!!freezes?.length&&freezes.every(proof=>receipt.proof.freezes.some(source=>source.orderId===proof.orderId&&source.freezeId===proof.freezeId));
+ return !!meta&&meta.customerId===receipt.customerId&&meta.handover===receipt.handover&&!!freezes?.length&&(freezes.every(proof=>receipt.proof.freezes.some(source=>source.orderId===proof.orderId&&source.freezeId===proof.freezeId))||await postalReplyReplacementProved(tx,auth,taskId,receipt));
+}
+/** A partial postal task can end only after its exact unaffected original replacement exists in this transaction. */
+export async function postalReplyReplacementProved(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string,reply:DispatchReplyReceipt){
+ type Prepared={document:{id:string;sha256:string;pdfBase64:string};taskId:string;meta:{customerId:string;handover:string;stageKey:string;orders:Array<{id:string}>;storageOrigin:{freezes:Proof['freezes']};replacesForReply?:{documentId:string;replyEventId:string}}};
+ const old=await tx.execute<{payload:Prepared}>(sql`SELECT payload FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND status='success' AND event_schema_version=1 AND payload->>'channel'='post' AND payload->>'taskId'=${taskId}`);
+ if(old.length!==1)return false;const source=old[0].payload;
+ if(source.meta.customerId!==reply.customerId||source.meta.handover!==reply.handover)return false;
+ const expected=source.meta.storageOrigin.freezes.filter(proof=>!reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId));
+ if(!expected.length||expected.length===source.meta.storageOrigin.freezes.length)return false;
+ const rows=await tx.execute<{payload:Prepared;proof_ok:boolean}>(sql`SELECT event.payload,(event.id::text=event.payload->'document'->>'id' AND event.client_event_id::text=event.payload->'meta'->>'stageKey' AND event.correlation_id=event.client_event_id AND task.client_key=event.client_event_id AND task.erstellt_von=event.user_id AND task.art='aufgabe' AND task.bezug_typ='auftrag' AND task.bezug_id=event.payload->'meta'->'orders'->0->>'id') AS proof_ok FROM public.events event JOIN public.tasks task ON task.tenant_id=event.tenant_id AND task.id::text=event.payload->>'taskId' WHERE event.tenant_id=${auth.tenantId} AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.status='success' AND event.event_schema_version=1 AND event.payload->>'channel'='post' AND event.payload->'meta'->'replacesForReply'->>'documentId'=${source.document.id} AND event.payload->'meta'->'replacesForReply'->>'replyEventId'=${reply.eventId}`);
+ if(rows.length!==1||!rows[0].proof_ok)return false;const replacement=rows[0].payload,bytes=Buffer.from(replacement.document.pdfBase64,'base64');
+ const key=(values:Proof['freezes'])=>values.map(proof=>proof.orderId+':'+proof.freezeId).sort();
+ return replacement.taskId!==taskId&&replacement.meta.customerId===reply.customerId&&replacement.meta.handover===reply.handover&&hash(key(expected))===hash(key(replacement.meta.storageOrigin.freezes))&&hash(expected.map(proof=>proof.orderId).sort())===hash(replacement.meta.orders.map(order=>order.id).sort())&&bytes.subarray(0,5).toString()==='%PDF-'&&createHash('sha256').update(bytes).digest('hex')===replacement.document.sha256;
+}
+
+/** Only the unaffected remainder of a qualified shared collection task may change. */
+export async function collectionTaskReplyRemainder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string,eventId:string){
+ if(!hasAuthorizationArea(auth,'auftraege'))return null;
+ const reply=await readDispatchReplyReceipt(tx,auth,eventId);
+ const rows=await tx.execute<{event_type:string;payload:{meta:{customerId:string;handover:string;freezes:Proof['freezes'];orderIds?:string[];orderNumbers?:string[];orders?:Array<{id:string;number:string}>}}}>(sql`SELECT event_type,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND status='success' AND event_schema_version=1 AND payload->>'taskId'=${taskId} AND event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_COLLECTION_CALL_UPDATED_V1','ORDER_STORAGE_FINAL_TASK_CREATED_V1','ORDER_STORAGE_FINAL_TASK_UPDATED_V1') ORDER BY created_at DESC,id DESC LIMIT 1`);
+ const source=rows[0],meta=source?.payload.meta;if(!meta||meta.customerId!==reply.customerId||meta.handover!==reply.handover)return null;
+ const remaining=meta.freezes.filter(proof=>!reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId));
+ if(!remaining.length||remaining.length===meta.freezes.length)return null;
+ const numbers=meta.orders?meta.orders.filter(order=>remaining.some(proof=>proof.orderId===order.id)).map(order=>order.number):meta.orderIds?.flatMap((id,index)=>remaining.some(proof=>proof.orderId===id)?[meta.orderNumbers![index]]:[]);
+ if(!numbers||numbers.length!==remaining.length||numbers.some(number=>!number))throw Error('REPLY_TASK_REMAINDER_INVALID');
+ return {freezes:remaining,note:source.event_type.startsWith('ORDER_COLLECTION_CALL_')?DISPATCH_CALL_COPY.note+numbers.join(', '):COLLECTION_REMINDER_COPY.finalTaskNote(numbers)};
+}
+export async function qualifyReplyRestriction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string,before:Proof['freezes'],after:Proof['freezes']){
+ const reply=await readDispatchReplyReceipt(tx,auth,eventId),expected=before.filter(proof=>!reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId));
+ const key=(values:Proof['freezes'])=>values.map(proof=>proof.orderId+':'+proof.freezeId).sort();
+ if(!expected.length||expected.length===before.length||JSON.stringify(key(expected))!==JSON.stringify(key(after)))throw Error('REPLY_TASK_RESTRICTION_INVALID');
 }

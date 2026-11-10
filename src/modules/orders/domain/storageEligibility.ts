@@ -1,8 +1,8 @@
 import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
 import type {DispatchPolicy} from '@/modules/fundament/public';
-import {createHash} from 'node:crypto';
+export {storageLetterKey} from '@/lib/server/storageLetterKey';
 
-export type StorageEligibility={state:'NEEDS_SETTING'|'WAIT'|'DUE';eligibleOn:string|null;missingSettings:string[];callResultAt?:string;appointmentEventId?:string;letter?:{state:'DUE'|'SENT'|'RECONCILE_MAIL'|'WAIT_FOR_POST';clientKey:string;orderIds:string[];due:string;sentAt:string|null;threadId:string|null;postalDocumentId?:string;postalTaskId?:string;callTaskId?:string;appointmentEventId?:string;freezes:Array<{orderId:string;freezeId:string}>;finalStage:{state:'NEEDS_SETTING'|'WAIT'|'DUE'|'TASK_PENDING'|'COMPLETED';due:string|null;recipientId:string|null;missingSettings:string[];taskId?:string;pausedUntil?:string|null;positionProposal?:{name:string;unit:string;unitPriceCents:number;quantity:null;automatic:false}|null}}};
+export type StorageEligibility={state:'NEEDS_SETTING'|'WAIT'|'DUE';eligibleOn:string|null;missingSettings:string[];callResultAt?:string;appointmentEventId?:string;replyEventId?:string;letter?:{state:'DUE'|'SENT'|'RECONCILE_MAIL'|'WAIT_FOR_POST';clientKey:string;orderIds:string[];due:string;sentAt:string|null;threadId:string|null;postalDocumentId?:string;postalTaskId?:string;callTaskId?:string;appointmentEventId?:string;replyEventId?:string;freezes:Array<{orderId:string;freezeId:string}>;finalStage:{state:'NEEDS_SETTING'|'WAIT'|'DUE'|'TASK_PENDING'|'COMPLETED';due:string|null;recipientId:string|null;missingSettings:string[];taskId?:string;pausedUntil?:string|null;positionProposal?:{name:string;unit:string;unitPriceCents:number;quantity:null;automatic:false}|null}}};
 /** A final interval starts only at a qualified dispatch receipt, never draft creation or a call. */
 export function finalStorageStage(sentAt:string|null,today:string,policy:DispatchPolicy|null,frozen?:{date:string;due:string|null}){
  if(frozen){
@@ -19,10 +19,6 @@ export function finalStorageStage(sentAt:string|null,today:string,policy:Dispatc
  const due=plusWorkingDays(berlinCalendarDay(new Date(sentAt)),policy!.finalStageAfterLetterDays!,policy!.holidays);
  if(!due)throw Error('STORAGE_LETTER_CALENDAR_INVALID');
  return {state:(due>today?'WAIT':'DUE') as 'WAIT'|'DUE',due,recipientId,missingSettings};
-}
-export function storageLetterKey(tenantId:string,customerId:string,handover:string,callKey:string,orderIds:readonly string[]){
- const hex=createHash('sha256').update(JSON.stringify(['storage-letter',tenantId,customerId,handover,callKey,[...orderIds].sort()])).digest('hex');
- return hex.slice(0,8)+'-'+hex.slice(8,12)+'-5'+hex.slice(13,16)+'-8'+hex.slice(17,20)+'-'+hex.slice(20,32);
 }
 /** PL06:00: each order keeps its own complete notice-to-E4 interval. No storage fee/deadline is inferred. */
 export function storageEligibility(noticeAt:string|null,callResultAt:string,today:string,policy:DispatchPolicy|null,noMail=false):StorageEligibility{

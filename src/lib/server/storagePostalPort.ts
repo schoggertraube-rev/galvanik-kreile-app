@@ -1,5 +1,5 @@
 import 'server-only';
-import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,type DispatchReplyReceipt} from './dispatchReplyPort';
+import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,postalReplyReplacementProved,qualifyReplyRestriction,type DispatchReplyReceipt} from './dispatchReplyPort';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
@@ -10,7 +10,8 @@ import type {StorageLetterSnapshot} from '@/lib/pdf/StorageLetterDocument';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {handedOverProofs} from './dispatchCallPort';
 import {COLLECTION_REMINDER_COPY as copy} from '@/ui/situationCatalog';
-import {readOrderPickupAppointmentInTransaction,readPickupAppointmentReceiptInTransaction,qualifyStorageOrigin,storageOriginIsCurrent} from './pickupAppointmentPort';
+import {storageLetterKey} from './storageLetterKey';
+import {readPickupAppointmentReceiptInTransaction,qualifyStorageOrigin,storageOriginIsCurrent} from './pickupAppointmentPort';
 
 type Document={id:string;snapshot:StorageLetterSnapshot;snapshotSha256:string;pdfBase64:string;sha256:string};
 type Payload={channel:'post';meta:CollectionReminderMeta;document:Document;taskId:string;title:string;note:string};
@@ -26,6 +27,15 @@ async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
  const row=rows[0],p=row.payload,d=p.document;
  if(d.id!==row.id||!p.meta.storageOrigin||snapshotHash(d.snapshot)!==d.snapshotSha256||JSON.stringify(d.snapshot.orderNumbers)!==JSON.stringify(p.meta.orders.map(order=>order.number)))throw Error('POSTAL_LETTER_DOCUMENT_INVALID');
  await qualifyStorageOrigin(tx,auth,p.meta.storageOrigin);
+ if(p.meta.replacesForReply){
+  const link=p.meta.replacesForReply,originals=await tx.execute<{payload:Payload}>(sql`SELECT payload FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${link.documentId} AND event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND status='success' AND event_schema_version=1 AND payload->>'channel'='post'`);
+  const before=originals[0]?.payload;if(originals.length!==1||!before?.meta.storageOrigin||before.meta.customerId!==p.meta.customerId||before.meta.handover!==p.meta.handover)throw Error('POSTAL_REPLACEMENT_ORIGIN_INVALID');
+  await qualifyReplyRestriction(tx,auth,link.replyEventId,before.meta.storageOrigin.freezes,p.meta.storageOrigin.freezes);
+  const remaining=before.meta.orders.filter(order=>p.meta.storageOrigin!.freezes.some(proof=>proof.orderId===order.id)),prefix=copy.letterBody(before.document.snapshot.orderNumbers,null);
+  const expected={...before.document.snapshot,orderNumbers:remaining.map(order=>order.number),body:copy.letterBody(remaining.map(order=>order.number),null)+before.document.snapshot.body.slice(prefix.length)};
+  if(!before.document.snapshot.body.startsWith(prefix)||snapshotHash(expected)!==d.snapshotSha256||JSON.stringify(remaining)!==JSON.stringify(p.meta.orders)||p.meta.stageKey!==storageLetterKey(auth.tenantId,p.meta.customerId,p.meta.handover,before.meta.stageKey+':reply:'+link.replyEventId,remaining.map(order=>order.id))||p.meta.storageOrigin.callTaskId!==before.meta.storageOrigin.callTaskId||p.meta.storageOrigin.appointmentEventId!==before.meta.storageOrigin.appointmentEventId||p.meta.storageOrigin.replyEventId!==before.meta.storageOrigin.replyEventId)throw Error('POSTAL_REPLACEMENT_SCOPE_INVALID');
+  const ended=await readReplyTaskEnd(tx,auth,before.taskId);if(!ended||ended.reply.eventId!==link.replyEventId||ended.payload.documentId!==before.document.id||ended.payload.documentSha256!==before.document.sha256)throw Error('POSTAL_REPLACEMENT_END_MISSING');
+ }
  const bytes=Buffer.from(d.pdfBase64,'base64');if(bytes.toString('base64')!==d.pdfBase64||bytes.subarray(0,5).toString()!=='%PDF-'||createHash('sha256').update(bytes).digest('hex')!==d.sha256)throw Error('POSTAL_LETTER_PDF_INVALID');
  const tasks=await tx.execute<TaskState>(sql`SELECT id::text,client_key::text,art,bezug_typ,bezug_id,erstellt_von::text,titel,notiz,fuer_bereich,fuer_login::text,status,version,erledigt_von::text,erledigt_notiz FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${p.taskId}::uuid`);
  const task=tasks[0];if(tasks.length!==1||task.client_key!==letterKey||task.art!=='aufgabe'||task.bezug_typ!=='auftrag'||task.bezug_id!==p.meta.orders[0]?.id||task.erstellt_von!==row.user_id||task.titel!==p.title||task.notiz!==p.note||task.fuer_bereich!=='auftraege'||task.fuer_login!==null)throw Error('POSTAL_LETTER_TASK_INVALID');
@@ -45,7 +55,7 @@ async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
   if(appointment.actorId!==appointmentEnd.user_id||!p.meta.storageOrigin.freezes.some(proof=>proof.orderId===appointment.orderId&&proof.freezeId===appointment.freezeId))throw Error('POSTAL_APPOINTMENT_SOURCE_INVALID');
  }
  const replyEnd=await readReplyTaskEnd(tx,auth,task.id);
- if(replyEnd&&(outcome||appointmentEnd||replyEnd.payload.documentId!==d.id||replyEnd.payload.documentSha256!==d.sha256||replyEnd.reply.customerId!==p.meta.customerId||replyEnd.reply.handover!==p.meta.handover||!replyCoversFreezes(replyEnd.reply,p.meta.storageOrigin.freezes)))throw Error('POSTAL_REPLY_END_INVALID');
+ if(replyEnd&&(outcome||appointmentEnd||replyEnd.payload.documentId!==d.id||replyEnd.payload.documentSha256!==d.sha256||replyEnd.reply.customerId!==p.meta.customerId||replyEnd.reply.handover!==p.meta.handover||!replyCoversFreezes(replyEnd.reply,p.meta.storageOrigin.freezes)&&!await postalReplyReplacementProved(tx,auth,task.id,replyEnd.reply)))throw Error('POSTAL_REPLY_END_INVALID');
  if(!outcome&&!appointmentEnd&&!replyEnd&&task.status!=='offen')throw Error('POSTAL_LETTER_COMPLETION_WITHOUT_RECEIPT');
  return {...row,task,outcome,appointmentEnd,replyEnd};
 }
@@ -76,21 +86,35 @@ export async function readStoragePostalReceipt(auth:AuthorizationSnapshot,input:
   return {code:'OK' as const,taskId:row.payload.taskId,document:row.payload.document,replayed:true};
  });}catch(error){console.error('[POSTAL_LETTER_RECEIPT_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:copy.proofUnavailable};}
 }
-export async function finishPostalTasksForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,complete:(taskId:string,note:string)=>Promise<void>){
+export async function finishPostalTasksForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,complete:(taskId:string,note:string)=>Promise<void>,replacement:{settingsUpdatedAt:string;customerCurrent:(tx:PrivilegedTenantTransaction,snapshot:StorageLetterSnapshot)=>Promise<boolean>;createTask:(tx:PrivilegedTenantTransaction,input:{orderId:string;clientKey:string;title:string;note:string;kind:'aufgabe';dueDate:string})=>Promise<string>}){
  const rows=await tx.execute<{key:string}>(sql`SELECT event.client_event_id::text AS key FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.payload->>'channel'='post' AND event.payload->'meta'->>'customerId'=${reply.customerId} AND event.payload->'meta'->>'handover'=${reply.handover} ORDER BY task.id FOR UPDATE OF task NOWAIT`);
  for(const row of rows){
   const original=await source(tx,auth,row.key);if(!original)throw Error('REPLY_POSTAL_SOURCE_MISSING');
   const freezes=original.payload.meta.storageOrigin!.freezes;
   if(!freezes.some(proof=>reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId)))continue;
-  if(!replyCoversFreezes(reply,freezes))throw Error('DISPATCH_REPLY_PARTIAL_TASK_SCOPE_UNDECIDED');
   if(original.outcome||original.appointmentEnd||original.replyEnd)throw Error('REPLY_POSTAL_NOT_OPEN');
+  if(!replyCoversFreezes(reply,freezes)){
+   const remaining=freezes.filter(proof=>!reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId));
+   const orders=original.payload.meta.orders.filter(order=>remaining.some(proof=>proof.orderId===order.id));
+   await qualifyReplyRestriction(tx,auth,reply.eventId,freezes,remaining);
+   await tx.execute(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) ORDER BY id FOR UPDATE NOWAIT`);
+   const before=original.payload.document.snapshot,prefix=copy.letterBody(before.orderNumbers,null);
+   if(!before.body.startsWith(prefix))throw Error('POSTAL_REPLACEMENT_TEMPLATE_UNAVAILABLE');
+   const numbers=orders.map(order=>order.number),snapshot={...before,orderNumbers:numbers,body:copy.letterBody(numbers,null)+before.body.slice(prefix.length)};
+   const key=storageLetterKey(auth.tenantId,reply.customerId,reply.handover,row.key+':reply:'+reply.eventId,orders.map(order=>order.id));
+   const meta:CollectionReminderMeta={...original.payload.meta,stageKey:key,intent:digest(JSON.stringify([key,snapshot.body])),orders,storageOrigin:{...original.payload.meta.storageOrigin!,freezes:remaining},replacesForReply:{documentId:original.payload.document.id,replyEventId:reply.eventId}};
+   const [{renderToBuffer},{createStorageLetterPdfDocument}]=await Promise.all([import('@react-pdf/renderer'),import('@/lib/pdf/StorageLetterDocument')]);
+   const pdf=Buffer.from(await renderToBuffer(createStorageLetterPdfDocument(snapshot,false)));
+   const prepared=await prepareStoragePostalLetter(auth,{customerId:reply.customerId,handover:reply.handover,clientKey:key},meta,snapshot,pdf,replacement.settingsUpdatedAt,{customerCurrent:writeTx=>replacement.customerCurrent(writeTx,snapshot),createTask:replacement.createTask},tx);
+   if(prepared.code!=='OK'||!await postalReplyReplacementProved(tx,auth,original.task.id,reply))throw Error('POSTAL_REPLACEMENT_NOT_SAVED');
+  }
   await complete(original.task.id,reply.note);await recordReplyTaskEnd(tx,auth,reply,{taskId:original.task.id,documentId:original.payload.document.id,documentSha256:original.payload.document.sha256});
  }
 }
-export async function prepareStoragePostalLetter(auth:AuthorizationSnapshot,input:{customerId:string;handover:string;clientKey:string},meta:CollectionReminderMeta,snapshot:StorageLetterSnapshot,pdf:Buffer,settingsUpdatedAt:string,ports:{customerCurrent:(tx:PrivilegedTenantTransaction)=>Promise<boolean>;createTask:(tx:PrivilegedTenantTransaction,input:{orderId:string;clientKey:string;title:string;note:string;kind:'aufgabe';dueDate:string})=>Promise<string>}){
+export async function prepareStoragePostalLetter(auth:AuthorizationSnapshot,input:{customerId:string;handover:string;clientKey:string},meta:CollectionReminderMeta,snapshot:StorageLetterSnapshot,pdf:Buffer,settingsUpdatedAt:string,ports:{customerCurrent:(tx:PrivilegedTenantTransaction)=>Promise<boolean>;createTask:(tx:PrivilegedTenantTransaction,input:{orderId:string;clientKey:string;title:string;note:string;kind:'aufgabe';dueDate:string})=>Promise<string>},transaction?:PrivilegedTenantTransaction){
  if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const,message:copy.forbidden};
  if(meta.stage!=='E4'||meta.stageKey!==input.clientKey||meta.customerId!==input.customerId||meta.handover!==input.handover||!meta.orders.length||JSON.stringify(snapshot.orderNumbers)!==JSON.stringify(meta.orders.map(order=>order.number)))return {code:'VALIDATION_ERROR' as const,message:copy.invalid};
- try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+ const write=async(tx:PrivilegedTenantTransaction)=>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':collection:'+input.clientKey},0))`);
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'task:'+auth.tenantId+':'+input.clientKey},0))`);
   const original=await source(tx,auth,input.clientKey);
@@ -108,7 +132,7 @@ export async function prepareStoragePostalLetter(auth:AuthorizationSnapshot,inpu
   const inserted=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_REMINDER_PREPARED_V1',${copy.letterTitle},'success',${auth.userId}::uuid,${input.clientKey}::uuid,${input.clientKey}::uuid,1,${JSON.stringify({channel:'post',meta,document,taskId,title,note})}::jsonb,statement_timestamp()) RETURNING id`);
   if(inserted.length!==1||inserted[0].id!==id)throw Error('POSTAL_LETTER_ORIGINAL_NOT_SAVED');
   return {code:'OK' as const,taskId,document,replayed:false};
- });}catch(error){console.error('[POSTAL_LETTER_PREPARE_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:copy.proofUnavailable};}
+ };try{return transaction?await write(transaction):await withPrivilegedTenantTransaction(auth,write);}catch(error){console.error('[POSTAL_LETTER_PREPARE_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:copy.proofUnavailable};}
 }
 export async function protectStoragePostalTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;action:string}){
  if(input.action!=='geaendert')return;
@@ -131,9 +155,9 @@ export async function recordStoragePostalResult(tx:PrivilegedTenantTransaction,a
  if(read.outcome){const saved=read.outcome.payload;if(read.outcome.user_id!==auth.userId||saved.taskVersion!==input.version+1||saved.note!==(input.note?.trim()||null)||(value?.kind==='posted'?saved.postedOn!==value.postedOn:saved.reason!==(value?.kind==='discarded'?value.reason:'goodsOut')))return fail('CONFLICT',copy.keyConflict);return;}
  if(task.version!==input.version)return fail('CONFLICT',copy.postalProtected);
  if(value?.kind==='posted'){
-  for(const order of original.meta.orders){const appointment=await readOrderPickupAppointmentInTransaction(tx,auth,order.id);if(appointment&&appointment.eventId!==original.meta.storageOrigin?.appointmentEventId)return fail('CONFLICT',copy.postalProtected);}
   const current=await tx.execute(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(original.meta.orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) AND station='fertig' AND status='fertig' AND current_station='fertig' AND current_station_id='fertig' ORDER BY id FOR UPDATE`);
   if(current.length!==original.meta.orders.length)return fail('CONFLICT',copy.postalProtected);
+  if(!original.meta.storageOrigin||!await storageOriginIsCurrent(tx,auth,original.meta.storageOrigin,original.meta.dueDate))return fail('CONFLICT',copy.postalProtected);
  }
  const outcomeId=randomUUID();
  const inserted=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at) VALUES(${outcomeId},${auth.tenantId},${value?.kind==='posted'?'ORDER_COLLECTION_REMINDER_SENT_V1':'ORDER_STORAGE_LETTER_VOIDED_V1'},${copy.letterTitle},'success',${auth.userId}::uuid,${randomUUID()}::uuid,${rows[0].key}::uuid,1,${JSON.stringify({channel:'post',meta:original.meta,documentId:original.document.id,documentSha256:original.document.sha256,taskId:task.id,taskVersion:task.version+1,note:input.note?.trim()||null,...(value?.kind==='posted'?{postedOn:value.postedOn}:{reason:value?.kind==='discarded'?value.reason:'goodsOut',...(gone?{goodsOutProofs:gone}:{})})})}::jsonb,statement_timestamp()) RETURNING id`);

@@ -1,6 +1,6 @@
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
 import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
-import {collectionTaskHasReplySource} from '@/lib/server/dispatchReplyPort';
+import {collectionTaskHasReplySource,collectionTaskReplyRemainder} from '@/lib/server/dispatchReplyPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import 'server-only';
@@ -58,13 +58,13 @@ export async function saveTask(input:unknown,deps:Dependencies):Promise<TaskResu
  try{return await withPrivilegedTenantTransaction(auth,tx=>persistTask(tx,auth,value,deps));}catch(error){return resultError(error);}
 }
 /** Both dialog saves and the goods command use this writer and the caller's transaction. */
-async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskSaveInput,deps:Dependencies,enforceReferenceVisibility=true,invoiceCommand=false):Promise<Extract<TaskResult,{code:'OK'}>>{
+async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskSaveInput,deps:Dependencies,enforceReferenceVisibility=true,invoiceCommand=false,replyRestriction=false):Promise<Extract<TaskResult,{code:'OK'}>>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${value.clientKey},0))`);
   const candidates=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${value.clientKey}::uuid FOR UPDATE`);
   if(candidates.length>1)throw Error('TASK_CLIENT_KEY_AMBIGUOUS');
   const before=value.taskId?await find(tx,auth,value.taskId,true):candidates[0]?await find(tx,auth,candidates[0].id,true):null;
   if(value.taskId&&!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
-  if(before&&(before.client_key!==value.clientKey||!allowed(auth,before)))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
+  if(before&&(before.client_key!==value.clientKey||!replyRestriction&&!allowed(auth,before)))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
   if(!before&&value.version!==0)reject('CONFLICT','Aufgabenstand ist nicht mehr aktuell.');
   if(before&&before.status!=='offen')reject('CONFLICT','Aufgabe ist bereits erledigt.');
   if(before&&!value.taskId){if(before.erstellt_von===auth.userId&&same(before,value))return {code:'OK',task:before,replayed:true};reject('CONFLICT','Diese Anfragekennung gehört zu einer anderen Aufgabe.');}
@@ -195,6 +195,14 @@ export async function completeCollectionTaskForReply(tx:PrivilegedTenantTransact
  if(!before||!['aufgabe','rueckruf'].includes(before.art)||before.bezug_typ!=='auftrag')reject('CONFLICT',DISPATCH_CALL_COPY.changed);
  if(before.status==='erledigt')return;
  await finishTask(tx,auth,{taskId:before.id,version:before.version,note:input.note},deps,undefined,undefined,undefined,input.replyEventId);
+}
+/** Keep the task, recipient and date; preserve the immutable original reference and narrow only the ware note. */
+export async function restrictCollectionTaskForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;replyEventId:string},deps:Dependencies){
+ const scope=await collectionTaskReplyRemainder(tx,auth,input.taskId,input.replyEventId),before=await find(tx,auth,input.taskId,true);
+ if(!scope||!before||before.status!=='offen'||!['aufgabe','rueckruf'].includes(before.art)||before.bezug_typ!=='auftrag'||!before.bezug_id)reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ const value:TaskSaveInput={taskId:before.id,clientKey:before.client_key,version:before.version,kind:before.art as 'aufgabe'|'rueckruf',title:before.titel,dueDate:before.faellig_am,time:before.uhrzeit,forLogin:before.fuer_login,forArea:before.fuer_bereich,reference:{type:'auftrag',id:before.bezug_id},note:scope.note,...(before.item_id?{itemId:before.item_id}:{})};
+ const saved=await persistTask(tx,auth,value,deps,false,false,true);
+ return {version:saved.task.version,note:scope.note,freezes:scope.freezes};
 }
 export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
  if(!request||typeof request!=='object'||Array.isArray(request)||('taskId'in request?!taskUuid(request.taskId):!validTaskReference(request.reference)))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};

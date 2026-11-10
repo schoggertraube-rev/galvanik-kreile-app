@@ -10,7 +10,7 @@ import {planInitialDispatchReminder,type DispatchNoticeMember,type InitialDispat
 import type {DispatchResponseCheck} from '@/lib/server/dispatchResponsePort';
 import {readCollectionReminderHistory} from '@/lib/server/collectionReminderPort';
 import {readDispatchCalls} from '@/lib/server/dispatchCallPort';
-import {readRecordedDispatchReplies,type DispatchReplyReceipt} from '@/lib/server/dispatchReplyPort';
+import {readRecordedDispatchReplies,replyDefersToAppointment,type DispatchReplyReceipt} from '@/lib/server/dispatchReplyPort';
 import {storageEligibility,storageLetterKey,finalStorageStage,type StorageEligibility} from '../domain/storageEligibility';
 import {COLLECTION_REMINDER_COPY,STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
 import {readStorageFinalTaskState} from '@/lib/server/storageFinalStagePort';
@@ -21,7 +21,8 @@ export type FinishedDispatch={orderId:string;version:number;handover:'pickup'|'s
 export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,orders:readonly OperationalOrder[],policy:DispatchPolicy|null,ports?:{readHasMail?:(customerId:string)=>Promise<boolean>;readResponses:(input:{customerId:string;noticeThreadIds:string[];oldestNoticeAt:string})=>Promise<DispatchResponseCheck>;recordReply?:(input:{customerId:string;handover:'pickup'|'shipping';proof:DispatchResponseCheck['proofs'][number]})=>Promise<DispatchReplyReceipt>}){
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
  const result:FinishedDispatch[]=[];
- const appointments=new Map<string,NonNullable<FinishedDispatch['pickupAppointment']>>();
+ const appointments=new Map<string,NonNullable<FinishedDispatch['pickupAppointment']>&{recordedAt:string}>();
+ const replies=new Map<string,DispatchReplyReceipt>();
  const histories=new Map<string,Awaited<ReturnType<typeof readCollectionReminderHistory>>>();
  const groups=new Map<string,{customerId:string;handover:'pickup'|'shipping';members:DispatchNoticeMember[];threads:Set<string>;deliveryFailedAt:string|null;responseSince:string|null}>();
  for(const order of orders.filter(row=>row.station==='fertig')){
@@ -35,7 +36,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   if(notification.handover==='pickup'){
    const read=await readOrderPickupAppointment(auth,order.id),row=result.at(-1)!;
    if(read.code!=='OK'){row.unavailable=true;row.gaps.push('PICKUP_APPOINTMENT_UNAVAILABLE');continue;}
-   if(read.appointment){const resumeOn=policy===null?null:plusWorkingDays(read.appointment.date,1,policy.holidays);row.pickupAppointment={eventId:read.appointment.eventId,date:read.appointment.date,resumeOn,paused:resumeOn===null?null:resumeOn>berlinCalendarDay()};appointments.set(order.id,row.pickupAppointment);}
+   if(read.appointment){const resumeOn=policy===null?null:plusWorkingDays(read.appointment.date,1,policy.holidays);row.pickupAppointment={eventId:read.appointment.eventId,date:read.appointment.date,resumeOn,paused:resumeOn===null?null:resumeOn>berlinCalendarDay()};appointments.set(order.id,{...row.pickupAppointment,recordedAt:read.appointment.recordedAt});}
   }
   if(notification.handover){
    const key=JSON.stringify([order.customerId,notification.handover]);
@@ -63,14 +64,18 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   for(const member of group.members){const call=calls.find(call=>call.result==='reached'&&member.freezeId&&call.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId));if(call)answered.set(member.orderId,{call});}
   try{
    const saved=await readRecordedDispatchReplies(auth,group.customerId,group.handover);
-   for(const member of group.members){const reply=saved.filter(reply=>reply.proof.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId)&&Date.parse(reply.proof.receivedAt)>=Date.parse(member.noticeAt??member.readyAt??'')).sort((a,b)=>Date.parse(b.proof.receivedAt)-Date.parse(a.proof.receivedAt))[0];if(reply&&!answered.has(member.orderId))answered.set(member.orderId,{mail:reply.proof});}
+   for(const member of group.members){const reply=saved.filter(reply=>reply.proof.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId)&&Date.parse(reply.proof.receivedAt)>=Date.parse(member.noticeAt??member.readyAt??'')).sort((a,b)=>Date.parse(b.proof.receivedAt)-Date.parse(a.proof.receivedAt))[0];if(reply){replies.set(member.orderId,reply);if(!answered.has(member.orderId))answered.set(member.orderId,{mail:reply.proof});}}
   }catch(error){console.error('[DISPATCH_RECORDED_REPLY_UNAVAILABLE]',error instanceof Error?error.message:'UnknownError');failGroup();continue;}
   let reaction:DispatchResponseCheck|undefined;
   const responseSince=group.responseSince??initial.oldestNoticeAt??group.deliveryFailedAt??history.filter(row=>row.deliveryFailedAt).at(-1)?.deliveryFailedAt;
-  if(answered.size<group.members.length&&ports&&responseSince&&group.threads.size){
+  const replyFollowupPending=history.some(entry=>!entry.voidId&&entry.stage==='E4'&&entry.storageOrigin?.replyEventId&&entry.orderIds.some(id=>replies.get(id)?.eventId===entry.storageOrigin!.replyEventId));
+  if((answered.size<group.members.length||replyFollowupPending)&&ports&&responseSince&&group.threads.size){
    reaction=await ports.readResponses({customerId:group.customerId,noticeThreadIds:[...group.threads],oldestNoticeAt:responseSince});
    if(reaction.state==='REPLIED'&&ports.recordReply){
-    try{for(const proof of reaction.proofs)if(group.members.some(member=>proof.freezes.some(source=>source.orderId===member.orderId&&source.freezeId===member.freezeId)))await ports.recordReply({customerId:group.customerId,handover:group.handover,proof});}
+    try{for(const proof of reaction.proofs)if(group.members.some(member=>proof.freezes.some(source=>source.orderId===member.orderId&&source.freezeId===member.freezeId))){const reply=await ports.recordReply({customerId:group.customerId,handover:group.handover,proof});for(const member of group.members)if(proof.freezes.some(source=>source.orderId===member.orderId&&source.freezeId===member.freezeId)){const previous=replies.get(member.orderId);if(!previous||Date.parse(previous.proof.receivedAt)<Date.parse(reply.proof.receivedAt))replies.set(member.orderId,reply);}}
+     history=await readCollectionReminderHistory(auth,group.customerId,group.handover,group.members.map(member=>member.orderId));histories.set(JSON.stringify([group.customerId,group.handover]),history);
+     calls=await readDispatchCalls(auth,group.customerId,group.handover,initial.orderIds);
+    }
     catch(error){console.error('[DISPATCH_REPLY_TASK_FOLLOWUP_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();continue;}
    }
    if(reaction.state==='REPLIED')for(const member of group.members){
@@ -129,7 +134,23 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   for(const member of members){const row=result.find(item=>item.orderId===member.orderId);if(row&&!row.unavailable)row.reminder=plan;}
   }
  }
- for(const row of result){const appointment=appointments.get(row.orderId);if(!appointment||row.unavailable||!row.reminder)continue;
+ // A qualified reply starts the next storage interval from that original, never from a fictitious call.
+ const replyLeads=(orderId:string)=>{const reply=replies.get(orderId),appointment=appointments.get(orderId);return reply&&(!appointment||!replyDefersToAppointment(reply,appointment))?reply:null;};
+ for(const row of result){
+  const reply=replyLeads(row.orderId);if(!reply||row.unavailable||!row.reminder)continue;
+  const members=result.filter(item=>!item.unavailable&&replyLeads(item.orderId)?.eventId===reply.eventId);
+  const orderIds=members.map(item=>item.orderId).sort(),freezes=reply.proof.freezes.filter(proof=>orderIds.includes(proof.orderId));
+  if(freezes.length!==orderIds.length){row.unavailable=true;row.gaps.push('REPLY_FREEZE_UNAVAILABLE');continue;}
+  const due=pickupStorageDue(berlinCalendarDay(new Date(reply.proof.receivedAt)),policy);
+  row.storage={state:due===null?'NEEDS_SETTING':due>berlinCalendarDay()?'WAIT':'DUE',eligibleOn:due,missingSettings:due===null?['storageAfterDays']:[],replyEventId:reply.eventId};
+  const originals=(histories.get(JSON.stringify([reply.customerId,reply.handover]))??[]).filter(item=>item.stage==='E4'&&item.storageOrigin?.replyEventId===reply.eventId&&item.storageOrigin.freezes.some(proof=>proof.orderId===row.orderId&&freezes.some(actual=>actual.orderId===proof.orderId&&actual.freezeId===proof.freezeId)));
+  const original=originals.filter(item=>!item.voidId).at(-1),voidId=originals.filter(item=>item.voidId).at(-1)?.voidId;
+  if(original){
+   row.storage.letter={state:original.sentAt&&!original.deliveryFailedAt?'SENT':original.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:original.stageKey,orderIds:original.orderIds,due:original.dueDate,sentAt:original.sentAt,threadId:original.threadId,...(original.postalDocumentId?{postalDocumentId:original.postalDocumentId,postalTaskId:original.postalTaskId}:{}),replyEventId:reply.eventId,freezes:original.storageOrigin!.freezes,finalStage:finalStorageStage(original.deliveryFailedAt?null:original.sentAt,berlinCalendarDay(),policy,original.storageDeadline??{date:'',due:null})};
+   try{const final=await readStorageFinalTaskState(auth,original.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}catch(error){console.error('[REPLY_FINAL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');row.unavailable=true;row.storage=undefined;}
+  }else if(due&&due<=berlinCalendarDay())row.storage.letter={state:'DUE',clientKey:storageLetterKey(auth.tenantId,reply.customerId,reply.handover,reply.eventId+(voidId?':void:'+voidId:''),orderIds),orderIds,due,sentAt:null,threadId:null,replyEventId:reply.eventId,freezes,finalStage:finalStorageStage(null,berlinCalendarDay(),policy)};
+ }
+ for(const row of result){const appointment=appointments.get(row.orderId);if(!appointment||replyLeads(row.orderId)||row.unavailable||!row.reminder)continue;
   row.reminder={...row.reminder,state:appointment.paused===null?'NEEDS_SETTING':appointment.paused?'PAUSED':'APPOINTMENT_EXPIRED',due:appointment.resumeOn,clientKey:null,requiresResponseCheck:false,responseState:'NONE'};
   if(appointment.paused===false){
    const order=orders.find(item=>item.id===row.orderId)!,group=groups.get(JSON.stringify([order.customerId,'pickup'])),member=group?.members.find(item=>item.orderId===row.orderId);

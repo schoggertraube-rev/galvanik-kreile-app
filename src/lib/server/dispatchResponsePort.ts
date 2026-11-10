@@ -6,7 +6,7 @@ import {readMicrosoftGraphSentMailReference} from './microsoftGraph';
 
 export type DispatchResponseCheck={state:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAILABLE';proofs:Array<{itemId:string;threadId:string;graphMessageId:string;originalSha256:string;receivedAt:string;inReplyTo:string;orderIds:string[];freezes:Array<{orderId:string;freezeId:string}>}>};
 type Original={itemId:string;message:{senderAddress:string;receivedAt:string;replyChain?:{source?:string;status?:string;originalSha256?:string;inReplyTo?:string[]};deliveryReport?:{status:string}}};
-export type DispatchResponsePorts={readLinked:(auth:AuthorizationSnapshot,target:{targetType:'CUSTOMER';targetId:string})=>Promise<{code:string;data?:Array<{id:string;receivedAt:string}>}>;readOriginal:(auth:AuthorizationSnapshot,input:{graphMessageId:string})=>Promise<{code:string}&Partial<Original>>};
+export type DispatchResponsePorts={readLinked:(auth:AuthorizationSnapshot,target:{targetType:'CUSTOMER';targetId:string})=>Promise<{code:string;data?:Array<{id:string;receivedAt:string;senderAddress?:string}>}>};
 
 /** Incoming MIME and the exact Sent-Items request header bind the reaction to the real notice. */
 export async function readDispatchResponses(auth:AuthorizationSnapshot,input:{customerId:string;noticeThreadIds:string[];oldestNoticeAt:string},ports:DispatchResponsePorts):Promise<DispatchResponseCheck>{
@@ -18,19 +18,28 @@ export async function readDispatchResponses(auth:AuthorizationSnapshot,input:{cu
   const proofs:DispatchResponseCheck['proofs']=[];
   for(const mail of linked.data){
    if(Date.parse(mail.receivedAt)<Date.parse(input.oldestNoticeAt))continue;
-   const original=await ports.readOriginal(auth,{graphMessageId:mail.id});if(original.code!=='OK'||!original.itemId||!original.message)throw Error('DISPATCH_RESPONSE_ORIGINAL_MISSING');
-   if(original.message.deliveryReport){if(original.message.deliveryReport.status==='invalid')throw Error('DISPATCH_DELIVERY_REPORT_UNCLEAR');continue;}
-   const chain=original.message.replyChain;
+   // Mails permission already exposes this linked correspondence. Read only secured
+   // reply metadata here; the full Eingang capture reader has a different write-area boundary.
+   const original=await withPrivilegedTenantTransaction(auth,async tx=>{
+    const delivery=await tx.execute<{report:{status:string}|null}>(sql`SELECT report FROM private.v_intake_delivery_evidence_v1 WHERE tenant_id=${auth.tenantId} AND graph_message_id=${mail.id}`);
+    if(delivery.some(row=>row.report?.status==='invalid'))throw Error('DISPATCH_DELIVERY_REPORT_UNCLEAR');
+    if(delivery.some(row=>row.report))return null;
+    const rows=await tx.execute<{item_id:string;customer_id:string;received_at:Date|string;reply_chain:NonNullable<Original['message']['replyChain']>;proof_ok:boolean}>(sql`SELECT item_id,customer_id,received_at,reply_chain,proof_ok FROM private.v_intake_reply_evidence_v1 WHERE tenant_id=${auth.tenantId} AND graph_message_id=${mail.id}`);
+    if(rows.length!==1||rows[0].customer_id!==input.customerId)throw Error('DISPATCH_RESPONSE_ORIGINAL_MISSING');return rows[0];
+   });
+   if(!original)continue;
+   const chain=original.reply_chain;
+   if(!original.proof_ok)throw Error('DISPATCH_RESPONSE_ORIGINAL_MISSING');
    if(chain?.status==='missing')continue;
-   if(!chain||chain.source!=='original_mime'||chain.status!=='present'||!Array.isArray(chain.inReplyTo)||chain.inReplyTo.length!==1||!chain.originalSha256||!/^[a-f0-9]{64}$/.test(chain.originalSha256))throw Error('DISPATCH_RESPONSE_REFERENCE_UNCLEAR');
-   const sent=await readMicrosoftGraphSentMailReference(chain.inReplyTo[0],original.message.senderAddress);
+   if(!original.proof_ok||!chain||chain.source!=='original_mime'||chain.status!=='present'||!Array.isArray(chain.inReplyTo)||chain.inReplyTo.length!==1||!chain.originalSha256||!/^[a-f0-9]{64}$/.test(chain.originalSha256)||!mail.senderAddress)throw Error('DISPATCH_RESPONSE_REFERENCE_UNCLEAR');
+   const sent=await readMicrosoftGraphSentMailReference(chain.inReplyTo[0],mail.senderAddress);
    if(sent.code!=='OK'||!sent.data.clientRequestId)throw Error('DISPATCH_RESPONSE_SENT_REFERENCE_UNCLEAR');
    const thread=threads.find(row=>row.source==='MS_GRAPH_OUT:'+sent.data.clientRequestId);
    if(thread){
     const freezes=await withPrivilegedTenantTransaction(auth,tx=>readDispatchResponseScope(tx,auth,thread.id));
     const orderIds=[...new Set(freezes.map(proof=>proof.orderId))];
     if(!orderIds.length)throw Error('DISPATCH_RESPONSE_SCOPE_MISSING');
-    proofs.push({itemId:original.itemId,threadId:thread.id,graphMessageId:sent.data.graphMessageId,originalSha256:chain.originalSha256,receivedAt:original.message.receivedAt,inReplyTo:chain.inReplyTo[0],orderIds,freezes});
+    proofs.push({itemId:original.item_id,threadId:thread.id,graphMessageId:sent.data.graphMessageId,originalSha256:chain.originalSha256,receivedAt:new Date(original.received_at).toISOString(),inReplyTo:chain.inReplyTo[0],orderIds,freezes});
    }
   }
   return {state:proofs.length?'REPLIED':'NONE',proofs};

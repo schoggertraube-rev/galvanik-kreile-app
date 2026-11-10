@@ -86,6 +86,10 @@
     "src/lib/server/dispatchReplyPort.ts": [
       "private.v_intake_reply_evidence_v1"
     ],
+    "src/lib/server/dispatchResponsePort.ts": [
+      "private.v_intake_delivery_evidence_v1",
+      "private.v_intake_reply_evidence_v1"
+    ],
     "src/lib/server/effectiveCustomerAgreementRead.ts": [
       "private.v_customer_effective_agreement_v1"
     ],
