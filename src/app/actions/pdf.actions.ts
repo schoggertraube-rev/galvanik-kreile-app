@@ -7,6 +7,26 @@ import { sql } from "drizzle-orm";
 import QRCode from "qrcode";
 import { createOrderLabelPdfDocument } from "@/lib/pdf/OrderLabel";
 import { normaliseOrderPositionUnit, orderPositionUnitLabel } from "@/lib/orderPositionContract";
+import {storageLetterRequestValid,readStorageLetterPreview} from '@/lib/server/storageLetterRead';
+import {createStorageLetterPdfDocument} from '@/lib/pdf/StorageLetterDocument';
+import {createHash} from 'node:crypto';
+import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
+
+export async function previewStorageLetterAction(input:unknown){
+ const {resolveAuthorization,hasAuthorizationArea}=await import('@/lib/server/authorization');
+ const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:auth.message};
+ if(!hasAuthorizationArea(auth.data,'auftraege')||!hasAuthorizationArea(auth.data,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
+ if(!storageLetterRequestValid(input))return {code:'VALIDATION_ERROR' as const,message:COLLECTION_REMINDER_COPY.invalid};
+ try{
+  const [{getOrdersDb},{readShippingSettings,readCompanyLetterSettings},{readCustomerProfile},{withPrivilegedTenantTransaction}]=await Promise.all([import('@/app/actions/orders.actions'),import('@/modules/fundament/server-public'),import('@/modules/customers/server-public'),import('@/lib/server/privilegedDb')]);
+  const [orders,settings]=await Promise.all([getOrdersDb(),readShippingSettings({tenantId:auth.data.tenantId,actorId:auth.data.userId,canRead:true})]);
+  if(!orders.ok||settings.code!=='OK')return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.unavailable};
+  const preview=await readStorageLetterPreview(auth.data,input,orders.data,settings.settings,{readCustomer:()=>withPrivilegedTenantTransaction(auth.data,tx=>readCustomerProfile(tx,auth.data.tenantId,input.customerId)),readCompany:()=>readCompanyLetterSettings({tenantId:auth.data.tenantId,actorId:auth.data.userId,canRead:true})});if(preview.code!=='OK')return preview;
+  const pdf=Buffer.from(await renderToBuffer(createStorageLetterPdfDocument(preview.data.snapshot)));
+  if(!pdf.length)throw Error('STORAGE_LETTER_PDF_EMPTY');
+  return {code:'OK' as const,data:{...preview.data,pdfBase64:pdf.toString('base64'),pdfSha256:createHash('sha256').update(pdf).digest('hex'),filename:'Lagerfrist-'+input.clientKey+'.pdf',sent:false as const}};
+ }catch(error){console.error('[STORAGE_LETTER_PREVIEW_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
+}
 
 type OrderLabelRow = {
   id: string;

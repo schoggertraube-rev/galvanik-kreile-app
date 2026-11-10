@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "e3f38649873c081017176b80e19df1da56ddcf9e4e6d195b7127ec53d1b31915",
+  "inventorySha256": "ef759eb7271d572ab344f5c64a604335805587d8fe76f15dfa98d63ffae4ec72",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -311,6 +311,9 @@
     ],
     "src/app/actions/eingang.actions.ts#createStorageFinalTaskAction": [
       "src/test/acceptance/dispatch_call.integration.test.ts"
+    ],
+    "src/app/actions/pdf.actions.ts#previewStorageLetterAction": [
+      "src/test/acceptance/storage_letter.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

@@ -183,6 +183,11 @@ export const DISPATCH_CALL_COPY={
  session:'Melde Dich erneut an; Deine Eingaben bleiben erhalten.',invalid:'Öffne den Anruf aus der Liste der fertigen Aufträge erneut.'
 };
 export const COLLECTION_REMINDER_COPY={
+  letterTitle:'Lagerfrist-Schreiben',
+  letterDraft:'Entwurf · noch nicht versendet',
+  letterBody:(numbers:readonly string[],days:number|null)=>'Deine Aufträge '+numbers.join(', ')+' sind fertig. Bitte melde Dich bei uns, damit wir die Übergabe abstimmen können.'+(days===null?'':' Die Frist nach Versand dieses Schreibens beträgt '+days+' Arbeitstage nach unserem Betriebskalender.'),
+  letterAddressMissing:'Ergänze die Postanschrift in der Kundenkarte. Dein Schreiben wurde noch nicht vorbereitet.',
+  letterSenderMissing:'Ergänze Name und Postanschrift der Firma in den Einstellungen. Dein Schreiben wurde noch nicht vorbereitet.',
   finalTaskTitle:'Lagergeld oder Einlagerung vorschlagen',
   finalTaskNote:(numbers:readonly string[])=>'Lagerfrist-Schreiben zu '+numbers.join(', ')+' · Lagergeld nur als Positionsvorschlag; noch nichts berechnet.',
   finalRecipientMissing:'Empfänger für die letzte Stufe eintragen.',

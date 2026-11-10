@@ -38,6 +38,16 @@ export type SystemSettingsContext = {
 };
 export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean };
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null };
+/** Letters need the real sender address, not invoice-only bank/tax configuration. */
+export async function readCompanyLetterSettings(context:CompanyDocumentContext){
+ if(!context.canRead)return {code:'FORBIDDEN' as const};
+ try{return await withPrivilegedTenantTransaction(context,async tx=>{
+  const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country FROM public.company_settings WHERE tenant_id=${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+  if(rows.length!==1)return {code:'NOT_FOUND' as const};
+  if(Object.values(rows[0]).some(value=>typeof value!=='string'||!value.trim()))return {code:'VALIDATION_ERROR' as const};
+  return {code:'OK' as const,company:rows[0]};
+ });}catch(error){logSystemSettingsPortFailure('COMPANY_LETTER_SETTINGS_READ_FAILED',error);return {code:'UNAVAILABLE' as const};}
+}
 
 export async function readShippingSettingsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string):Promise<ShippingSettings|null>{
  const rows=await tx.execute<ShippingSettings>(sql`SELECT versand_dienst AS service,versand_nummer_format AS "numberPattern",versand_nummer_hinweis AS "numberHint",
