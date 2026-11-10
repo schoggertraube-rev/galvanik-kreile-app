@@ -25,6 +25,27 @@ async function searchOrderFixture(label:string,customerId:string){
  return created;
 }
 
+it('S22 exact customer email remains a proven customer hit instead of disappearing after the read port',async()=>{
+ const customerId=await customerFixture('S22');
+ const email='TEST-'+customerId+'@example.invalid';
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(full,()=>searchTenantAction(email))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'CUSTOMER',id:customerId,matchField:'email',matchValue:email})])});
+ expect(await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{email}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
+it('S23/S31 actual order dates and surface prefixes stay grounded in the stored order',async()=>{
+ const customerId=await customerFixture('S23-S31');
+ const created=await searchOrderFixture('S23-S31',customerId);
+ const {searchTenantAction}=await import('@/app/actions/search.actions');
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ for(const query of ['15.05.2027','2027-05-15'])expect(await withSession(full,()=>searchTenantAction(query))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'ORDER',id:created.receipt.orderId,matchField:'dueDate',matchValue:query})])});
+ expect(await withSession(full,()=>searchTenantAction('ver'))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'ORDER',id:created.receipt.orderId,matchField:'surface',matchValue:'Verchromen'})])});
+ expect(await sql`SELECT due_date::date::text AS due_date FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.receipt.orderId}`).toEqual([{due_date:'2027-05-15'}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
 it('search preserves proven order hits when a separate customer source cannot read an isolated legacy row',async()=>{
  const needle='49'+Date.now().toString();
  const customerId=await customerFixture('PARTIAL');
