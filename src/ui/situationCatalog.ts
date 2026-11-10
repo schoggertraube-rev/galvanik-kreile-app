@@ -224,3 +224,5 @@ export const COLLECTION_REMINDER_COPY={
 export const ORDER_ITEM_COMPLETION_COPY = {
   alreadyChanged: 'Der Teilstatus hat sich bereits geändert. Öffne den Auftrag erneut.',
 };
+
+export const INVOICE_DELIVERY_COPY={alreadySent:(number:string,date:string)=>`Rechnung ${number} wurde schon am ${date} gesendet.`};

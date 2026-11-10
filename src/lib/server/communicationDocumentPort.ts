@@ -1,6 +1,6 @@
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
-import {sql} from 'drizzle-orm';
+import {sql,type SQL} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 import {appendOrderInformed} from './orderReleaseRead';
@@ -55,4 +55,25 @@ export async function readCommunicationDocumentReceipt(auth:AuthorizationSnapsho
   if(!row.message_id||row.sent_intent!==row.payload.intent||row.body!==communicationDocumentBody(input.body,document)||row.subject!==input.subject.trim())throw Error('COMMUNICATION_DOCUMENT_PROOF_INVALID');
   return {code:'OK' as const,document,data:{threadId:row.id,messageId:row.message_id,customerId:row.customer_id,orderId:row.order_id,recordedAt:row.created_at,replayed:true}};
  });}catch(error){console.error('[COMMUNICATION_DOCUMENT_RECEIPT_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Versandbeleg konnte nicht sicher gelesen werden. Nicht erneut senden.'};}
+}
+
+/** Same membership predicate for preparation and the check under invoice lock. */
+function invoiceSentMembership(invoiceId:SQL){
+ return sql`sent.payload->'document'->>'kind'='INVOICE'
+  AND (sent.payload->'document'->>'id'=${invoiceId}::text
+   OR coalesce(sent.payload->'document'->'bundle','[]'::jsonb) @> jsonb_build_array(jsonb_build_object('id',${invoiceId}::text)))`;
+}
+export function invoiceAlreadySent(tenantId:string,invoiceId:SQL){
+ return sql`EXISTS(SELECT 1 FROM public.events sent WHERE sent.tenant_id=${tenantId}
+  AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.status='success'
+  AND ${invoiceSentMembership(invoiceId)})`;
+}
+export class InvoiceAlreadySent extends Error{
+ constructor(readonly number:string,readonly sentOn:string){super('INVOICE_ALREADY_SENT');}
+}
+export async function assertInvoiceNotSent(tx:PrivilegedTenantTransaction,tenantId:string,invoice:{id:string;number:string}){
+ const rows=await tx.execute<{sent_on:string}>(sql`SELECT to_char(sent.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin','DD.MM.YYYY') AS sent_on FROM public.events sent
+  WHERE sent.tenant_id=${tenantId} AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.status='success'
+  AND ${invoiceSentMembership(sql`${invoice.id}`)} ORDER BY sent.created_at,sent.id LIMIT 1`);
+ if(rows.length)throw new InvoiceAlreadySent(invoice.number,rows[0].sent_on);
 }

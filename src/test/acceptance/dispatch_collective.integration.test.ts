@@ -31,17 +31,18 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  if(old.code!=='OK'||old.data.customerInformed?.code!=='OK'||!old.data.customerInformed.firstInformed)throw Error('COLLECTIVE_INITIAL_PROOF');
  const original=old.data.customerInformed.firstInformed;
  const second=await readyInvoiceOrder('Sammel-Zweiter','pickup',false,first.customerId);
+ const companion=await readyInvoiceOrder('Sammel-Neue-Begleitware','pickup',false,first.customerId);
  const shipping=await readyInvoiceOrder('Sammel-Andere-Uebergabe','shipping',false,first.customerId);
  const foreign=await readyInvoiceOrder('Sammel-Anderer-Kunde');
  const input={...initial,targetId:second.orderId,attachment:{kind:'INVOICE' as const,documentId:second.invoice.invoiceId},clientRequestId:randomUUID()};
  const sent=await withSession(full,()=>sendCustomerMailAction(input));
  expect(sent).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('COLLECTIVE_SEND:'+sent.code);
  expect(requests).toHaveLength(2);expect(requests[1].attachments).toHaveLength(2);
- const numbers=await sql`SELECT id,order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${first.orderId},${second.orderId})`;
+ const numbers=await sql`SELECT id,order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${second.orderId},${companion.orderId})`;
  for(const order of numbers)expect(requests[1].body.content).toContain(order.order_number);
- const stored=await sql`SELECT pdf_sha256 FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${first.invoice.invoiceId}::uuid,${second.invoice.invoiceId}::uuid)`;
+ const stored=await sql`SELECT pdf_sha256 FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${second.invoice.invoiceId}::uuid,${companion.invoice.invoiceId}::uuid)`;
  expect(requests[1].attachments.map(file=>createHash('sha256').update(Buffer.from(file.contentBytes,'base64')).digest('hex')).sort()).toEqual(stored.map(row=>row.pdf_sha256).sort());
- for(const order of [first,second])expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{code:'OK',ampel:'gruen',informed:{threadId:sent.data.threadId,channel:'mail',actorId:full.actorId}}}});
+ for(const order of [second,companion])expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{code:'OK',ampel:'gruen',informed:{threadId:sent.data.threadId,channel:'mail',actorId:full.actorId}}}});
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:first.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{firstInformed:{eventId:original.eventId,recordedAt:original.recordedAt}}}});
  for(const order of [shipping,foreign])expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{informed:null}}});
  const third=await readyInvoiceOrder('Sammel-Spaeter','pickup',false,first.customerId);
@@ -57,7 +58,7 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('COHORT_QUEUE');
  const group=queue.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder;
  expect(group).toMatchObject({state:'DUE',oldestNoticeAt:original.recordedAt,automaticSend:false,requiresResponseCheck:false,responseState:'NONE',needsNotice:[third.orderId]});
- expect(group!.orderIds.slice().sort()).toEqual([first.orderId,second.orderId,third.orderId].sort());
+ expect(group!.orderIds.slice().sort()).toEqual([first.orderId,second.orderId,companion.orderId,third.orderId].sort());
  expect(queue.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder?.clientKey).toBe(group!.clientKey);
  expect(requests[1].internetMessageHeaders).toEqual([{name:'x-kreile-request-id',value:input.clientRequestId}]);
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.customerId}`;
@@ -69,30 +70,30 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  const {readLinkedIntakeMails}=await import('@/modules/eingang/server-public');
  const response=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('REPLY_SCOPE_AUTH');return readDispatchResponses(auth.data,{customerId:first.customerId,noticeThreadIds:[sent.data.threadId],oldestNoticeAt:original.recordedAt},{readLinked:readLinkedIntakeMails});});
  expect(response.state).toBe('REPLIED');
- const originalFreezes=await sql`SELECT order_id AS "orderId",id::text AS "freezeId" FROM private.order_freezes WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id IN (${first.orderId},${second.orderId}) ORDER BY order_id`;
+ const originalFreezes=await sql`SELECT order_id AS "orderId",id::text AS "freezeId" FROM private.order_freezes WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id IN (${second.orderId},${companion.orderId}) ORDER BY order_id`;
  expect(response.proofs).toHaveLength(1);
  expect(response.proofs[0].freezes.slice().sort((a,b)=>a.orderId.localeCompare(b.orderId))).toEqual([...originalFreezes]);
  const reacted=await withSession(full,()=>getOrdersDb());if(!reacted.ok)throw Error('COHORT_REACTION_READ');
- expect(reacted.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED',automaticSend:false});
+ expect(reacted.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED',automaticSend:false});
  expect(await sql`SELECT station FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.orderId}`).toEqual([{station:'fertig'}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND graph_message_id='TEST-collective-reply' AND kunde_id=${first.customerId}`).toEqual([{n:1}]);
  const afterReply=await readyInvoiceOrder('Sammel-Nach-Antwort','pickup',false,first.customerId);
  expect(await withSession(full,()=>sendCustomerMailAction({...initial,targetId:afterReply.orderId,attachment:{kind:'INVOICE',documentId:afterReply.invoice.invoiceId},clientRequestId:randomUUID()}))).toMatchObject({code:'OK'});
  const laterQueue=await withSession(full,()=>getOrdersDb());if(!laterQueue.ok)throw Error('REPLY_SCOPE_QUEUE');
- for(const id of [first.orderId,second.orderId])expect(laterQueue.data.find(row=>row.id===id)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED'});
+ for(const id of [second.orderId,companion.orderId])expect(laterQueue.data.find(row=>row.id===id)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED'});
  for(const id of [third.orderId,afterReply.orderId])expect(laterQueue.data.find(row=>row.id===id)?.finishedDispatch?.reminder).toMatchObject({stage:'E1',state:'DUE'});
- expect(laterQueue.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder?.orderIds.slice().sort()).toEqual([third.orderId,afterReply.orderId].sort());
+ expect(laterQueue.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder?.orderIds.slice().sort()).toEqual([first.orderId,third.orderId,afterReply.orderId].sort());
  replyKey=randomUUID(); // A proved different outgoing request is not a reaction to this notice.
  const unrelated=await withSession(full,()=>getOrdersDb());if(!unrelated.ok)throw Error('COHORT_UNRELATED_READ');
- expect(unrelated.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED'});
+ expect(unrelated.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED'});
  expect(unrelated.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'DUE',responseState:'NONE'});
  replyKey='TEST-invalid-header';
  const uncertain=await withSession(full,()=>getOrdersDb());if(!uncertain.ok)throw Error('COHORT_UNCERTAIN_READ');
- expect(uncertain.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED'});
+ expect(uncertain.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED'});
  expect(uncertain.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'RECONCILE_RESPONSE',responseState:'UNAVAILABLE',requiresResponseCheck:true});
  const operational=await createFixture(['auftraege'],'werkstatt'),beforeLookup=lookups;
  const limited=await withSession(operational,()=>getOrdersDb());if(!limited.ok)throw Error('COHORT_LIMITED_READ');
- expect(limited.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'REPLIED',requiresResponseCheck:false});
+ expect(limited.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'REPLIED',requiresResponseCheck:false});
  expect(limited.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'NOT_CHECKED',requiresResponseCheck:true});
  expect(lookups).toBe(beforeLookup);expect(requests).toHaveLength(3);
  // The recorded reaction is idempotent and remains conditional on its actual immutable receipt.
@@ -111,4 +112,24 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  const corrupted=await withSession(operational,()=>getOrdersDb());if(!corrupted.ok)throw Error('COHORT_CORRUPTED_RECEIPT_READ');
  expect(corrupted.data.find(row=>row.id===first.orderId)?.finishedDispatch).toMatchObject({unavailable:true,gaps:expect.arrayContaining(['COLLECTION_PROOF_UNAVAILABLE'])});
  expect(lookups).toBe(beforeLookup);
+});
+
+it('K1 a later invoice mail excludes an already sent original and a fresh retry sends nothing twice',async()=>{
+ const requests:Array<{attachments:Array<{name:string}>}>=[];
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-K1-token'.repeat(10),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){requests.push(JSON.parse(String(init?.body)).message);return new Response(null,{status:202});}
+  return nativeFetch(input,init);
+ });
+ const first=await readyInvoiceOrder('K1 erster Originalbeleg');
+ const initial={targetType:'ORDER' as const,targetId:first.orderId,subject:'TEST K1 Fertig',body:'TEST K1 Ware fertig',attachment:{kind:'INVOICE' as const,documentId:first.invoice.invoiceId},clientRequestId:randomUUID()};
+ expect(await withSession(full,()=>sendCustomerMailAction(initial))).toMatchObject({code:'OK'});
+ const second=await readyInvoiceOrder('K1 spaeterer Originalbeleg','pickup',false,first.customerId);
+ const input={...initial,targetId:second.orderId,attachment:{kind:'INVOICE' as const,documentId:second.invoice.invoiceId},clientRequestId:randomUUID()};
+ const sent=await withSession(full,()=>sendCustomerMailAction(input));expect(sent).toMatchObject({code:'OK'});
+ expect(requests).toHaveLength(2);expect(requests[1].attachments).toHaveLength(1);
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
+ expect(await withSession(full,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}))).toMatchObject({code:'CONFLICT',message:expect.stringContaining('wurde schon am')});
+ expect(requests).toHaveLength(2);
 });

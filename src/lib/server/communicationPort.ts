@@ -1,11 +1,11 @@
 import "server-only";
 
 import { randomUUID,createHash } from "node:crypto";
-import {appendCommunicationDocument,communicationDocumentBody,communicationDocumentIntent,type CommunicationDocument} from './communicationDocumentPort';
+import {InvoiceAlreadySent,appendCommunicationDocument,communicationDocumentBody,communicationDocumentIntent,type CommunicationDocument} from './communicationDocumentPort';
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {hasAuthorizationArea} from '@/lib/server/authorization';
-import {MAIL_REQUEST_CONFLICT_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
+import {INVOICE_DELIVERY_COPY,MAIL_REQUEST_CONFLICT_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {prepareCollectionReminder,appendCollectionReminderSent,type CollectionReminderMeta} from './collectionReminderPort';
 import {
@@ -292,6 +292,7 @@ export async function sendCommunicationMail(
     });
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_SEND_PREPARE_FAILED", error);
+    if(error instanceof InvoiceAlreadySent)return {code:'CONFLICT',message:INVOICE_DELIVERY_COPY.alreadySent(error.number,error.sentOn)};
     if(error instanceof Error&&error.message==='COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED')return {code:'VALIDATION_ERROR',message:'Beleg oder Auftragsstand wurde seit der PDF-Erstellung geändert. Es wurde nichts gesendet. Aktuellen Beleg erneut wählen.'};
     if(error instanceof Error&&error.message==='COMMUNICATION_NOT_CONFIGURED')return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
     if(error instanceof Error&&error.message==='COMMUNICATION_REPLAY_INTENT_MISMATCH')return {code:'CONFLICT',message:MAIL_REQUEST_CONFLICT_COPY};

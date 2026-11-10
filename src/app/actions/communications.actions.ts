@@ -3,7 +3,7 @@
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {freezeStorageDeadline} from '@/lib/server/storageDeadline';
 import {createHash} from "node:crypto";
-import {readCommunicationDocumentReceipt,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
+import {readCommunicationDocumentReceipt,invoiceAlreadySent,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
@@ -120,6 +120,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
     JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
     JOIN private.v_order_freeze_state_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok
     WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${invoice.customer_id} AND invoice.status='issued' AND invoice.contract_version=1 AND invoice.id<>${invoice.id}::uuid
+     AND NOT ${invoiceAlreadySent(auth.tenantId,sql`invoice.id`)}
      AND orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig' AND orders.handover_mode=${invoice.handover_mode}
     ORDER BY orders.order_number,invoice.id LIMIT 101`));
    if(others.length>100)return {code:'VALIDATION_ERROR' as const,message:'Zu viele offene Belege für eine einzelne Sammel-Mail. Es wurde nichts gesendet.'};
@@ -150,6 +151,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
    if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;
    const rows=await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid AND order_id=${invoice.orderId} AND status='issued' AND aggregate_version=${invoice.version} AND pdf_sha256=${invoice.sha256} FOR UPDATE`);
    if(rows.length!==1)return false;
+   await assertInvoiceNotSent(tx,auth.tenantId,invoice);
   }return true;
  }:undefined});
  return sent.code==='OK'&&document?.kind==='QUOTE'?confirmQuoteDelivery(input,document,sent):sent;
