@@ -3,6 +3,48 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('customer complaint ratio follows the actual physical-release cohort and counts only its customer',async()=>{
+ const {readyInvoiceOrder}=await import('./orderFixture');
+ const {storeOrderPhoto}=await import('./photoFixture');
+ const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const {reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
+ const order=await readyInvoiceOrder('L3-Kohorte');
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{complaintRatio:{id:'KZ-REKLAMATIONSQUOTE',releasedOrderCount:0,complaintCount:0,ratio:null}}}});
+ const release={orderId:order.orderId,mode:'abholung' as const,expectedVersion:order.version,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>recordGoodsOutAction(release))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{complaintRatio:{releasedOrderCount:1,complaintCount:0,ratio:0}}}});
+ const photo=await storeOrderPhoto(order.orderId);
+ const complaint={action:'aufnehmen' as const,clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Abplatzung',description:'TEST L3 dokumentierte Beschichtung',photoIds:[photo],goodsReturn:'ja' as const};
+ expect(await withSession(full,()=>reklamationAusfuehrenAction(complaint))).toMatchObject({code:'OK'});
+ const read=await withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}));
+ expect(read).toMatchObject({code:'OK',data:{kennzahlen:{complaintRatio:{releasedOrderCount:1,complaintCount:1,ratio:1}}}});
+ expect(await withSession(full,()=>reklamationAusfuehrenAction(JSON.parse(JSON.stringify(complaint))))).toMatchObject({code:'OK',replayed:true});
+ const other=await readyInvoiceOrder('L3-Anderer');
+ expect(await withSession(full,()=>recordGoodsOutAction({...release,orderId:other.orderId,expectedVersion:other.version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const operational=await createFixture(['kunden'],'werkstatt');
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(operational,()=>getCustomerSummaryAction({customerId:order.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{complaintRatio:{releasedOrderCount:1,complaintCount:1,ratio:1}}}});
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:other.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{complaintRatio:{releasedOrderCount:1,complaintCount:0,ratio:0}}}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
+it('customer net revenue subtracts the actual cancellation once and the former gross summary uses that same port',async()=>{
+ const {readyInvoiceOrder}=await import('./orderFixture');
+ const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const order=await readyInvoiceOrder('L3-Netto-Storno');
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}))).toMatchObject({code:'OK',data:{invoiceRevenueCents:10000,invoiceOpenCents:11900,kennzahlen:{revenue:{netAmountCents:10000},openInvoices:{amountCents:11900}}}});
+ const input={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST L3 Korrektur',clientEventId:randomUUID()};
+ expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'OK'});
+ const read=()=>withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}));
+ expect(await read()).toMatchObject({code:'OK',data:{invoiceRevenueCents:0,invoiceOpenCents:0,kennzahlen:{revenue:{netAmountCents:0},openInvoices:{amountCents:0}}}});
+ expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await read()).toMatchObject({code:'OK',data:{kennzahlen:{revenue:{netAmountCents:0}}}});
+ expect(await sql`SELECT net_amount_cents,status FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{net_amount_cents:10000,status:'cancelled'}]);
+});
+
 it('customer metrics read actual paid invoices once, isolate customers and hide finance without Geld',async()=>{
  const {readyInvoiceOrder}=await import('./orderFixture');
  const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
