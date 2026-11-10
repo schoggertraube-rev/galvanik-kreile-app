@@ -1,5 +1,5 @@
 // Only unacknowledged uploads, as specified by eingang.geraete. Server remains authoritative.
-export type PendingOriginal = { id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
+export type PendingOriginal = { id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
   | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[] };
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingEntry=PendingOriginal|PendingQuarantine;
@@ -24,7 +24,16 @@ async function transaction<T>(scope: string, mode: IDBTransactionMode, work: (st
     transaction.onabort = () => { connection.close(); reject(new Error("INTAKE_PENDING_STORAGE_ABORTED")); };
   });
 }
-export async function retainPendingOriginal(scope: string, original: PendingOriginal): Promise<void> { await transaction(scope, "readwrite", store => store.put(original)); }
+export async function retainPendingOriginal(scope: string, original: PendingOriginal): Promise<void> {
+ if(original.kind!=="file"){await transaction(scope,"readwrite",store=>store.put(original));return;}
+ const connection=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=connection.transaction(STORE,"readwrite"),store=tx.objectStore(STORE),read=store.get(original.id);
+  read.onsuccess=()=>{const previous=read.result as PendingOriginal|undefined;const deviceCapturedAt=previous?.kind==="file"?previous.deviceCapturedAt:new Date().toISOString();store.put({...original,...(deviceCapturedAt?{deviceCapturedAt}:{})});};
+  tx.oncomplete=()=>{connection.close();window.dispatchEvent(new Event("kreile-pending-changed"));resolve();};
+  tx.onabort=()=>{connection.close();reject(new Error("INTAKE_PENDING_STORAGE_ABORTED"));};
+ });
+}
 export async function readPendingEntries(scope:string):Promise<PendingEntry[]> {
  const rows=await transaction<unknown[]>(scope,"readonly",store=>store.getAll());
  return rows.map(value=>{

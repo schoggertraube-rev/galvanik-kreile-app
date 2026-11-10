@@ -60,6 +60,15 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('resumes real scoped originals 
   }`);
   expect(result).toContain('"secured": 2');expect(api).toEqual({prepare:2,finish:2});
   expect(await sql`SELECT id::text FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${ids.item}::uuid ORDER BY id`).toHaveLength(2);
+  await evaluate(`async()=>{const p=await import('/module.mjs');const outcome=await p.syncPendingFiles('${scope}',{...window.TESTports});if(outcome.secured!==1||outcome.acknowledged!==0)throw Error('TEST_FRESH_RETRY');return {freshRetry:true};}`);
+  const deviceOrigins=await sql`SELECT nachher FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${ids.item}::uuid AND art='einsatz' AND nachher->>'action'='offline_original_captured'`;
+  expect(deviceOrigins).toHaveLength(2);for(const source of deviceOrigins)expect(source.nachher.deviceCapturedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  const [photo]=await sql`SELECT dateiname,mime,bytes::integer AS bytes,sha256 FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${ids.photo}::uuid`;
+  expect(await withSession(full,()=>prepareIntakeFileAction({itemId:ids.item,fileId:ids.photo,name:photo.dateiname,mime:photo.mime,bytes:photo.bytes,sha256:photo.sha256,captureOrigin:'warenfoto',deviceCapturedAt:'2000-01-01T00:00:00.000Z'},scope))).toMatchObject({code:'CONFLICT'});
+  expect(await sql`SELECT nachher FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${ids.item}::uuid AND art='einsatz' AND nachher->>'action'='offline_original_captured'`).toEqual(deviceOrigins);
+  const otherAuth=await withSession(other,()=>getAuthorizationSnapshotAction());if(!otherAuth.ok)throw Error('TEST_OTHER_SCOPE');
+  const photoOrigin=deviceOrigins.find(source=>source.nachher.fileId===ids.photo)!;
+  expect(await withSession(other,()=>prepareIntakeFileAction({itemId:ids.item,fileId:ids.photo,name:photo.dateiname,mime:photo.mime,bytes:photo.bytes,sha256:photo.sha256,captureOrigin:'warenfoto',deviceCapturedAt:photoOrigin.nachher.deviceCapturedAt},otherAuth.data.offlineScope))).toMatchObject({code:'FORBIDDEN'});
   actor=other;
   const denied=await evaluate(`async()=>{const p=await import('/module.mjs'),scope='${scope}';await p.retainPendingOriginal(scope,{id:'${ids.switched}',itemId:'${ids.item}',kind:'file',file:new File(['TEST actor changed'],'TEST-switched.bin',{type:'application/octet-stream'}),deviceId:null});const result=await p.syncPendingFiles(scope,window.TESTports);const rows=await p.readPendingEntries(scope);if(result.acknowledged!==0||!rows.some(x=>x.id==='${ids.switched}'))throw Error('TEST_FOREIGN_ACK');return {acknowledged:result.acknowledged};}`);
   expect(denied).toContain('"acknowledged": 0');
