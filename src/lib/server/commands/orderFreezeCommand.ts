@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import {appendProductionCompletion,appendFrozenProductionExtraWork,ensureOrderProductionHistory} from '@/lib/server/productionSnapshotPort';
+import {appendProductionCompletion,appendFrozenProductionExtraWork} from '@/lib/server/productionSnapshotPort';
 
 const EVENT_TYPE = "ORDER_FROZEN_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
@@ -372,7 +372,6 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
           AND photo.target_links @> jsonb_build_array(jsonb_build_object('targetType','ORDER','targetId',item.order_id),jsonb_build_object('targetType','ORDER_ITEM','targetId',item.id)))`);
       if(missingPhotos.length)return {code:'VALIDATION_ERROR',message:ORDER_ITEM_PHOTO_COPY.required};
 
-      await ensureOrderProductionHistory(tx,authorization.data.tenantId,order.id);
       const rateRows = await tx.execute<RateRow>(sql`
         SELECT id::text AS id, tenant_id, hourly_rate_cents, version
         FROM private.extra_work_hourly_rates

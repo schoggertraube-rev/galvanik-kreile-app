@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import {appendProductionPricing,ensureOrderProductionHistory} from '@/lib/server/productionSnapshotPort';
+import {appendProductionPricing} from '@/lib/server/productionSnapshotPort';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -171,7 +171,6 @@ export async function setInvoiceItemPrices(inputValue: unknown): Promise<SetInvo
         return { code: "VALIDATION_ERROR" as const, message: "Bitte alle preislosen Freitext-Positionen genau einmal ausfüllen." };
       }
 
-      await ensureOrderProductionHistory(tx,authorization.data.tenantId,input.orderId);
       for (const price of input.prices) {
         const updated = await tx.execute<{ id: string }>(sql`
           UPDATE public.items

@@ -12,7 +12,7 @@ import {
 import { type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {intakeHandoverDirective} from '@/modules/eingang/public';
 import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY} from '@/ui/situationCatalog';
-import {appendProductionCompletion,appendProductionPricing,appendProductionReversals,ensureOrderProductionHistory} from '@/lib/server/productionSnapshotPort';
+import {appendProductionCompletion,appendProductionPricing,appendProductionReversals} from '@/lib/server/productionSnapshotPort';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const VAT = new Set([0, 700, 1900]);
@@ -282,7 +282,6 @@ export async function changeOrderContent(input: ChangeOrderContentInput): Promis
         return service ? { ...item, name: service.name, surface: service.surface, unit: service.unit, unitPriceCents: service.net_price_cents, vatRateBasisPoints: service.vat_rate_basis_points as 0 | 700 | 1900 } : item;
       });
 
-      await ensureOrderProductionHistory(tx,auth.data.tenantId,input.orderId);
       for (const item of normalized) {
         if (existing.some((row) => row.id === item.id)) {
           await tx.execute(sql`UPDATE public.items SET name=${item.name}, quantity=${item.quantity}, material=${item.material}, surface_requested=${item.surface}, catalog_service_id=${item.catalogServiceId}::uuid, unit=${item.unit}, preis_netto=${item.unitPriceCents === null ? null : item.unitPriceCents / 100}, vat_rate_basis_points=${item.vatRateBasisPoints} WHERE tenant_id=${auth.data.tenantId} AND order_id=${input.orderId} AND id=${item.id}`);
@@ -329,7 +328,6 @@ export async function setOrderItemFinished(input: SetOrderItemFinishedInput): Pr
       const current = await tx.execute<{ current_station_id: string }>(sql`SELECT current_station_id FROM public.items WHERE tenant_id=${auth.data.tenantId} AND order_id=${input.orderId} AND id=${input.itemId} FOR UPDATE`);
       if (current.length !== 1) return { code: "NOT_FOUND" as const, message: "Teil nicht verfügbar." };
       if ((current[0]!.current_station_id === "fertig") === input.finished) return { code: "CONFLICT" as const, message: ORDER_ITEM_COMPLETION_COPY.alreadyChanged };
-      await ensureOrderProductionHistory(tx,auth.data.tenantId,input.orderId);
       const changed = await tx.execute<{ id: string }>(sql`UPDATE public.items SET current_station_id=${input.finished ? "fertig" : order.station} WHERE tenant_id=${auth.data.tenantId} AND order_id=${input.orderId} AND id=${input.itemId} RETURNING id`);
       if (changed.length !== 1) return { code: "NOT_FOUND" as const, message: "Teil nicht verfügbar." };
       const updated = await tx.execute<{ version: number }>(sql`UPDATE public.orders SET version=version+1 WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} AND version=${input.expectedVersion} RETURNING version`);
