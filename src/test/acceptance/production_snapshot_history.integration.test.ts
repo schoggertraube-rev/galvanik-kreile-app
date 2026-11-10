@@ -26,8 +26,9 @@ it('K2 the real weekly action ignores pre-adoption events and writes no history 
  expect(old.code==='OK'?Object.hasOwn(old.data,'reconstructed'):true).toBe(false);
  expect(old).toMatchObject({code:'OK',data:{weekStart:berlinDate,weekEndExclusive:'2026-11-02',netCents:0,currentlyUnpricedItemCount:0}});
  expect(await withSession(reader,()=>getProductionWeekAction({onDate:'2026-10-25'}))).toMatchObject({code:'OK',data:{netCents:0}});
- expect(await sql`SELECT event_id,net_cents::int,valuation FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND direction=1 ORDER BY occurred_at`).toEqual([{event_id:finished.receipt.eventId,net_cents:10000,valuation:'captured'}]);
- expect(await withSession(reader,()=>getProductionWeekAction({onDate:new Date().toISOString().slice(0,10)}))).toMatchObject({code:'OK',data:{netCents:10000}});
+ expect(await sql`SELECT event_id,net_cents::int,valuation FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND direction=1 AND component='base' ORDER BY occurred_at`).toEqual([{event_id:finished.receipt.eventId,net_cents:10000,valuation:'captured'}]);
+ expect(await sql`SELECT event_id,net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND component='pricing'`).toEqual([{event_id:changed.receipt.eventId,net_cents:10000}]);
+ expect(await withSession(reader,()=>getProductionWeekAction({onDate:new Date().toISOString().slice(0,10)}))).toMatchObject({code:'OK',data:{netCents:20000}});
  expect(await withSession(reader,()=>getProductionWeekAction(JSON.parse(JSON.stringify({onDate:berlinDate}))))).toEqual(old);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_PRODUCTION_HISTORY_REBUILT_V1'`).toHaveLength(0);
 });
