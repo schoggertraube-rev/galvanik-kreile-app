@@ -451,7 +451,7 @@ function parseBaseLines(value: unknown): ImmutableInvoiceBaseLine[] {
     if (quantity < 1 || unitNetAmountCents < 0) {
       throw new InvoiceMasterDataError("INVOICE_BASE_LINE_MASTER_DATA_INVALID");
     }
-    if (lineNetAmountCents !== unitNetAmountCents * quantity) {
+    if (lineNetAmountCents < 0 || unitNetAmountCents !== Number((BigInt(lineNetAmountCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity))) {
       throw new Error("INVOICE_BASE_LINE_INTEGRITY_INVALID");
     }
     return { type: "BASE" as const, itemId, name, quantity, unitNetAmountCents, lineNetAmountCents };
@@ -1050,8 +1050,8 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         // position's different rate with today's company setting.
         if(commercial.positions.some(row=>row.vatRateBasisPoints!=null&&row.vatRateBasisPoints!==rate))return {code:'VALIDATION_ERROR',message:'Stammdaten für die Rechnungsausgabe sind unvollständig.'};
         source.base_lines=commercial.positions.map(row=>{
-          const quantity=row.unit===null?1:row.quantity;
-          return {itemId:row.itemId,name:row.name,quantity,unitNetAmountCents:row.lineTotalCents/quantity,lineNetAmountCents:row.lineTotalCents};
+          const quantity=row.quantity;
+          return {itemId:row.itemId,name:row.name,quantity,unitNetAmountCents:Number((BigInt(row.lineTotalCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity)),lineNetAmountCents:row.lineTotalCents};
         });
         // The existing canonical awarded-quote port proves these prices; no price is copied into an intake intent.
         source.base_line_count=commercial.positions.length;source.base_net_amount_cents=commercial.totalNetCents;

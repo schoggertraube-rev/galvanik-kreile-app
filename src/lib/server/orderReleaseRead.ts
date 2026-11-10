@@ -8,7 +8,7 @@ export async function readOpenOrderComplaint(tx:PrivilegedTenantTransaction,tena
   SELECT id,nummer AS number FROM public.complaints
   WHERE tenant_id=${tenantId} AND order_id=${orderId}
     AND stand IS DISTINCT FROM 'abgeschlossen'
-  ORDER BY created_at,id LIMIT 1
+  ORDER BY created_at,id
  `);
- return rows[0]??null;
+ return rows[0]?{...rows[0],complaintIds:rows.map(row=>row.id)}:null;
 }

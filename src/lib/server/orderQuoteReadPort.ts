@@ -5,9 +5,8 @@ import {scaleQuotePositions} from '@/modules/quotes/public';
 import type {QuoteCalculation,QuoteQuantityLine} from '@/modules/quotes/public';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
 import type {AuthorizationSnapshot} from './authorization';
-import {QUOTE_COMMERCIAL_SOURCE_COPY} from '@/ui/situationCatalog';
 
-export type OrderCommercialQuote={quoteId:string;quoteNumber:string;edition:number;totalNetCents:number;plannedHours:string|null;specialRequests:string|null;vatRateBasisPoints?:0|700|1900|null;legacyMinutesAllocated?:boolean;hints?:Array<{code:'FLAT_QUOTE_PARTIAL';itemId:string;text:string}>;positions:Array<{itemId:string;position:number;name:string;quantity:number;lineTotalCents:number;unit?:string|null;plannedMinutes?:number|null;vatRateBasisPoints?:0|700|1900|null;flatPartial?:boolean}>};
+export type OrderCommercialQuote={quoteId:string;quoteNumber:string;edition:number;totalNetCents:number;plannedHours:string|null;specialRequests:string|null;vatRateBasisPoints?:0|700|1900|null;legacyMinutesAllocated?:boolean;positions:Array<{itemId:string;position:number;name:string;quantity:number;lineTotalCents:number;unit?:string|null;plannedMinutes?:number|null;vatRateBasisPoints?:0|700|1900|null}>};
 /** Immutable awarded quote is the sole source of its agreed line totals, never a rounded unit-price copy. */
 export async function readOrderCommercialQuote(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string):Promise<OrderCommercialQuote>{
  const rows=await tx.execute<OrderCommercialQuote&{integrity:boolean;sourceCalculation:QuoteCalculation|null;sourcePositions:Array<QuoteQuantityLine&{vatRateBasisPoints:0|700|1900|null}>}>(sql`SELECT quote.id::text AS "quoteId",quote.quote_number AS "quoteNumber",quote.fassung AS edition,sum(round(coalesce(position.zeilen_gesamt_cents,position.line_total_cents)::numeric * (item.value->>'quantity')::numeric / position.quantity))::float8 AS "totalNetCents",quote.sonderwuensche AS "specialRequests",
@@ -34,12 +33,11 @@ export async function readOrderCommercialQuote(tx:PrivilegedTenantTransaction,te
   quote.positions=quote.positions.map(row=>{
     const resolved=scaled.positions.find(priced=>priced.position===row.position)!;
     const original=sourcePositions.find(priced=>priced.position===row.position)!;
-    return {...row,lineTotalCents:resolved.lineTotalCents,unit:original.unit??null,plannedMinutes:resolved.plannedMinutes??null,vatRateBasisPoints:original.vatRateBasisPoints??fallback[0]?.rate??null,flatPartial:original.unit===null&&row.quantity!==original.quantity};
+    return {...row,lineTotalCents:resolved.lineTotalCents,unit:original.unit??null,plannedMinutes:resolved.plannedMinutes??null,vatRateBasisPoints:original.vatRateBasisPoints??fallback[0]?.rate??null};
   });
   const rates=new Set(quote.positions.map(row=>row.vatRateBasisPoints));
   quote.vatRateBasisPoints=rates.size===1?quote.positions[0].vatRateBasisPoints:null;
   quote.plannedHours=scaled.plannedHours??scaled.calculation?.hours??null;
-  quote.hints=quote.positions.filter(row=>row.flatPartial).map(row=>({code:'FLAT_QUOTE_PARTIAL',itemId:row.itemId,text:QUOTE_COMMERCIAL_SOURCE_COPY.flatPartial}));
  }
  return quote;
 }

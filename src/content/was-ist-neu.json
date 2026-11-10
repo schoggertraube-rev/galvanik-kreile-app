@@ -4,11 +4,16 @@
     "pr": 210,
     "seite": "auftrag",
     "punkte": [
-      "Bar oder Karte bei Abholung gibt die Ware erst nach gespeicherter Zahlung frei. Offene Reklamationen und überfällige Rechnungen sperren weiterhin die Ausgabe.",
-      "Kundenänderungen und Absprachen bleiben bei Fehlern und Wiederholungen konsistent.",
-      "Nachrichten, KV, Teilfotos und Zahlung bleiben mit ihrem Vorgang verbunden.",
-      "Ein zu später Abholwunsch bleibt als Rückruf mit Original erhalten, ohne den gebuchten Ausgang unlesbar zu machen.",
-      "Die Suche findet gespeicherte Ansprechpartner, E-Mail-Adressen und Teilhinweise, statt diese Treffer zu verlieren."
+      "Bar oder Karte bei Abholung: Die Ware wird erst nach gespeicherter Zahlung freigegeben.",
+      "Überfällige Rechnungen sperren die Ausgabe weiterer Ware an diesen Kunden. Eine bewusste Ausnahme braucht einen Grund.",
+      "Eine offene Reklamation hält nur den betroffenen Auftrag zurück.",
+      "Vor „Fertig melden“ braucht jedes Teil ein gespeichertes Foto.",
+      "Änderst Du einen Kunden oder eine Absprache, bleiben frühere Daten bei einer abgelehnten Änderung erhalten.",
+      "Bei einem Teil der vereinbarten Menge wird der KV-Betrag anteilig berechnet; Rundungsreste gehen nicht verloren.",
+      "Ein zu später Abholwunsch bleibt mit Originalnachricht als Rückruf erhalten.",
+      "Die Suche findet Ansprechpartner, E-Mail-Adressen und Hinweise zu Teilen.",
+      "Eine fehlende Steuerangabe verhindert die Rechnungsausgabe, ohne eine Rechnungsnummer zu verbrauchen.",
+      "Wiederholte KV-, Rechnungs- und Stornoanfragen überschreiben nicht den ursprünglichen Bearbeiter."
     ],
     "ziel": "/orders"
   },

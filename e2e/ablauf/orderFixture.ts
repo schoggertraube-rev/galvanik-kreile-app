@@ -17,10 +17,10 @@ export async function intakeOrderFixture(label:string,customerId:string,handover
 }
 
 /** Synthetic initial state for later boundaries, using the actual order writers. */
-export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'shipping'='pickup',options:boolean|number=false){
+export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'shipping'='pickup',options:boolean|number=false,existingCustomerId?:string){
  const concurrentIssue=typeof options==='boolean'?options:false;
  const quantity=typeof options==='number'?options:1;
- const customerId=await customerFixture(label);
+ const customerId=existingCustomerId??await customerFixture(label);
  const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,setExtraWorkHourlyRateAction,freezeOrderAction,getExtraWorkMasterDataAction}=await import('@/app/actions/orders.actions');
  const created=await intakeOrderFixture(label,customerId,handoverMode,quantity);
  const orderId=created.receipt.orderId;

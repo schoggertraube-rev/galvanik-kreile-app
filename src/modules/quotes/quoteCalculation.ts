@@ -41,7 +41,7 @@ export type QuoteQuantityLine={position:number;quantity:number;lineTotalCents:nu
 export function scaleQuotePositions(calculation:QuoteCalculation|null,source:QuoteQuantityLine[],quantities:Array<{position:number;quantity:number}>):
  {code:'OK';positions:QuoteQuantityLine[];totalNetCents:number;calculation:QuoteCalculation|null;plannedHours?:string|null;legacyMinutesAllocated?:boolean}|Exclude<QuoteCalculationResult,{code:'OK'}>{
  const invalid=():Exclude<QuoteCalculationResult,{code:'OK'}>=>({code:'VALIDATION_ERROR',field:'total',message:'KV-Positionen und Mengen sind nicht eindeutig oder passen nicht zur Kalkulation.'});
- // Explicit revision metadata distinguishes unit prices from a flat position.
+ // Revision metadata supplies time/unit facts; a missing unit never creates a flat price.
  // Older calculation-only callers retain their original contract until they supply it.
  if(source.some(row=>Object.hasOwn(row,'unit'))){
   if(!source.length||source.length!==quantities.length||new Set(source.map(row=>row.position)).size!==source.length||new Set(quantities.map(row=>row.position)).size!==quantities.length
@@ -59,17 +59,19 @@ export function scaleQuotePositions(calculation:QuoteCalculation|null,source:Quo
    shares[largest]+=totalMinutes-shares.reduce((sum,value)=>sum+value,BigInt(0));
    minutes=shares.map(Number);legacyMinutesAllocated=true;
   }
+  const priced=scaleQuotePositions(calculation,source.map(row=>({position:row.position,quantity:row.quantity,lineTotalCents:row.lineTotalCents})),quantities);
+  if(priced.code!=='OK')return priced;
   const positions=source.map((row,index)=>{
    const quantity=quantities.find(next=>next.position===row.position)!.quantity;
    const denominator=BigInt(row.quantity);
-   return {...row,quantity,lineTotalCents:row.unit===null?row.lineTotalCents:Number((BigInt(row.lineTotalCents)*BigInt(quantity)+denominator/BigInt(2))/denominator),plannedMinutes:minutes[index]===null?null:Number((BigInt(minutes[index]!)*BigInt(quantity)+denominator/BigInt(2))/denominator)};
+   return {...row,quantity,lineTotalCents:quantity===0?0:priced.positions.find(position=>position.position===row.position)!.lineTotalCents,plannedMinutes:minutes[index]===null?null:Number((BigInt(minutes[index]!)*BigInt(quantity)+denominator/BigInt(2))/denominator)};
   }).filter(row=>row.quantity>0);
   const totalNetCents=positions.reduce((sum,row)=>sum+row.lineTotalCents,0);
   if(!positions.length||!Number.isSafeInteger(totalNetCents)||positions.some(row=>!Number.isSafeInteger(row.lineTotalCents)||row.plannedMinutes!==null&&!Number.isSafeInteger(row.plannedMinutes)))return invalid();
   const knownMinutes=positions.every(row=>row.plannedMinutes!==null);
   const totalMinutes=positions.reduce((sum,row)=>sum+BigInt(row.plannedMinutes??0),BigInt(0));
   const hours=(totalMinutes*BigInt(10000)+BigInt(30))/BigInt(60);
-  return {code:'OK',positions,totalNetCents,calculation:null,legacyMinutesAllocated,plannedHours:knownMinutes?(hours/BigInt(10000)).toString()+'.'+(hours%BigInt(10000)).toString().padStart(4,'0'):null};
+  return {code:'OK',positions,totalNetCents,calculation:priced.calculation,legacyMinutesAllocated,plannedHours:priced.calculation?.hours??(!legacyMinutesAllocated&&knownMinutes?(hours/BigInt(10000)).toString()+'.'+(hours%BigInt(10000)).toString().padStart(4,'0'):null)};
  }
  if(calculation===null){
   if(!source.length||source.length!==quantities.length||new Set(source.map(row=>row.position)).size!==source.length||new Set(quantities.map(row=>row.position)).size!==quantities.length||source.some(row=>!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.quantity)||row.quantity<1||!Number.isSafeInteger(row.lineTotalCents)||row.lineTotalCents<0)||quantities.some(row=>!source.some(original=>original.position===row.position)||!Number.isSafeInteger(row.quantity)||row.quantity<0))return invalid();

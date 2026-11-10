@@ -265,6 +265,7 @@ describe("readPaymentSummary", () => {
         goodsOut: null,
         goodsOutAllowed: true,
         customerDeliveryBlock:{blocked:false,reason:'overdue_invoice',invoiceIds:[]},
+        complaintHold:{blocked:false,reason:'open_complaint',complaintIds:[]},
       },
     });
   });
