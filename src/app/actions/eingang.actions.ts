@@ -185,7 +185,8 @@ import { readCustomerOrderReadinessCommand } from "@/modules/customers/server-pu
 import { saveIntakeNote, readIntakeCapture, readIntakeNoteText, readIntakePendingScope, prepareIntakeFile, finishIntakeFile, readIntakeFileChanges } from "@/modules/eingang/server-public";
 import type { IntakeContext } from "@/modules/eingang/public";
 
-export async function saveIntakeNoteAction(input: unknown) {
+export async function saveIntakeNoteAction(input: unknown,pendingScope?:string) {
+  if(!await matchesPendingActor(pendingScope))return {code:"FORBIDDEN" as const,message:"Die Aufnahme wartet auf die ursprüngliche Anmeldung."};
   return saveIntakeNote(input, readCustomerProfile);
 }
 export async function discardIntakeCaptureAction(input:unknown){return discardIntakeCapture(input);}
