@@ -2,6 +2,10 @@
   "version": 1,
   "inventorySha256": "0403707d686e05ce8656b036dfbff838fbe1324683153cb4a4691bde09c74ae7",
   "testedWriteActions": {
+    "src/app/actions/orders.actions.ts#getProductionWeekAction": [
+      "src/test/acceptance/production_snapshot_storage.integration.test.ts",
+      "src/test/acceptance/production_snapshot_history.integration.test.ts"
+    ],
     "src/app/actions/orders.actions.ts#setOrderPickupAppointmentAction": [
       "src/test/acceptance/pickup_appointment.integration.test.ts"
     ],
@@ -29,7 +33,8 @@
       "src/test/h18_invoice_actions.integration.test.ts"
     ],
     "src/app/actions/invoices.actions.ts#setInvoiceItemPricesAction": [
-      "src/test/h18_invoice_actions.integration.test.ts"
+      "src/test/h18_invoice_actions.integration.test.ts",
+      "src/test/acceptance/production_snapshot_storage.integration.test.ts"
     ],
     "src/app/actions/customers.actions.ts#createCustomerAction": [
       "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",

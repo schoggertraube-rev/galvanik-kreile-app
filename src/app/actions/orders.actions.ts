@@ -1,5 +1,14 @@
 "use server";
 
+export async function getProductionWeekAction(input?:{onDate?:string}){
+ noStore();
+ const authorization=await resolveAuthorization();
+ if(!authorization.ok)return {code:authorization.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE' as const:'UNAUTHENTICATED' as const};
+ if(input!==undefined&&(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>key!=='onDate')||input.onDate!==undefined&&typeof input.onDate!=='string'))return {code:'VALIDATION_ERROR' as const};
+ const {readProductionWeek}=await import('@/lib/server/productionSnapshotPort');
+ return readProductionWeek(authorization.data,input?.onDate);
+}
+
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import type { ActionResult } from "@/lib/server/authHelper";
 import {

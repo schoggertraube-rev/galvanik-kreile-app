@@ -165,12 +165,15 @@ it('H7 rework segment: decision, return, galvanik, finish and release close the 
  const active=await withSession(full,()=>getLiveOrderCardAction({orderId:rework.receipt.orderId}));
  expect(active.code).toBe('OK');if(active.code!=='OK')throw Error('H7_GALVANIK:'+active.code);
  expect(active.data.card.station).toBe('galvanik');
- const {setOrderItemFinishedAction,freezeOrderAction}=await import('@/app/actions/orders.actions');
+ const {setOrderItemFinishedAction,freezeOrderAction,getProductionWeekAction}=await import('@/app/actions/orders.actions');
+ const beforeReworkWeek=await withSession(full,()=>getProductionWeekAction());if(beforeReworkWeek.code!=='OK')throw Error('REWORK_WEEK_BEFORE');
  const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId:rework.receipt.orderId,itemId:waiting.order.items[0].id,expectedVersion:active.data.card.version,clientEventId:randomUUID(),finished:true}));
  expect(finished.code).toBe('OK');if(finished.code!=='OK')throw Error('H7_PART_FINISH:'+finished.code);
  await storeItemPhoto(rework.receipt.orderId,waiting.order.items[0].id);
  const frozen=await withSession(full,()=>freezeOrderAction({orderId:rework.receipt.orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));
  expect(frozen.code).toBe('OK');if(frozen.code!=='OK')throw Error('H7_FINISH:'+frozen.code);
+ expect(await sql`SELECT net_cents::int,rework,component FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${rework.receipt.orderId} AND direction=1`).toEqual([{net_cents:0,rework:true,component:'base'}]);
+ expect(await withSession(full,()=>getProductionWeekAction())).toMatchObject({code:'OK',data:{netCents:beforeReworkWeek.data.netCents}});
  const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
  expect((await withSession(full,()=>issueInvoiceAction({orderId:rework.receipt.orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()}))).code).toBe('VALIDATION_ERROR');
  const out=await withSession(full,()=>recordGoodsOutAction({orderId:rework.receipt.orderId,mode:'abholung',expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()}));

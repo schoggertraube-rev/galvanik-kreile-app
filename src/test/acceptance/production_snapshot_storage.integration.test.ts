@@ -1,15 +1,17 @@
 // @vitest-environment node
 // Completion and reversal use the actual existing commands and persisted receipts.
-// Historical backfill, deferred pricing, frozen extra work and weekly reader remain unfinished.
+// Historical reconstruction uses a separate pre-adoption tenant test.
 import {vi,it,expect} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
-import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
+import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
 import {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,changeOrderContentAction,getLiveOrderCardAction,freezeOrderAction,reopenFrozenOrderAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction,configureExtraWorkCatalogPositionAction,changeOrderItemExtraWorkAction} from '@/app/actions/orders.actions';
 import {storeItemPhoto} from '../../../e2e/ablauf/photoFixture';
+import {getProductionWeekAction} from '@/app/actions/orders.actions';
+import {setInvoiceItemPricesAction} from '@/app/actions/invoices.actions';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('PRODUCTION_SNAPSHOT_LOOPBACK_REQUIRED');
 
 it('snapshot storage accepts an actual finish source, rejects mutation/foreign source/double counting and reverses its exact original facts',async()=>{
@@ -40,6 +42,28 @@ it('snapshot storage accepts an actual finish source, rejects mutation/foreign s
  await expect(sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,reverses_event_id) SELECT e.id,e.tenant_id,e.order_id,e.item_id,e.created_at,-1,p.quantity,p.unit,9999,p.rework,p.valuation,p.price_source,p.event_id FROM public.events e JOIN private.order_production_snapshots p ON p.event_id=${eventId} WHERE e.id=${reopen.receipt.eventId}`).rejects.toThrow('ORDER_PRODUCTION_REVERSAL_SOURCE_INVALID');
 
  expect(await sql`SELECT sum(direction*net_cents)::int AS net FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{net:0}]);
+});
+
+it('pricing through the existing invoice route after full freeze updates the weekly source and the actual order card',async()=>{
+ const customer=await customerFixture('Preis-nach-Freeze'),created=await intakeOrderFixture('Preis-nach-Freeze',customer),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
+ const changed=await withSession(full,()=>changeOrderContentAction({orderId,expectedVersion:1,clientEventId:randomUUID(),note:'TEST Preis wird nach Fertig ergänzt',items:[{id:itemId,catalogServiceId:null,name:'TEST Ware ohne Preis',quantity:2,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:null,vatRateBasisPoints:null}]}));if(changed.code!=='OK')throw Error('INVOICE_WEEK_CONTENT');
+ const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:changed.receipt.aggregateVersion,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('INVOICE_WEEK_MOVE');
+ const master=await withSession(full,()=>getExtraWorkMasterDataAction());if(master.code!=='OK')throw Error('INVOICE_WEEK_MASTER');
+ if(!master.data.currentRate)expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:12000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ await storeItemPhoto(orderId,itemId);
+ const frozen=await withSession(full,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID()}));if(frozen.code!=='OK')throw Error('INVOICE_WEEK_FREEZE');
+ const before=await withSession(full,()=>getProductionWeekAction());if(before.code!=='OK')throw Error('INVOICE_WEEK_BEFORE');
+ expect(before.data.currentlyUnpricedItemCount).toBe(1);
+ const input={orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID(),prices:[{itemId,unitPriceCents:5000}]};
+ const priced=await withSession(full,()=>setInvoiceItemPricesAction(input));if(priced.code!=='OK')throw Error('INVOICE_WEEK_PRICE');
+ expect(await withSession(full,()=>setInvoiceItemPricesAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ const other=await createFixture(['geld']);
+ expect(await withSession(other,()=>setInvoiceItemPricesAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{items:[expect.objectContaining({id:itemId,unitPriceCents:5000,finished:true})]}}});
+ const after=await withSession(full,()=>getProductionWeekAction());if(after.code!=='OK')throw Error('INVOICE_WEEK_AFTER');
+ expect(after.data.netCents-before.data.netCents).toBe(10000);
+ expect(after.data.currentlyUnpricedItemCount).toBe(0);
+ expect(await sql`SELECT event_id,net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND component='pricing'`).toEqual([{event_id:priced.receipt.eventId,net_cents:10000}]);
 });
 
 it('extra work counts only from the real frozen line and reversal keeps that amount after a rate change',async()=>{
@@ -106,10 +130,16 @@ it('completion without a price remains possible; a missing snapshot receipt roll
  expect(await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT quantity::text,net_cents,valuation FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{quantity:'3.000',net_cents:null,valuation:'captured'}]);
  const card=await withSession(full,()=>getLiveOrderCardAction({orderId})); if(card.code!=='OK')throw Error(JSON.stringify(card)); expect(card).toMatchObject({code:'OK',data:{card:{items:[expect.objectContaining({id:itemId,finished:true})]}}});
+ const beforePricing=await withSession(full,()=>getProductionWeekAction());if(beforePricing.code!=='OK')throw Error('UNPRICED_WEEK_READ');
+ expect(beforePricing.data.currentlyUnpricedItemCount).toBe(1);
  const priceInput={orderId,expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID(),note:'TEST Preis nach Fertig erfasst',items:[{id:itemId,catalogServiceId:null,name:'TEST Preis offen',quantity:3,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:2000,vatRateBasisPoints:1900 as const}]};
  const priced=await withSession(full,()=>changeOrderContentAction(priceInput));if(priced.code!=='OK')throw Error('LATE_PRICE');
  expect(await withSession(full,()=>changeOrderContentAction(JSON.parse(JSON.stringify(priceInput))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT event_id,net_cents::int,origin_event_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND component='pricing'`).toEqual([{event_id:priced.receipt.eventId,net_cents:6000,origin_event_id:finished.receipt.eventId}]);
+ const afterPricing=await withSession(full,()=>getProductionWeekAction());if(afterPricing.code!=='OK')throw Error('PRICED_WEEK_READ');
+ expect(afterPricing.data.currentlyUnpricedItemCount).toBe(0);
+ expect(afterPricing.data.netCents-beforePricing.data.netCents).toBe(6000);
  const reopened=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:priced.receipt.aggregateVersion,clientEventId:randomUUID(),finished:false}));if(reopened.code!=='OK')throw Error('LATE_PRICE_REOPEN');
  expect(await sql`SELECT component,net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${reopened.receipt.eventId} ORDER BY component`).toEqual([{component:'base',net_cents:null},{component:'pricing',net_cents:6000}]);
+ expect(await withSession(full,()=>getProductionWeekAction())).toMatchObject({code:'OK',data:{netCents:beforePricing.data.netCents,currentlyUnpricedItemCount:0}});
 });

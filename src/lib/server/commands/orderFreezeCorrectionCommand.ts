@@ -1,5 +1,5 @@
 import "server-only";
-import {appendProductionReversals} from '@/lib/server/productionSnapshotPort';
+import {appendProductionReversals,ensureOrderProductionHistory} from '@/lib/server/productionSnapshotPort';
 
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
@@ -331,6 +331,7 @@ export async function reopenFrozenOrder(
         return { code: "VALIDATION_ERROR", message: "Auftragsteile sind nicht korrekturfähig." };
       }
 
+      await ensureOrderProductionHistory(tx,authorization.data.tenantId,order.id);
       const nextVersion = input.expectedVersion + 1;
       const updatedOrders = await tx.execute<{ id: string; version: number }>(sql`
         UPDATE public.orders

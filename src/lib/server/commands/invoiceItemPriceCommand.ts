@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import {appendProductionPricing,ensureOrderProductionHistory} from '@/lib/server/productionSnapshotPort';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -32,6 +33,7 @@ export type SetInvoiceItemPricesResult =
 
 type EventRow = {
   id: string;
+  event_type: string;
   order_id: string;
   user_id: string;
   aggregate_version: number;
@@ -120,7 +122,7 @@ export async function setInvoiceItemPrices(inputValue: unknown): Promise<SetInvo
     return await withPrivilegedTenantTransaction(authorization.data, async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('invoice-item-prices:' || ${authorization.data.tenantId} || ':' || ${input.clientEventId}, 0))`);
       const replay = await tx.execute<EventRow>(sql`
-        SELECT id, order_id, user_id::text AS user_id, aggregate_version, created_at, payload
+        SELECT id, event_type, order_id, user_id::text AS user_id, aggregate_version, created_at, payload
         FROM public.events
         WHERE tenant_id = ${authorization.data.tenantId}
           AND client_event_id = ${input.clientEventId}::uuid
@@ -129,7 +131,7 @@ export async function setInvoiceItemPrices(inputValue: unknown): Promise<SetInvo
       if (replay.length > 0) {
         const row = replay[0];
         const payload = row?.payload as { requestHash?: unknown } | null;
-        return replay.length === 1 && row?.order_id === input.orderId && payload?.requestHash === hash
+        return replay.length === 1 && row?.event_type==='ORDER_INVOICE_PRICES_SET_V1' && row.user_id===authorization.data.userId && row.order_id === input.orderId && payload?.requestHash === hash
           ? { code: "OK" as const, receipt: mapReceipt(row), replayed: true }
           : { code: "CONFLICT" as const, message: "Anfragekennung wurde bereits anders verwendet." };
       }
@@ -169,6 +171,7 @@ export async function setInvoiceItemPrices(inputValue: unknown): Promise<SetInvo
         return { code: "VALIDATION_ERROR" as const, message: "Bitte alle preislosen Freitext-Positionen genau einmal ausfüllen." };
       }
 
+      await ensureOrderProductionHistory(tx,authorization.data.tenantId,input.orderId);
       for (const price of input.prices) {
         const updated = await tx.execute<{ id: string }>(sql`
           UPDATE public.items
@@ -203,9 +206,10 @@ export async function setInvoiceItemPrices(inputValue: unknown): Promise<SetInvo
           'success', ${authorization.data.userId}::uuid, 'fertig',
           ${input.clientEventId}::uuid, 1, ${nextVersion}
         )
-        RETURNING id, order_id, user_id::text AS user_id, aggregate_version, created_at, payload
+        RETURNING id, event_type, order_id, user_id::text AS user_id, aggregate_version, created_at, payload
       `);
       if (eventRows.length !== 1 || !eventRows[0]) throw new Error("INVOICE_PRICE_EVENT_INSERT_INVALID");
+      await appendProductionPricing(tx,authorization.data.tenantId,input.orderId,eventRows[0].id);
       return { code: "OK" as const, receipt: mapReceipt(eventRows[0]), replayed: false };
     });
   } catch (error) {
