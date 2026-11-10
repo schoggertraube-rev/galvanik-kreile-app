@@ -9,6 +9,7 @@ import type {StorageLetterSnapshot} from '@/lib/pdf/StorageLetterDocument';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {handedOverProofs} from './dispatchCallPort';
 import {COLLECTION_REMINDER_COPY as copy} from '@/ui/situationCatalog';
+import {readOrderPickupAppointmentInTransaction} from './pickupAppointmentPort';
 
 type Document={id:string;snapshot:StorageLetterSnapshot;snapshotSha256:string;pdfBase64:string;sha256:string};
 type Payload={channel:'post';meta:CollectionReminderMeta;document:Document;taskId:string;title:string;note:string};
@@ -96,6 +97,7 @@ export async function recordStoragePostalResult(tx:PrivilegedTenantTransaction,a
  if(read.outcome){const saved=read.outcome.payload;if(read.outcome.user_id!==auth.userId||saved.taskVersion!==input.version+1||saved.note!==(input.note?.trim()||null)||(value?.kind==='posted'?saved.postedOn!==value.postedOn:saved.reason!==(value?.kind==='discarded'?value.reason:'goodsOut')))return fail('CONFLICT',copy.keyConflict);return;}
  if(task.version!==input.version)return fail('CONFLICT',copy.postalProtected);
  if(value?.kind==='posted'){
+  for(const order of original.meta.orders)if(await readOrderPickupAppointmentInTransaction(tx,auth,order.id))return fail('CONFLICT',copy.postalProtected);
   const current=await tx.execute(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(original.meta.orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) AND station='fertig' AND status='fertig' AND current_station='fertig' AND current_station_id='fertig' ORDER BY id FOR UPDATE`);
   if(current.length!==original.meta.orders.length)return fail('CONFLICT',copy.postalProtected);
  }

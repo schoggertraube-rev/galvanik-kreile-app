@@ -58,10 +58,13 @@ export async function setOrderPickupAppointment(auth:AuthorizationSnapshot,input
 export async function readOrderPickupAppointment(auth:AuthorizationSnapshot,orderId:string){
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
  if(typeof orderId!=='string'||!uuid.test(orderId))return {code:'VALIDATION_ERROR' as const};
- try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>({code:'OK' as const,appointment:await readOrderPickupAppointmentInTransaction(tx,auth,orderId)}));
+ }catch(error){console.error('[PICKUP_APPOINTMENT_READ_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const};}
+}
+export async function readOrderPickupAppointmentInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string){
+  if(!hasAuthorizationArea(auth,'auftraege'))throw Error('PICKUP_APPOINTMENT_FORBIDDEN');
   const receipt=await latest(tx,auth,orderId);
-  if(!receipt)return {code:'OK' as const,appointment:null};
+  if(!receipt)return null;
   const current=await tx.execute<{freeze_id:string}>(sql`SELECT f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${auth.tenantId} AND o.id=${orderId} AND o.handover_mode='pickup' AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig'`);
-  return {code:'OK' as const,appointment:current[0]?.freeze_id===receipt.freezeId?receipt:null};
- });}catch(error){console.error('[PICKUP_APPOINTMENT_READ_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const};}
+  return current[0]?.freeze_id===receipt.freezeId?receipt:null;
 }

@@ -15,7 +15,7 @@ import {previewStorageLetterAction,prepareStoragePostalLetterAction} from '@/app
 import {updateCustomerAction} from '@/app/actions/customers.actions';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
-import {markOrderInformedByPhoneAction} from '@/app/actions/orders.actions';
+import {markOrderInformedByPhoneAction,setOrderPickupAppointmentAction} from '@/app/actions/orders.actions';
 import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
 import {emptyDispatchPolicy} from '@/modules/fundament/public';
 import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
@@ -277,4 +277,40 @@ it('PL10:03 storage weekly rate is explicit, protected and preserved by operatio
  expect((await plan())!.finishedDispatch!.storage!.letter!.finalStage).toMatchObject({state:'DUE',positionProposal:null});
  expect(await withSession(full,()=>createStorageFinalTaskAction(request))).toMatchObject({code:'OK'});
  expect(await sql`SELECT (SELECT count(*) FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId})::int AS items,(SELECT count(*) FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId})::int AS invoices`).toEqual(before);
+});
+
+it.each(['unposted','posted'] as const)('an actual pickup agreement pauses the %s collection route until its configured next working day without losing the original',async(stage)=>{
+ const {order,request,plan}=await prepareWithoutMail('Abholtermin-'+stage);
+ const prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('APPOINTMENT_LETTER');
+ const task=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));if(task.code!=='OK'||!task.task)throw Error('APPOINTMENT_POST_TASK');
+ const post={taskId:prepared.taskId,version:task.task.version,note:'TEST Brief zur Post',postalResult:{kind:'posted' as const,postedOn:berlinCalendarDay(),documentSha256:prepared.document.sha256}};
+ let finalTaskId:string|null=null;
+ if(stage==='posted'){expect(await withSession(full,()=>completeIntakeTaskAction(post))).toMatchObject({code:'OK'});const final=await withSession(full,()=>createStorageFinalTaskAction(request));if(final.code!=='OK')throw Error('APPOINTMENT_FINAL_TASK');finalTaskId=final.taskId;}
+ const friday=new Date(berlinCalendarDay()+'T12:00:00Z');friday.setUTCDate(friday.getUTCDate()+14);while(friday.getUTCDay()!==5)friday.setUTCDate(friday.getUTCDate()+1);
+ const day=(offset:number)=>{const date=new Date(friday);date.setUTCDate(date.getUTCDate()+offset);return date.toISOString().slice(0,10);};
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('APPOINTMENT_CALENDAR');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,holidays:[day(3)]}}))).toMatchObject({code:'OK'});
+ const current=await plan(),input={orderId:order.orderId,expectedVersion:current!.version,previousEventId:null,date:day(0),channel:'telefon' as const,clientEventId:randomUUID()};
+ const agreement=await withSession(full,()=>setOrderPickupAppointmentAction(input));if(agreement.code!=='OK')throw Error('APPOINTMENT_SET');
+ const paused=await plan();expect(paused!.finishedDispatch).toMatchObject({pickupAppointment:{eventId:agreement.receipt.eventId,date:day(0),resumeOn:day(4),paused:true},reminder:{state:'PAUSED',due:day(4),clientKey:null},storage:{state:'WAIT',letter:{postalDocumentId:prepared.document.id,finalStage:{state:stage==='posted'?'TASK_PENDING':'WAIT',pausedUntil:day(4)}}}});
+ if(stage==='posted'){
+  expect(paused!.finishedDispatch!.storage!.letter!.finalStage).toMatchObject({taskId:finalTaskId,due:post.postalResult.postedOn});
+  expect(await withSession(full,()=>createStorageFinalTaskAction(request))).toMatchObject({code:'OK',taskId:finalTaskId,replayed:true});
+ }else expect(await withSession(full,()=>createStorageFinalTaskAction(request))).toMatchObject({code:'CONFLICT'});
+ if(stage==='unposted'){
+  expect(await withSession(full,()=>completeIntakeTaskAction(post))).toMatchObject({code:'CONFLICT'});
+  expect(await sql`SELECT status,version FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.taskId}::uuid`).toEqual([{status:'offen',version:post.version}]);
+ }
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}))).toMatchObject({code:'OK',postalLetter:{state:stage==='posted'?'POSTED':'WAIT_FOR_POST',document:{sha256:prepared.document.sha256}}});
+ if(stage==='unposted'){
+  expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:'TEST-anderer-eingang@example.invalid'}))).toMatchObject({code:'OK'});
+  const extra=await readyInvoiceOrder('Andere-Ware-ohne-Termin','pickup',false,order.customerId);
+  expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
+  const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('APPOINTMENT_OTHER_QUEUE');
+  const next=queue.data.find(row=>row.id===extra.orderId)!.finishedDispatch!.reminder!;expect(next.state).toBe('DUE');
+  const call=await withSession(full,()=>createDispatchCallTaskAction({customerId:order.customerId,handover:'pickup',dueDate:next.due!,clientKey:next.clientKey!}));if(call.code!=='OK')throw Error('APPOINTMENT_OTHER_CALL');
+  const read=await withSession(full,()=>getIntakeTaskAction({taskId:call.taskId}));if(read.code!=='OK'||!read.task)throw Error('APPOINTMENT_OTHER_TASK');
+  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:call.taskId,version:read.task!.version,note:'TEST andere Ware nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
+  expect((await plan())!.finishedDispatch!.reminder).toMatchObject({state:'PAUSED',due:day(4)});
+ }
 });

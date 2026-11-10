@@ -42,6 +42,6 @@ export {
 export {ComplaintPanel} from '@/modules/complaints/public';
 
 export type {OrderActorEvidence,OrderActorSummary} from "./server/types";
-export type {InitialDispatchReminderPlan} from './domain/outputEscalation';
+export type {InitialDispatchReminderPlan,PickupAppointmentProjection} from './domain/outputEscalation';
 
 export type {StorageEligibility} from './domain/storageEligibility';

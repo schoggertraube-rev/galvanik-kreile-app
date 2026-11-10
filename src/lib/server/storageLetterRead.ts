@@ -18,7 +18,7 @@ export async function readStorageLetterPreview(auth:AuthorizationSnapshot,input:
  if(!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:copy.forbidden};
  const candidates=orders.filter(order=>order.customerId===input.customerId&&order.station==='fertig'&&order.finishedDispatch?.handover===input.handover);
  const letter=candidates.find(order=>order.finishedDispatch?.storage?.letter?.clientKey===input.clientKey)?.finishedDispatch?.storage?.letter;
- if(!letter||letter.state!=='DUE'||candidates.some(order=>letter.orderIds.includes(order.id)&&order.finishedDispatch?.reminder?.requiresResponseCheck!==false))return {code:'CONFLICT' as const,message:copy.notReady};
+ if(!letter||letter.state!=='DUE'||candidates.some(order=>letter.orderIds.includes(order.id)&&(order.finishedDispatch?.reminder?.requiresResponseCheck!==false||order.finishedDispatch?.pickupAppointment!==undefined)))return {code:'CONFLICT' as const,message:copy.notReady};
  const members=candidates.filter(order=>letter.orderIds.includes(order.id)).sort((a,b)=>a.id.localeCompare(b.id));
  if(members.length!==letter.orderIds.length)return {code:'CONFLICT' as const,message:copy.notReady};
  try{

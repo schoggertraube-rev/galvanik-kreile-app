@@ -88,7 +88,7 @@ export async function completeIntakeTaskAction(input:unknown){
   const {getOrdersDb}=await import('@/app/actions/orders.actions');const orders=await getOrdersDb();
   if(!orders.ok)return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
   const taskId='taskId' in input?input.taskId:null;
-  const answered=orders.data.filter(order=>order.finishedDispatch?.reminder?.state==='STOPPED'||order.finishedDispatch?.reminder?.state==='CALL_NOT_REACHED'&&order.finishedDispatch.reminder.callTaskId!==taskId).map(order=>({id:order.id,version:order.version}));
+  const answered=orders.data.filter(order=>order.finishedDispatch?.reminder?.state==='STOPPED'||['CALL_NOT_REACHED','PAUSED','APPOINTMENT_EXPIRED'].includes(order.finishedDispatch?.reminder?.state??'')&&!!order.finishedDispatch?.reminder?.callTaskId&&order.finishedDispatch.reminder.callTaskId!==taskId).map(order=>({id:order.id,version:order.version}));
   return completeTask(input,{...taskEffects,beforeComplete:async(tx,auth,task,value)=>{const blocked=await recordDispatchCallResult(tx,auth,task,value,answered);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,value);}});
  }
  return completeTask(input,taskEffects);
@@ -115,7 +115,7 @@ export async function createStorageFinalTaskAction(input:{customerId:string;hand
  if(!orders.ok||settings.code!=='OK')return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
  const candidates=orders.data.filter(order=>order.customerId===input.customerId&&order.station==='fertig'&&order.finishedDispatch?.handover===input.handover);
  const letter=candidates.find(order=>order.finishedDispatch?.storage?.letter?.clientKey===input.clientKey)?.finishedDispatch?.storage?.letter;
- if(!letter||candidates.some(order=>letter.orderIds.includes(order.id)&&order.finishedDispatch?.reminder?.requiresResponseCheck!==false))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+ if(!letter||candidates.some(order=>letter.orderIds.includes(order.id)&&(order.finishedDispatch?.reminder?.requiresResponseCheck!==false||order.finishedDispatch?.pickupAppointment!==undefined)))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
  const members=candidates.filter(order=>letter.orderIds.includes(order.id));
  return createStorageFinalTask(auth.data,input,letter,members.map(order=>({id:order.id,number:order.orderNumber,version:order.version})),settings.settings.updatedAt,(tx,request)=>createOrderHandoverTask(tx,auth.data,request,taskEffects));
 }

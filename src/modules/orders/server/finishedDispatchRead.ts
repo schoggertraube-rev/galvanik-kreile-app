@@ -3,9 +3,10 @@ import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {hasAuthorizationArea} from '@/lib/server/authorization';
 import {readOrderInformed} from '@/lib/server/orderReleaseRead';
 import type {OperationalOrder} from '@/lib/types/operationalOrder';
-import {berlinCalendarDay,workingDaysBetween} from '@/lib/domain/workingDays';
+import {berlinCalendarDay,workingDaysBetween,plusWorkingDays} from '@/lib/domain/workingDays';
+import {readOrderPickupAppointment} from '@/lib/server/pickupAppointmentPort';
 import type {DispatchPolicy} from '@/modules/fundament/public';
-import {planInitialDispatchReminder,type DispatchNoticeMember,type InitialDispatchReminderPlan} from '../domain/outputEscalation';
+import {planInitialDispatchReminder,type DispatchNoticeMember,type InitialDispatchReminderPlan,type PickupAppointmentProjection} from '../domain/outputEscalation';
 import type {DispatchResponseCheck} from '@/lib/server/dispatchResponsePort';
 import {readCollectionReminderHistory} from '@/lib/server/collectionReminderPort';
 import {readDispatchCalls} from '@/lib/server/dispatchCallPort';
@@ -13,12 +14,13 @@ import {storageEligibility,storageLetterKey,finalStorageStage,type StorageEligib
 import {COLLECTION_REMINDER_COPY,STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
 import {readStorageFinalTaskState} from '@/lib/server/storageFinalStagePort';
 
-export type FinishedDispatch={orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;unavailable?:true};
+export type FinishedDispatch={orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;pickupAppointment?:PickupAppointmentProjection;unavailable?:true};
 
 /** Enrich existing operational rows; never a second saved queue or release rule. */
 export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,orders:readonly OperationalOrder[],policy:DispatchPolicy|null,ports?:{readHasMail?:(customerId:string)=>Promise<boolean>;readResponses:(input:{customerId:string;noticeThreadIds:string[];oldestNoticeAt:string})=>Promise<DispatchResponseCheck>}){
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
  const result:FinishedDispatch[]=[];
+ const appointments=new Map<string,NonNullable<FinishedDispatch['pickupAppointment']>>();
  const groups=new Map<string,{customerId:string;handover:'pickup'|'shipping';members:DispatchNoticeMember[];threads:Set<string>;deliveryFailedAt:string|null;responseSince:string|null}>();
  for(const order of orders.filter(row=>row.station==='fertig')){
   const notification=await readOrderInformed(auth,order.id);
@@ -28,6 +30,11 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   result.push({orderId:order.id,version:order.version,handover:notification.handover,color:notification.ampel,releaseAllowed:notification.releaseAllowed,
    informedAt:notification.informed?.recordedAt??null,channel:notification.informed?.channel??null,blockReason:notification.blockReason,
    workingDays,gaps:[...(!notification.handover?['HANDOVER_MISSING']:[]),...(policy===null?['BUSINESS_CALENDAR_SETTINGS_MISSING']:[])]});
+  if(notification.handover==='pickup'){
+   const read=await readOrderPickupAppointment(auth,order.id),row=result.at(-1)!;
+   if(read.code!=='OK'){row.unavailable=true;row.gaps.push('PICKUP_APPOINTMENT_UNAVAILABLE');continue;}
+   if(read.appointment){const resumeOn=policy===null?null:plusWorkingDays(read.appointment.date,1,policy.holidays);row.pickupAppointment={eventId:read.appointment.eventId,date:read.appointment.date,resumeOn,paused:resumeOn===null?null:resumeOn>berlinCalendarDay()};appointments.set(order.id,row.pickupAppointment);}
+  }
   if(notification.handover){
    const key=JSON.stringify([order.customerId,notification.handover]);
    const group=groups.get(key)??{customerId:order.customerId,handover:notification.handover,members:[],threads:new Set<string>(),deliveryFailedAt:null,responseSince:null};
@@ -45,7 +52,8 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   for(const row of history)if(row.sentAt&&row.threadId)group.threads.add(row.threadId);
   let noMail=false;
   try{if(ports?.readHasMail)noMail=!await ports.readHasMail(group.customerId);}catch(error){console.error('[DISPATCH_CUSTOMER_MAIL_READ_FAILED]',error instanceof Error?error.name:'UnknownError');failGroup();continue;}
-  const initial=planInitialDispatchReminder({tenantId:auth.tenantId,...group,today:berlinCalendarDay(),noMail},policy,history);
+  const pausedOrderIds=group.members.filter(member=>appointments.has(member.orderId)).map(member=>member.orderId);
+  const initial=planInitialDispatchReminder({tenantId:auth.tenantId,...group,today:berlinCalendarDay(),noMail,pausedOrderIds},policy,history);
   let calls:Awaited<ReturnType<typeof readDispatchCalls>>;
   try{calls=await readDispatchCalls(auth,group.customerId,group.handover,initial.orderIds);}catch(error){console.error('[DISPATCH_CALL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();continue;}
   const answered=new Map<string,{call?:typeof calls[number];mail?:DispatchResponseCheck['proofs'][number]}>();
@@ -75,7 +83,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   if(fresh.length)cohorts.push({members:fresh,call:activeCalls.find(call=>call.result===null&&call.freezes.some(proof=>fresh.some(member=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId)))});
   for(const {members,call} of cohorts){
   const activeHistory=history.filter(row=>members.some(member=>row.orderIds.includes(member.orderId)&&(row.postalDocumentId?row.storageOrigin?.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId):!row.sentAt||Date.parse(row.sentAt)>=Date.parse(member.noticeAt??member.readyAt??''))));
-  const plan=planInitialDispatchReminder({tenantId:auth.tenantId,...group,members,deliveryFailedAt:members.flatMap(member=>member.deliveryFailedAt?[member.deliveryFailedAt]:[]).sort()[0]??null,today:berlinCalendarDay(),noMail},policy,activeHistory);
+  const plan=planInitialDispatchReminder({tenantId:auth.tenantId,...group,members,deliveryFailedAt:members.flatMap(member=>member.deliveryFailedAt?[member.deliveryFailedAt]:[]).sort()[0]??null,today:berlinCalendarDay(),noMail,pausedOrderIds},policy,activeHistory);
   if(call){plan.callTaskId=call.taskId;plan.stage='E3';plan.clientKey=call.stageKey;plan.due=call.due;plan.state='DUE';}
   if(reaction){plan.responseState=reaction.state==='REPLIED'?'NONE':reaction.state;plan.requiresResponseCheck=plan.responseState!=='NONE';if(reaction.state==='UNAVAILABLE')plan.state='RECONCILE_RESPONSE';}
   if(noMail&&!group.threads.size){plan.requiresResponseCheck=false;plan.responseState='NONE';}
@@ -95,7 +103,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
       catch(error){console.error('[STORAGE_FINAL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();storageUnavailable=true;break;}
       if(hasAuthorizationArea(auth,'geld')&&['DUE','TASK_PENDING'].includes(row.storage.letter.finalStage.state))row.storage.letter.finalStage.positionProposal=policy?.storageWeeklyCents==null?null:{name:STORAGE_CHARGE_COPY.name,unit:STORAGE_CHARGE_COPY.unit,unitPriceCents:policy.storageWeeklyCents,quantity:null,automatic:false};
      }
-     else if(row.storage.state==='DUE')unsent.push(row);
+     else if(row.storage.state==='DUE'&&!appointments.has(member.orderId))unsent.push(row);
     }
     if(!storageUnavailable&&unsent.length){
      const orderIds=unsent.map(row=>row.orderId).sort();
@@ -109,6 +117,11 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   }
   for(const member of members){const row=result.find(item=>item.orderId===member.orderId);if(row&&!row.unavailable)row.reminder=plan;}
   }
+ }
+ for(const row of result){const appointment=appointments.get(row.orderId);if(!appointment||row.unavailable||!row.reminder)continue;
+  row.reminder={...row.reminder,state:appointment.paused===null?'NEEDS_SETTING':appointment.paused?'PAUSED':'APPOINTMENT_EXPIRED',due:appointment.resumeOn,clientKey:null,requiresResponseCheck:false,responseState:'NONE'};
+  if(appointment.paused===false)row.gaps.push('PICKUP_APPOINTMENT_E4_FOLLOWUP_PENDING');
+  if(row.storage){row.storage.state='WAIT';if(row.storage.letter){const original=row.storage.letter.finalStage;row.storage.letter.finalStage={...original,state:original.taskId?original.state:'WAIT',due:original.taskId?original.due:appointment.resumeOn,pausedUntil:appointment.resumeOn};if('positionProposal'in row.storage.letter.finalStage)row.storage.letter.finalStage.positionProposal=null;}}
  }
  const due=new Map(orders.map(order=>[order.id,order.dueDate||'9999-12-31']));
  result.sort((a,b)=>Number(b.color==='gruen')-Number(a.color==='gruen')||(due.get(a.orderId)??'9999').localeCompare(due.get(b.orderId)??'9999')||a.orderId.localeCompare(b.orderId));
