@@ -59,12 +59,14 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
       JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email'
       JOIN public.events sent ON sent.tenant_id=thread.tenant_id AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.payload->>'threadId'=thread.id::text
       WHERE thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->'receipt'->>'threadId' AND thread.status='sent'
-       AND sent.payload->'document'->>'kind'='INVOICE' AND sent.payload->'document'->>'orderId'=event.order_id AND sent.payload->>'intent'=event.payload->>'intent'))) AS proof_ok
+       AND sent.payload->'document'->>'kind'='INVOICE'
+       AND (sent.payload->'document'->>'orderId'=event.order_id OR EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(sent.payload->'document'->'bundle','[]'::jsonb)) member WHERE member->>'orderId'=event.order_id))
+       AND sent.payload->>'intent'=event.payload->>'intent'))) AS proof_ok
    FROM public.events event JOIN private.v_order_freeze_state_v1 freeze_state ON freeze_state.tenant_id=event.tenant_id AND freeze_state.order_id=event.order_id
    WHERE event.tenant_id=${auth.tenantId} AND event.order_id=${orderId} AND event.event_type='ORDER_CUSTOMER_INFORMED_V1' AND event.status='success'
     AND freeze_state.active AND freeze_state.integrity_ok AND event.payload->'receipt'->>'freezeId'=freeze_state.freeze_id::text
-   ORDER BY event.created_at DESC,event.id DESC LIMIT 1`);
-  if(rows[0]&&(rows[0].proof_ok!==true||!Number.isFinite(Date.parse(rows[0].payload.receipt.recordedAt))))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
+   ORDER BY event.created_at ASC,event.id ASC LIMIT 1001`);
+  if(rows.length>1000||rows.some(row=>row.proof_ok!==true||!Number.isFinite(Date.parse(row.payload.receipt.recordedAt))))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
   const order=await tx.execute<{station:string;version:number;handover_mode:'pickup'|'shipping'|null;allowed:boolean;invoice_state:string;payment_allowed:boolean|null;frozen_at:string|null;debt_ids:string[]}>(sql`SELECT orders.station,orders.version,orders.handover_mode,private.order_release_allowed_v1(orders.tenant_id,orders.id) AS allowed,
    state.invoice_state,state.payment_goods_out_allowed AS payment_allowed,freeze_state.frozen_at::text,
    ARRAY(SELECT invoice.id::text FROM public.invoices invoice WHERE invoice.tenant_id=orders.tenant_id AND invoice.customer_id=orders.customer_id AND ${overdueInvoiceCondition()} ORDER BY invoice.id) AS debt_ids
@@ -72,11 +74,11 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
    LEFT JOIN private.v_order_frozen_receipts_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok
    WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${orderId}`);
   if(order.length!==1)return {code:'NOT_FOUND' as const};
-  const informed=rows[0]?.payload.receipt??null;
+  const informed=rows.at(-1)?.payload.receipt??null,firstInformed=rows[0]?.payload.receipt??null;
   const current=order[0],complaint=await readOpenOrderComplaint(tx,auth.tenantId,orderId);
   const blockReason=current.allowed?null:!current.frozen_at?'not_frozen':complaint?'open_complaint':current.debt_ids.length?'overdue_invoice':!current.payment_allowed?'payment':null;
   const ampel:'rot'|'gelb'|'gruen'|null=current.station==='fertig'?(informed?(current.allowed?'gruen':'gelb'):'rot'):null;
-  return {code:'OK' as const,informed,ampel,
+  return {code:'OK' as const,informed,firstInformed,mailThreadIds:[...new Set(rows.flatMap(row=>row.payload.receipt.channel==='mail'&&row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]))],ampel,
    orderVersion:current.version,handover:current.handover_mode,releaseAllowed:current.allowed,frozenAt:current.frozen_at,invoiceState:current.invoice_state,
    blockReason,complaintIds:complaint?.complaintIds??[],overdueInvoiceIds:hasAuthorizationArea(auth,'geld')?current.debt_ids:undefined};
  });}catch(error){console.error('[ORDER_NOTIFICATION_READ_FAILED]',error);return {code:'UNAVAILABLE' as const};}

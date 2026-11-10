@@ -202,7 +202,8 @@
     ],
     "src/app/actions/settings.actions.ts#saveShippingSettingsAction": [
       "src/test/h18_order_admin_actions.integration.test.ts",
-      "src/test/acceptance/order_notification.integration.test.ts"
+      "src/test/acceptance/order_notification.integration.test.ts",
+      "src/test/acceptance/dispatch_collective.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#createIntakeContinuationAction": [
       "src/test/h18_customer_actions.integration.test.ts"
@@ -252,7 +253,8 @@
     ],
     "src/app/actions/communications.actions.ts#sendCustomerMailAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts",
-      "src/test/acceptance/order_notification.integration.test.ts"
+      "src/test/acceptance/order_notification.integration.test.ts",
+      "src/test/acceptance/dispatch_collective.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#prepareQuoteCopyAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"

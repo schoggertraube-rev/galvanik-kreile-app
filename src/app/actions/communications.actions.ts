@@ -80,6 +80,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
  const auth=authorizationResult.data;
  if(!input||typeof input!=='object')return sendCommunicationMail(auth,input);
  let attachment,document:CommunicationDocument|undefined;
+ const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
  if(input.attachment){
   const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
   if(prior.code==='OK'){
@@ -89,11 +90,23 @@ export async function sendCustomerMailAction(input: TargetInput & {
   if(prior.code!=='NOT_FOUND')return prior;
   if(input.attachment.kind==='INVOICE'){
    const pdf=await readInvoicePdf(auth,input.attachment.documentId,'original');if(pdf.code!=='OK')return pdf;
-   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;order_id:string;customer_id:string;aggregate_version:number}>(sql`SELECT id::text,order_id,customer_id,aggregate_version FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${input.attachment!.documentId}::uuid AND status='issued' AND contract_version=1 AND pdf_sha256=${pdf.data.pdfSha256}`));
+   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;order_id:string;customer_id:string;aggregate_version:number;order_number:string;handover_mode:string|null}>(sql`SELECT invoice.id::text,invoice.order_id,invoice.customer_id,invoice.aggregate_version,orders.order_number,orders.handover_mode FROM public.invoices invoice JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${input.attachment!.documentId}::uuid AND invoice.status='issued' AND invoice.contract_version=1 AND invoice.pdf_sha256=${pdf.data.pdfSha256}`));
    const invoice=rows[0];
    if(rows.length!==1||!(input.targetType==='ORDER'?invoice.order_id===input.targetId:invoice.customer_id===input.targetId))return {code:'FORBIDDEN' as const,message:'Die Rechnung gehört nicht zu diesem Kunden oder Auftrag.'};
    attachment={filename:pdf.data.invoiceNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.data.pdf)};
-   document={kind:'INVOICE',id:invoice.id,orderId:invoice.order_id,number:pdf.data.invoiceNumber,version:invoice.aggregate_version,sha256:pdf.data.pdfSha256};
+   document={kind:'INVOICE',id:invoice.id,orderId:invoice.order_id,orderNumber:invoice.order_number,number:pdf.data.invoiceNumber,version:invoice.aggregate_version,sha256:pdf.data.pdfSha256};
+   const others=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;order_id:string;order_number:string;aggregate_version:number}>(sql`SELECT invoice.id::text,invoice.order_id,orders.order_number,invoice.aggregate_version FROM public.invoices invoice
+    JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
+    JOIN private.v_order_freeze_state_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok
+    WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${invoice.customer_id} AND invoice.status='issued' AND invoice.contract_version=1 AND invoice.id<>${invoice.id}::uuid
+     AND orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig' AND orders.handover_mode=${invoice.handover_mode}
+    ORDER BY orders.order_number,invoice.id LIMIT 101`));
+   if(others.length>100)return {code:'VALIDATION_ERROR' as const,message:'Zu viele offene Belege für eine einzelne Sammel-Mail. Es wurde nichts gesendet.'};
+   for(const other of others){
+    const original=await readInvoicePdf(auth,other.id,'original');if(original.code!=='OK')return original;
+    additionalAttachments.push({filename:original.data.invoiceNumber+'.pdf',contentType:'application/pdf',bytes:new Uint8Array(original.data.pdf)});
+    (document.bundle??=[]).push({id:other.id,orderId:other.order_id,orderNumber:other.order_number,number:original.data.invoiceNumber,version:other.aggregate_version,sha256:original.data.pdfSha256});
+   }
   }else{
   const pdf=await readQuotePdfAction({quoteId:input.attachment.documentId});
   if(pdf.code!=='OK')return pdf;
@@ -110,11 +123,13 @@ export async function sendCustomerMailAction(input: TargetInput & {
   }
  }
  const snapshot=document;
- const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,document,beforePrepare:snapshot?async tx=>{
+ const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,additionalAttachments,document,beforePrepare:snapshot?async tx=>{
   if(snapshot.kind==='QUOTE')return lockQuoteDeliverySnapshot(tx,auth.tenantId,snapshot);
-  if(!await readReadyNotificationContext(tx,auth.tenantId,snapshot.orderId))return false;
-  const rows=await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${snapshot.id}::uuid AND order_id=${snapshot.orderId} AND status='issued' AND aggregate_version=${snapshot.version} AND pdf_sha256=${snapshot.sha256} FOR UPDATE`);
-  return rows.length===1;
+  for(const invoice of [snapshot,...snapshot.bundle??[]].sort((a,b)=>a.orderId.localeCompare(b.orderId))){
+   if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;
+   const rows=await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid AND order_id=${invoice.orderId} AND status='issued' AND aggregate_version=${invoice.version} AND pdf_sha256=${invoice.sha256} FOR UPDATE`);
+   if(rows.length!==1)return false;
+  }return true;
  }:undefined});
  return sent.code==='OK'&&document?.kind==='QUOTE'?confirmQuoteDelivery(input,document,sent):sent;
  }catch(error){

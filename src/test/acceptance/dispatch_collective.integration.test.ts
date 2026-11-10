@@ -1,0 +1,81 @@
+// @vitest-environment node
+import {vi,it,expect} from 'vitest';
+import {randomUUID,createHash} from 'node:crypto';
+const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
+vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
+import {KREILE_TENANT_SLUG} from '@/lib/tenant';
+import {sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {sendCustomerMailAction} from '@/app/actions/communications.actions';
+import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
+const DATABASE_URL=process.env.DATABASE_URL,EXPECTED_DATABASE_URL=process.env.H18_EXPECTED_DATABASE_URL;
+if(!DATABASE_URL||DATABASE_URL!==EXPECTED_DATABASE_URL||new URL(DATABASE_URL).hostname!=='127.0.0.1')throw Error('DISPATCH_COLLECTIVE_LOOPBACK_REQUIRED');
+
+it('E06 one actual invoice mail includes the ready cohort and original PDFs, preserves the oldest per-order notice and replays its original cohort',async()=>{
+ const requests:Array<{body:{content:string};attachments:Array<{name:string;contentBytes:string}>;internetMessageHeaders?:Array<{name:string;value:string}>}>=[];
+ let replySender='',replyTo='',replyKey='',lookups=0;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-collective-token'.repeat(3),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){requests.push(JSON.parse(String(init?.body)).message);return new Response(null,{status:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages')){lookups++;return Response.json({value:[{id:'TEST-collective-sent',internetMessageId:replyTo,from:{emailAddress:{address:'TEST-mailbox@example.invalid'}},toRecipients:[{emailAddress:{address:replySender}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:replyKey}]}]});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/attachments'))return Response.json({value:[]});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/$value'))return new Response('Message-ID: <TEST-customer-reply@example.invalid>\r\nFrom: '+replySender+'\r\nIn-Reply-To: '+replyTo+'\r\nReferences: '+replyTo+'\r\nSubject: TEST Antwort\r\n\r\nTEST Danke, ich hole die Ware.');
+  if(url.hostname==='graph.microsoft.com')return Response.json({id:'TEST-collective-reply',internetMessageId:'<TEST-customer-reply@example.invalid>',subject:'TEST Antwort',from:{emailAddress:{name:'TEST Kunde',address:replySender}},receivedDateTime:new Date(Date.now()+100).toISOString(),bodyPreview:'TEST Danke',body:{contentType:'text',content:'TEST Danke, ich hole die Ware.'},hasAttachments:false});
+  return nativeFetch(input,init);
+ });
+ const first=await readyInvoiceOrder('Sammel-Erster');
+ const initial={targetType:'ORDER' as const,targetId:first.orderId,subject:'TEST Fertig',body:'TEST Deine Ware ist fertig.',attachment:{kind:'INVOICE' as const,documentId:first.invoice.invoiceId},clientRequestId:randomUUID()};
+ expect(await withSession(full,()=>sendCustomerMailAction(initial))).toMatchObject({code:'OK'});
+ const old=await withSession(full,()=>getLiveOrderCardAction({orderId:first.orderId}));
+ if(old.code!=='OK'||old.data.customerInformed?.code!=='OK'||!old.data.customerInformed.firstInformed)throw Error('COLLECTIVE_INITIAL_PROOF');
+ const original=old.data.customerInformed.firstInformed;
+ const second=await readyInvoiceOrder('Sammel-Zweiter','pickup',false,first.customerId);
+ const shipping=await readyInvoiceOrder('Sammel-Andere-Uebergabe','shipping',false,first.customerId);
+ const foreign=await readyInvoiceOrder('Sammel-Anderer-Kunde');
+ const input={...initial,targetId:second.orderId,attachment:{kind:'INVOICE' as const,documentId:second.invoice.invoiceId},clientRequestId:randomUUID()};
+ const sent=await withSession(full,()=>sendCustomerMailAction(input));
+ expect(sent).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('COLLECTIVE_SEND:'+sent.code);
+ expect(requests).toHaveLength(2);expect(requests[1].attachments).toHaveLength(2);
+ const numbers=await sql`SELECT id,order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${first.orderId},${second.orderId})`;
+ for(const order of numbers)expect(requests[1].body.content).toContain(order.order_number);
+ const stored=await sql`SELECT pdf_sha256 FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${first.invoice.invoiceId}::uuid,${second.invoice.invoiceId}::uuid)`;
+ expect(requests[1].attachments.map(file=>createHash('sha256').update(Buffer.from(file.contentBytes,'base64')).digest('hex')).sort()).toEqual(stored.map(row=>row.pdf_sha256).sort());
+ for(const order of [first,second])expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{code:'OK',ampel:'gruen',informed:{threadId:sent.data.threadId,channel:'mail',actorId:full.actorId}}}});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:first.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{firstInformed:{eventId:original.eventId,recordedAt:original.recordedAt}}}});
+ for(const order of [shipping,foreign])expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{informed:null}}});
+ const third=await readyInvoiceOrder('Sammel-Spaeter','pickup',false,first.customerId);
+ expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
+ expect(requests).toHaveLength(2);
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:third.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{informed:null}}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND payload->'receipt'->>'threadId'=${sent.data.threadId}`).toEqual([{n:2}]);
+ const {readShippingSettingsAction,saveShippingSettingsAction}=await import('@/app/actions/settings.actions');
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('COHORT_SETTINGS');
+ const {emptyDispatchPolicy}=await import('@/modules/fundament/public');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),reminderDays:0}}))).toMatchObject({code:'OK'});
+ const {getOrdersDb}=await import('@/app/actions/orders.actions');
+ const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('COHORT_QUEUE');
+ const group=queue.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder;
+ expect(group).toMatchObject({state:'DUE',oldestNoticeAt:original.recordedAt,automaticSend:false,requiresResponseCheck:false,responseState:'NONE',needsNotice:[third.orderId]});
+ expect(group!.orderIds.slice().sort()).toEqual([first.orderId,second.orderId,third.orderId].sort());
+ expect(queue.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder?.clientKey).toBe(group!.clientKey);
+ expect(requests[1].internetMessageHeaders).toEqual([{name:'x-kreile-request-id',value:input.clientRequestId}]);
+ const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.customerId}`;
+ replySender=customer.email;replyTo='<TEST-sent-'+input.clientRequestId+'@example.invalid>';replyKey=input.clientRequestId;
+ const {attachOutlookMailAction}=await import('@/app/actions/communications.actions');
+ expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:first.customerId,graphMessageId:'TEST-collective-reply'}))).toMatchObject({code:'OK'});
+ const reacted=await withSession(full,()=>getOrdersDb());if(!reacted.ok)throw Error('COHORT_REACTION_READ');
+ expect(reacted.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED',automaticSend:false});
+ expect(await sql`SELECT station FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.orderId}`).toEqual([{station:'fertig'}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND graph_message_id='TEST-collective-reply' AND kunde_id=${first.customerId}`).toEqual([{n:1}]);
+ replyKey=randomUUID(); // A proved different outgoing request is not a reaction to this notice.
+ const unrelated=await withSession(full,()=>getOrdersDb());if(!unrelated.ok)throw Error('COHORT_UNRELATED_READ');
+ expect(unrelated.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'DUE',responseState:'NONE'});
+ replyKey='TEST-invalid-header';
+ const uncertain=await withSession(full,()=>getOrdersDb());if(!uncertain.ok)throw Error('COHORT_UNCERTAIN_READ');
+ expect(uncertain.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'RECONCILE_RESPONSE',responseState:'UNAVAILABLE',requiresResponseCheck:true});
+ const operational=await createFixture(['auftraege'],'werkstatt'),beforeLookup=lookups;
+ const limited=await withSession(operational,()=>getOrdersDb());if(!limited.ok)throw Error('COHORT_LIMITED_READ');
+ expect(limited.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'NOT_CHECKED',requiresResponseCheck:true});
+ expect(lookups).toBe(beforeLookup);expect(requests).toHaveLength(2);
+});

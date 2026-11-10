@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomUUID,createHash } from "node:crypto";
-import {appendCommunicationDocument,communicationDocumentIntent,type CommunicationDocument} from './communicationDocumentPort';
+import {appendCommunicationDocument,communicationDocumentBody,communicationDocumentIntent,type CommunicationDocument} from './communicationDocumentPort';
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {hasAuthorizationArea} from '@/lib/server/authorization';
@@ -219,7 +219,7 @@ export async function attachInboxMessage(
 
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || typeof input.clientRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.clientRequestId) || typeof input.subject !== 'string' || typeof input.body !== 'string' || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
@@ -229,6 +229,9 @@ export async function sendCommunicationMail(
   const reminder=input.complaintResult?.kind==='reminder';
   const complaintSummary=input.complaintResult?'Reklamation '+input.complaintResult.complaintId+(reminder?' · Begleitschein':' · Ergebnis'):null;
   if(input.document&&(!input.attachment||!['QUOTE','INVOICE'].includes(input.document.kind)||!Number.isSafeInteger(input.document.version)||input.document.version<1||input.document.kind==='QUOTE'&&(!Number.isSafeInteger(input.document.edition)||input.document.edition<1)||input.document.sha256!==createHash('sha256').update(input.attachment.bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'Belegfassung oder PDF-Nachweis ist ungültig.'};
+  const bundle=input.document?.kind==='INVOICE'?input.document.bundle??[]:[];
+  if(bundle.length!==(input.additionalAttachments?.length??0)||bundle.some((doc,index)=>doc.sha256!==createHash('sha256').update(input.additionalAttachments![index].bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'Sammel-Belege passen nicht zu den Original-PDFs.'};
+  if(input.document)input={...input,body:communicationDocumentBody(input.body,input.document)};
   if(input.complaintResult){
     if(!hasAuthorizationArea(auth,'kunden')||input.targetType!=='ORDER')return {code:'FORBIDDEN',message:'Kunde informieren erfordert Kunden.'};
     const context=await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`SELECT complaint_id FROM public.v_complaint_rework_context_v1 complaint WHERE tenant_id=${auth.tenantId} AND complaint_id=${input.complaintResult!.complaintId} AND ${reminder?sql`nacharbeit_auftrag_id=${input.targetId}`:sql`source_order_id=${input.targetId}`} AND (
@@ -288,7 +291,7 @@ export async function sendCommunicationMail(
     return { code: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "CONFLICT" : "UNAVAILABLE", message: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "Der Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; zuerst im Outlook-Ausgang prüfen." : "Der Mailversand konnte nicht sicher vorbereitet werden." };
   }
   if (pending.replay) return { code: "OK", data: pending.replay };
-  const sent = await sendMicrosoftGraphMail({ to: target.email, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment, replyToMessageId: input.document?.source?.graphMessageId });
+  const sent = await sendMicrosoftGraphMail({ to: target.email, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment,additionalAttachments:input.additionalAttachments, replyToMessageId: input.document?.source?.graphMessageId,clientRequestId:input.clientRequestId });
   if (sent.code !== "OK") {
     await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
       UPDATE public.communication_threads SET status='failed', updated_at=statement_timestamp()

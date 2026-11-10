@@ -432,7 +432,8 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
      const [{readFinishedDispatchQueue},{readShippingSettings}]=await Promise.all([import('@/modules/orders/server-public'),import('@/modules/fundament/server-public')]);
      const settings=await readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true});
      if(settings.code==='UNAVAILABLE')return {code:'UNAVAILABLE' as const};
-     return readFinishedDispatchQueue(authorization.data,orders,settings.code==='OK'?settings.settings.dispatchPolicy?.holidays??null:null);
+     const [{readDispatchResponses},{readLinkedIntakeMails,readIntakeMailImportReceipt}]=await Promise.all([import('@/lib/server/dispatchResponsePort'),import('@/modules/eingang/server-public')]);
+     return readFinishedDispatchQueue(authorization.data,orders,settings.code==='OK'?settings.settings.dispatchPolicy??null:null,{readResponses:input=>readDispatchResponses(authorization.data,input,{readLinked:readLinkedIntakeMails,readOriginal:async(auth,identity)=>{const original=await readIntakeMailImportReceipt(auth,identity);return original.code==='OK'?original:{code:original.code};}})});
     })():{code:'OK' as const,rows:[]};
     const projections=new Map(finished.code==='OK'?finished.rows.map((row,rank)=>[row.orderId,{state:'available' as const,rank,...row}]):[]);
     const data: OrderResponse[] = orders.map((order, index) => {

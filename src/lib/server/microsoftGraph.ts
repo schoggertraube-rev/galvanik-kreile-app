@@ -228,20 +228,21 @@ export async function readMicrosoftGraphMessage(
 }
 
 export async function sendMicrosoftGraphMail(
-  input: { to: string; subject: string; body: string; attachment?: GraphMailAttachment; replyToMessageId?: string },
+  input: { to: string; subject: string; body: string; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; replyToMessageId?: string;clientRequestId?:string },
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
 ): Promise<GraphResult<{ accepted: true }>> {
   const config = readConfig(env);
   if (!config) return { code: "IN_KLAERUNG", message: "Microsoft 365 ist noch nicht für die Preview verbunden." };
   try {
+      if(input.clientRequestId!==undefined&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientRequestId))throw Error('GRAPH_REQUEST_ID_INVALID');
     const token = await accessToken(config, fetchPort);
-    const attachments = input.attachment ? [{
+      const attachments = input.attachment ? [input.attachment,...input.additionalAttachments??[]].map(attachment=>({
       "@odata.type": "#microsoft.graph.fileAttachment",
-      name: input.attachment.filename,
-      contentType: input.attachment.contentType,
-      contentBytes: Buffer.from(input.attachment.bytes).toString("base64"),
-    }] : undefined;
+        name: attachment.filename,
+        contentType: attachment.contentType,
+        contentBytes: Buffer.from(attachment.bytes).toString("base64"),
+      })) : undefined;
     const endpoint = input.replyToMessageId
       ? `${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/messages/${encodeURIComponent(input.replyToMessageId)}/reply`
       : `${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/sendMail`;
@@ -254,6 +255,7 @@ export async function sendMicrosoftGraphMail(
           body: { contentType: "Text", content: input.body },
           toRecipients: [{ emailAddress: { address: input.to } }],
           ...(attachments ? { attachments } : {}),
+            ...(!input.replyToMessageId&&input.clientRequestId?{internetMessageHeaders:[{name:'x-kreile-request-id',value:input.clientRequestId}]}:{}),
         },
         ...(!input.replyToMessageId ? { saveToSentItems: true } : {}),
       }),
@@ -264,6 +266,26 @@ export async function sendMicrosoftGraphMail(
   } catch (error) {
     return unavailable("Die E-Mail konnte nicht sicher an Microsoft 365 übergeben werden.", error);
   }
+}
+
+/** Read-only provider proof: a reply reference is tied to our immutable request header, never its subject. */
+export async function readMicrosoftGraphSentMailReference(internetMessageId:string,replySender:string,env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null}>>{
+ const config=readConfig(env);if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht verbunden.'};
+ if(!/^<[^<>\s]{1,998}>$/.test(internetMessageId)||!/^\S+@\S+\.\S+$/.test(replySender))return {code:'UNAVAILABLE',message:'Antwortreferenz fehlt oder ist ungültig.'};
+ const bounded:FetchPort=(input,init)=>fetchPort(input,{...init,signal:AbortSignal.timeout(10000)});
+ try{
+  const token=await accessToken(config,bounded),query=new URLSearchParams({'$top':'2','$filter':"internetMessageId eq '"+internetMessageId.replaceAll("'","''")+"'",'$select':'id,internetMessageId,from,toRecipients,isDraft,sentDateTime,internetMessageHeaders'});
+  const response=await graphGetMessage(config,token,'mailFolders/sentitems/messages?'+query,bounded);if(!response.ok)await providerFailure(response,'GRAPH_SENT_REPLY_REFERENCE');
+  const payload=await response.json() as {value?:unknown;'@odata.nextLink'?:unknown};
+  if(!Array.isArray(payload.value)||payload.value.length!==1||payload['@odata.nextLink'])throw Error('GRAPH_SENT_REPLY_REFERENCE_NOT_UNIQUE');
+  const row=payload.value[0] as Record<string,unknown>,from=row.from as {emailAddress?:{address?:unknown}}|undefined;
+  const recipients=Array.isArray(row.toRecipients)?row.toRecipients as Array<{emailAddress?:{address?:unknown}}>:[];
+  if(typeof row.id!=='string'||!row.id||row.id.length>1024||row.internetMessageId!==internetMessageId||row.isDraft!==false||typeof row.sentDateTime!=='string'||!Number.isFinite(Date.parse(row.sentDateTime))||typeof from?.emailAddress?.address!=='string'||from.emailAddress.address.toLowerCase()!==config.mailbox.toLowerCase()||!recipients.some(value=>typeof value.emailAddress?.address==='string'&&value.emailAddress.address.toLowerCase()===replySender.toLowerCase()))throw Error('GRAPH_SENT_REPLY_IDENTITY_INVALID');
+  if(!Array.isArray(row.internetMessageHeaders))throw Error('GRAPH_SENT_REPLY_HEADERS_MISSING');
+  const headers=row.internetMessageHeaders.filter((value:unknown)=>value&&typeof value==='object'&&'name'in value&&typeof value.name==='string'&&value.name.toLowerCase()==='x-kreile-request-id') as Array<{value?:unknown}>;
+  if(headers.length>1||headers.length===1&&(typeof headers[0].value!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(headers[0].value)))throw Error('GRAPH_SENT_REQUEST_HEADER_INVALID');
+  return {code:'OK',data:{graphMessageId:row.id,internetMessageId,clientRequestId:headers.length?headers[0].value as string:null}};
+ }catch(error){return unavailable('Die beantwortete Ausgangsmail konnte nicht sicher zugeordnet werden.',error);}
 }
 
 export async function readMicrosoftGraphAttachments(
