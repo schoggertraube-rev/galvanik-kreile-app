@@ -7,7 +7,7 @@ import type {TaskCompleteInput,TaskRecord,TaskFailure} from '@/modules/tasks/pub
 import type {InitialDispatchReminderPlan} from '@/modules/orders/public';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {appendOrderInformed} from './orderReleaseRead';
-import {readOrderPickupAppointmentInTransaction} from './pickupAppointmentPort';
+import {readOrderPickupAppointmentInTransaction,readPickupAppointmentReceiptInTransaction} from './pickupAppointmentPort';
 
 type CallMeta={customerId:string;handover:'pickup'|'shipping';due:string;stageKey:string;orderIds:string[];orderNumbers:string[];freezes:Array<{orderId:string;freezeId:string}>};
 type Created={payload:{meta:CallMeta;taskId:string};user_id:string;correlation_id:string;originalOrderIds?:string[]};
@@ -61,6 +61,13 @@ async function qualifiedTaskState(tx:PrivilegedTenantTransaction,auth:Authorizat
   (status='success' AND event_schema_version=1 AND payload->'meta'=${JSON.stringify(created.payload.meta)}::jsonb AND correlation_id=${created.correlation_id}::uuid) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${record.id}`);
  const clock={stageKey:created.payload.meta.stageKey,due:created.payload.meta.due};
  if(record.status==='offen'){if(results.length)throw Error('DISPATCH_CALL_OPEN_WITH_RESULT');return {taskId:record.id,result:null,recordedAt:null,...clock};}
+ const ended=await tx.execute<{payload:{appointmentEventId:string;taskId:string;version:number;note:string;meta:CallMeta};user_id:string;proof_ok:boolean}>(sql`SELECT payload,user_id::text,(status='success' AND event_schema_version=1) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1' AND payload->>'taskId'=${record.id}`);
+ if(ended.length){
+  const proof=ended[0];if(ended.length!==1||results.length||!proof.proof_ok||record.status!=='erledigt'||record.erledigt_von!==proof.user_id||record.version!==proof.payload.version||record.erledigt_notiz!==proof.payload.note||JSON.stringify(proof.payload.meta)!==JSON.stringify(created.payload.meta)||!record.erledigt_am)throw Error('DISPATCH_CALL_APPOINTMENT_CLOSE_INVALID');
+  const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,proof.payload.appointmentEventId);
+  if(appointment.actorId!==proof.user_id||!created.payload.meta.freezes.some(member=>member.orderId===appointment.orderId&&member.freezeId===appointment.freezeId))throw Error('DISPATCH_CALL_APPOINTMENT_ORIGIN_INVALID');
+  return {taskId:record.id,result:'appointment' as const,recordedAt:new Date(record.erledigt_am).toISOString(),...clock};
+ }
  const result=results[0];
  if(record.status!=='erledigt'||results.length!==1||!result.proof_ok||!['reached','notReached','noLongerNeeded'].includes(result.payload.result)||result.user_id!==record.erledigt_von||result.payload.version!==record.version||result.payload.note!==record.erledigt_notiz||!record.erledigt_am)throw Error('DISPATCH_CALL_RESULT_INVALID');
  if(result.payload.result==='noLongerNeeded'){
@@ -68,6 +75,20 @@ async function qualifiedTaskState(tx:PrivilegedTenantTransaction,auth:Authorizat
   if(!actual||!Array.isArray(stored)||JSON.stringify(actual.map(row=>[row.orderId,row.eventId]))!==JSON.stringify(stored.map(row=>[row.orderId,row.eventId])))throw Error('DISPATCH_CALL_CLOSE_PROOF_INVALID');
  }
  return {taskId:record.id,result:result.payload.result,recordedAt:new Date(record.erledigt_am).toISOString(),...clock};
+}
+/** Close the existing callback through its sole task writer; no call result is invented. */
+export async function finishDispatchCallsForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,appointment:{eventId:string;orderId:string;freezeId:string;date:string},complete:(taskId:string,note:string)=>Promise<void>){
+ const rows=await tx.execute<{id:string}>(sql`SELECT task.id::text FROM public.tasks task WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND EXISTS(SELECT 1 FROM public.events event WHERE event.tenant_id=task.tenant_id AND event.event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_COLLECTION_CALL_UPDATED_V1') AND event.payload->>'taskId'=task.id::text AND event.payload->'meta'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb) ORDER BY task.id FOR UPDATE NOWAIT`);
+ for(const row of rows){
+  const created=await source(tx,auth,row.id);if(!created)throw Error('APPOINTMENT_CALL_SOURCE_MISSING');
+  if(!created.payload.meta.freezes.some(member=>member.orderId===appointment.orderId&&member.freezeId===appointment.freezeId))continue;
+  const state=await qualifiedTaskState(tx,auth,created);if(state.result!==null)throw Error('APPOINTMENT_CALL_NOT_OPEN');
+  const note=DISPATCH_CALL_COPY.appointmentAgreed(appointment.date);
+  await complete(row.id,note);
+  const closed=await task(tx,auth,row.id);if(!closed||closed.status!=='erledigt'||closed.erledigt_von!==auth.userId||closed.erledigt_notiz!==note)throw Error('APPOINTMENT_CALL_TASK_NOT_CLOSED');
+  const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,payload,created_at) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1',${note},'success',${auth.userId}::uuid,1,${JSON.stringify({appointmentEventId:appointment.eventId,taskId:row.id,version:closed.version,note,meta:created.payload.meta})}::jsonb,statement_timestamp()) RETURNING id`);
+  if(saved.length!==1||saved[0].id!==id)throw Error('APPOINTMENT_CALL_CLOSE_RECEIPT_NOT_SAVED');
+ }
 }
 
 /** Runs inside the existing task completion transaction, including retries. */

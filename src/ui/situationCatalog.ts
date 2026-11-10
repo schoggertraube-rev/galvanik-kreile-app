@@ -177,6 +177,7 @@ export const PICKUP_APPOINTMENT_COPY={
 };
 export const STORAGE_CHARGE_COPY={name:'Lagergeld',unit:'Woche',forbidden:'Für den Lagergeldbetrag brauchst Du die Freigabe für Geld. Die übrigen Angaben bleiben erhalten.'};
 export const DISPATCH_CALL_COPY={
+ appointmentAgreed:(date:string)=>'Abholtermin vereinbart am '+date.split('-').reverse().join('.')+' · Anrufaufgabe entfällt.',
  title:'Ruf den Kunden wegen seiner fertigen Ware an',note:'Sprich mit dem Kunden über diese fertigen Aufträge: ',
  created:'Gemeinsamer Anruf zu fertiger Ware vorbereitet',resultRecorded:'Ergebnis des gemeinsamen Anrufs festgehalten',
  resultMissing:'Halte fest, ob Du den Kunden erreicht hast. Deine Notiz bleibt erhalten.',

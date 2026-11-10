@@ -10,7 +10,7 @@ import {setOrderPickupAppointmentAction,getLiveOrderCardAction} from '@/app/acti
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
 import {getOrdersDb} from '@/app/actions/orders.actions';
 import {updateCustomerAction} from '@/app/actions/customers.actions';
-import {createDispatchCallTaskAction} from '@/app/actions/eingang.actions';
+import {createDispatchCallTaskAction,getIntakeTaskAction} from '@/app/actions/eingang.actions';
 import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
 import {emptyDispatchPolicy} from '@/modules/fundament/public';
 import {resolveAuthorization} from '@/lib/server/authorization';
@@ -63,4 +63,31 @@ it('a stale call proposal cannot recreate a callback after an actual pickup agre
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->'meta'->'orderIds' @> ${sql.json([order.orderId])}`).toHaveLength(0);
  const refreshed=await withSession(full,()=>getOrdersDb());if(!refreshed.ok)throw Error('CALL_RACE_REFRESH');
  expect(refreshed.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'PAUSED',clientKey:null});
+});
+it('PL12:06 atomically ends only the actual matching callback with its appointment proof and preserves a recoverable retry',async()=>{
+ const seeded=await readyInvoiceOrder('Termin-beendet-Anruf');
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('CLOSE_CALL_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),holidays:[]}}))).toMatchObject({code:'OK'});
+ async function openCall(label:string,existing?:typeof seeded){
+  const order=existing??await readyInvoiceOrder(label);expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
+  const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('CLOSE_CALL_QUEUE');const p=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder;if(!p?.due||!p.clientKey)throw Error('CLOSE_CALL_PLAN');
+  const call=await withSession(full,()=>createDispatchCallTaskAction({customerId:order.customerId,handover:'pickup',dueDate:p.due!,clientKey:p.clientKey!}));if(call.code!=='OK')throw Error('CLOSE_CALL_CREATE');return {order,taskId:call.taskId};
+ }
+ const target=await openCall('Termin-beendet-Anruf',seeded),other=await openCall('Fremder-Anruf-bleibt');
+ const actor=await createFixture(['auftraege'],'werkstatt'),input={orderId:target.order.orderId,expectedVersion:target.order.version,previousEventId:null,date:'2027-06-10',channel:'telefon' as const,clientEventId:randomUUID()};
+ const name='test_appointment_close_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1' AND NEW.payload->>'taskId'='${target.taskId}' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
+ try{
+  expect(await withSession(actor,()=>setOrderPickupAppointmentAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT status,version FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${target.taskId}::uuid`).toEqual([{status:'offen',version:1}]);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(0);
+ }finally{await sql.unsafe(`DROP TRIGGER ${name} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${name}()`);}
+ const saved=await withSession(actor,()=>setOrderPickupAppointmentAction(JSON.parse(JSON.stringify(input))));expect(saved.code).toBe('OK');if(saved.code!=='OK')throw Error('CLOSE_CALL_APPOINTMENT');
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:target.taskId}))).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:actor.actorId}});
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:other.taskId}))).toMatchObject({code:'OK',task:{status:'offen'}});
+ expect(await sql`SELECT payload->>'appointmentEventId' AS appointment,user_id::text AS actor FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1' AND payload->>'taskId'=${target.taskId}`).toEqual([{appointment:saved.receipt.eventId,actor:actor.actorId}]);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${target.taskId}`).toHaveLength(0);
+ const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('CLOSE_CALL_READBACK');expect(queue.data.find(row=>row.id===target.order.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'PAUSED',clientKey:null});
+ expect(await withSession(actor,()=>setOrderPickupAppointmentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:saved.receipt.eventId}});
 });

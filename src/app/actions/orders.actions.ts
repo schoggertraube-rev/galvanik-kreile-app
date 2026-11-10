@@ -278,7 +278,8 @@ export async function markOrderInformedByPhoneAction(input:{orderId:string;expec
 export async function setOrderPickupAppointmentAction(input:unknown){
  const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
  const {setOrderPickupAppointment}=await import('@/lib/server/pickupAppointmentPort');
- const result=await setOrderPickupAppointment(auth.data,input);
+ const [{finishDispatchCallsForAppointment},{completeOrderCallbackTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/lib/server/dispatchCallPort'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+ const result=await setOrderPickupAppointment(auth.data,input,(tx,receipt)=>finishDispatchCallsForAppointment(tx,auth.data,receipt,(taskId,note)=>completeOrderCallbackTask(tx,auth.data,taskId,note,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)})));
  if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
  return result;
 }

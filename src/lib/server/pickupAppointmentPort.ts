@@ -31,7 +31,7 @@ async function latest(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
  return rows.length?qualify(rows[0]):null;
 }
 /** The agreement is an event on the existing order, never its production due date. */
-export async function setOrderPickupAppointment(auth:AuthorizationSnapshot,input:unknown){
+export async function setOrderPickupAppointment(auth:AuthorizationSnapshot,input:unknown,afterRecord:(tx:PrivilegedTenantTransaction,receipt:Receipt)=>Promise<void>){
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const,message:copy.forbidden};
  if(!validInput(input))return {code:'VALIDATION_ERROR' as const,message:copy.invalid};
  const intent=digest(input);
@@ -52,8 +52,15 @@ export async function setOrderPickupAppointment(auth:AuthorizationSnapshot,input
   const saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,client_event_id,correlation_id,event_schema_version,status,aggregate_version,payload,created_at)
    VALUES(${receipt.eventId},${auth.tenantId},${input.orderId},'ORDER_PICKUP_APPOINTMENT_SET_V1',${copy.recorded(input.date)},${auth.userId}::uuid,${input.clientEventId}::uuid,${input.clientEventId}::uuid,1,'success',${context.version},${JSON.stringify({intent,receipt,receiptSha256:digest(receipt)})}::jsonb,${receipt.recordedAt}::timestamptz) RETURNING id`);
   if(saved.length!==1||saved[0].id!==receipt.eventId)throw Error('PICKUP_APPOINTMENT_NOT_SAVED');
+  await afterRecord(tx,receipt);
   return {code:'OK' as const,receipt,replayed:false};
  });}catch(error){console.error('[PICKUP_APPOINTMENT_WRITE_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:copy.unavailable};}
+}
+/** Historical appointment proof remains valid after a later agreed date. */
+export async function readPickupAppointmentReceiptInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string){
+ const rows=await tx.execute<Row>(sql`SELECT ${selection} FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${eventId} AND event_type='ORDER_PICKUP_APPOINTMENT_SET_V1'`);
+ if(rows.length!==1)throw Error('PICKUP_APPOINTMENT_PROOF_MISSING');
+ return qualify(rows[0]);
 }
 export async function readOrderPickupAppointment(auth:AuthorizationSnapshot,orderId:string){
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
