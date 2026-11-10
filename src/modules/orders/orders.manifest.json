@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "owner": "Path-1 Orders (Auftragskarte V8)",
   "publicExports": [
+    "@/modules/orders/public#InitialDispatchReminderPlan",
     "@/modules/orders/public#ORDER_ACCOUNTING_STATUS",
     "@/modules/orders/public#ORDER_LIFECYCLE_STATUS",
     "@/modules/orders/public#ORDER_LIFECYCLE_STATUS_SEQUENCE",
@@ -68,7 +69,7 @@
   "storagePurposes": [],
   "events": {
     "emits": ["SHIPMENT_MANUAL_TRACKING_SET_V1","SHIPMENT_HANDED_OVER_V1","ORDER_CUSTOMER_INFORMED_V1"],
-    "consumes": ["ORDER_COLLECTION_REMINDER_PREPARED_V1","ORDER_COLLECTION_REMINDER_SENT_V1"]
+    "consumes": ["ORDER_COLLECTION_REMINDER_PREPARED_V1","ORDER_COLLECTION_REMINDER_SENT_V1","ORDER_COLLECTION_CALL_CREATED_V1","ORDER_COLLECTION_CALL_UPDATED_V1","ORDER_COLLECTION_CALL_RESULT_V1"]
   },
   "config": {},
   "dependencies": [

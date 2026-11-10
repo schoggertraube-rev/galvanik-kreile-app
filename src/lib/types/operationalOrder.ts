@@ -18,7 +18,7 @@ export type OperationalOrderItem = {
 };
 
 export type OperationalOrder = {
-  finishedDispatch?:{state:'available'|'unavailable';rank?:number;handover?:'pickup'|'shipping'|null;color?:'rot'|'gelb'|'gruen'|null;releaseAllowed?:boolean;informedAt?:string|null;channel?:'mail'|'telefon'|null;blockReason?:string|null;workingDays?:number|null;gaps?:string[];reminder?:{stage:'E1'|'E2'|'E3';state:string;due:string|null;oldestNoticeAt:string|null;clientKey:string|null;orderIds:string[];orderNumbers:string[];needsNotice:string[];automaticSend:false;requiresResponseCheck:boolean;responseState?:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAILABLE'}};
+  finishedDispatch?:{state:'available'|'unavailable';rank?:number;handover?:'pickup'|'shipping'|null;color?:'rot'|'gelb'|'gruen'|null;releaseAllowed?:boolean;informedAt?:string|null;channel?:'mail'|'telefon'|null;blockReason?:string|null;workingDays?:number|null;gaps?:string[];storage?:{state:'NEEDS_SETTING'|'WAIT'|'DUE';eligibleOn:string|null;missingSettings:string[];callResultAt:string};reminder?:{stage:'E1'|'E2'|'E3';state:'WAIT_FOR_NOTICE'|'NEEDS_SETTING'|'WAIT'|'DUE'|'STOPPED'|'RECONCILE_RESPONSE'|'RECONCILE_MAIL'|'CALL_PENDING'|'CALL_NOT_REACHED';due:string|null;oldestNoticeAt:string|null;anchorOrderId?:string;callTaskId?:string;clientKey:string|null;orderIds:string[];orderNumbers:string[];needsNotice:string[];automaticSend:false;requiresResponseCheck:boolean;responseState?:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAILABLE'}};
   ausgabeFrei?:boolean;
   id: string;
   version: number;

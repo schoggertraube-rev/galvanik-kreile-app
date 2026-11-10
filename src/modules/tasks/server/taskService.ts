@@ -1,5 +1,6 @@
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
+import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
@@ -10,7 +11,7 @@ import {TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference
 
 export type TaskEffectRequest={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:TaskReferenceRead;itemId?:string;itemVersion?:number};
 export type TaskEffects=(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>Promise<void|TaskFailure>;
-type Dependencies={effect:TaskEffects;readInvoice?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string)=>Promise<{name:string|null;status:string;taskId:string|null}|null>};
+type Dependencies={effect:TaskEffects;beforeComplete?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:TaskRecord,input:TaskCompleteInput)=>Promise<void|TaskFailure>;readInvoice?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string)=>Promise<{name:string|null;status:string;taskId:string|null}|null>};
 class Rejected extends Error{constructor(readonly result:TaskFailure){super(result.code);}}
 function reject(code:TaskFailure['code'],message:string):never{throw new Rejected({code,message});}
 const columns=sql`id::text,client_key::text,art,titel,faellig_am::text,to_char(uhrzeit,'HH24:MI') AS uhrzeit,vorlauf_tage,fuer_login::text,fuer_bereich,bezug_typ,bezug_id,item_id::text,notiz,status,erledigt_von::text,erledigt_am::text,erledigt_notiz,erstellt_von::text,erstellt_am::text,version`;
@@ -97,10 +98,10 @@ export async function createMissingGoodsTask(tx:PrivilegedTenantTransaction,auth
 }
 
 /** U252: the checked order/mail command creates a normal visible callback task. */
-export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string},deps:Dependencies){
+export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string;taskId?:string;version?:number},deps:Dependencies){
  if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))reject('FORBIDDEN','Übergabe klären benötigt Mails und Aufträge.');
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
- const value:TaskSaveInput={clientKey:input.clientKey,version:0,kind:'rueckruf',title:input.title,dueDate:clock.today,time:null,forLogin:null,forArea:'auftraege',reference:{type:'auftrag',id:input.orderId},note:input.note};
+ const value:TaskSaveInput={clientKey:input.clientKey,version:input.version??0,...(input.taskId?{taskId:input.taskId}:{}),kind:'rueckruf',title:input.title,dueDate:clock.today,time:null,forLogin:null,forArea:'auftraege',reference:{type:'auftrag',id:input.orderId},note:input.note};
  const errors=taskValidation(value);if(Object.keys(errors).length)reject('VALIDATION_ERROR','Rückruf-Aufgabe ist unvollständig.');
  return (await persistTask(tx,auth,value,deps)).task.id;
 }
@@ -129,6 +130,7 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   if(!allowed(auth,before)&&!operationalQuote)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
   if(before.art==='rechnung'&&(!invoiceId||before.bezug_typ!=='eingangsrechnung'||before.bezug_id!==invoiceId||!hasAuthorizationArea(auth,'geld')))reject('FORBIDDEN','Rechnung klären wird ausschließlich in der Eingangsrechnung erledigt.');
   const note=value.note?.trim()||null;
+  const completion=await deps.beforeComplete?.(tx,auth,before,value);if(completion)throw new Rejected(completion);
   if(before.status==='erledigt'){
    if(before.version===value.version+1&&before.erledigt_von===auth.userId&&before.erledigt_notiz===note)return {code:'OK',task:before,replayed:true};
    reject('CONFLICT','Aufgabe ist bereits erledigt.');
@@ -150,7 +152,8 @@ export async function resolveInvoiceClarificationTask(tx:PrivilegedTenantTransac
 export async function completeTask(input:unknown,deps:Dependencies):Promise<TaskResult>{
  if(!input||typeof input!=='object'||Array.isArray(input))return {code:'VALIDATION_ERROR',message:'Aufgabenkennung fehlt.'};
  const value=input as TaskCompleteInput;
- if(Object.keys(value).sort().join(',')!=='note,taskId,version'||!taskUuid(value.taskId)||!Number.isSafeInteger(value.version)||value.version<1||!(value.note===null||typeof value.note==='string'&&value.note.length<=2000))return {code:'VALIDATION_ERROR',message:'Aufgabenkennung oder Notiz ist ungültig.'};
+ if(!['note,taskId,version','callResult,note,taskId,version'].includes(Object.keys(value).sort().join(','))||value.callResult!==undefined&&!['reached','notReached'].includes(value.callResult)||!taskUuid(value.taskId)||!Number.isSafeInteger(value.version)||value.version<1||!(value.note===null||typeof value.note==='string'&&value.note.length<=2000))return {code:'VALIDATION_ERROR',message:'Aufgabenkennung oder Notiz ist ungültig.'};
+ if(value.callResult!==undefined&&!deps.beforeComplete)return {code:'VALIDATION_ERROR',message:DISPATCH_CALL_COPY.notCall};
  const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
  try{return await withPrivilegedTenantTransaction(auth,tx=>finishTask(tx,auth,value,deps));}catch(error){return resultError(error);}
 }

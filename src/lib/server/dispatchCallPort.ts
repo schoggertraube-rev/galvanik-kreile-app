@@ -1,0 +1,112 @@
+import 'server-only';
+import {randomUUID} from 'node:crypto';
+import {sql} from 'drizzle-orm';
+import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
+import type {TaskCompleteInput,TaskRecord,TaskFailure} from '@/modules/tasks/public';
+import type {InitialDispatchReminderPlan} from '@/modules/orders/public';
+import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
+import {appendOrderInformed} from './orderReleaseRead';
+
+type CallMeta={customerId:string;handover:'pickup'|'shipping';due:string;stageKey:string;orderIds:string[];orderNumbers:string[]};
+type Created={payload:{meta:CallMeta;taskId:string};user_id:string;correlation_id:string};
+type CallTask={id:string;client_key:string;art:string;bezug_typ:string;bezug_id:string|null;status:string;erstellt_von:string;erledigt_von:string|null;erledigt_am:string|null;erledigt_notiz:string|null;version:number};
+const failure=(code:TaskFailure['code'],message:string):TaskFailure=>({code,message});
+async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string){
+ const rows=await tx.execute<Created>(sql`SELECT payload,user_id::text,correlation_id::text FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${taskId}`);
+ if(rows.length>1)throw Error('DISPATCH_CALL_SOURCE_AMBIGUOUS');const created=rows[0];if(!created)return null;
+ const updates=await tx.execute<{payload:{meta:CallMeta;taskId:string};correlation_id:string}>(sql`SELECT payload,correlation_id::text FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_UPDATED_V1' AND payload->>'taskId'=${taskId} ORDER BY created_at,id`);
+ for(const update of updates){const meta=update.payload.meta;if(update.correlation_id!==created.correlation_id||meta.customerId!==created.payload.meta.customerId||meta.handover!==created.payload.meta.handover||meta.stageKey!==created.payload.meta.stageKey||meta.due!==created.payload.meta.due)throw Error('DISPATCH_CALL_UPDATE_INVALID');created.payload=update.payload;}
+ return created;
+}
+async function task(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,lock=false){
+ const rows=await tx.execute<CallTask>(sql`SELECT id::text,client_key::text,art,bezug_typ,bezug_id,status,erstellt_von::text,erledigt_von::text,erledigt_am::text,erledigt_notiz,version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${id}::uuid ${lock?sql`FOR UPDATE`:sql``}`);
+ return rows.length===1?rows[0]:null;
+}
+function validTask(record:CallTask,created:Created){return record.client_key===created.payload.meta.stageKey&&record.art==='rueckruf'&&record.bezug_typ==='auftrag'&&record.bezug_id!==null&&created.payload.meta.orderIds.includes(record.bezug_id)&&record.erstellt_von===created.user_id;}
+
+/** Runs inside the existing task completion transaction, including retries. */
+export async function recordDispatchCallResult(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,record:TaskRecord,input:TaskCompleteInput):Promise<void|TaskFailure>{
+ const created=await source(tx,auth,record.id);
+ if(!created)return input.callResult===undefined?undefined:failure('VALIDATION_ERROR',DISPATCH_CALL_COPY.notCall);
+ if(!hasAuthorizationArea(auth,'auftraege'))return failure('FORBIDDEN',DISPATCH_CALL_COPY.forbidden);
+ if(!validTask(record,created))throw Error('DISPATCH_CALL_TASK_INVALID');
+ if(input.callResult===undefined)return failure('VALIDATION_ERROR',DISPATCH_CALL_COPY.resultMissing);
+ const results=await tx.execute<{payload:{result:string;version:number;note:string|null};user_id:string}>(sql`SELECT payload,user_id::text FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${record.id}`);
+ if(record.status==='erledigt'){
+  if(results.length!==1||results[0].user_id!==auth.userId||results[0].payload.result!==input.callResult||results[0].payload.version!==input.version+1||results[0].payload.note!==(input.note?.trim()||null))return failure('CONFLICT',DISPATCH_CALL_COPY.resultConflict);
+  return;
+ }
+ if(results.length)throw Error('DISPATCH_CALL_RESULT_WITHOUT_COMPLETION');
+ if(record.version!==input.version)return failure('CONFLICT',DISPATCH_CALL_COPY.changed);
+ const current=await tx.execute<{id:string}>(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND customer_id=${created.payload.meta.customerId} AND handover_mode=${created.payload.meta.handover} AND station='fertig' AND status='fertig' AND current_station='fertig' AND current_station_id='fertig' ORDER BY id FOR UPDATE`);
+ if(JSON.stringify(current.map(row=>row.id).sort())!==JSON.stringify([...created.payload.meta.orderIds].sort()))return failure('CONFLICT',DISPATCH_CALL_COPY.cohortChanged);
+ if(input.callResult==='reached')for(const orderId of [...created.payload.meta.orderIds].sort()){
+  await appendOrderInformed(tx,auth,{orderId,clientEventId:randomUUID(),channel:'telefon',intent:'dispatch-call:'+record.id+':'+(record.version+1)});
+ }
+ await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at)
+ VALUES(${randomUUID()},${auth.tenantId},'ORDER_COLLECTION_CALL_RESULT_V1',${DISPATCH_CALL_COPY.resultRecorded},'success',${auth.userId}::uuid,${randomUUID()}::uuid,${created.correlation_id}::uuid,1,${JSON.stringify({taskId:record.id,result:input.callResult,version:record.version+1,note:input.note?.trim()||null,meta:created.payload.meta})}::jsonb,statement_timestamp())`);
+}
+
+export async function readDispatchCallRequirement(auth:AuthorizationSnapshot,taskId:string){
+ if(!hasAuthorizationArea(auth,'auftraege'))return null;
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const created=await source(tx,auth,taskId);if(!created)return null;
+  const record=await task(tx,auth,taskId);if(!record||!validTask(record,created))throw Error('DISPATCH_CALL_TASK_INVALID');
+  return {required:record.status==='offen',orderIds:created.payload.meta.orderIds,orderNumbers:created.payload.meta.orderNumbers};
+ });
+}
+
+/** Generic task editing must not erase the cohort or convert a mandatory-result call. */
+export async function protectDispatchCallTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;action:string;kind:string;title:string;note:string|null}):Promise<void|TaskFailure>{
+ if(input.action!=='geaendert')return;
+ const created=await source(tx,auth,input.taskId);if(!created)return;
+ if(input.kind!=='rueckruf'||input.title!==DISPATCH_CALL_COPY.title||input.note!==DISPATCH_CALL_COPY.note+created.payload.meta.orderNumbers.join(', '))return failure('CONFLICT',DISPATCH_CALL_COPY.preserve);
+}
+
+/** Only real tasks/results qualify; their state is never inferred from free text. */
+export async function readDispatchCall(auth:AuthorizationSnapshot,customerId:string,handover:'pickup'|'shipping',orderIds:readonly string[]){
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<Created>(sql`SELECT payload,user_id::text,correlation_id::text FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->'meta'->>'customerId'=${customerId} AND payload->'meta'->>'handover'=${handover} ORDER BY created_at DESC,id DESC`);
+  const relevant=rows.filter(row=>row.payload.meta.orderIds.some(id=>orderIds.includes(id)));
+  if(!relevant.length)return null;
+  // One live group has one call stage. Never silently prefer a damaged newer receipt.
+  const created=await source(tx,auth,relevant[0].payload.taskId);if(!created)throw Error('DISPATCH_CALL_SOURCE_MISSING');const record=await task(tx,auth,created.payload.taskId);
+  if(!record||!validTask(record,created))throw Error('DISPATCH_CALL_TASK_INVALID');
+  const results=await tx.execute<{payload:{result:'reached'|'notReached';version:number;note:string|null};user_id:string;created_at:string;proof_ok:boolean}>(sql`SELECT payload,user_id::text,created_at::text,
+   (payload->'meta'=${JSON.stringify(created.payload.meta)}::jsonb AND correlation_id=${created.correlation_id}::uuid) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${record.id}`);
+  const cohortChanged=JSON.stringify([...created.payload.meta.orderIds].sort())!==JSON.stringify([...orderIds].sort());
+  const clock={stageKey:created.payload.meta.stageKey,due:created.payload.meta.due};
+  if(record.status==='offen'){if(results.length)throw Error('DISPATCH_CALL_OPEN_WITH_RESULT');return {taskId:record.id,result:null,recordedAt:null,cohortChanged,...clock};}
+  const result=results[0];
+  if(results.length!==1||!result.proof_ok||!['reached','notReached'].includes(result.payload.result)||result.user_id!==record.erledigt_von||result.payload.version!==record.version||result.payload.note!==record.erledigt_notiz||!record.erledigt_am)throw Error('DISPATCH_CALL_RESULT_INVALID');
+  return {taskId:record.id,result:result.payload.result,recordedAt:new Date(record.erledigt_am).toISOString(),cohortChanged,...clock};
+ });
+}
+
+type Request={customerId:string;handover:'pickup'|'shipping';dueDate:string};
+export async function createDispatchCall(auth:AuthorizationSnapshot,input:Request,plan:InitialDispatchReminderPlan,versions:ReadonlyArray<{id:string;version:number}>,createTask:(tx:PrivilegedTenantTransaction,meta:{orderId:string;clientKey:string;title:string;note:string;taskId?:string;version?:number})=>Promise<string>){
+ if(!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
+ if(plan.stage!=='E3'||plan.due!==input.dueDate||!plan.clientKey||!plan.anchorOrderId)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+ const stageKey=plan.clientKey,anchorOrderId=plan.anchorOrderId;
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':collection:'+stageKey},0))`);
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'task:'+auth.tenantId+':'+stageKey},0))`);
+  const prior=await tx.execute<Created>(sql`SELECT payload,user_id::text,correlation_id::text FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND client_event_id=${stageKey}::uuid`);
+  const existing=prior.length===1?await source(tx,auth,prior[0].payload.taskId):null;
+  const record=existing?await task(tx,auth,existing.payload.taskId,true):null;
+  if(prior.length&&(!existing||!record||!validTask(record,existing)||existing.payload.meta.customerId!==input.customerId||existing.payload.meta.handover!==input.handover))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+  if(existing&&record&&JSON.stringify([...existing.payload.meta.orderIds].sort())===JSON.stringify([...plan.orderIds].sort()))return {code:'OK' as const,taskId:record.id,replayed:true};
+  if(existing&&record?.status!=='offen')return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.cohortChanged};
+  if(!['DUE','CALL_PENDING'].includes(plan.state)||plan.requiresResponseCheck||plan.needsNotice.length)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+  const occupied=await tx.execute(sql`SELECT id FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${stageKey}::uuid`);
+  if(occupied.length&&!existing)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+  const orders=await tx.execute<{id:string;version:number;customer_id:string;handover_mode:string;station:string;current_station:string;current_station_id:string;status:string}>(sql`SELECT id,version,customer_id,handover_mode,station,current_station,current_station_id,status FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(plan.orderIds.map(id=>sql`${id}`),sql`, `)}]::text[]) ORDER BY id FOR UPDATE`);
+  if(orders.length!==plan.orderIds.length||orders.some(row=>row.customer_id!==input.customerId||row.handover_mode!==input.handover||[row.station,row.current_station,row.current_station_id,row.status].some(state=>state!=='fertig')||versions.find(order=>order.id===row.id)?.version!==row.version))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+  const meta:CallMeta={customerId:input.customerId,handover:input.handover,due:input.dueDate,stageKey,orderIds:plan.orderIds,orderNumbers:plan.orderNumbers};
+  const taskId=await createTask(tx,{orderId:record?.bezug_id??anchorOrderId,clientKey:stageKey,title:DISPATCH_CALL_COPY.title,note:DISPATCH_CALL_COPY.note+plan.orderNumbers.join(', '),...(record?{taskId:record.id,version:record.version}:{})});
+  await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at)
+   VALUES(${randomUUID()},${auth.tenantId},${existing?'ORDER_COLLECTION_CALL_UPDATED_V1':'ORDER_COLLECTION_CALL_CREATED_V1'},${DISPATCH_CALL_COPY.created},'success',${auth.userId}::uuid,${existing?randomUUID():stageKey}::uuid,${existing?.correlation_id??randomUUID()}::uuid,1,${JSON.stringify({meta,taskId})}::jsonb,statement_timestamp())`);
+  return {code:'OK' as const,taskId,replayed:false};
+ });}catch(error){console.error('[DISPATCH_CALL_CREATE_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};}
+}

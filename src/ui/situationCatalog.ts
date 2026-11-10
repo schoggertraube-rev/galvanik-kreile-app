@@ -161,6 +161,19 @@ export const MANUAL_SHIPPING_COPY={
  SHIPMENT_CARRIER_CHANGED:'Der Versanddienst des Pakets weicht von den Einstellungen ab. Öffne das Paket und kläre den Versanddienst vor der Änderung.'
 } as const;
 export const DISPATCH_NOTICE_COPY={collective:(orders:readonly string[])=>'Deine fertigen Aufträge: '+orders.join(', ')};
+export const DISPATCH_CALL_COPY={
+ title:'Ruf den Kunden wegen seiner fertigen Ware an',note:'Sprich mit dem Kunden über diese fertigen Aufträge: ',
+ created:'Gemeinsamer Anruf zu fertiger Ware vorbereitet',resultRecorded:'Ergebnis des gemeinsamen Anrufs festgehalten',
+ resultMissing:'Halte fest, ob Du den Kunden erreicht hast. Deine Notiz bleibt erhalten.',
+ resultConflict:'Für diesen Anruf ist bereits ein anderes Ergebnis gespeichert. Öffne die Aufgabe erneut.',
+ changed:'Der nächste Schritt hat sich geändert. Lies die fertigen Aufträge neu ein.',
+ notCall:'Diese Aufgabe gehört nicht zur Anrufstufe. Schließe sie über ihren normalen Weg ab.',
+ preserve:'Dieser Anruf hält die gemeinsamen Aufträge zusammen. Halte Dein Ergebnis beim Erledigen fest.',
+ cohortChanged:'Die fertigen Aufträge haben sich geändert. Öffne den gemeinsamen Anruf aus der Fertig-Liste erneut.',
+ forbidden:'Für diesen Schritt brauchst Du die Freigabe für Aufträge und beim Vorbereiten auch Mails.',
+ unavailable:'Der Anruf konnte nicht gespeichert werden. Deine Eingaben bleiben erhalten; versuche es erneut.',
+ session:'Melde Dich erneut an; Deine Eingaben bleiben erhalten.',invalid:'Öffne den Anruf aus der Liste der fertigen Aufträge erneut.'
+};
 export const COLLECTION_REMINDER_COPY={
  forbidden:'Sammelerinnerung benötigt Mails und Aufträge sowie einen Kundenbezug.',
  invalid:'Erinnerungsstufe, Frist oder Versandkennung fehlt.',

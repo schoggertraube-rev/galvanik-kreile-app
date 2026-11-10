@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "c7663733013893c5987828f8a8b4926556fa40aee23fcf856d947c0f189d6691",
+  "inventorySha256": "0ad62f4eca8ca34c2839121c754126a9ee1fef13ea70fd460577530e6a03cb5e",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -179,10 +179,12 @@
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#saveIntakeTaskAction": [
-      "src/test/h18_customer_actions.integration.test.ts"
+      "src/test/h18_customer_actions.integration.test.ts",
+      "src/test/acceptance/dispatch_call.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#completeIntakeTaskAction": [
-      "src/test/h18_customer_actions.integration.test.ts"
+      "src/test/h18_customer_actions.integration.test.ts",
+      "src/test/acceptance/dispatch_call.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#assignIntakeCustomerAction": [
       "src/test/h18_customer_actions.integration.test.ts"
@@ -299,6 +301,9 @@
     ],
     "src/app/actions/orders.actions.ts#markOrderInformedByPhoneAction": [
       "src/test/acceptance/order_notification.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#createDispatchCallTaskAction": [
+      "src/test/acceptance/dispatch_call.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

@@ -1,0 +1,108 @@
+// @vitest-environment node
+import {vi,it,expect} from 'vitest';
+import {randomUUID} from 'node:crypto';
+const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
+vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
+import {KREILE_TENANT_SLUG} from '@/lib/tenant';
+import {sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {sendCustomerMailAction} from '@/app/actions/communications.actions';
+import {getOrdersDb} from '@/app/actions/orders.actions';
+import {completeIntakeTaskAction,createDispatchCallTaskAction,getIntakeTaskAction,saveIntakeTaskAction} from '@/app/actions/eingang.actions';
+import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
+import {emptyDispatchPolicy} from '@/modules/fundament/public';
+import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
+import {updateCustomerAction} from '@/app/actions/customers.actions';
+if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('DISPATCH_CALL_LOOPBACK_REQUIRED');
+async function proposal(id:string){const result=await withSession(full,()=>getOrdersDb());if(!result.ok)throw Error('CALL_QUEUE');const plan=result.data.find(row=>row.id===id)?.finishedDispatch?.reminder;if(!plan)throw Error('CALL_PLAN');return plan;}
+async function prepare(label:string){
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-call-token'.repeat(4),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail'))return new Response(null,{status:202});return nativeFetch(input,init);});
+ const first=await readyInvoiceOrder(label),second=await readyInvoiceOrder(label+'-2','pickup',false,first.customerId);
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:first.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertig',attachment:{kind:'INVOICE',documentId:first.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ const read=await withSession(full,()=>readShippingSettingsAction());if(read.code!=='OK')throw Error('CALL_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:read.settings.service,numberPattern:read.settings.numberPattern,numberHint:read.settings.numberHint,trackingUrl:read.settings.trackingUrl,expectedUpdatedAt:read.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),reminderDays:0,secondReminderDays:0,callAfterDays:0,holdMinutes:0}}))).toMatchObject({code:'OK'});
+ for(const stage of ['E1','E2'] as const){const plan=await proposal(first.orderId);if(!plan.due)throw Error('CALL_DUE');expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST '+stage,body:'TEST Bitte abholen',collectionReminder:{stage,handover:'pickup',dueDate:plan.due!}}))).toMatchObject({code:'OK'});}
+ const plan=await proposal(first.orderId);expect(plan).toMatchObject({stage:'E3',state:'DUE'});if(!plan.due)throw Error('CALL_DUE');
+ return {first,second,request:{customerId:first.customerId,handover:'pickup' as const,dueDate:plan.due}};
+}
+it('E3 creates one real visible callback for the collective cohort; mandatory reached result stops the ladder with actor, fresh retry and original history',async()=>{
+ const {first,second,request}=await prepare('E3-Erreicht');
+ const operator=await createFixture(['mails','auftraege'],'buero');
+ const attempts=await Promise.all([withSession(operator,()=>createDispatchCallTaskAction(request)),withSession(operator,()=>createDispatchCallTaskAction(structuredClone(request)))]);
+ for(const result of attempts)expect(result).toMatchObject({code:'OK'});const created=attempts[0];if(created.code!=='OK')throw Error('CALL_CREATE');
+ expect(attempts[1]).toMatchObject({taskId:created.taskId});
+ const task=await withSession(operator,()=>getIntakeTaskAction({taskId:created.taskId}));if(task.code!=='OK'||!task.task)throw Error('CALL_TASK');
+ expect(task).toMatchObject({canComplete:true,dispatchCall:{required:true},task:{art:'rueckruf',status:'offen',fuer_bereich:'auftraege'}});
+ for(const id of [first.orderId,second.orderId]){const [row]=await sql`SELECT order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${id}`;expect(task.task.notiz).toContain(row.order_number);expect(await proposal(id)).toMatchObject({state:'CALL_PENDING',callTaskId:created.taskId});}
+ expect(await withSession(operator,()=>saveIntakeTaskAction({taskId:created.taskId,clientKey:task.task!.client_key,version:task.task!.version,kind:'aufgabe',title:task.task!.titel,dueDate:task.task!.faellig_am,time:null,forLogin:null,forArea:'auftraege',reference:{type:'auftrag',id:task.task!.bezug_id},note:task.task!.notiz}))).toMatchObject({code:'CONFLICT'});
+ const input={taskId:created.taskId,version:task.task.version,note:'TEST persönlich erreicht'};
+ expect(await withSession(operator,()=>completeIntakeTaskAction(input))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.taskId}::uuid`).toEqual([{status:'offen'}]);
+ const completed=await withSession(operator,()=>completeIntakeTaskAction({...input,callResult:'reached'}));expect(completed).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:operator.actorId}});
+ expect(await proposal(first.orderId)).toMatchObject({state:'STOPPED',callTaskId:created.taskId});
+ expect(await withSession(operator,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify({...input,callResult:'reached'}))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(operator,()=>completeIntakeTaskAction({...input,callResult:'notReached'}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT user_id::text,payload->>'result' AS result FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${created.taskId}`).toEqual([{user_id:operator.actorId,result:'reached'}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${created.taskId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND nachher->>'taskId'=${created.taskId}`).toEqual([{n:2}]);
+ const denied=await createFixture(['kunden'],'werkstatt');expect(await withSession(denied,()=>createDispatchCallTaskAction(request))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(denied,()=>completeIntakeTaskAction({...input,callResult:'reached'}))).toMatchObject({code:'FORBIDDEN'});
+});
+it('not reached remains explicit without inventing a storage deadline; generic tasks cannot inject a result and damaged call evidence is never treated as no call',async()=>{
+ const {first,request}=await prepare('E3-NichtErreicht');const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('CALL_CREATE');
+ const read=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));if(read.code!=='OK'||!read.task)throw Error('CALL_TASK');
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:created.taskId,version:read.task!.version,note:'TEST nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
+ expect(await proposal(first.orderId)).toMatchObject({stage:'E3',state:'CALL_NOT_REACHED'});
+ let queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.storage).toMatchObject({state:'NEEDS_SETTING',eligibleOn:null});
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK'||!settings.settings.dispatchPolicy)throw Error('CALL_STORAGE_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,storageAfterDays:0}}))).toMatchObject({code:'OK'});
+ queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.storage).toMatchObject({state:'DUE'});
+ const generic=await withSession(full,()=>saveIntakeTaskAction({clientKey:randomUUID(),version:0,kind:'rueckruf',title:'TEST normaler Rückruf',dueDate:request.dueDate,time:null,forLogin:null,forArea:'auftraege',reference:{type:'auftrag',id:first.orderId},note:null}));if(generic.code!=='OK')throw Error('CALL_GENERIC');
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:generic.task.id,version:generic.task.version,note:null,callResult:'reached'}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:generic.task.id,version:generic.task.version,note:null}))).toMatchObject({code:'OK'});
+ const stranger=await createFixture(['auftraege'],'buero');
+ await sql`UPDATE public.events SET payload=jsonb_set(payload,'{result}','"reached"'::jsonb),user_id=${stranger.actorId}::uuid WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${created.taskId}`;
+ queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.state).toBe('unavailable');
+});
+it('a later ready order refreshes the same open task through its owner writer before an outcome can cover the enlarged cohort',async()=>{
+ const {first,request}=await prepare('E3-Gruppe');const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('CALL_GROUP_CREATE');
+ const before=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));if(before.code!=='OK'||!before.task)throw Error('CALL_GROUP_TASK');
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK'||!settings.settings.dispatchPolicy)throw Error('CALL_GROUP_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,callAfterDays:12}}))).toMatchObject({code:'OK'});
+ expect(await proposal(first.orderId)).toMatchObject({state:'CALL_PENDING',due:request.dueDate,callTaskId:created.taskId});
+ const later=await readyInvoiceOrder('E3-Später','pickup',false,first.customerId);
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:later.orderId,clientRequestId:randomUUID(),subject:'TEST Weitere Ware fertig',body:'TEST Weitere Ware fertig',attachment:{kind:'INVOICE',documentId:later.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:created.taskId,version:before.task!.version,note:'TEST erreicht',callResult:'reached'}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>createDispatchCallTaskAction(structuredClone(request)))).toMatchObject({code:'OK',taskId:created.taskId});
+ const after=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));if(after.code!=='OK'||!after.task)throw Error('CALL_GROUP_AFTER');
+ const [number]=await sql`SELECT order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${later.orderId}`;
+ expect(after.task.notiz).toContain(number.order_number);expect(after.task.version).toBe(before.task.version+1);
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:created.taskId,version:after.task!.version,note:'TEST alle Aufträge angesprochen',callResult:'reached'}))).toMatchObject({code:'OK'});
+ expect(await proposal(later.orderId)).toMatchObject({state:'STOPPED',callTaskId:created.taskId});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.taskId}::uuid`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_UPDATED_V1' AND payload->>'taskId'=${created.taskId}`).toEqual([{n:1}]);
+});
+it('an ordinary task occupying the stage key cannot be promoted into a qualified call even with identical text',async()=>{
+ const {first,request}=await prepare('E3-Zweckbindung');const plan=await proposal(first.orderId);if(!plan.clientKey||!plan.anchorOrderId)throw Error('CALL_PURPOSE_PLAN');
+ expect(await withSession(full,()=>saveIntakeTaskAction({clientKey:plan.clientKey,version:0,kind:'rueckruf',title:DISPATCH_CALL_COPY.title,dueDate:request.dueDate,time:null,forLogin:null,forArea:'auftraege',reference:{type:'auftrag',id:plan.anchorOrderId},note:DISPATCH_CALL_COPY.note+plan.orderNumbers.join(', ')}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>createDispatchCallTaskAction(request))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND client_event_id=${plan.clientKey}::uuid`).toEqual([{n:0}]);
+ expect(await proposal(first.orderId)).toMatchObject({state:'DUE'});
+});
+it('a customer without email goes directly to one call without reminder settings or provider traffic; reached uses the existing informed receipt writer',async()=>{
+ let external=0;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='graph.microsoft.com'||url.hostname==='login.microsoftonline.com'){external++;throw Error('TEST_NO_MAIL_PROVIDER_EXPECTED');}return nativeFetch(input,init);});
+ const order=await readyInvoiceOrder('E3-OhneMail');
+ expect(await withSession(full,()=>updateCustomerAction({clientEventId:randomUUID(),customerId:order.customerId,email:null}))).toMatchObject({code:'OK'});
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('CALL_NO_MAIL_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:null}))).toMatchObject({code:'OK'});
+ const planned=await proposal(order.orderId);expect(planned).toMatchObject({stage:'E3',state:'DUE',requiresResponseCheck:false});if(!planned.due)throw Error('NO_MAIL_DUE');
+ const request={customerId:order.customerId,handover:'pickup' as const,dueDate:planned.due};
+ const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('NO_MAIL_CALL:'+created.code);
+ const read=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));if(read.code!=='OK'||!read.task)throw Error('NO_MAIL_TASK');
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:created.taskId,version:read.task!.version,note:'TEST Fertige Ware telefonisch mitgeteilt',callResult:'reached'}))).toMatchObject({code:'OK'});
+ expect(await sql`SELECT user_id::text,payload->'receipt'->>'channel' AS channel FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toEqual([{user_id:full.actorId,channel:'telefon'}]);
+ const queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(row=>row.id===order.orderId)?.finishedDispatch).toMatchObject({state:'available',channel:'telefon',reminder:{state:'STOPPED'}});
+ expect(await withSession(full,()=>createDispatchCallTaskAction(structuredClone(request)))).toMatchObject({code:'OK',taskId:created.taskId,replayed:true});
+ expect(external).toBe(0);
+});
