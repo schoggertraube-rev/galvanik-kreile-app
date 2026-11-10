@@ -4,7 +4,7 @@ import type {ReactElement} from 'react';
 import type {CompanyLetterSettings} from '@/modules/fundament/public';
 import {COLLECTION_REMINDER_COPY as copy} from '@/ui/situationCatalog';
 
-export type StorageLetterSnapshot={date:string;company:CompanyLetterSettings;recipient:{name:string;street:string;zip:string;city:string;country:string};orderNumbers:string[];body:string};
+export type StorageLetterSnapshot={date:string;deadline?:{date:string;due:string|null};company:CompanyLetterSettings;recipient:{name:string;street:string;zip:string;city:string;country:string};orderNumbers:string[];body:string};
 const styles=StyleSheet.create({page:{padding:48,fontFamily:'Helvetica',fontSize:11,color:'#182033',lineHeight:1.5},sender:{fontSize:9,marginBottom:32},address:{marginBottom:28},title:{fontSize:18,fontFamily:'Helvetica-Bold',marginBottom:8},date:{fontSize:10,marginBottom:20},draft:{fontSize:10,color:'#675E51',marginBottom:16},body:{marginBottom:24},footer:{position:'absolute',bottom:36,left:48,right:48,fontSize:9,color:'#675E51',borderTopWidth:1,borderTopColor:'#D5D0C7',paddingTop:8}});
 /** Read-only preview. The actual postal dispatch must have its own explicit receipt. */
 export function createStorageLetterPdfDocument(snapshot:StorageLetterSnapshot,draft=true):ReactElement<DocumentProps>{

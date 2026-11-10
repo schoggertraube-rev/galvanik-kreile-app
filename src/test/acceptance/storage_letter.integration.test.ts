@@ -333,3 +333,34 @@ it('the configured storage rate and its actual audit receipt commit together or 
  expect(await withSession(full,()=>saveShippingSettingsAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT payload->>'actorId' AS actor FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='shipping_settings_updated' AND payload->'after'->'dispatchPolicy'->>'storageWeeklyCents'='700'`).toEqual([{actor:full.actorId}]);
 });
+it('PL12:06 freezes the promised postal deadline in the original despite later interval and calendar changes',async()=>{
+ const {order,request,plan}=await prepareWithoutMail('Frist-im-Original');
+ const prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('FROZEN_DEADLINE_PREPARE');
+ const [original]=await sql`SELECT payload->'document'->'snapshot' AS snapshot FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.document.id}`;
+ expect(original.snapshot.deadline).toEqual({date:berlinCalendarDay(),due:berlinCalendarDay()});
+ expect(original.snapshot.body).toContain(berlinCalendarDay().split('-').reverse().join('.'));
+ const task=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));if(task.code!=='OK'||!task.task)throw Error('FROZEN_DEADLINE_TASK');
+ const taskVersion=task.task.version;
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:prepared.taskId,version:taskVersion,note:'TEST Original zur Post',postalResult:{kind:'posted',postedOn:berlinCalendarDay(),documentSha256:prepared.document.sha256}}))).toMatchObject({code:'OK'});
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('FROZEN_DEADLINE_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,finalStageAfterLetterDays:20,holidays:[berlinCalendarDay()]}}))).toMatchObject({code:'OK'});
+ expect((await plan())?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'DUE',due:original.snapshot.deadline.due});
+ const final=await withSession(full,()=>createStorageFinalTaskAction(request));expect(final.code).toBe('OK');if(final.code!=='OK')throw Error('FROZEN_DEADLINE_FINAL');
+ expect(await withSession(full,()=>createStorageFinalTaskAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',taskId:final.taskId,replayed:true});
+ expect(await sql`SELECT payload->'document'->'snapshot' AS snapshot FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.document.id}`).toEqual([original]);
+ expect((await plan())?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'TASK_PENDING',due:original.snapshot.deadline.due,taskId:final.taskId});
+ expect(await sql`SELECT count(*)::int AS n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${order.orderId} AND status='offen'`).toEqual([{n:1}]);
+});
+it('PL12:06 freezes the actual mail original deadline and preserves its fresh retry after settings shorten the interval',async()=>{
+ const {order,request,plan}=await prepareLetter('Mailfrist-Original');
+ const input={targetType:'CUSTOMER' as const,targetId:order.customerId,clientRequestId:randomUUID(),subject:'TEST Lagerfrist',body:'TEST Bitte melde Dich zur Übergabe.',collectionReminder:{stage:'E4' as const,handover:'pickup' as const,dueDate:(await plan())?.storage?.letter?.due??'',clientKey:request.clientKey}};
+ const sent=await withSession(full,()=>sendCustomerMailAction(input));expect(sent.code).toBe('OK');
+ const [proof]=await sql`SELECT payload->'meta'->'storageDeadline' AS deadline FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND correlation_id=${input.clientRequestId}::uuid`;
+ expect(proof.deadline.date).toBe(berlinCalendarDay());expect(proof.deadline.due>berlinCalendarDay()).toBe(true);
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('MAIL_DEADLINE_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,finalStageAfterLetterDays:0,finalStageRecipientId:full.actorId}}))).toMatchObject({code:'OK'});
+ const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('MAIL_DEADLINE_QUEUE');
+ expect(queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'WAIT',due:proof.deadline.due});
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{n:1}]);
+});

@@ -1,6 +1,7 @@
 "use server";
 
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
+import {freezeStorageDeadline} from '@/lib/server/storageDeadline';
 import {createHash} from "node:crypto";
 import {readCommunicationDocumentReceipt,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
@@ -95,9 +96,9 @@ export async function sendCustomerMailAction(input: TargetInput & {
   if(!proposal||proposal.stage!==request.stage||proposal.state!=='DUE'||proposal.due!==request.dueDate||!proposal.clientKey||proposal.requiresResponseCheck||proposal.needsNotice.length)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.notReady};
   if(settings.settings.dispatchPolicy?.holdMinutes!==0)return {code:'IN_KLAERUNG' as const,message:COLLECTION_REMINDER_COPY.holdUnavailable};
   const members=candidates.filter(order=>proposal.orderIds.includes(order.id));
-  const meta:CollectionReminderMeta={stage:request.stage,customerId:input.targetId,handover:request.handover,dueDate:request.dueDate,stageKey:proposal.clientKey,intent:collectionReminderIntent({...input,collectionReminder:request}),orders:members.map(order=>({id:order.id,number:order.orderNumber,version:order.version})),...(storageLetter?{storageOrigin:{callTaskId:storageLetter.callTaskId,freezes:storageLetter.freezes}}:{})};
+  const meta:CollectionReminderMeta={stage:request.stage,customerId:input.targetId,handover:request.handover,dueDate:request.dueDate,stageKey:proposal.clientKey,intent:collectionReminderIntent({...input,collectionReminder:request}),orders:members.map(order=>({id:order.id,number:order.orderNumber,version:order.version})),...(storageLetter?{storageDeadline:freezeStorageDeadline(settings.settings.dispatchPolicy),storageOrigin:{callTaskId:storageLetter.callTaskId,freezes:storageLetter.freezes}}:{})};
   const prefix=DISPATCH_NOTICE_COPY.collective(meta.orders.map(order=>order.number))+'\n\n';
-  return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:prefix+input.body.trim(),collectionReminder:meta,beforePrepare:async tx=>(await readShippingSettingsInTransaction(tx,auth.tenantId))?.updatedAt===settings.settings.updatedAt});
+  return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:prefix+input.body.trim()+(meta.storageDeadline?.due?'\n\n'+COLLECTION_REMINDER_COPY.letterDeadline(meta.storageDeadline.due):''),collectionReminder:meta,beforePrepare:async tx=>(await readShippingSettingsInTransaction(tx,auth.tenantId))?.updatedAt===settings.settings.updatedAt});
  }
  let attachment,document:CommunicationDocument|undefined;
  const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];

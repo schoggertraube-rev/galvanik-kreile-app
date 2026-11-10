@@ -5,6 +5,7 @@ import type {ShippingSettings,CompanyLetterSettings} from '@/modules/fundament/p
 import type {OperationalOrder} from '@/lib/types/operationalOrder';
 import type {StorageLetterSnapshot} from '@/lib/pdf/StorageLetterDocument';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
+import {freezeStorageDeadline} from './storageDeadline';
 import {COLLECTION_REMINDER_COPY as copy} from '@/ui/situationCatalog';
 
 export type StorageLetterRequest={customerId:string;handover:'pickup'|'shipping';clientKey:string};
@@ -27,9 +28,9 @@ export async function readStorageLetterPreview(auth:AuthorizationSnapshot,input:
   const country=customer.country,zip=customer.zipCode;
   if(!customer.name?.trim()||!customer.street?.trim()||!zip?.trim()||!customer.city?.trim()||!country?.trim()||country==='andere'||customerFieldError('country',{...EMPTY_CUSTOMER_FORM,country})||customerFieldError('zipCode',{...EMPTY_CUSTOMER_FORM,country,zipCode:zip}))return {code:'VALIDATION_ERROR' as const,message:copy.letterAddressMissing};
   if(sender.code!=='OK')return {code:sender.code==='FORBIDDEN'?'FORBIDDEN' as const:'VALIDATION_ERROR' as const,message:copy.letterSenderMissing};
-  const numbers=members.map(order=>order.orderNumber),snapshot:StorageLetterSnapshot={date:berlinCalendarDay(),company:sender.company,
+  const deadline=freezeStorageDeadline(settings.dispatchPolicy),numbers=members.map(order=>order.orderNumber),snapshot:StorageLetterSnapshot={date:berlinCalendarDay(),deadline,company:sender.company,
    recipient:{name:customer.name,street:[customer.street,customer.houseNumber].filter(Boolean).join(' '),zip,city:customer.city,country:customerCountryLabel(country)},
-   orderNumbers:numbers,body:copy.letterBody(numbers,settings.dispatchPolicy?.finalStageAfterLetterDays??null)};
+   orderNumbers:numbers,body:copy.letterBody(numbers,settings.dispatchPolicy?.finalStageAfterLetterDays??null)+(deadline.due?' '+copy.letterDeadline(deadline.due):'')};
   return {code:'OK' as const,data:{snapshot,clientKey:letter.clientKey,channel:customer.email?.trim()?'mail' as const:'postal' as const,orders:members.map(order=>({id:order.id,version:order.version,number:order.orderNumber})),callTaskId:letter.callTaskId,freezes:letter.freezes,settingsUpdatedAt:settings.updatedAt}};
  }catch(error){console.error('[STORAGE_LETTER_PREVIEW_READ_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:copy.proofUnavailable};}
 }

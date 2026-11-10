@@ -16,7 +16,7 @@ type Payload={channel:'post';meta:CollectionReminderMeta;document:Document;taskI
 type Source={id:string;payload:Payload;user_id:string;proof_ok:boolean};
 const fail=(code:TaskFailure['code'],message:string):TaskFailure=>({code,message});
 const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
-function snapshotHash(value:StorageLetterSnapshot){const c=value.company,r=value.recipient;return digest(JSON.stringify([value.date,c.companyName,c.street,c.zip,c.city,c.country,r.name,r.street,r.zip,r.city,r.country,value.orderNumbers,value.body]));}
+function snapshotHash(value:StorageLetterSnapshot){const c=value.company,r=value.recipient;return digest(JSON.stringify([value.date,c.companyName,c.street,c.zip,c.city,c.country,r.name,r.street,r.zip,r.city,r.country,value.orderNumbers,value.body,...(value.deadline?[value.deadline.date,value.deadline.due]:[])]));}
 function postedDayValid(value:unknown,earliest:string):value is string{return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value+'T12:00:00Z').toISOString().slice(0,10)===value&&value>=earliest&&value<=berlinCalendarDay();}
 type TaskState={id:string;client_key:string;art:string;bezug_typ:string;bezug_id:string;erstellt_von:string;titel:string;notiz:string;fuer_bereich:string;fuer_login:string|null;status:string;version:number;erledigt_von:string|null;erledigt_notiz:string|null};
 async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,letterKey:string){
@@ -110,7 +110,7 @@ export async function readPostalCollectionHistory(tx:PrivilegedTenantTransaction
  const result:CollectionReminderHistoryEntry[]=[];
  for(const row of rows){const read=await source(tx,auth,row.key);if(!read)throw Error('POSTAL_HISTORY_SOURCE_MISSING');const p=read.payload;if(!p.meta.orders.some(order=>orderIds.includes(order.id)))continue;
   const voided=read.outcome?.event_type==='ORDER_STORAGE_LETTER_VOIDED_V1';
-  result.push({stage:'E4',stageKey:p.meta.stageKey,dueDate:p.meta.dueDate,storageOrigin:p.meta.storageOrigin,sentAt:read.outcome&&!voided?read.outcome.payload.postedOn??null:null,threadId:null,orderIds:p.meta.orders.map(order=>order.id),deliveryFailedAt:null,postalDocumentId:p.document.id,postalTaskId:p.taskId,...(voided?{voidId:read.outcome!.id}:{})});
+  result.push({stage:'E4',stageKey:p.meta.stageKey,dueDate:p.meta.dueDate,storageDeadline:p.document.snapshot.deadline,storageOrigin:p.meta.storageOrigin,sentAt:read.outcome&&!voided?read.outcome.payload.postedOn??null:null,threadId:null,orderIds:p.meta.orders.map(order=>order.id),deliveryFailedAt:null,postalDocumentId:p.document.id,postalTaskId:p.taskId,...(voided?{voidId:read.outcome!.id}:{})});
  }
  return result;
 }
