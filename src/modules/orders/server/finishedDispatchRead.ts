@@ -7,6 +7,7 @@ import {berlinCalendarDay,workingDaysBetween} from '@/lib/domain/workingDays';
 import type {DispatchPolicy} from '@/modules/fundament/public';
 import {planInitialDispatchReminder,type DispatchNoticeMember,type InitialDispatchReminderPlan} from '../domain/outputEscalation';
 import type {DispatchResponseCheck} from '@/lib/server/dispatchResponsePort';
+import {readCollectionReminderHistory} from '@/lib/server/collectionReminderPort';
 
 export type FinishedDispatch={orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan};
 
@@ -26,7 +27,10 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   if(notification.handover){const key=JSON.stringify([order.customerId,notification.handover]);const group=groups.get(key)??{customerId:order.customerId,handover:notification.handover,members:[],threads:new Set<string>()};group.members.push({orderId:order.id,orderNumber:order.orderNumber,noticeAt:notification.firstInformed?.recordedAt??null});for(const id of notification.mailThreadIds)group.threads.add(id);groups.set(key,group);}
  }
  for(const group of groups.values()){
-  const plan=planInitialDispatchReminder({tenantId:auth.tenantId,...group,today:berlinCalendarDay()},policy);
+  let history:Awaited<ReturnType<typeof readCollectionReminderHistory>>;
+  try{history=await readCollectionReminderHistory(auth,group.customerId,group.handover,group.members.map(member=>member.orderId));}catch(error){console.error('[DISPATCH_HISTORY_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const};}
+  for(const row of history)if(row.sentAt)group.threads.add(row.threadId);
+  const plan=planInitialDispatchReminder({tenantId:auth.tenantId,...group,today:berlinCalendarDay()},policy,history);
   if(plan.state==='DUE'&&ports&&plan.oldestNoticeAt&&group.threads.size){
    const reaction=await ports.readResponses({customerId:group.customerId,noticeThreadIds:[...group.threads],oldestNoticeAt:plan.oldestNoticeAt});
    plan.responseState=reaction.state;plan.requiresResponseCheck=reaction.state!=='NONE';

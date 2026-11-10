@@ -68,7 +68,7 @@
   "storagePurposes": [],
   "events": {
     "emits": ["SHIPMENT_MANUAL_TRACKING_SET_V1","SHIPMENT_HANDED_OVER_V1","ORDER_CUSTOMER_INFORMED_V1"],
-    "consumes": []
+    "consumes": ["ORDER_COLLECTION_REMINDER_PREPARED_V1","ORDER_COLLECTION_REMINDER_SENT_V1"]
   },
   "config": {},
   "dependencies": [

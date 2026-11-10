@@ -161,3 +161,14 @@ export const MANUAL_SHIPPING_COPY={
  SHIPMENT_CARRIER_CHANGED:'Der Versanddienst des Pakets weicht von den Einstellungen ab. Öffne das Paket und kläre den Versanddienst vor der Änderung.'
 } as const;
 export const DISPATCH_NOTICE_COPY={collective:(orders:readonly string[])=>'Deine fertigen Aufträge: '+orders.join(', ')};
+export const COLLECTION_REMINDER_COPY={
+ forbidden:'Sammelerinnerung benötigt Mails und Aufträge sowie einen Kundenbezug.',
+ invalid:'Erinnerungsstufe, Frist oder Versandkennung fehlt.',
+ unavailable:'Aufträge oder Fristen konnten nicht sicher gelesen werden.',
+ notReady:'Diese Erinnerung ist nicht freigegeben: Bescheid, Antwort oder Frist ist noch offen. Lies den aktuellen Ausgang neu.',
+ holdUnavailable:'Der zeitversetzte Rückhalte-Versand ist noch nicht angeschlossen. Es wurde nichts gesendet.',
+ keyConflict:'Die Versandkennung ist bereits anders belegt.',
+ unclear:'Dieser Versand ist ungeklärt. Gleiche Ausgangsmail abgleichen, nicht erneut senden.',
+ proofUnavailable:'Der Original-Versandbeleg konnte nicht sicher gelesen werden.',
+ preparedConflict:'Die Sammelerinnerung wurde bereits vorbereitet oder der Auftrag hat sich geändert. Lies den aktuellen Ausgang neu.',
+};

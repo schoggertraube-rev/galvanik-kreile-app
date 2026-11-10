@@ -21,6 +21,8 @@ import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {readReadyNotificationContext} from '@/lib/server/orderReleaseRead';
+import {readCollectionReminderReceipt,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
+import {DISPATCH_NOTICE_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
 
@@ -72,13 +74,29 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Extr
 }
 
 export async function sendCustomerMailAction(input: TargetInput & {
- clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};
+ clientRequestId:string;subject:string;body:string;attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2';handover:'pickup'|'shipping';dueDate:string};
 }){
  try{
  const authorizationResult=await authorization();
  if(!authorizationResult.ok)return {code:'UNAUTHENTICATED' as const,message:authorizationResult.message};
  const auth=authorizationResult.data;
  if(!input||typeof input!=='object')return sendCommunicationMail(auth,input);
+ if(input.collectionReminder){
+  const request=input.collectionReminder;
+  if(input.targetType!=='CUSTOMER'||input.attachment||!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
+  if(!request||Object.keys(request).sort().join(',')!=='dueDate,handover,stage'||!['E1','E2'].includes(request.stage)||!['pickup','shipping'].includes(request.handover)||!/^\d{4}-\d{2}-\d{2}$/.test(request.dueDate)||!Number.isFinite(Date.parse(request.dueDate))||typeof input.subject!=='string'||typeof input.body!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientRequestId))return {code:'VALIDATION_ERROR' as const,message:COLLECTION_REMINDER_COPY.invalid};
+  const prior=await readCollectionReminderReceipt(auth,{...input,collectionReminder:request});if(prior.code!=='NOT_FOUND')return prior;
+  const [{getOrdersDb},{readShippingSettings,readShippingSettingsInTransaction}]=await Promise.all([import('@/app/actions/orders.actions'),import('@/modules/fundament/server-public')]);
+  const [orders,settings]=await Promise.all([getOrdersDb(),readShippingSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true})]);
+  if(!orders.ok||settings.code!=='OK')return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.unavailable};
+  const members=orders.data.filter(order=>order.customerId===input.targetId&&order.station==='fertig'&&order.finishedDispatch?.handover===request.handover);
+  const proposal=members[0]?.finishedDispatch?.reminder;
+  if(!proposal||proposal.stage!==request.stage||proposal.state!=='DUE'||proposal.due!==request.dueDate||!proposal.clientKey||proposal.requiresResponseCheck||proposal.needsNotice.length)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.notReady};
+  if(settings.settings.dispatchPolicy?.holdMinutes!==0)return {code:'IN_KLAERUNG' as const,message:COLLECTION_REMINDER_COPY.holdUnavailable};
+  const meta:CollectionReminderMeta={stage:request.stage,customerId:input.targetId,handover:request.handover,dueDate:request.dueDate,stageKey:proposal.clientKey,intent:collectionReminderIntent({...input,collectionReminder:request}),orders:members.map(order=>({id:order.id,number:order.orderNumber,version:order.version}))};
+  const prefix=DISPATCH_NOTICE_COPY.collective(meta.orders.map(order=>order.number))+'\n\n';
+  return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:prefix+input.body.trim(),collectionReminder:meta,beforePrepare:async tx=>(await readShippingSettingsInTransaction(tx,auth.tenantId))?.updatedAt===settings.settings.updatedAt});
+ }
  let attachment,document:CommunicationDocument|undefined;
  const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
  if(input.attachment){
