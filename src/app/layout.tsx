@@ -52,6 +52,7 @@ export default async function RootLayout({
       lang="de"
       data-auth-status={authState.status}
       data-offline-scope={authState.status==='authenticated'?authState.user.offlineScope:undefined}
+      data-offline-login-scope={authState.status==='authenticated'?authState.user.offlineLoginScope:undefined}
       className={`${fraunces.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
       style={{ "--sans": inter.style.fontFamily, "--serif": fraunces.style.fontFamily } as CSSProperties}
     >
