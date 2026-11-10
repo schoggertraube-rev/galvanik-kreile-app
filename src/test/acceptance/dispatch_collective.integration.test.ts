@@ -11,7 +11,7 @@ import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 const DATABASE_URL=process.env.DATABASE_URL,EXPECTED_DATABASE_URL=process.env.H18_EXPECTED_DATABASE_URL;
 if(!DATABASE_URL||DATABASE_URL!==EXPECTED_DATABASE_URL||new URL(DATABASE_URL).hostname!=='127.0.0.1')throw Error('DISPATCH_COLLECTIVE_LOOPBACK_REQUIRED');
 
-it('K10 saves a real Outlook reply before reaction checking; an unbound Outlook reference never becomes an app reaction or blocks E1/E2',async()=>{
+it('K10 saves a real Outlook reply before reaction checking; an unbound Outlook reference never becomes an app reaction or blocks E1/E2/E4',async()=>{
  const order=await readyInvoiceOrder('K10-Outlook-Antwort');
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
  let outage=true,sends=0;
@@ -40,7 +40,7 @@ it('K10 saves a real Outlook reply before reaction checking; an unbound Outlook 
  const {readShippingSettingsAction,saveShippingSettingsAction}=await import('@/app/actions/settings.actions');
  const {emptyDispatchPolicy}=await import('@/modules/fundament/public');
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('K10_SETTINGS');
- expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),reminderDays:0,secondReminderDays:0,callAfterDays:0,holdMinutes:0}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),reminderDays:0,secondReminderDays:0,callAfterDays:0,storageAfterDays:0,finalStageAfterLetterDays:4,holdMinutes:0}}))).toMatchObject({code:'OK'});
  const {getOrdersDb}=await import('@/app/actions/orders.actions');
  const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
@@ -52,7 +52,16 @@ it('K10 saves a real Outlook reply before reaction checking; an unbound Outlook 
   const dueDate=reminder.due;
   expect(await withSession(reminderOperator,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:order.customerId,subject:'TEST Erinnerung',body:'TEST Abholung',clientRequestId:randomUUID(),collectionReminder:{stage,handover:'pickup',dueDate}}))).toMatchObject({code:'OK'});
  }
- expect(sends).toBe(3);
+ const {createDispatchCallTaskAction,getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+ const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('K10_CALL_QUEUE');
+ const next=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder;if(!next?.due||!next.clientKey)throw Error('K10_CALL_PLAN');
+ const call=await withSession(full,()=>createDispatchCallTaskAction({customerId:order.customerId,handover:'pickup',dueDate:next.due!,clientKey:next.clientKey!}));if(call.code!=='OK')throw Error('K10_CALL');
+ const task=await withSession(full,()=>getIntakeTaskAction({taskId:call.taskId}));if(task.code!=='OK'||!task.task)throw Error('K10_CALL_TASK');
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:call.taskId,version:task.task!.version,note:'TEST K10 nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
+ const afterCall=await withSession(full,()=>getOrdersDb());if(!afterCall.ok)throw Error('K10_STORAGE_QUEUE');
+ const letter=afterCall.data.find(row=>row.id===order.orderId)?.finishedDispatch?.storage?.letter;if(!letter)throw Error('K10_STORAGE_PLAN');
+ expect(await withSession(reminderOperator,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:order.customerId,subject:'TEST E4',body:'TEST E4',clientRequestId:randomUUID(),collectionReminder:{stage:'E4',handover:'pickup',dueDate:letter.due,clientKey:letter.clientKey}}))).toMatchObject({code:'OK'});
+ expect(sends).toBe(4);
 });
 
 it('E06 one actual invoice mail includes the ready cohort and original PDFs, preserves the oldest per-order notice and replays its original cohort',async()=>{
