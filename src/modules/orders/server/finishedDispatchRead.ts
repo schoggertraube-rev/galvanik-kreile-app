@@ -62,16 +62,25 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   for(const member of group.members){const answer=answered.get(member.orderId);if(!answer)continue;
    const row=result.find(item=>item.orderId===member.orderId);if(row)row.reminder={...initial,stage:answer.call?'E3':initial.stage,state:'STOPPED',needsNotice:[],orderIds:answer.call?.orderIds??answer.mail!.orderIds,orderNumbers:answer.call?.orderNumbers??group.members.filter(item=>answer.mail!.orderIds.includes(item.orderId)).map(item=>item.orderNumber),clientKey:answer.call?.stageKey??null,due:answer.call?.due??null,callTaskId:answer.call?.taskId,requiresResponseCheck:false,responseState:answer.mail?'REPLIED':'NONE'};
   }
-  const members=group.members.filter(member=>!answered.has(member.orderId));if(!members.length)continue;
+  const pendingMembers=group.members.filter(member=>!answered.has(member.orderId));if(!pendingMembers.length)continue;
+  const activeCalls=calls.filter(call=>call.result!=='reached'&&call.freezes.some(proof=>pendingMembers.some(member=>member.orderId===proof.orderId&&member.freezeId===proof.freezeId)));
+  // A completed unsuccessful call covers its original ware only. New ware must not hide old letters.
+  const assigned=new Set<string>();
+  const cohorts:Array<{members:DispatchNoticeMember[];call:typeof calls[number]|undefined}>=[];
+  for(const call of activeCalls.filter(call=>call.result==='notReached')){
+   const members=pendingMembers.filter(member=>!assigned.has(member.orderId)&&call.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId));
+   if(members.length){for(const member of members)assigned.add(member.orderId);cohorts.push({members,call});}
+  }
+  const fresh=pendingMembers.filter(member=>!assigned.has(member.orderId));
+  if(fresh.length)cohorts.push({members:fresh,call:activeCalls.find(call=>call.result===null&&call.freezes.some(proof=>fresh.some(member=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId)))});
+  for(const {members,call} of cohorts){
   const activeHistory=history.filter(row=>members.some(member=>row.orderIds.includes(member.orderId)&&(!row.sentAt||Date.parse(row.sentAt)>=Date.parse(member.noticeAt??member.readyAt??''))));
   const plan=planInitialDispatchReminder({tenantId:auth.tenantId,...group,members,deliveryFailedAt:members.flatMap(member=>member.deliveryFailedAt?[member.deliveryFailedAt]:[]).sort()[0]??null,today:berlinCalendarDay(),noMail},policy,activeHistory);
-  const activeCalls=calls.filter(call=>call.result!=='reached'&&call.freezes.some(proof=>members.some(member=>member.orderId===proof.orderId&&member.freezeId===proof.freezeId)));
-  const call=activeCalls[0];
   if(call){plan.callTaskId=call.taskId;plan.stage='E3';plan.clientKey=call.stageKey;plan.due=call.due;plan.state='DUE';}
   if(reaction){plan.responseState=reaction.state==='REPLIED'?'NONE':reaction.state;plan.requiresResponseCheck=plan.responseState!=='NONE';if(reaction.state==='UNAVAILABLE')plan.state='RECONCILE_RESPONSE';}
   if(noMail&&!group.threads.size){plan.requiresResponseCheck=false;plan.responseState='NONE';}
   if(call&&plan.state!=='RECONCILE_RESPONSE'){
-   const changed=JSON.stringify([...call.orderIds].sort())!==JSON.stringify(members.map(member=>member.orderId).sort());
+   const changed=call.result===null&&JSON.stringify([...call.orderIds].sort())!==JSON.stringify(members.map(member=>member.orderId).sort());
    plan.state=changed&&call.result?'RECONCILE_RESPONSE':call.result==='notReached'?'CALL_NOT_REACHED':'CALL_PENDING';
    if(call.result==='notReached'&&call.recordedAt&&!changed){
     const unsent:FinishedDispatch[]=[];let storageUnavailable=false;
@@ -96,6 +105,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
    }
   }
   for(const member of members){const row=result.find(item=>item.orderId===member.orderId);if(row&&!row.unavailable)row.reminder=plan;}
+  }
  }
  const due=new Map(orders.map(order=>[order.id,order.dueDate||'9999-12-31']));
  result.sort((a,b)=>Number(b.color==='gruen')-Number(a.color==='gruen')||(due.get(a.orderId)??'9999').localeCompare(due.get(b.orderId)??'9999')||a.orderId.localeCompare(b.orderId));

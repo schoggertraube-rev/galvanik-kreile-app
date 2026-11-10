@@ -83,6 +83,12 @@ it('E4 uses the existing sender only after individual eligibility and starts the
  expect(await withSession(recipient,()=>completeIntakeTaskAction({taskId:finalTask.taskId,version:taskRead.task!.version,note:'TEST Einlagerung vorschlagen'}))).toMatchObject({code:'OK'});
  const completed=await withSession(full,()=>getOrdersDb());expect(completed.ok&&completed.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'COMPLETED',taskId:finalTask.taskId});
  expect(await withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))).toMatchObject({code:'OK',taskId:finalTask.taskId,replayed:true});
+ const later=await readyInvoiceOrder('E4-Spätere-Ware','pickup',false,first.customerId);
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:later.orderId,clientRequestId:randomUUID(),subject:'TEST Neue Ware fertig',body:'TEST Neue Ware fertig',attachment:{kind:'INVOICE',documentId:later.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ const newGroup=await withSession(full,()=>getOrdersDb());if(!newGroup.ok)throw Error('E4_NEW_GROUP_READ');
+ expect(newGroup.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'COMPLETED',taskId:finalTask.taskId});
+ expect(newGroup.data.find(row=>row.id===later.orderId)?.finishedDispatch?.reminder).toMatchObject({stage:'E1',state:'DUE',orderIds:[later.orderId]});
+ expect(newGroup.data.find(row=>row.id===later.orderId)?.finishedDispatch?.storage).toBeUndefined();
  await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'threadId'=${sent.data.threadId}`;
  const damaged=await withSession(full,()=>getOrdersDb());expect(damaged.ok&&damaged.data.find(row=>row.id===first.orderId)?.finishedDispatch?.state).toBe('unavailable');
  expect(await withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))).toMatchObject({code:'UNAVAILABLE'});

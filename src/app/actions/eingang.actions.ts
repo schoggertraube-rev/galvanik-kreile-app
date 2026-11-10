@@ -83,7 +83,8 @@ export async function completeIntakeTaskAction(input:unknown){
   if(!hasAuthorizationArea(auth.data,'auftraege'))return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
   const {getOrdersDb}=await import('@/app/actions/orders.actions');const orders=await getOrdersDb();
   if(!orders.ok)return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
-  const answered=orders.data.filter(order=>order.finishedDispatch?.reminder?.state==='STOPPED').map(order=>({id:order.id,version:order.version}));
+  const taskId='taskId' in input?input.taskId:null;
+  const answered=orders.data.filter(order=>order.finishedDispatch?.reminder?.state==='STOPPED'||order.finishedDispatch?.reminder?.state==='CALL_NOT_REACHED'&&order.finishedDispatch.reminder.callTaskId!==taskId).map(order=>({id:order.id,version:order.version}));
   return completeTask(input,{...taskEffects,beforeComplete:(tx,auth,task,value)=>recordDispatchCallResult(tx,auth,task,value,answered)});
  }
  return completeTask(input,taskEffects);
