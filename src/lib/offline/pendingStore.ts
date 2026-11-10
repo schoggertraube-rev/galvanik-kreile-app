@@ -24,32 +24,73 @@ type ShellRead={code:'EMPTY'}|{code:'QUARANTINE'}|{code:'OK';metadata:PendingShe
 function shellMetadata(value:unknown,scope:string):value is PendingShellMetadata{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>;
- return Object.keys(row).length===3&&(row.scope===scope||row.scope===null)&&typeof row.cacheGeneration==='number'&&Number.isSafeInteger(row.cacheGeneration)&&row.cacheGeneration>0&&typeof row.updatedAt==='string'&&Number.isFinite(Date.parse(row.updatedAt));
+ return Object.keys(row).length===3&&(row.scope===scope||row.scope===null)&&typeof row.cacheGeneration==='number'&&Number.isSafeInteger(row.cacheGeneration)&&row.cacheGeneration>0&&row.cacheGeneration<Number.MAX_SAFE_INTEGER&&typeof row.updatedAt==='string'&&Number.isFinite(Date.parse(row.updatedAt));
 }
-export async function readPendingShellMetadata(scope:string):Promise<ShellRead>{
+function shellKey(loginScope:string):string{if(!/^[0-9a-f]{64}$/.test(loginScope))throw Error('OFFLINE_SHELL_LOGIN_SCOPE_REQUIRED');return 'login:'+loginScope;}
+export async function readPendingShellMetadata(scope:string,loginScope:string):Promise<ShellRead>{
+ const key=shellKey(loginScope);
  const connection=await database(scope);
  return new Promise((resolve,reject)=>{
-  const tx=connection.transaction(SHELL_STORE,'readonly'),read=tx.objectStore(SHELL_STORE).get('active');
-  tx.oncomplete=()=>{connection.close();resolve(read.result===undefined?{code:'EMPTY'}:shellMetadata(read.result,scope)?{code:'OK',metadata:read.result}:{code:'QUARANTINE'});};
+  const tx=connection.transaction(SHELL_STORE,'readonly'),read=tx.objectStore(SHELL_STORE).get(key);
+  tx.oncomplete=()=>{connection.close();resolve(read.result===undefined?{code:'EMPTY'}:shellMetadata(read.result,loginScope)?{code:'OK',metadata:read.result}:{code:'QUARANTINE'});};
   tx.onabort=()=>{connection.close();reject(Error('OFFLINE_SHELL_METADATA_READ_ABORTED'));};
  });
 }
 /** CAS invalidates late warm responses; it grants no identity or permission. */
-export async function changePendingShellMetadata(scope:string,expectedGeneration:number|null,active:boolean):Promise<{code:'STALE'|'QUARANTINE'}|{code:'OK';metadata:PendingShellMetadata}>{
+export async function changePendingShellMetadata(scope:string,loginScope:string,expectedGeneration:number|null,active:boolean):Promise<{code:'STALE'|'QUARANTINE'|'REVOKED'}|{code:'OK';metadata:PendingShellMetadata}>{
+ const key=shellKey(loginScope);
  const connection=await database(scope);
  return new Promise((resolve,reject)=>{
-  const tx=connection.transaction(SHELL_STORE,'readwrite'),store=tx.objectStore(SHELL_STORE),read=store.get('active');
-  let result:{code:'STALE'|'QUARANTINE'}|{code:'OK';metadata:PendingShellMetadata}={code:'STALE'};
+  const tx=connection.transaction(SHELL_STORE,'readwrite'),store=tx.objectStore(SHELL_STORE),read=store.get(key);
+  let result:{code:'STALE'|'QUARANTINE'|'REVOKED'}|{code:'OK';metadata:PendingShellMetadata}={code:'STALE'};
   read.onsuccess=()=>{
    const previous:unknown=read.result;
-   if(previous!==undefined&&!shellMetadata(previous,scope)){result={code:'QUARANTINE'};return;}
+   if(previous!==undefined&&!shellMetadata(previous,loginScope)){result={code:'QUARANTINE'};return;}
    const generation=previous===undefined?null:(previous as PendingShellMetadata).cacheGeneration;
-   if(generation!==expectedGeneration||generation===Number.MAX_SAFE_INTEGER)return;
-   const metadata={scope:active?scope:null,cacheGeneration:(generation??0)+1,updatedAt:new Date().toISOString()};
-   store.put(metadata,'active');result={code:'OK',metadata};
+   if(generation!==expectedGeneration||active&&generation!==null&&generation>=Number.MAX_SAFE_INTEGER-1)return;
+   // Revocation is terminal for this exact server-validated login. A stale tab
+   // cannot read the new generation and reactivate its old credential's cache.
+   if(active&&previous!==undefined&&(previous as PendingShellMetadata).scope===null){result={code:'REVOKED'};return;}
+   const metadata={scope:active?loginScope:null,cacheGeneration:Math.min((generation??0)+1,Number.MAX_SAFE_INTEGER-1),updatedAt:new Date().toISOString()};
+   store.put(metadata,key);result={code:'OK',metadata};
   };
   tx.oncomplete=()=>{connection.close();resolve(result);};
   tx.onabort=()=>{connection.close();reject(Error('OFFLINE_SHELL_METADATA_WRITE_ABORTED'));};
+ });
+}
+type ShellInventory={entries:Array<{loginScope:string;metadata:PendingShellMetadata}>;quarantined:number};
+function shellInventory(keys:IDBValidKey[],values:unknown[]):ShellInventory{
+ const result:ShellInventory={entries:[],quarantined:0};
+ for(let index=0;index<keys.length;index++){
+  const key=keys[index],loginScope=typeof key==='string'&&/^login:[0-9a-f]{64}$/.test(key)?key.slice(6):null;
+  if(!loginScope||!shellMetadata(values[index],loginScope)){result.quarantined++;continue;}
+  result.entries.push({loginScope,metadata:values[index] as PendingShellMetadata});
+ }
+ return result;
+}
+export async function readPendingShellInventory(scope:string):Promise<ShellInventory>{
+ const connection=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=connection.transaction(SHELL_STORE,'readonly'),store=tx.objectStore(SHELL_STORE),keys=store.getAllKeys(),values=store.getAll();
+  tx.oncomplete=()=>{connection.close();resolve(shellInventory(keys.result,values.result));};
+  tx.onabort=()=>{connection.close();reject(Error('OFFLINE_SHELL_INVENTORY_ABORTED'));};
+ });
+}
+/** One atomic privacy fence for all known cached logins of this actor.
+ * Originals and unknown metadata are never deleted or reassigned. */
+export async function revokePendingShells(scope:string):Promise<{loginScopes:string[];quarantined:number}>{
+ const connection=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=connection.transaction(SHELL_STORE,'readwrite'),store=tx.objectStore(SHELL_STORE),keys=store.getAllKeys(),values=store.getAll();
+  let keysReady=false,valuesReady=false,result:{loginScopes:string[];quarantined:number}={loginScopes:[],quarantined:0};
+  const revoke=()=>{
+   if(!keysReady||!valuesReady)return;
+   const inventory=shellInventory(keys.result,values.result);result={loginScopes:inventory.entries.map(entry=>entry.loginScope),quarantined:inventory.quarantined};
+   for(const entry of inventory.entries)if(entry.metadata.scope!==null)store.put({scope:null,cacheGeneration:Math.min(entry.metadata.cacheGeneration+1,Number.MAX_SAFE_INTEGER-1),updatedAt:new Date().toISOString()},shellKey(entry.loginScope));
+  };
+  keys.onsuccess=()=>{keysReady=true;revoke();};values.onsuccess=()=>{valuesReady=true;revoke();};
+  tx.oncomplete=()=>{connection.close();resolve(result);};
+  tx.onabort=()=>{connection.close();reject(Error('OFFLINE_SHELL_REVOCATION_ABORTED'));};
  });
 }
 async function transaction<T>(scope: string, mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
