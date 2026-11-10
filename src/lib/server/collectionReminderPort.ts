@@ -50,7 +50,7 @@ export async function appendCollectionReminderSent(tx:PrivilegedTenantTransactio
 
 export async function readCollectionReminderHistory(auth:AuthorizationSnapshot,customerId:string,handover:'pickup'|'shipping',orderIds:readonly string[]){
  return withPrivilegedTenantTransaction(auth,async tx=>{
-  const rows=await tx.execute<{prepared_id:string;payload:{meta:CollectionReminderMeta;threadId:string;bodySha256:string};sent_at:string|null;sent_intent:string|null;body:string|null;status:string;proof_ok:boolean}>(sql`SELECT prepared.id::text AS prepared_id,prepared.payload,thread.status,sent.created_at::text AS sent_at,sent.payload->>'intent' AS sent_intent,message.body,
+  const rows=await tx.execute<{prepared_id:string;payload:{meta:CollectionReminderMeta;threadId:string;bodySha256:string};sent_at:string|null;sent_intent:string|null;body:string|null;status:string;proof_ok:boolean}>(sql`SELECT prepared.id::text AS prepared_id,prepared.payload,thread.status,(sent.created_at AT TIME ZONE 'UTC')::text AS sent_at,sent.payload->>'intent' AS sent_intent,message.body,
     (prepared.user_id=thread.created_by AND sent.user_id=prepared.user_id AND sent.correlation_id=prepared.correlation_id
      AND thread.source='MS_GRAPH_OUT:'||prepared.correlation_id::text AND sent.payload->>'messageId'=message.id::text AND sent.payload->'meta'=prepared.payload->'meta') AS proof_ok
    FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
@@ -61,6 +61,6 @@ export async function readCollectionReminderHistory(auth:AuthorizationSnapshot,c
   if(new Set(relevant.map(row=>row.prepared_id)).size!==relevant.length)throw Error('COLLECTION_HISTORY_PROOF_AMBIGUOUS');
   if(relevant.some(row=>row.sent_at&&(row.proof_ok!==true||row.status!=='sent'||row.sent_intent!==row.payload.meta.intent||!row.body||hash(row.body)!==row.payload.bodySha256)))throw Error('COLLECTION_HISTORY_PROOF_INVALID');
   const failures=await readCommunicationDeliveryFailures(tx,auth,relevant.map(row=>row.payload.threadId));
-  return relevant.map(row=>({stage:row.payload.meta.stage,sentAt:row.sent_at?new Date(row.sent_at).toISOString():null,threadId:row.payload.threadId,deliveryFailedAt:failures.find(proof=>proof.threadId===row.payload.threadId)?.recordedAt??null}));
+  return relevant.map(row=>({stage:row.payload.meta.stage,sentAt:row.sent_at?new Date(row.sent_at).toISOString():null,threadId:row.payload.threadId,orderIds:row.payload.meta.orders.map(member=>member.id),deliveryFailedAt:failures.find(proof=>proof.threadId===row.payload.threadId)?.recordedAt??null}));
  });
 }

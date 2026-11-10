@@ -8,19 +8,19 @@ import type {InitialDispatchReminderPlan} from '@/modules/orders/public';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {appendOrderInformed} from './orderReleaseRead';
 
-type CallMeta={customerId:string;handover:'pickup'|'shipping';due:string;stageKey:string;orderIds:string[];orderNumbers:string[]};
+type CallMeta={customerId:string;handover:'pickup'|'shipping';due:string;stageKey:string;orderIds:string[];orderNumbers:string[];freezes:Array<{orderId:string;freezeId:string}>};
 type Created={payload:{meta:CallMeta;taskId:string};user_id:string;correlation_id:string;originalOrderIds?:string[]};
 type CallTask={id:string;client_key:string;art:string;bezug_typ:string;bezug_id:string|null;status:string;erstellt_von:string;erledigt_von:string|null;erledigt_am:string|null;erledigt_notiz:string|null;version:number};
 const failure=(code:TaskFailure['code'],message:string):TaskFailure=>({code,message});
 async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string){
- const rows=await tx.execute<Created&{proof_ok:boolean}>(sql`SELECT payload,user_id::text,correlation_id::text,(status='success' AND event_schema_version=1 AND client_event_id::text=payload->'meta'->>'stageKey' AND correlation_id IS NOT NULL) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${taskId}`);
+ const rows=await tx.execute<Created&{proof_ok:boolean;created_at:string}>(sql`SELECT payload,user_id::text,correlation_id::text,(created_at AT TIME ZONE 'UTC')::text AS created_at,(status='success' AND event_schema_version=1 AND client_event_id::text=payload->'meta'->>'stageKey' AND correlation_id IS NOT NULL) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${taskId}`);
  if(rows.length>1)throw Error('DISPATCH_CALL_SOURCE_AMBIGUOUS');const created=rows[0];if(!created)return null;
  if(!created.proof_ok)throw Error('DISPATCH_CALL_SOURCE_INVALID');
  const originalOrderIds=[...created.payload.meta.orderIds];
  const updates=await tx.execute<{payload:{meta:CallMeta;taskId:string};correlation_id:string;proof_ok:boolean}>(sql`SELECT payload,correlation_id::text,(status='success' AND event_schema_version=1) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_UPDATED_V1' AND payload->>'taskId'=${taskId} ORDER BY created_at,id LIMIT 1001`);
  if(updates.length>1000)throw Error('DISPATCH_CALL_UPDATE_LIMIT');
  for(const update of updates){const meta=update.payload.meta;if(!update.proof_ok||update.correlation_id!==created.correlation_id||meta.customerId!==created.payload.meta.customerId||meta.handover!==created.payload.meta.handover||meta.stageKey!==created.payload.meta.stageKey||meta.due!==created.payload.meta.due)throw Error('DISPATCH_CALL_UPDATE_INVALID');created.payload=update.payload;}
- return {...created,originalOrderIds};
+ return {...created,originalOrderIds,startedAt:new Date(created.created_at).toISOString()};
 }
 async function task(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,lock=false){
  const rows=await tx.execute<CallTask>(sql`SELECT id::text,client_key::text,art,bezug_typ,bezug_id,status,erstellt_von::text,erledigt_von::text,erledigt_am::text,erledigt_notiz,version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${id}::uuid ${lock?sql`FOR UPDATE`:sql``}`);
@@ -70,7 +70,7 @@ async function qualifiedTaskState(tx:PrivilegedTenantTransaction,auth:Authorizat
 }
 
 /** Runs inside the existing task completion transaction, including retries. */
-export async function recordDispatchCallResult(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,record:TaskRecord,input:TaskCompleteInput):Promise<void|TaskFailure>{
+export async function recordDispatchCallResult(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,record:TaskRecord,input:TaskCompleteInput,answered:ReadonlyArray<{id:string;version:number}>=[]):Promise<void|TaskFailure>{
  const created=await source(tx,auth,record.id);
  if(!created)return input.callResult===undefined?undefined:failure('VALIDATION_ERROR',DISPATCH_CALL_COPY.notCall);
  if(!hasAuthorizationArea(auth,'auftraege'))return failure('FORBIDDEN',DISPATCH_CALL_COPY.forbidden);
@@ -86,8 +86,10 @@ export async function recordDispatchCallResult(tx:PrivilegedTenantTransaction,au
  const goodsOutProofs=await handedOverProofs(tx,auth,created.payload.meta.orderIds);
  if(input.callResult===undefined&&!goodsOutProofs)return failure('VALIDATION_ERROR',DISPATCH_CALL_COPY.resultMissing);
  if(input.callResult!==undefined&&goodsOutProofs)return failure('CONFLICT',DISPATCH_CALL_COPY.cohortChanged);
- const current=await tx.execute<{id:string}>(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND customer_id=${created.payload.meta.customerId} AND handover_mode=${created.payload.meta.handover} AND station='fertig' AND status='fertig' AND current_station='fertig' AND current_station_id='fertig' ORDER BY id FOR UPDATE`);
- if(!goodsOutProofs&&JSON.stringify(current.map(row=>row.id).sort())!==JSON.stringify([...created.payload.meta.orderIds].sort()))return failure('CONFLICT',DISPATCH_CALL_COPY.cohortChanged);
+ const current=await tx.execute<{id:string;version:number;freeze_id:string|null}>(sql`SELECT o.id,o.version,f.freeze_id::text FROM public.orders o LEFT JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${auth.tenantId} AND o.customer_id=${created.payload.meta.customerId} AND o.handover_mode=${created.payload.meta.handover} AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig' ORDER BY o.id FOR UPDATE OF o`);
+ const pending=current.filter(row=>!answered.some(covered=>covered.id===row.id&&covered.version===row.version));
+ if(!goodsOutProofs&&JSON.stringify(pending.map(row=>row.id).sort())!==JSON.stringify([...created.payload.meta.orderIds].sort()))return failure('CONFLICT',DISPATCH_CALL_COPY.cohortChanged);
+ if(!goodsOutProofs&&pending.some(row=>!row.freeze_id||!created.payload.meta.freezes?.some(proof=>proof.orderId===row.id&&proof.freezeId===row.freeze_id)))return failure('CONFLICT',DISPATCH_CALL_COPY.changed);
  if(input.callResult==='reached')for(const orderId of [...created.payload.meta.orderIds].sort()){
   await appendOrderInformed(tx,auth,{orderId,clientEventId:randomUUID(),channel:'telefon',intent:'dispatch-call:'+record.id+':'+(record.version+1)});
  }
@@ -112,23 +114,37 @@ export async function protectDispatchCallTask(tx:PrivilegedTenantTransaction,aut
 }
 
 /** Only real tasks/results qualify; their state is never inferred from free text. */
-export async function readDispatchCall(auth:AuthorizationSnapshot,customerId:string,handover:'pickup'|'shipping',orderIds:readonly string[]){
+export async function readDispatchCalls(auth:AuthorizationSnapshot,customerId:string,handover:'pickup'|'shipping',orderIds:readonly string[]){
  return withPrivilegedTenantTransaction(auth,async tx=>{
-  const rows=await tx.execute<Created>(sql`SELECT payload,user_id::text,correlation_id::text FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->'meta'->>'customerId'=${customerId} AND payload->'meta'->>'handover'=${handover} ORDER BY created_at DESC,id DESC LIMIT 1001`);
+  const rows=await tx.execute<Created>(sql`SELECT created.payload,created.user_id::text,created.correlation_id::text FROM public.events created WHERE created.tenant_id=${auth.tenantId} AND created.event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND created.payload->'meta'->>'customerId'=${customerId} AND created.payload->'meta'->>'handover'=${handover}
+   AND (created.payload->'meta'->'orderIds' ?| ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[] OR EXISTS(SELECT 1 FROM public.events updated WHERE updated.tenant_id=created.tenant_id AND updated.event_type='ORDER_COLLECTION_CALL_UPDATED_V1' AND updated.payload->>'taskId'=created.payload->>'taskId' AND updated.payload->'meta'->'orderIds' ?| ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[])) ORDER BY created.created_at DESC,created.id DESC LIMIT 1001`);
   if(rows.length>1000)throw Error('DISPATCH_CALL_HISTORY_LIMIT');
-  const relevant=rows.filter(row=>row.payload.meta.orderIds.some(id=>orderIds.includes(id)));
-  if(!relevant.length)return null;
-  // One live group has one call stage. Never silently prefer a damaged newer receipt.
-  const created=await source(tx,auth,relevant[0].payload.taskId);if(!created)throw Error('DISPATCH_CALL_SOURCE_MISSING');
-  const cohortChanged=JSON.stringify([...created.payload.meta.orderIds].sort())!==JSON.stringify([...orderIds].sort());
-  return {...await qualifiedTaskState(tx,auth,created),cohortChanged};
+  const result=[];
+  for(const row of rows){
+   const created=await source(tx,auth,row.payload.taskId);if(!created)throw Error('DISPATCH_CALL_SOURCE_MISSING');
+   if(!created.payload.meta.orderIds.some(id=>orderIds.includes(id)))continue;
+   const cohortChanged=JSON.stringify([...created.payload.meta.orderIds].sort())!==JSON.stringify([...orderIds].sort());
+   if(!Array.isArray(created.payload.meta.freezes)||created.payload.meta.freezes.length!==created.payload.meta.orderIds.length)throw Error('DISPATCH_CALL_FREEZE_PROOF_MISSING');
+   result.push({...await qualifiedTaskState(tx,auth,created),cohortChanged,orderIds:created.payload.meta.orderIds,orderNumbers:created.payload.meta.orderNumbers,startedAt:created.startedAt,freezes:created.payload.meta.freezes});
+  }
+  return result;
  });
 }
 
-type Request={customerId:string;handover:'pickup'|'shipping';dueDate:string};
+type Request={customerId:string;handover:'pickup'|'shipping';dueDate:string;clientKey:string};
+export async function readCompletedDispatchCallReceipt(auth:AuthorizationSnapshot,input:Request){
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<Created&{event_type:string}>(sql`SELECT payload,user_id::text,correlation_id::text,event_type FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${input.clientKey}::uuid`);
+  if(!rows.length)return {code:'NOT_FOUND' as const};
+  const row=rows[0];if(rows.length!==1||row.event_type!=='ORDER_COLLECTION_CALL_CREATED_V1'||row.payload.meta.customerId!==input.customerId||row.payload.meta.handover!==input.handover||row.payload.meta.due!==input.dueDate)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+  const created=await source(tx,auth,row.payload.taskId);if(!created)throw Error('DISPATCH_CALL_SOURCE_MISSING');
+  const state=await qualifiedTaskState(tx,auth,created);
+  return state.result===null?{code:'NOT_FOUND' as const}:{code:'OK' as const,taskId:state.taskId,replayed:true};
+ });}catch(error){console.error('[DISPATCH_CALL_RECEIPT_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};}
+}
 export async function createDispatchCall(auth:AuthorizationSnapshot,input:Request,plan:InitialDispatchReminderPlan,versions:ReadonlyArray<{id:string;version:number}>,createTask:(tx:PrivilegedTenantTransaction,meta:{orderId:string;clientKey:string;title:string;note:string;taskId?:string;version?:number})=>Promise<string>){
  if(!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
- if(plan.stage!=='E3'||plan.due!==input.dueDate||!plan.clientKey||!plan.anchorOrderId)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+ if(plan.stage!=='E3'||plan.due!==input.dueDate||!plan.clientKey||plan.clientKey!==input.clientKey||!plan.anchorOrderId)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
  const stageKey=plan.clientKey,anchorOrderId=plan.anchorOrderId;
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':collection:'+stageKey},0))`);
@@ -142,9 +158,9 @@ export async function createDispatchCall(auth:AuthorizationSnapshot,input:Reques
   if(!['DUE','CALL_PENDING'].includes(plan.state)||plan.requiresResponseCheck||plan.needsNotice.length)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
   const occupied=await tx.execute(sql`SELECT id FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${stageKey}::uuid`);
   if(occupied.length&&!existing)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
-  const orders=await tx.execute<{id:string;version:number;customer_id:string;handover_mode:string;station:string;current_station:string;current_station_id:string;status:string}>(sql`SELECT id,version,customer_id,handover_mode,station,current_station,current_station_id,status FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(plan.orderIds.map(id=>sql`${id}`),sql`, `)}]::text[]) ORDER BY id FOR UPDATE`);
+  const orders=await tx.execute<{id:string;version:number;customer_id:string;handover_mode:string;station:string;current_station:string;current_station_id:string;status:string;freeze_id:string}>(sql`SELECT o.id,o.version,o.customer_id,o.handover_mode,o.station,o.current_station,o.current_station_id,o.status,f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${auth.tenantId} AND o.id=ANY(ARRAY[${sql.join(plan.orderIds.map(id=>sql`${id}`),sql`, `)}]::text[]) ORDER BY o.id FOR UPDATE OF o`);
   if(orders.length!==plan.orderIds.length||orders.some(row=>row.customer_id!==input.customerId||row.handover_mode!==input.handover||[row.station,row.current_station,row.current_station_id,row.status].some(state=>state!=='fertig')||versions.find(order=>order.id===row.id)?.version!==row.version))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
-  const meta:CallMeta={customerId:input.customerId,handover:input.handover,due:input.dueDate,stageKey,orderIds:plan.orderIds,orderNumbers:plan.orderNumbers};
+  const meta:CallMeta={customerId:input.customerId,handover:input.handover,due:input.dueDate,stageKey,orderIds:plan.orderIds,orderNumbers:plan.orderNumbers,freezes:orders.map(row=>({orderId:row.id,freezeId:row.freeze_id}))};
   const taskId=await createTask(tx,{orderId:record?.bezug_id??anchorOrderId,clientKey:stageKey,title:DISPATCH_CALL_COPY.title,note:DISPATCH_CALL_COPY.note+plan.orderNumbers.join(', '),...(record?{taskId:record.id,version:record.version}:{})});
   await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at)
    VALUES(${randomUUID()},${auth.tenantId},${existing?'ORDER_COLLECTION_CALL_UPDATED_V1':'ORDER_COLLECTION_CALL_CREATED_V1'},${DISPATCH_CALL_COPY.created},'success',${auth.userId}::uuid,${existing?randomUUID():stageKey}::uuid,${existing?.correlation_id??randomUUID()}::uuid,1,${JSON.stringify({meta,taskId})}::jsonb,statement_timestamp())`);

@@ -8,7 +8,7 @@ import type {DispatchPolicy} from '@/modules/fundament/public';
 import {planInitialDispatchReminder,type DispatchNoticeMember,type InitialDispatchReminderPlan} from '../domain/outputEscalation';
 import type {DispatchResponseCheck} from '@/lib/server/dispatchResponsePort';
 import {readCollectionReminderHistory} from '@/lib/server/collectionReminderPort';
-import {readDispatchCall} from '@/lib/server/dispatchCallPort';
+import {readDispatchCalls} from '@/lib/server/dispatchCallPort';
 import {storageEligibility,type StorageEligibility} from '../domain/storageEligibility';
 import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 
@@ -27,7 +27,15 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   result.push({orderId:order.id,version:order.version,handover:notification.handover,color:notification.ampel,releaseAllowed:notification.releaseAllowed,
    informedAt:notification.informed?.recordedAt??null,channel:notification.informed?.channel??null,blockReason:notification.blockReason,
    workingDays,gaps:[...(!notification.handover?['HANDOVER_MISSING']:[]),...(policy===null?['BUSINESS_CALENDAR_SETTINGS_MISSING']:[])]});
-  if(notification.handover){const key=JSON.stringify([order.customerId,notification.handover]);const group=groups.get(key)??{customerId:order.customerId,handover:notification.handover,members:[],threads:new Set<string>(),deliveryFailedAt:null,responseSince:null};group.members.push({orderId:order.id,orderNumber:order.orderNumber,noticeAt:notification.firstInformed?.recordedAt??null,readyAt:notification.frozenAt});for(const id of notification.mailThreadIds)group.threads.add(id);if(notification.failedDelivery&&(!group.deliveryFailedAt||notification.failedDelivery.recordedAt<group.deliveryFailedAt))group.deliveryFailedAt=notification.failedDelivery.recordedAt;if(notification.responseSince&&(!group.responseSince||notification.responseSince<group.responseSince))group.responseSince=notification.responseSince;groups.set(key,group);}
+  if(notification.handover){
+   const key=JSON.stringify([order.customerId,notification.handover]);
+   const group=groups.get(key)??{customerId:order.customerId,handover:notification.handover,members:[],threads:new Set<string>(),deliveryFailedAt:null,responseSince:null};
+   group.members.push({orderId:order.id,orderNumber:order.orderNumber,noticeAt:notification.firstInformed?.recordedAt??null,readyAt:notification.frozenAt,deliveryFailedAt:notification.failedDelivery?.recordedAt??null,freezeId:notification.freezeId});
+   for(const id of notification.mailThreadIds)group.threads.add(id);
+   if(notification.failedDelivery&&(!group.deliveryFailedAt||notification.failedDelivery.recordedAt<group.deliveryFailedAt))group.deliveryFailedAt=notification.failedDelivery.recordedAt;
+   if(notification.responseSince&&(!group.responseSince||notification.responseSince<group.responseSince))group.responseSince=notification.responseSince;
+   groups.set(key,group);
+  }
  }
  for(const group of groups.values()){
   const failGroup=()=>{for(const row of result.filter(item=>group.members.some(member=>member.orderId===item.orderId))){row.unavailable=true;row.reminder=undefined;row.storage=undefined;row.gaps.push('COLLECTION_PROOF_UNAVAILABLE');}};
@@ -36,25 +44,37 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   for(const row of history)if(row.sentAt)group.threads.add(row.threadId);
   let noMail=false;
   try{if(ports?.readHasMail)noMail=!await ports.readHasMail(group.customerId);}catch(error){console.error('[DISPATCH_CUSTOMER_MAIL_READ_FAILED]',error instanceof Error?error.name:'UnknownError');failGroup();continue;}
-  const plan=planInitialDispatchReminder({tenantId:auth.tenantId,...group,today:berlinCalendarDay(),noMail},policy,history);
-  let call:Awaited<ReturnType<typeof readDispatchCall>>;
-  try{call=await readDispatchCall(auth,group.customerId,group.handover,plan.orderIds);}catch(error){console.error('[DISPATCH_CALL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();continue;}
-  if(call){plan.callTaskId=call.taskId;plan.stage='E3';plan.clientKey=call.stageKey;plan.due=call.due;plan.state='DUE';}
-  if(call?.result==='reached'&&!call.cohortChanged)plan.state='STOPPED';
-  if(noMail&&!group.threads.size){plan.requiresResponseCheck=false;plan.responseState='NONE';}
-  const responseSince=group.responseSince??plan.oldestNoticeAt??group.deliveryFailedAt??history.filter(row=>row.deliveryFailedAt).at(-1)?.deliveryFailedAt;
-  if(plan.state==='DUE'&&ports&&responseSince&&group.threads.size){
-   const reaction=await ports.readResponses({customerId:group.customerId,noticeThreadIds:[...group.threads],oldestNoticeAt:responseSince});
-   plan.responseState=reaction.state;plan.requiresResponseCheck=reaction.state!=='NONE';
-   if(reaction.state==='REPLIED')plan.state='STOPPED';else if(reaction.state==='UNAVAILABLE')plan.state='RECONCILE_RESPONSE';
-  }
-   if(call&&plan.state!=='STOPPED'&&plan.state!=='RECONCILE_RESPONSE'){
-    plan.state=call.cohortChanged&&call.result?'RECONCILE_RESPONSE':call.result==='reached'?'STOPPED':call.result==='notReached'?'CALL_NOT_REACHED':'CALL_PENDING';
-    if(call.result==='notReached'&&call.recordedAt&&!call.cohortChanged)for(const member of group.members){
-     const row=result.find(item=>item.orderId===member.orderId);if(row)row.storage=storageEligibility(member.noticeAt,call.recordedAt,berlinCalendarDay(),policy);
-    }
+  const initial=planInitialDispatchReminder({tenantId:auth.tenantId,...group,today:berlinCalendarDay(),noMail},policy,history);
+  let calls:Awaited<ReturnType<typeof readDispatchCalls>>;
+  try{calls=await readDispatchCalls(auth,group.customerId,group.handover,initial.orderIds);}catch(error){console.error('[DISPATCH_CALL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();continue;}
+  const answered=new Map<string,{call?:typeof calls[number];mail?:DispatchResponseCheck['proofs'][number]}>();
+  for(const member of group.members){const call=calls.find(call=>call.result==='reached'&&member.freezeId&&call.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId));if(call)answered.set(member.orderId,{call});}
+  let reaction:DispatchResponseCheck|undefined;
+  const responseSince=group.responseSince??initial.oldestNoticeAt??group.deliveryFailedAt??history.filter(row=>row.deliveryFailedAt).at(-1)?.deliveryFailedAt;
+  if(answered.size<group.members.length&&ports&&responseSince&&group.threads.size){
+   reaction=await ports.readResponses({customerId:group.customerId,noticeThreadIds:[...group.threads],oldestNoticeAt:responseSince});
+   if(reaction.state==='REPLIED')for(const member of group.members){
+    const proof=reaction.proofs.find(proof=>proof.orderIds.includes(member.orderId)&&Date.parse(proof.receivedAt)>=Date.parse(member.noticeAt??member.readyAt??''));
+    if(proof&&!answered.has(member.orderId))answered.set(member.orderId,{mail:proof});
    }
-  for(const member of group.members){const row=result.find(row=>row.orderId===member.orderId);if(row)row.reminder=plan;}
+  }
+  for(const member of group.members){const answer=answered.get(member.orderId);if(!answer)continue;
+   const row=result.find(item=>item.orderId===member.orderId);if(row)row.reminder={...initial,stage:answer.call?'E3':initial.stage,state:'STOPPED',needsNotice:[],orderIds:answer.call?.orderIds??answer.mail!.orderIds,orderNumbers:answer.call?.orderNumbers??group.members.filter(item=>answer.mail!.orderIds.includes(item.orderId)).map(item=>item.orderNumber),clientKey:answer.call?.stageKey??null,due:answer.call?.due??null,callTaskId:answer.call?.taskId,requiresResponseCheck:false,responseState:answer.mail?'REPLIED':'NONE'};
+  }
+  const members=group.members.filter(member=>!answered.has(member.orderId));if(!members.length)continue;
+  const activeHistory=history.filter(row=>members.some(member=>row.orderIds.includes(member.orderId)&&(!row.sentAt||Date.parse(row.sentAt)>=Date.parse(member.noticeAt??member.readyAt??''))));
+  const plan=planInitialDispatchReminder({tenantId:auth.tenantId,...group,members,deliveryFailedAt:members.flatMap(member=>member.deliveryFailedAt?[member.deliveryFailedAt]:[]).sort()[0]??null,today:berlinCalendarDay(),noMail},policy,activeHistory);
+  const activeCalls=calls.filter(call=>call.result!=='reached'&&call.freezes.some(proof=>members.some(member=>member.orderId===proof.orderId&&member.freezeId===proof.freezeId)));
+  const call=activeCalls[0];
+  if(call){plan.callTaskId=call.taskId;plan.stage='E3';plan.clientKey=call.stageKey;plan.due=call.due;plan.state='DUE';}
+  if(reaction){plan.responseState=reaction.state==='REPLIED'?'NONE':reaction.state;plan.requiresResponseCheck=plan.responseState!=='NONE';if(reaction.state==='UNAVAILABLE')plan.state='RECONCILE_RESPONSE';}
+  if(noMail&&!group.threads.size){plan.requiresResponseCheck=false;plan.responseState='NONE';}
+  if(call&&plan.state!=='RECONCILE_RESPONSE'){
+   const changed=JSON.stringify([...call.orderIds].sort())!==JSON.stringify(members.map(member=>member.orderId).sort());
+   plan.state=changed&&call.result?'RECONCILE_RESPONSE':call.result==='notReached'?'CALL_NOT_REACHED':'CALL_PENDING';
+   if(call.result==='notReached'&&call.recordedAt&&!changed)for(const member of members){const row=result.find(item=>item.orderId===member.orderId);if(row)row.storage=storageEligibility(member.noticeAt,call.recordedAt,berlinCalendarDay(),policy);}
+  }
+  for(const member of members){const row=result.find(item=>item.orderId===member.orderId);if(row)row.reminder=plan;}
  }
  const due=new Map(orders.map(order=>[order.id,order.dueDate||'9999-12-31']));
  result.sort((a,b)=>Number(b.color==='gruen')-Number(a.color==='gruen')||(due.get(a.orderId)??'9999').localeCompare(due.get(b.orderId)??'9999')||a.orderId.localeCompare(b.orderId));

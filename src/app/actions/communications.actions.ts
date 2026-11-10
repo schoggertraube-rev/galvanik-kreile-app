@@ -89,10 +89,11 @@ export async function sendCustomerMailAction(input: TargetInput & {
   const [{getOrdersDb},{readShippingSettings,readShippingSettingsInTransaction}]=await Promise.all([import('@/app/actions/orders.actions'),import('@/modules/fundament/server-public')]);
   const [orders,settings]=await Promise.all([getOrdersDb(),readShippingSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true})]);
   if(!orders.ok||settings.code!=='OK')return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.unavailable};
-  const members=orders.data.filter(order=>order.customerId===input.targetId&&order.station==='fertig'&&order.finishedDispatch?.handover===request.handover);
-  const proposal=members[0]?.finishedDispatch?.reminder;
+  const candidates=orders.data.filter(order=>order.customerId===input.targetId&&order.station==='fertig'&&order.finishedDispatch?.handover===request.handover);
+  const proposal=candidates.find(order=>order.finishedDispatch?.reminder?.stage===request.stage&&order.finishedDispatch.reminder.state==='DUE'&&order.finishedDispatch.reminder.due===request.dueDate)?.finishedDispatch?.reminder;
   if(!proposal||proposal.stage!==request.stage||proposal.state!=='DUE'||proposal.due!==request.dueDate||!proposal.clientKey||proposal.requiresResponseCheck||proposal.needsNotice.length)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.notReady};
   if(settings.settings.dispatchPolicy?.holdMinutes!==0)return {code:'IN_KLAERUNG' as const,message:COLLECTION_REMINDER_COPY.holdUnavailable};
+  const members=candidates.filter(order=>proposal.orderIds.includes(order.id));
   const meta:CollectionReminderMeta={stage:request.stage,customerId:input.targetId,handover:request.handover,dueDate:request.dueDate,stageKey:proposal.clientKey,intent:collectionReminderIntent({...input,collectionReminder:request}),orders:members.map(order=>({id:order.id,number:order.orderNumber,version:order.version}))};
   const prefix=DISPATCH_NOTICE_COPY.collective(meta.orders.map(order=>order.number))+'\n\n';
   return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:prefix+input.body.trim(),collectionReminder:meta,beforePrepare:async tx=>(await readShippingSettingsInTransaction(tx,auth.tenantId))?.updatedAt===settings.settings.updatedAt});

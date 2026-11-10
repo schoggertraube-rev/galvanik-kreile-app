@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
 import type {DispatchPolicy} from '@/modules/fundament/public';
 
-export type DispatchNoticeMember={orderId:string;orderNumber:string;noticeAt:string|null;readyAt?:string|null};
+export type DispatchNoticeMember={orderId:string;orderNumber:string;noticeAt:string|null;readyAt?:string|null;deliveryFailedAt?:string|null;freezeId?:string|null};
 export type InitialDispatchReminderPlan={stage:'E1'|'E2'|'E3';state:'WAIT_FOR_NOTICE'|'NEEDS_SETTING'|'WAIT'|'DUE'|'STOPPED'|'RECONCILE_RESPONSE'|'RECONCILE_MAIL'|'CALL_PENDING'|'CALL_NOT_REACHED';due:string|null;oldestNoticeAt:string|null;anchorOrderId?:string;callTaskId?:string;clientKey:string|null;orderIds:string[];orderNumbers:string[];needsNotice:string[];automaticSend:false;requiresResponseCheck:boolean;responseState?:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAILABLE'};
 
 /** A proposal only. The sending command must verify replies and immutable prior dispatches. */
@@ -20,7 +20,8 @@ export function planInitialDispatchReminder(input:{tenantId:string;customerId:st
   if(!start)return {...base,stage:'E3'};
   if(!Number.isFinite(Date.parse(start)))throw Error('DISPATCH_READY_TIME_INVALID');
   const due=berlinCalendarDay(new Date(start));
-  return {...base,stage:'E3',state:'DUE',due,anchorOrderId:members.find(member=>member.noticeAt===oldest&&oldest!==null)?.orderId??ready?.orderId,needsNotice:[],clientKey:dispatchReminderKey(input.tenantId,input.customerId,input.handover,'E3',due)};
+  const anchor=members.find(member=>member.noticeAt===oldest&&oldest!==null)?.orderId??ready?.orderId;
+  return {...base,stage:'E3',state:'DUE',due,anchorOrderId:anchor,needsNotice:[],clientKey:dispatchReminderKey(input.tenantId,input.customerId,input.handover,'E3',due,JSON.stringify([anchor,oldest??ready?.readyAt]))};
  }
  if(!oldest)return base;
  base.anchorOrderId=members.find(member=>member.noticeAt===oldest)?.orderId;
@@ -31,11 +32,11 @@ export function planInitialDispatchReminder(input:{tenantId:string;customerId:st
  if(interval===undefined||interval===null)return {...base,stage,state:'NEEDS_SETTING'};
  const due=plusWorkingDays(berlinCalendarDay(new Date(start)),interval,policy!.holidays);
  if(!due)throw Error('DISPATCH_REMINDER_CALENDAR_INVALID');
- const clientKey=dispatchReminderKey(input.tenantId,input.customerId,input.handover,stage,due);
+ const clientKey=dispatchReminderKey(input.tenantId,input.customerId,input.handover,stage,due,JSON.stringify([base.anchorOrderId,oldest]));
  return {...base,stage,due,clientKey,state:due>input.today?'WAIT':'DUE'};
 }
 
-function dispatchReminderKey(tenantId:string,customerId:string,handover:string,stage:string,due:string){
- const hex=createHash('sha256').update(JSON.stringify(['dispatch-reminder',tenantId,customerId,handover,stage,due])).digest('hex');
+function dispatchReminderKey(tenantId:string,customerId:string,handover:string,stage:string,due:string,generation:string){
+ const hex=createHash('sha256').update(JSON.stringify(['dispatch-reminder',tenantId,customerId,handover,stage,due,generation])).digest('hex');
  return hex.slice(0,8)+'-'+hex.slice(8,12)+'-5'+hex.slice(13,16)+'-8'+hex.slice(17,20)+'-'+hex.slice(20,32);
 }

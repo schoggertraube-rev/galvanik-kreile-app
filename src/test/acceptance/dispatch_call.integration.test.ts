@@ -23,8 +23,8 @@ async function prepare(label:string){
  const read=await withSession(full,()=>readShippingSettingsAction());if(read.code!=='OK')throw Error('CALL_SETTINGS');
  expect(await withSession(full,()=>saveShippingSettingsAction({service:read.settings.service,numberPattern:read.settings.numberPattern,numberHint:read.settings.numberHint,trackingUrl:read.settings.trackingUrl,expectedUpdatedAt:read.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),reminderDays:0,secondReminderDays:0,callAfterDays:0,holdMinutes:0}}))).toMatchObject({code:'OK'});
  for(const stage of ['E1','E2'] as const){const plan=await proposal(first.orderId);if(!plan.due)throw Error('CALL_DUE');expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST '+stage,body:'TEST Bitte abholen',collectionReminder:{stage,handover:'pickup',dueDate:plan.due!}}))).toMatchObject({code:'OK'});}
- const plan=await proposal(first.orderId);expect(plan).toMatchObject({stage:'E3',state:'DUE'});if(!plan.due)throw Error('CALL_DUE');
- return {first,second,request:{customerId:first.customerId,handover:'pickup' as const,dueDate:plan.due}};
+ const plan=await proposal(first.orderId);expect(plan).toMatchObject({stage:'E3',state:'DUE'});if(!plan.due||!plan.clientKey)throw Error('CALL_DUE');
+ return {first,second,request:{customerId:first.customerId,handover:'pickup' as const,dueDate:plan.due,clientKey:plan.clientKey}};
 }
 it('E3 creates one real visible callback for the collective cohort; mandatory reached result stops the ladder with actor, fresh retry and original history',async()=>{
  const {first,second,request}=await prepare('E3-Erreicht');
@@ -100,8 +100,8 @@ it('a customer without email goes directly to one call without reminder settings
  expect(await withSession(full,()=>updateCustomerAction({clientEventId:randomUUID(),customerId:order.customerId,email:null}))).toMatchObject({code:'OK'});
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('CALL_NO_MAIL_SETTINGS');
  expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:null}))).toMatchObject({code:'OK'});
- const planned=await proposal(order.orderId);expect(planned).toMatchObject({stage:'E3',state:'DUE',requiresResponseCheck:false});if(!planned.due)throw Error('NO_MAIL_DUE');
- const request={customerId:order.customerId,handover:'pickup' as const,dueDate:planned.due};
+ const planned=await proposal(order.orderId);expect(planned).toMatchObject({stage:'E3',state:'DUE',requiresResponseCheck:false});if(!planned.due||!planned.clientKey)throw Error('NO_MAIL_DUE');
+ const request={customerId:order.customerId,handover:'pickup' as const,dueDate:planned.due,clientKey:planned.clientKey};
  const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('NO_MAIL_CALL:'+created.code);
  const read=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));if(read.code!=='OK'||!read.task)throw Error('NO_MAIL_TASK');
  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:created.taskId,version:read.task!.version,note:'TEST Fertige Ware telefonisch mitgeteilt',callResult:'reached'}))).toMatchObject({code:'OK'});
@@ -131,4 +131,31 @@ it('handing over the remaining goods completes the existing callback atomically 
  expect(await withSession(full,()=>recordGoodsOutAction(JSON.parse(JSON.stringify(release))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND nachher->>'taskId'=${created.taskId}`).toEqual([{n:history.n}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND order_id IN (${first.orderId},${second.orderId})`).toEqual([{n:2}]);
+});
+it('PL07:00 keeps reached cohorts stopped and starts a distinct ladder for later ware, even on the same due day; original retries never open the new task',async()=>{
+ const {first,second,request}=await prepare('E3-NeueLeiter');
+ const old=await withSession(full,()=>createDispatchCallTaskAction(request));if(old.code!=='OK')throw Error('NEW_LADDER_OLD');
+ const oldRead=await withSession(full,()=>getIntakeTaskAction({taskId:old.taskId}));if(oldRead.code!=='OK'||!oldRead.task)throw Error('NEW_LADDER_TASK');
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:old.taskId,version:oldRead.task!.version,note:'TEST alte Gruppe erreicht',callResult:'reached'}))).toMatchObject({code:'OK'});
+ const later=await readyInvoiceOrder('E3-Neue-Ware','pickup',false,first.customerId);
+ const notify=async(order:typeof later)=>withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Neue Ware fertig',body:'TEST Neu fertig',attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}));
+ expect(await notify(later)).toMatchObject({code:'OK'});
+ for(const id of [first.orderId,second.orderId])expect(await proposal(id)).toMatchObject({state:'STOPPED',callTaskId:old.taskId});
+ let planned=await proposal(later.orderId);expect(planned).toMatchObject({stage:'E1',state:'DUE',orderIds:[later.orderId]});
+ expect(await withSession(full,()=>createDispatchCallTaskAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',taskId:old.taskId,replayed:true});
+ if(!planned.due)throw Error('NEW_LADDER_E1');
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST Neue erste Erinnerung',body:'TEST Neue Ware abholen',collectionReminder:{stage:'E1',handover:'pickup',dueDate:planned.due!}}))).toMatchObject({code:'OK'});
+ const fourth=await readyInvoiceOrder('E3-Noch-Ware','pickup',false,first.customerId);expect(await notify(fourth)).toMatchObject({code:'OK'});
+ planned=await proposal(later.orderId);expect(planned).toMatchObject({stage:'E2',state:'DUE'});expect(planned.orderIds.slice().sort()).toEqual([later.orderId,fourth.orderId].sort());
+ if(!planned.due)throw Error('NEW_LADDER_E2');
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST Neue zweite Erinnerung',body:'TEST Beide neuen Aufträge',collectionReminder:{stage:'E2',handover:'pickup',dueDate:planned.due!}}))).toMatchObject({code:'OK'});
+ planned=await proposal(later.orderId);if(!planned.due||!planned.clientKey)throw Error('NEW_LADDER_E3');
+ const nextRequest={customerId:first.customerId,handover:'pickup' as const,dueDate:planned.due,clientKey:planned.clientKey};expect(nextRequest.clientKey).not.toBe(request.clientKey);
+ const next=await withSession(full,()=>createDispatchCallTaskAction(nextRequest));expect(next).toMatchObject({code:'OK'});if(next.code!=='OK')throw Error('NEW_LADDER_CREATE');expect(next.taskId).not.toBe(old.taskId);
+ expect(await withSession(full,()=>createDispatchCallTaskAction(structuredClone(request)))).toMatchObject({code:'OK',taskId:old.taskId,replayed:true});
+ const nextRead=await withSession(full,()=>getIntakeTaskAction({taskId:next.taskId}));if(nextRead.code!=='OK'||!nextRead.task)throw Error('NEW_LADDER_NEW_TASK');
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:next.taskId,version:nextRead.task!.version,note:'TEST neue Gruppe erreicht',callResult:'reached'}))).toMatchObject({code:'OK'});
+ const fifth=await readyInvoiceOrder('E3-Dritte-Generation','pickup',false,first.customerId);expect(await notify(fifth)).toMatchObject({code:'OK'});
+ expect(await proposal(fifth.orderId)).toMatchObject({stage:'E1',state:'DUE',orderIds:[fifth.orderId]});
+ for(const id of [first.orderId,second.orderId,later.orderId,fourth.orderId])expect(await proposal(id)).toMatchObject({state:'STOPPED'});
 });

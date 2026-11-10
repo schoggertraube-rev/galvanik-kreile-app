@@ -4,7 +4,7 @@ import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 import {readMicrosoftGraphSentMailReference} from './microsoftGraph';
 
-export type DispatchResponseCheck={state:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAILABLE';proofs:Array<{itemId:string;threadId:string;graphMessageId:string;originalSha256:string;receivedAt:string}>};
+export type DispatchResponseCheck={state:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAILABLE';proofs:Array<{itemId:string;threadId:string;graphMessageId:string;originalSha256:string;receivedAt:string;orderIds:string[]}>};
 type Original={itemId:string;message:{senderAddress:string;receivedAt:string;replyChain?:{source?:string;status?:string;originalSha256?:string;inReplyTo?:string[]};deliveryReport?:{status:string}}};
 export type DispatchResponsePorts={readLinked:(auth:AuthorizationSnapshot,target:{targetType:'CUSTOMER';targetId:string})=>Promise<{code:string;data?:Array<{id:string;receivedAt:string}>}>;readOriginal:(auth:AuthorizationSnapshot,input:{graphMessageId:string})=>Promise<{code:string}&Partial<Original>>};
 
@@ -26,7 +26,18 @@ export async function readDispatchResponses(auth:AuthorizationSnapshot,input:{cu
    const sent=await readMicrosoftGraphSentMailReference(chain.inReplyTo[0],original.message.senderAddress);
    if(sent.code!=='OK'||!sent.data.clientRequestId)throw Error('DISPATCH_RESPONSE_SENT_REFERENCE_UNCLEAR');
    const thread=threads.find(row=>row.source==='MS_GRAPH_OUT:'+sent.data.clientRequestId);
-   if(thread)proofs.push({itemId:original.itemId,threadId:thread.id,graphMessageId:sent.data.graphMessageId,originalSha256:chain.originalSha256,receivedAt:original.message.receivedAt});
+   if(thread){
+    const orderIds=await withPrivilegedTenantTransaction(auth,async tx=>{
+     const notices=await tx.execute<{order_id:string}>(sql`SELECT notice.order_id FROM public.events notice JOIN public.events sent ON sent.tenant_id=notice.tenant_id AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.payload->>'threadId'=${thread.id} AND sent.status='success' AND sent.user_id=notice.user_id AND sent.payload->>'intent'=notice.payload->>'intent'
+      WHERE notice.tenant_id=${auth.tenantId} AND notice.event_type='ORDER_CUSTOMER_INFORMED_V1' AND notice.status='success' AND notice.payload->'receipt'->>'threadId'=${thread.id} AND notice.payload->'receipt'->>'orderId'=notice.order_id AND notice.payload->'receipt'->>'actorId'=notice.user_id::text`);
+     const reminders=await tx.execute<{orders:Array<{id:string}>}>(sql`SELECT sent.payload->'meta'->'orders' AS orders FROM public.events sent JOIN public.events prepared ON prepared.tenant_id=sent.tenant_id AND prepared.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND prepared.payload->>'threadId'=${thread.id} AND prepared.status='success' AND prepared.user_id=sent.user_id AND prepared.correlation_id=sent.correlation_id AND prepared.payload->'meta'=sent.payload->'meta'
+      WHERE sent.tenant_id=${auth.tenantId} AND sent.event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND sent.status='success' AND sent.payload->>'threadId'=${thread.id}`);
+     if(reminders.length>1)throw Error('DISPATCH_RESPONSE_SCOPE_AMBIGUOUS');
+     return [...new Set([...notices.map(row=>row.order_id),...reminders.flatMap(row=>row.orders.map(order=>order.id))])];
+    });
+    if(!orderIds.length)throw Error('DISPATCH_RESPONSE_SCOPE_MISSING');
+    proofs.push({itemId:original.itemId,threadId:thread.id,graphMessageId:sent.data.graphMessageId,originalSha256:chain.originalSha256,receivedAt:original.message.receivedAt,orderIds});
+   }
   }
   return {state:proofs.length?'REPLIED':'NONE',proofs};
  }catch(error){console.error('[DISPATCH_RESPONSE_READ_FAILED]',{reason:error instanceof Error&&/^[A-Z_]+$/.test(error.message)?error.message:'DATABASE_OR_PROVIDER_FAILURE'});return {state:'UNAVAILABLE',proofs:[]};}

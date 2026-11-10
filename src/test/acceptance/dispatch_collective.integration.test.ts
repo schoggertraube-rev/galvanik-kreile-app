@@ -68,6 +68,12 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  expect(reacted.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED',automaticSend:false});
  expect(await sql`SELECT station FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.orderId}`).toEqual([{station:'fertig'}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND graph_message_id='TEST-collective-reply' AND kunde_id=${first.customerId}`).toEqual([{n:1}]);
+ const afterReply=await readyInvoiceOrder('Sammel-Nach-Antwort','pickup',false,first.customerId);
+ expect(await withSession(full,()=>sendCustomerMailAction({...initial,targetId:afterReply.orderId,attachment:{kind:'INVOICE',documentId:afterReply.invoice.invoiceId},clientRequestId:randomUUID()}))).toMatchObject({code:'OK'});
+ const laterQueue=await withSession(full,()=>getOrdersDb());if(!laterQueue.ok)throw Error('REPLY_SCOPE_QUEUE');
+ for(const id of [first.orderId,second.orderId])expect(laterQueue.data.find(row=>row.id===id)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED'});
+ for(const id of [third.orderId,afterReply.orderId])expect(laterQueue.data.find(row=>row.id===id)?.finishedDispatch?.reminder).toMatchObject({stage:'E1',state:'DUE'});
+ expect(laterQueue.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder?.orderIds.slice().sort()).toEqual([third.orderId,afterReply.orderId].sort());
  replyKey=randomUUID(); // A proved different outgoing request is not a reaction to this notice.
  const unrelated=await withSession(full,()=>getOrdersDb());if(!unrelated.ok)throw Error('COHORT_UNRELATED_READ');
  expect(unrelated.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'DUE',responseState:'NONE'});
@@ -77,5 +83,5 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  const operational=await createFixture(['auftraege'],'werkstatt'),beforeLookup=lookups;
  const limited=await withSession(operational,()=>getOrdersDb());if(!limited.ok)throw Error('COHORT_LIMITED_READ');
  expect(limited.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'NOT_CHECKED',requiresResponseCheck:true});
- expect(lookups).toBe(beforeLookup);expect(requests).toHaveLength(2);
+ expect(lookups).toBe(beforeLookup);expect(requests).toHaveLength(3);
 });

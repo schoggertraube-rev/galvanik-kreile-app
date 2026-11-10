@@ -45,7 +45,7 @@ it('E03 imports one secured original, binds the actual failed outgoing mail and 
  const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));expect(card).toMatchObject({code:'OK',data:{customerInformed:{informed:null,ampel:'rot',failedDelivery:{threadId:sent.data.threadId}}}});
  const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('BOUNCE_QUEUE');const plan=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder;
  expect(plan).toMatchObject({stage:'E3',state:'DUE',requiresResponseCheck:false,needsNotice:[]});if(!plan?.due)throw Error('BOUNCE_DUE');
- expect(await withSession(full,()=>createDispatchCallTaskAction({customerId:order.customerId,handover:'pickup',dueDate:plan.due!}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>createDispatchCallTaskAction({customerId:order.customerId,handover:'pickup',dueDate:plan.due!,clientKey:plan.clientKey!}))).toMatchObject({code:'OK'});
  state.blocked=true;const before=state.fetches;
  expect(await withSession(full,()=>importOutlookMailAction(state.graphId))).toMatchObject({code:'OK',itemId:imported.itemId,replayed:true});expect(state.fetches).toBe(before);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DELIVERY_FAILED_V1'`).toEqual([{n:1}]);

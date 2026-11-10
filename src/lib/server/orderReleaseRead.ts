@@ -68,8 +68,8 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
     AND freeze_state.active AND freeze_state.integrity_ok AND event.payload->'receipt'->>'freezeId'=freeze_state.freeze_id::text
    ORDER BY event.created_at ASC,event.id ASC LIMIT 1001`);
   if(rows.length>1000||rows.some(row=>row.proof_ok!==true||!Number.isFinite(Date.parse(row.payload.receipt.recordedAt))))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
-  const order=await tx.execute<{station:string;version:number;handover_mode:'pickup'|'shipping'|null;allowed:boolean;invoice_state:string;payment_allowed:boolean|null;frozen_at:string|null;debt_ids:string[]}>(sql`SELECT orders.station,orders.version,orders.handover_mode,private.order_release_allowed_v1(orders.tenant_id,orders.id) AS allowed,
-   state.invoice_state,state.payment_goods_out_allowed AS payment_allowed,freeze_state.frozen_at::text,
+  const order=await tx.execute<{station:string;version:number;handover_mode:'pickup'|'shipping'|null;allowed:boolean;invoice_state:string;payment_allowed:boolean|null;frozen_at:string|null;freeze_id:string|null;debt_ids:string[]}>(sql`SELECT orders.station,orders.version,orders.handover_mode,private.order_release_allowed_v1(orders.tenant_id,orders.id) AS allowed,
+   state.invoice_state,state.payment_goods_out_allowed AS payment_allowed,freeze_state.frozen_at::text,freeze_state.freeze_id::text,
    ARRAY(SELECT invoice.id::text FROM public.invoices invoice WHERE invoice.tenant_id=orders.tenant_id AND invoice.customer_id=orders.customer_id AND ${overdueInvoiceCondition()} ORDER BY invoice.id) AS debt_ids
    FROM public.orders orders JOIN private.v_goods_out_ui_state_v1 state ON state.tenant_id=orders.tenant_id AND state.order_id=orders.id AND state.integrity_ok
    LEFT JOIN private.v_order_frozen_receipts_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok
@@ -85,7 +85,7 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
   const blockReason=current.allowed?null:!current.frozen_at?'not_frozen':complaint?'open_complaint':current.debt_ids.length?'overdue_invoice':!current.payment_allowed?'payment':null;
   const ampel:'rot'|'gelb'|'gruen'|null=current.station==='fertig'?(informed?(current.allowed?'gruen':'gelb'):'rot'):null;
   return {code:'OK' as const,informed,firstInformed,mailThreadIds:[...new Set(rows.flatMap(row=>row.payload.receipt.channel==='mail'&&row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]))],ampel,
-   orderVersion:current.version,handover:current.handover_mode,releaseAllowed:current.allowed,frozenAt:current.frozen_at,invoiceState:current.invoice_state,responseSince:rows[0]?.payload.receipt.recordedAt??null,failedDelivery:failedDelivery?{threadId:failedDelivery.threadId,recordedAt:failedDelivery.recordedAt}:null,
+   orderVersion:current.version,handover:current.handover_mode,releaseAllowed:current.allowed,frozenAt:current.frozen_at,freezeId:current.freeze_id,invoiceState:current.invoice_state,responseSince:rows[0]?.payload.receipt.recordedAt??null,failedDelivery:failedDelivery?{threadId:failedDelivery.threadId,recordedAt:failedDelivery.recordedAt}:null,
    blockReason,complaintIds:complaint?.complaintIds??[],overdueInvoiceIds:hasAuthorizationArea(auth,'geld')?current.debt_ids:undefined};
  });}catch(error){console.error('[ORDER_NOTIFICATION_READ_FAILED]',error);return {code:'UNAVAILABLE' as const};}
 }
