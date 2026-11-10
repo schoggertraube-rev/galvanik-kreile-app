@@ -15,11 +15,13 @@ it('customer metrics read actual paid invoices once, isolate customers and hide 
  expect(await withSession(full,()=>confirmPaymentAction({...payment,invoiceId:second.invoice.invoiceId,amount:second.invoice.grossAmountCents,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  const operational=await createFixture(['kunden'],'werkstatt');
  const events=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
- expect(await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{period:{timeZone:'Europe/Berlin'},averagePaymentDays:{value:0,invoiceCount:1},overdue:{invoiceCount:0,openAmountCents:0}}}});
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{period:{timeZone:'Europe/Berlin'},revenue:{id:'KZ-UMSATZ',netAmountCents:10000},openInvoices:{amountCents:0},averagePaymentDays:{value:0,invoiceCount:1},overdue:{invoiceCount:0,openAmountCents:0}}}});
  const restricted=await withSession(operational,()=>getCustomerSummaryAction({customerId:first.customerId}));
  expect(restricted.code).toBe('OK');if(restricted.code!=='OK')throw Error('METRIC_READ:'+restricted.code);
  expect(restricted.data.kennzahlen).not.toHaveProperty('averagePaymentDays');
  expect(restricted.data.kennzahlen).not.toHaveProperty('overdue');
+ expect(restricted.data.kennzahlen).not.toHaveProperty('revenue');
+ expect(restricted.data.kennzahlen).not.toHaveProperty('openInvoices');
  expect(restricted.data).not.toHaveProperty('invoiceRevenueCents');
  expect(await sql`SELECT classification FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.customerId}`).toEqual([{classification:'B'}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(events);
