@@ -130,6 +130,23 @@ it('a reply to A atomically replaces the unposted A+B PDF with B, preserving ori
  expect(await withSession(operator,()=>getIntakeTaskAction({taskId:letter.postalTaskId!}))).toMatchObject({code:'OK',postalLetter:{state:'POSTED'}});
 });
 
+it('K14 collective originals use plural order references and one qualified reminder sentence',async()=>{
+ const {order,second,request,plan}=await prepareLetter('K14 Mehrzahl',true,true);
+ if(!second)throw Error('K14_SECOND_ORDER');
+ const preview=await withSession(full,()=>previewStorageLetterAction(request));
+ if(preview.code!=='OK')throw Error('K14_PREVIEW:'+preview.code);
+ const facts=preview.data.snapshot.customerText!;
+ const numbers=facts.members.map(member=>member.number).join(', ');
+ expect(preview.data.snapshot.body).toContain('Ihre Teile aus den Aufträgen '+numbers);
+ expect(preview.data.snapshot.body.match(/Wir haben Sie am /g)).toHaveLength(1);
+ const due=(await plan())!.storage!.letter!;
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:order.customerId,clientRequestId:randomUUID(),subject:'TEST ignored',body:'TEST ignored',collectionReminder:{stage:'E4',handover:'pickup',dueDate:due.due,clientKey:due.clientKey}}))).toMatchObject({code:'OK'});
+ const originals=await sql`SELECT thread.subject,message.body FROM public.events event JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->>'threadId' JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' WHERE event.tenant_id=${KREILE_TENANT_SLUG} AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.payload->'meta'->>'customerId'=${order.customerId} ORDER BY event.created_at`;
+ expect(originals[0].subject).toBe('Abholbereit: Aufträge '+numbers);
+ expect(originals.at(-1)?.subject).toBe('Lagerfrist für Ihre Teile aus den Aufträgen '+numbers);
+ expect(originals.at(-1)?.body).toBe(preview.data.snapshot.body);
+});
+
 it('E4 preview renders a real customer/sender PDF without invoice-only settings, writes nothing and rejects missing address or rights',async()=>{
  const {order,request,plan,mailRequests}=await prepareLetter('Lagerfrist-Vorschau');
  const [originalSettings]=await sql`SELECT tax_id,iban,bic,bank_name,invoice_payment_term_days,logo_url FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`;

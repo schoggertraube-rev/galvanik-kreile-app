@@ -224,7 +224,7 @@ export const ORDER_ITEM_COMPLETION_COPY = {
 
 export const INVOICE_DELIVERY_COPY={
  alreadySent:(number:string,date:string)=>`Rechnung ${number} wurde schon am ${date} gesendet.`,
- expectedListMissing:'Lade die angezeigte Belegliste erneut. Es wurde nichts gesendet.',
+ expectedListMissing:(number:string)=>`Die Liste hat sich geändert – ${number} ist dazugekommen bzw. weggefallen.`,
  listChanged:(number:string,added:boolean)=>`Die Liste hat sich geändert – ${number} ist ${added?'dazugekommen':'weggefallen'}.`,
  'rechnung.senden_sammel':(numbers:readonly string[],customer:string)=>`Rechnungen ${numbers.join(', ')} an ${customer} senden`,
  'rechnung.senden_einzel':(number:string,amount:string,customer:string)=>`Rechnung ${number} über ${amount} an ${customer} senden`
@@ -236,18 +236,24 @@ export const GOODS_OUT_FOLLOWUP_COPY={incomplete:(order:string)=>`Erinnerungsbel
 export type CollectionCustomerFacts={name?:string|null;company?:string|null;members:Array<{number:string;quantity?:number|null;finishedDate?:string|null;e1Date?:string|null;e2Date?:string|null;callDate?:string|null}>;deadline?:string|null;storageAmount?:string|null;storageUnit?:string|null;openAmount?:string|null};
 const customerDay=(value:string|null|undefined)=>value&&/^\d{4}-\d{2}-\d{2}/.test(value)?value.slice(0,10).split('-').reverse().join('.'):null;
 export const CUSTOMER_COLLECTION_COPY={
- 'kunde.abholung.e1':{subject:(order:string)=>'Abholbereit: Auftrag '+order},
+ 'kunde.abholung.e1':{subject:(order:string)=>'Abholbereit: '+(order.includes(', ')?'Aufträge ':'Auftrag ')+order},
  'kunde.abholung.e2':{subject:(order:string)=>'Erinnerung: Auftrag '+order+' wartet auf Abholung'},
- 'kunde.abholung.lagerfrist':{subject:(order:string)=>'Lagerfrist für Ihre Teile aus Auftrag '+order},
+ 'kunde.abholung.lagerfrist':{subject:(order:string)=>'Lagerfrist für Ihre Teile aus '+(order.includes(', ')?'den Aufträgen ':'Auftrag ')+order},
  'kunde.abholung.lagergeld_satz':(amount?:string|null,unit?:string|null)=>amount&&unit?'Danach berechnen wir Lagergeld von '+amount+' je '+unit+'.':'',
  'kunde.zahlung_zeile':(amount?:string|null)=>amount?'Offen sind '+amount+'; bitte bringen Sie den Betrag zur Abholung mit.':'',
  'notiz.abholung.antwort':(customer:string,date:string)=>customer+' hat am '+customerDay(date)+' geantwortet – Anruf und Brief entfallen.',
  'notiz.abholung.termin':(customer:string,date:string)=>'Abholtermin '+customerDay(date)+' mit '+customer+' vereinbart – Anruf und Brief entfallen.',
  render:(stage:'E1'|'E2'|'E4',facts:CollectionCustomerFacts)=>{
   const lines:string[]=[];if(facts.name?.trim())lines.push('Guten Tag '+facts.name.trim()+',');
-  for(const member of facts.members){const day=customerDay(member.finishedDate),quantity=member.quantity;
+  const collective=facts.members.length>1,numbers=facts.members.map(member=>member.number).join(', ');
+  if(collective)lines.push('Ihre Teile aus den Aufträgen '+numbers+(stage==='E2'?' warten auf Abholung.':' sind fertig und liegen zur Abholung bereit.'));
+  for(const member of collective?[]:facts.members){const day=customerDay(member.finishedDate),quantity=member.quantity;
    if(member.number&&day&&quantity!=null&&Number.isFinite(quantity)&&quantity>0)lines.push('Ihre '+quantity+' Teile aus Auftrag '+member.number+(stage==='E1'?' sind fertig und liegen seit '+day+' zur Abholung bereit.':stage==='E2'?' liegen seit '+day+' bei uns.':' liegen seit '+day+' zur Abholung bereit.'));
-   if(stage==='E4'){const e1=customerDay(member.e1Date),e2=customerDay(member.e2Date),call=customerDay(member.callDate);if(e1&&e2&&call)lines.push('Wir haben Sie am '+e1+' und '+e2+' erinnert und am '+call+' versucht, Sie telefonisch zu erreichen.');}
+  }
+  if(stage==='E4'){
+   const shared=(key:'e1Date'|'e2Date'|'callDate')=>{const dates=facts.members.map(member=>customerDay(member[key]));return dates.length&&dates[0]&&dates.every(date=>date===dates[0])?dates[0]:null;};
+   const e1=shared('e1Date'),e2=shared('e2Date'),call=shared('callDate');
+   if(e1&&e2)lines.push('Wir haben Sie am '+e1+' und '+e2+' erinnert'+(call?' und am '+call+' versucht, Sie telefonisch zu erreichen.':'.'));
   }
   if(stage==='E2')lines.push('Bitte holen Sie sie ab oder antworten Sie auf diese Mail mit einem Abholtermin.');
   const deadline=customerDay(facts.deadline);if(stage==='E4'&&deadline)lines.push('Bitte holen Sie die Teile bis '+deadline+' ab.');

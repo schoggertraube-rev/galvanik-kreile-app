@@ -292,7 +292,7 @@ export async function sendCommunicationMail(
     });
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_SEND_PREPARE_FAILED", error);
-    if(error instanceof Error&&error.message==='INVOICE_EXPECTED_LIST_INVALID')return {code:'VALIDATION_ERROR',message:INVOICE_DELIVERY_COPY.expectedListMissing};
+    if(error instanceof Error&&error.message==='INVOICE_EXPECTED_LIST_INVALID'&&input.document?.kind==='INVOICE')return {code:'VALIDATION_ERROR',message:INVOICE_DELIVERY_COPY.expectedListMissing(input.document.number)};
     if(error instanceof InvoiceMailListChanged)return {code:'VALIDATION_ERROR',message:INVOICE_DELIVERY_COPY.listChanged(error.number,error.added)};
     if(error instanceof InvoiceAlreadySent)return {code:'CONFLICT',message:INVOICE_DELIVERY_COPY.alreadySent(error.number,error.sentOn)};
     if(error instanceof Error&&error.message==='COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED')return {code:'VALIDATION_ERROR',message:'Beleg oder Auftragsstand wurde seit der PDF-Erstellung geändert. Es wurde nichts gesendet. Aktuellen Beleg erneut wählen.'};

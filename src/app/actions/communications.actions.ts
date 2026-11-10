@@ -107,7 +107,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   const proposal=request.stage==='E4'&&storageLetter?{...storageLetter,stage:'E4' as const,requiresResponseCheck:candidates.some(order=>storageLetter.orderIds.includes(order.id)&&order.finishedDispatch?.reminder?.requiresResponseCheck!==false),needsNotice:[]}:candidates.find(order=>order.finishedDispatch?.reminder?.stage===request.stage&&order.finishedDispatch.reminder.state==='DUE'&&order.finishedDispatch.reminder.due===request.dueDate)?.finishedDispatch?.reminder;
   if(!proposal||proposal.stage!==request.stage||proposal.state!=='DUE'||proposal.due!==request.dueDate||!proposal.clientKey||proposal.requiresResponseCheck||proposal.needsNotice.length)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.notReady};
   if(settings.settings.dispatchPolicy?.holdMinutes!==0)return {code:'IN_KLAERUNG' as const,message:COLLECTION_REMINDER_COPY.holdUnavailable};
-  const members=candidates.filter(order=>proposal.orderIds.includes(order.id));
+  const members=candidates.filter(order=>proposal.orderIds.includes(order.id)).sort((a,b)=>a.id.localeCompare(b.id));
   const meta:CollectionReminderMeta={stage:request.stage,customerId:input.targetId,handover:request.handover,dueDate:request.dueDate,stageKey:proposal.clientKey,intent:collectionReminderIntent({...input,collectionReminder:request}),orders:members.map(order=>({id:order.id,number:order.orderNumber,version:order.version})),...(storageLetter?{storageDeadline:freezeStorageDeadline(settings.settings.dispatchPolicy),storageOrigin:{callTaskId:storageLetter.callTaskId,appointmentEventId:storageLetter.appointmentEventId,replyEventId:storageLetter.replyEventId,freezes:storageLetter.freezes}}:{})};
   const [{readCollectionCustomerFacts},{readCustomerProfile},{readCompanyLetterSettings}]=await Promise.all([import('@/lib/server/storageLetterRead'),import('@/modules/customers/server-public'),import('@/modules/fundament/server-public')]);
   const [customer,company]=await Promise.all([withPrivilegedTenantTransaction(auth,tx=>readCustomerProfile(tx,auth.tenantId,input.targetId)),readCompanyLetterSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true})]);
@@ -118,13 +118,13 @@ export async function sendCustomerMailAction(input: TargetInput & {
  }
  let attachment,document:CommunicationDocument|undefined;
  let invoiceGroup:{customerId:string;handover:string|null}|undefined;
- if(input.attachment?.kind==='INVOICE'&&(!Array.isArray(input.expectedInvoiceIds)||!input.expectedInvoiceIds.length||input.expectedInvoiceIds.length>101||new Set(input.expectedInvoiceIds).size!==input.expectedInvoiceIds.length||input.expectedInvoiceIds.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))||!input.expectedInvoiceIds.includes(input.attachment.documentId)))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing};
+ if(input.attachment?.kind==='INVOICE'&&(!Array.isArray(input.expectedInvoiceIds)||!input.expectedInvoiceIds.length||input.expectedInvoiceIds.length>101||new Set(input.expectedInvoiceIds).size!==input.expectedInvoiceIds.length||input.expectedInvoiceIds.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))||!input.expectedInvoiceIds.includes(input.attachment.documentId))){const original=await readInvoicePdf(auth,input.attachment.documentId,'original');if(original.code!=='OK')return original;return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.data.invoiceNumber)};}
  const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
  if(input.attachment){
   const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
   if(prior.code==='OK'){
    if(prior.document.kind!==input.attachment.kind)return {code:'CONFLICT' as const,message:'Die Versandkennung gehört zu einer anderen Belegart.'};
-   if(prior.document.kind==='INVOICE'&&JSON.stringify([prior.document.id,...prior.document.bundle?.map(row=>row.id)??[]].sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing};
+   if(prior.document.kind==='INVOICE'&&JSON.stringify([prior.document.id,...prior.document.bundle?.map(row=>row.id)??[]].sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(prior.document.number)};
    return prior.document.kind==='QUOTE'?confirmQuoteDelivery(input,prior.document,{code:'OK',data:prior.data}):{code:'OK' as const,data:prior.data};
   }
   if(prior.code!=='NOT_FOUND')return prior;
