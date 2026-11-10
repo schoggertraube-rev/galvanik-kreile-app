@@ -15,6 +15,7 @@ import {previewStorageLetterAction,prepareStoragePostalLetterAction} from '@/app
 import {updateCustomerAction} from '@/app/actions/customers.actions';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
+import {markOrderInformedByPhoneAction} from '@/app/actions/orders.actions';
 import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
 import {emptyDispatchPolicy} from '@/modules/fundament/public';
 import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
@@ -226,4 +227,25 @@ it('a matching ordinary task cannot be adopted as a qualified E5 task',async()=>
  expect(await withSession(full,()=>createStorageFinalTaskAction(request))).toMatchObject({code:'CONFLICT'});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND correlation_id=${request.clientKey}::uuid`).toEqual([{n:0}]);
  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${ordinary.task.id}::uuid`).toEqual([{status:'offen'}]);
+});
+
+it('PL10:03 an actual S1 phone notice without mail waits for callAfterDays; reached E3 stops only that group',async()=>{
+ const order=await readyInvoiceOrder('S1-Telefon-ohne-Mail');
+ expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
+ const phone={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>markOrderInformedByPhoneAction(phone))).toMatchObject({code:'OK'});
+ async function setting(days:number|null){const current=await withSession(full,()=>readShippingSettingsAction());if(current.code!=='OK')throw Error('PHONE_SETTINGS');expect(await withSession(full,()=>saveShippingSettingsAction({service:current.settings.service,numberPattern:current.settings.numberPattern,numberHint:current.settings.numberHint,trackingUrl:current.settings.trackingUrl,expectedUpdatedAt:current.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),callAfterDays:days}}))).toMatchObject({code:'OK'});}
+ async function plan(){const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('PHONE_QUEUE');return queue.data.find(row=>row.id===order.orderId)!.finishedDispatch!.reminder!;}
+ await setting(1);const waiting=await plan();expect(waiting).toMatchObject({stage:'E3',state:'WAIT',needsNotice:[],responseState:'NONE'});
+ expect(await withSession(full,()=>createDispatchCallTaskAction({customerId:order.customerId,handover:'pickup',dueDate:waiting.due!,clientKey:waiting.clientKey!}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->'meta'->>'customerId'=${order.customerId}`).toHaveLength(0);
+ await setting(null);expect(await plan()).toMatchObject({stage:'E3',state:'NEEDS_SETTING',due:null,clientKey:null});
+ await setting(0);const due=await plan();expect(due).toMatchObject({stage:'E3',state:'DUE'});
+ const request={customerId:order.customerId,handover:'pickup' as const,dueDate:due.due!,clientKey:due.clientKey!},created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('PHONE_E3:'+created.code);
+ const task=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));if(task.code!=='OK'||!task.task)throw Error('PHONE_E3_TASK');
+ const result={taskId:created.taskId,version:task.task.version,note:'TEST telefonisch erreicht',callResult:'reached' as const};
+ expect(await withSession(full,()=>completeIntakeTaskAction(result))).toMatchObject({code:'OK'});
+ expect(await plan()).toMatchObject({stage:'E3',state:'STOPPED',callTaskId:created.taskId});
+ expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(result))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT count(*)::int AS n FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${order.customerId}`).toEqual([{n:0}]);
 });

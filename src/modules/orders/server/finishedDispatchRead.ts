@@ -31,7 +31,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   if(notification.handover){
    const key=JSON.stringify([order.customerId,notification.handover]);
    const group=groups.get(key)??{customerId:order.customerId,handover:notification.handover,members:[],threads:new Set<string>(),deliveryFailedAt:null,responseSince:null};
-   group.members.push({orderId:order.id,orderNumber:order.orderNumber,noticeAt:notification.firstInformed?.recordedAt??null,readyAt:notification.frozenAt,deliveryFailedAt:notification.failedDelivery?.recordedAt??null,freezeId:notification.freezeId});
+   group.members.push({orderId:order.id,orderNumber:order.orderNumber,noticeAt:notification.firstInformed?.recordedAt??null,noticeChannel:notification.firstInformed?.channel??null,readyAt:notification.frozenAt,deliveryFailedAt:notification.failedDelivery?.recordedAt??null,freezeId:notification.freezeId});
    for(const id of notification.mailThreadIds)group.threads.add(id);
    if(notification.failedDelivery&&(!group.deliveryFailedAt||notification.failedDelivery.recordedAt<group.deliveryFailedAt))group.deliveryFailedAt=notification.failedDelivery.recordedAt;
    if(notification.responseSince&&(!group.responseSince||notification.responseSince<group.responseSince))group.responseSince=notification.responseSince;
