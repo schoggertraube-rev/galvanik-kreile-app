@@ -3,6 +3,44 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('an actual cancellation of an initially historical invoice subtracts its net value in the current window exactly once',async()=>{
+ const {readyInvoiceOrder}=await import('./orderFixture');
+ const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const {createImmutableInvoicePdfDocument}=await import('@/lib/pdf/ImmutableInvoiceDocument');
+ const {renderToBuffer}=await import('@react-pdf/renderer');
+ const {createHash}=await import('node:crypto');
+ const order=await readyInvoiceOrder('L3-Altrechnung');
+ const [template]=await sql`SELECT to_jsonb(invoice) AS row FROM public.invoices invoice WHERE id=${order.invoice.invoiceId}::uuid`;
+ expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST Vorlage beendet',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ // Isolated INITIAL historical TEST records, not a product backdating/import
+ // command. Existing immutable records and DB guards remain untouched.
+ const [dates]=await sql`SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-interval '2 years')::date::text AS day`;
+ const issuedAt=dates.day+'T12:00:00.000Z';
+ const dueDate=new Date(new Date(issuedAt).getTime()+template.row.payment_term_days*86400000).toISOString().slice(0,10);
+ const snapshot={...template.row.snapshot,issuedAt,serviceDate:dates.day};
+ const id=randomUUID(),key=randomUUID(),eventId=randomUUID(),correlation=randomUUID();
+ const number='R-'+dates.day.slice(0,4)+'-900001';
+ const pdf=await renderToBuffer(createImmutableInvoicePdfDocument({invoiceNumber:number,dueDate,snapshot}));
+ const hash=createHash('sha256').update(pdf).digest('hex');
+ await sql.begin(async tx=>{
+  await tx`INSERT INTO public.events SELECT (jsonb_populate_record(NULL::public.events,to_jsonb(event)||jsonb_build_object('id',${eventId}::text,'client_event_id',${key}::text,'correlation_id',${correlation}::text,'created_at',${issuedAt}::timestamptz AT TIME ZONE 'UTC','payload',event.payload||jsonb_build_object('invoiceId',${id}::text,'invoiceNumber',${number}::text,'pdfSha256',${hash}::text)))).* FROM public.events event WHERE event.id=${template.row.issue_event_id}`;
+  const replacement={...template.row,id,invoice_number:number,issued_at:issuedAt,service_date:dates.day,due_date:dueDate,snapshot,client_event_id:key,correlation_id:correlation,issue_event_id:eventId,pdf_ref:`invoice://${id}/original`,pdf_sha256:hash,pdf_content:'\\x'+pdf.toString('hex')};
+  await tx`INSERT INTO public.invoices SELECT (jsonb_populate_record(NULL::public.invoices,${tx.json(replacement)}::jsonb)).*`;
+ });
+ const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const {readInvoiceReceipt}=await import('@/lib/server/invoiceRead');
+ expect(await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('HISTORICAL_AUTH');return readInvoiceReceipt(auth.data,{orderId:order.orderId,clientEventId:key});})).toMatchObject({code:'OK',data:{invoiceId:id,pdfSha256:hash}});
+ const read=()=>withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}));
+ expect(await read()).toMatchObject({code:'OK',data:{invoiceRevenueCents:0,invoiceOpenCents:11900,kennzahlen:{revenue:{netAmountCents:0},openInvoices:{amountCents:11900},overdue:{invoiceCount:1,openAmountCents:11900}}}});
+ const cancel={invoiceId:id,expectedVersion:1,reason:'TEST alte Rechnung heute storniert',clientEventId:randomUUID()};
+ expect(await withSession(full,()=>cancelInvoiceAction(cancel))).toMatchObject({code:'OK'});
+ expect(await read()).toMatchObject({code:'OK',data:{invoiceRevenueCents:-10000,invoiceOpenCents:0,kennzahlen:{revenue:{netAmountCents:-10000},openInvoices:{amountCents:0},overdue:{invoiceCount:0,openAmountCents:0}}}});
+ expect(await withSession(full,()=>cancelInvoiceAction(structuredClone(cancel)))).toMatchObject({code:'OK',replayed:true});
+ expect(await read()).toMatchObject({code:'OK',data:{kennzahlen:{revenue:{netAmountCents:-10000}}}});
+ expect(await sql`SELECT pdf_sha256,net_amount_cents FROM public.invoices WHERE id=${id}::uuid`).toEqual([{pdf_sha256:hash,net_amount_cents:10000}]);
+});
+
 it('customer complaint ratio follows the actual physical-release cohort and counts only its customer',async()=>{
  const {readyInvoiceOrder}=await import('./orderFixture');
  const {storeOrderPhoto}=await import('./photoFixture');
