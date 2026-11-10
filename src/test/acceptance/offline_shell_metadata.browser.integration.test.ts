@@ -30,10 +30,16 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('upgrades the existing native q
    if((await p.readPendingShellMetadata(scope)).code!=='QUARANTINE'||(await p.changePendingShellMetadata(scope,null,true)).code!=='QUARANTINE')throw Error('TEST_UNKNOWN_GENERATION_OVERWRITTEN');
    const evidence=await raw(null,(db,resolve,reject)=>{const tx=db.transaction(['originals','shellMetadata'],'readonly'),original=tx.objectStore('originals').get('TEST-original'),unknown=tx.objectStore('originals').get(7),metadata=tx.objectStore('shellMetadata').get('active');tx.oncomplete=async()=>{db.close();resolve({bytes:await original.result.file.text(),unknown:unknown.result,metadata:metadata.result});};tx.onabort=()=>reject(tx.error);});
    if(evidence.bytes!=='TEST immutable legacy bytes'||evidence.unknown.legacy!=='TEST unknown must survive'||evidence.metadata.keep!=='TEST unchanged')throw Error('TEST_UPGRADE_LOST_DATA');
-   return {nativeUpgrade:true,originalsPreserved:true,staleRefused:true,abortRolledBack:true,quarantinePreserved:true};
+   const blockedScope='${'f'.repeat(64)}',blockedName='kreile-pending-originals-v1-'+blockedScope;
+   const blocker=await new Promise((resolve,reject)=>{const r=indexedDB.open(blockedName,1);r.onupgradeneeded=()=>r.result.createObjectStore('originals',{keyPath:'id'});r.onerror=()=>reject(r.error);r.onsuccess=()=>resolve(r.result);});
+   const nativeOpen=indexedDB.open.bind(indexedDB),nativeClose=IDBDatabase.prototype.close;let lateClosed=false,finishLate;const late=new Promise(resolve=>{finishLate=resolve;});
+   indexedDB.open=(...args)=>{const r=nativeOpen(...args);if(args[0]===blockedName&&args[1]===2)r.addEventListener('success',()=>setTimeout(finishLate,0));return r;};
+   IDBDatabase.prototype.close=function(){if(this.name===blockedName&&this.version===2)lateClosed=true;return nativeClose.call(this);};
+   try{let blocked=false;try{await p.readPendingShellMetadata(blockedScope);}catch(error){blocked=error.message==='INTAKE_PENDING_STORAGE_BLOCKED';}blocker.close();await late;if(!blocked||!lateClosed)throw Error('TEST_BLOCKED_UPGRADE_LEAKED_CONNECTION');}finally{blocker.close();indexedDB.open=nativeOpen;IDBDatabase.prototype.close=nativeClose;}
+   return {nativeUpgrade:true,originalsPreserved:true,staleRefused:true,abortRolledBack:true,quarantinePreserved:true,blockedUpgradeClosed:true};
   }`;
   const encoded=Buffer.from('('+code+')').toString('base64');
-  const result=await cli(['eval',`async()=>await(eval(atob('${encoded}')))()`]);
+  const result=await cli(['eval',`async()=>await(eval(atob('${encoded}')))()`]).catch(error=>{throw Error('TEST_BROWSER: '+String(error.stdout??error.message).slice(0,1500));});
   expect(result.stdout).not.toContain('### Error');expect(result.stdout).toContain('"nativeUpgrade": true');expect(result.stdout).toContain('"quarantinePreserved": true');
  }finally{await cli(['close']).catch(()=>{});await new Promise<void>(resolve=>server.close(()=>resolve()));}
 },120000);

@@ -8,14 +8,15 @@ const SHELL_STORE = "shellMetadata";
 async function database(scope: string): Promise<IDBDatabase> {
   if (!/^[0-9a-f]{64}$/.test(scope)) throw new Error("INTAKE_PENDING_SCOPE_REQUIRED");
   return new Promise((resolve, reject) => {
+    let abandoned=false;
     const request = indexedDB.open(`kreile-pending-originals-v1-${scope}`, 2);
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE, { keyPath: "id" });
       if (!request.result.objectStoreNames.contains(SHELL_STORE)) request.result.createObjectStore(SHELL_STORE);
     };
-    request.onsuccess = () => {request.result.onversionchange=()=>request.result.close();resolve(request.result);};
+    request.onsuccess = () => {if(abandoned){request.result.close();return;}request.result.onversionchange=()=>request.result.close();resolve(request.result);};
     request.onerror = () => reject(new Error("INTAKE_PENDING_STORAGE_UNAVAILABLE"));
-    request.onblocked = () => reject(new Error("INTAKE_PENDING_STORAGE_BLOCKED"));
+    request.onblocked = () => {abandoned=true;reject(new Error("INTAKE_PENDING_STORAGE_BLOCKED"));};
   });
 }
 export type PendingShellMetadata={scope:string|null;cacheGeneration:number;updatedAt:string};
