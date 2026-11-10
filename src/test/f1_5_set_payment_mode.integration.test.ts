@@ -44,7 +44,7 @@ const USERS = {
 const CUSTOMER = "f15-b2-customer";
 const FOREIGN_CUSTOMER = "f15-b2-foreign-customer";
 const FOREIGN_ORDER = "f15-b2-foreign-order";
-const SETTINGS = "f14-command-settings";
+const SETTINGS = "f15-b2-settings";
 const RATE = "25252525-2525-4252-8252-252525252510";
 const MODE_EVENTS = {
   buero: "25252525-2525-4252-8252-252525252520",
