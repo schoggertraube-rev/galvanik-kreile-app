@@ -1,12 +1,13 @@
+import {readOfflineNoteConflictSource} from '@/lib/server/offlineNoteConflictPort';
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
 import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
 import {collectionTaskHasReplySource,collectionTaskReplyRemainder,readCollectionTaskCurrentOrder} from '@/lib/server/dispatchReplyPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
-import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
+import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY,OFFLINE_RECONCILIATION_COPY} from '@/ui/situationCatalog';
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
-import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
+import {hasAuthorizationArea,resolveAuthorization,readClarificationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AccessArea} from '@/lib/auth/authorizationContract';
 import {TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference,type TaskRecord,type TaskReferenceRead,type TaskSaveInput,type TaskFailure,type TaskResult,type TaskReadResult,type TaskCompleteInput,type TaskOpenRequest} from '../contract';
@@ -253,4 +254,15 @@ export async function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransact
  const candidates=tasks.filter(task=>taskUuid(task.bezug_id)&&allowed(auth,task));
  const facts=await readQuoteFollowupFacts(tx,auth.tenantId,[...new Set(candidates.map(task=>task.bezug_id!))]);
  return candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];if(!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');return [{id:task.id,title:task.titel,dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,isMine:task.fuer_login===auth.userId}];}).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
+}
+
+/** PL19:08: normal original actor and normal shared recipient area; no system login. */
+export async function createOfflineNoteConflictTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string,deps:Dependencies){
+ const original=await readOfflineNoteConflictSource(tx,auth,eventId);
+ const key=eventKey(eventId,0,'offline-conflict'),prior=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid`);
+ if(prior.length){const existing=await find(tx,auth,prior[0].id);if(prior.length!==1||existing?.erstellt_von!==auth.userId||existing.bezug_typ!=='eingang'||existing.bezug_id!==eventId)throw Error('OFFLINE_TASK_KEY_CHANGED');return existing.id;}
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title:OFFLINE_RECONCILIATION_COPY.reason,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'eingang',id:eventId},note:new Date(original.deviceCapturedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})};
+ // The source note command has already authorized its exact original context.
+ return (await persistTask(tx,auth,value,deps,false)).task.id;
 }

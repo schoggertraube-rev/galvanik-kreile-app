@@ -157,7 +157,8 @@
     "@/modules/eingang/public#intakeHandoverDirective",
     "@/modules/eingang/server-public#readIntakeHandoverMail",
     "@/modules/eingang/server-public#recordIntakeHandoverEffect",
-    "@/modules/eingang/server-public#readPackageExpectation"
+    "@/modules/eingang/server-public#readPackageExpectation",
+    "@/modules/eingang/server-public#writeIntakeNoteInTransaction"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"

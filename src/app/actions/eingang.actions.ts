@@ -187,7 +187,14 @@ import type { IntakeContext } from "@/modules/eingang/public";
 
 export async function saveIntakeNoteAction(input: unknown,pendingScope?:string) {
   if(!await matchesPendingActor(pendingScope))return {code:"FORBIDDEN" as const,message:"Die Aufnahme wartet auf die ursprüngliche Anmeldung."};
-  return saveIntakeNote(input, readCustomerProfile);
+  if(pendingScope===undefined)return saveIntakeNote(input,readCustomerProfile);
+  const [{preserveOfflineNoteConflict},{writeIntakeNoteInTransaction},{createOfflineNoteConflictTask},{recordIntakeTaskEffect}]=await Promise.all([import('@/lib/server/offlineNoteConflictPort'),import('@/modules/eingang/server-public'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public')]);
+  return saveIntakeNote(input,readCustomerProfile,async(tx,auth,note,currentVersion,orderCustomerId)=>{
+   try{await preserveOfflineNoteConflict(tx,auth,note,currentVersion,async eventId=>{
+    const failure=await writeIntakeNoteInTransaction(tx,auth,{...note,itemId:eventId,textstand:eventId,expectedVersion:0,concerns:[]},readCustomerProfile,orderCustomerId);if(failure)throw Error('OFFLINE_CONFLICT_ORIGINAL_'+failure.code);
+    return createOfflineNoteConflictTask(tx,auth,eventId,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});
+   });}catch(error){console.error('[OFFLINE_NOTE_CONFLICT_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});throw Error('OFFLINE_NOTE_CONFLICT_FAILED');}
+  });
 }
 export async function discardIntakeCaptureAction(input:unknown){return discardIntakeCapture(input);}
 async function matchesPendingActor(scope:string|undefined){
