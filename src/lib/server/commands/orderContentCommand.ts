@@ -62,7 +62,7 @@ export async function readOrderPickupNotice(input:unknown){
   if(!auth.ok)return {code:"UNAUTHENTICATED" as const,message:auth.message};
   if(!hasAuthorizationArea(auth.data,"eingang")&&!hasAuthorizationArea(auth.data,"auftraege"))return {code:"FORBIDDEN" as const,message:"Abholmitteilung ist nicht freigegeben."};
   try{
-    const rows=await withPrivilegedTenantTransaction(auth.data,tx=>tx.execute<PickupRow>(sql`SELECT id,version,station,status,pickup_by_name,pickup_by_note,pickup_by_source,pickup_by_at,pickup_by_login::text,ausgabe_frei
+    const rows=await withPrivilegedTenantTransaction(auth.data,tx=>tx.execute<PickupRow>(sql`SELECT id,version,station,status,pickup_by_name,pickup_by_note,pickup_by_source,pickup_by_at,pickup_by_login::text,private.order_release_allowed_v1(tenant_id,id) AS ausgabe_frei
       FROM public.orders WHERE tenant_id=${auth.data.tenantId} AND id=${orderId}`));
     if(rows.length!==1)return {code:"NOT_FOUND" as const,message:"Auftrag nicht verfügbar."};
     return {code:"OK" as const,data:rows[0]};
@@ -90,7 +90,7 @@ export async function changeOrderPickupNotice(input:unknown,handover?:MailHandov
       if(prior.length){const row=prior[0];return prior.length===1&&row.user_id===auth.data.userId&&row.event_type==='ORDER_PICKUP_NOTICE_CHANGED_V1'&&row.order_id===value.orderId
         &&(row.payload as {requestHash?:unknown})?.requestHash===requestHash?{code:"OK" as const,receipt:receipt(row),replayed:true}
         :{code:"CONFLICT" as const,message:"Diese Kennung wurde bereits anders verwendet."};}
-      const rows=await tx.execute<PickupRow>(sql`SELECT id,version,station,status,pickup_by_name,pickup_by_note,pickup_by_source,pickup_by_at,pickup_by_login::text,ausgabe_frei
+      const rows=await tx.execute<PickupRow>(sql`SELECT id,version,station,status,pickup_by_name,pickup_by_note,pickup_by_source,pickup_by_at,pickup_by_login::text,private.order_release_allowed_v1(tenant_id,id) AS ausgabe_frei
         FROM public.orders WHERE tenant_id=${auth.data.tenantId} AND id=${value.orderId} FOR UPDATE`);
       const row=rows[0];if(rows.length!==1||!row)return {code:"NOT_FOUND" as const,message:"Auftrag nicht verfügbar."};
       if(row.version!==value.expectedVersion)return {code:"CONFLICT" as const,message:"Abholmitteilung wurde inzwischen geändert. Bitte abgleichen und erneut bestätigen.",current:row};

@@ -103,7 +103,7 @@ export type RecordGoodsOutResult =
   | { code: "UNAVAILABLE"; message: string };
 
 type LockedOrder = {
-  ausgabe_frei:boolean;
+  release_ready:boolean;
   id: string;
   tenant_id: string;
   customer_id: string | null;
@@ -272,7 +272,8 @@ async function readOrder(
 ): Promise<LockedOrder[]> {
   const query = sql`
     SELECT id, tenant_id, customer_id, station, current_station,
-      current_station_id, status, version, payment_mode, nacharbeit_zu, ausgabe_frei
+      current_station_id, status, version, payment_mode, nacharbeit_zu,
+      private.order_release_allowed_v1(tenant_id,id,true,true) AS release_ready
     FROM public.orders
     WHERE id = ${orderId} AND tenant_id = ${tenantId}
     LIMIT 2
@@ -775,7 +776,9 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
       ) {
         return { code: "VALIDATION_ERROR", message: "Zahlung fehlt." };
       }
-      if (order.ausgabe_frei !== true && agreement === null) {
+      // Payment and debt are checked by the existing validated contracts below
+      // and above (including explicit agreement/override). Never trust the cache.
+      if (order.release_ready !== true) {
         return { code: "CONFLICT", message: "Ausgabe ist noch nicht freigegeben. Zahlung oder Abschluss fehlt." };
       }
 

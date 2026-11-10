@@ -63,7 +63,7 @@ const finishedOrder = {
   status: "fertig",
   version: 3,
   payment_mode: "vorkasse",
-  ausgabe_frei: true,
+  release_ready: true,
 };
 
 const pickedUpOrder = {
