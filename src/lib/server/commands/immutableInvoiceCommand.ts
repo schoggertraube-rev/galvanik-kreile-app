@@ -1324,8 +1324,8 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
         if (replayRows.length !== 1 || !replayRows[0]) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
-        const receipt = mapCancellationReceipt(replayRows[0], tenantId, actorId);
-        return cancellationReceiptMatchesIntent(receipt, input)
+        const receipt = mapCancellationReceipt(replayRows[0], tenantId, replayRows[0].actor_id);
+        return receipt.cancelledBy === actorId && cancellationReceiptMatchesIntent(receipt, input)
           ? { code: "OK", receipt, replayed: true }
           : { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
       }

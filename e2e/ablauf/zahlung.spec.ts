@@ -17,6 +17,23 @@ it('invoice issue retries from another actual finance actor are a key conflict a
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
 });
 
+it('invoice cancellation retries reject another finance actor without replacing the original cancellation',async()=>{
+ const order=await readyInvoiceOrder('Storno-Akteur');
+ const {cancelInvoiceAction,getInvoiceCancellationReceiptAction}=await import('@/app/actions/invoices.actions');
+ const input={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST dokumentierte Korrektur',clientEventId:randomUUID()};
+ const cancelled=await withSession(full,()=>cancelInvoiceAction(input));
+ if(cancelled.code!=='OK')throw Error('CANCEL_ACTOR_INITIAL:'+cancelled.code);
+ const original=await withSession(full,()=>getInvoiceCancellationReceiptAction({invoiceId:order.invoice.invoiceId,clientEventId:input.clientEventId}));
+ expect(original.code).toBe('OK');
+ const other=await createFixture(['auftraege','geld']);
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(other,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>getInvoiceCancellationReceiptAction({invoiceId:order.invoice.invoiceId,clientEventId:input.clientEventId}))).toEqual(original);
+ expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:cancelled.receipt.eventId,cancelledBy:full.actorId}});
+ expect(await sql`SELECT status,aggregate_version AS version,cancel_event_id FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{status:'cancelled',version:2,cancel_event_id:cancelled.receipt.eventId}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
 it('a real login without Geld cannot read financial receipts or mutate invoice prices and payment modes',async()=>{
  const order=await readyInvoiceOrder('Geld-Lesegrenze');
  const actor=await createFixture(['auftraege']);
