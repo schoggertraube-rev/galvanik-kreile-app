@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "owner": "AP-EIN Teil 4 – Aufgabe",
   "publicExports": [
+    "@/modules/tasks/server-public#completeOrderCallbackTask",
     "@/modules/tasks/server-public#createInvoiceClarificationTask",
     "@/modules/tasks/server-public#resolveInvoiceClarificationTask",
     "@/modules/tasks/server-public#createMissingGoodsTask",

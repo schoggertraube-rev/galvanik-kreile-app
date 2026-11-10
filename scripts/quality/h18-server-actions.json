@@ -36,7 +36,8 @@
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/goodsOut.actions.ts#recordGoodsOutAction": [
-      "src/test/h18_workshop_actions.integration.test.ts"
+      "src/test/h18_workshop_actions.integration.test.ts",
+      "src/test/acceptance/dispatch_call.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#convertQuoteToOrderAction": [
       "src/test/h18_quote_actions.integration.test.ts"

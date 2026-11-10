@@ -157,6 +157,13 @@ export async function completeTask(input:unknown,deps:Dependencies):Promise<Task
  const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
  try{return await withPrivilegedTenantTransaction(auth,tx=>finishTask(tx,auth,value,deps));}catch(error){return resultError(error);}
 }
+/** A checked goods-out composition finishes the same visible task atomically, never via a second UPDATE writer. */
+export async function completeOrderCallbackTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string,note:string,deps:Dependencies):Promise<void>{
+ if(!hasAuthorizationArea(auth,'auftraege'))reject('FORBIDDEN',DISPATCH_CALL_COPY.forbidden);
+ const before=await find(tx,auth,taskId,true);if(!before||before.art!=='rueckruf'||before.bezug_typ!=='auftrag')reject('NOT_FOUND',DISPATCH_CALL_COPY.notCall);
+ if(before.status==='erledigt')return;
+ await finishTask(tx,auth,{taskId,version:before.version,note},deps);
+}
 export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
  if(!request||typeof request!=='object'||Array.isArray(request)||('taskId'in request?!taskUuid(request.taskId):!validTaskReference(request.reference)))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};
  if('taskId'in request?Object.keys(request).join(',')!=='taskId':Object.keys(request).some(key=>!['reference','kind','itemId'].includes(key))||request.kind!==undefined&&!TASK_KINDS.includes(request.kind)||request.itemId!==undefined&&!taskUuid(request.itemId))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf enthält ungültige Felder.'};

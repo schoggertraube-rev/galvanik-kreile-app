@@ -652,8 +652,9 @@ export async function authorizeGoodsOutInput(input: unknown): Promise<
 }
 
 type GoodsOutComposition={
-  beforeOrderLock:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
-  beforeWrite:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<Exclude<RecordGoodsOutResult,{code:'OK'}>|null>;
+  beforeOrderLock?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
+  beforeWrite?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<Exclude<RecordGoodsOutResult,{code:'OK'}>|null>;
+  afterWrite?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
 };
 class GoodsOutRejected extends Error{
   constructor(readonly result:Exclude<RecordGoodsOutResult,{code:'OK'}>){super('GOODS_OUT_REJECTED');}
@@ -701,7 +702,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
 
       // Invoice advisory locks must precede the shared order-row lock to avoid
       // deadlock with a simultaneous standalone invoice action.
-      await composition?.beforeOrderLock(tx,authorization.data);
+      await composition?.beforeOrderLock?.(tx,authorization.data);
       const orders = await readOrder(tx, tenantId, input.orderId, true);
       const order = orders[0];
       if (orders.length !== 1 || !order || order.tenant_id !== tenantId) {
@@ -782,7 +783,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
         return { code: "CONFLICT", message: "Ausgabe ist noch nicht freigegeben. Zahlung oder Abschluss fehlt." };
       }
 
-      const preparation=await composition?.beforeWrite(tx,authorization.data);
+      const preparation=await composition?.beforeWrite?.(tx,authorization.data);
       if(preparation)return preparation;
       const invoices = await readActiveInvoice(tx, tenantId, order.id);
       if (invoices.length > 1) {
@@ -1057,6 +1058,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
     return await withPrivilegedTenantTransaction(authorization.data,async tx=>{
       const result=await write(tx);
       if(result.code!=='OK')throw new GoodsOutRejected(result);
+      await composition?.afterWrite?.(tx,authorization.data);
       return result;
     });
   } catch (error: unknown) {

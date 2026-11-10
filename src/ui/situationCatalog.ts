@@ -170,6 +170,7 @@ export const DISPATCH_CALL_COPY={
  notCall:'Diese Aufgabe gehört nicht zur Anrufstufe. Schließe sie über ihren normalen Weg ab.',
  preserve:'Dieser Anruf hält die gemeinsamen Aufträge zusammen. Halte Dein Ergebnis beim Erledigen fest.',
  cohortChanged:'Die fertigen Aufträge haben sich geändert. Öffne den gemeinsamen Anruf aus der Fertig-Liste erneut.',
+ goodsGone:'Die Ware ist bereits übergeben. Der Anruf zur Abholung entfällt.',
  forbidden:'Für diesen Schritt brauchst Du die Freigabe für Aufträge und beim Vorbereiten auch Mails.',
  unavailable:'Der Anruf konnte nicht gespeichert werden. Deine Eingaben bleiben erhalten; versuche es erneut.',
  session:'Melde Dich erneut an; Deine Eingaben bleiben erhalten.',invalid:'Öffne den Anruf aus der Liste der fertigen Aufträge erneut.'

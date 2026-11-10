@@ -13,6 +13,7 @@ import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actio
 import {emptyDispatchPolicy} from '@/modules/fundament/public';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {updateCustomerAction} from '@/app/actions/customers.actions';
+import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('DISPATCH_CALL_LOOPBACK_REQUIRED');
 async function proposal(id:string){const result=await withSession(full,()=>getOrdersDb());if(!result.ok)throw Error('CALL_QUEUE');const plan=result.data.find(row=>row.id===id)?.finishedDispatch?.reminder;if(!plan)throw Error('CALL_PLAN');return plan;}
 async function prepare(label:string){
@@ -108,4 +109,26 @@ it('a customer without email goes directly to one call without reminder settings
  const queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(row=>row.id===order.orderId)?.finishedDispatch).toMatchObject({state:'available',channel:'telefon',reminder:{state:'STOPPED'}});
  expect(await withSession(full,()=>createDispatchCallTaskAction(structuredClone(request)))).toMatchObject({code:'OK',taskId:created.taskId,replayed:true});
  expect(external).toBe(0);
+});
+it('handing over the remaining goods completes the existing callback atomically without inventing a phone call, and goods-out retry repeats no history',async()=>{
+ const {first,second,request}=await prepare('E3-Abgeholt');
+ const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('CALL_GONE_CREATE');
+ const releaseFirst={orderId:first.orderId,expectedVersion:first.version,mode:'abholung' as const,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>recordGoodsOutAction(releaseFirst))).toMatchObject({code:'OK'});
+ expect(await proposal(second.orderId)).toMatchObject({state:'CALL_PENDING'});
+ expect(await withSession(full,()=>createDispatchCallTaskAction(structuredClone(request)))).toMatchObject({code:'OK',taskId:created.taskId});
+ const task=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));expect(task).toMatchObject({code:'OK',task:{status:'offen'},dispatchCall:{orderIds:[second.orderId]}});
+ const release={orderId:second.orderId,expectedVersion:second.version,mode:'abholung' as const,clientEventId:randomUUID()};
+ await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${created.taskId}`;
+ expect(await withSession(full,()=>recordGoodsOutAction(release))).toMatchObject({code:'UNAVAILABLE'});
+ expect(await sql`SELECT station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second.orderId}`).toEqual([{station:'fertig',version:second.version}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${release.clientEventId}::uuid`).toEqual([{n:0}]);
+ await sql`UPDATE public.events SET status='success' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${created.taskId}`;
+ expect(await withSession(full,()=>recordGoodsOutAction(release))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}))).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:full.actorId},dispatchCall:{required:false,result:'noLongerNeeded'}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${created.taskId}`).toEqual([{n:1}]);
+ const [history]=await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND nachher->>'taskId'=${created.taskId}`;
+ expect(await withSession(full,()=>recordGoodsOutAction(JSON.parse(JSON.stringify(release))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND nachher->>'taskId'=${created.taskId}`).toEqual([{n:history.n}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND order_id IN (${first.orderId},${second.orderId})`).toEqual([{n:2}]);
 });
