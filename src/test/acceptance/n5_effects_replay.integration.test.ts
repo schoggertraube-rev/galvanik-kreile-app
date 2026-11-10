@@ -84,6 +84,50 @@ it('S02 existing payment, pickup, shipping and sending retain exactly one effect
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${unknown.clientRequestId}::uuid`).toHaveLength(0);
 },120000);
 
+it.each([false,true])('S02 confirmed resend requires ten minutes and reserves one actor-bound effect (aged=%s)',async(aged)=>{
+ const order=await readyInvoiceOrder('N5 Bestaetigtes-Neusenden');
+ const [customer]=await sql`SELECT name FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+ const input={targetType:'CUSTOMER' as const,targetId:order.customerId,subject:'TEST N5 Freigabe',body:'TEST unveraenderter Originalinhalt',clientRequestId:randomUUID()};
+ let sends=0;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-N5-resend-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;if(sends===1)throw Error('TEST unknown original effect');return new Response(null,{status:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:[]});
+  return nativeFetch(request,init);
+ });
+ const clock='test_resend_clock_'+randomUUID().replaceAll('-','');
+ if(aged){
+  // Isolated TEST age boundary at insertion; immutable receipts are never edited.
+  await sql.unsafe(`CREATE FUNCTION private.${clock}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND NEW.correlation_id='${input.clientRequestId}'::uuid THEN NEW.created_at=statement_timestamp()-interval '11 minutes'; END IF; RETURN NEW; END $$`);
+  await sql.unsafe(`CREATE TRIGGER ${clock} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${clock}()`);
+ }
+ try{expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});}
+ finally{if(aged){await sql.unsafe(`DROP TRIGGER ${clock} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${clock}()`);}}
+ const checked=await withSession(full,()=>sendCustomerMailAction(fresh(input)));expect(checked.code).toBe('CONFLICT');
+ if(!aged){
+  expect(checked).not.toHaveProperty('resend');
+  expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(1);return;
+ }
+ expect(checked).toMatchObject({resend:{requestId:input.clientRequestId,label:'Mail an '+customer.name+' erneut senden – nicht im Postausgang gefunden'}});
+ const other=await createFixture(['mails'],'buero');
+ expect(await withSession(other,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(1);
+ const guard='test_resend_confirmation_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${guard}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${guard} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${guard}()`);
+ try{
+  expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'UNAVAILABLE'});expect(sends).toBe(1);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND correlation_id=${input.clientRequestId}::uuid`).toHaveLength(0);
+ }finally{await sql.unsafe(`DROP TRIGGER ${guard} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${guard}()`);}
+ const result=await Promise.all([withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true})),withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))]);
+ expect(result.filter(row=>row.code==='OK')).toHaveLength(1);expect(sends).toBe(2);
+ expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(2);
+ const proof=await sql`SELECT id,user_id::text AS actor,payload->>'reason' AS reason FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND correlation_id=${input.clientRequestId}::uuid`;
+ expect(proof).toEqual([{id:expect.any(String),actor:full.actorId,reason:'nicht_im_postausgang_gefunden'}]);
+ await expect(sql`UPDATE public.events SET payload=payload||'{"reason":"TEST changed"}'::jsonb WHERE id=${proof[0].id}`).rejects.toThrow(/append-only/);
+ await expect(sql`DELETE FROM public.events WHERE id=${proof[0].id}`).rejects.toThrow(/append-only/);
+},120000);
+
 it('S02 Sent Items closes an uncertain ordinary send without another external effect',async()=>{
  const order=await readyInvoiceOrder('N5 Sent-Items-Abgleich');
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;

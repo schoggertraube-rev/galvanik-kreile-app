@@ -76,7 +76,7 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Extr
 }
 
 export async function sendCustomerMailAction(input: TargetInput & {
- clientRequestId:string;subject:string;body:string;expectedInvoiceIds?:string[];attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string};
+ clientRequestId:string;subject:string;body:string;confirmedResend?:true;expectedInvoiceIds?:string[];attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string};
 }){
  try{
  const authorizationResult=await authorization();
@@ -162,7 +162,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   }
  }
  const snapshot=document;
- const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,additionalAttachments,document,beforePrepare:snapshot?async (tx,recipient)=>{
+ const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,attachment,additionalAttachments,document,beforePrepare:snapshot?async (tx,recipient)=>{
   if(snapshot.kind==='QUOTE')return lockQuoteDeliverySnapshot(tx,auth.tenantId,snapshot);
   for(const invoice of [snapshot,...snapshot.bundle??[]].sort((a,b)=>a.orderId.localeCompare(b.orderId))){
    if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;

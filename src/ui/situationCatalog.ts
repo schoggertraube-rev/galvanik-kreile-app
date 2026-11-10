@@ -264,3 +264,5 @@ export const CUSTOMER_COLLECTION_COPY={
   const key=stage==='E1'?'kunde.abholung.e1':stage==='E2'?'kunde.abholung.e2':'kunde.abholung.lagerfrist';return {subject:CUSTOMER_COLLECTION_COPY[key].subject(facts.members.map(member=>member.number).join(', ')),body:lines.join('\n\n')};
  }
 };
+
+export const MAIL_RESEND_COPY={confirm:(customer:string)=>'Mail an '+customer+' erneut senden – nicht im Postausgang gefunden'};

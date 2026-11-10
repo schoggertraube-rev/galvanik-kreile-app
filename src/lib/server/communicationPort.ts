@@ -1,3 +1,4 @@
+import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
 import "server-only";
 
 import { randomUUID,createHash } from "node:crypto";
@@ -30,7 +31,7 @@ export async function readComplaintGoodsReminderDates(tx:import('./privilegedDb'
     JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email' AND message.summary='Reklamation '||complaint.complaint_id||' · Begleitschein'
     WHERE complaint.tenant_id=${auth.tenantId} AND complaint.complaint_id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::text[]) AND thread.status='sent' AND thread.updated_at>=complaint.rework_ware_since GROUP BY complaint.complaint_id`);
 }
-type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string };
+type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string;resend?:{requestId:string;label:string} };
 type Target = { customerId: string; orderId: string | null; email: string; label: string };
 type ThreadRow = { id: string; customer_id: string | null; order_id: string | null; status: string | null; created_at: Date | string | null;created_by?:string };
 type LinkedMessageRow = {
@@ -221,9 +222,9 @@ export async function attachInboxMessage(
 
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; confirmedResend?:true; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
 ): Promise<Result<CommunicationReceipt>> {
-  if (!validTarget(input?.targetType, input?.targetId) || typeof input.clientRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.clientRequestId) || typeof input.subject !== 'string' || typeof input.body !== 'string' || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
+  if (input?.confirmedResend!==undefined&&input.confirmedResend!==true || !validTarget(input?.targetType, input?.targetId) || typeof input.clientRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.clientRequestId) || typeof input.subject !== 'string' || typeof input.body !== 'string' || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
   }
   // The bound 4.8 result mail requires Kunden. It grants no inbox or arbitrary
@@ -301,9 +302,11 @@ export async function sendCommunicationMail(
       if(unresolved.length){
         const prior=unresolved[0];
         if(unresolved.length!==1||prior.actor!==auth.userId||prior.content!==contentSha256||!prior.thread_id||input.document||input.collectionReminder||input.complaintResult)throw Error('COMMUNICATION_OUTCOME_UNCLEAR');
+        if(input.confirmedResend&&input.clientRequestId!==prior.request_id)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         input={...input,clientRequestId:prior.request_id};
         return {threadId:prior.thread_id,recordedAt:iso(prior.created_at),recovery:true as const};
       }
+      if(input.confirmedResend)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
       if(readMicrosoftGraphConfigurationStatus().code!=='READY')throw Error('COMMUNICATION_NOT_CONFIGURED');
       if((input.document&&!input.beforePrepare)||(input.beforePrepare&&!await input.beforePrepare(tx,target.email)))throw Error('COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED');
       const threadId = randomUUID();
@@ -335,11 +338,33 @@ export async function sendCommunicationMail(
   }
   if (pending.replay) return { code: "OK", data: pending.replay };
   let sentItemsEvidence:{graphMessageId:string;internetMessageId:string;clientRequestId:string|null}|undefined;
+  let resendConfirmationId:string|undefined;
   if(pending.recovery){
     const proof=await readMicrosoftGraphSentMailByRequest({clientRequestId:input.clientRequestId,recipient:target.email,preparedAt:pending.recordedAt});
-    if(proof.code!=='OK'||'notFound'in proof.data)return {code:'CONFLICT',message:COLLECTION_REMINDER_COPY.unclear};
-    sentItemsEvidence=proof.data;
-  }else{
+    if(proof.code!=='OK')return {code:'CONFLICT',message:COLLECTION_REMINDER_COPY.unclear};
+    if('notFound'in proof.data){
+      const confirmation=await withPrivilegedTenantTransaction(auth,async tx=>{
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${auth.tenantId}:mail-intent:${intentHash}`},0))`);
+        const state=await tx.execute<{eligible:boolean;used:boolean}>(sql`SELECT statement_timestamp()>=(prepared.created_at AT TIME ZONE 'UTC')+interval '10 minutes' AS eligible,
+         EXISTS(SELECT 1 FROM public.events confirmed WHERE confirmed.tenant_id=prepared.tenant_id AND confirmed.event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND confirmed.correlation_id=prepared.correlation_id) AS used
+         FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
+         WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND prepared.correlation_id=${input.clientRequestId}::uuid
+          AND prepared.user_id=${auth.userId}::uuid AND prepared.payload->>'intentHash'=${intentHash} AND prepared.payload->>'contentSha256'=${contentSha256}
+          AND thread.status IN('pending','failed') AND thread.id=${pending.threadId} FOR UPDATE OF thread`);
+        if(state.length!==1||!state[0].eligible||state[0].used)return {available:false};
+        if(!input.confirmedResend)return {available:true};
+        const rows=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
+          VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_RESEND_CONFIRMED_V1','Versand unklar',${JSON.stringify({threadId:pending.threadId,originalRequestId:input.clientRequestId,intentHash,reason:'nicht_im_postausgang_gefunden'})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp()) RETURNING id`);
+        if(rows.length!==1)throw Error('COMMUNICATION_RESEND_CONFIRMATION_NOT_SAVED');
+        const changed=await tx.execute(sql`UPDATE public.communication_threads SET status='pending' WHERE tenant_id=${auth.tenantId} AND id=${pending.threadId} AND status IN('pending','failed') RETURNING id`);
+        if(changed.length!==1)throw Error('COMMUNICATION_RESEND_STATE_CHANGED');
+        return {available:true,id:rows[0].id};
+      });
+      if(!confirmation.id)return {code:'CONFLICT',message:COLLECTION_REMINDER_COPY.unclear,...(confirmation.available?{resend:{requestId:input.clientRequestId,label:MAIL_RESEND_COPY.confirm(target.label)}}:{})};
+      resendConfirmationId=confirmation.id;
+    }else sentItemsEvidence=proof.data;
+  }
+  if(!pending.recovery||resendConfirmationId){
   const sent = await sendMicrosoftGraphMail({ to: target.email, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment,additionalAttachments:input.additionalAttachments, replyToMessageId: input.document?.source?.graphMessageId,clientRequestId:input.clientRequestId });
   if (sent.code !== "OK") {
     await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
@@ -371,12 +396,12 @@ export async function sendCommunicationMail(
         bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
         const h=bytes.subarray(0,16).toString('hex'),key=`${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
         const sentReceipt=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
-          VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_SENT_V1','E-Mail versendet',${JSON.stringify({threadId:pending.threadId,messageId,customerId:target.customerId,orderId:target.orderId,...(sentItemsEvidence?{sentItemsEvidence}:{}),contentSha256:createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex')})}::jsonb,'success',${auth.userId},${key}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
+          VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_SENT_V1','E-Mail versendet',${JSON.stringify({threadId:pending.threadId,messageId,customerId:target.customerId,orderId:target.orderId,...(sentItemsEvidence?{sentItemsEvidence}:{}),...(resendConfirmationId?{resendConfirmationId}:{}),contentSha256:createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex')})}::jsonb,'success',${auth.userId},${key}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
         if(sentReceipt.length!==1)throw Error('COMMUNICATION_SENT_RECEIPT_NOT_SAVED');
       }
       if(input.collectionReminder)await appendCollectionReminderSent(tx,auth,input.collectionReminder,pending.threadId,messageId,input.clientRequestId);
     });
-    return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: pending.recovery===true } };
+    return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: pending.recovery===true&&!resendConfirmationId } };
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_SEND_FINALIZE_FAILED", error);
     return { code: "UNAVAILABLE", message: "Microsoft 365 hat die Mail angenommen, die lokale Vorgangskopie ist aber noch nicht sicher bestätigt. Nicht erneut senden." };
