@@ -3,7 +3,7 @@
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {freezeStorageDeadline} from '@/lib/server/storageDeadline';
 import {createHash} from "node:crypto";
-import {readCommunicationDocumentReceipt,readInvoiceMailCohort,assertInvoiceMailCohort,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
+import {readCommunicationDocumentReceipt,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
@@ -131,7 +131,8 @@ export async function sendCustomerMailAction(input: TargetInput & {
    attachment={filename:pdf.data.invoiceNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.data.pdf)};
    document={kind:'INVOICE',id:invoice.id,orderId:invoice.order_id,orderNumber:invoice.order_number,number:pdf.data.invoiceNumber,version:invoice.aggregate_version,sha256:pdf.data.pdfSha256};
    invoiceGroup={customerId:invoice.customer_id,handover:invoice.handover_mode};
-   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode))).filter(row=>row.id!==invoice.id);
+   const resend=await withPrivilegedTenantTransaction(auth,tx=>qualifyInvoiceResend(tx,auth,invoice.id,invoice.customer_id));if(resend)document.resend=resend;
+   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id)))).filter(row=>row.id!==invoice.id);
    if(others.length>100)return {code:'VALIDATION_ERROR' as const,message:'Zu viele offene Belege für eine einzelne Sammel-Mail. Es wurde nichts gesendet.'};
    for(const other of others){
     const original=await readInvoicePdf(auth,other.id,'original');if(original.code!=='OK')return original;
@@ -154,16 +155,17 @@ export async function sendCustomerMailAction(input: TargetInput & {
   }
  }
  const snapshot=document;
- const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,additionalAttachments,document,beforePrepare:snapshot?async tx=>{
+ const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,additionalAttachments,document,beforePrepare:snapshot?async (tx,recipient)=>{
   if(snapshot.kind==='QUOTE')return lockQuoteDeliverySnapshot(tx,auth.tenantId,snapshot);
   for(const invoice of [snapshot,...snapshot.bundle??[]].sort((a,b)=>a.orderId.localeCompare(b.orderId))){
    if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;
    const rows=await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid AND order_id=${invoice.orderId} AND status='issued' AND aggregate_version=${invoice.version} AND pdf_sha256=${invoice.sha256} FOR UPDATE`);
    if(rows.length!==1)return false;
-   await assertInvoiceNotSent(tx,auth.tenantId,invoice);
+   if(!snapshot.resend?.originals.some(original=>original.id===invoice.id&&original.sha256===invoice.sha256))await assertInvoiceNotSent(tx,auth.tenantId,invoice);
   }
   if(!invoiceGroup)throw Error('INVOICE_GROUP_MISSING');
-  await assertInvoiceMailCohort(tx,auth.tenantId,invoiceGroup,input.expectedInvoiceIds!,[snapshot.id,...snapshot.bundle?.map(row=>row.id)??[]]);
+  if(snapshot.resend){const qualified=await qualifyInvoiceResend(tx,auth,snapshot.id,invoiceGroup!.customerId,recipient);if(JSON.stringify(qualified)!==JSON.stringify(snapshot.resend)||!snapshot.resend.originals.every(original=>[snapshot,...snapshot.bundle??[]].some(row=>row.id===original.id&&row.sha256===original.sha256)))return false;}
+  await assertInvoiceMailCohort(tx,auth.tenantId,invoiceGroup,input.expectedInvoiceIds!,[snapshot.id,...snapshot.bundle?.map(row=>row.id)??[]],snapshot.resend?.originals.map(row=>row.id));
   return true;
  }:undefined});
  return sent.code==='OK'&&document?.kind==='QUOTE'?confirmQuoteDelivery(input,document,sent):sent;

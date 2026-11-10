@@ -220,7 +220,7 @@ export async function attachInboxMessage(
 
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || typeof input.clientRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.clientRequestId) || typeof input.subject !== 'string' || typeof input.body !== 'string' || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
@@ -278,7 +278,7 @@ export async function sendCommunicationMail(
         }
       }
       if(readMicrosoftGraphConfigurationStatus().code!=='READY')throw Error('COMMUNICATION_NOT_CONFIGURED');
-      if((input.document&&!input.beforePrepare)||(input.beforePrepare&&!await input.beforePrepare(tx)))throw Error('COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED');
+      if((input.document&&!input.beforePrepare)||(input.beforePrepare&&!await input.beforePrepare(tx,target.email)))throw Error('COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED');
       const threadId = randomUUID();
       const rows = await tx.execute<ThreadRow>(sql`
         INSERT INTO public.communication_threads (id, tenant_id, customer_id, order_id, source, subject, status, priority, category, created_by)

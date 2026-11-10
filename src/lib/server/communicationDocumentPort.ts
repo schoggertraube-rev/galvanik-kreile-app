@@ -1,12 +1,15 @@
 import 'server-only';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql,type SQL} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
+import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
 import {appendOrderInformed} from './orderReleaseRead';
 import {DISPATCH_NOTICE_COPY} from '@/ui/situationCatalog';
 
-export type InvoiceMailDocument={id:string;number:string;version:number;sha256:string;orderId:string;orderNumber?:string};
+export type InvoiceResendEvidence={bounceEventId:string;bounceItemId:string;bouncedThreadId:string;correctionEventId:string;recipient:string;originals:Array<{id:string;sha256:string}>};
+export type InvoiceMailDocument={resend?:InvoiceResendEvidence;id:string;number:string;version:number;sha256:string;orderId:string;orderNumber?:string};
 export type CommunicationDocument={kind:'QUOTE';id:string;number:string;version:number;edition:number;sha256:string;source?:{itemId:string;graphMessageId:string}}|InvoiceMailDocument&{kind:'INVOICE';bundle?:InvoiceMailDocument[];source?:never};
 type Intent={targetType:'CUSTOMER'|'ORDER';targetId:string;clientRequestId:string;subject:string;body:string};
 export function communicationDocumentBody(body:string,document:CommunicationDocument,legacy=false){
@@ -15,7 +18,7 @@ export function communicationDocumentBody(body:string,document:CommunicationDocu
  const prefix=(legacy?DISPATCH_NOTICE_COPY.legacyCollective(orders as string[]):DISPATCH_NOTICE_COPY.collective(orders as string[]))+'\n\n';
  return body.trim().startsWith(prefix)?body.trim():prefix+body.trim();
 }
-export function communicationDocumentIntent(input:Intent,document:CommunicationDocument,legacy=false){return createHash('sha256').update(JSON.stringify({targetType:input.targetType,targetId:input.targetId,subject:input.subject.trim(),body:communicationDocumentBody(input.body,document,legacy),document:{kind:document.kind,id:document.id,number:document.number,version:document.version,...(document.kind==='QUOTE'?{edition:document.edition}:{orderId:document.orderId,...(document.bundle?.length?{orderNumber:document.orderNumber,bundle:document.bundle.map(doc=>({id:doc.id,orderId:doc.orderId,orderNumber:doc.orderNumber,number:doc.number,version:doc.version,sha256:doc.sha256}))}:{})}),sha256:document.sha256,...(document.source?{source:{itemId:document.source.itemId,graphMessageId:document.source.graphMessageId}}:{})}})).digest('hex');}
+export function communicationDocumentIntent(input:Intent,document:CommunicationDocument,legacy=false){return createHash('sha256').update(JSON.stringify({targetType:input.targetType,targetId:input.targetId,subject:input.subject.trim(),body:communicationDocumentBody(input.body,document,legacy),document:{kind:document.kind,id:document.id,number:document.number,version:document.version,...(document.kind==='QUOTE'?{edition:document.edition}:{orderId:document.orderId,...(document.resend?{resend:JSON.parse(canonicalJson(document.resend))}:{}),...(document.bundle?.length?{orderNumber:document.orderNumber,bundle:document.bundle.map(doc=>({id:doc.id,orderId:doc.orderId,orderNumber:doc.orderNumber,number:doc.number,version:doc.version,sha256:doc.sha256}))}:{})}),sha256:document.sha256,...(document.source?{source:{itemId:document.source.itemId,graphMessageId:document.source.graphMessageId}}:{})}})).digest('hex');}
 export async function appendCommunicationDocument(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:Intent,document:CommunicationDocument,threadId:string,phase:'prepared'|'sent'){
  const payload={threadId,document,intent:communicationDocumentIntent(input,document),targetType:input.targetType,targetId:input.targetId,subject:input.subject.trim(),bodySha256:createHash('sha256').update(input.body.trim()).digest('hex')};
  await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at)
@@ -79,22 +82,45 @@ export async function assertInvoiceNotSent(tx:PrivilegedTenantTransaction,tenant
  if(rows.length)throw new InvoiceAlreadySent(invoice.number,rows[0].sent_on);
 }
 
-export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null){
+export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]=[]){
  return tx.execute<{id:string;order_id:string;order_number:string;invoice_number:string;aggregate_version:number}>(sql`SELECT invoice.id::text,invoice.order_id,orders.order_number,invoice.invoice_number,invoice.aggregate_version FROM public.invoices invoice
   JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
   JOIN private.v_order_freeze_state_v1 frozen ON frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active AND frozen.integrity_ok
   WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId} AND invoice.status='issued' AND invoice.contract_version=1
-   AND NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} AND orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig' AND orders.handover_mode=${handover}
+   AND (NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} OR invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[])) AND orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig' AND orders.handover_mode=${handover}
   ORDER BY orders.order_number,invoice.id LIMIT 102`);
 }
 export class InvoiceMailListChanged extends Error{
  constructor(readonly number:string,readonly added:boolean){super('INVOICE_MAIL_LIST_CHANGED');}
 }
-export async function assertInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,group:{customerId:string;handover:string|null},expected:readonly string[],prepared:readonly string[]){
- const current=await readInvoiceMailCohort(tx,tenantId,group.customerId,group.handover);
+export async function assertInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,group:{customerId:string;handover:string|null},expected:readonly string[],prepared:readonly string[],resendIds:readonly string[]=[]){
+ const current=await readInvoiceMailCohort(tx,tenantId,group.customerId,group.handover,resendIds);
  const added=current.find(row=>!expected.includes(row.id)),removed=expected.find(id=>!current.some(row=>row.id===id));
  const unprepared=current.find(row=>expected.includes(row.id)&&!prepared.includes(row.id));
  if(added||unprepared)throw new InvoiceMailListChanged((added??unprepared)!.invoice_number,true);
  if(removed){const [invoice]=await tx.execute<{invoice_number:string}>(sql`SELECT invoice_number FROM public.invoices WHERE tenant_id=${tenantId} AND customer_id=${group.customerId} AND id=${removed}::uuid`);if(!invoice)throw Error('INVOICE_EXPECTED_LIST_INVALID');throw new InvoiceMailListChanged(invoice.invoice_number,false);}
  if(expected.length!==prepared.length)throw Error('INVOICE_EXPECTED_LIST_INVALID');
+}
+
+/** PL21:12: one corrected-address resend of the same PDFs, qualified by the existing secured DSN reader. */
+export async function qualifyInvoiceResend(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,invoiceId:string,customerId:string,actualRecipient?:string):Promise<InvoiceResendEvidence|null>{
+ const sent=await tx.execute<{id:string;event_schema_version:number;payload:{threadId:string;document:CommunicationDocument;intent:string;bodySha256:string}}>(sql`SELECT sent.id::text,sent.event_schema_version,sent.payload FROM public.events sent WHERE sent.tenant_id=${auth.tenantId} AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.status='success' AND ${invoiceSentMembership(sql`${invoiceId}`)} ORDER BY sent.created_at DESC,sent.id DESC LIMIT 1`);
+ if(!sent.length)return null;const latest=sent[0];if(latest.event_schema_version!==1)throw Error('INVOICE_RESEND_SCHEMA_INVALID');
+ const sources=await tx.execute<{body:string;proof_ok:boolean}>(sql`SELECT message.body,(thread.status='sent' AND thread.customer_id=${customerId} AND prepared.status='success' AND prepared.event_schema_version=1 AND prepared.payload->'document'=${JSON.stringify(latest.payload.document)}::jsonb AND prepared.payload->>'intent'=${latest.payload.intent} AND prepared.payload->>'bodySha256'=${latest.payload.bodySha256} AND thread.created_by=prepared.user_id AND message.created_by=prepared.user_id) AS proof_ok FROM public.communication_threads thread LEFT JOIN public.events prepared ON prepared.tenant_id=thread.tenant_id AND prepared.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1' AND prepared.payload->>'threadId'=thread.id::text LEFT JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email' WHERE thread.tenant_id=${auth.tenantId} AND thread.id::text=${latest.payload.threadId}`);
+ if(sources.length!==1||!sources[0].proof_ok||createHash('sha256').update(sources[0].body).digest('hex')!==latest.payload.bodySha256)throw Error('INVOICE_RESEND_SENT_PROOF_INVALID');
+ const failures=await readCommunicationDeliveryFailures(tx,auth,[latest.payload.threadId]);if(!failures.length)return null;
+ const failure=failures.at(-1)!;
+ const bounce=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_DELIVERY_FAILED_V1' AND status='success' AND event_schema_version=1 AND payload->>'itemId'=${failure.itemId} AND payload->>'threadId'=${failure.threadId}`);if(bounce.length!==1)throw Error('INVOICE_RESEND_BOUNCE_AMBIGUOUS');
+ const [customer]=await tx.execute<{email:string|null}>(sql`SELECT email FROM public.customers WHERE tenant_id=${auth.tenantId} AND id=${customerId} FOR SHARE`);
+ const recipient=customer?.email?.trim().toLowerCase();if(!recipient||recipient===failure.recipient.trim().toLowerCase()||actualRecipient!==undefined&&recipient!==actualRecipient)return null;
+ const changes=await tx.execute<{id:string;email:string|null;after_bounce:boolean}>(sql`SELECT change.id::text,change.payload->'fields'->>'email' AS email,(change.created_at>(SELECT created_at FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${bounce[0].id})) AS after_bounce FROM public.events change JOIN public.app_users actor ON actor.tenant_id=change.tenant_id AND actor.id::text=change.user_id::text WHERE change.tenant_id=${auth.tenantId} AND change.event_type IN ('CUSTOMER_CREATED_V1','CUSTOMER_UPDATED_V1') AND change.status='success' AND change.event_schema_version=1 AND change.payload->>'customerId'=${customerId} AND change.payload->'fields' ? 'email' AND change.created_at>=(SELECT created_at FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${latest.id}) ORDER BY change.created_at,change.id LIMIT 1001`);
+ if(changes.length>1000)throw Error('INVOICE_RESEND_CORRECTION_LIMIT');let previous=failure.recipient.trim().toLowerCase(),correction:string|null=null;
+ for(const change of changes){const email=change.email?.trim().toLowerCase()??'';if(email!==previous){correction=change.after_bounce&&email===recipient?change.id:null;previous=email;}}
+ if(!correction||previous!==recipient)return null;
+ const reserved=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type IN ('COMMUNICATION_DOCUMENT_PREPARED_V1','COMMUNICATION_DOCUMENT_SENT_V1') AND status='success' AND payload->'document'->'resend'->>'bounceEventId'=${bounce[0].id} LIMIT 1`);if(reserved.length)return null;
+ const document=latest.payload.document;if(document.kind!=='INVOICE')throw Error('INVOICE_RESEND_SOURCE_KIND');const originals=[document,...document.bundle??[]].map(row=>({id:row.id,sha256:row.sha256}));
+ if(!originals.some(row=>row.id===invoiceId)||new Set(originals.map(row=>row.id)).size!==originals.length||originals.some(row=>!/^([a-f0-9]{64})$/.test(row.sha256)))throw Error('INVOICE_RESEND_ORIGINALS_INVALID');
+ const newest=await tx.execute<{id:string;sent_id:string}>(sql`SELECT DISTINCT ON (original.id) original.id,sent.id::text AS sent_id FROM jsonb_to_recordset(${JSON.stringify(originals)}::jsonb) AS original(id text,sha256 text) JOIN public.events sent ON sent.tenant_id=${auth.tenantId} AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.status='success' AND ${invoiceSentMembership(sql`original.id`)} ORDER BY original.id,sent.created_at DESC,sent.id DESC`);
+ if(newest.length!==originals.length||newest.some(row=>row.sent_id!==latest.id))return null;
+ return {bounceEventId:bounce[0].id,bounceItemId:failure.itemId,bouncedThreadId:failure.threadId,correctionEventId:correction,recipient,originals};
 }

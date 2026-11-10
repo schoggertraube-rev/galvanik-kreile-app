@@ -17,12 +17,12 @@ function mime(messageId:string,recipient:string,action='failed',status='5.1.1'){
  return 'Message-ID: <TEST-report@example.invalid>\r\nFrom: postmaster@example.invalid\r\nContent-Type: multipart/report; report-type=delivery-status; boundary="TEST-report"\r\n\r\n--TEST-report\r\nContent-Type: text/plain\r\n\r\nTEST untrusted human body\r\n--TEST-report\r\nContent-Type: message/delivery-status\r\n\r\nReporting-MTA: dns; TEST.example.invalid\r\n\r\nFinal-Recipient: rfc822; '+recipient+'\r\nAction: '+action+'\r\nStatus: '+status+'\r\n\r\n--TEST-report\r\nContent-Type: text/rfc822-headers\r\n\r\nMessage-ID: '+messageId+'\r\nFrom: TEST-mailbox@example.invalid\r\nTo: '+recipient+'\r\n--TEST-report--\r\n';
 }
 function provider(){
- const state={graphId:'TEST-dsn-'+randomUUID(),requestId:randomUUID(),originalId:'<TEST-original-'+randomUUID()+'@example.invalid>',recipient:'',mime:'',blocked:false,lookups:0,sends:0,fetches:0};
+ const state={graphId:'TEST-dsn-'+randomUUID(),requestId:randomUUID(),originalId:'<TEST-original-'+randomUUID()+'@example.invalid>',recipient:'',mime:'',blocked:false,lookups:0,sends:0,fetches:0,mails:[] as Array<{to:string[];hashes:string[]}>};
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
   if(url.hostname==='graph.microsoft.com'||url.hostname==='login.microsoftonline.com'){state.fetches++;if(state.blocked)throw Error('TEST_GRAPH_OFFLINE_AFTER_IMPORT');}
   if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-bounce-token'.repeat(4),expires_in:3600});
-  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){state.sends++;return new Response(null,{status:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){const message=JSON.parse(String(init?.body)).message;state.mails.push({to:message.toRecipients.map((row:{emailAddress:{address:string}})=>row.emailAddress.address),hashes:(message.attachments??[]).map((row:{contentBytes:string})=>createHash('sha256').update(Buffer.from(row.contentBytes,'base64')).digest('hex'))});state.sends++;return new Response(null,{status:202});}
   if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages')){state.lookups++;return Response.json({value:[{id:'TEST-actual-sent',internetMessageId:state.originalId,from:{emailAddress:{address:'TEST-mailbox@example.invalid'}},toRecipients:[{emailAddress:{address:state.recipient}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:state.requestId}]}]});}
   if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/attachments'))return Response.json({value:[]});
   if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/$value'))return new Response(state.mime);
@@ -32,10 +32,11 @@ function provider(){
 }
 async function configure(){const read=await withSession(full,()=>readShippingSettingsAction());if(read.code!=='OK')throw Error('BOUNCE_SETTINGS');expect(await withSession(full,()=>saveShippingSettingsAction({service:read.settings.service,numberPattern:read.settings.numberPattern,numberHint:read.settings.numberHint,trackingUrl:read.settings.trackingUrl,expectedUpdatedAt:read.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),reminderDays:99}}))).toMatchObject({code:'OK'});}
 
-it('E03 imports one secured original, binds the actual failed outgoing mail and immediately proposes the one callback; retry works without Outlook',async()=>{
+it.each([false,true])('E03 imports one secured original, binds the actual failed outgoing mail and immediately proposes the one callback; retry works without Outlook (bundle=%s)',async(bundle)=>{
  const state=provider(),order=await readyInvoiceOrder('E03-Zurück');
+ const second=bundle?await readyInvoiceOrder('E03 zweites Original','pickup',false,order.customerId):undefined,expectedInvoiceIds=[order.invoice.invoiceId,...(second?[second.invoice.invoiceId]:[])];
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;state.recipient=customer.email;
- const sent=await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:state.requestId,subject:'TEST Fertig',body:'TEST Ware fertig',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}));if(sent.code!=='OK')throw Error('BOUNCE_SEND');
+ const sent=await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:state.requestId,subject:'TEST Fertig',body:'TEST Ware fertig',expectedInvoiceIds,attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}));if(sent.code!=='OK')throw Error('BOUNCE_SEND');
  await configure();state.mime=mime(state.originalId,state.recipient);
  const imported=await withSession(full,()=>importOutlookMailAction(state.graphId));expect(imported).toMatchObject({code:'OK'});if(imported.code!=='OK')throw Error('BOUNCE_IMPORT:'+imported.code);
  expect(await sql`SELECT kunde_id,zuordnung FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${imported.itemId}::uuid`).toEqual([{kunde_id:order.customerId,zuordnung:'hand'}]);
@@ -50,8 +51,17 @@ it('E03 imports one secured original, binds the actual failed outgoing mail and 
  expect(await withSession(full,()=>importOutlookMailAction(state.graphId))).toMatchObject({code:'OK',itemId:imported.itemId,replayed:true});expect(state.fetches).toBe(before);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DELIVERY_FAILED_V1'`).toEqual([{n:1}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.communication_messages WHERE tenant_id=${KREILE_TENANT_SLUG} AND direction='incoming'`).toEqual([{n:0}]);
- state.blocked=false;expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:'TEST-corrected@example.invalid'}))).toMatchObject({code:'OK'});
- const corrected=await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST korrigierte Adresse',body:'TEST Ware fertig',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}));if(corrected.code!=='OK')throw Error('BOUNCE_CORRECTED');
+ state.blocked=false;const sendCount=state.sends;
+ const retryInput={targetType:'ORDER' as const,targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST korrigierte Adresse',body:'TEST Ware fertig',expectedInvoiceIds,attachment:{kind:'INVOICE' as const,documentId:order.invoice.invoiceId}};
+ expect(await withSession(full,()=>sendCustomerMailAction(retryInput))).toMatchObject({code:'CONFLICT'});expect(state.sends).toBe(sendCount);
+ const correctionKey=randomUUID();expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:correctionKey,email:'TEST-corrected@example.invalid'}))).toMatchObject({code:'OK'});
+ const corrected=await withSession(full,()=>sendCustomerMailAction(retryInput));if(corrected.code!=='OK')throw Error('BOUNCE_CORRECTED:'+JSON.stringify(corrected));
+ expect(state.sends).toBe(sendCount+1);expect(state.mails.at(-1)?.to).toEqual(['test-corrected@example.invalid']);expect(state.mails.at(-1)?.hashes).toEqual(state.mails[0].hashes);expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(retryInput))))).toMatchObject({code:'OK',data:{replayed:true}});
+ expect(await withSession(full,()=>sendCustomerMailAction({...retryInput,clientRequestId:randomUUID()}))).toMatchObject({code:'CONFLICT'});expect(state.sends).toBe(sendCount+1);
+ const [resend]=await sql`SELECT payload->'document' AS document FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND payload->>'threadId'=${corrected.data.threadId}`;
+ const [firstOriginal]=await sql`SELECT payload->'document'->>'sha256' AS sha,payload->'document' AS document FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND payload->>'threadId'=${sent.data.threadId}`;
+ const [correction]=await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='CUSTOMER_UPDATED_V1' AND client_event_id=${correctionKey}::uuid`;
+ expect(resend.document).toMatchObject({sha256:firstOriginal.sha,resend:{bounceItemId:imported.itemId,bouncedThreadId:sent.data.threadId,correctionEventId:correction.id,recipient:'test-corrected@example.invalid'}});expect(resend.document.resend.originals).toEqual([firstOriginal.document,...firstOriginal.document.bundle??[]].map((row:{id:string;sha256:string})=>({id:row.id,sha256:row.sha256})));
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{informed:{threadId:corrected.data.threadId},failedDelivery:null}}});
  await sql`UPDATE public.intake_event SET nachher=jsonb_set(nachher,'{deliveryReport,originalSha256}',to_jsonb(repeat('0',64))) WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND art='angelegt'`;
  const broken=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));expect(broken.code==='OK'&&broken.data.customerInformed?.code).toBe('UNAVAILABLE');
