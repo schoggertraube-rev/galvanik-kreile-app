@@ -1,7 +1,9 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import type {AuthorizationSnapshot} from "@/lib/server/authorization";
+import { overdueInvoiceCondition } from "@/lib/server/paymentContract";
 import {evaluateOrderPriority} from '@/lib/priority';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -20,7 +22,6 @@ const AGREEMENT_TYPES = new Set<string>(CUSTOMER_AGREEMENT_TYPES);
 
 /** One batched projection for the list and card; hidden money/mail reasons never leave this port. */
 export async function readCustomerListSignals(auth:AuthorizationSnapshot,customerIds:readonly string[]):Promise<Map<string,CustomerListSignals>> {
-  const {hasAuthorizationArea}=await import('@/lib/server/authorization');
   if(!hasAuthorizationArea(auth,'kunden'))throw Error('CUSTOMER_SIGNALS_FORBIDDEN');
   if(!customerIds.length)return new Map();
   if(customerIds.some(id=>typeof id!=='string'||!id||id.length>128))throw Error('CUSTOMER_SIGNALS_IDS_INVALID');
@@ -31,7 +32,7 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
         AND queue.station NOT IN ('abgeholt','versendet','raus','storniert') AND order_source.ware<>'storniert') AS active_orders,
       (SELECT count(*)::integer FROM private.v_open_quotes_v1 quote WHERE quote.tenant_id=customer.tenant_id AND quote.customer_id=customer.id) AS active_quotes,
       (SELECT count(*)::integer FROM public.invoices invoice WHERE ${money} AND invoice.tenant_id=customer.tenant_id AND invoice.customer_id=customer.id
-        AND invoice.status='issued' AND invoice.payment_status IN ('offen','teilbezahlt') AND invoice.payment_open_amount_cents>0 AND invoice.due_date<(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date) AS overdue,
+        AND ${overdueInvoiceCondition()}) AS overdue,
       (SELECT count(*)::integer FROM public.intake_item source WHERE source.tenant_id=customer.tenant_id AND source.richtung IN ('rein','intern') AND source.einsatz='offen' AND source.aussortiert IS NULL AND source.zuordnung='offen'
         AND (${mails} OR source.kanal<>'mail' AND ${intake} AND source.erstellt_von=${auth.userId}::uuid)
         AND (source.kunde_id=customer.id OR source.kunde_id IS NULL AND customer.email IS NOT NULL AND lower(btrim(source.absender_adresse))=lower(btrim(customer.email)))) AS unassigned,
@@ -97,8 +98,8 @@ export type CustomerSummary = CustomerStoredProfile & {
   orderCount: number;
   wareImHausCount: number;
   wareImHaus: boolean;
-  invoiceRevenueCents: number;
-  invoiceOpenCents: number;
+  invoiceRevenueCents?: number;
+  invoiceOpenCents?: number;
   agreements: CustomerAgreementSummary[];
   agreementSlotsAvailable: number;
   orders: CustomerSummaryOrder[];
@@ -384,8 +385,7 @@ function mapSummary(
     orderCount: row.order_count,
     wareImHausCount: row.ware_im_haus_count,
     wareImHaus: row.ware_im_haus,
-    invoiceRevenueCents,
-    invoiceOpenCents,
+    ...(hasAuthorizationArea(authorization,'geld')?{invoiceRevenueCents,invoiceOpenCents}:{}),
     agreements,
     agreementSlotsAvailable,
     orders,
@@ -420,8 +420,10 @@ export async function readCustomerSummary(
           FROM public.invoices invoice
           WHERE invoice.tenant_id = summary.tenant_id
             AND invoice.customer_id = summary.id
+            AND ${hasAuthorizationArea(authorization,'geld')}
         ) billing ON true
         WHERE summary.id = ${input.customerId}
+          AND (customer.type IS DISTINCT FROM 'lieferant' OR ${hasAuthorizationArea(authorization,'geld')})
         LIMIT 2
       `);
       if (rows.length > 1) throw new Error("CUSTOMER_SUMMARY_AMBIGUOUS");

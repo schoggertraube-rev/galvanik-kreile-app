@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash,randomUUID } from "node:crypto";
 import postgres from "postgres";
@@ -1386,6 +1387,7 @@ it.each(['early','label','two','future','delivered'] as const)('AF19 real mail h
   await sql`INSERT INTO private.extra_work_hourly_rates(id,tenant_id,hourly_rate_cents,version,created_by,effective_at) SELECT ${randomUUID()}::uuid,${KREILE_TENANT_SLUG},12000,coalesce(max(version),0)+1,${fixture.actorId}::uuid,now() FROM private.extra_work_hourly_rates WHERE tenant_id=${KREILE_TENANT_SLUG}`;
   expect(await withSession(fixture,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await withSession(fixture,()=>setOrderItemFinishedAction({orderId,itemId:created.receipt.items[0].id,expectedVersion:2,clientEventId:randomUUID(),finished:true}))).toMatchObject({code:'OK'});
+  await seedSyntheticItemPhotos(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,orderId});
   expect(await withSession(fixture,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:3,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await withSession(fixture,()=>recordGoodsOutAction({orderId,mode:'versand',expectedVersion:4,clientEventId:randomUUID(),agreement:{id:agreement.agreement.id,type:'sammelrechnung',version:agreement.agreement.version}}))).toMatchObject({code:'OK'});
  }
@@ -1405,7 +1407,11 @@ it.each(['early','label','two','future','delivered'] as const)('AF19 real mail h
  const result=await withSession(fixture,()=>changeOrderPickupNoticeAction(selected));expect(result).toMatchObject({code:'OK',replayed:false,receipt:{orderId,handoverMode:kind==='label'||kind==='delivered'?'shipping':'pickup',outcome:kind==='label'||kind==='delivered'?'call_customer':'changed',mailActor:{kind:'mail',sender,originalItemId:itemId,originalSha256:originalHash}}});
  expect(await withSession(fixture,()=>changeOrderPickupNoticeAction(selected))).toMatchObject({code:'OK',replayed:true});
  expect(await withSession(fixture,()=>changeOrderPickupNoticeAction({...selected,sourceVersion:2}))).toMatchObject({code:'CONFLICT'});
- expect((await sql`SELECT handover_mode,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`)[0]).toMatchObject({handover_mode:kind==='label'||kind==='delivered'?'shipping':'pickup',version:kind==='delivered'?6:2});
+ expect((await sql`SELECT handover_mode,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`)[0]).toMatchObject({handover_mode:kind==='label'||kind==='delivered'?'shipping':'pickup',version:kind==='delivered'?5:2});
+ if(kind==='delivered'){
+  const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+  expect(await withSession(fixture,()=>getOrderPaymentStateAction({orderId}))).toMatchObject({code:'OK',data:{physicalStatus:'abgeholt',goodsOut:{eventSchemaVersion:3,orderVersion:5}}});
+ }
  expect((await sql`SELECT handover_preference FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`)[0].handover_preference).toBe(kind==='future'?'pickup':'shipping');
  expect((await sql`SELECT vorgang_art,vorgang_id,version,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0]).toMatchObject({vorgang_art:'auftrag',vorgang_id:orderId,version:2,anliegen_offen:[]});
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND event_type='ORDER_HANDOVER_MAIL_V1' AND user_id=${fixture.actorId}::uuid AND payload->'receipt'->'mailActor'->>'originalSha256'=${originalHash}`).toHaveLength(1);

@@ -5,7 +5,7 @@ import {calculateQuote,type QuoteCalculation} from "../quoteCalculation";
 import {appendQuoteJournal,quoteHasPreparedDocument,readQuoteComplaintSource} from "@/lib/server/quoteJournalPort";
 import {readQuoteReceivedQuantities,readQuoteGoodsSummaries,readQuoteGoodsSummariesForQuotes} from "@/lib/server/quoteGoodsContextPort";
 import { sql } from "drizzle-orm";
-import { normaliseOrderPositionSurface, orderPositionSurfaceLabel, orderPositionUnitLabel, orderPositionQuantityError, orderPositionPriceError } from "@/lib/orderPositionContract";
+import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionSurfaceLabel, orderPositionUnitLabel, orderPositionQuantityError, orderPositionPriceError } from "@/lib/orderPositionContract";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type {
   ConvertQuoteInput,
@@ -32,6 +32,7 @@ const TERM_STATUS_VALUES = ["wunsch", "bestaetigt", "verschoben", "gegenvorschla
 const INTAKE_SOURCE_VALUES = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"] as const;
 
 type QuoteRow = {
+  commercial_terms?:Array<{position:number;unit:string|null;minutes:number|null;vat:0|700|1900|null}>;
   fassung?:number;
   kalk_stunden?:string|number|null;stundensatz_cents?:string|number|null;ruest_cents?:string|number|null;material_cents?:string|number|null;
   vorbehalt_fassung?:number|null;vorbehalt_am?:Date|string|null;vorbehalt_grund?:string|null;
@@ -155,7 +156,7 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
     ||value.intakeSource!==undefined&&value.intakeSource!==null&&!INTAKE_SOURCE_VALUES.includes(value.intakeSource as typeof INTAKE_SOURCE_VALUES[number])) return null;
   const positions = [];
   for (const candidate of value.positions) {
-    if (!plainObject(candidate) || !exactKeys(candidate, ["material", "name", "quantity", "surfaceRequested", "unitPriceCents", ...(Object.hasOwn(candidate,"lineTotalCents")?["lineTotalCents"]:[])])) return null;
+    if (!plainObject(candidate) || !exactKeys(candidate, ["material", "name", "quantity", "surfaceRequested", "unitPriceCents", ...['lineTotalCents','unit','plannedMinutes'].filter(key=>Object.hasOwn(candidate,key))])) return null;
     const name = text(candidate.name, 2, 160);
     const material = candidate.material === null ? null : text(candidate.material, 1, 120);
     const surfaceRequested = normaliseOrderPositionSurface(candidate.surfaceRequested);
@@ -163,7 +164,9 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
       || typeof candidate.quantity !== "number" || orderPositionQuantityError(candidate.quantity, null) !== null
       || typeof candidate.unitPriceCents !== "number" || orderPositionPriceError(candidate.unitPriceCents, true) !== null) return null;
     if (Object.hasOwn(candidate,"lineTotalCents") && (typeof candidate.lineTotalCents!=="number" || !Number.isSafeInteger(candidate.lineTotalCents) || candidate.lineTotalCents<0 || candidate.lineTotalCents>999999999999)) return null;
-    positions.push({ name, quantity: candidate.quantity, material, surfaceRequested, unitPriceCents: candidate.unitPriceCents, ...(Object.hasOwn(candidate,"lineTotalCents")?{lineTotalCents:candidate.lineTotalCents as number}:{}) });
+    if(candidate.unit!==undefined&&candidate.unit!==null&&!normaliseOrderPositionUnit(candidate.unit))return null;
+    if(candidate.plannedMinutes!==undefined&&candidate.plannedMinutes!==null&&(!Number.isSafeInteger(candidate.plannedMinutes)||Number(candidate.plannedMinutes)<0||Number(candidate.plannedMinutes)>9999999))return null;
+    positions.push({ name, quantity: candidate.quantity, material, surfaceRequested, unitPriceCents: candidate.unitPriceCents, ...(Object.hasOwn(candidate,"lineTotalCents")?{lineTotalCents:candidate.lineTotalCents as number}:{}),...(Object.hasOwn(candidate,'unit')?{unit:normaliseOrderPositionUnit(candidate.unit)}:{}),...(Object.hasOwn(candidate,'plannedMinutes')?{plannedMinutes:candidate.plannedMinutes as number|null}:{}) });
   }
   const calculation=Object.hasOwn(value,'calculation')?normalizeCalculation(value.calculation,positions):undefined;
   if(calculation===null)return null;
@@ -341,7 +344,7 @@ function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
   };
 }
 
-function diagnostic(error: unknown, key: "message" | "details" | "hint"): string | null {
+function diagnostic(error: unknown, key: "message" | "details" | "hint" | "code" | "constraint_name"): string | null {
   if (!error || typeof error !== "object") return null;
   const record = error as Record<string, unknown>;
   const source = record.cause && typeof record.cause === "object" ? record.cause as Record<string, unknown> : record;
@@ -351,11 +354,19 @@ function diagnostic(error: unknown, key: "message" | "details" | "hint"): string
 }
 
 export async function readQuote(tx: PrivilegedTenantTransaction, tenantId: string, quoteId: string): Promise<QuoteReadback | null> {
-  const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id FROM private.v_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id WHERE projection.quote_id = ${quoteId}::uuid LIMIT 2`);
+  const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id,
+    (SELECT coalesce(jsonb_agg(jsonb_build_object('position',terms.position,'unit',terms.unit,'minutes',terms.aufwand_min,'vat',terms.vat_rate_basis_points) ORDER BY terms.position),'[]'::jsonb) FROM private.quote_positions terms WHERE terms.tenant_id=projection.tenant_id AND terms.quote_id=projection.quote_id AND terms.revision=projection.version) AS commercial_terms
+    FROM private.v_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id WHERE projection.quote_id = ${quoteId}::uuid LIMIT 2`);
   if (rows.length === 0) return null;
   if (rows.length !== 1 || !rows[0]) throw new Error("QUOTE_READBACK_AMBIGUOUS");
   const quote = quoteFromRow(rows[0], tenantId);
   if (!quote) throw new Error("QUOTE_READBACK_INVALID");
+  const terms=rows[0].commercial_terms;
+  if(!Array.isArray(terms)||terms.length!==quote.positions.length)throw Error('QUOTE_COMMERCIAL_TERMS_INVALID');
+  quote.positions=quote.positions.map((position,index)=>{
+    if(terms[index].position!==position.position)throw Error('QUOTE_COMMERCIAL_TERMS_INVALID');
+    return {...position,unit:terms[index].unit,plannedMinutes:terms[index].minutes,vatRateBasisPoints:terms[index].vat};
+  });
   if(quote.lifecycle)quote.lifecycle.goods=await readQuoteGoodsSummaries(tx,tenantId,quoteId);
   return quote;
 }
@@ -424,6 +435,12 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
   } catch (error) {
     console.error("quote_create_command_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
     if (error instanceof QuoteSourceFailure) return error.result;
+    // The event key is tenant-wide, while the original receipt is actor-bound.
+    // A different actor must get a conflict after rollback, never a second KV
+    // or a misleading temporary-outage response. Other constraints stay errors.
+    if (diagnostic(error, "code") === "23505" && diagnostic(error, "constraint_name") === "events_tenant_client_event_uidx") {
+      return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
+    }
     return { code: "UNAVAILABLE", message: "KV konnte nicht sicher gespeichert werden." };
   }
 }

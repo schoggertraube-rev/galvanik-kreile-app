@@ -1,4 +1,5 @@
 import "server-only";
+import {ORDER_ITEM_PHOTO_COPY} from '@/ui/situationCatalog';
 
 import { sql } from "drizzle-orm";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
@@ -363,6 +364,12 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
         return { code: "VALIDATION_ERROR", message: "Auftragsteile sind nicht fertigsetzbar." };
       }
       const pendingItemCount = itemRows.filter((item) => item.current_station_id === SOURCE_STATION).length;
+      const missingPhotos=await tx.execute<{id:string}>(sql`SELECT item.id FROM public.items item WHERE item.tenant_id=${authorization.data.tenantId} AND item.order_id=${order.id}
+        AND NOT EXISTS(SELECT 1 FROM private.v_evidence_records_v2 photo WHERE photo.tenant_id=item.tenant_id
+          AND photo.source_kind='ORDER_STATION_ATTACHMENT' AND photo.integrity_ok=true AND photo.original_state='VERIFIED'
+          AND photo.original_mime_type IN ('image/jpeg','image/png','image/webp')
+          AND photo.target_links @> jsonb_build_array(jsonb_build_object('targetType','ORDER','targetId',item.order_id),jsonb_build_object('targetType','ORDER_ITEM','targetId',item.id)))`);
+      if(missingPhotos.length)return {code:'VALIDATION_ERROR',message:ORDER_ITEM_PHOTO_COPY.required};
 
       const rateRows = await tx.execute<RateRow>(sql`
         SELECT id::text AS id, tenant_id, hourly_rate_cents, version

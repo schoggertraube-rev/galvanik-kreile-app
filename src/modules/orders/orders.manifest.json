@@ -45,9 +45,14 @@
   "migrations": [
     "20261106020000_ein4b_nacharbeit.sql",
     "supabase/migrations/20261108192708_af19_handover_receipt_lineage.sql",
-    "supabase/migrations/20261108200232_af19_immutable_mail_handover_lineage.sql"
+    "supabase/migrations/20261108200232_af19_immutable_mail_handover_lineage.sql",
+    "supabase/migrations/20261109225533_ablauf_goods_out_override_immutable.sql",
+    "supabase/migrations/20261110003450_ablauf_cash_pickup_requires_payment.sql",
+    "supabase/migrations/20261110010200_ablauf_historical_callback_receipt.sql"
   ],
-  "viewsFunctions": [],
+  "viewsFunctions": [
+    "private.guard_goods_out_debt_override_v1"
+  ],
   "ownsTables": [
     "public.orders",
     "public.items",

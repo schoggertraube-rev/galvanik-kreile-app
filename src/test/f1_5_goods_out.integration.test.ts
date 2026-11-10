@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -180,6 +181,7 @@ async function createReadyOrder(label: string, paymentMode: PaymentMode): Promis
 
   setSession(USERS.admin, "admin");
   const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
+  await seedSyntheticItemPhotos(sql,{tenantId:TENANT,actorId:USERS.admin,orderId:orderId});
   const frozen = await freezeOrder({
     orderId,
     freezeId: randomUUID(),

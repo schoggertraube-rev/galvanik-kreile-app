@@ -1,4 +1,6 @@
 import "server-only";
+import {QUOTE_COMMERCIAL_SOURCE_COPY} from '@/ui/situationCatalog';
+import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
 import {customerCountryLabel} from "@/modules/customers/public";
 
 import { createHash, randomUUID } from "node:crypto";
@@ -155,6 +157,7 @@ type InvoicePaymentInitializationRow = {
 };
 
 type SourceRow = {
+  has_quote?:boolean;
   tenant_id: string;
   order_id: string;
   freeze_id: string;
@@ -448,7 +451,7 @@ function parseBaseLines(value: unknown): ImmutableInvoiceBaseLine[] {
     if (quantity < 1 || unitNetAmountCents < 0) {
       throw new InvoiceMasterDataError("INVOICE_BASE_LINE_MASTER_DATA_INVALID");
     }
-    if (lineNetAmountCents !== unitNetAmountCents * quantity) {
+    if (lineNetAmountCents < 0 || unitNetAmountCents !== Number((BigInt(lineNetAmountCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity))) {
       throw new Error("INVOICE_BASE_LINE_INTEGRITY_INVALID");
     }
     return { type: "BASE" as const, itemId, name, quantity, unitNetAmountCents, lineNetAmountCents };
@@ -908,7 +911,13 @@ async function readInitialPaymentState(
   }
 }
 
-export async function createInvoice(input: unknown): Promise<CreateInvoiceResult> {
+/** Shared lock order for standalone issuance and issuance composed with goods-out. */
+export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantId:string,input:{clientEventId:string;orderId:string}):Promise<void>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0))`);
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:order:' || ${tenantId} || ':' || ${input.orderId}, 0))`);
+}
+
+export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Rechnungsanfrage." };
   }
@@ -934,25 +943,19 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
   const actorId = authorization.data.userId;
 
   try {
-    return await withPrivilegedTenantTransaction(authorization.data, async (tx) => {
-      await tx.execute(sql`
-        SELECT pg_advisory_xact_lock(
-          hashtextextended('f1:invoice:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0)
-        )
-      `);
-      await tx.execute(sql`
-        SELECT pg_advisory_xact_lock(
-          hashtextextended('f1:invoice:order:' || ${tenantId} || ':' || ${input.orderId}, 0)
-        )
-      `);
+    const write=async(tx:PrivilegedTenantTransaction):Promise<CreateInvoiceResult>=>{
+      await lockInvoiceCreation(tx,tenantId,input);
 
       const replayRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
       if (replayRows.length > 0) {
         if (replayRows.length !== 1 || !replayRows[0]) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
-        const receipt = mapReceipt(replayRows[0], tenantId, actorId);
-        return receiptMatchesIntent(receipt, input)
+        // Validate the complete persisted original before comparing the caller.
+        // A valid receipt owned by another actor is a key conflict, not an outage;
+        // damaged receipts still fail the unchanged integrity validator.
+        const receipt = mapReceipt(replayRows[0], tenantId, replayRows[0].actor_id);
+        return receipt.issuedBy === actorId && receiptMatchesIntent(receipt, input)
           ? { code: "OK", receipt, replayed: true }
           : { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
       }
@@ -1020,7 +1023,7 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       // service_date arrives Berlin-normalised from the read port. The command
       // never derives a calendar day from the database session time zone.
       const sourceRows = await tx.execute<SourceRow>(sql`
-        SELECT source.*
+        SELECT source.*,EXISTS(SELECT 1 FROM private.quote_conversion_receipts receipt JOIN private.quotes quote ON quote.tenant_id=receipt.tenant_id AND quote.id=receipt.quote_id AND quote.linked_order_id=receipt.order_id WHERE receipt.tenant_id=source.tenant_id AND receipt.order_id=source.order_id) AS has_quote
         FROM private.v_invoice_issue_source_v2 source
         WHERE source.order_id = ${order.id}
         LIMIT 2
@@ -1039,12 +1042,40 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       if (!source.no_active_invoice) {
         return { code: "CONFLICT", message: "Für diesen Auftrag besteht bereits eine aktive Rechnung." };
       }
+      const commercial=source.has_quote?await readOrderCommercialQuote(tx,tenantId,order.id):null;
+      if(commercial){
+        const rate=commercial.vatRateBasisPoints??source.invoice_vat_rate_basis_points;
+        if(rate===null)return {code:'VALIDATION_ERROR',message:QUOTE_COMMERCIAL_SOURCE_COPY.missingVat};
+        // This invoice contract has one VAT rate: never replace an awarded
+        // position's different rate with today's company setting.
+        if(commercial.positions.some(row=>row.vatRateBasisPoints!=null&&row.vatRateBasisPoints!==rate))return {code:'VALIDATION_ERROR',message:'Stammdaten für die Rechnungsausgabe sind unvollständig.'};
+        source.base_lines=commercial.positions.map(row=>{
+          const quantity=row.quantity;
+          return {itemId:row.itemId,name:row.name,quantity,unitNetAmountCents:Number((BigInt(row.lineTotalCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity)),lineNetAmountCents:row.lineTotalCents};
+        });
+        // The existing canonical awarded-quote port proves these prices; no price is copied into an intake intent.
+        source.base_line_count=commercial.positions.length;source.base_net_amount_cents=commercial.totalNetCents;
+        source.base_prices_complete=source.base_line_count>0&&commercial.positions.every(row=>Number.isSafeInteger(row.lineTotalCents)&&row.lineTotalCents>=0);
+        source.invoice_vat_rate_basis_points=rate;
+        // Recompose the existing structural guards with the canonical quote price proof.
+        // The legacy SQL projection includes item prices in integrity_ok, which are
+        // deliberately absent for a quote-backed intake. No structural guard is waived.
+        const proofs=await tx.execute<{frozen:boolean;handed_over:boolean}>(sql`
+          SELECT count(*)=1 AND bool_and(frozen_state.active AND frozen_state.integrity_ok AND frozen_state.freeze_id=${source.freeze_id}::uuid) AS frozen,
+            (SELECT count(*)=1 AND bool_and(receipt.integrity_ok) FROM private.v_goods_out_receipt_v2 receipt WHERE receipt.tenant_id=${tenantId} AND receipt.order_id=${order.id} AND receipt.order_version=${order.version}) AS handed_over
+          FROM private.v_order_freeze_state_v1 frozen_state WHERE frozen_state.tenant_id=${tenantId} AND frozen_state.order_id=${order.id}
+        `);
+        const structural=proofs.length===1&&proofs[0].frozen===true&&source.seller_config_complete&&source.customer_config_complete&&source.base_prices_complete;
+        source.post_goods_out_invoice_eligible=structural&&proofs[0].handed_over===true&&order.payment_mode==='rechnung'&&order.station==='abgeholt'&&order.status==='abgeholt';
+        source.effective_integrity_ok=structural&&(order.station==='fertig'||source.post_goods_out_invoice_eligible);
+      }
       if (
         !source.effective_integrity_ok
         || (afterGoodsOut && !source.post_goods_out_invoice_eligible)
         || !source.seller_config_complete
         || !source.customer_config_complete
         || !source.base_prices_complete
+        || source.invoice_vat_rate_basis_points === null
       ) {
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
@@ -1077,6 +1108,10 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
         throw error;
       }
       const { netAmountCents, vatAmountCents, grossAmountCents } = content.totals;
+      if(commercial){
+        const bound=await bindOrderQuoteCommercialTerms(tx,authorization.data,order.id);
+        if(bound.vatRateBasisPoints!==vatRateBasisPoints||bound.totalNetCents!==commercial.totalNetCents)throw Error('QUOTE_COMMERCIAL_TERMS_CHANGED_DURING_INVOICE');
+      }
 
       // Exactly one issue instant per invoice. Berlin is the only legal
       // calendar truth for the invoice year and the due date; the same instant
@@ -1225,7 +1260,8 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       ) throw new Error("INVOICE_RECEIPT_MISMATCH");
 
       return { code: "OK", receipt, replayed: false };
-    });
+    };
+    return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
   } catch (error) {
     const cause = error && typeof error === "object" && "cause" in error
       ? (error as { cause?: { code?: unknown; constraint_name?: unknown } }).cause
@@ -1288,8 +1324,8 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
         if (replayRows.length !== 1 || !replayRows[0]) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
-        const receipt = mapCancellationReceipt(replayRows[0], tenantId, actorId);
-        return cancellationReceiptMatchesIntent(receipt, input)
+        const receipt = mapCancellationReceipt(replayRows[0], tenantId, replayRows[0].actor_id);
+        return receipt.cancelledBy === actorId && cancellationReceiptMatchesIntent(receipt, input)
           ? { code: "OK", receipt, replayed: true }
           : { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
       }

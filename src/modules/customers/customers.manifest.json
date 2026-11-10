@@ -93,7 +93,8 @@
     "20261028234500_h13_clear_customer_payment_preferences.sql",
     "20261103032000_b2_kunde_k1.sql",
     "20261103032001_ein1_kunde_schreibweg.sql",
-    "20261106013106_abs_absprachen.sql"
+    "20261106013106_abs_absprachen.sql",
+    "20261109222615_ablauf_agreement_version_guard.sql"
   ],
   "viewsFunctions": [
     "private.allocate_customer_number",

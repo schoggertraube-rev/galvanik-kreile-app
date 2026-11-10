@@ -1,6 +1,18 @@
 import {describe,expect,it} from 'vitest';
 import {calculateQuote,scaleQuoteCalculation,scaleQuotePositions,nextQuoteEdition,quoteAcceptanceIsCurrent} from '../quoteCalculation';
 
+it('scales a unitless quote position on partial goods and distributes legacy total minutes by net value',()=>{
+ const calculation={hours:'1.0000',hourlyRateCents:10000,setupCents:0,materialCents:0};
+ const result=scaleQuotePositions(calculation,[{position:1,quantity:4,lineTotalCents:7500,unit:null,plannedMinutes:null},{position:2,quantity:2,lineTotalCents:2500,unit:'stueck',plannedMinutes:null}],[{position:1,quantity:2},{position:2,quantity:2}]);
+ expect(result).toMatchObject({code:'OK',totalNetCents:6250,positions:[{position:1,lineTotalCents:3750,plannedMinutes:23},{position:2,lineTotalCents:2500,plannedMinutes:15}],legacyMinutesAllocated:true});
+});
+
+it('assigns the remainder minute to the largest original net position and honors explicitly stored minutes',()=>{
+ const source=[{position:1,quantity:1,lineTotalCents:100,unit:'stueck',plannedMinutes:null},{position:2,quantity:1,lineTotalCents:200,unit:'stueck',plannedMinutes:null}];
+ expect(scaleQuotePositions({hours:'0.0833',hourlyRateCents:3600,setupCents:0,materialCents:0},source,[{position:1,quantity:1},{position:2,quantity:1}])).toMatchObject({code:'OK',positions:[{plannedMinutes:1},{plannedMinutes:4}]});
+ expect(scaleQuotePositions(null,[{...source[0],quantity:4,plannedMinutes:80}],[{position:1,quantity:1}])).toMatchObject({code:'OK',positions:[{plannedMinutes:20}],legacyMinutesAllocated:false});
+});
+
 describe('AP-KV-V04 Server A: configured arithmetic and content edition',()=>{
  it('keeps setup fixed when quantity changes and scales work/material identically for both entry paths',()=>{
   const original={hours:'8',hourlyRateCents:7500,setupCents:1200,materialCents:900};

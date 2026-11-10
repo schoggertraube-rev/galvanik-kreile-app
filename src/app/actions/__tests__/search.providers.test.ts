@@ -11,6 +11,7 @@ const authorization: AuthorizationSnapshot = {
   role: "admin",
   permissions: ["perm_view_leitstand", "perm_view_prices"],
   active: true,
+  areas:['geld','mails','auftraege'],
 };
 
 const quote: QuoteReadback = {
@@ -75,14 +76,14 @@ describe("P2 module search providers", () => {
     await expect(providers[1]?.search("R-2026")).resolves.toMatchObject({ hits: [{ type: "INVOICE", id: invoice.invoiceId, source: "Rechnungen" }], exhaustive: true });
   });
 
-  it("omits invoice reads for workshop roles and fails closed on source errors", async () => {
+  it("omits invoice and mail reads without their areas and fails closed on source errors", async () => {
     const readInvoices = vi.fn();
-    const providers = buildSearchProviders({ ...authorization, role: "werkstatt", permissions: ["perm_view_leitstand"] }, {
+    const providers = buildSearchProviders({ ...authorization, role: "werkstatt",areas:['auftraege'], permissions: ["perm_view_leitstand"] }, {
       readQuotes: vi.fn().mockResolvedValue({ code: "UNAVAILABLE", message: "nicht lesbar" }),
       readInvoices,
       readAuxiliary: vi.fn().mockResolvedValue({ documents: [], mails: [], appointments: [], exhaustive: true }),
     });
-    expect(providers.map((provider) => provider.label)).toEqual(["Angebote", "Dokumente", "Mails", "Termine"]);
+    expect(providers.map((provider) => provider.label)).toEqual(["Angebote", "Dokumente", "Termine"]);
     await expect(providers[0]?.search("KV")).rejects.toThrow("SEARCH_QUOTES_UNAVAILABLE");
     expect(readInvoices).not.toHaveBeenCalled();
   });

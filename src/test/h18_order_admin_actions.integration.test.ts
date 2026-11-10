@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
@@ -331,6 +332,7 @@ describe("H18 order administration Server Actions against the real replay databa
       data: { card: { version, items: [{ id: itemId, extraWork: [expect.objectContaining({ lineId, minutes: 60 })] }] } },
     });
 
+    await seedSyntheticItemPhotos(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,orderId:orderId});
     const frozen = await withSession(fixture, "actor", () => freezeOrderAction({
       orderId,
       freezeId: randomUUID(),

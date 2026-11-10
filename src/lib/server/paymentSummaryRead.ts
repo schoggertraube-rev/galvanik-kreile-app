@@ -1,4 +1,5 @@
 import "server-only";
+import {readOpenOrderComplaint} from './orderReleaseRead';
 
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -6,6 +7,7 @@ import {
   canReadPaymentSummary,
   mapOrderPaymentStateRow,
   mapPaymentSummaryRow,
+  overdueInvoiceCondition,
   type OrderPaymentState,
   type OrderPaymentStateRow,
   type PaymentSummary,
@@ -19,7 +21,7 @@ export type PaymentSummaryReadResult =
   | { code: "UNAVAILABLE"; message: string };
 
 export type OrderPaymentStateReadResult =
-  | { code: "OK"; data: OrderPaymentState }
+  | { code: "OK"; data: OrderPaymentState & {complaintHold:{blocked:boolean;reason:'open_complaint';complaintIds:string[]};customerDeliveryBlock:{blocked:boolean;reason:'overdue_invoice';invoiceIds:string[]}} }
   | { code: "NOT_FOUND"; message: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
@@ -82,15 +84,27 @@ export async function getPaymentState(
 
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<OrderPaymentStateRow>(sql`
-        SELECT *
-        FROM private.v_goods_out_ui_state_v1
-        WHERE order_id = ${orderId}
+      const rows = await tx.execute<OrderPaymentStateRow & { customer_overdue_invoice_ids: string[] }>(sql`
+        SELECT state.*, ARRAY (
+          SELECT invoice.id::text FROM public.invoices invoice
+          JOIN public.orders orders
+            ON orders.tenant_id = invoice.tenant_id
+            AND orders.customer_id = invoice.customer_id
+          WHERE orders.tenant_id = state.tenant_id
+            AND orders.id = state.order_id
+            AND ${overdueInvoiceCondition()}
+          ORDER BY invoice.due_date,invoice.id
+        ) AS customer_overdue_invoice_ids
+        FROM private.v_goods_out_ui_state_v1 state
+        WHERE state.order_id = ${orderId}
         LIMIT 2
       `);
       if (rows.length === 0) return null;
       if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
-      return mapOrderPaymentStateRow(rows[0], authorization);
+      if (!Array.isArray(rows[0].customer_overdue_invoice_ids) || rows[0].customer_overdue_invoice_ids.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id))) throw new Error("ORDER_CUSTOMER_DEBT_STATE_INVALID");
+      const mapped = mapOrderPaymentStateRow(rows[0], authorization);
+      const complaint=await readOpenOrderComplaint(tx,authorization.tenantId,mapped.orderId);
+      return { ...mapped,complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
     });
     return data
       ? { code: "OK", data }

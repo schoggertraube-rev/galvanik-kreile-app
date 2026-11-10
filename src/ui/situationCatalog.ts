@@ -1,5 +1,9 @@
 /** One presentation catalogue. Facts are projections of existing readers, never stored here. */
 export const ORDER_TERMINAL_COPY={dateLocked:'Der Auftrag wurde bereits herausgegeben. Du kannst den Liefertermin nicht mehr ändern.'} as const;
+export const MAIL_REQUEST_CONFLICT_COPY='Diese Anfragekennung gehört zu einer anderen Nachricht. Öffne den gespeicherten Versand.';
+export const INTAKE_PENDING_WORKFLOW_COPY={quoteRequest:'Lege zuerst den KV zur Anfrage an'} as const;
+export const SEARCH_NAME_MATCH_COPY={phonetic:'Klingt gleich',spelling:'Ähnliche Schreibweise'} as const;
+export const COMPLAINT_ORDER_COPY={notReady:'Du kannst eine Reklamation aufnehmen, sobald die Ware fertig ist oder bereits herausgegeben wurde.',releaseBlocked:(number:string|null)=>`Du kannst die Ware noch nicht herausgeben: ${number?'Reklamation '+number:'Eine Reklamation'} ist offen. Kläre zuerst die Reklamation.`} as const;
 export type SituationCommand='open-order'|'receive-quote'|'open-assignment'|'open-task'|'receive-order'|'convert-quote'|'save-blocked-goods'|'prepare-quote'|'preview-quote-change'|'request-photos'|'save-document'|'open-document'|'undo-document'|'undo-order'|'open-quote'|'create-customer';
 export type SituationCandidate={id:string;kind:'customer'|'quote'|'order';label:string;reason:string};
 export type SituationFacts={originalCount:number;context?:'capture'|'quote';recognizedText?:boolean;actor?:string|null;kind?:'ware'|'anfrage'|'rechnung'|'dokument'|'kontakt'|'notiz'|'unklar';customerId?:string|null;customerName?:string|null;candidates?:SituationCandidate[];recognized?:Array<{label:string;value:string|null|undefined;uncertain?:boolean}>;quote?:{id:string;number:string;customer:string;accepted:boolean;sent:boolean;goodsHere:boolean;location?:string|null;edition:number};match?:'ambiguous'|'chosen'|'unique-reader';requiredComplete?:boolean;document?:{number:string;complete:boolean;missing:string[]};complaint?:{orderNumber:string;photoCount:number};textChange?:{quoteNumber:string};completed?:{kind:'order'|'document';id:string;number:string;quoteNumber?:string;undoAvailable:boolean;booked?:boolean}};
@@ -128,3 +132,15 @@ export const PACKAGE_ONSITE_COPY={partial:(name:string,nr:string)=>'Kunde '+name
 
 export const QUOTE_POSITION_COPY={title:'Positionen',position:(n:number)=>'Position '+n,remove:(n:number)=>'Position '+n+' entfernen',name:'Teil / Leistung',placeholder:'Katalog oder Freitext',quantity:'Menge',material:'Material',surface:'Oberfläche',choose:'Bitte wählen',unit:'Einheit',price:'Preis netto (€)',add:'Position hinzufügen'} as const;
 export const PACKAGE_ASSIGN_COPY={notConnected:'Kundenzuordnung ist nicht verbunden · Original bleibt erhalten.',changed:'Kunde wurde inzwischen zugeordnet · neu lesen.',failed:'Zuordnung nicht bestätigt · Original und Auswahl bleiben erhalten.',unavailable:PACKAGE_UNAVAILABLE_COPY} as const;
+export const QUOTE_COMMERCIAL_SOURCE_COPY={missingVat:'Steuersatz in Firmendaten eintragen'};
+export const CUSTOMER_LOOKUP_COPY={invalidId:'Gib eine gültige Kundenkennung an.',invalidQuery:'Gib einen Suchbegriff als Text ein.'} as const;
+export const GOODS_OUT_DEBT_COPY = {
+  overrideRecorded: 'Du hast die Ware trotz der Kundensperre herausgegeben.',
+  reasonMissing: 'Nenne den Grund, warum Du die Ware trotz der überfälligen Rechnung herausgibst.',
+  overrideForbidden: 'Du brauchst das Recht „Entscheiden“, um die Ware trotz der Kundensperre herauszugeben.',
+  noLongerBlocked: 'Die Kundensperre ist aufgehoben. Lies den Auftrag neu und gib die Ware ohne Ausnahme heraus.',
+  blocked: (invoiceNumber?: string) => invoiceNumber
+    ? `Du kannst die Ware noch nicht herausgeben: Rechnung ${invoiceNumber} ist überfällig. Buche zuerst die Zahlung.`
+    : 'Du kannst die Ware noch nicht herausgeben: Eine Rechnung des Kunden ist überfällig. Lass die Zahlung im Büro buchen.',
+} as const;
+export const ORDER_ITEM_PHOTO_COPY={required:'Nimm für jedes Teil ein Foto auf, bevor Du den Auftrag fertig meldest.'} as const;

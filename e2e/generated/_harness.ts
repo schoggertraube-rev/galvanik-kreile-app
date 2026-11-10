@@ -837,6 +837,7 @@ async function materializeDeliveredComplaintSource(page: Page) {
   await invoke('src/app/actions/orders.actions.ts','transitionWareneingangToGalvanikAction',{orderId,expectedVersion:await version(),clientEventId:randomUUID()});
   const items=await sql<{id:string;name:string}[]>`SELECT id,name FROM public.items WHERE tenant_id=${TENANT} AND order_id=${orderId} ORDER BY id`;
   for(const item of items)await invoke('src/app/actions/orders.actions.ts','setOrderItemFinishedAction',{orderId,itemId:item.id,finished:true,expectedVersion:await version(),clientEventId:randomUUID()});
+  await seedSyntheticItemPhotos(sql,{tenantId:TENANT,actorId:fixtureLoginId,orderId});
   await invoke('src/app/actions/orders.actions.ts','freezeOrderAction',{orderId,freezeId:randomUUID(),expectedVersion:await version(),clientEventId:randomUUID()});
   // The model intentionally omits one price; this explicit synthetic 10 EUR
   // fixture price is set through the real writer, never a product fallback.
@@ -1815,3 +1816,4 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
 function testTimeoutGuard(flowCase: FlowCase) {
   if (!flowCase.id || !flowCase.titel || !flowCase.gegeben?.login) throw new Error("FLOW_CASE_CONTRACT_INVALID");
 }
+import {seedSyntheticItemPhotos} from '../../src/test/fixtures/complaintPhoto';

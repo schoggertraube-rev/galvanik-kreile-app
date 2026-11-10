@@ -107,7 +107,7 @@ function summary(paymentMode: "vorkasse" | "abholung" | "rechnung", status: "off
     payment_correlation_id: status === "offen" ? null : "55555555-5555-4555-8555-555555555555",
     payment_mode_version: 0,
     payment_version: status === "offen" ? 0 : 1,
-    goods_out_allowed: paymentMode === "rechnung" || paymentMode === "abholung" || status === "bezahlt",
+    goods_out_allowed: paymentMode === "rechnung" || status === "bezahlt",
     integrity_ok: true,
   };
 }
@@ -184,6 +184,8 @@ function configureSuccess(options: {
   execute.mockImplementation((query: Query) => {
     const text = queryText(query);
     if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+    if (text.includes("FROM public.events audit")) return Promise.resolve([]);
+    if (text.includes("FROM public.complaints")) return Promise.resolve([]);
     if (text.includes("FROM public.events")) {
       eventReads += 1;
       return Promise.resolve(eventReads === 1 ? [] : [{
@@ -197,6 +199,7 @@ function configureSuccess(options: {
         ? [{ ...finishedOrder, payment_mode: paymentMode }]
         : [{ ...pickedUpOrder, payment_mode: paymentMode }]);
     }
+    if (text.includes("FROM public.invoices invoice")) return Promise.resolve([]);
     if (text.includes("FROM public.invoices")) return Promise.resolve(invoiceIssued ? [invoice] : []);
     if (text.includes("FROM private.v_payment_summary_v1")) return Promise.resolve([summary(paymentMode, paymentStatus)]);
     if (text.includes("FROM public.items")) return Promise.resolve(Array.from({ length: itemCount }, (_, index) => ({
@@ -323,9 +326,10 @@ describe("recordGoodsOut", () => {
       execute.mockReset();
       configureSuccess({ paymentMode: "abholung", paymentStatus, mode: "abholung" });
       await expect(recordGoodsOut({ ...input, mode: "abholung" })).resolves.toMatchObject({
-        code: "OK",
-        receipt: { paymentMode: "abholung", paymentStatus },
+        code: "CONFLICT",
+        message: "Zahlung ist für den Warenausgang noch offen.",
       });
+      expect(execute.mock.calls.map(([query]) => queryText(query as Query)).join("\n")).not.toContain("UPDATE public.orders");
     }
 
     execute.mockReset();
@@ -359,6 +363,7 @@ describe("recordGoodsOut", () => {
         const text = queryText(query);
         if (text.includes("pg_advisory_xact_lock") || text.includes("FROM public.events")) return Promise.resolve([]);
         if (text.includes("FROM public.orders")) return Promise.resolve([{ ...finishedOrder, payment_mode: "vorkasse" }]);
+        if (text.includes("FROM public.complaints")) return Promise.resolve([]);
         if (text.includes("FROM public.invoices")) return Promise.resolve([]);
         throw new Error(`Unexpected SQL: ${text}`);
       });
@@ -391,6 +396,8 @@ describe("recordGoodsOut", () => {
     execute.mockImplementationOnce(() => Promise.resolve([]))
       .mockImplementationOnce(() => Promise.resolve([]))
       .mockImplementationOnce(() => Promise.resolve([finishedOrder]))
+      .mockImplementationOnce(() => Promise.resolve([])) // No overdue customer debt.
+      .mockImplementationOnce(() => Promise.resolve([])) // No open complaint.
       .mockImplementationOnce(() => Promise.resolve([invoice]))
       .mockImplementationOnce(() => Promise.resolve([summary("vorkasse", "bezahlt")]))
       .mockImplementationOnce(() => Promise.resolve([{
@@ -404,6 +411,7 @@ describe("recordGoodsOut", () => {
     execute.mockImplementation((query: Query) => {
       const text = queryText(query);
       if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (text.includes("FROM public.events audit")) return Promise.resolve([]);
       if (text.includes("FROM public.events")) return Promise.resolve([eventRow()]);
       if (text.includes("FROM public.orders")) return Promise.resolve([pickedUpOrder]);
       throw new Error(`Unexpected SQL: ${text}`);

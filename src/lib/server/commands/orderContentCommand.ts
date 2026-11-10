@@ -122,7 +122,7 @@ type MailHandoverDependencies={
 };
 async function changeHandoverFromMail(raw:unknown,deps:MailHandoverDependencies){
  const value=raw as MailHandoverInput;
- if(Object.keys(value).sort().join(',')!==['command','sourceItemId','sourceVersion','clientEventId',...(value.orderId!==undefined?['orderId','expectedVersion']:[])].sort().join(',')||![value.sourceItemId,value.clientEventId].every(id=>typeof id==='string'&&UUID.test(id))||!Number.isSafeInteger(value.sourceVersion)||value.sourceVersion<1||value.orderId!==undefined&&(!value.orderId.trim()||value.orderId.length>128||!Number.isSafeInteger(value.expectedVersion)||value.expectedVersion!<1))return {code:'VALIDATION_ERROR' as const,message:'Original-Mail, Version und eindeutiger Auftrag fehlen.'};
+ if(Object.keys(value).sort().join(',')!==['command','sourceItemId','sourceVersion','clientEventId',...(value.orderId!==undefined?['orderId','expectedVersion']:[])].sort().join(',')||![value.sourceItemId,value.clientEventId].every(id=>typeof id==='string'&&UUID.test(id))||!Number.isSafeInteger(value.sourceVersion)||value.sourceVersion<1||value.orderId!==undefined&&(typeof value.orderId!=='string'||!value.orderId.trim()||value.orderId.length>128||!Number.isSafeInteger(value.expectedVersion)||value.expectedVersion!<1))return {code:'VALIDATION_ERROR' as const,message:'Original-Mail, Version und eindeutiger Auftrag fehlen.'};
  const authorization=await resolveAuthorization();if(!authorization.ok)return {code:'UNAUTHENTICATED' as const,message:authorization.message};
  const auth=authorization.data;if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const,message:'Mail-Übergabe benötigt Mails und Aufträge.'};
  const requestHash=hash(value);
@@ -160,7 +160,9 @@ async function changeHandoverFromMail(raw:unknown,deps:MailHandoverDependencies)
   if(late)taskId=await deps.createTask(tx,auth,{orderId:order.id,clientKey:value.clientEventId,title:ORDER_HANDOVER_COPY.call(customer.name,customer.phone).slice(0,120),note:message},id=>deps.recordEffect(tx,auth,{...effect,taskId:id}));
   else await deps.recordEffect(tx,auth,{...effect,taskId:null});
   const mode=late?order.handover_mode:directive.mode;
-  const updated=await tx.execute<{version:number}>(sql`UPDATE public.orders SET handover_mode=${mode},version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${order.id} AND version=${order.version} RETURNING version`);
+  // A callback about completed handover is a task, not another physical order mutation.
+  // Keep the immutable goods-out receipt and its current order version valid.
+  const updated=passed?[{version:order.version}]:await tx.execute<{version:number}>(sql`UPDATE public.orders SET handover_mode=${mode},version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${order.id} AND version=${order.version} RETURNING version`);
   if(updated.length!==1)throw Error('HANDOVER_ORDER_VERSION_CONFLICT');
   const result={eventId,orderId:order.id,orderNumber:order.order_number,customerId:customer.id,orderVersion:updated[0].version,handoverMode:mode,requestedHandoverMode:directive.mode,taskId,outcome:late?'call_customer':'changed',message,mailActor:{kind:'mail',sender:source.mail.sender,at:source.mail.receivedAt,originalItemId:source.mail.id,originalVersion:source.mail.version,graphMessageId:source.mail.graphMessageId,originalSha256:source.mail.originalSha256}};
   await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,aggregate_version,correlation_id) VALUES(${eventId},${auth.tenantId},${order.id},'ORDER_HANDOVER_MAIL_V1',${message},${JSON.stringify({requestHash,before:{handoverMode:order.handover_mode},receipt:result})}::jsonb,'success',${auth.userId}::uuid,${value.clientEventId}::uuid,1,${updated[0].version},gen_random_uuid())`);

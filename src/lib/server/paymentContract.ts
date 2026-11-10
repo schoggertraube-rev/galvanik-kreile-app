@@ -1,7 +1,16 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 
 export const PAYMENT_CONTRACT_VERSION = 1 as const;
+
+/** Shared invoice fact for customer hints and the release gate; alias is invoice. */
+export function overdueInvoiceCondition() {
+  return sql`invoice.status = 'issued'
+    AND invoice.payment_status IN ('offen', 'teilbezahlt')
+    AND invoice.payment_open_amount_cents > 0
+    AND invoice.due_date < (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date`;
+}
 export const PAYMENT_MODES = ["vorkasse", "abholung", "rechnung"] as const;
 export const ORDER_PAYMENT_MODES = ["vorkasse", "abholung", "rechnung", "keiner"] as const;
 
@@ -238,7 +247,7 @@ export function mapPaymentSummaryRow(
 
   if (
     !(openStateValid || (settledStateValid && (paidStateValid || partialStateValid)))
-    || row.goods_out_allowed !== (mode === "rechnung" || mode === "abholung" || status === "bezahlt")
+    || row.goods_out_allowed !== (mode === "rechnung" || status === "bezahlt")
   ) {
     throw new Error("PAYMENT_SUMMARY_STATE_INVALID");
   }
@@ -402,7 +411,7 @@ export function mapOrderPaymentStateRow(
       || (eventSchemaVersion !== 1 && eventSchemaVersion !== 2 && eventSchemaVersion !== 3 && eventSchemaVersion !== 4)
       || (isRework && eventSchemaVersion !== 4)
       || (!isRework && eventSchemaVersion === 4)
-      || goodsOutOrderVersion !== orderVersion
+      || goodsOutOrderVersion < 1 || goodsOutOrderVersion > orderVersion
       || typeof row.goods_out_actor_id !== "string"
       || !UUID_PATTERN.test(row.goods_out_actor_id)
       || typeof row.goods_out_occurred_at !== "string"
