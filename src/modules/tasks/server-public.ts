@@ -15,3 +15,4 @@ export {createGoodsOutClarificationTask} from './server/taskService';
 export {restrictCollectionTaskForAppointment} from './server/taskService';
 
 export {createCanceledInvoiceMailTask} from './server/taskService';
+export {createOfflineNoteConflictTask} from './server/taskService';

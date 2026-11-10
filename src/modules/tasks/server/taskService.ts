@@ -1,17 +1,17 @@
 import {readCanceledInvoiceMailTaskSource,isCanceledInvoiceMailTask,bindCanceledInvoiceMailTask} from '@/lib/server/communicationDocumentPort';
 import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
 import {handedOverProofs} from '@/lib/server/dispatchCallPort';
-import {readClarificationArea} from '@/lib/server/authorization';
 import {GOODS_OUT_FOLLOWUP_COPY} from '@/ui/situationCatalog';
+import {readOfflineNoteConflictSource} from '@/lib/server/offlineNoteConflictPort';
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
 import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
 import {collectionTaskHasReplySource,collectionTaskReplyRemainder,collectionTaskAppointmentRemainder,readCollectionTaskCurrentOrder} from '@/lib/server/dispatchReplyPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
-import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
+import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY,OFFLINE_RECONCILIATION_COPY} from '@/ui/situationCatalog';
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
-import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
+import {hasAuthorizationArea,resolveAuthorization,readClarificationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AccessArea} from '@/lib/auth/authorizationContract';
 import {TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference,type TaskRecord,type TaskReferenceRead,type TaskSaveInput,type TaskFailure,type TaskResult,type TaskReadResult,type TaskCompleteInput,type TaskOpenRequest} from '../contract';
@@ -300,4 +300,15 @@ export async function createCanceledInvoiceMailTask(tx:PrivilegedTenantTransacti
  const saved=await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'geld',reference:{type:'auftrag',id:source.order_id},note:MAIL_RESEND_COPY.canceledTaskDescription(source.invoice_number,source.customer_name,source.sent_at)},deps,false);
  await bindCanceledInvoiceMailTask(tx,auth,{...input,taskId:saved.task.id,clientEventId:eventKey(source.invoice_id,0,'cancelled-invoice-task-source')});
  return saved.task.id;
+}
+
+/** PL19:08: normal original actor and normal shared recipient area; no system login. */
+export async function createOfflineNoteConflictTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string,deps:Dependencies){
+ const original=await readOfflineNoteConflictSource(tx,auth,eventId);
+ const key=eventKey(eventId,0,'offline-conflict'),prior=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid`);
+ if(prior.length){const existing=await find(tx,auth,prior[0].id);if(prior.length!==1||existing?.erstellt_von!==auth.userId||existing.bezug_typ!=='eingang'||existing.bezug_id!==eventId)throw Error('OFFLINE_TASK_KEY_CHANGED');return existing.id;}
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title:OFFLINE_RECONCILIATION_COPY.reason,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'eingang',id:eventId},note:new Date(original.deviceCapturedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})};
+ // The source note command has already authorized its exact original context.
+ return (await persistTask(tx,auth,value,deps,false)).task.id;
 }

@@ -30,3 +30,5 @@ export { processIntakeDeviceRequest } from "./server/intakeDevice";
 
 export {returnQuoteGoodsReceipt,readQuoteGoodsReturns} from "./server/quoteGoodsReturn";
 export {readPackageExpectation} from './server/packageExpectation';
+
+export {writeIntakeNoteInTransaction} from './server/intakeCapture';
