@@ -127,3 +127,19 @@ export async function readOrderPickupAppointmentInTransaction(tx:PrivilegedTenan
   const current=await tx.execute<{freeze_id:string}>(sql`SELECT f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${auth.tenantId} AND o.id=${orderId} AND o.handover_mode='pickup' AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig'`);
   return current[0]?.freeze_id===receipt.freezeId?receipt:null;
 }
+
+/** A task may retain only the freezes not covered by this actual appointment. */
+export async function qualifyAppointmentRestriction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string,before:StorageOrigin['freezes'],after:StorageOrigin['freezes']){
+ const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,eventId);
+ const expected=before.filter(proof=>proof.orderId!==appointment.orderId||proof.freezeId!==appointment.freezeId);
+ const key=(values:StorageOrigin['freezes'])=>values.map(proof=>proof.orderId+':'+proof.freezeId).sort();
+ if(!expected.length||expected.length===before.length||JSON.stringify(key(expected))!==JSON.stringify(key(after)))throw Error('APPOINTMENT_TASK_RESTRICTION_INVALID');
+}
+
+/** Root-only composition facts for replacing an unposted original after an appointment. */
+export async function readAppointmentPostalContext(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string){
+ const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,eventId);if(appointment.actorId!==auth.userId)throw Error('PICKUP_POSTAL_ACTOR_INVALID');
+ const [order]=await tx.execute<{customer_id:string}>(sql`SELECT customer_id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${appointment.orderId}`);if(!order?.customer_id)throw Error('PICKUP_POSTAL_CUSTOMER_UNAVAILABLE');
+ const rows=await tx.execute<{taskId:string}>(sql`SELECT task.id::text AS "taskId" FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.payload->>'channel'='post' AND event.payload->'meta'->'storageOrigin'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb`);
+ return {customerId:order.customer_id,sourceTaskId:rows[0]?.taskId};
+}

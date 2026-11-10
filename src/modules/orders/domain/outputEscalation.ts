@@ -14,7 +14,7 @@ export function planInitialDispatchReminder(input:{tenantId:string;customerId:st
  const notices=clockMembers.flatMap(member=>member.noticeAt?[member.noticeAt]:[]);
  if(notices.some(at=>!Number.isFinite(Date.parse(at))))throw Error('DISPATCH_NOTICE_TIME_INVALID');
  const oldest=notices.sort((a,b)=>Date.parse(a)-Date.parse(b))[0]??null;
- const base:InitialDispatchReminderPlan={stage:'E1',state:'WAIT_FOR_NOTICE',due:null,oldestNoticeAt:oldest,clientKey:null,orderIds:members.map(row=>row.orderId),orderNumbers:members.map(row=>row.orderNumber),needsNotice:clockMembers.filter(row=>!row.noticeAt).map(row=>row.orderId),automaticSend:false,requiresResponseCheck:true};
+ const base:InitialDispatchReminderPlan={stage:'E1',state:'WAIT_FOR_NOTICE',due:null,oldestNoticeAt:oldest,clientKey:null,orderIds:clockMembers.map(row=>row.orderId),orderNumbers:clockMembers.map(row=>row.orderNumber),needsNotice:clockMembers.filter(row=>!row.noticeAt).map(row=>row.orderId),automaticSend:false,requiresResponseCheck:true};
  if(!clockMembers.length)return base;
  const failedAt=input.deliveryFailedAt??history.filter(row=>row.deliveryFailedAt).at(-1)?.deliveryFailedAt;
  if(input.noMail||failedAt){

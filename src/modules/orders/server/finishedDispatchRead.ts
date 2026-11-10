@@ -72,7 +72,8 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   for(const member of group.members){const answer=answered.get(member.orderId);if(!answer)continue;
    const row=result.find(item=>item.orderId===member.orderId);if(row)row.reminder={...initial,stage:answer.call?'E3':initial.stage,state:'STOPPED',needsNotice:[],orderIds:answer.call?.orderIds??answer.mail!.orderIds,orderNumbers:answer.call?.orderNumbers??group.members.filter(item=>answer.mail!.orderIds.includes(item.orderId)).map(item=>item.orderNumber),clientKey:answer.call?.stageKey??null,due:answer.call?.due??null,callTaskId:answer.call?.taskId,requiresResponseCheck:false,responseState:answer.mail?'REPLIED':'NONE'};
   }
-  const pendingMembers=group.members.filter(member=>!answered.has(member.orderId));if(!pendingMembers.length)continue;
+  for(const member of group.members.filter(member=>pausedOrderIds.includes(member.orderId))){const row=result.find(item=>item.orderId===member.orderId);if(row&&!row.reminder)row.reminder={...initial,orderIds:[member.orderId],orderNumbers:[member.orderNumber]};}
+  const pendingMembers=group.members.filter(member=>!answered.has(member.orderId)&&!pausedOrderIds.includes(member.orderId));if(!pendingMembers.length)continue;
   const activeCalls=calls.filter(call=>(call.result===null||call.result==='notReached')&&call.freezes.some(proof=>pendingMembers.some(member=>member.orderId===proof.orderId&&member.freezeId===proof.freezeId)));
   // A completed unsuccessful call covers its original ware only. New ware must not hide old letters.
   const assigned=new Set<string>();

@@ -37,7 +37,8 @@
     "@/modules/tasks/server-public#completeCollectionTaskForReply",
     "@/modules/tasks/server-public#restrictCollectionTaskForReply",
     "@/modules/tasks/server-public#readOrderHandoverTaskState",
-    "@/modules/tasks/server-public#createGoodsOutClarificationTask"
+    "@/modules/tasks/server-public#createGoodsOutClarificationTask",
+    "@/modules/tasks/server-public#restrictCollectionTaskForAppointment"
   ],
   "capabilities": [
     "aufgabe:speichern",

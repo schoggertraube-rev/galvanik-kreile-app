@@ -9,7 +9,7 @@ import {handedOverProofs} from './dispatchCallPort';
 import {verifyPostalDispatch,finishPostalTaskAfterGoodsOut} from './storagePostalPort';
 import type {StorageEligibility} from '@/modules/orders/public';
 import {COLLECTION_REMINDER_COPY as copy} from '@/ui/situationCatalog';
-import {storageOriginIsCurrent,readPickupAppointmentReceiptInTransaction} from './pickupAppointmentPort';
+import {storageOriginIsCurrent,qualifyAppointmentRestriction,readPickupAppointmentReceiptInTransaction} from './pickupAppointmentPort';
 
 type Letter=NonNullable<StorageEligibility['letter']>;
 type Meta={customerId:string;handover:string;letterKey:string;threadId:string|null;postalDocumentId?:string;recipientId:string;due:string;orders:Array<{id:string;number:string;version:number}>;freezes:Letter['freezes']};
@@ -30,8 +30,8 @@ async function receipt(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot
  const row=rows[0],meta=row.payload.meta;
  const originalAnchor=meta.orders[0]?.id;
  if(!originalAnchor)throw Error('FINAL_ORIGINAL_ANCHOR_MISSING');
- const updates=await tx.execute<{payload:{meta:Meta;taskId:string;replyEventId:string};proof_ok:boolean}>(sql`SELECT payload,(status='success' AND event_schema_version=1 AND correlation_id=${letterKey}::uuid) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_STORAGE_FINAL_TASK_UPDATED_V1' AND payload->>'taskId'=${row.payload.taskId} ORDER BY created_at,id`);
- for(const update of updates){const next=update.payload.meta;if(!update.proof_ok||next.customerId!==meta.customerId||next.handover!==meta.handover||next.letterKey!==letterKey||next.recipientId!==meta.recipientId||next.due!==meta.due||next.threadId!==meta.threadId||next.postalDocumentId!==meta.postalDocumentId)throw Error('FINAL_REPLY_UPDATE_INVALID');await qualifyReplyRestriction(tx,auth,update.payload.replyEventId,meta.freezes,next.freezes);Object.assign(meta,next);}
+ const updates=await tx.execute<{payload:{meta:Meta;taskId:string;replyEventId?:string;appointmentEventId?:string};proof_ok:boolean}>(sql`SELECT payload,(status='success' AND event_schema_version=1 AND correlation_id=${letterKey}::uuid) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_STORAGE_FINAL_TASK_UPDATED_V1' AND payload->>'taskId'=${row.payload.taskId} ORDER BY created_at,id`);
+ for(const update of updates){const next=update.payload.meta;if(!update.proof_ok||next.customerId!==meta.customerId||next.handover!==meta.handover||next.letterKey!==letterKey||next.recipientId!==meta.recipientId||next.due!==meta.due||next.threadId!==meta.threadId||next.postalDocumentId!==meta.postalDocumentId)throw Error('FINAL_REPLY_UPDATE_INVALID');if(update.payload.appointmentEventId){if(update.payload.replyEventId)throw Error('FINAL_UPDATE_ORIGIN_AMBIGUOUS');await qualifyAppointmentRestriction(tx,auth,update.payload.appointmentEventId,meta.freezes,next.freezes);}else await qualifyReplyRestriction(tx,auth,update.payload.replyEventId!,meta.freezes,next.freezes);Object.assign(meta,next);}
  const task=await tx.execute(sql`SELECT id FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${row.payload.taskId}::uuid AND client_key=${finalKey(letterKey)}::uuid AND erstellt_von=${row.user_id}::uuid AND art='aufgabe' AND titel=${copy.finalTaskTitle} AND notiz=${copy.finalTaskNote(meta.orders.map(order=>order.number))} AND fuer_login=${meta.recipientId}::uuid AND fuer_bereich IS NULL AND bezug_typ='auftrag' AND bezug_id=${originalAnchor} AND status IN ('offen','erledigt')`);
  if(task.length!==1||meta.letterKey!==letterKey)throw Error('STORAGE_FINAL_TASK_INVALID');await verifyLetter(tx,auth,meta);return {...row,originalAnchor};
 }
@@ -62,11 +62,18 @@ export async function readFinalTaskCurrentOrder(tx:PrivilegedTenantTransaction,a
  const current=await receipt(tx,auth,rows[0].key);if(!current?.payload.meta.orders.length)throw Error('FINAL_TASK_REFERENCE_EMPTY');
  return current.payload.meta.orders[0].id;
 }
-export async function finishFinalTasksForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,appointment:{eventId:string;orderId:string;freezeId:string;date:string},complete:(taskId:string,note:string)=>Promise<void>){
+export async function finishFinalTasksForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,appointment:{eventId:string;orderId:string;freezeId:string;date:string},complete:(taskId:string,note:string)=>Promise<void>,restrict:(taskId:string)=>Promise<{version:number;note:string;freezes:Letter['freezes']}>){
  const rows=await tx.execute<{key:string}>(sql`SELECT event.correlation_id::text AS key FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND event.event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND event.payload->'meta'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb ORDER BY task.id FOR UPDATE OF task NOWAIT`);
  for(const row of rows){
   const original=await receipt(tx,auth,row.key);if(!original)throw Error('FINAL_APPOINTMENT_SOURCE_MISSING');
   if(!original.payload.meta.freezes.some(proof=>proof.orderId===appointment.orderId&&proof.freezeId===appointment.freezeId))continue;
+  const remaining=original.payload.meta.freezes.filter(proof=>proof.orderId!==appointment.orderId||proof.freezeId!==appointment.freezeId);
+  if(remaining.length){
+   const changed=await restrict(original.payload.taskId);await qualifyAppointmentRestriction(tx,auth,appointment.eventId,original.payload.meta.freezes,changed.freezes);
+   const meta={...original.payload.meta,orders:original.payload.meta.orders.filter(order=>remaining.some(proof=>proof.orderId===order.id)),freezes:changed.freezes};
+   const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,correlation_id,payload) VALUES(${id},${auth.tenantId},'ORDER_STORAGE_FINAL_TASK_UPDATED_V1',${changed.note},'success',${auth.userId}::uuid,1,${row.key}::uuid,${JSON.stringify({taskId:original.payload.taskId,appointmentEventId:appointment.eventId,version:changed.version,meta})}::jsonb) RETURNING id`);
+   if(saved.length!==1||saved[0].id!==id)throw Error('APPOINTMENT_FINAL_RESTRICTION_NOT_SAVED');continue;
+  }
   const note=copy.appointmentAgreed(appointment.date);await complete(original.payload.taskId,note);
   const closed=await tx.execute<{version:number}>(sql`SELECT version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${original.payload.taskId}::uuid AND status='erledigt' AND erledigt_von=${auth.userId}::uuid AND erledigt_notiz=${note}`);if(closed.length!==1)throw Error('FINAL_APPOINTMENT_TASK_NOT_ENDED');
   const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,payload,created_at) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1',${note},'success',${auth.userId}::uuid,1,${JSON.stringify({appointmentEventId:appointment.eventId,taskId:original.payload.taskId,version:closed[0].version,note,letterKey:row.key})}::jsonb,statement_timestamp()) RETURNING id`);

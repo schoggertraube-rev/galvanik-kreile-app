@@ -7,7 +7,7 @@ import type {TaskCompleteInput,TaskRecord,TaskFailure} from '@/modules/tasks/pub
 import type {InitialDispatchReminderPlan} from '@/modules/orders/public';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {appendOrderInformed} from './orderReleaseRead';
-import {readOrderPickupAppointmentInTransaction,readPickupAppointmentReceiptInTransaction} from './pickupAppointmentPort';
+import {readOrderPickupAppointmentInTransaction,readPickupAppointmentReceiptInTransaction,qualifyAppointmentRestriction} from './pickupAppointmentPort';
 import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,qualifyReplyRestriction,readLatestReplyForFreeze,type DispatchReplyReceipt} from './dispatchReplyPort';
 
 type CallMeta={customerId:string;handover:'pickup'|'shipping';due:string;stageKey:string;orderIds:string[];orderNumbers:string[];freezes:Array<{orderId:string;freezeId:string}>};
@@ -19,9 +19,9 @@ async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
  if(rows.length>1)throw Error('DISPATCH_CALL_SOURCE_AMBIGUOUS');const created=rows[0];if(!created)return null;
  if(!created.proof_ok)throw Error('DISPATCH_CALL_SOURCE_INVALID');
  const originalOrderIds=[...created.payload.meta.orderIds];
- const updates=await tx.execute<{payload:{meta:CallMeta;taskId:string;replyEventId?:string};correlation_id:string;proof_ok:boolean}>(sql`SELECT payload,correlation_id::text,(status='success' AND event_schema_version=1) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_UPDATED_V1' AND payload->>'taskId'=${taskId} ORDER BY created_at,id LIMIT 1001`);
+ const updates=await tx.execute<{payload:{meta:CallMeta;taskId:string;replyEventId?:string;appointmentEventId?:string};correlation_id:string;proof_ok:boolean}>(sql`SELECT payload,correlation_id::text,(status='success' AND event_schema_version=1) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_UPDATED_V1' AND payload->>'taskId'=${taskId} ORDER BY created_at,id LIMIT 1001`);
  if(updates.length>1000)throw Error('DISPATCH_CALL_UPDATE_LIMIT');
- for(const update of updates){const meta=update.payload.meta;if(!update.proof_ok||update.correlation_id!==created.correlation_id||meta.customerId!==created.payload.meta.customerId||meta.handover!==created.payload.meta.handover||meta.stageKey!==created.payload.meta.stageKey||meta.due!==created.payload.meta.due)throw Error('DISPATCH_CALL_UPDATE_INVALID');if(update.payload.replyEventId)await qualifyReplyRestriction(tx,auth,update.payload.replyEventId,created.payload.meta.freezes,meta.freezes);created.payload=update.payload;}
+ for(const update of updates){const meta=update.payload.meta;if(!update.proof_ok||update.correlation_id!==created.correlation_id||meta.customerId!==created.payload.meta.customerId||meta.handover!==created.payload.meta.handover||meta.stageKey!==created.payload.meta.stageKey||meta.due!==created.payload.meta.due)throw Error('DISPATCH_CALL_UPDATE_INVALID');if(update.payload.replyEventId)await qualifyReplyRestriction(tx,auth,update.payload.replyEventId,created.payload.meta.freezes,meta.freezes);if(update.payload.appointmentEventId){if(update.payload.replyEventId)throw Error('DISPATCH_CALL_UPDATE_ORIGIN_AMBIGUOUS');await qualifyAppointmentRestriction(tx,auth,update.payload.appointmentEventId,created.payload.meta.freezes,meta.freezes);}created.payload=update.payload;}
  return {...created,originalOrderIds,startedAt:new Date(created.created_at).toISOString()};
 }
 async function task(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,lock=false){
@@ -80,12 +80,20 @@ async function qualifiedTaskState(tx:PrivilegedTenantTransaction,auth:Authorizat
  return {taskId:record.id,result:result.payload.result,recordedAt:new Date(record.erledigt_am).toISOString(),...clock};
 }
 /** Close the existing callback through its sole task writer; no call result is invented. */
-export async function finishDispatchCallsForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,appointment:{eventId:string;orderId:string;freezeId:string;date:string},complete:(taskId:string,note:string)=>Promise<void>){
+export async function finishDispatchCallsForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,appointment:{eventId:string;orderId:string;freezeId:string;date:string},complete:(taskId:string,note:string)=>Promise<void>,restrict:(taskId:string)=>Promise<{version:number;note:string;freezes:CallMeta['freezes']}>){
  const rows=await tx.execute<{id:string}>(sql`SELECT task.id::text FROM public.tasks task WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND EXISTS(SELECT 1 FROM public.events event WHERE event.tenant_id=task.tenant_id AND event.event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_COLLECTION_CALL_UPDATED_V1') AND event.payload->>'taskId'=task.id::text AND event.payload->'meta'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb) ORDER BY task.id FOR UPDATE NOWAIT`);
  for(const row of rows){
   const created=await source(tx,auth,row.id);if(!created)throw Error('APPOINTMENT_CALL_SOURCE_MISSING');
   if(!created.payload.meta.freezes.some(member=>member.orderId===appointment.orderId&&member.freezeId===appointment.freezeId))continue;
   const state=await qualifiedTaskState(tx,auth,created);if(state.result!==null)throw Error('APPOINTMENT_CALL_NOT_OPEN');
+  const remaining=created.payload.meta.freezes.filter(proof=>proof.orderId!==appointment.orderId||proof.freezeId!==appointment.freezeId);
+  if(remaining.length){
+   const changed=await restrict(row.id),before=created.payload.meta;
+   await qualifyAppointmentRestriction(tx,auth,appointment.eventId,before.freezes,changed.freezes);
+   const ids=before.orderIds.filter(id=>remaining.some(proof=>proof.orderId===id)),meta={...before,orderIds:ids,orderNumbers:before.orderIds.flatMap((id,index)=>ids.includes(id)?[before.orderNumbers[index]]:[]),freezes:changed.freezes};
+   const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,event_schema_version,correlation_id,payload) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_CALL_UPDATED_V1',${changed.note},'success',${auth.userId}::uuid,1,${created.correlation_id}::uuid,${JSON.stringify({taskId:row.id,appointmentEventId:appointment.eventId,version:changed.version,meta})}::jsonb) RETURNING id`);
+   if(saved.length!==1||saved[0].id!==id)throw Error('APPOINTMENT_CALL_RESTRICTION_NOT_SAVED');continue;
+  }
   const note=DISPATCH_CALL_COPY.appointmentAgreed(appointment.date);
   await complete(row.id,note);
   const closed=await task(tx,auth,row.id);if(!closed||closed.status!=='erledigt'||closed.erledigt_von!==auth.userId||closed.erledigt_notiz!==note)throw Error('APPOINTMENT_CALL_TASK_NOT_CLOSED');

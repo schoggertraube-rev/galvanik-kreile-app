@@ -3,7 +3,7 @@ import {readClarificationArea} from '@/lib/server/authorization';
 import {GOODS_OUT_FOLLOWUP_COPY} from '@/ui/situationCatalog';
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
 import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
-import {collectionTaskHasReplySource,collectionTaskReplyRemainder,readCollectionTaskCurrentOrder} from '@/lib/server/dispatchReplyPort';
+import {collectionTaskHasReplySource,collectionTaskReplyRemainder,collectionTaskAppointmentRemainder,readCollectionTaskCurrentOrder} from '@/lib/server/dispatchReplyPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import 'server-only';
@@ -110,8 +110,8 @@ export async function createMissingGoodsTask(tx:PrivilegedTenantTransaction,auth
 }
 
 /** U252: the checked order/mail command creates a normal visible callback task. */
-export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string;taskId?:string;version?:number;kind?:'aufgabe';forLogin?:string;dueDate?:string},deps:Dependencies){
- if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))reject('FORBIDDEN','Übergabe klären benötigt Mails und Aufträge.');
+export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string;taskId?:string;version?:number;kind?:'aufgabe';forLogin?:string;dueDate?:string},deps:Dependencies,appointmentSource?:{taskId:string;appointmentEventId:string}){
+ if(!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails')&&(!appointmentSource||!await storageTaskHasAppointmentSource(tx,auth,appointmentSource.taskId,appointmentSource.appointmentEventId)))reject('FORBIDDEN','Übergabe klären benötigt Mails und Aufträge.');
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  const value:TaskSaveInput={clientKey:input.clientKey,version:input.version??0,...(input.taskId?{taskId:input.taskId}:{}),kind:input.kind??'rueckruf',title:input.title,dueDate:input.dueDate??clock.today,time:null,forLogin:input.forLogin??null,forArea:input.forLogin?null:'auftraege',reference:{type:'auftrag',id:input.orderId},note:input.note};
  const errors=taskValidation(value);if(Object.keys(errors).length)reject('VALIDATION_ERROR','Rückruf-Aufgabe ist unvollständig.');
@@ -209,6 +209,13 @@ export async function completeCollectionTaskForReply(tx:PrivilegedTenantTransact
 /** Keep the task, recipient and date; preserve the immutable original reference and narrow only the ware note. */
 export async function restrictCollectionTaskForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;replyEventId:string},deps:Dependencies){
  const scope=await collectionTaskReplyRemainder(tx,auth,input.taskId,input.replyEventId),before=await find(tx,auth,input.taskId,true);
+ if(!scope||!before||before.status!=='offen'||!['aufgabe','rueckruf'].includes(before.art)||before.bezug_typ!=='auftrag'||!before.bezug_id)reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ const value:TaskSaveInput={taskId:before.id,clientKey:before.client_key,version:before.version,kind:before.art as 'aufgabe'|'rueckruf',title:before.titel,dueDate:before.faellig_am,time:before.uhrzeit,forLogin:before.fuer_login,forArea:before.fuer_bereich,reference:{type:'auftrag',id:before.bezug_id},note:scope.note,...(before.item_id?{itemId:before.item_id}:{})};
+ const saved=await persistTask(tx,auth,value,deps,false,false,true);
+ return {version:saved.task.version,note:scope.note,freezes:scope.freezes};
+}
+export async function restrictCollectionTaskForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;appointmentEventId:string},deps:Dependencies){
+ const scope=await collectionTaskAppointmentRemainder(tx,auth,input.taskId,input.appointmentEventId),before=await find(tx,auth,input.taskId,true);
  if(!scope||!before||before.status!=='offen'||!['aufgabe','rueckruf'].includes(before.art)||before.bezug_typ!=='auftrag'||!before.bezug_id)reject('CONFLICT',DISPATCH_CALL_COPY.changed);
  const value:TaskSaveInput={taskId:before.id,clientKey:before.client_key,version:before.version,kind:before.art as 'aufgabe'|'rueckruf',title:before.titel,dueDate:before.faellig_am,time:before.uhrzeit,forLogin:before.fuer_login,forArea:before.fuer_bereich,reference:{type:'auftrag',id:before.bezug_id},note:scope.note,...(before.item_id?{itemId:before.item_id}:{})};
  const saved=await persistTask(tx,auth,value,deps,false,false,true);

@@ -286,15 +286,24 @@ export async function markOrderInformedByPhoneAction(input:{orderId:string;expec
 }
 export async function setOrderPickupAppointmentAction(input:unknown){
  const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
- const {setOrderPickupAppointment}=await import('@/lib/server/pickupAppointmentPort');
+ const {setOrderPickupAppointment,readAppointmentPostalContext}=await import('@/lib/server/pickupAppointmentPort');
  const [{finishDispatchCallsForAppointment},{completeOrderCallbackTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/lib/server/dispatchCallPort'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
- const [{finishPostalTasksForAppointment},{finishFinalTasksForAppointment},{completeStorageTaskForAppointment}]=await Promise.all([import('@/lib/server/storagePostalPort'),import('@/lib/server/storageFinalStagePort'),import('@/modules/tasks/server-public')]);
+ const [{finishPostalTasksForAppointment},{finishFinalTasksForAppointment},{completeStorageTaskForAppointment,restrictCollectionTaskForAppointment,createOrderHandoverTask}]=await Promise.all([import('@/lib/server/storagePostalPort'),import('@/lib/server/storageFinalStagePort'),import('@/modules/tasks/server-public')]);
+ const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
  const result=await setOrderPickupAppointment(auth.data,input,async(tx,receipt)=>{
   const effects={effect:(writeTx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,actor:AuthorizationSnapshot,effect:import('@/modules/tasks/server-public').TaskEffectRequest)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)};
-  await finishDispatchCallsForAppointment(tx,auth.data,receipt,(taskId,note)=>completeOrderCallbackTask(tx,auth.data,taskId,note,effects));
+  await finishDispatchCallsForAppointment(tx,auth.data,receipt,(taskId,note)=>completeOrderCallbackTask(tx,auth.data,taskId,note,effects),taskId=>restrictCollectionTaskForAppointment(tx,auth.data,{taskId,appointmentEventId:receipt.eventId},effects));
   const close=(taskId:string,note:string)=>completeStorageTaskForAppointment(tx,auth.data,{taskId,note,appointmentEventId:receipt.eventId},effects);
-  await finishPostalTasksForAppointment(tx,auth.data,receipt,close);
-  await finishFinalTasksForAppointment(tx,auth.data,receipt,close);
+  const postalContext=await readAppointmentPostalContext(tx,auth.data,receipt.eventId);
+  if(postalContext.sourceTaskId){
+  const settings=await readShippingSettingsInTransaction(tx,auth.data.tenantId);if(!settings)throw Error('PICKUP_POSTAL_SETTINGS_UNAVAILABLE');
+  await finishPostalTasksForAppointment(tx,auth.data,receipt,close,{
+   settingsUpdatedAt:settings.updatedAt,
+   customerCurrent:async(writeTx,snapshot)=>{const {customerCountryLabel}=await import('@/modules/customers/public');const customer=await readCustomerProfile(writeTx,auth.data.tenantId,postalContext.customerId,true),r=snapshot.recipient;return !!customer&&customer.name===r.name&&[customer.street,customer.houseNumber].filter(Boolean).join(' ')===r.street&&customer.zipCode===r.zip&&customer.city===r.city&&customerCountryLabel(customer.country)===r.country;},
+   createTask:(writeTx,value)=>createOrderHandoverTask(writeTx,auth.data,value,effects,postalContext.sourceTaskId?{taskId:postalContext.sourceTaskId,appointmentEventId:receipt.eventId}:undefined)
+  });
+  }
+  await finishFinalTasksForAppointment(tx,auth.data,receipt,close,taskId=>restrictCollectionTaskForAppointment(tx,auth.data,{taskId,appointmentEventId:receipt.eventId},effects));
  });
  if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
  return result;

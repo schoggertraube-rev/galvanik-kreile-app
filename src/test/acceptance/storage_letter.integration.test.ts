@@ -643,3 +643,41 @@ it('PL12:06 a missed pickup uses the existing mail sender and final task, while 
  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${final.taskId}::uuid`).toEqual([{status:'erledigt'}]);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_COLLECTION_CALL_RESULT_V1') AND payload->'meta'->'orderIds' @> ${sql.json([order.orderId])}`).toHaveLength(0);
 });
+
+it.each(['call','post','final'] as const)('K3 appointment for A keeps B in its existing %s path without inventing dispatch',async(kind)=>{
+ const {order,second,request,callTaskId}=await prepareLetter('TEST K3 Teil-Termin '+kind,kind!=='call',true);if(!second)throw Error('K3_SECOND');
+ let original:Extract<Awaited<ReturnType<typeof prepareStoragePostalLetterAction>>,{code:'OK'}>|undefined;
+ let finalId:string|undefined;
+ if(kind!=='call'){
+  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('K3_SETTINGS');
+  expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,finalStageAfterLetterDays:0,finalStageRecipientId:full.actorId}}))).toMatchObject({code:'OK'});
+  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+  expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
+  const prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('K3_POST');original=prepared;
+  if(kind==='final'){
+   const task=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));if(task.code!=='OK'||!task.task)throw Error('K3_POST_TASK');
+   expect(await withSession(full,()=>completeIntakeTaskAction({taskId:prepared.taskId,version:task.task!.version,note:'TEST K3 original posted',postalResult:{kind:'posted',postedOn:berlinCalendarDay(),documentSha256:prepared.document.sha256}}))).toMatchObject({code:'OK'});
+   const final=await withSession(full,()=>createStorageFinalTaskAction(request));if(final.code!=='OK')throw Error('K3_FINAL');finalId=final.taskId;
+  }
+  expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:customer.email}))).toMatchObject({code:'OK'});
+ }
+ const operator=await createFixture(['auftraege'],'werkstatt');
+ const card=await withSession(operator,()=>import('@/app/actions/orders.actions').then(port=>port.getLiveOrderCardAction({orderId:order.orderId})));if(card.code!=='OK')throw Error('K3_CARD');
+ const input={orderId:order.orderId,expectedVersion:card.data.card.version,previousEventId:null,date:new Date(Date.now()+14*86400000).toISOString().slice(0,10),channel:'telefon' as const,clientEventId:randomUUID()};
+ const saved=await withSession(operator,()=>setOrderPickupAppointmentAction(input));expect(saved).toMatchObject({code:'OK'});if(saved.code!=='OK')throw Error('K3_APPOINTMENT');
+ const queue=await withSession(operator,()=>getOrdersDb());if(!queue.ok)throw Error('K3_QUEUE');
+ expect(queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'PAUSED'});
+ const b=queue.data.find(row=>row.id===second.orderId)?.finishedDispatch;
+ if(kind==='call'){
+  expect(b?.reminder).toMatchObject({stage:'E3',state:'CALL_PENDING',orderIds:[second.orderId]});
+  expect(await withSession(operator,()=>getIntakeTaskAction({taskId:callTaskId}))).toMatchObject({code:'OK',task:{status:'offen'},reference:{id:second.orderId}});
+ }else if(kind==='final'){
+  expect(await withSession(operator,()=>getIntakeTaskAction({taskId:finalId!}))).toMatchObject({code:'OK',task:{status:'offen'},reference:{id:second.orderId}});
+ }else{
+  expect(await withSession(operator,()=>getIntakeTaskAction({taskId:original!.taskId}))).toMatchObject({code:'OK',task:{status:'erledigt'},postalLetter:{state:'ENDED_BY_APPOINTMENT',document:{sha256:original!.document.sha256}}});
+  expect(b?.storage?.letter).toMatchObject({state:'WAIT_FOR_POST',orderIds:[second.orderId]});
+  expect(b?.storage?.letter?.postalDocumentId).not.toBe(original!.document.id);
+ }
+ expect(await withSession(operator,()=>setOrderPickupAppointmentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'channel'='post'`).toHaveLength(kind==='final'?1:0);
+});

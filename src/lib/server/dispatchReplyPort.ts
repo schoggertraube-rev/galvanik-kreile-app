@@ -114,13 +114,36 @@ export async function postalReplyReplacementProved(tx:PrivilegedTenantTransactio
  return replacement.taskId!==taskId&&replacement.meta.customerId===reply.customerId&&replacement.meta.handover===reply.handover&&hash(key(expected))===hash(key(replacement.meta.storageOrigin.freezes))&&hash(expected.map(proof=>proof.orderId).sort())===hash(replacement.meta.orders.map(order=>order.id).sort())&&bytes.subarray(0,5).toString()==='%PDF-'&&createHash('sha256').update(bytes).digest('hex')===replacement.document.sha256;
 }
 
+export async function postalAppointmentReplacementProved(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string,appointmentEventId:string){
+ type Prepared={document:{id:string;sha256:string;pdfBase64:string};taskId:string;meta:{customerId:string;handover:string;stageKey:string;orders:Array<{id:string}>;storageOrigin:{freezes:Proof['freezes']};replacesForAppointment?:{documentId:string;appointmentEventId:string}}};
+ const {readPickupAppointmentReceiptInTransaction}=await import('./pickupAppointmentPort');
+ const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,appointmentEventId);
+ const old=await tx.execute<{payload:Prepared}>(sql`SELECT payload FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND status='success' AND event_schema_version=1 AND payload->>'channel'='post' AND payload->>'taskId'=${taskId}`);
+ if(old.length!==1)return false;const source=old[0].payload;
+ const expected=source.meta.storageOrigin.freezes.filter(proof=>![{orderId:appointment.orderId,freezeId:appointment.freezeId}].some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId));
+ if(!expected.length||expected.length===source.meta.storageOrigin.freezes.length)return false;
+ const rows=await tx.execute<{payload:Prepared;proof_ok:boolean}>(sql`SELECT event.payload,(event.id::text=event.payload->'document'->>'id' AND event.client_event_id::text=event.payload->'meta'->>'stageKey' AND event.correlation_id=event.client_event_id AND task.client_key=event.client_event_id AND task.erstellt_von=event.user_id AND task.art='aufgabe' AND task.bezug_typ='auftrag' AND task.bezug_id=event.payload->'meta'->'orders'->0->>'id') AS proof_ok FROM public.events event JOIN public.tasks task ON task.tenant_id=event.tenant_id AND task.id::text=event.payload->>'taskId' WHERE event.tenant_id=${auth.tenantId} AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.status='success' AND event.event_schema_version=1 AND event.payload->>'channel'='post' AND event.payload->'meta'->'replacesForAppointment'->>'documentId'=${source.document.id} AND event.payload->'meta'->'replacesForAppointment'->>'appointmentEventId'=${appointment.eventId}`);
+ if(rows.length!==1||!rows[0].proof_ok)return false;const replacement=rows[0].payload,bytes=Buffer.from(replacement.document.pdfBase64,'base64');
+ const key=(values:Proof['freezes'])=>values.map(proof=>proof.orderId+':'+proof.freezeId).sort();
+ return replacement.taskId!==taskId&&replacement.meta.customerId===source.meta.customerId&&replacement.meta.handover===source.meta.handover&&hash(key(expected))===hash(key(replacement.meta.storageOrigin.freezes))&&hash(expected.map(proof=>proof.orderId).sort())===hash(replacement.meta.orders.map(order=>order.id).sort())&&bytes.subarray(0,5).toString()==='%PDF-'&&createHash('sha256').update(bytes).digest('hex')===replacement.document.sha256;
+}
+
 /** Only the unaffected remainder of a qualified shared collection task may change. */
 export async function collectionTaskReplyRemainder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string,eventId:string){
  if(!hasAuthorizationArea(auth,'auftraege'))return null;
  const reply=await readDispatchReplyReceipt(tx,auth,eventId);
+ return collectionTaskRemainder(tx,auth,taskId,reply.proof.freezes,reply);
+}
+export async function collectionTaskAppointmentRemainder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string,eventId:string){
+ if(!hasAuthorizationArea(auth,'auftraege'))return null;
+ const {readPickupAppointmentReceiptInTransaction}=await import('./pickupAppointmentPort');
+ const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,eventId);if(appointment.actorId!==auth.userId)return null;
+ return collectionTaskRemainder(tx,auth,taskId,[{orderId:appointment.orderId,freezeId:appointment.freezeId}]);
+}
+async function collectionTaskRemainder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string,excluded:Proof['freezes'],context?:{customerId:string;handover:string}){
  const rows=await tx.execute<{event_type:string;payload:{meta:{customerId:string;handover:string;freezes:Proof['freezes'];orderIds?:string[];orderNumbers?:string[];orders?:Array<{id:string;number:string}>}}}>(sql`SELECT event_type,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND status='success' AND event_schema_version=1 AND payload->>'taskId'=${taskId} AND event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_COLLECTION_CALL_UPDATED_V1','ORDER_STORAGE_FINAL_TASK_CREATED_V1','ORDER_STORAGE_FINAL_TASK_UPDATED_V1') ORDER BY created_at DESC,id DESC LIMIT 1`);
- const source=rows[0],meta=source?.payload.meta;if(!meta||meta.customerId!==reply.customerId||meta.handover!==reply.handover)return null;
- const remaining=meta.freezes.filter(proof=>!reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId));
+ const source=rows[0],meta=source?.payload.meta;if(!meta||context&&(meta.customerId!==context.customerId||meta.handover!==context.handover))return null;
+ const remaining=meta.freezes.filter(proof=>!excluded.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId));
  if(!remaining.length||remaining.length===meta.freezes.length)return null;
  const numbers=meta.orders?meta.orders.filter(order=>remaining.some(proof=>proof.orderId===order.id)).map(order=>order.number):meta.orderIds?.flatMap((id,index)=>remaining.some(proof=>proof.orderId===id)?[meta.orderNumbers![index]]:[]);
  if(!numbers||numbers.length!==remaining.length||numbers.some(number=>!number))throw Error('REPLY_TASK_REMAINDER_INVALID');
@@ -134,7 +157,7 @@ export async function qualifyReplyRestriction(tx:PrivilegedTenantTransaction,aut
 /** A hint selects the existing qualified reader; it never determines the task's scope itself. */
 export async function readCollectionTaskCurrentOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string){
  if(!hasAuthorizationArea(auth,'auftraege'))return null;
- const rows=await tx.execute<{event_type:string}>(sql`SELECT event_type FROM public.events WHERE tenant_id=${auth.tenantId} AND payload->>'taskId'=${taskId} AND payload->>'replyEventId' IS NOT NULL AND event_type IN ('ORDER_COLLECTION_CALL_UPDATED_V1','ORDER_STORAGE_FINAL_TASK_UPDATED_V1') ORDER BY created_at DESC,id DESC LIMIT 1`);
+ const rows=await tx.execute<{event_type:string}>(sql`SELECT event_type FROM public.events WHERE tenant_id=${auth.tenantId} AND payload->>'taskId'=${taskId} AND (payload->>'replyEventId' IS NOT NULL OR payload->>'appointmentEventId' IS NOT NULL) AND event_type IN ('ORDER_COLLECTION_CALL_UPDATED_V1','ORDER_STORAGE_FINAL_TASK_UPDATED_V1') ORDER BY created_at DESC,id DESC LIMIT 1`);
  if(!rows.length)return null;
  if(rows[0].event_type==='ORDER_COLLECTION_CALL_UPDATED_V1'){const {readDispatchTaskCurrentOrder}=await import('./dispatchCallPort');return readDispatchTaskCurrentOrder(tx,auth,taskId);}
  const {readFinalTaskCurrentOrder}=await import('./storageFinalStagePort');return readFinalTaskCurrentOrder(tx,auth,taskId);
