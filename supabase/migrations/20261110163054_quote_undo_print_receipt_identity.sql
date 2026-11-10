@@ -34,4 +34,3 @@ BEGIN
      AND binding.nachher->>'vorgangId'=o.id AND (original.vorgang_art IS DISTINCT FROM 'auftrag' OR original.vorgang_id IS DISTINCT FROM o.id OR original.version<>(binding.vorher->>'version')::integer+1)) THEN RETURN 'Ein Original wurde nach der Zuordnung geändert'; END IF;
  RETURN NULL;
 END; $fn$;
-
