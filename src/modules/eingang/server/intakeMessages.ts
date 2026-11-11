@@ -4,7 +4,7 @@ import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
-import {MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult} from '../messageContract';
+import {readFallbackMessagePriority,MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult} from '../messageContract';
 
 /** One projection of intake_item; no communications/phone_notes shadow inbox. */
 export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string):Promise<IntakeMessagesResult>{
@@ -41,7 +41,7 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
       AND (source.gruppe_adresse IS NOT NULL AND candidate.gruppe_adresse=source.gruppe_adresse OR candidate.id=source.id)))
     ORDER BY coalesce(source.empfangen_am,source.erstellt_am),source.id`);
    const actors=await readIntakeActorTraces(tx,auth,messages.map(row=>row.id));
-   return {code:'OK' as const,messages:messages.map(row=>({...row,actorTrace:actors.get(row.id)})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
+   return {code:'OK' as const,messages:messages.map(row=>({...row,fallbackPriority:readFallbackMessagePriority(row),actorTrace:actors.get(row.id)})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
   });
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }
