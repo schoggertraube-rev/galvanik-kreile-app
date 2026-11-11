@@ -66,7 +66,9 @@ async function attachReplyToOriginalNotice(order:{orderId:string;customerId:stri
   }return nativeFetch(input,init);
  });
  const {attachOutlookMailAction}=await import('@/app/actions/communications.actions');
- expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:order.customerId,graphMessageId:identity}))).toMatchObject({code:expected});
+ expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:order.customerId,graphMessageId:identity}))).toMatchObject({code:'OK'});
+ if(expected==='UNAVAILABLE')expect(await sql`SELECT retry.id FROM public.events retry JOIN private.v_intake_reply_evidence_v1 evidence ON evidence.tenant_id=retry.tenant_id AND evidence.item_id::text=retry.payload->>'itemId'
+  WHERE retry.tenant_id=${KREILE_TENANT_SLUG} AND retry.event_type='DISPATCH_REPLY_RETRY_REQUIRED_V1' AND evidence.graph_message_id=${identity}`).toHaveLength(1);
 }
 it.each(['reply','goodsOut'] as const)('a reply to A narrows the shared E5 task to B, preserves the posted original and finishes through %s',async(ending)=>{
  const {order,second,request,plan}=await prepareLetter('Teilantwort finale Aufgabe',true,true);
@@ -257,7 +259,9 @@ it('an original customer reply ends the exact open postal task without inventing
  await sql.unsafe(`CREATE FUNCTION private.${guard}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='ORDER_COLLECTION_TASK_ENDED_FOR_REPLY_V1' AND NEW.payload->>'taskId'='${prepared.taskId}' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
  try{
   await sql.unsafe(`CREATE TRIGGER ${guard} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${guard}()`);
-  expect(await withSession(full,()=>attachOutlookMailAction(JSON.parse(JSON.stringify(replyInput))))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await withSession(full,()=>attachOutlookMailAction(JSON.parse(JSON.stringify(replyInput))))).toMatchObject({code:'OK'});
+  expect(await sql`SELECT retry.id FROM public.events retry JOIN private.v_intake_reply_evidence_v1 evidence ON evidence.tenant_id=retry.tenant_id AND evidence.item_id::text=retry.payload->>'itemId'
+   WHERE retry.tenant_id=${KREILE_TENANT_SLUG} AND retry.event_type='DISPATCH_REPLY_RETRY_REQUIRED_V1' AND evidence.graph_message_id=${replyInput.graphMessageId}`).toHaveLength(1);
   expect(await sql`SELECT status,erledigt_am FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.taskId}::uuid`).toEqual([{status:'offen',erledigt_am:null}]);
   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1' AND payload->'receipt'->>'customerId'=${order.customerId}`).toHaveLength(0);
  }finally{
