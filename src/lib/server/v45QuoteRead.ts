@@ -49,7 +49,7 @@ export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback,
  let hauptaktion:null|{elementId:string;textKey:string;werte:Record<string,string|number>;befehl:NonNullable<ReturnType<typeof readV45QuoteCommand>>;recht:string|null}=null;
  if(rule.hauptaktion!==null){
   if(!('textKey' in rule)||typeof rule.textKey!=='string'||!('recht' in rule)||rule.recht!==null&&typeof rule.recht!=='string')return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_METADATA'],source};
-  const befehl=readV45QuoteCommand(rule.hauptaktion);if(!befehl)return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_COMMAND'],source};
+  const befehl=readV45QuoteCommand(rule.hauptaktion,quote);if(!befehl)return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_COMMAND'],source};
   // V45 kern.js/mainVars: current edition and first actual stored goods location.
   // Missing location stays absent; there is no empty preview fallback.
   const parameters=readV45ActionValues(rule.textKey,{number:quote.quoteNumber,name:quote.customerDisplayName,edition:quote.lifecycle.edition,...(quote.lifecycle.goods?.[0]?{location:quote.lifecycle.goods[0].location}:{})});

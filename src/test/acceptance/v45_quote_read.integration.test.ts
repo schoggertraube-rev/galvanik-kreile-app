@@ -21,7 +21,7 @@ it('reads actual KV editions after commands, retains unknown evidence and expose
  const first=await readRule();if(first.code!=='OK')throw Error('TEST_FIRST_LOOK');
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${tenant}`).toEqual(beforeRead);
  expect(first.weitere).toEqual([]);
- expect(first.hauptaktion).toMatchObject({elementId:'quote.send',textKey:'quote.send',werte:{number:created.quote.quoteNumber},befehl:{datei:'src/app/actions/communications.actions.ts',funktion:'sendCustomerMailAction'}});
+ expect(first.hauptaktion).toMatchObject({elementId:'quote.send',textKey:'quote.send',werte:{number:created.quote.quoteNumber},befehl:{datei:'src/app/actions/communications.actions.ts',funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:customerId,attachment:{kind:'QUOTE',documentId:input.quoteId}}}});
  expect(first.erstblick.map(row=>row.key)).toEqual(['kv.lage','kv.teile','kv.termin','kv.kalkulation','kv.hauptaktion']);
  expect(first.erstblick.find(row=>row.key==='kv.kalkulation')?.werte).toEqual({nettoCents:24690});
  expect(first.erstblick.find(row=>row.key==='kv.teile')?.werte).toMatchObject({teile:[{name:'TEST V45 Teil',menge:2}]});
@@ -30,7 +30,9 @@ it('reads actual KV editions after commands, retains unknown evidence and expose
  expect(await readRule()).toMatchObject({code:'OK',ruleId:'kv.versendet',source:{version:2},hauptaktion:{elementId:'quote.accept',befehl:{funktion:'changeQuoteLifecycleAction',argumente:{action:'accept'}},werte:{edition:1}}});
  expect(await withSession(full,()=>changeQuoteLifecycleAction(JSON.parse(JSON.stringify(sent))))).toMatchObject({code:'OK',replayed:true});
  expect(await readRule()).toMatchObject({code:'OK',ruleId:'kv.versendet',source:{version:2}});
- const accepted=await withSession(full,()=>changeQuoteLifecycleAction({...input,expectedVersion:2,edition:1,clientEventId:randomUUID(),action:'accept',evidence:'TEST aktuelle Fassung zugesagt'}));
+ const proposed=await readRule();if(proposed.code!=='OK'||!proposed.hauptaktion)throw Error('TEST_ACCEPT_BINDING');
+ expect(proposed.hauptaktion.befehl.argumente).toEqual({quoteId:input.quoteId,expectedVersion:2,edition:1,action:'accept'});
+ const accepted=await withSession(full,()=>changeQuoteLifecycleAction({...JSON.parse(JSON.stringify(proposed.hauptaktion!.befehl.argumente)),clientEventId:randomUUID(),evidence:'TEST aktuelle Fassung zugesagt'}));
  expect(accepted).toMatchObject({code:'OK'});
  expect(await readRule()).toMatchObject({code:'OK',ruleId:'kv.zugesagt',source:{version:3},hauptaktion:{elementId:'quote.receive',befehl:{funktion:'saveGoodsReceiptAction'}}});
  const operator=await createFixture(['auftraege'],'werkstatt'),operationalAuth=await withSession(operator,()=>resolveAuthorization());if(!operationalAuth.ok)throw Error('TEST_OPERATOR_AUTH');
