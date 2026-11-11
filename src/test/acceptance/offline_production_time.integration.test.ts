@@ -120,7 +120,7 @@ it('keeps a real physical completion when its later pricing supplement hits an S
   expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${taskId}::uuid`).toEqual([{status:'offen'}]);
  }finally{await sql.unsafe(`DROP TRIGGER IF EXISTS ${fault} ON private.order_production_snapshots`);await sql.unsafe(`DROP FUNCTION IF EXISTS private.${fault}()`);}
  if(!saved||!taskId)throw Error('TEST_PRICING_FOLLOWUP_NOT_PRESERVED');
- const task=await withSession(decider,()=>getIntakeTaskAction({taskId:taskId!}));expect(task).toMatchObject({code:'OK',canComplete:true,completeLabel:'Nachtrag erneut auslösen'});if(task.code!=='OK'||!task.task)throw Error('TEST_TASK_READER');
+ const task=await withSession(decider,()=>getIntakeTaskAction({taskId:taskId!}));expect(task).toMatchObject({code:'OK',pricingSource:'KNOWN',canComplete:true,completeLabel:'Nachtrag erneut auslösen'});if(task.code!=='OK'||!task.task)throw Error('TEST_TASK_READER');
  const retry={taskId,version:task.task.version,note:null};
  expect(await withSession(decider,()=>completeIntakeTaskAction(retry))).toMatchObject({code:'OK'});
  expect(await withSession(decider,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(retry))))).toMatchObject({code:'OK',replayed:true});

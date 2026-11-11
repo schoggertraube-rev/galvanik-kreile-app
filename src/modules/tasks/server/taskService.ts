@@ -15,7 +15,7 @@ import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization,readClarificationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
-import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AccessArea} from '@/lib/auth/authorizationContract';
 import {TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference,type TaskRecord,type TaskReferenceRead,type TaskSaveInput,type TaskFailure,type TaskResult,type TaskReadResult,type TaskCompleteInput,type TaskOpenRequest} from '../contract';
 
@@ -240,8 +240,11 @@ export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
   // Aufgaben sind je Mandant für jeden Login lesbar; Bezug und Schreibknöpfe prüfen ihre eigenen Rechte.
   const canEdit=task?task.status==='offen'&&allowed(auth,task)&&!await isCanceledInvoiceMailTask(tx,auth,task.id):true;
   const canceledCustomer=task?await readCanceledInvoiceTaskCompletion(tx,auth,task.id):null;
-  const pricing=task?await readProductionPricingRetrySource(tx,auth,task.client_key):null;
-  return {code:'OK',task,reference,currentLogin:auth.userId,canEdit,canComplete:!!task&&task.status==='offen'&&(canEdit||canceledCustomer!==null)&&task.art!=='rechnung',...(pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
+  let pricing:Awaited<ReturnType<typeof readProductionPricingRetrySource>>=null;
+  let pricingSource:'KNOWN'|'SOURCE_INCOMPLETE'='KNOWN';
+  if(task){try{pricing=await withTenantSavepoint(tx,nested=>readProductionPricingRetrySource(nested,auth,task.client_key));}catch{pricingSource='SOURCE_INCOMPLETE';}}
+
+  return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,canEdit,canComplete:!!task&&task.status==='offen'&&(canEdit||canceledCustomer!==null)&&task.art!=='rechnung',...(pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
  });}catch(error){return resultError(error);}
 }
 
