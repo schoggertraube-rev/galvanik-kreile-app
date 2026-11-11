@@ -615,3 +615,34 @@ it('S02 legacy quote normal send reserves only one new PREPARE and fresh keys re
  expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),clientRequestId:randomUUID()}))).toMatchObject({code:'OK',data:{replayed:true}});
  expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(attachments).toHaveLength(2);
 },120000);
+
+it.each(['sql','missing'])('S02 result mail survives a failed complaint closure and a fresh key repairs without another send (%s)',async(fault)=>{
+ const order=await readyInvoiceOrder('N5 RK-Ergebnis');
+ const {storeOrderPhoto}=await import('../../../e2e/ablauf/photoFixture');const photoId=await storeOrderPhoto(order.orderId);
+ const {reklamationAusfuehrenAction,sendeReklamationErgebnisAction}=await import('@/app/actions/complaints.actions');
+ const created=await withSession(full,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST echte Reklamation',photoIds:[photoId],goodsReturn:'offen'}));if(created.code!=='OK')throw Error('N5_COMPLAINT_CREATE:'+created.code);
+ const decider=await createFixture(['auftraege','kunden','geld','entscheiden'],'meister');
+ const decided=await withSession(decider,()=>reklamationAusfuehrenAction({action:'entscheiden',clientKey:randomUUID(),complaintId:created.receipt.complaintId,version:created.receipt.version,assessment:'abgelehnt',measure:'ablehnen',reason:'TEST geprueft',creditCents:null}));if(decided.code!=='OK')throw Error('N5_COMPLAINT_DECIDE:'+decided.code);
+ let sends=0;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-RK-result-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;return new Response(null,{status:202});}
+  return nativeFetch(request,init);
+ });
+ const input={complaintId:created.receipt.complaintId,version:decided.receipt.version,clientKey:randomUUID(),subject:'TEST Ergebnis',body:'TEST Originalergebnis'};
+ const failure='test_complaint_closure_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${failure}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='COMPLAINT_CHANGED_V1' AND NEW.payload->>'action'='abschliessen' AND NEW.payload->>'complaintId'='${input.complaintId}' THEN ${fault==='sql'?"RAISE EXCEPTION 'TEST closure receipt unavailable'":'RETURN NULL'}; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${failure} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${failure}()`);
+ try{
+  expect(await withSession(full,()=>sendeReklamationErgebnisAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT status FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+input.clientKey}`).toEqual([{status:'sent'}]);
+ }finally{await sql.unsafe(`DROP TRIGGER ${failure} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${failure}()`);}
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_COMPLAINT_EFFECT_RETRY_REQUIRED_V1' AND correlation_id=${input.clientKey}::uuid`).toHaveLength(1);
+ const other=await createFixture(['auftraege','kunden','mails'],'buero');
+ expect(await withSession(other,()=>sendeReklamationErgebnisAction({...fresh(input),clientKey:randomUUID()}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(1);
+ expect(await withSession(full,()=>sendeReklamationErgebnisAction({...fresh(input),clientKey:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(sends).toBe(1);
+ expect(await withSession(full,()=>sendeReklamationErgebnisAction(fresh(input)))).toMatchObject({code:'OK',replayed:true});expect(sends).toBe(1);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMPLAINT_CHANGED_V1' AND payload->>'action'='abschliessen' AND payload->>'complaintId'=${input.complaintId}`).toHaveLength(1);
+},120000);

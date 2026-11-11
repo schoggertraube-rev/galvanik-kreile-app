@@ -1,3 +1,4 @@
+import {readCompletedComplaintMail} from './communicationComplaintPort';
 import {quoteCommandContext} from './quoteAuthorization';
 import {readIntakeConfirmationMailSource} from './intakeDraftEvents';
 import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
@@ -49,7 +50,7 @@ function logCommunicationFailure(code: string, error: unknown) {
   console.error(`[${code}]`, error instanceof Error ? error.message : "UNKNOWN_ERROR");
 }
 
-export type CommunicationReceipt = { threadId: string; messageId: string | null; customerId: string; orderId: string | null; recordedAt: string; replayed: boolean; attachmentsImported?: number; attachmentsSkipped?: number; attachmentWarning?: string };
+export type CommunicationReceipt = { threadId: string; messageId: string | null; customerId: string; orderId: string | null; recordedAt: string; replayed: boolean;sourceRequestId?:string; attachmentsImported?: number; attachmentsSkipped?: number; attachmentWarning?: string };
 function canRead(auth: AuthorizationSnapshot) {
   return auth.areas?.includes("mails") === true;
 }
@@ -250,6 +251,7 @@ export async function sendCommunicationMail(
     intakeRecipient=source.recipient;
   }else if(input.complaintResult){
     if(!hasAuthorizationArea(auth,'kunden')||input.targetType!=='ORDER')return {code:'FORBIDDEN',message:'Kunde informieren erfordert Kunden.'};
+    if(!reminder){try{const sent=await readCompletedComplaintMail(auth,{...input.complaintResult,orderId:input.targetId,subject:input.subject,body:input.body});if(sent)return {code:'OK',data:sent};}catch(error){logCommunicationFailure('COMPLAINT_MAIL_REPLAY_FAILED',error);return error instanceof Error&&error.message==='COMMUNICATION_REPLAY_INTENT_MISMATCH'?{code:'CONFLICT',message:MAIL_REQUEST_CONFLICT_COPY}:{code:'UNAVAILABLE',message:'Reklamationsstand konnte nicht geprüft werden.'};}}
     const context=await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`SELECT complaint_id FROM public.v_complaint_rework_context_v1 complaint WHERE tenant_id=${auth.tenantId} AND complaint_id=${input.complaintResult!.complaintId} AND ${reminder?sql`nacharbeit_auftrag_id=${input.targetId}`:sql`source_order_id=${input.targetId}`} AND (
       version=${input.complaintResult!.version} AND ${reminder?sql`stand='massnahme_nacharbeit' AND rework_ware='erwartet'`:sql`stand='kunde_informieren'`} OR EXISTS(
         SELECT 1 FROM public.communication_threads thread JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id
@@ -317,6 +319,16 @@ export async function sendCommunicationMail(
         }
       }
       if(input.legacyReplaces){if(!input.document)throw Error('LEGACY_QUOTE_REPLACEMENT_INVALID');await assertLegacyQuoteReplacement(tx,auth,input,input.document,input.legacyReplaces);}
+      if(input.complaintResult&&input.complaintResult.kind!=='reminder'){
+        const purpose=input.complaintResult;
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('complaint-result-mail:'||${auth.tenantId}||':'||${purpose.complaintId}||':'||${purpose.version}::text,0))`);
+        const reserved=await tx.execute<{actor:string;intent:string;content:string;status:string}>(sql`SELECT prepared.user_id::text AS actor,prepared.payload->>'intentHash' AS intent,prepared.payload->>'contentSha256' AS content,thread.status
+          FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
+          WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='COMMUNICATION_MAIL_PREPARED_V1'
+           AND prepared.payload->'complaintResult'->>'complaintId'=${purpose.complaintId} AND prepared.payload->'complaintResult'->>'version'=${String(purpose.version)}
+           AND coalesce(prepared.payload->'complaintResult'->>'kind','result')='result' LIMIT 2`);
+        if(reserved.length&&(reserved.length!==1||reserved[0].actor!==auth.userId||reserved[0].intent!==intentHash||reserved[0].content!==contentSha256||reserved[0].status==='sent'))throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
+      }
       const unresolved=await tx.execute<{id:string;actor:string;request_id:string;content:string;thread_id:string;created_at:Date}>(sql`SELECT prepared.id,prepared.user_id::text AS actor,prepared.correlation_id::text AS request_id,prepared.payload->>'contentSha256' AS content,thread.id::text AS thread_id,thread.created_at FROM public.events prepared
         LEFT JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
         WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND prepared.payload->>'intentHash'=${intentHash} AND prepared.correlation_id::text IS DISTINCT FROM ${input.legacyReplaces?.requestId??null}
@@ -438,7 +450,7 @@ export async function sendCommunicationMail(
       if(recoveredInvoice){if(!input.reconcileInvoice)throw Error('COMMUNICATION_RECONCILIATION_COMPOSER_MISSING');await input.reconcileInvoice(tx,pending.threadId);}
       if(input.collectionReminder)await applyCollectionReminderMailEffects(tx,auth,input.collectionReminder,pending.threadId,messageId,input.clientRequestId);
     });
-    return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: pending.recovery===true&&!resendConfirmationId } };
+    return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: pending.recovery===true&&!resendConfirmationId,...(input.complaintResult?{sourceRequestId:input.clientRequestId}:{}) } };
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_SEND_FINALIZE_FAILED", error);
     return { code: "UNAVAILABLE", message: "Microsoft 365 hat die Mail angenommen, die lokale Vorgangskopie ist aber noch nicht sicher bestätigt. Nicht erneut senden." };

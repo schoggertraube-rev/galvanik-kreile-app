@@ -1,4 +1,5 @@
 "use server";
+import {recordComplaintMailRetry} from '@/lib/server/communicationComplaintPort';
 import {unstable_noStore as noStore} from "next/cache";
 import {readComplaints,executeComplaint,readComplaintOrderSource,readComplaintOrderChoices} from "@/modules/complaints/server-public";
 import {recordIntakeComplaintEffect} from "@/modules/eingang/server-public";
@@ -31,7 +32,9 @@ export async function sendeReklamationErgebnisAction(input:{complaintId:string;v
  const complaint=rows.complaints[0];if(!complaint)return {code:'NOT_FOUND',message:'Reklamation nicht verfügbar.'};
  const result=await sendCommunicationMail(authorization.data,{targetType:'ORDER',targetId:complaint.orderId,clientRequestId:input.clientKey,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,complaintResult:{complaintId:complaint.id,version:input.version}});
  if(result.code!=='OK')return {code:result.code==='IN_KLAERUNG'?'UNAVAILABLE':result.code,message:result.message,...(result.resend?{resend:result.resend}:{})};
- return executeComplaint({action:'abschliessen',clientKey:input.clientKey,complaintId:complaint.id,version:input.version,kind:'mail',note:null,sentThreadId:result.data.threadId},recordIntakeComplaintEffect);
+ const closed=await executeComplaint({action:'abschliessen',clientKey:result.data.sourceRequestId??input.clientKey,complaintId:complaint.id,version:input.version,kind:'mail',note:null,sentThreadId:result.data.threadId},recordIntakeComplaintEffect);
+ if(closed.code!=='OK')await recordComplaintMailRetry(authorization.data,{complaintId:complaint.id,version:input.version,orderId:complaint.orderId,subject:input.subject,body:input.body}).catch(error=>{console.error('[COMPLAINT_MAIL_FOLLOWUP_MARKER_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});});
+ return closed;
 }
 
 export async function getComplaintDialogAction(request:ComplaintRequest):Promise<{code:'OK';data:ComplaintDialogData}|{code:string;message:string}> {
