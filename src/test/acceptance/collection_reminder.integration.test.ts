@@ -26,7 +26,7 @@ it('E1/E2 actual approval uses the single sender, one group proof and original r
  expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:first.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertigmeldung',expectedInvoiceIds:[first.invoice.invoiceId,second.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:first.invoice.invoiceId}}))).toMatchObject({code:'OK'});
  expect(await configure()).toMatchObject({code:'OK'});
  const planned=await proposal(first.orderId);expect(planned).toMatchObject({stage:'E1',state:'DUE',requiresResponseCheck:false});if(!planned.due)throw Error('COLLECTION_DUE');
- const operator=await createFixture(['mails','auftraege'],'buero');
+ const operator=await createFixture(['mails','auftraege','geld'],'buero');
  const input={targetType:'CUSTOMER' as const,targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST Erinnerung',body:'TEST Bitte hole Deine fertige Ware ab.',collectionReminder:{stage:'E1' as const,handover:'pickup' as const,dueDate:planned.due}};
  const sent=await withSession(operator,()=>sendCustomerMailAction(input));expect(sent).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('COLLECTION_E1:'+sent.code);
  expect(bodies).toHaveLength(2);
