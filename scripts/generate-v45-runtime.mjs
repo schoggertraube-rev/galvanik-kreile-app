@@ -9,6 +9,23 @@ const files={regeln:'regeln.json',texte:'texte.json',bausteine:'bausteine.json',
 const digest=value=>createHash('sha256').update(value).digest('hex');
 const generatorSha=digest(readFileSync(fileURLToPath(import.meta.url)));
 const names=/\b(?:Rolf|Philipp|Phillip|Gregor)\b/gu;
+// Integrity metadata only: no parallel text/rule copy. Current PL-approved V45 import.
+const SOURCE_BINDING={
+  "preview": "c49d2336b21b7dc8bb8a2e7a3f37dc0c429d2a5e7a3e71533cc67288da183f65",
+  "sources": {
+    "regeln.json": "ca7bd55a3b1ed8decfbef7e3b6760340a68e21a9f66b1a5a6ee856dbf289d053",
+    "texte.json": "a103a730cc5fae2fbb95c8ff415edd48eeea95ad500d8aa2a1745f7ba2dc7d41",
+    "bausteine.json": "aebad3e3410f1b25f498e3f37300b650198c86784298d2be32e0b78dda183c40",
+    "bedienung.json": "cc6cf08c6172e1e939c8bc11b86930192ed648237e9499bee652d763a7aacdd9",
+    "tokens.css": "fe9fbcd67c5cf8745311bfb101ae66a754f99ed954ffb5495ff0885814efadd9"
+  },
+  "projection": "034b6e649fdcfafeaea3aaf9222484509fed6560ac85765c083f0df1a5644a7e"
+};
+export function assertProjectionBinding(projected,hashes,previewSha){
+ if(previewSha!==SOURCE_BINDING.preview||Object.keys(SOURCE_BINDING.sources).some(name=>hashes[name]!==SOURCE_BINDING.sources[name])||Object.keys(hashes).length!==Object.keys(SOURCE_BINDING.sources).length)throw Error('V45_SOURCE_BINDING_CHANGED');
+ if(digest(JSON.stringify(projected))!==SOURCE_BINDING.projection)throw Error('V45_PROJECTION_SOURCE_MISMATCH');
+}
+
 
 /** PL05:02 import contract. Sources remain untouched. Unknown locations fail. */
 export function projectRuntime(texts){
@@ -31,11 +48,12 @@ export function projectRuntime(texts){
 }
 
 function render(projected,hashes,previewSha){
+ assertProjectionBinding(projected,hashes,previewSha);
  if(Object.keys(projected).sort().join()!==Object.keys(files).sort().join()||Object.values(projected).some(value=>typeof value!=='string'))throw Error('V45_RUNTIME_SOURCES_INVALID');
  const rules=JSON.parse(projected.regeln);
  if(!Array.isArray(rules.regeln)||!rules.regeln.length||new Set(rules.regeln.map(rule=>rule.id)).size!==rules.regeln.length)throw Error('V45_RUNTIME_RULES_INVALID');
  if(!/^[a-f0-9]{64}$/.test(previewSha)||Object.keys(hashes).sort().join()!==Object.values(files).sort().join()||Object.values(hashes).some(hash=>!/^[a-f0-9]{64}$/.test(hash)))throw Error('V45_RUNTIME_HASH_INVALID');
- return '// erzeugt – nie von Hand ändern; Quelle V45, Quell-SHA-256 siehe V45_SOURCE_HASHES.\n'
+ return '// erzeugt â€“ nie von Hand Ã¤ndern; Quelle V45, Quell-SHA-256 siehe V45_SOURCE_HASHES.\n'
   +'// Generator-SHA-256: '+generatorSha+'\n'
   +'export const V45_PREVIEW_SHA = '+JSON.stringify(previewSha)+';\n'
   +'export const V45_SOURCE_HASHES = '+JSON.stringify(hashes,null,2)+' as const;\n'
