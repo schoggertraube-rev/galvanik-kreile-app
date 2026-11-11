@@ -6,7 +6,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
-import {transitionWareneingangToGalvanikAction,getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {transitionWareneingangToGalvanikAction,getLiveOrderCardAction,configureExtraWorkCatalogPositionAction,setOrderItemFinishedAction,changeOrderItemExtraWorkAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction} from '@/app/actions/orders.actions';
 import {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
 import {offlinePartition} from '@/lib/server/offlinePartition';
 import type {PendingWorkshopOriginal} from '@/lib/offline/pendingStore';
@@ -54,4 +54,42 @@ it('keeps the original actor after rights are revoked and selects active entsche
  expect(second).toMatchObject({code:'PRESERVED'});if(second.code!=='PRESERVED')throw Error('TEST_FALLBACK_NOT_PRESERVED');
  expect(await sql`SELECT erstellt_von::text,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second.taskId}::uuid`).toEqual([{erstellt_von:operator.actorId,fuer_bereich:'geld'}]);
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{version:1,items:[expect.objectContaining({id:itemId,finished:false})]}}});
+});
+
+it('PL09:00 binds successful extra-work and completion originals to their existing immutable receipts without changing server time',async()=>{
+ const customerId=await customerFixture('Offline Originalzeit'),created=await intakeOrderFixture('Offline Originalzeit',customerId),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
+ const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('TEST_MOVE');
+ const scope=offlinePartition({tenantId:KREILE_TENANT_SLUG,userId:full.actorId}),catalogPositionId=randomUUID(),deviceCapturedAt=new Date(Date.now()-300000).toISOString();
+ expect(await withSession(full,()=>configureExtraWorkCatalogPositionAction({positionId:catalogPositionId,expectedVersion:0,name:'TEST Offline Mehrarbeit',standardMinutes:25,active:true,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const master=await withSession(full,()=>getExtraWorkMasterDataAction());if(master.code!=='OK')throw Error('TEST_RATE_READ');
+ // Explicit TEST configuration through its actual writer, not a product fallback.
+ if(!master.data.currentRate)expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const lineId=randomUUID(),legacy={lineId,orderId,itemId,catalogPositionId,minutes:15,active:true,expectedLineVersion:0,expectedOrderVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID()};
+ const legacySaved=await withSession(full,()=>changeOrderItemExtraWorkAction(legacy));expect(legacySaved.code).toBe('OK');if(legacySaved.code!=='OK')throw Error('TEST_LEGACY_EXTRA');
+ expect(await withSession(full,()=>changeOrderItemExtraWorkAction(JSON.parse(JSON.stringify(legacy))))).toMatchObject({code:'OK',replayed:true});
+ const extraKey=randomUUID(),extra:PendingWorkshopOriginal={kind:'workshop',id:extraKey,itemId:orderId,command:'item.extraWork',deviceCapturedAt,input:{lineId,orderId,itemId,catalogPositionId,minutes:25,active:true,expectedLineVersion:1,expectedOrderVersion:legacySaved.receipt.aggregateVersion,clientEventId:extraKey}};
+ const savedExtra=await withSession(full,()=>replayOfflineWorkshopAction(scope,extra));expect(savedExtra).toMatchObject({code:'OK'});if(savedExtra.code!=='OK')throw Error('TEST_EXTRA_ORIGINAL');
+ expect(await withSession(full,()=>replayOfflineWorkshopAction(scope,JSON.parse(JSON.stringify(extra))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:savedExtra.receipt.eventId}});
+ const metadata={deviceCapturedAt,actorId:full.actorId,clientEventId:extraKey};
+ expect(await withSession(full,()=>changeOrderItemExtraWorkAction({...extra.input,offlineOriginal:{...metadata,deviceCapturedAt:new Date(Date.now()-600000).toISOString()}}))).toMatchObject({code:'CONFLICT'});
+ const key=randomUUID(),finished:PendingWorkshopOriginal={kind:'workshop',id:key,itemId:orderId,command:'item.finished',deviceCapturedAt,input:{orderId,itemId,expectedVersion:savedExtra.receipt.aggregateVersion,clientEventId:key,finished:true}};
+ const saved=await withSession(full,()=>replayOfflineWorkshopAction(scope,finished));expect(saved).toMatchObject({code:'OK'});if(saved.code!=='OK')throw Error('TEST_FINISHED_ORIGINAL');
+ expect(await withSession(full,()=>replayOfflineWorkshopAction(scope,JSON.parse(JSON.stringify(finished))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:saved.receipt.eventId}});
+ expect(await withSession(full,()=>setOrderItemFinishedAction({...finished.input,offlineOriginal:{deviceCapturedAt,actorId:randomUUID(),clientEventId:key}}))).toMatchObject({code:'CONFLICT'});
+ for(const [id,clientEventId] of [[savedExtra.receipt.eventId,extraKey],[saved.receipt.eventId,key]]){
+  const [event]=await sql`SELECT payload,user_id::text,(extract(epoch FROM created_at AT TIME ZONE 'UTC')*1000)::double precision AS server_millis FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${id}`;
+  expect(event).toMatchObject({user_id:full.actorId,payload:{offlineOriginal:{deviceCapturedAt,actorId:full.actorId,clientEventId}}});
+  // events stores UTC timestamp without zone; compare the database's explicit
+  // UTC instant rather than asking the host-local Date parser to infer a zone.
+  expect(event.server_millis).toBeGreaterThan(Date.parse(deviceCapturedAt));
+ }
+ const [source]=await sql`SELECT payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${savedExtra.receipt.eventId}`;
+ for(const kind of ['extra_core','actor','key','time','extra_metadata']){
+  const newId=randomUUID(),newKey=randomUUID();
+  const proof={...source.payload.offlineOriginal,clientEventId:newKey,...(kind==='actor'?{actorId:randomUUID()}:kind==='key'?{clientEventId:randomUUID()}:kind==='time'?{deviceCapturedAt:'2026-99-99T05:00:00Z'}:kind==='extra_metadata'?{roles:['TEST unapproved authority']}:{})};
+  const payload={...source.payload,offlineOriginal:proof,...(kind==='extra_core'?{unexpected:'TEST forbidden payload key'}:{})};
+  await expect(sql`INSERT INTO public.events SELECT (jsonb_populate_record(NULL::public.events,to_jsonb(event)||jsonb_build_object('id',${newId}::text,'client_event_id',${newKey}::text,'correlation_id',${randomUUID()}::text,'payload',${sql.json(payload)}::jsonb))).*
+   FROM public.events event WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${savedExtra.receipt.eventId}`,kind).rejects.toMatchObject({code:'23514',constraint_name:kind==='extra_core'?'events_order_item_extra_work_set_v1_contract_chk':'events_offline_original_v1_contract_chk'});
+ }
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{version:saved.receipt.aggregateVersion,items:[expect.objectContaining({id:itemId,finished:true,extraWork:[expect.objectContaining({minutes:25})]})]}}});
 });

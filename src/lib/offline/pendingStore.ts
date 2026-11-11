@@ -6,6 +6,7 @@ export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file:
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingWorkshopCommand={command:'item.finished';input:Parameters<typeof setOrderItemFinishedAction>[0]}|{command:'item.extraWork';input:Parameters<typeof changeOrderItemExtraWorkAction>[0]};
 export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:string;kind:'workshop';deviceCapturedAt?:string;queueSequence?:number};
+export type PendingWorkshopReceipt={scope:string;clientEventId:string;deviceCapturedAt:string;eventId:string;actorId:string};
 export type PendingEntry=PendingOriginal|PendingWorkshopOriginal|PendingQuarantine;
 export function isPendingWorkshopOriginal(value:unknown):value is PendingWorkshopOriginal{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
@@ -201,4 +202,16 @@ export async function acknowledgePendingOriginal(scope: string, id: string, text
     transaction.onerror = () => { connection.close(); reject(new Error("INTAKE_PENDING_ACK_FAILED")); };
     transaction.onabort = () => { connection.close(); reject(new Error("INTAKE_PENDING_ACK_ABORTED")); };
   });
+}
+/** A command cannot be erased by the legacy file/note acknowledgement. */
+export async function acknowledgePendingWorkshopOriginal(scope:string,entry:PendingWorkshopOriginal,receipt:PendingWorkshopReceipt):Promise<boolean>{
+ const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+ if(!isPendingWorkshopOriginal(entry)||receipt.scope!==scope||receipt.clientEventId!==entry.id||receipt.deviceCapturedAt!==entry.deviceCapturedAt||!uuid.test(receipt.eventId)||!uuid.test(receipt.actorId))throw Error('OFFLINE_WORKSHOP_RECEIPT_REQUIRED');
+ const db=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.get(entry.id);let removed=false;
+  read.onsuccess=()=>{const current=read.result;if(!isPendingWorkshopOriginal(current)||current.command!==entry.command||current.deviceCapturedAt!==entry.deviceCapturedAt||canonicalJson(current.input)!==canonicalJson(entry.input))return;store.delete(entry.id);removed=true;};
+  tx.oncomplete=()=>{db.close();if(removed)window.dispatchEvent(new Event('kreile-pending-changed'));resolve(removed);};
+  tx.onabort=()=>{db.close();reject(Error('OFFLINE_WORKSHOP_ACK_ABORTED'));};
+ });
 }

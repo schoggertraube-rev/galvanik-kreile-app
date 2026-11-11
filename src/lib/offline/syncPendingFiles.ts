@@ -1,8 +1,8 @@
-import {readPendingOriginals,acknowledgePendingOriginal} from './pendingStore';
+import {readPendingEntries,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal} from './pendingStore';
 import type {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
 import {recognizeNoteConcerns} from '@/lib/domain/noteConcerns';
 import type {uploadIntakeOriginal} from '@/modules/eingang/public';
-type Ports={saveNote:typeof saveIntakeNoteAction;prepare:typeof prepareIntakeFileAction;finish:typeof finishIntakeFileAction;upload:typeof uploadIntakeOriginal;currentScope:()=>string|null};
+type Ports={saveNote:typeof saveIntakeNoteAction;prepare:typeof prepareIntakeFileAction;finish:typeof finishIntakeFileAction;upload:typeof uploadIntakeOriginal;currentScope:()=>string|null;workshop?:typeof import('@/app/actions/offlineWorkshop.actions').replayOfflineWorkshopAction};
 type Outcome={secured:number;acknowledged:number;blocked:number};
 const running=new Map<string,Promise<Outcome>>();
 /** Reuses the original registration, immutable-byte upload and secured-original receipt. */
@@ -12,7 +12,7 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
   const outcome={secured:0,acknowledged:0,blocked:0};
   // IndexedDB getAll follows random UUID keys. Replay known capture times in
   // their original order so a later file cannot create the note's base first.
-  const entries=await readPendingOriginals(scope);
+  const entries=(await readPendingEntries(scope)).filter(entry=>entry.kind!=='quarantine');
   const timed=entries.filter(entry=>entry.deviceCapturedAt&&Number.isFinite(Date.parse(entry.deviceCapturedAt)))
    .sort((a,b)=>Date.parse(a.deviceCapturedAt!)-Date.parse(b.deviceCapturedAt!));
   let cursor=0;
@@ -28,6 +28,17 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
    // Dependent originals must not create the intake before its earlier note.
    // Other intake groups keep their existing independent recovery path.
    if(blockedItems.has(entry.itemId)){outcome.blocked++;continue;}
+   if(entry.kind==='workshop'){
+    try{
+     if(!ports.workshop||!entry.deviceCapturedAt){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
+     const result=await ports.workshop(scope,entry);
+     if((result.code!=='OK'&&result.code!=='PRESERVED')||!('offlineReceipt' in result)){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
+     outcome.secured++;
+     if(ports.currentScope()!==scope)break;
+     if(await acknowledgePendingWorkshopOriginal(scope,entry,result.offlineReceipt))outcome.acknowledged++;
+    }catch(error){outcome.blocked++;blockedItems.add(entry.itemId);console.error('[OFFLINE_WORKSHOP_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
+    continue;
+   }
    if(entry.kind==='note'){
     if(entry.expectedVersion===undefined||!entry.deviceCapturedAt)continue;
     try{

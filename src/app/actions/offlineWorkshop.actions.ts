@@ -15,7 +15,10 @@ export async function replayOfflineWorkshopAction(scope:string,original:PendingW
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const};
  if(offlinePartition(auth.data)!==scope)return {code:'FORBIDDEN' as const};
  if(!isPendingWorkshopOriginal(original)||!original.deviceCapturedAt||!Number.isFinite(Date.parse(original.deviceCapturedAt)))return {code:'VALIDATION_ERROR' as const};
- try{return await reconcileOfflineWorkshop(auth.data,original,async()=>original.command==='item.finished'?setOrderItemFinishedAction(original.input):changeOrderItemExtraWorkAction(original.input),
+ const offlineOriginal={deviceCapturedAt:original.deviceCapturedAt,actorId:auth.data.userId,clientEventId:original.input.clientEventId};
+ try{const result=await reconcileOfflineWorkshop(auth.data,original,async()=>original.command==='item.finished'?setOrderItemFinishedAction({...original.input,offlineOriginal}):changeOrderItemExtraWorkAction({...original.input,offlineOriginal}),
   (tx,eventId)=>createOfflineWorkshopConflictTask(tx,auth.data,eventId,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
+  if(result.code!=='OK'&&result.code!=='PRESERVED')return result;
+  return {...result,offlineReceipt:{scope,clientEventId:original.input.clientEventId,deviceCapturedAt:original.deviceCapturedAt,eventId:result.code==='OK'?result.receipt.eventId:result.eventId,actorId:auth.data.userId}};
  }catch(error){console.error('[OFFLINE_WORKSHOP_RECONCILIATION_FAILED]',{name:error instanceof Error?error.name:'UnknownError',code:error instanceof Error&&/^[A-Z0-9_]+$/.test(error.message)?error.message:'UNAVAILABLE'});return {code:'UNAVAILABLE' as const};}
 }

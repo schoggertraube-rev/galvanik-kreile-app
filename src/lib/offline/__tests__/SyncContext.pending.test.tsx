@@ -5,6 +5,7 @@ const state=vi.hoisted(()=>({scope:'a'.repeat(64),status:'authenticated'}));
 const ports=vi.hoisted(()=>({read:vi.fn(),retain:vi.fn(),sync:vi.fn(async(...args:unknown[])=>{void args;return {secured:0,acknowledged:0,blocked:1};})}));
 vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:state.scope,status:state.status,hasArea:()=>false})}));
 vi.mock('@/app/actions/eingang.actions',()=>({prepareIntakeFileAction:vi.fn(),finishIntakeFileAction:vi.fn(),saveIntakeNoteAction:vi.fn()}));
+vi.mock('@/app/actions/offlineWorkshop.actions',()=>({replayOfflineWorkshopAction:vi.fn()}));
 vi.mock('@/modules/eingang/public',()=>({uploadIntakeOriginal:vi.fn()}));
 vi.mock('../syncPendingFiles',()=>({syncPendingFiles:ports.sync}));
 vi.mock('../pendingStore',()=>({readPendingEntries:ports.read,retainQuarantinedPending:ports.retain}));

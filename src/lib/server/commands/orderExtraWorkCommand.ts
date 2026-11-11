@@ -4,12 +4,16 @@ import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {isOfflineOriginal,normalizeOfflineOriginal,type OfflineOriginal} from '@/lib/domain/offlineOriginal';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 const EVENT_TYPE = "ORDER_ITEM_EXTRA_WORK_CHANGED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export type ChangeOrderItemExtraWorkInput = {
+  offlineOriginal?:OfflineOriginal;
   lineId: string;
   orderId: string;
   itemId: string;
@@ -108,12 +112,14 @@ function hasExactKeys(value: unknown): value is Record<string, unknown> {
     "active", "catalogPositionId", "clientEventId", "expectedLineVersion",
     "expectedOrderVersion", "itemId", "lineId", "minutes", "orderId",
   ].sort();
+  if(Object.hasOwn(value,'offlineOriginal'))expected.push('offlineOriginal');expected.sort();
   const actual = Object.keys(value).sort();
   return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
 }
 
 function isValidInput(input: unknown): input is ChangeOrderItemExtraWorkInput {
   return hasExactKeys(input)
+    && (input.offlineOriginal===undefined||isOfflineOriginal(input.offlineOriginal))
     && typeof input.lineId === "string"
     && UUID_PATTERN.test(input.lineId)
     && typeof input.catalogPositionId === "string"
@@ -196,6 +202,10 @@ function receiptMatchesIntent(
     && receipt.lineVersion === input.expectedLineVersion + 1
     && receipt.aggregateVersion === input.expectedOrderVersion + 1;
 }
+async function offlineOriginalMatches(tx:PrivilegedTenantTransaction,tenantId:string,eventId:string,original:OfflineOriginal|undefined){
+ const rows=await tx.execute<{original:unknown}>(sql`SELECT payload->'offlineOriginal' AS original FROM public.events WHERE tenant_id=${tenantId} AND id=${eventId} AND event_type=${EVENT_TYPE} AND status='success'`);
+ return rows.length===1&&canonicalJson(rows[0].original??null)===canonicalJson(original??null);
+}
 
 export async function changeOrderItemExtraWork(
   input: ChangeOrderItemExtraWorkInput,
@@ -218,6 +228,8 @@ export async function changeOrderItemExtraWork(
   if (!authorization.data.permissions.includes("perm_op_status")) {
     return { code: "FORBIDDEN", message: "Mehrarbeit darf mit dieser Rolle nicht geändert werden." };
   }
+  if(input.offlineOriginal&&(input.offlineOriginal.actorId!==authorization.data.userId||input.offlineOriginal.clientEventId!==input.clientEventId))return {code:'CONFLICT',message:'Anfragekennung wurde bereits anders verwendet.'};
+  if(input.offlineOriginal)input={...input,offlineOriginal:normalizeOfflineOriginal(input.offlineOriginal)};
 
   try {
     return await withPrivilegedTenantTransaction(authorization.data, async (tx) => {
@@ -241,7 +253,7 @@ export async function changeOrderItemExtraWork(
         const receipt = mapReceipt(
           replayRows[0], authorization.data.tenantId, authorization.data.userId,
         );
-        return receiptMatchesIntent(receipt, input)
+        return receiptMatchesIntent(receipt, input)&&await offlineOriginalMatches(tx,authorization.data.tenantId,receipt.eventId,input.offlineOriginal)
           ? { code: "OK", receipt, replayed: true }
           : { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
       }
@@ -413,6 +425,7 @@ export async function changeOrderItemExtraWork(
             minutes: input.minutes,
             active: input.active,
             lineVersion: nextLineVersion,
+            ...(input.offlineOriginal?{offlineOriginal:input.offlineOriginal}:{}),
           })}::jsonb,
           'success', ${authorization.data.userId}::uuid,
           ${ORDER_LIFECYCLE_STATUS.GALVANIK},
@@ -430,7 +443,7 @@ export async function changeOrderItemExtraWork(
       const receipt = mapReceipt(
         receiptRows[0], authorization.data.tenantId, authorization.data.userId,
       );
-      if (!receiptMatchesIntent(receipt, input)) throw new Error("ORDER_EXTRA_WORK_RECEIPT_MISMATCH");
+      if (!receiptMatchesIntent(receipt, input)||!await offlineOriginalMatches(tx,authorization.data.tenantId,receipt.eventId,input.offlineOriginal)) throw new Error("ORDER_EXTRA_WORK_RECEIPT_MISMATCH");
       return { code: "OK", receipt, replayed: false };
     });
   } catch {
