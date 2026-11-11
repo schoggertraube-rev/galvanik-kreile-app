@@ -22,3 +22,21 @@ it('reads the stored send state and actor for U2 without inferring an unclear di
  expect(after.messages.find(row=>row.id===itemId)).toMatchObject({fallbackPriority:{code:'SOURCE_INCOMPLETE',missing:['QUESTION_REPLY_HISTORY']},sendState:'gesendet',createdBy:full.actorId});
  const restricted=await createFixture(['eingang'],'werkstatt');expect(await withSession(restricted,()=>getIntakeMessagesAction('alle'))).toMatchObject({code:'FORBIDDEN'});
 });
+
+it('reuses the actual assignment writer gate for U2 instead of assuming mails grants entry assignment',async()=>{
+ const {canAssignIntakeCustomer}=await import('@/modules/eingang/server-public');
+ const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const {assignIntakeCustomerAction,getIntakeAssignmentAction}=await import('@/app/actions/eingang.actions');
+ const customerId=await customerFixture('TEST U2 Assignment'),itemId=randomUUID();
+ const saved=await withSession(full,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST Quelle ohne Kundenbezug'}));if(saved.code!=='OK')throw Error('TEST_ASSIGNMENT_SOURCE');
+ const noEntry=await createFixture(['mails','kunden']),noEntryAuth=await withSession(noEntry,()=>resolveAuthorization());if(!noEntryAuth.ok)throw Error('TEST_NO_ENTRY_AUTH');
+ expect(canAssignIntakeCustomer(noEntryAuth.data)).toBe(false);
+ const input={itemId,version:saved.capture.version,clientEventId:randomUUID(),customerId,mode:'manual' as const};
+ expect(await withSession(noEntry,()=>assignIntakeCustomerAction(input))).toMatchObject({code:'FORBIDDEN'});
+ const permitted=await createFixture(['eingang','kunden']),allowed=await withSession(permitted,()=>resolveAuthorization());if(!allowed.ok)throw Error('TEST_ENTRY_AUTH');
+ expect(canAssignIntakeCustomer(allowed.data)).toBe(true);
+ expect(await withSession(permitted,()=>assignIntakeCustomerAction(input))).toMatchObject({code:'OK',replayed:false});
+ expect(await withSession(permitted,()=>assignIntakeCustomerAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(permitted,()=>getIntakeAssignmentAction({itemId,mode:'normal'}))).toMatchObject({code:'OK',view:{customer:{id:customerId}}});
+ expect(await sql`SELECT von::text FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${input.clientEventId}::uuid`).toEqual([{von:permitted.actorId}]);
+});
