@@ -20,9 +20,13 @@ it('reads current unsent invoice originals from the customer port and never disc
  // The metrics port legitimately advances asOf on every read. The persisted
  // invoice evidence/count, not that read timestamp, must stay the same.
  expect(await readCustomerSummary(auth.data,{customerId})).toMatchObject({code:'OK',data:{id:customerId,invoiceUnsentCount:1}});
+ const actionRead=await withSession(full,()=>getCustomerSummaryAction({customerId}));
+ expect(actionRead).toMatchObject({code:'OK',data:{invoiceUnsentOriginal:{id:order.invoice.invoiceId},nextActionRule:{code:'OK',hauptaktion:{elementId:'customer.invoice',befehl:{funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:customerId,expectedInvoiceIds:[order.invoice.invoiceId]}}}}}});
+ if(actionRead.code!=='OK'||actionRead.data.nextActionRule?.code!=='OK'||!actionRead.data.nextActionRule.hauptaktion)throw Error('TEST_CUSTOMER_PRIMARY');
+ expect(actionRead.data.nextActionRule.hauptaktion.werte.number).toBe(actionRead.data.invoiceUnsentOriginal?.number);
  const otherId=await customerFixture('V45 anderer Kunde');expect(await readCustomerSummary(auth.data,{customerId:otherId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
  const restricted=await createFixture(['kunden'],'werkstatt'),noMoney=await withSession(restricted,()=>resolveAuthorization());if(!noMoney.ok)throw Error('TEST_NO_MONEY_AUTH');
- const hidden=await readCustomerSummary(noMoney.data,{customerId});expect(hidden.code).toBe('OK');if(hidden.code!=='OK')throw Error('TEST_CUSTOMER_READ');expect(hidden.data).not.toHaveProperty('invoiceUnsentCount');expect(hidden.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',source:{kind:'customer',id:customerId}});
+ const hidden=await readCustomerSummary(noMoney.data,{customerId});expect(hidden.code).toBe('OK');if(hidden.code!=='OK')throw Error('TEST_CUSTOMER_READ');expect(hidden.data).not.toHaveProperty('invoiceUnsentCount');expect(hidden.data).not.toHaveProperty('invoiceUnsentOriginal');expect(hidden.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',source:{kind:'customer',id:customerId}});
  const publicHidden=await withSession(restricted,()=>getCustomerSummaryAction({customerId}));expect(publicHidden.code).toBe('OK');if(publicHidden.code!=='OK')throw Error('TEST_CUSTOMER_ACTION_READ');expect(publicHidden.data).not.toHaveProperty('invoiceUnsentCount');
  const cancel={invoiceId:order.invoice.invoiceId,expectedVersion:1,clientEventId:randomUUID(),reason:'TEST nicht mehr zu versenden'};
  expect(await withSession(full,()=>cancelInvoiceAction(cancel))).toMatchObject({code:'OK'});
@@ -50,3 +54,11 @@ it('uses the actual document dispatch proof after sending, including a fresh ret
   const reread=await readCustomerSummary(auth.data,{customerId:order.customerId});expect(reread).toMatchObject({code:'OK',data:{nextActionRule:{code:'SOURCE_INCOMPLETE'}}});
  }finally{provider.mockRestore();}
 },60000);
+
+it('does not choose an arbitrary invoice number or original when several current originals are unsent',async()=>{
+ const customerId=await customerFixture('TEST U2 mehrere Originale');
+ await readyInvoiceOrder('TEST U2 Original A','pickup',false,customerId);
+ await readyInvoiceOrder('TEST U2 Original B','pickup',false,customerId);
+ const read=await withSession(full,()=>getCustomerSummaryAction({customerId}));
+ expect(read).toMatchObject({code:'OK',data:{invoiceUnsentCount:2,invoiceUnsentOriginal:null,nextActionRule:{code:'SOURCE_INCOMPLETE',missing:['CUSTOMER_INVOICE_ORIGINAL']}}});
+});
