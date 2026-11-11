@@ -17,3 +17,13 @@ it('a blocked local store cannot hold the logged-out user indefinitely',async()=
  const logout=logoutWithReadCleanup();await vi.advanceTimersByTimeAsync(1500);await logout;
  expect(readLogoutNotice()).toBe('Du bist abgemeldet. Die gespeicherten Daten auf diesem Gerät werden beim nächsten Start gelöscht.');
 });
+it('still fences local reading state after a lost server response without claiming logout success',async()=>{
+ const failure=Error('TEST lost logout response');ports.logout.mockRejectedValue(failure);
+ document.documentElement.dataset.offlineScope='a'.repeat(64);
+ ports.cleanup.mockResolvedValue({cacheCleared:true,pendingCount:1});
+ await expect(logoutWithReadCleanup()).rejects.toBe(failure);
+ expect(ports.cleanup).toHaveBeenCalledWith('a'.repeat(64));
+ expect(document.documentElement.dataset.authStatus).toBe('error');
+ expect(document.documentElement.dataset.offlineScope).toBeUndefined();
+ expect(readLogoutNotice()).toBe('');
+});

@@ -52,8 +52,8 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     // proxy.ts und roles.ts lesen ihn – konsistente Bereinigung erforderlich.
     // Sicherheitsauftrag: vollständige Migration auf kreile_app_session ist geplant.
     document.cookie = "bypass-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    await logoutWithReadCleanup();
-    router.replace("/start");
+    try{await logoutWithReadCleanup();}
+    finally{router.replace("/start");}
   };
 
   const today = new Date();

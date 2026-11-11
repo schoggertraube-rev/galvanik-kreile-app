@@ -343,9 +343,8 @@ export function GlobalCreateAppAdapter() {
         openOrder,
         refresh: () => router.refresh(),
         switchProfile: async () => {
-          await logoutWithReadCleanup();
-          router.replace("/start");
-          router.refresh();
+          try{await logoutWithReadCleanup();}
+          finally{router.replace("/start");router.refresh();}
         },
       }}
     /></>
