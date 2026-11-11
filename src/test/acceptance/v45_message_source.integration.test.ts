@@ -66,3 +66,27 @@ it('R13 imports a real original and reads the assignment main action with the ac
   expect(await sql`SELECT id FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND mime='message/rfc822'`).toHaveLength(1);
  }finally{vi.restoreAllMocks();}
 });
+
+it('binds a real quote reply to the existing original target reader with 0/1/many customer choices and no price grant',async()=>{
+ const {selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
+ const {createQuoteAction,readQuoteReplyTargetsAction}=await import('@/app/actions/quotes.actions');
+ const customerId=await customerFixture('TEST U2 KV Antwort'),foreignCustomerId=await customerFixture('TEST fremder KV'),itemId=randomUUID();
+ const saved=await withSession(full,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST Bitte bearbeiten: Original zur KV-Antwort',context:{customerId}}));if(saved.code!=='OK')throw Error('TEST_REPLY_SOURCE');
+ expect(await withSession(full,()=>selectIntakeConcernAction({itemId,version:saved.capture.version,clientEventId:randomUUID(),concern:'kv_annahme'}))).toMatchObject({code:'OK'});
+ const actor=await createFixture(['mails'],'werkstatt');
+ const read=await withSession(actor,()=>getIntakeMessagesAction('alle'));if(read.code!=='OK')throw Error('TEST_REPLY_U2');
+ const rule=read.messages.find(row=>row.id===itemId)?.nextActionRule;
+ expect(rule).toMatchObject({code:'OK',prioritaet:2,hauptaktion:{elementId:'concern.act',textKey:'concern.act',befehl:{funktion:'readQuoteReplyTargetsAction',argumente:{sourceItemId:itemId}}}});
+ if(rule?.code!=='OK'||!rule.hauptaktion)throw Error('TEST_REPLY_COMMAND');
+ const command=JSON.parse(JSON.stringify(rule.hauptaktion.befehl.argumente));
+ const before=await sql`SELECT count(*)::int AS n FROM public.intake_event WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid`;
+ expect(await withSession(actor,()=>readQuoteReplyTargetsAction(command))).toMatchObject({code:'OK',targets:[]});
+ const make=async(customer:string)=>{const result=await withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId:customer,dueDate:'2027-06-01',note:'TEST U2 Reply',positions:[{name:'TEST U2 Halter',quantity:1,material:null,surfaceRequested:'verchromen',unitPriceCents:654321}]}));if(result.code!=='OK')throw Error('TEST_REPLY_QUOTE');return result.quote.quoteId;};
+ const one=await make(customerId);expect(await withSession(actor,()=>readQuoteReplyTargetsAction(command))).toMatchObject({code:'OK',targets:[{id:one}]});
+ const two=await make(customerId),foreign=await make(foreignCustomerId);
+ const choices=await withSession(actor,()=>readQuoteReplyTargetsAction(command));if(choices.code!=='OK')throw Error('TEST_REPLY_CHOICES');
+ expect(choices.targets.map(row=>row.id).sort()).toEqual([one,two].sort());expect(choices.targets.some(row=>row.id===foreign)).toBe(false);
+ expect(JSON.stringify(choices)).not.toMatch(/654321|unitPriceCents|totalNetCents|calculation/);
+ expect(await withSession(actor,()=>readQuoteReplyTargetsAction(JSON.parse(JSON.stringify(command))))).toEqual(choices);
+ expect(await sql`SELECT count(*)::int AS n FROM public.intake_event WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid`).toEqual(before);
+});

@@ -14,7 +14,7 @@ export function readMessageNextAction(auth:AuthorizationSnapshot,row:IntakeMessa
  if(priority.source.id!==row.id||priority.source.version!==row.version)return {code:'SOURCE_INCOMPLETE' as const,missing:['MESSAGE_VERSION'],source};
  const tone=messageTone(row),farbe=({rot:'ral',orange:'warn',navy:'info',gruen:'succ'} as const)[tone];
  const base={zustand:tone,farbe,nutzung:row.usage,zuordnung:row.assignment,source};
- let hauptaktion:null|{elementId:string;textKey:string;werte:Record<string,string|number>;befehl:{datei:'src/app/actions/eingang.actions.ts';funktion:keyof typeof import('@/app/actions/eingang.actions');argumente:{itemId:string;mode:'normal'}};recht:string|null}=null;
+ let hauptaktion:null|{elementId:string;textKey:string;werte:Record<string,string|number>;befehl:{datei:string;funktion:string;argumente:Readonly<Record<string,unknown>>};recht:string|null}=null;
  let gesperrt:Array<{elementId:string;grundKey:string}>=[];
  if(priority.code==='OK'&&priority.rank===6){
   const selected=readAuthorizedV45Action(auth,'message.assign',{'message.assign':canAssignIntakeCustomer(auth)});
@@ -24,6 +24,18 @@ export function readMessageNextAction(auth:AuthorizationSnapshot,row:IntakeMessa
    if(!('textKey' in selected)||typeof selected.textKey!=='string'||!('recht' in selected)||selected.recht!==null&&typeof selected.recht!=='string')return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_METADATA'],...base};
    const values=readV45ActionValues(selected.textKey,{});if(values.code!=='OK')return {...values,...base};
    hauptaktion={elementId:selected.hauptaktion,textKey:selected.textKey,werte:values.werte,befehl:{datei:'src/app/actions/eingang.actions.ts',funktion:'getIntakeAssignmentAction',argumente:{itemId:row.id,mode:'normal'}},recht:selected.recht};
+  }
+ }else if(priority.code==='OK'&&priority.rank===2){
+  if(!row.customerId)return {code:'SOURCE_INCOMPLETE' as const,missing:['MESSAGE_CUSTOMER'],prioritaet:priority.rank,...base};
+  // The existing reply-target reader opens the real original and its bounded
+  // customer choices (0/1/many); it neither accepts a quote nor invents a use ID.
+  const selected=readAuthorizedV45Action(auth,'concern.act');
+  if(selected.code!=='OK')return {...selected,...base};
+  gesperrt=selected.gesperrt;
+  if(selected.hauptaktion!==null){
+   if(!('textKey' in selected)||typeof selected.textKey!=='string'||!('recht' in selected)||selected.recht!==null&&typeof selected.recht!=='string')return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_METADATA'],...base};
+   const values=readV45ActionValues(selected.textKey,{});if(values.code!=='OK')return {...values,...base};
+   hauptaktion={elementId:selected.hauptaktion,textKey:selected.textKey,werte:values.werte,befehl:{datei:'src/app/actions/quotes.actions.ts',funktion:'readQuoteReplyTargetsAction',argumente:{sourceItemId:row.id,...(row.orderKind==='kv'&&row.orderId?{quoteId:row.orderId}:{})}},recht:selected.recht};
   }
  }else if(priority.code==='OK'&&priority.rank!==8)return {code:'SOURCE_INCOMPLETE' as const,missing:['MESSAGE_SPECIALIST_ACTION_BINDING'],prioritaet:priority.rank,...base};
  const first=readV45FirstLook('nachrichten',{
