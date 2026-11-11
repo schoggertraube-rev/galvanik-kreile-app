@@ -1,3 +1,4 @@
+HISTORISCH – ersetzt durch _review/OWNER_ENTSCHEIDUNGEN.md U-288 und PLAN_LIVEGANG S52, kein Bauauftrag.
 # Datenregister Dev-DB
 
 Stand: 29.10.2026 · Quelle: verknüpfte Dev-DB, Schemas `public`, `private` und `drizzle`

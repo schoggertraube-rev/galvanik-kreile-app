@@ -1,3 +1,4 @@
+HISTORISCH – ersetzt durch _review/OWNER_ENTSCHEIDUNGEN.md, kein Bauauftrag.
 # KREILE — DIE LINIE · Kanonisches Entscheidungsregister & Bauplan-Verfassung · 2026-08-28
 
 **Zweck:** Genau EINE Wahrheit für alle Entscheidungen (Owner-Chat, Design-Chats, Projektleitung, Reviews). Widerspruchsfrei, datiert, mit Quelle und Status. Dies ist die *Linie*. Die PL-Bibel muss deckungsgleich sein; bei Divergenz gilt DIESES Register, die Bibel wird nachgezogen.

@@ -1,3 +1,4 @@
+HISTORISCH – ersetzt durch _review/PL_ABLAUF.md (Owner-Fragen), kein Bauauftrag.
 # Owner-TODO – Verkaufsstufe 1
 
 Stand: 26.10.2026

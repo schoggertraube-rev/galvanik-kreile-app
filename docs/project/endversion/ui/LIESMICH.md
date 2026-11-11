@@ -1,3 +1,4 @@
+HISTORISCH – ersetzt durch V45 (_review/quellen/endversion_V45/, ab S14 docs/project/endversion/v45/), kein Bauauftrag.
 # UI-Wahrheit der Endversion (für Planungschat, Prüfchat, Codex)
 
 Stand: 2026-11-03 (Runde 52 · V41) · Quelle: Owner-Vorschau (Endversion) · Hashes siehe codex/BAUPLAN.next.json → bauplan.ui

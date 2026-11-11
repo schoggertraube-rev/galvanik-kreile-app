@@ -1,3 +1,4 @@
+HISTORISCH – ersetzt durch AGENTS.md und _review/PLAN_LIVEGANG.md, kein Bauauftrag.
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
 Letzter vor Aktivierung dieser Baulinie verifizierter Liefer-Base:
