@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Search, Camera, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
-import { logout } from "@/app/actions/auth";
+import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
@@ -52,7 +52,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     // proxy.ts und roles.ts lesen ihn – konsistente Bereinigung erforderlich.
     // Sicherheitsauftrag: vollständige Migration auf kreile_app_session ist geplant.
     document.cookie = "bypass-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    await logout();
+    await logoutWithReadCleanup();
     router.replace("/start");
   };
 

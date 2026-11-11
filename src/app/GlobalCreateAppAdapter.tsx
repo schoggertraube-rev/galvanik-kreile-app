@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {getIncomingInvoiceAction,saveIncomingInvoiceAction,changeIncomingInvoiceStatusAction,clarifyIncomingInvoiceAction,searchInvoiceSuppliersAction} from '@/app/actions/eingang.actions';
 import {IncomingInvoiceDialogs,type InvoicePorts} from '@/modules/eingang/public';
-import { logout } from "@/app/actions/auth";
+import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import {saveIntakeTaskAction,completeIntakeTaskAction,getIntakeTaskAction,createCustomerForIntakeAction,getIntakeAssignmentAction,assignIntakeCustomerAction,setIntakeNoBusinessAction} from '@/app/actions/eingang.actions';
 import type {TaskPorts,AssignmentPorts} from '@/modules/eingang/public';
 import { chooseIntakeCaptureKindAction } from "@/app/actions/eingang.actions";
@@ -343,7 +343,7 @@ export function GlobalCreateAppAdapter() {
         openOrder,
         refresh: () => router.refresh(),
         switchProfile: async () => {
-          await logout();
+          await logoutWithReadCleanup();
           router.replace("/start");
           router.refresh();
         },

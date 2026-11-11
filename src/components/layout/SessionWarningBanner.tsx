@@ -3,7 +3,7 @@
 import { AlertTriangle, LogIn } from "lucide-react";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { logout } from "@/app/actions/auth";
+import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 
 interface SessionWarningBannerProps {
   show: boolean;
@@ -23,7 +23,7 @@ export function SessionWarningBanner({ show }: SessionWarningBannerProps) {
     setPending(true);
 
     try {
-      await logout();
+      await logoutWithReadCleanup();
     } catch {
       // Auch bei einer gestörten Logout-Action zur öffentlichen Anmeldung wechseln.
     } finally {

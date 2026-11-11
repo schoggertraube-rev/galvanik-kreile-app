@@ -8,6 +8,16 @@ import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readOffline24hFlag} from '@/lib/server/offlineFeatureFlag';
 import {sql} from 'drizzle-orm';
+import {logout} from '@/app/actions/auth';
+import {readAppSession} from '@/lib/server/appSession';
+
+it('the real logout clears the actual session before any browser-cache work',async()=>{
+ await withSession(full,async()=>{
+  expect((await readAppSession()).ok).toBe(true);
+  expect((await logout()).ok).toBe(true);
+  expect(await readAppSession()).toEqual({ok:false,reason:'NO_COOKIE'});
+ });
+});
 
 it('reads the real offline DB flag and role filter without persisting TEST configuration',async()=>{
  await withSession(full,async()=>{

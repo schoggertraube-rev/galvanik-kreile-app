@@ -31,6 +31,7 @@ import { DiagnosticsWidget } from "@/components/diagnostics/DiagnosticsWidget";
 import { PermissionsProvider } from "@/lib/auth/PermissionsContext";
 import { SyncProvider } from "@/lib/offline/SyncContext";
 import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
+import {OfflineLogoutNotice} from '@/components/OfflineLogoutNotice';
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ClientActionErrorBanner } from "@/components/layout/ClientActionErrorBanner";
 
@@ -59,6 +60,7 @@ export default async function RootLayout({
     >
       <body className="h-full">
         <ServiceWorkerRegister />
+        <OfflineLogoutNotice />
         <ClientActionErrorBanner />
         <Suspense fallback={null}>
           <PermissionsProvider initialAuthState={authState}>

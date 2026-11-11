@@ -1,4 +1,5 @@
 /** One presentation catalogue. Facts are projections of existing readers, never stored here. */
+export const OFFLINE_LOGOUT_COPY={cachePending:'Du bist abgemeldet. Die gespeicherten Daten auf diesem Gerät werden beim nächsten Start gelöscht.',pending:(count:number)=>`Du bist abgemeldet. ${count} Eingaben warten noch auf Netz und werden übertragen, sobald es da ist.`} as const;
 export const ORDER_TERMINAL_COPY={dateLocked:'Der Auftrag wurde bereits herausgegeben. Du kannst den Liefertermin nicht mehr ändern.'} as const;
 export const MAIL_REQUEST_CONFLICT_COPY='Diese Anfragekennung gehört zu einer anderen Nachricht. Öffne den gespeicherten Versand.';
 export const INTAKE_PENDING_WORKFLOW_COPY={quoteRequest:'Lege zuerst den KV zur Anfrage an'} as const;
