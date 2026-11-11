@@ -1621,7 +1621,7 @@ export function checkLivePackageScope({ root, base, head, branch }) {
       return { status: status.slice(0, 1), path: posix(rel) };
     }) : [];
     if (branch === GOVERNANCE_RESTART_BRANCH || (branch === "main" && resolved(root, base) === GOVERNANCE_RESTART_BASE && files.includes("_review/BAUREGELN.md"))) return checkGovernanceRestartScopeForTest({ entries, branch, baseSha: resolved(root, base) });
-    return checkB3ScopeForTest({entries,readChange:(rel)=>{let before=null,after=null;try{before=gitFile(root,base,rel);}catch{}try{after=gitFile(root,head,rel);}catch{}return {before,after};}});
+    return checkB3ScopeForTest({entries,readChange:(rel)=>{let before=null,after=null;try{before=execFileSync("git",["-C",root,"show",`${base}:${rel}`],{encoding:"utf8",stdio:["ignore","pipe","pipe"]});}catch{}try{after=execFileSync("git",["-C",root,"show",`${head}:${rel}`],{encoding:"utf8",stdio:["ignore","pipe","pipe"]});}catch{}return {before,after};}});
   }
   if (branch === "main") return [];
   try {
