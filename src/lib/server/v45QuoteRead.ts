@@ -8,6 +8,7 @@ import {quoteCommandContext} from './quoteAuthorization';
 import {readV45QuoteCommand} from './v45QuoteCommandRead';
 import {readV45ActionValues} from './v45ActionValuesRead';
 import {V45_SOURCE_HASHES} from '@/ui/v45.generated';
+import {readV45ObjectActionAbsence} from './v45ObjectActionsRead';
 
 /** V45 quoteFacts, projected from the existing validated quote read port.
  * Historical editions never stand in for the current promise. Missing lifecycle
@@ -32,10 +33,13 @@ export function v45QuoteFacts(quote:Pick<QuoteReadback,'linkedOrderId'|'validUnt
  * First-look order comes from V45 metadata, values from this same readback.
  * Commands remain the existing action boundaries; this reader never calls them.
  */
-export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback){
+export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback,capabilities:{canReceive:boolean;canEdit:boolean;canSend:boolean}){
  const source={kind:'quote' as const,id:quote.quoteId,version:quote.version,edition:quote.lifecycle?.edition??null};
- const rule=readAuthorizedV45Rule(auth,'kv',v45QuoteFacts(quote));if(rule.code!=='OK')return {...rule,source};
+ const selected=readAuthorizedV45Rule(auth,'kv',v45QuoteFacts(quote));if(selected.code!=='OK')return {...selected,source};
+ const commandBlocked=selected.hauptaktion==='quote.receive'&&!capabilities.canReceive||selected.hauptaktion==='quote.revise'&&!capabilities.canEdit||['quote.send','quote.followup'].includes(selected.hauptaktion??'')&&!capabilities.canSend;
+ const rule=commandBlocked?{...selected,hauptaktion:null,gesperrt:[...selected.gesperrt,{elementId:selected.hauptaktion!,grundKey:'error.permission'}]}:selected;
  if(!quote.lifecycle)return {code:'SOURCE_INCOMPLETE' as const,missing:['QUOTE_LIFECYCLE'],source};
+ const objectActions=readV45ObjectActionAbsence('kv',rule.zustand);if(objectActions.code!=='OK')return {...objectActions,source};
  const financial=quoteCommandContext(auth).capabilities.canReadQuote;
  const values:Record<string,Readonly<Record<string,unknown>>>={
   'kv.lage':{nummer:quote.quoteNumber,fassung:quote.lifecycle.edition,zustand:rule.zustand},
@@ -55,5 +59,5 @@ export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback)
   if(parameters.code!=='OK')return {...parameters,source};
   hauptaktion={elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,befehl,recht:rule.recht};
  }
- return {code:'OK' as const,ruleId:rule.ruleId,zustand:rule.zustand,farbe:rule.farbe,aktionsfarbe:rule.aktionsfarbe,erstblick:first.erstblick,hauptaktion,gesperrt:rule.gesperrt,quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,texteSha256:V45_SOURCE_HASHES['texte.json']},source};
+ return {code:'OK' as const,ruleId:rule.ruleId,zustand:rule.zustand,farbe:rule.farbe,aktionsfarbe:rule.aktionsfarbe,erstblick:first.erstblick,hauptaktion,weitere:objectActions.weitere,gesperrt:rule.gesperrt,quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,texteSha256:V45_SOURCE_HASHES['texte.json'],erwartungSha256:objectActions.quelle.sha256},source};
 }
