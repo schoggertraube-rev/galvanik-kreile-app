@@ -19,10 +19,9 @@ export async function readV45ResponsibilityText(auth:AuthorizationSnapshot,input
   const holders=await withPrivilegedTenantTransaction(auth,tx=>readActiveAreaHolders(tx,auth.tenantId,input.requiredArea));
   if(holders.length===1){name=holders[0].name.trim();source='login';}
   else if(holders.length>1){
-   const labels=[...new Set(holders.map(holder=>ROLE_LABELS[holder.role]))];
-   // TODO_PL: multiple distinct role labels need the PL fallback decision.
-   if(labels.length!==1)return {code:'SOURCE_INCOMPLETE' as const,missing:'MULTIPLE_ROLE_LABELS' as const};
-   name=labels[0];source='role';
+   const roles=new Set(holders.map(holder=>holder.role));
+   const labels=[...new Set(Object.entries(ROLE_LABELS).filter(([role])=>roles.has(role as typeof holders[number]['role'])).map(([,label])=>label))];
+   name=labels.join(' oder ');source='role';
   }
  }
  if(!name||!source)return {code:'SOURCE_INCOMPLETE' as const,missing:'RESPONSIBLE_NAME' as const};
