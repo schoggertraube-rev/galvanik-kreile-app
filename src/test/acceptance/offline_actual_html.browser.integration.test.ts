@@ -1,5 +1,5 @@
 // @vitest-environment node
-// Actual Next/Auth/DB page warming only; not an offline cold-start acceptance.
+// Actual Next/Auth/DB HTML, then offline navigation through the product worker.
 import {it,expect} from 'vitest';
 import {spawn,execFile,execFileSync} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -9,7 +9,7 @@ import postgres from 'postgres';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {signAppSession,cacheScopeFromCredential,COOKIE_NAME} from '@/lib/server/appSession';
 import {CACHE_SCOPE_COOKIE} from '@/lib/offline/cacheScopeMarker';
-it.skipIf(process.env.KREILE_REAL_NEXT_CACHE_PROOF!=='1'||!process.env.KREILE_PLAYWRIGHT_CLI_JS)('warms only the real authenticated Next HTML and keeps original session authorization real',async()=>{
+it.skipIf(process.env.KREILE_REAL_NEXT_CACHE_PROOF!=='1'||!process.env.KREILE_PLAYWRIGHT_CLI_JS)('restarts the real authenticated Next page offline through the scoped worker',async()=>{
  const database=process.env.DATABASE_URL;
  if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database).hostname!=='127.0.0.1'||new URL(database).port!=='54342')throw Error('TEST_OWN_REPLAY_REQUIRED');
  const sql=postgres(database,{max:1,prepare:false}),actor=randomUUID(),secret='TEST-actual-html-'+randomUUID(),port=3187,origin='http://127.0.0.1:'+port;
@@ -43,6 +43,8 @@ it.skipIf(process.env.KREILE_REAL_NEXT_CACHE_PROOF!=='1'||!process.env.KREILE_PL
   await cli(['run-code',`async(page)=>{await page.context().addCookies(${JSON.stringify(cookies)});await page.goto('${origin}/customers');await page.getByRole('heading',{name:'Kunden & Kontakt',exact:true}).waitFor({timeout:15000});}`]);
   const proof=await cli(['eval',`async()=>{for(let i=0;i<100;i++){const names=(await caches.keys()).filter(n=>n.startsWith('kreile-private-')&&n.includes('${login}'));if(names.length===1){const response=await caches.match(location.href,{cacheName:names[0]});if(response){const text=await response.text();if(!text.includes('data-auth-status="authenticated"')||!text.includes('data-offline-login-scope="${login}"'))throw Error('TEST_UNQUALIFIED_CONTENT');return {actualNextHTML:true,qualifiedCache:true};}}await new Promise(r=>setTimeout(r,100));}throw Error('TEST_REAL_HTML_NOT_WARMED');}`]);
   expect(proof.stdout).not.toContain('### Error');expect(proof.stdout).toContain('"actualNextHTML": true');
+  const cold=await cli(['run-code',`async(page)=>{await page.evaluate(async()=>{await navigator.serviceWorker.ready;for(let i=0;i<100&&!navigator.serviceWorker.controller;i++)await new Promise(r=>setTimeout(r,100));if(!navigator.serviceWorker.controller)throw Error('TEST_NO_CONTROLLER');});await page.context().setOffline(true);await page.reload({waitUntil:'domcontentloaded'});await page.getByRole('heading',{name:'Kunden & Kontakt',exact:true}).waitFor({timeout:15000});return {offlineActualNext:true,authenticated:await page.locator('html').getAttribute('data-auth-status')};}`]);
+  expect(cold.stdout).toMatch(/"offlineActualNext":\s*true/);expect(cold.stdout).toMatch(/"authenticated":\s*"authenticated"/);
  }finally{
   await cli(['close']).catch(()=>{});
   if(child.pid&&child.exitCode===null){if(process.platform==='win32')await execute('taskkill',['/PID',String(child.pid),'/T','/F']).catch(()=>{});else child.kill('SIGTERM');}

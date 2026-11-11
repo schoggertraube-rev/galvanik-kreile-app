@@ -19,7 +19,7 @@ describe("W2C-B2M4A OfflineManager queue fail-closed", () => {
     Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
   });
 
-  it("retains every queued action and reports the complete queue as NOT_AVAILABLE", async () => {
+  it("cannot read, send or remove the retired anonymous queue", async () => {
     const completions: CustomEvent[] = [];
     const expired: Event[] = [];
     const completionListener = (event: Event) => completions.push(event as CustomEvent);
@@ -27,15 +27,14 @@ describe("W2C-B2M4A OfflineManager queue fail-closed", () => {
     window.addEventListener("kreile-sync-success", completionListener);
     window.addEventListener("kreile-sync-expired", expiredListener);
     const { OfflineManager } = await import("@/lib/offline/OfflineManager");
-    await OfflineManager.syncQueue();
+    expect(OfflineManager).not.toHaveProperty("syncQueue");
     window.removeEventListener("kreile-sync-success", completionListener);
     window.removeEventListener("kreile-sync-expired", expiredListener);
 
-    expect(ports.getQueue).toHaveBeenCalledTimes(1);
+    expect(ports.getQueue).not.toHaveBeenCalled();
     expect(ports.removeFromQueue).not.toHaveBeenCalled();
     for (const writer of [ports.orderCreate, ports.customerCreate, ports.customerUpdate, ports.inquiryCreate, ports.inquiryStatus, ports.inquiryPricing]) expect(writer).not.toHaveBeenCalled();
-    expect(completions).toHaveLength(1);
-    expect(completions[0].detail).toEqual({ count: 0, blockedCount: 16 });
+    expect(completions).toHaveLength(0);
     expect(expired).toHaveLength(0);
   });
 
@@ -50,23 +49,23 @@ describe("W2C-B2M4A OfflineManager queue fail-closed", () => {
 
     try {
       const { OfflineManager } = await import("@/lib/offline/OfflineManager");
-      await OfflineManager.syncQueue();
+      expect(OfflineManager).not.toHaveProperty("syncQueue");
     } finally {
       window.removeEventListener("kreile-sync-success", completionListener);
       window.removeEventListener("kreile-sync-expired", expiredListener);
     }
 
-    expect(ports.getQueue).toHaveBeenCalledTimes(1);
+    expect(ports.getQueue).not.toHaveBeenCalled();
     expect(completions).toHaveLength(0);
     expect(expired).toHaveLength(0);
     expect(ports.removeFromQueue).not.toHaveBeenCalled();
     for (const writer of [ports.orderCreate, ports.customerCreate, ports.customerUpdate, ports.inquiryCreate, ports.inquiryStatus, ports.inquiryPricing]) expect(writer).not.toHaveBeenCalled();
   });
 
-  it("keeps syncQueue free of deletion, repository, expiry, and mock-delay paths", async () => {
+  it("keeps the network observer free of a second queue or simulated network", async () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
     const source = await readFile(path.join(root, "lib/offline/OfflineManager.ts"), "utf8");
-    const syncQueueSource = source.slice(source.indexOf("async syncQueue"), source.indexOf("// Global browser listeners"));
-    expect(syncQueueSource).not.toMatch(/removeFromQueue|repositories\/|expiresAt|new Date|setTimeout|Mocking backend sync/);
+    const syncQueueSource = source;
+    expect(syncQueueSource).not.toMatch(/IndexedDBHelper|syncQueue|removeFromQueue|repositories\/|expiresAt|new Date|setTimeout|kreile_simulated_offline/);
   });
 });

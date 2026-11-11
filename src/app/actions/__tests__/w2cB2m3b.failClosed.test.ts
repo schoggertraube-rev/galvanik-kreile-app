@@ -82,11 +82,11 @@ describe("W2C B2M3B fail-closed commands", () => {
     const listener = (event: Event) => events.push(event as CustomEvent);
     window.addEventListener("kreile-sync-success", listener);
     const { OfflineManager } = await import("@/lib/offline/OfflineManager");
-    await OfflineManager.syncQueue();
+    expect(OfflineManager).not.toHaveProperty("syncQueue");
     window.removeEventListener("kreile-sync-success", listener);
 
     expect(ports.removeFromQueue).not.toHaveBeenCalled();
-    expect(events.at(-1)?.detail).toEqual({ count: 0, blockedCount: 1 });
+    expect(events).toHaveLength(0);
   });
 });
 

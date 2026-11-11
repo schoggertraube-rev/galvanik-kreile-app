@@ -1,4 +1,4 @@
-import {readPendingEntries,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal} from './pendingStore';
+import {readPendingEntries,retainQuarantinedPending,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal} from './pendingStore';
 import type {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
 import {recognizeNoteConcerns} from '@/lib/domain/noteConcerns';
 import type {PendingWorkshopOriginal} from './pendingStore';
@@ -14,7 +14,8 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
   const outcome={secured:0,acknowledged:0,blocked:0};
   // IndexedDB getAll follows random UUID keys. Replay known capture times in
   // their original order so a later file cannot create the note's base first.
-  const entries=(await readPendingEntries(scope)).filter(entry=>entry.kind!=='quarantine');
+  const inventory=await readPendingEntries(scope);
+  const entries=inventory.filter(entry=>entry.kind!=='quarantine');
   const timed=entries.filter(entry=>entry.deviceCapturedAt&&Number.isFinite(Date.parse(entry.deviceCapturedAt)))
    .sort((a,b)=>Date.parse(a.deviceCapturedAt!)-Date.parse(b.deviceCapturedAt!));
   let cursor=0;
@@ -23,6 +24,9 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
   const sequenced=ordered.filter(hasSequence).sort((a,b)=>a.queueSequence!-b.queueSequence!);
   let sequenceCursor=0;
   const blockedItems=new Set<string>();
+  for(const entry of inventory)if(entry.kind==='quarantine'&&entry.payload?.reason==='NOTE_SYNC_METADATA_MISSING'){
+   const original=entry.payload.original;if(original&&typeof original==='object'&&'itemId'in original&&typeof original.itemId==='string')blockedItems.add(original.itemId);
+  }
   // Keep legacy entries in their existing time-based slots; never invent a
   // historical sequence. Newly captured originals retain their actual order.
   for(const entry of ordered.map(entry=>hasSequence(entry)?sequenced[sequenceCursor++]:entry)){
@@ -42,7 +46,10 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
     continue;
    }
    if(entry.kind==='note'){
-    if(entry.expectedVersion===undefined||!entry.deviceCapturedAt)continue;
+    if(entry.expectedVersion===undefined||!entry.deviceCapturedAt){
+     await retainQuarantinedPending(scope,{id:entry.id,kind:'quarantine',capturedAt:entry.deviceCapturedAt??'',payload:{reason:'NOTE_SYNC_METADATA_MISSING',original:entry}});
+     outcome.blocked++;blockedItems.add(entry.itemId);continue;
+    }
     try{
      const concerns=recognizeNoteConcerns(entry.text).map(item=>item.id).filter(id=>!entry.dismissed.includes(id));
      const saved=await ports.saveNote({itemId:entry.itemId,textstand:entry.textstand,text:entry.text,concerns,expectedVersion:entry.expectedVersion,deviceCapturedAt:entry.deviceCapturedAt,...(entry.context?{context:entry.context}:{})},scope);

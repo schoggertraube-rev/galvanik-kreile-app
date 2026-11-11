@@ -24,6 +24,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const { initials, status, name } = usePermissions();
   const { status: realtimeStatus } = useRealtimeStatus();
   const { isOnline, outboxItems } = useSync();
+  const pendingNotice=outboxItems.find(item=>typeof item.lastError==='string')?.lastError;
   const pendingOutboxCount = outboxItems.filter((item) => item.status !== "synced").length;
 
   // User Dropdown State
@@ -172,7 +173,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           title="Gerätesignal: zeigt Netzwerkverfügbarkeit und lokal ausstehende Einträge; kein Server- oder Synchronisierungsnachweis."
         >
           <span className={`w-2 h-2 rounded-full ${!isOnline ? "bg-accent-orange" : (pendingOutboxCount > 0 ? "bg-gold-500 animate-pulse" : "bg-success-green")}`} />
-          <span>{!isOnline ? "Offline" : (pendingOutboxCount > 0 ? `${pendingOutboxCount} lokal ausstehend` : "Netzwerk verfügbar")}</span>
+          <span>{pendingNotice??(!isOnline ? "Offline" : (pendingOutboxCount > 0 ? `${pendingOutboxCount} lokal ausstehend` : "Netzwerk verfügbar"))}</span>
         </div>
 
         {/* Live-Sync Indicator */}

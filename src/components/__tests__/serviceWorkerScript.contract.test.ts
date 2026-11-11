@@ -167,12 +167,12 @@ describe("service worker containment contract", () => {
     expect(metrics).toMatchObject({ cacheMatch: 1, selfFetch: 1, cacheOpen: 0, cachePut: 0 });
   });
 
-  it("does not respond to query, cross-origin, navigation, or unknown requests", () => {
+  it("does not respond to query, cross-origin, protected navigation, or unknown requests", () => {
     const { handlers, metrics } = loadWorker();
     for (const [url, method, mode] of [
       ["https://werkstatt.example/icons/icon-192.png?v=1", "GET", "cors"],
       ["https://outside.example/icons/icon-192.png", "GET", "cors"],
-      ["https://werkstatt.example/orders", "GET", "navigate"],
+      ["https://werkstatt.example/login", "GET", "navigate"],
       ["https://werkstatt.example/orders", "GET", "cors"],
     ] as const) {
       const request = fetchEvent(url, method, mode);
@@ -195,9 +195,18 @@ describe("service worker containment contract", () => {
     expect(source).toContain('const STATIC_ASSETS = [');
     expect(source).toContain('if (request.method !== "GET") return;');
     expect(source).toContain('if (url.origin !== self.location.origin) return;');
-    expect(source).not.toMatch(/\bindexedDB\b|\bnew\s+Response\s*\(/);
+    expect(source).not.toMatch(/\bnew\s+Response\s*\(|deleteDatabase|objectStore\([^)]*\)\.put/);
+    expect(source).toContain('open.transaction.abort()');
+    expect(source).toContain('db.transaction("shellMetadata", "readonly")');
     expect(source).not.toMatch(/(?:pathname|url\.pathname)\s*(?:===|\.startsWith|\.includes|\.match)\s*\(?\s*["'][^"']*\/(?:api|supabase)(?:\/|["'])/i);
-    expect(source).not.toMatch(/\bcaches\.delete\s*\(|\bapi-cache\b/);
-    expect(source).not.toMatch(/OFFLINE_URL|text\/html|url\.pathname\s*===\s*["']\/["']|request\.mode\s*===\s*["']navigate["']/i);
+    expect(source).not.toMatch(/\bapi-cache\b/);
+    expect(source).toContain('parts[2] !== login');
+    expect(source).toContain('current.cacheGeneration !== selected.generation');
+    expect(source).not.toMatch(/OFFLINE_URL|url\.pathname\s*===\s*["']\/["']/i);
   });
+});
+
+it('PL00:11 never invents an offline navigation response without the real private fence',async()=>{
+ const {handlers,metrics}=loadWorker({network:{kind:'reject'}}),request=fetchEvent('https://werkstatt.example/customers','GET','navigate');
+ handlers.get('fetch')?.(request.event as never);await expect(request.responsePromise()).rejects.toThrow('network offline');expect(metrics.indexedDbOpen).toBe(0);expect(metrics.cachePut).toBe(0);
 });

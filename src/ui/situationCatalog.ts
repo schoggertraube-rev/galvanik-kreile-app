@@ -1,3 +1,5 @@
+/** PL12.11.00:11: a missing historical time stays explicit, never today. */
+export const OFFLINE_NOTE_QUARANTINE_COPY={notice:(time:string|null)=>`Notiz von ${time??'TODO_PL'} konnte nicht abgeglichen werden`} as const;
 /** R8 TODO_PL: complaint original has photographs, but no chosen order number. */
 export const MESSAGE_COMPLAINT_ACTION_COPY={key:'messages.complaint_customer',text:'TODO_PL'} as const;
 

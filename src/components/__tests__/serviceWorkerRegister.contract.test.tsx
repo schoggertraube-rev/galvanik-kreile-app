@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
-import {PwaRegister} from "@/components/layout/PwaRegister";
 
 const workspacePath = (...parts: string[]) => resolve(process.cwd(), ...parts);
 const originalServiceWorker = Object.getOwnPropertyDescriptor(navigator, "serviceWorker");
@@ -38,7 +37,7 @@ describe("ServiceWorkerRegister contract", () => {
   it("reuses the attempt across StrictMode and a root remount", async () => {
     const register = vi.fn().mockResolvedValue({scope:"/"});
     Object.defineProperty(navigator,"serviceWorker",{configurable:true,value:{register}});
-    const first=render(<StrictMode><ServiceWorkerRegister /><PwaRegister /></StrictMode>);
+    const first=render(<StrictMode><ServiceWorkerRegister /><ServiceWorkerRegister /></StrictMode>);
     await waitFor(()=>expect(register).toHaveBeenCalledTimes(1));
     first.unmount();
     render(<ServiceWorkerRegister />);

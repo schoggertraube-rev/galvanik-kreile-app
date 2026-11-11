@@ -89,13 +89,8 @@ describe("W2C-B1 caller containment", () => {
   });
 
   it("leaves non-atomic flows visibly blocked and removes the simple start from the process port", async () => {
-    const blockedFiles = await Promise.all([
-      "lib/offline/OfflineManager.ts",
-    ].map((file) => readFile(path.join(srcRoot, file), "utf8")));
-
-    for (const source of blockedFiles) {
-      expect(source).toMatch(/NOT_AVAILABLE|disabled/);
-    }
+    const networkObserver=await readFile(path.join(srcRoot,"lib/offline/OfflineManager.ts"),"utf8");
+    expect(networkObserver).not.toMatch(/syncQueue|IndexedDBHelper|enqueueAction|removeFromQueue|kreile_simulated_offline/);
     expect(existsSync(path.join(srcRoot, "app/status/page.tsx"))).toBe(false);
     for (const file of [
       "components/orders/variants/WareneingangActive.tsx",
@@ -148,14 +143,13 @@ describe("OfflineManager legacy mutation containment (F0-W2C-B1)", () => {
     window.addEventListener("kreile-sync-success", listener);
 
     const { OfflineManager } = await import("@/lib/offline/OfflineManager");
-    await OfflineManager.syncQueue();
+    expect(OfflineManager).not.toHaveProperty("syncQueue");
 
     window.removeEventListener("kreile-sync-success", listener);
     expect(offlineSpies.updateOrder).not.toHaveBeenCalled();
     expect(offlineSpies.createMovement).not.toHaveBeenCalled();
     expect(offlineSpies.addEvent).not.toHaveBeenCalled();
     expect(offlineSpies.removeFromQueue).not.toHaveBeenCalled();
-    expect(successEvents).toHaveLength(1);
-    expect(successEvents[0].detail).toEqual({ count: 0, blockedCount: 3 });
+    expect(successEvents).toHaveLength(0);
   });
 });

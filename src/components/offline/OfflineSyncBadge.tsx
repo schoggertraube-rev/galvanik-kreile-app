@@ -1,45 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { Cloud, CloudOff, RefreshCw, AlertCircle } from "lucide-react";
+import { useSync } from "@/lib/offline/SyncContext";
+import { Cloud, CloudOff, RefreshCw } from "lucide-react";
 
 export function OfflineSyncBadge() {
-  const [isOffline, setIsOffline] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [lastSync, setLastSync] = useState<string | null>(null);
-
-  useEffect(() => {
-    const updateState = async () => {
-      setIsOffline(OfflineManager.isOffline());
-      const count = await OfflineManager.getPendingCount();
-      setPendingCount(count);
-    };
-
-    updateState();
-
-    const handleOffline = () => updateState();
-    const handleOnline = () => updateState();
-    const handleSyncUpdate = () => updateState();
-    const handleSyncSuccess = () => {
-      setLastSync(new Date().toLocaleTimeString());
-      updateState();
-    };
-
-    window.addEventListener("offline", handleOffline);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("kreile-network-change", handleOffline);
-    window.addEventListener("kreile-sync-queue-updated", handleSyncUpdate);
-    window.addEventListener("kreile-sync-success", handleSyncSuccess);
-
-    return () => {
-      window.removeEventListener("offline", handleOffline);
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("kreile-network-change", handleOffline);
-      window.removeEventListener("kreile-sync-queue-updated", handleSyncUpdate);
-      window.removeEventListener("kreile-sync-success", handleSyncSuccess);
-    };
-  }, []);
+  const {isOnline,outboxItems}=useSync();
+  const isOffline=!isOnline,pendingCount=outboxItems.length;
 
   if (!isOffline && pendingCount === 0) return null;
 
@@ -57,12 +23,6 @@ export function OfflineSyncBadge() {
         </div>
       )}
 
-      {lastSync && pendingCount === 0 && (
-        <div className="flex items-center gap-2 mt-1 opacity-70">
-          <AlertCircle className="w-3 h-3" />
-          <span>Zuletzt synchronisiert: {lastSync}</span>
-        </div>
-      )}
     </div>
   );
 }
