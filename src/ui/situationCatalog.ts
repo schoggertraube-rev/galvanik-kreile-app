@@ -303,3 +303,12 @@ export const PRODUCTION_PRICING_RETRY_COPY={
 
 /** PL11.11.17:05: shared wording for conflicting request identities. */
 export const ORDER_REQUEST_COPY={intentConflict:"Anfragekennung wurde bereits anders verwendet."} as const;
+
+/** PL21:04 CB21:00: keep every original in transport; bound only the text value. */
+export const CUSTOMER_INVOICE_ACTION_COPY={numbers:(numbers:readonly string[])=>{
+ const all=numbers.join(', ');if(all.length<=120)return all;
+ let prefix='';
+ for(let i=0;i<numbers.length;i++){const next=prefix?prefix+', '+numbers[i]:numbers[i],suffix=` und ${numbers.length-i-1} weitere`;if(next.length+suffix.length>120)break;prefix=next;}
+ if(prefix){const shown=prefix.split(', ').length;return prefix+` und ${numbers.length-shown} weitere`;}
+ const suffix=` und ${numbers.length-1} weitere`;let short='';for(const char of numbers[0]){if(short.length+char.length+1+suffix.length>120)break;short+=char;}return short+'…'+suffix;
+}} as const;

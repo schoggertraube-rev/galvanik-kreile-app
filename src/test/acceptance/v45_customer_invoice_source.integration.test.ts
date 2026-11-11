@@ -21,9 +21,9 @@ it('reads current unsent invoice originals from the customer port and never disc
  // invoice evidence/count, not that read timestamp, must stay the same.
  expect(await readCustomerSummary(auth.data,{customerId})).toMatchObject({code:'OK',data:{id:customerId,invoiceUnsentCount:1}});
  const actionRead=await withSession(full,()=>getCustomerSummaryAction({customerId}));
- expect(actionRead).toMatchObject({code:'OK',data:{invoiceUnsentOriginal:{id:order.invoice.invoiceId},nextActionRule:{code:'OK',hauptaktion:{elementId:'customer.invoice',befehl:{funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:customerId,expectedInvoiceIds:[order.invoice.invoiceId]}}}}}});
+ expect(actionRead).toMatchObject({code:'OK',data:{invoiceUnsentOriginals:[{id:order.invoice.invoiceId}],nextActionRule:{code:'OK',hauptaktion:{elementId:'customer.invoice',befehl:{funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:customerId,expectedInvoiceIds:[order.invoice.invoiceId]}}}}}});
  if(actionRead.code!=='OK'||actionRead.data.nextActionRule?.code!=='OK'||!actionRead.data.nextActionRule.hauptaktion)throw Error('TEST_CUSTOMER_PRIMARY');
- expect(actionRead.data.nextActionRule.hauptaktion.werte.number).toBe(actionRead.data.invoiceUnsentOriginal?.number);
+ expect(actionRead.data.nextActionRule.hauptaktion.werte.number).toBe(actionRead.data.invoiceUnsentOriginals?.[0]?.number);
  expect(actionRead.data.nextActionRule.erstblick).toHaveLength(5);
  expect(actionRead.data.nextActionRule.weitere).toEqual([]);
  expect(actionRead.data.nextActionRule.quelle.erwartungSha256).toMatch(/^[a-f0-9]{64}$/);
@@ -41,7 +41,7 @@ it('reads current unsent invoice originals from the customer port and never disc
 
  const otherId=await customerFixture('V45 anderer Kunde');expect(await readCustomerSummary(auth.data,{customerId:otherId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
  const restricted=await createFixture(['kunden'],'werkstatt'),noMoney=await withSession(restricted,()=>resolveAuthorization());if(!noMoney.ok)throw Error('TEST_NO_MONEY_AUTH');
- const hidden=await readCustomerSummary(noMoney.data,{customerId});expect(hidden.code).toBe('OK');if(hidden.code!=='OK')throw Error('TEST_CUSTOMER_READ');expect(hidden.data).not.toHaveProperty('invoiceUnsentCount');expect(hidden.data).not.toHaveProperty('invoiceUnsentOriginal');expect(hidden.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',source:{kind:'customer',id:customerId}});
+ const hidden=await readCustomerSummary(noMoney.data,{customerId});expect(hidden.code).toBe('OK');if(hidden.code!=='OK')throw Error('TEST_CUSTOMER_READ');expect(hidden.data).not.toHaveProperty('invoiceUnsentCount');expect(hidden.data).not.toHaveProperty('invoiceUnsentOriginals');expect(hidden.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',source:{kind:'customer',id:customerId}});
  const publicHidden=await withSession(restricted,()=>getCustomerSummaryAction({customerId}));expect(publicHidden.code).toBe('OK');if(publicHidden.code!=='OK')throw Error('TEST_CUSTOMER_ACTION_READ');expect(publicHidden.data).not.toHaveProperty('invoiceUnsentCount');
  const cancel={invoiceId:order.invoice.invoiceId,expectedVersion:1,clientEventId:randomUUID(),reason:'TEST nicht mehr zu versenden'};
  expect(await withSession(full,()=>cancelInvoiceAction(cancel))).toMatchObject({code:'OK'});
@@ -70,10 +70,26 @@ it('uses the actual document dispatch proof after sending, including a fresh ret
  }finally{provider.mockRestore();}
 },60000);
 
-it('does not choose an arbitrary invoice number or original when several current originals are unsent',async()=>{
+it('CB21:00 sends two current originals through the existing main action in one physical mail',async()=>{
  const customerId=await customerFixture('TEST U2 mehrere Originale');
- await readyInvoiceOrder('TEST U2 Original A','pickup',false,customerId);
- await readyInvoiceOrder('TEST U2 Original B','pickup',false,customerId);
+ const first=await readyInvoiceOrder('TEST U2 Original A','pickup',false,customerId);
+ const second=await readyInvoiceOrder('TEST U2 Original B','pickup',false,customerId);
  const read=await withSession(full,()=>getCustomerSummaryAction({customerId}));
- expect(read).toMatchObject({code:'OK',data:{invoiceUnsentCount:2,invoiceUnsentOriginal:null,nextActionRule:{code:'SOURCE_INCOMPLETE',missing:['CUSTOMER_INVOICE_ORIGINAL']}}});
+ expect(read).toMatchObject({code:'OK',data:{invoiceUnsentCount:2,invoiceUnsentOriginals:[{id:first.invoice.invoiceId},{id:second.invoice.invoiceId}],nextActionRule:{code:'OK',hauptaktion:{elementId:'customer.invoice',befehl:{argumente:{attachment:{kind:'INVOICE',documentId:first.invoice.invoiceId},expectedInvoiceIds:[first.invoice.invoiceId,second.invoice.invoiceId]}}}}}});
+ if(read.code!=='OK'||read.data.nextActionRule?.code!=='OK'||!read.data.nextActionRule.hauptaktion)throw Error('TEST_MULTIPLE_PRIMARY');
+ expect(read.data.nextActionRule.hauptaktion.werte.number).toBe(read.data.invoiceUnsentOriginals!.map(row=>row.number).join(', '));
+ let sends=0,attachmentCount=0;
+ const provider=vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-U2-bundle-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;attachmentCount=JSON.parse(String(init?.body)).message.attachments.length;return new Response(null,{status:202});}
+  return nativeFetch(request,init);
+ });
+ try{
+  const input={...read.data.nextActionRule.hauptaktion.befehl.argumente,subject:'TEST beide Rechnungen',body:'TEST gespeicherte Originale',clientRequestId:randomUUID()} as Parameters<typeof sendCustomerMailAction>[0];
+  expect(await withSession(full,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK'});
+  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
+  expect(sends).toBe(1);expect(attachmentCount).toBe(2);
+  expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{invoiceUnsentCount:0,invoiceUnsentOriginals:[]}});
+ }finally{provider.mockRestore();}
 });

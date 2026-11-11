@@ -6,6 +6,7 @@ import {readAuthorizedV45Rule} from './v45RuleRead';
 import {readV45ActionValues} from './v45ActionValuesRead';
 import {readV45FirstLook} from './v45FirstLookRead';
 import {readV45ObjectActionAbsence} from './v45ObjectActionsRead';
+import {CUSTOMER_INVOICE_ACTION_COPY} from '@/ui/situationCatalog';
 import type {CustomerListSignals} from '@/modules/customers/public';
 
 type ContactFacts=Pick<CustomerSummary,'email'|'billingEmail'|'invoiceUnsentCount'>;
@@ -31,7 +32,7 @@ export function v45CustomerFacts(customer:ContactFacts,money:boolean,overdueCoun
 }
 /** The customer's rule seam uses the same summary/metrics snapshot, not a
  * second customer or revenue query. This is not the full U2 presentation. */
-export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<CustomerSummary,'id'|'updatedAt'|'email'|'billingEmail'|'invoiceUnsentCount'|'invoiceUnsentOriginal'|'kennzahlen'|'name'|'invoiceOpenCents'>,signals?:CustomerListSignals){
+export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<CustomerSummary,'id'|'updatedAt'|'email'|'billingEmail'|'invoiceUnsentCount'|'invoiceUnsentOriginals'|'kennzahlen'|'name'|'invoiceOpenCents'>,signals?:CustomerListSignals){
  const facts=v45CustomerFacts(customer,hasAuthorizationArea(auth,'geld'),customer.kennzahlen?.overdue?.invoiceCount);
  const source={kind:'customer' as const,id:customer.id,updatedAt:customer.updatedAt,...(signals?.asOf?{signalsAt:signals.asOf}:{})};
  const rule=readAuthorizedV45Rule(auth,'kunde',facts);if(rule.code!=='OK')return {...rule,source};
@@ -40,10 +41,11 @@ export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<Cus
  let befehl:{datei:string;funktion:keyof typeof import('@/app/actions/communications.actions')|keyof typeof import('@/app/actions/customers.actions');argumente:Readonly<Record<string,unknown>>};
  let number:string|undefined;
  if(rule.hauptaktion==='customer.invoice'){
-  const original=customer.invoiceUnsentOriginal;
-  if(customer.invoiceUnsentCount!==1||!original||typeof original.id!=='string'||typeof original.number!=='string'||!Number.isSafeInteger(original.version))return {code:'SOURCE_INCOMPLETE' as const,missing:['CUSTOMER_INVOICE_ORIGINAL'],source};
-  number=original.number;
-  befehl={datei:'src/app/actions/communications.actions.ts',funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:customer.id,attachment:{kind:'INVOICE',documentId:original.id},expectedInvoiceIds:[original.id]}};
+  const originals=customer.invoiceUnsentOriginals;
+  if(!Array.isArray(originals)||!originals.length||originals.length!==customer.invoiceUnsentCount||originals.some(original=>typeof original.id!=='string'||typeof original.number!=='string'||!Number.isSafeInteger(original.version)))return {code:'SOURCE_INCOMPLETE' as const,missing:['CUSTOMER_INVOICE_ORIGINAL'],source};
+  const original=originals[0];
+  number=CUSTOMER_INVOICE_ACTION_COPY.numbers(originals.map(row=>row.number));
+  befehl={datei:'src/app/actions/communications.actions.ts',funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:customer.id,attachment:{kind:'INVOICE',documentId:original.id},expectedInvoiceIds:originals.map(row=>row.id)}};
  }else if(rule.hauptaktion==='customer.edit')befehl={datei:'src/app/actions/customers.actions.ts',funktion:'updateCustomerAction',argumente:{customerId:customer.id}};
  else return {code:'SOURCE_INCOMPLETE' as const,missing:['CUSTOMER_ACTION_BINDING'],source};
  const parameters=readV45ActionValues(rule.textKey,{name:customer.name,...(number?{number}:{})});if(parameters.code!=='OK')return {...parameters,source};
