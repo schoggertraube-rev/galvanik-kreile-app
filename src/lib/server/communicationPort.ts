@@ -1,3 +1,4 @@
+import {readIntakeMailOriginal,type IntakeMailOriginal} from './communicationOriginalPort';
 import {readCompletedComplaintMail} from './communicationComplaintPort';
 import {quoteCommandContext} from './quoteAuthorization';
 import {readIntakeConfirmationMailSource} from './intakeDraftEvents';
@@ -225,7 +226,7 @@ export async function attachInboxMessage(
 
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; confirmedResend?:true; allowResend?:boolean;legacyReplaces?:LegacyQuoteReplacement; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; reconcileInvoice?:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeConfirmation?:{outboxId:string;sourceClientEventId:string} },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; confirmedResend?:true; allowResend?:boolean;legacyReplaces?:LegacyQuoteReplacement; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; reconcileInvoice?:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeConfirmation?:{outboxId:string;sourceClientEventId:string;original:IntakeMailOriginal} },
 ): Promise<Result<CommunicationReceipt>> {
   if (input?.confirmedResend!==undefined&&input.confirmedResend!==true || !validTarget(input?.targetType, input?.targetId) || typeof input.clientRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.clientRequestId) || typeof input.subject !== 'string' || typeof input.body !== 'string' || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
@@ -248,7 +249,9 @@ export async function sendCommunicationMail(
     if(!hasAuthorizationArea(auth,'eingang')||input.targetType!=='ORDER'||input.document||input.complaintResult||input.collectionReminder||input.clientRequestId!==input.intakeConfirmation.outboxId)return {code:'FORBIDDEN',message:'E-Mails dürfen für diese Rolle nicht versendet werden.'};
     const source=await withPrivilegedTenantTransaction(auth,tx=>readIntakeConfirmationMailSource(tx,auth,{...input.intakeConfirmation!,orderId:input.targetId}));
     if(!source)return {code:'FORBIDDEN',message:'E-Mails dürfen für diese Rolle nicht versendet werden.'};
-    intakeRecipient=source.recipient;
+    const original=await readIntakeMailOriginal(input.intakeConfirmation.original);
+    if(original.subject!==input.subject.trim()||original.body!==input.body.trim())return {code:'CONFLICT',message:MAIL_REQUEST_CONFLICT_COPY};
+    intakeRecipient=source.recipient.trim().toLowerCase();
   }else if(input.complaintResult){
     if(!hasAuthorizationArea(auth,'kunden')||input.targetType!=='ORDER')return {code:'FORBIDDEN',message:'Kunde informieren erfordert Kunden.'};
     if(!reminder){try{const sent=await readCompletedComplaintMail(auth,{...input.complaintResult,orderId:input.targetId,subject:input.subject,body:input.body});if(sent)return {code:'OK',data:sent};}catch(error){logCommunicationFailure('COMPLAINT_MAIL_REPLAY_FAILED',error);return error instanceof Error&&error.message==='COMMUNICATION_REPLAY_INTENT_MISMATCH'?{code:'CONFLICT',message:MAIL_REQUEST_CONFLICT_COPY}:{code:'UNAVAILABLE',message:'Reklamationsstand konnte nicht geprüft werden.'};}}

@@ -4,6 +4,15 @@ import type { PrivilegedTenantTransaction } from "./privilegedDb";
 import type { AuthorizationSnapshot } from "./authorization";
 
 type Actor = Pick<AuthorizationSnapshot,"tenantId"|"userId">;
+export async function readIntakeConfirmationOriginal(tx:PrivilegedTenantTransaction,actor:Actor,input:{orderId:string;outboxId:string;sourceClientEventId:string}){
+ if(!await readIntakeConfirmationMailSource(tx,actor,input))return null;
+ const rows=await tx.execute<{original:import('./communicationOriginalPort').IntakeMailOriginal|null}>(sql`SELECT payload->'intakeConfirmation'->'original' AS original FROM public.events
+  WHERE tenant_id=${actor.tenantId} AND user_id=${actor.userId}::uuid AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND status='success'
+  AND correlation_id=${input.outboxId}::uuid AND payload->'intakeConfirmation'->>'sourceClientEventId'=${input.sourceClientEventId}`);
+ if(rows.length>1)throw Error('INTAKE_MAIL_ORIGINAL_AMBIGUOUS');
+ if(rows.length===1&&!rows[0].original)throw Error('INTAKE_MAIL_ORIGINAL_MISSING');
+ return rows[0]?.original??null;
+}
 type Kind = "INTAKE_DRAFT_SAVED_V1" | "INTAKE_DRAFT_DISCARDED_V1";
 
 /** Transaction port to the existing append-only event store, not another draft store. */

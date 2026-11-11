@@ -554,7 +554,7 @@ it('S02 legacy quote without an original can reconcile Sent Items but never offe
  expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(attachments).toHaveLength(1);
 },120000);
 
-it.each([false,true])('S02 PL02:01 Eingang-only intake confirmation uses one writer and reload never resends (lost=%s)',async(lost)=>{
+it.each([false,true,'resend'] as const)('S02 PL02:01 Eingang-only intake confirmation uses one writer and reload never resends (lost=%s)',async(lost)=>{
  const customerId=await customerFixture('N5 Eingang-Mail');
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST Eingangsbestätigung' WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
  const {updateCustomerAction}=await import('@/app/actions/customers.actions');
@@ -563,24 +563,47 @@ it.each([false,true])('S02 PL02:01 Eingang-only intake confirmation uses one wri
  const {resolveAuthorization}=await import('@/lib/server/authorization');
  const rights=await withSession(actor,()=>resolveAuthorization());expect(rights).toMatchObject({ok:true,data:{areas:['eingang']}});
  let sends=0,header:string|undefined;
+ const physical:Array<{subject:string;body:{content:string}}>=[];
  vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
   const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
   if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-intake-source-token'.repeat(4),expires_in:3600});
-  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;header=JSON.parse(String(init?.body)).message.internetMessageHeaders.find((row:{name:string})=>row.name==='x-kreile-request-id')?.value;if(lost)throw Error('TEST intake accepted, response lost');return new Response(null,{status:202});}
-  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages')){const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`;return Response.json({value:[{id:'TEST-intake-sent',internetMessageId:'<TEST-intake-sent@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:header}]}]});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;physical.push(JSON.parse(String(init?.body)).message);header=JSON.parse(String(init?.body)).message.internetMessageHeaders.find((row:{name:string})=>row.name==='x-kreile-request-id')?.value;if(lost&&sends===1)throw Error('TEST intake accepted, response lost');return new Response(null,{status:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages')){if(lost==='resend')return Response.json({value:[]});const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`;return Response.json({value:[{id:'TEST-intake-sent',internetMessageId:'<TEST-intake-sent@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:header}]}]});}
   return nativeFetch(request,init);
  });
  const {erfasseAuftragAusEingangAction}=await import('@/app/actions/eingang.actions');
  const input={clientKey:randomUUID(),geprueft:true,text:'TEST Eingang bestaetigen',customer:{mode:'EXISTING' as const,customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',items:[{catalogServiceId:null,name:'TEST Eingangsteil',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:null,vatRateBasisPoints:null}]};
+ const clock='n5_intake_clock_'+randomUUID().replaceAll('-','');
+ if(lost==='resend'){
+  await sql.unsafe(`CREATE FUNCTION private.${clock}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND NEW.payload->'intakeConfirmation'->>'sourceClientEventId'='${input.clientKey}' THEN NEW.created_at=statement_timestamp()-interval '11 minutes'; END IF; RETURN NEW; END $$`);
+  await sql.unsafe(`CREATE TRIGGER ${clock} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${clock}()`);
+ }
+ try{
  const first=await withSession(actor,()=>erfasseAuftragAusEingangAction(fresh(input)),true);expect(first).toMatchObject({code:'OK'});if(first.code!=='OK')throw Error('N5_INTAKE_ACTION');
  expect(sends).toBe(1);
  const outbox=await sql`SELECT id::text,status FROM public.outbox_mails WHERE tenant_id=${KREILE_TENANT_SLUG} AND objekt=${first.orderId}`;expect(outbox).toEqual([{id:header,status:lost?'fehler':'gesendet'}]);
  const prepared=await sql`SELECT user_id::text AS actor,payload->'intakeConfirmation'->>'sourceClientEventId' AS source FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND correlation_id=${header!}::uuid`;
  expect(prepared).toEqual([{actor:actor.actorId,source:input.clientKey}]);
  expect(await withSession(actor,()=>sendCustomerMailAction({targetType:'ORDER',targetId:first.orderId,clientRequestId:randomUUID(),subject:'TEST kein allgemeines Mailsrecht',body:'TEST gesperrt'}))).toMatchObject({code:'FORBIDDEN'});expect(sends).toBe(1);
+ if(lost){expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),lastName:'TEST Neuer Kundenname',street:'TEST Neue Strasse'}))).toMatchObject({code:'OK'});}
  expect(await withSession(actor,()=>erfasseAuftragAusEingangAction(fresh(input)),true)).toMatchObject({code:'OK',orderId:first.orderId,replayed:true});expect(sends).toBe(1);
+ if(lost==='resend'){
+  const [proof]=await sql`SELECT payload->'intakeConfirmation' AS source,payload->>'contentSha256' AS hash FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND correlation_id=${header!}::uuid`;
+  const {sendCommunicationMail}=await import('@/lib/server/communicationPort');
+  const {readIntakeMailOriginal}=await import('@/lib/server/communicationOriginalPort');
+  const original=await readIntakeMailOriginal(proof.source.original);
+  expect(proof.source.original.sha256).toBe(proof.hash);
+  expect(rights.ok).toBe(true);if(!rights.ok)throw Error('N5_INTAKE_AUTH');
+  const retry={targetType:'ORDER' as const,targetId:first.orderId,clientRequestId:header!,...original,intakeConfirmation:proof.source,confirmedResend:true as const};
+  const sent=await withSession(actor,()=>sendCommunicationMail(rights.data,fresh(retry)));if(sent.code!=='OK')throw Error('N5_INTAKE_RETRY:'+JSON.stringify(sent));expect(sent).toMatchObject({code:'OK'});
+  expect(physical).toHaveLength(2);expect(physical[1].subject).toBe(physical[0].subject);expect(physical[1].body).toEqual(physical[0].body);
+  expect(original.body).not.toContain('TEST Neuer Kundenname');
+  expect(await withSession(actor,()=>erfasseAuftragAusEingangAction(fresh(input)),true)).toMatchObject({code:'OK'});expect(sends).toBe(2);
+ }
+
  expect(await sql`SELECT status FROM public.outbox_mails WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${header!}::uuid`).toEqual([{status:'gesendet'}]);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${header!}::uuid`).toHaveLength(1);
+ }finally{if(lost==='resend'){await sql.unsafe(`DROP TRIGGER IF EXISTS ${clock} ON public.events`);await sql.unsafe(`DROP FUNCTION IF EXISTS private.${clock}()`);}}
 },120000);
 
 it('S02 legacy quote normal send reserves only one new PREPARE and fresh keys replay its actual mail',async()=>{
