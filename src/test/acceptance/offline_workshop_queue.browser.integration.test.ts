@@ -40,6 +40,19 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('retains actual native-IDB work
    if(rows.filter(row=>row.kind==='workshop').length!==1||rows.filter(row=>row.kind==='quarantine').length!==3)throw Error('TEST_UNKNOWN_COMMAND_OR_METADATA_EXECUTABLE');
    if((await p.readPendingOriginals(scope)).length!==2)throw Error('TEST_INTAKE_RESUME_CAPTURED_WORKSHOP');
    if((await p.readPendingEntries('${'e'.repeat(64)}')).length)throw Error('TEST_OTHER_SCOPE_DISCLOSED');
+   // Explicit synthetic login marker/clock boundaries, native same-store gate.
+   const producerScope='${'9'.repeat(64)}',login='${'8'.repeat(64)}';
+   document.cookie='kreile_offline_cache_scope='+login+'; Path=/; SameSite=Lax';
+   await p.changePendingShellMetadata(producerScope,login,null,true);
+   if((await p.capturePendingItemFinished(producerScope,false,original.input)).code!=='NETWORK_REQUIRED')throw Error('TEST_FLAG_IGNORED');
+   if((await p.capturePendingItemFinished(producerScope,true,{...original.input,finished:false})).code!=='NETWORK_REQUIRED')throw Error('TEST_OFFLINE_REOPEN');
+   if((await p.capturePendingItemFinished(producerScope,true,original.input)).code!=='QUEUED')throw Error('TEST_PRODUCER_NOT_CAPTURED');
+   const captured=(await p.readPendingEntries(producerScope))[0];
+   if(captured.kind!=='workshop'||captured.input.clientEventId!==original.input.clientEventId)throw Error('TEST_PRODUCER_KEY_CHANGED');
+   const SavedDate=Date;try{window.Date=class extends SavedDate{constructor(...args){super(...(args.length?args:[SavedDate.now()+25*60*60*1000]));}static now(){return SavedDate.now()+25*60*60*1000;}};
+    if((await p.capturePendingItemFinished(producerScope,true,{...original.input,clientEventId:ids.invalid})).code!=='NETWORK_REQUIRED')throw Error('TEST_25H_WRITE_ALLOWED');
+   }finally{window.Date=SavedDate;}
+   if(JSON.stringify((await p.readPendingEntries(producerScope))[0])!==JSON.stringify(captured))throw Error('TEST_EXPIRED_ORIGINAL_CHANGED');
    return {oneNativeQueue:true,immutableIntent:true,receiptRequired:true,quarantinePreserved:true,abortPreserved:true};
   }`]);
   expect(result.stdout).not.toContain('### Error');for(const key of ['oneNativeQueue','immutableIntent','receiptRequired','quarantinePreserved','abortPreserved'])expect(result.stdout).toContain('"'+key+'": true');

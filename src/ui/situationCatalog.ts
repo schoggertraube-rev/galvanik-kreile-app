@@ -280,3 +280,6 @@ export const MAIL_RESEND_COPY={
  canceled:(invoice:string)=>'Rechnung '+invoice+' ist storniert – Versand nicht mehr nötig'
 };
 export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich'} as const;
+
+/** PL11.11.11:01: pending is not a successful server completion. */
+export const OFFLINE_ITEM_FINISHED_COPY={pending:(part:string)=>`Teil ${part} fertig – wird übertragen, sobald Netz da ist`,networkRequired:'Geht nur mit Netz',notSaved:'Teilstatus ist noch nicht gesichert. Erneut speichern.'} as const;

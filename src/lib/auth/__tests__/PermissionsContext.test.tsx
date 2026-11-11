@@ -51,6 +51,7 @@ vi.mock("@/app/actions/auth.actions", () => ({
 function TestComponent() {
   const {
     status,
+    offline24h,
     initials,
     name,
     role,
@@ -65,6 +66,7 @@ function TestComponent() {
   } = usePermissions();
   return (
     <div>
+      <span data-testid="offline24h">{String(offline24h)}</span>
       <span data-testid="status">{status}</span>
       <span data-testid="initials">{initials}</span>
       <span data-testid="name">{name}</span>
@@ -512,4 +514,12 @@ describe("PermissionsProvider identity consistency", () => {
     });
     expect(getAuthorizationSnapshotAction).toHaveBeenCalledOnce();
   });
+});
+
+it('projects only the server offline flag and clears it with unauthenticated bootstrap',()=>{
+ if(initialRolf.status!=='authenticated')throw Error('TEST_BOOTSTRAP');
+ const first=render(<PermissionsProvider initialAuthState={{...initialRolf,user:{...initialRolf.user,offline24h:true}}}><TestComponent/></PermissionsProvider>);
+ expect(screen.getByTestId('offline24h')).toHaveTextContent('true');first.unmount();
+ render(<PermissionsProvider initialAuthState={{status:'unauthenticated'}}><TestComponent/></PermissionsProvider>);
+ expect(screen.getByTestId('offline24h')).toHaveTextContent('false');
 });

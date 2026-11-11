@@ -83,7 +83,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     activeScope=scope;
     const refresh=()=>{void refreshOutboxSnapshot(scope);};
     refresh();window.addEventListener('kreile-pending-changed',refresh);
-    if(scope&&isOnline)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction}).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
+    if(scope&&isOnline)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))}).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     return ()=>{window.removeEventListener('kreile-pending-changed',refresh);if(activeScope===scope)activeScope=null;};
   }, [scope,isOnline]);
 
@@ -91,7 +91,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     // Retry the same canonical queue; each command checks its current server
     // rights. Customer/order notes do not require the Eingang area on the client.
     if (!isOnline||!scope||activeScope!==scope) return;
-    await syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction});
+    await syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))});
     await refreshOutboxSnapshot(scope);
   }, [isOnline,scope]);
 

@@ -35,6 +35,7 @@ export type ClientAuthorizationResult =
       data: {
         displayName: string;
         offlineScope?: string;
+        offline24h?:boolean;
         role: AppRole;
         areas: readonly AccessArea[];
         permissions: readonly PermissionKey[];
@@ -70,6 +71,7 @@ export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizat
       displayName: result.data.displayName,
       // Local partition only, never a credential; preserves existing intake originals.
       offlineScope: offlinePartition(result.data),
+      offline24h: result.data.offline24h===true,
       role: result.data.role,
       areas: result.data.areas ?? [],
       permissions: result.data.permissions,

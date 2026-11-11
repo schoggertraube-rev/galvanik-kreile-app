@@ -1,5 +1,7 @@
 "use client";
-import {ACTOR_COPY} from "@/ui/situationCatalog";
+import {capturePendingItemFinished} from '@/lib/offline/pendingStore';
+import type {WorkshopAcknowledgement} from '@/lib/offline/syncPendingFiles';
+import {OFFLINE_ITEM_FINISHED_COPY,OFFLINE_RECONCILIATION_COPY,ACTOR_COPY} from "@/ui/situationCatalog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -293,7 +295,7 @@ export function OrderCardAppAdapter({
   const router = useRouter();
   const storeCustomer = useOverlayStore((s) => s.openCustomer);
   const storeClose = useOverlayStore((s) => s.pop);
-  const { canAction, hasArea, hasPermission } = usePermissions();
+  const { canAction, hasArea, hasPermission,offlineScope,offline24h,status:authStatus } = usePermissions();
   const [state, setState] = useState<OrderCardState>({ kind: "loading" });
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [feedback, setFeedback] = useState<OrderCardActionFeedback>({
@@ -806,11 +808,33 @@ export function OrderCardAppAdapter({
     delete requests.current.content;
     success("content", { ...result.receipt, receiptId: `order-content://${orderId}/${result.receipt.aggregateVersion}` }, "Auftragsinhalt wurde gespeichert.");
   }, [fail, load, orderId, snapshot, success]);
+  useEffect(()=>{
+    let active=true;
+    const acknowledged=(event:Event)=>{const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
+      if(!proof||proof.scope!==offlineScope||proof.entry.command!=='item.finished'||!proof.entry.input.finished||proof.entry.input.orderId!==orderId)return;
+      void (async()=>{const fresh=await load(true);if(!active||!fresh)return;
+        if(proof.result.code==='OK'&&fresh.card.version===proof.result.receipt.aggregateVersion&&fresh.card.items.some(item=>item.id===proof.entry.input.itemId&&item.finished)){
+          delete requests.current[`item:${proof.entry.input.itemId}:true`];
+          success('item-finished',{...proof.result.receipt,receiptId:`order-item://${proof.entry.input.itemId}/${proof.result.receipt.aggregateVersion}`},'Teil ist fertig.');
+        }else if(proof.result.code==='PRESERVED')setFeedback({kind:'conflict',message:OFFLINE_RECONCILIATION_COPY.reason});
+      })();
+    };
+    window.addEventListener('kreile-workshop-acknowledged',acknowledged);return()=>{active=false;window.removeEventListener('kreile-workshop-acknowledged',acknowledged);};
+  },[offlineScope,orderId,load,success]);
   const onToggleItemFinished = useCallback(async (itemId: string, finished: boolean) => {
     if (!snapshot) return;
     setFeedback({ kind: "submitting", message: finished ? "Teil wird fertig gemeldet." : "Teil wird wieder geöffnet." });
     const key = `item:${itemId}:${finished}`;
     const clientEventId = (requests.current[key] ??= crypto.randomUUID());
+    if(!navigator.onLine){
+      try{
+        if(!offlineScope||authStatus!=='authenticated'){setFeedback({kind:'error',message:OFFLINE_ITEM_FINISHED_COPY.networkRequired});return;}
+        const held=await capturePendingItemFinished(offlineScope,offline24h&&hasPermission('perm_op_status'),{orderId,itemId,expectedVersion:snapshot.card.version,clientEventId,finished});
+        if(held.code!=='QUEUED'){setFeedback({kind:'error',message:OFFLINE_ITEM_FINISHED_COPY.networkRequired});return;}
+        setFeedback({kind:'pending',message:OFFLINE_ITEM_FINISHED_COPY.pending(snapshot.card.items.find(item=>item.id===itemId)?.name??itemId)});
+      }catch{setFeedback({kind:'error',message:OFFLINE_ITEM_FINISHED_COPY.notSaved});}
+      return;
+    }
     const result = await setOrderItemFinishedAction({ orderId, itemId, expectedVersion: snapshot.card.version, clientEventId, finished });
     if (result.code !== "OK") { await fail(result); return; }
     const fresh = await load(true);
@@ -820,7 +844,7 @@ export function OrderCardAppAdapter({
     }
     delete requests.current[key];
     success("item-finished", { ...result.receipt, receiptId: `order-item://${itemId}/${result.receipt.aggregateVersion}` }, finished ? "Teil ist fertig." : "Teil ist wieder offen.");
-  }, [fail, load, orderId, snapshot, success]);
+  }, [fail, load, orderId, snapshot, success,offlineScope,offline24h,authStatus,hasPermission]);
   const onDuplicate = useCallback(async () => {
     if (!snapshot?.card.dueAt) {
       setFeedback({ kind: "error", message: "Duplizieren benötigt einen bestätigten Liefertermin." });

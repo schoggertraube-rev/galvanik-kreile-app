@@ -116,7 +116,7 @@ export type OrderCardActionReceipt = {
   receiptId: string;
 };
 export type OrderCardActionFeedback =
-  | { kind: "idle" | "submitting"; message: string; operation?:"responsibility" }
+  | { kind: "idle" | "submitting" | "pending"; message: string; operation?:"responsibility" }
   | { kind: "success"; message: string; receipt: OrderCardActionReceipt }
   | { kind: "conflict" | "error"; message: string; code?:string; operation?:"responsibility" };
 export type OrderCardActionAvailability = {

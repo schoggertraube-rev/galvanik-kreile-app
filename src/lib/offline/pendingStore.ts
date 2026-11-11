@@ -215,3 +215,17 @@ export async function acknowledgePendingWorkshopOriginal(scope:string,entry:Pend
   tx.onabort=()=>{db.close();reject(Error('OFFLINE_WORKSHOP_ACK_ABORTED'));};
  });
 }
+
+/** PL11:01 producer gate. This is a device reading fence, never server authority.
+ * A missing/expired/revoked device stand cannot start a new offline command. */
+export async function capturePendingItemFinished(scope:string,enabled:boolean,input:Extract<PendingWorkshopCommand,{command:'item.finished'}>['input']){
+ if(!enabled||input.finished!==true)return {code:'NETWORK_REQUIRED' as const};
+ const {readCacheScopeMarker}=await import('./cacheScopeMarker');
+ const login=readCacheScopeMarker();if(!login)return {code:'NETWORK_REQUIRED' as const};
+ const state=await readPendingShellMetadata(scope,login),now=new Date();
+ if(state.code!=='OK'||state.metadata.scope!==login)return {code:'NETWORK_REQUIRED' as const};
+ const age=now.getTime()-Date.parse(state.metadata.updatedAt);
+ if(!Number.isFinite(age)||age<0||age>=24*60*60*1000||readCacheScopeMarker()!==login)return {code:'NETWORK_REQUIRED' as const};
+ await retainPendingWorkshopOriginal(scope,{kind:'workshop',command:'item.finished',id:input.clientEventId,itemId:input.orderId,input,deviceCapturedAt:now.toISOString()});
+ return {code:'QUEUED' as const};
+}
