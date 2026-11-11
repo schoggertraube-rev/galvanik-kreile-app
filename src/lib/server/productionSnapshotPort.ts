@@ -104,13 +104,14 @@ async function appendHistoricalOfflinePricing(tx:PrivilegedTenantTransaction,ten
  ) SELECT price.id,price.cents,to_char(price.created_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "occurredAt" FROM prices price JOIN public.events booked ON booked.tenant_id=${tenantId} AND booked.order_id=${orderId} AND booked.id=${baseEventId}
  WHERE price.created_at>${at}::timestamptz AT TIME ZONE 'UTC' AND price.created_at<=booked.created_at
  AND NOT EXISTS(SELECT 1 FROM private.order_production_snapshots existing WHERE existing.tenant_id=${tenantId} AND existing.origin_event_id=${baseEventId} AND existing.item_id=${itemId} AND existing.event_id=price.id AND existing.component='pricing') ORDER BY price.created_at,price.id`);
- const priced=quote?.positions.find(position=>position.itemId===itemId);if(quote&&!priced)throw Error('OFFLINE_SUPPLEMENT_QUOTE_ITEM_MISSING');
+ const priced=quote?.positions.find(position=>position.itemId===itemId);
  for(const row of rows){
-  if(!priced&&row.cents===null)continue;
+  try{
+  if(quote&&!priced)throw Error('OFFLINE_SUPPLEMENT_QUOTE_ITEM_MISSING');
+  if(!priced&&row.cents===null)throw Error('OFFLINE_SUPPLEMENT_PRICE_UNVALUED');
   const amount=priced?sql`round(${priced.lineTotalCents}::numeric*${quantity}::numeric/${priced.quantity}::numeric)::bigint`:sql`round(${row.cents}::numeric*${quantity}::numeric)::bigint`;
   const [change]=await tx.execute<{delta:string}>(sql`SELECT ((${amount})-coalesce((SELECT net_cents FROM private.order_production_snapshots WHERE tenant_id=${tenantId} AND event_id=${baseEventId} AND item_id=${itemId} AND component='base' AND direction=1),0)-coalesce((SELECT sum(net_cents) FROM private.order_production_snapshots WHERE tenant_id=${tenantId} AND origin_event_id=${baseEventId} AND item_id=${itemId} AND component='pricing' AND direction=1),0))::text AS delta`);
   if(!change||!Number.isSafeInteger(Number(change.delta)))throw Error('OFFLINE_SUPPLEMENT_DELTA_INVALID');
-  try{
   const saved=await tx.execute<{event_id:string}>(sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,component,origin_event_id)
    SELECT event.id,${tenantId},${orderId},${itemId},event.created_at,1,${quantity}::numeric,${unit},${change.delta}::bigint,false,'captured',jsonb_build_object('kind','offline_price_receipt','pricingEventId',event.id),'pricing',${baseEventId}
    FROM public.events event WHERE event.tenant_id=${tenantId} AND event.id=${row.id} RETURNING event_id`);
@@ -141,6 +142,8 @@ export async function readProductionPricingRetrySource(tx:PrivilegedTenantTransa
  const m=markers[0];if(markers.length!==1||pricingRetryKey(auth.tenantId,m.payload)!==id||m.orderId!==m.payload.orderId||m.itemId!==m.payload.itemId)throw Error('PRODUCTION_PRICING_MARKER_CHANGED');
  const rows=await tx.execute<{part:string;day:string;pending:boolean;proof:boolean}>(sql`SELECT item.name AS part,to_char(price.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin','DD.MM.YYYY') AS day,
  NOT EXISTS(SELECT 1 FROM private.order_production_snapshots posted WHERE posted.tenant_id=base.tenant_id AND posted.origin_event_id=base.event_id AND posted.item_id=base.item_id AND posted.component='pricing' AND posted.direction=1 AND posted.event_id=price.id)
+ AND NOT EXISTS(SELECT 1 FROM private.order_production_snapshots settled JOIN public.events later ON later.tenant_id=settled.tenant_id AND later.id=settled.event_id
+ WHERE settled.tenant_id=base.tenant_id AND settled.origin_event_id=base.event_id AND settled.item_id=base.item_id AND settled.component='pricing' AND settled.direction=1 AND settled.net_cents IS NOT NULL AND later.created_at>price.created_at)
  AND NOT EXISTS(SELECT 1 FROM private.order_production_snapshots reversed WHERE reversed.tenant_id=base.tenant_id AND reversed.reverses_event_id=base.event_id AND reversed.item_id=base.item_id AND reversed.component='base') AS pending,
  original.user_id::text=${m.actorId} AND original.status='success' AND original.event_type='ORDER_ITEM_FINISHED_CHANGED_V1' AND original.payload->>'finished'='true'
  AND private.valid_offline_original_event_v1(original.payload->'offlineOriginal',original.user_id,original.client_event_id)

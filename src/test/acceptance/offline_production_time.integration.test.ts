@@ -139,3 +139,26 @@ it('retains the existing online source guard and amount without granting the off
  FROM private.order_production_snapshots snapshot WHERE snapshot.event_id=${saved.receipt.eventId} AND snapshot.item_id=${itemId}`).rejects.toMatchObject({code:'P0001'});
  expect(await sql`SELECT net_cents::int FROM private.order_production_snapshots WHERE event_id=${saved.receipt.eventId} AND item_id=${itemId}`).toEqual([{net_cents:10000}]);
 });
+
+it('retains an unvalued physical completion and a real clarification task for a price receipt without cents',async()=>{
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const customerId=await customerFixture('TEST CB17 unbelegt'),created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',note:'TEST CB17 unbewertet',items:[{catalogServiceId:null,name:'TEST CB17 ohne Cent',quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:null,vatRateBasisPoints:null}]}));
+ expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('TEST_UNPRICED_INTAKE');
+ const orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
+ const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));
+ expect(moved.code).toBe('OK');if(moved.code!=='OK')throw Error('TEST_UNPRICED_MOVE');
+ const saved=await finish(orderId,itemId,moved.receipt.aggregateVersion,new Date(Date.now()-8*86400000).toISOString());
+ expect(await sql`SELECT current_station_id FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}`).toEqual([{current_station_id:'fertig'}]);
+ expect(await sql`SELECT net_cents FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND item_id=${itemId} AND component='base'`).toEqual([{net_cents:null}]);
+ const tasks=await sql`SELECT id,titel,status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${orderId}`;
+ expect(tasks).toHaveLength(1);expect(tasks[0]).toMatchObject({status:'offen'});
+ const taskId=String(tasks[0].id),before=await withSession(full,()=>getIntakeTaskAction({taskId}));
+ expect(before).toMatchObject({code:'OK',pricingSource:'KNOWN',completeLabel:'Nachtrag erneut auslösen'});
+ const priced=await withSession(full,()=>changeOrderContentAction({orderId,expectedVersion:saved.receipt.aggregateVersion,clientEventId:randomUUID(),note:'TEST echte spaetere Bepreisung',items:[{id:itemId,catalogServiceId:null,name:'TEST CB17 ohne Cent',quantity:1,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
+ expect(priced.code).toBe('OK');
+ const read=await withSession(full,()=>getIntakeTaskAction({taskId}));if(read.code!=='OK'||!read.task)throw Error('TEST_UNPRICED_TASK_READ');
+ const retry={taskId,version:read.task.version,note:null};
+ expect(await withSession(full,()=>completeIntakeTaskAction(retry))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(retry))))).toMatchObject({code:'OK',replayed:true});
+
+});
