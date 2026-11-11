@@ -1,4 +1,4 @@
-import {readCanceledInvoiceMailTaskSource,isCanceledInvoiceMailTask,bindCanceledInvoiceMailTask} from '@/lib/server/communicationDocumentPort';
+import {readCanceledInvoiceMailTaskSource,isCanceledInvoiceMailTask,bindCanceledInvoiceMailTask,readCanceledInvoiceTaskCompletion} from '@/lib/server/communicationDocumentPort';
 import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
 import {handedOverProofs} from '@/lib/server/dispatchCallPort';
 import {GOODS_OUT_FOLLOWUP_COPY} from '@/ui/situationCatalog';
@@ -141,7 +141,7 @@ export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransact
 /** Shared completion writer. Invoice tasks remain inaccessible to the normal completion action. */
 async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string},replyEventId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
   const before=await find(tx,auth,value.taskId,true);if(!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
-  if(await isCanceledInvoiceMailTask(tx,auth,before.id))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
+  if(await isCanceledInvoiceMailTask(tx,auth,before.id)&&!await readCanceledInvoiceTaskCompletion(tx,auth,before.id))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
   const operationalQuote=quoteOperation&&before.art==='aufgabe'&&before.bezug_typ==='kv'&&before.bezug_id===quoteOperation.quoteId&&quoteOperation.keys.includes(before.client_key);
   const operationalStorage=storageOperation&&hasAuthorizationArea(auth,'auftraege')&&before.art==='aufgabe'&&before.bezug_typ==='auftrag'&&before.bezug_id===storageOperation.orderId&&before.client_key===storageOperation.clientKey;
   const operationalReply=replyEventId&&hasAuthorizationArea(auth,'auftraege')&&['aufgabe','rueckruf'].includes(before.art)&&before.bezug_typ==='auftrag'&&await collectionTaskHasReplySource(tx,auth,before.id,replyEventId);
@@ -236,7 +236,8 @@ export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
   const reference=await context(tx,auth,task?{type:task.bezug_typ,id:currentOrder??task.bezug_id}:(request as Exclude<TaskOpenRequest,{taskId:string}>).reference,!task);
   // Aufgaben sind je Mandant für jeden Login lesbar; Bezug und Schreibknöpfe prüfen ihre eigenen Rechte.
   const canEdit=task?task.status==='offen'&&allowed(auth,task)&&!await isCanceledInvoiceMailTask(tx,auth,task.id):true;
-  return {code:'OK',task,reference,currentLogin:auth.userId,canEdit,canComplete:!!task&&canEdit&&task.art!=='rechnung',canOpenReference:reference.type==='allgemein'||reference.label!==null};
+  const canceledCustomer=task?await readCanceledInvoiceTaskCompletion(tx,auth,task.id):null;
+  return {code:'OK',task,reference,currentLogin:auth.userId,canEdit,canComplete:!!task&&task.status==='offen'&&(canEdit||canceledCustomer!==null)&&task.art!=='rechnung',...(canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
  });}catch(error){return resultError(error);}
 }
 
@@ -296,7 +297,7 @@ export async function createCanceledInvoiceMailTask(tx:PrivilegedTenantTransacti
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  const title=MAIL_RESEND_COPY.canceledTask(source.invoice_number,source.customer_name);
  // PL02:01: only the customer may be shortened; full source facts stay in the note.
- // TODO_PL: cancellation mail is not a supported attachment kind yet; no fake sender/button.
+ // PL05:15: the normal completion records the operator's actual cancellation delivery.
  const saved=await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'geld',reference:{type:'auftrag',id:source.order_id},note:MAIL_RESEND_COPY.canceledTaskDescription(source.invoice_number,source.customer_name,source.sent_at)},deps,false);
  await bindCanceledInvoiceMailTask(tx,auth,{...input,taskId:saved.task.id,clientEventId:eventKey(source.invoice_id,0,'cancelled-invoice-task-source')});
  return saved.task.id;

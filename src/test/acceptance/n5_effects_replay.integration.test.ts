@@ -42,6 +42,16 @@ it.each([false,true])('S02 A2 cancellation preserves mail and one money task (lo
  const tasks=await sql`SELECT task.id::text,task.titel,task.fuer_bereich,task.notiz FROM public.tasks task JOIN public.events source ON source.tenant_id=task.tenant_id AND source.payload->>'taskId'=task.id::text AND source.event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' WHERE task.tenant_id=${KREILE_TENANT_SLUG} AND source.payload->>'invoiceId'=${a.invoice.invoiceId}`;
  expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'geld',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
  expect(Array.from(tasks[0].titel).length).toBeLessThanOrEqual(120);expect(tasks[0].titel).toContain(a.invoice.invoiceNumber);expect(tasks[0].notiz).not.toContain('nicht belegt');
+ const {getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+ const money=await createFixture(['geld'],'buero'),noMoney=await createFixture(['auftraege'],'werkstatt');
+ const opened=await withSession(money,()=>getIntakeTaskAction({taskId:tasks[0].id}));
+ expect(opened).toMatchObject({code:'OK',canEdit:false,canComplete:true,completeLabel:'Storno an '+customer.name+' gesendet'});
+ if(opened.code!=='OK'||!opened.task)throw Error('TEST_TASK_MISSING');
+ const completion={taskId:opened.task.id,version:opened.task.version,note:'TEST Storno tatsächlich gesendet'};
+ expect(await withSession(noMoney,()=>completeIntakeTaskAction(fresh(completion)))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(money,()=>completeIntakeTaskAction(fresh(completion)))).toMatchObject({code:'OK',task:{status:'erledigt'}});
+ expect(await withSession(money,()=>completeIntakeTaskAction(fresh(completion)))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(money,()=>getIntakeTaskAction({taskId:opened.task!.id}))).toMatchObject({code:'OK',canComplete:false,task:{status:'erledigt'}});
 },120000);
 
 it('S02 A2 missing task source receipt keeps the physical mail and repairs the task atomically',async()=>{
@@ -80,9 +90,9 @@ it('S02 A2 missing task source receipt keeps the physical mail and repairs the t
  expect(Array.from(tasks[0].titel).length).toBeLessThanOrEqual(120);expect(tasks[0].titel).toContain(a.invoice.invoiceNumber);expect(tasks[0].notiz).not.toContain('nicht belegt');
  const {getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
  const read=await withSession(full,()=>getIntakeTaskAction({taskId:tasks[0].id}));
- expect(read).toMatchObject({code:'OK',canEdit:false,canComplete:false});
+ expect(read).toMatchObject({code:'OK',canEdit:false,canComplete:true});
  if(read.code!=='OK'||!read.task)throw Error('N5_TASK_READ');
- expect(await withSession(full,()=>completeIntakeTaskAction({taskId:tasks[0].id,version:read.task!.version,note:'TEST kein simulierter Stornoversand'}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:tasks[0].id,version:read.task!.version,note:'TEST manuell bestätigter Stornoversand'}))).toMatchObject({code:'OK'});
 },120000);
 
 it('S02 A2 mixed original bundle records only the still valid invoice effects',async()=>{
@@ -148,11 +158,12 @@ it('S02 A5 invoice resend requires current money permission and stays singular',
  const [customer]=await sql`SELECT name,email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${a.customerId}`;
  const sender=await createFixture(['auftraege','mails','geld'],'buero');
  const input={targetType:'ORDER' as const,targetId:a.orderId,subject:'TEST N5 A2',body:'TEST echtes Original',clientRequestId:randomUUID(),attachment:{kind:'INVOICE' as const,documentId:a.invoice.invoiceId},expectedInvoiceIds:[a.invoice.invoiceId]};
- let sends=0;
+ let sends=0;let releaseResend:()=>void=()=>{},markResendStarted:()=>void=()=>{};
+ const resendHeld=new Promise<void>(resolve=>{releaseResend=resolve;}),resendStarted=new Promise<void>(resolve=>{markResendStarted=resolve;});
  vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
   const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
   if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-N5-A2-token'.repeat(4),expires_in:3600});
-  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;if(sends===1)throw Error('TEST A5 accepted, response lost');return new Response(null,{status:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;if(sends===1)throw Error('TEST A5 accepted, response lost');markResendStarted();await resendHeld;return new Response(null,{status:202});}
   if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:[]});
   return nativeFetch(request,init);
  });
@@ -163,13 +174,16 @@ it('S02 A5 invoice resend requires current money permission and stays singular',
  finally{await sql.unsafe(`DROP TRIGGER ${clock} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${clock}()`);}
  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='geld'`;
  const denied=await withSession(sender,()=>sendCustomerMailAction(fresh(input)));
- expect(denied).toMatchObject({code:'CONFLICT'});expect(denied).not.toHaveProperty('resend');
- expect(await withSession(sender,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(1);
- await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) VALUES(${KREILE_TENANT_SLUG},${sender.actorId}::uuid,'geld',${full.actorId}::uuid)`;
- expect(await withSession(sender,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'CONFLICT',resend:{requestId:input.clientRequestId,label:'Mail an '+customer.name+' erneut senden – nicht im Postausgang gefunden'}});
- const contenders=await Promise.all([withSession(sender,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true})),withSession(sender,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))]);
+ expect(denied).toMatchObject({code:'FORBIDDEN'});expect(denied).not.toHaveProperty('resend');
+ expect(await withSession(sender,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'FORBIDDEN'});expect(sends).toBe(1);
+ const delegate=await createFixture(['geld'],'buero');
+ expect(await withSession(delegate,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'CONFLICT',resend:{requestId:input.clientRequestId,label:'Mail an '+customer.name+' erneut senden – nicht im Postausgang gefunden'}});
+ const first=withSession(delegate,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}));
+ await resendStarted;let second:Awaited<typeof first>;try{second=await withSession(delegate,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}));}finally{releaseResend();}
+ const contenders=[await first,second];
  expect(contenders.filter(row=>row.code==='OK')).toHaveLength(1);expect(sends).toBe(2);
- expect(await withSession(sender,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(2);
+ expect(await withSession(delegate,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(2);
+ expect(await sql`SELECT user_id::text AS clicked,payload->>'prepareActorId' AS original FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{clicked:delegate.actorId,original:sender.actorId}]);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND correlation_id=${input.clientRequestId}::uuid`).toHaveLength(1);
 },120000);
 
@@ -321,8 +335,10 @@ it.each([false,true])('S02 A1/A3 recovers an original bundle with PREPARE author
   expect(await withSession(sender,()=>getOrderPaymentStateAction({orderId:a.orderId}))).toMatchObject({code:'FORBIDDEN'});
  }
  const retry={...fresh(input),clientRequestId:randomUUID()};
- expect(await withSession(sender,()=>sendCustomerMailAction(retry))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
- expect(await withSession(sender,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
+ if(geldRemoved)expect(await withSession(sender,()=>sendCustomerMailAction(retry))).toMatchObject({code:'FORBIDDEN'});
+ const reconciler=geldRemoved?await createFixture(['geld'],'buero'):sender;
+ expect(await withSession(reconciler,()=>sendCustomerMailAction(retry))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
+ expect(await withSession(reconciler,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{n:1}]);
  expect(await sql`SELECT user_id::text AS actor FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{actor:sender.actorId}]);
  expect(await sql`SELECT order_id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND order_id IN(${a.orderId},${b.orderId}) ORDER BY order_id`).toEqual([a.orderId,b.orderId].sort().map(order_id=>({order_id})));
@@ -382,7 +398,7 @@ it.each([false,true])('S02 an in-flight invoice bundle stays excluded after anot
  expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),clientRequestId:randomUUID(),expectedInvoiceIds:[a.invoice.invoiceId]}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(2);
 },120000);
 
-it.each([false,true])('S02 confirmed resend requires ten minutes and reserves one actor-bound effect (aged=%s)',async(aged)=>{
+it.each([false,true])('S02 confirmed resend requires ten minutes and reserves one effect per unresolved attempt (aged=%s)',async(aged)=>{
  const order=await readyInvoiceOrder('N5 Bestaetigtes-Neusenden');
  const [customer]=await sql`SELECT name FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
  const input={targetType:'CUSTOMER' as const,targetId:order.customerId,subject:'TEST N5 Freigabe',body:'TEST unveraenderter Originalinhalt',clientRequestId:randomUUID()};
@@ -408,8 +424,8 @@ it.each([false,true])('S02 confirmed resend requires ten minutes and reserves on
   expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(1);return;
  }
  expect(checked).toMatchObject({resend:{requestId:input.clientRequestId,label:'Mail an '+customer.name+' erneut senden – nicht im Postausgang gefunden'}});
- const other=await createFixture(['mails'],'buero');
- expect(await withSession(other,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(1);
+ const other=await createFixture(['auftraege'],'buero');
+ expect(await withSession(other,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'FORBIDDEN'});expect(sends).toBe(1);
  const guard='test_resend_confirmation_'+randomUUID().replaceAll('-','');
  await sql.unsafe(`CREATE FUNCTION private.${guard}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
  await sql.unsafe(`CREATE TRIGGER ${guard} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${guard}()`);
@@ -417,13 +433,57 @@ it.each([false,true])('S02 confirmed resend requires ten minutes and reserves on
   expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'UNAVAILABLE'});expect(sends).toBe(1);
   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND correlation_id=${input.clientRequestId}::uuid`).toHaveLength(0);
  }finally{await sql.unsafe(`DROP TRIGGER ${guard} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${guard}()`);}
- const result=await Promise.all([withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true})),withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))]);
+ const delegated=await createFixture(['mails'],'buero');
+ const result=await Promise.all([withSession(delegated,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true})),withSession(delegated,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))]);
  expect(result.filter(row=>row.code==='OK')).toHaveLength(1);expect(sends).toBe(2);
  expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(2);
  const proof=await sql`SELECT id,user_id::text AS actor,payload->>'reason' AS reason FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND correlation_id=${input.clientRequestId}::uuid`;
- expect(proof).toEqual([{id:expect.any(String),actor:full.actorId,reason:'nicht_im_postausgang_gefunden'}]);
+ expect(proof).toEqual([{id:expect.any(String),actor:delegated.actorId,reason:'nicht_im_postausgang_gefunden'}]);
  await expect(sql`UPDATE public.events SET payload=payload||'{"reason":"TEST changed"}'::jsonb WHERE id=${proof[0].id}`).rejects.toThrow(/append-only/);
  await expect(sql`DELETE FROM public.events WHERE id=${proof[0].id}`).rejects.toThrow(/append-only/);
+},120000);
+
+it.each(['young','aged','found'])('S02 B1 failed confirmed resend has a new ten-minute exit and each attempt is unique (%s)',async(mode)=>{
+ const aged=mode==='aged';
+ const order=await readyInvoiceOrder('N5 B1 neuer Versuch');
+ const input={targetType:'CUSTOMER' as const,targetId:order.customerId,subject:'TEST B1',body:'TEST Original',clientRequestId:randomUUID()};
+ let sends=0,found=false;
+ const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-B1-token'.repeat(5),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;return new Response(null,{status:sends<=2?503:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:found?[{id:'TEST-B1-found',internetMessageId:'<TEST-B1@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},isDraft:false,sentDateTime:new Date().toISOString(),toRecipients:[{emailAddress:{address:customer.email}}],internetMessageHeaders:[{name:'X-Kreile-Request-Id',value:input.clientRequestId}]}]:[]});
+  return nativeFetch(request,init);
+ });
+ const clock='test_b1_clock_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${clock}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.correlation_id='${input.clientRequestId}'::uuid AND (NEW.event_type='COMMUNICATION_MAIL_PREPARED_V1' OR ${aged?'true':'false'} AND NEW.event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND NEW.payload->>'attempt'='1') THEN NEW.created_at=statement_timestamp()-interval '11 minutes'; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${clock} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${clock}()`);
+ try{
+  expect((await withSession(full,()=>sendCustomerMailAction(fresh(input)))).code).not.toBe('OK');
+  expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).not.toHaveProperty('data');
+  expect(sends).toBe(2);
+  const next=await withSession(full,()=>sendCustomerMailAction(fresh(input)));
+  expect(next.code).toBe('CONFLICT');
+  if(!aged){
+   expect(next).not.toHaveProperty('resend');
+   if(mode==='found'){found=true;expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(2);}
+   return;
+  }
+  expect(next).toHaveProperty('resend.requestId',input.clientRequestId);
+  const repeated=await Promise.all([withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true})),withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))]);
+  expect(repeated.filter(row=>row.code==='OK')).toHaveLength(1);expect(sends).toBe(3);
+  expect((await sql`SELECT payload->>'attempt' AS attempt FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${input.clientRequestId}::uuid AND event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' ORDER BY payload->>'attempt'`).map(row=>row.attempt)).toEqual(['1','2']);
+  // Explicit synthetic clones exercise only DB boundaries, not a product-writer claim.
+  await expect(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version)
+   SELECT ${randomUUID()},tenant_id,order_id,event_type,description,payload,status,user_id,${randomUUID()}::uuid,correlation_id,event_schema_version FROM public.events
+   WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${input.clientRequestId}::uuid AND event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND payload->>'attempt'='1'`).rejects.toThrow(/communication_mail_one_confirmed_resend_per_attempt/);
+  await expect(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version)
+   SELECT ${randomUUID()},tenant_id,order_id,event_type,description,jsonb_set(payload,'{attempt}','0'),status,user_id,${randomUUID()}::uuid,correlation_id,event_schema_version FROM public.events
+   WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${input.clientRequestId}::uuid AND event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND payload->>'attempt'='1'`).rejects.toThrow(/communication_mail_resend_attempt_contract/);
+ }finally{await sql.unsafe(`DROP TRIGGER ${clock} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${clock}()`);}
+ found=true;
+ expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(3);
 },120000);
 
 it('S02 Sent Items closes an uncertain ordinary send without another external effect',async()=>{
@@ -519,8 +579,10 @@ it('S02 PL02:01 quote resend uses the secured original despite a later quote cha
  expect(original).toHaveLength(1);expect(original[0].document.original.path).toMatch(/^domain-attachments\/v1\//);
  const {createHash}=await import('node:crypto');const sha=createHash('sha256').update(Buffer.from(attachments[0],'base64')).digest('hex');expect(original[0].document.sha256).toBe(sha);
  expect(await withSession(full,()=>updateQuoteAction({quoteId:created.quote.quoteId,expectedVersion:created.quote.version,clientEventId:randomUUID(),dueDate:'2027-05-16',note:'TEST neue Fassung',positions:[{...position,unitPriceCents:5000,lineTotalCents:5000}]}))).toMatchObject({code:'OK'});
- expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'CONFLICT',resend:{requestId:input.clientRequestId}});
- expect(await withSession(full,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'OK'});
+ const delegated=await createFixture(['mails'],'buero');
+ expect(await withSession(delegated,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(delegated,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'CONFLICT',resend:{requestId:input.clientRequestId}});
+ expect(await withSession(delegated,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'OK'});
  expect(attachments).toHaveLength(2);expect(attachments[1]).toBe(attachments[0]);
  expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(attachments).toHaveLength(2);
  expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toMatchObject({code:'OK',quote:{totalNetCents:5000,note:'TEST neue Fassung'}});
@@ -596,7 +658,8 @@ it.each([false,true,'resend'] as const)('S02 PL02:01 Eingang-only intake confirm
   expect(proof.source.original.sha256).toBe(proof.hash);
   expect(rights.ok).toBe(true);if(!rights.ok)throw Error('N5_INTAKE_AUTH');
   const retry={targetType:'ORDER' as const,targetId:first.orderId,clientRequestId:header!,...original,intakeConfirmation:proof.source,confirmedResend:true as const};
-  const sent=await withSession(actor,()=>sendCommunicationMail(rights.data,fresh(retry)));if(sent.code!=='OK')throw Error('N5_INTAKE_RETRY:'+JSON.stringify(sent));expect(sent).toMatchObject({code:'OK'});
+  const delegated=await createFixture(['mails'],'buero');const delegatedAuth=await withSession(delegated,()=>resolveAuthorization());if(!delegatedAuth.ok)throw Error('TEST_DELEGATED_AUTH');
+  const sent=await withSession(delegated,()=>sendCommunicationMail(delegatedAuth.data,fresh(retry)));if(sent.code!=='OK')throw Error('N5_INTAKE_RETRY:'+JSON.stringify(sent));expect(sent).toMatchObject({code:'OK'});
   expect(physical).toHaveLength(2);expect(physical[1].subject).toBe(physical[0].subject);expect(physical[1].body).toEqual(physical[0].body);
   expect(original.body).not.toContain('TEST Neuer Kundenname');
   expect(await withSession(actor,()=>erfasseAuftragAusEingangAction(fresh(input)),true)).toMatchObject({code:'OK'});expect(sends).toBe(2);
@@ -666,7 +729,7 @@ it.each(['sql','missing'])('S02 result mail survives a failed complaint closure 
  }finally{await sql.unsafe(`DROP TRIGGER ${failure} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${failure}()`);}
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_COMPLAINT_EFFECT_RETRY_REQUIRED_V1' AND correlation_id=${input.clientKey}::uuid`).toHaveLength(1);
  const other=await createFixture(['auftraege','kunden','mails'],'buero');
- expect(await withSession(other,()=>sendeReklamationErgebnisAction({...fresh(input),clientKey:randomUUID()}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(1);
+ expect(await withSession(other,()=>sendeReklamationErgebnisAction({...fresh(input),clientKey:randomUUID()}))).toMatchObject({code:'OK'});expect(sends).toBe(1);
  expect(await withSession(full,()=>sendeReklamationErgebnisAction({...fresh(input),clientKey:randomUUID()}))).toMatchObject({code:'OK'});
  expect(sends).toBe(1);
  expect(await withSession(full,()=>sendeReklamationErgebnisAction(fresh(input)))).toMatchObject({code:'OK',replayed:true});expect(sends).toBe(1);

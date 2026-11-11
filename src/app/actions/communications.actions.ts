@@ -1,7 +1,7 @@
 "use server";
 
 import {storeQuoteMailOriginal,readQuoteMailOriginal} from '@/lib/server/communicationOriginalPort';
-import {quoteCommandContext} from '@/lib/server/quoteAuthorization';
+import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {readQuoteCommand} from '@/modules/quotes/server-public';
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {freezeStorageDeadline} from '@/lib/server/storageDeadline';
@@ -88,7 +88,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
  if(!input||typeof input!=='object')return sendCommunicationMail(auth,input);
  if(input.collectionReminder){
   const request=input.collectionReminder;
-  if(input.targetType!=='CUSTOMER'||input.attachment||!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
+  if(input.targetType!=='CUSTOMER'||input.attachment||!hasAuthorizationArea(auth,'mails')&&!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
   if(!request||Object.keys(request).sort().join(',')!==(request.stage==='E4'?'clientKey,dueDate,handover,stage':'dueDate,handover,stage')||!['E1','E2','E4'].includes(request.stage)||!['pickup','shipping'].includes(request.handover)||!/^\d{4}-\d{2}-\d{2}$/.test(request.dueDate)||!Number.isFinite(Date.parse(request.dueDate))||typeof input.subject!=='string'||typeof input.body!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientRequestId)||(request.stage==='E4'&&(typeof request.clientKey!=='string'||!/^[0-9a-f-]{36}$/.test(request.clientKey))))return {code:'VALIDATION_ERROR' as const,message:COLLECTION_REMINDER_COPY.invalid};
   const prior=await readCollectionReminderReceipt(auth,{...input,collectionReminder:request});
   if(prior.code==='FOLLOWUP_PENDING'){
@@ -97,15 +97,14 @@ export async function sendCustomerMailAction(input: TargetInput & {
   }
   if(prior.code==='PENDING'){
    if(input.confirmedResend&&input.clientRequestId!==prior.originalRequestId)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
-   const [{readShippingSettingsInTransaction},{readCollectionMoneyAccess}]=await Promise.all([import('@/modules/fundament/server-public'),import('@/lib/server/storageLetterRead')]);
    return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:prior.original.subject,body:prior.original.body,confirmedResend:input.confirmedResend,collectionReminder:prior.meta,beforePrepare:async tx=>{
-    if(prior.meta.moneyRequired!==false&&!hasAuthorizationArea(auth,'geld'))return false;
+    if(!hasAuthorizationArea(auth,prior.meta.moneyRequired!==false?'geld':'mails'))return false;
     await assertCollectionReminderCurrent(tx,auth,prior.meta);
-    const settings=await readShippingSettingsInTransaction(tx,auth.tenantId);if(!settings)return false;
-    return (await readCollectionMoneyAccess(auth,prior.meta.orders.map(order=>order.id),settings,prior.meta.stage)).sendAllowed;
+    return true;
    }});
   }
   if(prior.code!=='NOT_FOUND')return prior;
+  if(!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
   // An explicit send also synchronizes the already imported originals. It is
   // a write command under the sender, never an effect of opening the list.
   const linked=await readLinkedIntakeMails(auth,{targetType:'CUSTOMER',targetId:input.targetId});
@@ -153,7 +152,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
     const bytes=original.original?await readQuoteMailOriginal(original.original,original.sha256):null;
     const result=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,allowResend:!!bytes,document:original,attachment:bytes?{filename:original.number+'.pdf',contentType:'application/pdf',bytes}:undefined,beforePrepare:async()=>{
      if(!bytes)return false;
-     return (await readQuoteCommand(quoteCommandContext(auth),{quoteId:original.id})).code==='OK';
+     return (await readQuoteCommand(quoteOperationContext(auth),{quoteId:original.id})).code==='OK';
     }});
     if(!original.original&&result.code==='CONFLICT'&&result.newPrepare&&input.clientRequestId!==prior.originalRequestId&&!input.confirmedResend){legacyReplaces={requestId:prior.originalRequestId,checkedAt:result.newPrepare.checkedAt};}
     else return result.code==='OK'?confirmQuoteDelivery({...input,clientRequestId:prior.originalRequestId},original,result):result;

@@ -142,8 +142,12 @@ it('S02 a financial reminder retains its original money requirement after paymen
  const payment=await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}));if(payment.code!=='OK'||!payment.data.payment)throw Error('N5_MONEY_PAYMENT');const due=payment.data.payment;
  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:due.invoiceId,amount:due.openAmountCents,expectedOpenAmountCents:due.openAmountCents,expectedVersion:due.paymentVersion,method:'bar',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='geld'`;
- const checked=await withSession(sender,()=>sendCustomerMailAction(structuredClone(input)));expect(checked).toMatchObject({code:'CONFLICT'});expect(checked).not.toHaveProperty('resend');
- expect(await withSession(sender,()=>sendCustomerMailAction({...structuredClone(input),confirmedResend:true}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(2);
+ const checked=await withSession(sender,()=>sendCustomerMailAction(structuredClone(input)));expect(checked).toMatchObject({code:'FORBIDDEN'});expect(checked).not.toHaveProperty('resend');
+ expect(await withSession(sender,()=>sendCustomerMailAction({...structuredClone(input),confirmedResend:true}))).toMatchObject({code:'FORBIDDEN'});expect(sends).toBe(2);
+ const delegated=await createFixture(['geld'],'buero');
+ expect(await withSession(delegated,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'CONFLICT',resend:{requestId}});
+ lose=false;expect(await withSession(delegated,()=>sendCustomerMailAction({...structuredClone(input),confirmedResend:true}))).toMatchObject({code:'OK'});expect(sends).toBe(3);
  found=true;
- expect(await withSession(sender,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(2);
+ expect(await withSession(delegated,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(3);
+ expect(await sql`SELECT payload->>'clickedBy' AS clicked,payload->>'prepareActorId' AS original FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND correlation_id=${requestId}::uuid`).toEqual([{clicked:delegated.actorId,original:sender.actorId}]);
 },120000);

@@ -267,6 +267,7 @@ export const CUSTOMER_COLLECTION_COPY={
 };
 
 export const MAIL_RESEND_COPY={
+ canceledCompleted:(customer:string)=>`Storno an ${customer} gesendet`,
  confirm:(customer:string)=>'Mail an '+customer+' erneut senden – nicht im Postausgang gefunden',
  canceledTask:(invoice:string,customer:string)=>{
   const prefix='Storno an ',suffix=' senden – Rechnung '+invoice+' kam trotz Storno an';
