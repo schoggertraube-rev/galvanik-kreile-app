@@ -3,11 +3,12 @@ import {it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {full,withSession,createFixture,nativeFetch} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readCustomerSummary} from '@/lib/server/customerSummaryRead';
 import {cancelInvoiceAction} from '@/app/actions/invoices.actions';
+import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 
 it('reads current unsent invoice originals from the customer port and never discloses the financial count without geld',async()=>{
  const customerId=await customerFixture('V45 offene Originale'),auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_AUTH');
@@ -25,4 +26,23 @@ it('reads current unsent invoice originals from the customer port and never disc
  expect(await readCustomerSummary(auth.data,{customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(cancel))))).toMatchObject({code:'OK',replayed:true});
  expect(await readCustomerSummary(auth.data,{customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
+},60000);
+
+it('uses the actual document dispatch proof after sending, including a fresh retry',async()=>{
+ const order=await readyInvoiceOrder('V45 Versandbeleg'),auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_AUTH');
+ expect(await readCustomerSummary(auth.data,{customerId:order.customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:1}});
+ let sends=0;
+ const provider=vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-V45-dispatch-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;return new Response(null,{status:202});}
+  return nativeFetch(request,init);
+ });
+ try{
+  const input={targetType:'ORDER' as const,targetId:order.orderId,subject:'TEST V45 Rechnung',body:'TEST Rechnung im Original',clientRequestId:randomUUID(),attachment:{kind:'INVOICE' as const,documentId:order.invoice.invoiceId},expectedInvoiceIds:[order.invoice.invoiceId]};
+  expect(await withSession(full,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK'});
+  expect(await readCustomerSummary(auth.data,{customerId:order.customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
+  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
+  expect(await readCustomerSummary(auth.data,{customerId:order.customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});expect(sends).toBe(1);
+ }finally{provider.mockRestore();}
 },60000);
