@@ -1,5 +1,5 @@
 import {readCacheScopeMarker} from './cacheScopeMarker';
-import {readPendingShellMetadata} from './pendingStore';
+import {readPendingShellMetadata,changePendingShellMetadata} from './pendingStore';
 import {privateReadCachePrefix} from './logoutReadState';
 
 export function qualifiedPrivateCacheName(scope:string,loginScope:string,generation:number):string{
@@ -35,4 +35,32 @@ export async function readScopedPrivateResponse(scope:string,loginScope:string,r
   if(readCacheScopeMarker()!==loginScope||current.code!=='OK'||current.metadata.scope!==loginScope||current.metadata.cacheGeneration!==state.metadata.cacheGeneration)return null;
   return response??null;
  }catch{console.error('[OFFLINE_PRIVATE_CACHE_READ_BLOCKED]');return null;}
+}
+
+/** Store only actual authenticated HTML returned by the existing application route.
+ * The readable marker is a fence, never authority: the response must independently
+ * carry the exact server bootstrap identity and enabled flag before storage.
+ */
+export async function warmScopedPrivateResponse(scope:string,loginScope:string,url:URL):Promise<boolean>{
+ if(!/^[a-f0-9]{64}$/.test(scope)||readCacheScopeMarker()!==loginScope||url.origin!==window.location.origin||url.search!==''||/^\/(?:api|auth|start|login)(?:\/|$)/.test(url.pathname))return false;
+ try{
+  const response=await fetch(url,{credentials:'same-origin',cache:'no-store',headers:{Accept:'text/html'}});
+  if(!response.ok||response.redirected||!/^text\/html(?:;|$)/i.test(response.headers.get('content-type')??''))return false;
+  const document=new DOMParser().parseFromString(await response.clone().text(),'text/html');
+  const root=document.documentElement;
+  if(root.dataset.authStatus!=='authenticated'||root.getAttribute('data-offline-24h')!=='enabled'||root.dataset.offlineScope!==scope||root.dataset.offlineLoginScope!==loginScope||readCacheScopeMarker()!==loginScope)return false;
+  let state=await readPendingShellMetadata(scope,loginScope);
+  if(state.code==='EMPTY'){
+   const activated=await changePendingShellMetadata(scope,loginScope,null,true);
+   if(activated.code!=='OK')return false;
+   state={code:'OK',metadata:activated.metadata};
+  }
+  if(state.code!=='OK'||state.metadata.scope!==loginScope||readCacheScopeMarker()!==loginScope)return false;
+  const name=qualifiedPrivateCacheName(scope,loginScope,state.metadata.cacheGeneration);
+  const cache=await caches.open(name);
+  await cache.put(url,response);
+  const current=await readPendingShellMetadata(scope,loginScope);
+  if(readCacheScopeMarker()!==loginScope||current.code!=='OK'||current.metadata.scope!==loginScope||current.metadata.cacheGeneration!==state.metadata.cacheGeneration){await caches.delete(name);return false;}
+  return true;
+ }catch{console.error('[OFFLINE_PRIVATE_CACHE_WARM_FAILED]');return false;}
 }
