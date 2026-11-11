@@ -126,7 +126,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           H18_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
-        run: npx vitest run src/test/acceptance/ --passWithNoTests --maxWorkers=1 --no-file-parallelism
+        run: node scripts/run-acceptance-tests.mjs
 
       - name: Generated BAUPLAN flows against replay DB
         env:
