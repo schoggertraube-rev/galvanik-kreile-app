@@ -1,7 +1,7 @@
 {
   "moduleId": "tasks",
   "version": "1.0.0",
-  "owner": "AP-EIN Teil 4 â€“ Aufgabe",
+  "owner": "AP-EIN Teil 4 – Aufgabe",
   "publicExports": [
     "@/modules/tasks/server-public#createCanceledInvoiceMailTask",
     "@/modules/tasks/server-public#completeOrderCallbackTask",

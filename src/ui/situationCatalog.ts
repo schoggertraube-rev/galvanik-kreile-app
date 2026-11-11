@@ -297,3 +297,6 @@ export const PRODUCTION_PRICING_RETRY_COPY={
  },
  retry:"Nachtrag erneut auslösen",/* TODO_PL R8: only the already-saved follow-up task completion is unavailable. */taskPending:"Der Wochenwert ist gespeichert. Die Aufgabe konnte noch nicht abgeschlossen werden."
 } as const;
+
+/** PL11.11.17:05: shared wording for conflicting request identities. */
+export const ORDER_REQUEST_COPY={intentConflict:"Anfragekennung wurde bereits anders verwendet."} as const;

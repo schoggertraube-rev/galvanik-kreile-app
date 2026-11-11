@@ -11,7 +11,7 @@ import {
 } from "@/lib/server/authorization";
 import { type PrivilegedTenantTransaction, withPrivilegedTenantTransaction,withTenantSavepoint } from "@/lib/server/privilegedDb";
 import {intakeHandoverDirective} from '@/modules/eingang/public';
-import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY,PRODUCTION_PRICING_RETRY_COPY} from '@/ui/situationCatalog';
+import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY,PRODUCTION_PRICING_RETRY_COPY,ORDER_REQUEST_COPY} from '@/ui/situationCatalog';
 import {appendProductionCompletion,appendProductionPricing,appendProductionReversals,ProductionPricingRetryNeeded,recordProductionPricingRetry,readProductionPricingRetrySource,repairProductionCompletionPricing} from '@/lib/server/productionSnapshotPort';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -262,7 +262,7 @@ export async function changeOrderContent(input: ChangeOrderContentInput): Promis
         const payload = row?.payload as { requestHash?: unknown } | null;
         return replay.length === 1 && row && row.event_type === "ORDER_CONTENT_CHANGED_V1" && row.order_id === input.orderId && payload?.requestHash === requestHash
           ? { code: "OK" as const, receipt: receipt(row), replayed: true }
-          : { code: "CONFLICT" as const, message: "Anfragekennung wurde bereits anders verwendet." };
+          : { code: "CONFLICT" as const, message: ORDER_REQUEST_COPY.intentConflict };
       }
 
       const orders = await tx.execute<OrderRow>(sql`SELECT id, customer_id, version, station, status FROM public.orders WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} FOR UPDATE`);
@@ -311,7 +311,7 @@ export async function setOrderItemFinished(input: SetOrderItemFinishedInput,comp
   if(input.offlineOriginal!==undefined&&!isOfflineOriginal(input.offlineOriginal))return {code:'VALIDATION_ERROR',message:'Teilstatus ist ungültig.'};
   const auth = await authorization("status");
   if (!auth.ok) return auth.result;
-  if(input.offlineOriginal&&(input.offlineOriginal.actorId!==auth.data.userId||input.offlineOriginal.clientEventId!==input.clientEventId))return {code:'CONFLICT',message:'Anfragekennung wurde bereits anders verwendet.'};
+  if(input.offlineOriginal&&(input.offlineOriginal.actorId!==auth.data.userId||input.offlineOriginal.clientEventId!==input.clientEventId))return {code:'CONFLICT',message:ORDER_REQUEST_COPY.intentConflict};
   if(input.offlineOriginal)input={...input,offlineOriginal:normalizeOfflineOriginal(input.offlineOriginal)};
   const requestHash = hash(input);
   let followupMessage:string|null=null;
@@ -333,7 +333,7 @@ export async function setOrderItemFinished(input: SetOrderItemFinishedInput,comp
       const replay = await tx.execute<EventRow>(sql`SELECT id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id FROM public.events WHERE tenant_id=${auth.data.tenantId} AND client_event_id=${input.clientEventId}::uuid LIMIT 2`);
       if (replay.length) {
         const row = replay[0]; const payload = row?.payload as { requestHash?: unknown } | null;
-        if(!(replay.length===1&&row&&row.user_id===auth.data.userId&&row.event_type==="ORDER_ITEM_FINISHED_CHANGED_V1"&&row.order_id===input.orderId&&payload?.requestHash===requestHash))return {code:"CONFLICT" as const,message:"Anfragekennung wurde bereits anders verwendet."};
+        if(!(replay.length===1&&row&&row.user_id===auth.data.userId&&row.event_type==="ORDER_ITEM_FINISHED_CHANGED_V1"&&row.order_id===input.orderId&&payload?.requestHash===requestHash))return {code:"CONFLICT" as const,message:ORDER_REQUEST_COPY.intentConflict};
         if(input.offlineOriginal&&input.finished)await pricing(tx,row.id,()=>repairProductionCompletionPricing(tx,auth.data,input.orderId,row.id));
         return {code:"OK" as const,receipt:receipt(row),replayed:true};
       }
