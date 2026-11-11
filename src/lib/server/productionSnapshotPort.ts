@@ -152,7 +152,7 @@ export async function readProductionPricingRetrySource(tx:PrivilegedTenantTransa
  JOIN public.items item ON item.tenant_id=base.tenant_id AND item.order_id=base.order_id AND item.id=base.item_id
  WHERE base.tenant_id=${auth.tenantId} AND base.order_id=${m.orderId} AND base.item_id=${m.itemId} AND base.event_id=${m.payload.productionEventId} AND base.component='base' AND base.direction=1 AND base.valuation='captured'`);
  if(rows.length!==1||rows[0].proof!==true||!rows[0].part||!rows[0].day)throw Error('PRODUCTION_PRICING_RECEIPT_INVALID');
- return {...m.payload,markerId:id,actorId:m.actorId,pending:rows[0].pending,title:PRODUCTION_PRICING_RETRY_COPY.title(rows[0].part,rows[0].day)};
+ return {...m.payload,markerId:id,actorId:m.actorId,pending:rows[0].pending,title:PRODUCTION_PRICING_RETRY_COPY.title(rows[0].part,rows[0].day),description:PRODUCTION_PRICING_RETRY_COPY.description(rows[0].part,rows[0].day)};
 }
 /** Existing event reader supplies source keys; the TaskWriter owns only tasks. */
 export async function readProductionPricingRetryKeys(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string){

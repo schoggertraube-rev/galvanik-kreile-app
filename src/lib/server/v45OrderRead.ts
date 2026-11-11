@@ -19,6 +19,8 @@ type ReleaseSource={orderId:string;value:Awaited<ReturnType<typeof readOrderInfo
 export function v45OrderReleaseFacts(card:{id:string;version:number},source?:ReleaseSource):Readonly<Record<string,unknown>>{
  if(!source||source.orderId!==card.id||source.value.code!=='OK'||source.value.orderVersion!==card.version)return {};
  const value=source.value,facts:Record<string,unknown>={};
+ if(value.invoiceState==='issued'||value.invoiceState==='not_issued')facts.invoiceIssued=value.invoiceState==='issued';
+ if(typeof value.paymentReady==='boolean')facts.paymentReady=value.paymentReady;
  if(value.informed===null)facts.noticeSent=false;
  else if(value.informed.orderId===card.id&&value.informed.freezeId===value.freezeId)facts.noticeSent=true;
  if(Array.isArray(value.complaintIds)&&value.complaintIds.every(id=>typeof id==='string'))facts.complaint=value.complaintIds.length>0;

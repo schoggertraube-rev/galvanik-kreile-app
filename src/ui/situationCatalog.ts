@@ -285,4 +285,15 @@ export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich'} as co
 export const OFFLINE_ITEM_FINISHED_COPY={pending:(part:string)=>`Teil ${part} fertig – wird übertragen, sobald Netz da ist`,networkRequired:'Geht nur mit Netz',notSaved:'Teilstatus ist noch nicht gesichert. Erneut speichern.'} as const;
 
 /** PL11.11.12:42 / R2; actual part and immutable pricing receipt date. */
-export const PRODUCTION_PRICING_RETRY_COPY={title:(part:string,day:string)=>`Wochenwert für ${part} nachtragen – Preisbuchung vom ${day} ist gescheitert`,retry:"Nachtrag erneut auslösen",/* TODO_PL R8: only the already-saved follow-up task completion is unavailable. */taskPending:"Der Wochenwert ist gespeichert. Die Aufgabe konnte noch nicht abgeschlossen werden."} as const;
+const productionPricingDescription=(part:string,day:string)=>`Wochenwert für ${part} nachtragen – Preisbuchung vom ${day} ist gescheitert`;
+export const PRODUCTION_PRICING_RETRY_COPY={
+ description:productionPricingDescription,
+ title:(part:string,day:string)=>{
+  const full=productionPricingDescription(part,day);if(full.length<=120)return full;
+  // R10: preserve every fixed word; shorten only the real placeholder value.
+  const room=120-productionPricingDescription('',day).length;let short='';
+  for(const char of part){if(short.length+char.length>room-1)break;short+=char;}
+  return productionPricingDescription(short+'…',day);
+ },
+ retry:"Nachtrag erneut auslösen",/* TODO_PL R8: only the already-saved follow-up task completion is unavailable. */taskPending:"Der Wochenwert ist gespeichert. Die Aufgabe konnte noch nicht abgeschlossen werden."
+} as const;

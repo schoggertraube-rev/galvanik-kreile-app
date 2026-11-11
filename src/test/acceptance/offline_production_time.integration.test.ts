@@ -66,7 +66,7 @@ it('keeps a proven historical price and books a later real pricing receipt in it
 });
 
 it('retains the pending original when the real task history fails, then repairs via the same N5 original',async()=>{
- const {orderId,itemId,version}=await setup('Offline Aufgabe Belegfehler'),key=randomUUID();
+ const {orderId,itemId,version}=await setup('Offline '+ 'Ä'.repeat(80)+' 🔧'.repeat(6)),key=randomUUID();
  const original={kind:'workshop' as const,command:'item.finished' as const,id:key,itemId:orderId,deviceCapturedAt:new Date(Date.now()-8*86400000).toISOString(),input:{orderId,itemId,expectedVersion:version,clientEventId:key,finished:true}};
  const replay=()=>withSession(full,()=>replayOfflineWorkshopAction(offlinePartition({tenantId:KREILE_TENANT_SLUG,userId:full.actorId}),JSON.parse(JSON.stringify(original))));
  const fault='test_r2_'+randomUUID().replaceAll('-',''),history=fault+'_history';
@@ -85,7 +85,8 @@ it('retains the pending original when the real task history fails, then repairs 
   await expect(sql`DELETE FROM public.events WHERE id=${marker.id}`).rejects.toMatchObject({code:'P0001'});
   await sql.unsafe(`DROP TRIGGER ${history} ON public.intake_event`);
   expect(await replay()).toMatchObject({code:'OK',replayed:true});
-  const [task]=await sql`SELECT id::text,status,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${orderId}`;
+  const [task]=await sql`SELECT id::text,status,fuer_bereich,titel,notiz FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${orderId}`;
+  expect(task.titel.length).toBeLessThanOrEqual(120);expect(task.titel).toContain('…');expect(task.notiz).toContain('Ä'.repeat(80)+' 🔧'.repeat(6));
   expect(task).toMatchObject({status:'offen',fuer_bereich:'geld'}); // No active entscheiden login in this tenant yet.
   await sql.unsafe(`DROP TRIGGER ${fault} ON private.order_production_snapshots`);
   expect(await replay()).toMatchObject({code:'OK',replayed:true});

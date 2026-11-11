@@ -13,12 +13,12 @@ it('reuses the real informed source after phone/retry and rejects a different or
  const ready=await readyInvoiceOrder('V45 echte Informiertquelle');
  const read=async()=>{const result=await withSession(full,()=>getLiveOrderCardAction({orderId:ready.orderId}));if(result.code!=='OK'||!result.data.customerInformed)throw Error('TEST_CARD_READ');return result.data;};
  const before=await read();
- expect(v45OrderReleaseFacts(before.card,{orderId:ready.orderId,value:before.customerInformed!})).toEqual({noticeSent:false,complaint:false});
+ expect(v45OrderReleaseFacts(before.card,{orderId:ready.orderId,value:before.customerInformed!})).toEqual({invoiceIssued:true,paymentReady:true,noticeSent:false,complaint:false});
  const input={orderId:ready.orderId,expectedVersion:before.card.version,clientEventId:randomUUID()};
  expect(await withSession(full,()=>markOrderInformedByPhoneAction(input))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>markOrderInformedByPhoneAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
  const after=await read(),source={orderId:ready.orderId,value:after.customerInformed!};
- expect(v45OrderReleaseFacts(after.card,source)).toEqual({noticeSent:true,complaint:false});
+ expect(v45OrderReleaseFacts(after.card,source)).toEqual({invoiceIssued:true,paymentReady:true,noticeSent:true,complaint:false});
  expect(v45OrderReleaseFacts({...after.card,id:randomUUID()},source)).toEqual({});
  expect(v45OrderReleaseFacts({...after.card,version:after.card.version+1},source)).toEqual({});
  expect(v45OrderReleaseFacts(after.card,{orderId:ready.orderId,value:{code:'UNAVAILABLE'}})).toEqual({});
