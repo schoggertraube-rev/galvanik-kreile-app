@@ -96,6 +96,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
    if(input.confirmedResend&&input.clientRequestId!==prior.originalRequestId)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
    const [{readShippingSettingsInTransaction},{readCollectionMoneyAccess}]=await Promise.all([import('@/modules/fundament/server-public'),import('@/lib/server/storageLetterRead')]);
    return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:prior.original.subject,body:prior.original.body,confirmedResend:input.confirmedResend,collectionReminder:prior.meta,beforePrepare:async tx=>{
+    if(prior.meta.moneyRequired!==false&&!hasAuthorizationArea(auth,'geld'))return false;
     await assertCollectionReminderCurrent(tx,auth,prior.meta);
     const settings=await readShippingSettingsInTransaction(tx,auth.tenantId);if(!settings)return false;
     return (await readCollectionMoneyAccess(auth,prior.meta.orders.map(order=>order.id),settings,prior.meta.stage)).sendAllowed;
@@ -128,6 +129,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   if(!customer||company.code==='UNAVAILABLE')return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};
   const moneyAccess=await readCollectionMoneyAccess(auth,members.map(order=>order.id),settings.settings,request.stage);
   if(!moneyAccess.sendAllowed)return {code:'FORBIDDEN' as const,message:moneyAccess.roles.length?COLLECTION_REMINDER_COPY.moneyRequired(customer.name,moneyAccess.roles.join(', ')):COLLECTION_REMINDER_COPY.forbidden};
+  meta.moneyRequired=moneyAccess.required;
   const facts=await readCollectionCustomerFacts(auth,members,settings.settings,{name:customer.name,company:company.code==='OK'?company.company.companyName:null},meta.storageDeadline?.due??null);
   const message=CUSTOMER_COLLECTION_COPY.render(request.stage,facts);meta.customerMessage=message;
   return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:input.clientRequestId,subject:message.subject,body:message.body,collectionReminder:meta,beforePrepare:async tx=>(await readShippingSettingsInTransaction(tx,auth.tenantId))?.updatedAt===settings.settings.updatedAt});
