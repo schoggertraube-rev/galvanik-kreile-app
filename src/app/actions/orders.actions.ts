@@ -171,7 +171,9 @@ export async function setOrderItemFinishedAction(
   input: SetOrderItemFinishedInput,
 ): Promise<OrderContentResult> {
   const { setOrderItemFinished } = await import("@/lib/server/commands/orderContentCommand");
-  return setOrderItemFinished(input);
+  const [{createProductionPricingRetryTask,settleProductionPricingRetryTasks},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+  const effect:import('@/modules/tasks/server-public').TaskEffects=(tx,auth,value)=>recordIntakeTaskEffect(tx,auth,value,readCustomerProfile);
+  return setOrderItemFinished(input,{failed:async(tx,auth,id)=>{await createProductionPricingRetryTask(tx,auth,id,{effect});},settled:async(tx,auth,eventId)=>{await settleProductionPricingRetryTasks(tx,auth,eventId,{effect});}});
 }
 
 export async function configureExtraWorkCatalogPositionAction(

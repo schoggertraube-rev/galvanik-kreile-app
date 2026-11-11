@@ -283,3 +283,6 @@ export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich'} as co
 
 /** PL11.11.11:01: pending is not a successful server completion. */
 export const OFFLINE_ITEM_FINISHED_COPY={pending:(part:string)=>`Teil ${part} fertig – wird übertragen, sobald Netz da ist`,networkRequired:'Geht nur mit Netz',notSaved:'Teilstatus ist noch nicht gesichert. Erneut speichern.'} as const;
+
+/** PL11.11.12:42 / R2; actual part and immutable pricing receipt date. */
+export const PRODUCTION_PRICING_RETRY_COPY={title:(part:string,day:string)=>`Wochenwert für ${part} nachtragen – Preisbuchung vom ${day} ist gescheitert`,retry:"Nachtrag erneut auslösen",/* TODO_PL R8: only the already-saved follow-up task completion is unavailable. */taskPending:"Der Wochenwert ist gespeichert. Die Aufgabe konnte noch nicht abgeschlossen werden."} as const;
