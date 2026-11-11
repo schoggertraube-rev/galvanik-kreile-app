@@ -17,6 +17,8 @@ import {
 } from "@/lib/auth/authorizationContract";
 
 export type AuthorizationSnapshot = {
+  /** Existing DB feature filter, resolved alongside rights; never a permission. */
+  offline24h?: boolean;
   userId: string;
   tenantId: string;
   displayName: string;
@@ -156,6 +158,10 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
         fullName: appUsers.fullName,
         role: appUsers.role,
         active: appUsers.active,
+        // PL06:01: evaluate the existing role-filtered flag at the one rights resolver.
+        offline24h: sql<boolean>`EXISTS(SELECT 1 FROM public.feature_flags flag
+          WHERE flag.id='offline_24h' AND flag.enabled IS TRUE AND flag.roles_allowed IS NOT NULL
+          AND (cardinality(flag.roles_allowed)=0 OR ${appUsers.role}=ANY(flag.roles_allowed)))`,
         updatedAt: appUsers.updatedAt,
         areas: sql<string[]>`(
           SELECT COALESCE(array_agg(rights.bereich ORDER BY rights.bereich), ARRAY[]::text[])
@@ -246,6 +252,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
       areas,
       permissions,
       active: true,
+      offline24h: dbUser.offline24h === true,
     },
   };
 }

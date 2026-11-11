@@ -2,10 +2,30 @@
 import {it,expect,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {full,withSession,createFixture,sql} from '../../../e2e/ablauf/replayHarness';
 import {getAuthBootstrapState} from '@/lib/server/authBootstrap';
 import {logout} from '@/app/actions/auth';
 import {readAppSession} from '@/lib/server/appSession';
+import {resolveAuthorization} from '@/lib/server/authorization';
+
+it('resolves the existing offline flag beside real rights and projects only its boolean',async()=>{
+ const [original]=await sql`SELECT enabled,roles_allowed FROM public.feature_flags WHERE id='offline_24h'`;
+ if(!original)throw Error('TEST_EXISTING_FLAG_REQUIRED');
+ try{await withSession(full,async()=>{
+  await sql`UPDATE public.feature_flags SET enabled=false,roles_allowed=ARRAY[]::text[] WHERE id='offline_24h'`;
+  const before=await resolveAuthorization();if(!before.ok)throw Error('TEST_AUTH');
+  expect(before.data.offline24h).toBe(false);
+  await sql`UPDATE public.feature_flags SET enabled=true WHERE id='offline_24h'`;
+  const enabled=await resolveAuthorization();if(!enabled.ok)throw Error('TEST_AUTH');
+  expect(enabled.data.offline24h).toBe(true);expect(enabled.data.permissions).toEqual(before.data.permissions);
+  expect(await getAuthBootstrapState()).toMatchObject({status:'authenticated',user:{offline24h:true}});
+  await sql`UPDATE public.feature_flags SET roles_allowed=ARRAY[${enabled.data.role}]::text[] WHERE id='offline_24h'`;
+  expect(await resolveAuthorization()).toMatchObject({ok:true,data:{offline24h:true}});
+  await sql`UPDATE public.feature_flags SET roles_allowed=ARRAY['TEST-other-role']::text[] WHERE id='offline_24h'`;
+  expect(await getAuthBootstrapState()).toMatchObject({status:'authenticated',user:{offline24h:false}});
+ });}finally{await sql`UPDATE public.feature_flags SET enabled=${original.enabled},roles_allowed=${original.roles_allowed} WHERE id='offline_24h'`;}
+ expect(await sql`SELECT enabled,roles_allowed FROM public.feature_flags WHERE id='offline_24h'`).toEqual([original]);
+});
 
 it('the real logout clears the actual session before any browser-cache work',async()=>{
  await withSession(full,async()=>{

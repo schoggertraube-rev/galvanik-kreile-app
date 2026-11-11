@@ -50,7 +50,7 @@ describe("getAuthBootstrapState()", () => {
       status: "authenticated",
       user: {
         offlineScope: expect.stringMatching(/^[a-f0-9]{64}$/),
-        offline24hEnabled: false,
+        offline24h: false,
         loginHandle:createPinLoginHandle(gregorAuthorization.data.userId),
         role: "developer",
         displayName: "Gregor",

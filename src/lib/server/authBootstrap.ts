@@ -23,7 +23,7 @@ export type AuthBootstrapUser = {
   /** Cache-only partition for this already validated credential; never authority. */
   offlineLoginScope?: string;
   /** Read-only feature setting; grants no server permission. Default is off. */
-  offline24hEnabled?: boolean;
+  offline24h?: boolean;
   role: AppRole;
   displayName: string;
   areas: readonly AccessArea[];
@@ -68,8 +68,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
       user: {
         loginHandle:createPinLoginHandle(result.data.userId),
         offlineScope:offlinePartition(result.data),
-        // TODO_PL: DB role-filter resolver is parked until the H16 contract is decided.
-        offline24hEnabled:false,
+        offline24h:result.data.offline24h===true,
         ...(offlineLoginScope?{offlineLoginScope}:{}),
         role: result.data.role,
         displayName: result.data.displayName,
