@@ -124,7 +124,21 @@ it('uses secured original image evidence for complaint routing and never treats 
   expect(await withSession(noOrders,()=>getComplaintOrderChoicesAction(customerId))).toMatchObject({code:'FORBIDDEN'});
   hasPhoto=false;graphId='TEST-U2-only-mime-'+randomUUID();const mimeOnly=await open();
   const after=await withSession(full,()=>getIntakeMessagesAction('alle'));if(after.code!=='OK')throw Error('TEST_MIME_U2');
-  expect(after.messages.find(row=>row.id===mimeOnly)?.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',missing:['COMPLAINT_PHOTO_ACTION_BINDING']});
+  expect(after.messages.find(row=>row.id===mimeOnly)?.nextActionRule).toMatchObject({code:'OK',hauptaktion:null,prioritaet:3,datenluecken:['COMPLAINT_PHOTO_ACTION_BINDING']});
   expect(await withSession(full,()=>getIntakeMessagesAction('alle'))).toEqual(after);
  }finally{vi.restoreAllMocks();}
+});
+
+it('PL23:08 keeps first-look facts and explicit gaps when a specialist command is deferred',async()=>{
+ const {selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
+ const customerId=await customerFixture('TEST U2 Abschluss');
+ for(const [concern,rank] of [['abholung',4],['ware',5]] as const){
+  const itemId=randomUUID(),saved=await withSession(full,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST Bitte bearbeiten: Fachweg',context:{customerId}}));if(saved.code!=='OK')throw Error('TEST_DEFERRED_SOURCE');
+  expect(await withSession(full,()=>selectIntakeConcernAction({itemId,version:saved.capture.version,clientEventId:randomUUID(),concern}))).toMatchObject({code:'OK'});
+  const read=await withSession(full,()=>getIntakeMessagesAction('alle'));if(read.code!=='OK')throw Error('TEST_DEFERRED_READ');const row=read.messages.find(row=>row.id===itemId);
+  expect(row?.nextActionRule).toMatchObject({code:'OK',prioritaet:rank,hauptaktion:null,datenluecken:['MESSAGE_SPECIALIST_ACTION_BINDING'],source:{id:itemId,version:2}});
+  if(row?.nextActionRule?.code!=='OK')throw Error('TEST_DEFERRED_FIRST_LOOK');expect(row.nextActionRule.erstblick).toHaveLength(3);
+  expect(row.nextActionRule.erstblick.find(field=>field.key==='nachrichten.inhalt')?.werte).toMatchObject({text:row.text});
+  expect(await withSession(full,()=>getIntakeMessagesAction('alle'))).toEqual(read);
+ }
 });

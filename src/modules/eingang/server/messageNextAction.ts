@@ -19,6 +19,7 @@ export function readMessageNextAction(auth:AuthorizationSnapshot,row:IntakeMessa
  const base={zustand:tone,farbe,nutzung:row.usage,zuordnung:row.assignment,source};
  let hauptaktion:null|{elementId:string;textKey:string;werte:Record<string,string|number>;befehl:{datei:string;funktion:string;argumente:Readonly<Record<string,unknown>>};recht:string|null}=null;
  let gesperrt:Array<{elementId:string;grundKey:string}>=[];
+ let datenluecken:readonly string[]=priority.code==='OK'?[]:priority.missing;
  if(priority.code==='OK'&&priority.rank===6){
   const selected=readAuthorizedV45Action(auth,'message.assign',{'message.assign':canAssignIntakeCustomer(auth)});
   if(selected.code!=='OK')return {...selected,...base};
@@ -42,7 +43,10 @@ export function readMessageNextAction(auth:AuthorizationSnapshot,row:IntakeMessa
   }
  }else if(priority.code==='OK'&&priority.rank===3){
   if(!capture||capture.code!=='OK'||capture.capture.id!==row.id||capture.capture.version!==row.version||capture.capture.customerId!==row.customerId)return {code:'SOURCE_INCOMPLETE' as const,missing:['COMPLAINT_ORIGINAL_SOURCE'],prioritaet:priority.rank,...base};
-  if(!row.customerId||!capture.capture.files.some(file=>file.mime.startsWith('image/')&&file.secured===true))return {code:'SOURCE_INCOMPLETE' as const,missing:['COMPLAINT_PHOTO_ACTION_BINDING'],prioritaet:priority.rank,...base};
+  if(!row.customerId||!capture.capture.files.some(file=>file.mime.startsWith('image/')&&file.secured===true)){
+   // PL23:08: keep the first look and known priority; no more specialist build.
+   datenluecken=['COMPLAINT_PHOTO_ACTION_BINDING'];
+  }else{
   const selected=readAuthorizedV45Action(auth,'complaint.message',{'complaint.message':canReadComplaintOrderChoices(auth)});
   if(selected.code!=='OK')return {...selected,...base};
   gesperrt=selected.gesperrt;
@@ -53,7 +57,11 @@ export function readMessageNextAction(auth:AuthorizationSnapshot,row:IntakeMessa
    const values=row.orderNumber?readV45ActionValues(textKey,{number:row.orderNumber}):{code:'OK' as const,werte:{}};if(values.code!=='OK')return {...values,...base};
    hauptaktion={elementId:selected.hauptaktion,textKey,werte:values.werte,befehl:{datei:'src/app/actions/complaints.actions.ts',funktion:'getComplaintOrderChoicesAction',argumente:{customerId:row.customerId}},recht:selected.recht};
   }
- }else if(priority.code==='OK'&&priority.rank!==8)return {code:'SOURCE_INCOMPLETE' as const,missing:['MESSAGE_SPECIALIST_ACTION_BINDING'],prioritaet:priority.rank,...base};
+  }
+ }else if(priority.code==='OK'&&priority.rank!==8){
+  // PL23:08 / R1/R8: missing command is explicit, never a fabricated action.
+  datenluecken=['MESSAGE_SPECIALIST_ACTION_BINDING'];
+ }
  const first=readV45FirstLook('nachrichten',{
   'nachrichten.inhalt':{absenderName:row.senderName,absenderAdresse:row.senderAddress,betreff:row.subject,text:row.text,zeit:row.at,dateien:row.files},
   'nachrichten.kundenspalte':{id:row.customerId,name:row.customerName,typ:row.customerType},
@@ -61,6 +69,6 @@ export function readMessageNextAction(auth:AuthorizationSnapshot,row:IntakeMessa
  });
  if(first.code!=='OK')return {...first,...base};
  return {code:'OK' as const,...base,prioritaet:priority.code==='OK'?priority.rank:null,erstblick:first.erstblick,hauptaktion,gesperrt,
-  datenluecken:priority.code==='OK'?[]:priority.missing,weitereStatus:'SOURCE_INCOMPLETE' as const,
+  datenluecken,weitereStatus:'SOURCE_INCOMPLETE' as const,
   quelle:{priority:'PL02:25',tone:'R13/PL22:06',elementeSha256:first.quelle.sha256}};
 }
