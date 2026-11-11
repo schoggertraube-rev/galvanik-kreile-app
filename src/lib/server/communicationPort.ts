@@ -448,6 +448,7 @@ export async function sendCommunicationMail(
   }
   try {
     const messageId = randomUUID();
+    const originalActorId=pending.prepareActorId??auth.userId;
     await withPrivilegedTenantTransaction(auth, async (tx) => {
       const updated = await tx.execute<{ id: string }>(sql`
         UPDATE public.communication_threads SET status='sent', updated_at=statement_timestamp()
@@ -466,7 +467,7 @@ export async function sendCommunicationMail(
         bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
         const h=bytes.subarray(0,16).toString('hex'),key=`${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
         const sentReceipt=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
-          VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_SENT_V1','E-Mail versendet',${JSON.stringify({threadId:pending.threadId,messageId,prepareActorId:pending.prepareActorId??auth.userId,clickedBy:auth.userId,customerId:target.customerId,orderId:target.orderId,...(sentItemsEvidence?{sentItemsEvidence}:{}),...(resendConfirmationId?{resendConfirmationId}:{}),...(recoveredInvoice?{documentReconciliation:{originalDocument:input.document},...(!sentItemsEvidence?{graphAcceptedRequestId:input.clientRequestId}:{})}:{}),contentSha256:createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex')})}::jsonb,'success',${pending.prepareActorId??auth.userId},${key}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
+          VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_SENT_V1','E-Mail versendet',${JSON.stringify({threadId:pending.threadId,messageId,prepareActorId:pending.prepareActorId??auth.userId,clickedBy:auth.userId,customerId:target.customerId,orderId:target.orderId,...(sentItemsEvidence?{sentItemsEvidence}:{}),...(resendConfirmationId?{resendConfirmationId}:{}),...(recoveredInvoice?{documentReconciliation:{originalDocument:input.document},...(!sentItemsEvidence?{graphAcceptedRequestId:input.clientRequestId}:{})}:{}),contentSha256:createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex')})}::jsonb,'success',${originalActorId},${key}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
         if(sentReceipt.length!==1)throw Error('COMMUNICATION_SENT_RECEIPT_NOT_SAVED');
       }
       if(recoveredInvoice){if(!input.reconcileInvoice)throw Error('COMMUNICATION_RECONCILIATION_COMPOSER_MISSING');await input.reconcileInvoice(tx,pending.threadId);}

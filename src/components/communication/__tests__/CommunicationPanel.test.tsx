@@ -28,6 +28,8 @@ vi.mock("@/components/layout/GlobalCreateFlow", () => ({
   requestGlobalCreate: actions.request,
 }));
 
+beforeEach(() => { cleanup(); vi.resetAllMocks(); });
+
 describe("CommunicationPanel order assignment", () => {
   beforeEach(() => {
     vi.clearAllMocks();
