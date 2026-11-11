@@ -163,7 +163,7 @@ async function createReworkComplaint(
 
 afterAll(async()=>{vi.restoreAllMocks();await sql.end({timeout:1});if(originalSecret===undefined)delete process.env.APP_SESSION_SECRET;else process.env.APP_SESSION_SECRET=originalSecret;});
 
-it('sends a reminder through the real Action, DB receipt and shared view; only Microsoft is a TEST boundary',async()=>{
+it.each([false,true])('sends a reminder through the real Action, DB receipt and shared view (responseLost=%s)',async(responseLost)=>{
  const fixture=await createFixture(),sender=await createFixture(['kunden']);
  await sql`INSERT INTO public.email_templates(tenant_id,template_key,name,subject_template,body_html_template,body_text_template,variables) VALUES(${KREILE_TENANT_SLUG},${KREILE_TENANT_SLUG+':nacharbeit_begleitschein'},'TEST Nacharbeit Begleitschein','TEST Nacharbeit {Auftragsnummer}','<p>TEST {Kunde} · {RK-Nummer}</p>','TEST {Kunde} · {RK-Nummer}', '["Kunde","Auftragsnummer","RK-Nummer"]'::jsonb)`;
  const source=await createOrder(fixture,'TEST-REMINDER','rechnung');
@@ -187,10 +187,12 @@ it('sends a reminder through the real Action, DB receipt and shared view; only M
   vi.spyOn(globalThis,'fetch').mockImplementation(async(url,options)=>{
    const target=new URL(typeof url==='string'?url:url instanceof URL?url.href:url.url);
    if(target.hostname==='login.microsoftonline.com')return new Response(JSON.stringify({access_token:'TEST-provider-token-not-a-real-secret',expires_in:3600}),{status:200,headers:{'content-type':'application/json'}});
-   if(target.hostname==='graph.microsoft.com'&&target.pathname.endsWith('/sendMail')){sends++;return new Response(null,{status:202});}
+   if(target.hostname==='graph.microsoft.com'&&target.pathname.endsWith('/sendMail')){sends++;if(responseLost)throw Error('TEST complaint reminder accepted, response lost');return new Response(null,{status:202});}
+   if(target.hostname==='graph.microsoft.com'&&target.pathname.includes('/mailFolders/sentitems/messages')){const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=(SELECT customer_id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${work.receipt.orderId})`;return Response.json({value:[{id:'TEST-complaint-sent',internetMessageId:'<TEST-complaint-sent@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:input.clientKey}]}]});}
    return native(url,options);
   });
-  const sent=await withSession(sender,()=>sendeNacharbeitBegleitscheinAction(input));expect(sent).toMatchObject({code:'OK'});
+  if(responseLost)expect(await withSession(sender,()=>sendeNacharbeitBegleitscheinAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  const sent=await withSession(sender,()=>sendeNacharbeitBegleitscheinAction(responseLost?{...input,clientKey:randomUUID()}:input));expect(sent).toMatchObject({code:'OK'});
   const [stored]=await sql`SELECT thread.status,thread.order_id,message.summary,message.body FROM public.communication_threads thread JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id WHERE thread.tenant_id=${KREILE_TENANT_SLUG} AND thread.source=${'MS_GRAPH_OUT:'+input.clientKey}`;
   expect(stored).toMatchObject({status:'sent',order_id:work.receipt.orderId,summary:'Reklamation '+complaint.complaintId+' · Begleitschein',body:input.body});
   expect(await withSession(sender,()=>getByOrder(source.orderId))).toMatchObject({code:'OK',complaints:[expect.objectContaining({id:complaint.complaintId,stand:'massnahme_nacharbeit',goodsReminderSentAt:expect.any(String)})]});

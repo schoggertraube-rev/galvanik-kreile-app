@@ -265,7 +265,7 @@ export async function sendCommunicationMail(
   // The body remains outside the business log; its hash binds a same-key retry.
   const originals=input.document?[{id:input.document.id,sha256:input.document.sha256},...bundle.map(document=>({id:document.id,sha256:document.sha256}))]:[input.attachment,...input.additionalAttachments??[]].filter((attachment):attachment is GraphMailAttachment=>!!attachment).map(attachment=>({id:null,sha256:createHash('sha256').update(attachment.bytes).digest('hex')}));
   originals.sort((a,b)=>String(a.id??a.sha256).localeCompare(String(b.id??b.sha256)));
-  const intentHash=createHash('sha256').update(JSON.stringify([target.email.trim().toLowerCase(),input.subject.trim(),input.targetType,input.targetId,target.customerId,target.orderId,originals])).digest('hex');
+  const intentHash=createHash('sha256').update(JSON.stringify([target.email.trim().toLowerCase(),input.subject.trim(),input.targetType,input.targetId,target.customerId,target.orderId,originals,...(input.complaintResult?[[input.complaintResult.complaintId,input.complaintResult.version,input.complaintResult.kind??'result']]:[])])).digest('hex');
   const contentSha256=createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex');
   const source = `MS_GRAPH_OUT:${input.clientRequestId}`;
   let pending: { threadId: string; recordedAt: string; replay?: CommunicationReceipt; recovery?:true };
@@ -285,7 +285,7 @@ export async function sendCommunicationMail(
           WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND payload->>'threadId'=${existing[0].id} AND correlation_id=${input.clientRequestId}::uuid`);
         if(prepared.length>1||prepared.length===1&&(prepared[0].user_id!==auth.userId||prepared[0].intent!==intentHash||prepared[0].content!==contentSha256))throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         if (existing[0].status !== "sent") {
-          if(prepared.length!==1||input.complaintResult)throw new Error("COMMUNICATION_OUTCOME_UNCLEAR");
+          if(prepared.length!==1)throw new Error("COMMUNICATION_OUTCOME_UNCLEAR");
           return {threadId:existing[0].id,recordedAt:iso(existing[0].created_at),recovery:true as const};
         }
         if(input.collectionReminder){
@@ -310,7 +310,7 @@ export async function sendCommunicationMail(
               AND sent.user_id=prepared.user_id AND sent.payload->>'threadId'=prepared.payload->>'threadId')) LIMIT 2`);
       if(unresolved.length){
         const prior=unresolved[0];
-        if(unresolved.length!==1||prior.actor!==auth.userId||prior.content!==contentSha256||!prior.thread_id||input.document||input.collectionReminder||input.complaintResult)throw Error('COMMUNICATION_OUTCOME_UNCLEAR');
+        if(unresolved.length!==1||prior.actor!==auth.userId||prior.content!==contentSha256||!prior.thread_id||input.document||input.collectionReminder)throw Error('COMMUNICATION_OUTCOME_UNCLEAR');
         if(input.confirmedResend&&input.clientRequestId!==prior.request_id)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         input={...input,clientRequestId:prior.request_id};
         return {threadId:prior.thread_id,recordedAt:iso(prior.created_at),recovery:true as const};
@@ -328,7 +328,7 @@ export async function sendCommunicationMail(
       const prepBytes=createHash('sha256').update('communication-mail-prepared:'+auth.tenantId+':'+input.clientRequestId).digest();prepBytes[6]=(prepBytes[6]&15)|80;prepBytes[8]=(prepBytes[8]&63)|128;
       const hex=prepBytes.subarray(0,16).toString('hex'),prepareKey=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
       const proof=await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
-        VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_PREPARED_V1','COMMUNICATION_MAIL_PREPARED_V1',${JSON.stringify({threadId,clientRequestId:input.clientRequestId.toLowerCase(),targetType:input.targetType,targetId:input.targetId,customerId:target.customerId,orderId:target.orderId,recipient:target.email,intentHash,contentSha256,documents:originals})}::jsonb,'success',${auth.userId}::uuid,${prepareKey}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp()) RETURNING id`);
+        VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_PREPARED_V1','COMMUNICATION_MAIL_PREPARED_V1',${JSON.stringify({threadId,clientRequestId:input.clientRequestId.toLowerCase(),targetType:input.targetType,targetId:input.targetId,customerId:target.customerId,orderId:target.orderId,recipient:target.email,intentHash,contentSha256,documents:originals,...(input.complaintResult?{complaintResult:input.complaintResult}:{})})}::jsonb,'success',${auth.userId}::uuid,${prepareKey}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp()) RETURNING id`);
       if(proof.length!==1)throw Error('COMMUNICATION_MAIL_PREPARE_PROOF_MISSING');
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,threadId,'prepared');
       if(input.collectionReminder)await prepareCollectionReminder(tx,auth,input.collectionReminder,{threadId,clientRequestId:input.clientRequestId,body:input.body});
