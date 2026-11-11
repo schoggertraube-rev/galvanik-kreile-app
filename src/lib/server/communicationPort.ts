@@ -346,7 +346,7 @@ export async function sendCommunicationMail(
     return { code: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "CONFLICT" : "UNAVAILABLE", message: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "Der Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; zuerst im Outlook-Ausgang prüfen." : "Der Mailversand konnte nicht sicher vorbereitet werden." };
   }
   if (pending.replay) return { code: "OK", data: pending.replay };
-  let sentItemsEvidence:{graphMessageId:string;internetMessageId:string;clientRequestId:string|null}|undefined;
+  let sentItemsEvidence:{graphMessageId:string;internetMessageId:string;clientRequestId:string|null;sentAt:string}|undefined;
   let resendConfirmationId:string|undefined;
   if(pending.recovery){
     const proof=await readMicrosoftGraphSentMailByRequest({clientRequestId:input.clientRequestId,recipient:target.email,preparedAt:pending.recordedAt});

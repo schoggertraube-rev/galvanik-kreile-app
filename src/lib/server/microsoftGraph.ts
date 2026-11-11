@@ -269,7 +269,7 @@ export async function sendMicrosoftGraphMail(
 }
 
 /** Resolve an uncertain send by its immutable provider header, never by subject. */
-export async function readMicrosoftGraphSentMailByRequest(input:{clientRequestId:string;recipient:string;preparedAt:string},env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null}|{notFound:true}>>{
+export async function readMicrosoftGraphSentMailByRequest(input:{clientRequestId:string;recipient:string;preparedAt:string},env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null;sentAt:string}|{notFound:true}>>{
  const config=readConfig(env);if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht verbunden.'};
  if(!/^[0-9a-f-]{36}$/i.test(input.clientRequestId)||!Number.isFinite(Date.parse(input.preparedAt)))return {code:'UNAVAILABLE',message:'Versandbeleg fehlt.'};
  const bounded:FetchPort=(request,init)=>fetchPort(request,{...init,signal:AbortSignal.timeout(10000)});
@@ -310,7 +310,7 @@ export async function readMicrosoftGraphSentMailByRequest(input:{clientRequestId
 }
 
 /** Read-only provider proof: a reply reference is tied to our immutable request header, never its subject. */
-export async function readMicrosoftGraphSentMailReference(internetMessageId:string,replySender:string,env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null}>>{
+export async function readMicrosoftGraphSentMailReference(internetMessageId:string,replySender:string,env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null;sentAt:string}>>{
  const config=readConfig(env);if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht verbunden.'};
  if(!/^<[^<>\s]{1,998}>$/.test(internetMessageId)||!/^\S+@\S+\.\S+$/.test(replySender))return {code:'UNAVAILABLE',message:'Antwortreferenz fehlt oder ist ungültig.'};
  const bounded:FetchPort=(input,init)=>fetchPort(input,{...init,signal:AbortSignal.timeout(10000)});
@@ -325,7 +325,7 @@ export async function readMicrosoftGraphSentMailReference(internetMessageId:stri
   if(!Array.isArray(row.internetMessageHeaders))throw Error('GRAPH_SENT_REPLY_HEADERS_MISSING');
   const headers=row.internetMessageHeaders.filter((value:unknown)=>value&&typeof value==='object'&&'name'in value&&typeof value.name==='string'&&value.name.toLowerCase()==='x-kreile-request-id') as Array<{value?:unknown}>;
   if(headers.length>1||headers.length===1&&(typeof headers[0].value!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(headers[0].value)))throw Error('GRAPH_SENT_REQUEST_HEADER_INVALID');
-  return {code:'OK',data:{graphMessageId:row.id,internetMessageId,clientRequestId:headers.length?headers[0].value as string:null}};
+  return {code:'OK',data:{graphMessageId:row.id,internetMessageId,clientRequestId:headers.length?headers[0].value as string:null,sentAt:new Date(row.sentDateTime).toISOString()}};
  }catch(error){return unavailable('Die beantwortete Ausgangsmail konnte nicht sicher zugeordnet werden.',error);}
 }
 

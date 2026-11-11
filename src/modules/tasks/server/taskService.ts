@@ -295,9 +295,9 @@ export async function createCanceledInvoiceMailTask(tx:PrivilegedTenantTransacti
  if(prior.length){if(prior.length!==1||prior[0].bezug_id!==source.order_id||prior[0].fuer_bereich!=='geld'||!await isCanceledInvoiceMailTask(tx,auth,prior[0].id))reject('CONFLICT','Aufgabenkennung gehört zu einem anderen Vorgang.');return prior[0].id;}
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  const title=MAIL_RESEND_COPY.canceledTask(source.invoice_number,source.customer_name);
- // Full source text is retained, even beyond the ordinary editable title limit.
+ // PL02:01: only the customer may be shortened; full source facts stay in the note.
  // TODO_PL: cancellation mail is not a supported attachment kind yet; no fake sender/button.
- const saved=await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'geld',reference:{type:'auftrag',id:source.order_id},note:title},deps,false);
+ const saved=await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'geld',reference:{type:'auftrag',id:source.order_id},note:MAIL_RESEND_COPY.canceledTaskDescription(source.invoice_number,source.customer_name,source.sent_at)},deps,false);
  await bindCanceledInvoiceMailTask(tx,auth,{...input,taskId:saved.task.id,clientEventId:eventKey(source.invoice_id,0,'cancelled-invoice-task-source')});
  return saved.task.id;
 }

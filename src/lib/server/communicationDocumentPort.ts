@@ -175,7 +175,7 @@ export async function obsoleteInvoiceMailMembers(tx:PrivilegedTenantTransaction,
 /** The existing task writer accepts only this real, actor-bound mail source. */
 export async function readCanceledInvoiceMailTaskSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{threadId:string;invoiceId:string}){
  if(!hasAuthorizationArea(auth,'mails'))return null;
- const rows=await tx.execute<{mail_event_id:string;invoice_id:string;invoice_number:string;order_id:string;customer_name:string}>(sql`SELECT mail.id AS mail_event_id,invoice.id::text AS invoice_id,invoice.invoice_number,invoice.order_id,customer.name AS customer_name
+ const rows=await tx.execute<{mail_event_id:string;invoice_id:string;invoice_number:string;order_id:string;customer_name:string;sent_at:string|null}>(sql`SELECT mail.payload->'sentItemsEvidence'->>'sentAt' AS sent_at,mail.id AS mail_event_id,invoice.id::text AS invoice_id,invoice.invoice_number,invoice.order_id,customer.name AS customer_name
   FROM public.events mail JOIN public.communication_threads thread ON thread.tenant_id=mail.tenant_id AND thread.id::text=mail.payload->>'threadId' AND thread.status='sent'
   JOIN public.communication_messages message ON message.tenant_id=mail.tenant_id AND message.thread_id=thread.id AND message.id::text=mail.payload->>'messageId' AND message.direction='outgoing'
   JOIN public.invoices invoice ON invoice.tenant_id=mail.tenant_id AND invoice.id=${input.invoiceId}::uuid AND invoice.customer_id=thread.customer_id AND invoice.status='cancelled'
