@@ -323,3 +323,14 @@ export async function readClarificationArea(tx:import('./privilegedDb').Privileg
   FROM public.app_users users WHERE users.tenant_id=${tenantId} AND users.active=true`);
  return rows.some(row=>isAppRole(row.role)&&hasAuthorizationArea({role:row.role,areas:row.areas.filter(isAccessArea)},'entscheiden'))?'entscheiden':'geld';
 }
+/** Display projection of the same effective area contract, not another grant source. */
+export async function readActiveAreaHolders(tx:import('./privilegedDb').PrivilegedTenantTransaction,tenantId:string,area:AccessArea){
+ const rows=await tx.execute<{name:string;role:string;areas:string[]}>(sql`SELECT users.full_name AS name,users.role,
+  ARRAY(SELECT rights.bereich FROM public.app_user_rights rights WHERE rights.tenant_id=users.tenant_id AND rights.user_id=users.id) AS areas
+  FROM public.app_users users WHERE users.tenant_id=${tenantId} AND users.active=true ORDER BY users.id`);
+ return rows.flatMap(row=>{
+  if(!isAppRole(row.role))return [];
+  if(!row.areas.every(isAccessArea))throw Error('RESPONSIBILITY_UNKNOWN_AREA');
+  return hasAuthorizationArea({role:row.role,areas:row.areas},area)?[{name:row.name,role:row.role}]:[];
+ });
+}
