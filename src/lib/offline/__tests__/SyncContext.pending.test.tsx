@@ -10,6 +10,14 @@ vi.mock('../syncPendingFiles',()=>({syncPendingFiles:ports.sync}));
 vi.mock('../pendingStore',()=>({readPendingEntries:ports.read,retainQuarantinedPending:ports.retain}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 function Count(){const {outboxItems}=useSync();return <output data-testid="pending">{outboxItems.length}</output>;}
+function Kinds(){const {outboxItems}=useSync();return <output data-testid="kinds">{outboxItems.map(item=>item.entityType+':'+item.status).join(',')}</output>;}
+it('counts a retained workshop original as a pending item, never as a sent mail',async()=>{
+ state.scope='f'.repeat(64);state.status='authenticated';ports.read.mockResolvedValue([{id:'TEST-workshop',itemId:'TEST-order',kind:'workshop'},{id:'TEST-unknown',kind:'quarantine',capturedAt:''}]);
+ render(<SyncProvider><Count/><Kinds/></SyncProvider>);
+ await waitFor(()=>expect(screen.getByTestId('pending')).toHaveTextContent('2'));
+ expect(screen.getByTestId('kinds')).toHaveTextContent('item:queued,communication_draft:conflict');
+ expect(ports.retain).not.toHaveBeenCalled();
+});
 it('reads the existing original queue and responds to committed original changes',async()=>{
  state.scope='a'.repeat(64);state.status='authenticated';
  ports.read.mockResolvedValue([{id:'TEST-photo',itemId:'TEST-item',kind:'file'},{id:'TEST-note',itemId:'TEST-item',kind:'note'}]);
