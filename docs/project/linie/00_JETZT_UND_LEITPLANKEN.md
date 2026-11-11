@@ -1,4 +1,5 @@
 <!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+HISTORISCH – ersetzt durch AGENTS.md, kein Bauauftrag.
 
 # Kreile — jetzt
 

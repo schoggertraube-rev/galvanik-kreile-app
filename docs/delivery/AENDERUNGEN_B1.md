@@ -1,3 +1,4 @@
+HISTORISCH – ersetzt durch _review/PLAN_LIVEGANG.md, kein Bauauftrag.
 # Änderungen B1 / P0 – Bauquellen und Navigation
 
 Stand: 25.10.2026

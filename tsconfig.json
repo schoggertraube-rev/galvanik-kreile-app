@@ -37,6 +37,8 @@
     "**/*.mts"
   ],
   "exclude": [
+    ".steuer_sicherung",
+    "_review",
     "node_modules",
     "supabase"
   ]

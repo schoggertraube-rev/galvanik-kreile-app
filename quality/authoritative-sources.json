@@ -1,33 +1,9 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "truthTypes": [
-    { "id": "project_rules", "source": "AGENTS.md" },
-    { "id": "build_rules", "source": "_review/BAUREGELN.md" },
-    { "id": "active_queue", "source": "_review/WARTESCHLANGE.md" },
-    { "id": "page_authority", "source": "_review/SEITENHOHEIT.md" },
-    { "id": "owner_decisions", "source": "_review/OWNER_ENTSCHEIDUNGEN.md" },
-    { "id": "product_decisions", "source": "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md" },
-    { "id": "scope_modules", "source": "docs/project/linie/MODULKARTE_KANON.md" },
-    { "id": "architecture", "source": "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md" },
-    { "id": "live_plan", "source": "docs/delivery/KREILE_VERKAUFSSTUFE_1.md" },
-    { "id": "active_execution", "source": "missions/F1_ORDER_TO_CASH_PILOT_001.yml" },
-    { "id": "delivered_main", "source": "docs/project/CURRENT_STATE.md" },
-    { "id": "ui_truth", "source": "docs/project/linie/00_UI_REFERENZEN_PFADE.md" }
-  ],
-  "uiReferences": [
-    "docs/project/linie/ui/KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html",
-    "docs/project/linie/ui/KREILE_STARTSEITE_ROLF_V8_2026-08-20.html",
-    "docs/project/linie/ui/KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
-    "docs/project/linie/ui/KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html"
-  ],
-  "designSystem": {
-    "path": "docs/project/linie/ui/designsystem_v1_1",
-    "manifestPath": "docs/project/linie/ui/designsystem_v1_1/SHA256SUMS.txt",
-    "manifestSha256": "71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5",
-    "role": "TOKENS_TYPOGRAPHY_COMPONENTS_RESPONSIVE",
-    "pageCompositionRole": "FOUR_UI_REFERENCES_ONLY",
-    "flowPath": "docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html",
-    "flowSha256": "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA",
-    "flowRole": "FLOW_AND_INTERMEDIATE_STEPS_ONLY"
-  }
+    {
+      "id": "project_rules",
+      "source": "AGENTS.md"
+    }
+  ]
 }

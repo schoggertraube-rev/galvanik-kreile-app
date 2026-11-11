@@ -73,6 +73,13 @@ describe("#189 one-time planning authority migration", () => {
 });
 
 describe("TA-B3 protected sources", () => {
+  it("U289 permits steering deletion and exact headings only",()=>{
+ expect(checkB3ScopeForTest({entries:[{status:"D",path:"_review/old.md"}]})).toEqual([]);
+ const rel="docs/project/MASTERPLAN.md",before="<!-- STATUS: preserved -->\n# Plan\n",after="<!-- STATUS: preserved -->\nHISTORISCH – ersetzt durch AGENTS.md und _review/PLAN_LIVEGANG.md, kein Bauauftrag.\n# Plan\n";
+ expect(checkB3ScopeForTest({entries:[{status:"M",path:rel}],readChange:()=>({before,after})})).toEqual([]);
+ expect(checkB3ScopeForTest({entries:[{status:"M",path:rel}],readChange:()=>({before,after:after+"changed"})})).toContain("B3_BOUND_SOURCE_PROTECTED:"+rel);
+ expect(checkB3ScopeForTest({entries:[{status:"A",path:"_review/new.md"}]})).toContain("B3_BOUND_SOURCE_PROTECTED:_review/new.md");
+ });
   it("permits product, workflow, checker and new migration paths without branch rules", () => {
     expect(checkB3ScopeForTest({ entries: [
       { status: "M", path: ".github/workflows/quality.yml" },
