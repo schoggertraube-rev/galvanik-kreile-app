@@ -5,6 +5,7 @@ import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import { overdueInvoiceCondition } from "@/lib/server/paymentContract";
 import {CUSTOMER_METRICS_COPY} from '@/ui/situationCatalog';
+import {invoiceAlreadySent} from './communicationDocumentPort';
 import {evaluateOrderPriority} from '@/lib/priority';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -102,6 +103,8 @@ export type CustomerSummary = CustomerStoredProfile & {
   wareImHaus: boolean;
   invoiceRevenueCents?: number;
   invoiceOpenCents?: number;
+  /** All current issued originals, using the actual dispatch membership proof. */
+  invoiceUnsentCount?:number;
   agreements: CustomerAgreementSummary[];
   agreementSlotsAvailable: number;
   orders: CustomerSummaryOrder[];
@@ -499,7 +502,16 @@ export async function readCustomerSummary(
        );
        const agreementSlotsAvailable = await readCustomerAgreementSlots(tx, authorization.tenantId, input.customerId);
        const kennzahlen=await readCustomerKennzahlen(tx,authorization,input.customerId);
-       return mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable,kennzahlen);
+       const summary=mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable,kennzahlen);
+       if(hasAuthorizationArea(authorization,'geld')){
+        const [pending]=await tx.execute<{count:number}>(sql`SELECT count(*)::integer AS count FROM public.invoices invoice
+         WHERE invoice.tenant_id=${authorization.tenantId} AND invoice.customer_id=${input.customerId}
+          AND invoice.status='issued' AND invoice.contract_version=1
+          AND NOT ${invoiceAlreadySent(authorization.tenantId,sql`invoice.id`)}`);
+        if(!pending||!Number.isSafeInteger(pending.count)||pending.count<0)throw Error('CUSTOMER_UNSENT_INVOICE_COUNT_INVALID');
+        summary.invoiceUnsentCount=pending.count;
+       }
+       return summary;
     });
     if(data){const signals=await readCustomerListSignals(authorization,[input.customerId]);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;}
     return data
