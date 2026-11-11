@@ -35,22 +35,10 @@ export function v45CustomerFacts(customer:ContactFacts,money:boolean,overdueCoun
 export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<CustomerSummary,'id'|'updatedAt'|'email'|'billingEmail'|'invoiceUnsentCount'|'invoiceUnsentOriginals'|'kennzahlen'|'name'|'invoiceOpenCents'>,signals?:CustomerListSignals){
  const facts=v45CustomerFacts(customer,hasAuthorizationArea(auth,'geld'),customer.kennzahlen?.overdue?.invoiceCount);
  const source={kind:'customer' as const,id:customer.id,updatedAt:customer.updatedAt,...(signals?.asOf?{signalsAt:signals.asOf}:{})};
- const rule=readAuthorizedV45Rule(auth,'kunde',facts);if(rule.code!=='OK')return {...rule,source};
- if(rule.hauptaktion===null)return {...rule,hauptaktion:null,source};
- if(!('textKey' in rule)||typeof rule.textKey!=='string'||!('recht' in rule))return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_METADATA'],source};
- let befehl:{datei:string;funktion:keyof typeof import('@/app/actions/communications.actions')|keyof typeof import('@/app/actions/customers.actions');argumente:Readonly<Record<string,unknown>>};
- let number:string|undefined;
- if(rule.hauptaktion==='customer.invoice'){
-  const originals=customer.invoiceUnsentOriginals;
-  if(!Array.isArray(originals)||!originals.length||originals.length!==customer.invoiceUnsentCount||originals.some(original=>typeof original.id!=='string'||typeof original.number!=='string'||!Number.isSafeInteger(original.version)))return {code:'SOURCE_INCOMPLETE' as const,missing:['CUSTOMER_INVOICE_ORIGINAL'],source};
-  const original=originals[0];
-  number=CUSTOMER_INVOICE_ACTION_COPY.numbers(originals.map(row=>row.number));
-  befehl={datei:'src/app/actions/communications.actions.ts',funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:customer.id,attachment:{kind:'INVOICE',documentId:original.id},expectedInvoiceIds:originals.map(row=>row.id)}};
- }else if(rule.hauptaktion==='customer.edit')befehl={datei:'src/app/actions/customers.actions.ts',funktion:'updateCustomerAction',argumente:{customerId:customer.id}};
- else return {code:'SOURCE_INCOMPLETE' as const,missing:['CUSTOMER_ACTION_BINDING'],source};
- const parameters=readV45ActionValues(rule.textKey,{name:customer.name,...(number?{number}:{})});if(parameters.code!=='OK')return {...parameters,source};
+ const rule=readAuthorizedV45Rule(auth,'kunde',facts);
+ if(rule.code==='FORBIDDEN')return {...rule,source};
  const money=hasAuthorizationArea(auth,'geld'),mails=hasAuthorizationArea(auth,'mails');
- const values:Record<string,Readonly<Record<string,unknown>>>={'kunde.hauptaktion':{elementId:rule.hauptaktion}};
+ const values:Record<string,Readonly<Record<string,unknown>>>={'kunde.hauptaktion':{elementId:rule.code==='OK'?rule.hauptaktion:null}};
  if(customer.kennzahlen?.classification)values['kunde.einstufung']={einstufung:customer.kennzahlen.classification};
  if(signals&&knownCount(signals.activeOrderCount)&&knownCount(signals.activeQuoteCount))values['kunde.kachel.orders']={offeneAuftraege:signals.activeOrderCount,offeneKv:signals.activeQuoteCount};
  if(signals&&knownCount(signals.openComplaintCount))values['kunde.kachel.complaints']={offeneReklamationen:signals.openComplaintCount};
@@ -66,5 +54,22 @@ export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<Cus
  // existing domain references to agree before projecting an empty alternative list.
  const alternatives=readV45ObjectActionAbsence('kunde');if(alternatives.code!=='OK')return {...alternatives,source};
  const weitereInformationen=money&&mails&&values['kunde.kachel.messages']?[{key:'kunde.kachel.messages',werte:values['kunde.kachel.messages']}]:[];
- return {...rule,erstblick:first.erstblick,weitere:alternatives.weitere,weitereInformationen,hauptaktion:{elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,befehl,recht:rule.recht},quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,erstblickRegel:'R12/PL20:00',erwartungSha256:alternatives.quelle.sha256},source};
+ const presentation={erstblick:first.erstblick,weitere:alternatives.weitere,weitereInformationen,source};
+ const withheld={...presentation,erstblick:first.erstblick.map(field=>field.key==='kunde.hauptaktion'?{...field,werte:{elementId:null}}:field)};
+ if(rule.code!=='OK')return {...rule,...withheld,hauptaktion:null};
+ if(rule.hauptaktion===null)return {...rule,...withheld,hauptaktion:null};
+ if(!('textKey' in rule)||typeof rule.textKey!=='string'||!('recht' in rule))return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_METADATA'],...withheld,hauptaktion:null};
+ let befehl:{datei:string;funktion:keyof typeof import('@/app/actions/communications.actions')|keyof typeof import('@/app/actions/customers.actions');argumente:Readonly<Record<string,unknown>>};
+ let number:string|undefined;
+ if(rule.hauptaktion==='customer.invoice'){
+  const originals=customer.invoiceUnsentOriginals;
+  if(!Array.isArray(originals)||!originals.length||originals.length!==customer.invoiceUnsentCount||originals.some(original=>typeof original.id!=='string'||typeof original.number!=='string'||!Number.isSafeInteger(original.version)))return {code:'SOURCE_INCOMPLETE' as const,missing:['CUSTOMER_INVOICE_ORIGINAL'],...withheld,hauptaktion:null};
+  const original=originals[0];
+  number=CUSTOMER_INVOICE_ACTION_COPY.numbers(originals.map(row=>row.number));
+  befehl={datei:'src/app/actions/communications.actions.ts',funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:customer.id,attachment:{kind:'INVOICE',documentId:original.id},expectedInvoiceIds:originals.map(row=>row.id)}};
+ }else if(rule.hauptaktion==='customer.edit')befehl={datei:'src/app/actions/customers.actions.ts',funktion:'updateCustomerAction',argumente:{customerId:customer.id}};
+ else return {code:'SOURCE_INCOMPLETE' as const,missing:['CUSTOMER_ACTION_BINDING'],...withheld,hauptaktion:null};
+ const parameters=readV45ActionValues(rule.textKey,{name:customer.name,...(number?{number}:{})});if(parameters.code!=='OK')return {...parameters,...withheld,hauptaktion:null};
+
+ return {...rule,...presentation,hauptaktion:{elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,befehl,recht:rule.recht},quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,erstblickRegel:'R12/PL20:00',erwartungSha256:alternatives.quelle.sha256},source};
 }

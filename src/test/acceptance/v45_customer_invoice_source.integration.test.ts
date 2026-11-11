@@ -93,3 +93,19 @@ it('CB21:00 sends two current originals through the existing main action in one 
   expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{invoiceUnsentCount:0,invoiceUnsentOriginals:[]}});
  }finally{provider.mockRestore();}
 });
+
+it('retains the same customer first look when the higher-priority action source is still incomplete',async()=>{
+ const customerId=await customerFixture('TEST U2 unvollstaendige Handlungsquelle');
+ const read=await withSession(full,()=>getCustomerSummaryAction({customerId}));if(read.code!=='OK')throw Error('TEST_CUSTOMER_INCOMPLETE');
+ expect(read.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',hauptaktion:null,source:{kind:'customer',id:customerId}});
+ const next=read.data.nextActionRule;if(!next||!('erstblick'in next)||!Array.isArray(next.erstblick))throw Error('TEST_CUSTOMER_FIRST_LOOK_LOST');
+ expect(next.erstblick).toHaveLength(5);expect(next.erstblick.find(row=>row.key==='kunde.kachel.orders')?.werte).toEqual({offeneAuftraege:0,offeneKv:0});
+ const actor=await createFixture(['kunden'],'werkstatt');
+ const hidden=await withSession(actor,()=>getCustomerSummaryAction({customerId}));if(hidden.code!=='OK')throw Error('TEST_CUSTOMER_NO_MONEY');
+ expect(hidden.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',hauptaktion:null,source:{id:customerId}});
+ const operational=hidden.data.nextActionRule;if(!operational||!('erstblick'in operational)||!Array.isArray(operational.erstblick))throw Error('TEST_CUSTOMER_OPERATIONAL_FIRST_LOOK');
+ expect(operational.erstblick.length).toBeLessThanOrEqual(5);
+ expect(JSON.stringify(operational)).not.toMatch(/Cents|offeneForderungen|netto|umsatz/);
+ const reread=await withSession(full,()=>getCustomerSummaryAction({customerId}));if(reread.code!=='OK')throw Error('TEST_CUSTOMER_REPEAT');
+ expect(reread.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',hauptaktion:null,erstblick:next.erstblick});
+});
