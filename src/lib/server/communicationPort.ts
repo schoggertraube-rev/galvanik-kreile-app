@@ -243,6 +243,7 @@ export async function sendCommunicationMail(
   if(input.document&&(!input.attachment&&!legacyOriginalRecovery||!['QUOTE','INVOICE'].includes(input.document.kind)||!Number.isSafeInteger(input.document.version)||input.document.version<1||input.document.kind==='QUOTE'&&(!Number.isSafeInteger(input.document.edition)||input.document.edition<1)||input.attachment&&input.document.sha256!==createHash('sha256').update(input.attachment.bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'Belegfassung oder PDF-Nachweis ist ungültig.'};
   const bundle=input.document?.kind==='INVOICE'?input.document.bundle??[]:[];
   if(bundle.length!==(input.additionalAttachments?.length??0)||bundle.some((doc,index)=>doc.sha256!==createHash('sha256').update(input.additionalAttachments![index].bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'Sammel-Belege passen nicht zu den Original-PDFs.'};
+  if(input.document?.kind==='INVOICE')input={...input,document:{...input.document,bundle:input.document.bundle??[]}};
   if(input.document)input={...input,body:communicationDocumentBody(input.body,input.document)};
   let intakeRecipient:string|undefined;
   if(input.intakeConfirmation){

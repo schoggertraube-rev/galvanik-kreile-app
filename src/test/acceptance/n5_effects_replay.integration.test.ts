@@ -326,6 +326,7 @@ it.each([false,true])('S02 A1/A3 recovers an original bundle with PREPARE author
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{n:1}]);
  expect(await sql`SELECT user_id::text AS actor FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{actor:sender.actorId}]);
  expect(await sql`SELECT order_id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND order_id IN(${a.orderId},${b.orderId}) ORDER BY order_id`).toEqual([a.orderId,b.orderId].sort().map(order_id=>({order_id})));
+ if(!geldRemoved){expect(await withSession(sender,()=>sendCustomerMailAction({...fresh(input),clientRequestId:randomUUID()}))).toMatchObject({code:'CONFLICT',message:expect.stringContaining('wurde schon am')});expect(sends).toBe(1);}
 },120000);
 
 it('S02 an address correction cannot replace the recipient of the original reconciliation',async()=>{
