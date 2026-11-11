@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {projectRuntime,assertProjectionBinding,generatorSourceDigest} from './generate-v45-runtime.mjs';
+import {projectRuntime,assertProjectionBinding,generatorSourceDigest,projectElementMetadata} from './generate-v45-runtime.mjs';
 
 test('approved runtime replacements are reported and descriptive rights never enter the projection',()=>{
  const texts={texte:JSON.stringify({example:{text:'Rolf, Philipp, Phillip und Gregor'}}),bedienung:JSON.stringify({tag_direkt:{rechte:'Philipp sieht keine Geldkachel',karten:'bleibt'}})};
@@ -34,4 +34,19 @@ test('CI rejects a rewritten rule even when the artifact recomputes its own chec
  const rules=JSON.parse(projected.regeln);rules.regeln[0].dann.hauptaktion='synthetic.changed';projected.regeln=JSON.stringify(rules);
  assert.throws(()=>assertProjectionBinding(projected,hashes,preview),/V45_PROJECTION_SOURCE_MISMATCH/);
  assert.throws(()=>assertProjectionBinding(projected,{...hashes,'regeln.json':'0'.repeat(64)},preview),/V45_SOURCE_BINDING_CHANGED/);
+});
+
+test('PL07:01 element metadata preserves only the approved fields and never defaults missing facts',()=>{
+ const raw={elemente:[{id:'synthetic.action',text:'example.text',recht:'geld',tiefe:1,stufe:'pilot',reihenfolge:[],ziel:{status:'neu'},status:'in_arbeit',zustaende:['invented'],folge:['invented'],sperrt:['invented']}]};
+ const projected=projectElementMetadata(raw).elemente[0];
+ assert.deepEqual(Object.keys(projected),['id','text','recht','tiefe','stufe','reihenfolge']);
+ assert.equal(Object.hasOwn(projected,'zaehlt_als_info'),false);
+ assert.throws(()=>projectElementMetadata({elemente:[{text:'missing id'}]}),/V45_ELEMENT_ID_MISSING/);
+});
+test('actual element metadata keeps its source identity without importing unfinished effects or targets',()=>{
+ const original=JSON.parse(readFileSync('_review/quellen/endversion_V45/elemente.json','utf8'));
+ const projected=projectElementMetadata(original).elemente;
+ assert.equal(projected.length,399);assert.equal(new Set(projected.map(row=>row.id)).size,399);
+ for(let i=0;i<projected.length;i++)for(const [key,value] of Object.entries(projected[i]))assert.deepEqual(value,original.elemente[i][key]);
+ assert.ok(projected.every(row=>!Object.hasOwn(row,'ziel')&&!Object.hasOwn(row,'status')&&!Object.hasOwn(row,'folge')&&!Object.hasOwn(row,'sperrt')));
 });

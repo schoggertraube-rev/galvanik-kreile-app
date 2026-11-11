@@ -5,7 +5,7 @@ import {resolve} from 'node:path';
 
 const source=resolve('_review/quellen/endversion_V45');
 const output=resolve('src/ui/v45.generated.ts');
-const files={regeln:'regeln.json',texte:'texte.json',bausteine:'bausteine.json',bedienung:'bedienung.json',tokens:'tokens.css'};
+const files={regeln:'regeln.json',texte:'texte.json',bausteine:'bausteine.json',bedienung:'bedienung.json',tokens:'tokens.css',elemente:'elemente.json'};
 const digest=value=>createHash('sha256').update(value).digest('hex');
 // Git stores LF while Windows may check out CRLF. Source authority hashes stay raw.
 export const generatorSourceDigest=value=>digest(value.toString().replace(/\r\n/g,'\n'));
@@ -19,9 +19,10 @@ const SOURCE_BINDING={
     "texte.json": "a103a730cc5fae2fbb95c8ff415edd48eeea95ad500d8aa2a1745f7ba2dc7d41",
     "bausteine.json": "aebad3e3410f1b25f498e3f37300b650198c86784298d2be32e0b78dda183c40",
     "bedienung.json": "cc6cf08c6172e1e939c8bc11b86930192ed648237e9499bee652d763a7aacdd9",
-    "tokens.css": "fe9fbcd67c5cf8745311bfb101ae66a754f99ed954ffb5495ff0885814efadd9"
+    "tokens.css": "fe9fbcd67c5cf8745311bfb101ae66a754f99ed954ffb5495ff0885814efadd9",
+    "elemente.json": "9477cc234feb9a0a32563e5fb58216018e2067d7ed9e42c9c9822121fcd4c80e"
   },
-  "projection": "034b6e649fdcfafeaea3aaf9222484509fed6560ac85765c083f0df1a5644a7e"
+  "projection": "14a2c5bae22b25fbaf89f84d287052613510f870969364f83d7f578c768fd64d"
 };
 export function assertProjectionBinding(projected,hashes,previewSha){
  if(previewSha!==SOURCE_BINDING.preview||Object.keys(SOURCE_BINDING.sources).some(name=>hashes[name]!==SOURCE_BINDING.sources[name])||Object.keys(hashes).length!==Object.keys(SOURCE_BINDING.sources).length)throw Error('V45_SOURCE_BINDING_CHANGED');
@@ -30,6 +31,15 @@ export function assertProjectionBinding(projected,hashes,previewSha){
 
 
 /** PL05:02 import contract. Sources remain untouched. Unknown locations fail. */
+/** PL07:01 allowlist: absent values stay absent, never a synthesized false. */
+export function projectElementMetadata(value){
+ if(!value||typeof value!=='object'||!Array.isArray(value.elemente))throw Error('V45_ELEMENT_METADATA_INVALID');
+ const allowed=['id','text','recht','tiefe','stufe','zaehlt_als_info','reihenfolge'];
+ return {elemente:value.elemente.map(row=>{
+  if(!row||typeof row!=='object'||typeof row.id!=='string')throw Error('V45_ELEMENT_ID_MISSING');
+  return Object.fromEntries(allowed.filter(key=>Object.hasOwn(row,key)).map(key=>[key,row[key]]));
+ })};
+}
 export function projectRuntime(texts){
  const replacements=[];
  const visit=(value,path)=>{
@@ -44,7 +54,7 @@ export function projectRuntime(texts){
   if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([key])=>path+'.'+key!=='bedienung.tag_direkt.rechte').map(([key,entry])=>[key,visit(entry,path+'.'+key)]));
   return value;
  };
- const projected=Object.fromEntries(Object.entries(texts).map(([key,value])=>[key,key==='tokens'?value:JSON.stringify(visit(JSON.parse(value),key))]));
+ const projected=Object.fromEntries(Object.entries(texts).map(([key,value])=>[key,key==='tokens'?value:JSON.stringify(visit(key==='elemente'?projectElementMetadata(JSON.parse(value)):JSON.parse(value),key))]));
  for(const value of Object.values(projected))if(names.test(value))throw Error('V45_UNRESOLVED_NAME');
  return {projected,replacements};
 }
@@ -63,7 +73,9 @@ function render(projected,hashes,previewSha){
   +'export const V45_PROJECTED_TEXT = '+JSON.stringify(projected,null,2)+' as const;\n'
   +'export type V45Rule = {id:string;bereich:string;wenn:Record<string,string|boolean|number>;dann:{zustand:string;hauptaktion:string|null;farbe:string;aktionsfarbe:string|null};quelle:string};\n'
   +'export const V45_RULES = (JSON.parse(V45_PROJECTED_TEXT.regeln) as {regeln:V45Rule[]}).regeln;\n'
-  +'export const V45_RUNTIME = {regeln:V45_RULES,texte:JSON.parse(V45_PROJECTED_TEXT.texte) as Record<string,{text:string}>,bausteine:JSON.parse(V45_PROJECTED_TEXT.bausteine) as unknown,bedienung:JSON.parse(V45_PROJECTED_TEXT.bedienung) as unknown,tokens:V45_PROJECTED_TEXT.tokens};\n';
+  +'export type V45ElementMetadata = {id:string;text?:string|null;recht?:string|null;tiefe?:number|null;stufe?:string|null;zaehlt_als_info?:boolean|null;reihenfolge?:unknown};\n'
+  +'export const V45_ELEMENTS = (JSON.parse(V45_PROJECTED_TEXT.elemente) as {elemente:V45ElementMetadata[]}).elemente;\n'
+  +'export const V45_RUNTIME = {elemente:V45_ELEMENTS,regeln:V45_RULES,texte:JSON.parse(V45_PROJECTED_TEXT.texte) as Record<string,{text:string}>,bausteine:JSON.parse(V45_PROJECTED_TEXT.bausteine) as unknown,bedienung:JSON.parse(V45_PROJECTED_TEXT.bedienung) as unknown,tokens:V45_PROJECTED_TEXT.tokens};\n';
 }
 
 function main(){
