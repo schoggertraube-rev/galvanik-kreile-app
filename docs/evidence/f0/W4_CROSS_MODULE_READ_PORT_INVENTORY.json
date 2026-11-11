@@ -65,6 +65,9 @@
       "private.v_payment_summary_v1",
       "public.v_complaint_rework_context_v1"
     ],
+    "src/lib/server/communicationComplaintPort.ts": [
+      "public.v_complaint_rework_context_v1"
+    ],
     "src/lib/server/communicationDeliveryPort.ts": [
       "private.v_intake_delivery_evidence_v1"
     ],
