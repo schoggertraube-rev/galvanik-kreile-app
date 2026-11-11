@@ -28,8 +28,8 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
   if(!customerIds.length)return new Map();
   if(customerIds.some(id=>typeof id!=='string'||!id||id.length>128))throw Error('CUSTOMER_SIGNALS_IDS_INVALID');
   const money=hasAuthorizationArea(auth,'geld'),mails=hasAuthorizationArea(auth,'mails'),intake=hasAuthorizationArea(auth,'eingang');
-  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;active_orders:number;active_quotes:number;overdue:number;unassigned:number;open_messages:number;agreements:Array<{text:string}>;complaints:Array<{text:string}>;tasks:Array<{text:string}>;deadlines:Array<{number:string|null;dueDate:string|null;risk:string|null;status:string|null}>}>(sql`
-    SELECT customer.id,
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;as_of:string;active_orders:number;active_quotes:number;overdue:number;unassigned:number;open_messages:number;agreements:Array<{text:string}>;complaints:Array<{text:string}>;tasks:Array<{text:string}>;deadlines:Array<{number:string|null;dueDate:string|null;risk:string|null;status:string|null}>}>(sql`
+    SELECT customer.id,statement_timestamp()::text AS as_of,
       (SELECT count(*)::integer FROM private.v_operational_station_queue_v1 queue JOIN public.orders order_source ON order_source.tenant_id=queue.tenant_id AND order_source.id=queue.id WHERE queue.tenant_id=customer.tenant_id AND queue.customer_id=customer.id
         AND queue.station NOT IN ('abgeholt','versendet','raus','storniert') AND order_source.ware<>'storniert') AS active_orders,
       (SELECT count(*)::integer FROM private.v_open_quotes_v1 quote WHERE quote.tenant_id=customer.tenant_id AND quote.customer_id=customer.id) AS active_quotes,
@@ -60,7 +60,7 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
     if(row.unassigned)hints.push({kind:'message',text:`${row.unassigned} ${row.unassigned===1?'Nachricht':'Nachrichten'} zuordnen`,urgent:false});
     if(row.open_messages)hints.push({kind:'message',text:`${row.open_messages} ${row.open_messages===1?'Nachricht':'Nachrichten'} offen`,urgent:false});
     hints.push(...row.agreements.map(value=>({kind:'agreement' as const,text:value.text,urgent:false})),...row.complaints.map(value=>({kind:'complaint' as const,text:value.text,urgent:true})),...row.tasks.map(value=>({kind:'task' as const,text:value.text,urgent:false})));
-    return [row.id,{activeOrderCount:row.active_orders,activeQuoteCount:row.active_quotes,hints}];
+    return [row.id,{activeOrderCount:row.active_orders,activeQuoteCount:row.active_quotes,openComplaintCount:row.complaints.length,...(mails?{openMessageCount:row.open_messages}:{}),asOf:row.as_of,hints}];
   }));
 }
 
@@ -516,10 +516,9 @@ export async function readCustomerSummary(
         summary.invoiceUnsentCount=pending.count;
         summary.invoiceUnsentOriginal=pending.count===1?pending.originals[0]:null;
        }
-       summary.nextActionRule=readV45CustomerRule(authorization,summary);
        return summary;
     });
-    if(data){const signals=await readCustomerListSignals(authorization,[input.customerId]);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;}
+    if(data){const signals=await readCustomerListSignals(authorization,[input.customerId]);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;data.nextActionRule=readV45CustomerRule(authorization,data,signal);}
     return data
       ? { code: "OK", data }
       : { code: "NOT_FOUND", message: "Kunde nicht verfügbar." };

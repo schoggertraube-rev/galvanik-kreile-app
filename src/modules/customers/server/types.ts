@@ -1,7 +1,7 @@
 import type { OrderReadiness } from "../orderReadiness";
 
 export type CustomerHint={kind:'payment'|'deadline'|'message'|'agreement'|'complaint'|'task'|'incomplete';text:string;urgent:boolean};
-export type CustomerListSignals={activeOrderCount:number;activeQuoteCount:number;hints:CustomerHint[]};
+export type CustomerListSignals={activeOrderCount:number;activeQuoteCount:number;openComplaintCount?:number;openMessageCount?:number;asOf?:string;hints:CustomerHint[]};
 export type CustomerListItem={id:string;customerNumber:string;name:string;type:string;city:string|null;activeOrderCount:number;activeQuoteCount?:number;contactPerson?:string|null;email?:string|null;hints?:CustomerHint[];complete?:boolean};
 export type CustomersViewState={kind:"loading"}|{kind:"denied"|"error"|"conflict";message:string}|{kind:"data";customers:CustomerListItem[]};
 export type CustomerOrderItem={id:string;orderNumber:string;title:string;station:string;status:string;dueAt:string|null;version:number};

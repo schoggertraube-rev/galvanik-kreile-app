@@ -15,7 +15,7 @@ it('reads current unsent invoice originals from the customer port and never disc
  const customerId=await customerFixture('V45 offene Originale'),auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_AUTH');
  expect(await readCustomerSummary(auth.data,{customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
  const order=await readyInvoiceOrder('V45 Rechnung', 'pickup',false,customerId);
- const read=await readCustomerSummary(auth.data,{customerId});expect(read).toMatchObject({code:'OK',data:{invoiceUnsentCount:1,nextActionRule:{code:'OK',ruleId:'kunde.rechnung',source:{kind:'customer',id:customerId}}}});
+ const read=await readCustomerSummary(auth.data,{customerId});expect(read,JSON.stringify(read.code==='OK'?read.data.nextActionRule:read)).toMatchObject({code:'OK',data:{invoiceUnsentCount:1,nextActionRule:{code:'OK',ruleId:'kunde.rechnung',source:{kind:'customer',id:customerId}}}});
  expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{invoiceUnsentCount:1,nextActionRule:{code:'OK',ruleId:'kunde.rechnung',source:{kind:'customer',id:customerId}}}});
  // The metrics port legitimately advances asOf on every read. The persisted
  // invoice evidence/count, not that read timestamp, must stay the same.
@@ -24,6 +24,19 @@ it('reads current unsent invoice originals from the customer port and never disc
  expect(actionRead).toMatchObject({code:'OK',data:{invoiceUnsentOriginal:{id:order.invoice.invoiceId},nextActionRule:{code:'OK',hauptaktion:{elementId:'customer.invoice',befehl:{funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:customerId,expectedInvoiceIds:[order.invoice.invoiceId]}}}}}});
  if(actionRead.code!=='OK'||actionRead.data.nextActionRule?.code!=='OK'||!actionRead.data.nextActionRule.hauptaktion)throw Error('TEST_CUSTOMER_PRIMARY');
  expect(actionRead.data.nextActionRule.hauptaktion.werte.number).toBe(actionRead.data.invoiceUnsentOriginal?.number);
+ expect(actionRead.data.nextActionRule.erstblick).toHaveLength(5);
+ expect(actionRead.data.nextActionRule.erstblick.map(row=>row.key)).toContain('kunde.kachel.debt');
+ expect(actionRead.data.nextActionRule.erstblick.map(row=>row.key)).not.toContain('kunde.kachel.messages');
+ expect(actionRead.data.nextActionRule.weitereInformationen).toMatchObject([{key:'kunde.kachel.messages',werte:{offeneNachrichten:0}}]);
+ expect(actionRead.data.nextActionRule.erstblick.find(row=>row.key==='kunde.kachel.orders')).toMatchObject({werte:{offeneAuftraege:1,offeneKv:0}});
+ const moneyOnly=await createFixture(['kunden','geld']);
+ const noMail=await withSession(moneyOnly,()=>getCustomerSummaryAction({customerId}));
+ expect(noMail).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK',weitereInformationen:[]}}});
+ if(noMail.code!=='OK'||noMail.data.nextActionRule?.code!=='OK'||!noMail.data.nextActionRule.hauptaktion)throw Error('TEST_MONEY_ONLY_FIRST_LOOK');
+ expect(noMail.data.nextActionRule.erstblick).toHaveLength(5);
+ expect(JSON.stringify(noMail.data.nextActionRule)).not.toContain('offeneNachrichten');
+
+
  const otherId=await customerFixture('V45 anderer Kunde');expect(await readCustomerSummary(auth.data,{customerId:otherId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
  const restricted=await createFixture(['kunden'],'werkstatt'),noMoney=await withSession(restricted,()=>resolveAuthorization());if(!noMoney.ok)throw Error('TEST_NO_MONEY_AUTH');
  const hidden=await readCustomerSummary(noMoney.data,{customerId});expect(hidden.code).toBe('OK');if(hidden.code!=='OK')throw Error('TEST_CUSTOMER_READ');expect(hidden.data).not.toHaveProperty('invoiceUnsentCount');expect(hidden.data).not.toHaveProperty('invoiceUnsentOriginal');expect(hidden.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',source:{kind:'customer',id:customerId}});

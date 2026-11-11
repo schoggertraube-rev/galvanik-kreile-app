@@ -4,6 +4,8 @@ import type {AuthorizationSnapshot} from './authorization';
 import type {CustomerSummary} from './customerSummaryRead';
 import {readAuthorizedV45Rule} from './v45RuleRead';
 import {readV45ActionValues} from './v45ActionValuesRead';
+import {readV45FirstLook} from './v45FirstLookRead';
+import type {CustomerListSignals} from '@/modules/customers/public';
 
 type ContactFacts=Pick<CustomerSummary,'email'|'billingEmail'|'invoiceUnsentCount'>;
 const knownCount=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0;
@@ -28,9 +30,9 @@ export function v45CustomerFacts(customer:ContactFacts,money:boolean,overdueCoun
 }
 /** The customer's rule seam uses the same summary/metrics snapshot, not a
  * second customer or revenue query. This is not the full U2 presentation. */
-export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<CustomerSummary,'id'|'updatedAt'|'email'|'billingEmail'|'invoiceUnsentCount'|'invoiceUnsentOriginal'|'kennzahlen'|'name'>){
+export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<CustomerSummary,'id'|'updatedAt'|'email'|'billingEmail'|'invoiceUnsentCount'|'invoiceUnsentOriginal'|'kennzahlen'|'name'|'invoiceOpenCents'>,signals?:CustomerListSignals){
  const facts=v45CustomerFacts(customer,hasAuthorizationArea(auth,'geld'),customer.kennzahlen?.overdue?.invoiceCount);
- const source={kind:'customer' as const,id:customer.id,updatedAt:customer.updatedAt};
+ const source={kind:'customer' as const,id:customer.id,updatedAt:customer.updatedAt,...(signals?.asOf?{signalsAt:signals.asOf}:{})};
  const rule=readAuthorizedV45Rule(auth,'kunde',facts);if(rule.code!=='OK')return {...rule,source};
  if(rule.hauptaktion===null)return {...rule,hauptaktion:null,source};
  if(!('textKey' in rule)||typeof rule.textKey!=='string'||!('recht' in rule))return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_METADATA'],source};
@@ -44,5 +46,19 @@ export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<Cus
  }else if(rule.hauptaktion==='customer.edit')befehl={datei:'src/app/actions/customers.actions.ts',funktion:'updateCustomerAction',argumente:{customerId:customer.id}};
  else return {code:'SOURCE_INCOMPLETE' as const,missing:['CUSTOMER_ACTION_BINDING'],source};
  const parameters=readV45ActionValues(rule.textKey,{name:customer.name,...(number?{number}:{})});if(parameters.code!=='OK')return {...parameters,source};
- return {...rule,hauptaktion:{elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,befehl,recht:rule.recht},source};
+ const money=hasAuthorizationArea(auth,'geld'),mails=hasAuthorizationArea(auth,'mails');
+ const values:Record<string,Readonly<Record<string,unknown>>>={'kunde.hauptaktion':{elementId:rule.hauptaktion}};
+ if(customer.kennzahlen?.classification)values['kunde.einstufung']={einstufung:customer.kennzahlen.classification};
+ if(signals&&knownCount(signals.activeOrderCount)&&knownCount(signals.activeQuoteCount))values['kunde.kachel.orders']={offeneAuftraege:signals.activeOrderCount,offeneKv:signals.activeQuoteCount};
+ if(signals&&knownCount(signals.openComplaintCount))values['kunde.kachel.complaints']={offeneReklamationen:signals.openComplaintCount};
+ if(money&&knownCount(customer.invoiceOpenCents)&&knownCount(customer.kennzahlen?.overdue?.invoiceCount))values['kunde.kachel.debt']={offeneForderungenCents:customer.invoiceOpenCents,ueberfaelligeRechnungen:customer.kennzahlen!.overdue!.invoiceCount};
+ if(mails&&signals&&knownCount(signals.openMessageCount))values['kunde.kachel.messages']={offeneNachrichten:signals.openMessageCount};
+ // R12 / PL20:00: debt owns the single alternative tile when both rights exist.
+ // The allowed message information is still returned for its existing next view.
+ const hidden=[...(!money?['kunde.kachel.debt']:[]),...(!mails||money?['kunde.kachel.messages']:[])];
+ // Customer overview fields use the declared domain layout; S16 owns the later
+ // state-specific golden capture (invoice has no captured reference case yet).
+ const first=readV45FirstLook('kunde',values,hidden);if(first.code!=='OK')return {...first,source};
+ const weitereInformationen=money&&mails&&values['kunde.kachel.messages']?[{key:'kunde.kachel.messages',werte:values['kunde.kachel.messages']}]:[];
+ return {...rule,erstblick:first.erstblick,weitereInformationen,hauptaktion:{elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,befehl,recht:rule.recht},quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,erstblickRegel:'R12/PL20:00'},source};
 }
