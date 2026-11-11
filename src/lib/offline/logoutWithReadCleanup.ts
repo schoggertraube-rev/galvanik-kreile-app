@@ -2,6 +2,7 @@
 import {logout} from '@/app/actions/auth';
 import {clearLoggedOutReadState} from './logoutReadState';
 import {OFFLINE_LOGOUT_COPY} from '@/ui/situationCatalog';
+import {removeCacheScopeMarker} from './cacheScopeMarker';
 
 let notice='';
 const listeners=new Set<()=>void>();
@@ -10,6 +11,7 @@ export const readLogoutNotice=()=>notice;
 /** The existing action ends the session first; local storage is never authority. */
 export async function logoutWithReadCleanup(){
  const scope=document.documentElement.dataset.offlineScope??null;
+ try{removeCacheScopeMarker();}catch{console.error('[OFFLINE_CACHE_MARKER_REVOKE_FAILED]');}
  // Start the server action before touching potentially broken local storage.
  let result:Awaited<ReturnType<typeof logout>>|undefined;
  let failure:unknown;

@@ -2,8 +2,7 @@ import "server-only";
 import {offlinePartition} from "./offlinePartition";
 import {createPinLoginHandle} from './pinLoginHandle';
 import {cookies} from 'next/headers';
-import {createHash} from 'node:crypto';
-import {COOKIE_NAME} from './appSession';
+import {COOKIE_NAME,cacheScopeFromCredential} from './appSession';
 
 import type {
   AccessArea,
@@ -57,7 +56,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
     let offlineLoginScope:string|undefined;
     try{
       const credential=(await cookies()).get(COOKIE_NAME)?.value;
-      if(credential)offlineLoginScope=createHash('sha256').update('offline-cache:'+credential).digest('hex');
+      if(credential)offlineLoginScope=cacheScopeFromCredential(credential);
     }catch(error){
       // No cookie/token details in diagnostics. Missing cache identity never
       // changes the independently resolved authorization or enables a cache.

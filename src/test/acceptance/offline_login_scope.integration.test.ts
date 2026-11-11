@@ -5,7 +5,9 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {full,withSession,createFixture,sql} from '../../../e2e/ablauf/replayHarness';
 import {getAuthBootstrapState} from '@/lib/server/authBootstrap';
 import {logout} from '@/app/actions/auth';
-import {readAppSession} from '@/lib/server/appSession';
+import {readAppSession,setAppSession} from '@/lib/server/appSession';
+import {cookies} from 'next/headers';
+import {CACHE_SCOPE_COOKIE} from '@/lib/offline/cacheScopeMarker';
 import {resolveAuthorization} from '@/lib/server/authorization';
 
 it('resolves the existing offline flag beside real rights and projects only its boolean',async()=>{
@@ -29,9 +31,16 @@ it('resolves the existing offline flag beside real rights and projects only its 
 
 it('the real logout clears the actual session before any browser-cache work',async()=>{
  await withSession(full,async()=>{
-  expect((await readAppSession()).ok).toBe(true);
+  const session=await readAppSession();expect(session.ok).toBe(true);if(!session.ok)throw Error('TEST_SESSION');
+  await setAppSession(session.session);
+  const bootstrap=await getAuthBootstrapState();if(bootstrap.status!=='authenticated')throw Error('TEST_AUTH');
+  expect((await cookies()).get(CACHE_SCOPE_COOKIE)?.value).toBe(bootstrap.user.offlineLoginScope);
   expect((await logout()).ok).toBe(true);
   expect(await readAppSession()).toEqual({ok:false,reason:'NO_COOKIE'});
+  // Next's mutable response jar retains the expired empty tombstone until HTTP delivery.
+  expect((await cookies()).get(CACHE_SCOPE_COOKIE)?.value??'').toBe('');
+  (await cookies()).set(CACHE_SCOPE_COOKIE,'a'.repeat(64));
+  expect(await getAuthBootstrapState()).toEqual({status:'unauthenticated'});
  });
 });
 

@@ -10,7 +10,7 @@ export async function deletePrivateReadCaches(scope:string):Promise<void>{
  if(typeof caches==='undefined')return;
  const names=await caches.keys();
  await Promise.all(names.filter(name=>name.startsWith(prefix)).map(async name=>{
-  if(!await caches.delete(name))throw Error('OFFLINE_CACHE_DELETE_NOT_CONFIRMED');
+  if(!await caches.delete(name)&&(await caches.keys()).includes(name))throw Error('OFFLINE_CACHE_DELETE_NOT_CONFIRMED');
  }));
 }
 export type LogoutReadState={cacheCleared:boolean;pendingCount:number|null};
