@@ -18,3 +18,9 @@ it('projects the V45 physical pickup terminal fact without money or approval gue
 it('keeps a missing handover mode unknown and an empty item list unfinished',()=>{
  const facts=v45OrderFacts({...card,handoverMode:null});expect(facts).not.toHaveProperty('shipping');expect(facts.allDone).toBe(false);
 });
+
+it.each(['shipping',null] as const)('does not turn the shared output station into delivery with mode %s',handoverMode=>{
+ const facts=v45OrderFacts({...card,station:'abgeholt',handoverMode});
+ expect(facts).not.toHaveProperty('closed');expect(facts).not.toHaveProperty('inTransit');expect(facts).not.toHaveProperty('returning');
+ expect(readV45Rule('auftrag',facts)).toMatchObject({code:'SOURCE_INCOMPLETE'});
+});

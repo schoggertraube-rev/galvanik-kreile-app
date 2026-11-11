@@ -63,6 +63,8 @@ it('V13–V16 actual manual tracking keeps shipment, actor and history across re
  expect(await sql`SELECT status,shipped_at IS NOT NULL AS handed_over,delivered_at FROM public.shipments WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.shipmentId}::uuid`).toEqual([{status:'shipped',handed_over:true,delivered_at:null}]);
  expect(await sql`SELECT user_id::text,payload->>'goodsOutEventId' AS physical_receipt FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='SHIPMENT_HANDED_OVER_V1' AND payload->>'shipmentId'=${input.shipmentId}`).toEqual([{user_id:full.actorId,physical_receipt:handedOver.receipt.eventId}]);
  expect(await withSession(full,()=>getManualShippingAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{shipments:expect.arrayContaining([expect.objectContaining({id:input.shipmentId,status:'shipped'})])}});
+ // A real handed-over shipment is not a delivered order; no delivery receipt exists.
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{handoverMode:'shipping'},nextActionRule:{code:'SOURCE_INCOMPLETE'}}});
  expect(await withSession(full,()=>recordGoodsOutAction(structuredClone(handover)))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='SHIPMENT_HANDED_OVER_V1' AND payload->>'shipmentId'=${input.shipmentId}`).toEqual([{n:1}]);
  expect(await withSession(full,()=>saveManualTrackingAction({...correction,expectedUpdatedAt:changed.receipt.updatedAt,reason:'TEST zu spät',clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT',reason:'SHIPPING_RELEASE_BLOCKED'});

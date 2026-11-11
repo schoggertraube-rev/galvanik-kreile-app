@@ -9,8 +9,11 @@ import {readAuthorizedV45Rule} from './v45RuleRead';
  * This is the rule seam for U2, not its complete presentation contract. */
 export function v45OrderFacts(card:Pick<LiveOrderCard,'station'|'handoverMode'|'items'>):Readonly<Record<string,unknown>>{
  const shipping=card.handoverMode===null?{}:{shipping:card.handoverMode==='shipping'};
+ // The persisted 'abgeholt' station is shared by pickup and carrier handover.
+ // It proves customer receipt only for a known pickup, never for shipping.
+ const transportUnknown=card.station==='versendet'||card.station==='abgeholt'&&card.handoverMode!=='pickup';
  return {station:card.station,...shipping,
-  ...(card.station!=='versendet'?{closed:card.station==='abgeholt',inTransit:false,returning:false}:{}),
+  ...(!transportUnknown?{closed:card.station==='abgeholt',inTransit:false,returning:false}:{}),
   allDone:card.items.length>0&&card.items.every(item=>item.finished)};
 }
 type ReleaseSource={orderId:string;value:Awaited<ReturnType<typeof readOrderInformed>>};
