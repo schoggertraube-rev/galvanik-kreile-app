@@ -142,7 +142,7 @@ const FlagContext = createContext<FlagContextValue>({
 
 // ── Provider ──────────────────────────────────────────────────────────
 
-export function FeatureFlagProvider({ children }: { children: ReactNode }) {
+export function FeatureFlagProvider({ children, offline24hEnabled = false }: { children: ReactNode; offline24hEnabled?: boolean }) {
   const overrides = useSyncExternalStore(subscribeToOverrides, readOverrides, () => EMPTY_OVERRIDES);
 
   // Resolve all flags
@@ -150,8 +150,12 @@ export function FeatureFlagProvider({ children }: { children: ReactNode }) {
   for (const def of FLAG_DEFS) {
     flags[def.name] = resolveFlag(def.name, overrides);
   }
+  // This flag is resolved from the existing DB row for the authenticated login.
+  // Browser overrides never participate, including legacy stored values.
+  flags.offline_24h = offline24hEnabled;
 
   const setOverride = useCallback((name: string, value: boolean) => {
+    if (name === 'offline_24h') return;
     writeOverrides({ ...readOverrides(), [name]: value });
   }, []);
 

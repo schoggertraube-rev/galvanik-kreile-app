@@ -4,6 +4,8 @@ import {createPinLoginHandle} from './pinLoginHandle';
 import {cookies} from 'next/headers';
 import {createHash} from 'node:crypto';
 import {COOKIE_NAME} from './appSession';
+import {readOffline24hFlag} from './offlineFeatureFlag';
+import {withPrivilegedTenantTransaction} from './privilegedDb';
 
 import type {
   AccessArea,
@@ -22,6 +24,8 @@ export type AuthBootstrapUser = {
   offlineScope?: string;
   /** Cache-only partition for this already validated credential; never authority. */
   offlineLoginScope?: string;
+  /** Read-only feature setting; grants no server permission. Default is off. */
+  offline24hEnabled?: boolean;
   role: AppRole;
   displayName: string;
   areas: readonly AccessArea[];
@@ -52,6 +56,9 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
   const result = await resolveAuthorization();
 
   if (result.ok) {
+    let offline24hEnabled=false;
+    try{offline24hEnabled=await withPrivilegedTenantTransaction(result.data,tx=>readOffline24hFlag(tx,result.data));}
+    catch(error){console.error('[OFFLINE_FLAG_READ_FAILED]',error instanceof Error?error.name:'UnknownError');}
     let offlineLoginScope:string|undefined;
     try{
       const credential=(await cookies()).get(COOKIE_NAME)?.value;
@@ -66,6 +73,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
       user: {
         loginHandle:createPinLoginHandle(result.data.userId),
         offlineScope:offlinePartition(result.data),
+        offline24hEnabled,
         ...(offlineLoginScope?{offlineLoginScope}:{}),
         role: result.data.role,
         displayName: result.data.displayName,

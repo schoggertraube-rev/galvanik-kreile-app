@@ -53,6 +53,7 @@ export default async function RootLayout({
       data-auth-status={authState.status}
       data-offline-scope={authState.status==='authenticated'?authState.user.offlineScope:undefined}
       data-offline-login-scope={authState.status==='authenticated'?authState.user.offlineLoginScope:undefined}
+      data-offline-24h={authState.status==='authenticated'&&authState.user.offline24hEnabled===true?'enabled':'disabled'}
       className={`${fraunces.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
       style={{ "--sans": inter.style.fontFamily, "--serif": fraunces.style.fontFamily } as CSSProperties}
     >
@@ -63,7 +64,7 @@ export default async function RootLayout({
           <PermissionsProvider initialAuthState={authState}>
             <SyncProvider>
               <DiagnosticsProvider>
-                <FeatureFlagProvider>
+                <FeatureFlagProvider offline24hEnabled={authState.status === 'authenticated' && authState.user.offline24hEnabled === true}>
                   <KreileAppShell loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>
                     {children}
                   </KreileAppShell>
