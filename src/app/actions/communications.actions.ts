@@ -3,7 +3,7 @@
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {freezeStorageDeadline} from '@/lib/server/storageDeadline';
 import {createHash,randomUUID} from "node:crypto";
-import {readCommunicationDocumentReceipt,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
+import {readCommunicationDocumentReceipt,readPreparedInvoiceTransportOriginal,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
@@ -132,9 +132,9 @@ export async function sendCustomerMailAction(input: TargetInput & {
    if(JSON.stringify(invoices.map(row=>row.id).sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'CONFLICT' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.number)};
    const originals:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
    for(const invoice of invoices){
-    const pdf=await readInvoicePdf(auth,invoice.id,'original');if(pdf.code!=='OK')return pdf;
-    if(pdf.data.pdfSha256!==invoice.sha256)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};
-    originals.push({filename:invoice.number+'.pdf',contentType:'application/pdf',bytes:new Uint8Array(pdf.data.pdf)});
+    const pdf=await readPreparedInvoiceTransportOriginal(auth,{...input,clientRequestId:prior.originalRequestId},original,invoice);
+    if(!pdf)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};
+    originals.push({filename:invoice.number+'.pdf',contentType:'application/pdf',bytes:new Uint8Array(pdf)});
    }
    return sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,document:original,attachment:originals[0],additionalAttachments:originals.slice(1),beforePrepare:async tx=>{
     for(const invoice of invoices.slice().sort((a,b)=>a.orderId.localeCompare(b.orderId))){

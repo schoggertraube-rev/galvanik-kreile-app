@@ -64,6 +64,22 @@ export async function readCommunicationDocumentReceipt(auth:AuthorizationSnapsho
  });}catch(error){console.error('[COMMUNICATION_DOCUMENT_RECEIPT_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Versandbeleg konnte nicht sicher gelesen werden. Nicht erneut senden.'};}
 }
 
+/** PL00:40: transport reconciliation uses the original PREPARE authority.
+ * Bytes stay server-side; this does not grant access to the invoice PDF viewer. */
+export async function readPreparedInvoiceTransportOriginal(auth:AuthorizationSnapshot,input:Intent,document:Extract<CommunicationDocument,{kind:'INVOICE'}>,invoice:InvoiceMailDocument){
+ if(!hasAuthorizationArea(auth,'mails'))return null;
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<{pdf_content:Buffer|Uint8Array;integrity_ok:boolean}>(sql`SELECT invoice.pdf_content,encode(sha256(invoice.pdf_content),'hex')=invoice.pdf_sha256 AS integrity_ok
+   FROM public.invoices invoice WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${invoice.id}::uuid AND invoice.order_id=${invoice.orderId} AND invoice.pdf_sha256=${invoice.sha256}
+    AND EXISTS(SELECT 1 FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
+     WHERE prepared.tenant_id=invoice.tenant_id AND prepared.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1' AND prepared.user_id=${auth.userId}::uuid AND thread.created_by=${auth.userId}::uuid
+      AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId} AND prepared.payload->'document'=${JSON.stringify(document)}::jsonb AND prepared.payload->>'intent'=${communicationDocumentIntent(input,document)})`);
+  if(rows.length!==1||rows[0].integrity_ok!==true||!rows[0].pdf_content)return null;
+  const bytes=Buffer.from(rows[0].pdf_content);
+  return createHash('sha256').update(bytes).digest('hex')===invoice.sha256?bytes:null;
+ });
+}
+
 /** Same membership predicate for preparation and the check under invoice lock. */
 function invoiceSentMembership(invoiceId:SQL){
  return sql`sent.payload->'document'->>'kind'='INVOICE'

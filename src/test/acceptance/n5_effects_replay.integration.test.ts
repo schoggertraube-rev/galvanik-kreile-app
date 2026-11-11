@@ -84,10 +84,11 @@ it('S02 existing payment, pickup, shipping and sending retain exactly one effect
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${unknown.clientRequestId}::uuid`).toHaveLength(0);
 },120000);
 
-it('S02 A1 recovers the original invoice bundle from Sent Items after a new click key',async()=>{
+it.each([false,true])('S02 A1/A3 recovers an original bundle with PREPARE authority (geldRemoved=%s)',async(geldRemoved)=>{
  const a=await readyInvoiceOrder('N5 A1 Original A'),b=await readyInvoiceOrder('N5 A1 Original B','pickup',false,a.customerId);
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${a.customerId}`;
  const input={targetType:'ORDER' as const,targetId:a.orderId,subject:'TEST N5 A1',body:'TEST gleiche Originalgruppe',clientRequestId:randomUUID(),attachment:{kind:'INVOICE' as const,documentId:a.invoice.invoiceId},expectedInvoiceIds:[a.invoice.invoiceId,b.invoice.invoiceId]};
+ const sender=await createFixture(['auftraege','mails','geld'],'buero');
  let sends=0;
  vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
   const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
@@ -96,11 +97,17 @@ it('S02 A1 recovers the original invoice bundle from Sent Items after a new clic
   if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:[{id:'TEST-A1-Sent',internetMessageId:'<TEST-A1@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:input.clientRequestId}]}]});
   return nativeFetch(request,init);
  });
- expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});
+ expect(await withSession(sender,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});
+ if(geldRemoved){
+  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='geld'`;
+  const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+  expect(await withSession(sender,()=>getOrderPaymentStateAction({orderId:a.orderId}))).toMatchObject({code:'FORBIDDEN'});
+ }
  const retry={...fresh(input),clientRequestId:randomUUID()};
- expect(await withSession(full,()=>sendCustomerMailAction(retry))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
- expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
+ expect(await withSession(sender,()=>sendCustomerMailAction(retry))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
+ expect(await withSession(sender,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{n:1}]);
+ expect(await sql`SELECT user_id::text AS actor FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{actor:sender.actorId}]);
  expect(await sql`SELECT order_id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND order_id IN(${a.orderId},${b.orderId}) ORDER BY order_id`).toEqual([a.orderId,b.orderId].sort().map(order_id=>({order_id})));
 },120000);
 
