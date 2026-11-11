@@ -19,7 +19,7 @@ it('reads the stored send state and actor for U2 without inferring an unclear di
  expect(await withSession(full,()=>getIntakeMessagesAction('alle'))).toEqual(read);
  await sql`UPDATE public.intake_item SET sendestatus='gesendet' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`;
  const after=await withSession(full,()=>getIntakeMessagesAction('alle'));if(after.code!=='OK')throw Error('TEST_MESSAGE_REREAD');
- expect(after.messages.find(row=>row.id===itemId)).toMatchObject({fallbackPriority:{code:'SOURCE_INCOMPLETE',missing:['QUESTION_REPLY_HISTORY']},sendState:'gesendet',createdBy:full.actorId});
+ expect(after.messages.find(row=>row.id===itemId)).toMatchObject({fallbackPriority:{code:'SOURCE_INCOMPLETE',missing:['QUESTION_REPLY_HISTORY']},nextActionRule:{code:'OK',hauptaktion:null,datenluecken:['QUESTION_REPLY_HISTORY']},sendState:'gesendet',createdBy:full.actorId});
  const restricted=await createFixture(['eingang'],'werkstatt');expect(await withSession(restricted,()=>getIntakeMessagesAction('alle'))).toMatchObject({code:'FORBIDDEN'});
 });
 
@@ -39,4 +39,30 @@ it('reuses the actual assignment writer gate for U2 instead of assuming mails gr
  expect(await withSession(permitted,()=>assignIntakeCustomerAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
  expect(await withSession(permitted,()=>getIntakeAssignmentAction({itemId,mode:'normal'}))).toMatchObject({code:'OK',view:{customer:{id:customerId}}});
  expect(await sql`SELECT von::text FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${input.clientEventId}::uuid`).toEqual([{von:permitted.actorId}]);
+});
+
+it('R13 imports a real original and reads the assignment main action with the actual writer gate',async()=>{
+ const {installMailProvider}=await import('../../../e2e/ablauf/mailProvider');
+ const {importOutlookMailAction}=await import('@/app/actions/communications.actions');
+ const {getIntakeAssignmentAction,assignIntakeCustomerAction}=await import('@/app/actions/eingang.actions');
+ const graphId='TEST-U2-R13-'+randomUUID(),sender='TEST-'+randomUUID()+'@example.invalid';
+ installMailProvider(graphId,'TEST allgemeine Nachricht ohne Fachanliegen',sender,'TEST U2 R13 Original');
+ try{
+  const imported=await withSession(full,()=>importOutlookMailAction(graphId));if(imported.code!=='OK')throw Error('TEST_U2_IMPORT:'+imported.code);
+  const read=await withSession(full,()=>getIntakeMessagesAction('alle'));if(read.code!=='OK')throw Error('TEST_U2_MESSAGES');
+  const message=read.messages.find(row=>row.id===imported.itemId);expect(message).toBeDefined();
+  expect(message).toMatchObject({fallbackPriority:{code:'OK',rank:6},nextActionRule:{code:'OK',zustand:'orange',farbe:'warn',prioritaet:6,hauptaktion:{elementId:'message.assign',textKey:'messages.assign',befehl:{funktion:'getIntakeAssignmentAction',argumente:{itemId:imported.itemId,mode:'normal'}}}}});
+  const rule=message?.nextActionRule;if(rule?.code!=='OK'||!rule.hauptaktion)throw Error('TEST_U2_ASSIGN_PRIMARY');
+  expect(rule.erstblick.length).toBeLessThanOrEqual(5);
+  const noEntry=await createFixture(['mails','kunden']);
+  const denied=await withSession(noEntry,()=>getIntakeMessagesAction('alle'));if(denied.code!=='OK')throw Error('TEST_U2_RESTRICTED');
+  expect(denied.messages.find(row=>row.id===imported.itemId)).toMatchObject({nextActionRule:{code:'OK',hauptaktion:null,gesperrt:[{elementId:'message.assign',grundKey:'error.permission'}]}});
+  const opened=await withSession(full,()=>getIntakeAssignmentAction(rule.hauptaktion!.befehl.argumente));if(opened.code!=='OK')throw Error('TEST_U2_OPEN_ASSIGNMENT');
+  const customerId=await customerFixture('TEST R13 Zuordnung'),input={itemId:imported.itemId,version:opened.view.version,clientEventId:randomUUID(),customerId,mode:'manual' as const};
+  expect(await withSession(full,()=>assignIntakeCustomerAction(input))).toMatchObject({code:'OK'});
+  expect(await withSession(full,()=>assignIntakeCustomerAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+  const after=await withSession(full,()=>getIntakeMessagesAction('alle'));if(after.code!=='OK')throw Error('TEST_U2_REREAD');
+  expect(after.messages.find(row=>row.id===imported.itemId)).toMatchObject({customerId,nextActionRule:{code:'OK',hauptaktion:null,prioritaet:8}});
+  expect(await sql`SELECT id FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND mime='message/rfc822'`).toHaveLength(1);
+ }finally{vi.restoreAllMocks();}
 });

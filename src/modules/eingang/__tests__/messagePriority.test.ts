@@ -13,3 +13,7 @@ it('does not fabricate an overdue outgoing question or an absent dispatch receip
 
 
 it('keeps unknown stored classifications incomplete instead of calling them calm',()=>expect(readFallbackMessagePriority({...base,openConcerns:['TEST-unknown']})).toMatchObject({code:'SOURCE_INCOMPLETE',missing:['MESSAGE_CLASSIFICATION']}));
+
+it('R13 keeps a known higher-priority concern actionable even when outgoing reply history is missing',()=>{
+ expect(readFallbackMessagePriority({...base,direction:'raus',openConcerns:['kv_annahme']})).toMatchObject({code:'OK',rank:2});
+});
