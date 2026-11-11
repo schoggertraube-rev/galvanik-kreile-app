@@ -1,13 +1,25 @@
 import 'server-only';
-import {V45_ELEMENTS,V45_SOURCE_HASHES} from '@/ui/v45.generated';
+import {V45_ELEMENTS,V45_REFERENCE_STATES,V45_SOURCE_HASHES} from '@/ui/v45.generated';
 
 /** Derive only the field order from the existing V45 occurrence metadata.
  * No example values or person-to-role mapping enter the result. An incomplete
  * or contradictory order stays unavailable rather than choosing a new layout. */
-export function readV45FirstLook(area:string,values:Readonly<Record<string,Readonly<Record<string,unknown>>>>,hiddenKeys:readonly string[]=[]){
+export function readV45FirstLook(area:string,values:Readonly<Record<string,Readonly<Record<string,unknown>>>>,hiddenKeys:readonly string[]=[],state?:string){
  const declared=V45_ELEMENTS.filter(row=>row.id.startsWith(area+'.'));
  if(declared.some(row=>typeof row.zaehlt_als_info!=='boolean'||row.zaehlt_als_info&&(typeof row.tiefe!=='number'||!Array.isArray(row.reihenfolge))))return {code:'SOURCE_INCOMPLETE' as const,missing:['FIRST_LOOK_METADATA']};
- const fields=declared.filter(row=>row.tiefe===1&&row.zaehlt_als_info&&Array.isArray(row.reihenfolge)&&row.reihenfolge.length>0);
+ let contexts:Set<string>|undefined;
+ if(state!==undefined){
+  const references=V45_REFERENCE_STATES as {faelle?:unknown};
+  if(!Array.isArray(references?.faelle))return {code:'SOURCE_INCOMPLETE' as const,missing:['FIRST_LOOK_CONTEXT']};
+  contexts=new Set(references.faelle.flatMap((value:unknown)=>{
+   if(!value||typeof value!=='object'||Array.isArray(value))return [];
+   const row=value as Record<string,unknown>;
+   return typeof row.fall==='string'&&row.fall.startsWith(area+'.')&&row.zustand===state?[row.fall]:[];
+  }));
+  if(!contexts.size)return {code:'SOURCE_INCOMPLETE' as const,missing:['FIRST_LOOK_CONTEXT']};
+ }
+ const inContext=(value:unknown)=>!contexts||!!value&&typeof value==='object'&&!Array.isArray(value)&&contexts.has(String((value as Record<string,unknown>).zustand));
+ const fields=declared.filter(row=>row.tiefe===1&&row.zaehlt_als_info&&Array.isArray(row.reihenfolge)&&row.reihenfolge.some(inContext));
  const allKeys=new Set(fields.map(row=>row.id));
  if(!fields.length||hiddenKeys.some(key=>!allKeys.has(key)))return {code:'SOURCE_INCOMPLETE' as const,missing:['FIRST_LOOK_METADATA']};
  const hidden=new Set(hiddenKeys),keys=[...allKeys].filter(key=>!hidden.has(key));
@@ -18,7 +30,7 @@ export function readV45FirstLook(area:string,values:Readonly<Record<string,Reado
   for(const value of field.reihenfolge as unknown[]){
    if(!value||typeof value!=='object'||Array.isArray(value))return {code:'SOURCE_INCOMPLETE' as const,missing:['FIRST_LOOK_METADATA']};
    const occurrence=value as Record<string,unknown>;
-   if(occurrence.tiefe!==1)continue;
+   if(occurrence.tiefe!==1||!inContext(value))continue;
    if(typeof occurrence.zustand!=='string'||typeof occurrence.rolle!=='string'||typeof occurrence.geraet!=='string'||typeof occurrence.reihenfolge!=='number'||!Number.isSafeInteger(occurrence.reihenfolge))return {code:'SOURCE_INCOMPLETE' as const,missing:['FIRST_LOOK_METADATA']};
    const scope=JSON.stringify([occurrence.zustand,occurrence.rolle,occurrence.geraet]);
    const rows=groups.get(scope)??[];
@@ -40,7 +52,7 @@ export function readV45FirstLook(area:string,values:Readonly<Record<string,Reado
   if(roots.length!==1)return {code:'SOURCE_INCOMPLETE' as const,missing:['FIRST_LOOK_ORDER']};
   ordered.push(roots[0]);remaining.delete(roots[0]);
  }
- const missing=ordered.filter(key=>!Object.hasOwn(values,key));
+ const missing=ordered.filter(key=>!Object.hasOwn(values,key)||values[key]===null||typeof values[key]!=='object'||Array.isArray(values[key]));
  if(missing.length)return {code:'SOURCE_INCOMPLETE' as const,missing};
  return {code:'OK' as const,erstblick:ordered.map(key=>({key,werte:values[key]})),quelle:{sha256:V45_SOURCE_HASHES['elemente.json']}};
 }

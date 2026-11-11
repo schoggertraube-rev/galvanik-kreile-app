@@ -48,7 +48,7 @@ export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback,
   'kv.hauptaktion':{elementId:rule.hauptaktion}
  };
  if(financial)values['kv.kalkulation']={nettoCents:quote.totalNetCents};
- const first=readV45FirstLook('kv',values,financial?[]:['kv.kalkulation']);if(first.code!=='OK')return {...first,source};
+ const first=readV45FirstLook('kv',values,financial?[]:['kv.kalkulation'],rule.zustand);if(first.code!=='OK')return {...first,source};
  let hauptaktion:null|{elementId:string;textKey:string;werte:Record<string,string|number>;befehl:NonNullable<ReturnType<typeof readV45QuoteCommand>>;recht:string|null}=null;
  if(rule.hauptaktion!==null){
   if(!('textKey' in rule)||typeof rule.textKey!=='string'||!('recht' in rule)||rule.recht!==null&&typeof rule.recht!=='string')return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_METADATA'],source};
