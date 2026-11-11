@@ -139,7 +139,7 @@ async function retainOriginal(scope:string,original:PendingOriginal|PendingWorks
     store.put(previous);return;
    }
    const same=original.kind==='file'?previous?.kind==='file':original.kind==='note'&&previous?.kind==='note'&&previous.textstand===original.textstand;
-   const deviceCapturedAt=same?previous?.deviceCapturedAt:new Date().toISOString();
+   const deviceCapturedAt=same?previous?.deviceCapturedAt:original.kind==='workshop'&&original.deviceCapturedAt?original.deviceCapturedAt:new Date().toISOString();
    const expectedVersion=same&&previous?.kind==='note'?previous.expectedVersion:original.kind==='note'?original.expectedVersion:undefined;
    if(previous&&previous.kind!==original.kind){tx.abort();return;}
    // The first file is the original. A retry must never replace its bytes or

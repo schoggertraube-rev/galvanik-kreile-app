@@ -18,11 +18,11 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('retains actual native-IDB work
   const result=await cli(['eval',`async()=>{
    const p=await import('/queue.mjs'),scope='${'d'.repeat(64)}',ids=${JSON.stringify(ids)};
    await p.retainPendingOriginal(scope,{id:'TEST-note',itemId:'TEST-intake',kind:'note',text:'TEST first original',textstand:'TEST-stand',dismissed:[]});
-   const original={kind:'workshop',id:ids.key,itemId:ids.order,command:'item.finished',input:{orderId:ids.order,itemId:ids.item,expectedVersion:7,clientEventId:ids.key,finished:true}};
+   const original={deviceCapturedAt:'2026-11-01T12:34:56.000Z',kind:'workshop',id:ids.key,itemId:ids.order,command:'item.finished',input:{orderId:ids.order,itemId:ids.item,expectedVersion:7,clientEventId:ids.key,finished:true}};
    await p.retainPendingWorkshopOriginal(scope,original);
    await p.retainPendingOriginal(scope,{id:'TEST-file',itemId:'TEST-intake',kind:'file',file:new File(['TEST exact bytes'],'TEST.bin')});
    const first=(await p.readPendingEntries(scope)).find(row=>row.id===ids.key);
-   if(!first||first.queueSequence!==2||!first.deviceCapturedAt)throw Error('TEST_NOT_ONE_QUEUE');
+   if(!first||first.queueSequence!==2||first.deviceCapturedAt!==original.deviceCapturedAt)throw Error('TEST_NOT_ONE_QUEUE');
    await p.retainPendingWorkshopOriginal(scope,{...original,input:{finished:true,clientEventId:ids.key,expectedVersion:7,itemId:ids.item,orderId:ids.order},deviceCapturedAt:'2099-01-01T00:00:00Z'});
    let changed=false;try{await p.retainPendingWorkshopOriginal(scope,{...original,input:{...original.input,finished:false}});}catch{changed=true;}
    if(!changed)throw Error('TEST_N5_INTENT_REPLACED');
