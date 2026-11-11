@@ -1,3 +1,6 @@
+import {isDeepStrictEqual} from 'node:util';
+import {dispatchPolicyValid} from '../dispatchPolicy';
+import {STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
 import "server-only";
 
 import bcrypt from "bcryptjs";
@@ -33,16 +36,28 @@ export type SystemSettingsContext = {
   canManageCompany?: boolean;
   canManageLogins?: boolean;
   canManageSystem?: boolean;
+  canManageFinancial?: boolean;
 };
 export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean };
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null };
+/** Letters need the real sender address, not invoice-only bank/tax configuration. */
+export async function readCompanyLetterSettings(context:CompanyDocumentContext){
+ if(!context.canRead)return {code:'FORBIDDEN' as const};
+ try{return await withPrivilegedTenantTransaction(context,async tx=>{
+  const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country FROM public.company_settings WHERE tenant_id=${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+  if(rows.length!==1)return {code:'NOT_FOUND' as const};
+  if(Object.values(rows[0]).some(value=>typeof value!=='string'||!value.trim()))return {code:'VALIDATION_ERROR' as const};
+  return {code:'OK' as const,company:rows[0]};
+ });}catch(error){logSystemSettingsPortFailure('COMPANY_LETTER_SETTINGS_READ_FAILED',error);return {code:'UNAVAILABLE' as const};}
+}
 
 export async function readShippingSettingsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string):Promise<ShippingSettings|null>{
  const rows=await tx.execute<ShippingSettings>(sql`SELECT versand_dienst AS service,versand_nummer_format AS "numberPattern",versand_nummer_hinweis AS "numberHint",
-   versand_verfolgung_url AS "trackingUrl",versand_label_api AS "labelApi",to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
+   versand_verfolgung_url AS "trackingUrl",versand_label_api AS "labelApi",ausgang_regeln AS "dispatchPolicy",to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
    FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 2`);
  if(!rows.length)return null;
  if(rows.length!==1||!rows[0]||typeof rows[0].service!=="string"||!rows[0].service.trim())throw Error('SHIPPING_SETTINGS_INVALID');
+ if(rows[0].dispatchPolicy!==null&&!dispatchPolicyValid(rows[0].dispatchPolicy))throw Error("DISPATCH_POLICY_INVALID");
  return rows[0];
 }
 export async function readShippingSettings(context:CompanyDocumentContext){
@@ -55,11 +70,12 @@ export async function updateShippingSettings(context:SystemSettingsContext,input
  if(context.canManageCompany!==true)return {code:"FORBIDDEN" as const,message:"Versandangaben dürfen nicht geändert werden."};
  if(!input||typeof input!=="object"||Array.isArray(input))return {code:"VALIDATION_ERROR" as const,message:"Versandangaben fehlen."};
  const value=input as Record<string,unknown>;
- if(Object.keys(value).sort().join(',')!=="expectedUpdatedAt,numberHint,numberPattern,service,trackingUrl"
+ if(Object.keys(value).sort().join(',')!==['expectedUpdatedAt','numberHint','numberPattern','service','trackingUrl',...('dispatchPolicy' in value?['dispatchPolicy']:[])].sort().join(',')
   ||typeof value.service!=="string"||value.service!==value.service.trim()||value.service.length<1||value.service.length>40
   ||typeof value.numberPattern!=="string"||value.numberPattern.length>160||typeof value.numberHint!=="string"||value.numberHint.length>160
   ||!(value.trackingUrl===null||typeof value.trackingUrl==="string"&&value.trackingUrl.length<=1000)
   ||typeof value.expectedUpdatedAt!=="string"||!Number.isFinite(Date.parse(value.expectedUpdatedAt)))return {code:"VALIDATION_ERROR" as const,message:"Versandangaben sind ungültig."};
+ if('dispatchPolicy' in value&&value.dispatchPolicy!==null&&!dispatchPolicyValid(value.dispatchPolicy))return {code:'VALIDATION_ERROR' as const,message:'Fristen, Kalender oder Dienstschluss sind unvollständig oder ungültig · Eingaben bleiben erhalten.'};
  try{
   if(value.numberPattern)new RegExp(value.numberPattern);
   if(value.trackingUrl){const url=new URL((value.trackingUrl as string).replace('{nr}','0'));if(url.protocol!=="https:"||!(value.trackingUrl as string).includes('{nr}'))return {code:"VALIDATION_ERROR" as const,message:"Sendungsverfolgung benötigt eine HTTPS-Adresse mit {nr}."};}
@@ -68,14 +84,23 @@ export async function updateShippingSettings(context:SystemSettingsContext,input
   return await withPrivilegedTenantTransaction(context,async tx=>{
    const current=await readShippingSettingsInTransaction(tx,context.tenantId);
    if(!current)return {code:"NOT_FOUND" as const,message:"Firmendaten müssen zuerst gespeichert werden."};
-   const identical=current.service===value.service&&current.numberPattern===value.numberPattern&&current.numberHint===value.numberHint&&current.trackingUrl===value.trackingUrl;
+   const submitted=value.dispatchPolicy as import('../dispatchPolicy').DispatchPolicy|null|undefined;
+   if(context.canManageFinancial!==true&&(submitted&&'storageWeeklyCents'in submitted||submitted===null&&current.dispatchPolicy?.storageWeeklyCents!=null))return {code:'FORBIDDEN' as const,message:STORAGE_CHARGE_COPY.forbidden};
+   const policy=submitted&& !('storageWeeklyCents'in submitted)&&current.dispatchPolicy?.storageWeeklyCents!==undefined?{...submitted,storageWeeklyCents:current.dispatchPolicy.storageWeeklyCents}:submitted;
+   const effectivePolicy='dispatchPolicy'in value?policy:current.dispatchPolicy;
+   const identical=current.service===value.service&&current.numberPattern===value.numberPattern&&current.numberHint===value.numberHint&&current.trackingUrl===value.trackingUrl&&isDeepStrictEqual(current.dispatchPolicy,effectivePolicy);
    if(identical)return {code:"OK" as const,settings:current,replayed:true};
    if(current.updatedAt!==value.expectedUpdatedAt)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte abgleichen.",current};
+   if(policy?.finalStageRecipientId){
+    const recipient=await tx.execute(sql`SELECT id FROM public.app_users WHERE tenant_id=${context.tenantId} AND id=${policy.finalStageRecipientId}::uuid AND active=true FOR SHARE`);
+    if(recipient.length!==1)return {code:'VALIDATION_ERROR' as const,message:'Empfänger für die letzte Stufe ist kein aktiver Login · Eingaben bleiben erhalten.'};
+   }
    const changed=await tx.execute(sql`UPDATE public.company_settings SET versand_dienst=${value.service},versand_nummer_format=${value.numberPattern},
-     versand_nummer_hinweis=${value.numberHint},versand_verfolgung_url=${value.trackingUrl},updated_at=statement_timestamp()
+     versand_nummer_hinweis=${value.numberHint},versand_verfolgung_url=${value.trackingUrl},ausgang_regeln=${effectivePolicy===null?null:JSON.stringify(effectivePolicy)}::jsonb,updated_at=statement_timestamp()
      WHERE tenant_id=${context.tenantId} AND updated_at=${value.expectedUpdatedAt}::timestamptz RETURNING id`);
    if(changed.length!==1)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte erneut abgleichen.",current:await readShippingSettingsInTransaction(tx,context.tenantId)};
-   await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'shipping_settings_updated',${JSON.stringify({actorId:context.actorId,before:current,after:{service:value.service,numberPattern:value.numberPattern,numberHint:value.numberHint,trackingUrl:value.trackingUrl}})}::jsonb)`);
+   const audit=await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'shipping_settings_updated',${JSON.stringify({actorId:context.actorId,before:current,after:{service:value.service,numberPattern:value.numberPattern,numberHint:value.numberHint,trackingUrl:value.trackingUrl,dispatchPolicy:effectivePolicy}})}::jsonb) RETURNING id`);
+   if(audit.length!==1)throw Error('SHIPPING_SETTINGS_EVENT_NOT_SAVED');
    return {code:"OK" as const,settings:await readShippingSettingsInTransaction(tx,context.tenantId),replayed:false};
   });
  }catch(error){logSystemSettingsPortFailure('SHIPPING_SETTINGS_WRITE_FAILED',error);return {code:"UNAVAILABLE" as const,message:"Versandangaben konnten nicht gespeichert werden. Fehlercode: SHIPPING_SETTINGS_WRITE_FAILED."};}

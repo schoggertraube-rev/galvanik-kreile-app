@@ -4,6 +4,38 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {readyInvoiceOrder} from './orderFixture';
 
+it('S0 release readers and the actual writer use live payment facts instead of a stale stored ausgabe_frei flag',async()=>{
+ const order=await readyInvoiceOrder('S0-Eine-Freigabe');
+ const {setPaymentModeAction,confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const {readTenantOperationalOrders}=await import('@/lib/server/orderStationRead');
+ const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('S0_AUTH');return readTenantOperationalOrders(auth.data);});
+ expect(await withSession(full,()=>setPaymentModeAction({orderId:order.orderId,paymentMode:'abholung',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect((await read()).find(row=>row.id===order.orderId)).toMatchObject({ausgabeFrei:false});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{goodsOutAllowed:false}});
+ // Isolated stale legacy TEST cache: this is never a product write path.
+ await sql`UPDATE public.orders SET ausgabe_frei=true WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ expect((await read()).find(row=>row.id===order.orderId)).toMatchObject({ausgabeFrei:false});
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));if(card.code!=='OK')throw Error('S0_CARD:'+card.code);
+ const release={orderId:order.orderId,mode:'abholung' as const,expectedVersion:card.data.card.version,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>recordGoodsOutAction(release))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${release.clientEventId}::uuid`).toEqual([{n:0}]);
+ const payment={invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>confirmPaymentAction(payment))).toMatchObject({code:'OK'});
+ await sql`UPDATE public.orders SET ausgabe_frei=false WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ expect((await read()).find(row=>row.id===order.orderId)).toMatchObject({ausgabeFrei:true});
+ const out=await withSession(full,()=>recordGoodsOutAction(structuredClone(release)));
+ expect(out).toMatchObject({code:'OK'});if(out.code!=='OK')throw Error('S0_RELEASE:'+out.code);
+ expect((await read()).find(row=>row.id===order.orderId)).toMatchObject({ausgabeFrei:false,station:'abgeholt'});
+ expect(await withSession(full,()=>recordGoodsOutAction(structuredClone(release)))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:out.receipt.eventId}});
+ expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${release.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
+ const afterReleaseKey=randomUUID();
+ expect(await withSession(full,()=>recordGoodsOutAction({...release,expectedVersion:out.receipt.orderVersion,clientEventId:afterReleaseKey}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${afterReleaseKey}::uuid`).toEqual([{n:0}]);
+});
+
 it('AF-A9 two actual logins releasing the same version produce one release and one version conflict',async()=>{
  const order=await readyInvoiceOrder('AF-A9');
  const other=await createFixture(['auftraege','geld']);

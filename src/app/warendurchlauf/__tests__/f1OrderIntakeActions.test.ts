@@ -50,7 +50,7 @@ describe("F1 order intake actions", () => {
     const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const input = { geprueft: true, clientEventId: "x", customer: {}, dueDate: "x", note: null, items: [] } as never;
     await expect(createOrderIntakeAction(input)).resolves.toMatchObject({ code: "OK" });
-    expect(ports.create).toHaveBeenCalledWith(input,expect.any(Function));
+    expect(ports.create).toHaveBeenCalledWith(input,expect.any(Function),{before:expect.any(Function),after:expect.any(Function)});
     expect(ports.create.mock.calls[0][1].name).toBe("createCustomerInTransaction");
   });
 

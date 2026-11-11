@@ -1,4 +1,5 @@
 "use server";
+import {createInitialOrderPrintJobs} from '@/modules/orders/server-public';
 import {quoteCommandContext,quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
@@ -325,6 +326,7 @@ async function convertQuoteToOrder(input:ConvertQuoteInput,newGoodsInput?:unknow
     },
     beforeEvent:async(tx)=>{await check(tx,false);},
     after:async(tx,auth,receipt)=>{
+      await createInitialOrderPrintJobs(tx,auth,receipt.orderId,receipt.customerDisplayName,receipt.items.map(item=>item.id));
       try{goods=await bindQuoteGoodsReceiptToCreatedOrder(tx,auth,{quoteId:input.quoteId,receiptId:input.goodsReceiptId!,clientEventId:input.clientEventId,orderId:receipt.orderId,items:receipt.items});await bindOrderQuoteCommercialTerms(tx,auth,receipt.orderId);}
       catch(error){
         if(error&&typeof error==='object'&&'result'in error){const result=error.result as {code:string;message:string};boundFailure={code:result.code==='CONFLICT'?'CONFLICT':'VALIDATION_ERROR',message:result.message};}

@@ -1,7 +1,7 @@
 import "server-only";
 export {readQuoteSettings,readQuoteSettingsInTransaction,saveQuoteSettings} from './server/quoteSettingsPort';
 export type {QuoteCalculationSettings} from './server/quoteSettingsPort';
-export { readShippingSettings,readShippingSettingsInTransaction,updateShippingSettings } from "./server/systemSettingsPort";
+export { readShippingSettings,readShippingSettingsInTransaction,updateShippingSettings,readCompanyLetterSettings } from "./server/systemSettingsPort";
 
 export {
   changeOwnPin,

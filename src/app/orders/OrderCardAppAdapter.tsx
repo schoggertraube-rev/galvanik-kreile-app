@@ -696,6 +696,7 @@ export function OrderCardAppAdapter({
         amount: invoice.openAmountCents,
         method,
         expectedVersion: invoice.paymentVersion,
+        expectedOpenAmountCents: invoice.openAmountCents,
         clientEventId,
       });
       if (result.code !== "OK") {

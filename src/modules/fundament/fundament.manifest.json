@@ -3,6 +3,8 @@
   "version": "1.1.1",
   "owner": "Path-1 Fundament (authentifizierter Produkteinstieg)",
   "publicExports": [
+    "@/modules/fundament/public#CompanyLetterSettings",
+    "@/modules/fundament/server-public#readCompanyLetterSettings",
     "@/modules/fundament/public#ProductStartProfile",
     "@/modules/fundament/public#SystemAdminView",
     "@/modules/fundament/public#SystemAdminViewProps",
@@ -43,7 +45,11 @@
     "@/modules/fundament/server-public#readQuoteSettings",
     "@/modules/fundament/server-public#readQuoteSettingsInTransaction",
     "@/modules/fundament/server-public#saveQuoteSettings",
-    "@/modules/fundament/server-public#QuoteCalculationSettings"
+    "@/modules/fundament/server-public#QuoteCalculationSettings",
+    "@/modules/fundament/public#DispatchPolicy",
+    "@/modules/fundament/public#emptyDispatchPolicy",
+    "@/modules/fundament/public#dispatchPolicyValid",
+    "@/modules/fundament/public#DISPATCH_DAY_FIELDS"
   ],
   "capabilities": [
     "product-actors:fail-closed-status",
@@ -54,7 +60,8 @@
     "20261025182920_s1_p1_datenfundament.sql",
     "20261026190000_s1_p2_feature_switch.sql",
     "20261028163707_h11_align_access_rights.sql",
-    "20261107193000_kv_v04_content_editions.sql"
+    "20261107193000_kv_v04_content_editions.sql",
+    "20261110034000_output_dispatch_policy.sql"
   ],
   "viewsFunctions": [],
   "ownsTables": [

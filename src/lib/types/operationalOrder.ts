@@ -18,6 +18,7 @@ export type OperationalOrderItem = {
 };
 
 export type OperationalOrder = {
+  finishedDispatch?:{collectionSend?:{allowed:boolean;requiresMoney:boolean;message:string|null};state:'available'|'unavailable';rank?:number;handover?:'pickup'|'shipping'|null;color?:'rot'|'gelb'|'gruen'|null;releaseAllowed?:boolean;informedAt?:string|null;channel?:'mail'|'telefon'|null;blockReason?:string|null;workingDays?:number|null;gaps?:string[];storage?:import('@/modules/orders/public').StorageEligibility;reminder?:import('@/modules/orders/public').InitialDispatchReminderPlan;pickupAppointment?:import('@/modules/orders/public').PickupAppointmentProjection};
   ausgabeFrei?:boolean;
   id: string;
   version: number;

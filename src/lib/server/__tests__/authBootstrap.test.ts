@@ -48,6 +48,7 @@ describe("getAuthBootstrapState()", () => {
     expect(firstLoad).toEqual({
       status: "authenticated",
       user: {
+        offlineScope: expect.stringMatching(/^[a-f0-9]{64}$/),
         loginHandle:createPinLoginHandle(gregorAuthorization.data.userId),
         role: "developer",
         displayName: "Gregor",

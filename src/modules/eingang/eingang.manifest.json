@@ -174,9 +174,13 @@
     "20261107213000_kv_v04_goods_reference.sql",
     "20261108163051_quote_goods_return_receipt.sql",
     "supabase/migrations/20261108173258_quote_goods_deviation_clearance.sql",
-    "supabase/migrations/20261108173803_quote_goods_clearance_history.sql"
+    "supabase/migrations/20261108173803_quote_goods_clearance_history.sql",
+    "20261110070400_intake_delivery_evidence_view.sql",
+    "20261110142424_intake_reply_evidence_view.sql"
   ],
   "viewsFunctions": [
+    "private.v_intake_delivery_evidence_v1",
+    "private.v_intake_reply_evidence_v1",
     "public.v_intake_expected_goods_v1",
     "private.v_intake_message_contexts_v1",
     "public.v_quote_goods_receipt_v1"
@@ -196,7 +200,8 @@
   "events": {
     "emits": [
       "ORDER_INTAKE_CREATED_V1",
-      "GOODS_RECEIPT_SAVED_V1"
+      "GOODS_RECEIPT_SAVED_V1",
+      "COMMUNICATION_DELIVERY_FAILED_V1"
     ],
     "consumes": []
   },

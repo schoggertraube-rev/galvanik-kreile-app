@@ -1,6 +1,6 @@
 import "server-only";
 import {readOpenOrderComplaint} from '@/lib/server/orderReleaseRead';
-import {COMPLAINT_ORDER_COPY} from '@/ui/situationCatalog';
+import {COMPLAINT_ORDER_COPY,MANUAL_SHIPPING_HANDOVER_LABEL} from '@/ui/situationCatalog';
 
 import { randomUUID } from "node:crypto";
 import { GOODS_OUT_DEBT_COPY } from "@/ui/situationCatalog";
@@ -20,6 +20,7 @@ import {
 import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   withPrivilegedTenantTransaction,
+  withTenantSavepoint,
   type PrivilegedTenantTransaction,
 } from "@/lib/server/privilegedDb";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
@@ -103,7 +104,7 @@ export type RecordGoodsOutResult =
   | { code: "UNAVAILABLE"; message: string };
 
 type LockedOrder = {
-  ausgabe_frei:boolean;
+  release_ready:boolean;
   id: string;
   tenant_id: string;
   customer_id: string | null;
@@ -272,7 +273,8 @@ async function readOrder(
 ): Promise<LockedOrder[]> {
   const query = sql`
     SELECT id, tenant_id, customer_id, station, current_station,
-      current_station_id, status, version, payment_mode, nacharbeit_zu, ausgabe_frei
+      current_station_id, status, version, payment_mode, nacharbeit_zu,
+      private.order_release_allowed_v1(tenant_id,id,true,true) AS release_ready
     FROM public.orders
     WHERE id = ${orderId} AND tenant_id = ${tenantId}
     LIMIT 2
@@ -651,8 +653,10 @@ export async function authorizeGoodsOutInput(input: unknown): Promise<
 }
 
 type GoodsOutComposition={
-  beforeOrderLock:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
-  beforeWrite:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<Exclude<RecordGoodsOutResult,{code:'OK'}>|null>;
+  beforeOrderLock?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
+  beforeWrite?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<Exclude<RecordGoodsOutResult,{code:'OK'}>|null>;
+  afterWrite?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
+  afterWriteFailure?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:GoodsOutReceipt)=>Promise<void>;
 };
 class GoodsOutRejected extends Error{
   constructor(readonly result:Exclude<RecordGoodsOutResult,{code:'OK'}>){super('GOODS_OUT_REJECTED');}
@@ -700,7 +704,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
 
       // Invoice advisory locks must precede the shared order-row lock to avoid
       // deadlock with a simultaneous standalone invoice action.
-      await composition?.beforeOrderLock(tx,authorization.data);
+      await composition?.beforeOrderLock?.(tx,authorization.data);
       const orders = await readOrder(tx, tenantId, input.orderId, true);
       const order = orders[0];
       if (orders.length !== 1 || !order || order.tenant_id !== tenantId) {
@@ -730,7 +734,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
 
       // This decision uses invoice facts even when the actor cannot see money.
       // Do not use the visibility-filtered customer-hints projection as a gate.
-      const overdueInvoices = await tx.execute<{ id: string; invoice_number: string }>(sql`
+      const overdueInvoices = isRework ? [] : await tx.execute<{ id: string; invoice_number: string }>(sql`
         SELECT invoice.id::text, invoice.invoice_number
         FROM public.invoices invoice
         WHERE invoice.tenant_id = ${tenantId}
@@ -775,11 +779,13 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
       ) {
         return { code: "VALIDATION_ERROR", message: "Zahlung fehlt." };
       }
-      if (order.ausgabe_frei !== true && agreement === null) {
+      // Payment and debt are checked by the existing validated contracts below
+      // and above (including explicit agreement/override). Never trust the cache.
+      if (order.release_ready !== true) {
         return { code: "CONFLICT", message: "Ausgabe ist noch nicht freigegeben. Zahlung oder Abschluss fehlt." };
       }
 
-      const preparation=await composition?.beforeWrite(tx,authorization.data);
+      const preparation=await composition?.beforeWrite?.(tx,authorization.data);
       if(preparation)return preparation;
       const invoices = await readActiveInvoice(tx, tenantId, order.id);
       if (invoices.length > 1) {
@@ -1025,11 +1031,43 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
         || !await orderMatchesReceipt(tx,persistedOrders[0], receipt, tenantId)
       ) throw new Error("GOODS_OUT_READBACK_INVALID");
 
+      if(input.mode==='versand'){
+        // A typed manual-tracking receipt proves which parcels this real
+        // physical release hands over. A label alone never reaches this code.
+        const parcels=await tx.execute<{id:string;tracking_number:string;carrier:string}>(sql`
+          UPDATE public.shipments shipment SET status='shipped',shipped_at=${receipt.occurredAt}::timestamptz,
+            updated_at=${receipt.occurredAt}::timestamptz
+          WHERE shipment.tenant_id=${tenantId} AND shipment.order_id=${order.id}
+            AND shipment.status='created' AND shipment.shipped_at IS NULL
+            AND EXISTS(SELECT 1 FROM public.events proof
+              WHERE proof.tenant_id=shipment.tenant_id AND proof.order_id=shipment.order_id
+                AND proof.event_type='SHIPMENT_MANUAL_TRACKING_SET_V1' AND proof.status='success'
+                AND proof.user_id IS NOT NULL AND proof.payload->'receipt'->>'shipmentId'=shipment.id::text
+                AND proof.payload->'receipt'->>'trackingNumber'=shipment.tracking_number
+                AND proof.payload->'receipt'->>'carrier'=shipment.carrier)
+          RETURNING shipment.id::text,shipment.tracking_number,shipment.carrier
+        `);
+        for(const parcel of parcels)await tx.execute(sql`
+          INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,payload,status,
+            client_event_id,event_schema_version,correlation_id,aggregate_version,station,created_at)
+          VALUES(${randomUUID()},${tenantId},${order.id},'SHIPMENT_HANDED_OVER_V1',${MANUAL_SHIPPING_HANDOVER_LABEL},${actorId}::uuid,
+            ${JSON.stringify({shipmentId:parcel.id,trackingNumber:parcel.tracking_number,carrier:parcel.carrier,goodsOutEventId:receipt.eventId,source:'manual_tracking'})}::jsonb,
+            'success',${randomUUID()}::uuid,1,${receipt.correlationId}::uuid,${receipt.orderVersion},'abgeholt',${receipt.occurredAt}::timestamptz AT TIME ZONE 'UTC')
+        `);
+      }
       return { code: "OK", receipt, replayed: false };
     };
     return await withPrivilegedTenantTransaction(authorization.data,async tx=>{
       const result=await write(tx);
       if(result.code!=='OK')throw new GoodsOutRejected(result);
+      if(composition?.afterWrite){
+       try{await withTenantSavepoint(tx,nested=>composition.afterWrite!(nested,authorization.data));}
+       catch(error){
+        console.error('[GOODS_OUT_FOLLOWUP_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});
+        if(!composition.afterWriteFailure)throw error;
+        await composition.afterWriteFailure(tx,authorization.data,result.receipt);
+       }
+      }
       return result;
     });
   } catch (error: unknown) {

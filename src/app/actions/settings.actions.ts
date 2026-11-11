@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { resolveAuthorization,hasAuthorizationArea } from "@/lib/server/authorization";
 import {
   changeOwnPin,
   createManagedUser,
@@ -34,6 +34,7 @@ async function settingsContext() {
       canManageCompany: areas.includes("einstellungen"),
       canManageLogins: areas.includes("logins"),
       canManageSystem: areas.includes("wartung"),
+      canManageFinancial: hasAuthorizationArea(result.data,'geld'),
     },
   };
 }
@@ -67,10 +68,24 @@ async function refreshSettingsSession(authorization: {
   });
 }
 
+function presentShippingSettings<T extends object>(result:T,canReadMoney:boolean):T{
+ if(canReadMoney)return result;
+ const presented={...result} as Record<string,unknown>;
+ for(const key of ['settings','current']){
+  const settings=presented[key];if(!settings||typeof settings!=='object'||Array.isArray(settings))continue;
+  const value=settings as Record<string,unknown>,policy=value.dispatchPolicy;
+  if(policy&&typeof policy==='object'&&!Array.isArray(policy)){
+   const operational={...policy} as Record<string,unknown>;delete operational.storageWeeklyCents;
+   presented[key]={...value,dispatchPolicy:operational};
+  }
+ }
+ return presented as T;
+}
 export async function readShippingSettingsAction(){
  const resolved=await settingsContext();if(!resolved)return {code:"UNAUTHENTICATED" as const,message:"Sitzung fehlt."};
  const {readShippingSettings}=await import("@/modules/fundament/server-public");
- return readShippingSettings({...resolved.context,canRead:resolved.context.canManageCompany===true||resolved.authorization.areas?.includes("auftraege")===true});
+ const result=await readShippingSettings({...resolved.context,canRead:resolved.context.canManageCompany===true||resolved.authorization.areas?.includes("auftraege")===true});
+ return presentShippingSettings(result,hasAuthorizationArea(resolved.authorization,'geld'));
 }
 export async function saveQuoteSettingsAction(input:unknown) {
   const resolved=await settingsContext();
@@ -82,7 +97,8 @@ export async function saveQuoteSettingsAction(input:unknown) {
 }
 export async function saveShippingSettingsAction(input:unknown){
  const resolved=await settingsContext();if(!resolved)return {code:"UNAUTHENTICATED" as const,message:"Sitzung fehlt."};
- const {updateShippingSettings}=await import("@/modules/fundament/server-public");return updateShippingSettings(resolved.context,input);
+ const {updateShippingSettings}=await import("@/modules/fundament/server-public");const result=await updateShippingSettings(resolved.context,input);
+ return presentShippingSettings(result,hasAuthorizationArea(resolved.authorization,'geld'));
 }
 
 export async function readSettingsAction() {

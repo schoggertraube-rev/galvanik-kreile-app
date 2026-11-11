@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import { overdueInvoiceCondition } from "@/lib/server/paymentContract";
+import {CUSTOMER_METRICS_COPY} from '@/ui/situationCatalog';
 import {evaluateOrderPriority} from '@/lib/priority';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -73,6 +74,7 @@ export type CustomerSummaryOrder = {
 };
 
 export type CustomerSummary = CustomerStoredProfile & {
+  kennzahlen?:CustomerKennzahlen;
   hints?:CustomerHint[];
   id: string;
   customerNumber: string | null;
@@ -104,6 +106,77 @@ export type CustomerSummary = CustomerStoredProfile & {
   agreementSlotsAvailable: number;
   orders: CustomerSummaryOrder[];
 };
+
+export type CustomerKennzahlen={
+  period:{from:string;to:string;timeZone:'Europe/Berlin'};
+  asOf:string;
+  averagePaymentDays?:{id:'KZ-ZAHLUNGSDAUER';value:number|null;invoiceCount:number};
+  overdue?:{invoiceCount:number;openAmountCents:number};
+  revenue?:{id:'KZ-UMSATZ';netAmountCents:number};
+  openInvoices?:{amountCents:number};
+  complaintRatio:{id:'KZ-REKLAMATIONSQUOTE';complaintCount:number;releasedOrderCount:number;ratio:number|null};
+  classification:{value:null;state:'missing_thresholds';reason:string};
+};
+
+/** The customer picture's single metrics port. No search-answer or persisted rollup. */
+async function readCustomerKennzahlen(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string):Promise<CustomerKennzahlen>{
+ const money=hasAuthorizationArea(auth,'geld');
+ const rows=await tx.execute<{from_date:string;to_date:string;as_of:Date|string;paid_count:number;payment_days:string|number|null;overdue_count:number;overdue_open:string|number;net_revenue:string|number;open_total:string|number;released_count:number;complaint_count:number;release_integrity:boolean}>(sql`
+  WITH calendar AS (
+   SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-interval '12 months')::date AS from_date,
+          (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date AS to_date
+  ), delivered AS (
+   SELECT orders.id,
+          release.integrity_ok IS TRUE AND release.goods_out_event_count=1 AND release.goods_out_occurred_at IS NOT NULL AS valid,
+          (release.goods_out_occurred_at::timestamptz AT TIME ZONE 'Europe/Berlin')::date AS released_date
+   FROM public.orders orders
+   LEFT JOIN private.v_goods_out_ui_state_v1 release ON release.tenant_id=orders.tenant_id AND release.order_id=orders.id
+   WHERE orders.tenant_id=${auth.tenantId} AND orders.customer_id=${customerId} AND orders.station='abgeholt'
+  )
+  SELECT calendar.from_date::text,calendar.to_date::text,statement_timestamp() AS as_of,
+         paid.invoice_count AS paid_count,paid.average_days AS payment_days,
+         overdue.invoice_count AS overdue_count,overdue.open_amount AS overdue_open,
+         billing.net_revenue,billing.open_total,
+         (SELECT count(*)::integer FROM delivered WHERE released_date BETWEEN calendar.from_date AND calendar.to_date) AS released_count,
+         (SELECT count(*)::integer FROM public.complaints complaint
+          WHERE complaint.tenant_id=${auth.tenantId} AND complaint.order_id IN
+           (SELECT id FROM delivered WHERE released_date BETWEEN calendar.from_date AND calendar.to_date)) AS complaint_count,
+         (SELECT coalesce(bool_and(valid),true) FROM delivered) AS release_integrity
+  FROM calendar
+  CROSS JOIN LATERAL (
+   SELECT count(*)::integer AS invoice_count,
+          avg((invoice.payment_paid_at AT TIME ZONE 'Europe/Berlin')::date-(invoice.issued_at AT TIME ZONE 'Europe/Berlin')::date) AS average_days
+   FROM public.invoices invoice
+   WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId}
+     AND invoice.contract_version=1 AND invoice.status='issued' AND invoice.payment_status='bezahlt'
+     AND (invoice.issued_at AT TIME ZONE 'Europe/Berlin')::date BETWEEN calendar.from_date AND calendar.to_date
+     AND ${money}
+  ) paid
+  CROSS JOIN LATERAL (
+   SELECT count(*)::integer AS invoice_count,coalesce(sum(invoice.payment_open_amount_cents),0)::bigint AS open_amount
+   FROM public.invoices invoice
+   WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId} AND ${overdueInvoiceCondition()} AND ${money}
+  ) overdue
+  CROSS JOIN LATERAL (
+   SELECT coalesce(sum(invoice.net_amount_cents) FILTER(WHERE (invoice.issued_at AT TIME ZONE 'Europe/Berlin')::date BETWEEN calendar.from_date AND calendar.to_date),0)
+        - coalesce(sum(invoice.net_amount_cents) FILTER(WHERE invoice.status='cancelled' AND (invoice.cancelled_at AT TIME ZONE 'Europe/Berlin')::date BETWEEN calendar.from_date AND calendar.to_date),0) AS net_revenue,
+          coalesce(sum(invoice.payment_open_amount_cents) FILTER(WHERE invoice.status='issued'),0) AS open_total
+   FROM public.invoices invoice WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId}
+     AND invoice.contract_version=1 AND invoice.status IN ('issued','cancelled') AND ${money}
+  ) billing
+ `);
+ const row=rows[0];if(rows.length!==1||!row)throw Error('CUSTOMER_METRICS_RESULT_INVALID');
+ const average=row.payment_days===null?null:Number(row.payment_days),open=Number(row.overdue_open);
+ const revenue=Number(row.net_revenue),openTotal=Number(row.open_total);
+ if(row.release_integrity!==true||!Number.isSafeInteger(row.released_count)||row.released_count<0||!Number.isSafeInteger(row.complaint_count)||row.complaint_count<0)throw Error('CUSTOMER_METRICS_COHORT_INVALID');
+ if(!Number.isSafeInteger(revenue)||!Number.isSafeInteger(openTotal)||openTotal<0)throw Error('CUSTOMER_METRICS_AMOUNT_INVALID');
+ if(!Number.isSafeInteger(row.paid_count)||row.paid_count<0||!Number.isSafeInteger(row.overdue_count)||row.overdue_count<0||!Number.isSafeInteger(open)||open<0||(row.paid_count===0)!==(average===null)||average!==null&&!Number.isFinite(average))throw Error('CUSTOMER_METRICS_VALUES_INVALID');
+ return {period:{from:row.from_date,to:row.to_date,timeZone:'Europe/Berlin'},asOf:toIso(row.as_of),
+  ...(money?{revenue:{id:'KZ-UMSATZ' as const,netAmountCents:revenue},openInvoices:{amountCents:openTotal},averagePaymentDays:{id:'KZ-ZAHLUNGSDAUER' as const,value:average,invoiceCount:row.paid_count},overdue:{invoiceCount:row.overdue_count,openAmountCents:open}}:{}),
+  classification:{value:null,state:'missing_thresholds',reason:CUSTOMER_METRICS_COPY.classificationMissing},
+  complaintRatio:{id:'KZ-REKLAMATIONSQUOTE',complaintCount:row.complaint_count,releasedOrderCount:row.released_count,ratio:row.released_count===0?null:row.complaint_count/row.released_count},
+ };
+}
 
 export type CustomerSummaryReadResult =
   | { code: "OK"; data: CustomerSummary }
@@ -338,10 +411,11 @@ function mapSummary(
   profile: CustomerStoredProfile,
   agreements: CustomerAgreementSummary[],
   agreementSlotsAvailable: number,
+  kennzahlen: CustomerKennzahlen,
 ): CustomerSummary {
   const orders = mapOrders(row.orders);
-  const invoiceRevenueCents = Number(row.invoice_revenue_cents);
-  const invoiceOpenCents = Number(row.invoice_open_cents);
+  const money=hasAuthorizationArea(authorization,'geld');
+  if(money&&(!kennzahlen.revenue||!kennzahlen.openInvoices))throw Error('CUSTOMER_METRICS_MONEY_MISSING');
   if (
     row.integrity_ok !== true
     || row.tenant_id !== authorization.tenantId
@@ -350,10 +424,6 @@ function mapSummary(
     || row.name.length < 1
     || !Number.isSafeInteger(row.order_count)
     || !Number.isSafeInteger(row.ware_im_haus_count)
-    || !Number.isSafeInteger(invoiceRevenueCents)
-    || invoiceRevenueCents < 0
-    || !Number.isSafeInteger(invoiceOpenCents)
-    || invoiceOpenCents < 0
     || row.order_count !== orders.length
     || row.ware_im_haus_count !== orders.filter((order) => ["angenommen", "galvanik", "fertig"].includes(order.status)).length
     || row.ware_im_haus !== (row.ware_im_haus_count > 0)
@@ -377,7 +447,8 @@ function mapSummary(
     paymentPreference: profile.paymentPreference,
     invoiceTermsEnabled: row.invoice_terms_enabled,
     vatId: profile.vatId,
-    classification: row.classification,
+    classification: kennzahlen.classification.value,
+    kennzahlen,
     internalNotes: profile.notes,
     tags: mapTags(row.tags),
     createdAt: toIso(row.created_at),
@@ -385,7 +456,7 @@ function mapSummary(
     orderCount: row.order_count,
     wareImHausCount: row.ware_im_haus_count,
     wareImHaus: row.ware_im_haus,
-    ...(hasAuthorizationArea(authorization,'geld')?{invoiceRevenueCents,invoiceOpenCents}:{}),
+    ...(money?{invoiceRevenueCents:kennzahlen.revenue!.netAmountCents,invoiceOpenCents:kennzahlen.openInvoices!.amountCents}:{}),
     agreements,
     agreementSlotsAvailable,
     orders,
@@ -407,21 +478,11 @@ export async function readCustomerSummary(
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<SummaryRow>(sql`
         SELECT summary.*,
-               customer.ziel_freigeschaltet AS invoice_terms_enabled,
-               COALESCE(billing.invoice_revenue_cents, 0)::bigint AS invoice_revenue_cents,
-               COALESCE(billing.invoice_open_cents, 0)::bigint AS invoice_open_cents
+               customer.ziel_freigeschaltet AS invoice_terms_enabled
         FROM private.v_customer_summary_v1 summary
         JOIN public.customers customer
           ON customer.tenant_id = summary.tenant_id
          AND customer.id = summary.id
-        LEFT JOIN LATERAL (
-          SELECT sum(invoice.gross_amount_cents) FILTER (WHERE invoice.status = 'issued') AS invoice_revenue_cents,
-                 sum(invoice.payment_open_amount_cents) FILTER (WHERE invoice.status = 'issued') AS invoice_open_cents
-          FROM public.invoices invoice
-          WHERE invoice.tenant_id = summary.tenant_id
-            AND invoice.customer_id = summary.id
-            AND ${hasAuthorizationArea(authorization,'geld')}
-        ) billing ON true
         WHERE summary.id = ${input.customerId}
           AND (customer.type IS DISTINCT FROM 'lieferant' OR ${hasAuthorizationArea(authorization,'geld')})
         LIMIT 2
@@ -437,7 +498,8 @@ export async function readCustomerSummary(
          hasAuthorizationArea(authorization, "geld"),
        );
        const agreementSlotsAvailable = await readCustomerAgreementSlots(tx, authorization.tenantId, input.customerId);
-       return mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable);
+       const kennzahlen=await readCustomerKennzahlen(tx,authorization,input.customerId);
+       return mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable,kennzahlen);
     });
     if(data){const signals=await readCustomerListSignals(authorization,[input.customerId]);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;}
     return data

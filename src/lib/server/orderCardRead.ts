@@ -696,6 +696,22 @@ export async function readLiveOrderCard(
         });
         const currentShape = items.map(shape);
         const eventShape = eventItems.map(shape);
+        // The existing invoice-price command may fill an unpriced position
+        // after this content receipt. Only its real later receipt can explain
+        // that price change; copying the current value would hide corruption.
+        const priceEvents=await tx.execute<{payload:{prices:unknown}}>(sql`SELECT payload FROM public.events WHERE tenant_id=${authorization.tenantId} AND order_id=${input.orderId}
+          AND event_type='ORDER_INVOICE_PRICES_SET_V1' AND status='success' AND event_schema_version=1 AND user_id IS NOT NULL
+          AND aggregate_version>${contentEvent!.aggregate_version} AND aggregate_version<=${queue.version} ORDER BY aggregate_version,created_at,id`);
+        for(const priceEvent of priceEvents){
+          const prices=priceEvent.payload?.prices;
+          if(!Array.isArray(prices)||!prices.length||new Set(prices.map(price=>price?.itemId)).size!==prices.length)throw Error('ORDER_CARD_INVOICE_PRICE_RECEIPT_INVALID');
+          for(const price of prices){
+            if(!price||typeof price!=='object'||Object.keys(price).sort().join(',')!=='itemId,unitPriceCents'||typeof price.itemId!=='string'||!UUID_PATTERN.test(price.itemId)||!Number.isSafeInteger(price.unitPriceCents)||price.unitPriceCents<0)throw Error('ORDER_CARD_INVOICE_PRICE_RECEIPT_INVALID');
+            const expected=eventShape.find(item=>item.id===price.itemId);
+            if(!expected||expected.catalogServiceId!==null||expected.unitPriceCents!==null)throw Error('ORDER_CARD_INVOICE_PRICE_RECEIPT_INVALID');
+            expected.unitPriceCents=price.unitPriceCents;
+          }
+        }
         if (JSON.stringify(currentShape) !== JSON.stringify(eventShape) || eventPayload?.note !== (queue.task ?? null)) {
           throw new Error("ORDER_CARD_CONTENT_READBACK_INVALID");
         }

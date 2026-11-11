@@ -1124,11 +1124,16 @@ it.each([false,true,'operational'] as const)('AF-8/17 telephone acceptance and g
   const auth=await withSession(operator,()=>resolveAuthorization());expect(auth.ok).toBe(true);if(auth.ok){expect(auth.data.areas).not.toContain('geld');expect(auth.data.areas).not.toContain('eingang');}
   expect(await withSession(operator,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:fixture.customerId},dueDate:'2027-04-20',handoverMode:'pickup',items:[{catalogServiceId:null,name:'TEST Direktversuch',quantity:1,material:null,surfaceRequested:'verchromen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:null}))).toMatchObject({code:'FORBIDDEN'});
   const {undoQuoteConversionAction,readQuoteConversionReceiptAction}=await import('@/app/actions/quotes.actions');
-  const beforeUndo=await withSession(operator,()=>readQuoteAction({quoteId,purpose:'operations'}));expect(beforeUndo).toMatchObject({code:'OK',undo:{ready:true,canUndo:true}});
+  await sql`UPDATE public.print_jobs SET attempts=1 WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${result.orderReceipt.orderId}`;
+  expect(await withSession(operator,()=>readQuoteAction({quoteId,purpose:'operations'}))).toMatchObject({code:'OK',undo:{ready:true,canUndo:false}});
+  await sql`UPDATE public.print_jobs SET attempts=0 WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${result.orderReceipt.orderId}`;
+  const beforeUndo=await withSession(operator,()=>readQuoteAction({quoteId,purpose:'operations'}));expect(beforeUndo.code==='OK'?beforeUndo.undo:null).toMatchObject({ready:true,reason:null,canUndo:true});
   if(beforeUndo.code!=='OK')throw Error('TEST_UNDO_READ');
   const undo={quoteId,expectedVersion:beforeUndo.quote.version,clientEventId:randomUUID(),reason:'TEST falsche Zuordnung unmittelbar zurückgenommen'};
   const reversed=await withSession(operator,()=>undoQuoteConversionAction(undo));expect(reversed).toMatchObject({code:'OK',replayed:false,orderId:result.orderReceipt.orderId,quote:{status:'draft',linkedOrderId:null,lifecycle:{acceptedEdition:1}}});
   expect((await sql`SELECT status,ware,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${result.orderReceipt.orderId}`)[0]).toMatchObject({status:'storniert',ware:'storniert',version:2});
+  expect(await sql`SELECT status,attempts FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${result.orderReceipt.orderId}`).toEqual(expect.arrayContaining([{status:'storniert',attempts:0}]));
+  expect((await sql`SELECT print_symbol_active FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${result.orderReceipt.orderId}`)[0]).toEqual({print_symbol_active:false});
   expect((await sql`SELECT auftrag_id,kv_id::text FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`)[0]).toMatchObject({auftrag_id:null,kv_id:quoteId});
   expect((await sql`SELECT vorgang_art,vorgang_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0]).toMatchObject({vorgang_art:'kv',vorgang_id:quoteId});
   expect(await withSession(operator,()=>undoQuoteConversionAction(undo))).toMatchObject({code:'OK',replayed:true});

@@ -1,4 +1,5 @@
 import "server-only";
+import {offlinePartition} from "./offlinePartition";
 import {createPinLoginHandle} from './pinLoginHandle';
 
 import type {
@@ -15,6 +16,7 @@ import {
 export type AuthBootstrapUser = {
   /** Public opaque login handle, reused only for this login's local reading marker. */
   loginHandle?: string;
+  offlineScope?: string;
   role: AppRole;
   displayName: string;
   areas: readonly AccessArea[];
@@ -49,6 +51,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
       status: "authenticated",
       user: {
         loginHandle:createPinLoginHandle(result.data.userId),
+        offlineScope:offlinePartition(result.data),
         role: result.data.role,
         displayName: result.data.displayName,
         areas: [...(result.data.areas ?? [])],

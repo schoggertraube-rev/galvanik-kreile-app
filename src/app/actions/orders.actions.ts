@@ -1,5 +1,14 @@
 "use server";
 
+export async function getProductionWeekAction(input?:{onDate?:string}){
+ noStore();
+ const authorization=await resolveAuthorization();
+ if(!authorization.ok)return {code:authorization.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE' as const:'UNAUTHENTICATED' as const};
+ if(input!==undefined&&(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>key!=='onDate')||input.onDate!==undefined&&typeof input.onDate!=='string'))return {code:'VALIDATION_ERROR' as const};
+ const {readProductionWeek}=await import('@/lib/server/productionSnapshotPort');
+ return readProductionWeek(authorization.data,input?.onDate);
+}
+
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import type { ActionResult } from "@/lib/server/authHelper";
 import {
@@ -190,7 +199,7 @@ type OrderCardActionResult<T> = OrderCardReadResult<T> | {
 
 async function resolveOrderCardAuthorization(): Promise<
   | { ok: true; data: AuthorizationSnapshot }
-  | { ok: false; result: OrderCardActionResult<never> }
+  | { ok: false; result: Exclude<OrderCardActionResult<never>,{code:'OK'}> }
 > {
   let authorization;
   try {
@@ -217,7 +226,7 @@ async function resolveOrderCardAuthorization(): Promise<
 
 export async function getLiveOrderCardAction(
   input: { orderId: string },
-): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[] }>> {
+): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>>; pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>> }>> {
   noStore();
   try {
     const authorization = await resolveOrderCardAuthorization();
@@ -246,7 +255,15 @@ export async function getLiveOrderCardAction(
     if (evidence.code !== "OK") return evidence;
     const {readOrderActors}=await import('@/modules/orders/server-public');
     const actors=await readOrderActors(authorization.data,{orderId:input.orderId,version:card.data.version});
-    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data } };
+    const manualShipping=card.data.handoverMode==='shipping'?await readManualShippingForOrder(authorization.data,input.orderId):undefined;
+    const {readOrderInformed}=await import('@/lib/server/orderReleaseRead');
+    const customerInformed=await readOrderInformed(authorization.data,input.orderId);
+    if(customerInformed.code==='OK'&&customerInformed.orderVersion!==card.data.version)return {code:'UNAVAILABLE',message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'};
+    const {readOrderPrintQueue}=await import('@/modules/orders/server-public');
+    const printQueue=await readOrderPrintQueue(authorization.data,input.orderId);
+    const {readOrderPickupAppointment}=await import('@/lib/server/pickupAppointmentPort');
+    const pickupAppointment=await readOrderPickupAppointment(authorization.data,input.orderId);
+    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,
@@ -254,6 +271,57 @@ export async function getLiveOrderCardAction(
     });
     return { code: "UNAVAILABLE", message: "Auftragskarte ist derzeit nicht verfügbar." };
   }
+}
+
+async function manualShippingPorts(){
+ const [{readCustomerProfile},{readShippingSettingsInTransaction}]=await Promise.all([import('@/modules/customers/server-public'),import('@/modules/fundament/server-public')]);
+ return {readCustomer:readCustomerProfile,readSettings:readShippingSettingsInTransaction};
+}
+export async function markOrderInformedByPhoneAction(input:{orderId:string;expectedVersion:number;clientEventId:string}){
+ const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
+ const {markOrderInformedByPhone}=await import('@/lib/server/orderReleaseRead');
+ const result=await markOrderInformedByPhone(auth.data,input);
+ if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
+ return result;
+}
+export async function setOrderPickupAppointmentAction(input:unknown){
+ const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
+ const {setOrderPickupAppointment,readAppointmentPostalContext}=await import('@/lib/server/pickupAppointmentPort');
+ const [{finishDispatchCallsForAppointment},{completeOrderCallbackTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/lib/server/dispatchCallPort'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+ const [{finishPostalTasksForAppointment},{finishFinalTasksForAppointment},{completeStorageTaskForAppointment,restrictCollectionTaskForAppointment,createOrderHandoverTask}]=await Promise.all([import('@/lib/server/storagePostalPort'),import('@/lib/server/storageFinalStagePort'),import('@/modules/tasks/server-public')]);
+ const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
+ const result=await setOrderPickupAppointment(auth.data,input,async(tx,receipt)=>{
+  const effects={effect:(writeTx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,actor:AuthorizationSnapshot,effect:import('@/modules/tasks/server-public').TaskEffectRequest)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)};
+  await finishDispatchCallsForAppointment(tx,auth.data,receipt,(taskId,note)=>completeOrderCallbackTask(tx,auth.data,taskId,note,effects),taskId=>restrictCollectionTaskForAppointment(tx,auth.data,{taskId,appointmentEventId:receipt.eventId},effects));
+  const close=(taskId:string,note:string)=>completeStorageTaskForAppointment(tx,auth.data,{taskId,note,appointmentEventId:receipt.eventId},effects);
+  const postalContext=await readAppointmentPostalContext(tx,auth.data,receipt.eventId);
+  if(postalContext.sourceTaskId){
+  const settings=await readShippingSettingsInTransaction(tx,auth.data.tenantId);if(!settings)throw Error('PICKUP_POSTAL_SETTINGS_UNAVAILABLE');
+  await finishPostalTasksForAppointment(tx,auth.data,receipt,close,{
+   settingsUpdatedAt:settings.updatedAt,
+   customerCurrent:async(writeTx,snapshot)=>{const {customerCountryLabel}=await import('@/modules/customers/public');const customer=await readCustomerProfile(writeTx,auth.data.tenantId,postalContext.customerId,true),r=snapshot.recipient;return !!customer&&customer.name===r.name&&[customer.street,customer.houseNumber].filter(Boolean).join(' ')===r.street&&customer.zipCode===r.zip&&customer.city===r.city&&customerCountryLabel(customer.country)===r.country;},
+   createTask:(writeTx,value)=>createOrderHandoverTask(writeTx,auth.data,value,effects,postalContext.sourceTaskId?{taskId:postalContext.sourceTaskId,appointmentEventId:receipt.eventId}:undefined)
+  });
+  }
+  await finishFinalTasksForAppointment(tx,auth.data,receipt,close,taskId=>restrictCollectionTaskForAppointment(tx,auth.data,{taskId,appointmentEventId:receipt.eventId},effects));
+ });
+ if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
+ return result;
+}
+async function readManualShippingForOrder(auth:AuthorizationSnapshot,orderId:unknown){
+ const {readManualShipping}=await import('@/modules/orders/server-public');
+ return readManualShipping(auth,orderId,await manualShippingPorts());
+}
+export async function getManualShippingAction(input:{orderId:string}){
+ const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
+ return readManualShippingForOrder(auth.data,input?.orderId);
+}
+export async function saveManualTrackingAction(input:unknown){
+ const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
+ const {saveManualTracking}=await import('@/modules/orders/server-public');
+ const result=await saveManualTracking(auth.data,input,await manualShippingPorts());
+ if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
+ return result;
 }
 
 export async function getExtraWorkMasterDataAction(): Promise<OrderCardActionResult<ExtraWorkMasterData>> {
@@ -397,10 +465,19 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
       getOperationalOrders(authorization.data),
     ]);
     const cardReads = await Promise.all(orders.map((order) => readLiveOrderCard(authorization.data, { orderId: order.id })));
+    const finished=orders.some(order=>order.station==='fertig')?await (async()=>{
+     const [{readFinishedDispatchQueue},{readShippingSettings}]=await Promise.all([import('@/modules/orders/server-public'),import('@/modules/fundament/server-public')]);
+     const settings=await readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true});
+     if(settings.code==='UNAVAILABLE')return {code:'UNAVAILABLE' as const};
+     const [{readCustomerProfile},{withPrivilegedTenantTransaction}]=await Promise.all([import('@/modules/customers/server-public'),import('@/lib/server/privilegedDb')]);
+     return readFinishedDispatchQueue(authorization.data,orders,settings.code==='OK'?settings.settings.dispatchPolicy??null:null,{readHasMail:id=>withPrivilegedTenantTransaction(authorization.data,async tx=>{const customer=await readCustomerProfile(tx,authorization.data.tenantId,id);if(!customer)throw Error('DISPATCH_CUSTOMER_NOT_FOUND');return !!customer.email?.trim();})});
+    })():{code:'OK' as const,rows:[]};
+    const projections=new Map(finished.code==='OK'?finished.rows.map((row,rank)=>[row.orderId,{state:row.unavailable?'unavailable' as const:'available' as const,rank,...row}]):[]);
     const data: OrderResponse[] = orders.map((order, index) => {
       const cardRead = cardReads[index];
       return {
         ...order,
+        ...(order.station==='fertig'?{finishedDispatch:projections.get(order.id)??{state:'unavailable' as const}}:{}),
         cardReadErrorCode: cardRead?.code === "OK"
           ? null
           : cardRead?.code === "UNAVAILABLE"

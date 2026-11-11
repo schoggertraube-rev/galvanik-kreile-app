@@ -17,6 +17,9 @@
     "src/lib/server/cardSearchRead.ts": [
       "private.v_card_search_documents_v1"
     ],
+    "src/lib/server/collectionReminderPort.ts": [
+      "private.v_order_freeze_state_v1"
+    ],
     "src/lib/server/commands/complaintCommand.ts": [
       "public.v_complaint_rework_context_v1"
     ],
@@ -62,13 +65,33 @@
       "private.v_payment_summary_v1",
       "public.v_complaint_rework_context_v1"
     ],
+    "src/lib/server/communicationDeliveryPort.ts": [
+      "private.v_intake_delivery_evidence_v1"
+    ],
+    "src/lib/server/communicationDocumentPort.ts": [
+      "private.v_order_freeze_state_v1"
+    ],
     "src/lib/server/communicationPort.ts": [
       "public.v_complaint_rework_context_v1"
     ],
     "src/lib/server/customerSummaryRead.ts": [
       "private.v_customer_summary_v1",
+      "private.v_goods_out_ui_state_v1",
       "private.v_open_quotes_v1",
       "private.v_operational_station_queue_v1"
+    ],
+    "src/lib/server/dispatchCallPort.ts": [
+      "private.v_order_freeze_state_v1"
+    ],
+    "src/lib/server/dispatchReplyEffectsPort.ts": [
+      "private.v_intake_reply_evidence_v1"
+    ],
+    "src/lib/server/dispatchReplyPort.ts": [
+      "private.v_intake_reply_evidence_v1"
+    ],
+    "src/lib/server/dispatchResponsePort.ts": [
+      "private.v_intake_delivery_evidence_v1",
+      "private.v_intake_reply_evidence_v1"
     ],
     "src/lib/server/effectiveCustomerAgreementRead.ts": [
       "private.v_customer_effective_agreement_v1"
@@ -108,6 +131,11 @@
       "private.v_order_intake_customers_v1",
       "private.v_order_intake_receipts_v1"
     ],
+    "src/lib/server/orderReleaseRead.ts": [
+      "private.v_goods_out_ui_state_v1",
+      "private.v_order_freeze_state_v1",
+      "private.v_order_frozen_receipts_v1"
+    ],
     "src/lib/server/orderStationAttachment.ts": [
       "private.v_order_evidence_attachment_receipts_v1"
     ],
@@ -126,6 +154,9 @@
       "private.v_goods_out_ui_state_v1",
       "private.v_payment_summary_v1"
     ],
+    "src/lib/server/pickupAppointmentPort.ts": [
+      "private.v_order_freeze_state_v1"
+    ],
     "src/lib/server/quoteGoodsContextPort.ts": [
       "private.v_quotes_v1"
     ],
@@ -135,6 +166,15 @@
     ],
     "src/lib/server/searchAuxiliaryRead.ts": [
       "private.v_evidence_records_v2"
+    ],
+    "src/lib/server/storageFinalStagePort.ts": [
+      "private.v_order_freeze_state_v1"
+    ],
+    "src/lib/server/storageLetterRead.ts": [
+      "private.v_goods_out_ui_state_v1"
+    ],
+    "src/lib/server/storagePostalPort.ts": [
+      "private.v_order_freeze_state_v1"
     ],
     "src/lib/server/todayDashboard.ts": [
       "private.v_goods_out_ui_state_v1",
@@ -170,6 +210,7 @@
       "private.v_quotes_v1"
     ],
     "src/modules/tasks/server/taskService.ts": [
+      "private.v_storage_final_task_context_v1",
       "private.v_task_contexts_v1",
       "private.v_task_recipients_v1"
     ]

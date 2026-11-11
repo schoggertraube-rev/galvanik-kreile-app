@@ -68,6 +68,7 @@ vi.mock("@/lib/pdf/OrderLabel", () => ({
 }));
 vi.mock("qrcode", () => ({ default: { toDataURL: mockQrToDataUrl } }));
 vi.mock("@react-pdf/renderer", () => ({ renderToBuffer: mockRenderToBuffer }));
+vi.mock("@/lib/pdf/StorageLetterDocument", () => ({createStorageLetterPdfDocument:vi.fn()}));
 
 const sourceFile = (source: string, fileName: string) =>
   ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);

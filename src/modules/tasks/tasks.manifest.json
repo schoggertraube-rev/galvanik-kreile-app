@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "owner": "AP-EIN Teil 4 – Aufgabe",
   "publicExports": [
+    "@/modules/tasks/server-public#completeOrderCallbackTask",
     "@/modules/tasks/server-public#createInvoiceClarificationTask",
     "@/modules/tasks/server-public#resolveInvoiceClarificationTask",
     "@/modules/tasks/server-public#createMissingGoodsTask",
@@ -31,16 +32,26 @@
     "@/modules/tasks/server-public#readQuoteFollowupTasksForToday",
     "@/modules/tasks/server-public#QuoteFollowupRequest",
     "@/modules/tasks/server-public#createOrderHandoverTask",
-    "@/modules/tasks/server-public#readOrderHandoverTaskState"
+    "@/modules/tasks/server-public#completeStorageTaskAfterGoodsOut",
+    "@/modules/tasks/server-public#completeStorageTaskForAppointment",
+    "@/modules/tasks/server-public#completeCollectionTaskForReply",
+    "@/modules/tasks/server-public#restrictCollectionTaskForReply",
+    "@/modules/tasks/server-public#readOrderHandoverTaskState",
+    "@/modules/tasks/server-public#createGoodsOutClarificationTask",
+    "@/modules/tasks/server-public#restrictCollectionTaskForAppointment"
   ],
   "capabilities": [
     "aufgabe:speichern",
     "aufgabe:erledigen"
   ],
   "migrations": [
-    "20261104012000_ein4_nachrichten.sql"
+    "20261110083000_storage_final_task_context.sql",
+    "20261104012000_ein4_nachrichten.sql",
+    "20261110083300_storage_final_missing_goods_proof.sql",
+    "20261110091300_storage_postal_task_context.sql"
   ],
   "viewsFunctions": [
+    "private.v_storage_final_task_context_v1",
     "private.v_task_contexts_v1",
     "private.v_task_recipients_v1"
   ],

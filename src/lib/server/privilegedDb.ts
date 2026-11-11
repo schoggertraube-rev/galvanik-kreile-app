@@ -24,3 +24,10 @@ export async function withPrivilegedTenantTransaction<T>(
     return work(transaction as PrivilegedTenantTransaction);
   });
 }
+
+/** Keep SQL failures inside the driver's nested transaction/savepoint scope.
+ * A raw SAVEPOINT does not clear postgres-js's outer transaction error state. */
+export async function withTenantSavepoint<T>(tx:PrivilegedTenantTransaction,work:(nested:PrivilegedTenantTransaction)=>Promise<T>):Promise<T>{
+ const transaction=tx as Parameters<Parameters<typeof db.transaction>[0]>[0];
+ return transaction.transaction(nested=>work(nested as PrivilegedTenantTransaction));
+}

@@ -309,3 +309,10 @@ export async function resolveLoginIdentityByEmail(
     return { ok: false, message: "AUTH_ERROR: Berechtigungen nicht verfügbar" };
   }
 }
+
+/** Existing effective rights choose one shared clarification inbox, never a new actor. */
+export async function readClarificationArea(tx:import('./privilegedDb').PrivilegedTenantTransaction,tenantId:string):Promise<'entscheiden'|'geld'>{
+ const rows=await tx.execute<{role:string;areas:string[]}>(sql`SELECT users.role,ARRAY(SELECT rights.bereich FROM public.app_user_rights rights WHERE rights.tenant_id=users.tenant_id AND rights.user_id=users.id) AS areas
+  FROM public.app_users users WHERE users.tenant_id=${tenantId} AND users.active=true`);
+ return rows.some(row=>isAppRole(row.role)&&hasAuthorizationArea({role:row.role,areas:row.areas.filter(isAccessArea)},'entscheiden'))?'entscheiden':'geld';
+}

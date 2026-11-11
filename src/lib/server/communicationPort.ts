@@ -1,12 +1,13 @@
 import "server-only";
 
 import { randomUUID,createHash } from "node:crypto";
-import {appendCommunicationDocument,communicationDocumentIntent,type CommunicationDocument} from './communicationDocumentPort';
+import {InvoiceMailListChanged,InvoiceAlreadySent,appendCommunicationDocument,communicationDocumentBody,communicationDocumentIntent,type CommunicationDocument} from './communicationDocumentPort';
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {hasAuthorizationArea} from '@/lib/server/authorization';
-import {MAIL_REQUEST_CONFLICT_COPY} from '@/ui/situationCatalog';
+import {INVOICE_DELIVERY_COPY,MAIL_REQUEST_CONFLICT_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {prepareCollectionReminder,appendCollectionReminderSent,type CollectionReminderMeta} from './collectionReminderPort';
 import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphConfigurationStatus,
@@ -30,7 +31,7 @@ export async function readComplaintGoodsReminderDates(tx:import('./privilegedDb'
 }
 type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string };
 type Target = { customerId: string; orderId: string | null; email: string; label: string };
-type ThreadRow = { id: string; customer_id: string | null; order_id: string | null; status: string | null; created_at: Date | string | null };
+type ThreadRow = { id: string; customer_id: string | null; order_id: string | null; status: string | null; created_at: Date | string | null;created_by?:string };
 type LinkedMessageRow = {
   thread_id: string;
   source: string;
@@ -219,7 +220,7 @@ export async function attachInboxMessage(
 
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || typeof input.clientRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.clientRequestId) || typeof input.subject !== 'string' || typeof input.body !== 'string' || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
@@ -228,7 +229,10 @@ export async function sendCommunicationMail(
   // mail access: target, state and version are read from the complaint itself.
   const reminder=input.complaintResult?.kind==='reminder';
   const complaintSummary=input.complaintResult?'Reklamation '+input.complaintResult.complaintId+(reminder?' · Begleitschein':' · Ergebnis'):null;
-  if(input.document&&(!input.attachment||input.document.kind!=='QUOTE'||!Number.isSafeInteger(input.document.version)||input.document.version<1||!Number.isSafeInteger(input.document.edition)||input.document.edition<1||input.document.sha256!==createHash('sha256').update(input.attachment.bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'KV-Fassung oder PDF-Nachweis ist ungültig.'};
+  if(input.document&&(!input.attachment||!['QUOTE','INVOICE'].includes(input.document.kind)||!Number.isSafeInteger(input.document.version)||input.document.version<1||input.document.kind==='QUOTE'&&(!Number.isSafeInteger(input.document.edition)||input.document.edition<1)||input.document.sha256!==createHash('sha256').update(input.attachment.bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'Belegfassung oder PDF-Nachweis ist ungültig.'};
+  const bundle=input.document?.kind==='INVOICE'?input.document.bundle??[]:[];
+  if(bundle.length!==(input.additionalAttachments?.length??0)||bundle.some((doc,index)=>doc.sha256!==createHash('sha256').update(input.additionalAttachments![index].bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'Sammel-Belege passen nicht zu den Original-PDFs.'};
+  if(input.document)input={...input,body:communicationDocumentBody(input.body,input.document)};
   if(input.complaintResult){
     if(!hasAuthorizationArea(auth,'kunden')||input.targetType!=='ORDER')return {code:'FORBIDDEN',message:'Kunde informieren erfordert Kunden.'};
     const context=await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`SELECT complaint_id FROM public.v_complaint_rework_context_v1 complaint WHERE tenant_id=${auth.tenantId} AND complaint_id=${input.complaintResult!.complaintId} AND ${reminder?sql`nacharbeit_auftrag_id=${input.targetId}`:sql`source_order_id=${input.targetId}`} AND (
@@ -252,13 +256,18 @@ export async function sendCommunicationMail(
     pending = await withPrivilegedTenantTransaction(auth, async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${auth.tenantId}:${source}`}, 0))`);
       const existing = await tx.execute<ThreadRow>(sql`
-        SELECT id, customer_id, order_id, status, created_at FROM public.communication_threads
+        SELECT id, customer_id, order_id, status, created_at,created_by::text FROM public.communication_threads
         WHERE tenant_id=${auth.tenantId} AND source=${source} LIMIT 2 FOR UPDATE
       `);
       if (existing.length > 1) throw new Error("COMMUNICATION_SOURCE_AMBIGUOUS");
       if (existing[0]) {
         if (existing[0].customer_id !== target.customerId || existing[0].order_id !== target.orderId) throw new Error("COMMUNICATION_TARGET_MISMATCH");
         if (existing[0].status !== "sent") throw new Error("COMMUNICATION_OUTCOME_UNCLEAR");
+        if(input.collectionReminder){
+         if(existing[0].created_by!==auth.userId)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
+         const proof=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND user_id=${auth.userId}::uuid AND payload->>'threadId'=${existing[0].id} AND payload->>'intent'=${input.collectionReminder.intent}`);
+         if(proof.length!==1)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
+        }
         if(input.document){const proof=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND payload->>'threadId'=${existing[0].id} AND payload->>'intent'=${communicationDocumentIntent(input,input.document)}`);if(proof.length!==1)throw Error('COMMUNICATION_DOCUMENT_REPLAY_INTENT_MISMATCH');}
         {
           const confirmed=await tx.execute<{id:string}>(sql`SELECT message.id FROM public.communication_messages message JOIN public.communication_threads thread ON thread.tenant_id=message.tenant_id AND thread.id=message.thread_id
@@ -269,7 +278,7 @@ export async function sendCommunicationMail(
         }
       }
       if(readMicrosoftGraphConfigurationStatus().code!=='READY')throw Error('COMMUNICATION_NOT_CONFIGURED');
-      if(input.document&&(!input.beforePrepare||!await input.beforePrepare(tx)))throw Error('COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED');
+      if((input.document&&!input.beforePrepare)||(input.beforePrepare&&!await input.beforePrepare(tx,target.email)))throw Error('COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED');
       const threadId = randomUUID();
       const rows = await tx.execute<ThreadRow>(sql`
         INSERT INTO public.communication_threads (id, tenant_id, customer_id, order_id, source, subject, status, priority, category, created_by)
@@ -278,17 +287,22 @@ export async function sendCommunicationMail(
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("COMMUNICATION_THREAD_INSERT_FAILED");
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,threadId,'prepared');
+      if(input.collectionReminder)await prepareCollectionReminder(tx,auth,input.collectionReminder,{threadId,clientRequestId:input.clientRequestId,body:input.body});
       return { threadId, recordedAt: iso(rows[0].created_at) };
     });
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_SEND_PREPARE_FAILED", error);
-    if(error instanceof Error&&error.message==='COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED')return {code:'VALIDATION_ERROR',message:'KV wurde seit der PDF-Erstellung geändert. Es wurde nichts gesendet. Aktuellen KV erneut wählen.'};
+    if(error instanceof Error&&error.message==='INVOICE_EXPECTED_LIST_INVALID'&&input.document?.kind==='INVOICE')return {code:'VALIDATION_ERROR',message:INVOICE_DELIVERY_COPY.expectedListMissing(input.document.number)};
+    if(error instanceof InvoiceMailListChanged)return {code:'VALIDATION_ERROR',message:INVOICE_DELIVERY_COPY.listChanged(error.number,error.added)};
+    if(error instanceof InvoiceAlreadySent)return {code:'CONFLICT',message:INVOICE_DELIVERY_COPY.alreadySent(error.number,error.sentOn)};
+    if(error instanceof Error&&error.message==='COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED')return {code:'VALIDATION_ERROR',message:'Beleg oder Auftragsstand wurde seit der PDF-Erstellung geändert. Es wurde nichts gesendet. Aktuellen Beleg erneut wählen.'};
     if(error instanceof Error&&error.message==='COMMUNICATION_NOT_CONFIGURED')return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
     if(error instanceof Error&&error.message==='COMMUNICATION_REPLAY_INTENT_MISMATCH')return {code:'CONFLICT',message:MAIL_REQUEST_CONFLICT_COPY};
+    if(error instanceof Error&&error.message.startsWith('COLLECTION_REMINDER_'))return {code:'CONFLICT',message:COLLECTION_REMINDER_COPY.preparedConflict};
     return { code: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "CONFLICT" : "UNAVAILABLE", message: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "Der Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; zuerst im Outlook-Ausgang prüfen." : "Der Mailversand konnte nicht sicher vorbereitet werden." };
   }
   if (pending.replay) return { code: "OK", data: pending.replay };
-  const sent = await sendMicrosoftGraphMail({ to: target.email, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment, replyToMessageId: input.document?.source?.graphMessageId });
+  const sent = await sendMicrosoftGraphMail({ to: target.email, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment,additionalAttachments:input.additionalAttachments, replyToMessageId: input.document?.source?.graphMessageId,clientRequestId:input.clientRequestId });
   if (sent.code !== "OK") {
     await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
       UPDATE public.communication_threads SET status='failed', updated_at=statement_timestamp()
@@ -320,6 +334,7 @@ export async function sendCommunicationMail(
         await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
           VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_SENT_V1','E-Mail versendet',${JSON.stringify({threadId:pending.threadId,messageId,customerId:target.customerId,orderId:target.orderId,contentSha256:createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex')})}::jsonb,'success',${auth.userId},${key}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC')`);
       }
+      if(input.collectionReminder)await appendCollectionReminderSent(tx,auth,input.collectionReminder,pending.threadId,messageId,input.clientRequestId);
     });
     return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: false } };
   } catch (error) {

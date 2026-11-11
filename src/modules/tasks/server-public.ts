@@ -4,3 +4,12 @@ export type {TaskEffectRequest,TaskEffects} from './server/taskService';
 export {createOrderHandoverTask,readOrderHandoverTaskState} from './server/taskService';
 
 export type {QuoteFollowupRequest} from './server/taskService';
+export {completeOrderCallbackTask} from './server/taskService';
+export {completeStorageTaskAfterGoodsOut} from './server/taskService';
+export {completeStorageTaskForAppointment} from './server/taskService';
+export {completeCollectionTaskForReply} from './server/taskService';
+export {restrictCollectionTaskForReply} from './server/taskService';
+
+export {createGoodsOutClarificationTask} from './server/taskService';
+
+export {restrictCollectionTaskForAppointment} from './server/taskService';

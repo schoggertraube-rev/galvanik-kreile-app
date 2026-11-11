@@ -3,7 +3,9 @@ import {PACKAGE_ASSIGN_COPY} from "@/ui/situationCatalog";
 import {quoteOperationContext,canReadQuoteForGoods} from "@/lib/server/quoteAuthorization";
 
 import {listOpenQuotesCommand,readPackageQuoteHistory} from '@/modules/quotes/server-public';
-import {readPackageOrderCustomers} from '@/modules/orders/server-public';
+import {readPackageOrderCustomers,createInitialOrderPrintJobs} from '@/modules/orders/server-public';
+import type {OrderIntakeTransactionBinding} from '@/lib/server/commands/orderIntakeCommand';
+const queueOrderPrints:OrderIntakeTransactionBinding['after']=(tx,auth,receipt)=>createInitialOrderPrintJobs(tx,auth,receipt.orderId,receipt.customerDisplayName,receipt.items.map(item=>item.id));
 import type {PackageCustomerHistory} from '@/lib/server/packageIntakeContextPort';
 import {readPackageExpectation} from '@/modules/eingang/server-public';
 import type {IntakeCaptureResult} from '@/modules/eingang/public';
@@ -39,12 +41,21 @@ import {selectIntakeConcern,finishIntakeUse,reopenIntake} from '@/modules/eingan
 export async function selectIntakeConcernAction(input:unknown){return selectIntakeConcern(input);}
 export async function finishIntakeUseAction(input:unknown){return finishIntakeUse(input);}
 export async function reopenIntakeAction(input:unknown){return reopenIntake(input);}
-import {saveTask,completeTask,readTask,createMissingGoodsTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
+import {saveTask,completeTask,readTask,createMissingGoodsTask,createOrderHandoverTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
+import {createDispatchCall,recordDispatchCallResult,readDispatchCallRequirement,protectDispatchCallTask,readCompletedDispatchCallReceipt} from '@/lib/server/dispatchCallPort';
+import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
+import {createStorageFinalTask,readStorageFinalTaskReceipt,protectStorageFinalTask} from '@/lib/server/storageFinalStagePort';
+import {recordStoragePostalResult,readStoragePostalTask,protectStoragePostalTask} from '@/lib/server/storagePostalPort';
 import type {TaskOpenRequest} from '@/modules/tasks/public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
-const taskEffects={effect:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>recordIntakeTaskEffect(tx,auth,input,readCustomerProfile)};
+const taskEffects={beforeComplete:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:import('@/modules/tasks/public').TaskRecord,input:import('@/modules/tasks/public').TaskCompleteInput)=>{const blocked=await recordDispatchCallResult(tx,auth,task,input);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,input);},effect:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>{
+ const blocked=await protectDispatchCallTask(tx,auth,input);if(blocked)return blocked;
+ const storageBlocked=await protectStorageFinalTask(tx,auth,input);if(storageBlocked)return storageBlocked;
+ await protectStoragePostalTask(tx,auth,input);
+ return recordIntakeTaskEffect(tx,auth,input,readCustomerProfile);
+}};
 import {createInvoiceClarificationTask,resolveInvoiceClarificationTask} from '@/modules/tasks/server-public';
 import {readIncomingInvoice,saveIncomingInvoice,changeIncomingInvoice,readInvoiceTaskContext} from '@/modules/eingang/server-public';
 import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
@@ -70,8 +81,50 @@ export async function searchInvoiceSuppliersAction(query:string){
 }
 const goodsEffects={createMissingTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;missing:string[];clientKey:string})=>createMissingGoodsTask(tx,auth,input,taskEffects)};
 export async function saveIntakeTaskAction(input:unknown){return saveTask(input,taskEffects);}
-export async function completeIntakeTaskAction(input:unknown){return completeTask(input,taskEffects);}
-export async function getIntakeTaskAction(input:TaskOpenRequest){return readTask(input);}
+export async function completeIntakeTaskAction(input:unknown){
+ if(input&&typeof input==='object'&&'callResult'in input){
+  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:DISPATCH_CALL_COPY.session};
+  if(!hasAuthorizationArea(auth.data,'auftraege'))return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
+  const {getOrdersDb}=await import('@/app/actions/orders.actions');const orders=await getOrdersDb();
+  if(!orders.ok)return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
+  const taskId='taskId' in input?input.taskId:null;
+  const answered=orders.data.filter(order=>['STOPPED','PAUSED','APPOINTMENT_EXPIRED'].includes(order.finishedDispatch?.reminder?.state??'')||['CALL_NOT_REACHED'].includes(order.finishedDispatch?.reminder?.state??'')&&!!order.finishedDispatch?.reminder?.callTaskId&&order.finishedDispatch.reminder.callTaskId!==taskId).map(order=>({id:order.id,version:order.version}));
+  return completeTask(input,{...taskEffects,beforeComplete:async(tx,auth,task,value)=>{const blocked=await recordDispatchCallResult(tx,auth,task,value,answered);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,value);}});
+ }
+ return completeTask(input,taskEffects);
+}
+export async function createDispatchCallTaskAction(input:{customerId:string;handover:'pickup'|'shipping';dueDate:string;clientKey:string}){
+ const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:DISPATCH_CALL_COPY.session};
+ if(!hasAuthorizationArea(auth.data,'mails')||!hasAuthorizationArea(auth.data,'auftraege'))return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
+ if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).sort().join(',')!=='clientKey,customerId,dueDate,handover'||typeof input.customerId!=='string'||!input.customerId.trim()||input.customerId.length>128||!['pickup','shipping'].includes(input.handover)||typeof input.dueDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)||typeof input.clientKey!=='string'||!/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(input.clientKey))return {code:'VALIDATION_ERROR' as const,message:DISPATCH_CALL_COPY.invalid};
+ const receipt=await readCompletedDispatchCallReceipt(auth.data,input);if(receipt.code!=='NOT_FOUND')return receipt;
+ const {getOrdersDb}=await import('@/app/actions/orders.actions');const orders=await getOrdersDb();if(!orders.ok)return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
+ const candidates=orders.data.filter(order=>order.customerId===input.customerId&&order.station==='fertig'&&order.finishedDispatch?.handover===input.handover);
+ const plan=candidates.find(order=>order.finishedDispatch?.reminder?.clientKey===input.clientKey)?.finishedDispatch?.reminder;
+ if(!plan)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+ const members=candidates.filter(order=>plan.orderIds.includes(order.id));
+ return createDispatchCall(auth.data,input,plan,members,(tx,request)=>createOrderHandoverTask(tx,auth.data,request,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
+}
+export async function createStorageFinalTaskAction(input:{customerId:string;handover:'pickup'|'shipping';clientKey:string}){
+ const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:DISPATCH_CALL_COPY.session};
+ if(!hasAuthorizationArea(auth.data,'mails')||!hasAuthorizationArea(auth.data,'auftraege'))return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
+ if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).sort().join(',')!=='clientKey,customerId,handover'||typeof input.customerId!=='string'||!input.customerId.trim()||input.customerId.length>128||!['pickup','shipping'].includes(input.handover)||typeof input.clientKey!=='string'||!/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(input.clientKey))return {code:'VALIDATION_ERROR' as const,message:DISPATCH_CALL_COPY.invalid};
+ const prior=await readStorageFinalTaskReceipt(auth.data,input);if(prior.code!=='NOT_FOUND')return prior;
+ const [{getOrdersDb},{readShippingSettings}]=await Promise.all([import('@/app/actions/orders.actions'),import('@/modules/fundament/server-public')]);
+ const [orders,settings]=await Promise.all([getOrdersDb(),readShippingSettings({tenantId:auth.data.tenantId,actorId:auth.data.userId,canRead:true})]);
+ if(!orders.ok||settings.code!=='OK')return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
+ const candidates=orders.data.filter(order=>order.customerId===input.customerId&&order.station==='fertig'&&order.finishedDispatch?.handover===input.handover);
+ const letter=candidates.find(order=>order.finishedDispatch?.storage?.letter?.clientKey===input.clientKey)?.finishedDispatch?.storage?.letter;
+ if(!letter||candidates.some(order=>letter.orderIds.includes(order.id)&&(order.finishedDispatch?.reminder?.requiresResponseCheck!==false||order.finishedDispatch?.pickupAppointment!==undefined&&letter.appointmentEventId!==order.finishedDispatch.pickupAppointment.eventId)))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+ const members=candidates.filter(order=>letter.orderIds.includes(order.id));
+ return createStorageFinalTask(auth.data,input,letter,members.map(order=>({id:order.id,number:order.orderNumber,version:order.version})),settings.settings.updatedAt,(tx,request)=>createOrderHandoverTask(tx,auth.data,request,taskEffects));
+}
+export async function getIntakeTaskAction(input:TaskOpenRequest){
+ const result=await readTask(input);if(result.code!=='OK'||!result.task)return result;
+ const auth=await resolveAuthorization();if(!auth.ok)return result;
+ try{const call=await readDispatchCallRequirement(auth.data,result.task.id),postal=await readStoragePostalTask(auth.data,result.task.id);return {...result,...(call?{dispatchCall:call}:{}),...(postal?{postalLetter:postal}:{})};}
+ catch(error){console.error('[DISPATCH_CALL_REQUIREMENT_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};}
+}
 import {readOpenIntakeMails} from '@/modules/eingang/server-public';
 import {saveIntakeProspect} from '@/modules/eingang/server-public';
 export async function saveIntakeProspectAction(input:unknown){return saveIntakeProspect(input,createCustomerInTransaction,readCustomerProfile);}
@@ -169,7 +222,7 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
   const customerId = existingCustomerId(input);
   const authorization = await resolveAuthorization();
   if (!customerId || !authorization.ok || !hasAuthorizationArea(authorization.data, "eingang") || (input as {customer?:{changes?:unknown}})?.customer?.changes) {
-    return erfasseAuftragAusEingangCommand(input,undefined,createCustomerInTransaction,updateCustomerInTransaction,after);
+    return erfasseAuftragAusEingangCommand(input,undefined,createCustomerInTransaction,updateCustomerInTransaction,after,queueOrderPrints);
   }
   const customer = await readCustomerOrderReadinessCommand(authorization.data, {
     customerId,
@@ -188,13 +241,13 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
       missing: readiness.issues.map((issue) => issue.field),
     };
   }
-  return erfasseAuftragAusEingangCommand(input, { customerId, readiness },undefined,undefined,after);
+  return erfasseAuftragAusEingangCommand(input, { customerId, readiness },undefined,undefined,after,queueOrderPrints);
 }
 
 export async function createOrderIntakeAction(input:unknown){
   const authorization=await resolveAuthorization();
   if(!authorization.ok)return {code:"UNAUTHENTICATED" as const,message:authorization.message};
-  const result=await createOrderIntake(input,createCustomerInTransaction);
+  const result=await createOrderIntake(input,createCustomerInTransaction,{before:async()=>undefined,after:queueOrderPrints});
   return result.code==="OK"?{...result,receipt:presentOrderIntakeReceipt(result.receipt,hasAuthorizationArea(authorization.data,"geld"))}:result;
 }
 

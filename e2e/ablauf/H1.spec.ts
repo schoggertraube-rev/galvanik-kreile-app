@@ -122,6 +122,7 @@ it('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice bound
   if(finished.code!=='OK')throw Error('H1_FINISH:'+finished.code);
   orderVersion=finished.receipt.aggregateVersion;
  }
+ expect(await sql`SELECT quantity::text,net_cents::int,price_source->>'kind' AS kind,price_source->>'quoteId' AS quote_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND component='base' AND direction=1`).toEqual([{quantity:'4.000',net_cents:10000,kind:'quote',quote_id:created.quote.quoteId}]);
  const master=await withSession(full,()=>getExtraWorkMasterDataAction());
  expect(master.code).toBe('OK');if(master.code!=='OK')throw Error('H1_MASTER:'+master.code);
  if(!master.data.currentRate)expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});

@@ -3,6 +3,114 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 
+it('an actual cancellation of an initially historical invoice subtracts its net value in the current window exactly once',async()=>{
+ const {readyInvoiceOrder}=await import('./orderFixture');
+ const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const {createImmutableInvoicePdfDocument}=await import('@/lib/pdf/ImmutableInvoiceDocument');
+ const {renderToBuffer}=await import('@react-pdf/renderer');
+ const {createHash}=await import('node:crypto');
+ const order=await readyInvoiceOrder('L3-Altrechnung');
+ const [template]=await sql`SELECT to_jsonb(invoice) AS row FROM public.invoices invoice WHERE id=${order.invoice.invoiceId}::uuid`;
+ expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST Vorlage beendet',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ // Isolated INITIAL historical TEST records, not a product backdating/import
+ // command. Existing immutable records and DB guards remain untouched.
+ const [dates]=await sql`SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-interval '2 years')::date::text AS day`;
+ const issuedAt=dates.day+'T12:00:00.000Z';
+ const dueDate=new Date(new Date(issuedAt).getTime()+template.row.payment_term_days*86400000).toISOString().slice(0,10);
+ const snapshot={...template.row.snapshot,issuedAt,serviceDate:dates.day};
+ const id=randomUUID(),key=randomUUID(),eventId=randomUUID(),correlation=randomUUID();
+ const number='R-'+dates.day.slice(0,4)+'-900001';
+ const pdf=await renderToBuffer(createImmutableInvoicePdfDocument({invoiceNumber:number,dueDate,snapshot}));
+ const hash=createHash('sha256').update(pdf).digest('hex');
+ await sql.begin(async tx=>{
+  await tx`INSERT INTO public.events SELECT (jsonb_populate_record(NULL::public.events,to_jsonb(event)||jsonb_build_object('id',${eventId}::text,'client_event_id',${key}::text,'correlation_id',${correlation}::text,'created_at',${issuedAt}::timestamptz AT TIME ZONE 'UTC','payload',event.payload||jsonb_build_object('invoiceId',${id}::text,'invoiceNumber',${number}::text,'pdfSha256',${hash}::text)))).* FROM public.events event WHERE event.id=${template.row.issue_event_id}`;
+  const replacement={...template.row,id,invoice_number:number,issued_at:issuedAt,service_date:dates.day,due_date:dueDate,snapshot,client_event_id:key,correlation_id:correlation,issue_event_id:eventId,pdf_ref:`invoice://${id}/original`,pdf_sha256:hash,pdf_content:'\\x'+pdf.toString('hex')};
+  await tx`INSERT INTO public.invoices SELECT (jsonb_populate_record(NULL::public.invoices,${tx.json(replacement)}::jsonb)).*`;
+ });
+ const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const {readInvoiceReceipt}=await import('@/lib/server/invoiceRead');
+ expect(await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('HISTORICAL_AUTH');return readInvoiceReceipt(auth.data,{orderId:order.orderId,clientEventId:key});})).toMatchObject({code:'OK',data:{invoiceId:id,pdfSha256:hash}});
+ const read=()=>withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}));
+ expect(await read()).toMatchObject({code:'OK',data:{invoiceRevenueCents:0,invoiceOpenCents:11900,kennzahlen:{revenue:{netAmountCents:0},openInvoices:{amountCents:11900},overdue:{invoiceCount:1,openAmountCents:11900}}}});
+ const cancel={invoiceId:id,expectedVersion:1,reason:'TEST alte Rechnung heute storniert',clientEventId:randomUUID()};
+ expect(await withSession(full,()=>cancelInvoiceAction(cancel))).toMatchObject({code:'OK'});
+ expect(await read()).toMatchObject({code:'OK',data:{invoiceRevenueCents:-10000,invoiceOpenCents:0,kennzahlen:{revenue:{netAmountCents:-10000},openInvoices:{amountCents:0},overdue:{invoiceCount:0,openAmountCents:0}}}});
+ expect(await withSession(full,()=>cancelInvoiceAction(structuredClone(cancel)))).toMatchObject({code:'OK',replayed:true});
+ expect(await read()).toMatchObject({code:'OK',data:{kennzahlen:{revenue:{netAmountCents:-10000}}}});
+ expect(await sql`SELECT pdf_sha256,net_amount_cents FROM public.invoices WHERE id=${id}::uuid`).toEqual([{pdf_sha256:hash,net_amount_cents:10000}]);
+});
+
+it('customer complaint ratio follows the actual physical-release cohort and counts only its customer',async()=>{
+ const {readyInvoiceOrder}=await import('./orderFixture');
+ const {storeOrderPhoto}=await import('./photoFixture');
+ const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const {reklamationAusfuehrenAction}=await import('@/app/actions/complaints.actions');
+ const order=await readyInvoiceOrder('L3-Kohorte');
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{complaintRatio:{id:'KZ-REKLAMATIONSQUOTE',releasedOrderCount:0,complaintCount:0,ratio:null}}}});
+ const release={orderId:order.orderId,mode:'abholung' as const,expectedVersion:order.version,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>recordGoodsOutAction(release))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{complaintRatio:{releasedOrderCount:1,complaintCount:0,ratio:0}}}});
+ const photo=await storeOrderPhoto(order.orderId);
+ const complaint={action:'aufnehmen' as const,clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Abplatzung',description:'TEST L3 dokumentierte Beschichtung',photoIds:[photo],goodsReturn:'ja' as const};
+ expect(await withSession(full,()=>reklamationAusfuehrenAction(complaint))).toMatchObject({code:'OK'});
+ const read=await withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}));
+ expect(read).toMatchObject({code:'OK',data:{kennzahlen:{complaintRatio:{releasedOrderCount:1,complaintCount:1,ratio:1}}}});
+ expect(await withSession(full,()=>reklamationAusfuehrenAction(JSON.parse(JSON.stringify(complaint))))).toMatchObject({code:'OK',replayed:true});
+ const other=await readyInvoiceOrder('L3-Anderer');
+ expect(await withSession(full,()=>recordGoodsOutAction({...release,orderId:other.orderId,expectedVersion:other.version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const operational=await createFixture(['kunden'],'werkstatt');
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(operational,()=>getCustomerSummaryAction({customerId:order.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{complaintRatio:{releasedOrderCount:1,complaintCount:1,ratio:1}}}});
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:other.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{complaintRatio:{releasedOrderCount:1,complaintCount:0,ratio:0}}}});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+});
+
+it('customer net revenue subtracts the actual cancellation once and the former gross summary uses that same port',async()=>{
+ const {readyInvoiceOrder}=await import('./orderFixture');
+ const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const order=await readyInvoiceOrder('L3-Netto-Storno');
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}))).toMatchObject({code:'OK',data:{invoiceRevenueCents:10000,invoiceOpenCents:11900,kennzahlen:{revenue:{netAmountCents:10000},openInvoices:{amountCents:11900}}}});
+ const input={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST L3 Korrektur',clientEventId:randomUUID()};
+ expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'OK'});
+ const read=()=>withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}));
+ expect(await read()).toMatchObject({code:'OK',data:{invoiceRevenueCents:0,invoiceOpenCents:0,kennzahlen:{revenue:{netAmountCents:0},openInvoices:{amountCents:0}}}});
+ expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await read()).toMatchObject({code:'OK',data:{kennzahlen:{revenue:{netAmountCents:0}}}});
+ expect(await sql`SELECT net_amount_cents,status FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{net_amount_cents:10000,status:'cancelled'}]);
+});
+
+it('customer metrics read actual paid invoices once, isolate customers and hide finance without Geld',async()=>{
+ const {readyInvoiceOrder}=await import('./orderFixture');
+ const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
+ const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
+ const first=await readyInvoiceOrder('Kennzahl-1');
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'OK',data:{classification:null,kennzahlen:{averagePaymentDays:{id:'KZ-ZAHLUNGSDAUER',value:null,invoiceCount:0},classification:{value:null,state:'missing_thresholds',reason:'Grenzen für die Einstufung eintragen'}}}});
+ const payment={invoiceId:first.invoice.invoiceId,amount:first.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>confirmPaymentAction(payment))).toMatchObject({code:'OK'});
+ const second=await readyInvoiceOrder('Kennzahl-2');
+ expect(await withSession(full,()=>confirmPaymentAction({...payment,invoiceId:second.invoice.invoiceId,amount:second.invoice.grossAmountCents,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const operational=await createFixture(['kunden'],'werkstatt');
+ const events=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{period:{timeZone:'Europe/Berlin'},revenue:{id:'KZ-UMSATZ',netAmountCents:10000},openInvoices:{amountCents:0},averagePaymentDays:{value:0,invoiceCount:1},overdue:{invoiceCount:0,openAmountCents:0}}}});
+ const restricted=await withSession(operational,()=>getCustomerSummaryAction({customerId:first.customerId}));
+ expect(restricted.code).toBe('OK');if(restricted.code!=='OK')throw Error('METRIC_READ:'+restricted.code);
+ expect(restricted.data.kennzahlen).not.toHaveProperty('averagePaymentDays');
+ expect(restricted.data.kennzahlen).not.toHaveProperty('overdue');
+ expect(restricted.data.kennzahlen).not.toHaveProperty('revenue');
+ expect(restricted.data.kennzahlen).not.toHaveProperty('openInvoices');
+ expect(restricted.data).not.toHaveProperty('invoiceRevenueCents');
+ expect(await sql`SELECT classification FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.customerId}`).toEqual([{classification:'B'}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(events);
+ expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(payment))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{averagePaymentDays:{value:0,invoiceCount:1}}}});
+ const financeOnly=await createFixture(['geld']);
+ expect(await withSession(financeOnly,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'FORBIDDEN'});
+});
+
 it('editing visible customer notes without Geld never removes hidden financial or typed agreements',async()=>{
  const {createCustomerAction,saveCustomerAgreementAction,updateCustomerAction,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
  const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'TEST verborgene Absprache '+randomUUID(),phone:'+49 711 5550190'}));if(created.code!=='OK')throw Error('ABS_HIDDEN_CUSTOMER:'+created.code);

@@ -1,7 +1,7 @@
+import {offlinePartition} from "@/lib/server/offlinePartition";
 import {readIntakeActorTraces} from './actorRead';
 import "server-only";
 import {readExpectedPackageOrders} from "@/lib/server/packageIntakeContextPort";
-import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -150,7 +150,7 @@ export async function readIntakePendingScope() {
   const auth = await authorizedIntakeContext();
   if ("code" in auth) return { code: "FORBIDDEN" as const, message: "Eingang ist nicht freigegeben." };
   // Local storage partition only. This value authorizes no request and contains no identity or PIN.
-  return { code: "OK" as const, scope: createHash("sha256").update(`intake-pending:${auth.tenantId}:${auth.userId}`).digest("hex") };
+  return { code: "OK" as const, scope: offlinePartition(auth) };
 }
 export async function saveIntakeNote(input: unknown, readCustomer: (tx: PrivilegedTenantTransaction, tenantId: string, customerId: string) => Promise<{ customerType: string } | null>): Promise<IntakeCaptureResult> {
   if (!record(input) || Object.keys(input).some(key => !["itemId", "textstand", "text", "context", "concerns"].includes(key))

@@ -1,5 +1,11 @@
+import {handedOverProofs} from '@/lib/server/dispatchCallPort';
+import {readClarificationArea} from '@/lib/server/authorization';
+import {GOODS_OUT_FOLLOWUP_COPY} from '@/ui/situationCatalog';
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
+import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
+import {collectionTaskHasReplySource,collectionTaskReplyRemainder,collectionTaskAppointmentRemainder,readCollectionTaskCurrentOrder} from '@/lib/server/dispatchReplyPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
+import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
@@ -10,7 +16,7 @@ import {TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference
 
 export type TaskEffectRequest={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:TaskReferenceRead;itemId?:string;itemVersion?:number};
 export type TaskEffects=(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>Promise<void|TaskFailure>;
-type Dependencies={effect:TaskEffects;readInvoice?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string)=>Promise<{name:string|null;status:string;taskId:string|null}|null>};
+type Dependencies={effect:TaskEffects;beforeComplete?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:TaskRecord,input:TaskCompleteInput)=>Promise<void|TaskFailure>;readInvoice?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string)=>Promise<{name:string|null;status:string;taskId:string|null}|null>};
 class Rejected extends Error{constructor(readonly result:TaskFailure){super(result.code);}}
 function reject(code:TaskFailure['code'],message:string):never{throw new Rejected({code,message});}
 const columns=sql`id::text,client_key::text,art,titel,faellig_am::text,to_char(uhrzeit,'HH24:MI') AS uhrzeit,vorlauf_tage,fuer_login::text,fuer_bereich,bezug_typ,bezug_id,item_id::text,notiz,status,erledigt_von::text,erledigt_am::text,erledigt_notiz,erstellt_von::text,erstellt_am::text,version`;
@@ -55,15 +61,22 @@ export async function saveTask(input:unknown,deps:Dependencies):Promise<TaskResu
  try{return await withPrivilegedTenantTransaction(auth,tx=>persistTask(tx,auth,value,deps));}catch(error){return resultError(error);}
 }
 /** Both dialog saves and the goods command use this writer and the caller's transaction. */
-async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskSaveInput,deps:Dependencies,enforceReferenceVisibility=true,invoiceCommand=false):Promise<Extract<TaskResult,{code:'OK'}>>{
+async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskSaveInput,deps:Dependencies,enforceReferenceVisibility=true,invoiceCommand=false,replyRestriction=false):Promise<Extract<TaskResult,{code:'OK'}>>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${value.clientKey},0))`);
   const candidates=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${value.clientKey}::uuid FOR UPDATE`);
   if(candidates.length>1)throw Error('TASK_CLIENT_KEY_AMBIGUOUS');
   const before=value.taskId?await find(tx,auth,value.taskId,true):candidates[0]?await find(tx,auth,candidates[0].id,true):null;
   if(value.taskId&&!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
-  if(before&&(before.client_key!==value.clientKey||!allowed(auth,before)))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
+  if(before&&(before.client_key!==value.clientKey||!replyRestriction&&!allowed(auth,before)))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
   if(!before&&value.version!==0)reject('CONFLICT','Aufgabenstand ist nicht mehr aktuell.');
   if(before&&before.status!=='offen')reject('CONFLICT','Aufgabe ist bereits erledigt.');
+  if(before&&before.bezug_typ==='auftrag'&&value.reference.type==='auftrag'&&before.bezug_id!==value.reference.id){
+   const currentOrder=await readCollectionTaskCurrentOrder(tx,auth,before.id);
+   if(currentOrder!==value.reference.id)reject('CONFLICT','Der ursprüngliche Bezug der Aufgabe bleibt erhalten.');
+   // The dialog opens the current ware; only this qualified display reference maps
+   // back to the immutable task provenance for the one existing writer.
+   value={...value,reference:{type:'auftrag',id:before.bezug_id}};
+  }
   if(before&&!value.taskId){if(before.erstellt_von===auth.userId&&same(before,value))return {code:'OK',task:before,replayed:true};reject('CONFLICT','Diese Anfragekennung gehört zu einer anderen Aufgabe.');}
   if(before&&before.version===value.version+1&&same(before,value))return {code:'OK',task:before,replayed:true};
   if(before&&before.version!==value.version)reject('CONFLICT','Aufgabe wurde inzwischen geändert · Eingaben bleiben erhalten.');
@@ -97,10 +110,10 @@ export async function createMissingGoodsTask(tx:PrivilegedTenantTransaction,auth
 }
 
 /** U252: the checked order/mail command creates a normal visible callback task. */
-export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string},deps:Dependencies){
- if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))reject('FORBIDDEN','Übergabe klären benötigt Mails und Aufträge.');
+export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string;taskId?:string;version?:number;kind?:'aufgabe';forLogin?:string;dueDate?:string},deps:Dependencies,appointmentSource?:{taskId:string;appointmentEventId:string}){
+ if(!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails')&&(!appointmentSource||!await storageTaskHasAppointmentSource(tx,auth,appointmentSource.taskId,appointmentSource.appointmentEventId)))reject('FORBIDDEN','Übergabe klären benötigt Mails und Aufträge.');
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
- const value:TaskSaveInput={clientKey:input.clientKey,version:0,kind:'rueckruf',title:input.title,dueDate:clock.today,time:null,forLogin:null,forArea:'auftraege',reference:{type:'auftrag',id:input.orderId},note:input.note};
+ const value:TaskSaveInput={clientKey:input.clientKey,version:input.version??0,...(input.taskId?{taskId:input.taskId}:{}),kind:input.kind??'rueckruf',title:input.title,dueDate:input.dueDate??clock.today,time:null,forLogin:input.forLogin??null,forArea:input.forLogin?null:'auftraege',reference:{type:'auftrag',id:input.orderId},note:input.note};
  const errors=taskValidation(value);if(Object.keys(errors).length)reject('VALIDATION_ERROR','Rückruf-Aufgabe ist unvollständig.');
  return (await persistTask(tx,auth,value,deps)).task.id;
 }
@@ -123,12 +136,15 @@ export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransact
  return (await persistTask(tx,auth,value,deps,true,true)).task.id;
 }
 /** Shared completion writer. Invoice tasks remain inaccessible to the normal completion action. */
-async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]}):Promise<Extract<TaskResult,{code:'OK'}>>{
+async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string},replyEventId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
   const before=await find(tx,auth,value.taskId,true);if(!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
   const operationalQuote=quoteOperation&&before.art==='aufgabe'&&before.bezug_typ==='kv'&&before.bezug_id===quoteOperation.quoteId&&quoteOperation.keys.includes(before.client_key);
-  if(!allowed(auth,before)&&!operationalQuote)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
+  const operationalStorage=storageOperation&&hasAuthorizationArea(auth,'auftraege')&&before.art==='aufgabe'&&before.bezug_typ==='auftrag'&&before.bezug_id===storageOperation.orderId&&before.client_key===storageOperation.clientKey;
+  const operationalReply=replyEventId&&hasAuthorizationArea(auth,'auftraege')&&['aufgabe','rueckruf'].includes(before.art)&&before.bezug_typ==='auftrag'&&await collectionTaskHasReplySource(tx,auth,before.id,replyEventId);
+  if(!allowed(auth,before)&&!operationalQuote&&!operationalStorage&&!operationalReply)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
   if(before.art==='rechnung'&&(!invoiceId||before.bezug_typ!=='eingangsrechnung'||before.bezug_id!==invoiceId||!hasAuthorizationArea(auth,'geld')))reject('FORBIDDEN','Rechnung klären wird ausschließlich in der Eingangsrechnung erledigt.');
   const note=value.note?.trim()||null;
+  const completion=await deps.beforeComplete?.(tx,auth,before,value);if(completion)throw new Rejected(completion);
   if(before.status==='erledigt'){
    if(before.version===value.version+1&&before.erledigt_von===auth.userId&&before.erledigt_notiz===note)return {code:'OK',task:before,replayed:true};
    reject('CONFLICT','Aufgabe ist bereits erledigt.');
@@ -150,9 +166,60 @@ export async function resolveInvoiceClarificationTask(tx:PrivilegedTenantTransac
 export async function completeTask(input:unknown,deps:Dependencies):Promise<TaskResult>{
  if(!input||typeof input!=='object'||Array.isArray(input))return {code:'VALIDATION_ERROR',message:'Aufgabenkennung fehlt.'};
  const value=input as TaskCompleteInput;
- if(Object.keys(value).sort().join(',')!=='note,taskId,version'||!taskUuid(value.taskId)||!Number.isSafeInteger(value.version)||value.version<1||!(value.note===null||typeof value.note==='string'&&value.note.length<=2000))return {code:'VALIDATION_ERROR',message:'Aufgabenkennung oder Notiz ist ungültig.'};
+ if(!['note,taskId,version','callResult,note,taskId,version','note,postalResult,taskId,version'].includes(Object.keys(value).sort().join(','))||value.callResult!==undefined&&!['reached','notReached'].includes(value.callResult)||!taskUuid(value.taskId)||!Number.isSafeInteger(value.version)||value.version<1||!(value.note===null||typeof value.note==='string'&&value.note.length<=2000))return {code:'VALIDATION_ERROR',message:'Aufgabenkennung oder Notiz ist ungültig.'};
+ if(value.postalResult!==undefined&&(!deps.beforeComplete||!value.postalResult||typeof value.postalResult!=='object'||!['posted','discarded'].includes(value.postalResult.kind)||typeof value.postalResult.documentSha256!=='string'||!/^[a-f\d]{64}$/.test(value.postalResult.documentSha256)))return {code:'VALIDATION_ERROR',message:COLLECTION_REMINDER_COPY.postalDateMissing};
+ if(value.callResult!==undefined&&!deps.beforeComplete)return {code:'VALIDATION_ERROR',message:DISPATCH_CALL_COPY.notCall};
  const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
  try{return await withPrivilegedTenantTransaction(auth,tx=>finishTask(tx,auth,value,deps));}catch(error){return resultError(error);}
+}
+/** A checked goods-out composition finishes the same visible task atomically, never via a second UPDATE writer. */
+export async function completeOrderCallbackTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string,note:string,deps:Dependencies):Promise<void>{
+ if(!hasAuthorizationArea(auth,'auftraege'))reject('FORBIDDEN',DISPATCH_CALL_COPY.forbidden);
+ const before=await find(tx,auth,taskId,true);if(!before||before.art!=='rueckruf'||before.bezug_typ!=='auftrag')reject('NOT_FOUND',DISPATCH_CALL_COPY.notCall);
+ if(before.status==='erledigt')return;
+ await finishTask(tx,auth,{taskId,version:before.version,note},deps);
+}
+/** Only a qualified goods-out composition supplies this fixed source key, never the task dialog. */
+export async function completeStorageTaskAfterGoodsOut(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;orderId:string;clientKey:string},deps:Dependencies):Promise<void>{
+ if(!hasAuthorizationArea(auth,'auftraege'))reject('FORBIDDEN',DISPATCH_CALL_COPY.forbidden);
+ const before=await find(tx,auth,input.taskId,true);
+ if(!before||before.art!=='aufgabe'||before.bezug_typ!=='auftrag'||before.bezug_id!==input.orderId||before.client_key!==input.clientKey)reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ const source=await tx.execute(sql`SELECT task_id FROM private.v_storage_final_task_context_v1 WHERE tenant_id=${auth.tenantId} AND task_id=${before.id} AND client_key=${before.client_key} AND creator_id=${before.erstellt_von} AND order_id=${input.orderId} AND integrity_ok AND goods_out_complete`);
+ if(source.length!==1)reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ if(before.status==='erledigt')return;
+ await finishTask(tx,auth,{taskId:before.id,version:before.version,note:COLLECTION_REMINDER_COPY.finalTaskGoodsGone},deps,undefined,undefined,input);
+}
+/** A real appointment can end its original storage task, including an assigned task.
+ * The ordinary task action receives no additional rights. */
+export async function completeStorageTaskForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;appointmentEventId:string;note:string},deps:Dependencies):Promise<void>{
+ if(!hasAuthorizationArea(auth,'auftraege'))reject('FORBIDDEN',DISPATCH_CALL_COPY.forbidden);
+ const before=await find(tx,auth,input.taskId,true);
+ if(!before||before.art!=='aufgabe'||before.bezug_typ!=='auftrag'||!before.bezug_id||!await storageTaskHasAppointmentSource(tx,auth,before.id,input.appointmentEventId))reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ if(before.status==='erledigt')return;
+ await finishTask(tx,auth,{taskId:before.id,version:before.version,note:input.note},deps,undefined,undefined,{orderId:before.bezug_id,clientKey:before.client_key});
+}
+/** Only a qualified original reply can end this original collection task. */
+export async function completeCollectionTaskForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;replyEventId:string;note:string},deps:Dependencies):Promise<void>{
+ if(!hasAuthorizationArea(auth,'auftraege')||!await collectionTaskHasReplySource(tx,auth,input.taskId,input.replyEventId))reject('FORBIDDEN',DISPATCH_CALL_COPY.forbidden);
+ const before=await find(tx,auth,input.taskId,true);
+ if(!before||!['aufgabe','rueckruf'].includes(before.art)||before.bezug_typ!=='auftrag')reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ if(before.status==='erledigt')return;
+ await finishTask(tx,auth,{taskId:before.id,version:before.version,note:input.note},deps,undefined,undefined,undefined,input.replyEventId);
+}
+/** Keep the task, recipient and date; preserve the immutable original reference and narrow only the ware note. */
+export async function restrictCollectionTaskForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;replyEventId:string},deps:Dependencies){
+ const scope=await collectionTaskReplyRemainder(tx,auth,input.taskId,input.replyEventId),before=await find(tx,auth,input.taskId,true);
+ if(!scope||!before||before.status!=='offen'||!['aufgabe','rueckruf'].includes(before.art)||before.bezug_typ!=='auftrag'||!before.bezug_id)reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ const value:TaskSaveInput={taskId:before.id,clientKey:before.client_key,version:before.version,kind:before.art as 'aufgabe'|'rueckruf',title:before.titel,dueDate:before.faellig_am,time:before.uhrzeit,forLogin:before.fuer_login,forArea:before.fuer_bereich,reference:{type:'auftrag',id:before.bezug_id},note:scope.note,...(before.item_id?{itemId:before.item_id}:{})};
+ const saved=await persistTask(tx,auth,value,deps,false,false,true);
+ return {version:saved.task.version,note:scope.note,freezes:scope.freezes};
+}
+export async function restrictCollectionTaskForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;appointmentEventId:string},deps:Dependencies){
+ const scope=await collectionTaskAppointmentRemainder(tx,auth,input.taskId,input.appointmentEventId),before=await find(tx,auth,input.taskId,true);
+ if(!scope||!before||before.status!=='offen'||!['aufgabe','rueckruf'].includes(before.art)||before.bezug_typ!=='auftrag'||!before.bezug_id)reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ const value:TaskSaveInput={taskId:before.id,clientKey:before.client_key,version:before.version,kind:before.art as 'aufgabe'|'rueckruf',title:before.titel,dueDate:before.faellig_am,time:before.uhrzeit,forLogin:before.fuer_login,forArea:before.fuer_bereich,reference:{type:'auftrag',id:before.bezug_id},note:scope.note,...(before.item_id?{itemId:before.item_id}:{})};
+ const saved=await persistTask(tx,auth,value,deps,false,false,true);
+ return {version:saved.task.version,note:scope.note,freezes:scope.freezes};
 }
 export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
  if(!request||typeof request!=='object'||Array.isArray(request)||('taskId'in request?!taskUuid(request.taskId):!validTaskReference(request.reference)))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};
@@ -161,7 +228,8 @@ export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   const task='taskId'in request?await find(tx,auth,request.taskId):null;
   if('taskId'in request&&!task)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
-  const reference=await context(tx,auth,task?{type:task.bezug_typ,id:task.bezug_id}:(request as Exclude<TaskOpenRequest,{taskId:string}>).reference,!task);
+  const currentOrder=task?.bezug_typ==='auftrag'?await readCollectionTaskCurrentOrder(tx,auth,task.id):null;
+  const reference=await context(tx,auth,task?{type:task.bezug_typ,id:currentOrder??task.bezug_id}:(request as Exclude<TaskOpenRequest,{taskId:string}>).reference,!task);
   // Aufgaben sind je Mandant für jeden Login lesbar; Bezug und Schreibknöpfe prüfen ihre eigenen Rechte.
   const canEdit=task?task.status==='offen'&&allowed(auth,task):true;
   return {code:'OK',task,reference,currentLogin:auth.userId,canEdit,canComplete:!!task&&canEdit&&task.art!=='rechnung',canOpenReference:reference.type==='allgemein'||reference.label!==null};
@@ -195,4 +263,21 @@ export async function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransact
  const candidates=tasks.filter(task=>taskUuid(task.bezug_id)&&allowed(auth,task));
  const facts=await readQuoteFollowupFacts(tx,auth.tenantId,[...new Set(candidates.map(task=>task.bezug_id!))]);
  return candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];if(!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');return [{id:task.id,title:task.titel,dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,isMine:task.fuer_login===auth.userId}];}).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
+}
+
+/** Only the persisted physical command can create this normal shared clarification task. */
+export async function createGoodsOutClarificationTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;eventId:string},deps:Dependencies){
+ if(!hasAuthorizationArea(auth,'auftraege')||!taskUuid(input.eventId)||!validTaskReference({type:'auftrag',id:input.orderId}))reject('FORBIDDEN','Übergabebeleg fehlt.');
+ const proofs=await handedOverProofs(tx,auth,[input.orderId]);
+ if(!proofs?.some(proof=>proof.eventId===input.eventId))reject('CONFLICT','Übergabebeleg fehlt.');
+ const key=eventKey(input.eventId,0,'goods-out-followup');
+ await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${key},0))`);
+ const prior=await tx.execute<{id:string;art:string;bezug_typ:string;bezug_id:string;erstellt_von:string}>(sql`SELECT id::text,art,bezug_typ,bezug_id,erstellt_von::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid FOR UPDATE`);
+ if(prior.length){const task=prior[0];if(prior.length!==1||task.art!=='aufgabe'||task.bezug_typ!=='auftrag'||task.bezug_id!==input.orderId||task.erstellt_von!==auth.userId)reject('CONFLICT','Aufgabenkennung gehört zu einem anderen Vorgang.');return task.id;}
+ const reference=await context(tx,auth,{type:'auftrag',id:input.orderId});
+ if(!reference.label)reject('NOT_FOUND','Auftragsnummer fehlt.');
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ const title=GOODS_OUT_FOLLOWUP_COPY.incomplete(reference.label);
+ const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:input.orderId},note:title};
+ return (await persistTask(tx,auth,value,deps)).task.id;
 }

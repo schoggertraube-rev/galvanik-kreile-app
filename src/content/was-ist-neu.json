@@ -1,6 +1,16 @@
 [
   {
     "datum": "2026-11-10",
+    "pr": 211,
+    "seite": "auftrag",
+    "punkte": [
+      "Eine Zahlungsbestätigung prüft den angezeigten Restbetrag. Hat er sich geändert, wird nichts zusätzlich gebucht.",
+      "Offene lokale Aufnahmen werden für die aktuelle Anmeldung gezählt. Ein Speicherfehler wird nicht als leere Warteschlange ausgegeben."
+    ],
+    "ziel": "/orders"
+  },
+  {
+    "datum": "2026-11-10",
     "pr": 210,
     "seite": "auftrag",
     "punkte": [
