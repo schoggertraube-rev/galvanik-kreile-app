@@ -334,3 +334,6 @@ export async function readActiveAreaHolders(tx:import('./privilegedDb').Privileg
   return hasAuthorizationArea({role:row.role,areas:row.areas},area)?[{name:row.name,role:row.role}]:[];
  });
 }
+
+/** Existing complaint order-picker right, shared with read-only action descriptions. */
+export function canReadComplaintOrderChoices(auth:AuthorizationSnapshot){return hasAuthorizationArea(auth,'auftraege');}

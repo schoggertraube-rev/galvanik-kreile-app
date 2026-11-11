@@ -1,4 +1,5 @@
 import {readIntakeActorTraces} from './actorRead';
+import {intakeCaptureSnapshot} from './intakeCapture';
 import {readMessageNextAction} from './messageNextAction';
 import 'server-only';
 import {sql} from 'drizzle-orm';
@@ -42,7 +43,7 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
       AND (source.gruppe_adresse IS NOT NULL AND candidate.gruppe_adresse=source.gruppe_adresse OR candidate.id=source.id)))
     ORDER BY coalesce(source.empfangen_am,source.erstellt_am),source.id`);
    const actors=await readIntakeActorTraces(tx,auth,messages.map(row=>row.id));
-   return {code:'OK' as const,messages:messages.map(row=>{const priority=readFallbackMessagePriority(row);return {...row,fallbackPriority:priority,nextActionRule:readMessageNextAction(auth,row,priority),actorTrace:actors.get(row.id)};}),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
+   return {code:'OK' as const,messages:await Promise.all(messages.map(async row=>{const priority=readFallbackMessagePriority(row);const capture=priority.code==='OK'&&priority.rank===3?await intakeCaptureSnapshot(auth,row.id):undefined;return {...row,fallbackPriority:priority,nextActionRule:readMessageNextAction(auth,row,priority,capture),actorTrace:actors.get(row.id)};})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
   });
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }

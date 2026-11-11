@@ -2,7 +2,7 @@ import 'server-only';
 import {COMPLAINT_ORDER_COPY} from '@/ui/situationCatalog';
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from '@/lib/server/authorization';
+import { canReadComplaintOrderChoices, hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from '@/lib/server/authorization';
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 import { validComplaintCommand, type ComplaintCommand, type ComplaintWriteResult } from '@/modules/complaints/public';
 import {readSecuredOrderPhotoIds} from '@/lib/server/domainAttachment';
@@ -25,7 +25,7 @@ export async function readComplaintOrderSource(auth:AuthorizationSnapshot,orderI
 }
 /** Picker uses the persisted delivery event, never a later order edit date. */
 export async function readComplaintOrderChoices(auth:AuthorizationSnapshot,customerId:string){
- if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const,message:'Reklamation aufnehmen benötigt Aufträge.'};
+ if(!canReadComplaintOrderChoices(auth))return {code:'FORBIDDEN' as const,message:'Reklamation aufnehmen benötigt Aufträge.'};
  if(typeof customerId!=='string'||!customerId||customerId.length>128)return {code:'VALIDATION_ERROR' as const,message:'Kundenbezug ist ungültig.'};
  try{
   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;number:string;title:string}>(sql`SELECT orders.id,orders.order_number AS number,orders.title FROM public.orders orders

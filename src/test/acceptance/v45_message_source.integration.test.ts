@@ -90,3 +90,41 @@ it('binds a real quote reply to the existing original target reader with 0/1/man
  expect(await withSession(actor,()=>readQuoteReplyTargetsAction(JSON.parse(JSON.stringify(command))))).toEqual(choices);
  expect(await sql`SELECT count(*)::int AS n FROM public.intake_event WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid`).toEqual(before);
 });
+
+it('uses secured original image evidence for complaint routing and never treats the MIME original as a photo',async()=>{
+ const {nativeFetch}=await import('../../../e2e/ablauf/replayHarness');
+ const {importOutlookMailAction}=await import('@/app/actions/communications.actions');
+ const {assignIntakeCustomerAction,getIntakeAssignmentAction,selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
+ const {getComplaintOrderChoicesAction}=await import('@/app/actions/complaints.actions');
+ const customerId=await customerFixture('TEST U2 Foto Reklamation'),photo=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jlpEAAAAASUVORK5CYII=','base64');
+ let graphId='TEST-U2-photo-'+randomUUID(),hasPhoto=true;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-provider-token'.repeat(3)});
+  if(url.hostname==='graph.microsoft.com'){
+   if(url.pathname.endsWith('/$value'))return new Response('Message-ID: <'+graphId+'@example.invalid>\r\nFrom: test-'+graphId+'@example.invalid\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=TEST\r\n\r\n--TEST\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nTEST Bitte anrufen. Reklamation\r\n'+(hasPhoto?'--TEST\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\n\r\n'+photo.toString('base64')+'\r\n':'')+'--TEST--\r\n');
+   if(url.pathname.endsWith('/attachments'))return Response.json({value:hasPhoto?[{id:'TEST-image',name:'TEST-Mangel.png',contentType:'image/png',size:photo.length,contentBytes:photo.toString('base64'),isInline:false}]:[]});
+   return Response.json({id:graphId,internetMessageId:'<'+graphId+'@example.invalid>',subject:'TEST Reklamation',from:{emailAddress:{name:'TEST Kunde',address:'test-'+graphId+'@example.invalid'}},receivedDateTime:'2026-11-11T12:00:00Z',bodyPreview:'TEST Bitte anrufen. Reklamation',body:{contentType:'text',content:'TEST Bitte anrufen. Reklamation'},hasAttachments:hasPhoto});
+  }
+  return nativeFetch(input,init);
+ });
+ try{
+  const open=async()=>{const imported=await withSession(full,()=>importOutlookMailAction(graphId));if(imported.code!=='OK')throw Error('TEST_PHOTO_IMPORT:'+imported.code);
+   const view=await withSession(full,()=>getIntakeAssignmentAction({itemId:imported.itemId,mode:'normal'}));if(view.code!=='OK')throw Error('TEST_PHOTO_ASSIGN_VIEW');
+   const assigned=await withSession(full,()=>assignIntakeCustomerAction({itemId:imported.itemId,version:view.view.version,clientEventId:randomUUID(),customerId,mode:'manual'}));if(assigned.code!=='OK')throw Error('TEST_PHOTO_ASSIGN');
+   const current=await withSession(full,()=>getIntakeMessagesAction('alle'));if(current.code!=='OK')throw Error('TEST_PHOTO_VERSION');const row=current.messages.find(row=>row.id===imported.itemId);if(!row)throw Error('TEST_PHOTO_ROW');
+   expect(await withSession(full,()=>selectIntakeConcernAction({itemId:row.id,version:row.version,clientEventId:randomUUID(),concern:'reklamation'}))).toMatchObject({code:'OK'});return row.id;};
+  const itemId=await open();
+  const read=await withSession(full,()=>getIntakeMessagesAction('alle'));if(read.code!=='OK')throw Error('TEST_PHOTO_U2');const rule=read.messages.find(row=>row.id===itemId)?.nextActionRule;
+  expect(rule).toMatchObject({code:'OK',prioritaet:3,hauptaktion:{elementId:'complaint.message',befehl:{funktion:'getComplaintOrderChoicesAction',argumente:{customerId}}}});
+  if(rule?.code!=='OK'||!rule.hauptaktion)throw Error('TEST_PHOTO_COMMAND');
+  const args=JSON.parse(JSON.stringify(rule.hauptaktion.befehl.argumente));expect(await withSession(full,()=>getComplaintOrderChoicesAction(args.customerId))).toMatchObject({code:'OK',orders:[]});
+  const noOrders=await createFixture(['mails']);const denied=await withSession(noOrders,()=>getIntakeMessagesAction('alle'));if(denied.code!=='OK')throw Error('TEST_PHOTO_RIGHT');
+  expect(denied.messages.find(row=>row.id===itemId)?.nextActionRule).toMatchObject({code:'OK',hauptaktion:null,gesperrt:[{elementId:'complaint.message',grundKey:'error.permission'}]});
+  expect(await withSession(noOrders,()=>getComplaintOrderChoicesAction(customerId))).toMatchObject({code:'FORBIDDEN'});
+  hasPhoto=false;graphId='TEST-U2-only-mime-'+randomUUID();const mimeOnly=await open();
+  const after=await withSession(full,()=>getIntakeMessagesAction('alle'));if(after.code!=='OK')throw Error('TEST_MIME_U2');
+  expect(after.messages.find(row=>row.id===mimeOnly)?.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',missing:['COMPLAINT_PHOTO_ACTION_BINDING']});
+  expect(await withSession(full,()=>getIntakeMessagesAction('alle'))).toEqual(after);
+ }finally{vi.restoreAllMocks();}
+});

@@ -1,3 +1,6 @@
+/** R8 TODO_PL: complaint original has photographs, but no chosen order number. */
+export const MESSAGE_COMPLAINT_ACTION_COPY={key:'messages.complaint_customer',text:'TODO_PL'} as const;
+
 /** One presentation catalogue. Facts are projections of existing readers, never stored here. */
 export const OFFLINE_LOGOUT_COPY={cachePending:'Du bist abgemeldet. Die gespeicherten Daten auf diesem Gerät werden beim nächsten Start gelöscht.',pending:(count:number)=>`Du bist abgemeldet. ${count} Eingaben warten noch auf Netz und werden übertragen, sobald es da ist.`} as const;
 export const ORDER_TERMINAL_COPY={dateLocked:'Der Auftrag wurde bereits herausgegeben. Du kannst den Liefertermin nicht mehr ändern.'} as const;
