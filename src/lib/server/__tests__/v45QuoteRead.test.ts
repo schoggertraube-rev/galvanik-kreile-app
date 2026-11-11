@@ -35,3 +35,9 @@ it('keeps missing lifecycle or goods unknown rather than manufacturing an empty 
  expect(readV45Rule('kv',v45QuoteFacts({...base,lifecycle:{...life,goods:undefined}},now))).toMatchObject({code:'SOURCE_INCOMPLETE'});
  expect(readV45Rule('kv',v45QuoteFacts({...base,linkedOrderId:'TEST-order',lifecycle:undefined},now))).toMatchObject({code:'OK',ruleId:'kv.umgewandelt'});
 });
+it('PL09:00 keeps the current accepted promise valid after its acceptance deadline, never an older edition',()=>{
+ const expired={...base,validUntil:'2026-11-10'};
+ expect(readV45Rule('kv',v45QuoteFacts({...expired,lifecycle:{...life,acceptedEdition:2}},now))).toMatchObject({code:'OK',ruleId:'kv.zugesagt'});
+ expect(readV45Rule('kv',v45QuoteFacts({...expired,lifecycle:{...life,acceptedEdition:1}},now))).toMatchObject({code:'OK',ruleId:'kv.abgelaufen'});
+ expect(v45QuoteFacts({...expired,lifecycle:undefined},now)).not.toHaveProperty('expired');
+});

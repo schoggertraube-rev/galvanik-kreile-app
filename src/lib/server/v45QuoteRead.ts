@@ -10,10 +10,14 @@ import {readAuthorizedV45Rule} from './v45RuleRead';
  */
 export function v45QuoteFacts(quote:Pick<QuoteReadback,'linkedOrderId'|'validUntil'|'lifecycle'>,now=new Date()):Readonly<Record<string,unknown>>{
  const life=quote.lifecycle,converted=Boolean(quote.linkedOrderId);
- const facts:Record<string,unknown>={converted,expired:quote.validUntil!==null&&quote.validUntil<berlinCalendarDay(now)&&!converted};
+ const past=quote.validUntil!==null&&quote.validUntil<berlinCalendarDay(now);
+ const facts:Record<string,unknown>={converted,...(!past||converted?{expired:false}:{})};
  if(!life)return facts;
  const conditional=life.conditional?.edition===life.edition;
- return {...facts,rejected:life.declinedAt!==null,conditional,sent:life.sentEdition===life.edition,accepted:life.acceptedEdition===life.edition&&!conditional,
+ const accepted=life.acceptedEdition===life.edition&&!conditional;
+ // PL 11.11.09:00: validity only limits acceptance, not an existing promise.
+ // Keep frozen V45 files untouched; the PL records this in NACHTRAG_PL.
+ return {...facts,expired:past&&!converted&&!accepted,rejected:life.declinedAt!==null,conditional,sent:life.sentEdition===life.edition,accepted,
   ...(Array.isArray(life.goods)?{goods:life.goods.length>0}:{})};
 }
 

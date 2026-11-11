@@ -32,6 +32,8 @@ it('reads actual KV editions after commands, retains unknown evidence and expose
  const reread=await withSession(full,()=>readQuoteAction(input));if(reread.code!=='OK')throw Error('TEST_QUOTE_READ');
  expect(v45QuoteFacts({...reread.quote,lifecycle:undefined})).not.toHaveProperty('sent');
  expect(v45QuoteFacts({...reread.quote,lifecycle:{...reread.quote.lifecycle!,goods:undefined}})).not.toHaveProperty('goods');
- expect(v45QuoteFacts(reread.quote,new Date('2027-05-31T22:30:00Z'))).toMatchObject({expired:true});
+ expect(v45QuoteFacts(reread.quote,new Date('2027-05-31T22:30:00Z'))).toMatchObject({accepted:true,expired:false});
+ // Explicit synthetic unaccepted boundary; the stored accepted promise stays unchanged.
+ expect(v45QuoteFacts({...reread.quote,lifecycle:{...reread.quote.lifecycle!,acceptedEdition:null,acceptedAt:null,acceptanceEvidence:null}},new Date('2027-05-31T22:30:00Z'))).toMatchObject({expired:true});
  expect(v45QuoteFacts(reread.quote,new Date('2027-05-31T21:30:00Z'))).toMatchObject({expired:false});
 });
