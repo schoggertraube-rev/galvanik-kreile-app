@@ -22,6 +22,17 @@ export async function hasOwnOrderIntakeReceipt(tx:PrivilegedTenantTransaction,ac
   return rows.length===1;
 }
 
+/** PL02:01: source-bound mail authority, never an added general Mails grant. */
+export async function readIntakeConfirmationMailSource(tx:PrivilegedTenantTransaction,actor:Actor,input:{orderId:string;outboxId:string;sourceClientEventId:string},lock=false){
+ const rows=await tx.execute<{recipient:string}>(sql`SELECT outbox.an AS recipient FROM public.outbox_mails outbox
+  JOIN private.order_intake_receipts receipt ON receipt.tenant_id=outbox.tenant_id AND receipt.order_id=outbox.objekt AND receipt.actor_id=${actor.userId}::uuid AND receipt.client_event_id=${input.sourceClientEventId}::uuid
+  JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id AND event.user_id=receipt.actor_id AND event.event_type='ORDER_INTAKE_CREATED_V1' AND event.status='success'
+  WHERE outbox.tenant_id=${actor.tenantId} AND outbox.id=${input.outboxId}::uuid AND outbox.objekt=${input.orderId} AND outbox.vorlage='auftragsbestaetigung'
+   AND (outbox.status<>'gesendet' OR EXISTS(SELECT 1 FROM public.communication_threads thread WHERE thread.tenant_id=outbox.tenant_id AND thread.source='MS_GRAPH_OUT:'||outbox.id::text))
+  ${lock?sql`FOR UPDATE OF outbox`:sql``}`);
+ return rows.length===1?rows[0]:null;
+}
+
 /** Root read port for canonical customer/company fields, never a second customer store. */
 export async function readIntakeConfirmationContext(tx:PrivilegedTenantTransaction,actor:Actor,customerId:string,orderId:string){
   const rows=await tx.execute<{email:string|null;auto_info:boolean;salutation:string|null;first_name:string|null;last_name:string|null;company_name:string|null;street:string|null;house_number:string|null;zip_code:string|null;city:string|null;company:string|null;phone:string|null;oeffnungszeiten:string|null;wish_date:string|null}>(sql`

@@ -1,8 +1,10 @@
+import {quoteCommandContext} from './quoteAuthorization';
+import {readIntakeConfirmationMailSource} from './intakeDraftEvents';
 import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
 import "server-only";
 
 import { randomUUID,createHash } from "node:crypto";
-import {InvoiceMailListChanged,InvoiceAlreadySent,appendCommunicationDocument,communicationDocumentBody,communicationDocumentIntent,type CommunicationDocument} from './communicationDocumentPort';
+import {InvoiceMailListChanged,InvoiceAlreadySent,appendCommunicationDocument,communicationDocumentBody,communicationDocumentIntent,readCommunicationDocumentReceipt,assertLegacyQuoteReplacement,type LegacyQuoteReplacement,type CommunicationDocument} from './communicationDocumentPort';
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {hasAuthorizationArea} from '@/lib/server/authorization';
@@ -31,7 +33,7 @@ export async function readComplaintGoodsReminderDates(tx:import('./privilegedDb'
     JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email' AND message.summary='Reklamation '||complaint.complaint_id||' · Begleitschein'
     WHERE complaint.tenant_id=${auth.tenantId} AND complaint.complaint_id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::text[]) AND thread.status='sent' AND thread.updated_at>=complaint.rework_ware_since GROUP BY complaint.complaint_id`);
 }
-type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string;resend?:{requestId:string;label:string} };
+type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string;resend?:{requestId:string;label:string};newPrepare?:{requestId:string;previousRequestId:string;checkedAt:string} };
 type Target = { customerId: string; orderId: string | null; email: string; label: string;customerName:string };
 type ThreadRow = { id: string; customer_id: string | null; order_id: string | null; status: string | null; created_at: Date | string | null;created_by?:string };
 type LinkedMessageRow = {
@@ -222,7 +224,7 @@ export async function attachInboxMessage(
 
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; confirmedResend?:true; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; reconcileInvoice?:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; confirmedResend?:true; allowResend?:boolean;legacyReplaces?:LegacyQuoteReplacement; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; reconcileInvoice?:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeConfirmation?:{outboxId:string;sourceClientEventId:string} },
 ): Promise<Result<CommunicationReceipt>> {
   if (input?.confirmedResend!==undefined&&input.confirmedResend!==true || !validTarget(input?.targetType, input?.targetId) || typeof input.clientRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.clientRequestId) || typeof input.subject !== 'string' || typeof input.body !== 'string' || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
@@ -231,11 +233,22 @@ export async function sendCommunicationMail(
   // mail access: target, state and version are read from the complaint itself.
   const reminder=input.complaintResult?.kind==='reminder';
   const complaintSummary=input.complaintResult?'Reklamation '+input.complaintResult.complaintId+(reminder?' · Begleitschein':' · Ergebnis'):null;
-  if(input.document&&(!input.attachment||!['QUOTE','INVOICE'].includes(input.document.kind)||!Number.isSafeInteger(input.document.version)||input.document.version<1||input.document.kind==='QUOTE'&&(!Number.isSafeInteger(input.document.edition)||input.document.edition<1)||input.document.sha256!==createHash('sha256').update(input.attachment.bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'Belegfassung oder PDF-Nachweis ist ungültig.'};
+  let legacyOriginalRecovery=false;
+  if(input.document?.kind==='QUOTE'&&!input.attachment&&input.allowResend===false){
+    const source=await readCommunicationDocumentReceipt(auth,input,input.document.id);
+    legacyOriginalRecovery=source.code==='PENDING'&&source.document.kind==='QUOTE'&&!source.document.original&&source.originalRequestId===input.clientRequestId&&source.document.sha256===input.document.sha256;
+  }
+  if(input.document&&(!input.attachment&&!legacyOriginalRecovery||!['QUOTE','INVOICE'].includes(input.document.kind)||!Number.isSafeInteger(input.document.version)||input.document.version<1||input.document.kind==='QUOTE'&&(!Number.isSafeInteger(input.document.edition)||input.document.edition<1)||input.attachment&&input.document.sha256!==createHash('sha256').update(input.attachment.bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'Belegfassung oder PDF-Nachweis ist ungültig.'};
   const bundle=input.document?.kind==='INVOICE'?input.document.bundle??[]:[];
   if(bundle.length!==(input.additionalAttachments?.length??0)||bundle.some((doc,index)=>doc.sha256!==createHash('sha256').update(input.additionalAttachments![index].bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'Sammel-Belege passen nicht zu den Original-PDFs.'};
   if(input.document)input={...input,body:communicationDocumentBody(input.body,input.document)};
-  if(input.complaintResult){
+  let intakeRecipient:string|undefined;
+  if(input.intakeConfirmation){
+    if(!hasAuthorizationArea(auth,'eingang')||input.targetType!=='ORDER'||input.document||input.complaintResult||input.collectionReminder||input.clientRequestId!==input.intakeConfirmation.outboxId)return {code:'FORBIDDEN',message:'E-Mails dürfen für diese Rolle nicht versendet werden.'};
+    const source=await withPrivilegedTenantTransaction(auth,tx=>readIntakeConfirmationMailSource(tx,auth,{...input.intakeConfirmation!,orderId:input.targetId}));
+    if(!source)return {code:'FORBIDDEN',message:'E-Mails dürfen für diese Rolle nicht versendet werden.'};
+    intakeRecipient=source.recipient;
+  }else if(input.complaintResult){
     if(!hasAuthorizationArea(auth,'kunden')||input.targetType!=='ORDER')return {code:'FORBIDDEN',message:'Kunde informieren erfordert Kunden.'};
     const context=await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`SELECT complaint_id FROM public.v_complaint_rework_context_v1 complaint WHERE tenant_id=${auth.tenantId} AND complaint_id=${input.complaintResult!.complaintId} AND ${reminder?sql`nacharbeit_auftrag_id=${input.targetId}`:sql`source_order_id=${input.targetId}`} AND (
       version=${input.complaintResult!.version} AND ${reminder?sql`stand='massnahme_nacharbeit' AND rework_ware='erwartet'`:sql`stand='kunde_informieren'`} OR EXISTS(
@@ -252,6 +265,7 @@ export async function sendCommunicationMail(
   });
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
   const currentRecipient=target.email;
+  if(intakeRecipient)target.email=intakeRecipient;
   // A physical-mail reconciliation checks the address reserved before Graph,
   // even when the customer record has since been corrected.
   const transport=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{recipient:string}>(sql`SELECT payload->>'recipient' AS recipient FROM public.events
@@ -265,7 +279,7 @@ export async function sendCommunicationMail(
   // The body remains outside the business log; its hash binds a same-key retry.
   const originals=input.document?[{id:input.document.id,sha256:input.document.sha256},...bundle.map(document=>({id:document.id,sha256:document.sha256}))]:[input.attachment,...input.additionalAttachments??[]].filter((attachment):attachment is GraphMailAttachment=>!!attachment).map(attachment=>({id:null,sha256:createHash('sha256').update(attachment.bytes).digest('hex')}));
   originals.sort((a,b)=>String(a.id??a.sha256).localeCompare(String(b.id??b.sha256)));
-  const intentHash=createHash('sha256').update(JSON.stringify([target.email.trim().toLowerCase(),input.subject.trim(),input.targetType,input.targetId,target.customerId,target.orderId,originals,...(input.complaintResult?[[input.complaintResult.complaintId,input.complaintResult.version,input.complaintResult.kind??'result']]:[])])).digest('hex');
+  const intentHash=createHash('sha256').update(JSON.stringify([target.email.trim().toLowerCase(),input.subject.trim(),input.targetType,input.targetId,target.customerId,target.orderId,originals,...(input.complaintResult?[[input.complaintResult.complaintId,input.complaintResult.version,input.complaintResult.kind??'result']]:[]),...(input.intakeConfirmation?[[input.intakeConfirmation.outboxId,input.intakeConfirmation.sourceClientEventId]]:[])])).digest('hex');
   const contentSha256=createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex');
   const source = `MS_GRAPH_OUT:${input.clientRequestId}`;
   let pending: { threadId: string; recordedAt: string; replay?: CommunicationReceipt; recovery?:true };
@@ -302,9 +316,10 @@ export async function sendCommunicationMail(
           return { threadId: existing[0].id, recordedAt: iso(existing[0].created_at), replay: { threadId: existing[0].id, messageId: confirmed[0].id, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(existing[0].created_at), replayed: true } };
         }
       }
+      if(input.legacyReplaces){if(!input.document)throw Error('LEGACY_QUOTE_REPLACEMENT_INVALID');await assertLegacyQuoteReplacement(tx,auth,input,input.document,input.legacyReplaces);}
       const unresolved=await tx.execute<{id:string;actor:string;request_id:string;content:string;thread_id:string;created_at:Date}>(sql`SELECT prepared.id,prepared.user_id::text AS actor,prepared.correlation_id::text AS request_id,prepared.payload->>'contentSha256' AS content,thread.id::text AS thread_id,thread.created_at FROM public.events prepared
         LEFT JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
-        WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND prepared.payload->>'intentHash'=${intentHash}
+        WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND prepared.payload->>'intentHash'=${intentHash} AND prepared.correlation_id::text IS DISTINCT FROM ${input.legacyReplaces?.requestId??null}
           AND (thread.status IS DISTINCT FROM 'sent' OR NOT EXISTS(SELECT 1 FROM public.events sent
             WHERE sent.tenant_id=prepared.tenant_id AND sent.event_type IN('COMMUNICATION_MAIL_SENT_V1','COMMUNICATION_DOCUMENT_SENT_V1')
               AND sent.user_id=prepared.user_id AND sent.payload->>'threadId'=prepared.payload->>'threadId')) LIMIT 2`);
@@ -316,6 +331,7 @@ export async function sendCommunicationMail(
         return {threadId:prior.thread_id,recordedAt:iso(prior.created_at),recovery:true as const};
       }
       if(input.confirmedResend)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
+      if(input.intakeConfirmation&&!await readIntakeConfirmationMailSource(tx,auth,{...input.intakeConfirmation,orderId:input.targetId},true))throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
       if(readMicrosoftGraphConfigurationStatus().code!=='READY')throw Error('COMMUNICATION_NOT_CONFIGURED');
       if((input.document&&!input.beforePrepare)||(input.beforePrepare&&!await input.beforePrepare(tx,target.email)))throw Error('COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED');
       const threadId = randomUUID();
@@ -328,7 +344,7 @@ export async function sendCommunicationMail(
       const prepBytes=createHash('sha256').update('communication-mail-prepared:'+auth.tenantId+':'+input.clientRequestId).digest();prepBytes[6]=(prepBytes[6]&15)|80;prepBytes[8]=(prepBytes[8]&63)|128;
       const hex=prepBytes.subarray(0,16).toString('hex'),prepareKey=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
       const proof=await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
-        VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_PREPARED_V1','COMMUNICATION_MAIL_PREPARED_V1',${JSON.stringify({threadId,clientRequestId:input.clientRequestId.toLowerCase(),targetType:input.targetType,targetId:input.targetId,customerId:target.customerId,orderId:target.orderId,recipient:target.email,intentHash,contentSha256,documents:originals,...(input.complaintResult?{complaintResult:input.complaintResult}:{})})}::jsonb,'success',${auth.userId}::uuid,${prepareKey}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp()) RETURNING id`);
+        VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_PREPARED_V1','COMMUNICATION_MAIL_PREPARED_V1',${JSON.stringify({threadId,clientRequestId:input.clientRequestId.toLowerCase(),targetType:input.targetType,targetId:input.targetId,customerId:target.customerId,orderId:target.orderId,recipient:target.email,intentHash,contentSha256,documents:originals,...(input.complaintResult?{complaintResult:input.complaintResult}:{}),...(input.intakeConfirmation?{intakeConfirmation:input.intakeConfirmation}:{}),...(input.legacyReplaces?{legacyReplaces:input.legacyReplaces}:{})})}::jsonb,'success',${auth.userId}::uuid,${prepareKey}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp()) RETURNING id`);
       if(proof.length!==1)throw Error('COMMUNICATION_MAIL_PREPARE_PROOF_MISSING');
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,threadId,'prepared');
       if(input.collectionReminder)await prepareCollectionReminder(tx,auth,input.collectionReminder,{threadId,clientRequestId:input.clientRequestId,body:input.body});
@@ -354,13 +370,15 @@ export async function sendCommunicationMail(
     if('notFound'in proof.data){
       const confirmation=await withPrivilegedTenantTransaction(auth,async tx=>{
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${auth.tenantId}:mail-intent:${intentHash}`},0))`);
-        const state=await tx.execute<{eligible:boolean;used:boolean}>(sql`SELECT statement_timestamp()>=(prepared.created_at AT TIME ZONE 'UTC')+interval '10 minutes' AS eligible,
+        const state=await tx.execute<{eligible:boolean;used:boolean;checked_at:string}>(sql`SELECT statement_timestamp()::text AS checked_at,statement_timestamp()>=(prepared.created_at AT TIME ZONE 'UTC')+interval '10 minutes' AS eligible,
          EXISTS(SELECT 1 FROM public.events confirmed WHERE confirmed.tenant_id=prepared.tenant_id AND confirmed.event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND confirmed.correlation_id=prepared.correlation_id) AS used
          FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
          WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND prepared.correlation_id=${input.clientRequestId}::uuid
           AND prepared.user_id=${auth.userId}::uuid AND prepared.payload->>'intentHash'=${intentHash} AND prepared.payload->>'contentSha256'=${contentSha256}
           AND thread.status IN('pending','failed') AND thread.id=${pending.threadId} FOR UPDATE OF thread`);
-        if(state.length!==1||!state[0].eligible||state[0].used||target.email!==currentRecipient)return {available:false};
+        if(state.length!==1||!state[0].eligible||state[0].used)return {available:false};
+        if(input.allowResend===false)return {available:false,...(legacyOriginalRecovery&&quoteCommandContext(auth).capabilities.canReadQuote?{newPrepare:{requestId:randomUUID(),previousRequestId:input.clientRequestId,checkedAt:state[0].checked_at}}:{})};
+        if(target.email!==currentRecipient)return {available:false};
         if(input.document?.kind==='INVOICE'){
           for(const invoice of [input.document,...input.document.bundle??[]].sort((a,b)=>a.id.localeCompare(b.id))){
             const [current]=await tx.execute<{status:string}>(sql`SELECT status FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid FOR UPDATE`);
@@ -377,7 +395,7 @@ export async function sendCommunicationMail(
         if(changed.length!==1)throw Error('COMMUNICATION_RESEND_STATE_CHANGED');
         return {available:true,id:rows[0].id};
       });
-      if(!confirmation.id)return {code:'CONFLICT',message:confirmation.canceled?MAIL_RESEND_COPY.canceled(confirmation.canceled):COLLECTION_REMINDER_COPY.unclear,...(confirmation.available?{resend:{requestId:input.clientRequestId,label:MAIL_RESEND_COPY.confirm(target.customerName)}}:{})};
+      if(!confirmation.id)return {code:'CONFLICT',message:confirmation.canceled?MAIL_RESEND_COPY.canceled(confirmation.canceled):COLLECTION_REMINDER_COPY.unclear,...(confirmation.available?{resend:{requestId:input.clientRequestId,label:MAIL_RESEND_COPY.confirm(target.customerName)}}:{}),...('newPrepare'in confirmation&&confirmation.newPrepare?{newPrepare:confirmation.newPrepare}:{})};
       resendConfirmationId=confirmation.id;
     }else sentItemsEvidence=proof.data;
   }

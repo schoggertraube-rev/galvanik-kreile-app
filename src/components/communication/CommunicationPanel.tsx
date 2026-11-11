@@ -105,6 +105,7 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
   const sendLock=useRef(false);
   const pendingSend=useRef<Parameters<typeof sendCustomerMailAction>[0]|null>(null);
   const [sendUnclear,setSendUnclear]=useState(false);
+  const [newPrepareReady,setNewPrepareReady]=useState(false);
   const [confirmedRetry,setConfirmedRetry]=useState<{requestId:string;label:string}|null>(null);
   const composeForm=(
       <form className={styles.compose} onSubmit={async (event) => {
@@ -119,6 +120,8 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
         try{
           const result=await sendCustomerMailAction(input);
           setConfirmedRetry(result.code!=='OK'&&'resend'in result&&result.resend&&typeof result.resend.requestId==='string'&&typeof result.resend.label==='string'?result.resend:null);
+          const normalPrepare=result.code!=='OK'&&'newPrepare'in result&&result.newPrepare&&typeof result.newPrepare.requestId==='string'?result.newPrepare:null;
+          setNewPrepareReady(!!normalPrepare);if(normalPrepare){const next={...input,clientRequestId:normalPrepare.requestId};delete next.confirmedResend;pendingSend.current=next;}
           setFeedback(result.code==='OK'?('notice'in result&&typeof result.notice==='string'&&result.notice?result.notice:'E-Mail wurde versendet und am Vorgang gespeichert.'):result.message);
           if(result.code==='OK'){pendingSend.current=null;setSendUnclear(false);formElement.reset();}
           else if(result.code==='UNAVAILABLE'||result.code==='CONFLICT'){setSendUnclear(true);}
@@ -129,7 +132,7 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
         <label>Betreff<input name="subject" required maxLength={500} value={composer?.subject} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onSubject(event.target.value):undefined} /></label>
         <label>Nachricht<textarea name="body" required maxLength={20_000} value={composer?.body} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onBody(event.target.value):undefined} /></label>
         {!composer?<label>PDF-Anhang<select name="quoteId" defaultValue="" disabled={sendBusy||sendUnclear}><option value="">Ohne Anhang</option>{matchingQuotes.map((quote) => <option key={quote.quoteId} value={quote.quoteId}>KV {quote.quoteNumber}</option>)}</select></label>:null}
-        {!composer?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{confirmedRetry?.label??(sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden")}</button>:null}
+        {!composer?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{confirmedRetry?.label??(newPrepareReady?"Versenden":sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden")}</button>:null}
       </form>
   );
   if(composer)return <section className={styles.panel}>{composeForm}</section>;

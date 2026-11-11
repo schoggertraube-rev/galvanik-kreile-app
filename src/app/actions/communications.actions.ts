@@ -1,9 +1,12 @@
 "use server";
 
+import {storeQuoteMailOriginal,readQuoteMailOriginal} from '@/lib/server/communicationOriginalPort';
+import {quoteCommandContext} from '@/lib/server/quoteAuthorization';
+import {readQuoteCommand} from '@/modules/quotes/server-public';
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {freezeStorageDeadline} from '@/lib/server/storageDeadline';
 import {createHash,randomUUID} from "node:crypto";
-import {readCommunicationDocumentReceipt,applyRecoveredInvoiceMailEffects,readPreparedInvoiceTransportOriginal,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
+import {readCommunicationDocumentReceipt,readLegacyQuoteReplacement,type LegacyQuoteReplacement,applyRecoveredInvoiceMailEffects,readPreparedInvoiceTransportOriginal,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
@@ -135,6 +138,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:input.clientRequestId,subject:message.subject,body:message.body,collectionReminder:meta,beforePrepare:async tx=>(await readShippingSettingsInTransaction(tx,auth.tenantId))?.updatedAt===settings.settings.updatedAt});
  }
  let attachment,document:CommunicationDocument|undefined;
+ let legacyReplaces:LegacyQuoteReplacement|undefined;
  let invoiceGroup:{customerId:string;handover:string|null}|undefined;
  if(input.attachment?.kind==='INVOICE'&&(!Array.isArray(input.expectedInvoiceIds)||!input.expectedInvoiceIds.length||input.expectedInvoiceIds.length>101||new Set(input.expectedInvoiceIds).size!==input.expectedInvoiceIds.length||input.expectedInvoiceIds.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))||!input.expectedInvoiceIds.includes(input.attachment.documentId))){const original=await readInvoicePdf(auth,input.attachment.documentId,'original');if(original.code!=='OK')return original;return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.data.invoiceNumber)};}
  const reconcileInvoice=(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,threadId:string)=>applyRecoveredInvoiceMailEffects(auth,threadId,(writeTx,value)=>createCanceledInvoiceMailTask(writeTx,auth,value,{effect:(effectTx,actor,effect)=>recordIntakeTaskEffect(effectTx,actor,effect,readCustomerProfile)}),tx);
@@ -144,6 +148,16 @@ export async function sendCustomerMailAction(input: TargetInput & {
   if(prior.code==='PENDING'){
    const original=prior.document;
    if(input.confirmedResend&&input.clientRequestId!==prior.originalRequestId)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
+   if(original.kind==='QUOTE'&&input.attachment.kind==='QUOTE'){
+    if(!original.original&&!input.confirmedResend){const replacement=await readLegacyQuoteReplacement(auth,prior.originalRequestId);if(replacement)return sendCustomerMailAction({...input,clientRequestId:replacement});}
+    const bytes=original.original?await readQuoteMailOriginal(original.original,original.sha256):null;
+    const result=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,allowResend:!!bytes,document:original,attachment:bytes?{filename:original.number+'.pdf',contentType:'application/pdf',bytes}:undefined,beforePrepare:async()=>{
+     if(!bytes)return false;
+     return (await readQuoteCommand(quoteCommandContext(auth),{quoteId:original.id})).code==='OK';
+    }});
+    if(!original.original&&result.code==='CONFLICT'&&result.newPrepare&&input.clientRequestId!==prior.originalRequestId&&!input.confirmedResend){legacyReplaces={requestId:prior.originalRequestId,checkedAt:result.newPrepare.checkedAt};}
+    else return result.code==='OK'?confirmQuoteDelivery({...input,clientRequestId:prior.originalRequestId},original,result):result;
+   }else{
    if(original.kind!=='INVOICE'||input.attachment.kind!=='INVOICE')return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
    const invoices=[original,...original.bundle??[]];
    if(JSON.stringify(invoices.map(row=>row.id).sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'CONFLICT' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.number)};
@@ -161,6 +175,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
     }
     return true;
    }});
+   }
   }
   if(prior.code==='OK'){
    if('mailOnly'in prior&&prior.mailOnly)await withPrivilegedTenantTransaction(auth,tx=>reconcileInvoice(tx,prior.data.threadId));
@@ -168,7 +183,8 @@ export async function sendCustomerMailAction(input: TargetInput & {
    if(prior.document.kind==='INVOICE'&&JSON.stringify([prior.document.id,...prior.document.bundle?.map(row=>row.id)??[]].sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(prior.document.number)};
    return prior.document.kind==='QUOTE'?confirmQuoteDelivery(input,prior.document,{code:'OK',data:prior.data}):{code:'OK' as const,data:prior.data};
   }
-  if(prior.code!=='NOT_FOUND')return prior;
+  if(prior.code==='PENDING'&&!legacyReplaces)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
+  if(prior.code!=='NOT_FOUND'&&prior.code!=='PENDING')return prior;
   if(input.attachment.kind==='INVOICE'){
    const pdf=await readInvoicePdf(auth,input.attachment.documentId,'original');if(pdf.code!=='OK')return pdf;
    const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;order_id:string;customer_id:string;aggregate_version:number;order_number:string;handover_mode:string|null}>(sql`SELECT invoice.id::text,invoice.order_id,invoice.customer_id,invoice.aggregate_version,orders.order_number,orders.handover_mode FROM public.invoices invoice JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${input.attachment!.documentId}::uuid AND invoice.status='issued' AND invoice.contract_version=1 AND invoice.pdf_sha256=${pdf.data.pdfSha256}`));
@@ -193,6 +209,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   if(pdf.document.edition===null)return {code:'VALIDATION_ERROR' as const,message:'KV-Fassung fehlt. Es wurde nichts gesendet.'};
   attachment={filename:pdf.quoteNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.pdf)};
   document={kind:'QUOTE',id:pdf.document.id,number:pdf.quoteNumber,version:pdf.document.version,edition:pdf.document.edition,sha256:createHash('sha256').update(attachment.bytes).digest('hex')};
+  document.original=await storeQuoteMailOriginal(auth,input.clientRequestId,document.id,attachment.bytes);
   if(pdf.document.sourceMessageId){
    const source=await readIntakeMailImportReceipt(auth,{itemId:pdf.document.sourceMessageId});
    if(source.code!=='OK')return {...source,message:'KV-Ursprungsnachricht konnte nicht sicher gelesen werden. Es wurde nichts gesendet. '+source.message};
@@ -201,7 +218,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   }
  }
  const snapshot=document;
- const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,attachment,additionalAttachments,document,reconcileInvoice,beforePrepare:snapshot?async (tx,recipient)=>{
+ const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,attachment,additionalAttachments,document,reconcileInvoice,legacyReplaces,beforePrepare:snapshot?async (tx,recipient)=>{
   if(snapshot.kind==='QUOTE')return lockQuoteDeliverySnapshot(tx,auth.tenantId,snapshot);
   for(const invoice of [snapshot,...snapshot.bundle??[]].sort((a,b)=>a.orderId.localeCompare(b.orderId))){
    if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;

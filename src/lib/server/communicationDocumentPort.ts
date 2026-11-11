@@ -1,4 +1,5 @@
 import 'server-only';
+import type {CommunicationOriginal} from './communicationOriginalPort';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql,type SQL} from 'drizzle-orm';
@@ -10,8 +11,30 @@ import {DISPATCH_NOTICE_COPY} from '@/ui/situationCatalog';
 
 export type InvoiceResendEvidence={bounceEventId:string;bounceItemId:string;bouncedThreadId:string;correctionEventId:string;recipient:string;originals:Array<{id:string;sha256:string}>};
 export type InvoiceMailDocument={resend?:InvoiceResendEvidence;id:string;number:string;version:number;sha256:string;orderId:string;orderNumber?:string};
-export type CommunicationDocument={kind:'QUOTE';id:string;number:string;version:number;edition:number;sha256:string;source?:{itemId:string;graphMessageId:string}}|InvoiceMailDocument&{kind:'INVOICE';bundle?:InvoiceMailDocument[];source?:never};
+export type CommunicationDocument={kind:'QUOTE';original?:CommunicationOriginal;id:string;number:string;version:number;edition:number;sha256:string;source?:{itemId:string;graphMessageId:string}}|InvoiceMailDocument&{kind:'INVOICE';bundle?:InvoiceMailDocument[];source?:never};
 type Intent={targetType:'CUSTOMER'|'ORDER';targetId:string;clientRequestId:string;subject:string;body:string};
+export type LegacyQuoteReplacement={requestId:string;checkedAt:string};
+export async function readLegacyQuoteReplacement(auth:AuthorizationSnapshot,requestId:string){
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<{request_id:string}>(sql`SELECT prepared.correlation_id::text AS request_id FROM public.events prepared
+   JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId' AND thread.created_by=prepared.user_id
+   JOIN public.events document ON document.tenant_id=prepared.tenant_id AND document.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1' AND document.correlation_id=prepared.correlation_id AND document.user_id=prepared.user_id
+   WHERE prepared.tenant_id=${auth.tenantId} AND prepared.user_id=${auth.userId}::uuid AND prepared.event_type='COMMUNICATION_MAIL_PREPARED_V1'
+    AND prepared.payload->'legacyReplaces'->>'requestId'=${requestId} AND document.payload->'document'->>'kind'='QUOTE' AND document.payload->'document' ? 'original'`);
+  if(rows.length>1)throw Error('LEGACY_QUOTE_REPLACEMENT_AMBIGUOUS');return rows[0]?.request_id??null;
+ });
+}
+/** Recheck and lock the still unresolved original after the explicit new-send click. */
+export async function assertLegacyQuoteReplacement(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:Intent,document:CommunicationDocument,replacement:LegacyQuoteReplacement){
+ if(document.kind!=='QUOTE'||!document.original||input.clientRequestId===replacement.requestId||!Number.isFinite(Date.parse(replacement.checkedAt)))throw Error('LEGACY_QUOTE_REPLACEMENT_INVALID');
+ const rows=await tx.execute(sql`SELECT thread.id FROM public.communication_threads thread
+  JOIN public.events prepared ON prepared.tenant_id=thread.tenant_id AND prepared.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1' AND prepared.client_event_id=thread.id AND prepared.user_id=thread.created_by
+  WHERE thread.tenant_id=${auth.tenantId} AND thread.created_by=${auth.userId}::uuid AND thread.source='MS_GRAPH_OUT:'||${replacement.requestId}
+   AND thread.status IN('pending','failed') AND prepared.payload->'document'->>'kind'='QUOTE' AND prepared.payload->'document'->>'id'=${document.id}
+   AND NOT(prepared.payload->'document' ? 'original') AND prepared.payload->>'targetType'=${input.targetType} AND prepared.payload->>'targetId'=${input.targetId}
+  FOR UPDATE OF thread`);
+ if(rows.length!==1)throw Error('LEGACY_QUOTE_REPLACEMENT_CHANGED');
+}
 export function communicationDocumentBody(body:string,document:CommunicationDocument,legacy=false){
  if(document.kind!=='INVOICE'||!document.bundle?.length)return body.trim();
  const orders=[document,...document.bundle].map(doc=>doc.orderNumber);if(orders.some(number=>!number))throw Error('INVOICE_BUNDLE_ORDER_NUMBER_MISSING');
@@ -53,7 +76,8 @@ export async function readCommunicationDocumentReceipt(auth:AuthorizationSnapsho
    LEFT JOIN public.events sent ON sent.tenant_id=thread.tenant_id AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.payload->>'threadId'=thread.id::text AND sent.payload->>'intent'=prepared.payload->>'intent'
    LEFT JOIN public.events mail ON mail.tenant_id=thread.tenant_id AND mail.event_type='COMMUNICATION_MAIL_SENT_V1' AND mail.payload->>'threadId'=thread.id::text
    WHERE thread.tenant_id=${auth.tenantId} AND (thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId}
-    OR thread.source LIKE 'MS_GRAPH_OUT:%' AND thread.status IN('pending','failed') AND thread.created_by=${auth.userId}::uuid
+    OR NOT EXISTS(SELECT 1 FROM public.communication_threads exact WHERE exact.tenant_id=${auth.tenantId} AND exact.source=${'MS_GRAPH_OUT:'+input.clientRequestId})
+     AND thread.source LIKE 'MS_GRAPH_OUT:%' AND thread.status IN('pending','failed') AND thread.created_by=${auth.userId}::uuid
      AND prepared.payload->'document'->>'id'=${documentId} AND (thread.order_id=${input.targetType==='ORDER'?input.targetId:null} OR ${input.targetType==='CUSTOMER'} AND thread.order_id IS NULL AND thread.customer_id=${input.targetId})) LIMIT 2`);
   if(!rows.length)return {code:'NOT_FOUND' as const,message:'Noch kein Versandbeleg.'};
   const row=rows[0],document=row.payload?.document;

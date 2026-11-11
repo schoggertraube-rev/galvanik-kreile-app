@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { sendMicrosoftGraphMail } from "@/lib/server/microsoftGraph";
+import {sendCommunicationMail} from "@/lib/server/communicationPort";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeReceipt } from "@/lib/server/commands/orderIntakeCommand";
@@ -98,7 +98,7 @@ export async function sendIntakeConfirmation(auth:AuthorizationSnapshot,receipt:
     if(typeof prepared==='string')return prepared;
     let failure:string|null='COMPANY_NAME_MISSING';
     if(prepared.message){
-      const sent=await sendMicrosoftGraphMail(prepared.message);
+      const sent=await sendCommunicationMail(auth,{targetType:'ORDER',targetId:receipt.orderId,clientRequestId:prepared.id,subject:prepared.message.subject,body:prepared.message.body,intakeConfirmation:{outboxId:prepared.id,sourceClientEventId:receipt.clientEventId}});
       failure=sent.code==='OK'?null:sent.code;
     }
     if(failure)console.error('[INTAKE_CONFIRMATION_SEND_FAILED]',{orderId:receipt.orderId,code:failure});
