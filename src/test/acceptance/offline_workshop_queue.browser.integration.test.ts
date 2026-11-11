@@ -12,7 +12,7 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('retains actual native-IDB work
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();if(!address||typeof address==='string')throw Error('TEST_LOOPBACK');
  const execute=promisify(execFile),session='TEST-workshop-queue-'+randomUUID();
  const cli=(args:string[])=>execute(process.execPath,[process.env.KREILE_PLAYWRIGHT_CLI_JS!,`-s=${session}`,...args],{maxBuffer:1024*1024,timeout:90000});
- const ids={order:randomUUID(),item:randomUUID(),key:randomUUID(),extraKey:randomUUID(),invalid:randomUUID(),line:randomUUID(),catalog:randomUUID()};
+ const ids={order:randomUUID(),item:randomUUID(),key:randomUUID(),extraKey:randomUUID(),invalid:randomUUID(),aborted:randomUUID(),line:randomUUID(),catalog:randomUUID()};
  try{
   await cli(['open',`http://127.0.0.1:${address.port}/TEST`]);
   const result=await cli(['eval',`async()=>{
@@ -29,6 +29,9 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('retains actual native-IDB work
    await p.acknowledgePendingOriginal(scope,ids.key);
    const held=(await p.readPendingEntries(scope)).find(row=>row.id===ids.key);
    if(JSON.stringify(held)!==JSON.stringify(first))throw Error('TEST_ORIGINAL_OR_TIMESTAMP_CHANGED');
+   const nativePut=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(...args){const request=nativePut.apply(this,args);if(this.name==='originals'&&args[0].id===ids.aborted)request.addEventListener('success',()=>this.transaction.abort());return request;};
+   let aborted=false;try{await p.retainPendingWorkshopOriginal(scope,{...original,id:ids.aborted,input:{...original.input,clientEventId:ids.aborted}});}catch{aborted=true;}finally{IDBObjectStore.prototype.put=nativePut;}
+   if(!aborted||(await p.readPendingEntries(scope)).some(row=>row.id===ids.aborted))throw Error('TEST_ABORT_FALSE_CAPTURE_SUCCESS');
    const extra={kind:'workshop',id:ids.extraKey,itemId:ids.order,command:'item.extraWork',input:{orderId:ids.order,itemId:ids.item,clientEventId:ids.extraKey,lineId:ids.line,catalogPositionId:ids.catalog,minutes:25,active:true,expectedLineVersion:0,expectedOrderVersion:7}};
    await p.retainPendingWorkshopOriginal(scope,extra);
    const raw=await new Promise((resolve,reject)=>{const r=indexedDB.open('kreile-pending-originals-v1-'+scope,2);r.onerror=()=>reject(r.error);r.onsuccess=()=>resolve(r.result);});
@@ -37,8 +40,8 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('retains actual native-IDB work
    if(rows.filter(row=>row.kind==='workshop').length!==1||rows.filter(row=>row.kind==='quarantine').length!==3)throw Error('TEST_UNKNOWN_COMMAND_OR_METADATA_EXECUTABLE');
    if((await p.readPendingOriginals(scope)).length!==2)throw Error('TEST_INTAKE_RESUME_CAPTURED_WORKSHOP');
    if((await p.readPendingEntries('${'e'.repeat(64)}')).length)throw Error('TEST_OTHER_SCOPE_DISCLOSED');
-   return {oneNativeQueue:true,immutableIntent:true,receiptRequired:true,quarantinePreserved:true};
+   return {oneNativeQueue:true,immutableIntent:true,receiptRequired:true,quarantinePreserved:true,abortPreserved:true};
   }`]);
-  expect(result.stdout).not.toContain('### Error');for(const key of ['oneNativeQueue','immutableIntent','receiptRequired','quarantinePreserved'])expect(result.stdout).toContain('"'+key+'": true');
+  expect(result.stdout).not.toContain('### Error');for(const key of ['oneNativeQueue','immutableIntent','receiptRequired','quarantinePreserved','abortPreserved'])expect(result.stdout).toContain('"'+key+'": true');
  }finally{await cli(['close']).catch(()=>{});await new Promise<void>(resolve=>server.close(()=>resolve()));}
 },120000);
