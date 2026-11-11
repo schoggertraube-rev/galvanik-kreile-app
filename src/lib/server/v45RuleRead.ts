@@ -10,8 +10,9 @@ export function readV45Rule(area:string,facts:Readonly<Record<string,unknown>>){
  if(!rules.length)return {code:'VALIDATION_ERROR' as const};
  for(const rule of rules){
   const conditions=Object.entries(rule.wenn);
-  if(conditions.some(([key,value])=>Object.hasOwn(facts,key)&&facts[key]!==undefined&&facts[key]!==null&&facts[key]!==value))continue;
-  const missing=conditions.filter(([key])=>!Object.hasOwn(facts,key)||facts[key]===undefined||facts[key]===null).map(([key])=>key);
+  const known=(key:string,value:string|boolean|number)=>Object.hasOwn(facts,key)&&typeof facts[key]===typeof value&&(typeof facts[key]!=='number'||Number.isFinite(facts[key]));
+  if(conditions.some(([key,value])=>known(key,value)&&facts[key]!==value))continue;
+  const missing=conditions.filter(([key,value])=>!known(key,value)).map(([key])=>key);
   if(missing.length)return {code:'SOURCE_INCOMPLETE' as const,ruleId:rule.id,missing};
   return {code:'OK' as const,ruleId:rule.id,...rule.dann,quelle:{rule:rule.id,source:rule.quelle,sha256:V45_SOURCE_HASHES['regeln.json'],previewSha256:V45_PREVIEW_SHA}};
  }

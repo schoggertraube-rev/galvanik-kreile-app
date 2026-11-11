@@ -23,6 +23,7 @@ describe('S04 single V45 rule reading seam',()=>{
   expect(readV45Rule('kunde',{})).toMatchObject({code:'SOURCE_INCOMPLETE'});
   expect(readV45Rule('kunde',{...baseline('kunde'),overdue:undefined,reminderNeeded:true})).toMatchObject({code:'SOURCE_INCOMPLETE',ruleId:'kunde.ueberfaellig'});
   expect(readV45Rule('kunde',{...baseline('kunde'),overdue:null,reminderNeeded:true})).toMatchObject({code:'SOURCE_INCOMPLETE'});
+  expect(readV45Rule('kunde',{...baseline('kunde'),overdue:'false',reminderNeeded:true})).toMatchObject({code:'SOURCE_INCOMPLETE'});
  });
  it('can skip an impossible conjunction without inventing its other missing fact',()=>{
   expect(readV45Rule('kunde',{...baseline('kunde'),emailMissing:false,hasAction:undefined})).toMatchObject({code:'OK',ruleId:'kunde.ruhig',hauptaktion:null});
