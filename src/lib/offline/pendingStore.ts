@@ -1,8 +1,22 @@
-// Only unacknowledged uploads, as specified by eingang.geraete. Server remains authoritative.
+import {canonicalJson} from '@/lib/domain/canonicalJson';
+import type {setOrderItemFinishedAction,changeOrderItemExtraWorkAction} from '@/app/actions/orders.actions';
+// Unacknowledged originals in one scoped queue. Server remains authoritative.
 export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
   | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number};
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
-export type PendingEntry=PendingOriginal|PendingQuarantine;
+export type PendingWorkshopCommand={command:'item.finished';input:Parameters<typeof setOrderItemFinishedAction>[0]}|{command:'item.extraWork';input:Parameters<typeof changeOrderItemExtraWorkAction>[0]};
+export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:string;kind:'workshop';deviceCapturedAt?:string;queueSequence?:number};
+export type PendingEntry=PendingOriginal|PendingWorkshopOriginal|PendingQuarantine;
+export function isPendingWorkshopOriginal(value:unknown):value is PendingWorkshopOriginal{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const row=value as Record<string,unknown>,input=row.input;
+ if(row.kind!=='workshop'||!input||typeof input!=='object'||Array.isArray(input))return false;
+ const data=input as Record<string,unknown>,uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(v);
+ if(!uuid(data.orderId)||!uuid(data.itemId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.orderId)return false;
+ const keys=Object.keys(data).sort().join(',');
+ if(row.command==='item.finished')return keys==='clientEventId,expectedVersion,finished,itemId,orderId'&&Number.isSafeInteger(data.expectedVersion)&&typeof data.finished==='boolean';
+ return row.command==='item.extraWork'&&keys==='active,catalogPositionId,clientEventId,expectedLineVersion,expectedOrderVersion,itemId,lineId,minutes,orderId'&&uuid(data.lineId)&&uuid(data.catalogPositionId)&&Number.isSafeInteger(data.expectedLineVersion)&&Number.isSafeInteger(data.expectedOrderVersion)&&typeof data.minutes==='number'&&Number.isFinite(data.minutes)&&typeof data.active==='boolean';
+}
 const STORE = "originals";
 const SHELL_STORE = "shellMetadata";
 async function database(scope: string): Promise<IDBDatabase> {
@@ -104,11 +118,23 @@ async function transaction<T>(scope: string, mode: IDBTransactionMode, work: (st
   });
 }
 export async function retainPendingOriginal(scope: string, original: PendingOriginal): Promise<void> {
+ return retainOriginal(scope,original);
+}
+/** Same store and sequence as files/notes; the N5 key and original intent cannot change. */
+export async function retainPendingWorkshopOriginal(scope:string,original:PendingWorkshopOriginal):Promise<void>{
+ if(!isPendingWorkshopOriginal(original))throw Error('OFFLINE_WORKSHOP_ORIGINAL_INVALID');
+ return retainOriginal(scope,original);
+}
+async function retainOriginal(scope:string,original:PendingOriginal|PendingWorkshopOriginal):Promise<void>{
  const connection=await database(scope);
  return new Promise((resolve,reject)=>{
   const tx=connection.transaction(STORE,"readwrite"),store=tx.objectStore(STORE),read=store.get(original.id);
-  read.onsuccess=()=>{const previous=read.result as PendingOriginal|undefined;
-   const same=original.kind==='file'?previous?.kind==='file':previous?.kind==='note'&&previous.textstand===original.textstand;
+  read.onsuccess=()=>{const previous=read.result as PendingOriginal|PendingWorkshopOriginal|undefined;
+   if(original.kind==='workshop'&&previous){
+    if(!isPendingWorkshopOriginal(previous)||previous.command!==original.command||canonicalJson(previous.input)!==canonicalJson(original.input)){tx.abort();return;}
+    store.put(previous);return;
+   }
+   const same=original.kind==='file'?previous?.kind==='file':original.kind==='note'&&previous?.kind==='note'&&previous.textstand===original.textstand;
    const deviceCapturedAt=same?previous?.deviceCapturedAt:new Date().toISOString();
    const expectedVersion=same&&previous?.kind==='note'?previous.expectedVersion:original.kind==='note'?original.expectedVersion:undefined;
    if(previous&&previous.kind!==original.kind){tx.abort();return;}
@@ -149,6 +175,7 @@ export async function readPendingEntries(scope:string):Promise<PendingEntry[]> {
   const projectedId="quarantine:"+quarantineKey(row.id);
   const isOriginal=typeof row.id==='string'&&typeof row.itemId==="string"&&(row.kind==="note"&&typeof row.text==="string"&&typeof row.textstand==="string"&&Array.isArray(row.dismissed)&&row.dismissed.every(item=>typeof item==="string")||row.kind==="file"&&typeof row.file==="object"&&row.file!==null&&typeof (row.file as File).arrayBuffer==="function"&&typeof (row.file as File).name==="string");
   if(isOriginal)return original;
+  if(isPendingWorkshopOriginal(row))return row;
   if(row.kind==="quarantine"&&typeof row.capturedAt==="string"&&row.payload&&typeof row.payload==="object"&&!Array.isArray(row.payload))return {...row,id:projectedId} as unknown as PendingQuarantine;
   // Read-only quarantine projection: preserve the exact unknown record in its original store.
   return {id:projectedId,kind:"quarantine",capturedAt:"",payload:row};
