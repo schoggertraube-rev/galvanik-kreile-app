@@ -1600,13 +1600,18 @@ function isHistoricalHeaderOnly(rel,before,after){
  if(before.startsWith("<!-- STATUS:")){const at=before.indexOf("\n")+1;return at>0&&after===before.slice(0,at)+line+before.slice(at);}
  return after===line+before;
 }
-/** @param {{entries:Array<{path:string,status:string}>,readChange?:((rel:string)=>{before:string|null,after:string|null})|null}} input */
-export function checkB3ScopeForTest({entries,readChange=null}){
+/** @param {{entries:Array<{path:string,status:string}>,readChange?:((rel:string)=>{before:string|null,after:string|null})|null,readRename?:((rel:string)=>{target:string,identical:boolean}|null)|null}} input */
+export function checkB3ScopeForTest({entries,readChange=null,readRename=null}){
  const errors=[];
  for(const {path:rel,status} of entries){
  if(rel.startsWith("supabase/migrations/")&&status!=="A")errors.push(`B3_EXISTING_MIGRATION_IMMUTABLE:${rel}`);
  if(rel.startsWith("_review/")&&status!=="D")errors.push(`B3_BOUND_SOURCE_PROTECTED:${rel}`);
- if(rel.startsWith("docs/project/")){const change=readChange?.(rel);if(!["A","M"].includes(status)||!change||!isHistoricalHeaderOnly(rel,change.before,change.after))errors.push(`B3_BOUND_SOURCE_PROTECTED:${rel}`);}
+ if(rel.startsWith("docs/project/")){
+ const rename=status==="D"?readRename?.(rel):null;
+ const archived=rename?.identical===true&&rename.target.startsWith("docs/_archiv/");
+ const change=readChange?.(rel);
+ if(!archived&&(!["A","M"].includes(status)||!change||!isHistoricalHeaderOnly(rel,change.before,change.after)))errors.push(`B3_BOUND_SOURCE_PROTECTED:${rel}`);
+ }
  }return errors;
 }
 
@@ -1621,7 +1626,10 @@ export function checkLivePackageScope({ root, base, head, branch }) {
       return { status: status.slice(0, 1), path: posix(rel) };
     }) : [];
     if (branch === GOVERNANCE_RESTART_BRANCH || (branch === "main" && resolved(root, base) === GOVERNANCE_RESTART_BASE && files.includes("_review/BAUREGELN.md"))) return checkGovernanceRestartScopeForTest({ entries, branch, baseSha: resolved(root, base) });
-    return checkB3ScopeForTest({entries,readChange:(rel)=>{let before=null,after=null;try{before=execFileSync("git",["-C",root,"show",`${base}:${rel}`],{encoding:"utf8",stdio:["ignore","pipe","pipe"]});}catch{}try{after=execFileSync("git",["-C",root,"show",`${head}:${rel}`],{encoding:"utf8",stdio:["ignore","pipe","pipe"]});}catch{}return {before,after};}});
+    const archiveRenames=new Map();
+    const renameParts=git(root,["diff","--find-renames=100%","--name-status","-z",base,head,"--","docs/project/","docs/_archiv/"]).split("\0");
+    for(let i=0;i<renameParts.length&&renameParts[i];){const status=renameParts[i++],from=renameParts[i++];if(status.startsWith("R")||status.startsWith("C")){const to=renameParts[i++];if(status==="R100"&&from.startsWith("docs/project/")&&to.startsWith("docs/_archiv/"))archiveRenames.set(from,{target:to,identical:git(root,["rev-parse",`${base}:${from}`])===git(root,["rev-parse",`${head}:${to}`])});}}
+    return checkB3ScopeForTest({entries,readRename:rel=>archiveRenames.get(rel)??null,readChange:(rel)=>{let before=null,after=null;try{before=execFileSync("git",["-C",root,"show",`${base}:${rel}`],{encoding:"utf8",stdio:["ignore","pipe","pipe"]});}catch{}try{after=execFileSync("git",["-C",root,"show",`${head}:${rel}`],{encoding:"utf8",stdio:["ignore","pipe","pipe"]});}catch{}return {before,after};}});
   }
   if (branch === "main") return [];
   try {
