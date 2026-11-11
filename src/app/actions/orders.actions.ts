@@ -266,7 +266,7 @@ export async function getLiveOrderCardAction(
     const {readOrderPickupAppointment}=await import('@/lib/server/pickupAppointmentPort');
     const pickupAppointment=await readOrderPickupAppointment(authorization.data,input.orderId);
     const {readV45OrderRule}=await import('@/lib/server/v45OrderRead');
-    return { code: "OK", data: { nextActionRule:readV45OrderRule(authorization.data,card.data),card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
+    return { code: "OK", data: { nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed}),card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,

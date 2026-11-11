@@ -52,3 +52,42 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('replays native workshop origin
   expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='OFFLINE_WORKSHOP_REJECTED_V1' AND payload->'original'->'input'->>'clientEventId'=${rejectedKey}`).toEqual([{n:1}]);
  }finally{await cli(['close']).catch(()=>{});server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 },120000);
+
+// R2 transport boundary: HTML here is only the native queue test harness.
+it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('keeps the native original through missing pricing-task evidence and acknowledges only its real follow-up',async()=>{
+ const customerId=await customerFixture('Browser R2'),created=await intakeOrderFixture('Browser R2',customerId),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
+ const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('TEST_MOVE');
+ const scope=offlinePartition({tenantId:KREILE_TENANT_SLUG,userId:full.actorId}),key=randomUUID();
+ const compiled=await build({stdin:{contents:`export * from './src/lib/offline/pendingStore.ts';export {syncPendingFiles} from './src/lib/offline/syncPendingFiles.ts';`,resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser'});
+ const server=createServer(async(req,res)=>{
+  if(req.url!=='/api'){res.setHeader('Content-Type',req.url==='/queue.mjs'?'text/javascript':'text/html');res.end(req.url==='/queue.mjs'?compiled.outputFiles[0].text:'<!doctype html><title>TEST native R2 queue</title>');return;}
+  try{const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));const body=JSON.parse(Buffer.concat(chunks).toString('utf8'));const result=await withSession(full,()=>replayOfflineWorkshopAction(body.scope,body.original));res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));}
+  catch{res.statusCode=500;res.end(JSON.stringify({code:'UNAVAILABLE'}));}
+ });
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();if(!address||typeof address==='string')throw Error('TEST_LOOPBACK');
+ const execute=promisify(execFile),session='TEST-r2-'+randomUUID();
+ const cli=async(args:string[])=>{const result=await execute(process.execPath,[process.env.KREILE_PLAYWRIGHT_CLI_JS!,`-s=${session}`,...args],{timeout:90000,maxBuffer:1024*1024});if(result.stdout.includes('### Error'))throw Error('TEST_BROWSER_FAILED:'+result.stdout.slice(0,700));return result;};
+ const setup=`async()=>{const p=await import('/queue.mjs');window.TESTqueue=p;window.TESTacks=[];window.TESTports={workshopAcknowledged:proof=>window.TESTacks.push(proof),currentScope:()=>'${scope}',workshop:async(scope,original)=>(await fetch('/api',{method:'POST',body:JSON.stringify({scope,original})})).json()};return true;}`;
+ const fault='test_browser_r2_'+randomUUID().replaceAll('-',''),history=fault+'_history';
+ await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.order_id='${orderId}' AND NEW.component='pricing' THEN RAISE EXCEPTION 'TEST_REAL_PRICE_FAILURE'; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON private.order_production_snapshots FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
+ await sql.unsafe(`CREATE FUNCTION private.${history}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.nachher->>'action'='aufgabe.angelegt' THEN RAISE EXCEPTION 'TEST_REAL_TASK_HISTORY_FAILURE'; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${history} BEFORE INSERT ON public.intake_event FOR EACH ROW EXECUTE FUNCTION private.${history}()`);
+ try{
+  await cli(['open',`http://127.0.0.1:${address.port}/TEST`]);await cli(['eval',setup]);
+  const original={kind:'workshop',id:key,itemId:orderId,command:'item.finished',deviceCapturedAt:new Date(Date.now()-8*86400000).toISOString(),input:{orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientEventId:key,finished:true}};
+  await cli(['eval',`async()=>{await window.TESTqueue.retainPendingWorkshopOriginal('${scope}',${JSON.stringify(original)});const result=await window.TESTqueue.syncPendingFiles('${scope}',window.TESTports);if(result.acknowledged||window.TESTacks.length||!(await window.TESTqueue.readPendingEntries('${scope}')).some(row=>row.id==='${key}'))throw Error('TEST_TASK_FAILURE_FALSE_ACK');return true;}`]);
+  expect(await sql`SELECT current_station_id FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}`).toEqual([{current_station_id:'fertig'}]);
+  expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${orderId}`).toHaveLength(0);
+  await sql.unsafe(`DROP TRIGGER ${history} ON public.intake_event`);
+  await cli(['reload']);await cli(['eval',setup]);
+  await cli(['eval',`async()=>{const result=await window.TESTqueue.syncPendingFiles('${scope}',window.TESTports);if(result.acknowledged!==1||window.TESTacks.length!==1||(await window.TESTqueue.readPendingEntries('${scope}')).length)throw Error('TEST_REAL_TASK_NOT_ACKNOWLEDGED');return true;}`]);
+  expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${orderId}`).toHaveLength(1);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toHaveLength(1);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='OFFLINE_WORKSHOP_REJECTED_V1' AND payload->'original'->'input'->>'clientEventId'=${key}`).toHaveLength(0);
+ }finally{
+  await cli(['close']).catch(()=>{});server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));
+  await sql.unsafe(`DROP TRIGGER IF EXISTS ${history} ON public.intake_event`);await sql.unsafe(`DROP FUNCTION IF EXISTS private.${history}()`);
+  await sql.unsafe(`DROP TRIGGER IF EXISTS ${fault} ON private.order_production_snapshots`);await sql.unsafe(`DROP FUNCTION IF EXISTS private.${fault}()`);
+ }
+},120000);
