@@ -1354,6 +1354,14 @@ async function topDialog(page: Page) {
 }
 
 async function openTarget(page: Page, target: string, arg: unknown, state?:FlowRunState) {
+  if (target === "nachrichten") {
+    // This is the adapter's existing canonical route. A one-shot custom event
+    // can be lost before its effect listener mounts after PIN navigation.
+    // Keep the real browser/session/read/action expectations unchanged.
+    await page.goto('/nachrichten'+(typeof arg==='string'&&arg?'?gruppe='+encodeURIComponent(arg):''));
+    await shellReady(page);
+    return;
+  }
   if (target === "kundebearbeiten") {
     const [customerId, fragment] = String(arg ?? "").split("#", 2);
     if (!customerId) throw new Error("FLOW_OPEN_CUSTOMER_REQUIRED");
