@@ -4,7 +4,7 @@ import {sendCommunicationMail} from "@/lib/server/communicationPort";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeReceipt } from "@/lib/server/commands/orderIntakeCommand";
-import { readIntakeConfirmationContext } from "@/lib/server/intakeDraftEvents";
+import { readIntakeConfirmationContext,hasIntakeConfirmationMailAttempt } from "@/lib/server/intakeDraftEvents";
 import { orderPositionUnitLabel, orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
 
 export async function queueIntakeConfirmation(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:OrderIntakeReceipt){
@@ -22,12 +22,12 @@ export async function scheduleIntakeConfirmation(
   afterResponse:((task:()=>Promise<void>)=>void)|undefined,
 ):Promise<string>{
   try{
-    const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{status:string;fehler_code:string|null}>(sql`
-      SELECT status,fehler_code FROM public.outbox_mails
+    const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;status:string;fehler_code:string|null}>(sql`
+      SELECT id::text,status,fehler_code FROM public.outbox_mails
       WHERE tenant_id=${auth.tenantId} AND objekt=${receipt.orderId} AND vorlage='auftragsbestaetigung'`));
     if(!rows.length)return 'Kunde bitte informieren (keine Auto-Mail)';
     if(rows.length!==1)throw Error('INTAKE_CONFIRMATION_AMBIGUOUS');
-    if(rows[0].status==='fehler')return 'Auftragsbestätigung nicht gesendet · '+rows[0].fehler_code;
+    if(rows[0].status==='fehler'&&!await withPrivilegedTenantTransaction(auth,tx=>hasIntakeConfirmationMailAttempt(tx,auth,{orderId:receipt.orderId,outboxId:rows[0].id,sourceClientEventId:receipt.clientEventId})))return 'Auftragsbestätigung nicht gesendet · '+rows[0].fehler_code;
     if(rows[0].status==='gesendet')return 'Auftragsbestätigung wird gesendet';
     try{
       if(!afterResponse)throw Error('AFTER_RESPONSE_UNAVAILABLE');
@@ -70,7 +70,7 @@ export async function sendIntakeConfirmation(auth:AuthorizationSnapshot,receipt:
       if(rows.length!==1)throw Error("INTAKE_CONFIRMATION_AMBIGUOUS");
       const row=rows[0];
       if(row.status==='gesendet')return "Auftragsbestätigung wird gesendet";
-      if(row.status==='fehler')return "Auftragsbestätigung nicht gesendet · "+row.fehler_code;
+      if(row.status==='fehler'&&!await hasIntakeConfirmationMailAttempt(tx,auth,{orderId:receipt.orderId,outboxId:row.id,sourceClientEventId:receipt.clientEventId}))return "Auftragsbestätigung nicht gesendet · "+row.fehler_code;
       const customer=await readIntakeConfirmationContext(tx,auth,receipt.customerId,receipt.orderId);
       let message:{to:string;subject:string;body:string}|null=null;
       if(customer.company?.trim()){

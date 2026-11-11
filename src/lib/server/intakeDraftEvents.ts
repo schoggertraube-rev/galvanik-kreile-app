@@ -33,6 +33,14 @@ export async function readIntakeConfirmationMailSource(tx:PrivilegedTenantTransa
  return rows.length===1?rows[0]:null;
 }
 
+export async function hasIntakeConfirmationMailAttempt(tx:PrivilegedTenantTransaction,actor:Actor,input:{orderId:string;outboxId:string;sourceClientEventId:string}){
+ if(!await readIntakeConfirmationMailSource(tx,actor,input))return false;
+ const rows=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${actor.tenantId} AND user_id=${actor.userId}::uuid
+  AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND status='success' AND event_schema_version=1 AND correlation_id=${input.outboxId}::uuid
+  AND payload->'intakeConfirmation'->>'outboxId'=${input.outboxId} AND payload->'intakeConfirmation'->>'sourceClientEventId'=${input.sourceClientEventId}`);
+ return rows.length===1;
+}
+
 /** Root read port for canonical customer/company fields, never a second customer store. */
 export async function readIntakeConfirmationContext(tx:PrivilegedTenantTransaction,actor:Actor,customerId:string,orderId:string){
   const rows=await tx.execute<{email:string|null;auto_info:boolean;salutation:string|null;first_name:string|null;last_name:string|null;company_name:string|null;street:string|null;house_number:string|null;zip_code:string|null;city:string|null;company:string|null;phone:string|null;oeffnungszeiten:string|null;wish_date:string|null}>(sql`
