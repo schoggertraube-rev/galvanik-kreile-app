@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {projectRuntime,assertProjectionBinding} from './generate-v45-runtime.mjs';
+import {projectRuntime,assertProjectionBinding,generatorSourceDigest} from './generate-v45-runtime.mjs';
 
 test('approved runtime replacements are reported and descriptive rights never enter the projection',()=>{
  const texts={texte:JSON.stringify({example:{text:'Rolf, Philipp, Phillip und Gregor'}}),bedienung:JSON.stringify({tag_direkt:{rechte:'Philipp sieht keine Geldkachel',karten:'bleibt'}})};
@@ -11,6 +11,9 @@ test('approved runtime replacements are reported and descriptive rights never en
  assert.deepEqual(JSON.parse(result.projected.bedienung),{tag_direkt:{karten:'bleibt'}});
  assert.equal(JSON.stringify(texts),before);
  assert.deepEqual(projectRuntime(result.projected).projected,result.projected);
+});
+test('the generator binding survives Git LF and Windows CRLF checkouts',()=>{
+ assert.equal(generatorSourceDigest('TEST first\nTEST second\n'),generatorSourceDigest('TEST first\r\nTEST second\r\n'));
 });
 test('a name in any unapproved location fails instead of silently omitting or encoding it',()=>{
  assert.throws(()=>projectRuntime({texte:JSON.stringify({example:{description:'Rolf'}})}),/V45_NAME_OUTSIDE_APPROVED_RUNTIME_FIELD/);

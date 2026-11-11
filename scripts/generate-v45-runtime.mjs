@@ -7,7 +7,9 @@ const source=resolve('_review/quellen/endversion_V45');
 const output=resolve('src/ui/v45.generated.ts');
 const files={regeln:'regeln.json',texte:'texte.json',bausteine:'bausteine.json',bedienung:'bedienung.json',tokens:'tokens.css'};
 const digest=value=>createHash('sha256').update(value).digest('hex');
-const generatorSha=digest(readFileSync(fileURLToPath(import.meta.url)));
+// Git stores LF while Windows may check out CRLF. Source authority hashes stay raw.
+export const generatorSourceDigest=value=>digest(value.toString().replace(/\r\n/g,'\n'));
+const generatorSha=generatorSourceDigest(readFileSync(fileURLToPath(import.meta.url)));
 const names=/\b(?:Rolf|Philipp|Phillip|Gregor)\b/gu;
 // Integrity metadata only: no parallel text/rule copy. Current PL-approved V45 import.
 const SOURCE_BINDING={
