@@ -4,8 +4,6 @@ import {createPinLoginHandle} from './pinLoginHandle';
 import {cookies} from 'next/headers';
 import {createHash} from 'node:crypto';
 import {COOKIE_NAME} from './appSession';
-import {readOffline24hFlag} from './offlineFeatureFlag';
-import {withPrivilegedTenantTransaction} from './privilegedDb';
 
 import type {
   AccessArea,
@@ -56,9 +54,6 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
   const result = await resolveAuthorization();
 
   if (result.ok) {
-    let offline24hEnabled=false;
-    try{offline24hEnabled=await withPrivilegedTenantTransaction(result.data,tx=>readOffline24hFlag(tx,result.data));}
-    catch(error){console.error('[OFFLINE_FLAG_READ_FAILED]',error instanceof Error?error.name:'UnknownError');}
     let offlineLoginScope:string|undefined;
     try{
       const credential=(await cookies()).get(COOKIE_NAME)?.value;
@@ -73,7 +68,8 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
       user: {
         loginHandle:createPinLoginHandle(result.data.userId),
         offlineScope:offlinePartition(result.data),
-        offline24hEnabled,
+        // TODO_PL: DB role-filter resolver is parked until the H16 contract is decided.
+        offline24hEnabled:false,
         ...(offlineLoginScope?{offlineLoginScope}:{}),
         role: result.data.role,
         displayName: result.data.displayName,

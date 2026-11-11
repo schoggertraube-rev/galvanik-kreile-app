@@ -4,10 +4,6 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {getAuthBootstrapState} from '@/lib/server/authBootstrap';
-import {resolveAuthorization} from '@/lib/server/authorization';
-import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {readOffline24hFlag} from '@/lib/server/offlineFeatureFlag';
-import {sql} from 'drizzle-orm';
 import {logout} from '@/app/actions/auth';
 import {readAppSession} from '@/lib/server/appSession';
 
@@ -16,26 +12,6 @@ it('the real logout clears the actual session before any browser-cache work',asy
   expect((await readAppSession()).ok).toBe(true);
   expect((await logout()).ok).toBe(true);
   expect(await readAppSession()).toEqual({ok:false,reason:'NO_COOKIE'});
- });
-});
-
-it('reads the real offline DB flag and role filter without persisting TEST configuration',async()=>{
- await withSession(full,async()=>{
-  const resolved=await resolveAuthorization();if(!resolved.ok)throw Error('TEST_REAL_AUTH');
-  const rollback=Error('TEST_ROLLBACK_FLAG');
-  await expect(withPrivilegedTenantTransaction(resolved.data,async tx=>{
-   await tx.execute(sql`UPDATE public.feature_flags SET enabled=false,roles_allowed=ARRAY[]::text[] WHERE id='offline_24h'`);
-   expect(await readOffline24hFlag(tx,resolved.data)).toBe(false);
-   await tx.execute(sql`UPDATE public.feature_flags SET enabled=true WHERE id='offline_24h'`);
-   expect(await readOffline24hFlag(tx,resolved.data)).toBe(true);
-   await tx.execute(sql`UPDATE public.feature_flags SET roles_allowed=ARRAY[${resolved.data.role}]::text[] WHERE id='offline_24h'`);
-   expect(await readOffline24hFlag(tx,resolved.data)).toBe(true);
-   await tx.execute(sql`UPDATE public.feature_flags SET roles_allowed=ARRAY['TEST-other-role']::text[] WHERE id='offline_24h'`);
-   expect(await readOffline24hFlag(tx,resolved.data)).toBe(false);
-   throw rollback;
-  })).rejects.toBe(rollback);
-  const boot=await getAuthBootstrapState();if(boot.status!=='authenticated')throw Error('TEST_REAL_BOOT');
-  expect(boot.user.offline24hEnabled).toBe(false);
  });
 });
 
