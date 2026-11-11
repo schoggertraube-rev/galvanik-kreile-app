@@ -17,7 +17,7 @@ export async function readScopedPrivateResponse(scope:string,loginScope:string,r
  const input=request instanceof Request?request:null;
  let url:URL;
  try{url=new URL(input?input.url:String(request),window.location.origin);}catch{return null;}
- if(url.origin!==window.location.origin||input&&input.method!=='GET'||/^\/(?:api|auth|start|login)(?:\/|$)/.test(url.pathname)||url.searchParams.has('_rsc'))return null;
+ if(url.origin!==window.location.origin||input&&(input.method!=='GET'||input.headers.has('authorization')||input.headers.has('rsc')||input.headers.has('next-router-state-tree'))||/^\/(?:api|auth|start|login)(?:\/|$)/.test(url.pathname)||url.searchParams.has('_rsc'))return null;
  if(readCacheScopeMarker()!==loginScope){
   try{await clearUnmarkedPrivateCaches();}catch{console.error('[OFFLINE_START_CACHE_DELETE_FAILED]');}
   return null;

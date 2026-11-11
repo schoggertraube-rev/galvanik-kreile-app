@@ -26,6 +26,13 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('a missing login marker prevent
    if(!await p.readScopedPrivateResponse(scope,login,'/TEST-private')||await p.readScopedPrivateResponse(scope,login,'/api/TEST'))throw Error('TEST_READER_BOUNDARY');
    if(!await p.warmScopedPrivateResponse(scope,login,new URL('/TEST-warm',location.origin))||!await p.readScopedPrivateResponse(scope,login,'/TEST-warm'))throw Error('TEST_QUALIFIED_HTML_NOT_STORED');
    if(await p.warmScopedPrivateResponse(scope,login,new URL('/TEST-no-auth',location.origin))||await cache.match('/TEST-no-auth'))throw Error('TEST_UNQUALIFIED_HTML_STORED');
+   for(const headers of [{Authorization:'TEST not authority'},{RSC:'1'},{'Next-Router-State-Tree':'TEST'}])if(await p.readScopedPrivateResponse(scope,login,new Request(location.origin+'/TEST-warm',{headers})))throw Error('TEST_PRIVATE_SUBREQUEST_READ');
+   const nativePut=Cache.prototype.put;
+   Cache.prototype.put=async function(...args){await nativePut.apply(this,args);p.removeCacheScopeMarker();};
+   try{if(await p.warmScopedPrivateResponse(scope,login,new URL('/TEST-warm',location.origin)))throw Error('TEST_LOGOUT_RACE_FALSE_SUCCESS');}finally{Cache.prototype.put=nativePut;}
+   if((await caches.keys()).includes(p.qualifiedPrivateCacheName(scope,login,1)))throw Error('TEST_LOGOUT_RACE_LEFT_CONTENT');
+   document.cookie=p.CACHE_SCOPE_COOKIE+'='+login+'; Path=/';
+
    const nativeKeys=CacheStorage.prototype.keys,nativeOpen=indexedDB.open;
    CacheStorage.prototype.keys=async()=>{throw Error('TEST cache unavailable');};indexedDB.open=()=>{throw Error('TEST IDB unavailable');};
    try{p.removeCacheScopeMarker();const result=await p.clearLoggedOutReadState(scope);if(result.cacheCleared)throw Error('TEST_FALSE_DELETE_SUCCESS');}finally{CacheStorage.prototype.keys=nativeKeys;indexedDB.open=nativeOpen;}
