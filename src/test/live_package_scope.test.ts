@@ -73,6 +73,11 @@ describe("#189 one-time planning authority migration", () => {
 });
 
 describe("TA-B3 protected sources", () => {
+  it("permits only byte-identical project archives with an actual target",()=>{
+ const path="docs/project/linie/_lieferungen/suche/LIEFERSCHEIN.md",entries=[{status:"D",path}];
+ expect(checkB3ScopeForTest({entries,readRename:()=>({target:"docs/_archiv/old.md",identical:true})})).toEqual([]);
+ for(const value of [null,{target:"docs/_archiv/old.md",identical:false},{target:"src/old.md",identical:true}])expect(checkB3ScopeForTest({entries,readRename:()=>value})).toContain("B3_BOUND_SOURCE_PROTECTED:"+path);
+ });
   it("U289 permits steering deletion and exact headings only",()=>{
  expect(checkB3ScopeForTest({entries:[{status:"D",path:"_review/old.md"}]})).toEqual([]);
  const rel="docs/project/MASTERPLAN.md",before="<!-- STATUS: preserved -->\n# Plan\n",after="<!-- STATUS: preserved -->\nHISTORISCH – ersetzt durch AGENTS.md und _review/PLAN_LIVEGANG.md, kein Bauauftrag.\n# Plan\n";
