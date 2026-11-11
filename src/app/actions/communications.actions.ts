@@ -1,9 +1,12 @@
 "use server";
 
+import {storeQuoteMailOriginal,readQuoteMailOriginal} from '@/lib/server/communicationOriginalPort';
+import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
+import {readQuoteCommand} from '@/modules/quotes/server-public';
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {freezeStorageDeadline} from '@/lib/server/storageDeadline';
 import {createHash,randomUUID} from "node:crypto";
-import {readCommunicationDocumentReceipt,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
+import {readCommunicationDocumentReceipt,readLegacyQuoteReplacement,type LegacyQuoteReplacement,applyRecoveredInvoiceMailEffects,readPreparedInvoiceTransportOriginal,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
@@ -22,7 +25,7 @@ import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {readReadyNotificationContext} from '@/lib/server/orderReleaseRead';
-import {readCollectionReminderReceipt,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
+import {readCollectionReminderReceipt,applyCollectionReminderMailEffects,assertCollectionReminderCurrent,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
 import {INVOICE_DELIVERY_COPY,COLLECTION_REMINDER_COPY,CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
@@ -76,7 +79,7 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Extr
 }
 
 export async function sendCustomerMailAction(input: TargetInput & {
- clientRequestId:string;subject:string;body:string;expectedInvoiceIds?:string[];attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string};
+ clientRequestId:string;subject:string;body:string;confirmedResend?:true;expectedInvoiceIds?:string[];attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string};
 }){
  try{
  const authorizationResult=await authorization();
@@ -85,9 +88,23 @@ export async function sendCustomerMailAction(input: TargetInput & {
  if(!input||typeof input!=='object')return sendCommunicationMail(auth,input);
  if(input.collectionReminder){
   const request=input.collectionReminder;
-  if(input.targetType!=='CUSTOMER'||input.attachment||!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
+  if(input.targetType!=='CUSTOMER'||input.attachment||!hasAuthorizationArea(auth,'mails')&&!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
   if(!request||Object.keys(request).sort().join(',')!==(request.stage==='E4'?'clientKey,dueDate,handover,stage':'dueDate,handover,stage')||!['E1','E2','E4'].includes(request.stage)||!['pickup','shipping'].includes(request.handover)||!/^\d{4}-\d{2}-\d{2}$/.test(request.dueDate)||!Number.isFinite(Date.parse(request.dueDate))||typeof input.subject!=='string'||typeof input.body!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientRequestId)||(request.stage==='E4'&&(typeof request.clientKey!=='string'||!/^[0-9a-f-]{36}$/.test(request.clientKey))))return {code:'VALIDATION_ERROR' as const,message:COLLECTION_REMINDER_COPY.invalid};
-  const prior=await readCollectionReminderReceipt(auth,{...input,collectionReminder:request});if(prior.code!=='NOT_FOUND')return prior;
+  const prior=await readCollectionReminderReceipt(auth,{...input,collectionReminder:request});
+  if(prior.code==='FOLLOWUP_PENDING'){
+   await withPrivilegedTenantTransaction(auth,tx=>applyCollectionReminderMailEffects(tx,auth,prior.meta,prior.data.threadId,prior.data.messageId,prior.originalRequestId));
+   return {code:'OK' as const,data:prior.data};
+  }
+  if(prior.code==='PENDING'){
+   if(input.confirmedResend&&input.clientRequestId!==prior.originalRequestId)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
+   return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:prior.original.subject,body:prior.original.body,confirmedResend:input.confirmedResend,collectionReminder:prior.meta,beforePrepare:async tx=>{
+    if(!hasAuthorizationArea(auth,prior.meta.moneyRequired!==false?'geld':'mails'))return false;
+    await assertCollectionReminderCurrent(tx,auth,prior.meta);
+    return true;
+   }});
+  }
+  if(prior.code!=='NOT_FOUND')return prior;
+  if(!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
   // An explicit send also synchronizes the already imported originals. It is
   // a write command under the sender, never an effect of opening the list.
   const linked=await readLinkedIntakeMails(auth,{targetType:'CUSTOMER',targetId:input.targetId});
@@ -114,29 +131,66 @@ export async function sendCustomerMailAction(input: TargetInput & {
   if(!customer||company.code==='UNAVAILABLE')return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};
   const moneyAccess=await readCollectionMoneyAccess(auth,members.map(order=>order.id),settings.settings,request.stage);
   if(!moneyAccess.sendAllowed)return {code:'FORBIDDEN' as const,message:moneyAccess.roles.length?COLLECTION_REMINDER_COPY.moneyRequired(customer.name,moneyAccess.roles.join(', ')):COLLECTION_REMINDER_COPY.forbidden};
+  meta.moneyRequired=moneyAccess.required;
   const facts=await readCollectionCustomerFacts(auth,members,settings.settings,{name:customer.name,company:company.code==='OK'?company.company.companyName:null},meta.storageDeadline?.due??null);
   const message=CUSTOMER_COLLECTION_COPY.render(request.stage,facts);meta.customerMessage=message;
   return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:input.clientRequestId,subject:message.subject,body:message.body,collectionReminder:meta,beforePrepare:async tx=>(await readShippingSettingsInTransaction(tx,auth.tenantId))?.updatedAt===settings.settings.updatedAt});
  }
  let attachment,document:CommunicationDocument|undefined;
+ let legacyReplaces:LegacyQuoteReplacement|undefined;
  let invoiceGroup:{customerId:string;handover:string|null}|undefined;
  if(input.attachment?.kind==='INVOICE'&&(!Array.isArray(input.expectedInvoiceIds)||!input.expectedInvoiceIds.length||input.expectedInvoiceIds.length>101||new Set(input.expectedInvoiceIds).size!==input.expectedInvoiceIds.length||input.expectedInvoiceIds.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))||!input.expectedInvoiceIds.includes(input.attachment.documentId))){const original=await readInvoicePdf(auth,input.attachment.documentId,'original');if(original.code!=='OK')return original;return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.data.invoiceNumber)};}
+ const reconcileInvoice=(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,threadId:string)=>applyRecoveredInvoiceMailEffects(auth,threadId,(writeTx,value)=>createCanceledInvoiceMailTask(writeTx,auth,value,{effect:(effectTx,actor,effect)=>recordIntakeTaskEffect(effectTx,actor,effect,readCustomerProfile)}),tx);
  const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
  if(input.attachment){
   const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
+  if(prior.code==='PENDING'){
+   const original=prior.document;
+   if(input.confirmedResend&&input.clientRequestId!==prior.originalRequestId)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
+   if(original.kind==='QUOTE'&&input.attachment.kind==='QUOTE'){
+    if(!original.original&&!input.confirmedResend){const replacement=await readLegacyQuoteReplacement(auth,prior.originalRequestId);if(replacement)return sendCustomerMailAction({...input,clientRequestId:replacement});}
+    const bytes=original.original?await readQuoteMailOriginal(original.original,original.sha256):null;
+    const result=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,allowResend:!!bytes,document:original,attachment:bytes?{filename:original.number+'.pdf',contentType:'application/pdf',bytes}:undefined,beforePrepare:async()=>{
+     if(!bytes)return false;
+     return (await readQuoteCommand(quoteOperationContext(auth),{quoteId:original.id})).code==='OK';
+    }});
+    if(!original.original&&result.code==='CONFLICT'&&result.newPrepare&&input.clientRequestId!==prior.originalRequestId&&!input.confirmedResend){legacyReplaces={requestId:prior.originalRequestId,checkedAt:result.newPrepare.checkedAt};}
+    else return result.code==='OK'?confirmQuoteDelivery({...input,clientRequestId:prior.originalRequestId},original,result):result;
+   }else{
+   if(original.kind!=='INVOICE'||input.attachment.kind!=='INVOICE')return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
+   const invoices=[original,...original.bundle??[]];
+   if(JSON.stringify(invoices.map(row=>row.id).sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'CONFLICT' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.number)};
+   const originals:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
+   for(const invoice of invoices){
+    const pdf=await readPreparedInvoiceTransportOriginal(auth,{...input,clientRequestId:prior.originalRequestId},original,invoice);
+    if(!pdf)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};
+    originals.push({filename:invoice.number+'.pdf',contentType:'application/pdf',bytes:new Uint8Array(pdf)});
+   }
+   return sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,reconcileInvoice,document:original,attachment:originals[0],additionalAttachments:originals.slice(1),beforePrepare:async tx=>{
+    for(const invoice of invoices.slice().sort((a,b)=>a.orderId.localeCompare(b.orderId))){
+     if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;
+     const locked=await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid AND status='issued' AND aggregate_version=${invoice.version} AND pdf_sha256=${invoice.sha256} FOR UPDATE`);
+     if(locked.length!==1)return false;
+    }
+    return true;
+   }});
+   }
+  }
   if(prior.code==='OK'){
+   if('mailOnly'in prior&&prior.mailOnly)await withPrivilegedTenantTransaction(auth,tx=>reconcileInvoice(tx,prior.data.threadId));
    if(prior.document.kind!==input.attachment.kind)return {code:'CONFLICT' as const,message:'Die Versandkennung gehört zu einer anderen Belegart.'};
    if(prior.document.kind==='INVOICE'&&JSON.stringify([prior.document.id,...prior.document.bundle?.map(row=>row.id)??[]].sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(prior.document.number)};
    return prior.document.kind==='QUOTE'?confirmQuoteDelivery(input,prior.document,{code:'OK',data:prior.data}):{code:'OK' as const,data:prior.data};
   }
-  if(prior.code!=='NOT_FOUND')return prior;
+  if(prior.code==='PENDING'&&!legacyReplaces)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
+  if(prior.code!=='NOT_FOUND'&&prior.code!=='PENDING')return prior;
   if(input.attachment.kind==='INVOICE'){
    const pdf=await readInvoicePdf(auth,input.attachment.documentId,'original');if(pdf.code!=='OK')return pdf;
    const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;order_id:string;customer_id:string;aggregate_version:number;order_number:string;handover_mode:string|null}>(sql`SELECT invoice.id::text,invoice.order_id,invoice.customer_id,invoice.aggregate_version,orders.order_number,orders.handover_mode FROM public.invoices invoice JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${input.attachment!.documentId}::uuid AND invoice.status='issued' AND invoice.contract_version=1 AND invoice.pdf_sha256=${pdf.data.pdfSha256}`));
    const invoice=rows[0];
    if(rows.length!==1||!(input.targetType==='ORDER'?invoice.order_id===input.targetId:invoice.customer_id===input.targetId))return {code:'FORBIDDEN' as const,message:'Die Rechnung gehört nicht zu diesem Kunden oder Auftrag.'};
    attachment={filename:pdf.data.invoiceNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.data.pdf)};
-   document={kind:'INVOICE',id:invoice.id,orderId:invoice.order_id,orderNumber:invoice.order_number,number:pdf.data.invoiceNumber,version:invoice.aggregate_version,sha256:pdf.data.pdfSha256};
+   document={kind:'INVOICE',id:invoice.id,orderId:invoice.order_id,orderNumber:invoice.order_number,number:pdf.data.invoiceNumber,version:invoice.aggregate_version,sha256:pdf.data.pdfSha256,bundle:[]};
    invoiceGroup={customerId:invoice.customer_id,handover:invoice.handover_mode};
    const resend=await withPrivilegedTenantTransaction(auth,tx=>qualifyInvoiceResend(tx,auth,invoice.id,invoice.customer_id));if(resend)document.resend=resend;
    const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id)))).filter(row=>row.id!==invoice.id);
@@ -154,6 +208,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   if(pdf.document.edition===null)return {code:'VALIDATION_ERROR' as const,message:'KV-Fassung fehlt. Es wurde nichts gesendet.'};
   attachment={filename:pdf.quoteNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.pdf)};
   document={kind:'QUOTE',id:pdf.document.id,number:pdf.quoteNumber,version:pdf.document.version,edition:pdf.document.edition,sha256:createHash('sha256').update(attachment.bytes).digest('hex')};
+  document.original=await storeQuoteMailOriginal(auth,input.clientRequestId,document.id,attachment.bytes);
   if(pdf.document.sourceMessageId){
    const source=await readIntakeMailImportReceipt(auth,{itemId:pdf.document.sourceMessageId});
    if(source.code!=='OK')return {...source,message:'KV-Ursprungsnachricht konnte nicht sicher gelesen werden. Es wurde nichts gesendet. '+source.message};
@@ -162,7 +217,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   }
  }
  const snapshot=document;
- const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,attachment,additionalAttachments,document,beforePrepare:snapshot?async (tx,recipient)=>{
+ const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,attachment,additionalAttachments,document,reconcileInvoice,legacyReplaces,beforePrepare:snapshot?async (tx,recipient)=>{
   if(snapshot.kind==='QUOTE')return lockQuoteDeliverySnapshot(tx,auth.tenantId,snapshot);
   for(const invoice of [snapshot,...snapshot.bundle??[]].sort((a,b)=>a.orderId.localeCompare(b.orderId))){
    if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;
@@ -189,7 +244,7 @@ import {finishPostalTasksForReply} from '@/lib/server/storagePostalPort';
 import {finishFinalTasksForReply} from '@/lib/server/storageFinalStagePort';
 import {readShippingSettings} from '@/modules/fundament/server-public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
-import {completeCollectionTaskForReply,restrictCollectionTaskForReply,createOrderHandoverTask} from '@/modules/tasks/server-public';
+import {completeCollectionTaskForReply,restrictCollectionTaskForReply,createOrderHandoverTask,createCanceledInvoiceMailTask} from '@/modules/tasks/server-public';
 import {recordImportedDispatchReplies,readImportedDispatchReplyEvidence} from '@/lib/server/dispatchReplyEffectsPort';
 import {qualifyImportedDeliveryFailure} from '@/lib/server/communicationDeliveryPort';
 async function withDeliveryFailure<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T,deferReply=false){

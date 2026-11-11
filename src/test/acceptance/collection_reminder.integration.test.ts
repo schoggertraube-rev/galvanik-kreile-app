@@ -79,3 +79,75 @@ it('failed E1 does not advance and a second key cannot duplicate an uncertain ou
  expect(await withSession(full,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}))).toMatchObject({code:'CONFLICT'});expect(attempts).toBe(2);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->'meta'->>'customerId'=${order.customerId}`).toEqual([{n:0}]);
 });
+
+it.each([false,true])('S02 reminder reconciles its original from Sent Items without a second send (followFailure=%s)',async(followFailure)=>{
+ const order=await readyInvoiceOrder('N5-Erinnerung');
+ const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+ let sends=0,lose=false,requestId='';
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-reminder-N5-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;if(lose)throw Error('TEST reminder accepted, response lost');return new Response(null,{status:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:[{id:'TEST-reminder-original',internetMessageId:'<TEST-reminder-original@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:requestId}]}]});
+  return nativeFetch(request,init);
+ });
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Original',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ expect(await configure()).toMatchObject({code:'OK'});
+ const plan=await proposal(order.orderId);if(!plan.due)throw Error('N5_REMINDER_DUE');
+ requestId=randomUUID();
+ const input={targetType:'CUSTOMER' as const,targetId:order.customerId,clientRequestId:requestId,subject:'TEST Erinnerung',body:'TEST gleicher Freigabe-Intent',collectionReminder:{stage:'E1' as const,handover:'pickup' as const,dueDate:plan.due}};
+ lose=true;
+ expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'UNAVAILABLE'});
+ const failure='test_reminder_follow_'+randomUUID().replaceAll('-','');
+ if(followFailure){
+  await sql.unsafe(`CREATE FUNCTION private.${failure}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='ORDER_COLLECTION_REMINDER_SENT_V1' THEN RAISE EXCEPTION 'TEST reminder bookkeeping unavailable'; END IF; RETURN NEW; END $$`);
+  await sql.unsafe(`CREATE TRIGGER ${failure} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${failure}()`);
+ }
+ try{
+  expect(await withSession(full,()=>sendCustomerMailAction({...structuredClone(input),clientRequestId:randomUUID()}))).toMatchObject({code:'OK',data:{replayed:true}});
+  if(followFailure){
+   expect(await sql`SELECT status FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+requestId}`).toEqual([{status:'sent'}]);
+   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_COLLECTION_EFFECT_RETRY_REQUIRED_V1' AND correlation_id=${requestId}::uuid`).toHaveLength(1);
+  }
+ }finally{if(followFailure){await sql.unsafe(`DROP TRIGGER ${failure} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${failure}()`);}}
+ expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'OK',data:{replayed:true}});
+ expect(sends).toBe(2);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${requestId}::uuid`).toHaveLength(1);
+ expect(await proposal(order.orderId)).toMatchObject({stage:'E2',state:'DUE'});
+},120000);
+
+it('S02 a financial reminder retains its original money requirement after payment',async()=>{
+ const order=await readyInvoiceOrder('N5 Geldbrief');
+ const sender=await createFixture(['auftraege','mails','geld'],'buero');
+ const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+ let sends=0,lose=false,found=false,requestId='';
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-original-money-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;if(lose)throw Error('TEST accepted financial reminder');return new Response(null,{status:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:found?[{id:'TEST-money-original',internetMessageId:'<TEST-money-original@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:requestId}]}]:[]});
+  return nativeFetch(request,init);
+ });
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Original',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ expect(await configure()).toMatchObject({code:'OK'});const plan=await proposal(order.orderId);if(!plan.due)throw Error('N5_MONEY_DUE');
+ requestId=randomUUID();const input={targetType:'CUSTOMER' as const,targetId:order.customerId,clientRequestId:requestId,subject:'TEST Geldbrief',body:'TEST Originalfreigabe',collectionReminder:{stage:'E1' as const,handover:'pickup' as const,dueDate:plan.due}};
+ const clock='test_money_clock_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${clock}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND NEW.correlation_id='${requestId}'::uuid THEN NEW.created_at=statement_timestamp()-interval '11 minutes'; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${clock} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${clock}()`);
+ lose=true;
+ try{expect(await withSession(sender,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'UNAVAILABLE'});}
+ finally{await sql.unsafe(`DROP TRIGGER ${clock} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${clock}()`);}
+ expect(await sql`SELECT payload->'meta'->'moneyRequired' AS required FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND correlation_id=${requestId}::uuid`).toEqual([{required:true}]);
+ const {getOrderPaymentStateAction,confirmPaymentAction}=await import('@/app/actions/payments.actions');
+ const payment=await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}));if(payment.code!=='OK'||!payment.data.payment)throw Error('N5_MONEY_PAYMENT');const due=payment.data.payment;
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:due.invoiceId,amount:due.openAmountCents,expectedOpenAmountCents:due.openAmountCents,expectedVersion:due.paymentVersion,method:'bar',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='geld'`;
+ const checked=await withSession(sender,()=>sendCustomerMailAction(structuredClone(input)));expect(checked).toMatchObject({code:'FORBIDDEN'});expect(checked).not.toHaveProperty('resend');
+ expect(await withSession(sender,()=>sendCustomerMailAction({...structuredClone(input),confirmedResend:true}))).toMatchObject({code:'FORBIDDEN'});expect(sends).toBe(2);
+ const delegated=await createFixture(['geld'],'buero');
+ expect(await withSession(delegated,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'CONFLICT',resend:{requestId}});
+ lose=false;expect(await withSession(delegated,()=>sendCustomerMailAction({...structuredClone(input),confirmedResend:true}))).toMatchObject({code:'OK'});expect(sends).toBe(3);
+ found=true;
+ expect(await withSession(delegated,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(3);
+ expect(await sql`SELECT payload->>'clickedBy' AS clicked,payload->>'prepareActorId' AS original FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_RESEND_CONFIRMED_V1' AND correlation_id=${requestId}::uuid`).toEqual([{clicked:delegated.actorId,original:sender.actorId}]);
+},120000);

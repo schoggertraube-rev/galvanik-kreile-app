@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const BUCKET_ID = "scans";
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
-const PATH = /^domain-attachments\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp|pdf)$/;
+const PATH = /^domain-attachments\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp|pdf|json)$/;
 
 type ObjectInfo = { id: string; version: string; path: string; createdAt: string; size: number; contentType: string };
 

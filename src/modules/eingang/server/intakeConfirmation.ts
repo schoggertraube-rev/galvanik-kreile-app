@@ -1,10 +1,11 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { sendMicrosoftGraphMail } from "@/lib/server/microsoftGraph";
+import {sendCommunicationMail} from "@/lib/server/communicationPort";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeReceipt } from "@/lib/server/commands/orderIntakeCommand";
-import { readIntakeConfirmationContext } from "@/lib/server/intakeDraftEvents";
+import { readIntakeConfirmationContext,hasIntakeConfirmationMailAttempt,readIntakeConfirmationOriginal } from "@/lib/server/intakeDraftEvents";
+import {storeIntakeMailOriginal,readIntakeMailOriginal} from "@/lib/server/communicationOriginalPort";
 import { orderPositionUnitLabel, orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
 
 export async function queueIntakeConfirmation(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:OrderIntakeReceipt){
@@ -22,12 +23,12 @@ export async function scheduleIntakeConfirmation(
   afterResponse:((task:()=>Promise<void>)=>void)|undefined,
 ):Promise<string>{
   try{
-    const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{status:string;fehler_code:string|null}>(sql`
-      SELECT status,fehler_code FROM public.outbox_mails
+    const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;status:string;fehler_code:string|null}>(sql`
+      SELECT id::text,status,fehler_code FROM public.outbox_mails
       WHERE tenant_id=${auth.tenantId} AND objekt=${receipt.orderId} AND vorlage='auftragsbestaetigung'`));
     if(!rows.length)return 'Kunde bitte informieren (keine Auto-Mail)';
     if(rows.length!==1)throw Error('INTAKE_CONFIRMATION_AMBIGUOUS');
-    if(rows[0].status==='fehler')return 'Auftragsbestätigung nicht gesendet · '+rows[0].fehler_code;
+    if(rows[0].status==='fehler'&&!await withPrivilegedTenantTransaction(auth,tx=>hasIntakeConfirmationMailAttempt(tx,auth,{orderId:receipt.orderId,outboxId:rows[0].id,sourceClientEventId:receipt.clientEventId})))return 'Auftragsbestätigung nicht gesendet · '+rows[0].fehler_code;
     if(rows[0].status==='gesendet')return 'Auftragsbestätigung wird gesendet';
     try{
       if(!afterResponse)throw Error('AFTER_RESPONSE_UNAVAILABLE');
@@ -70,10 +71,13 @@ export async function sendIntakeConfirmation(auth:AuthorizationSnapshot,receipt:
       if(rows.length!==1)throw Error("INTAKE_CONFIRMATION_AMBIGUOUS");
       const row=rows[0];
       if(row.status==='gesendet')return "Auftragsbestätigung wird gesendet";
-      if(row.status==='fehler')return "Auftragsbestätigung nicht gesendet · "+row.fehler_code;
-      const customer=await readIntakeConfirmationContext(tx,auth,receipt.customerId,receipt.orderId);
+      if(row.status==='fehler'&&!await hasIntakeConfirmationMailAttempt(tx,auth,{orderId:receipt.orderId,outboxId:row.id,sourceClientEventId:receipt.clientEventId}))return "Auftragsbestätigung nicht gesendet · "+row.fehler_code;
+      const source={orderId:receipt.orderId,outboxId:row.id,sourceClientEventId:receipt.clientEventId};
+      let original=await readIntakeConfirmationOriginal(tx,auth,source);
+      const customer=original?null:await readIntakeConfirmationContext(tx,auth,receipt.customerId,receipt.orderId);
       let message:{to:string;subject:string;body:string}|null=null;
-      if(customer.company?.trim()){
+      if(original){message={to:row.an,...await readIntakeMailOriginal(original)};}
+      else if(customer?.company?.trim()){
         const name=[customer.first_name,customer.last_name].filter(Boolean).join(' ');
         const greeting=customer.salutation==='frau'?`Guten Tag Frau ${customer.last_name??''}`:customer.salutation==='herr'?`Guten Tag Herr ${customer.last_name??''}`:`Guten Tag${name?' '+name:''}`;
         const date=new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(receipt.dueDate+'T12:00:00Z'));
@@ -90,15 +94,16 @@ export async function sendIntakeConfirmation(auth:AuthorizationSnapshot,receipt:
           ...(customer.phone?['Bei Fragen erreichen Sie uns unter '+customer.phone+'.']:[]),'Freundliche Grüße · '+customer.company].join('\n');
         message={to:row.an,subject:`Auftragsbestätigung ${receipt.orderNumber} · ${customer.company}`,body};
       }
+      if(message&&!original)original=await storeIntakeMailOriginal(auth,source,message);
       // Commit the claim before contacting Graph. An unknown outcome is never retried automatically.
       await tx.execute(sql`UPDATE public.outbox_mails SET status='fehler',fehler_code='SEND_OUTCOME_UNCLEAR'
         WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid AND status='wartet'`);
-      return {id:row.id,message};
+      return {id:row.id,message,original};
     });
     if(typeof prepared==='string')return prepared;
     let failure:string|null='COMPANY_NAME_MISSING';
-    if(prepared.message){
-      const sent=await sendMicrosoftGraphMail(prepared.message);
+    if(prepared.message&&prepared.original){
+      const sent=await sendCommunicationMail(auth,{targetType:'ORDER',targetId:receipt.orderId,clientRequestId:prepared.id,subject:prepared.message.subject,body:prepared.message.body,intakeConfirmation:{outboxId:prepared.id,sourceClientEventId:receipt.clientEventId,original:prepared.original}});
       failure=sent.code==='OK'?null:sent.code;
     }
     if(failure)console.error('[INTAKE_CONFIRMATION_SEND_FAILED]',{orderId:receipt.orderId,code:failure});

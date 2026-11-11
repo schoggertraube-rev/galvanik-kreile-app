@@ -45,12 +45,14 @@ it('S1 actual phone notice changes the one informed reader; new request data rep
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${late.clientEventId}::uuid`).toEqual([{n:0}]);
 });
 
-it('S1 existing real mail pipeline counts only a confirmed invoice notice, not ordinary or failed mail; fresh retry never resends',async()=>{
- const order=await readyInvoiceOrder('S1-Mail');let sends=0,fail=false;
+it.each(['found','resend'] as const)('S1 PL04:01 recovers an uncertain invoice notice through its original key (%s)',async(mode)=>{
+ const order=await readyInvoiceOrder('S1-Mail');let sends=0,fail=false,originalRequestId='';
+ const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
   if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-S1-provider-token'.repeat(3),expires_in:3600});
   if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;return new Response(null,{status:fail?503:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:mode==='resend'?[]:[{id:'TEST-S1-sent',internetMessageId:'<TEST-S1-sent@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:originalRequestId}]}]});
   return nativeFetch(input,init);
  });
  const base={targetType:'ORDER' as const,targetId:order.orderId,subject:'TEST Fertigmeldung',body:'TEST Deine Ware ist fertig.',clientRequestId:randomUUID()};
@@ -58,18 +60,32 @@ it('S1 existing real mail pipeline counts only a confirmed invoice notice, not o
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{informed:null,ampel:'rot'}}});
  fail=true;
  const failed={...base,clientRequestId:randomUUID(),expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE' as const,documentId:order.invoice.invoiceId}};
- const rejected=await withSession(full,()=>sendCustomerMailAction(failed));expect(rejected.code).not.toBe('OK');
- expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toEqual([{n:0}]);
- fail=false;
- const input={...failed,clientRequestId:randomUUID()};
- const sent=await withSession(full,()=>sendCustomerMailAction(input));expect(sent).toMatchObject({code:'OK'});
- if(sent.code!=='OK')throw Error('INVOICE_NOTICE:'+sent.code);
- expect(await sql`SELECT user_id::text,payload->'receipt'->>'channel' AS channel,payload->'receipt'->>'threadId' AS thread FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toEqual([{user_id:full.actorId,channel:'mail',thread:sent.data.threadId}]);
- expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{ampel:'gruen',informed:{actorId:full.actorId,channel:'mail'}}}});
- const before=sends;
- expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
- expect(sends).toBe(before);
- expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toEqual([{n:1}]);
+ originalRequestId=failed.clientRequestId;
+ const clock='notice_clock_'+randomUUID().replaceAll('-','');
+ if(mode==='resend'){
+  await sql.unsafe(`CREATE FUNCTION private.${clock}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND NEW.correlation_id='${originalRequestId}'::uuid THEN NEW.created_at=statement_timestamp()-interval '11 minutes'; END IF; RETURN NEW; END $$`);
+  await sql.unsafe(`CREATE TRIGGER ${clock} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${clock}()`);
+ }
+ try{
+  const rejected=await withSession(full,()=>sendCustomerMailAction(failed));expect(rejected.code).not.toBe('OK');
+  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toEqual([{n:0}]);
+  fail=false;
+  if(mode==='resend')expect(await withSession(full,()=>sendCustomerMailAction({...failed,clientRequestId:randomUUID()}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(2);
+  const checked=await withSession(full,()=>sendCustomerMailAction(structuredClone(failed)));
+  if(mode==='resend')expect(checked).toMatchObject({code:'CONFLICT',resend:{requestId:originalRequestId}});
+  else expect(checked).toMatchObject({code:'OK'});
+  expect(sends).toBe(2);
+  const input={...failed,...(mode==='resend'?{confirmedResend:true as const}:{})};
+  const sent=mode==='resend'?await withSession(full,()=>sendCustomerMailAction(structuredClone(input))):checked;
+  expect(sent).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('INVOICE_NOTICE:'+sent.code);
+  expect(sends).toBe(mode==='resend'?3:2);
+  expect(await withSession(full,()=>sendCustomerMailAction({...failed,clientRequestId:randomUUID()}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(mode==='resend'?3:2);
+  expect(await sql`SELECT user_id::text,payload->'receipt'->>'channel' AS channel,payload->'receipt'->>'threadId' AS thread FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toEqual([{user_id:full.actorId,channel:'mail',thread:sent.data.threadId}]);
+  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{ampel:'gruen',informed:{actorId:full.actorId,channel:'mail'}}}});
+  const before=sends;
+  expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});expect(sends).toBe(before);
+  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toEqual([{n:1}]);
+ }finally{if(mode==='resend'){await sql.unsafe(`DROP TRIGGER IF EXISTS ${clock} ON public.events`);await sql.unsafe(`DROP FUNCTION IF EXISTS private.${clock}()`);}}
 });
 
 it('Fertig existing operational consumer reads one notification/release projection, separates pickup/shipping and ranks releasable rows first without prices',async()=>{

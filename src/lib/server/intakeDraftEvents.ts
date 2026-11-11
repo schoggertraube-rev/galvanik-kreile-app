@@ -4,6 +4,15 @@ import type { PrivilegedTenantTransaction } from "./privilegedDb";
 import type { AuthorizationSnapshot } from "./authorization";
 
 type Actor = Pick<AuthorizationSnapshot,"tenantId"|"userId">;
+export async function readIntakeConfirmationOriginal(tx:PrivilegedTenantTransaction,actor:Actor,input:{orderId:string;outboxId:string;sourceClientEventId:string}){
+ if(!await readIntakeConfirmationMailSource(tx,actor,input))return null;
+ const rows=await tx.execute<{original:import('./communicationOriginalPort').IntakeMailOriginal|null}>(sql`SELECT payload->'intakeConfirmation'->'original' AS original FROM public.events
+  WHERE tenant_id=${actor.tenantId} AND user_id=${actor.userId}::uuid AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND status='success'
+  AND correlation_id=${input.outboxId}::uuid AND payload->'intakeConfirmation'->>'sourceClientEventId'=${input.sourceClientEventId}`);
+ if(rows.length>1)throw Error('INTAKE_MAIL_ORIGINAL_AMBIGUOUS');
+ if(rows.length===1&&!rows[0].original)throw Error('INTAKE_MAIL_ORIGINAL_MISSING');
+ return rows[0]?.original??null;
+}
 type Kind = "INTAKE_DRAFT_SAVED_V1" | "INTAKE_DRAFT_DISCARDED_V1";
 
 /** Transaction port to the existing append-only event store, not another draft store. */
@@ -20,6 +29,25 @@ export async function hasOwnOrderIntakeReceipt(tx:PrivilegedTenantTransaction,ac
   const rows=await tx.execute(sql`SELECT id FROM private.order_intake_receipts
     WHERE tenant_id=${actor.tenantId} AND actor_id=${actor.userId}::uuid AND client_event_id=${clientEventId}::uuid`);
   return rows.length===1;
+}
+
+/** PL02:01: source-bound mail authority, never an added general Mails grant. */
+export async function readIntakeConfirmationMailSource(tx:PrivilegedTenantTransaction,actor:Actor,input:{orderId:string;outboxId:string;sourceClientEventId:string},lock=false){
+ const rows=await tx.execute<{recipient:string}>(sql`SELECT outbox.an AS recipient FROM public.outbox_mails outbox
+  JOIN private.order_intake_receipts receipt ON receipt.tenant_id=outbox.tenant_id AND receipt.order_id=outbox.objekt AND receipt.actor_id=${actor.userId}::uuid AND receipt.client_event_id=${input.sourceClientEventId}::uuid
+  JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id AND event.user_id=receipt.actor_id AND event.event_type='ORDER_INTAKE_CREATED_V1' AND event.status='success'
+  WHERE outbox.tenant_id=${actor.tenantId} AND outbox.id=${input.outboxId}::uuid AND outbox.objekt=${input.orderId} AND outbox.vorlage='auftragsbestaetigung'
+   AND (outbox.status<>'gesendet' OR EXISTS(SELECT 1 FROM public.communication_threads thread WHERE thread.tenant_id=outbox.tenant_id AND thread.source='MS_GRAPH_OUT:'||outbox.id::text))
+  ${lock?sql`FOR UPDATE OF outbox`:sql``}`);
+ return rows.length===1?rows[0]:null;
+}
+
+export async function hasIntakeConfirmationMailAttempt(tx:PrivilegedTenantTransaction,actor:Actor,input:{orderId:string;outboxId:string;sourceClientEventId:string}){
+ if(!await readIntakeConfirmationMailSource(tx,actor,input))return false;
+ const rows=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${actor.tenantId} AND user_id=${actor.userId}::uuid
+  AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND status='success' AND event_schema_version=1 AND correlation_id=${input.outboxId}::uuid
+  AND payload->'intakeConfirmation'->>'outboxId'=${input.outboxId} AND payload->'intakeConfirmation'->>'sourceClientEventId'=${input.sourceClientEventId}`);
+ return rows.length===1;
 }
 
 /** Root read port for canonical customer/company fields, never a second customer store. */

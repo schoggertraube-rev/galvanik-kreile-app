@@ -1,5 +1,16 @@
 [
   {
+    "datum": "2026-11-11",
+    "pr": 212,
+    "seite": "nachrichten",
+    "punkte": [
+      "Mails gehen nicht mehr doppelt raus. Bricht ein Versand ab, schaut die App zuerst im Postausgang nach. Findet sie die Mail nicht, kannst du sie nach 10 Minuten genau einmal neu senden – das darf jede Kollegin und jeder Kollege mit dem passenden Recht.",
+      "Wird eine Rechnung storniert, während ihr Versand noch unklar ist, sendet die App sie nicht mehr. Kam sie doch beim Kunden an, bekommst du eine Aufgabe, ihm das Storno zu schicken.",
+      "Angebote und Eingangsbestätigungen gehen bei einer Neusendung genau so raus wie beim ersten Mal."
+    ],
+    "ziel": "/nachrichten"
+  },
+  {
     "datum": "2026-11-10",
     "pr": 211,
     "seite": "auftrag",
