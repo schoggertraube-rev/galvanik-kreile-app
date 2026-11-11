@@ -24,7 +24,7 @@ it('a missing recipient writes no dispatch and saving the real customer permits 
  expect(sends).toHaveLength(1);
  expect(JSON.parse(String(sends[0][1]?.body)).message.toRecipients).toEqual([{emailAddress:{address:email.toLowerCase()}}]);
  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
- expect(await sql`SELECT user_id::text,event_type FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${request.clientRequestId}::uuid`).toEqual([{user_id:full.actorId,event_type:'COMMUNICATION_MAIL_SENT_V1'}]);
+ expect(await sql`SELECT user_id::text,event_type FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${request.clientRequestId}::uuid ORDER BY event_type`).toEqual([{user_id:full.actorId,event_type:'COMMUNICATION_MAIL_PREPARED_V1'},{user_id:full.actorId,event_type:'COMMUNICATION_MAIL_SENT_V1'}]);
 });
 
 it('a non-UUID mail request key cannot send before its audit rejects the identifier',async()=>{
@@ -67,7 +67,7 @@ it('concurrent actual mail requests dispatch once and a fresh retry reads the sa
  const {searchTenantAction}=await import('@/app/actions/search.actions');
  expect(await withSession(full,()=>searchTenantAction(request.subject))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'MAIL',id:threads[0].id})])});
  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',data:{threadId:threads[0].id,messageId:messages[0].id,replayed:true}});
- expect(await sql`SELECT user_id::text,event_type FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${request.clientRequestId}::uuid`).toEqual([{user_id:full.actorId,event_type:'COMMUNICATION_MAIL_SENT_V1'}]);
+ expect(await sql`SELECT user_id::text,event_type FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${request.clientRequestId}::uuid ORDER BY event_type`).toEqual([{user_id:full.actorId,event_type:'COMMUNICATION_MAIL_PREPARED_V1'},{user_id:full.actorId,event_type:'COMMUNICATION_MAIL_SENT_V1'}]);
  expect(vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&init?.method==='POST')).toHaveLength(1);
 });
 
@@ -94,7 +94,7 @@ it('W16 actual mail send preserves the open concern and rejects changed contents
  const doneKey=randomUUID();
  expect(await withSession(full,()=>finishIntakeUseAction({items:[{itemId,version:before[0].version}],clientEventId:doneKey,kind:'erledigt',note:'TEST Antwort ersetzt den KV nicht'}))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${doneKey}::uuid`).toEqual([{n:0}]);
- expect(await sql`SELECT user_id::text,event_type FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${request.clientRequestId}::uuid`).toEqual([{user_id:full.actorId,event_type:'COMMUNICATION_MAIL_SENT_V1'}]);
+ expect(await sql`SELECT user_id::text,event_type FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${request.clientRequestId}::uuid ORDER BY event_type`).toEqual([{user_id:full.actorId,event_type:'COMMUNICATION_MAIL_PREPARED_V1'},{user_id:full.actorId,event_type:'COMMUNICATION_MAIL_SENT_V1'}]);
  const denied=await createFixture(['kunden']);
  expect(await withSession(denied,()=>sendCustomerMailAction({...request,clientRequestId:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
  const sends=vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&init?.method==='POST');
@@ -118,7 +118,7 @@ it('mail provider failure retains a visible failed dispatch and prevents a secon
  const [dispatch]=await sql`SELECT id::text,status,created_by FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+request.clientRequestId}`;
  expect(dispatch).toMatchObject({status:'failed',created_by:full.actorId});
  expect(await sql`SELECT count(*)::integer AS n FROM public.communication_messages WHERE tenant_id=${KREILE_TENANT_SLUG} AND thread_id=${dispatch.id}::uuid AND direction='outgoing'`).toEqual([{n:0}]);
- expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${request.clientRequestId}::uuid`).toEqual([{n:0}]);
+ expect(await sql`SELECT event_type,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${request.clientRequestId}::uuid`).toEqual([{event_type:'COMMUNICATION_MAIL_PREPARED_V1',user_id:full.actorId}]);
  const {searchTenantAction}=await import('@/app/actions/search.actions');
  expect(await withSession(full,()=>searchTenantAction(needle))).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'MAIL',id:dispatch.id,status:'failed'})])});
  expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(request)))).toMatchObject({code:'CONFLICT'});

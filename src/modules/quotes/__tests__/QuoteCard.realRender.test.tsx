@@ -67,6 +67,22 @@ it('quote mail uses the existing send port, retains uncertain payload and only r
  await waitFor(()=>expect(read.mock.calls.length).toBeGreaterThan(1));
 });
 
+it.each([false,true])('quote mail explicit capability keeps the original payload (legacy=%s)',async(legacy)=>{
+ const send=vi.fn().mockResolvedValueOnce({code:'ERROR',message:'TEST Versand ungeklärt',unclear:true,...(legacy?{newPrepare:{requestId:'TEST-next-request'}}:{resend:{requestId:'TEST-confirm-request',label:'Mail an TEST Kunde erneut senden – nicht im Postausgang gefunden'}})}).mockResolvedValueOnce({code:'OK'}),read=vi.fn(async()=>({code:'OK' as const,quote,canEdit:true}));
+ const ports:QuoteCardPorts={read,send,change:vi.fn(),prepare:vi.fn(),update:vi.fn()};
+ const close=vi.fn();render(<QuoteCard quoteId={quote.quoteId} ports={ports} onClose={close} onCustomer={vi.fn()} onOrder={vi.fn()} MailView={({draft})=><><label>TEST Betreff<input value={draft.subject} disabled={draft.busy} onChange={e=>draft.onSubject(e.target.value)}/></label><label>TEST Nachricht<textarea value={draft.body} disabled={draft.busy} onChange={e=>draft.onBody(e.target.value)}/></label></>}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'KV per E-Mail senden'}));
+ fireEvent.change(screen.getByLabelText('TEST Nachricht'),{target:{value:'TEST Bitte aktuelle Fassung bestätigen'}});
+ const sendButton=screen.getByRole('button',{name:'KV senden'});fireEvent.click(sendButton);fireEvent.click(sendButton);
+ await screen.findByText('TEST Versand ungeklärt');expect(send).toHaveBeenCalledOnce();
+ expect(screen.getByLabelText('TEST Nachricht')).toBeDisabled();
+ fireEvent.click(screen.getByRole('button',{name:'Zurück'}));expect(close).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:legacy?'KV senden':'Mail an TEST Kunde erneut senden – nicht im Postausgang gefunden'}));
+ await waitFor(()=>expect(send).toHaveBeenCalledTimes(2));expect(send.mock.calls[1][0]).toEqual({...send.mock.calls[0][0],clientRequestId:legacy?'TEST-next-request':'TEST-confirm-request',...(legacy?{}:{confirmedResend:true})});
+ expect(send.mock.calls[0][0]).toMatchObject({quoteId:quote.quoteId,customerId:quote.customerId,subject:'KV-TEST-118',body:'TEST Bitte aktuelle Fassung bestätigen'});
+ await waitFor(()=>expect(read.mock.calls.length).toBeGreaterThan(1));
+});
+
 it('operational purpose shows the phone decision but hides finance and editing',async()=>{
  const safe={...quote,totalNetCents:null,plannedHours:'4',positions:quote.positions.map(row=>({...row,unitPriceCents:null,lineTotalCents:null})),lifecycle:{...quote.lifecycle!,calculation:null}};
  const change=vi.fn(async()=>({code:'UNAVAILABLE' as const,message:'TEST Offline'}));

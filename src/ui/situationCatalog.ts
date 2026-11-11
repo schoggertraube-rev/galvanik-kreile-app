@@ -264,3 +264,17 @@ export const CUSTOMER_COLLECTION_COPY={
   const key=stage==='E1'?'kunde.abholung.e1':stage==='E2'?'kunde.abholung.e2':'kunde.abholung.lagerfrist';return {subject:CUSTOMER_COLLECTION_COPY[key].subject(facts.members.map(member=>member.number).join(', ')),body:lines.join('\n\n')};
  }
 };
+
+export const MAIL_RESEND_COPY={
+ canceledCompleted:(customer:string)=>`Storno an ${customer} gesendet`,
+ confirm:(customer:string)=>'Mail an '+customer+' erneut senden – nicht im Postausgang gefunden',
+ canceledTask:(invoice:string,customer:string)=>{
+  const prefix='Storno an ',suffix=' senden – Rechnung '+invoice+' kam trotz Storno an';
+  const space=120-Array.from(prefix+suffix).length;
+  if(space<1)throw Error('INVOICE_TASK_TITLE_NO_CUSTOMER_SPACE');
+  const name=Array.from(customer);
+  return prefix+(name.length>space?name.slice(0,space-1).join('')+'…':customer)+suffix;
+ },
+ canceledTaskDescription:(invoice:string,customer:string,sentAt:string|null)=>'Kunde: '+customer+'\nRechnung: '+invoice+'\nSendezeit: '+(sentAt?new Intl.DateTimeFormat('de-DE',{dateStyle:'medium',timeStyle:'medium',timeZone:'Europe/Berlin'}).format(new Date(sentAt)):'nicht belegt'),
+ canceled:(invoice:string)=>'Rechnung '+invoice+' ist storniert – Versand nicht mehr nötig'
+};

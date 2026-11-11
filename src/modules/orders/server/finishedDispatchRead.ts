@@ -52,7 +52,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
  for(const group of groups.values()){
   const failGroup=()=>{for(const row of result.filter(item=>group.members.some(member=>member.orderId===item.orderId))){row.unavailable=true;row.reminder=undefined;row.storage=undefined;row.gaps.push('COLLECTION_PROOF_UNAVAILABLE');}};
   let history:Awaited<ReturnType<typeof readCollectionReminderHistory>>;
-  try{history=await readCollectionReminderHistory(auth,group.customerId,group.handover,group.members.map(member=>member.orderId));}catch(error){console.error('[DISPATCH_HISTORY_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');failGroup();continue;}
+  try{history=await readCollectionReminderHistory(auth,group.customerId,group.handover,group.members.map(member=>member.orderId));}catch(error){console.error('[DISPATCH_HISTORY_UNAVAILABLE]',error instanceof Error&&/^[A-Z][A-Z0-9_]{1,100}$/.test(error.message)?error.message:error instanceof Error?error.name:'UnknownError');failGroup();continue;}
   histories.set(JSON.stringify([group.customerId,group.handover]),history);
   for(const row of history)if(row.sentAt&&row.threadId)group.threads.add(row.threadId);
   let noMail=false;

@@ -4,7 +4,9 @@ import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash,randomUUID } from "node:crypto";
 import postgres from "postgres";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import {execFileSync} from "node:child_process";
+import path from "node:path";
+import { beforeAll,afterAll, describe, expect, it, vi } from "vitest";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import type { AppSession } from "@/lib/server/appSession";
 
@@ -25,6 +27,18 @@ if (parsed.protocol !== "postgresql:" || parsed.hostname !== "127.0.0.1" || pars
   throw new Error("H18_QUOTE_LOCAL_REPLAY_REQUIRED: dedicated loopback Postgres expected");
 }
 if (process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("H18_QUOTE_LOCAL_REPLAY_REQUIRED: service role must be unset");
+const nativeStorageFetch=globalThis.fetch;
+const priorStorageUrl=process.env.NEXT_PUBLIC_SUPABASE_URL;
+let testStorageUrl='';
+beforeAll(()=>{
+ const local=JSON.parse(execFileSync(process.execPath,[path.resolve('node_modules/supabase/dist/supabase.js'),'status','-o','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:20000})) as Record<string,string>;
+ if(new URL(local.API_URL).hostname!=='127.0.0.1'||!local.SERVICE_ROLE_KEY)throw Error('H18_QUOTE_LOOPBACK_STORAGE_REQUIRED');
+ testStorageUrl=local.API_URL;
+ process.env.NEXT_PUBLIC_SUPABASE_URL=testStorageUrl;
+ process.env.SUPABASE_SERVICE_ROLE_KEY=local.SERVICE_ROLE_KEY;
+});
+afterAll(()=>{delete process.env.SUPABASE_SERVICE_ROLE_KEY;if(priorStorageUrl===undefined)delete process.env.NEXT_PUBLIC_SUPABASE_URL;else process.env.NEXT_PUBLIC_SUPABASE_URL=priorStorageUrl;});
+
 
 const sql = postgres(DATABASE_URL, { max: 2, prepare: false });
 const originalSecret = process.env.APP_SESSION_SECRET;
@@ -593,6 +607,7 @@ it.each([false,true])('KV-04 sends the real current PDF through the existing mai
  for(const key of envNames)process.env[key]=key==='MS_GRAPH_MAILBOX'?'test-kv@fixture.invalid':'TEST-kv-provider-only';
  const deliveries:Record<string,unknown>[]=[],endpoints:string[]=[];let proofReads=0;
  vi.stubGlobal('fetch',vi.fn(async(url:string|URL,init?:RequestInit)=>{
+  if(new URL(String(url)).origin===new URL(testStorageUrl).origin)return nativeStorageFetch(url,init);
   if(String(url).startsWith('https://login.microsoftonline.com/'))return Response.json({access_token:'TEST-kv-provider-token-'+('x'.repeat(32))});
   if(String(url).startsWith('https://graph.microsoft.com/')&&String(url).endsWith('/reply')){endpoints.push(String(url));deliveries.push(JSON.parse(String(init?.body)));return new Response('',{status:202});}
   if(String(url).includes('/mailFolders/sentitems/messages?')){proofReads++;const second=new URL(String(url)).searchParams.get('$filter')?.includes('edition2');return Response.json({value:[{id:second?'TEST-sent-2':'TEST-sent-1',internetMessageId:second?'<TEST-KV-edition2@fixture.invalid>':'<TEST-KV-edition1@fixture.invalid>',from:{emailAddress:{address:'test-kv@fixture.invalid'}},toRecipients:[{emailAddress:{address:'kv-'+fixture.customerId+'@local.invalid'}}],isDraft:false,sentDateTime:'2026-11-08T10:00:00Z',hasAttachments:true}]});}
@@ -610,8 +625,8 @@ it.each([false,true])('KV-04 sends the real current PDF through the existing mai
   expect(payload.message.attachments).toHaveLength(1);
   expect(Buffer.from(payload.message.attachments[0].contentBytes,'base64').subarray(0,4).toString()).toBe('%PDF');
   const events=await sql`SELECT event_type,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND (correlation_id=${input.clientRequestId}::uuid OR client_event_id=${input.clientRequestId}::uuid) ORDER BY created_at`;
-  expect(events.map(event=>event.event_type)).toEqual(['COMMUNICATION_DOCUMENT_PREPARED_V1','COMMUNICATION_DOCUMENT_SENT_V1','QUOTE_LIFECYCLE_V04']);
-  expect(events[0].payload.document).toMatchObject({id:quote.quote.quoteId,edition:1,version:1,sha256:expect.stringMatching(/^[0-9a-f]{64}$/),source:{itemId,graphMessageId}});
+  expect(events.map(event=>event.event_type)).toEqual(['COMMUNICATION_MAIL_PREPARED_V1','COMMUNICATION_DOCUMENT_PREPARED_V1','COMMUNICATION_DOCUMENT_SENT_V1','QUOTE_LIFECYCLE_V04']);
+  expect(events.find(event=>event.event_type==='COMMUNICATION_DOCUMENT_PREPARED_V1')!.payload.document).toMatchObject({id:quote.quote.quoteId,edition:1,version:1,sha256:expect.stringMatching(/^[0-9a-f]{64}$/),source:{itemId,graphMessageId}});
   expect(await withSession(fixture,()=>readQuoteAction({quoteId:quote.quote.quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{sentEdition:1,sentChannel:'mail',stage:'versendet'}}});
   expect(await withSession(fixture,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK',data:{replayed:true}});
   expect(deliveries).toHaveLength(1);
@@ -697,6 +712,7 @@ it('KV-04 reserves the PDF edition, preserves a real concurrent edit and never m
  for(const key of envNames)process.env[key]=key==='MS_GRAPH_MAILBOX'?'test-kv@fixture.invalid':'TEST-kv-provider-only';
  const deliveries:Record<string,unknown>[]=[];let failDelivery=false;
  vi.stubGlobal('fetch',vi.fn(async(url:string|URL,init?:RequestInit)=>{
+  if(new URL(String(url)).origin===new URL(testStorageUrl).origin)return nativeStorageFetch(url,init);
   if(String(url).startsWith('https://login.microsoftonline.com/'))return Response.json({access_token:'TEST-kv-provider-token-'+('x'.repeat(32))});
   if(String(url).startsWith('https://graph.microsoft.com/')&&String(url).endsWith('/sendMail')){deliveries.push(JSON.parse(String(init?.body)));
    if(failDelivery)return Response.json({error:{code:'TEST_PROVIDER_UNAVAILABLE',message:'TEST unavailable'}},{status:503});

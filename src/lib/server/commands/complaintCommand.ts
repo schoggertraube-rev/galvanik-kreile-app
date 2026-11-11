@@ -125,12 +125,13 @@ export async function executeComplaint(input:unknown,sourceEffect:ComplaintSourc
       }
       const receipt:Success['receipt']={complaintId:after.complaint_id,number:after.nummer,state:after.stand,version:after.version,eventId:randomUUID()};
       const payload={complaintId:after.complaint_id,action:input.action,requestHash,before,after,receipt,...(input.action==='wieder_oeffnen'?{reason:input.reason}:{})};
-      await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,notes,payload,status,user_id,client_event_id,event_schema_version,correlation_id,aggregate_version,created_at)
-        VALUES(${receipt.eventId},${auth.tenantId},${after.source_order_id},'COMPLAINT_CHANGED_V1',${'Reklamation '+after.nummer+' · '+after.stand},${input.action==='wieder_oeffnen'?input.reason:null},${JSON.stringify(payload)}::jsonb,'success',${auth.userId}::uuid,${input.clientKey}::uuid,1,${input.clientKey}::uuid,${after.version},statement_timestamp())`);
+      const recorded=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,notes,payload,status,user_id,client_event_id,event_schema_version,correlation_id,aggregate_version,created_at)
+        VALUES(${receipt.eventId},${auth.tenantId},${after.source_order_id},'COMPLAINT_CHANGED_V1',${'Reklamation '+after.nummer+' · '+after.stand},${input.action==='wieder_oeffnen'?input.reason:null},${JSON.stringify(payload)}::jsonb,'success',${auth.userId}::uuid,${input.clientKey}::uuid,1,${input.clientKey}::uuid,${after.version},statement_timestamp()) RETURNING id`);
+      if(recorded.length!==1||recorded[0].id!==receipt.eventId)throw Error('COMPLAINT_RECEIPT_NOT_SAVED');
       return {code:'OK',receipt,replayed:false};
     });
   } catch(error) {
-    console.error('[COMPLAINT_COMMAND_FAILED]',error instanceof Error?error.message:error);
+    console.error('[COMPLAINT_COMMAND_FAILED]',{code:error instanceof Rejected?error.result.code:'UNAVAILABLE',name:error instanceof Error?error.name:'UnknownError'});
     return error instanceof Rejected?error.result:{code:'UNAVAILABLE',message:'Nicht gespeichert · alle Eingaben sind noch da. Fehlercode: COMPLAINT_COMMAND_FAILED.'};
   }
 }

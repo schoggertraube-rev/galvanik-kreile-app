@@ -105,6 +105,8 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
   const sendLock=useRef(false);
   const pendingSend=useRef<Parameters<typeof sendCustomerMailAction>[0]|null>(null);
   const [sendUnclear,setSendUnclear]=useState(false);
+  const [newPrepareReady,setNewPrepareReady]=useState(false);
+  const [confirmedRetry,setConfirmedRetry]=useState<{requestId:string;label:string}|null>(null);
   const composeForm=(
       <form className={styles.compose} onSubmit={async (event) => {
         event.preventDefault();
@@ -113,10 +115,13 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
         const formElement=event.currentTarget,form=new FormData(formElement);
         if(pendingSend.current&&(pendingSend.current.targetType!==targetType||pendingSend.current.targetId!==targetId)){setFeedback('Vorherigen Versand zuerst am ursprünglichen Vorgang prüfen.');return;}
         const quoteId=String(form.get('quoteId')??'');
-        const input=pendingSend.current??{targetType,targetId,clientRequestId:globalThis.crypto.randomUUID(),subject:String(form.get('subject')??''),body:String(form.get('body')??''),...(quoteId?{attachment:{kind:'QUOTE' as const,documentId:quoteId}}:{})};
+        const input=confirmedRetry&&pendingSend.current?{...pendingSend.current,clientRequestId:confirmedRetry.requestId,confirmedResend:true as const}:pendingSend.current??{targetType,targetId,clientRequestId:globalThis.crypto.randomUUID(),subject:String(form.get('subject')??''),body:String(form.get('body')??''),...(quoteId?{attachment:{kind:'QUOTE' as const,documentId:quoteId}}:{})};
         pendingSend.current=input;sendLock.current=true;setSendBusy(true);setFeedback('');
         try{
           const result=await sendCustomerMailAction(input);
+          setConfirmedRetry(result.code!=='OK'&&'resend'in result&&result.resend&&typeof result.resend.requestId==='string'&&typeof result.resend.label==='string'?result.resend:null);
+          const normalPrepare=result.code!=='OK'&&'newPrepare'in result&&result.newPrepare&&typeof result.newPrepare.requestId==='string'?result.newPrepare:null;
+          setNewPrepareReady(!!normalPrepare);if(normalPrepare){const next={...input,clientRequestId:normalPrepare.requestId};delete next.confirmedResend;pendingSend.current=next;}
           setFeedback(result.code==='OK'?('notice'in result&&typeof result.notice==='string'&&result.notice?result.notice:'E-Mail wurde versendet und am Vorgang gespeichert.'):result.message);
           if(result.code==='OK'){pendingSend.current=null;setSendUnclear(false);formElement.reset();}
           else if(result.code==='UNAVAILABLE'||result.code==='CONFLICT'){setSendUnclear(true);}
@@ -127,7 +132,7 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
         <label>Betreff<input name="subject" required maxLength={500} value={composer?.subject} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onSubject(event.target.value):undefined} /></label>
         <label>Nachricht<textarea name="body" required maxLength={20_000} value={composer?.body} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onBody(event.target.value):undefined} /></label>
         {!composer?<label>PDF-Anhang<select name="quoteId" defaultValue="" disabled={sendBusy||sendUnclear}><option value="">Ohne Anhang</option>{matchingQuotes.map((quote) => <option key={quote.quoteId} value={quote.quoteId}>KV {quote.quoteNumber}</option>)}</select></label>:null}
-        {!composer?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden"}</button>:null}
+        {!composer?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{confirmedRetry?.label??(newPrepareReady?"Versenden":sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden")}</button>:null}
       </form>
   );
   if(composer)return <section className={styles.panel}>{composeForm}</section>;

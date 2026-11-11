@@ -28,6 +28,8 @@ vi.mock("@/components/layout/GlobalCreateFlow", () => ({
   requestGlobalCreate: actions.request,
 }));
 
+beforeEach(() => { cleanup(); vi.resetAllMocks(); });
+
 describe("CommunicationPanel order assignment", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -86,6 +88,22 @@ it('locks duplicate submits, preserves an unclear mail intent and retries with t
  expect(screen.getByRole('textbox',{name:'Nachricht'})).toHaveValue('');
 });
 
+it('requires an explicit click on the server-qualified resend label and retains the original request',async()=>{
+ cleanup();actions.getStatus.mockResolvedValue({code:'OK'});actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});actions.listGlobal.mockResolvedValue({code:'OK',data:[]});
+ const requestId='aa212121-1111-4111-8111-222222222222',label='Mail an TEST Kunde erneut senden – nicht im Postausgang gefunden';
+ actions.send.mockResolvedValueOnce({code:'CONFLICT',message:'Versand unklar',resend:{requestId,label}}).mockResolvedValueOnce({code:'OK',data:{}});
+ render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer"/>);
+ const send=await screen.findByRole('button',{name:'Versenden'});
+ fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:'TEST Betreff'}});
+ fireEvent.change(screen.getByRole('textbox',{name:'Nachricht'}),{target:{value:'TEST Original bleibt'}});
+ fireEvent.click(send);
+ const confirm=await screen.findByRole('button',{name:label});
+ expect(actions.send).toHaveBeenCalledTimes(1);expect(actions.send.mock.calls[0][0]).not.toHaveProperty('confirmedResend');
+ fireEvent.click(confirm);
+ await waitFor(()=>expect(actions.send).toHaveBeenCalledTimes(2));
+ expect(actions.send.mock.calls[1][0]).toMatchObject({clientRequestId:requestId,confirmedResend:true,subject:'TEST Betreff',body:'TEST Original bleibt'});
+});
+
 it('starts capture only with a secured canonical mail source and keeps a failed import on screen',async()=>{
  cleanup();actions.getStatus.mockResolvedValue({code:'OK'});actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});
  actions.listGlobal.mockResolvedValue({code:'OK',data:[{id:'TEST-mail',subject:'TEST Mail',body:'TEST Auftrag',preview:'TEST Auftrag',senderName:'TEST Kunde',senderAddress:'test@example.invalid',receivedAt:'2026-11-07T10:00:00Z',hasAttachments:true}]});
@@ -95,4 +113,20 @@ it('starts capture only with a secured canonical mail source and keeps a failed 
  expect(await screen.findByText('TEST Original fehlt')).toBeInTheDocument();expect(actions.request).not.toHaveBeenCalled();
  fireEvent.click(screen.getByRole('button',{name:'KV anlegen'}));
  await waitFor(()=>expect(actions.request).toHaveBeenCalledWith({intent:'QUOTE',prefill:{sourceItemId:'TEST-intake',customerQuery:'test@example.invalid',note:'TEST Auftrag'}}));
+});
+
+it('uses the existing normal send control for a legacy new PREPARE without a resend flag',async()=>{
+ cleanup();actions.getStatus.mockResolvedValue({code:'OK'});actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});actions.listGlobal.mockResolvedValue({code:'OK',data:[]});
+ const requestId='bb212121-1111-4111-8111-222222222222';
+ actions.send.mockResolvedValueOnce({code:'CONFLICT',message:'TEST legacy original unavailable',newPrepare:{requestId,previousRequestId:'TEST old',checkedAt:'2026-11-11T01:00:00Z'}}).mockResolvedValueOnce({code:'OK',data:{}});
+ render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer"/>);
+ const send=await screen.findByRole('button',{name:'Versenden'});
+ fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:'TEST Betreff'}});
+ fireEvent.change(screen.getByRole('textbox',{name:'Nachricht'}),{target:{value:'TEST Original bleibt'}});
+ fireEvent.click(send);await screen.findByText('TEST legacy original unavailable');
+ expect(actions.send).toHaveBeenCalledTimes(1);expect(screen.queryByRole('button',{name:/erneut senden/})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Versenden'}));
+ await waitFor(()=>expect(actions.send).toHaveBeenCalledTimes(2));
+ expect(actions.send.mock.calls[1][0]).toMatchObject({clientRequestId:requestId,subject:'TEST Betreff',body:'TEST Original bleibt'});
+ expect(actions.send.mock.calls[1][0]).not.toHaveProperty('confirmedResend');
 });
