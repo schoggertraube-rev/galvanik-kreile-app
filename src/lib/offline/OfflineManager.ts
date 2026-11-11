@@ -36,12 +36,8 @@ export const OfflineManager = {
   },
 
   async getPendingCount(): Promise<number> {
-    try {
-      const queue = await IndexedDBHelper.getQueue();
-      return queue.length;
-    } catch {
-      return 0;
-    }
+    const queue = await IndexedDBHelper.getQueue();
+    return queue.length;
   },
 
   async enqueueAction(actionType: OfflineAction["actionType"], payload: unknown): Promise<OfflineAction> {
@@ -75,10 +71,4 @@ export const OfflineManager = {
   }
 };
 
-// Global browser listeners for automatic synchronization
-if (typeof window !== "undefined") {
-  window.addEventListener("online", () => {
-    console.log("🌐 Browser regained network connection. Starting auto-sync.");
-    OfflineManager.syncQueue().catch(err => console.error("Browser auto-sync failed:", err));
-  });
-}
+// Legacy collections are read-only; only SyncContext starts the active scoped transport.

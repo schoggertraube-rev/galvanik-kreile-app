@@ -1,3 +1,4 @@
+import {readLegacyStore,rejectLegacyWrite} from './legacyReadOnly';
 export type OfflineOutboxItem = {
   id: string;
   entityType:
@@ -26,72 +27,10 @@ export type OfflineOutboxItem = {
   deviceId?: string;
 };
 
-const DB_NAME = "KreileOfflineOutboxDB";
-const STORE_NAME = "outbox";
-const DB_VERSION = 1;
-
-function getDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === "undefined" || !window.indexedDB) {
-      reject(new Error("IndexedDB is not supported"));
-      return;
-    }
-    const request = window.indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    request.onupgradeneeded = (e) => {
-      const db = (e.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "id" });
-      }
-    };
-  });
-}
-
-export const offlineOutbox = {
-  async saveItem(item: OfflineOutboxItem): Promise<void> {
-    const db = await getDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      store.put(item);
-      // A successful request can still be rolled back by the transaction.
-      tx.oncomplete = () => { db.close(); resolve(); };
-      tx.onabort = () => { db.close(); reject(tx.error ?? new Error("OFFLINE_WRITE_ABORTED")); };
-      tx.onerror = () => { /* onabort owns the final outcome */ };
-    });
-  },
-
-  async getAllItems(): Promise<OfflineOutboxItem[]> {
-    const db = await getDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readonly");
-      const req = tx.objectStore(STORE_NAME).getAll();
-      tx.oncomplete = () => { db.close(); resolve(req.result as OfflineOutboxItem[]); };
-      tx.onabort = () => { db.close(); reject(tx.error ?? new Error("OFFLINE_READ_ABORTED")); };
-      tx.onerror = () => { /* onabort owns the final outcome */ };
-    });
-  },
-
-  async removeItem(id: string): Promise<void> {
-    const db = await getDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.delete(id);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  },
-  
-  async clearAll(): Promise<void> {
-    const db = await getDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.clear();
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  }
+// Read-only historical API; the active queue is pendingStore.ts.
+export const offlineOutbox={
+ async saveItem(item:OfflineOutboxItem):Promise<void>{void item;rejectLegacyWrite();},
+ async getAllItems():Promise<OfflineOutboxItem[]>{return readLegacyStore('KreileOfflineOutboxDB','outbox');},
+ async removeItem(id:string):Promise<void>{void id;rejectLegacyWrite();},
+ async clearAll():Promise<void>{rejectLegacyWrite();}
 };
