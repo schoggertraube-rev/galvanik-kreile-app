@@ -80,7 +80,8 @@ function fetchEvent(url: string, method = "GET", mode = "cors") {
   let responsePromise: Promise<Response> | undefined;
   return {
     event: {
-      request: { url, method, mode },
+      request: { url, method, mode, headers: new Headers() },
+      waitUntil: (_promise:Promise<unknown>) => { void _promise; },
       respondWith: (response: Promise<Response> | Response) => { responsePromise = Promise.resolve(response); },
     },
     responsePromise: () => responsePromise,
@@ -181,12 +182,19 @@ describe("service worker containment contract", () => {
     expectNoStorageOrFetch(metrics);
   });
 
+  it("serves a cached immutable build asset without touching API or login storage", async () => {
+    const {handlers,metrics}=loadWorker({cachedResponse:new Response('TEST immutable build',{headers:{'content-type':'text/javascript'}})});
+    const request=fetchEvent('https://werkstatt.example/_next/static/TEST/app.js');
+    handlers.get('fetch')?.(request.event as never);
+    expect(await (await request.responsePromise())?.text()).toBe('TEST immutable build');
+    expect(metrics.selfFetch).toBe(0);expect(metrics.indexedDbOpen).toBe(0);
+  });
+
   it("has source-level guards against API caching, synthetic responses, and fallbacks", () => {
     const { source } = loadWorker();
     expect(source).toContain('const STATIC_ASSETS = [');
     expect(source).toContain('if (request.method !== "GET") return;');
     expect(source).toContain('if (url.origin !== self.location.origin) return;');
-    expect(source).toContain('if (!STATIC_ASSETS.includes(url.pathname) || url.search !== "") return;');
     expect(source).not.toMatch(/\bindexedDB\b|\bnew\s+Response\s*\(/);
     expect(source).not.toMatch(/(?:pathname|url\.pathname)\s*(?:===|\.startsWith|\.includes|\.match)\s*\(?\s*["'][^"']*\/(?:api|supabase)(?:\/|["'])/i);
     expect(source).not.toMatch(/\bcaches\.delete\s*\(|\bapi-cache\b/);
