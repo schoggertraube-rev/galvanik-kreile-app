@@ -25,6 +25,8 @@ it('reads current unsent invoice originals from the customer port and never disc
  if(actionRead.code!=='OK'||actionRead.data.nextActionRule?.code!=='OK'||!actionRead.data.nextActionRule.hauptaktion)throw Error('TEST_CUSTOMER_PRIMARY');
  expect(actionRead.data.nextActionRule.hauptaktion.werte.number).toBe(actionRead.data.invoiceUnsentOriginal?.number);
  expect(actionRead.data.nextActionRule.erstblick).toHaveLength(5);
+ expect(actionRead.data.nextActionRule.weitere).toEqual([]);
+ expect(actionRead.data.nextActionRule.quelle.erwartungSha256).toMatch(/^[a-f0-9]{64}$/);
  expect(actionRead.data.nextActionRule.erstblick.map(row=>row.key)).toContain('kunde.kachel.debt');
  expect(actionRead.data.nextActionRule.erstblick.map(row=>row.key)).not.toContain('kunde.kachel.messages');
  expect(actionRead.data.nextActionRule.weitereInformationen).toMatchObject([{key:'kunde.kachel.messages',werte:{offeneNachrichten:0}}]);

@@ -5,6 +5,7 @@ import type {CustomerSummary} from './customerSummaryRead';
 import {readAuthorizedV45Rule} from './v45RuleRead';
 import {readV45ActionValues} from './v45ActionValuesRead';
 import {readV45FirstLook} from './v45FirstLookRead';
+import {readV45ObjectActionAbsence} from './v45ObjectActionsRead';
 import type {CustomerListSignals} from '@/modules/customers/public';
 
 type ContactFacts=Pick<CustomerSummary,'email'|'billingEmail'|'invoiceUnsentCount'>;
@@ -59,6 +60,9 @@ export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<Cus
  // Customer overview fields use the declared domain layout; S16 owns the later
  // state-specific golden capture (invoice has no captured reference case yet).
  const first=readV45FirstLook('kunde',values,hidden);if(first.code!=='OK')return {...first,source};
+ // The customer overview has a single footer action in kunde.js. Require all
+ // existing domain references to agree before projecting an empty alternative list.
+ const alternatives=readV45ObjectActionAbsence('kunde');if(alternatives.code!=='OK')return {...alternatives,source};
  const weitereInformationen=money&&mails&&values['kunde.kachel.messages']?[{key:'kunde.kachel.messages',werte:values['kunde.kachel.messages']}]:[];
- return {...rule,erstblick:first.erstblick,weitereInformationen,hauptaktion:{elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,befehl,recht:rule.recht},quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,erstblickRegel:'R12/PL20:00'},source};
+ return {...rule,erstblick:first.erstblick,weitere:alternatives.weitere,weitereInformationen,hauptaktion:{elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,befehl,recht:rule.recht},quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,erstblickRegel:'R12/PL20:00',erwartungSha256:alternatives.quelle.sha256},source};
 }
