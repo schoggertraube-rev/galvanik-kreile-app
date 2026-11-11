@@ -165,7 +165,7 @@ afterAll(async()=>{vi.restoreAllMocks();await sql.end({timeout:1});if(originalSe
 
 it.each([false,true,'confirm'] as const)('sends a reminder through the real Action, DB receipt and shared view (responseLost=%s)',async(responseLost)=>{
  const fixture=await createFixture(),sender=await createFixture(['kunden']);
- await sql`INSERT INTO public.email_templates(tenant_id,template_key,name,subject_template,body_html_template,body_text_template,variables) VALUES(${KREILE_TENANT_SLUG},${KREILE_TENANT_SLUG+':nacharbeit_begleitschein'},'TEST Nacharbeit Begleitschein','TEST Nacharbeit {Auftragsnummer}','<p>TEST {Kunde} · {RK-Nummer}</p>','TEST {Kunde} · {RK-Nummer}', '["Kunde","Auftragsnummer","RK-Nummer"]'::jsonb)`;
+ await sql`INSERT INTO public.email_templates(tenant_id,template_key,name,subject_template,body_html_template,body_text_template,variables) VALUES(${KREILE_TENANT_SLUG},${KREILE_TENANT_SLUG+':nacharbeit_begleitschein'},'TEST Nacharbeit Begleitschein','TEST Nacharbeit {Auftragsnummer}','<p>TEST {Kunde} · {RK-Nummer}</p>','TEST {Kunde} · {RK-Nummer}', '["Kunde","Auftragsnummer","RK-Nummer"]'::jsonb) ON CONFLICT(template_key) DO NOTHING`;
  const source=await createOrder(fixture,'TEST-REMINDER','rechnung');
  const complaint=await createReworkComplaint(fixture,source);
  const {nacharbeitAnlegenAction,sendeNacharbeitBegleitscheinAction,getByOrder,getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
