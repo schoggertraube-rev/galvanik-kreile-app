@@ -4,7 +4,6 @@ import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import type {AuthorizationSnapshot} from './authorization';
 import {readAuthorizedV45Rule} from './v45RuleRead';
 import {readV45FirstLook} from './v45FirstLookRead';
-import {quoteCommandContext} from './quoteAuthorization';
 import {readV45QuoteCommand} from './v45QuoteCommandRead';
 import {readV45ActionValues} from './v45ActionValuesRead';
 import {V45_SOURCE_HASHES} from '@/ui/v45.generated';
@@ -33,14 +32,12 @@ export function v45QuoteFacts(quote:Pick<QuoteReadback,'linkedOrderId'|'validUnt
  * First-look order comes from V45 metadata, values from this same readback.
  * Commands remain the existing action boundaries; this reader never calls them.
  */
-export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback,capabilities:{canReceive:boolean;canEdit:boolean;canSend:boolean}){
+export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback,capabilities:{financial:boolean;commandRights:Readonly<Record<string,boolean>>}){
  const source={kind:'quote' as const,id:quote.quoteId,version:quote.version,edition:quote.lifecycle?.edition??null};
- const selected=readAuthorizedV45Rule(auth,'kv',v45QuoteFacts(quote));if(selected.code!=='OK')return {...selected,source};
- const commandBlocked=selected.hauptaktion==='quote.receive'&&!capabilities.canReceive||selected.hauptaktion==='quote.revise'&&!capabilities.canEdit||['quote.send','quote.followup'].includes(selected.hauptaktion??'')&&!capabilities.canSend;
- const rule=commandBlocked?{...selected,hauptaktion:null,gesperrt:[...selected.gesperrt,{elementId:selected.hauptaktion!,grundKey:'error.permission'}]}:selected;
+ const rule=readAuthorizedV45Rule(auth,'kv',v45QuoteFacts(quote),capabilities.commandRights);if(rule.code!=='OK')return {...rule,source};
  if(!quote.lifecycle)return {code:'SOURCE_INCOMPLETE' as const,missing:['QUOTE_LIFECYCLE'],source};
  const objectActions=readV45ObjectActionAbsence('kv',rule.zustand);if(objectActions.code!=='OK')return {...objectActions,source};
- const financial=quoteCommandContext(auth).capabilities.canReadQuote;
+ const financial=capabilities.financial;
  const values:Record<string,Readonly<Record<string,unknown>>>={
   'kv.lage':{nummer:quote.quoteNumber,fassung:quote.lifecycle.edition,zustand:rule.zustand},
   'kv.teile':{teile:quote.positions.map(part=>({id:part.id,name:part.name,menge:part.quantity,material:part.material,oberflaeche:part.surfaceRequested,...(part.unit!==undefined?{einheit:part.unit}:{})}))},

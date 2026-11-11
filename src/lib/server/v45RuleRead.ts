@@ -24,7 +24,7 @@ export function readV45Rule(area:string,facts:Readonly<Record<string,unknown>>){
 /** One rights-filtered rule seam for the later U2 domain composition.
  * It never returns caller facts or example amounts, and grants no command right.
  */
-export function readAuthorizedV45Rule(auth:AuthorizationSnapshot,area:string,facts:Readonly<Record<string,unknown>>){
+export function readAuthorizedV45Rule(auth:AuthorizationSnapshot,area:string,facts:Readonly<Record<string,unknown>>,commandRights?:Readonly<Record<string,boolean>>){
  if(!auth.active)return {code:'FORBIDDEN' as const};
  const selected=readV45Rule(area,facts);
  if(selected.code!=='OK')return selected;
@@ -35,6 +35,7 @@ export function readAuthorizedV45Rule(auth:AuthorizationSnapshot,area:string,fac
  // V45 status names the existing perm_op_status capability; no role inference.
  if(right!==null&&right!=='status'&&!isAccessArea(right))return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_RIGHT']};
  const permitted=auth.active&&(right===null||right==='status'?right===null||auth.permissions.includes('perm_op_status'):hasAuthorizationArea(auth,right!));
- if(!permitted)return {...selected,hauptaktion:null,gesperrt:[{elementId:action.id,grundKey:'error.permission'}]};
+ const commandPermitted=commandRights===undefined||Object.hasOwn(commandRights,action.id)&&commandRights[action.id]===true;
+ if(!permitted||!commandPermitted)return {...selected,hauptaktion:null,gesperrt:[{elementId:action.id,grundKey:'error.permission'}]};
  return {...selected,textKey:action.text,recht:right,gesperrt:[]};
 }

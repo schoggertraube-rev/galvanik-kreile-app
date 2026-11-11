@@ -46,6 +46,13 @@ describe('S04 canonical authorization across every imported rule',()=>{
   expect(result.gesperrt).toEqual(permitted?[]:[{elementId:rule.dann.hauptaktion,grundKey:'error.permission'}]);
   expect(JSON.stringify(result)).not.toContain('987654321');
  });
+ it.each(V45_RULES.filter(rule=>rule.bereich==='kv'&&rule.dann.hauptaktion!==null))('$id checks the existing command capability in the same authorization seam',rule=>{
+  const facts={...baseline('kv'),...rule.wenn},auth=snapshot('meister'),action=rule.dann.hauptaktion!;
+  const denied=readAuthorizedV45Rule(auth,'kv',facts,{[action]:false});
+  expect(denied).toMatchObject({code:'OK',hauptaktion:null,gesperrt:[{elementId:action,grundKey:'error.permission'}]});
+  const permitted=readAuthorizedV45Rule(auth,'kv',facts,{[action]:true});
+  expect(permitted).toEqual(readAuthorizedV45Rule(auth,'kv',facts));
+ });
  it('never turns an inactive login or incomplete source into an action grant',()=>{
   expect(readAuthorizedV45Rule({...snapshot('meister'),active:false} as unknown as AuthorizationSnapshot,'auftrag',{})).toEqual({code:'FORBIDDEN'});
   expect(readAuthorizedV45Rule(snapshot('meister'),'auftrag',{})).toMatchObject({code:'SOURCE_INCOMPLETE'});
