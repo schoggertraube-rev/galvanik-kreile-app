@@ -3,6 +3,7 @@ import type {LiveOrderCard} from './orderCardRead';
 import type {AuthorizationSnapshot} from './authorization';
 import type {readOrderInformed} from './orderReleaseRead';
 import {readAuthorizedV45Rule} from './v45RuleRead';
+import {readV45FirstLook} from './v45FirstLookRead';
 
 /** Facts exposed by the existing versioned card. Missing shipment, financial
  * and approval evidence deliberately stays unknown, never a false calm state.
@@ -29,6 +30,17 @@ export function v45OrderReleaseFacts(card:{id:string;version:number},source?:Rel
  if(Array.isArray(value.complaintIds)&&value.complaintIds.every(id=>typeof id==='string'))facts.complaint=value.complaintIds.length>0;
  return facts;
 }
-export function readV45OrderRule(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,'id'|'version'|'station'|'handoverMode'|'items'>,release?:ReleaseSource){
- return {...readAuthorizedV45Rule(auth,'auftrag',{...v45OrderFacts(card),...v45OrderReleaseFacts(card,release)}),source:{kind:'order' as const,id:card.id,version:card.version}};
+export function readV45OrderRule(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'dueAt'|'station'|'handoverMode'|'items'>,release?:ReleaseSource){
+ const source={kind:'order' as const,id:card.id,version:card.version};
+ const rule=readAuthorizedV45Rule(auth,'auftrag',{...v45OrderFacts(card),...v45OrderReleaseFacts(card,release)});
+ if(rule.code!=='OK')return {...rule,source};
+ const first=readV45FirstLook('auftrag',{
+  'auftrag.lage':{nummer:card.orderNumber,station:card.station},
+  'auftrag.termin':{datum:card.dueAt},
+  'auftrag.teile':{teile:card.items.map(item=>({id:item.id,name:item.name,menge:item.quantity,material:item.material,oberflaeche:item.surfaceRequested,fertig:item.finished,einheit:item.unit}))},
+  'auftrag.hauptaktion':{elementId:rule.hauptaktion}
+ },[],rule.zustand);
+ // A state requiring an as-yet unbound blocker stays incomplete, never calm.
+ if(first.code!=='OK')return {...first,source};
+ return {...rule,erstblick:first.erstblick,quelle:{...rule.quelle,elementeSha256:first.quelle.sha256},source};
 }

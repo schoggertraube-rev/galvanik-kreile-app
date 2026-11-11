@@ -69,3 +69,20 @@ it('V13–V16 actual manual tracking keeps shipment, actor and history across re
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='SHIPMENT_HANDED_OVER_V1' AND payload->>'shipmentId'=${input.shipmentId}`).toEqual([{n:1}]);
  expect(await withSession(full,()=>saveManualTrackingAction({...correction,expectedUpdatedAt:changed.receipt.updatedAt,reason:'TEST zu spät',clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT',reason:'SHIPPING_RELEASE_BLOCKED'});
 });
+
+it('reads the physical pickup first look from the same real card without money or unrelated blockers',async()=>{
+ const order=await readyInvoiceOrder('TEST U2 Abgeholt','pickup');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const handed=await withSession(full,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:order.version,clientEventId:randomUUID()}));
+ expect(handed.code).toBe('OK');
+ const login=await createFixture(['auftraege'],'werkstatt');
+ const count=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const read=await withSession(login,()=>getLiveOrderCardAction({orderId:order.orderId}));
+ expect(read).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK',zustand:'closed',hauptaktion:null}}});
+ if(read.code!=='OK'||read.data.nextActionRule?.code!=='OK')throw Error('TEST_PICKUP_FIRST_LOOK');
+ expect(read.data.nextActionRule.erstblick.map(row=>row.key)).toEqual(['auftrag.lage','auftrag.termin','auftrag.teile','auftrag.hauptaktion']);
+ expect(read.data.nextActionRule.source.version).toBe(read.data.card.version);
+ expect(JSON.stringify(read.data.nextActionRule)).not.toMatch(/netto|Cents|unitPrice|vatRate/);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(count);
+});
