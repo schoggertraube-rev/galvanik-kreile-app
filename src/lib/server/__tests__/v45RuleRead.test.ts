@@ -2,7 +2,7 @@ import {describe,it,expect,vi} from 'vitest';
 import {ROLE_ACCESS_AREA_TEMPLATES,getPermissionsForAreas,hasAuthorizationArea,type AppRole} from '@/lib/auth/authorizationContract';
 import type {AuthorizationSnapshot} from '../authorization';
 vi.mock('server-only',()=>({}));
-import {readV45Rule,readAuthorizedV45Rule} from '../v45RuleRead';
+import {readV45Rule,readAuthorizedV45Rule,readAuthorizedV45Action} from '../v45RuleRead';
 import {V45_RULES,V45_SOURCE_HASHES,V45_ELEMENTS} from '@/ui/v45.generated';
 // Explicitly synthetic complete rule facts; these are not a domain-data adapter.
 function baseline(area:string):Record<string,unknown>{
@@ -52,6 +52,12 @@ describe('S04 canonical authorization across every imported rule',()=>{
   expect(denied).toMatchObject({code:'OK',hauptaktion:null,gesperrt:[{elementId:action,grundKey:'error.permission'}]});
   const permitted=readAuthorizedV45Rule(auth,'kv',facts,{[action]:true});
   expect(permitted).toEqual(readAuthorizedV45Rule(auth,'kv',facts));
+ });
+ it('uses the same canonical action rights for the existing message assignment ID',()=>{
+  expect(readAuthorizedV45Action(snapshot('meister'),'message.assign')).toMatchObject({code:'OK',hauptaktion:'message.assign',textKey:'messages.assign',recht:'mails'});
+  const noMail={...snapshot('meister'),areas:['kunden'] as const,permissions:getPermissionsForAreas(['kunden'])};
+  expect(readAuthorizedV45Action(noMail,'message.assign')).toMatchObject({code:'OK',hauptaktion:null,gesperrt:[{elementId:'message.assign',grundKey:'error.permission'}]});
+  expect(readAuthorizedV45Action(snapshot('meister'),'TEST-unknown')).toMatchObject({code:'SOURCE_INCOMPLETE'});
  });
  it('never turns an inactive login or incomplete source into an action grant',()=>{
   expect(readAuthorizedV45Rule({...snapshot('meister'),active:false} as unknown as AuthorizationSnapshot,'auftrag',{})).toEqual({code:'FORBIDDEN'});
