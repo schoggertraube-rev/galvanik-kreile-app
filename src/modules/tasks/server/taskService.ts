@@ -3,6 +3,7 @@ import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
 import {handedOverProofs} from '@/lib/server/dispatchCallPort';
 import {GOODS_OUT_FOLLOWUP_COPY} from '@/ui/situationCatalog';
 import {readOfflineNoteConflictSource} from '@/lib/server/offlineNoteConflictPort';
+import {readOfflineWorkshopConflictSource} from '@/lib/server/offlineWorkshopConflictPort';
 import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
 import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
 import {collectionTaskHasReplySource,collectionTaskReplyRemainder,collectionTaskAppointmentRemainder,readCollectionTaskCurrentOrder} from '@/lib/server/dispatchReplyPort';
@@ -311,5 +312,13 @@ export async function createOfflineNoteConflictTask(tx:PrivilegedTenantTransacti
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title:OFFLINE_RECONCILIATION_COPY.reason,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'eingang',id:eventId},note:new Date(original.deviceCapturedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})};
  // The source note command has already authorized its exact original context.
+ return (await persistTask(tx,auth,value,deps,false)).task.id;
+}
+/** PL 11.11.08:01: a qualified rejected workshop original, never a general grant. */
+export async function createOfflineWorkshopConflictTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string,deps:Dependencies){
+ const source=await readOfflineWorkshopConflictSource(tx,auth,eventId);
+ const key=eventKey(eventId,0,'offline-workshop-conflict');
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title:OFFLINE_RECONCILIATION_COPY.reason,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:source.orderId?{type:'auftrag',id:source.orderId}:{type:'allgemein',id:null},note:new Date(source.deviceCapturedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})};
  return (await persistTask(tx,auth,value,deps,false)).task.id;
 }

@@ -40,7 +40,8 @@
     "@/modules/tasks/server-public#readOrderHandoverTaskState",
     "@/modules/tasks/server-public#createGoodsOutClarificationTask",
     "@/modules/tasks/server-public#restrictCollectionTaskForAppointment",
-    "@/modules/tasks/server-public#createOfflineNoteConflictTask"
+    "@/modules/tasks/server-public#createOfflineNoteConflictTask",
+    "@/modules/tasks/server-public#createOfflineWorkshopConflictTask"
   ],
   "capabilities": [
     "aufgabe:speichern",
