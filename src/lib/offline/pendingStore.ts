@@ -11,6 +11,9 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>,input=row.input;
  if(row.kind!=='workshop'||!input||typeof input!=='object'||Array.isArray(input))return false;
+ if(Object.keys(row).some(key=>!['id','itemId','kind','command','input','deviceCapturedAt','queueSequence'].includes(key)))return false;
+ if(row.deviceCapturedAt!==undefined&&(typeof row.deviceCapturedAt!=='string'||!Number.isFinite(Date.parse(row.deviceCapturedAt))))return false;
+ if(row.queueSequence!==undefined&&(typeof row.queueSequence!=='number'||!Number.isSafeInteger(row.queueSequence)||row.queueSequence<1))return false;
  const data=input as Record<string,unknown>,uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(v);
  if(!uuid(data.orderId)||!uuid(data.itemId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.orderId)return false;
  const keys=Object.keys(data).sort().join(',');
