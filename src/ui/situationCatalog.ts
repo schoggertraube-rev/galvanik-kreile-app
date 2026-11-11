@@ -287,6 +287,9 @@ export const OFFLINE_ITEM_FINISHED_COPY={pending:(part:string)=>`Teil ${part} fe
 /** PL11.11.12:42 / R2; actual part and immutable pricing receipt date. */
 const productionPricingDescription=(part:string,day:string)=>`Wochenwert für ${part} nachtragen – Preisbuchung vom ${day} ist gescheitert`;
 export const PRODUCTION_PRICING_RETRY_COPY={
+ // TODO_PL R8: no price or booking date is invented for a missing base receipt.
+ baseTitle:(part:string)=>{const prefix='Wochenwert für ',suffix=' nachtragen';if(prefix.length+part.length+suffix.length<=120)return prefix+part+suffix;let short='';for(const char of part){if(prefix.length+short.length+char.length+suffix.length+1>120)break;short+=char;}return prefix+short+'…'+suffix;},
+ baseDescription:(part:string)=>`Wochenwert für ${part} nachtragen – Bewertung der belegten Fertigmeldung fehlt`,
  description:productionPricingDescription,
  title:(part:string,day:string)=>{
   const full=productionPricingDescription(part,day);if(full.length<=120)return full;

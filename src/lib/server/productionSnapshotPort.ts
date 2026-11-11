@@ -9,8 +9,9 @@ import {withPrivilegedTenantTransaction,withTenantSavepoint} from './privilegedD
 /** R2: real immutable receipt context survives rollback of the pricing savepoint.
  * The root completion composition binds it to the normal TaskWriter; missing
  * task evidence keeps the device original pending after the physical commit. */
+type PricingFailureSource={phase:'basis';orderId:string;productionEventId:string;itemId:string}|{phase?:'nachtrag';orderId:string;productionEventId:string;itemId:string;pricingEventId:string;pricingOccurredAt:string};
 export class ProductionPricingRetryNeeded extends Error {
- constructor(readonly source:{orderId:string;productionEventId:string;itemId:string;pricingEventId:string;pricingOccurredAt:string},cause:unknown){super('PRODUCTION_PRICING_RETRY_REQUIRED',{cause});this.name='ProductionPricingRetryNeeded';}
+ constructor(readonly source:PricingFailureSource,cause:unknown){super('PRODUCTION_PRICING_RETRY_REQUIRED',{cause});this.name='ProductionPricingRetryNeeded';}
 }
 /** U264: all real logins may read the single aggregate, never position prices. */
 export async function readProductionWeek(auth:AuthorizationSnapshot,onDate?:string){
@@ -59,6 +60,16 @@ async function historicalProductionEvidence(tx:PrivilegedTenantTransaction,tenan
 /** Capture the base position price at the existing completion edge. Extra work
  * belongs to its frozen receipt, never to the current hourly rate here. */
 export async function appendProductionCompletion(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string,eventId:string,itemIds:readonly string[]){
+ for(const itemId of itemIds){
+  let followup:ProductionPricingRetryNeeded|undefined;
+  try{await withTenantSavepoint(tx,async nested=>{
+   try{await appendProductionCompletionWork(nested,tenantId,orderId,eventId,[itemId]);}
+   catch(error){if(error instanceof ProductionPricingRetryNeeded){followup=error;return;}throw error;}
+  });}catch(error){throw new ProductionPricingRetryNeeded({phase:'basis',orderId,productionEventId:eventId,itemId},error);}
+  if(followup)throw followup;
+ }
+}
+async function appendProductionCompletionWork(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string,eventId:string,itemIds:readonly string[]){
  if(!itemIds.length)return;
  const [occurrence]=await tx.execute<{offline:boolean;at:string}>(sql`SELECT event.payload ? 'offlineOriginal' AS offline,to_char(private.order_production_time_v1(event),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at FROM public.events event WHERE event.tenant_id=${tenantId} AND event.order_id=${orderId} AND event.id=${eventId}`);
  if(!occurrence)throw Error('PRODUCTION_EVENT_SOURCE_MISSING');
@@ -116,13 +127,13 @@ async function appendHistoricalOfflinePricing(tx:PrivilegedTenantTransaction,ten
    SELECT event.id,${tenantId},${orderId},${itemId},event.created_at,1,${quantity}::numeric,${unit},${change.delta}::bigint,false,'captured',jsonb_build_object('kind','offline_price_receipt','pricingEventId',event.id),'pricing',${baseEventId}
    FROM public.events event WHERE event.tenant_id=${tenantId} AND event.id=${row.id} RETURNING event_id`);
   if(saved.length!==1||saved[0].event_id!==row.id)throw Error('OFFLINE_SUPPLEMENT_NOT_SAVED');
-  }catch(error){throw new ProductionPricingRetryNeeded({orderId,productionEventId:baseEventId,itemId,pricingEventId:row.id,pricingOccurredAt:row.occurredAt},error);}
+  }catch(error){throw new ProductionPricingRetryNeeded({phase:'nachtrag',orderId,productionEventId:baseEventId,itemId,pricingEventId:row.id,pricingOccurredAt:row.occurredAt},error);}
 
  }
 }
 
 export type ProductionPricingFailure=ProductionPricingRetryNeeded['source'];
-function pricingRetryKey(tenant:string,source:ProductionPricingFailure){const b=createHash('sha256').update(JSON.stringify(['production-pricing-retry',tenant,source.productionEventId,source.itemId,source.pricingEventId])).digest().subarray(0,16);b[6]=(b[6]&15)|80;b[8]=(b[8]&63)|128;const h=b.toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;}
+function pricingRetryKey(tenant:string,source:ProductionPricingFailure){const b=createHash('sha256').update(JSON.stringify(['production-pricing-retry',tenant,source.productionEventId,source.itemId,source.phase==='basis'?'basis':source.pricingEventId])).digest().subarray(0,16);b[6]=(b[6]&15)|80;b[8]=(b[8]&63)|128;const h=b.toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;}
 /** The marker is provenance in the existing event store, not a second task. */
 export async function recordProductionPricingRetry(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,source:ProductionPricingFailure){
  const id=pricingRetryKey(auth.tenantId,source);
@@ -133,13 +144,23 @@ export async function recordProductionPricingRetry(tx:PrivilegedTenantTransactio
   if(inserted.length!==1)throw Error('PRODUCTION_PRICING_MARKER_NOT_SAVED');
  }
  const proof=await readProductionPricingRetrySource(tx,auth,id);
- if(!proof||proof.actorId!==auth.userId||proof.pricingEventId!==source.pricingEventId||proof.pricingOccurredAt!==source.pricingOccurredAt)throw Error('PRODUCTION_PRICING_MARKER_SOURCE_INVALID');
+ if(!proof||proof.actorId!==auth.userId||JSON.stringify(proof.phase==='basis'?{phase:'basis',productionEventId:proof.productionEventId,itemId:proof.itemId}:proof.phase==='nachtrag'||proof.phase===undefined?{pricingEventId:proof.pricingEventId,pricingOccurredAt:proof.pricingOccurredAt}:null)!==JSON.stringify(source.phase==='basis'?{phase:'basis',productionEventId:source.productionEventId,itemId:source.itemId}:{pricingEventId:source.pricingEventId,pricingOccurredAt:source.pricingOccurredAt}))throw Error('PRODUCTION_PRICING_MARKER_SOURCE_INVALID');
  return id;
 }
 export async function readProductionPricingRetrySource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string){
  const markers=await tx.execute<{id:string;actorId:string;orderId:string;itemId:string;payload:ProductionPricingFailure}>(sql`SELECT id,user_id::text AS "actorId",order_id AS "orderId",item_id AS "itemId",payload FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${id} AND event_type='ORDER_PRODUCTION_PRICING_RETRY_REQUIRED_V1' AND status='success' AND event_schema_version=1`);
  if(!markers.length)return null;
  const m=markers[0];if(markers.length!==1||pricingRetryKey(auth.tenantId,m.payload)!==id||m.orderId!==m.payload.orderId||m.itemId!==m.payload.itemId)throw Error('PRODUCTION_PRICING_MARKER_CHANGED');
+ if(m.payload.phase==='basis'){
+  const rows=await tx.execute<{part:string;pending:boolean;proof:boolean}>(sql`SELECT item.name AS part,
+   NOT EXISTS(SELECT 1 FROM private.order_production_snapshots base WHERE base.tenant_id=original.tenant_id AND base.event_id=original.id AND base.item_id=item.id AND base.component='base' AND base.direction=1 AND base.valuation='captured') AS pending,
+   original.user_id::text=${m.actorId} AND original.status='success' AND original.event_schema_version=1 AND original.event_type='ORDER_ITEM_FINISHED_CHANGED_V1' AND original.payload->>'finished'='true' AND original.item_id=item.id
+   AND original.client_event_id IS NOT NULL AND jsonb_typeof(original.payload->'requestHash')='string' AND (NOT original.payload ? 'offlineOriginal' OR private.valid_offline_original_event_v1(original.payload->'offlineOriginal',original.user_id,original.client_event_id)) AS proof
+   FROM public.events original JOIN public.items item ON item.tenant_id=original.tenant_id AND item.order_id=original.order_id AND item.id=${m.itemId}
+   WHERE original.tenant_id=${auth.tenantId} AND original.order_id=${m.orderId} AND original.id=${m.payload.productionEventId}`);
+  if(rows.length!==1||rows[0].proof!==true||!rows[0].part)throw Error('PRODUCTION_PRICING_BASE_RECEIPT_INVALID');
+  return {...m.payload,markerId:id,actorId:m.actorId,pending:rows[0].pending,title:PRODUCTION_PRICING_RETRY_COPY.baseTitle(rows[0].part),description:PRODUCTION_PRICING_RETRY_COPY.baseDescription(rows[0].part)};
+ }
  const rows=await tx.execute<{part:string;day:string;pending:boolean;proof:boolean}>(sql`SELECT item.name AS part,to_char(price.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin','DD.MM.YYYY') AS day,
  NOT EXISTS(SELECT 1 FROM private.order_production_snapshots posted WHERE posted.tenant_id=base.tenant_id AND posted.origin_event_id=base.event_id AND posted.item_id=base.item_id AND posted.component='pricing' AND posted.direction=1 AND posted.event_id=price.id)
  AND NOT EXISTS(SELECT 1 FROM private.order_production_snapshots settled JOIN public.events later ON later.tenant_id=settled.tenant_id AND later.id=settled.event_id
@@ -164,6 +185,9 @@ export async function readProductionPricingRetryKeys(tx:PrivilegedTenantTransact
 }
 /** Uses the original base quantity and original time, never today's completion. */
 export async function repairProductionCompletionPricing(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,eventId:string){
+ const missing=await tx.execute<{id:string}>(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND order_id=${orderId} AND event_type='ORDER_PRODUCTION_PRICING_RETRY_REQUIRED_V1' AND payload->>'productionEventId'=${eventId} AND payload->>'phase'='basis'`);
+ for(const marker of missing){const source=await readProductionPricingRetrySource(tx,auth,marker.id);if(source?.phase==='basis'&&source.pending)await appendProductionCompletion(tx,auth.tenantId,orderId,eventId,[source.itemId]);}
+
  await tx.execute(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${orderId} FOR UPDATE NOWAIT`);
  const bases=await tx.execute<{itemId:string;quantity:string;unit:string|null;at:string;hasQuote:boolean}>(sql`SELECT base.item_id AS "itemId",base.quantity::text,base.unit,to_char(base.occurred_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at,
  EXISTS(SELECT 1 FROM private.quote_conversion_receipts receipt WHERE receipt.tenant_id=base.tenant_id AND receipt.order_id=base.order_id) AS "hasQuote"
@@ -177,7 +201,7 @@ export async function repairProductionCompletionPricing(tx:PrivilegedTenantTrans
 export async function repairProductionPricingTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:{client_key:string;bezug_typ:string;bezug_id:string|null;erstellt_von:string}){
  const source=await readProductionPricingRetrySource(tx,auth,task.client_key);if(!source)return;
  if(task.bezug_typ!=='auftrag'||task.bezug_id!==source.orderId||task.erstellt_von!==source.actorId)throw Error('PRODUCTION_PRICING_TASK_SOURCE_CHANGED');
- if(source.pending)await repairProductionCompletionPricing(tx,auth,source.orderId,source.productionEventId);
+ if(source.pending){if(source.phase==='basis')await appendProductionCompletion(tx,auth.tenantId,source.orderId,source.productionEventId,[source.itemId]);else await repairProductionCompletionPricing(tx,auth,source.orderId,source.productionEventId);}
  const proof=await readProductionPricingRetrySource(tx,auth,source.markerId);if(!proof||proof.pending)throw Error('PRODUCTION_PRICING_REPAIR_NOT_PROVEN');
 }
 

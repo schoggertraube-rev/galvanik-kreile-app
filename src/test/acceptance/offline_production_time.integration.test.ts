@@ -162,3 +162,33 @@ it('retains an unvalued physical completion and a real clarification task for a 
  expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(retry))))).toMatchObject({code:'OK',replayed:true});
 
 });
+
+it('keeps the real physical edge and a strict basis-phase task when base pricing fails before its snapshot',async()=>{
+ const decider=await createFixture(['entscheiden']);
+ const {orderId,itemId,version}=await setup('CB17 Basis-Savepoint');
+ const fault='test_base_price_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.order_id='${orderId}' AND NEW.component='base' THEN RAISE EXCEPTION 'TEST_BASE_PRICE_FAILURE'; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON private.order_production_snapshots FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
+ let original:Awaited<ReturnType<typeof finish>>|undefined,taskId:string|undefined;
+ try{
+  original=await finish(orderId,itemId,version,new Date(Date.now()-8*86400000).toISOString());
+  expect(await sql`SELECT current_station_id FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}`).toEqual([{current_station_id:'fertig'}]);
+  expect(await sql`SELECT event_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${original.receipt.eventId}`).toHaveLength(0);
+  const markers=await sql`SELECT id,payload,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_PRODUCTION_PRICING_RETRY_REQUIRED_V1' AND order_id=${orderId}`;
+  expect(markers).toHaveLength(1);expect(markers[0]).toMatchObject({user_id:full.actorId,payload:{phase:'basis',productionEventId:original.receipt.eventId,itemId}});
+  expect(markers[0].payload).not.toHaveProperty('pricingEventId');
+  const forged=randomUUID();await expect(sql`INSERT INTO public.events(id,tenant_id,order_id,item_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version) VALUES(${forged},${KREILE_TENANT_SLUG},${orderId},${itemId},'ORDER_PRODUCTION_PRICING_RETRY_REQUIRED_V1','TEST synthetic invalid actor proof',${JSON.stringify(markers[0].payload)}::jsonb,'success',${decider.actorId}::uuid,${forged}::uuid,1)`).rejects.toMatchObject({code:'P0001'});
+  const [task]=await sql`SELECT id::text,version,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${markers[0].id}::uuid`;expect(task.fuer_bereich).toBe('entscheiden');taskId=task.id;
+  expect(await withSession(decider,()=>getIntakeTaskAction({taskId:task.id}))).toMatchObject({code:'OK',pricingSource:'KNOWN',canComplete:true});
+  expect(await withSession(decider,()=>completeIntakeTaskAction({taskId:task.id,version:task.version,note:null}))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${task.id}::uuid`).toEqual([{status:'offen'}]);
+ }finally{await sql.unsafe(`DROP TRIGGER IF EXISTS ${fault} ON private.order_production_snapshots`);await sql.unsafe(`DROP FUNCTION IF EXISTS private.${fault}()`);}
+ if(!original||!taskId)throw Error('TEST_BASE_FOLLOWUP_MISSING');
+ const read=await withSession(decider,()=>getIntakeTaskAction({taskId}));if(read.code!=='OK'||!read.task)throw Error('TEST_BASE_TASK_READ');
+ const input={taskId,version:read.task.version,note:null};
+ expect(await withSession(decider,()=>completeIntakeTaskAction(input))).toMatchObject({code:'OK'});
+ expect(await withSession(decider,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>replayOfflineWorkshopAction(offlinePartition({tenantId:KREILE_TENANT_SLUG,userId:full.actorId}),JSON.parse(JSON.stringify(original!.original))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND origin_event_id=${original.receipt.eventId} AND component='pricing'`).toEqual([{net_cents:10000}]);
+ expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${orderId}`).toHaveLength(1);
+});
