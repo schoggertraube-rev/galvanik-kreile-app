@@ -14,7 +14,7 @@ import type { AppSession } from "@/lib/server/appSession";
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 // AP-EIN packet: fixed provider response only at the existing Azure boundary in isolated Replay tests.
 vi.mock("@/lib/server/azureDocumentIntelligence", () => ({ analyzeWithAzureDocumentIntelligence: vi.fn(async () => ({ code: "OK", data: { suggestions: [] } })) }));
-vi.mock("@/lib/server/microsoftGraph", () => ({ sendMicrosoftGraphMail: vi.fn(async () => ({ code: "OK", data: {} })) }));
+vi.mock("@/lib/server/microsoftGraph", () => ({ sendMicrosoftGraphMail: vi.fn(async () => ({ code: "OK", data: {} })), readMicrosoftGraphConfigurationStatus: vi.fn(()=>({code:"READY"})) }));
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const EXPECTED_DATABASE_URL = process.env.H18_EXPECTED_DATABASE_URL;
@@ -400,12 +400,12 @@ describe("AP-EIN werkbank.buchen: inline customer in the canonical transaction",
   expect((await withSession(actor,()=>erfasseAuftragAusEingangAction({...input,items:[{...input.items[0]!,quantity:0}]}))).code).toBe("VALIDATION_ERROR");
   expect((await sql`SELECT id FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND company_name=${companyName}`)).toHaveLength(0);
   // Owner AB02 / annahme: durable outbox first, Graph only after the response closes.
-  const booked=await withSession(actor,()=>erfasseAuftragAusEingangAction(input),async result=>{
+  const booked=await withLocalReplayStorage(()=>withSession(actor,()=>erfasseAuftragAusEingangAction(input),async result=>{
     expect(result).toMatchObject({code:'OK',confirmationMessage:'Auftragsbestätigung wird gesendet'});
     if(result.code!=='OK')throw Error('INLINE_BOOKING_RESPONSE_REQUIRED');
     expect(await sql`SELECT status FROM public.outbox_mails WHERE tenant_id=${KREILE_TENANT_SLUG} AND objekt=${result.orderId}`).toEqual([{status:'wartet'}]);
     expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${result.intakeItemId} AND art='gesendet'`).toHaveLength(0);
-  });
+  }));
   expect(booked.code).toBe("OK");if(booked.code!=="OK")throw Error("INLINE_BOOKING_FAILED:"+booked.message);
   const [row]=await sql`SELECT c.id AS customer_id,c.company_name,c.house_number,o.id AS order_id,source.vorgang_id,o.wunschtermin,o.termin_herkunft,o.processing_weeks,
    (SELECT count(*)::int FROM public.events e WHERE e.tenant_id=o.tenant_id AND e.order_id=o.id AND e.event_type='ORDER_INTAKE_CREATED_V1') AS events
