@@ -100,7 +100,7 @@ it('retains the pending original when the real task history fails, then repairs 
 });
 
 it('keeps a real physical completion when its later pricing supplement hits an SQL error',async()=>{
- await createFixture(['auftraege','entscheiden']); // Real active decision inbox for this prescribed recipient case.
+ const decider=await createFixture(['entscheiden']); // Real recipient, without money or order permission.
  const {created,orderId,itemId,version}=await setup('Offline Nachtrag SQL-Fehler'),at=new Date(Date.now()-8*86400000).toISOString();
  const [source]=await sql`SELECT item.name,to_char(event.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin','DD.MM.YYYY') AS day FROM public.items item JOIN public.events event ON event.id=${created.receipt.eventId} WHERE item.tenant_id=${KREILE_TENANT_SLUG} AND item.id=${itemId}`;
  const title=`Wochenwert für ${source.name} nachtragen – Preisbuchung vom ${source.day} ist gescheitert`;
@@ -116,18 +116,19 @@ it('keeps a real physical completion when its later pricing supplement hits an S
   expect(tasks).toHaveLength(1);if(tasks.length!==1)throw Error('TEST_REAL_PRICING_TASK_MISSING');
   expect(tasks[0]).toMatchObject({titel:title,status:'offen',erstellt_von:full.actorId,fuer_bereich:'entscheiden'});taskId=tasks[0].id;if(typeof taskId!=='string')throw Error('TEST_TASK_ID_MISSING');
   // The existing task command must retry the actual posting, never just close it.
-  expect(await withSession(full,()=>completeIntakeTaskAction({taskId,version:tasks[0].version,note:null}))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await withSession(decider,()=>completeIntakeTaskAction({taskId,version:tasks[0].version,note:null}))).toMatchObject({code:'UNAVAILABLE'});
   expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${taskId}::uuid`).toEqual([{status:'offen'}]);
  }finally{await sql.unsafe(`DROP TRIGGER IF EXISTS ${fault} ON private.order_production_snapshots`);await sql.unsafe(`DROP FUNCTION IF EXISTS private.${fault}()`);}
  if(!saved||!taskId)throw Error('TEST_PRICING_FOLLOWUP_NOT_PRESERVED');
- const task=await withSession(full,()=>getIntakeTaskAction({taskId:taskId!}));expect(task).toMatchObject({code:'OK',canComplete:true,completeLabel:'Nachtrag erneut auslösen'});if(task.code!=='OK'||!task.task)throw Error('TEST_TASK_READER');
+ const task=await withSession(decider,()=>getIntakeTaskAction({taskId:taskId!}));expect(task).toMatchObject({code:'OK',canComplete:true,completeLabel:'Nachtrag erneut auslösen'});if(task.code!=='OK'||!task.task)throw Error('TEST_TASK_READER');
  const retry={taskId,version:task.task.version,note:null};
- expect(await withSession(full,()=>completeIntakeTaskAction(retry))).toMatchObject({code:'OK'});
- expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(retry))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(decider,()=>completeIntakeTaskAction(retry))).toMatchObject({code:'OK'});
+ expect(await withSession(decider,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(retry))))).toMatchObject({code:'OK',replayed:true});
  expect(await withSession(full,()=>replayOfflineWorkshopAction(offlinePartition({tenantId:KREILE_TENANT_SLUG,userId:full.actorId}),JSON.parse(JSON.stringify(saved!.original))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:saved.receipt.eventId}});
  expect(await sql`SELECT event_id,net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND origin_event_id=${saved.receipt.eventId} AND item_id=${itemId} AND component='pricing'`).toEqual([{event_id:created.receipt.eventId,net_cents:10000}]);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${saved.original.input.clientEventId}::uuid`).toHaveLength(1);
  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${taskId}::uuid`).toEqual([{status:'erledigt'}]);
+ expect(await sql`SELECT erledigt_von::text,erstellt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${taskId}::uuid`).toEqual([{erledigt_von:decider.actorId,erstellt_von:full.actorId}]);
 });
 
 it('retains the existing online source guard and amount without granting the offline supplement exception',async()=>{
