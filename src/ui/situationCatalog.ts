@@ -265,4 +265,4 @@ export const CUSTOMER_COLLECTION_COPY={
  }
 };
 
-export const MAIL_RESEND_COPY={confirm:(customer:string)=>'Mail an '+customer+' erneut senden – nicht im Postausgang gefunden'};
+export const MAIL_RESEND_COPY={confirm:(customer:string)=>'Mail an '+customer+' erneut senden – nicht im Postausgang gefunden',canceledTask:(invoice:string,customer:string)=>'Rechnung '+invoice+' ist trotz Storno bei '+customer+' angekommen – Storno an '+customer+' senden',canceled:(invoice:string)=>'Rechnung '+invoice+' ist storniert – Versand nicht mehr nötig'};

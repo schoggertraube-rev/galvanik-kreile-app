@@ -3,7 +3,7 @@
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {freezeStorageDeadline} from '@/lib/server/storageDeadline';
 import {createHash,randomUUID} from "node:crypto";
-import {readCommunicationDocumentReceipt,readPreparedInvoiceTransportOriginal,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
+import {readCommunicationDocumentReceipt,applyRecoveredInvoiceMailEffects,readPreparedInvoiceTransportOriginal,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
@@ -22,7 +22,7 @@ import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {readReadyNotificationContext} from '@/lib/server/orderReleaseRead';
-import {readCollectionReminderReceipt,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
+import {readCollectionReminderReceipt,applyCollectionReminderMailEffects,assertCollectionReminderCurrent,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
 import {INVOICE_DELIVERY_COPY,COLLECTION_REMINDER_COPY,CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
@@ -87,7 +87,21 @@ export async function sendCustomerMailAction(input: TargetInput & {
   const request=input.collectionReminder;
   if(input.targetType!=='CUSTOMER'||input.attachment||!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
   if(!request||Object.keys(request).sort().join(',')!==(request.stage==='E4'?'clientKey,dueDate,handover,stage':'dueDate,handover,stage')||!['E1','E2','E4'].includes(request.stage)||!['pickup','shipping'].includes(request.handover)||!/^\d{4}-\d{2}-\d{2}$/.test(request.dueDate)||!Number.isFinite(Date.parse(request.dueDate))||typeof input.subject!=='string'||typeof input.body!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientRequestId)||(request.stage==='E4'&&(typeof request.clientKey!=='string'||!/^[0-9a-f-]{36}$/.test(request.clientKey))))return {code:'VALIDATION_ERROR' as const,message:COLLECTION_REMINDER_COPY.invalid};
-  const prior=await readCollectionReminderReceipt(auth,{...input,collectionReminder:request});if(prior.code!=='NOT_FOUND')return prior;
+  const prior=await readCollectionReminderReceipt(auth,{...input,collectionReminder:request});
+  if(prior.code==='FOLLOWUP_PENDING'){
+   await withPrivilegedTenantTransaction(auth,tx=>applyCollectionReminderMailEffects(tx,auth,prior.meta,prior.data.threadId,prior.data.messageId,prior.originalRequestId));
+   return {code:'OK' as const,data:prior.data};
+  }
+  if(prior.code==='PENDING'){
+   if(input.confirmedResend&&input.clientRequestId!==prior.originalRequestId)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
+   const [{readShippingSettingsInTransaction},{readCollectionMoneyAccess}]=await Promise.all([import('@/modules/fundament/server-public'),import('@/lib/server/storageLetterRead')]);
+   return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:prior.original.subject,body:prior.original.body,confirmedResend:input.confirmedResend,collectionReminder:prior.meta,beforePrepare:async tx=>{
+    await assertCollectionReminderCurrent(tx,auth,prior.meta);
+    const settings=await readShippingSettingsInTransaction(tx,auth.tenantId);if(!settings)return false;
+    return (await readCollectionMoneyAccess(auth,prior.meta.orders.map(order=>order.id),settings,prior.meta.stage)).sendAllowed;
+   }});
+  }
+  if(prior.code!=='NOT_FOUND')return prior;
   // An explicit send also synchronizes the already imported originals. It is
   // a write command under the sender, never an effect of opening the list.
   const linked=await readLinkedIntakeMails(auth,{targetType:'CUSTOMER',targetId:input.targetId});
@@ -121,6 +135,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
  let attachment,document:CommunicationDocument|undefined;
  let invoiceGroup:{customerId:string;handover:string|null}|undefined;
  if(input.attachment?.kind==='INVOICE'&&(!Array.isArray(input.expectedInvoiceIds)||!input.expectedInvoiceIds.length||input.expectedInvoiceIds.length>101||new Set(input.expectedInvoiceIds).size!==input.expectedInvoiceIds.length||input.expectedInvoiceIds.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))||!input.expectedInvoiceIds.includes(input.attachment.documentId))){const original=await readInvoicePdf(auth,input.attachment.documentId,'original');if(original.code!=='OK')return original;return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.data.invoiceNumber)};}
+ const reconcileInvoice=(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,threadId:string)=>applyRecoveredInvoiceMailEffects(auth,threadId,(writeTx,value)=>createCanceledInvoiceMailTask(writeTx,auth,value,{effect:(effectTx,actor,effect)=>recordIntakeTaskEffect(effectTx,actor,effect,readCustomerProfile)}),tx);
  const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
  if(input.attachment){
   const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
@@ -136,7 +151,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
     if(!pdf)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};
     originals.push({filename:invoice.number+'.pdf',contentType:'application/pdf',bytes:new Uint8Array(pdf)});
    }
-   return sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,document:original,attachment:originals[0],additionalAttachments:originals.slice(1),beforePrepare:async tx=>{
+   return sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,reconcileInvoice,document:original,attachment:originals[0],additionalAttachments:originals.slice(1),beforePrepare:async tx=>{
     for(const invoice of invoices.slice().sort((a,b)=>a.orderId.localeCompare(b.orderId))){
      if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;
      const locked=await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid AND status='issued' AND aggregate_version=${invoice.version} AND pdf_sha256=${invoice.sha256} FOR UPDATE`);
@@ -146,6 +161,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
    }});
   }
   if(prior.code==='OK'){
+   if('mailOnly'in prior&&prior.mailOnly)await withPrivilegedTenantTransaction(auth,tx=>reconcileInvoice(tx,prior.data.threadId));
    if(prior.document.kind!==input.attachment.kind)return {code:'CONFLICT' as const,message:'Die Versandkennung gehört zu einer anderen Belegart.'};
    if(prior.document.kind==='INVOICE'&&JSON.stringify([prior.document.id,...prior.document.bundle?.map(row=>row.id)??[]].sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(prior.document.number)};
    return prior.document.kind==='QUOTE'?confirmQuoteDelivery(input,prior.document,{code:'OK',data:prior.data}):{code:'OK' as const,data:prior.data};
@@ -183,7 +199,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   }
  }
  const snapshot=document;
- const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,attachment,additionalAttachments,document,beforePrepare:snapshot?async (tx,recipient)=>{
+ const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,attachment,additionalAttachments,document,reconcileInvoice,beforePrepare:snapshot?async (tx,recipient)=>{
   if(snapshot.kind==='QUOTE')return lockQuoteDeliverySnapshot(tx,auth.tenantId,snapshot);
   for(const invoice of [snapshot,...snapshot.bundle??[]].sort((a,b)=>a.orderId.localeCompare(b.orderId))){
    if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;
@@ -210,7 +226,7 @@ import {finishPostalTasksForReply} from '@/lib/server/storagePostalPort';
 import {finishFinalTasksForReply} from '@/lib/server/storageFinalStagePort';
 import {readShippingSettings} from '@/modules/fundament/server-public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
-import {completeCollectionTaskForReply,restrictCollectionTaskForReply,createOrderHandoverTask} from '@/modules/tasks/server-public';
+import {completeCollectionTaskForReply,restrictCollectionTaskForReply,createOrderHandoverTask,createCanceledInvoiceMailTask} from '@/modules/tasks/server-public';
 import {recordImportedDispatchReplies,readImportedDispatchReplyEvidence} from '@/lib/server/dispatchReplyEffectsPort';
 import {qualifyImportedDeliveryFailure} from '@/lib/server/communicationDeliveryPort';
 async function withDeliveryFailure<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T,deferReply=false){

@@ -8,7 +8,7 @@ import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {hasAuthorizationArea} from '@/lib/server/authorization';
 import {INVOICE_DELIVERY_COPY,MAIL_REQUEST_CONFLICT_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {prepareCollectionReminder,appendCollectionReminderSent,type CollectionReminderMeta} from './collectionReminderPort';
+import {prepareCollectionReminder,applyCollectionReminderMailEffects,type CollectionReminderMeta} from './collectionReminderPort';
 import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphConfigurationStatus,
@@ -32,7 +32,7 @@ export async function readComplaintGoodsReminderDates(tx:import('./privilegedDb'
     WHERE complaint.tenant_id=${auth.tenantId} AND complaint.complaint_id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::text[]) AND thread.status='sent' AND thread.updated_at>=complaint.rework_ware_since GROUP BY complaint.complaint_id`);
 }
 type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string;resend?:{requestId:string;label:string} };
-type Target = { customerId: string; orderId: string | null; email: string; label: string };
+type Target = { customerId: string; orderId: string | null; email: string; label: string;customerName:string };
 type ThreadRow = { id: string; customer_id: string | null; order_id: string | null; status: string | null; created_at: Date | string | null;created_by?:string };
 type LinkedMessageRow = {
   thread_id: string;
@@ -70,12 +70,12 @@ async function resolveTarget(auth:AuthorizationSnapshot,type:TargetType,id:strin
 export async function readCommunicationTargetInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,type:TargetType,id:string):Promise<Target|null>{
  if(!validTarget(type,id))return null;
   const rows = type === "CUSTOMER"
-      ? await tx.execute<{ customer_id: string; order_id: null; email: string | null; label: string }>(sql`
-          SELECT id AS customer_id, NULL::text AS order_id, email, name AS label
+      ? await tx.execute<{ customer_id: string; order_id: null; email: string | null; label: string;customer_name:string }>(sql`
+          SELECT id AS customer_id, NULL::text AS order_id, email, name AS label,name AS customer_name
           FROM public.customers WHERE tenant_id=${auth.tenantId} AND id=${id} LIMIT 2
         `)
-      : await tx.execute<{ customer_id: string; order_id: string; email: string | null; label: string }>(sql`
-          SELECT customer.id AS customer_id, orders.id AS order_id, customer.email,
+      : await tx.execute<{ customer_id: string; order_id: string; email: string | null; label: string;customer_name:string }>(sql`
+          SELECT customer.id AS customer_id, orders.id AS order_id, customer.email,customer.name AS customer_name,
                  concat(orders.order_number, ' · ', customer.name) AS label
           FROM public.orders orders
           JOIN public.customers customer ON customer.id=orders.customer_id AND customer.tenant_id=orders.tenant_id
@@ -83,7 +83,7 @@ export async function readCommunicationTargetInTransaction(tx:PrivilegedTenantTr
         `);
     if (rows.length !== 1 || !rows[0]) return null;
     const email = rows[0].email?.trim().toLowerCase() ?? "";
-    return { customerId: rows[0].customer_id, orderId: rows[0].order_id, email, label: rows[0].label };
+    return { customerId: rows[0].customer_id, orderId: rows[0].order_id, email, label: rows[0].label,customerName:rows[0].customer_name };
 }
 /** Historical correspondence is projected into the intake once, without changing its target. */
 export async function readCommunicationImportContext(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,graphId:string){
@@ -222,7 +222,7 @@ export async function attachInboxMessage(
 
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; confirmedResend?:true; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; confirmedResend?:true; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; reconcileInvoice?:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
 ): Promise<Result<CommunicationReceipt>> {
   if (input?.confirmedResend!==undefined&&input.confirmedResend!==true || !validTarget(input?.targetType, input?.targetId) || typeof input.clientRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.clientRequestId) || typeof input.subject !== 'string' || typeof input.body !== 'string' || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
@@ -251,6 +251,15 @@ export async function sendCommunicationMail(
     return null;
   });
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
+  const currentRecipient=target.email;
+  // A physical-mail reconciliation checks the address reserved before Graph,
+  // even when the customer record has since been corrected.
+  const transport=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{recipient:string}>(sql`SELECT payload->>'recipient' AS recipient FROM public.events
+   WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND correlation_id=${input.clientRequestId}::uuid
+    AND user_id=${auth.userId}::uuid AND payload->>'customerId'=${target.customerId}
+    AND payload->>'targetType'=${input.targetType} AND payload->>'targetId'=${input.targetId}`));
+  if(transport.length>1)return {code:'UNAVAILABLE',message:COLLECTION_REMINDER_COPY.proofUnavailable};
+  if(transport.length===1)target.email=transport[0].recipient;
   if (!/^\S+@\S+\.\S+$/.test(target.email)) return { code: "VALIDATION_ERROR", message: "Beim Kunden ist keine gültige E-Mail-Adresse hinterlegt." };
   // PL23:01: reserve the external intent independently of a composer UUID.
   // The body remains outside the business log; its hash binds a same-key retry.
@@ -276,7 +285,7 @@ export async function sendCommunicationMail(
           WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_MAIL_PREPARED_V1' AND payload->>'threadId'=${existing[0].id} AND correlation_id=${input.clientRequestId}::uuid`);
         if(prepared.length>1||prepared.length===1&&(prepared[0].user_id!==auth.userId||prepared[0].intent!==intentHash||prepared[0].content!==contentSha256))throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         if (existing[0].status !== "sent") {
-          if(prepared.length!==1||input.collectionReminder||input.complaintResult)throw new Error("COMMUNICATION_OUTCOME_UNCLEAR");
+          if(prepared.length!==1||input.complaintResult)throw new Error("COMMUNICATION_OUTCOME_UNCLEAR");
           return {threadId:existing[0].id,recordedAt:iso(existing[0].created_at),recovery:true as const};
         }
         if(input.collectionReminder){
@@ -351,8 +360,15 @@ export async function sendCommunicationMail(
          WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND prepared.correlation_id=${input.clientRequestId}::uuid
           AND prepared.user_id=${auth.userId}::uuid AND prepared.payload->>'intentHash'=${intentHash} AND prepared.payload->>'contentSha256'=${contentSha256}
           AND thread.status IN('pending','failed') AND thread.id=${pending.threadId} FOR UPDATE OF thread`);
-        if(state.length!==1||!state[0].eligible||state[0].used||input.document&&!hasAuthorizationArea(auth,'geld'))return {available:false};
-        if(input.document&&(!input.beforePrepare||!await input.beforePrepare(tx,target.email)))return {available:false};
+        if(state.length!==1||!state[0].eligible||state[0].used||target.email!==currentRecipient)return {available:false};
+        if(input.document?.kind==='INVOICE'){
+          for(const invoice of [input.document,...input.document.bundle??[]].sort((a,b)=>a.id.localeCompare(b.id))){
+            const [current]=await tx.execute<{status:string}>(sql`SELECT status FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid FOR UPDATE`);
+            if(current?.status==='cancelled')return {available:false,canceled:invoice.number};
+          }
+        }
+        if(input.document&&!hasAuthorizationArea(auth,'geld'))return {available:false};
+        if((input.document||input.collectionReminder)&&(!input.beforePrepare||!await input.beforePrepare(tx,target.email)))return {available:false};
         if(!input.confirmedResend)return {available:true};
         const rows=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
           VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_RESEND_CONFIRMED_V1','Versand unklar',${JSON.stringify({threadId:pending.threadId,originalRequestId:input.clientRequestId,intentHash,reason:'nicht_im_postausgang_gefunden'})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp()) RETURNING id`);
@@ -361,7 +377,7 @@ export async function sendCommunicationMail(
         if(changed.length!==1)throw Error('COMMUNICATION_RESEND_STATE_CHANGED');
         return {available:true,id:rows[0].id};
       });
-      if(!confirmation.id)return {code:'CONFLICT',message:COLLECTION_REMINDER_COPY.unclear,...(confirmation.available?{resend:{requestId:input.clientRequestId,label:MAIL_RESEND_COPY.confirm(target.label)}}:{})};
+      if(!confirmation.id)return {code:'CONFLICT',message:confirmation.canceled?MAIL_RESEND_COPY.canceled(confirmation.canceled):COLLECTION_REMINDER_COPY.unclear,...(confirmation.available?{resend:{requestId:input.clientRequestId,label:MAIL_RESEND_COPY.confirm(target.customerName)}}:{})};
       resendConfirmationId=confirmation.id;
     }else sentItemsEvidence=proof.data;
   }
@@ -391,16 +407,18 @@ export async function sendCommunicationMail(
         VALUES (${messageId}, ${auth.tenantId}, ${pending.threadId}, 'outgoing', 'email', ${input.body.trim()}, ${complaintSummary??(input.attachment ? `Anhang: ${input.attachment.filename}` : 'Ohne Anhang')}, ${auth.userId}) RETURNING id
       `);
       if (messages.length !== 1 || messages[0]?.id !== messageId) throw new Error("COMMUNICATION_MESSAGE_INSERT_FAILED");
-      if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,pending.threadId,'sent');
+      const recoveredInvoice=input.document?.kind==='INVOICE';
+      if(input.document&&!recoveredInvoice)await appendCommunicationDocument(tx,auth,input,input.document,pending.threadId,'sent');
       else{
         const bytes=createHash('sha256').update('communication-mail-sent:'+auth.tenantId+':'+input.clientRequestId).digest();
         bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
         const h=bytes.subarray(0,16).toString('hex'),key=`${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
         const sentReceipt=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
-          VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_SENT_V1','E-Mail versendet',${JSON.stringify({threadId:pending.threadId,messageId,customerId:target.customerId,orderId:target.orderId,...(sentItemsEvidence?{sentItemsEvidence}:{}),...(resendConfirmationId?{resendConfirmationId}:{}),contentSha256:createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex')})}::jsonb,'success',${auth.userId},${key}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
+          VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_SENT_V1','E-Mail versendet',${JSON.stringify({threadId:pending.threadId,messageId,customerId:target.customerId,orderId:target.orderId,...(sentItemsEvidence?{sentItemsEvidence}:{}),...(resendConfirmationId?{resendConfirmationId}:{}),...(recoveredInvoice?{documentReconciliation:{originalDocument:input.document},...(!sentItemsEvidence?{graphAcceptedRequestId:input.clientRequestId}:{})}:{}),contentSha256:createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex')})}::jsonb,'success',${auth.userId},${key}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
         if(sentReceipt.length!==1)throw Error('COMMUNICATION_SENT_RECEIPT_NOT_SAVED');
       }
-      if(input.collectionReminder)await appendCollectionReminderSent(tx,auth,input.collectionReminder,pending.threadId,messageId,input.clientRequestId);
+      if(recoveredInvoice){if(!input.reconcileInvoice)throw Error('COMMUNICATION_RECONCILIATION_COMPOSER_MISSING');await input.reconcileInvoice(tx,pending.threadId);}
+      if(input.collectionReminder)await applyCollectionReminderMailEffects(tx,auth,input.collectionReminder,pending.threadId,messageId,input.clientRequestId);
     });
     return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: pending.recovery===true&&!resendConfirmationId } };
   } catch (error) {

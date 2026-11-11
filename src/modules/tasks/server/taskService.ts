@@ -1,3 +1,5 @@
+import {readCanceledInvoiceMailTaskSource,isCanceledInvoiceMailTask,bindCanceledInvoiceMailTask} from '@/lib/server/communicationDocumentPort';
+import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
 import {handedOverProofs} from '@/lib/server/dispatchCallPort';
 import {readClarificationArea} from '@/lib/server/authorization';
 import {GOODS_OUT_FOLLOWUP_COPY} from '@/ui/situationCatalog';
@@ -67,6 +69,7 @@ async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnap
   if(candidates.length>1)throw Error('TASK_CLIENT_KEY_AMBIGUOUS');
   const before=value.taskId?await find(tx,auth,value.taskId,true):candidates[0]?await find(tx,auth,candidates[0].id,true):null;
   if(value.taskId&&!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
+  if(before&&await isCanceledInvoiceMailTask(tx,auth,before.id))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
   if(before&&(before.client_key!==value.clientKey||!replyRestriction&&!allowed(auth,before)))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
   if(!before&&value.version!==0)reject('CONFLICT','Aufgabenstand ist nicht mehr aktuell.');
   if(before&&before.status!=='offen')reject('CONFLICT','Aufgabe ist bereits erledigt.');
@@ -138,6 +141,7 @@ export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransact
 /** Shared completion writer. Invoice tasks remain inaccessible to the normal completion action. */
 async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string},replyEventId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
   const before=await find(tx,auth,value.taskId,true);if(!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
+  if(await isCanceledInvoiceMailTask(tx,auth,before.id))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
   const operationalQuote=quoteOperation&&before.art==='aufgabe'&&before.bezug_typ==='kv'&&before.bezug_id===quoteOperation.quoteId&&quoteOperation.keys.includes(before.client_key);
   const operationalStorage=storageOperation&&hasAuthorizationArea(auth,'auftraege')&&before.art==='aufgabe'&&before.bezug_typ==='auftrag'&&before.bezug_id===storageOperation.orderId&&before.client_key===storageOperation.clientKey;
   const operationalReply=replyEventId&&hasAuthorizationArea(auth,'auftraege')&&['aufgabe','rueckruf'].includes(before.art)&&before.bezug_typ==='auftrag'&&await collectionTaskHasReplySource(tx,auth,before.id,replyEventId);
@@ -231,7 +235,7 @@ export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
   const currentOrder=task?.bezug_typ==='auftrag'?await readCollectionTaskCurrentOrder(tx,auth,task.id):null;
   const reference=await context(tx,auth,task?{type:task.bezug_typ,id:currentOrder??task.bezug_id}:(request as Exclude<TaskOpenRequest,{taskId:string}>).reference,!task);
   // Aufgaben sind je Mandant für jeden Login lesbar; Bezug und Schreibknöpfe prüfen ihre eigenen Rechte.
-  const canEdit=task?task.status==='offen'&&allowed(auth,task):true;
+  const canEdit=task?task.status==='offen'&&allowed(auth,task)&&!await isCanceledInvoiceMailTask(tx,auth,task.id):true;
   return {code:'OK',task,reference,currentLogin:auth.userId,canEdit,canComplete:!!task&&canEdit&&task.art!=='rechnung',canOpenReference:reference.type==='allgemein'||reference.label!==null};
  });}catch(error){return resultError(error);}
 }
@@ -280,4 +284,20 @@ export async function createGoodsOutClarificationTask(tx:PrivilegedTenantTransac
  const title=GOODS_OUT_FOLLOWUP_COPY.incomplete(reference.label);
  const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:input.orderId},note:title};
  return (await persistTask(tx,auth,value,deps)).task.id;
+}
+
+/** PL00:40: source-bound money task; same persistTask writer, no system actor. */
+export async function createCanceledInvoiceMailTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{threadId:string;invoiceId:string},deps:Dependencies){
+ const source=await readCanceledInvoiceMailTaskSource(tx,auth,input);if(!source)reject('FORBIDDEN','Versandbeleg fehlt.');
+ const key=eventKey(source.invoice_id,0,'cancelled-invoice-arrived');
+ await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${key},0))`);
+ const prior=await tx.execute<{id:string;bezug_id:string;fuer_bereich:string}>(sql`SELECT id::text,bezug_id,fuer_bereich FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid FOR UPDATE`);
+ if(prior.length){if(prior.length!==1||prior[0].bezug_id!==source.order_id||prior[0].fuer_bereich!=='geld'||!await isCanceledInvoiceMailTask(tx,auth,prior[0].id))reject('CONFLICT','Aufgabenkennung gehört zu einem anderen Vorgang.');return prior[0].id;}
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ const title=MAIL_RESEND_COPY.canceledTask(source.invoice_number,source.customer_name);
+ // Full source text is retained, even beyond the ordinary editable title limit.
+ // TODO_PL: cancellation mail is not a supported attachment kind yet; no fake sender/button.
+ const saved=await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'geld',reference:{type:'auftrag',id:source.order_id},note:title},deps,false);
+ await bindCanceledInvoiceMailTask(tx,auth,{...input,taskId:saved.task.id,clientEventId:eventKey(source.invoice_id,0,'cancelled-invoice-task-source')});
+ return saved.task.id;
 }

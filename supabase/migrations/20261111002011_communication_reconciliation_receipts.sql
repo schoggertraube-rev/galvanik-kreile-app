@@ -1,0 +1,12 @@
+-- PL00:40: one actor-bound reconciliation outcome and one money task per invoice.
+CREATE UNIQUE INDEX communication_document_one_reconciliation ON public.events(tenant_id,(payload->>'threadId'))
+ WHERE event_type='COMMUNICATION_DOCUMENT_EFFECTS_APPLIED_V1';
+CREATE UNIQUE INDEX communication_invoice_one_conflict_task ON public.events(tenant_id,(payload->>'invoiceId'))
+ WHERE event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1';
+CREATE TRIGGER communication_reconciliation_update_immutable BEFORE UPDATE ON public.events FOR EACH ROW
+ WHEN(OLD.event_type IN ('COMMUNICATION_MAIL_SENT_V1','COMMUNICATION_DOCUMENT_EFFECTS_APPLIED_V1','COMMUNICATION_INVOICE_TASK_CREATED_V1','COMMUNICATION_DOCUMENT_EFFECT_RETRY_REQUIRED_V1')
+ OR NEW.event_type IN ('COMMUNICATION_MAIL_SENT_V1','COMMUNICATION_DOCUMENT_EFFECTS_APPLIED_V1','COMMUNICATION_INVOICE_TASK_CREATED_V1','COMMUNICATION_DOCUMENT_EFFECT_RETRY_REQUIRED_V1'))
+ EXECUTE FUNCTION public.prevent_audit_mutation();
+CREATE TRIGGER communication_reconciliation_delete_immutable BEFORE DELETE ON public.events FOR EACH ROW
+ WHEN(OLD.event_type IN ('COMMUNICATION_MAIL_SENT_V1','COMMUNICATION_DOCUMENT_EFFECTS_APPLIED_V1','COMMUNICATION_INVOICE_TASK_CREATED_V1','COMMUNICATION_DOCUMENT_EFFECT_RETRY_REQUIRED_V1'))
+ EXECUTE FUNCTION public.prevent_audit_mutation();

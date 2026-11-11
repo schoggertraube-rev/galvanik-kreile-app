@@ -79,3 +79,39 @@ it('failed E1 does not advance and a second key cannot duplicate an uncertain ou
  expect(await withSession(full,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}))).toMatchObject({code:'CONFLICT'});expect(attempts).toBe(2);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->'meta'->>'customerId'=${order.customerId}`).toEqual([{n:0}]);
 });
+
+it.each([false,true])('S02 reminder reconciles its original from Sent Items without a second send (followFailure=%s)',async(followFailure)=>{
+ const order=await readyInvoiceOrder('N5-Erinnerung');
+ const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+ let sends=0,lose=false,requestId='';
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-reminder-N5-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;if(lose)throw Error('TEST reminder accepted, response lost');return new Response(null,{status:202});}
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:[{id:'TEST-reminder-original',internetMessageId:'<TEST-reminder-original@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:requestId}]}]});
+  return nativeFetch(request,init);
+ });
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Original',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ expect(await configure()).toMatchObject({code:'OK'});
+ const plan=await proposal(order.orderId);if(!plan.due)throw Error('N5_REMINDER_DUE');
+ requestId=randomUUID();
+ const input={targetType:'CUSTOMER' as const,targetId:order.customerId,clientRequestId:requestId,subject:'TEST Erinnerung',body:'TEST gleicher Freigabe-Intent',collectionReminder:{stage:'E1' as const,handover:'pickup' as const,dueDate:plan.due}};
+ lose=true;
+ expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'UNAVAILABLE'});
+ const failure='test_reminder_follow_'+randomUUID().replaceAll('-','');
+ if(followFailure){
+  await sql.unsafe(`CREATE FUNCTION private.${failure}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='ORDER_COLLECTION_REMINDER_SENT_V1' THEN RAISE EXCEPTION 'TEST reminder bookkeeping unavailable'; END IF; RETURN NEW; END $$`);
+  await sql.unsafe(`CREATE TRIGGER ${failure} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${failure}()`);
+ }
+ try{
+  expect(await withSession(full,()=>sendCustomerMailAction({...structuredClone(input),clientRequestId:randomUUID()}))).toMatchObject({code:'OK',data:{replayed:true}});
+  if(followFailure){
+   expect(await sql`SELECT status FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND source=${'MS_GRAPH_OUT:'+requestId}`).toEqual([{status:'sent'}]);
+   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_COLLECTION_EFFECT_RETRY_REQUIRED_V1' AND correlation_id=${requestId}::uuid`).toHaveLength(1);
+  }
+ }finally{if(followFailure){await sql.unsafe(`DROP TRIGGER ${failure} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${failure}()`);}}
+ expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'OK',data:{replayed:true}});
+ expect(sends).toBe(2);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${requestId}::uuid`).toHaveLength(1);
+ expect(await proposal(order.orderId)).toMatchObject({stage:'E2',state:'DUE'});
+},120000);

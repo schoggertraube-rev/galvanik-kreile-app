@@ -3,7 +3,7 @@ import {qualifyStorageOrigin,storageOriginIsCurrent,type StorageOrigin} from './
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
-import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
+import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from './privilegedDb';
 import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
 import {readPostalCollectionHistory} from './storagePostalPort';
@@ -17,15 +17,24 @@ const hash=(body:string)=>createHash('sha256').update(body.trim()).digest('hex')
 export async function readCollectionReminderReceipt(auth:AuthorizationSnapshot,input:CollectionReminderRequest){
  if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const rows=await tx.execute<{payload:{meta:CollectionReminderMeta;threadId:string;bodySha256:string};user_id:string;status:string;message_id:string|null;sent_body:string|null;sent_subject:string;recorded_at:string;sent_intent:string|null;proof_ok:boolean}>(sql`SELECT prepared.payload,prepared.user_id::text,thread.status,message.id::text AS message_id,message.body AS sent_body,thread.subject AS sent_subject,thread.created_at::text AS recorded_at,sent.payload->>'intent' AS sent_intent,
+  const rows=await tx.execute<{payload:{meta:CollectionReminderMeta;threadId:string;bodySha256:string};user_id:string;status:string;message_id:string|null;sent_body:string|null;sent_subject:string;recorded_at:string;sent_intent:string|null;proof_ok:boolean;request_id:string}>(sql`SELECT prepared.correlation_id::text AS request_id,prepared.payload,prepared.user_id::text,thread.status,message.id::text AS message_id,message.body AS sent_body,thread.subject AS sent_subject,thread.created_at::text AS recorded_at,sent.payload->>'intent' AS sent_intent,
    (thread.created_by=prepared.user_id AND sent.user_id=prepared.user_id AND sent.correlation_id=prepared.correlation_id AND sent.payload->>'messageId'=message.id::text AND sent.payload->'meta'=prepared.payload->'meta') AS proof_ok
-   FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId' AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId} AND thread.order_id IS NULL
+   FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId' AND (thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId} OR thread.status IN('pending','failed') AND prepared.payload->'meta'->>'intent'=${collectionReminderIntent(input)}) AND thread.order_id IS NULL AND thread.customer_id=${input.targetId}
    LEFT JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email'
    LEFT JOIN public.events sent ON sent.tenant_id=thread.tenant_id AND sent.event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND sent.payload->>'threadId'=thread.id::text
-   WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND prepared.correlation_id=${input.clientRequestId}::uuid`);
+   WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND (prepared.correlation_id=${input.clientRequestId}::uuid OR thread.status IN('pending','failed') AND prepared.user_id=${auth.userId}::uuid AND prepared.payload->'meta'->>'intent'=${collectionReminderIntent(input)}) LIMIT 2`);
   if(!rows.length)return {code:'NOT_FOUND' as const};
   const row=rows[0];if(rows.length!==1||row.user_id!==auth.userId||row.payload.meta.intent!==collectionReminderIntent(input))return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.keyConflict};
-  if(row.status!=='sent')return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
+  const original=row.payload.meta.customerMessage;
+  if(row.status!=='sent'){
+   if(!original||hash(original.body)!==row.payload.bodySha256||original.subject!==row.sent_subject)throw Error('COLLECTION_REMINDER_ORIGINAL_INVALID');
+   return {code:'PENDING' as const,meta:row.payload.meta,originalRequestId:row.request_id,original};
+  }
+  if(!row.sent_intent){
+   const main=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND user_id=${auth.userId}::uuid AND correlation_id=${row.request_id}::uuid AND payload->>'threadId'=${row.payload.threadId} AND payload->>'messageId'=${row.message_id}`);
+   if(main.length!==1||!row.message_id||hash(row.sent_body??'')!==row.payload.bodySha256||row.sent_subject!==original?.subject)throw Error('COLLECTION_REMINDER_MAIN_PROOF_INVALID');
+   return {code:'FOLLOWUP_PENDING' as const,meta:row.payload.meta,originalRequestId:row.request_id,data:{threadId:row.payload.threadId,messageId:row.message_id,customerId:input.targetId,orderId:null,recordedAt:new Date(row.recorded_at).toISOString(),replayed:true}};
+  }
   if(row.proof_ok!==true||!row.message_id||!row.sent_body||hash(row.sent_body)!==row.payload.bodySha256||row.sent_subject!==(row.payload.meta.customerMessage?.subject??input.subject.trim())||row.sent_intent!==row.payload.meta.intent)throw Error('COLLECTION_REMINDER_RECEIPT_INVALID');
   return {code:'OK' as const,data:{threadId:row.payload.threadId,messageId:row.message_id,customerId:input.targetId,orderId:null,recordedAt:new Date(row.recorded_at).toISOString(),replayed:true}};
  });}catch(error){console.error('[COLLECTION_REMINDER_RECEIPT_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
@@ -36,6 +45,12 @@ export async function prepareCollectionReminder(tx:PrivilegedTenantTransaction,a
  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':collection:'+meta.stageKey},0))`);
  const prior=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${meta.stageKey}::uuid`);
  if(prior.length)throw Error('COLLECTION_REMINDER_ALREADY_PREPARED');
+ await assertCollectionReminderCurrent(tx,auth,meta);
+ await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at)
+ VALUES(${randomUUID()},${auth.tenantId},'ORDER_COLLECTION_REMINDER_PREPARED_V1','Sammelerinnerung ausdrücklich freigegeben','success',${auth.userId}::uuid,${meta.stageKey}::uuid,${input.clientRequestId}::uuid,1,${JSON.stringify({meta,threadId:input.threadId,bodySha256:hash(input.body)})}::jsonb,statement_timestamp())`);
+}
+
+export async function assertCollectionReminderCurrent(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,meta:CollectionReminderMeta){
   const orders=await tx.execute<{id:string;order_number:string;version:number;customer_id:string;handover_mode:string;station:string;current_station:string;current_station_id:string;status:string}>(sql`SELECT id,order_number,version,customer_id,handover_mode,station,current_station,current_station_id,status FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(meta.orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) ORDER BY id FOR UPDATE`);
  if(orders.length!==meta.orders.length||orders.some(order=>order.customer_id!==meta.customerId||order.handover_mode!==meta.handover||[order.station,order.current_station,order.current_station_id,order.status].some(state=>state!=='fertig')||order.version!==meta.orders.find(member=>member.id===order.id)?.version||order.order_number!==meta.orders.find(member=>member.id===order.id)?.number))throw Error('COLLECTION_REMINDER_COHORT_CHANGED');
  if(meta.stage==='E4'){
@@ -43,17 +58,19 @@ export async function prepareCollectionReminder(tx:PrivilegedTenantTransaction,a
   const current=await tx.execute<{order_id:string;freeze_id:string}>(sql`SELECT order_id,freeze_id::text FROM private.v_order_freeze_state_v1 WHERE tenant_id=${auth.tenantId} AND order_id=ANY(ARRAY[${sql.join(meta.orders.map(order=>sql`${order.id}`),sql`, `)}]::text[]) AND active AND integrity_ok`);
   if(current.length!==meta.orders.length||current.some(row=>!meta.storageOrigin!.freezes.some(proof=>proof.orderId===row.order_id&&proof.freezeId===row.freeze_id)))throw Error('STORAGE_LETTER_CYCLE_CHANGED');
  }
- await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at)
- VALUES(${randomUUID()},${auth.tenantId},'ORDER_COLLECTION_REMINDER_PREPARED_V1','Sammelerinnerung ausdrücklich freigegeben','success',${auth.userId}::uuid,${meta.stageKey}::uuid,${input.clientRequestId}::uuid,1,${JSON.stringify({meta,threadId:input.threadId,bodySha256:hash(input.body)})}::jsonb,statement_timestamp())`);
 }
 
 export async function appendCollectionReminderSent(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,meta:CollectionReminderMeta,threadId:string,messageId:string,requestId:string){
  const prepared=await tx.execute(sql`SELECT event.id FROM public.events event JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id=${threadId}::uuid AND thread.status='sent' AND thread.customer_id=${meta.customerId}
   JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.id=${messageId}::uuid AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email'
-  WHERE event.tenant_id=${auth.tenantId} AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.client_event_id=${meta.stageKey}::uuid AND event.user_id=${auth.userId}::uuid AND event.payload->>'threadId'=thread.id::text AND event.payload->'meta'->>'intent'=${meta.intent} AND event.payload->>'bodySha256'=encode(sha256(convert_to(message.body,'UTF8')),'hex')`);
+  WHERE event.tenant_id=${auth.tenantId} AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.status='success' AND event.event_schema_version=1
+   AND event.client_event_id=${meta.stageKey}::uuid AND event.correlation_id=${requestId}::uuid AND thread.source='MS_GRAPH_OUT:'||event.correlation_id::text
+   AND event.user_id=${auth.userId}::uuid AND event.payload->>'threadId'=thread.id::text AND event.payload->'meta'=${JSON.stringify(meta)}::jsonb
+   AND event.payload->>'bodySha256'=encode(sha256(convert_to(message.body,'UTF8')),'hex')`);
  if(prepared.length!==1)throw Error('COLLECTION_REMINDER_SENT_PROOF_INVALID');
- await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at)
- VALUES(${randomUUID()},${auth.tenantId},'ORDER_COLLECTION_REMINDER_SENT_V1','Sammelerinnerung an Microsoft 365 übergeben','success',${auth.userId}::uuid,${randomUUID()}::uuid,${requestId}::uuid,1,${JSON.stringify({threadId,messageId,intent:meta.intent,meta})}::jsonb,statement_timestamp())`);
+ const recorded=await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,payload,created_at)
+ VALUES(${randomUUID()},${auth.tenantId},'ORDER_COLLECTION_REMINDER_SENT_V1','Sammelerinnerung an Microsoft 365 übergeben','success',${auth.userId}::uuid,${randomUUID()}::uuid,${requestId}::uuid,1,${JSON.stringify({threadId,messageId,intent:meta.intent,meta})}::jsonb,statement_timestamp()) RETURNING id`);
+ if(recorded.length!==1)throw Error('COLLECTION_REMINDER_SENT_RECEIPT_MISSING');
 }
 
 export async function readCollectionReminderHistory(auth:AuthorizationSnapshot,customerId:string,handover:'pickup'|'shipping',orderIds:readonly string[]):Promise<CollectionReminderHistoryEntry[]>{
@@ -73,4 +90,17 @@ export async function readCollectionReminderHistory(auth:AuthorizationSnapshot,c
   const failures=await readCommunicationDeliveryFailures(tx,auth,relevant.map(row=>row.payload.threadId));
   return [...relevant.map(row=>({stage:row.payload.meta.stage,stageKey:row.payload.meta.stageKey,dueDate:row.payload.meta.dueDate,storageDeadline:row.payload.meta.storageDeadline,storageOrigin:row.payload.meta.storageOrigin,sentAt:row.sent_at?new Date(row.sent_at).toISOString():null,threadId:row.payload.threadId,orderIds:row.payload.meta.orders.map(member=>member.id),deliveryFailedAt:failures.find(proof=>proof.threadId===row.payload.threadId)?.recordedAt??null})),...await readPostalCollectionHistory(tx,auth,customerId,handover,orderIds)];
  });
+}
+
+/** Native savepoints preserve the actual outgoing mail when reminder bookkeeping fails. */
+export async function applyCollectionReminderMailEffects(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,meta:CollectionReminderMeta,threadId:string,messageId:string,requestId:string){
+ try{await withTenantSavepoint(tx,async nested=>{
+  const prior=await nested.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${requestId}::uuid AND payload->>'threadId'=${threadId} AND payload->>'messageId'=${messageId} AND payload->'meta'=${JSON.stringify(meta)}::jsonb`);
+  if(prior.length===1)return;if(prior.length)throw Error('COLLECTION_REMINDER_EFFECT_AMBIGUOUS');
+  await appendCollectionReminderSent(nested,auth,meta,threadId,messageId,requestId);
+ });}catch(error){
+  console.error('[COLLECTION_REMINDER_FOLLOWUP_REQUIRED]',{name:error instanceof Error?error.name:'UnknownError'});
+  try{await withTenantSavepoint(tx,async nested=>{await nested.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version) VALUES(${randomUUID()},${auth.tenantId},'COMMUNICATION_COLLECTION_EFFECT_RETRY_REQUIRED_V1','COMMUNICATION_COLLECTION_EFFECT_RETRY_REQUIRED_V1',${JSON.stringify({threadId,messageId})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,${requestId}::uuid,1)`);});}
+  catch(marker){console.error('[COLLECTION_REMINDER_MARKER_FAILED]',{name:marker instanceof Error?marker.name:'UnknownError'});}
+ }
 }
