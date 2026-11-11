@@ -15,14 +15,14 @@ it('reads current unsent invoice originals from the customer port and never disc
  const customerId=await customerFixture('V45 offene Originale'),auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_AUTH');
  expect(await readCustomerSummary(auth.data,{customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
  const order=await readyInvoiceOrder('V45 Rechnung', 'pickup',false,customerId);
- const read=await readCustomerSummary(auth.data,{customerId});expect(read).toMatchObject({code:'OK',data:{invoiceUnsentCount:1}});
- expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{invoiceUnsentCount:1}});
+ const read=await readCustomerSummary(auth.data,{customerId});expect(read).toMatchObject({code:'OK',data:{invoiceUnsentCount:1,nextActionRule:{code:'OK',ruleId:'kunde.rechnung',source:{kind:'customer',id:customerId}}}});
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{invoiceUnsentCount:1,nextActionRule:{code:'OK',ruleId:'kunde.rechnung',source:{kind:'customer',id:customerId}}}});
  // The metrics port legitimately advances asOf on every read. The persisted
  // invoice evidence/count, not that read timestamp, must stay the same.
  expect(await readCustomerSummary(auth.data,{customerId})).toMatchObject({code:'OK',data:{id:customerId,invoiceUnsentCount:1}});
  const otherId=await customerFixture('V45 anderer Kunde');expect(await readCustomerSummary(auth.data,{customerId:otherId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
  const restricted=await createFixture(['kunden'],'werkstatt'),noMoney=await withSession(restricted,()=>resolveAuthorization());if(!noMoney.ok)throw Error('TEST_NO_MONEY_AUTH');
- const hidden=await readCustomerSummary(noMoney.data,{customerId});expect(hidden.code).toBe('OK');if(hidden.code!=='OK')throw Error('TEST_CUSTOMER_READ');expect(hidden.data).not.toHaveProperty('invoiceUnsentCount');
+ const hidden=await readCustomerSummary(noMoney.data,{customerId});expect(hidden.code).toBe('OK');if(hidden.code!=='OK')throw Error('TEST_CUSTOMER_READ');expect(hidden.data).not.toHaveProperty('invoiceUnsentCount');expect(hidden.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',source:{kind:'customer',id:customerId}});
  const publicHidden=await withSession(restricted,()=>getCustomerSummaryAction({customerId}));expect(publicHidden.code).toBe('OK');if(publicHidden.code!=='OK')throw Error('TEST_CUSTOMER_ACTION_READ');expect(publicHidden.data).not.toHaveProperty('invoiceUnsentCount');
  const cancel={invoiceId:order.invoice.invoiceId,expectedVersion:1,clientEventId:randomUUID(),reason:'TEST nicht mehr zu versenden'};
  expect(await withSession(full,()=>cancelInvoiceAction(cancel))).toMatchObject({code:'OK'});
@@ -33,7 +33,7 @@ it('reads current unsent invoice originals from the customer port and never disc
 
 it('uses the actual document dispatch proof after sending, including a fresh retry',async()=>{
  const order=await readyInvoiceOrder('V45 Versandbeleg'),auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_AUTH');
- expect(await readCustomerSummary(auth.data,{customerId:order.customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:1}});
+ expect(await readCustomerSummary(auth.data,{customerId:order.customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:1,nextActionRule:{code:'OK',ruleId:'kunde.rechnung',source:{kind:'customer',id:order.customerId}}}});
  let sends=0;
  const provider=vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
   const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
@@ -47,5 +47,6 @@ it('uses the actual document dispatch proof after sending, including a fresh ret
   expect(await readCustomerSummary(auth.data,{customerId:order.customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
   expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
   expect(await readCustomerSummary(auth.data,{customerId:order.customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});expect(sends).toBe(1);
+  const reread=await readCustomerSummary(auth.data,{customerId:order.customerId});expect(reread).toMatchObject({code:'OK',data:{nextActionRule:{code:'SOURCE_INCOMPLETE'}}});
  }finally{provider.mockRestore();}
 },60000);

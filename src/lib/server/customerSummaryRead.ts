@@ -75,6 +75,7 @@ export type CustomerSummaryOrder = {
 };
 
 export type CustomerSummary = CustomerStoredProfile & {
+  nextActionRule?:ReturnType<typeof import("./v45CustomerRead").readV45CustomerRule>;
   kennzahlen?:CustomerKennzahlen;
   hints?:CustomerHint[];
   id: string;
@@ -478,6 +479,7 @@ export async function readCustomerSummary(
     return { code: "FORBIDDEN", message: "Kundenkarte ist nicht erlaubt." };
   }
   try {
+    const {readV45CustomerRule}=await import("./v45CustomerRead");
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<SummaryRow>(sql`
         SELECT summary.*,
@@ -511,6 +513,7 @@ export async function readCustomerSummary(
         if(!pending||!Number.isSafeInteger(pending.count)||pending.count<0)throw Error('CUSTOMER_UNSENT_INVOICE_COUNT_INVALID');
         summary.invoiceUnsentCount=pending.count;
        }
+       summary.nextActionRule=readV45CustomerRule(authorization,summary);
        return summary;
     });
     if(data){const signals=await readCustomerListSignals(authorization,[input.customerId]);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;}
