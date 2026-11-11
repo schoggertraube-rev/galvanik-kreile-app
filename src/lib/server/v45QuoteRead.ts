@@ -5,6 +5,9 @@ import type {AuthorizationSnapshot} from './authorization';
 import {readAuthorizedV45Rule} from './v45RuleRead';
 import {readV45FirstLook} from './v45FirstLookRead';
 import {quoteCommandContext} from './quoteAuthorization';
+import {readV45QuoteCommand} from './v45QuoteCommandRead';
+import {readV45ActionValues} from './v45ActionValuesRead';
+import {V45_SOURCE_HASHES} from '@/ui/v45.generated';
 
 /** V45 quoteFacts, projected from the existing validated quote read port.
  * Historical editions never stand in for the current promise. Missing lifecycle
@@ -27,7 +30,7 @@ export function v45QuoteFacts(quote:Pick<QuoteReadback,'linkedOrderId'|'validUnt
  * from the existing quote action. Only whitelisted display values escape;
  * financial fields use the same canonical quote capability as that action.
  * First-look order comes from V45 metadata, values from this same readback.
- * Command bindings and the full U2 presentation are still separate pending work.
+ * Commands remain the existing action boundaries; this reader never calls them.
  */
 export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback){
  const source={kind:'quote' as const,id:quote.quoteId,version:quote.version,edition:quote.lifecycle?.edition??null};
@@ -42,5 +45,15 @@ export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback)
  };
  if(financial)values['kv.kalkulation']={nettoCents:quote.totalNetCents};
  const first=readV45FirstLook('kv',values,financial?[]:['kv.kalkulation']);if(first.code!=='OK')return {...first,source};
- return {...rule,erstblick:first.erstblick,quelle:{...rule.quelle,elementeSha256:first.quelle.sha256},source};
+ let hauptaktion:null|{elementId:string;textKey:string;werte:Record<string,string|number>;befehl:NonNullable<ReturnType<typeof readV45QuoteCommand>>;recht:string|null}=null;
+ if(rule.hauptaktion!==null){
+  if(!('textKey' in rule)||typeof rule.textKey!=='string'||!('recht' in rule)||rule.recht!==null&&typeof rule.recht!=='string')return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_METADATA'],source};
+  const befehl=readV45QuoteCommand(rule.hauptaktion);if(!befehl)return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_COMMAND'],source};
+  // V45 kern.js/mainVars: current edition and first actual stored goods location.
+  // Missing location stays absent; there is no empty preview fallback.
+  const parameters=readV45ActionValues(rule.textKey,{number:quote.quoteNumber,name:quote.customerDisplayName,edition:quote.lifecycle.edition,...(quote.lifecycle.goods?.[0]?{location:quote.lifecycle.goods[0].location}:{})});
+  if(parameters.code!=='OK')return {...parameters,source};
+  hauptaktion={elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,befehl,recht:rule.recht};
+ }
+ return {code:'OK' as const,ruleId:rule.ruleId,zustand:rule.zustand,farbe:rule.farbe,aktionsfarbe:rule.aktionsfarbe,erstblick:first.erstblick,hauptaktion,gesperrt:rule.gesperrt,quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,texteSha256:V45_SOURCE_HASHES['texte.json']},source};
 }
