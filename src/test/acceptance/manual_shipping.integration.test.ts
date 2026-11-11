@@ -79,10 +79,11 @@ it('reads the physical pickup first look from the same real card without money o
  const login=await createFixture(['auftraege'],'werkstatt');
  const count=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const read=await withSession(login,()=>getLiveOrderCardAction({orderId:order.orderId}));
- expect(read).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK',zustand:'closed',hauptaktion:null}}});
+ expect(read).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK',zustand:'closed',hauptaktion:null,weitere:[],gesperrt:[]}}});
  if(read.code!=='OK'||read.data.nextActionRule?.code!=='OK')throw Error('TEST_PICKUP_FIRST_LOOK');
  expect(read.data.nextActionRule.erstblick.map(row=>row.key)).toEqual(['auftrag.lage','auftrag.termin','auftrag.teile','auftrag.hauptaktion']);
  expect(read.data.nextActionRule.source.version).toBe(read.data.card.version);
+ expect(read.data.nextActionRule.quelle.erwartungSha256).toMatch(/^[a-f0-9]{64}$/);
  expect(JSON.stringify(read.data.nextActionRule)).not.toMatch(/netto|Cents|unitPrice|vatRate/);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(count);
 });

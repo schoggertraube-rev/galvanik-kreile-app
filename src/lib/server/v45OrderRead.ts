@@ -4,6 +4,7 @@ import type {AuthorizationSnapshot} from './authorization';
 import type {readOrderInformed} from './orderReleaseRead';
 import {readAuthorizedV45Rule} from './v45RuleRead';
 import {readV45FirstLook} from './v45FirstLookRead';
+import {readV45ObjectActionAbsence} from './v45ObjectActionsRead';
 
 /** Facts exposed by the existing versioned card. Missing shipment, financial
  * and approval evidence deliberately stays unknown, never a false calm state.
@@ -42,5 +43,6 @@ export function readV45OrderRule(auth:AuthorizationSnapshot,card:Pick<LiveOrderC
  },[],rule.zustand);
  // A state requiring an as-yet unbound blocker stays incomplete, never calm.
  if(first.code!=='OK')return {...first,source};
- return {...rule,erstblick:first.erstblick,quelle:{...rule.quelle,elementeSha256:first.quelle.sha256},source};
+ const actions=readV45ObjectActionAbsence('auftrag',rule.zustand);if(actions.code!=='OK')return {...actions,source};
+ return {...rule,erstblick:first.erstblick,weitere:actions.weitere,quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,erwartungSha256:actions.quelle.sha256},source};
 }
