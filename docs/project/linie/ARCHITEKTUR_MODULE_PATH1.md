@@ -1,3 +1,4 @@
+HISTORISCH – ersetzt durch _review/PLAN_LIVEGANG.md Abschnitt 2 und 3 (Modulkarte, Bauweise), kein Bauauftrag.
 # KREILE — ARCHITEKTUR „PATH 1": Modulbauweise (verbindliche Bauanleitung)
 
 Status: Architekturautorität gemäß D-GOV-001; Path 1 ist durch D-ARCH-008/009 ratifiziert. Diese Datei bestimmt ausschließlich das WIE. Scope steht in `MODULKARTE_KANON.md`, aktive Ausführung ausschließlich in der Mission und Lieferstand ausschließlich in `CURRENT_STATE.md`. Ein Konflikt innerhalb der Architekturwahrheit ist `BLOCKED_GOVERNANCE_CONFLICT`.

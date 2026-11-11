@@ -1,3 +1,4 @@
+HISTORISCH – ersetzt durch V45 (_review/quellen/endversion_V45/, BAUREGELN S), kein Bauauftrag.
 # Kreile — einzige geschichtete UI-Wahrheit
 
 Stand: 2026-10-11, D-UI-DS-001.

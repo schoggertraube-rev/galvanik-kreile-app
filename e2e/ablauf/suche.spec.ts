@@ -60,7 +60,9 @@ it('S17 stored part instructions are searchable with their original evidence',as
 });
 
 it('search preserves proven order hits when a separate customer source cannot read an isolated legacy row',async()=>{
- const needle='49'+Date.now().toString();
+ // Keep the intentional corrupt phone local to this probe: later 040/000000
+ // searches must not randomly match zero-bearing clock digits in its fixture.
+ const needle='49'+randomUUID().replace(/[^1-9]/g,'');
  const customerId=await customerFixture('PARTIAL');
  const order=await searchOrderFixture(needle,customerId);
  // Explicit malformed historical TEST data, not a DB/auth mock or production mutation.

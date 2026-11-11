@@ -241,8 +241,6 @@ const TA_B2K2_REQUIRED_FILES = Object.freeze([
   ".github/workflows/agentur-gate.yml",
   ".github/workflows/quality.yml",
   ".github/workflows/eslint-ratchet.yml",
-  "_review/AKTUELLE_ANWEISUNG.md",
-  "_review/OWNER_ENTSCHEIDUNGEN.md",
   "docs/project/arbeitspakete/AP-EIN-eingang-komplett/PAKET.md",
   "docs/project/arbeitspakete/AP-ABS-absprachen/PAKET.md",
   "docs/project/arbeitspakete/TRUST_ANCHOR_B2F.md",
@@ -379,8 +377,6 @@ const TA_B2D2_ANCHOR_ALLOWLIST = Object.freeze([
 ]);
 const TA_B2D2_REQUIRED_FILES = Object.freeze([
   ".github/workflows/agentur-gate.yml",
-  "_review/AKTUELLE_ANWEISUNG.md",
-  "_review/OWNER_ENTSCHEIDUNGEN.md",
   "docs/project/arbeitspakete/AP-G-testmodell/PAKET.md",
   "docs/project/arbeitspakete/AP-R-neu-erfassen/PAKET.md",
   "docs/project/arbeitspakete/BEFUNDE.md",
@@ -432,8 +428,6 @@ const TA_B2F_REQUIRED_FILES = Object.freeze([
   "quality/eslint-baseline.json",
   ".gitattributes",
   ".github/workflows/eslint-ratchet.yml",
-  "_review/AKTUELLE_ANWEISUNG.md",
-  "_review/OWNER_ENTSCHEIDUNGEN.md",
   "docs/project/arbeitspakete/AP-EIN-eingang-komplett/PAKET.md",
   "docs/project/arbeitspakete/TRUST_ANCHOR_B2F.md",
   "docs/project/arbeitspakete/WORKQUEUE.json",
@@ -1596,13 +1590,29 @@ export function checkGovernanceRestartScopeForTest({ entries, branch, baseSha })
   return errors;
 }
 
-export function checkB3ScopeForTest({ entries }) {
-  const errors = [];
-  for (const { path: rel, status } of entries) {
-    if (rel.startsWith("supabase/migrations/") && status !== "A") errors.push(`B3_EXISTING_MIGRATION_IMMUTABLE:${rel}`);
-    if (rel.startsWith("_review/") || rel.startsWith("docs/project/")) errors.push(`B3_BOUND_SOURCE_PROTECTED:${rel}`);
-  }
-  return errors;
+const S01C_HEADERS=Object.freeze({"docs/project/DOCUMENT_AUTHORITY.md": "HISTORISCH – ersetzt durch AGENTS.md und _review/PLAN_LIVEGANG.md, kein Bauauftrag.", "docs/project/MASTERPLAN.md": "HISTORISCH – ersetzt durch AGENTS.md und _review/PLAN_LIVEGANG.md, kein Bauauftrag.", "docs/project/CURRENT_STATE.md": "HISTORISCH – ersetzt durch AGENTS.md und _review/PLAN_LIVEGANG.md, kein Bauauftrag.", "docs/project/linie/00_ABC_INDEX.md": "HISTORISCH – ersetzt durch AGENTS.md, kein Bauauftrag.", "docs/project/linie/00_BIBEL_INDEX.md": "HISTORISCH – ersetzt durch AGENTS.md, kein Bauauftrag.", "docs/project/linie/00_JETZT_UND_LEITPLANKEN.md": "HISTORISCH – ersetzt durch AGENTS.md, kein Bauauftrag.", "docs/project/linie/00_UI_REFERENZEN_PFADE.md": "HISTORISCH – ersetzt durch V45 (_review/quellen/endversion_V45/, BAUREGELN S), kein Bauauftrag.", "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md": "HISTORISCH – ersetzt durch _review/OWNER_ENTSCHEIDUNGEN.md, kein Bauauftrag.", "docs/project/linie/MODULKARTE_KANON.md": "HISTORISCH – ersetzt durch _review/PLAN_LIVEGANG.md Abschnitt 2 und 3 (Modulkarte, Bauweise), kein Bauauftrag.", "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md": "HISTORISCH – ersetzt durch _review/PLAN_LIVEGANG.md Abschnitt 2 und 3 (Modulkarte, Bauweise), kein Bauauftrag.", "docs/project/endversion/ui/LIESMICH.md": "HISTORISCH – ersetzt durch V45 (_review/quellen/endversion_V45/, ab S14 docs/project/endversion/v45/), kein Bauauftrag."});
+const S01C_SIDECARS=Object.freeze({"docs/project/arbeitspakete/HISTORISCH.md": "WORKQUEUE.json, README.md, alle PAKET.md: HISTORISCH – ersetzt durch _review/PLAN_LIVEGANG.md, kein Bauauftrag.\n", "docs/project/endversion/codex/HISTORISCH.md": "BAUPLAN.json, BAUPLAN.next.json: HISTORISCH – ersetzt durch _review/PLAN_LIVEGANG.md und V45, kein Bauauftrag (nur Fall-IDs, die AP-ABLAUF-PRUEFUNG zitiert).\n", "docs/project/endversion/ui/HISTORISCH.md": "*.json: HISTORISCH – ersetzt durch V45, nur Prüfgrundlage von pruefe_sicht bis S14, kein Bauauftrag.\n", "docs/project/linie/HISTORISCH.md": "CURRENT_DESIGN_REFERENCE.json, designsystem_v1_1/: HISTORISCH – ersetzt durch V45, kein Bauauftrag.\n"});
+function isHistoricalHeaderOnly(rel,before,after){
+ if(typeof after!=="string")return false;
+ if(before===null)return Object.hasOwn(S01C_SIDECARS,rel)&&after===S01C_SIDECARS[rel];
+ if(typeof before!=="string"||!Object.hasOwn(S01C_HEADERS,rel))return false;
+ const line=S01C_HEADERS[rel]+"\n";
+ if(before.startsWith("<!-- STATUS:")){const at=before.indexOf("\n")+1;return at>0&&after===before.slice(0,at)+line+before.slice(at);}
+ return after===line+before;
+}
+/** @param {{entries:Array<{path:string,status:string}>,readChange?:((rel:string)=>{before:string|null,after:string|null})|null,readRename?:((rel:string)=>{target:string,identical:boolean}|null)|null}} input */
+export function checkB3ScopeForTest({entries,readChange=null,readRename=null}){
+ const errors=[];
+ for(const {path:rel,status} of entries){
+ if(rel.startsWith("supabase/migrations/")&&status!=="A")errors.push(`B3_EXISTING_MIGRATION_IMMUTABLE:${rel}`);
+ if(rel.startsWith("_review/")&&status!=="D")errors.push(`B3_BOUND_SOURCE_PROTECTED:${rel}`);
+ if(rel.startsWith("docs/project/")){
+ const rename=status==="D"?readRename?.(rel):null;
+ const archived=rename?.identical===true&&rename.target.startsWith("docs/_archiv/");
+ const change=readChange?.(rel);
+ if(!archived&&(!["A","M"].includes(status)||!change||!isHistoricalHeaderOnly(rel,change.before,change.after)))errors.push(`B3_BOUND_SOURCE_PROTECTED:${rel}`);
+ }
+ }return errors;
 }
 
 export function checkLivePackageScope({ root, base, head, branch }) {
@@ -1616,7 +1626,10 @@ export function checkLivePackageScope({ root, base, head, branch }) {
       return { status: status.slice(0, 1), path: posix(rel) };
     }) : [];
     if (branch === GOVERNANCE_RESTART_BRANCH || (branch === "main" && resolved(root, base) === GOVERNANCE_RESTART_BASE && files.includes("_review/BAUREGELN.md"))) return checkGovernanceRestartScopeForTest({ entries, branch, baseSha: resolved(root, base) });
-    return checkB3ScopeForTest({ entries });
+    const archiveRenames=new Map();
+    const renameParts=git(root,["diff","--find-renames=100%","--name-status","-z",base,head,"--","docs/project/","docs/_archiv/"]).split("\0");
+    for(let i=0;i<renameParts.length&&renameParts[i];){const status=renameParts[i++],from=renameParts[i++];if(status.startsWith("R")||status.startsWith("C")){const to=renameParts[i++];if(status==="R100"&&from.startsWith("docs/project/")&&to.startsWith("docs/_archiv/"))archiveRenames.set(from,{target:to,identical:git(root,["rev-parse",`${base}:${from}`])===git(root,["rev-parse",`${head}:${to}`])});}}
+    return checkB3ScopeForTest({entries,readRename:rel=>archiveRenames.get(rel)??null,readChange:(rel)=>{let before=null,after=null;try{before=execFileSync("git",["-C",root,"show",`${base}:${rel}`],{encoding:"utf8",stdio:["ignore","pipe","pipe"]});}catch{}try{after=execFileSync("git",["-C",root,"show",`${head}:${rel}`],{encoding:"utf8",stdio:["ignore","pipe","pipe"]});}catch{}return {before,after};}});
   }
   if (branch === "main") return [];
   try {

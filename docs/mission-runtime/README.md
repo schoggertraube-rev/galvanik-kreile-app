@@ -1,3 +1,4 @@
+HISTORISCH – ersetzt durch _review/BAUREGELN.md (Pflicht-Checks), kein Bauauftrag.
 # Control Plane Minimum CI
 
 This control-plane slice keeps `main` as the single delivery truth and adds the smallest blocking CI gate that can run on every pull request to `main` and every push on `main`.

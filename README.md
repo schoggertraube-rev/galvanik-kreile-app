@@ -1,3 +1,4 @@
+HISTORISCH – ersetzt durch AGENTS.md, kein Bauauftrag.
 # Kreile WerkstattCockpit
 
 Der einzige ausfuehrbare Lieferplan ist

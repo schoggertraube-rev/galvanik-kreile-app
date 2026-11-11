@@ -1,3 +1,4 @@
+HISTORISCH – ersetzt durch _review/PLAN_LIVEGANG.md Abschnitt 2 und 3 (Modulkarte, Bauweise), kein Bauauftrag.
 # KREILE — MODULKARTE (verbindlicher Scope & Modulschnitt)
 
 Quelle: Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026), ratifiziert 2026-09-06 als D-ARCH-009. Roter Faden: **INFOS REIN → LIEGT & WÄCHST (Karte) → SUCHEN & AUSKUNFT → RAUS.** Wenige Module, aber vollständig; alles andere entfällt oder wartet als Quarantäne. Diese Datei bestimmt, WAS ein Modul ist und WAS es NICHT gibt. Gilt mit `ARCHITEKTUR_MODULE_PATH1.md` (Wie) und `ui/` (Aussehen).
