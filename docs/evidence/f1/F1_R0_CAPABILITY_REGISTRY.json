@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 15,
     "api_routes": 3,
-    "server_action_groups": 48,
+    "server_action_groups": 49,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 92
+    "total": 93
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -1445,6 +1445,27 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "AP-EIN Teil 4 canonical intake conversation; independent exact-SHA and visual acceptance pending."
+    },
+    {
+      "stable_id": "server-actions.offline-workshop",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/offlineWorkshop.actions.ts",
+      "exported_functions": [
+        "replayOfflineWorkshopAction"
+      ],
+      "classification": "REAL_VERIFIED",
+      "evidence": {
+        "verified_functions": [
+          "replayOfflineWorkshopAction"
+        ],
+        "tests": [
+          "src/test/acceptance/offline_workshop_replay.integration.test.ts",
+          "src/test/acceptance/offline_workshop_sync.browser.integration.test.ts"
+        ],
+        "scope": "Existing authenticated workshop commands, immutable originals, conflict task and fresh retry; no 24-hour or tablet acceptance claim."
+      },
+      "visible": false,
+      "reachable": true
     }
   ]
 }
