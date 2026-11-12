@@ -21,7 +21,7 @@
     "test:unit": "node scripts/run-unit-tests.mjs",
     "test:integration": "vitest run src/test/verify.integration.test.ts",
     "test:e2e": "playwright test",
-    "verify:precommit": "npx tsc --noEmit && npm run lint:staged && npm run test:unit",
+    "verify:precommit": "npx tsc --noEmit && npm run lint:staged && node scripts/test-staged-related.mjs",
     "quality:no-fake-production": "node scripts/quality/check-no-fake-production.mjs",
     "quality:authority-gate": "node scripts/quality/check-authoritative-sources.mjs --check",
     "quality:authority-gate:selftest": "node scripts/quality/check-authoritative-sources.mjs --selftest",
