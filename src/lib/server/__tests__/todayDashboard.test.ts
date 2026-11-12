@@ -1,5 +1,5 @@
 import type {U2Read} from '@/lib/domain/u2ReadContract';
-import {projectTodayChallenges} from '../todayDashboardPolicy';
+import {readTodayCalendar,projectTodayChallenges} from '../todayDashboardPolicy';
 import {sortTodayByResponsibility} from '../todayDashboardPolicy';
 import { describe, expect, it } from "vitest";
 import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/server/todayDashboardPolicy";
@@ -146,5 +146,16 @@ describe('S05 evidenced challenges',()=>{
  it('keeps an unreadable financial amount unknown instead of inventing a zero debt',()=>{
   const read=projectTodayChallenges([],[{id:'TEST-bad',orderId:'TEST-order',number:'TEST-R',dueDate:'2026-11-10',amountCents:null,amount:null}],'2026-11-12');
   expect(read.groups).toEqual([]);expect(read.missing).toEqual(['CHALLENGE_INVOICE_FACTS:TEST-bad']);
+ });
+});
+
+describe('S05 one Berlin read calendar',()=>{
+ it.each([
+  ['2026-11-12T22:30:00.000Z','2026-11-12','2026-11-19'],
+  ['2026-11-12T23:30:00.000Z','2026-11-13','2026-11-20'],
+  ['2026-03-28T23:30:00.000Z','2026-03-29','2026-04-05'],
+  ['2026-10-24T22:30:00.000Z','2026-10-25','2026-11-01'],
+ ])('uses calendar dates across midnight and daylight saving: %s',(instant,today,throughDate)=>{
+  expect(readTodayCalendar(new Date(instant))).toEqual({readStartedAt:instant,today,throughDate});
  });
 });

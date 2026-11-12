@@ -27,6 +27,7 @@ it('T05-3 counts all 25 historical invoice fixtures while limiting the list and 
  }
  const read=async(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
  const first=await read(full),again=await read(full);
+ const [serverDay]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS today`;expect(first.calendar?.today).toBe(serverDay.today);expect(Number.isFinite(Date.parse(first.calendar?.readStartedAt??''))).toBe(true);
  expect(first.moneyMetric).toMatchObject({code:'OK',count:25});
  expect(first.moneySources).toEqual({invoices:{code:'OK',count:25},prepayments:{code:'OK',count:0},collections:{code:'OK',count:0}});
  expect(first.moneyMetric?.code==='OK'?first.moneyMetric.sources.map(row=>row.id).sort():null).toEqual(ids.sort());

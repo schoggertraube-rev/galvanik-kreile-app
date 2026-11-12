@@ -9,7 +9,7 @@ import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
-import { projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
+import { readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -42,6 +42,7 @@ export type TodayCollectionNotice = {
 };
 
 export type TodayDashboard = {
+  calendar?:ReturnType<typeof readTodayCalendar>;
   datenluecken?:readonly string[];
   challenges?:{code:'OK'|'SOURCE_INCOMPLETE';groups:ReturnType<typeof projectTodayChallenges>['groups'];missing:readonly string[]};
   orderActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:Array<{orderId:string;version:number;read:U2Read}>;missingOrderIds:string[]};
@@ -117,6 +118,7 @@ export async function readTodaySource<T>(tx:PrivilegedTenantTransaction,read:(ne
 
 export type TodayQuoteFollowup={isMine?:boolean;id:string;title:string;dueDate:string;quoteId:string;quoteNumber:string;customerName:string};
 export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>): Promise<TodayDashboard> {
+  const calendar=readTodayCalendar(),today=calendar.today;
   const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
   const graphAllowed = hasAuthorizationArea(auth, "mails");
   const moneyAllowed = hasAuthorizationArea(auth, "geld");
@@ -134,7 +136,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
           JOIN public.customers customer ON customer.tenant_id=invoice.tenant_id AND customer.id=invoice.customer_id
           WHERE invoice.tenant_id=${auth.tenantId} AND invoice.status='issued'
             AND invoice.payment_status IN ('offen', 'teilbezahlt')
-            AND invoice.due_date < (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date
+            AND invoice.due_date < ${today}::date
           ORDER BY invoice.due_date, invoice.invoice_number
         `)) : {code:'OK' as const,data:[] as InvoiceRow[]};
       const prepaymentSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<PrepaymentRow>(sql`
@@ -163,7 +165,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
             ON collection_order.tenant_id=collection.tenant_id AND collection_order.collection_id=collection.id
           WHERE collection.tenant_id=${auth.tenantId}
             AND collection.status='offen'
-            AND collection.monat < date_trunc('month', timezone('Europe/Berlin', clock_timestamp()))::date
+            AND collection.monat < date_trunc('month', ${today}::date)::date
           GROUP BY collection.id, collection.monat, customer.name
           HAVING count(collection_order.order_id)>0
           ORDER BY collection.monat, customer.name, collection.id
@@ -221,7 +223,6 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const selected = layout.map((item) => item.field).filter((field): field is TodayVisibleField => field !== "action");
   const selectedSet = new Set(selected);
   const reminders = new Map(support.reminders.map((row) => [row.item_key, new Date(row.reminder_until).toISOString()]));
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const items: TodayItem[] = [];
   const assignments = new Map(support.assignments.map((row) => [row.order_id, row]));
   const add = (item: TodayItem) => items.push({ ...item, field: item.field === "action" || selectedSet.has(item.field as TodayVisibleField) ? item.field : "action", snoozedUntil: reminders.get(item.key) });
@@ -289,6 +290,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const challengeMissing=[...challenges.missing,...(orderActions.code!=='OK'?['CHALLENGE_ORDER_SOURCE']:[]),...(support.invoiceSource.code!=='OK'?['CHALLENGE_INVOICE_SOURCE']:[]),...(!complaintsKnown||complaintCases.length?['CHALLENGE_COMPLAINT_SOURCE']:[]),...(graphAllowed&&(graph.code!=='OK'||graph.messages.some(row=>row.usage==='offen'&&(row.sendState==='unklar'||row.sendState==='fehler'||row.openConcerns.some(kind=>['kv_annahme','kv_ablehnung','reklamation'].includes(kind)))))?['CHALLENGE_CONCERN_SOURCE']:[])];
 
   return {
+    calendar,
     items:sortedItems,
     challenges:{code:challengeMissing.length?'SOURCE_INCOMPLETE':'OK',groups:challenges.groups,missing:challengeMissing},
     ...(ordersAllowed?{orderActions}:{}),

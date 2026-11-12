@@ -48,6 +48,12 @@ function addCalendarDays(day: CalendarDay, amount: number): CalendarDay {
   return { year: value.getUTCFullYear(), month: value.getUTCMonth() + 1, day: value.getUTCDate() };
 }
 
+/** S05: one server read clock, with seven calendar days in Europe/Berlin. */
+export function readTodayCalendar(now=new Date()){
+ const day=berlinClock(now);
+ return {readStartedAt:now.toISOString(),today:dateKey(day),throughDate:dateKey(addCalendarDays(day,7))};
+}
+
 function nextWorkday(day: CalendarDay): CalendarDay {
   let candidate = addCalendarDays(day, 1);
   while ([0, 6].includes(new Date(Date.UTC(candidate.year, candidate.month - 1, candidate.day)).getUTCDay())) candidate = addCalendarDays(candidate, 1);
