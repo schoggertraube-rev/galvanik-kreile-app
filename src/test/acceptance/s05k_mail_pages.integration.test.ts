@@ -7,7 +7,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readIntakeMailboxWatermark} from '@/modules/eingang/server-public';
-import {getOpenIntakeMailsAction} from '@/app/actions/eingang.actions';
+import {getOpenIntakeMailsAction,getIntakeTaskAction} from '@/app/actions/eingang.actions';
 
 it('S05K A1 imports 45 originals across three Graph pages and rereads without duplicates',async()=>{
  const run=randomUUID(),text='TEST Bitte senden Sie einen Kostenvoranschlag für vier Trompeten.';
@@ -131,6 +131,9 @@ it('S05K A1 keeps a secured original and creates one normal retry task when prog
   const [tasks]=await sql`SELECT count(*)::integer AS n FROM public.tasks WHERE tenant_id=${tenant}`;
   expect(tasks.n-before.n).toBe(1);
   expect(pending.state['test-mailbox@example.invalid'].retryRequired).toBe(true);
+  const [storedTask]=await sql`SELECT id::text AS id FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${pending.state['test-mailbox@example.invalid'].retryKey}::uuid`;
+  const taskRead=await withSession(full,()=>getIntakeTaskAction(JSON.parse(JSON.stringify({taskId:storedTask.id}))));
+  expect(taskRead).toMatchObject({code:'OK',canComplete:true,task:{id:storedTask.id,erstellt_von:full.actorId,titel:'Mailabruf fortsetzen – Fortschritt konnte nicht gesichert werden'}});
   const other=await createFixture(['eingang','mails']);
   expect(await withSession(other,()=>getOpenIntakeMailsAction())).toMatchObject({code:'OK',notice:expect.any(String)});
   const [retried]=await sql`SELECT count(*)::integer AS n FROM public.tasks WHERE tenant_id=${tenant}`;expect(retried.n).toBe(tasks.n);
