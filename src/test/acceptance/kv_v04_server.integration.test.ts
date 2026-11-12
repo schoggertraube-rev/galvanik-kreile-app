@@ -1325,7 +1325,7 @@ it('AK-02: quote followups prioritize their actual recipient rather than the quo
  if(quoteRead.code!=='OK')throw Error('TEST S05 followup quote target');expect(quoteRead.quote.totalNetCents).toBeNull();
  expect(mineA[0]).toMatchObject({quoteId:ids[1],isMine:true});expect(mineB[0]).toMatchObject({quoteId:ids[0],isMine:true});expect(new Set(mineA.map(row=>row.id))).toEqual(new Set(mineB.map(row=>row.id)));
  const {readTodayDashboard}=await import('@/lib/server/todayDashboard'),{getComplaints}=await import('@/app/actions/complaints.actions');
- const day=()=>withSession(mailOnly,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST S05 followup auth');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const day=(actor=mailOnly)=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST S05 followup auth');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
  const first=await day();expect(first.items.filter(row=>row.kind==='task').map(row=>row.target?.screen)).toEqual(['kv','kv']);expect(JSON.stringify(first)).not.toContain('991,00');expect(first).not.toHaveProperty('invoiceMoney');
  expect(first.quoteActions).toMatchObject({code:'OK',missingQuoteIds:[]});expect(first.quoteActions?.rows).toHaveLength(2);
  expect(first.quoteActions?.rows.find(row=>row.quoteId===ids[0])?.read).toEqual(quoteRead.nextActionRule);
@@ -1335,10 +1335,11 @@ it('AK-02: quote followups prioritize their actual recipient rather than the quo
  expect(after.quoteActions?.rows.find(row=>row.quoteId===ids[0])).toMatchObject({version:quoteRead.quote.version+1,facts:{accepted:true,expired:false},followupAt:null});
  expect((await day()).items).toEqual(after.items);
  expect(await withSession(b,()=>changeQuoteLifecycleAction({action:'conditional',quoteId:ids[1],clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST S05 ja, aber nicht zu diesem Preis'}))).toMatchObject({code:'OK'});
- const conditional=await day(),group=conditional.challenges?.groups.find(row=>row.quoteId===ids[1]);
+ const withoutMoney=await day();expect(withoutMoney.challenges?.groups.some(row=>row.quoteId===ids[1])).toBe(false);
+ const conditional=await day(b),group=conditional.challenges?.groups.find(row=>row.quoteId===ids[1]);
  expect(conditional.items.filter(row=>row.kind==='task')).toHaveLength(0);expect(group).toMatchObject({key:'quote:'+ids[1],rank:5,reasons:[{textKey:'day.challenge_condition',sourceId:ids[1]}]});
  expect(conditional.quoteActions?.rows.find(row=>row.quoteId===ids[1])).toMatchObject({version:3,facts:{conditional:true,accepted:false}});
- expect((await day()).challenges).toEqual(conditional.challenges);
+ expect((await day(b)).challenges).toEqual(conditional.challenges);
 
 
 });
