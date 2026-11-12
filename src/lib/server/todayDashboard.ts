@@ -41,6 +41,7 @@ export type TodayCollectionNotice = {
 
 export type TodayDashboard = {
   datenluecken?:readonly string[];
+  moneyMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
   assignmentMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
   items: TodayItem[];
   /**
@@ -59,7 +60,7 @@ export type TodayDashboard = {
 
 type PreferenceRow = { visible_fields: string[]; layout: unknown | null };
 type ReminderRow = { item_key: string; reminder_until: Date | string };
-type InvoiceRow = { id: string; invoice_number: string; order_id: string; customer_name: string; customer_country: string | null; due_date: Date | string; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string };
+type InvoiceRow = { payment_version:number;id: string; invoice_number: string; order_id: string; customer_name: string; customer_country: string | null; due_date: Date | string; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string };
 type PrepaymentRow = { order_id: string; order_number: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; invoice_id: string | null; open_amount_cents: number | string | null; payment_status: string | null; station: string; goods_out_event_count: number | string };
 type UserRow = { id: string; full_name: string };
 type AssignmentRow = { integrity_ok:boolean;order_id: string; assigned_to_name: string; current_order_version: number };
@@ -114,7 +115,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
         tx.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`),
         tx.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`),
         moneyAllowed ? tx.execute<InvoiceRow>(sql`
-          SELECT invoice.id, invoice.invoice_number, invoice.order_id, customer.name AS customer_name,
+          SELECT invoice.id, invoice.payment_version, invoice.invoice_number, invoice.order_id, customer.name AS customer_name,
                  customer.country AS customer_country, invoice.due_date,
                  invoice.payment_open_amount_cents AS open_amount_cents,
                  orders.payment_mode, invoice.payment_status, orders.station
@@ -125,7 +126,6 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
             AND invoice.payment_status IN ('offen', 'teilbezahlt')
             AND invoice.due_date < (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date
           ORDER BY invoice.due_date, invoice.invoice_number
-          LIMIT 20
         `) : Promise.resolve([]),
         moneyAllowed ? tx.execute<PrepaymentRow>(sql`
           SELECT payment.order_id, payment.order_number, customer.name AS customer_name,
@@ -217,9 +217,9 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   // Legacy mail opener consumes only a real provider ID; native IDs stay in U3 sources.
   if(assignmentMessages)for(const mail of assignmentMessages.filter(row=>row.graphMessageId).slice(0,5))add({key:`mail:${mail.id}`,field:'assign',kind:'mail',title:mail.subject||'Mail ohne Betreff',meta:`${mail.senderName} · ${new Intl.DateTimeFormat('de-DE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Berlin'}).format(new Date(mail.at))}`,urgency:'decision',graphMessageId:mail.graphMessageId!});
 
-  for (const invoice of support.invoices) {
+  const overdueInvoices=support.invoices.filter(invoice=>classifyMoneyForToday({customerCountry:invoice.customer_country,dueDate:dateOnly(invoice.due_date),goodsOutRecorded:false,paymentMode:invoice.payment_mode,paymentStatus:invoice.payment_status,station:invoice.station},today)==='overdue_invoice');
+  for (const invoice of overdueInvoices.slice(0,20)) {
     const dueDate = dateOnly(invoice.due_date);
-    if (classifyMoneyForToday({ customerCountry: invoice.customer_country, dueDate, goodsOutRecorded: false, paymentMode: invoice.payment_mode, paymentStatus: invoice.payment_status, station: invoice.station }, today) !== "overdue_invoice") continue;
     add({ key: `invoice:${invoice.id}`, field: "money", kind: "invoice", title: `${invoice.invoice_number} · ${invoice.customer_name}`, meta: `${euro(invoice.open_amount_cents)} · fällig ${dueDate}`, urgency: "conflict", invoiceId: invoice.id, orderId: invoice.order_id, dueDate, primaryActionLabel: "Erinnern" });
   }
 
@@ -260,6 +260,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const sortedItems=sortTodayByResponsibility(items,mine);
   return {
     items:sortedItems,
+    ...(moneyAllowed?{moneyMetric:{code:'OK' as const,count:overdueInvoices.length,sources:overdueInvoices.map(row=>({id:row.id,version:row.payment_version}))}}:{}),
     ...(graphAllowed?{assignmentMetric:assignmentMessages?{code:'OK' as const,count:assignmentMessages.length,sources:assignmentMessages.map(row=>({id:row.id,version:row.version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
     datenluecken:[...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
     collectionNotices,
