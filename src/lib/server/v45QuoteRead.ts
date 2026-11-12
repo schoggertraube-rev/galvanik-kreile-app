@@ -1,7 +1,8 @@
+import {completeU2Read} from '@/lib/domain/u2ReadContract';
 import 'server-only';
 import type {QuoteReadback} from '@/modules/quotes/public';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
-import type {AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import {readAuthorizedV45Rule} from './v45RuleRead';
 import {readV45FirstLook} from './v45FirstLookRead';
 import {readV45QuoteCommand} from './v45QuoteCommandRead';
@@ -32,11 +33,11 @@ export function v45QuoteFacts(quote:Pick<QuoteReadback,'linkedOrderId'|'validUnt
  * First-look order comes from V45 metadata, values from this same readback.
  * Commands remain the existing action boundaries; this reader never calls them.
  */
-export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback,capabilities:{financial:boolean;commandRights:Readonly<Record<string,boolean>>}){
+function readV45QuoteRuleRaw(auth:AuthorizationSnapshot,quote:QuoteReadback,capabilities:{financial:boolean;commandRights:Readonly<Record<string,boolean>>}){
  const source={kind:'quote' as const,id:quote.quoteId,version:quote.version,edition:quote.lifecycle?.edition??null};
  const rule=readAuthorizedV45Rule(auth,'kv',v45QuoteFacts(quote),capabilities.commandRights);
- if(rule.code==='FORBIDDEN')return {...rule,source};
- const financial=capabilities.financial;
+
+ const financial=hasAuthorizationArea(auth,'geld');
  const values:Record<string,Readonly<Record<string,unknown>>>={
   'kv.lage':{nummer:quote.quoteNumber,fassung:quote.lifecycle?.edition??null,zustand:rule.code==='OK'?rule.zustand:null},
   'kv.teile':{teile:quote.positions.map(part=>({id:part.id,name:part.name,menge:part.quantity,material:part.material,oberflaeche:part.surfaceRequested,...(part.unit!==undefined?{einheit:part.unit}:{})}))},
@@ -44,8 +45,8 @@ export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback,
   'kv.hauptaktion':{elementId:rule.code==='OK'?rule.hauptaktion:null}
  };
  if(financial)values['kv.kalkulation']={nettoCents:quote.totalNetCents};
- const first=readV45FirstLook('kv',values,financial?[]:['kv.kalkulation'],rule.code==='OK'?rule.zustand:undefined);if(first.code!=='OK')return {...first,source};
- const presentation={erstblick:first.erstblick,source};
+ const first=readV45FirstLook('kv',values,financial?[]:['kv.kalkulation'],rule.code==='OK'?rule.zustand:undefined,true);if(first.code!=='OK')return {...first,source};
+ const presentation={datenluecken:first.datenluecken,erstblick:first.erstblick,source};
  const withheld={...presentation,erstblick:first.erstblick.map(field=>field.key==='kv.hauptaktion'?{...field,werte:{elementId:null}}:field),hauptaktion:null};
  if(rule.code!=='OK')return {...rule,...withheld};
  if(!quote.lifecycle)return {code:'SOURCE_INCOMPLETE' as const,missing:['QUOTE_LIFECYCLE'],...withheld};
@@ -60,5 +61,7 @@ export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback,
   if(parameters.code!=='OK')return {...parameters,...withheld};
   hauptaktion={elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,befehl,recht:rule.recht};
  }
- return {code:'OK' as const,ruleId:rule.ruleId,zustand:rule.zustand,farbe:rule.farbe,aktionsfarbe:rule.aktionsfarbe,erstblick:first.erstblick,hauptaktion,weitere:objectActions.weitere,gesperrt:rule.gesperrt,quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,texteSha256:V45_SOURCE_HASHES['texte.json'],erwartungSha256:objectActions.quelle.sha256},source};
+ return {code:'OK' as const,ruleId:rule.ruleId,zustand:rule.zustand,farbe:rule.farbe,aktionsfarbe:rule.aktionsfarbe,erstblick:first.erstblick,datenluecken:first.datenluecken,hauptaktion,weitere:objectActions.weitere,gesperrt:rule.gesperrt,quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,texteSha256:V45_SOURCE_HASHES['texte.json'],erwartungSha256:objectActions.quelle.sha256},source};
 }
+
+export function readV45QuoteRule(...args:Parameters<typeof readV45QuoteRuleRaw>){return completeU2Read(readV45QuoteRuleRaw(...args));}

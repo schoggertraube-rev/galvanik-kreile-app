@@ -14,11 +14,7 @@ export type IntakeMessage={
  sendState?:'entwurf'|'sendet'|'gesendet'|'fehler'|'unklar'|'verworfen'|null;
  actorTrace?:CaseActorTrace;id:string;version:number;channel:string;direction:string;assignment:string;usage:string;senderName:string|null;senderAddress:string|null;groupAddress:string|null;subject:string|null;text:string|null;at:string;customerId:string|null;customerName:string|null;customerType:string|null;orderId:string|null;orderKind:string|null;orderNumber:string|null;orderStation:string|null;goods:string|null;concerns:string[];openConcerns:string[];discardReason:string|null;createdBy:string;fileIds:string[];files?:Array<{id:string;name:string}>};
 /** Browser-safe read contract; no server implementation import enters the client facade. */
-export type MessageNextActionRead=({code:'OK';zustand:string;farbe:'ral'|'warn'|'info'|'succ';nutzung:string;zuordnung:string;prioritaet:number|null;
- erstblick:Array<{key:string;werte:Readonly<Record<string,unknown>>}>;
- hauptaktion:null|{elementId:string;textKey:string;werte:Record<string,string|number>;befehl:{datei:string;funktion:string;argumente:Readonly<Record<string,unknown>>};recht:string|null};
- gesperrt:Array<{elementId:string;grundKey:string}>;datenluecken:readonly string[];weitereStatus:'SOURCE_INCOMPLETE';quelle:Readonly<Record<string,string>>}
- |{code:'SOURCE_INCOMPLETE';missing:readonly string[]}|{code:'FORBIDDEN'})&{source:{kind:'intake';id:string;version:number}};
+export type MessageNextActionRead=import('@/lib/domain/u2ReadContract').U2Read & {nutzung:string;zuordnung:string;prioritaet?:number|null;source:{kind:'intake';id:string;version:number}};
 export type IntakeMessagesResult={code:'OK';messages:IntakeMessage[];areas:AccessArea[];currentLogin:string}|{code:'UNAUTHENTICATED'|'FORBIDDEN'|'VALIDATION_ERROR'|'UNAVAILABLE';message:string};
 export type IntakeHandoverRequest={command:"handover_from_mail";sourceItemId:string;sourceVersion:number;clientEventId:string;orderId?:string;expectedVersion?:number};
 export type IntakeHandoverResult={code:"OK";receipt:unknown;replayed:boolean}|{code:"UNAUTHENTICATED"|"FORBIDDEN"|"VALIDATION_ERROR"|"NOT_FOUND"|"CONFLICT"|"UNAVAILABLE";message:string;choices?:Array<{id:string;number:string|null;version:number}>};

@@ -1,3 +1,4 @@
+import {completeU2Read} from '@/lib/domain/u2ReadContract';
 import 'server-only';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import type {AuthorizationSnapshot} from './authorization';
@@ -32,11 +33,11 @@ export function v45CustomerFacts(customer:ContactFacts,money:boolean,overdueCoun
 }
 /** The customer's rule seam uses the same summary/metrics snapshot, not a
  * second customer or revenue query. This is not the full U2 presentation. */
-export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<CustomerSummary,'id'|'updatedAt'|'email'|'billingEmail'|'invoiceUnsentCount'|'invoiceUnsentOriginals'|'kennzahlen'|'name'|'invoiceOpenCents'>,signals?:CustomerListSignals){
+function readV45CustomerRuleRaw(auth:AuthorizationSnapshot,customer:Pick<CustomerSummary,'id'|'updatedAt'|'email'|'billingEmail'|'invoiceUnsentCount'|'invoiceUnsentOriginals'|'kennzahlen'|'name'|'invoiceOpenCents'>,signals?:CustomerListSignals){
  const facts=v45CustomerFacts(customer,hasAuthorizationArea(auth,'geld'),customer.kennzahlen?.overdue?.invoiceCount);
  const source={kind:'customer' as const,id:customer.id,updatedAt:customer.updatedAt,...(signals?.asOf?{signalsAt:signals.asOf}:{})};
  const rule=readAuthorizedV45Rule(auth,'kunde',facts);
- if(rule.code==='FORBIDDEN')return {...rule,source};
+
  const money=hasAuthorizationArea(auth,'geld'),mails=hasAuthorizationArea(auth,'mails');
  const values:Record<string,Readonly<Record<string,unknown>>>={'kunde.hauptaktion':{elementId:rule.code==='OK'?rule.hauptaktion:null}};
  if(customer.kennzahlen?.classification)values['kunde.einstufung']={einstufung:customer.kennzahlen.classification};
@@ -49,12 +50,12 @@ export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<Cus
  const hidden=[...(!money?['kunde.kachel.debt']:[]),...(!mails||money?['kunde.kachel.messages']:[])];
  // Customer overview fields use the declared domain layout; S16 owns the later
  // state-specific golden capture (invoice has no captured reference case yet).
- const first=readV45FirstLook('kunde',values,hidden);if(first.code!=='OK')return {...first,source};
+ const first=readV45FirstLook('kunde',values,hidden,undefined,true);if(first.code!=='OK')return {...first,source};
  // The customer overview has a single footer action in kunde.js. Require all
  // existing domain references to agree before projecting an empty alternative list.
- const alternatives=readV45ObjectActionAbsence('kunde');if(alternatives.code!=='OK')return {...alternatives,source};
+ const alternatives=readV45ObjectActionAbsence('kunde');if(alternatives.code!=='OK')return {...alternatives,source,erstblick:first.erstblick,datenluecken:first.datenluecken};
  const weitereInformationen=money&&mails&&values['kunde.kachel.messages']?[{key:'kunde.kachel.messages',werte:values['kunde.kachel.messages']}]:[];
- const presentation={erstblick:first.erstblick,weitere:alternatives.weitere,weitereInformationen,source};
+ const presentation={datenluecken:first.datenluecken,erstblick:first.erstblick,weitere:alternatives.weitere,weitereInformationen,source};
  const withheld={...presentation,erstblick:first.erstblick.map(field=>field.key==='kunde.hauptaktion'?{...field,werte:{elementId:null}}:field)};
  if(rule.code!=='OK')return {...rule,...withheld,hauptaktion:null};
  if(rule.hauptaktion===null)return {...rule,...withheld,hauptaktion:null};
@@ -73,3 +74,5 @@ export function readV45CustomerRule(auth:AuthorizationSnapshot,customer:Pick<Cus
 
  return {...rule,...presentation,hauptaktion:{elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,befehl,recht:rule.recht},quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,erstblickRegel:'R12/PL20:00',erwartungSha256:alternatives.quelle.sha256},source};
 }
+
+export function readV45CustomerRule(...args:Parameters<typeof readV45CustomerRuleRaw>){return completeU2Read(readV45CustomerRuleRaw(...args));}

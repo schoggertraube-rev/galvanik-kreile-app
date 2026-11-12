@@ -47,9 +47,9 @@ it('retains source-bound first look and money filtering when synthetic lifecycle
  const auth={userId:'TEST-actor',tenantId:'TEST-only',active:true,areas:['auftraege'],permissions:[],role:'werkstatt',displayName:'TEST'} as unknown as Parameters<typeof readV45QuoteRule>[0];
  for(const financial of [false,true]){
   const result=readV45QuoteRule(auth,quote,{financial,commandRights:{}});
-  expect(result).toMatchObject({code:'SOURCE_INCOMPLETE',hauptaktion:null,source:{id:quote.quoteId,version:3,edition:null}});
+  expect(result).toMatchObject({code:'OK',hauptaktion:null,source:{id:quote.quoteId,version:3,edition:null}});
   if(!('erstblick'in result)||!Array.isArray(result.erstblick))throw Error('TEST_FIRST_LOOK_REQUIRED');
-  expect(result.erstblick.map(row=>row.key)).toEqual(['kv.lage','kv.teile','kv.termin',...(financial?['kv.kalkulation']:[]),'kv.hauptaktion']);
-  expect(JSON.stringify(result).includes('987654321')).toBe(financial);
+  expect(result.erstblick.map(row=>row.key)).toEqual(['kv.lage','kv.teile','kv.termin',...[],'kv.hauptaktion']);
+  expect(JSON.stringify(result).includes('987654321')).toBe(false);
  }
 });

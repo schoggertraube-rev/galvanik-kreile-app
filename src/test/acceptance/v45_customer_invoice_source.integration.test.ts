@@ -41,7 +41,7 @@ it('reads current unsent invoice originals from the customer port and never disc
 
  const otherId=await customerFixture('V45 anderer Kunde');expect(await readCustomerSummary(auth.data,{customerId:otherId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
  const restricted=await createFixture(['kunden'],'werkstatt'),noMoney=await withSession(restricted,()=>resolveAuthorization());if(!noMoney.ok)throw Error('TEST_NO_MONEY_AUTH');
- const hidden=await readCustomerSummary(noMoney.data,{customerId});expect(hidden.code).toBe('OK');if(hidden.code!=='OK')throw Error('TEST_CUSTOMER_READ');expect(hidden.data).not.toHaveProperty('invoiceUnsentCount');expect(hidden.data).not.toHaveProperty('invoiceUnsentOriginals');expect(hidden.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',source:{kind:'customer',id:customerId}});
+ const hidden=await readCustomerSummary(noMoney.data,{customerId});expect(hidden.code).toBe('OK');if(hidden.code!=='OK')throw Error('TEST_CUSTOMER_READ');expect(hidden.data).not.toHaveProperty('invoiceUnsentCount');expect(hidden.data).not.toHaveProperty('invoiceUnsentOriginals');expect(hidden.data.nextActionRule).toMatchObject({code:'OK',source:{kind:'customer',id:customerId}});
  const publicHidden=await withSession(restricted,()=>getCustomerSummaryAction({customerId}));expect(publicHidden.code).toBe('OK');if(publicHidden.code!=='OK')throw Error('TEST_CUSTOMER_ACTION_READ');expect(publicHidden.data).not.toHaveProperty('invoiceUnsentCount');
  const cancel={invoiceId:order.invoice.invoiceId,expectedVersion:1,clientEventId:randomUUID(),reason:'TEST nicht mehr zu versenden'};
  expect(await withSession(full,()=>cancelInvoiceAction(cancel))).toMatchObject({code:'OK'});
@@ -66,7 +66,7 @@ it('uses the actual document dispatch proof after sending, including a fresh ret
   expect(await readCustomerSummary(auth.data,{customerId:order.customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
   expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
   expect(await readCustomerSummary(auth.data,{customerId:order.customerId})).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});expect(sends).toBe(1);
-  const reread=await readCustomerSummary(auth.data,{customerId:order.customerId});expect(reread).toMatchObject({code:'OK',data:{nextActionRule:{code:'SOURCE_INCOMPLETE'}}});
+  const reread=await readCustomerSummary(auth.data,{customerId:order.customerId});expect(reread).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK'}}});
  }finally{provider.mockRestore();}
 },60000);
 
@@ -97,15 +97,15 @@ it('CB21:00 sends two current originals through the existing main action in one 
 it('retains the same customer first look when the higher-priority action source is still incomplete',async()=>{
  const customerId=await customerFixture('TEST U2 unvollstaendige Handlungsquelle');
  const read=await withSession(full,()=>getCustomerSummaryAction({customerId}));if(read.code!=='OK')throw Error('TEST_CUSTOMER_INCOMPLETE');
- expect(read.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',hauptaktion:null,source:{kind:'customer',id:customerId}});
+ expect(read.data.nextActionRule).toMatchObject({code:'OK',hauptaktion:null,source:{kind:'customer',id:customerId}});
  const next=read.data.nextActionRule;if(!next||!('erstblick'in next)||!Array.isArray(next.erstblick))throw Error('TEST_CUSTOMER_FIRST_LOOK_LOST');
  expect(next.erstblick).toHaveLength(5);expect(next.erstblick.find(row=>row.key==='kunde.kachel.orders')?.werte).toEqual({offeneAuftraege:0,offeneKv:0});
  const actor=await createFixture(['kunden'],'werkstatt');
  const hidden=await withSession(actor,()=>getCustomerSummaryAction({customerId}));if(hidden.code!=='OK')throw Error('TEST_CUSTOMER_NO_MONEY');
- expect(hidden.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',hauptaktion:null,source:{id:customerId}});
+ expect(hidden.data.nextActionRule).toMatchObject({code:'OK',hauptaktion:null,source:{id:customerId}});
  const operational=hidden.data.nextActionRule;if(!operational||!('erstblick'in operational)||!Array.isArray(operational.erstblick))throw Error('TEST_CUSTOMER_OPERATIONAL_FIRST_LOOK');
  expect(operational.erstblick.length).toBeLessThanOrEqual(5);
  expect(JSON.stringify(operational)).not.toMatch(/Cents|offeneForderungen|netto|umsatz/);
  const reread=await withSession(full,()=>getCustomerSummaryAction({customerId}));if(reread.code!=='OK')throw Error('TEST_CUSTOMER_REPEAT');
- expect(reread.data.nextActionRule).toMatchObject({code:'SOURCE_INCOMPLETE',hauptaktion:null,erstblick:next.erstblick});
+ expect(reread.data.nextActionRule).toMatchObject({code:'OK',hauptaktion:null,erstblick:next.erstblick});
 });

@@ -1,3 +1,4 @@
+import {completeU2Read} from '@/lib/domain/u2ReadContract';
 import 'server-only';
 import type {EvidenceReadRecord} from './evidenceRead';
 import type {LiveOrderCard} from './orderCardRead';
@@ -65,20 +66,20 @@ export function v45OrderReleaseFacts(card:{id:string;version:number},source?:Rel
  if(Array.isArray(value.complaintIds)&&value.complaintIds.every(id=>typeof id==='string'))facts.complaint=value.complaintIds.length>0;
  return facts;
 }
-export function readV45OrderRule(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'customerId'|'title'|'dueAt'|'station'|'handoverMode'|'items'|'operationalFacts'>,release?:ReleaseSource,evidence?:{orderId:string;records:readonly EvidenceReadRecord[]}){
+function readV45OrderRuleRaw(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'customerId'|'title'|'dueAt'|'station'|'handoverMode'|'items'|'operationalFacts'>,release?:ReleaseSource,evidence?:{orderId:string;records:readonly EvidenceReadRecord[]}){
  const source={kind:'order' as const,id:card.id,version:card.version};
  const missingPhotoItems=evidence?.orderId===card.id?card.items.filter(item=>!evidence.records.some(record=>record.source==='ORDER_STATION_ATTACHMENT'&&record.original.state==='VERIFIED'&&['image/jpeg','image/png','image/webp'].includes(record.original.mimeType??'')&&record.targets.some(target=>target.targetType==='ORDER'&&target.targetId===card.id)&&record.targets.some(target=>target.targetType==='ORDER_ITEM'&&target.targetId===item.id))):null;
  const rule=readAuthorizedV45Rule(auth,'auftrag',{...v45OrderFacts(card),...v45OrderReleaseFacts(card,release),...(missingPhotoItems!==null?{photosMissing:missingPhotoItems.length>0}:{})},undefined,['workProblem','deliveryRequest','termUpdatePending','workUpdatePending','extraPending']);
- if(rule.code!=='OK')return {...rule,source};
  const first=readV45FirstLook('auftrag',{
   'auftrag.lage':{nummer:card.orderNumber,station:card.station},
   'auftrag.termin':{datum:card.dueAt},
   'auftrag.teile':{teile:card.items.map(item=>({id:item.id,name:item.name,menge:item.quantity,material:item.material,oberflaeche:item.surfaceRequested,fertig:item.finished,einheit:item.unit}))},
-  'auftrag.hauptaktion':{elementId:rule.hauptaktion},
-  ...(rule.zustand==='photo'&&missingPhotoItems!==null?{'auftrag.blocker':{textKey:'order.photo_required',teilIds:missingPhotoItems.map(item=>item.id)}}:{})
- },rule.zustand==='work'||rule.zustand==='finish'?['auftrag.blocker']:[],rule.zustand==='work'||rule.zustand==='finish'?undefined:rule.zustand);
+  'auftrag.hauptaktion':{elementId:rule.code==='OK'?rule.hauptaktion:null},
+  ...(rule.code==='OK'&&rule.zustand==='photo'&&missingPhotoItems!==null?{'auftrag.blocker':{textKey:'order.photo_required',teilIds:missingPhotoItems.map(item=>item.id)}}:{})
+ },rule.code==='OK'&&(rule.zustand==='work'||rule.zustand==='finish')?['auftrag.blocker']:[],rule.code==='OK'&&(rule.zustand==='work'||rule.zustand==='finish')?undefined:rule.code==='OK'?rule.zustand:undefined,true);
  // A state requiring an as-yet unbound blocker stays incomplete, never calm.
  if(first.code!=='OK')return {...first,source};
+ if(rule.code!=='OK')return {...rule,source,erstblick:first.erstblick,datenluecken:first.datenluecken};
  const actions=readV45ObjectActionAbsence('auftrag',rule.zustand);
  const part=rule.hauptaktion==='order.photo'?missingPhotoItems?.[0]:undefined;
  const binding=rule.hauptaktion&&Object.hasOwn(ORDER_U2_BINDINGS.commands,rule.hauptaktion)?ORDER_U2_BINDINGS.commands[rule.hauptaktion as keyof typeof ORDER_U2_BINDINGS.commands]:null;
@@ -96,6 +97,8 @@ export function readV45OrderRule(auth:AuthorizationSnapshot,card:Pick<LiveOrderC
   }
  }
  const erstblick=hauptaktion||rule.hauptaktion===null?first.erstblick:first.erstblick.map(field=>field.key==='auftrag.hauptaktion'?{...field,werte:{elementId:null}}:field);
- const datenluecken=[...(rule.datenluecken??[]),...bindingGaps,...(actions.code==='OK'?[]:actions.missing)];
+ const datenluecken=[...first.datenluecken,...(rule.datenluecken??[]),...bindingGaps,...(actions.code==='OK'?[]:actions.missing)];
  return {...rule,hauptaktion,erstblick,weitere:actions.code==='OK'?actions.weitere:null,...(datenluecken.length?{datenluecken}:{}),quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,...(actions.code==='OK'?{erwartungSha256:actions.quelle.sha256}:{})},source};
 }
+
+export function readV45OrderRule(...args:Parameters<typeof readV45OrderRuleRaw>){return completeU2Read(readV45OrderRuleRaw(...args));}

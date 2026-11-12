@@ -4,7 +4,7 @@ import {V45_ELEMENTS,V45_REFERENCE_STATES,V45_SOURCE_HASHES} from '@/ui/v45.gene
 /** Derive only the field order from the existing V45 occurrence metadata.
  * No example values or person-to-role mapping enter the result. An incomplete
  * or contradictory order stays unavailable rather than choosing a new layout. */
-export function readV45FirstLook(area:string,values:Readonly<Record<string,Readonly<Record<string,unknown>>>>,hiddenKeys:readonly string[]=[],state?:string){
+export function readV45FirstLook(area:string,values:Readonly<Record<string,Readonly<Record<string,unknown>>>>,hiddenKeys:readonly string[]=[],state?:string,partial=false){
  const declared=V45_ELEMENTS.filter(row=>row.id.startsWith(area+'.'));
  if(declared.some(row=>typeof row.zaehlt_als_info!=='boolean'||row.zaehlt_als_info&&(typeof row.tiefe!=='number'||!Array.isArray(row.reihenfolge))))return {code:'SOURCE_INCOMPLETE' as const,missing:['FIRST_LOOK_METADATA']};
  let contexts:Set<string>|undefined;
@@ -16,7 +16,7 @@ export function readV45FirstLook(area:string,values:Readonly<Record<string,Reado
    const row=value as Record<string,unknown>;
    return typeof row.fall==='string'&&row.fall.startsWith(area+'.')&&row.zustand===state?[row.fall]:[];
   }));
-  if(!contexts.size)return {code:'SOURCE_INCOMPLETE' as const,missing:['FIRST_LOOK_CONTEXT']};
+  if(!contexts.size){if(!partial)return {code:'SOURCE_INCOMPLETE' as const,missing:['FIRST_LOOK_CONTEXT']};contexts=undefined;}
  }
  const inContext=(value:unknown)=>!contexts||!!value&&typeof value==='object'&&!Array.isArray(value)&&contexts.has(String((value as Record<string,unknown>).zustand));
  const fields=declared.filter(row=>row.tiefe===1&&row.zaehlt_als_info&&Array.isArray(row.reihenfolge)&&row.reihenfolge.some(inContext));
@@ -53,6 +53,6 @@ export function readV45FirstLook(area:string,values:Readonly<Record<string,Reado
   ordered.push(roots[0]);remaining.delete(roots[0]);
  }
  const missing=ordered.filter(key=>!Object.hasOwn(values,key)||values[key]===null||typeof values[key]!=='object'||Array.isArray(values[key]));
- if(missing.length)return {code:'SOURCE_INCOMPLETE' as const,missing};
- return {code:'OK' as const,erstblick:ordered.map(key=>({key,werte:values[key]})),quelle:{sha256:V45_SOURCE_HASHES['elemente.json']}};
+ if(missing.length&&!partial)return {code:'SOURCE_INCOMPLETE' as const,missing};
+ return {code:'OK' as const,datenluecken:missing,erstblick:ordered.filter(key=>!missing.includes(key)).map(key=>({key,werte:values[key]})),quelle:{sha256:V45_SOURCE_HASHES['elemente.json']}};
 }

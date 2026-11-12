@@ -1,3 +1,4 @@
+import {completeU2Read} from '@/lib/domain/u2ReadContract';
 import 'server-only';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {readAuthorizedV45Action} from '@/lib/server/v45RuleRead';
@@ -12,11 +13,16 @@ import {canAssignIntakeCustomer} from './intakeAssignment';
 /** R13/PL22:06: the stored message and the existing priority/tone readers are
  * the sole facts. This is a partial U2 binding; unsupported specialist command
  * bindings remain explicit instead of guessing their target or a reply clock. */
-export function readMessageNextAction(auth:AuthorizationSnapshot,row:IntakeMessage,priority:ReturnType<typeof readFallbackMessagePriority>,capture?:IntakeCaptureResult){
+function readMessageNextActionRaw(auth:AuthorizationSnapshot,row:IntakeMessage,priority:ReturnType<typeof readFallbackMessagePriority>,capture?:IntakeCaptureResult){
  const source={kind:'intake' as const,id:row.id,version:row.version};
- if(priority.source.id!==row.id||priority.source.version!==row.version)return {code:'SOURCE_INCOMPLETE' as const,missing:['MESSAGE_VERSION'],source};
  const tone=messageTone(row),farbe=({rot:'ral',orange:'warn',navy:'info',gruen:'succ'} as const)[tone];
- const base={zustand:tone,farbe,nutzung:row.usage,zuordnung:row.assignment,source};
+ const first=readV45FirstLook('nachrichten',{
+  'nachrichten.inhalt':{absenderName:row.senderName,absenderAdresse:row.senderAddress,betreff:row.subject,text:row.text,zeit:row.at,dateien:row.files},
+  'nachrichten.kundenspalte':{id:row.customerId,name:row.customerName,typ:row.customerType},
+  'nachrichten.hauptaktion':{elementId:null}
+ },[],undefined,true);
+ const base={zustand:tone,farbe,nutzung:row.usage,zuordnung:row.assignment,source,erstblick:first.code==='OK'?first.erstblick:[],datenluecken:first.code==='OK'?first.datenluecken:first.missing};
+ if(priority.source.id!==row.id||priority.source.version!==row.version)return {code:'SOURCE_INCOMPLETE' as const,missing:['MESSAGE_VERSION'],...base};
  let hauptaktion:null|{elementId:string;textKey:string;werte:Record<string,string|number>;befehl:{datei:string;funktion:string;argumente:Readonly<Record<string,unknown>>};recht:string|null}=null;
  let gesperrt:Array<{elementId:string;grundKey:string}>=[];
  let datenluecken:readonly string[]=priority.code==='OK'?[]:priority.missing;
@@ -62,13 +68,9 @@ export function readMessageNextAction(auth:AuthorizationSnapshot,row:IntakeMessa
   // PL23:08 / R1/R8: missing command is explicit, never a fabricated action.
   datenluecken=['MESSAGE_SPECIALIST_ACTION_BINDING'];
  }
- const first=readV45FirstLook('nachrichten',{
-  'nachrichten.inhalt':{absenderName:row.senderName,absenderAdresse:row.senderAddress,betreff:row.subject,text:row.text,zeit:row.at,dateien:row.files},
-  'nachrichten.kundenspalte':{id:row.customerId,name:row.customerName,typ:row.customerType},
-  'nachrichten.hauptaktion':{elementId:hauptaktion?.elementId??null}
- });
- if(first.code!=='OK')return {...first,...base};
- return {code:'OK' as const,...base,prioritaet:priority.code==='OK'?priority.rank:null,erstblick:first.erstblick,hauptaktion,gesperrt,
-  datenluecken,weitereStatus:'SOURCE_INCOMPLETE' as const,
-  quelle:{priority:'PL02:25',tone:'R13/PL22:06',elementeSha256:first.quelle.sha256}};
+ return {code:'OK' as const,...base,prioritaet:priority.code==='OK'?priority.rank:null,erstblick:base.erstblick,hauptaktion,gesperrt,
+  datenluecken:[...base.datenluecken,...datenluecken,'MESSAGE_ALTERNATIVE_ACTION_BINDING'],weitere:null,
+  quelle:{priority:'PL02:25',tone:'R13/PL22:06',...(first.code==='OK'?{elementeSha256:first.quelle.sha256}:{})}};
 }
+
+export function readMessageNextAction(...args:Parameters<typeof readMessageNextActionRaw>){return completeU2Read(readMessageNextActionRaw(...args));}
