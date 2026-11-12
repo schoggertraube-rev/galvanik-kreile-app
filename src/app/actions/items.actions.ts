@@ -62,7 +62,7 @@ export async function getItemsByOrderDb(orderId: string): Promise<ActionResult<I
   try {
     // orderId and tenantId
     const dbItems = await db.select().from(items)
-      .where(and(eq(items.orderId, orderId),eq(items.tenantId,auth.data.tenantId))); 
+      .where(and(eq(items.orderId, orderId),eq(items.tenantId,auth.data.tenantId)));
       
     const data = dbItems.map(i => ({
       id: i.id,

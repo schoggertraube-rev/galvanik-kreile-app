@@ -2,14 +2,17 @@
 
 import { db } from '@/db'
 import { orders, customers, appUsers } from '@/db/schema'
-import { count } from 'drizzle-orm'
-import { checkAppAuthorization } from '@/lib/server/authHelper'
+import { count, eq } from 'drizzle-orm'
+import {resolveAuthorization,hasAuthorizationArea} from '@/lib/server/authorization'
+import {LEGACY_ACTION_ACCESS_COPY} from '@/ui/situationCatalog'
 
 export async function getSystemStats() {
-  const authorization = await checkAppAuthorization('read')
+  const authorization = await resolveAuthorization()
   if (!authorization.ok) {
     throw new Error(authorization.message)
   }
+
+  if (!hasAuthorizationArea(authorization.data,'wartung')) throw new Error(LEGACY_ACTION_ACCESS_COPY.forbidden)
 
   const provider = process.env.NEXT_PUBLIC_DATA_PROVIDER || 'local'
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -36,9 +39,9 @@ export async function getSystemStats() {
   }
 
   try {
-    const oRes = await db.select({ value: count() }).from(orders)
-    const cRes = await db.select({ value: count() }).from(customers)
-    const uRes = await db.select({ value: count() }).from(appUsers)
+    const oRes = await db.select({ value: count() }).from(orders).where(eq(orders.tenantId,authorization.data.tenantId))
+    const cRes = await db.select({ value: count() }).from(customers).where(eq(customers.tenantId,authorization.data.tenantId))
+    const uRes = await db.select({ value: count() }).from(appUsers).where(eq(appUsers.tenantId,authorization.data.tenantId))
 
     return {
       provider,

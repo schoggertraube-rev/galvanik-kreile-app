@@ -26,3 +26,14 @@ it('S05K A10 existing legacy readers use canonical areas and resolved tenant',as
  expect(await withSession(customer,()=>searchCustomersDb('A10 read'))).toMatchObject({ok:true,data:expect.arrayContaining([expect.objectContaining({id:customerId})])});
  expect(await withSession(full,()=>getItemsByOrderDb(orderId))).toMatchObject({ok:true,data:expect.arrayContaining([expect.objectContaining({id:itemId})])});
 });
+
+it('S05K A10 maintenance statistics reject business-only rights and count only resolved tenant',async()=>{
+ const {getSystemStats}=await import('@/app/actions/systemStats');
+ const maintenance=await createFixture(['wartung'],'developer');
+ await expect(withSession(full,()=>getSystemStats())).rejects.toThrow('Keine Berechtigung');
+ process.env.NEXT_PUBLIC_DATA_PROVIDER='supabase';
+ const [expected]=await sql`SELECT (SELECT count(*)::integer FROM public.orders WHERE tenant_id=${tenant}) AS orders,(SELECT count(*)::integer FROM public.customers WHERE tenant_id=${tenant}) AS customers,(SELECT count(*)::integer FROM public.app_users WHERE tenant_id=${tenant}) AS users`;
+ const read=await withSession(maintenance,()=>getSystemStats());
+ expect(read).toMatchObject({reachable:true,orders:expected.orders,customers:expected.customers,users:expected.users});
+ expect(await withSession(maintenance,()=>getSystemStats())).toMatchObject({reachable:true,orders:expected.orders,customers:expected.customers,users:expected.users});
+});
