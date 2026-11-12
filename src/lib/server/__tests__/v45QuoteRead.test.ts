@@ -1,7 +1,7 @@
 import {it,expect,vi} from 'vitest';
 import type {QuoteReadback} from '@/modules/quotes/public';
 vi.mock('server-only',()=>({}));
-import {v45QuoteFacts} from '../v45QuoteRead';
+import {v45QuoteFacts,readV45QuoteRule} from '../v45QuoteRead';
 import {readV45Rule} from '../v45RuleRead';
 
 // Explicitly synthetic readback boundaries. The separate acceptance test obtains
@@ -40,4 +40,16 @@ it('PL09:00 keeps the current accepted promise valid after its acceptance deadli
  expect(readV45Rule('kv',v45QuoteFacts({...expired,lifecycle:{...life,acceptedEdition:2}},now))).toMatchObject({code:'OK',ruleId:'kv.zugesagt'});
  expect(readV45Rule('kv',v45QuoteFacts({...expired,lifecycle:{...life,acceptedEdition:1}},now))).toMatchObject({code:'OK',ruleId:'kv.abgelaufen'});
  expect(v45QuoteFacts({...expired,lifecycle:undefined},now)).not.toHaveProperty('expired');
+});
+
+it('retains source-bound first look and money filtering when synthetic lifecycle evidence is missing',()=>{
+ const quote={quoteId:'TEST-incomplete',version:3,quoteNumber:'TEST-KV-3',linkedOrderId:null,validUntil:null,dueDate:null,termStatus:null,lifecycle:undefined,positions:[],totalNetCents:987654321} as unknown as QuoteReadback;
+ const auth={userId:'TEST-actor',tenantId:'TEST-only',active:true,areas:['auftraege'],permissions:[],role:'werkstatt',displayName:'TEST'} as unknown as Parameters<typeof readV45QuoteRule>[0];
+ for(const financial of [false,true]){
+  const result=readV45QuoteRule(auth,quote,{financial,commandRights:{}});
+  expect(result).toMatchObject({code:'SOURCE_INCOMPLETE',hauptaktion:null,source:{id:quote.quoteId,version:3,edition:null}});
+  if(!('erstblick'in result)||!Array.isArray(result.erstblick))throw Error('TEST_FIRST_LOOK_REQUIRED');
+  expect(result.erstblick.map(row=>row.key)).toEqual(['kv.lage','kv.teile','kv.termin',...(financial?['kv.kalkulation']:[]),'kv.hauptaktion']);
+  expect(JSON.stringify(result).includes('987654321')).toBe(financial);
+ }
 });

@@ -34,26 +34,30 @@ export function v45QuoteFacts(quote:Pick<QuoteReadback,'linkedOrderId'|'validUnt
  */
 export function readV45QuoteRule(auth:AuthorizationSnapshot,quote:QuoteReadback,capabilities:{financial:boolean;commandRights:Readonly<Record<string,boolean>>}){
  const source={kind:'quote' as const,id:quote.quoteId,version:quote.version,edition:quote.lifecycle?.edition??null};
- const rule=readAuthorizedV45Rule(auth,'kv',v45QuoteFacts(quote),capabilities.commandRights);if(rule.code!=='OK')return {...rule,source};
- if(!quote.lifecycle)return {code:'SOURCE_INCOMPLETE' as const,missing:['QUOTE_LIFECYCLE'],source};
- const objectActions=readV45ObjectActionAbsence('kv',rule.zustand);if(objectActions.code!=='OK')return {...objectActions,source};
+ const rule=readAuthorizedV45Rule(auth,'kv',v45QuoteFacts(quote),capabilities.commandRights);
+ if(rule.code==='FORBIDDEN')return {...rule,source};
  const financial=capabilities.financial;
  const values:Record<string,Readonly<Record<string,unknown>>>={
-  'kv.lage':{nummer:quote.quoteNumber,fassung:quote.lifecycle.edition,zustand:rule.zustand},
+  'kv.lage':{nummer:quote.quoteNumber,fassung:quote.lifecycle?.edition??null,zustand:rule.code==='OK'?rule.zustand:null},
   'kv.teile':{teile:quote.positions.map(part=>({id:part.id,name:part.name,menge:part.quantity,material:part.material,oberflaeche:part.surfaceRequested,...(part.unit!==undefined?{einheit:part.unit}:{})}))},
   'kv.termin':{datum:quote.dueDate,terminstatus:quote.termStatus,gueltigBis:quote.validUntil},
-  'kv.hauptaktion':{elementId:rule.hauptaktion}
+  'kv.hauptaktion':{elementId:rule.code==='OK'?rule.hauptaktion:null}
  };
  if(financial)values['kv.kalkulation']={nettoCents:quote.totalNetCents};
- const first=readV45FirstLook('kv',values,financial?[]:['kv.kalkulation'],rule.zustand);if(first.code!=='OK')return {...first,source};
+ const first=readV45FirstLook('kv',values,financial?[]:['kv.kalkulation'],rule.code==='OK'?rule.zustand:undefined);if(first.code!=='OK')return {...first,source};
+ const presentation={erstblick:first.erstblick,source};
+ const withheld={...presentation,erstblick:first.erstblick.map(field=>field.key==='kv.hauptaktion'?{...field,werte:{elementId:null}}:field),hauptaktion:null};
+ if(rule.code!=='OK')return {...rule,...withheld};
+ if(!quote.lifecycle)return {code:'SOURCE_INCOMPLETE' as const,missing:['QUOTE_LIFECYCLE'],...withheld};
+ const objectActions=readV45ObjectActionAbsence('kv',rule.zustand);if(objectActions.code!=='OK')return {...objectActions,...withheld};
  let hauptaktion:null|{elementId:string;textKey:string;werte:Record<string,string|number>;befehl:NonNullable<ReturnType<typeof readV45QuoteCommand>>;recht:string|null}=null;
  if(rule.hauptaktion!==null){
-  if(!('textKey' in rule)||typeof rule.textKey!=='string'||!('recht' in rule)||rule.recht!==null&&typeof rule.recht!=='string')return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_METADATA'],source};
-  const befehl=readV45QuoteCommand(rule.hauptaktion,quote);if(!befehl)return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_COMMAND'],source};
+  if(!('textKey' in rule)||typeof rule.textKey!=='string'||!('recht' in rule)||rule.recht!==null&&typeof rule.recht!=='string')return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_METADATA'],...withheld};
+  const befehl=readV45QuoteCommand(rule.hauptaktion,quote);if(!befehl)return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_COMMAND'],...withheld};
   // V45 kern.js/mainVars: current edition and first actual stored goods location.
   // Missing location stays absent; there is no empty preview fallback.
   const parameters=readV45ActionValues(rule.textKey,{number:quote.quoteNumber,name:quote.customerDisplayName,edition:quote.lifecycle.edition,...(quote.lifecycle.goods?.[0]?{location:quote.lifecycle.goods[0].location}:{})});
-  if(parameters.code!=='OK')return {...parameters,source};
+  if(parameters.code!=='OK')return {...parameters,...withheld};
   hauptaktion={elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,befehl,recht:rule.recht};
  }
  return {code:'OK' as const,ruleId:rule.ruleId,zustand:rule.zustand,farbe:rule.farbe,aktionsfarbe:rule.aktionsfarbe,erstblick:first.erstblick,hauptaktion,weitere:objectActions.weitere,gesperrt:rule.gesperrt,quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,texteSha256:V45_SOURCE_HASHES['texte.json'],erwartungSha256:objectActions.quelle.sha256},source};
