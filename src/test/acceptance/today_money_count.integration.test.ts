@@ -9,6 +9,7 @@ import {resolveAuthorization} from '@/lib/server/authorization';
 import {sql as query} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readTodayDashboard,readTodaySource} from '@/lib/server/todayDashboard';
+import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
 import {setPaymentModeAction} from '@/app/actions/payments.actions';
 import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
@@ -34,7 +35,7 @@ it('T05-3 counts all 25 historical invoice fixtures while limiting the list and 
  const restricted=await createFixture(['auftraege'],'werkstatt'),hidden=await read(restricted);
  expect(hidden).not.toHaveProperty('moneyMetric');expect(hidden).not.toHaveProperty('moneySources');expect(hidden.allowedFields).not.toContain('money');
  expect(hidden.items.some(row=>row.invoiceId||row.kind==='invoice')).toBe(false);
- expect(JSON.stringify(hidden)).not.toContain('119,00');
+ expect(JSON.stringify(hidden)).not.toContain('119,00');expect(JSON.stringify(hidden.challenges)).not.toContain('day.challenge_debt');
 });
 
 // Explicit native SQL-error boundary, not a simulated product database.
@@ -48,4 +49,19 @@ it('keeps the next real daily query readable after a failed source savepoint and
   expect(retained).toMatchObject({code:'OK',data:[{id:order.receipt.orderId}]});return retained;
  });
  expect(await read()).toEqual(await read());
+});
+
+it('T05-6 combines a real overdue order and an explicit historical invoice fixture in one source-bound challenge',async()=>{
+ const customerId=await customerFixture('TEST S05 Doppelgrund'),order=await intakeOrderFixture('TEST S05 Doppelgrund',customerId);
+ const [clock]=await sql`SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1)::text AS yesterday`;
+ expect(await withSession(full,()=>changeOrderPromisedDueDateAction({orderId:order.receipt.orderId,expectedVersion:1,dueDate:clock.yesterday,reason:'TEST dokumentierter historischer Termin',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const invoiceId=randomUUID();
+ // Explicit synthetic historical invoice, never an invoice-writer proof.
+ await sql`INSERT INTO public.invoices(id,tenant_id,order_id,customer_id,invoice_number,amount_total,status,due_date,gross_amount_cents,payment_contract_version,payment_mode,payment_status,payment_open_amount_cents,payment_paid_amount_cents,payment_currency,payment_version)
+ VALUES(${invoiceId}::uuid,${tenant},${order.receipt.orderId},${customerId},${'TEST-S05-LATE-'+invoiceId},119,'issued',${clock.yesterday}::date,11900,1,'rechnung','offen',11900,0,'EUR',0)`;
+ const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const first=await read(),groups=first.challenges?.groups.filter(row=>row.orderId===order.receipt.orderId);
+ expect(groups).toHaveLength(1);expect(groups?.[0].reasons.map(reason=>reason.textKey)).toEqual(['day.challenge_late','day.challenge_debt']);
+ expect(groups?.[0].action).toBeNull();expect(first.challenges?.missing).toContain('CHALLENGE_PAYMENT_ACTION:'+invoiceId);
+ expect((await read()).challenges?.groups.filter(row=>row.orderId===order.receipt.orderId)).toEqual(groups);
 });

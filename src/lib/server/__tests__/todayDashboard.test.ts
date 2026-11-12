@@ -1,3 +1,5 @@
+import type {U2Read} from '@/lib/domain/u2ReadContract';
+import {projectTodayChallenges} from '../todayDashboardPolicy';
 import {sortTodayByResponsibility} from '../todayDashboardPolicy';
 import { describe, expect, it } from "vitest";
 import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/server/todayDashboardPolicy";
@@ -117,4 +119,32 @@ describe("Später in Europe/Berlin", () => {
 
 it('SA correction never puts personal ownership above actual urgency or an earlier deadline',()=>{
  const rows=[{id:'mine',urgency:'warning' as const,dueDate:'2026-11-10'},{id:'blocked',urgency:'conflict' as const,dueDate:'2026-11-10'},{id:'earlier',urgency:'warning' as const,dueDate:'2026-11-09'},{id:'other',urgency:'warning' as const,dueDate:'2026-11-10'}];expect(sortTodayByResponsibility(rows,row=>row.id==='mine').map(row=>row.id)).toEqual(['blocked','earlier','mine','other']);
+});
+
+// Explicit synthetic U2 read boundaries for the pure, production-used projection.
+describe('S05 evidenced challenges',()=>{
+ const card=(id:string,number:string,due:string,finished=false):{orderId:string;version:number;read:U2Read}=>({orderId:id,version:1,read:{code:'OK',zustand:'work',farbe:'succ',erstblick:[{key:'auftrag.lage',werte:{station:'galvanik',nummer:number}},{key:'auftrag.termin',werte:{datum:due}},{key:'auftrag.teile',werte:{teile:[{fertig:finished}]}}],hauptaktion:null,weitere:null,gesperrt:[],datenluecken:[],quelle:{}} satisfies U2Read});
+ it('keeps future ordinary work and missing prices out of challenges',()=>{
+  const row=card('TEST-future','A-002','2026-11-17');row.read.datenluecken=['PRICES_SOURCE'];
+  expect(projectTodayChallenges([row],[],'2026-11-12').groups).toEqual([]);
+ });
+ it('groups evidenced debt and lateness once per order without fabricating a payment command',()=>{
+  const read=projectTodayChallenges([card('TEST-order','A-001','2026-11-11')],[{id:'TEST-invoice',orderId:'TEST-order',number:'TEST-R1',dueDate:'2026-11-10',amountCents:11900,amount:'119,00 EUR'}],'2026-11-12');
+  expect(read.groups).toHaveLength(1);expect(read.groups[0]).toMatchObject({key:'order:TEST-order',rank:10,action:null});
+  expect(read.groups[0].reasons.map(reason=>reason.textKey)).toEqual(['day.challenge_late','day.challenge_debt']);
+  expect(read.missing).toContain('CHALLENGE_PAYMENT_ACTION:TEST-invoice');
+ });
+ it('sorts equal ranks by oldest due date and then order number',()=>{
+  const read=projectTodayChallenges([card('TEST-b','A-002','2026-11-11'),card('TEST-a','A-001','2026-11-11'),card('TEST-old','A-003','2026-11-10')],[],'2026-11-12');
+  expect(read.groups.map(row=>row.orderId)).toEqual(['TEST-old','TEST-a','TEST-b']);
+ });
+ it('never substitutes unfinished for unknown parts and never flags known completed production',()=>{
+  const unknown=card('TEST-unknown','A-001','2026-11-10');unknown.read.erstblick=unknown.read.erstblick.filter(field=>field.key!=='auftrag.teile');
+  const read=projectTodayChallenges([unknown,card('TEST-done','A-002','2026-11-10',true)],[],'2026-11-12');
+  expect(read.groups).toEqual([]);expect(read.missing).toEqual(['CHALLENGE_ORDER_FACTS:TEST-unknown']);
+ });
+ it('keeps an unreadable financial amount unknown instead of inventing a zero debt',()=>{
+  const read=projectTodayChallenges([],[{id:'TEST-bad',orderId:'TEST-order',number:'TEST-R',dueDate:'2026-11-10',amountCents:null,amount:null}],'2026-11-12');
+  expect(read.groups).toEqual([]);expect(read.missing).toEqual(['CHALLENGE_INVOICE_FACTS:TEST-bad']);
+ });
 });

@@ -1,3 +1,4 @@
+import type {U2Read,U2Action} from '@/lib/domain/u2ReadContract';
 import type { AppRole } from "@/lib/auth/authorizationContract";
 
 const TERMINAL_ORDER_STATES = new Set(["abgeholt", "versendet", "raus", "storniert", "cancelled", "canceled", "completed", "done", "erledigt"]);
@@ -231,4 +232,40 @@ export function classifyMoneyForToday(candidate: TodayMoneyCandidate, today: str
 /** Personal ownership is only a tie breaker after actual urgency and deadline. */
 export function sortTodayByResponsibility<T extends {urgency:'conflict'|'decision'|'warning';dueDate?:string}>(items:readonly T[],isMine:(item:T)=>boolean):T[]{
  const rank={conflict:0,decision:1,warning:2};return [...items].sort((a,b)=>rank[a.urgency]-rank[b.urgency]||(a.dueDate??'9999').localeCompare(b.dueDate??'9999')||Number(isMine(b))-Number(isMine(a)));
+}
+
+export type TodayChallengeReason={textKey:'day.challenge_late'|'day.challenge_debt';werte:Readonly<Record<string,string|number>>;sourceId:string};
+export type TodayChallenge={key:string;orderId:string|null;orderNumber:string|null;rank:number;dueDate:string;reasons:TodayChallengeReason[];action:U2Action|null};
+/** S05: only evidenced lateness/debt here, never a guessed capacity conflict.
+ * Inputs are the same qualified U2 cards and already rights-filtered invoices. */
+export function projectTodayChallenges(orderRows:ReadonlyArray<{orderId:string;version:number;read:U2Read}>,invoices:ReadonlyArray<{id:string;orderId:string;number:string;dueDate:string;amountCents:number|string|null;amount:string|null}>,today:string){
+ const groups=new Map<string,TodayChallenge>(),missing:string[]=[];
+ const cards=new Map(orderRows.map(row=>[row.orderId,row]));
+ const add=(input:{orderId:string|null;orderNumber:string|null;rank:number;dueDate:string;action:U2Action|null;reason:TodayChallengeReason})=>{
+  const key=input.orderId?'order:'+input.orderId:'invoice:'+input.reason.sourceId;
+  const old=groups.get(key);
+  if(old){old.rank=Math.min(old.rank,input.rank);old.dueDate=old.dueDate<input.dueDate?old.dueDate:input.dueDate;old.reasons.push(input.reason);if(input.reason.textKey==='day.challenge_debt')old.action=null;}
+  else groups.set(key,{key,orderId:input.orderId,orderNumber:input.orderNumber,rank:input.rank,dueDate:input.dueDate,reasons:[input.reason],action:input.action});
+ };
+ for(const row of orderRows){
+  const field=(key:string)=>row.read.erstblick.find(value=>value.key===key)?.werte;
+  const location=field('auftrag.lage'),station=location?.station,number=location?.nummer;
+  if(typeof station!=='string'||typeof number!=='string'){missing.push('CHALLENGE_ORDER_IDENTITY:'+row.orderId);continue;}
+  if(['complaint','work_update','term_update'].includes(row.read.zustand??''))missing.push('CHALLENGE_REASON_BINDING:'+row.orderId);
+  if(!['angenommen','wareneingang','galvanik'].includes(station))continue;
+  const rawDue=field('auftrag.termin')?.datum,parts=field('auftrag.teile')?.teile;
+  if(typeof rawDue!=='string'||!parseDateKey(rawDue.slice(0,10))||!Array.isArray(parts)||!parts.length||parts.some(part=>!part||typeof part!=='object'||typeof (part as Record<string,unknown>).fertig!=='boolean')){missing.push('CHALLENGE_ORDER_FACTS:'+row.orderId);continue;}
+  const dueDate=rawDue.slice(0,10),allDone=parts.every(part=>(part as Record<string,unknown>).fertig===true);
+  if(!allDone)missing.push('CHALLENGE_PLANNING_SOURCE:'+row.orderId);
+  if(dueDate>=today||allDone)continue;
+  add({orderId:row.orderId,orderNumber:number,rank:15,dueDate,action:row.read.hauptaktion,reason:{textKey:'day.challenge_late',werte:{date:dueDate},sourceId:row.orderId}});
+ }
+ for(const invoice of invoices){
+  if(!Number.isSafeInteger(Number(invoice.amountCents))||Number(invoice.amountCents)<=0||typeof invoice.amount!=='string'||!invoice.amount||!parseDateKey(invoice.dueDate)||invoice.dueDate>=today){missing.push('CHALLENGE_INVOICE_FACTS:'+invoice.id);continue;}
+  const card=cards.get(invoice.orderId),number=card?.read.erstblick.find(value=>value.key==='auftrag.lage')?.werte.nummer;
+  add({orderId:invoice.orderId||null,orderNumber:typeof number==='string'?number:null,rank:10,dueDate:invoice.dueDate,action:null,reason:{textKey:'day.challenge_debt',werte:{amount:invoice.amount,date:invoice.dueDate,number:invoice.number},sourceId:invoice.id}});
+  // The financial U2 command/step is explicitly incomplete until S08b.
+  missing.push('CHALLENGE_PAYMENT_ACTION:'+invoice.id);
+ }
+ return {groups:[...groups.values()].sort((a,b)=>a.rank-b.rank||a.dueDate.localeCompare(b.dueDate)||(a.orderNumber??a.key).localeCompare(b.orderNumber??b.key)),missing};
 }
