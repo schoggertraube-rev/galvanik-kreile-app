@@ -89,7 +89,7 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
     const mailOriginal=file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml'),invoiceAccess=hasAuthorizationArea(auth,'geld')&&file.invoice_context===true&&!mailOriginal;
     if(!hasAuthorizationArea(auth,'eingang')&&!invoiceAccess)return {code:'FORBIDDEN',message:'Geld erlaubt Dateien ausschließlich am vorhandenen Rechnungseingang.'};
     if((file.kanal==='mail'&&!invoiceAccess||mailOriginal)&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
-    const snapshot=()=>intakeCaptureSnapshot(auth,file.item_id,undefined,invoiceAccess&&(!hasAuthorizationArea(auth,'eingang')||file.kanal==='mail'&&!hasAuthorizationArea(auth,'mails')));
+    const snapshot=()=>intakeCaptureSnapshot(auth,file.item_id,undefined,invoiceAccess&&(!hasAuthorizationArea(auth,'eingang')||file.kanal==='mail'&&!hasAuthorizationArea(auth,'mails')),originalOnly);
     if(retryKey){
       const retry=await withPrivilegedTenantTransaction(auth,async tx=>{
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);

@@ -121,7 +121,7 @@ it('S05K A1 keeps a secured original and creates one normal retry task when prog
   expect(await withSession(full,()=>getOpenIntakeMailsAction())).toMatchObject({code:'OK',notice:expect.any(String)});
   const [rolled]=await sql`SELECT count(*)::integer AS n FROM public.tasks WHERE tenant_id=${tenant}`;expect(rolled.n).toBe(before.n);
   const [rolledMarker]=await sql`SELECT mailbox_fetch_state AS state FROM public.company_settings WHERE tenant_id=${tenant}`;
-  expect(rolledMarker.state['test-mailbox@example.invalid'].retryRequired).toBe(false);
+  expect(rolledMarker.state['test-mailbox@example.invalid'].retryRequired).toBe(false);expect(rolledMarker.state['test-mailbox@example.invalid'].extraRetryIds).toEqual([id]);
   await sql.unsafe(`DROP TRIGGER ${history} ON public.intake_event`);
   expect(await withSession(full,()=>getOpenIntakeMailsAction())).toMatchObject({code:'OK',notice:expect.any(String)});
   const [captured]=await sql`SELECT count(*)::integer AS n FROM public.intake_item source WHERE source.tenant_id=${tenant} AND source.graph_message_id=${id} AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=source.tenant_id AND receipt.item_id=source.id AND receipt.nachher->>'action'='mail_import_complete')`;

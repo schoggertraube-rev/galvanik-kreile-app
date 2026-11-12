@@ -154,3 +154,15 @@ it('S05K A1 never forwards its token to another host or mailbox via a persisted 
   const fetchPort=vi.fn();expect(await listMicrosoftGraphInbox(env,fetchPort,{watermark:null,cursorUrl,remaining:null})).toMatchObject({code:'UNAVAILABLE'});expect(fetchPort).not.toHaveBeenCalled();
  }
 });
+
+
+it('S05K A2 shares the500 mail budget with persisted failures and leaves an unfetched cursor timestamp to its caller',async()=>{
+ const cursorUrl='https://graph.microsoft.com/v1.0/users/mailbox%40example.invalid/mailFolders/inbox/messages?$top=50&$skip=50';
+ const fetchPort=vi.fn();
+ expect(await listMicrosoftGraphInbox(env,fetchPort,{watermark:null,cursorUrl,remaining:450,maxMessages:49})).toMatchObject({code:'OK',data:[],startUrl:cursorUrl,cursorUrl,remaining:450,incomplete:[]});
+ expect(fetchPort).not.toHaveBeenCalled();
+});
+it('S05K A2 retains an incomplete list row identity for the existing full-message importer instead of silently dropping it',async()=>{
+ const fetchPort=vi.fn().mockResolvedValueOnce(Response.json({access_token:'TEST-token'.repeat(5)})).mockResolvedValueOnce(Response.json({value:[{id:'TEST-missing-summary'}],'@odata.count':1}));
+ expect(await listMicrosoftGraphInbox(env,fetchPort,{watermark:null,cursorUrl:null,remaining:null,maxMessages:500})).toMatchObject({code:'OK',data:[],incomplete:[{id:'TEST-missing-summary'}],cursorUrl:null});
+});

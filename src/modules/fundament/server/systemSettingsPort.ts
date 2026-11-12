@@ -555,7 +555,9 @@ export async function writeMailboxFetchState(auth:MailboxSyncAuth,input:{setting
    if(!frame||typeof frame!=='object'||Array.isArray(frame))throw Error('MAILBOX_RETRY_FRAME_REQUIRED');
    const source=frame as Record<string,unknown>,uuid=/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
    if(typeof source.retryKey!=='string'||!uuid.test(source.retryKey)||typeof source.retryActorId!=='string'||!uuid.test(source.retryActorId))throw Error('MAILBOX_RETRY_IDENTITY_REQUIRED');
-   const retryState={...input.before,[input.retryMailbox]:{...source,retryRequired:true}};
+   const target=input.forceRetry?input.after[input.retryMailbox]:source;
+   if(!target||typeof target!=='object'||Array.isArray(target))throw Error('MAILBOX_RETRY_PROGRESS_REQUIRED');
+   const retryState={...(input.forceRetry?input.after:input.before),[input.retryMailbox]:{...target,retryKey:source.retryKey,retryActorId:source.retryActorId,retryRequired:true}};
    const marker=await tx.execute<{state:unknown}>(sql`UPDATE public.company_settings SET mailbox_fetch_state=${JSON.stringify(retryState)}::jsonb WHERE tenant_id=${auth.tenantId} AND id=${input.settingsId} RETURNING mailbox_fetch_state AS state`);
    if(marker.length!==1||!isDeepStrictEqual(marker[0].state,retryState))throw Error('MAILBOX_RETRY_MARKER_REQUIRED');
    const taskId=await onFailure(tx,{key:source.retryKey,actorId:source.retryActorId,mailbox:input.retryMailbox});

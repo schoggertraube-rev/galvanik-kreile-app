@@ -1,6 +1,6 @@
 import {it,expect,vi} from 'vitest';
 vi.mock('server-only',()=>({}));
-import {readFallbackMessagePriority} from '../messageContract';
+import {messageTone,readFallbackMessagePriority} from '../messageContract';
 // Synthetic boundaries of the canonical stored message projection.
 const base={id:'TEST-message',version:4,sendState:null,usage:'offen',discardReason:null,openConcerns:[],assignment:'kunde',customerId:'TEST-customer',direction:'rein'} satisfies Parameters<typeof readFallbackMessagePriority>[0];
 it.each([{rank:1,row:{sendState:'unklar' as const,openConcerns:['kv_annahme','reklamation']}},{rank:2,row:{openConcerns:['kv_ablehnung','reklamation','ware']}},{rank:3,row:{openConcerns:['reklamation','abholung','ware']}},{rank:4,row:{openConcerns:['abholung','ware']}},{rank:5,row:{openConcerns:['ware'],assignment:'offen',customerId:null}},{rank:6,row:{assignment:'offen',customerId:null}},{rank:8,row:{usage:'erledigt',sendState:'unklar' as const}},{rank:8,row:{openConcerns:[]}}])('keeps PL fallback rank $rank and its actual source version',({rank,row})=>{
@@ -32,4 +32,12 @@ it.each([2,3,6] as const)('KORR S04 rank %s retains message first look when its 
  expect(result.code).toBe('OK');expect(result.hauptaktion).toBeNull();expect(result.weitere).toBeNull();
  expect(result.erstblick.find(field=>field.key==='nachrichten.inhalt')?.werte.betreff).toBe('TEST original');
  expect(result.datenluecken.length).toBeGreaterThan(0);
+});
+
+
+it('A2 failed-import tone uses the existing warning seam without changing PL priority or hiding a complaint',()=>{
+ const row={...base,importFailure:{state:'FAILED' as const,label:'Import fehlgeschlagen',graphMessageId:'TEST-Graph',reason:'TEST provider unavailable',attempts:1,mailbox:'test@example.invalid',taskId:null}};
+ expect(messageTone(row)).toBe('orange');expect(readFallbackMessagePriority(row)).toMatchObject({code:'OK',rank:8});
+ expect(messageTone({...row,openConcerns:['reklamation']})).toBe('rot');
+ expect(messageTone({...row,usage:'erledigt'})).toBe('gruen');
 });

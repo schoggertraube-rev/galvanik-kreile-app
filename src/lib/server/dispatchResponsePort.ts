@@ -6,7 +6,7 @@ import {readMicrosoftGraphSentMailReference} from './microsoftGraph';
 
 export type DispatchResponseCheck={state:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAILABLE';proofs:Array<{itemId:string;threadId:string;graphMessageId:string;originalSha256:string;receivedAt:string;inReplyTo:string;orderIds:string[];freezes:Array<{orderId:string;freezeId:string}>}>};
 type Original={itemId:string;message:{senderAddress:string;receivedAt:string;replyChain?:{source?:string;status?:string;originalSha256?:string;inReplyTo?:string[]};deliveryReport?:{status:string}}};
-export type DispatchResponsePorts={readLinked:(auth:AuthorizationSnapshot,target:{targetType:'CUSTOMER';targetId:string})=>Promise<{code:string;data?:Array<{id:string;receivedAt:string;senderAddress?:string}>}>};
+export type DispatchResponsePorts={readLinked:(auth:AuthorizationSnapshot,target:{targetType:'CUSTOMER';targetId:string})=>Promise<{code:string;data?:Array<{id:string;receivedAt:string|null;senderAddress?:string}>}>};
 
 /** Incoming MIME and the exact Sent-Items request header bind the reaction to the real notice. */
 export async function readDispatchResponses(auth:AuthorizationSnapshot,input:{customerId:string;noticeThreadIds:string[];oldestNoticeAt:string},ports:DispatchResponsePorts):Promise<DispatchResponseCheck>{
@@ -17,6 +17,7 @@ export async function readDispatchResponses(auth:AuthorizationSnapshot,input:{cu
   const linked=await ports.readLinked(auth,{targetType:'CUSTOMER',targetId:input.customerId});if(linked.code!=='OK'||!linked.data)throw Error('DISPATCH_RESPONSE_SOURCE_UNAVAILABLE');
   const proofs:DispatchResponseCheck['proofs']=[];
   for(const mail of linked.data){
+   if(mail.receivedAt===null||!Number.isFinite(Date.parse(mail.receivedAt)))throw Error('DISPATCH_RESPONSE_TIME_UNAVAILABLE');
    if(Date.parse(mail.receivedAt)<Date.parse(input.oldestNoticeAt))continue;
    // Mails permission already exposes this linked correspondence. Read only secured
    // reply metadata here; the full Eingang capture reader has a different write-area boundary.

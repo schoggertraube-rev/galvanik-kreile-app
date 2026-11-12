@@ -162,7 +162,10 @@
     "@/modules/eingang/server-public#readIntakeHandoverMail",
     "@/modules/eingang/server-public#recordIntakeHandoverEffect",
     "@/modules/eingang/server-public#readPackageExpectation",
-    "@/modules/eingang/server-public#writeIntakeNoteInTransaction"
+    "@/modules/eingang/server-public#writeIntakeNoteInTransaction",
+    "@/modules/eingang/server-public#parkIntakeMailImportFailure",
+    "@/modules/eingang/server-public#readFailedIntakeMailImports",
+    "@/modules/eingang/public#MailImportFailure"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"

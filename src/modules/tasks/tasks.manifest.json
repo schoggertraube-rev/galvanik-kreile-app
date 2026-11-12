@@ -45,7 +45,8 @@
     "@/modules/tasks/server-public#createProductionPricingRetryTask",
     "@/modules/tasks/server-public#settleProductionPricingRetryTasks",
     "@/modules/tasks/public#TaskCalendarRead",
-    "@/modules/tasks/server-public#createMailboxFetchRetryTask"
+    "@/modules/tasks/server-public#createMailboxFetchRetryTask",
+    "@/modules/tasks/server-public#createIntakeMailFailureTask"
   ],
   "capabilities": [
     "aufgabe:speichern",

@@ -1,3 +1,4 @@
+import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
 import {canSynchronizeIntakeMailbox} from '@/lib/auth/authorizationContract';
 import {MAILBOX_SYNC_COPY} from '@/ui/situationCatalog';
 import {canReadQuoteFollowups} from '@/lib/auth/authorizationContract';
@@ -382,4 +383,16 @@ export async function createMailboxFetchRetryTask(tx:PrivilegedTenantTransaction
  if(source.actorId!==auth.userId)throw Error('MAILBOX_TASK_ORIGINAL_ACTOR_REQUIRED');
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  return (await persistTask(tx,auth,{clientKey:source.key,version:0,kind:'aufgabe',title:MAILBOX_SYNC_COPY.retryTask,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'allgemein',id:null},note:MAILBOX_SYNC_COPY.retryTask},deps)).task.id;
+}
+
+export async function createIntakeMailFailureTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,source:{itemId:string;key:string;graphId:string;actors:string[];reason:string},deps:Dependencies){
+ if(!canSynchronizeIntakeMailbox(auth)||!taskUuid(source.itemId)||!taskUuid(source.key)||source.actors.length<3||!source.actors.includes(auth.userId))throw Error('MAIL_IMPORT_TASK_SOURCE_INVALID');
+ const prior=await tx.execute<{id:string;erstellt_von:string;art:string;bezug_typ:string;bezug_id:string|null}>(sql`SELECT id::text,erstellt_von::text,art,bezug_typ,bezug_id FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${source.key}::uuid FOR UPDATE`);
+ if(prior.length){if(prior.length!==1||!source.actors.includes(prior[0].erstellt_von)||prior[0].art!=='aufgabe'||prior[0].bezug_typ!=='eingang'||prior[0].bezug_id!==source.itemId)throw Error('MAIL_IMPORT_TASK_CHANGED');return prior[0].id;}
+ const full=MAIL_IMPORT_COPY.task(source.graphId),budget=120-MAIL_IMPORT_COPY.task('').length,id=source.graphId.length>budget?source.graphId.slice(0,budget-1)+'…':source.graphId;
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ // Fixed import-failure purpose; history gets the normal readable reference
+ // projection. Ordinary dialog writes and reference-reader rights stay unchanged.
+ const scopedEffects:Dependencies={...deps,effect:async(nested,actor,input)=>deps.effect(nested,actor,{...input,reference:await context(nested,actor,input.reference,false,true)})};
+ return (await persistTask(tx,auth,{clientKey:source.key,version:0,kind:'aufgabe',title:MAIL_IMPORT_COPY.task(id),dueDate:clock.today,time:null,forLogin:null,forArea:'eingang',reference:{type:'eingang',id:source.itemId},note:full+'\n'+source.reason},scopedEffects,false)).task.id;
 }

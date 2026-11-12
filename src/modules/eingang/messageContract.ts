@@ -9,6 +9,7 @@ export const MESSAGE_FILTERS=['offen','zuordnen','alle','erledigt','aussortiert'
 export const INTAKE_CHANGED_EVENT='kreile:intake-changed';
 export type MessageFilter=typeof MESSAGE_FILTERS[number];
 export type IntakeMessage={
+ importFailure?:import('./mailSelectionContract').MailImportFailure|null;
  fallbackPriority?:ReturnType<typeof readFallbackMessagePriority>;
  nextActionRule?:MessageNextActionRead;
  sendState?:'entwurf'|'sendet'|'gesendet'|'fehler'|'unklar'|'verworfen'|null;
@@ -20,9 +21,10 @@ export type IntakeHandoverRequest={command:"handover_from_mail";sourceItemId:str
 export type IntakeHandoverResult={code:"OK";receipt:unknown;replayed:boolean}|{code:"UNAUTHENTICATED"|"FORBIDDEN"|"VALIDATION_ERROR"|"NOT_FOUND"|"CONFLICT"|"UNAVAILABLE";message:string;choices?:Array<{id:string;number:string|null;version:number}>};
 export type IntakeMessagesPorts={handover?:(input:IntakeHandoverRequest)=>Promise<IntakeHandoverResult>;list:(filter:MessageFilter)=>Promise<IntakeMessagesResult>;select:(input:IntakeSelectionInput)=>Promise<IntakeCaptureResult>;finish:(input:IntakeUseInput)=>Promise<IntakeUseResult>;reopen:(input:IntakeReopenInput)=>Promise<IntakeCaptureResult>;assignment:Pick<AssignmentPorts,'read'|'assign'>};
 export function messageGroupId(row:IntakeMessage){return row.customerId?'kunde:'+row.customerId:row.groupAddress?'adresse:'+row.groupAddress:'eingang:'+row.id;}
-export function messageTone(row:IntakeMessage):'rot'|'orange'|'navy'|'gruen'{
+export function messageTone(row:Pick<IntakeMessage,'usage'|'openConcerns'|'assignment'|'direction'|'importFailure'>):'rot'|'orange'|'navy'|'gruen'{
  if(row.usage!=='offen')return 'gruen';
  if(row.openConcerns.includes('reklamation'))return 'rot';
+ if(row.importFailure)return 'orange';
  if(row.assignment==='offen'&&row.direction==='rein'||row.openConcerns.some(value=>['termin','kv_anfrage','kv_annahme','kv_ablehnung'].includes(value)))return 'orange';
  return 'navy';
 }

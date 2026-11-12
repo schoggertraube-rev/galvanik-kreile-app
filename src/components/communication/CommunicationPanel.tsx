@@ -1,4 +1,6 @@
 "use client";
+import {MAIL_IMPORT_COPY} from "@/ui/situationCatalog";
+import type {MailImportFailure} from "@/modules/eingang/public";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AtSign, Inbox, Loader2, MailPlus, Paperclip, Send } from "lucide-react";
@@ -17,11 +19,12 @@ import styles from "./CommunicationPanel.module.css";
 type Target = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
 type Composer={subject:string;body:string;onSubject:(value:string)=>void;onBody:(value:string)=>void;onSend:()=>void;busy:boolean};
 type InboxMessage = {
+  importFailure?:MailImportFailure|null;
   id: string;
   subject: string;
   senderName: string;
   senderAddress: string;
-  receivedAt: string;
+  receivedAt: string|null;
   preview: string;
   body: string;
   hasAttachments: boolean | null;
@@ -148,13 +151,13 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
       {targetType === "ORDER" ? inbox.length === 0 ? <p className={styles.empty}>Diesem Auftrag sind keine Mails zugeordnet.</p> : (
         <ol className={styles.inbox}>
           {inbox.map((mail) => <li key={mail.id}>
-            <div><strong>{mail.subject}</strong><small>{mail.senderName} · {mail.senderAddress} · {new Date(mail.receivedAt).toLocaleString("de-DE")}</small><p>{mail.body}</p></div>
+            <div><strong>{mail.importFailure?mail.importFailure.label+" · ":""}{mail.subject}</strong><small>{mail.senderName} · {mail.senderAddress} · {mail.receivedAt===null?MAIL_IMPORT_COPY.timeUnknown:new Date(mail.receivedAt).toLocaleString("de-DE")}</small><p>{mail.body}</p></div>
           </li>)}
         </ol>
       ) : inbox.length === 0 ? <p className={styles.empty}>Der Posteingang enthält keine lesbaren Mails.</p> : (
         <ol className={styles.inbox}>
           {inbox.map((mail) => <li key={mail.id}>
-            <div><strong>{mail.subject}</strong><small>{mail.senderName} · {new Date(mail.receivedAt).toLocaleString("de-DE")}</small><p>{mail.preview || "Keine Vorschau vorhanden."}</p>{mail.hasAttachments ? <span><Paperclip /> Mit Anhang</span> : null}</div>
+            <div><strong>{mail.importFailure?mail.importFailure.label+" · ":""}{mail.subject}</strong><small>{mail.senderName} · {mail.receivedAt===null?MAIL_IMPORT_COPY.timeUnknown:new Date(mail.receivedAt).toLocaleString("de-DE")}</small><p>{mail.preview || "Keine Vorschau vorhanden."}</p>{mail.hasAttachments ? <span><Paperclip /> Mit Anhang</span> : null}</div>
             <div className={styles.mailActions}>
               <button type="button" disabled={busyId === mail.id} onClick={() => void attach(mail)}>{busyId === mail.id ? <Loader2 className={styles.spin} /> : <Paperclip />}Am Vorgang ablegen</button>
               <button type="button" disabled={busyId!==null} onClick={() => void captureMail(mail,'CUSTOMER')}><MailPlus />Kunde anlegen</button>

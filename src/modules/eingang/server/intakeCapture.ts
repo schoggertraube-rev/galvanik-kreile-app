@@ -1,3 +1,6 @@
+import {mailImportFailureProjection} from './intakeMailFailureRead';
+import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
+import type {MailImportFailure} from '../mailSelectionContract';
 import {offlinePartition} from "@/lib/server/offlinePartition";
 import {readIntakeActorTraces} from './actorRead';
 import "server-only";
@@ -13,7 +16,7 @@ import { intakeInvoiceReviewRequired } from "../intakeLifecycleContract";
 import { mayUseContinuationSources } from "./intakeContinuationAccess";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type Row = { id: string; kanal:string; version: number; text: string | null; fortsetzung_von:string|null; kunde_id: string | null; vorgang_id: string | null; vorgang_art?:string|null; zuordnung: string; einsatz: string; anliegen: string[]; anliegen_abgewaehlt:string[];anliegen_offen?:string[] };
+type Row = { importFailure:MailImportFailure|null; id: string; kanal:string; version: number; text: string | null; fortsetzung_von:string|null; kunde_id: string | null; vorgang_id: string | null; vorgang_art?:string|null; zuordnung: string; einsatz: string; anliegen: string[]; anliegen_abgewaehlt:string[];anliegen_offen?:string[] };
 function failure(code: Exclude<IntakeCaptureResult, { code: "OK" }>["code"], message: string): Exclude<IntakeCaptureResult, { code: "OK" }> { return { code, message }; }
 function record(input: unknown): input is Record<string, unknown> { return input !== null && typeof input === "object" && !Array.isArray(input); }
 function mayAccessCaptureContent(auth:AuthorizationSnapshot,channel:string){return channel!=='mail'||hasAuthorizationArea(auth,'mails');}
@@ -28,16 +31,17 @@ export async function authorizedIntakeContext(ctx?: IntakeContext): Promise<Auth
   if (!hasAuthorizationArea(result.data, area)) return failure("FORBIDDEN", `Bereich ${area} ist nicht freigegeben.`);
   return result.data;
 }
-export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId: string, ctx?: IntakeContext,invoiceOnly=false): Promise<IntakeCaptureResult> {
+export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId: string, ctx?: IntakeContext,invoiceOnly=false,pendingOriginalImport=false): Promise<IntakeCaptureResult> {
   return withPrivilegedTenantTransaction(auth, async tx => {
-    const rows = await tx.execute<Row>(sql`SELECT id::text,kanal, version, text, fortsetzung_von::text, kunde_id, vorgang_id,vorgang_art, zuordnung, einsatz, anliegen,anliegen_abgewaehlt,anliegen_offen
-      FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${itemId}::uuid`);
+    const rows = await tx.execute<Row>(sql`SELECT ${mailImportFailureProjection()} AS "importFailure",id::text,kanal, version, text, fortsetzung_von::text, kunde_id, vorgang_id,vorgang_art, zuordnung, einsatz, anliegen,anliegen_abgewaehlt,anliegen_offen
+      FROM public.intake_item source WHERE tenant_id=${auth.tenantId} AND id=${itemId}::uuid`);
     if (rows.length !== 1) return failure("NOT_FOUND", "Eingang wurde nicht gefunden.");
     const row = rows[0];
     if(invoiceOnly&&(!hasAuthorizationArea(auth,'geld')||!row.anliegen.includes('rechnung')&&row.vorgang_art!=='rechnung'))return failure('FORBIDDEN','Rechnungsbezug für den Beleg fehlt.');
     if(!invoiceOnly&&!mayAccessCaptureContent(auth,row.kanal))return failure('FORBIDDEN','Mail-Inhalte benötigen das Recht Mails.');
     if(row.fortsetzung_von&&!await mayUseContinuationSources(tx,auth,itemId))return failure("FORBIDDEN","Original der Fortsetzung ist für diesen Login nicht freigegeben.");
     if (ctx?.customerId && row.kunde_id !== ctx.customerId || ctx?.orderId && row.vorgang_id !== ctx.orderId) return failure("FORBIDDEN", "Eingang gehört nicht zu diesem Kontext.");
+    if(row.importFailure&&!pendingOriginalImport&&!invoiceOnly)return failure("UNAVAILABLE",MAIL_IMPORT_COPY.detail(row.importFailure));
     const files = await tx.execute<{ id: string; name: string; mime: string; bytes: string; readable: boolean; status: string; secured: boolean; errorCode:string|null; captureOrigin:"warenfoto"|"dokument" }>(sql`
       SELECT file.id::text,file.dateiname AS name,file.mime,file.bytes::text,file.lesbar AS readable,file.erkennung_status AS status,file.aufnahme_herkunft AS "captureOrigin",
         EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text) AS secured,

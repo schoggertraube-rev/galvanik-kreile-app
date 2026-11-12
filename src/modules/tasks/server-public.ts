@@ -21,3 +21,5 @@ export {createOfflineWorkshopConflictTask} from './server/taskService';
 export {createProductionPricingRetryTask,settleProductionPricingRetryTasks} from './server/taskService';
 
 export {createMailboxFetchRetryTask} from './server/taskService';
+
+export {createIntakeMailFailureTask} from './server/taskService';
