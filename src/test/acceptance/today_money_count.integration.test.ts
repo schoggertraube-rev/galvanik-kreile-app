@@ -6,7 +6,9 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
-import {readTodayDashboard} from '@/lib/server/todayDashboard';
+import {sql as query} from 'drizzle-orm';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {readTodayDashboard,readTodaySource} from '@/lib/server/todayDashboard';
 import {setPaymentModeAction} from '@/app/actions/payments.actions';
 import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
@@ -32,4 +34,17 @@ it('T05-3 counts all 25 historical invoice fixtures while limiting the list and 
  expect(hidden).not.toHaveProperty('moneyMetric');expect(hidden.allowedFields).not.toContain('money');
  expect(hidden.items.some(row=>row.invoiceId||row.kind==='invoice')).toBe(false);
  expect(JSON.stringify(hidden)).not.toContain('119,00');
+});
+
+// Explicit native SQL-error boundary, not a simulated product database.
+it('keeps the next real daily query readable after a failed source savepoint and after reread',async()=>{
+ const customerId=await customerFixture('TEST S05 SQL Fehler');
+ const order=await intakeOrderFixture('TEST S05 Ware bleibt',customerId);
+ const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_S05_AUTH');
+ const read=()=>withPrivilegedTenantTransaction(auth.data,async tx=>{
+  expect(await readTodaySource(tx,nested=>nested.execute(query`SELECT 1/0 AS fail`))).toEqual({code:'SOURCE_INCOMPLETE'});
+  const retained=await readTodaySource(tx,nested=>nested.execute<{id:string}>(query`SELECT id FROM public.orders WHERE tenant_id=${tenant} AND id=${order.receipt.orderId}`));
+  expect(retained).toMatchObject({code:'OK',data:[{id:order.receipt.orderId}]});return retained;
+ });
+ expect(await read()).toEqual(await read());
 });
