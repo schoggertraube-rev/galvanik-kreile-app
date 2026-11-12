@@ -115,6 +115,7 @@ const MOCK_RULES = [
   },
   {
     id: "HARDCODED_BEISPIEL_COMMENT",
+    requiredLiteral: "(Beispiel)",
     // Matches: + 2000; // 2000EUR = ... (Beispiel)
     pattern: /\d+[^/\n]*\/\/\s*\d+[^/\n]*\(Beispiel\)/,
     reason:
@@ -404,6 +405,9 @@ function detectMocks(reachableFiles, repoRoot = REPO_ROOT) {
     let text;
     try { text = readText(file); } catch { continue; }
     for (const rule of MOCK_RULES) {
+      // This literal is necessary for the unchanged regex to match. Avoid its
+      // quadratic negative scan on large generated strings; inspect every file.
+      if (rule.requiredLiteral && !text.includes(rule.requiredLiteral)) continue;
       if (rule.pattern.test(text)) {
         const lines = text.split("\n");
         let lineNo = -1;
