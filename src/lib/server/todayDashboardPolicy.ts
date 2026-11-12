@@ -305,3 +305,25 @@ export function projectOrderSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:
  const sources=[...dates.values()],counts={today:sources.filter(row=>row.dueDate<=calendar.today).length,upcoming:sources.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
  return missing.length?{code:'SOURCE_INCOMPLETE' as const,knownCounts:counts,missing,sources}:{code:'OK' as const,...counts,sources};
 }
+
+/** Financial slice uses the same persisted open-invoice rows, never the visible
+ * twenty-row list. An unreadable amount/date is a gap, not a zero balance. */
+export function projectTodayInvoiceMoney(source:{code:'OK';data:ReadonlyArray<{id:string;payment_version:number;due_date:Date|string|null;open_amount_cents:number|string|null}>}|{code:'SOURCE_INCOMPLETE'},calendar:ReturnType<typeof readTodayCalendar>){
+ const missing:string[]=[],sources:Array<{id:string;version:number;dueDate:string;amountCents:number}>=[];
+ if(source.code!=='OK')return {code:'SOURCE_INCOMPLETE' as const,missing:['INVOICE_MONEY_SOURCE']};
+ let openCents=0,overdueCents=0;
+ for(const row of source.data){
+  const amount=row.open_amount_cents===null?NaN:Number(row.open_amount_cents);
+  const raw=row.due_date instanceof Date?(Number.isFinite(row.due_date.getTime())?row.due_date.toISOString():null):row.due_date;
+  const dueDate=typeof raw==='string'?raw.slice(0,10):null;
+  if(!row.id||!Number.isSafeInteger(row.payment_version)||!Number.isSafeInteger(amount)||amount<=0||!dueDate||!parseDateKey(dueDate)){
+   missing.push('INVOICE_MONEY_FACTS:'+row.id);continue;
+  }
+  if(!Number.isSafeInteger(openCents+amount)||!Number.isSafeInteger(overdueCents+(dueDate<calendar.today?amount:0))){missing.push('INVOICE_MONEY_RANGE:'+row.id);continue;}
+  openCents+=amount;if(dueDate<calendar.today)overdueCents+=amount;
+  sources.push({id:row.id,version:row.payment_version,dueDate,amountCents:amount});
+ }
+ const totals={openCount:sources.length,openCents,overdueCount:sources.filter(row=>row.dueDate<calendar.today).length,overdueCents,
+  today:sources.filter(row=>row.dueDate<=calendar.today).length,upcoming:sources.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
+ return missing.length?{code:'SOURCE_INCOMPLETE' as const,knownTotals:totals,sources,missing}:{code:'OK' as const,...totals,sources};
+}

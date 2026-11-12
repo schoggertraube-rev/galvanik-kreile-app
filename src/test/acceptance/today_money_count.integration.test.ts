@@ -25,16 +25,25 @@ it('T05-3 counts all 25 historical invoice fixtures while limiting the list and 
   await sql`INSERT INTO public.invoices(id,tenant_id,order_id,customer_id,invoice_number,amount_total,status,due_date,gross_amount_cents,payment_contract_version,payment_mode,payment_status,payment_open_amount_cents,payment_paid_amount_cents,payment_currency,payment_version)
    VALUES(${id}::uuid,${tenant},${order.receipt.orderId},${customerId},${'TEST-S05-'+String(index).padStart(3,'0')},119.00,'issued',(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1,11900,1,${index===24?'vorkasse':'rechnung'},'offen',11900,0,'EUR',0)`;
  }
+ // Additional explicit historical fixtures: future receivables must count as
+ // open money while staying out of the overdue metric/challenges.
+ for(const days of [7,8]){
+  const order=await intakeOrderFixture('TEST S05 kommende Rechnung '+days,customerId),id=randomUUID();
+  await sql`INSERT INTO public.invoices(id,tenant_id,order_id,customer_id,invoice_number,amount_total,status,due_date,gross_amount_cents,payment_contract_version,payment_mode,payment_status,payment_open_amount_cents,payment_paid_amount_cents,payment_currency,payment_version)
+   VALUES(${id}::uuid,${tenant},${order.receipt.orderId},${customerId},${'TEST-S05-FUTURE-'+days},30.00,'issued',(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+${days}::integer,3000,1,'rechnung','offen',3000,0,'EUR',0)`;
+ }
  const read=async(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
  const first=await read(full),again=await read(full);
  const [serverDay]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS today`;expect(first.calendar?.today).toBe(serverDay.today);expect(Number.isFinite(Date.parse(first.calendar?.readStartedAt??''))).toBe(true);
  expect(first.moneyMetric).toMatchObject({code:'OK',count:25});
- expect(first.moneySources).toEqual({invoices:{code:'OK',count:25},prepayments:{code:'OK',count:0},collections:{code:'OK',count:0}});
+ expect(first.invoiceMoney).toMatchObject({code:'OK',openCount:27,openCents:303500,overdueCount:25,overdueCents:297500,today:25,upcoming:1});
+ expect(again.invoiceMoney).toEqual(first.invoiceMoney);
+ expect(first.moneySources).toEqual({invoices:{code:'OK',count:27},prepayments:{code:'OK',count:0},collections:{code:'OK',count:0}});
  expect(first.moneyMetric?.code==='OK'?first.moneyMetric.sources.map(row=>row.id).sort():null).toEqual(ids.sort());
  expect(first.items.filter(row=>row.kind==='invoice')).toHaveLength(20);
  expect(again.moneyMetric).toEqual(first.moneyMetric);
  const restricted=await createFixture(['auftraege'],'werkstatt'),hidden=await read(restricted);
- expect(hidden).not.toHaveProperty('moneyMetric');expect(hidden).not.toHaveProperty('moneySources');expect(hidden.allowedFields).not.toContain('money');
+ expect(hidden).not.toHaveProperty('invoiceMoney');expect(hidden).not.toHaveProperty('moneyMetric');expect(hidden).not.toHaveProperty('moneySources');expect(hidden.allowedFields).not.toContain('money');
  expect(hidden.items.some(row=>row.invoiceId||row.kind==='invoice')).toBe(false);
  expect(JSON.stringify(hidden)).not.toContain('119,00');expect(JSON.stringify(hidden.challenges)).not.toContain('day.challenge_debt');
 });

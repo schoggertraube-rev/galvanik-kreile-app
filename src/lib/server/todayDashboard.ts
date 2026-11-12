@@ -8,7 +8,7 @@ import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
-import { type TodayOrderScheduleRow,projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
+import { projectTodayInvoiceMoney,type TodayOrderScheduleRow,projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -47,6 +47,7 @@ export type TodayDashboard = {
   challenges?:{code:'OK'|'SOURCE_INCOMPLETE';groups:ReturnType<typeof projectTodayChallenges>['groups'];missing:readonly string[]};
   orderActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:TodayOrderScheduleRow[];missingOrderIds:string[]};
   moneySources?:{invoices:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'};prepayments:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'};collections:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'}};
+  invoiceMoney?:ReturnType<typeof projectTodayInvoiceMoney>;
   moneyMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
   assignmentMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
   items: TodayItem[];
@@ -66,7 +67,7 @@ export type TodayDashboard = {
 
 type PreferenceRow = { visible_fields: string[]; layout: unknown | null };
 type ReminderRow = { item_key: string; reminder_until: Date | string };
-type InvoiceRow = { payment_version:number;id: string; invoice_number: string; order_id: string; customer_name: string; customer_country: string | null; due_date: Date | string; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string };
+type InvoiceRow = { payment_version:number;id: string; invoice_number: string; order_id: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string };
 type PrepaymentRow = { order_id: string; order_number: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; invoice_id: string | null; open_amount_cents: number | string | null; payment_status: string | null; station: string; goods_out_event_count: number | string };
 type UserRow = { id: string; full_name: string };
 type AssignmentRow = { integrity_ok:boolean;order_id: string; assigned_to_name: string; current_order_version: number };
@@ -136,7 +137,6 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
           JOIN public.customers customer ON customer.tenant_id=invoice.tenant_id AND customer.id=invoice.customer_id
           WHERE invoice.tenant_id=${auth.tenantId} AND invoice.status='issued'
             AND invoice.payment_status IN ('offen', 'teilbezahlt')
-            AND invoice.due_date < ${today}::date
           ORDER BY invoice.due_date, invoice.invoice_number
         `)) : {code:'OK' as const,data:[] as InvoiceRow[]};
       const prepaymentSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<PrepaymentRow>(sql`
@@ -257,9 +257,11 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   // Legacy mail opener consumes only a real provider ID; native IDs stay in U3 sources.
   if(assignmentMessages)for(const mail of assignmentMessages.filter(row=>row.graphMessageId).slice(0,5))add({key:`mail:${mail.id}`,field:'assign',kind:'mail',title:mail.subject||'Mail ohne Betreff',meta:`${mail.senderName} · ${new Intl.DateTimeFormat('de-DE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Berlin'}).format(new Date(mail.at))}`,urgency:'decision',graphMessageId:mail.graphMessageId!});
 
-  const overdueInvoices=support.invoices.filter(invoice=>classifyMoneyForToday({customerCountry:invoice.customer_country,dueDate:dateOnly(invoice.due_date),goodsOutRecorded:false,paymentMode:invoice.payment_mode,paymentStatus:invoice.payment_status,station:invoice.station},today)==='overdue_invoice');
+  const invoiceMoney=projectTodayInvoiceMoney(support.invoiceSource,calendar);
+  const overdueInvoiceRows=support.invoices.filter(invoice=>invoice.due_date!==null&&dateOnly(invoice.due_date)<today);
+  const overdueInvoices=overdueInvoiceRows.filter(invoice=>classifyMoneyForToday({customerCountry:invoice.customer_country,dueDate:invoice.due_date===null?null:dateOnly(invoice.due_date),goodsOutRecorded:false,paymentMode:invoice.payment_mode,paymentStatus:invoice.payment_status,station:invoice.station},today)==='overdue_invoice');
   for (const invoice of overdueInvoices.slice(0,20)) {
-    const dueDate = dateOnly(invoice.due_date);
+    const dueDate = dateOnly(invoice.due_date!);
     add({ key: `invoice:${invoice.id}`, field: "money", kind: "invoice", title: `${invoice.invoice_number} · ${invoice.customer_name}`, meta: `${euro(invoice.open_amount_cents)} · fällig ${dueDate}`, urgency: "conflict", invoiceId: invoice.id, orderId: invoice.order_id, dueDate, primaryActionLabel: "Erinnern" });
   }
 
@@ -298,7 +300,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const responsible=await withPrivilegedTenantTransaction(auth,tx=>readOrderResponsibilityForToday(tx,auth,items.flatMap(item=>item.orderId?[item.orderId]:[])));
   const mine=(item:TodayItem)=>ownTaskKeys.has(item.key)||item.kind!=='complaint'&&!!item.orderId&&responsible.get(item.orderId)===auth.userId;
   const sortedItems=sortTodayByResponsibility(items,mine);
-  const challenges=projectTodayChallenges(orderActions.rows,support.invoices.map(row=>({id:row.id,orderId:row.order_id,number:row.invoice_number,dueDate:dateOnly(row.due_date),amountCents:row.open_amount_cents,amount:Number.isSafeInteger(Number(row.open_amount_cents))&&Number(row.open_amount_cents)>0?euro(row.open_amount_cents):null})),today);
+  const challenges=projectTodayChallenges(orderActions.rows,overdueInvoiceRows.map(row=>({id:row.id,orderId:row.order_id,number:row.invoice_number,dueDate:dateOnly(row.due_date!),amountCents:row.open_amount_cents,amount:Number.isSafeInteger(Number(row.open_amount_cents))&&Number(row.open_amount_cents)>0?euro(row.open_amount_cents):null})),today);
   const challengeMissing=[...challenges.missing,...(orderActions.code!=='OK'?['CHALLENGE_ORDER_SOURCE']:[]),...(support.invoiceSource.code!=='OK'?['CHALLENGE_INVOICE_SOURCE']:[]),...(!complaintsKnown||complaintCases.length?['CHALLENGE_COMPLAINT_SOURCE']:[]),...(graphAllowed&&(graph.code!=='OK'||graph.messages.some(row=>row.usage==='offen'&&(row.sendState==='unklar'||row.sendState==='fehler'||row.openConcerns.some(kind=>['kv_annahme','kv_ablehnung','reklamation'].includes(kind)))))?['CHALLENGE_CONCERN_SOURCE']:[])];
 
   return {
@@ -306,10 +308,11 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     items:sortedItems,
     challenges:{code:challengeMissing.length?'SOURCE_INCOMPLETE':'OK',groups:challenges.groups,missing:challengeMissing},
     ...(ordersAllowed?{orderActions,orderSchedule}:{}),
+    ...(moneyAllowed?{invoiceMoney}:{}),
     ...(moneyAllowed?{moneySources:{invoices:countTodaySource(support.invoiceSource),prepayments:countTodaySource(support.prepaymentSource),collections:countTodaySource(support.collectionSource)}}:{}),
-    ...(moneyAllowed?{moneyMetric:support.invoiceSource.code==='OK'?{code:'OK' as const,count:support.invoices.length,sources:support.invoices.map(row=>({id:row.id,version:row.payment_version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
+    ...(moneyAllowed?{moneyMetric:invoiceMoney.code==='OK'?{code:'OK' as const,count:overdueInvoiceRows.length,sources:overdueInvoiceRows.map(row=>({id:row.id,version:row.payment_version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
     ...(graphAllowed?{assignmentMetric:assignmentMessages?{code:'OK' as const,count:assignmentMessages.length,sources:assignmentMessages.map(row=>({id:row.id,version:row.version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
-    datenluecken:[...challengeMissing,...(ordersAllowed&&orderSchedule.code==='SOURCE_INCOMPLETE'?orderSchedule.missing:[]),...(ordersAllowed&&orderSource.code!=='OK'?['ORDER_SOURCE']:[]),...(ordersAllowed&&orderActions.code!=='OK'?['ORDER_ACTION_SOURCE']:[]),...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
+    datenluecken:[...challengeMissing,...(moneyAllowed&&invoiceMoney.code==='SOURCE_INCOMPLETE'?invoiceMoney.missing:[]),...(ordersAllowed&&orderSchedule.code==='SOURCE_INCOMPLETE'?orderSchedule.missing:[]),...(ordersAllowed&&orderSource.code!=='OK'?['ORDER_SOURCE']:[]),...(ordersAllowed&&orderActions.code!=='OK'?['ORDER_ACTION_SOURCE']:[]),...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
     ...(support.collectionSource.code==='OK'?{collectionNotices}:{}),
     visibleFields: selected,
     layout,

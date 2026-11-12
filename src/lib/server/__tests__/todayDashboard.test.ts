@@ -1,5 +1,5 @@
 import type {U2Read} from '@/lib/domain/u2ReadContract';
-import {projectOrderSchedule,readTodayCalendar,projectTodayChallenges} from '../todayDashboardPolicy';
+import {projectTodayInvoiceMoney,projectOrderSchedule,readTodayCalendar,projectTodayChallenges} from '../todayDashboardPolicy';
 import {sortTodayByResponsibility} from '../todayDashboardPolicy';
 import { describe, expect, it } from "vitest";
 import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/server/todayDashboardPolicy";
@@ -186,4 +186,18 @@ describe('S05 qualified order calendar slice',()=>{
   expect(projectOrderSchedule({code:'OK',rows:[],missingOrderIds:[]},calendar)).toMatchObject({code:'OK',today:0,upcoming:0});
   const unknown=projectOrderSchedule({code:'SOURCE_INCOMPLETE',rows:[],missingOrderIds:[]},calendar);expect(unknown.code).toBe('SOURCE_INCOMPLETE');expect(unknown).not.toHaveProperty('today');
  });
+});
+
+// Explicit synthetic projection boundaries; real read/auth is covered separately.
+it('keeps all open invoice amounts and separates overdue/today/upcoming without a list limit',()=>{
+ const calendar=readTodayCalendar(new Date('2026-11-12T12:00:00Z'));
+ const rows=[{id:'late',payment_version:2,due_date:'2026-11-11',open_amount_cents:1250},{id:'today',payment_version:1,due_date:'2026-11-12',open_amount_cents:'2500'},
+ {id:'next',payment_version:3,due_date:'2026-11-19',open_amount_cents:300},{id:'later',payment_version:4,due_date:'2026-11-20',open_amount_cents:400}];
+ expect(projectTodayInvoiceMoney({code:'OK',data:rows},calendar)).toMatchObject({code:'OK',openCount:4,openCents:4450,overdueCount:1,overdueCents:1250,today:2,upcoming:1});
+ expect(projectTodayInvoiceMoney({code:'OK',data:[]},calendar)).toMatchObject({code:'OK',openCount:0,openCents:0,today:0,upcoming:0});
+ expect(projectTodayInvoiceMoney({code:'SOURCE_INCOMPLETE'},calendar)).toEqual({code:'SOURCE_INCOMPLETE',missing:['INVOICE_MONEY_SOURCE']});
+ for(const invalid of [{...rows[0],open_amount_cents:null},{...rows[0],due_date:null},{...rows[0],open_amount_cents:'unreadable'}]){
+  const partial=projectTodayInvoiceMoney({code:'OK',data:[rows[1],invalid]},calendar);
+  expect(partial).toMatchObject({code:'SOURCE_INCOMPLETE',knownTotals:{openCount:1,openCents:2500}});expect(partial).not.toHaveProperty('openCents');
+ }
 });
