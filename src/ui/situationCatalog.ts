@@ -1,3 +1,5 @@
+/** PL13.11.00:14 deferred sales-stage sources. */
+export const DEFERRED_LEGACY_COPY={unavailable:"Kommt nach dem Start dazu - bis dahin ausgeschaltet."} as const;
 /** Existing compatibility denial text, now shared by canonical area gates. */
 export const LEGACY_ACTION_ACCESS_COPY={forbidden:"Keine Berechtigung für diese Aktion."} as const;
 export const MAIL_IMPORT_COPY={timeUnknown:'Eingangszeit fehlt',failed:'Import fehlgeschlagen',detail:(failure:{reason:string|null;graphMessageId:string|null})=>['Import fehlgeschlagen',failure.reason??MAILBOX_SYNC_COPY.unavailable,failure.graphMessageId??MAILBOX_SYNC_COPY.unavailable].join(' · '),task:(id:string)=>`Mail ${id} importieren – Import fehlgeschlagen`} as const;

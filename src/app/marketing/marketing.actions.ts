@@ -1,4 +1,6 @@
 "use server";
+import {rejectDeferredLegacy} from "@/lib/server/authHelper";
+
 
 import { db } from "@/db";
 import { kampagne, kanal, segment, aktion, lernMetrik } from "@/db/schema_marketing";
@@ -77,6 +79,8 @@ async function ensureMarketingData() {
 }
 
 export async function getBesteAktionAction(): Promise<AktionVorschlag | null> {
+  await rejectDeferredLegacy("geld");
+
   await ensureMarketingData();
   const res = await db.select().from(aktion).where(eq(aktion.status, "vorschlag")).orderBy(desc(aktion.score)).limit(1);
   if (!res.length) return null;
@@ -103,12 +107,16 @@ export async function getBesteAktionAction(): Promise<AktionVorschlag | null> {
 }
 
 export async function listVorschlaegeAction(sort: SortMode = "output"): Promise<AktionVorschlag[]> {
+  await rejectDeferredLegacy("geld");
+
   void sort;
   // Empty state for Ideen as requested
   return [];
 }
 
 export async function getKampagnenAction(): Promise<MKampagne[]> {
+  await rejectDeferredLegacy("geld");
+
   await ensureMarketingData();
   const res = await db.select().from(kampagne).orderBy(desc(kampagne.erstelltAm));
   return res.map(k => ({
@@ -124,6 +132,8 @@ export async function getKampagnenAction(): Promise<MKampagne[]> {
 }
 
 export async function getSegmenteAction(): Promise<MSegment[]> {
+  await rejectDeferredLegacy("geld");
+
   await ensureMarketingData();
   const res = await db.select().from(segment);
   return res.map(s => ({
@@ -136,6 +146,8 @@ export async function getSegmenteAction(): Promise<MSegment[]> {
 }
 
 export async function getLernInsightsAction(): Promise<LernInsight[]> {
+  await rejectDeferredLegacy("geld");
+
   await ensureMarketingData();
   const res = await db.select().from(lernMetrik);
   return res.map(l => ({
@@ -146,6 +158,8 @@ export async function getLernInsightsAction(): Promise<LernInsight[]> {
 }
 
 export async function getWirkungMiniAction(): Promise<WirkungMini[]> {
+  await rejectDeferredLegacy("geld");
+
   return [
     { label: "Anfragen aus Marketing", wert: 23, suffix: "", sparkValues: [30, 45, 40, 62, 55, 85, 100] },
     { label: "Umsatz daraus", wert: 5760, suffix: " €", sparkValues: [35, 30, 55, 48, 70, 78, 100] },
@@ -154,6 +168,8 @@ export async function getWirkungMiniAction(): Promise<WirkungMini[]> {
 }
 
 export async function getFunnelAction(): Promise<FunnelDaten> {
+  await rejectDeferredLegacy("geld");
+
   return {
     stufen: [
       { label: "Posts / Mails", wert: 14, breite: 10 },
@@ -168,6 +184,8 @@ export async function getFunnelAction(): Promise<FunnelDaten> {
 }
 
 export async function getStoryIdeenAction(): Promise<StoryIdee[]> {
+  await rejectDeferredLegacy("geld");
+
   const v = await listVorschlaegeAction();
   return [
     ...v.map(vorschlag => ({

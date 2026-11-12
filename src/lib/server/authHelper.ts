@@ -1,6 +1,9 @@
+import type {AccessArea} from '@/lib/auth/authorizationContract';
+import {DEFERRED_LEGACY_COPY,LEGACY_ACTION_ACCESS_COPY} from '@/ui/situationCatalog';
 import { readAppSession, type AppSession, type SessionReadResult } from "@/lib/server/appSession";
 import {
   resolveAuthorization,
+  hasAuthorizationArea,
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
 
@@ -114,4 +117,24 @@ export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<Act
   }
 
   return { ok: true, data: result.data.role.toLowerCase() };
+}
+
+
+/** PL13.11.00:14: shared canonical area check; no compatibility role/mode policy. */
+export async function readAuthorizedArea(area:AccessArea):Promise<ActionResult<AuthorizationSnapshot>>{
+ const result=await resolveAuthorization();
+ if(!result.ok)return {ok:false,error:'UNAUTHORIZED',message:result.message};
+ if(!hasAuthorizationArea(result.data,area))return {ok:false,error:'FORBIDDEN',message:LEGACY_ACTION_ACCESS_COPY.forbidden};
+ return result;
+}
+/** Deferred sources have no tenant authority yet. Authorization precedes denial. */
+export async function deferredLegacyResult(area:AccessArea):Promise<ActionResult<never>>{
+ const auth=await readAuthorizedArea(area);
+ if(!auth.ok)return auth;
+ return {ok:false,error:'CONFLICT',message:DEFERRED_LEGACY_COPY.unavailable};
+}
+export async function rejectDeferredLegacy(area:AccessArea):Promise<never>{
+ const result=await deferredLegacyResult(area);
+ if(!result.ok)throw Error(result.message);
+ throw Error(DEFERRED_LEGACY_COPY.unavailable);
 }

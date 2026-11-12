@@ -74,3 +74,23 @@ it('S05K A10 analysis consumes every denied auth result before any provider read
  expect(await withSession(denied,()=>getAnalyseLinkedEntities('werkstatt_puls'))).toMatchObject({data:[],error:'Keine Berechtigung für diese Aktion.'});
  expect(fetches).not.toHaveBeenCalled();fetches.mockRestore();
 });
+
+it('S05K A10 PL0014 deferred tenantless sources deny after canonical rights without data effects',async()=>{
+ const {getBathsDb,createBathMeasurementDb}=await import('@/app/actions/baths.actions');
+ const {getBaederListAction}=await import('@/app/baeder/actions');
+ const {getBesteAktionAction}=await import('@/app/marketing/marketing.actions');
+ const {getUstvaAnalysisAction}=await import('@/app/buchhaltung/analysis.actions');
+ const {searchBelegeByOcrTextAction}=await import('@/app/buchhaltung/search-actions');
+ const {createAktion}=await import('@/app/marketing/aktion/actions');
+ const operator=await createFixture(['auftraege']),money=await createFixture(['geld']);
+ const text='Kommt nach dem Start dazu - bis dahin ausgeschaltet.';
+ expect(await withSession(operator,()=>getBathsDb())).toMatchObject({ok:false,error:'CONFLICT',message:text});
+ expect(await withSession(money,()=>getBathsDb())).toMatchObject({ok:false,error:'FORBIDDEN'});
+ expect(await withSession(operator,()=>getBaederListAction())).toMatchObject({ok:false,message:text});
+ expect(await withSession(operator,()=>createBathMeasurementDb({bathId:'TEST-no-write',temperature:20}))).toMatchObject({ok:false,message:text});
+ await expect(withSession(operator,()=>getBesteAktionAction())).rejects.toThrow('Keine Berechtigung');
+ for(const work of [()=>getBesteAktionAction(),()=>getUstvaAnalysisAction('2026-01-01','2026-12-31'),()=>searchBelegeByOcrTextAction('TEST'),()=>createAktion(new FormData())]){
+  await expect(withSession<unknown>(money,work)).rejects.toThrow(text);
+ }
+ expect(await withSession(operator,()=>getBathsDb())).toMatchObject({ok:false,message:text});
+});
