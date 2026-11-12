@@ -1,7 +1,8 @@
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import type {AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 import {readMicrosoftGraphSentMailReference} from './microsoftGraph';
 import {DELIVERY_FAILURE_COPY} from '@/ui/situationCatalog';
