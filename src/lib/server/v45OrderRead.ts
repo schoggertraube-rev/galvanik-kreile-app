@@ -1,7 +1,7 @@
 import 'server-only';
 import type {EvidenceReadRecord} from './evidenceRead';
 import type {LiveOrderCard} from './orderCardRead';
-import type {AuthorizationSnapshot} from './authorization';
+import {canTransportInvoiceDocument,type AuthorizationSnapshot} from './authorization';
 import type {readOrderInformed} from './orderReleaseRead';
 import {readAuthorizedV45Rule} from './v45RuleRead';
 import {readV45FirstLook} from './v45FirstLookRead';
@@ -9,7 +9,7 @@ import {readV45ActionValues} from './v45ActionValuesRead';
 import {readV45ObjectActionAbsence} from './v45ObjectActionsRead';
 
 type OrderCommand={datei:string;funktion:string;argumente:Readonly<Record<string,unknown>>};
-type OrderContext={card:Pick<LiveOrderCard,'id'|'version'|'customerId'|'handoverMode'>;part?:{id:string}};
+type OrderContext={card:Pick<LiveOrderCard,'id'|'version'|'customerId'|'handoverMode'>;part?:{id:string};invoiceMailOriginals?:readonly {id:string;orderId:string;version:number}[]};
 const orderCommand=<N extends keyof typeof import('@/app/actions/orders.actions')>(funktion:N,argumente:Readonly<Record<string,unknown>>):OrderCommand=>({datei:'src/app/actions/orders.actions.ts',funktion,argumente});
 const invoiceCommand=<N extends keyof typeof import('@/app/actions/invoices.actions')>(funktion:N,argumente:Readonly<Record<string,unknown>>):OrderCommand=>({datei:'src/app/actions/invoices.actions.ts',funktion,argumente});
 const customerCommand=<N extends keyof typeof import('@/app/actions/customers.actions')>(funktion:N,argumente:Readonly<Record<string,unknown>>):OrderCommand=>({datei:'src/app/actions/customers.actions.ts',funktion,argumente});
@@ -31,8 +31,9 @@ const ORDER_U2_BINDINGS={
   'order.ship_prepare':({card}:OrderContext)=>orderCommand('getManualShippingAction',{orderId:card.id}),
   'order.payment':({card}:OrderContext):OrderCommand=>({datei:'src/app/actions/payments.actions.ts',funktion:'getOrderPaymentStateAction' satisfies keyof typeof import('@/app/actions/payments.actions'),argumente:{orderId:card.id}}),
   'order.handover':({card}:OrderContext):OrderCommand|null=>card.handoverMode?{datei:'src/app/actions/goodsOut.actions.ts',funktion:'recordGoodsOutAction' satisfies keyof typeof import('@/app/actions/goodsOut.actions'),argumente:{orderId:card.id,expectedVersion:card.version,mode:card.handoverMode==='shipping'?'versand':'abholung'}}:null,
+  'order.notify':({card,invoiceMailOriginals}:OrderContext):OrderCommand|null=>{const original=invoiceMailOriginals?.find(row=>row.orderId===card.id);return original?{datei:'src/app/actions/communications.actions.ts',funktion:'sendCustomerMailAction' satisfies keyof typeof import('@/app/actions/communications.actions'),argumente:{targetType:'ORDER',targetId:card.id,attachment:{kind:'INVOICE',documentId:original.id},expectedInvoiceIds:invoiceMailOriginals!.map(row=>row.id)}}:null;},
   'order.followup_settings':():OrderCommand=>({datei:'src/app/actions/settings.actions.ts',funktion:'readSettingsAction' satisfies keyof typeof import('@/app/actions/settings.actions'),argumente:{}}),
-  'shipping.return_receive':null,'work.resolve':null,'order.delivery':null,'order.term_notify':null,'work.update_customer':null,'work.remaining_return':null,'order.extra_request':null,'order.collect':null,'shipping.cost':null,'order.apply_credit':null,'order.notify':null,'order.remind':null,'order.dunning':null,'order.ship_photo':null,
+  'shipping.return_receive':null,'work.resolve':null,'order.delivery':null,'order.term_notify':null,'work.update_customer':null,'work.remaining_return':null,'order.extra_request':null,'order.collect':null,'shipping.cost':null,'order.apply_credit':null,'order.remind':null,'order.dunning':null,'order.ship_photo':null,
  } satisfies Record<string,((context:OrderContext)=>OrderCommand|null)|null>
 };
 
@@ -80,7 +81,8 @@ export function readV45OrderRule(auth:AuthorizationSnapshot,card:Pick<LiveOrderC
  const actions=readV45ObjectActionAbsence('auftrag',rule.zustand);
  const part=rule.hauptaktion==='order.photo'?missingPhotoItems?.[0]:undefined;
  const binding=rule.hauptaktion&&Object.hasOwn(ORDER_U2_BINDINGS.commands,rule.hauptaktion)?ORDER_U2_BINDINGS.commands[rule.hauptaktion as keyof typeof ORDER_U2_BINDINGS.commands]:null;
- const befehl=binding?binding({card,part}):null;
+ const invoiceMailOriginals=canTransportInvoiceDocument(auth)&&release?.orderId===card.id&&release.value.code==='OK'&&release.value.orderVersion===card.version?release.value.invoiceMailOriginals:undefined;
+ const befehl=binding?binding({card,part,invoiceMailOriginals}):null;
  let hauptaktion:null|{ziel?:{tab:'parts'};elementId:string;textKey:string;werte:Record<string,string|number>;recht:string|null;befehl:OrderCommand}=null;
  const bindingGaps:string[]=[];
  if(rule.hauptaktion!==null){

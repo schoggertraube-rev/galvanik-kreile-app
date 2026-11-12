@@ -337,3 +337,5 @@ export async function readActiveAreaHolders(tx:import('./privilegedDb').Privileg
 
 /** Existing complaint order-picker right, shared with read-only action descriptions. */
 export function canReadComplaintOrderChoices(auth:AuthorizationSnapshot){return hasAuthorizationArea(auth,'auftraege');}
+/** Existing invoice transport money gate; V45/mail gate remains independently required. */
+export function canTransportInvoiceDocument(auth:AuthorizationSnapshot){return hasAuthorizationArea(auth,'geld');}

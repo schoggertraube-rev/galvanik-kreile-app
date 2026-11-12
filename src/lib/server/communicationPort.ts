@@ -9,7 +9,7 @@ import { randomUUID,createHash } from "node:crypto";
 import {InvoiceMailListChanged,InvoiceAlreadySent,appendCommunicationDocument,communicationDocumentBody,communicationDocumentIntent,readCommunicationDocumentReceipt,assertLegacyQuoteReplacement,type LegacyQuoteReplacement,type CommunicationDocument} from './communicationDocumentPort';
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import {hasAuthorizationArea} from '@/lib/server/authorization';
+import {hasAuthorizationArea,canTransportInvoiceDocument} from '@/lib/server/authorization';
 import {INVOICE_DELIVERY_COPY,MAIL_REQUEST_CONFLICT_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {prepareCollectionReminder,applyCollectionReminderMailEffects,type CollectionReminderMeta} from './collectionReminderPort';
@@ -244,7 +244,7 @@ export async function sendCommunicationMail(
   const bundle=input.document?.kind==='INVOICE'?input.document.bundle??[]:[];
   if(bundle.length!==(input.additionalAttachments?.length??0)||bundle.some((doc,index)=>doc.sha256!==createHash('sha256').update(input.additionalAttachments![index].bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'Sammel-Belege passen nicht zu den Original-PDFs.'};
   if(input.document?.kind==='INVOICE')input={...input,document:{...input.document,bundle:input.document.bundle??[]}};
-  if((input.document?.kind==='INVOICE'||input.collectionReminder&&input.collectionReminder.moneyRequired!==false)&&!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN',message:COLLECTION_REMINDER_COPY.forbidden};
+  if(input.document?.kind==='INVOICE'&&!canTransportInvoiceDocument(auth)||input.collectionReminder&&input.collectionReminder.moneyRequired!==false&&!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN',message:COLLECTION_REMINDER_COPY.forbidden};
   if(input.document)input={...input,body:communicationDocumentBody(input.body,input.document)};
   let intakeRecipient:string|undefined;
   let intakeSourceActorId=auth.userId;
