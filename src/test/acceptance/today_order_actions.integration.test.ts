@@ -3,11 +3,11 @@ import {it,expect,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
+import {customerFixture,intakeOrderFixture,readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readTodayDashboard} from '@/lib/server/todayDashboard';
 import {randomUUID} from 'node:crypto';
-import {changeOrderPromisedDueDateAction,transitionWareneingangToGalvanikAction,getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {setOrderPickupAppointmentAction,changeOrderPromisedDueDateAction,transitionWareneingangToGalvanikAction,getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 
@@ -30,4 +30,20 @@ it('reads the exact same three real versioned U2 order actions into U3 and hides
  expect(changed.orderActions?.rows.find(row=>row.orderId===firstOrder)).toEqual({orderId:firstOrder,version:3,read:card.data.nextActionRule});
  expect(day.orderActions?.rows.find(row=>row.orderId===firstOrder)?.version).toBe(2);
  const noOrders=await createFixture(['mails']);const hidden=await read(noOrders);expect(hidden).not.toHaveProperty('orderActions');expect(hidden).not.toHaveProperty('orderSchedule');
+});
+
+it('uses an actual frozen pickup appointment instead of the old production date',async()=>{
+ const order=await readyInvoiceOrder('TEST S05 Abholkalender');
+ const [dates]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS today,((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+1)::text AS tomorrow`;
+ const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const firstInput={orderId:order.orderId,expectedVersion:order.version,previousEventId:null,date:dates.today,channel:'telefon' as const,clientEventId:randomUUID()};
+ const first=await withSession(full,()=>setOrderPickupAppointmentAction(firstInput));expect(first).toMatchObject({code:'OK'});if(first.code!=='OK')throw Error('TEST_S05_APPOINTMENT');
+ const initial=await read(),row=initial.orderActions?.rows.find(row=>row.orderId===order.orderId);
+ expect(row?.pickupSchedule).toMatchObject({code:'OK',date:dates.today,eventId:first.receipt.eventId,freezeId:first.receipt.freezeId});
+ expect(initial.orderSchedule?.sources.find(row=>row.id===order.orderId)).toMatchObject({dueDate:dates.today,appointmentEventId:first.receipt.eventId});
+ const changedInput={...firstInput,previousEventId:first.receipt.eventId,date:dates.tomorrow,clientEventId:randomUUID()};
+ const changed=await withSession(full,()=>setOrderPickupAppointmentAction(changedInput));expect(changed).toMatchObject({code:'OK'});if(changed.code!=='OK')throw Error('TEST_S05_APPOINTMENT_CHANGE');
+ expect(await withSession(full,()=>setOrderPickupAppointmentAction(JSON.parse(JSON.stringify(changedInput))))).toMatchObject({code:'OK',replayed:true});
+ const fresh=await read();expect(fresh.orderSchedule?.sources.find(row=>row.id===order.orderId)).toMatchObject({dueDate:dates.tomorrow,appointmentEventId:changed.receipt.eventId});
+ expect(fresh.orderSchedule?.sources.find(row=>row.id===order.orderId)?.dueDate).not.toBe('2027-05-15');
 });

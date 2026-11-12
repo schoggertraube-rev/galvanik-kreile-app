@@ -4,12 +4,11 @@ import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentR
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
-import type {U2Read} from '@/lib/domain/u2ReadContract';
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
-import { projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
+import { type TodayOrderScheduleRow,projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -46,7 +45,7 @@ export type TodayDashboard = {
   orderSchedule?:ReturnType<typeof projectOrderSchedule>;
   datenluecken?:readonly string[];
   challenges?:{code:'OK'|'SOURCE_INCOMPLETE';groups:ReturnType<typeof projectTodayChallenges>['groups'];missing:readonly string[]};
-  orderActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:Array<{orderId:string;version:number;read:U2Read}>;missingOrderIds:string[]};
+  orderActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:TodayOrderScheduleRow[];missingOrderIds:string[]};
   moneySources?:{invoices:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'};prepayments:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'};collections:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'}};
   moneyMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
   assignmentMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
@@ -208,13 +207,24 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const orderActionReads=ordersAllowed?await Promise.all(orders.map(async order=>{
     try{
       const card=await getLiveOrderCardAction({orderId:order.id});
-      if(card.code==='OK'&&card.data.card.version===order.version&&card.data.nextActionRule)
-        return {orderId:order.id,version:order.version,read:card.data.nextActionRule};
+      if(card.code==='OK'&&card.data.card.version===order.version&&card.data.nextActionRule){
+        const row:TodayOrderScheduleRow={orderId:order.id,version:order.version,read:card.data.nextActionRule};
+        if(card.data.card.station==='fertig'&&card.data.card.handoverMode==='pickup'){
+          row.pickupSchedule={code:'SOURCE_INCOMPLETE'};
+          const appointment=card.data.pickupAppointment,freeze=card.data.card.freeze;
+          if(appointment?.code==='OK'&&freeze){
+            if(appointment.appointment===null)row.pickupSchedule={code:'OK',date:null,eventId:null,freezeId:freeze.freezeId};
+            else if(appointment.appointment.orderId===order.id&&appointment.appointment.freezeId===freeze.freezeId)
+              row.pickupSchedule={code:'OK',date:appointment.appointment.date,eventId:appointment.appointment.eventId,freezeId:freeze.freezeId};
+          }
+        }
+        return row;
+      }
     }catch{return {orderId:order.id,version:order.version,read:null};}
     return {orderId:order.id,version:order.version,read:null};
   })):[];
   const orderActions={code:orderSource.code==='OK'&&orderActionReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
-    rows:orderActionReads.flatMap(row=>row.read?[{orderId:row.orderId,version:row.version,read:row.read}]:[]),
+    rows:orderActionReads.flatMap(row=>row.read?[{...row,read:row.read}]:[]),
     missingOrderIds:orderActionReads.filter(row=>row.read===null).map(row=>row.orderId)};
 
   const orderSchedule=projectOrderSchedule(orderActions,calendar);

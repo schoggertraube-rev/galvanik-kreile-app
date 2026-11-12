@@ -176,6 +176,12 @@ describe('S05 qualified order calendar slice',()=>{
   expect(read).toMatchObject({code:'SOURCE_INCOMPLETE',knownCounts:{today:1,upcoming:0}});expect(read).not.toHaveProperty('today');
   if(read.code==='SOURCE_INCOMPLETE')expect(read.missing).toEqual(['ORDER_SCHEDULE_DATE:TEST-no-date','ORDER_SCHEDULE_NON_PRODUCTION:TEST-pickup']);
  });
+ it('uses qualified pickup evidence and never the previous production date',()=>{
+  const pending={...row('TEST-pickup','2026-11-10','fertig'),pickupSchedule:{code:'OK' as const,date:'2026-11-13',eventId:'TEST-appointment',freezeId:'TEST-freeze'}};
+  expect(projectOrderSchedule({code:'OK',rows:[pending],missingOrderIds:[]},calendar)).toMatchObject({code:'OK',today:0,upcoming:1,sources:[{id:'TEST-pickup',dueDate:'2026-11-13',appointmentEventId:'TEST-appointment',freezeId:'TEST-freeze'}]});
+  const corrupt={...pending,pickupSchedule:{...pending.pickupSchedule,eventId:null}};
+  expect(projectOrderSchedule({code:'OK',rows:[corrupt],missingOrderIds:[]},calendar)).toMatchObject({code:'SOURCE_INCOMPLETE',knownCounts:{today:0,upcoming:0}});
+ });
  it('proves an empty source as zero but never turns an unreadable source into zero',()=>{
   expect(projectOrderSchedule({code:'OK',rows:[],missingOrderIds:[]},calendar)).toMatchObject({code:'OK',today:0,upcoming:0});
   const unknown=projectOrderSchedule({code:'SOURCE_INCOMPLETE',rows:[],missingOrderIds:[]},calendar);expect(unknown.code).toBe('SOURCE_INCOMPLETE');expect(unknown).not.toHaveProperty('today');

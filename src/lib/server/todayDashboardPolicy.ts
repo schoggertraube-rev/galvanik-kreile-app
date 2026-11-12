@@ -276,21 +276,31 @@ export function projectTodayChallenges(orderRows:ReadonlyArray<{orderId:string;v
  return {groups:[...groups.values()].sort((a,b)=>a.rank-b.rank||a.dueDate.localeCompare(b.dueDate)||(a.orderNumber??a.key).localeCompare(b.orderNumber??b.key)),missing};
 }
 
+export type TodayOrderScheduleRow={orderId:string;version:number;read:U2Read;pickupSchedule?:{code:'OK';date:string|null;eventId:string|null;freezeId:string}|{code:'SOURCE_INCOMPLETE'}};
 /** Production-calendar slice of U3; finished/pickup dates are deliberately not
  * replaced by their former production date. Those need their own source. */
-export function projectOrderSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:ReadonlyArray<{orderId:string;version:number;read:U2Read}>;missingOrderIds:readonly string[]},calendar:ReturnType<typeof readTodayCalendar>){
+export function projectOrderSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:ReadonlyArray<TodayOrderScheduleRow>;missingOrderIds:readonly string[]},calendar:ReturnType<typeof readTodayCalendar>){
  const missing=source.code==='OK'?[]:['ORDER_SCHEDULE_SOURCE',...source.missingOrderIds.map(id=>'ORDER_SCHEDULE_CARD:'+id)];
- const dates=new Map<string,{id:string;version:number;dueDate:string}>(),conflicts=new Set<string>();
+ const dates=new Map<string,{id:string;version:number;dueDate:string;appointmentEventId?:string;freezeId?:string}>(),conflicts=new Set<string>();
  for(const row of source.rows){
   if(conflicts.has(row.orderId))continue;
   const station=row.read.erstblick.find(field=>field.key==='auftrag.lage')?.werte.station;
   if(row.read.zustand==='closed')continue;
-  if(typeof station!=='string'||!['angenommen','wareneingang','galvanik'].includes(station)){missing.push('ORDER_SCHEDULE_NON_PRODUCTION:'+row.orderId);continue;}
-  const raw=row.read.erstblick.find(field=>field.key==='auftrag.termin')?.werte.datum;
+  let appointmentEventId:string|undefined,freezeId:string|undefined,raw:unknown;
+  if(station==='fertig'&&row.pickupSchedule?.code==='OK'){
+   if(row.pickupSchedule.date===null){
+    if(row.read.zustand===null||['payment','debt'].includes(row.read.zustand))missing.push('ORDER_SCHEDULE_FINANCIAL_SOURCE:'+row.orderId);
+    continue;
+   }
+   if(!row.pickupSchedule.eventId||!row.pickupSchedule.freezeId){missing.push('ORDER_SCHEDULE_PICKUP_EVIDENCE:'+row.orderId);continue;}
+   raw=row.pickupSchedule.date;appointmentEventId=row.pickupSchedule.eventId;freezeId=row.pickupSchedule.freezeId;
+  }else if(typeof station==='string'&&['angenommen','wareneingang','galvanik'].includes(station))raw=row.read.erstblick.find(field=>field.key==='auftrag.termin')?.werte.datum;
+  else{missing.push('ORDER_SCHEDULE_NON_PRODUCTION:'+row.orderId);continue;}
+
   if(typeof raw!=='string'||!parseDateKey(raw.slice(0,10))){missing.push('ORDER_SCHEDULE_DATE:'+row.orderId);continue;}
   const dueDate=raw.slice(0,10),previous=dates.get(row.orderId);
-  if(previous&&(previous.version!==row.version||previous.dueDate!==dueDate)){dates.delete(row.orderId);conflicts.add(row.orderId);missing.push('ORDER_SCHEDULE_VERSION:'+row.orderId);continue;}
-  dates.set(row.orderId,{id:row.orderId,version:row.version,dueDate});
+  if(previous&&(previous.version!==row.version||previous.dueDate!==dueDate||previous.appointmentEventId!==appointmentEventId||previous.freezeId!==freezeId)){dates.delete(row.orderId);conflicts.add(row.orderId);missing.push('ORDER_SCHEDULE_VERSION:'+row.orderId);continue;}
+  dates.set(row.orderId,{id:row.orderId,version:row.version,dueDate,...(appointmentEventId&&freezeId?{appointmentEventId,freezeId}:{})});
  }
  const sources=[...dates.values()],counts={today:sources.filter(row=>row.dueDate<=calendar.today).length,upcoming:sources.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
  return missing.length?{code:'SOURCE_INCOMPLETE' as const,knownCounts:counts,missing,sources}:{code:'OK' as const,...counts,sources};
