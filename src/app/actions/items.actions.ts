@@ -1,10 +1,11 @@
 "use server";
-import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import { db } from "@/db";
 import { items } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import { eq, desc, and } from "drizzle-orm";
+import type { ActionResult } from "@/lib/server/authHelper";
+import {resolveAuthorization,hasAuthorizationArea} from "@/lib/server/authorization";
+import {LEGACY_ACTION_ACCESS_COPY} from "@/ui/situationCatalog";
 
 export type ItemResponse = Record<string, unknown>;
 
@@ -23,13 +24,14 @@ export type ItemMutationPayload = {
 };
 
 export async function getItemsDb(): Promise<ActionResult<ItemResponse[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return {ok:false,error:"UNAUTHORIZED",message:auth.message};
+  if (!hasAuthorizationArea(auth.data,"auftraege")) return {ok:false,error:"FORBIDDEN",message:LEGACY_ACTION_ACCESS_COPY.forbidden};
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
-    const dbItems = await db.select().from(items).where(eq(items.tenantId, KREILE_TENANT_SLUG)).orderBy(desc(items.createdAt));
+    const dbItems = await db.select().from(items).where(eq(items.tenantId, auth.data.tenantId)).orderBy(desc(items.createdAt));
     
     const data = dbItems.map(i => ({
       id: i.id,
@@ -51,15 +53,16 @@ export async function getItemsDb(): Promise<ActionResult<ItemResponse[]>> {
 }
 
 export async function getItemsByOrderDb(orderId: string): Promise<ActionResult<ItemResponse[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return {ok:false,error:"UNAUTHORIZED",message:auth.message};
+  if (!hasAuthorizationArea(auth.data,"auftraege")) return {ok:false,error:"FORBIDDEN",message:LEGACY_ACTION_ACCESS_COPY.forbidden};
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
     // orderId and tenantId
     const dbItems = await db.select().from(items)
-      .where(eq(items.orderId, orderId)); 
+      .where(and(eq(items.orderId, orderId),eq(items.tenantId,auth.data.tenantId))); 
       
     const data = dbItems.map(i => ({
       id: i.id,

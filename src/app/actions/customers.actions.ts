@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { customers } from "@/db/schema";
 import { eq, ilike, or, and, sql } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import type { ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import {
@@ -167,9 +167,6 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
   activeQuoteCount:number;hints:CustomerListSignals['hints'];complete:boolean;
 }>>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
-
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
   if (!hasAuthorizationArea(authRes.data, "kunden")) {
@@ -203,9 +200,6 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
 
 export async function getCustomerByIdDb(id: string): Promise<ActionResult<Customer | null>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
-
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
   if (!hasAuthorizationArea(authRes.data, "kunden")) return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben." };
@@ -245,9 +239,6 @@ export async function updateCustomerDb(id: string, changes: Partial<Customer>): 
 
 export async function searchCustomersDb(query: string): Promise<ActionResult<Customer[]>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
-
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
   if (!hasAuthorizationArea(authRes.data, "kunden")) return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben." };
