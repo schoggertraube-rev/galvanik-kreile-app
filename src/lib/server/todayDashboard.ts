@@ -11,7 +11,7 @@ import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
-import { projectIntakeTaskSchedule,projectQuoteSchedule,projectTodayInvoiceMoney,type TodayOrderScheduleRow,projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
+import { projectIntakeTaskSchedule,projectQuoteSchedule,projectTodayInvoiceMoney,isOverdueInvoiceForToday,type TodayOrderScheduleRow,projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -180,10 +180,12 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
           HAVING count(collection_order.order_id)>0
           ORDER BY collection.monat, customer.name, collection.id
         `)) : {code:'OK' as const,data:[] as CollectionRow[]};
-      const [preferences, reminders, delegationTargets, assignments] = await Promise.all([
-        tx.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`),
-        tx.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`),
-        ordersAllowed ? tx.execute<UserRow>(sql`
+      const preferencesSource = await readTodaySource(tx,nested=>
+        nested.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`));
+      const remindersSource = await readTodaySource(tx,nested=>
+        nested.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`));
+      const delegationSource =
+        ordersAllowed ? await readTodaySource(tx,nested=>nested.execute<UserRow>(sql`
           SELECT users.id, users.full_name
           FROM public.app_users users
           WHERE users.tenant_id=${auth.tenantId}
@@ -196,16 +198,18 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
                 AND rights.bereich='auftraege'
             )
           ORDER BY users.full_name, users.id
-        `) : Promise.resolve([]),
-        ordersAllowed ? tx.execute<AssignmentRow>(sql`
+        `)) : {code:'OK' as const,data:[] as UserRow[]};
+      const assignmentSource =
+        ordersAllowed ? await readTodaySource(tx,nested=>nested.execute<AssignmentRow>(sql`
           SELECT order_id, assigned_to_name, current_order_version, integrity_ok
           FROM private.v_order_task_assignment_v1
           WHERE tenant_id=${auth.tenantId}
             AND assigned_by=${auth.userId}::uuid
             AND active=true
-        `) : Promise.resolve([]),
-      ]);
-      return { preferences, reminders, invoiceSource,invoices:invoiceSource.code==='OK'?invoiceSource.data:[], prepaymentSource,prepayments:prepaymentSource.code==='OK'?prepaymentSource.data:[],collectionSource,collections:collectionSource.code==='OK'?collectionSource.data:[], delegationTargets, assignmentSourceIncomplete:assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
+        `)) : {code:'OK' as const,data:[] as AssignmentRow[]};
+      const assignments=assignmentSource.code==='OK'?assignmentSource.data:[];
+      const supportMissing=[...(preferencesSource.code!=='OK'?['TODAY_PREFERENCES_SOURCE']:[]),...(remindersSource.code!=='OK'?['TODAY_REMINDERS_SOURCE']:[]),...(delegationSource.code!=='OK'?['TODAY_DELEGATION_SOURCE']:[])];
+      return { supportMissing,preferences:preferencesSource.code==='OK'?preferencesSource.data:[],reminders:remindersSource.code==='OK'?remindersSource.data:[],invoiceSource,invoices:invoiceSource.code==='OK'?invoiceSource.data:[], prepaymentSource,prepayments:prepaymentSource.code==='OK'?prepaymentSource.data:[],collectionSource,collections:collectionSource.code==='OK'?collectionSource.data:[],delegationTargets:delegationSource.code==='OK'?delegationSource.data:[],assignmentSourceIncomplete:assignmentSource.code!=='OK'||assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
     }),
     ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints().catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'})):Promise.resolve({code:'OK' as const,complaints:[]}),
     graphAllowed?readQuoteFollowups().catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'})):Promise.resolve({code:'OK' as const,tasks:[]}),
@@ -305,8 +309,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   if(assignmentMessages)for(const mail of assignmentMessages.filter(row=>row.graphMessageId).slice(0,5))add({key:`mail:${mail.id}`,field:'assign',kind:'mail',title:mail.subject||'Mail ohne Betreff',meta:`${mail.senderName} · ${new Intl.DateTimeFormat('de-DE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Berlin'}).format(new Date(mail.at))}`,urgency:'decision',graphMessageId:mail.graphMessageId!});
 
   const invoiceMoney=projectTodayInvoiceMoney(support.invoiceSource,calendar);
-  const overdueInvoiceRows=support.invoices.filter(invoice=>invoice.due_date!==null&&dateOnly(invoice.due_date)<today);
-  const overdueInvoices=overdueInvoiceRows.filter(invoice=>classifyMoneyForToday({customerCountry:invoice.customer_country,dueDate:invoice.due_date===null?null:dateOnly(invoice.due_date),goodsOutRecorded:false,paymentMode:invoice.payment_mode,paymentStatus:invoice.payment_status,station:invoice.station},today)==='overdue_invoice');
+  const overdueInvoices=support.invoices.filter(invoice=>isOverdueInvoiceForToday(invoice,today));
   for (const invoice of overdueInvoices.slice(0,20)) {
     const dueDate = dateOnly(invoice.due_date!);
     add({ key: `invoice:${invoice.id}`, field: "money", kind: "invoice", title: `${invoice.invoice_number} · ${invoice.customer_name}`, meta: `${euro(invoice.open_amount_cents)} · fällig ${dueDate}`, urgency: "conflict", invoiceId: invoice.id, orderId: invoice.order_id, dueDate, primaryActionLabel: "Erinnern" });
@@ -344,10 +347,10 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   if (STAGE2_TODAY_FEATURES.has("bundle") && bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
   const ownTaskKeys=new Set(followupsKnown?quoteFollowups.tasks.filter(task=>task.isMine===true).map(task=>'task:'+task.id):[]);
-  const responsible=await withPrivilegedTenantTransaction(auth,tx=>readOrderResponsibilityForToday(tx,auth,items.flatMap(item=>item.orderId?[item.orderId]:[])));
-  const mine=(item:TodayItem)=>ownTaskKeys.has(item.key)||item.kind!=='complaint'&&!!item.orderId&&responsible.get(item.orderId)===auth.userId;
+  const responsibilitySource=await withPrivilegedTenantTransaction(auth,tx=>readTodaySource(tx,nested=>readOrderResponsibilityForToday(nested,auth,items.flatMap(item=>item.orderId?[item.orderId]:[]))));
+  const mine=(item:TodayItem)=>ownTaskKeys.has(item.key)||item.kind!=='complaint'&&!!item.orderId&&responsibilitySource.code==='OK'&&responsibilitySource.data.get(item.orderId)===auth.userId;
   const sortedItems=sortTodayByResponsibility(items,mine);
-  const challenges=projectTodayChallenges(orderActions.rows,overdueInvoiceRows.map(row=>({id:row.id,orderId:row.order_id,number:row.invoice_number,dueDate:dateOnly(row.due_date!),amountCents:row.open_amount_cents,amount:Number.isSafeInteger(Number(row.open_amount_cents))&&Number(row.open_amount_cents)>0?euro(row.open_amount_cents):null})),today,moneyAllowed?quoteActions.rows:[]);
+  const challenges=projectTodayChallenges(orderActions.rows,overdueInvoices.map(row=>({id:row.id,orderId:row.order_id,number:row.invoice_number,dueDate:dateOnly(row.due_date!),amountCents:row.open_amount_cents,amount:Number.isSafeInteger(Number(row.open_amount_cents))&&Number(row.open_amount_cents)>0?euro(row.open_amount_cents):null})),today,moneyAllowed?quoteActions.rows:[]);
   const challengeMissing=[...challenges.missing,...(graphAllowed&&moneyAllowed&&quoteActions.code!=='OK'?['CHALLENGE_QUOTE_SOURCE']:[]),...(orderActions.code!=='OK'?['CHALLENGE_ORDER_SOURCE']:[]),...(support.invoiceSource.code!=='OK'?['CHALLENGE_INVOICE_SOURCE']:[]),...(!complaintsKnown||complaintCases.length?['CHALLENGE_COMPLAINT_SOURCE']:[]),...(graphAllowed&&(graph.code!=='OK'||graph.messages.some(row=>row.usage==='offen'&&(row.sendState==='unklar'||row.sendState==='fehler'||row.openConcerns.some(kind=>['kv_annahme','kv_ablehnung','reklamation'].includes(kind)))))?['CHALLENGE_CONCERN_SOURCE']:[])];
 
   // PL16:17: bind the existing most urgent case to its very same U2 command.
@@ -355,18 +358,18 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   let hauptaktion:U2Read['hauptaktion']=null;
   let hauptaktionsQuelle:{key:string;id:string;version:number}|null=null;
   const mainMissing:string[]=[];
+  const needsAction=(read:U2Read)=>read.farbe==='ral'||read.farbe==='warn';
   const challengeFocus=challenges.groups[0];
   if(challengeFocus){
     const source=challengeFocus.quoteId?quoteActions.rows.find(row=>row.quoteId===challengeFocus.quoteId):orderActions.rows.find(row=>row.orderId===challengeFocus.orderId);
-    if(challengeFocus.action&&source?.read.hauptaktion){
+    if(challengeFocus.action&&source?.read.hauptaktion&&needsAction(source.read)){
       hauptaktion=source.read.hauptaktion;
       hauptaktionsQuelle={key:challengeFocus.key,id:'quoteId'in source?source.quoteId:source.orderId,version:source.version};
-    }else mainMissing.push('TODAY_MAIN_U2:'+challengeFocus.key);
+    }else if(!source||needsAction(source.read))mainMissing.push('TODAY_MAIN_U2:'+challengeFocus.key);
   }else{
     // Bundle is a later-stage feature, not a new S05 main action.
-    const focus=sortedItems.find(item=>item.kind!=='bundle');
     let selected:{key:string;id:string;version:number;read:U2Read}|undefined;
-    if(focus){
+    for(const focus of sortedItems.filter(item=>item.kind!=='bundle')){
       if(focus.target?.screen==='kv'){
         const source=quoteActions.rows.find(row=>row.quoteId===focus.target!.arg);
         if(source)selected={key:focus.key,id:source.quoteId,version:source.version,read:source.read};
@@ -379,12 +382,16 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
         if(source)selected={key:focus.key,id:source.orderId,version:source.version,read:source.read};
       }
       if(!selected)mainMissing.push('TODAY_MAIN_SOURCE:'+focus.key);
-    }else{
+      if(selected&&needsAction(selected.read))break;
+      selected=undefined;
+    }
+    if(!selected){
       // Normal production and active quotes remain daily work before becoming
       // late. Dates/facts and commands are already qualified above, not reread.
       const dates=new Map(orderSchedule.sources.map(row=>[row.id,row.dueDate]));
       const candidates:Array<{key:string;id:string;version:number;read:U2Read;date:string|null;number:string}>=[];
       for(const row of orderActions.rows){
+        if(!needsAction(row.read))continue;
         const location=row.read.erstblick.find(field=>field.key==='auftrag.lage')?.werte;
         if(!['angenommen','wareneingang','galvanik'].includes(String(location?.station)))continue;
         candidates.push({key:'order:'+row.orderId,id:row.orderId,version:row.version,read:row.read,date:dates.get(row.orderId)??null,number:typeof location?.nummer==='string'?location.nummer:row.orderId});
@@ -393,10 +400,12 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
         if(schedule.state!=='active')continue;
         const row=quoteActions.rows.find(value=>value.quoteId===schedule.id&&value.version===schedule.version);
         if(!row){mainMissing.push('TODAY_MAIN_QUOTE_SOURCE:'+schedule.id);continue;}
+        if(!needsAction(row.read))continue;
         const number=row.read.erstblick.find(field=>field.key==='kv.lage')?.werte.nummer;
         candidates.push({key:'quote:'+row.quoteId,id:row.quoteId,version:row.version,read:row.read,date:schedule.dueDate,number:typeof number==='string'?number:row.quoteId});
       }
       for(const row of messageActions.rows){
+        if(!needsAction(row.read))continue;
         const original=graph.code==='OK'?graph.messages.find(value=>value.id===row.messageId&&value.version===row.version):undefined;
         if(!original){mainMissing.push('TODAY_MAIN_MESSAGE_SOURCE:'+row.messageId);continue;}
         if(original.fallbackPriority?.code==='OK'&&original.fallbackPriority.rank===8)continue;
@@ -406,7 +415,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     }
     if(selected){
       hauptaktion=selected.read.hauptaktion;
-      hauptaktionsQuelle={key:selected.key,id:selected.id,version:selected.version};
+      if(hauptaktion)hauptaktionsQuelle={key:selected.key,id:selected.id,version:selected.version};
       if(!hauptaktion&&selected.read.datenluecken.length)mainMissing.push('TODAY_MAIN_U2:'+selected.key);
     }
   }
@@ -422,9 +431,9 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     ...(ordersAllowed?{orderActions,orderSchedule}:{}),
     ...(moneyAllowed?{invoiceMoney}:{}),
     ...(moneyAllowed?{moneySources:{invoices:countTodaySource(support.invoiceSource),prepayments:countTodaySource(support.prepaymentSource),collections:countTodaySource(support.collectionSource)}}:{}),
-    ...(moneyAllowed?{moneyMetric:invoiceMoney.code==='OK'?{code:'OK' as const,count:overdueInvoiceRows.length,sources:overdueInvoiceRows.map(row=>({id:row.id,version:row.payment_version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
+    ...(moneyAllowed?{moneyMetric:invoiceMoney.code==='OK'?{code:'OK' as const,count:overdueInvoices.length,sources:overdueInvoices.map(row=>({id:row.id,version:row.payment_version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
     ...(graphAllowed?{assignmentMetric:assignmentMessages?{code:'OK' as const,count:assignmentMessages.length,sources:assignmentMessages.map(row=>({id:row.id,version:row.version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
-    datenluecken:[...mainMissing,...challengeMissing,...(graphAllowed&&messageActions.code!=='OK'?['MESSAGE_ACTION_SOURCE']:[]),...(graphAllowed&&!taskKnown?['INTAKE_TASK_SOURCE']:[]),...(graphAllowed&&quoteSchedule.code==='SOURCE_INCOMPLETE'?quoteSchedule.missing:[]),...(graphAllowed&&quoteActions.code!=='OK'?['QUOTE_ACTION_SOURCE']:[]),...(moneyAllowed&&invoiceMoney.code==='SOURCE_INCOMPLETE'?invoiceMoney.missing:[]),...(ordersAllowed&&orderSchedule.code==='SOURCE_INCOMPLETE'?orderSchedule.missing:[]),...(ordersAllowed&&orderSource.code!=='OK'?['ORDER_SOURCE']:[]),...(ordersAllowed&&orderActions.code!=='OK'?['ORDER_ACTION_SOURCE']:[]),...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
+    datenluecken:[...support.supportMissing,...mainMissing,...challengeMissing,...(graphAllowed&&messageActions.code!=='OK'?['MESSAGE_ACTION_SOURCE']:[]),...(graphAllowed&&!taskKnown?['INTAKE_TASK_SOURCE']:[]),...(graphAllowed&&quoteSchedule.code==='SOURCE_INCOMPLETE'?quoteSchedule.missing:[]),...(graphAllowed&&quoteActions.code!=='OK'?['QUOTE_ACTION_SOURCE']:[]),...(moneyAllowed&&invoiceMoney.code==='SOURCE_INCOMPLETE'?invoiceMoney.missing:[]),...(ordersAllowed&&orderSchedule.code==='SOURCE_INCOMPLETE'?orderSchedule.missing:[]),...(ordersAllowed&&orderSource.code!=='OK'?['ORDER_SOURCE']:[]),...(ordersAllowed&&orderActions.code!=='OK'?['ORDER_ACTION_SOURCE']:[]),...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsibilitySource.code!=='OK'||responsibilitySource.data.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
     ...(support.collectionSource.code==='OK'?{collectionNotices}:{}),
     visibleFields: selected,
     layout,
