@@ -55,7 +55,7 @@ export type OrderCardItem = {
 };
 
 export type LiveOrderCard = {
-  operationalFacts?:{rework:boolean;pricesMissing:boolean;complaint?:boolean};
+  operationalFacts?:{rework:boolean;pricesMissing:boolean;complaint?:boolean;reworkComplaintId?:string};
   actors?:OrderActorSummary;
   actorReadError?:string;
   shippingService?:string|null;
@@ -880,7 +880,7 @@ export async function readLiveOrderCard(
         ...(handover?{handoverNotice:{message:handover.message,taskId:handover.taskId,originalItemId:handover.mailActor.originalItemId}}:{}),
         ...(commercialQuote?{commercialQuote}:{}),
         ...(cancellationRows[0]?{cancellation:cancellationRows[0]}:{}),
-        operationalFacts:{rework:isReworkOrder,pricesMissing:!isReworkOrder&&items.some(item=>item.unitPriceCents===null),...(activeComplaint!==undefined?{complaint:activeComplaint!==null}:{})},
+        operationalFacts:{rework:isReworkOrder,...(isReworkOrder?{reworkComplaintId:origin.nacharbeit_zu!}:{}),pricesMissing:!isReworkOrder&&items.some(item=>item.unitPriceCents===null),...(activeComplaint!==undefined?{complaint:activeComplaint!==null}:{})},
         id: queue.id,
         version: queue.version,
         orderNumber: queue.order_number,
