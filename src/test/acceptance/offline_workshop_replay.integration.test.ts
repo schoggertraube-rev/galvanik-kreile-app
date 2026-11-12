@@ -10,7 +10,7 @@ import {transitionWareneingangToGalvanikAction,getLiveOrderCardAction,configureE
 import {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
 import {offlinePartition} from '@/lib/server/offlinePartition';
 import type {PendingWorkshopOriginal} from '@/lib/offline/pendingStore';
-if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1'||new URL(process.env.DATABASE_URL).port!=='54342')throw Error('TEST_OWN_LOOPBACK_REQUIRED');
+if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||!['127.0.0.1','localhost'].includes(new URL(process.env.DATABASE_URL).hostname)||new URL(process.env.DATABASE_URL).pathname!=='/postgres'||!tenant.startsWith('TEST-'))throw Error('TEST_OWN_LOOPBACK_REQUIRED');
 
 it('preserves a real rejected workshop command and one normal task atomically, then rereads the same original on fresh retry',async()=>{
  const customerId=await customerFixture('Offline Werkstatt'),created=await intakeOrderFixture('Offline Werkstatt',customerId),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;

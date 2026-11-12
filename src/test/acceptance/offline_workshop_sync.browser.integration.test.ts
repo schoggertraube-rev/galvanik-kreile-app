@@ -14,7 +14,7 @@ import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixtu
 import {transitionWareneingangToGalvanikAction,getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
 import {offlinePartition} from '@/lib/server/offlinePartition';
-if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1'||new URL(process.env.DATABASE_URL).port!=='54342')throw Error('TEST_OWN_LOOPBACK_REQUIRED');
+if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||!['127.0.0.1','localhost'].includes(new URL(process.env.DATABASE_URL).hostname)||new URL(process.env.DATABASE_URL).pathname!=='/postgres'||!tenant.startsWith('TEST-'))throw Error('TEST_OWN_LOOPBACK_REQUIRED');
 
 it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('KORR S03 offline restart exactly-once conflict task and actual logout retain pending originals',async()=>{
  const customerId=await customerFixture('Browser Werkstatt'),created=await intakeOrderFixture('Browser Werkstatt',customerId),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
