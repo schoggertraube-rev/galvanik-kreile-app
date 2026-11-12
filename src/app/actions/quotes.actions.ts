@@ -1,4 +1,5 @@
 "use server";
+import {canReadQuoteFollowups} from '@/lib/auth/authorizationContract';
 import {createInitialOrderPrintJobs} from '@/modules/orders/server-public';
 import {quoteCommandContext,quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
@@ -404,7 +405,7 @@ export async function readQuotePdfAction(input: { quoteId: string }) {
 export async function getQuoteFollowupsForTodayAction(){
  noStore();
  try{const auth=await resolveAuthorization();const denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
-  if(!quoteCommandContext(auth.data).capabilities.canReadQuote)return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
+  if(!canReadQuoteFollowups(auth.data))return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
   const tasks=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data));
   return {code:'OK' as const,tasks};
  }catch(error){console.error('[QUOTE_FOLLOWUP_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Nachfassaufgaben konnten nicht geladen werden.'};}

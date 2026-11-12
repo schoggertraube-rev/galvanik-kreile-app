@@ -1,3 +1,4 @@
+import {canReadQuoteFollowups} from '@/lib/auth/authorizationContract';
 import {readProductionPricingRetrySource,readProductionPricingRetryKeys} from '@/lib/server/productionSnapshotPort';
 import {PRODUCTION_PRICING_RETRY_COPY} from '@/ui/situationCatalog';
 import {readCanceledInvoiceMailTaskSource,isCanceledInvoiceMailTask,bindCanceledInvoiceMailTask,readCanceledInvoiceTaskCompletion} from '@/lib/server/communicationDocumentPort';
@@ -264,17 +265,19 @@ export async function syncQuoteFollowupTask(tx:PrivilegedTenantTransaction,auth:
  const current=rows.find(row=>row.client_key===currentKey);
  if(current?.status==='erledigt')return null;
  if(input.dueDate===null)return current?.faellig_am??null;
- const customer=input.customerName.length>120?input.customerName.slice(0,119)+'…':input.customerName;
- const value:TaskSaveInput={clientKey:currentKey,version:current?.version??0,...(current?{taskId:current.id}:{}),kind:'aufgabe',title:'Bei '+customer+' wegen KV '+input.quoteNumber+' nachfragen',dueDate:input.dueDate,time:null,forLogin:null,forArea:'geld',reference:{type:'kv',id:input.quoteId},note:'Nachfassen zur versendeten KV-Fassung '+input.edition};
+ const value:TaskSaveInput={clientKey:currentKey,version:current?.version??0,...(current?{taskId:current.id}:{}),kind:'aufgabe',title:quoteFollowupTitle(input.customerName,input.quoteNumber),dueDate:input.dueDate,time:null,forLogin:null,forArea:'geld',reference:{type:'kv',id:input.quoteId},note:'Nachfassen zur versendeten KV-Fassung '+input.edition};
  if(Object.keys(taskValidation(value)).length)reject('VALIDATION_ERROR','KV-Nachfassdatum oder Bezug ist unvollständig.');
  return (await persistTask(tx,auth,value,deps)).task.faellig_am;
 }
+function quoteFollowupTitle(name:string,number:string){const customer=name.length>120?name.slice(0,119)+'…':name;return 'Bei '+customer+' wegen KV '+number+' nachfragen';}
 export async function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,today=berlinCalendarDay()){
- if(!hasAuthorizationArea(auth,'geld')||!hasAuthorizationArea(auth,'auftraege'))return [];
+ if(!canReadQuoteFollowups(auth))return [];
  const tasks=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND bezug_typ='kv' AND art='aufgabe' AND status='offen' AND faellig_am<=${today}::date ORDER BY faellig_am,id`);
- const candidates=tasks.filter(task=>taskUuid(task.bezug_id)&&allowed(auth,task));
+ // Narrow shared projection only: exact canonical followup key and live quote
+ // are verified below. Generic task read/edit authority is unchanged.
+ const candidates=tasks.filter(task=>taskUuid(task.bezug_id));
  const facts=await readQuoteFollowupFacts(tx,auth.tenantId,[...new Set(candidates.map(task=>task.bezug_id!))]);
- return candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];if(!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');return [{id:task.id,title:task.titel,dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,isMine:task.fuer_login===auth.userId}];}).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
+ return candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');if(quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];return [{id:task.id,title:hasAuthorizationArea(auth,'geld')?task.titel:quoteFollowupTitle(quote.customerName,quote.number),dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,isMine:task.fuer_login===auth.userId}];}).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
 }
 
 /** Only the persisted physical command can create this normal shared clarification task. */

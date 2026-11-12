@@ -1287,7 +1287,7 @@ it('AK invoice: the real invoice creator is distinct from the original importer 
 });
 
 it('AK-02: quote followups prioritize their actual recipient rather than the quote creator and retain all tasks',async()=>{
- const a=await createFixture(),b=await createFixture();
+ const a=await createFixture(true,['eingang','auftraege','kunden','geld','mails']),b=await createFixture(true,['eingang','auftraege','kunden','geld','mails']);
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteDefaultsAction}=await import('@/app/actions/quotes.actions');
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,updated_at) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST AK settings',statement_timestamp() WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
  const defaults=await withSession(a,()=>readQuoteDefaultsAction());if(defaults.code!=='OK')throw Error('TEST AK quote defaults');const {saveQuoteSettingsAction}=await import('@/app/actions/settings.actions');
@@ -1301,14 +1301,32 @@ it('AK-02: quote followups prioritize their actual recipient rather than the quo
  const {readQuoteFollowupTasksForToday}=await import('@/modules/tasks/server-public');const {resolveAuthorization}=await import('@/lib/server/authorization');const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
  const read=async(actor:Fixture)=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK task auth');return withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data,'2030-12-31'));});
  const unassigned=await read(a);expect(unassigned).toHaveLength(2);expect(unassigned.every(task=>!task.isMine)).toBe(true);
+ const mailOnly=await createFixture(true,['mails']),noMail=await createFixture();
+ expect(await read(mailOnly)).toHaveLength(2);expect(await read(noMail)).toEqual([]);
+ const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
+ expect(await withSession(noMail,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'FORBIDDEN'});
+ const [calendar]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS today`;
  const {getIntakeTaskAction,saveIntakeTaskAction}=await import('@/app/actions/eingang.actions');
  for(const [index,actor] of [a,b].entries()){
   const task=unassigned.find(task=>task.quoteId===ids[index])!;
   const current=await withSession(actor,()=>getIntakeTaskAction({taskId:task.id}));if(current.code!=='OK'||!current.task)throw Error('TEST recipient read');const value=current.task;
-  expect(await withSession(actor,()=>saveIntakeTaskAction({clientKey:value.client_key,taskId:value.id,version:value.version,kind:value.art,title:value.titel,dueDate:value.faellig_am,time:value.uhrzeit,forLogin:index===0?b.actorId:a.actorId,forArea:null,reference:{type:value.bezug_typ,id:value.bezug_id},note:value.notiz}))).toMatchObject({code:'OK'});
+  expect(await withSession(actor,()=>saveIntakeTaskAction({clientKey:value.client_key,taskId:value.id,version:value.version,kind:value.art,title:index===0?'TEST 991,00 vertraulicher Betrag':value.titel,dueDate:calendar.today,time:value.uhrzeit,forLogin:index===0?b.actorId:a.actorId,forArea:null,reference:{type:value.bezug_typ,id:value.bezug_id},note:value.notiz}))).toMatchObject({code:'OK'});
  }
  const mineA=await read(a),mineB=await read(b);expect(mineA).toHaveLength(2);expect(mineB).toHaveLength(2);
+ const publicRead=await withSession(mailOnly,()=>getQuoteFollowupsForTodayAction());expect(publicRead).toMatchObject({code:'OK',tasks:expect.any(Array)});
+ if(publicRead.code!=='OK')throw Error('TEST S05 mail followups');expect(publicRead.tasks).toHaveLength(2);expect(JSON.stringify(publicRead)).not.toContain('991,00');
+ expect(await withSession(mailOnly,()=>getIntakeTaskAction({taskId:unassigned[0].id}))).toMatchObject({code:'OK',canEdit:false,canComplete:false,canOpenReference:false});
+ const {readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const quoteRead=await withSession(mailOnly,()=>readQuoteAction({quoteId:ids[0],purpose:'operations'}));expect(quoteRead).toMatchObject({code:'OK',canEdit:false});
+ if(quoteRead.code!=='OK')throw Error('TEST S05 followup quote target');expect(quoteRead.quote.totalNetCents).toBeNull();
  expect(mineA[0]).toMatchObject({quoteId:ids[1],isMine:true});expect(mineB[0]).toMatchObject({quoteId:ids[0],isMine:true});expect(new Set(mineA.map(row=>row.id))).toEqual(new Set(mineB.map(row=>row.id)));
+ const {readTodayDashboard}=await import('@/lib/server/todayDashboard'),{getComplaints}=await import('@/app/actions/complaints.actions');
+ const day=()=>withSession(mailOnly,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST S05 followup auth');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const first=await day();expect(first.items.filter(row=>row.kind==='task').map(row=>row.target?.screen)).toEqual(['kv','kv']);expect(JSON.stringify(first)).not.toContain('991,00');expect(first).not.toHaveProperty('invoiceMoney');
+ expect(await withSession(a,()=>changeQuoteLifecycleAction({action:'accept',quoteId:ids[0],clientEventId:randomUUID(),expectedVersion:quoteRead.quote.version,edition:1,evidence:'TEST S05 telefonisch ohne Vorbehalt zugesagt'}))).toMatchObject({code:'OK'});
+ const after=await day();expect(after.items.filter(row=>row.kind==='task')).toHaveLength(1);expect(after.items.find(row=>row.kind==='task')?.target).toEqual({screen:'kv',arg:ids[1]});
+ expect((await day()).items).toEqual(after.items);
+
 });
 
 it.each([false,true,'partial','operational'] as const)('AF-6: two package receipts preserve every source; damaged secondary blocks the whole conversion: %s',async(damaged)=>{

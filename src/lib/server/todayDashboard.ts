@@ -24,7 +24,7 @@ export type TodayItem = {
   orderVersion?: number;
   invoiceId?: string;
   graphMessageId?: string;
-  target?:{screen:'reklamation'|'mail'|'aufgabe';arg:string};
+  target?:{screen:'reklamation'|'mail'|'aufgabe'|'kv';arg:string};
   bundleSurface?: string;
   dueDate?: string;
   snoozedUntil?: string;
@@ -241,7 +241,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const followupsKnown=quoteFollowups.code==='OK'&&'tasks'in quoteFollowups;
   const complaintsKnown=complaints.code==='OK';
   const complaintCases=complaints.code==='OK'?complaintAttention(complaints.complaints,auth.areas??[]):[];
-  if(followupsKnown)for(const task of quoteFollowups.tasks)add({key:'task:'+task.id,field:'action',kind:'task',title:task.title,meta:'KV '+task.quoteNumber+' · '+task.customerName,urgency:'warning',dueDate:task.dueDate,target:{screen:'aufgabe',arg:task.id},primaryActionLabel:'Öffnen'});
+  if(followupsKnown)for(const task of quoteFollowups.tasks)add({key:'task:'+task.id,field:'action',kind:'task',title:task.title,meta:'KV '+task.quoteNumber+' · '+task.customerName,urgency:'warning',dueDate:task.dueDate,target:{screen:'kv',arg:task.quoteId},primaryActionLabel:'Öffnen'});
   for(const attention of complaintCases)add({key:attention.key,field:'action',kind:'complaint',title:attention.title,meta:attention.meta,urgency:attention.urgency,orderId:attention.orderId,target:attention.target,primaryActionLabel:attention.actionLabel as TodayItem['primaryActionLabel']});
 
   for (const order of orders) {
