@@ -1,6 +1,8 @@
 import "server-only";
 import {offlinePartition} from "./offlinePartition";
 import {createPinLoginHandle} from './pinLoginHandle';
+import {cookies} from 'next/headers';
+import {COOKIE_NAME,cacheScopeFromCredential} from './appSession';
 
 import type {
   AccessArea,
@@ -17,6 +19,10 @@ export type AuthBootstrapUser = {
   /** Public opaque login handle, reused only for this login's local reading marker. */
   loginHandle?: string;
   offlineScope?: string;
+  /** Cache-only partition for this already validated credential; never authority. */
+  offlineLoginScope?: string;
+  /** Read-only feature setting; grants no server permission. Default is off. */
+  offline24h?: boolean;
   role: AppRole;
   displayName: string;
   areas: readonly AccessArea[];
@@ -47,11 +53,22 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
   const result = await resolveAuthorization();
 
   if (result.ok) {
+    let offlineLoginScope:string|undefined;
+    try{
+      const credential=(await cookies()).get(COOKIE_NAME)?.value;
+      if(credential)offlineLoginScope=cacheScopeFromCredential(credential);
+    }catch(error){
+      // No cookie/token details in diagnostics. Missing cache identity never
+      // changes the independently resolved authorization or enables a cache.
+      console.error('[OFFLINE_CACHE_SCOPE_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');
+    }
     return {
       status: "authenticated",
       user: {
         loginHandle:createPinLoginHandle(result.data.userId),
         offlineScope:offlinePartition(result.data),
+        offline24h:result.data.offline24h===true,
+        ...(offlineLoginScope?{offlineLoginScope}:{}),
         role: result.data.role,
         displayName: result.data.displayName,
         areas: [...(result.data.areas ?? [])],

@@ -1,4 +1,6 @@
 "use server";
+import {repairProductionPricingTask} from '@/lib/server/productionSnapshotPort';
+import {offlinePartition} from "@/lib/server/offlinePartition";
 import {PACKAGE_ASSIGN_COPY} from "@/ui/situationCatalog";
 import {quoteOperationContext,canReadQuoteForGoods} from "@/lib/server/quoteAuthorization";
 
@@ -50,7 +52,7 @@ import type {TaskOpenRequest} from '@/modules/tasks/public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
-const taskEffects={beforeComplete:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:import('@/modules/tasks/public').TaskRecord,input:import('@/modules/tasks/public').TaskCompleteInput)=>{const blocked=await recordDispatchCallResult(tx,auth,task,input);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,input);},effect:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>{
+const taskEffects={beforeComplete:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:import('@/modules/tasks/public').TaskRecord,input:import('@/modules/tasks/public').TaskCompleteInput)=>{await repairProductionPricingTask(tx,auth,task);const blocked=await recordDispatchCallResult(tx,auth,task,input);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,input);},effect:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>{
  const blocked=await protectDispatchCallTask(tx,auth,input);if(blocked)return blocked;
  const storageBlocked=await protectStorageFinalTask(tx,auth,input);if(storageBlocked)return storageBlocked;
  await protectStoragePostalTask(tx,auth,input);
@@ -89,7 +91,7 @@ export async function completeIntakeTaskAction(input:unknown){
   if(!orders.ok)return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
   const taskId='taskId' in input?input.taskId:null;
   const answered=orders.data.filter(order=>['STOPPED','PAUSED','APPOINTMENT_EXPIRED'].includes(order.finishedDispatch?.reminder?.state??'')||['CALL_NOT_REACHED'].includes(order.finishedDispatch?.reminder?.state??'')&&!!order.finishedDispatch?.reminder?.callTaskId&&order.finishedDispatch.reminder.callTaskId!==taskId).map(order=>({id:order.id,version:order.version}));
-  return completeTask(input,{...taskEffects,beforeComplete:async(tx,auth,task,value)=>{const blocked=await recordDispatchCallResult(tx,auth,task,value,answered);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,value);}});
+  return completeTask(input,{...taskEffects,beforeComplete:async(tx,auth,task,value)=>{await repairProductionPricingTask(tx,auth,task);const blocked=await recordDispatchCallResult(tx,auth,task,value,answered);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,value);}});
  }
  return completeTask(input,taskEffects);
 }
@@ -184,12 +186,30 @@ import { readCustomerOrderReadinessCommand } from "@/modules/customers/server-pu
 import { saveIntakeNote, readIntakeCapture, readIntakeNoteText, readIntakePendingScope, prepareIntakeFile, finishIntakeFile, readIntakeFileChanges } from "@/modules/eingang/server-public";
 import type { IntakeContext } from "@/modules/eingang/public";
 
-export async function saveIntakeNoteAction(input: unknown) {
-  return saveIntakeNote(input, readCustomerProfile);
+export async function saveIntakeNoteAction(input: unknown,pendingScope?:string) {
+  if(!await matchesPendingActor(pendingScope))return {code:"FORBIDDEN" as const,message:"Die Aufnahme wartet auf die ursprüngliche Anmeldung."};
+  if(pendingScope===undefined)return saveIntakeNote(input,readCustomerProfile);
+  const [{preserveOfflineNoteConflict},{writeIntakeNoteInTransaction},{createOfflineNoteConflictTask},{recordIntakeTaskEffect}]=await Promise.all([import('@/lib/server/offlineNoteConflictPort'),import('@/modules/eingang/server-public'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public')]);
+  return saveIntakeNote(input,readCustomerProfile,async(tx,auth,note,currentVersion,orderCustomerId)=>{
+   try{await preserveOfflineNoteConflict(tx,auth,note,currentVersion,async eventId=>{
+    const failure=await writeIntakeNoteInTransaction(tx,auth,{...note,itemId:eventId,textstand:eventId,expectedVersion:0,concerns:[]},readCustomerProfile,orderCustomerId);if(failure)throw Error('OFFLINE_CONFLICT_ORIGINAL_'+failure.code);
+    return createOfflineNoteConflictTask(tx,auth,eventId,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});
+   });}catch(error){console.error('[OFFLINE_NOTE_CONFLICT_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});throw Error('OFFLINE_NOTE_CONFLICT_FAILED');}
+  });
 }
 export async function discardIntakeCaptureAction(input:unknown){return discardIntakeCapture(input);}
-export async function prepareIntakeFileAction(input: unknown) { return prepareIntakeFile(input); }
-export async function finishIntakeFileAction(fileId: string) { return finishIntakeFile(fileId); }
+async function matchesPendingActor(scope:string|undefined){
+ if(scope===undefined)return true;
+ const auth=await resolveAuthorization();return auth.ok&&offlinePartition(auth.data)===scope;
+}
+export async function prepareIntakeFileAction(input: unknown,pendingScope?:string) {
+ if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
+ return prepareIntakeFile(input);
+}
+export async function finishIntakeFileAction(fileId: string,pendingScope?:string) {
+ if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
+ return finishIntakeFile(fileId);
+}
 export async function getIntakePendingScopeAction() { return readIntakePendingScope(); }
 export async function getIntakeFileChangesAction(since: string, after: string | null) { return readIntakeFileChanges(since, after); }
 export async function saveIntakeDeviceRequestAction(input: unknown) {

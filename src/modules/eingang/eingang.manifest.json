@@ -136,6 +136,7 @@
     "@/modules/eingang/public#IntakeMessagesPorts",
     "@/modules/eingang/server-public#readIntakeAssignment",
     "@/modules/eingang/server-public#assignIntakeCustomer",
+    "@/modules/eingang/server-public#canAssignIntakeCustomer",
     "@/modules/eingang/server-public#setIntakeNoBusiness",
     "@/modules/eingang/server-public#createCustomerForIntake",
     "@/modules/eingang/public#AssignmentPorts",
@@ -157,7 +158,8 @@
     "@/modules/eingang/public#intakeHandoverDirective",
     "@/modules/eingang/server-public#readIntakeHandoverMail",
     "@/modules/eingang/server-public#recordIntakeHandoverEffect",
-    "@/modules/eingang/server-public#readPackageExpectation"
+    "@/modules/eingang/server-public#readPackageExpectation",
+    "@/modules/eingang/server-public#writeIntakeNoteInTransaction"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"

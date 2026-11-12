@@ -1,9 +1,14 @@
 "use client";
 
+import {OFFLINE_NOTE_QUARANTINE_COPY} from '@/ui/situationCatalog';
 import React, { createContext, useContext, useEffect, useCallback, useSyncExternalStore } from "react";
 import type { OfflineOutboxItem } from "./OfflineOutbox";
 import {readPendingEntries,retainQuarantinedPending} from "./pendingStore";
 import {usePermissions} from "@/lib/auth/PermissionsContext";
+import {syncPendingFiles} from './syncPendingFiles';
+import {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
+import {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
+import {uploadIntakeOriginal} from '@/modules/eingang/public';
 import { createId } from "@paralleldrive/cuid2";
 
 interface SyncContextValue {
@@ -52,7 +57,7 @@ async function refreshOutboxSnapshot(scope:string|null): Promise<void> {
   try {
     const entries=await readPendingEntries(scope);
     if(activeScope!==scope||generation!==snapshotGeneration)return;
-    outboxSnapshot=entries.map(entry=>({id:entry.id,entityType:entry.kind==='file'?'photo':entry.kind==='note'?'phone_note':'communication_draft',actionType:'create',localEntityId:'itemId' in entry?entry.itemId:entry.id,payload:{},status:entry.kind==='quarantine'?'conflict':'queued',retryCount:0,createdAt:entry.kind==='quarantine'?entry.capturedAt:'',updatedAt:entry.kind==='quarantine'?entry.capturedAt:''}));
+    outboxSnapshot=entries.map(entry=>({id:entry.id,entityType:entry.kind==='file'?'photo':entry.kind==='note'?'phone_note':entry.kind==='workshop'?'item':'communication_draft',actionType:'create',localEntityId:'itemId' in entry?entry.itemId:entry.id,payload:{},...(entry.kind==='quarantine'&&entry.payload?.reason==='NOTE_SYNC_METADATA_MISSING'?{lastError:OFFLINE_NOTE_QUARANTINE_COPY.notice(entry.capturedAt||null)}:{}),status:entry.kind==='quarantine'?'conflict':'queued',retryCount:0,createdAt:entry.kind==='quarantine'?entry.capturedAt:'',updatedAt:entry.kind==='quarantine'?entry.capturedAt:''}));
     snapshotScope=scope;
     outboxListeners.forEach(listener=>listener());
   } catch (error) {
@@ -79,17 +84,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     activeScope=scope;
     const refresh=()=>{void refreshOutboxSnapshot(scope);};
     refresh();window.addEventListener('kreile-pending-changed',refresh);
+    if(scope&&isOnline)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))}).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     return ()=>{window.removeEventListener('kreile-pending-changed',refresh);if(activeScope===scope)activeScope=null;};
   }, [scope,isOnline]);
 
   const syncNow = useCallback(async () => {
-    // CONTAINMENT (OFFLINE-48H-001): No real server sync transport exists yet.
-    // The previous implementation deleted outbox items after a fake 600ms delay
-    // WITHOUT transmitting them to the server, causing silent data loss on
-    // reconnect. Until a real, verified sync transport is implemented, syncNow
-    // must NEVER remove or mutate outbox items. It only refreshes the snapshot
-    // so the UI reflects the pending, still-intact items.
-    if (!isOnline) return;
+    // Retry the same canonical queue; each command checks its current server
+    // rights. Customer/order notes do not require the Eingang area on the client.
+    if (!isOnline||!scope||activeScope!==scope) return;
+    await syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))});
     await refreshOutboxSnapshot(scope);
   }, [isOnline,scope]);
 

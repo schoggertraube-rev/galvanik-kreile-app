@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "0403707d686e05ce8656b036dfbff838fbe1324683153cb4a4691bde09c74ae7",
+  "inventorySha256": "4f53fa32a202e826c6ba47c196a41d1e4535fb02a8b28bf161f008067b02a9cf",
   "testedWriteActions": {
     "src/app/actions/orders.actions.ts#getProductionWeekAction": [
       "src/test/acceptance/production_snapshot_storage.integration.test.ts",
@@ -151,7 +151,8 @@
       "src/test/h18_settings_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#saveIntakeNoteAction": [
-      "src/test/h18_customer_actions.integration.test.ts"
+      "src/test/h18_customer_actions.integration.test.ts",
+      "src/test/acceptance/offline_note_conflict.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#prepareIntakeFileAction": [
       "src/test/h18_customer_actions.integration.test.ts"
@@ -331,6 +332,9 @@
     ],
     "src/app/actions/pdf.actions.ts#prepareStoragePostalLetterAction": [
       "src/test/acceptance/storage_letter.integration.test.ts"
+    ],
+    "src/app/actions/offlineWorkshop.actions.ts#replayOfflineWorkshopAction": [
+      "src/test/acceptance/offline_workshop_replay.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

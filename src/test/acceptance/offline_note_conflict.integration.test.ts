@@ -1,0 +1,42 @@
+// @vitest-environment node
+import {vi,it,expect} from 'vitest';
+import {randomUUID} from 'node:crypto';
+const tenant=vi.hoisted(()=> 'TEST-ablauf-'+globalThis.crypto.randomUUID());
+vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
+import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {KREILE_TENANT_SLUG} from '@/lib/tenant';
+import {getAuthorizationSnapshotAction} from '@/app/actions/auth.actions';
+import {saveIntakeNoteAction,getIntakeCaptureAction,getIntakeTaskAction} from '@/app/actions/eingang.actions';
+it('preserves an actual stale device note and one ordinary clarification task under its original actor, without overwriting the newer note',async()=>{
+ const auth=await withSession(full,()=>getAuthorizationSnapshotAction());if(!auth.ok||!auth.data.offlineScope)throw Error('TEST_SCOPE');
+ const scope=auth.data.offlineScope,itemId=randomUUID();
+ const initial=await withSession(full,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST first original',concerns:[]}));if(initial.code!=='OK')throw Error('TEST_INITIAL');
+ const current=await withSession(full,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST current server note',expectedVersion:initial.capture.version,concerns:[]}));if(current.code!=='OK')throw Error('TEST_CURRENT');
+ const original={itemId,textstand:randomUUID(),text:'TEST device original that must survive '+ 'ä'.repeat(5000),expectedVersion:initial.capture.version,deviceCapturedAt:new Date(Date.now()-60000).toISOString(),concerns:[]};
+ const decider=await createFixture(['entscheiden'],'buero');
+ const denied=await createFixture(['eingang'],'buero');
+ expect(await withSession(denied,()=>saveIntakeNoteAction(original,scope))).toMatchObject({code:'FORBIDDEN'});
+ const trigger='test_offline_note_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${trigger}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='OFFLINE_NOTE_CONFLICT_TASK_V1' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${trigger} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${trigger}()`);
+ try{expect(await withSession(full,()=>saveIntakeNoteAction(original,scope))).toMatchObject({code:'UNAVAILABLE'});}finally{await sql.unsafe(`DROP TRIGGER ${trigger} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${trigger}()`);}
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='OFFLINE_NOTE_CONFLICT_V1'`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND titel='Konflikt beim Abgleich'`).toHaveLength(0);
+ expect(await withSession(full,()=>saveIntakeNoteAction(JSON.parse(JSON.stringify(original)),scope))).toMatchObject({code:'CONFLICT'});
+ const [source]=await sql`SELECT id::text,user_id::text,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='OFFLINE_NOTE_CONFLICT_V1'`;
+ expect(source).toMatchObject({user_id:full.actorId,payload:{quelle:'offline_abgleich',reason:'Konflikt beim Abgleich',original}});
+ expect(await withSession(full,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{text:'TEST current server note',version:current.capture.version}});
+ expect(await withSession(full,()=>getIntakeCaptureAction(source.id))).toMatchObject({code:'OK',capture:{text:original.text}});
+ const tasks=await sql`SELECT id::text,erstellt_von::text,fuer_bereich,bezug_typ,bezug_id,notiz FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND titel='Konflikt beim Abgleich'`;
+ expect(tasks).toHaveLength(1);expect(tasks[0]).toMatchObject({erstellt_von:full.actorId,fuer_bereich:'entscheiden',bezug_typ:'eingang',bezug_id:source.id});expect(tasks[0].notiz).not.toContain(original.text);
+ expect(await withSession(decider,()=>getIntakeTaskAction({taskId:tasks[0].id}))).toMatchObject({code:'OK',task:{id:tasks[0].id},canEdit:true});
+ expect(await withSession(full,()=>saveIntakeNoteAction(JSON.parse(JSON.stringify(original)),scope))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='OFFLINE_NOTE_CONFLICT_V1'`).toHaveLength(1);
+ expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND titel='Konflikt beim Abgleich'`).toHaveLength(1);
+ expect(await withSession(full,()=>saveIntakeNoteAction({...original,text:'TEST different reused command'},scope))).toMatchObject({code:'UNAVAILABLE'});
+ expect(await withSession(full,()=>getIntakeCaptureAction(source.id))).toMatchObject({code:'OK',capture:{text:original.text}});
+ await sql`UPDATE public.app_users SET active=false WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${decider.actorId}::uuid`;
+ const fallback={...original,textstand:randomUUID(),text:'TEST another actual device note'};
+ expect(await withSession(full,()=>saveIntakeNoteAction(fallback,scope))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND titel='Konflikt beim Abgleich' ORDER BY erstellt_am,id`).toEqual([{fuer_bereich:'entscheiden'},{fuer_bereich:'geld'}]);
+});

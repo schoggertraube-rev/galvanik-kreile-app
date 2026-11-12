@@ -38,8 +38,8 @@
   ],
   "exclude": [
     ".steuer_sicherung",
-    "_review",
     "node_modules",
-    "supabase"
+    "supabase",
+    "_review"
   ]
 }

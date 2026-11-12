@@ -31,6 +31,7 @@ import { DiagnosticsWidget } from "@/components/diagnostics/DiagnosticsWidget";
 import { PermissionsProvider } from "@/lib/auth/PermissionsContext";
 import { SyncProvider } from "@/lib/offline/SyncContext";
 import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
+import {OfflineLogoutNotice} from '@/components/OfflineLogoutNotice';
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ClientActionErrorBanner } from "@/components/layout/ClientActionErrorBanner";
 
@@ -50,17 +51,22 @@ export default async function RootLayout({
   return (
     <html
       lang="de"
+      data-auth-status={authState.status}
+      data-offline-scope={authState.status==='authenticated'?authState.user.offlineScope:undefined}
+      data-offline-login-scope={authState.status==='authenticated'?authState.user.offlineLoginScope:undefined}
+      data-offline-24h={authState.status==='authenticated'&&authState.user.offline24h===true?'enabled':'disabled'}
       className={`${fraunces.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
       style={{ "--sans": inter.style.fontFamily, "--serif": fraunces.style.fontFamily } as CSSProperties}
     >
       <body className="h-full">
         <ServiceWorkerRegister />
+        <OfflineLogoutNotice />
         <ClientActionErrorBanner />
         <Suspense fallback={null}>
           <PermissionsProvider initialAuthState={authState}>
             <SyncProvider>
               <DiagnosticsProvider>
-                <FeatureFlagProvider>
+                <FeatureFlagProvider offline24hEnabled={authState.status === 'authenticated' && authState.user.offline24h === true}>
                   <KreileAppShell loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>
                     {children}
                   </KreileAppShell>

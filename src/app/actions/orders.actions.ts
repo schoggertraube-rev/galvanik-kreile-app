@@ -171,7 +171,9 @@ export async function setOrderItemFinishedAction(
   input: SetOrderItemFinishedInput,
 ): Promise<OrderContentResult> {
   const { setOrderItemFinished } = await import("@/lib/server/commands/orderContentCommand");
-  return setOrderItemFinished(input);
+  const [{createProductionPricingRetryTask,settleProductionPricingRetryTasks},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+  const effect:import('@/modules/tasks/server-public').TaskEffects=(tx,auth,value)=>recordIntakeTaskEffect(tx,auth,value,readCustomerProfile);
+  return setOrderItemFinished(input,{failed:async(tx,auth,id)=>{await createProductionPricingRetryTask(tx,auth,id,{effect});},settled:async(tx,auth,eventId)=>{await settleProductionPricingRetryTasks(tx,auth,eventId,{effect});}});
 }
 
 export async function configureExtraWorkCatalogPositionAction(
@@ -226,7 +228,7 @@ async function resolveOrderCardAuthorization(): Promise<
 
 export async function getLiveOrderCardAction(
   input: { orderId: string },
-): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>>; pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>> }>> {
+): Promise<OrderCardActionResult<{ nextActionRule?:ReturnType<typeof import('@/lib/server/v45OrderRead').readV45OrderRule>; card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>>; pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>> }>> {
   noStore();
   try {
     const authorization = await resolveOrderCardAuthorization();
@@ -263,7 +265,8 @@ export async function getLiveOrderCardAction(
     const printQueue=await readOrderPrintQueue(authorization.data,input.orderId);
     const {readOrderPickupAppointment}=await import('@/lib/server/pickupAppointmentPort');
     const pickupAppointment=await readOrderPickupAppointment(authorization.data,input.orderId);
-    return { code: "OK", data: { card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
+    const {readV45OrderRule}=await import('@/lib/server/v45OrderRead');
+    return { code: "OK", data: { nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data}),card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,

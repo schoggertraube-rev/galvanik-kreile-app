@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Inbox, LogOut, Mail, PackageCheck, Settings, X } from "lucide-react";
 import { useEffect,useRef,useState } from "react";
 import { usePathname,useRouter } from "next/navigation";
-import { logout } from "@/app/actions/auth";
+import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { requestGlobalCreate } from "./GlobalCreateFlow";
 import styles from "./TargetShell.module.css";
@@ -31,7 +31,7 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
   const signOut = async () => {
     setBusy(true);
     try {
-      await logout();
+      await logoutWithReadCleanup();
     } finally {
       router.replace("/start");
       router.refresh();

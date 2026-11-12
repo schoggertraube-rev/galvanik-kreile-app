@@ -11,6 +11,7 @@ const ports = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+vi.mock('../privilegedDb',()=>({withPrivilegedTenantTransaction:vi.fn(async()=>false)}));
 vi.mock("../authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
   getAuthorizationActionGrants: () => ports.actionGrants,
@@ -49,6 +50,7 @@ describe("getAuthBootstrapState()", () => {
       status: "authenticated",
       user: {
         offlineScope: expect.stringMatching(/^[a-f0-9]{64}$/),
+        offline24h: false,
         loginHandle:createPinLoginHandle(gregorAuthorization.data.userId),
         role: "developer",
         displayName: "Gregor",

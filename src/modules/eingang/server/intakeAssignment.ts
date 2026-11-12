@@ -3,7 +3,7 @@ import {sql} from 'drizzle-orm';
 import {isDeepStrictEqual} from 'node:util';
 import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
+import {ACCESS_AREAS,canAssignIntakeCustomer} from '@/lib/auth/authorizationContract';
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 import type {CustomerWriter} from '@/lib/server/commands/orderIntakeCommand';
 import type {CustomerCreateCommandResult} from '@/modules/customers/public';
@@ -51,10 +51,13 @@ function validIdentity(input:Record<string,unknown>){return uuid(input.itemId)&&
 async function event(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,row:Source,key:string,art:string,intent:unknown,after:unknown){
  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES(${auth.tenantId},${row.id}::uuid,${art},${key}::uuid,${auth.userId},${JSON.stringify({version:row.version,kundeId:row.kunde_id,vorgangArt:row.vorgang_art,vorgangId:row.vorgang_id,zuordnung:row.zuordnung,einsatz:row.einsatz})}::jsonb,${JSON.stringify({intent,version:row.version+1,...after as object})}::jsonb)`);
 }
+/** The existing source-assignment gate, shared with read-only U2 binding.
+ * Target-specific customer/supplier checks still run in the same writer. */
+export {canAssignIntakeCustomer} from '@/lib/auth/authorizationContract';
 export async function assignIntakeCustomer(input:unknown,readCustomer:CustomerReader):Promise<AssignmentResult>{
  if(!object(input)||Object.keys(input).sort().join(',')!=='clientEventId,customerId,itemId,mode,version'||!validIdentity(input)||typeof input.customerId!=='string'||!input.customerId.trim()||input.customerId.length>128||!['confirm','manual','move'].includes(String(input.mode)))return {code:'VALIDATION_ERROR',message:'Kunde oder Eingangsstand ist ungültig.'};
  const value=input as AssignmentInput;
- try{const auth=await session();if(!hasAuthorizationArea(auth,'eingang')||!hasAuthorizationArea(auth,'kunden')&&!hasAuthorizationArea(auth,'geld'))reject('FORBIDDEN','Zuordnen benötigt Eingang sowie das Recht des Ziels.');
+ try{const auth=await session();if(!canAssignIntakeCustomer(auth))reject('FORBIDDEN','Zuordnen benötigt Eingang sowie das Recht des Ziels.');
   return await withPrivilegedTenantTransaction(auth,tx=>assignInTransaction(tx,auth,value,readCustomer));
  }catch(error){return failed(error);}
 }

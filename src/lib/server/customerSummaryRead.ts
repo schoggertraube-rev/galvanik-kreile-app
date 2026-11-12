@@ -5,6 +5,7 @@ import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import { overdueInvoiceCondition } from "@/lib/server/paymentContract";
 import {CUSTOMER_METRICS_COPY} from '@/ui/situationCatalog';
+import {invoiceAlreadySent} from './communicationDocumentPort';
 import {evaluateOrderPriority} from '@/lib/priority';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -27,8 +28,8 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
   if(!customerIds.length)return new Map();
   if(customerIds.some(id=>typeof id!=='string'||!id||id.length>128))throw Error('CUSTOMER_SIGNALS_IDS_INVALID');
   const money=hasAuthorizationArea(auth,'geld'),mails=hasAuthorizationArea(auth,'mails'),intake=hasAuthorizationArea(auth,'eingang');
-  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;active_orders:number;active_quotes:number;overdue:number;unassigned:number;open_messages:number;agreements:Array<{text:string}>;complaints:Array<{text:string}>;tasks:Array<{text:string}>;deadlines:Array<{number:string|null;dueDate:string|null;risk:string|null;status:string|null}>}>(sql`
-    SELECT customer.id,
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;as_of:string;active_orders:number;active_quotes:number;overdue:number;unassigned:number;open_messages:number;agreements:Array<{text:string}>;complaints:Array<{text:string}>;tasks:Array<{text:string}>;deadlines:Array<{number:string|null;dueDate:string|null;risk:string|null;status:string|null}>}>(sql`
+    SELECT customer.id,statement_timestamp()::text AS as_of,
       (SELECT count(*)::integer FROM private.v_operational_station_queue_v1 queue JOIN public.orders order_source ON order_source.tenant_id=queue.tenant_id AND order_source.id=queue.id WHERE queue.tenant_id=customer.tenant_id AND queue.customer_id=customer.id
         AND queue.station NOT IN ('abgeholt','versendet','raus','storniert') AND order_source.ware<>'storniert') AS active_orders,
       (SELECT count(*)::integer FROM private.v_open_quotes_v1 quote WHERE quote.tenant_id=customer.tenant_id AND quote.customer_id=customer.id) AS active_quotes,
@@ -59,7 +60,7 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
     if(row.unassigned)hints.push({kind:'message',text:`${row.unassigned} ${row.unassigned===1?'Nachricht':'Nachrichten'} zuordnen`,urgent:false});
     if(row.open_messages)hints.push({kind:'message',text:`${row.open_messages} ${row.open_messages===1?'Nachricht':'Nachrichten'} offen`,urgent:false});
     hints.push(...row.agreements.map(value=>({kind:'agreement' as const,text:value.text,urgent:false})),...row.complaints.map(value=>({kind:'complaint' as const,text:value.text,urgent:true})),...row.tasks.map(value=>({kind:'task' as const,text:value.text,urgent:false})));
-    return [row.id,{activeOrderCount:row.active_orders,activeQuoteCount:row.active_quotes,hints}];
+    return [row.id,{activeOrderCount:row.active_orders,activeQuoteCount:row.active_quotes,openComplaintCount:row.complaints.length,...(mails?{openMessageCount:row.open_messages}:{}),asOf:row.as_of,hints}];
   }));
 }
 
@@ -74,6 +75,7 @@ export type CustomerSummaryOrder = {
 };
 
 export type CustomerSummary = CustomerStoredProfile & {
+  nextActionRule?:ReturnType<typeof import("./v45CustomerRead").readV45CustomerRule>;
   kennzahlen?:CustomerKennzahlen;
   hints?:CustomerHint[];
   id: string;
@@ -102,6 +104,9 @@ export type CustomerSummary = CustomerStoredProfile & {
   wareImHaus: boolean;
   invoiceRevenueCents?: number;
   invoiceOpenCents?: number;
+  /** All current issued originals, using the actual dispatch membership proof. */
+  invoiceUnsentCount?:number;
+  invoiceUnsentOriginals?:Array<{id:string;number:string;version:number;orderId:string}>;
   agreements: CustomerAgreementSummary[];
   agreementSlotsAvailable: number;
   orders: CustomerSummaryOrder[];
@@ -475,6 +480,7 @@ export async function readCustomerSummary(
     return { code: "FORBIDDEN", message: "Kundenkarte ist nicht erlaubt." };
   }
   try {
+    const {readV45CustomerRule}=await import("./v45CustomerRead");
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<SummaryRow>(sql`
         SELECT summary.*,
@@ -499,9 +505,20 @@ export async function readCustomerSummary(
        );
        const agreementSlotsAvailable = await readCustomerAgreementSlots(tx, authorization.tenantId, input.customerId);
        const kennzahlen=await readCustomerKennzahlen(tx,authorization,input.customerId);
-       return mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable,kennzahlen);
+       const summary=mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable,kennzahlen);
+       if(hasAuthorizationArea(authorization,'geld')){
+        const [pending]=await tx.execute<{count:number;originals:Array<{id:string;number:string;version:number;orderId:string}>}>(sql`SELECT count(*)::integer AS count,coalesce(jsonb_agg(jsonb_build_object('id',invoice.id::text,'number',invoice.invoice_number,'version',invoice.aggregate_version,'orderId',invoice.order_id) ORDER BY invoice.issued_at,invoice.id),'[]'::jsonb) AS originals FROM public.invoices invoice
+         WHERE invoice.tenant_id=${authorization.tenantId} AND invoice.customer_id=${input.customerId}
+          AND invoice.status='issued' AND invoice.contract_version=1
+          AND NOT ${invoiceAlreadySent(authorization.tenantId,sql`invoice.id`)}`);
+        if(!pending||!Number.isSafeInteger(pending.count)||pending.count<0)throw Error('CUSTOMER_UNSENT_INVOICE_COUNT_INVALID');
+        if(!Array.isArray(pending.originals)||pending.originals.length!==pending.count)throw Error('CUSTOMER_UNSENT_ORIGINALS_INVALID');
+        summary.invoiceUnsentCount=pending.count;
+        summary.invoiceUnsentOriginals=pending.originals;
+       }
+       return summary;
     });
-    if(data){const signals=await readCustomerListSignals(authorization,[input.customerId]);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;}
+    if(data){const signals=await readCustomerListSignals(authorization,[input.customerId]);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;data.nextActionRule=readV45CustomerRule(authorization,data,signal);}
     return data
       ? { code: "OK", data }
       : { code: "NOT_FOUND", message: "Kunde nicht verfügbar." };

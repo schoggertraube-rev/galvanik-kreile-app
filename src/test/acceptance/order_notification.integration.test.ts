@@ -55,6 +55,12 @@ it.each(['found','resend'] as const)('S1 PL04:01 recovers an uncertain invoice n
   if(url.hostname==='graph.microsoft.com'&&url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:mode==='resend'?[]:[{id:'TEST-S1-sent',internetMessageId:'<TEST-S1-sent@example.invalid>',from:{emailAddress:{address:process.env.MS_GRAPH_MAILBOX}},toRecipients:[{emailAddress:{address:customer.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:originalRequestId}]}]});
   return nativeFetch(input,init);
  });
+ const originalCard=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));
+ expect(originalCard).toMatchObject({code:'OK',data:{customerInformed:{code:'OK',orderVersion:order.version,invoiceMailOriginals:[{id:order.invoice.invoiceId,orderId:order.orderId}]}}});
+ const noMoney=await createFixture(['auftraege','mails'],'werkstatt');
+ const redacted=await withSession(noMoney,()=>getLiveOrderCardAction({orderId:order.orderId}));
+ expect(redacted).toMatchObject({code:'OK'});if(redacted.code!=='OK')throw Error('NOTIFY_READ');
+ expect(redacted.data.customerInformed?.code==='OK'&&redacted.data.customerInformed.invoiceMailOriginals).toBeUndefined();
  const base={targetType:'ORDER' as const,targetId:order.orderId,subject:'TEST Fertigmeldung',body:'TEST Deine Ware ist fertig.',clientRequestId:randomUUID()};
  expect(await withSession(full,()=>sendCustomerMailAction(base))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{informed:null,ampel:'rot'}}});
@@ -82,6 +88,7 @@ it.each(['found','resend'] as const)('S1 PL04:01 recovers an uncertain invoice n
   expect(await withSession(full,()=>sendCustomerMailAction({...failed,clientRequestId:randomUUID()}))).toMatchObject({code:'CONFLICT'});expect(sends).toBe(mode==='resend'?3:2);
   expect(await sql`SELECT user_id::text,payload->'receipt'->>'channel' AS channel,payload->'receipt'->>'threadId' AS thread FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toEqual([{user_id:full.actorId,channel:'mail',thread:sent.data.threadId}]);
   expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{ampel:'gruen',informed:{actorId:full.actorId,channel:'mail'}}}});
+  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{invoiceMailOriginals:[]}}});
   const before=sends;
   expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});expect(sends).toBe(before);
   expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toEqual([{n:1}]);

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Search, Camera, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
-import { logout } from "@/app/actions/auth";
+import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
@@ -24,6 +24,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const { initials, status, name } = usePermissions();
   const { status: realtimeStatus } = useRealtimeStatus();
   const { isOnline, outboxItems } = useSync();
+  const pendingNotice=outboxItems.find(item=>typeof item.lastError==='string')?.lastError;
   const pendingOutboxCount = outboxItems.filter((item) => item.status !== "synced").length;
 
   // User Dropdown State
@@ -52,8 +53,8 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     // proxy.ts und roles.ts lesen ihn – konsistente Bereinigung erforderlich.
     // Sicherheitsauftrag: vollständige Migration auf kreile_app_session ist geplant.
     document.cookie = "bypass-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    await logout();
-    router.replace("/start");
+    try{await logoutWithReadCleanup();}
+    finally{router.replace("/start");}
   };
 
   const today = new Date();
@@ -172,7 +173,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           title="Gerätesignal: zeigt Netzwerkverfügbarkeit und lokal ausstehende Einträge; kein Server- oder Synchronisierungsnachweis."
         >
           <span className={`w-2 h-2 rounded-full ${!isOnline ? "bg-accent-orange" : (pendingOutboxCount > 0 ? "bg-gold-500 animate-pulse" : "bg-success-green")}`} />
-          <span>{!isOnline ? "Offline" : (pendingOutboxCount > 0 ? `${pendingOutboxCount} lokal ausstehend` : "Netzwerk verfügbar")}</span>
+          <span>{pendingNotice??(!isOnline ? "Offline" : (pendingOutboxCount > 0 ? `${pendingOutboxCount} lokal ausstehend` : "Netzwerk verfügbar"))}</span>
         </div>
 
         {/* Live-Sync Indicator */}

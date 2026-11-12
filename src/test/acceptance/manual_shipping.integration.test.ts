@@ -63,7 +63,62 @@ it('V13–V16 actual manual tracking keeps shipment, actor and history across re
  expect(await sql`SELECT status,shipped_at IS NOT NULL AS handed_over,delivered_at FROM public.shipments WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.shipmentId}::uuid`).toEqual([{status:'shipped',handed_over:true,delivered_at:null}]);
  expect(await sql`SELECT user_id::text,payload->>'goodsOutEventId' AS physical_receipt FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='SHIPMENT_HANDED_OVER_V1' AND payload->>'shipmentId'=${input.shipmentId}`).toEqual([{user_id:full.actorId,physical_receipt:handedOver.receipt.eventId}]);
  expect(await withSession(full,()=>getManualShippingAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{shipments:expect.arrayContaining([expect.objectContaining({id:input.shipmentId,status:'shipped'})])}});
+ // A real handed-over shipment is not a delivered order; no delivery receipt exists.
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{handoverMode:'shipping'},nextActionRule:{code:'OK',hauptaktion:null,datenluecken:expect.arrayContaining(['returning'])}}});
  expect(await withSession(full,()=>recordGoodsOutAction(structuredClone(handover)))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='SHIPMENT_HANDED_OVER_V1' AND payload->>'shipmentId'=${input.shipmentId}`).toEqual([{n:1}]);
  expect(await withSession(full,()=>saveManualTrackingAction({...correction,expectedUpdatedAt:changed.receipt.updatedAt,reason:'TEST zu spät',clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT',reason:'SHIPPING_RELEASE_BLOCKED'});
+});
+
+it('reads the physical pickup first look from the same real card without money or unrelated blockers',async()=>{
+ const order=await readyInvoiceOrder('TEST U2 Abgeholt','pickup');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const handed=await withSession(full,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:order.version,clientEventId:randomUUID()}));
+ expect(handed.code).toBe('OK');
+ const login=await createFixture(['auftraege'],'werkstatt');
+ const count=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const read=await withSession(login,()=>getLiveOrderCardAction({orderId:order.orderId}));
+ expect(read).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK',zustand:'closed',hauptaktion:null,weitere:[],gesperrt:[]}}});
+ if(read.code!=='OK'||read.data.nextActionRule?.code!=='OK')throw Error('TEST_PICKUP_FIRST_LOOK');
+ expect(read.data.nextActionRule.erstblick.map(row=>row.key)).toEqual(['auftrag.lage','auftrag.termin','auftrag.teile','auftrag.hauptaktion']);
+ expect(read.data.nextActionRule.source.version).toBe(read.data.card.version);
+ expect(read.data.nextActionRule.quelle.erwartungSha256).toMatch(/^[a-f0-9]{64}$/);
+ expect(JSON.stringify(read.data.nextActionRule)).not.toMatch(/netto|Cents|unitPrice|vatRate/);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(count);
+});
+
+it('R15 active intake exposes the same versioned first look and existing start command without money',async()=>{
+ const {customerFixture,intakeOrderFixture}=await import('../../../e2e/ablauf/orderFixture');
+ const customer=await customerFixture('TEST R15 active');
+ const created=await intakeOrderFixture('TEST R15 active',customer);
+ const {getLiveOrderCardAction,transitionWareneingangToGalvanikAction}=await import('@/app/actions/orders.actions');
+ const login=await createFixture(['auftraege'],'werkstatt');
+ const read=await withSession(login,()=>getLiveOrderCardAction({orderId:created.receipt.orderId}));
+ console.info('TEST_R15_SOURCE',JSON.stringify(read.code==='OK'?read.data.nextActionRule:read));
+ expect(read).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK',zustand:'received',hauptaktion:{elementId:'order.start',befehl:{funktion:'transitionWareneingangToGalvanikAction',argumente:{orderId:created.receipt.orderId,expectedVersion:1}}},datenluecken:expect.arrayContaining(['workProblem','deliveryRequest','termUpdatePending','workUpdatePending','extraPending'])}}});
+ if(read.code!=='OK'||read.data.nextActionRule?.code!=='OK'||!read.data.nextActionRule.hauptaktion)throw Error('TEST_ACTIVE_U2_REQUIRED');
+ const rule=read.data.nextActionRule;
+ expect(rule.source.version).toBe(read.data.card.version);expect(rule.erstblick.length).toBeLessThanOrEqual(5);
+ expect(JSON.stringify(rule)).not.toMatch(/Cents|unitPrice|netto|vatRate/);
+ if(!rule.hauptaktion||typeof rule.hauptaktion!=='object'||!('befehl'in rule.hauptaktion))throw Error('TEST_COMMAND_REQUIRED');
+ const args=JSON.parse(JSON.stringify(rule.hauptaktion.befehl.argumente));
+ const input={...args,clientEventId:randomUUID()};
+ expect(await withSession(login,()=>transitionWareneingangToGalvanikAction(input))).toMatchObject({code:'OK'});
+ expect(await withSession(login,()=>transitionWareneingangToGalvanikAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true});
+ const photoRead=await withSession(login,()=>getLiveOrderCardAction({orderId:created.receipt.orderId}));
+ console.info('TEST_R15_PHOTO_SOURCE',JSON.stringify(photoRead.code==='OK'?photoRead.data.nextActionRule:photoRead));
+ expect(photoRead).toMatchObject({code:'OK',data:{card:{station:'galvanik'},nextActionRule:{code:'OK',zustand:'photo',hauptaktion:{elementId:'order.photo',befehl:{funktion:'reserveGalvanikHandoffAttachmentAction',argumente:{itemId:created.receipt.items[0].id}}}}}});
+ const {storeItemPhoto}=await import('../../../e2e/ablauf/photoFixture');
+ await storeItemPhoto(created.receipt.orderId,created.receipt.items[0].id);
+ const partsRead=await withSession(login,()=>getLiveOrderCardAction({orderId:created.receipt.orderId}));
+ console.info('TEST_R15_PARTS_SOURCE',JSON.stringify(partsRead.code==='OK'?partsRead.data.nextActionRule:partsRead));
+ expect(partsRead).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK',zustand:'work',hauptaktion:{elementId:'order.parts',ziel:{tab:'parts'},befehl:{funktion:'getLiveOrderCardAction'}}}}});
+ if(partsRead.code!=='OK')throw Error('TEST_PARTS_READ');
+ const {setOrderItemFinishedAction}=await import('@/app/actions/orders.actions');
+ expect(await withSession(login,()=>setOrderItemFinishedAction({orderId:created.receipt.orderId,itemId:created.receipt.items[0].id,expectedVersion:partsRead.data.card.version,clientEventId:randomUUID(),finished:true}))).toMatchObject({code:'OK'});
+ const finishRead=await withSession(login,()=>getLiveOrderCardAction({orderId:created.receipt.orderId}));
+ console.info('TEST_R15_FINISH_SOURCE',JSON.stringify(finishRead.code==='OK'?finishRead.data.nextActionRule:finishRead));
+ expect(finishRead).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK',zustand:'finish',hauptaktion:{elementId:'order.finish',befehl:{funktion:'freezeOrderAction'}}}}});
+ expect(JSON.stringify(finishRead.code==='OK'?finishRead.data.nextActionRule:{})).not.toMatch(/Cents|unitPrice|netto|vatRate/);
 });

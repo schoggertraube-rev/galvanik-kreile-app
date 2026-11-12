@@ -152,10 +152,12 @@ export async function readIntakePendingScope() {
   // Local storage partition only. This value authorizes no request and contains no identity or PIN.
   return { code: "OK" as const, scope: offlinePartition(auth) };
 }
-export async function saveIntakeNote(input: unknown, readCustomer: (tx: PrivilegedTenantTransaction, tenantId: string, customerId: string) => Promise<{ customerType: string } | null>): Promise<IntakeCaptureResult> {
-  if (!record(input) || Object.keys(input).some(key => !["itemId", "textstand", "text", "context", "concerns"].includes(key))
+export async function saveIntakeNote(input: unknown, readCustomer: (tx: PrivilegedTenantTransaction, tenantId: string, customerId: string) => Promise<{ customerType: string } | null>,onConflict?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,note:IntakeNoteInput,currentVersion:number,orderCustomerId:string|null)=>Promise<void>): Promise<IntakeCaptureResult> {
+  if (!record(input) || Object.keys(input).some(key => !["itemId", "textstand", "text", "context", "concerns", "expectedVersion", "deviceCapturedAt"].includes(key))
     || typeof input.itemId !== "string" || !UUID.test(input.itemId) || typeof input.textstand !== "string" || !UUID.test(input.textstand)
     || typeof input.text !== "string" || !input.text.trim() || input.text.length > 20_000 || !context(input.context)
+    || input.expectedVersion!==undefined&&(!Number.isSafeInteger(input.expectedVersion)||Number(input.expectedVersion)<0)
+    || input.deviceCapturedAt!==undefined&&(typeof input.deviceCapturedAt!=="string"||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(input.deviceCapturedAt)||!Number.isFinite(Date.parse(input.deviceCapturedAt))||new Date(input.deviceCapturedAt).toISOString()!==input.deviceCapturedAt)
     || input.concerns !== undefined && (!Array.isArray(input.concerns) || input.concerns.some(value => typeof value !== "string"))) {
     return failure("VALIDATION_ERROR", "Notiz: 1 bis 20.000 Zeichen und eine gültige Anfragekennung erforderlich.");
   }
@@ -166,7 +168,7 @@ export async function saveIntakeNote(input: unknown, readCustomer: (tx: Privileg
     const order = note.context?.orderId ? await readLiveOrderCard(auth, { orderId: note.context.orderId }) : null;
     if (order && order.code !== "OK") return failure("NOT_FOUND", "Vorgang konnte nicht sicher gelesen werden.");
     const orderCustomerId = order?.code === "OK" ? order.data.customerId : null;
-    const saved = await withPrivilegedTenantTransaction(auth, tx => writeIntakeNoteInTransaction(tx,auth,note,readCustomer,orderCustomerId));
+    const saved = await withPrivilegedTenantTransaction(auth, tx => writeIntakeNoteInTransaction(tx,auth,note,readCustomer,orderCustomerId,onConflict));
     return saved ?? await intakeCaptureSnapshot(auth, note.itemId);
   } catch (error) {
     console.error("[INTAKE_NOTE_WRITE_FAILED]", error);
@@ -183,6 +185,7 @@ export async function writeIntakeNoteInTransaction(
   tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,note:IntakeNoteInput,
   readCustomer:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<{customerType:string}|null>,
   orderCustomerId:string|null=null,
+  onConflict?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,note:IntakeNoteInput,currentVersion:number,orderCustomerId:string|null)=>Promise<void>,
 ){
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${note.itemId},0))`);
   let customerId = note.context?.customerId ?? null;
@@ -206,12 +209,13 @@ export async function writeIntakeNoteInTransaction(
   if (selected.some(id => !recognized.some(value => value.id === id))) return failure("VALIDATION_ERROR", "Anliegen passt nicht zur erkannten Notiz.");
   const selectedSql = sql`ARRAY[${sql.join(selected.map(value => sql`${value}`), sql`, `)}]::text[]`;
 
-  const repeated = await tx.execute<{ text: string }>(sql`SELECT nachher->>'text' AS text FROM public.intake_event
+  const repeated = await tx.execute<{ text: string;actor:string;device_captured_at:string|null;expected_version:number|null }>(sql`SELECT von::text AS actor,nachher->>'text' AS text,nachher->>'deviceCapturedAt' AS device_captured_at,(nachher->>'expectedVersion')::integer AS expected_version FROM public.intake_event
     WHERE tenant_id=${auth.tenantId} AND item_id=${note.itemId}::uuid AND art='original_gespeichert' AND befehl_id=${note.textstand}::uuid`);
   if (repeated.length) {
-    return repeated.length === 1 && repeated[0].text === note.text && JSON.stringify(existing[0]?.anliegen) === JSON.stringify(selected)
+    return repeated.length === 1 && repeated[0].text === note.text && ((note.expectedVersion===undefined&&note.deviceCapturedAt===undefined)||repeated[0].actor===auth.userId) && (note.deviceCapturedAt===undefined||repeated[0].device_captured_at===note.deviceCapturedAt) && (note.expectedVersion===undefined||repeated[0].expected_version===note.expectedVersion) && JSON.stringify(existing[0]?.anliegen) === JSON.stringify(selected)
       ? null : failure("CONFLICT", "Textstand wurde bereits anders verwendet. Eingaben bleiben erhalten.");
   }
+  if(note.expectedVersion!==undefined&&(existing[0]?.version??0)!==note.expectedVersion){if(existing[0]&&note.deviceCapturedAt&&onConflict)await onConflict(tx,auth,note,existing[0].version,orderCustomerId);return failure("CONFLICT","Textstand wurde bereits anders verwendet. Eingaben bleiben erhalten.");}
   const usage = customerId ? selected.length ? "offen" : "info" : note.concerns?.length === 0 ? "info" : "offen";
   if (!existing.length) {
     await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,text,kunde_id,vorgang_art,vorgang_id,zuordnung,einsatz,anliegen,anliegen_offen,anliegen_abgewaehlt)
@@ -231,6 +235,6 @@ export async function writeIntakeNoteInTransaction(
       VALUES(${auth.tenantId},${note.itemId}::uuid,'anliegen',${JSON.stringify(concern.id)}::jsonb,'vorschlag','notiz','Signal im Originaltext','offen')`);
   }
   await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES
-    (${auth.tenantId},${note.itemId}::uuid,'original_gespeichert',${note.textstand}::uuid,${auth.userId},${JSON.stringify(existing[0] ?? null)}::jsonb,${JSON.stringify({ text: note.text, anliegen: selected, einsatz: usage })}::jsonb)`);
+    (${auth.tenantId},${note.itemId}::uuid,'original_gespeichert',${note.textstand}::uuid,${auth.userId},${JSON.stringify(existing[0] ?? null)}::jsonb,${JSON.stringify({ text: note.text, anliegen: selected, einsatz: usage, ...(note.expectedVersion!==undefined?{expectedVersion:note.expectedVersion}:{}), ...(note.deviceCapturedAt?{deviceCapturedAt:note.deviceCapturedAt}:{}) })}::jsonb)`);
   return null;
 }

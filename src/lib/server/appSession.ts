@@ -1,10 +1,12 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import crypto from "crypto";
 import { cookies } from "next/headers";
+import {CACHE_SCOPE_COOKIE} from '@/lib/offline/cacheScopeMarker';
 
 // ─── Konstanten ─────────────────────────────────────────────────────────────
 export const COOKIE_NAME = "kreile_app_session";
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 Stunden
+export function cacheScopeFromCredential(credential:string):string{return crypto.createHash('sha256').update('offline-cache:'+credential).digest('hex');}
 export const APP_TENANT_ID = KREILE_TENANT_SLUG;
 
 // ─── Secret Key ──────────────────────────────────────────────────────────────
@@ -167,12 +169,15 @@ export async function setAppSession(session: AppSession): Promise<void> {
   const token = signAppSession(session, getSecretKey());
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, getCookieOptions(new Date(session.expiresAt)));
+  // Persistent reading fence, not a session lease. Offline contact age and
+  // online authorization remain independently checked at their existing ports.
+  cookieStore.set(CACHE_SCOPE_COOKIE,cacheScopeFromCredential(token),{...getCookieOptions(),httpOnly:false,maxAge:365*24*60*60});
 }
 
 // ─── Cookie I/O: Löschen ────────────────────────────────────────────────────
 export async function clearAppSession(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.delete(COOKIE_NAME);
+  try{cookieStore.delete(COOKIE_NAME);}finally{cookieStore.delete(CACHE_SCOPE_COOKIE);}
 }
 
 // ─── Backward-compat: getAppSession() ────────────────────────────────────────

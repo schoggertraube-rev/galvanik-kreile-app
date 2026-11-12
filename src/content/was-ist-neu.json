@@ -1,5 +1,16 @@
 [
   {
+    "datum": "2026-11-12",
+    "pr": 215,
+    "seite": "auftraege",
+    "punkte": [
+      "Arbeitest du ohne Netz, bleiben Fotos, Notizen und Werkstatt-Meldungen auf deinem Gerät. Sobald wieder Netz da ist, gehen sie genau einmal raus – in der Reihenfolge, in der du sie erfasst hast.",
+      "Hat sich in der Zwischenzeit etwas geändert, bekommt der Bereich eine Aufgabe zum Klären. Deine Aufnahme geht dabei nicht verloren.",
+      "Meldest du dich ab, während noch etwas wartet, sagt dir die App, wie viele Aufnahmen noch warten. Sie bleiben erhalten."
+    ],
+    "ziel": "/auftraege"
+  },
+  {
     "datum": "2026-11-11",
     "pr": 214,
     "seite": "nachrichten",

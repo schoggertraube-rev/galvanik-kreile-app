@@ -367,3 +367,11 @@ it('SA correction maps an unavailable assignment code through the catalog withou
 it('SA review gives a validation rejection a reload exit beside the responsibility action',()=>{
  const reload=vi.fn();render(<OrderCardView state={{kind:'data',card:{...card,actors:{currentLoginId:'TEST-a',createdBy:null,lastActor:null,responsible:null,assignmentUnavailable:false}}}} actions={{...actions,onReload:reload,feedback:{kind:'error',operation:'responsibility',code:'VALIDATION_ERROR',message:'Der Auftrag hat sich inzwischen geändert. Lade ihn neu und übernimm ihn dann.'}}} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);fireEvent.click(screen.getByRole('button',{name:'Neu laden'}));expect(reload).toHaveBeenCalledOnce();
 });
+
+it('shows the approved pending completion without a success receipt or blocking unrelated actions',()=>{
+ const message='Teil Haltewinkel fertig – wird übertragen, sobald Netz da ist';
+ render(<OrderCardView state={{kind:'data',card}} actions={{...actions,feedback:{kind:'pending',message}}} onOpenCustomer={vi.fn()} onClose={vi.fn()}/>);
+ expect(screen.getByText(message)).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'Termin ändern'})).not.toBeDisabled();
+ expect(screen.queryByText('Teil ist fertig.')).not.toBeInTheDocument();
+});

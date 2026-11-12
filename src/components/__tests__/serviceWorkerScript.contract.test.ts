@@ -80,7 +80,8 @@ function fetchEvent(url: string, method = "GET", mode = "cors") {
   let responsePromise: Promise<Response> | undefined;
   return {
     event: {
-      request: { url, method, mode },
+      request: { url, method, mode, headers: new Headers() },
+      waitUntil: (_promise:Promise<unknown>) => { void _promise; },
       respondWith: (response: Promise<Response> | Response) => { responsePromise = Promise.resolve(response); },
     },
     responsePromise: () => responsePromise,
@@ -166,12 +167,12 @@ describe("service worker containment contract", () => {
     expect(metrics).toMatchObject({ cacheMatch: 1, selfFetch: 1, cacheOpen: 0, cachePut: 0 });
   });
 
-  it("does not respond to query, cross-origin, navigation, or unknown requests", () => {
+  it("does not respond to query, cross-origin, protected navigation, or unknown requests", () => {
     const { handlers, metrics } = loadWorker();
     for (const [url, method, mode] of [
       ["https://werkstatt.example/icons/icon-192.png?v=1", "GET", "cors"],
       ["https://outside.example/icons/icon-192.png", "GET", "cors"],
-      ["https://werkstatt.example/orders", "GET", "navigate"],
+      ["https://werkstatt.example/login", "GET", "navigate"],
       ["https://werkstatt.example/orders", "GET", "cors"],
     ] as const) {
       const request = fetchEvent(url, method, mode);
@@ -181,15 +182,31 @@ describe("service worker containment contract", () => {
     expectNoStorageOrFetch(metrics);
   });
 
+  it("serves a cached immutable build asset without touching API or login storage", async () => {
+    const {handlers,metrics}=loadWorker({cachedResponse:new Response('TEST immutable build',{headers:{'content-type':'text/javascript'}})});
+    const request=fetchEvent('https://werkstatt.example/_next/static/TEST/app.js');
+    handlers.get('fetch')?.(request.event as never);
+    expect(await (await request.responsePromise())?.text()).toBe('TEST immutable build');
+    expect(metrics.selfFetch).toBe(0);expect(metrics.indexedDbOpen).toBe(0);
+  });
+
   it("has source-level guards against API caching, synthetic responses, and fallbacks", () => {
     const { source } = loadWorker();
     expect(source).toContain('const STATIC_ASSETS = [');
     expect(source).toContain('if (request.method !== "GET") return;');
     expect(source).toContain('if (url.origin !== self.location.origin) return;');
-    expect(source).toContain('if (!STATIC_ASSETS.includes(url.pathname) || url.search !== "") return;');
-    expect(source).not.toMatch(/\bindexedDB\b|\bnew\s+Response\s*\(/);
+    expect(source).not.toMatch(/\bnew\s+Response\s*\(|deleteDatabase|objectStore\([^)]*\)\.put/);
+    expect(source).toContain('open.transaction.abort()');
+    expect(source).toContain('db.transaction("shellMetadata", "readonly")');
     expect(source).not.toMatch(/(?:pathname|url\.pathname)\s*(?:===|\.startsWith|\.includes|\.match)\s*\(?\s*["'][^"']*\/(?:api|supabase)(?:\/|["'])/i);
-    expect(source).not.toMatch(/\bcaches\.delete\s*\(|\bapi-cache\b/);
-    expect(source).not.toMatch(/OFFLINE_URL|text\/html|url\.pathname\s*===\s*["']\/["']|request\.mode\s*===\s*["']navigate["']/i);
+    expect(source).not.toMatch(/\bapi-cache\b/);
+    expect(source).toContain('parts[2] !== login');
+    expect(source).toContain('current.cacheGeneration !== selected.generation');
+    expect(source).not.toMatch(/OFFLINE_URL|url\.pathname\s*===\s*["']\/["']/i);
   });
+});
+
+it('PL00:11 never invents an offline navigation response without the real private fence',async()=>{
+ const {handlers,metrics}=loadWorker({network:{kind:'reject'}}),request=fetchEvent('https://werkstatt.example/customers','GET','navigate');
+ handlers.get('fetch')?.(request.event as never);await expect(request.responsePromise()).rejects.toThrow('network offline');expect(metrics.indexedDbOpen).toBe(0);expect(metrics.cachePut).toBe(0);
 });

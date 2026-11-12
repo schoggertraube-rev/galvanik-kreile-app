@@ -1,4 +1,10 @@
+/** PL12.11.00:11: a missing historical time stays explicit, never today. */
+export const OFFLINE_NOTE_QUARANTINE_COPY={notice:(time:string|null)=>`Notiz von ${time??'TODO_PL'} konnte nicht abgeglichen werden`} as const;
+/** R8 TODO_PL: complaint original has photographs, but no chosen order number. */
+export const MESSAGE_COMPLAINT_ACTION_COPY={key:'messages.complaint_customer',text:'TODO_PL'} as const;
+
 /** One presentation catalogue. Facts are projections of existing readers, never stored here. */
+export const OFFLINE_LOGOUT_COPY={cachePending:'Du bist abgemeldet. Die gespeicherten Daten auf diesem Gerät werden beim nächsten Start gelöscht.',pending:(count:number)=>`Du bist abgemeldet. ${count} Eingaben warten noch auf Netz und werden übertragen, sobald es da ist.`} as const;
 export const ORDER_TERMINAL_COPY={dateLocked:'Der Auftrag wurde bereits herausgegeben. Du kannst den Liefertermin nicht mehr ändern.'} as const;
 export const MAIL_REQUEST_CONFLICT_COPY='Diese Anfragekennung gehört zu einer anderen Nachricht. Öffne den gespeicherten Versand.';
 export const INTAKE_PENDING_WORKFLOW_COPY={quoteRequest:'Lege zuerst den KV zur Anfrage an'} as const;
@@ -278,3 +284,36 @@ export const MAIL_RESEND_COPY={
  canceledTaskDescription:(invoice:string,customer:string,sentAt:string|null)=>'Kunde: '+customer+'\nRechnung: '+invoice+'\nSendezeit: '+(sentAt?new Intl.DateTimeFormat('de-DE',{dateStyle:'medium',timeStyle:'medium',timeZone:'Europe/Berlin'}).format(new Date(sentAt)):'nicht belegt'),
  canceled:(invoice:string)=>'Rechnung '+invoice+' ist storniert – Versand nicht mehr nötig'
 };
+export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich'} as const;
+
+/** PL11.11.11:01: pending is not a successful server completion. */
+export const OFFLINE_ITEM_FINISHED_COPY={pending:(part:string)=>`Teil ${part} fertig – wird übertragen, sobald Netz da ist`,networkRequired:'Geht nur mit Netz',notSaved:'Teilstatus ist noch nicht gesichert. Erneut speichern.'} as const;
+
+/** PL11.11.12:42 / R2; actual part and immutable pricing receipt date. */
+const productionPricingDescription=(part:string,day:string)=>`Wochenwert für ${part} nachtragen – Preisbuchung vom ${day} ist gescheitert`;
+export const PRODUCTION_PRICING_RETRY_COPY={
+ // TODO_PL R8: no price or booking date is invented for a missing base receipt.
+ baseTitle:(part:string)=>{const prefix='Wochenwert für ',suffix=' nachtragen';if(prefix.length+part.length+suffix.length<=120)return prefix+part+suffix;let short='';for(const char of part){if(prefix.length+short.length+char.length+suffix.length+1>120)break;short+=char;}return prefix+short+'…'+suffix;},
+ baseDescription:(part:string)=>`Wochenwert für ${part} nachtragen – Bewertung der belegten Fertigmeldung fehlt`,
+ description:productionPricingDescription,
+ title:(part:string,day:string)=>{
+  const full=productionPricingDescription(part,day);if(full.length<=120)return full;
+  // R10: preserve every fixed word; shorten only the real placeholder value.
+  const room=120-productionPricingDescription('',day).length;let short='';
+  for(const char of part){if(short.length+char.length>room-1)break;short+=char;}
+  return productionPricingDescription(short+'…',day);
+ },
+ retry:"Nachtrag erneut auslösen",/* TODO_PL R8: only the already-saved follow-up task completion is unavailable. */taskPending:"Der Wochenwert ist gespeichert. Die Aufgabe konnte noch nicht abgeschlossen werden."
+} as const;
+
+/** PL11.11.17:05: shared wording for conflicting request identities. */
+export const ORDER_REQUEST_COPY={intentConflict:"Anfragekennung wurde bereits anders verwendet."} as const;
+
+/** PL21:04 CB21:00: keep every original in transport; bound only the text value. */
+export const CUSTOMER_INVOICE_ACTION_COPY={numbers:(numbers:readonly string[])=>{
+ const all=numbers.join(', ');if(all.length<=120)return all;
+ let prefix='';
+ for(let i=0;i<numbers.length;i++){const next=prefix?prefix+', '+numbers[i]:numbers[i],suffix=` und ${numbers.length-i-1} weitere`;if(next.length+suffix.length>120)break;prefix=next;}
+ if(prefix){const shown=prefix.split(', ').length;return prefix+` und ${numbers.length-shown} weitere`;}
+ const suffix=` und ${numbers.length-1} weitere`;let short='';for(const char of numbers[0]){if(short.length+char.length+1+suffix.length>120)break;short+=char;}return short+'…'+suffix;
+}} as const;

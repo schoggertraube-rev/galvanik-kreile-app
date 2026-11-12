@@ -9,10 +9,10 @@ import {
   resolveAuthorization,
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
-import { type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { type PrivilegedTenantTransaction, withPrivilegedTenantTransaction,withTenantSavepoint } from "@/lib/server/privilegedDb";
 import {intakeHandoverDirective} from '@/modules/eingang/public';
-import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY} from '@/ui/situationCatalog';
-import {appendProductionCompletion,appendProductionPricing,appendProductionReversals} from '@/lib/server/productionSnapshotPort';
+import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY,PRODUCTION_PRICING_RETRY_COPY,ORDER_REQUEST_COPY} from '@/ui/situationCatalog';
+import {appendProductionCompletion,appendProductionPricing,appendProductionReversals,ProductionPricingRetryNeeded,recordProductionPricingRetry,readProductionPricingRetrySource,repairProductionCompletionPricing} from '@/lib/server/productionSnapshotPort';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const VAT = new Set([0, 700, 1900]);
@@ -38,6 +38,7 @@ export type ChangeOrderContentInput = {
 };
 
 export type SetOrderItemFinishedInput = {
+  offlineOriginal?:import('@/lib/domain/offlineOriginal').OfflineOriginal;
   orderId: string;
   itemId: string;
   expectedVersion: number;
@@ -261,7 +262,7 @@ export async function changeOrderContent(input: ChangeOrderContentInput): Promis
         const payload = row?.payload as { requestHash?: unknown } | null;
         return replay.length === 1 && row && row.event_type === "ORDER_CONTENT_CHANGED_V1" && row.order_id === input.orderId && payload?.requestHash === requestHash
           ? { code: "OK" as const, receipt: receipt(row), replayed: true }
-          : { code: "CONFLICT" as const, message: "Anfragekennung wurde bereits anders verwendet." };
+          : { code: "CONFLICT" as const, message: ORDER_REQUEST_COPY.intentConflict };
       }
 
       const orders = await tx.execute<OrderRow>(sql`SELECT id, customer_id, version, station, status FROM public.orders WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} FOR UPDATE`);
@@ -303,20 +304,38 @@ export async function changeOrderContent(input: ChangeOrderContentInput): Promis
   }
 }
 
-export async function setOrderItemFinished(input: SetOrderItemFinishedInput): Promise<OrderContentResult> {
+type ProductionPricingComposition={failed:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string)=>Promise<void>;settled:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string)=>Promise<void>};
+export async function setOrderItemFinished(input: SetOrderItemFinishedInput,composition?:ProductionPricingComposition): Promise<OrderContentResult> {
   if (!validBase(input) || !UUID.test(input.itemId) || typeof input.finished !== "boolean") return { code: "VALIDATION_ERROR", message: "Teilstatus ist ungültig." };
+  const {isOfflineOriginal,normalizeOfflineOriginal}=await import('@/lib/domain/offlineOriginal');
+  if(input.offlineOriginal!==undefined&&!isOfflineOriginal(input.offlineOriginal))return {code:'VALIDATION_ERROR',message:'Teilstatus ist ungültig.'};
   const auth = await authorization("status");
   if (!auth.ok) return auth.result;
+  if(input.offlineOriginal&&(input.offlineOriginal.actorId!==auth.data.userId||input.offlineOriginal.clientEventId!==input.clientEventId))return {code:'CONFLICT',message:ORDER_REQUEST_COPY.intentConflict};
+  if(input.offlineOriginal)input={...input,offlineOriginal:normalizeOfflineOriginal(input.offlineOriginal)};
   const requestHash = hash(input);
+  let followupMessage:string|null=null;
+  const pricing=async(tx:PrivilegedTenantTransaction,eventId:string,work:()=>Promise<void>)=>{
+   try{await work();}
+   catch(error){
+    if(!(error instanceof ProductionPricingRetryNeeded))throw error;
+    const markerId=await recordProductionPricingRetry(tx,auth.data,error.source);
+    const source=await readProductionPricingRetrySource(tx,auth.data,markerId);
+    try{if(!composition)throw Error('PRODUCTION_PRICING_TASK_PORT_MISSING');await withTenantSavepoint(tx,nested=>composition.failed(nested,auth.data,markerId));}
+    catch{followupMessage=source?.title??PRODUCTION_PRICING_RETRY_COPY.taskPending;}
+    return;
+   }
+   if(composition){try{await withTenantSavepoint(tx,nested=>composition.settled(nested,auth.data,eventId));}catch{followupMessage=PRODUCTION_PRICING_RETRY_COPY.taskPending;}}
+  };
   try {
-    return await withPrivilegedTenantTransaction(auth.data, async (tx) => {
+    const result=await withPrivilegedTenantTransaction(auth.data, async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('order-item-finished:' || ${auth.data.tenantId} || ':' || ${input.clientEventId}, 0))`);
       const replay = await tx.execute<EventRow>(sql`SELECT id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id FROM public.events WHERE tenant_id=${auth.data.tenantId} AND client_event_id=${input.clientEventId}::uuid LIMIT 2`);
       if (replay.length) {
         const row = replay[0]; const payload = row?.payload as { requestHash?: unknown } | null;
-        return replay.length === 1 && row && row.user_id === auth.data.userId && row.event_type === "ORDER_ITEM_FINISHED_CHANGED_V1" && row.order_id === input.orderId && payload?.requestHash === requestHash
-          ? { code: "OK" as const, receipt: receipt(row), replayed: true }
-          : { code: "CONFLICT" as const, message: "Anfragekennung wurde bereits anders verwendet." };
+        if(!(replay.length===1&&row&&row.user_id===auth.data.userId&&row.event_type==="ORDER_ITEM_FINISHED_CHANGED_V1"&&row.order_id===input.orderId&&payload?.requestHash===requestHash))return {code:"CONFLICT" as const,message:ORDER_REQUEST_COPY.intentConflict};
+        if(input.offlineOriginal&&input.finished)await pricing(tx,row.id,()=>repairProductionCompletionPricing(tx,auth.data,input.orderId,row.id));
+        return {code:"OK" as const,receipt:receipt(row),replayed:true};
       }
       const orders = await tx.execute<OrderRow>(sql`SELECT id, customer_id, version, station, status FROM public.orders WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} FOR UPDATE`);
       const order = orders[0];
@@ -332,13 +351,14 @@ export async function setOrderItemFinished(input: SetOrderItemFinishedInput): Pr
       if (changed.length !== 1) return { code: "NOT_FOUND" as const, message: "Teil nicht verfügbar." };
       const updated = await tx.execute<{ version: number }>(sql`UPDATE public.orders SET version=version+1 WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} AND version=${input.expectedVersion} RETURNING version`);
       if (updated.length !== 1 || updated[0]?.version !== input.expectedVersion + 1) throw new Error("ORDER_ITEM_FINISHED_VERSION_INVALID");
-      const eventId = randomUUID(); const payload = JSON.stringify({ requestHash, itemId: input.itemId, finished: input.finished });
+      const eventId = randomUUID(); const payload = JSON.stringify({ requestHash, itemId: input.itemId, finished: input.finished,...(input.offlineOriginal?{offlineOriginal:input.offlineOriginal}:{}) });
       const events = await tx.execute<EventRow>(sql`INSERT INTO public.events (id, tenant_id, order_id, item_id, event_type, description, payload, status, user_id, station, client_event_id, event_schema_version, aggregate_version) VALUES (${eventId}, ${auth.data.tenantId}, ${input.orderId}, ${input.itemId}, 'ORDER_ITEM_FINISHED_CHANGED_V1', ${input.finished ? "Teil fertig gemeldet" : "Teil wieder geöffnet"}, ${payload}::jsonb, 'success', ${auth.data.userId}::uuid, ${order.station}, ${input.clientEventId}::uuid, 1, ${updated[0]!.version}) RETURNING id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id`);
       if (events.length !== 1 || !events[0]) throw new Error("ORDER_ITEM_FINISHED_EVENT_MISSING");
-      if(input.finished)await appendProductionCompletion(tx,auth.data.tenantId,input.orderId,events[0].id,[input.itemId]);
+      if(input.finished)await pricing(tx,events[0].id,()=>appendProductionCompletion(tx,auth.data.tenantId,input.orderId,events[0].id,[input.itemId]));
       else await appendProductionReversals(tx,auth.data.tenantId,events[0].id,[input.itemId]);
       return { code: "OK" as const, receipt: receipt(events[0]), replayed: false };
     });
+    return result.code==='OK'&&followupMessage?{code:'UNAVAILABLE',message:followupMessage}:result;
   } catch(error) {
     console.error('[ORDER_ITEM_FINISHED_WRITE_FAILED]',error instanceof Error?error.message:'UnknownError');
     return { code: "UNAVAILABLE", message: "Teilstatus konnte nicht sicher gespeichert werden." };

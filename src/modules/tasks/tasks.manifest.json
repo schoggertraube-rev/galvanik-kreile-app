@@ -39,7 +39,11 @@
     "@/modules/tasks/server-public#restrictCollectionTaskForReply",
     "@/modules/tasks/server-public#readOrderHandoverTaskState",
     "@/modules/tasks/server-public#createGoodsOutClarificationTask",
-    "@/modules/tasks/server-public#restrictCollectionTaskForAppointment"
+    "@/modules/tasks/server-public#restrictCollectionTaskForAppointment",
+    "@/modules/tasks/server-public#createOfflineNoteConflictTask",
+    "@/modules/tasks/server-public#createOfflineWorkshopConflictTask",
+    "@/modules/tasks/server-public#createProductionPricingRetryTask",
+    "@/modules/tasks/server-public#settleProductionPricingRetryTasks"
   ],
   "capabilities": [
     "aufgabe:speichern",
@@ -49,7 +53,8 @@
     "20261110083000_storage_final_task_context.sql",
     "20261104012000_ein4_nachrichten.sql",
     "20261110083300_storage_final_missing_goods_proof.sql",
-    "20261110091300_storage_postal_task_context.sql"
+    "20261110091300_storage_postal_task_context.sql",
+    "20261111134617_production_pricing_retry_receipt.sql"
   ],
   "viewsFunctions": [
     "private.v_storage_final_task_context_v1",

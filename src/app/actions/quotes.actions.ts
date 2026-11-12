@@ -166,8 +166,9 @@ export async function readQuoteAction(input: { quoteId: string;receivedQuantitie
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
-  const financial=quoteCommandContext(authorization.data).capabilities.canReadQuote;
-  const context=input?.purpose==='operations'?quoteOperationContext(authorization.data):quoteCommandContext(authorization.data);
+  const financialContext=quoteCommandContext(authorization.data),operationalContext=quoteOperationContext(authorization.data);
+  const financial=financialContext.capabilities.canReadQuote;
+  const context=input?.purpose==='operations'?operationalContext:financialContext;
   const result=await readQuoteCommand(context,{quoteId:input?.quoteId});
   if(result.code!=='OK')return result;
   try{
@@ -183,7 +184,9 @@ export async function readQuoteAction(input: { quoteId: string;receivedQuantitie
     const annotated={...result.quote,...(actors.code==='OK'?{actorTrace:actors.trace}:{actorReadError:actors.message})};
     const preview=scaleQuotePositions(result.quote.lifecycle?.calculation??null,result.quote.positions,quantities);
     if(preview.code!=='OK')return preview;
-    return {...result,undo:await readQuoteUndoContext(context,result.quote),quote:quoteForUi(annotated,financial),canEdit:financial&&context.capabilities.canUpdateQuote,canOperate:true,canReceive:hasAuthorizationArea(authorization.data,'eingang'),conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:financial?preview.totalNetCents:null,plannedHours:preview.calculation?.hours??null,positions:preview.positions.map(row=>({position:row.position,quantity:row.quantity,lineTotalCents:financial?row.lineTotalCents:null}))}};
+    const {readV45QuoteRule}=await import('@/lib/server/v45QuoteRead');
+    const canEdit=financial&&context.capabilities.canUpdateQuote,canReceive=hasAuthorizationArea(authorization.data,'eingang');
+    return {...result,nextActionRule:readV45QuoteRule(authorization.data,result.quote,{financial,commandRights:{'quote.receive':canReceive,'quote.revise':canEdit,'quote.send':hasAuthorizationArea(authorization.data,'mails'),'quote.followup':hasAuthorizationArea(authorization.data,'mails'),'quote.convert':operationalContext.capabilities.canConvertQuote,'quote.accept':operationalContext.capabilities.canReadQuote&&(operationalContext.capabilities.canUpdateQuote||operationalContext.capabilities.canDecideQuote),'quote.extend':operationalContext.capabilities.canReadQuote&&(operationalContext.capabilities.canUpdateQuote||operationalContext.capabilities.canDecideQuote),'quote.return_goods':authorization.data.active}}),undo:await readQuoteUndoContext(context,result.quote),quote:quoteForUi(annotated,financial),canEdit,canOperate:true,canReceive,conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:financial?preview.totalNetCents:null,plannedHours:preview.calculation?.hours??null,positions:preview.positions.map(row=>({position:row.position,quantity:row.quantity,lineTotalCents:financial?row.lineTotalCents:null}))}};
   }catch(error){console.error('[QUOTE_CONVERSION_DEFAULTS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV konnte nicht sicher gelesen werden.'};}
 }
 

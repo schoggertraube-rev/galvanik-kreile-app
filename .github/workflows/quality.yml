@@ -143,6 +143,9 @@ jobs:
       - name: TypeScript
         run: npx tsc --noEmit --incremental false
 
+      - name: V45 generated runtime projection
+        run: node scripts/generate-v45-runtime.mjs --check-generated
+
       - name: Full ESLint (lint:full, BF-013)
         run: npm run lint:full
 

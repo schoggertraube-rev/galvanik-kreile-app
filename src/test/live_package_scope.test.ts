@@ -578,7 +578,6 @@ const apEinInventoryPaths = [
   "src/components/home/OfficeHomeClient.tsx",
   "src/components/intake/CameraCapture.tsx",
   "src/components/layout/F1SourceDialogs.tsx",
-  "src/components/layout/PwaRegister.tsx",
   "src/db/schema.ts",
   "src/db/schema_buchhaltung.ts",
   "src/lib/buchhaltung/erechnung/ERechnungParser.ts",

@@ -1,10 +1,12 @@
 import {readIntakeActorTraces} from './actorRead';
+import {intakeCaptureSnapshot} from './intakeCapture';
+import {readMessageNextAction} from './messageNextAction';
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
-import {MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult} from '../messageContract';
+import {readFallbackMessagePriority,MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult} from '../messageContract';
 
 /** One projection of intake_item; no communications/phone_notes shadow inbox. */
 export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string):Promise<IntakeMessagesResult>{
@@ -19,7 +21,7 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
     :filter==='erledigt'?sql`candidate.aussortiert IS NULL AND candidate.einsatz IN ('erledigt','info')`
     :filter==='aussortiert'?sql`candidate.aussortiert IS NOT NULL`
     :sql`candidate.einsatz='offen' OR candidate.erstellt_am>=statement_timestamp()-interval '90 days'`;
-   const messages=await tx.execute<IntakeMessage>(sql`SELECT source.id::text,source.version,source.kanal AS channel,source.richtung AS direction,
+   const messages=await tx.execute<IntakeMessage>(sql`SELECT source.id::text,source.version,source.kanal AS channel,source.richtung AS direction,source.sendestatus AS "sendState",
     source.zuordnung AS assignment,source.einsatz AS usage,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",source.gruppe_adresse AS "groupAddress",source.betreff AS subject,
     coalesce(source.text,(SELECT original.nachher->>'text' FROM public.intake_event created JOIN public.intake_event original
       ON original.tenant_id=created.tenant_id AND original.item_id::text=created.nachher->>'textSourceId' AND original.id::text=created.nachher->>'originalTextEventId'
@@ -41,7 +43,7 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
       AND (source.gruppe_adresse IS NOT NULL AND candidate.gruppe_adresse=source.gruppe_adresse OR candidate.id=source.id)))
     ORDER BY coalesce(source.empfangen_am,source.erstellt_am),source.id`);
    const actors=await readIntakeActorTraces(tx,auth,messages.map(row=>row.id));
-   return {code:'OK' as const,messages:messages.map(row=>({...row,actorTrace:actors.get(row.id)})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
+   return {code:'OK' as const,messages:await Promise.all(messages.map(async row=>{const priority=readFallbackMessagePriority(row);const capture=priority.code==='OK'&&priority.rank===3?await intakeCaptureSnapshot(auth,row.id):undefined;return {...row,fallbackPriority:priority,nextActionRule:readMessageNextAction(auth,row,priority,capture),actorTrace:actors.get(row.id)};})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
   });
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }

@@ -33,6 +33,7 @@ export function deriveInitials(displayName: string): string {
 interface AuthState {
   role: string | null;
   offlineScope: string | null;
+  offline24h: boolean;
   areas: AccessArea[];
   permissions: string[];
   actions: AuthorizationActionGrants;
@@ -60,6 +61,7 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
     return {
       role: initial.user.role,
       offlineScope: initial.user.offlineScope ?? null,
+      offline24h: initial.user.offline24h===true,
       areas: [...initial.user.areas],
       permissions: [...initial.user.permissions],
       actions: { ...DENIED_ACTIONS, ...initial.user.actions },
@@ -72,6 +74,7 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
   return {
     role: null,
     offlineScope: null,
+    offline24h: false,
     areas: [],
     permissions: [],
     actions: { ...DENIED_ACTIONS },
@@ -85,6 +88,7 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
 const PermissionsContext = createContext<PermissionsContextType>({
   role: null,
     offlineScope: null,
+    offline24h: false,
   areas: [],
   permissions: [],
   actions: { ...DENIED_ACTIONS },
@@ -139,6 +143,7 @@ export function PermissionsProvider({
         setAuthState({
           role: result.data.role,
           offlineScope: result.data.offlineScope ?? null,
+          offline24h: result.data.offline24h===true,
           areas: [...result.data.areas],
           permissions: [...result.data.permissions],
           actions: { ...result.data.actions },
@@ -151,6 +156,7 @@ export function PermissionsProvider({
         setAuthState({
           role: null,
     offlineScope: null,
+    offline24h: false,
           areas: [],
           permissions: [],
           actions: { ...DENIED_ACTIONS },
@@ -166,6 +172,7 @@ export function PermissionsProvider({
         setAuthState({
           role: null,
     offlineScope: null,
+    offline24h: false,
           areas: [],
           permissions: [],
           actions: { ...DENIED_ACTIONS },
@@ -186,6 +193,7 @@ export function PermissionsProvider({
       setAuthState({
         role: null,
     offlineScope: null,
+    offline24h: false,
         areas: [],
         permissions: [],
         actions: { ...DENIED_ACTIONS },

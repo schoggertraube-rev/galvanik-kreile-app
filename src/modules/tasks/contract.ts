@@ -11,7 +11,7 @@ export type TaskRecord={id:string;client_key:string;art:TaskKind;titel:string;fa
 export type TaskReferenceRead=TaskReference&{label:string|null;customerId:string|null;customerType:string|null;orderId:string|null;channel:string|null;phone:string|null;sourceVersion:number|null};
 export type TaskFailure={code:'UNAUTHENTICATED'|'FORBIDDEN'|'NOT_FOUND'|'VALIDATION_ERROR'|'CONFLICT'|'UNAVAILABLE';message:string;fields?:Record<string,string>};
 export type TaskResult={code:'OK';task:TaskRecord;replayed:boolean}|TaskFailure;
-export type TaskReadResult={code:'OK';task:TaskRecord|null;reference:TaskReferenceRead;currentLogin:string;canEdit:boolean;canComplete:boolean;completeLabel?:string;canOpenReference:boolean}|TaskFailure;
+export type TaskReadResult={code:'OK';task:TaskRecord|null;reference:TaskReferenceRead;currentLogin:string;canEdit:boolean;canComplete:boolean;completeLabel?:string;pricingSource?:'KNOWN'|'SOURCE_INCOMPLETE';canOpenReference:boolean}|TaskFailure;
 export type TaskOpenRequest={taskId:string}|{reference:TaskReference;kind?:TaskKind;itemId?:string};
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const taskUuid=(value:unknown):value is string=>typeof value==='string'&&UUID.test(value);

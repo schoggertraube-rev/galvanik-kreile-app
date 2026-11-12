@@ -171,6 +171,11 @@ it.each([false,true,'confirm'] as const)('sends a reminder through the real Acti
  const {nacharbeitAnlegenAction,sendeNacharbeitBegleitscheinAction,getByOrder,getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
  const work=await withSession(fixture,()=>nacharbeitAnlegenAction({reklamationId:complaint.complaintId,version:1,bewertung:'berechtigt',massnahme:'nacharbeit',liefertermin:'2027-05-18'}));
  if(work.code!=='OK')throw Error('TEST_REWORK:'+work.code+':'+work.message);
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const reworkCard=await withSession(fixture,()=>getLiveOrderCardAction({orderId:work.receipt.orderId}));
+ expect(reworkCard).toMatchObject({code:'OK',data:{card:{operationalFacts:{rework:true,reworkComplaintId:complaint.complaintId}}}});
+ const target=await withSession(fixture,()=>getComplaintDialogAction({complaintId:complaint.complaintId}));
+ expect(target).toMatchObject({code:'OK',data:{complaint:{id:complaint.complaintId,nacharbeitAuftragId:work.receipt.orderId}}});
  await sql`UPDATE public.orders SET ware_seit='2026-10-12T08:00:00Z'::timestamptz WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${work.receipt.orderId}`;
  const dialog=await withSession(sender,()=>getComplaintDialogAction({reminderOrderId:work.receipt.orderId}));
  expect(dialog).toMatchObject({code:'OK',data:{complaint:{id:complaint.complaintId,stand:'massnahme_nacharbeit'},resultMail:{subject:expect.stringContaining(work.receipt.orderNumber)}}});
