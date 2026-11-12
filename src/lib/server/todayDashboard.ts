@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
-import {getIntakeMessagesAction} from "@/app/actions/eingang.actions";
+import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
 import { projectQuoteSchedule,projectTodayInvoiceMoney,type TodayOrderScheduleRow,projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
@@ -45,6 +45,7 @@ export type TodayCollectionNotice = {
 
 export type TodayQuoteActionRow={quoteId:string;version:number;read:U2Read;facts:Readonly<Record<string,unknown>>;validUntil:string|null;followupAt:string|null};
 export type TodayDashboard = {
+  taskSchedule?:{code:'OK'|'SOURCE_INCOMPLETE';active:number|null;today:number|null;upcoming:number|null;rows:Array<{id:string;version:number;itemId:string;dueDate:string;canComplete:boolean;canOpenReference:boolean}>;missingTaskIds:string[]};
   quoteSchedule?:ReturnType<typeof projectQuoteSchedule>;
   quoteActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:TodayQuoteActionRow[];missingQuoteIds:string[]};
   calendar?:ReturnType<typeof readTodayCalendar>;
@@ -251,6 +252,11 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const quoteActions={code:quoteList.code==='OK'&&quoteReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
     rows:quoteReads.flatMap(row=>row.read?[row as TodayQuoteActionRow]:[]),missingQuoteIds:quoteReads.filter(row=>row.read===null).map(row=>row.quoteId)};
 
+  const taskRead=graphAllowed?await getIntakeTaskAction({calendar:true}):null;
+  const taskRows=taskRead&&'rows'in taskRead?taskRead.rows:[];
+  const taskKnown=taskRead?.code==='OK';
+  const taskSchedule={code:taskKnown?'OK' as const:'SOURCE_INCOMPLETE' as const,active:taskKnown?taskRows.length:null,today:taskKnown?taskRows.filter(row=>row.dueDate===calendar.today).length:null,upcoming:taskKnown?taskRows.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length:null,rows:taskRows,missingTaskIds:taskRead&&'missingTaskIds'in taskRead?taskRead.missingTaskIds:[]};
+
   const allowed = allowedTodayFields(auth);
   const suggestedLayout = defaultTodayLayout(auth.role, allowed);
   const storedLayout = parseTodayLayout(support.preferences[0]?.layout);
@@ -335,7 +341,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
 
   return {
     calendar,
-    ...(graphAllowed?{quoteActions,quoteSchedule}:{}),
+    ...(graphAllowed?{quoteActions,quoteSchedule,taskSchedule}:{}),
     items:sortedItems,
     challenges:{code:challengeMissing.length?'SOURCE_INCOMPLETE':'OK',groups:challenges.groups,missing:challengeMissing},
     ...(ordersAllowed?{orderActions,orderSchedule}:{}),
@@ -343,7 +349,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     ...(moneyAllowed?{moneySources:{invoices:countTodaySource(support.invoiceSource),prepayments:countTodaySource(support.prepaymentSource),collections:countTodaySource(support.collectionSource)}}:{}),
     ...(moneyAllowed?{moneyMetric:invoiceMoney.code==='OK'?{code:'OK' as const,count:overdueInvoiceRows.length,sources:overdueInvoiceRows.map(row=>({id:row.id,version:row.payment_version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
     ...(graphAllowed?{assignmentMetric:assignmentMessages?{code:'OK' as const,count:assignmentMessages.length,sources:assignmentMessages.map(row=>({id:row.id,version:row.version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
-    datenluecken:[...challengeMissing,...(graphAllowed&&quoteSchedule.code==='SOURCE_INCOMPLETE'?quoteSchedule.missing:[]),...(graphAllowed&&quoteActions.code!=='OK'?['QUOTE_ACTION_SOURCE']:[]),...(moneyAllowed&&invoiceMoney.code==='SOURCE_INCOMPLETE'?invoiceMoney.missing:[]),...(ordersAllowed&&orderSchedule.code==='SOURCE_INCOMPLETE'?orderSchedule.missing:[]),...(ordersAllowed&&orderSource.code!=='OK'?['ORDER_SOURCE']:[]),...(ordersAllowed&&orderActions.code!=='OK'?['ORDER_ACTION_SOURCE']:[]),...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
+    datenluecken:[...challengeMissing,...(graphAllowed&&!taskKnown?['INTAKE_TASK_SOURCE']:[]),...(graphAllowed&&quoteSchedule.code==='SOURCE_INCOMPLETE'?quoteSchedule.missing:[]),...(graphAllowed&&quoteActions.code!=='OK'?['QUOTE_ACTION_SOURCE']:[]),...(moneyAllowed&&invoiceMoney.code==='SOURCE_INCOMPLETE'?invoiceMoney.missing:[]),...(ordersAllowed&&orderSchedule.code==='SOURCE_INCOMPLETE'?orderSchedule.missing:[]),...(ordersAllowed&&orderSource.code!=='OK'?['ORDER_SOURCE']:[]),...(ordersAllowed&&orderActions.code!=='OK'?['ORDER_ACTION_SOURCE']:[]),...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
     ...(support.collectionSource.code==='OK'?{collectionNotices}:{}),
     visibleFields: selected,
     layout,
