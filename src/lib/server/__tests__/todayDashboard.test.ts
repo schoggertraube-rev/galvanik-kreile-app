@@ -1,5 +1,5 @@
 import type {U2Read} from '@/lib/domain/u2ReadContract';
-import {readTodayCalendar,projectTodayChallenges} from '../todayDashboardPolicy';
+import {projectOrderSchedule,readTodayCalendar,projectTodayChallenges} from '../todayDashboardPolicy';
 import {sortTodayByResponsibility} from '../todayDashboardPolicy';
 import { describe, expect, it } from "vitest";
 import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/server/todayDashboardPolicy";
@@ -157,5 +157,27 @@ describe('S05 one Berlin read calendar',()=>{
   ['2026-10-24T22:30:00.000Z','2026-10-25','2026-11-01'],
  ])('uses calendar dates across midnight and daylight saving: %s',(instant,today,throughDate)=>{
   expect(readTodayCalendar(new Date(instant))).toEqual({readStartedAt:instant,today,throughDate});
+ });
+});
+
+describe('S05 qualified order calendar slice',()=>{
+ const calendar=readTodayCalendar(new Date('2026-11-12T12:00:00.000Z'));
+ const row=(id:string,due:string|null,station='galvanik')=>({orderId:id,version:1,read:{code:'OK',zustand:'work',farbe:'succ',erstblick:[{key:'auftrag.lage',werte:{station}},{key:'auftrag.termin',werte:{datum:due}}],hauptaktion:null,weitere:null,gesperrt:[],datenluecken:[],quelle:{}} satisfies U2Read});
+ it('counts seven calendar days inclusively and collapses the same qualified object',()=>{
+  const first=row('TEST-today','2026-11-12');
+  expect(projectOrderSchedule({code:'OK',rows:[first,first,row('TEST-seven','2026-11-19'),row('TEST-eight','2026-11-20')],missingOrderIds:[]},calendar)).toMatchObject({code:'OK',today:1,upcoming:1});
+ });
+ it('never chooses one of two conflicting versions for the same object',()=>{
+  const first=row('TEST-conflict','2026-11-12'),changed={...row('TEST-conflict','2026-11-13'),version:2};
+  expect(projectOrderSchedule({code:'OK',rows:[first,changed,first],missingOrderIds:[]},calendar)).toMatchObject({code:'SOURCE_INCOMPLETE',knownCounts:{today:0,upcoming:0},missing:['ORDER_SCHEDULE_VERSION:TEST-conflict'],sources:[]});
+ });
+ it('keeps missing/pickup dates unknown and retains the qualified subtotal',()=>{
+  const read=projectOrderSchedule({code:'OK',rows:[row('TEST-known','2026-11-12'),row('TEST-no-date',null),row('TEST-pickup','2026-11-10','fertig')],missingOrderIds:[]},calendar);
+  expect(read).toMatchObject({code:'SOURCE_INCOMPLETE',knownCounts:{today:1,upcoming:0}});expect(read).not.toHaveProperty('today');
+  if(read.code==='SOURCE_INCOMPLETE')expect(read.missing).toEqual(['ORDER_SCHEDULE_DATE:TEST-no-date','ORDER_SCHEDULE_NON_PRODUCTION:TEST-pickup']);
+ });
+ it('proves an empty source as zero but never turns an unreadable source into zero',()=>{
+  expect(projectOrderSchedule({code:'OK',rows:[],missingOrderIds:[]},calendar)).toMatchObject({code:'OK',today:0,upcoming:0});
+  const unknown=projectOrderSchedule({code:'SOURCE_INCOMPLETE',rows:[],missingOrderIds:[]},calendar);expect(unknown.code).toBe('SOURCE_INCOMPLETE');expect(unknown).not.toHaveProperty('today');
  });
 });

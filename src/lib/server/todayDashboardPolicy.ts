@@ -275,3 +275,23 @@ export function projectTodayChallenges(orderRows:ReadonlyArray<{orderId:string;v
  }
  return {groups:[...groups.values()].sort((a,b)=>a.rank-b.rank||a.dueDate.localeCompare(b.dueDate)||(a.orderNumber??a.key).localeCompare(b.orderNumber??b.key)),missing};
 }
+
+/** Production-calendar slice of U3; finished/pickup dates are deliberately not
+ * replaced by their former production date. Those need their own source. */
+export function projectOrderSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:ReadonlyArray<{orderId:string;version:number;read:U2Read}>;missingOrderIds:readonly string[]},calendar:ReturnType<typeof readTodayCalendar>){
+ const missing=source.code==='OK'?[]:['ORDER_SCHEDULE_SOURCE',...source.missingOrderIds.map(id=>'ORDER_SCHEDULE_CARD:'+id)];
+ const dates=new Map<string,{id:string;version:number;dueDate:string}>(),conflicts=new Set<string>();
+ for(const row of source.rows){
+  if(conflicts.has(row.orderId))continue;
+  const station=row.read.erstblick.find(field=>field.key==='auftrag.lage')?.werte.station;
+  if(row.read.zustand==='closed')continue;
+  if(typeof station!=='string'||!['angenommen','wareneingang','galvanik'].includes(station)){missing.push('ORDER_SCHEDULE_NON_PRODUCTION:'+row.orderId);continue;}
+  const raw=row.read.erstblick.find(field=>field.key==='auftrag.termin')?.werte.datum;
+  if(typeof raw!=='string'||!parseDateKey(raw.slice(0,10))){missing.push('ORDER_SCHEDULE_DATE:'+row.orderId);continue;}
+  const dueDate=raw.slice(0,10),previous=dates.get(row.orderId);
+  if(previous&&(previous.version!==row.version||previous.dueDate!==dueDate)){dates.delete(row.orderId);conflicts.add(row.orderId);missing.push('ORDER_SCHEDULE_VERSION:'+row.orderId);continue;}
+  dates.set(row.orderId,{id:row.orderId,version:row.version,dueDate});
+ }
+ const sources=[...dates.values()],counts={today:sources.filter(row=>row.dueDate<=calendar.today).length,upcoming:sources.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
+ return missing.length?{code:'SOURCE_INCOMPLETE' as const,knownCounts:counts,missing,sources}:{code:'OK' as const,...counts,sources};
+}
