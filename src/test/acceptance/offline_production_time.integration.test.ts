@@ -11,7 +11,7 @@ import {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,change
 import {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
 import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingang.actions';
 import {offlinePartition} from '@/lib/server/offlinePartition';
-if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1'||new URL(process.env.DATABASE_URL).port!=='54342')throw Error('OWN_LOOPBACK_REQUIRED');
+if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||!['127.0.0.1','localhost'].includes(new URL(process.env.DATABASE_URL).hostname)||new URL(process.env.DATABASE_URL).pathname!=='/postgres'||!tenant.startsWith('TEST-'))throw Error('OWN_LOOPBACK_REQUIRED');
 async function setup(label:string){
  const customer=await customerFixture(label),created=await intakeOrderFixture(label,customer),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('TEST_MOVE');

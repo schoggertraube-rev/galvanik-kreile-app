@@ -8,7 +8,7 @@ import {full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness'
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {getLiveOrderCardAction,markOrderInformedByPhoneAction} from '@/app/actions/orders.actions';
 import {v45OrderReleaseFacts} from '@/lib/server/v45OrderRead';
-if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1'||new URL(process.env.DATABASE_URL).port!=='54342')throw Error('OWN_LOOPBACK_REQUIRED');
+if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||!['127.0.0.1','localhost'].includes(new URL(process.env.DATABASE_URL).hostname)||new URL(process.env.DATABASE_URL).pathname!=='/postgres'||!tenant.startsWith('TEST-'))throw Error('OWN_LOOPBACK_REQUIRED');
 it('reuses the real informed source after phone/retry and rejects a different or stale card binding',async()=>{
  const ready=await readyInvoiceOrder('V45 echte Informiertquelle');
  const read=async()=>{const result=await withSession(full,()=>getLiveOrderCardAction({orderId:ready.orderId}));if(result.code!=='OK'||!result.data.customerInformed)throw Error('TEST_CARD_READ');return result.data;};
