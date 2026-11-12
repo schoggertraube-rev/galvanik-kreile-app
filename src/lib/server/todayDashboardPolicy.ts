@@ -320,23 +320,31 @@ export function projectOrderSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:
 
 /** Financial slice uses the same persisted open-invoice rows, never the visible
  * twenty-row list. An unreadable amount/date is a gap, not a zero balance. */
-export function projectTodayInvoiceMoney(source:{code:'OK';data:ReadonlyArray<{id:string;payment_version:number;due_date:Date|string|null;open_amount_cents:number|string|null}>}|{code:'SOURCE_INCOMPLETE'},calendar:ReturnType<typeof readTodayCalendar>){
+export type TodayInvoiceMoneyRow={id:string;payment_version:number;due_date:Date|string|null;open_amount_cents:number|string|null;customer_country:string|null;payment_mode:string;payment_status:string|null;station:string};
+/** Same canonical classification for the metric, complete list, amounts and challenges. */
+export function isOverdueInvoiceForToday(row:TodayInvoiceMoneyRow,today:string){
+ const raw=row.due_date instanceof Date?row.due_date.toISOString():row.due_date;
+ return classifyMoneyForToday({customerCountry:row.customer_country,dueDate:raw===null?null:raw.slice(0,10),goodsOutRecorded:false,paymentMode:row.payment_mode,paymentStatus:row.payment_status,station:row.station},today)==='overdue_invoice';
+}
+export function projectTodayInvoiceMoney(source:{code:'OK';data:ReadonlyArray<TodayInvoiceMoneyRow>}|{code:'SOURCE_INCOMPLETE'},calendar:ReturnType<typeof readTodayCalendar>){
  const missing:string[]=[],sources:Array<{id:string;version:number;dueDate:string;amountCents:number}>=[];
  if(source.code!=='OK')return {code:'SOURCE_INCOMPLETE' as const,missing:['INVOICE_MONEY_SOURCE']};
+ const overdueIds=new Set<string>();
  let openCents=0,overdueCents=0;
  for(const row of source.data){
   const amount=row.open_amount_cents===null?NaN:Number(row.open_amount_cents);
   const raw=row.due_date instanceof Date?(Number.isFinite(row.due_date.getTime())?row.due_date.toISOString():null):row.due_date;
   const dueDate=typeof raw==='string'?raw.slice(0,10):null;
-  if(!row.id||!Number.isSafeInteger(row.payment_version)||!Number.isSafeInteger(amount)||amount<=0||!dueDate||!parseDateKey(dueDate)){
+  if(typeof row.payment_mode!=='string'||typeof row.station!=='string'||!row.id||!Number.isSafeInteger(row.payment_version)||!Number.isSafeInteger(amount)||amount<=0||!dueDate||!parseDateKey(dueDate)){
    missing.push('INVOICE_MONEY_FACTS:'+row.id);continue;
   }
-  if(!Number.isSafeInteger(openCents+amount)||!Number.isSafeInteger(overdueCents+(dueDate<calendar.today?amount:0))){missing.push('INVOICE_MONEY_RANGE:'+row.id);continue;}
-  openCents+=amount;if(dueDate<calendar.today)overdueCents+=amount;
+  const overdue=isOverdueInvoiceForToday(row,calendar.today);
+  if(!Number.isSafeInteger(openCents+amount)||!Number.isSafeInteger(overdueCents+(overdue?amount:0))){missing.push('INVOICE_MONEY_RANGE:'+row.id);continue;}
+  openCents+=amount;if(overdue){overdueCents+=amount;overdueIds.add(row.id);}
   sources.push({id:row.id,version:row.payment_version,dueDate,amountCents:amount});
  }
- const totals={openCount:sources.length,openCents,overdueCount:sources.filter(row=>row.dueDate<calendar.today).length,overdueCents,
-  today:sources.filter(row=>row.dueDate<=calendar.today).length,upcoming:sources.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
+ const totals={openCount:sources.length,openCents,overdueCount:overdueIds.size,overdueCents,
+  today:sources.filter(row=>overdueIds.has(row.id)||row.dueDate===calendar.today).length,upcoming:sources.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
  return missing.length?{code:'SOURCE_INCOMPLETE' as const,knownTotals:totals,sources,missing}:{code:'OK' as const,...totals,sources};
 }
 
