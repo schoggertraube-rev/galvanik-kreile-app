@@ -27,11 +27,12 @@ it('T05-3 counts all 25 historical invoice fixtures while limiting the list and 
  const read=async(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
  const first=await read(full),again=await read(full);
  expect(first.moneyMetric).toMatchObject({code:'OK',count:25});
+ expect(first.moneySources).toEqual({invoices:{code:'OK',count:25},prepayments:{code:'OK',count:0},collections:{code:'OK',count:0}});
  expect(first.moneyMetric?.code==='OK'?first.moneyMetric.sources.map(row=>row.id).sort():null).toEqual(ids.sort());
  expect(first.items.filter(row=>row.kind==='invoice')).toHaveLength(20);
  expect(again.moneyMetric).toEqual(first.moneyMetric);
  const restricted=await createFixture(['auftraege'],'werkstatt'),hidden=await read(restricted);
- expect(hidden).not.toHaveProperty('moneyMetric');expect(hidden.allowedFields).not.toContain('money');
+ expect(hidden).not.toHaveProperty('moneyMetric');expect(hidden).not.toHaveProperty('moneySources');expect(hidden.allowedFields).not.toContain('money');
  expect(hidden.items.some(row=>row.invoiceId||row.kind==='invoice')).toBe(false);
  expect(JSON.stringify(hidden)).not.toContain('119,00');
 });

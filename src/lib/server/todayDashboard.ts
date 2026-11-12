@@ -41,6 +41,7 @@ export type TodayCollectionNotice = {
 
 export type TodayDashboard = {
   datenluecken?:readonly string[];
+  moneySources?:{invoices:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'};prepayments:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'};collections:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'}};
   moneyMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
   assignmentMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
   items: TodayItem[];
@@ -102,6 +103,8 @@ function toPositiveInteger(value: number | string) {
   return Number.isSafeInteger(normalized) && normalized > 0 ? normalized : null;
 }
 
+function countTodaySource(source:{code:'OK';data:{length:number}}|{code:'SOURCE_INCOMPLETE'}):{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'}{return source.code==='OK'?{code:'OK',count:source.data.length}:{code:'SOURCE_INCOMPLETE'};}
+
 /** A failed SQL read must not poison the other daily sources in this transaction. */
 export async function readTodaySource<T>(tx:PrivilegedTenantTransaction,read:(nested:PrivilegedTenantTransaction)=>Promise<T>):Promise<{code:'OK';data:T}|{code:'SOURCE_INCOMPLETE'}>{
   try{return {code:'OK',data:await withTenantSavepoint(tx,read)};}
@@ -130,10 +133,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
             AND invoice.due_date < (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date
           ORDER BY invoice.due_date, invoice.invoice_number
         `)) : {code:'OK' as const,data:[] as InvoiceRow[]};
-      const [preferences, reminders, prepayments, collections, delegationTargets, assignments] = await Promise.all([
-        tx.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`),
-        tx.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`),
-        moneyAllowed ? tx.execute<PrepaymentRow>(sql`
+      const prepaymentSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<PrepaymentRow>(sql`
           SELECT payment.order_id, payment.order_number, customer.name AS customer_name,
                  customer.country AS customer_country, orders.due_date, payment.invoice_id,
                  payment.payment_open_amount_cents AS open_amount_cents,
@@ -148,9 +148,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
             AND payment.integrity_ok=true
             AND (payment.invoice_state='not_issued' OR payment.payment_status IN ('offen', 'teilbezahlt'))
           ORDER BY orders.due_date NULLS LAST, payment.order_number
-          LIMIT 20
-        `) : Promise.resolve([]),
-        moneyAllowed ? tx.execute<CollectionRow>(sql`
+        `)) : {code:'OK' as const,data:[] as PrepaymentRow[]};
+      const collectionSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<CollectionRow>(sql`
           SELECT collection.id::text, customer.name AS customer_name, collection.monat,
                  count(collection_order.order_id)::integer AS order_count
           FROM public.invoice_collections collection
@@ -164,8 +163,10 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
           GROUP BY collection.id, collection.monat, customer.name
           HAVING count(collection_order.order_id)>0
           ORDER BY collection.monat, customer.name, collection.id
-          LIMIT 20
-        `) : Promise.resolve([]),
+        `)) : {code:'OK' as const,data:[] as CollectionRow[]};
+      const [preferences, reminders, delegationTargets, assignments] = await Promise.all([
+        tx.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`),
+        tx.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`),
         ordersAllowed ? tx.execute<UserRow>(sql`
           SELECT users.id, users.full_name
           FROM public.app_users users
@@ -188,7 +189,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
             AND active=true
         `) : Promise.resolve([]),
       ]);
-      return { preferences, reminders, invoiceSource,invoices:invoiceSource.code==='OK'?invoiceSource.data:[], prepayments, collections, delegationTargets, assignmentSourceIncomplete:assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
+      return { preferences, reminders, invoiceSource,invoices:invoiceSource.code==='OK'?invoiceSource.data:[], prepaymentSource,prepayments:prepaymentSource.code==='OK'?prepaymentSource.data:[],collectionSource,collections:collectionSource.code==='OK'?collectionSource.data:[], delegationTargets, assignmentSourceIncomplete:assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
     }),
     ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints().catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'})):Promise.resolve({code:'OK' as const,complaints:[]}),
     graphAllowed?readQuoteFollowups().catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'})):Promise.resolve({code:'OK' as const,tasks:[]}),
@@ -229,14 +230,14 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     add({ key: `invoice:${invoice.id}`, field: "money", kind: "invoice", title: `${invoice.invoice_number} · ${invoice.customer_name}`, meta: `${euro(invoice.open_amount_cents)} · fällig ${dueDate}`, urgency: "conflict", invoiceId: invoice.id, orderId: invoice.order_id, dueDate, primaryActionLabel: "Erinnern" });
   }
 
-  for (const prepayment of support.prepayments) {
+  for (const prepayment of support.prepayments.slice(0,20)) {
     const dueDate = prepayment.due_date ? dateOnly(prepayment.due_date) : null;
     if (classifyMoneyForToday({ customerCountry: prepayment.customer_country, dueDate, goodsOutRecorded: Number(prepayment.goods_out_event_count) > 0, paymentMode: "vorkasse", paymentStatus: prepayment.payment_status, station: prepayment.station }, today) !== "open_prepayment") continue;
     const amount = prepayment.open_amount_cents === null ? "Betrag nach Rechnung" : euro(prepayment.open_amount_cents);
     add({ key: `prepayment:${prepayment.order_id}`, field: "money", kind: "order", title: `${prepayment.order_number} · Vorkasse offen`, meta: `${prepayment.customer_name} · ${amount} · Versand gesperrt`, urgency: "warning", orderId: prepayment.order_id, invoiceId: prepayment.invoice_id ?? undefined, dueDate: dueDate ?? undefined, primaryActionLabel: "Zahlung bestätigen" });
   }
 
-  const collectionNotices = support.collections.map((collection) => {
+  const collectionNotices = support.collections.slice(0,20).map((collection) => {
     const customerName = collection.customer_name.trim();
     const orderCount = toPositiveInteger(collection.order_count);
     if (!collection.id || !customerName || orderCount === null) throw new Error("TODAY_COLLECTION_ROW_INVALID");
@@ -266,10 +267,11 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const sortedItems=sortTodayByResponsibility(items,mine);
   return {
     items:sortedItems,
+    ...(moneyAllowed?{moneySources:{invoices:countTodaySource(support.invoiceSource),prepayments:countTodaySource(support.prepaymentSource),collections:countTodaySource(support.collectionSource)}}:{}),
     ...(moneyAllowed?{moneyMetric:support.invoiceSource.code==='OK'?{code:'OK' as const,count:support.invoices.length,sources:support.invoices.map(row=>({id:row.id,version:row.payment_version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
     ...(graphAllowed?{assignmentMetric:assignmentMessages?{code:'OK' as const,count:assignmentMessages.length,sources:assignmentMessages.map(row=>({id:row.id,version:row.version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
-    datenluecken:[...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
-    collectionNotices,
+    datenluecken:[...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
+    ...(support.collectionSource.code==='OK'?{collectionNotices}:{}),
     visibleFields: selected,
     layout,
     defaultLayout: suggestedLayout,
