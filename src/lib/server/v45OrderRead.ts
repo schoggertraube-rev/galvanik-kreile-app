@@ -1,4 +1,5 @@
 import 'server-only';
+import type {EvidenceReadRecord} from './evidenceRead';
 import type {LiveOrderCard} from './orderCardRead';
 import type {AuthorizationSnapshot} from './authorization';
 import type {readOrderInformed} from './orderReleaseRead';
@@ -6,6 +7,34 @@ import {readAuthorizedV45Rule} from './v45RuleRead';
 import {readV45FirstLook} from './v45FirstLookRead';
 import {readV45ActionValues} from './v45ActionValuesRead';
 import {readV45ObjectActionAbsence} from './v45ObjectActionsRead';
+
+type OrderCommand={datei:string;funktion:string;argumente:Readonly<Record<string,unknown>>};
+type OrderContext={card:Pick<LiveOrderCard,'id'|'version'|'customerId'|'handoverMode'>;part?:{id:string}};
+const orderCommand=<N extends keyof typeof import('@/app/actions/orders.actions')>(funktion:N,argumente:Readonly<Record<string,unknown>>):OrderCommand=>({datei:'src/app/actions/orders.actions.ts',funktion,argumente});
+const invoiceCommand=<N extends keyof typeof import('@/app/actions/invoices.actions')>(funktion:N,argumente:Readonly<Record<string,unknown>>):OrderCommand=>({datei:'src/app/actions/invoices.actions.ts',funktion,argumente});
+const customerCommand=<N extends keyof typeof import('@/app/actions/customers.actions')>(funktion:N,argumente:Readonly<Record<string,unknown>>):OrderCommand=>({datei:'src/app/actions/customers.actions.ts',funktion,argumente});
+/** PL04:16: one source-bound station/command table. Null keeps a not-yet-bound
+ * command explicit; never substitute generic mail or unrelated goods return. */
+const ORDER_U2_BINDINGS={
+ stations:{angenommen:'wareneingang'} as Readonly<Record<string,string>>,
+ commands:{
+  'order.start':({card}:OrderContext)=>orderCommand('transitionWareneingangToGalvanikAction',{orderId:card.id,expectedVersion:card.version}),
+  'order.photo':({card,part}:OrderContext):OrderCommand|null=>part?{datei:'src/app/warendurchlauf/actions.ts',funktion:'reserveGalvanikHandoffAttachmentAction' satisfies keyof typeof import('@/app/warendurchlauf/actions'),argumente:{orderId:card.id,expectedVersion:card.version,itemId:part.id}}:null,
+  'order.parts':({card}:OrderContext)=>orderCommand('getLiveOrderCardAction',{orderId:card.id}),
+  'order.finish':({card}:OrderContext)=>orderCommand('freezeOrderAction',{orderId:card.id,expectedVersion:card.version}),
+  'order.prices':({card}:OrderContext)=>invoiceCommand('setInvoiceItemPricesAction',{orderId:card.id,expectedVersion:card.version}),
+  'order.issue':({card}:OrderContext)=>invoiceCommand('issueInvoiceAction',{orderId:card.id,expectedVersion:card.version}),
+  'order.customer_details':({card}:OrderContext)=>customerCommand('updateCustomerAction',{customerId:card.customerId}),
+  'order.customer_debt':({card}:OrderContext)=>customerCommand('getCustomerSummaryAction',{customerId:card.customerId}),
+  'complaint.open':({card}:OrderContext):OrderCommand=>({datei:'src/app/actions/complaints.actions.ts',funktion:'getComplaintDialogAction' satisfies keyof typeof import('@/app/actions/complaints.actions'),argumente:{orderId:card.id}}),
+  'shipping.progress':({card}:OrderContext)=>orderCommand('getManualShippingAction',{orderId:card.id}),
+  'order.ship_prepare':({card}:OrderContext)=>orderCommand('getManualShippingAction',{orderId:card.id}),
+  'order.payment':({card}:OrderContext):OrderCommand=>({datei:'src/app/actions/payments.actions.ts',funktion:'getOrderPaymentStateAction' satisfies keyof typeof import('@/app/actions/payments.actions'),argumente:{orderId:card.id}}),
+  'order.handover':({card}:OrderContext):OrderCommand|null=>card.handoverMode?{datei:'src/app/actions/goodsOut.actions.ts',funktion:'recordGoodsOutAction' satisfies keyof typeof import('@/app/actions/goodsOut.actions'),argumente:{orderId:card.id,expectedVersion:card.version,mode:card.handoverMode==='shipping'?'versand':'abholung'}}:null,
+  'order.followup_settings':():OrderCommand=>({datei:'src/app/actions/settings.actions.ts',funktion:'readSettingsAction' satisfies keyof typeof import('@/app/actions/settings.actions'),argumente:{}}),
+  'shipping.return_receive':null,'work.resolve':null,'order.delivery':null,'order.term_notify':null,'work.update_customer':null,'work.remaining_return':null,'order.extra_request':null,'order.collect':null,'shipping.cost':null,'order.apply_credit':null,'order.notify':null,'order.remind':null,'order.dunning':null,'order.ship_photo':null,
+ } satisfies Record<string,((context:OrderContext)=>OrderCommand|null)|null>
+};
 
 /** Facts exposed by the existing versioned card. Missing shipment, financial
  * and approval evidence deliberately stays unknown, never a false calm state.
@@ -16,8 +45,9 @@ export function v45OrderFacts(card:Pick<LiveOrderCard,'station'|'handoverMode'|'
  // It proves customer receipt only for a known pickup, never for shipping.
  const transportUnknown=card.station==='versendet'||card.station==='abgeholt'&&card.handoverMode!=='pickup';
  // Existing start command consumes the persisted angenommen station; V45 names it wareneingang.
- return {station:card.station==='angenommen'?'wareneingang':card.station,...shipping,...(card.operationalFacts&&typeof card.operationalFacts.pricesMissing==='boolean'&&typeof card.operationalFacts.rework==='boolean'?card.operationalFacts:{}),
+ return {station:ORDER_U2_BINDINGS.stations[card.station]??card.station,...shipping,...(card.operationalFacts&&typeof card.operationalFacts.pricesMissing==='boolean'&&typeof card.operationalFacts.rework==='boolean'?card.operationalFacts:{}),
   ...(!transportUnknown?{closed:card.station==='abgeholt',inTransit:false,returning:false}:{}),
+  ...(card.operationalFacts?.rework===false?{reworkRemainder:false}:{}),
   allDone:card.items.length>0&&card.items.every(item=>item.finished)};
 }
 type ReleaseSource={orderId:string;value:Awaited<ReturnType<typeof readOrderInformed>>};
@@ -33,24 +63,36 @@ export function v45OrderReleaseFacts(card:{id:string;version:number},source?:Rel
  if(Array.isArray(value.complaintIds)&&value.complaintIds.every(id=>typeof id==='string'))facts.complaint=value.complaintIds.length>0;
  return facts;
 }
-export function readV45OrderRule(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'dueAt'|'station'|'handoverMode'|'items'|'operationalFacts'>,release?:ReleaseSource){
+export function readV45OrderRule(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'customerId'|'title'|'dueAt'|'station'|'handoverMode'|'items'|'operationalFacts'>,release?:ReleaseSource,evidence?:{orderId:string;records:readonly EvidenceReadRecord[]}){
  const source={kind:'order' as const,id:card.id,version:card.version};
- const rule=readAuthorizedV45Rule(auth,'auftrag',{...v45OrderFacts(card),...v45OrderReleaseFacts(card,release)},undefined,['workProblem','deliveryRequest','termUpdatePending','workUpdatePending','extraPending']);
+ const missingPhotoItems=evidence?.orderId===card.id?card.items.filter(item=>!evidence.records.some(record=>record.source==='ORDER_STATION_ATTACHMENT'&&record.original.state==='VERIFIED'&&['image/jpeg','image/png','image/webp'].includes(record.original.mimeType??'')&&record.targets.some(target=>target.targetType==='ORDER'&&target.targetId===card.id)&&record.targets.some(target=>target.targetType==='ORDER_ITEM'&&target.targetId===item.id))):null;
+ const rule=readAuthorizedV45Rule(auth,'auftrag',{...v45OrderFacts(card),...v45OrderReleaseFacts(card,release),...(missingPhotoItems!==null?{photosMissing:missingPhotoItems.length>0}:{})},undefined,['workProblem','deliveryRequest','termUpdatePending','workUpdatePending','extraPending']);
  if(rule.code!=='OK')return {...rule,source};
  const first=readV45FirstLook('auftrag',{
   'auftrag.lage':{nummer:card.orderNumber,station:card.station},
   'auftrag.termin':{datum:card.dueAt},
   'auftrag.teile':{teile:card.items.map(item=>({id:item.id,name:item.name,menge:item.quantity,material:item.material,oberflaeche:item.surfaceRequested,fertig:item.finished,einheit:item.unit}))},
-  'auftrag.hauptaktion':{elementId:rule.hauptaktion}
- },[],rule.zustand);
+  'auftrag.hauptaktion':{elementId:rule.hauptaktion},
+  ...(rule.zustand==='photo'&&missingPhotoItems!==null?{'auftrag.blocker':{textKey:'order.photo_required',teilIds:missingPhotoItems.map(item=>item.id)}}:{})
+ },rule.zustand==='work'||rule.zustand==='finish'?['auftrag.blocker']:[],rule.zustand==='work'||rule.zustand==='finish'?undefined:rule.zustand);
  // A state requiring an as-yet unbound blocker stays incomplete, never calm.
  if(first.code!=='OK')return {...first,source};
  const actions=readV45ObjectActionAbsence('auftrag',rule.zustand);
- let hauptaktion:null|{elementId:string;textKey:string;werte:Record<string,string|number>;recht:string|null;befehl:{datei:string;funktion:keyof typeof import('@/app/actions/orders.actions');argumente:Readonly<Record<string,unknown>>}}=null;
+ const part=rule.hauptaktion==='order.photo'?missingPhotoItems?.[0]:undefined;
+ const binding=rule.hauptaktion&&Object.hasOwn(ORDER_U2_BINDINGS.commands,rule.hauptaktion)?ORDER_U2_BINDINGS.commands[rule.hauptaktion as keyof typeof ORDER_U2_BINDINGS.commands]:null;
+ const befehl=binding?binding({card,part}):null;
+ let hauptaktion:null|{ziel?:{tab:'parts'};elementId:string;textKey:string;werte:Record<string,string|number>;recht:string|null;befehl:OrderCommand}=null;
+ const bindingGaps:string[]=[];
  if(rule.hauptaktion!==null){
-  if(rule.hauptaktion!=='order.start'||!('textKey'in rule)||typeof rule.textKey!=='string'||!('recht'in rule))return {code:'SOURCE_INCOMPLETE' as const,missing:['ORDER_ACTION_BINDING'],erstblick:first.erstblick,source};
-  const parameters=readV45ActionValues(rule.textKey,{number:card.orderNumber});if(parameters.code!=='OK')return {...parameters,erstblick:first.erstblick,source};
-  hauptaktion={elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,recht:rule.recht,befehl:{datei:'src/app/actions/orders.actions.ts',funktion:'transitionWareneingangToGalvanikAction',argumente:{orderId:card.id,expectedVersion:card.version}}};
+  if(!befehl)bindingGaps.push('ORDER_ACTION_BINDING:'+rule.hauptaktion);
+  else if(!('textKey'in rule)||typeof rule.textKey!=='string'||!('recht'in rule))bindingGaps.push('ORDER_ACTION_METADATA');
+  else{
+   const parameters=readV45ActionValues(rule.textKey,{number:card.orderNumber,title:card.title,...(part?{part:part.name}:{})});
+   if(parameters.code!=='OK')bindingGaps.push(...parameters.missing);
+   else hauptaktion={elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,recht:rule.recht,befehl,...(rule.hauptaktion==='order.parts'?{ziel:{tab:'parts' as const}}:{})};
+  }
  }
- return {...rule,hauptaktion,erstblick:first.erstblick,weitere:actions.code==='OK'?actions.weitere:null,...(actions.code!=='OK'?{datenluecken:[...(rule.datenluecken??[]),...actions.missing]}:{}),quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,...(actions.code==='OK'?{erwartungSha256:actions.quelle.sha256}:{})},source};
+ const erstblick=hauptaktion||rule.hauptaktion===null?first.erstblick:first.erstblick.map(field=>field.key==='auftrag.hauptaktion'?{...field,werte:{elementId:null}}:field);
+ const datenluecken=[...(rule.datenluecken??[]),...bindingGaps,...(actions.code==='OK'?[]:actions.missing)];
+ return {...rule,hauptaktion,erstblick,weitere:actions.code==='OK'?actions.weitere:null,...(datenluecken.length?{datenluecken}:{}),quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,...(actions.code==='OK'?{erwartungSha256:actions.quelle.sha256}:{})},source};
 }
