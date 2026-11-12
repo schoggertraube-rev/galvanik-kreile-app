@@ -1313,6 +1313,10 @@ it('AK-02: quote followups prioritize their actual recipient rather than the quo
   expect(await withSession(actor,()=>saveIntakeTaskAction({clientKey:value.client_key,taskId:value.id,version:value.version,kind:value.art,title:index===0?'TEST 991,00 vertraulicher Betrag':value.titel,dueDate:calendar.today,time:value.uhrzeit,forLogin:index===0?b.actorId:a.actorId,forArea:null,reference:{type:value.bezug_typ,id:value.bezug_id},note:value.notiz}))).toMatchObject({code:'OK'});
  }
  const mineA=await read(a),mineB=await read(b);expect(mineA).toHaveLength(2);expect(mineB).toHaveLength(2);
+ const {listOpenQuotesAction}=await import('@/app/actions/quotes.actions');
+ const refs=await withSession(mailOnly,()=>listOpenQuotesAction({purpose:'today'}));expect(refs).toMatchObject({code:'OK'});
+ if(refs.code!=='OK')throw Error('TEST S05 quote references');expect(refs.quotes).toHaveLength(2);expect(refs.quotes.every(row=>Object.keys(row).sort().join(',')==='quoteId,version')).toBe(true);
+ expect(await withSession(noMail,()=>listOpenQuotesAction({purpose:'today'}))).toMatchObject({code:'FORBIDDEN'});
  const publicRead=await withSession(mailOnly,()=>getQuoteFollowupsForTodayAction());expect(publicRead).toMatchObject({code:'OK',tasks:expect.any(Array)});
  if(publicRead.code!=='OK')throw Error('TEST S05 mail followups');expect(publicRead.tasks).toHaveLength(2);expect(JSON.stringify(publicRead)).not.toContain('991,00');
  expect(await withSession(mailOnly,()=>getIntakeTaskAction({taskId:unassigned[0].id}))).toMatchObject({code:'OK',canEdit:false,canComplete:false,canOpenReference:false});
@@ -1323,9 +1327,19 @@ it('AK-02: quote followups prioritize their actual recipient rather than the quo
  const {readTodayDashboard}=await import('@/lib/server/todayDashboard'),{getComplaints}=await import('@/app/actions/complaints.actions');
  const day=()=>withSession(mailOnly,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST S05 followup auth');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
  const first=await day();expect(first.items.filter(row=>row.kind==='task').map(row=>row.target?.screen)).toEqual(['kv','kv']);expect(JSON.stringify(first)).not.toContain('991,00');expect(first).not.toHaveProperty('invoiceMoney');
+ expect(first.quoteActions).toMatchObject({code:'OK',missingQuoteIds:[]});expect(first.quoteActions?.rows).toHaveLength(2);
+ expect(first.quoteActions?.rows.find(row=>row.quoteId===ids[0])?.read).toEqual(quoteRead.nextActionRule);
+ expect(first.quoteActions?.rows.every(row=>row.facts.sent===true&&row.facts.accepted===false)).toBe(true);
  expect(await withSession(a,()=>changeQuoteLifecycleAction({action:'accept',quoteId:ids[0],clientEventId:randomUUID(),expectedVersion:quoteRead.quote.version,edition:1,evidence:'TEST S05 telefonisch ohne Vorbehalt zugesagt'}))).toMatchObject({code:'OK'});
  const after=await day();expect(after.items.filter(row=>row.kind==='task')).toHaveLength(1);expect(after.items.find(row=>row.kind==='task')?.target).toEqual({screen:'kv',arg:ids[1]});
+ expect(after.quoteActions?.rows.find(row=>row.quoteId===ids[0])).toMatchObject({version:quoteRead.quote.version+1,facts:{accepted:true,expired:false},followupAt:null});
  expect((await day()).items).toEqual(after.items);
+ expect(await withSession(b,()=>changeQuoteLifecycleAction({action:'conditional',quoteId:ids[1],clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST S05 ja, aber nicht zu diesem Preis'}))).toMatchObject({code:'OK'});
+ const conditional=await day(),group=conditional.challenges?.groups.find(row=>row.quoteId===ids[1]);
+ expect(conditional.items.filter(row=>row.kind==='task')).toHaveLength(0);expect(group).toMatchObject({key:'quote:'+ids[1],rank:5,reasons:[{textKey:'day.challenge_condition',sourceId:ids[1]}]});
+ expect(conditional.quoteActions?.rows.find(row=>row.quoteId===ids[1])).toMatchObject({version:3,facts:{conditional:true,accepted:false}});
+ expect((await day()).challenges).toEqual(conditional.challenges);
+
 
 });
 

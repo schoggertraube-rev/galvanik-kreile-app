@@ -240,17 +240,17 @@ export function sortTodayByResponsibility<T extends {urgency:'conflict'|'decisio
  const rank={conflict:0,decision:1,warning:2};return [...items].sort((a,b)=>rank[a.urgency]-rank[b.urgency]||(a.dueDate??'9999').localeCompare(b.dueDate??'9999')||Number(isMine(b))-Number(isMine(a)));
 }
 
-export type TodayChallengeReason={textKey:'day.challenge_late'|'day.challenge_debt';werte:Readonly<Record<string,string|number>>;sourceId:string};
-export type TodayChallenge={key:string;orderId:string|null;orderNumber:string|null;rank:number;dueDate:string;reasons:TodayChallengeReason[];action:U2Action|null};
+export type TodayChallengeReason={textKey:'day.challenge_late'|'day.challenge_debt'|'day.challenge_condition';werte:Readonly<Record<string,string|number>>;sourceId:string};
+export type TodayChallenge={key:string;orderId:string|null;orderNumber:string|null;quoteId?:string;quoteNumber?:string|null;rank:number;dueDate:string|null;reasons:TodayChallengeReason[];action:U2Action|null};
 /** S05: only evidenced lateness/debt here, never a guessed capacity conflict.
  * Inputs are the same qualified U2 cards and already rights-filtered invoices. */
-export function projectTodayChallenges(orderRows:ReadonlyArray<{orderId:string;version:number;read:U2Read}>,invoices:ReadonlyArray<{id:string;orderId:string;number:string;dueDate:string;amountCents:number|string|null;amount:string|null}>,today:string){
+export function projectTodayChallenges(orderRows:ReadonlyArray<{orderId:string;version:number;read:U2Read}>,invoices:ReadonlyArray<{id:string;orderId:string;number:string;dueDate:string;amountCents:number|string|null;amount:string|null}>,today:string,quotes:ReadonlyArray<{quoteId:string;version:number;read:U2Read;facts:Readonly<Record<string,unknown>>;validUntil:string|null}>=[]){
  const groups=new Map<string,TodayChallenge>(),missing:string[]=[];
  const cards=new Map(orderRows.map(row=>[row.orderId,row]));
  const add=(input:{orderId:string|null;orderNumber:string|null;rank:number;dueDate:string;action:U2Action|null;reason:TodayChallengeReason})=>{
   const key=input.orderId?'order:'+input.orderId:'invoice:'+input.reason.sourceId;
   const old=groups.get(key);
-  if(old){old.rank=Math.min(old.rank,input.rank);old.dueDate=old.dueDate<input.dueDate?old.dueDate:input.dueDate;old.reasons.push(input.reason);if(input.reason.textKey==='day.challenge_debt')old.action=null;}
+  if(old){old.rank=Math.min(old.rank,input.rank);old.dueDate=old.dueDate!==null&&old.dueDate<input.dueDate?old.dueDate:input.dueDate;old.reasons.push(input.reason);if(input.reason.textKey==='day.challenge_debt')old.action=null;}
   else groups.set(key,{key,orderId:input.orderId,orderNumber:input.orderNumber,rank:input.rank,dueDate:input.dueDate,reasons:[input.reason],action:input.action});
  };
  for(const row of orderRows){
@@ -273,7 +273,19 @@ export function projectTodayChallenges(orderRows:ReadonlyArray<{orderId:string;v
   // The financial U2 command/step is explicitly incomplete until S08b.
   missing.push('CHALLENGE_PAYMENT_ACTION:'+invoice.id);
  }
- return {groups:[...groups.values()].sort((a,b)=>a.rank-b.rank||a.dueDate.localeCompare(b.dueDate)||(a.orderNumber??a.key).localeCompare(b.orderNumber??b.key)),missing};
+ for(const quote of quotes){
+  if(quote.facts.converted===true||quote.facts.rejected===true)continue;
+  if(quote.facts.converted!==false||quote.facts.rejected!==false||typeof quote.facts.conditional!=='boolean'){missing.push('CHALLENGE_QUOTE_FACTS:'+quote.quoteId);continue;}
+  if(!quote.facts.conditional)continue;
+  const number=quote.read.erstblick.find(field=>field.key==='kv.lage')?.werte.nummer;
+  if(typeof number!=='string')missing.push('CHALLENGE_QUOTE_IDENTITY:'+quote.quoteId);
+  const dueDate=quote.validUntil!==null&&parseDateKey(quote.validUntil)?quote.validUntil:null;
+  if(quote.validUntil!==null&&dueDate===null)missing.push('CHALLENGE_QUOTE_DATE:'+quote.quoteId);
+  const key='quote:'+quote.quoteId;
+  groups.set(key,{key,orderId:null,orderNumber:null,quoteId:quote.quoteId,quoteNumber:typeof number==='string'?number:null,rank:5,dueDate,
+   reasons:[{textKey:'day.challenge_condition',werte:{},sourceId:quote.quoteId}],action:quote.read.hauptaktion});
+ }
+ return {groups:[...groups.values()].sort((a,b)=>a.rank-b.rank||(a.dueDate??'9999').localeCompare(b.dueDate??'9999')||(a.orderNumber??a.quoteNumber??a.key).localeCompare(b.orderNumber??b.quoteNumber??b.key)),missing};
 }
 
 export type TodayOrderScheduleRow={orderId:string;version:number;read:U2Read;pickupSchedule?:{code:'OK';date:string|null;eventId:string|null;freezeId:string}|{code:'SOURCE_INCOMPLETE'}};

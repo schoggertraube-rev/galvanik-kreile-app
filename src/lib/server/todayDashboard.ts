@@ -1,3 +1,6 @@
+import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
+import {v45QuoteFacts} from '@/lib/server/v45QuoteRead';
+import type {U2Read} from '@/lib/domain/u2ReadContract';
 import "server-only";
 import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentRead";
 
@@ -40,7 +43,9 @@ export type TodayCollectionNotice = {
   orderCount: number;
 };
 
+export type TodayQuoteActionRow={quoteId:string;version:number;read:U2Read;facts:Readonly<Record<string,unknown>>;validUntil:string|null;followupAt:string|null};
 export type TodayDashboard = {
+  quoteActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:TodayQuoteActionRow[];missingQuoteIds:string[]};
   calendar?:ReturnType<typeof readTodayCalendar>;
   orderSchedule?:ReturnType<typeof projectOrderSchedule>;
   datenluecken?:readonly string[];
@@ -228,6 +233,23 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     missingOrderIds:orderActionReads.filter(row=>row.read===null).map(row=>row.orderId)};
 
   const orderSchedule=projectOrderSchedule(orderActions,calendar);
+  // The canonical list and operational U2 card are the only quote sources.
+  // Raw financial list objects never escape this server composition.
+  const quoteList=graphAllowed?await listOpenQuotesAction({purpose:'today'}):{code:'OK' as const,quotes:[]};
+  const quoteReads=quoteList.code==='OK'?await Promise.all(quoteList.quotes.map(async quote=>{
+    try{
+      const card=await readQuoteAction({quoteId:quote.quoteId,purpose:'operations'});
+      if(card.code==='OK'&&card.quote.version===quote.version&&card.quote.lifecycle){
+        const row:TodayQuoteActionRow={quoteId:quote.quoteId,version:quote.version,read:card.nextActionRule,
+          facts:v45QuoteFacts(card.quote,new Date(calendar.readStartedAt)),validUntil:card.quote.validUntil,followupAt:card.quote.lifecycle.followupAt};
+        return row;
+      }
+    }catch{return {quoteId:quote.quoteId,read:null};}
+    return {quoteId:quote.quoteId,read:null};
+  })):[];
+  const quoteActions={code:quoteList.code==='OK'&&quoteReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
+    rows:quoteReads.flatMap(row=>row.read?[row as TodayQuoteActionRow]:[]),missingQuoteIds:quoteReads.filter(row=>row.read===null).map(row=>row.quoteId)};
+
   const allowed = allowedTodayFields(auth);
   const suggestedLayout = defaultTodayLayout(auth.role, allowed);
   const storedLayout = parseTodayLayout(support.preferences[0]?.layout);
@@ -300,11 +322,12 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const responsible=await withPrivilegedTenantTransaction(auth,tx=>readOrderResponsibilityForToday(tx,auth,items.flatMap(item=>item.orderId?[item.orderId]:[])));
   const mine=(item:TodayItem)=>ownTaskKeys.has(item.key)||item.kind!=='complaint'&&!!item.orderId&&responsible.get(item.orderId)===auth.userId;
   const sortedItems=sortTodayByResponsibility(items,mine);
-  const challenges=projectTodayChallenges(orderActions.rows,overdueInvoiceRows.map(row=>({id:row.id,orderId:row.order_id,number:row.invoice_number,dueDate:dateOnly(row.due_date!),amountCents:row.open_amount_cents,amount:Number.isSafeInteger(Number(row.open_amount_cents))&&Number(row.open_amount_cents)>0?euro(row.open_amount_cents):null})),today);
-  const challengeMissing=[...challenges.missing,...(orderActions.code!=='OK'?['CHALLENGE_ORDER_SOURCE']:[]),...(support.invoiceSource.code!=='OK'?['CHALLENGE_INVOICE_SOURCE']:[]),...(!complaintsKnown||complaintCases.length?['CHALLENGE_COMPLAINT_SOURCE']:[]),...(graphAllowed&&(graph.code!=='OK'||graph.messages.some(row=>row.usage==='offen'&&(row.sendState==='unklar'||row.sendState==='fehler'||row.openConcerns.some(kind=>['kv_annahme','kv_ablehnung','reklamation'].includes(kind)))))?['CHALLENGE_CONCERN_SOURCE']:[])];
+  const challenges=projectTodayChallenges(orderActions.rows,overdueInvoiceRows.map(row=>({id:row.id,orderId:row.order_id,number:row.invoice_number,dueDate:dateOnly(row.due_date!),amountCents:row.open_amount_cents,amount:Number.isSafeInteger(Number(row.open_amount_cents))&&Number(row.open_amount_cents)>0?euro(row.open_amount_cents):null})),today,quoteActions.rows);
+  const challengeMissing=[...challenges.missing,...(graphAllowed&&quoteActions.code!=='OK'?['CHALLENGE_QUOTE_SOURCE']:[]),...(orderActions.code!=='OK'?['CHALLENGE_ORDER_SOURCE']:[]),...(support.invoiceSource.code!=='OK'?['CHALLENGE_INVOICE_SOURCE']:[]),...(!complaintsKnown||complaintCases.length?['CHALLENGE_COMPLAINT_SOURCE']:[]),...(graphAllowed&&(graph.code!=='OK'||graph.messages.some(row=>row.usage==='offen'&&(row.sendState==='unklar'||row.sendState==='fehler'||row.openConcerns.some(kind=>['kv_annahme','kv_ablehnung','reklamation'].includes(kind)))))?['CHALLENGE_CONCERN_SOURCE']:[])];
 
   return {
     calendar,
+    ...(graphAllowed?{quoteActions}:{}),
     items:sortedItems,
     challenges:{code:challengeMissing.length?'SOURCE_INCOMPLETE':'OK',groups:challenges.groups,missing:challengeMissing},
     ...(ordersAllowed?{orderActions,orderSchedule}:{}),
@@ -312,7 +335,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     ...(moneyAllowed?{moneySources:{invoices:countTodaySource(support.invoiceSource),prepayments:countTodaySource(support.prepaymentSource),collections:countTodaySource(support.collectionSource)}}:{}),
     ...(moneyAllowed?{moneyMetric:invoiceMoney.code==='OK'?{code:'OK' as const,count:overdueInvoiceRows.length,sources:overdueInvoiceRows.map(row=>({id:row.id,version:row.payment_version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
     ...(graphAllowed?{assignmentMetric:assignmentMessages?{code:'OK' as const,count:assignmentMessages.length,sources:assignmentMessages.map(row=>({id:row.id,version:row.version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
-    datenluecken:[...challengeMissing,...(moneyAllowed&&invoiceMoney.code==='SOURCE_INCOMPLETE'?invoiceMoney.missing:[]),...(ordersAllowed&&orderSchedule.code==='SOURCE_INCOMPLETE'?orderSchedule.missing:[]),...(ordersAllowed&&orderSource.code!=='OK'?['ORDER_SOURCE']:[]),...(ordersAllowed&&orderActions.code!=='OK'?['ORDER_ACTION_SOURCE']:[]),...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
+    datenluecken:[...challengeMissing,...(graphAllowed&&quoteActions.code!=='OK'?['QUOTE_ACTION_SOURCE']:[]),...(moneyAllowed&&invoiceMoney.code==='SOURCE_INCOMPLETE'?invoiceMoney.missing:[]),...(ordersAllowed&&orderSchedule.code==='SOURCE_INCOMPLETE'?orderSchedule.missing:[]),...(ordersAllowed&&orderSource.code!=='OK'?['ORDER_SOURCE']:[]),...(ordersAllowed&&orderActions.code!=='OK'?['ORDER_ACTION_SOURCE']:[]),...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
     ...(support.collectionSource.code==='OK'?{collectionNotices}:{}),
     visibleFields: selected,
     layout,
