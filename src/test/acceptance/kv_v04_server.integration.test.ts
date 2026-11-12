@@ -1248,6 +1248,14 @@ it('AK order: two actual logins retain creator and last actor, take through exis
  await sql`UPDATE private.order_task_assignment_state SET assigned_to=${first.actorId}::uuid WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;
  try{
   const dashboard=await withSession(second,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST home auth');const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');const first=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);const again=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);expect(again.items).toEqual(expect.arrayContaining([expect.objectContaining({orderId})]));return first;});expect(dashboard.items).toEqual(expect.arrayContaining([expect.objectContaining({orderId})]));expect(await sql`SELECT payload->>'orderId' AS order_id,payload->>'actorId' AS actor_id FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='today_assignment_read_failed' AND payload->>'orderId'=${orderId}`).toEqual([]);expect(dashboard.datenluecken).toContain('ORDER_ASSIGNMENT_SOURCE');
+  await withSession(second,async()=>{
+   const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_PARTIAL_AUTH');
+   const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
+   const broken=async()=>{await sql`SELECT 1/0`;throw Error('TEST_UNREACHABLE');};
+   const partial=await readTodayDashboard(auth.data,broken,getQuoteFollowupsForTodayAction);
+   expect(partial.items).toEqual(expect.arrayContaining([expect.objectContaining({orderId})]));expect(partial.datenluecken).toContain('COMPLAINT_SOURCE');
+   const reread=await readTodayDashboard(auth.data,broken,getQuoteFollowupsForTodayAction);expect(reread.items).toEqual(partial.items);expect(reread.datenluecken).toEqual(partial.datenluecken);
+  });
  }finally{await sql`UPDATE private.order_task_assignment_state SET assigned_to=${second.actorId}::uuid WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;}
 
 

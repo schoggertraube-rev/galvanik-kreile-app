@@ -185,8 +185,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
       ]);
       return { preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignmentSourceIncomplete:assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
     }),
-    ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints():Promise.resolve({code:'OK' as const,complaints:[]}),
-    moneyAllowed&&ordersAllowed?readQuoteFollowups():Promise.resolve({code:'OK' as const,tasks:[]}),
+    ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints().catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'})):Promise.resolve({code:'OK' as const,complaints:[]}),
+    graphAllowed?readQuoteFollowups().catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'})):Promise.resolve({code:'OK' as const,tasks:[]}),
   ]);
 
   const allowed = allowedTodayFields(auth);
@@ -200,10 +200,10 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const items: TodayItem[] = [];
   const assignments = new Map(support.assignments.map((row) => [row.order_id, row]));
   const add = (item: TodayItem) => items.push({ ...item, field: item.field === "action" || selectedSet.has(item.field as TodayVisibleField) ? item.field : "action", snoozedUntil: reminders.get(item.key) });
-  if(quoteFollowups.code!=='OK'||!('tasks'in quoteFollowups))throw Error('TODAY_QUOTE_FOLLOWUP_READ_FAILED');
-  for(const task of quoteFollowups.tasks)add({key:'task:'+task.id,field:'action',kind:'task',title:task.title,meta:'KV '+task.quoteNumber+' · '+task.customerName,urgency:'warning',dueDate:task.dueDate,target:{screen:'aufgabe',arg:task.id},primaryActionLabel:'Öffnen'});
-  if(complaints.code!=='OK')throw Error('TODAY_COMPLAINT_READ_FAILED:'+complaints.code);
-  for(const attention of complaintAttention(complaints.complaints,auth.areas??[]))add({key:attention.key,field:'action',kind:'complaint',title:attention.title,meta:attention.meta,urgency:attention.urgency,orderId:attention.orderId,target:attention.target,primaryActionLabel:attention.actionLabel as TodayItem['primaryActionLabel']});
+  const followupsKnown=quoteFollowups.code==='OK'&&'tasks'in quoteFollowups;
+  const complaintsKnown=complaints.code==='OK';
+  if(followupsKnown)for(const task of quoteFollowups.tasks)add({key:'task:'+task.id,field:'action',kind:'task',title:task.title,meta:'KV '+task.quoteNumber+' · '+task.customerName,urgency:'warning',dueDate:task.dueDate,target:{screen:'aufgabe',arg:task.id},primaryActionLabel:'Öffnen'});
+  if(complaints.code==='OK')for(const attention of complaintAttention(complaints.complaints,auth.areas??[]))add({key:attention.key,field:'action',kind:'complaint',title:attention.title,meta:attention.meta,urgency:attention.urgency,orderId:attention.orderId,target:attention.target,primaryActionLabel:attention.actionLabel as TodayItem['primaryActionLabel']});
 
   for (const order of orders) {
     const guidance = deriveOrderGuidance(order, today);
@@ -254,13 +254,13 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const bundle = [...surfaces.entries()].filter(([, group]) => group.length >= 2).sort((a, b) => b[1].length - a[1].length)[0];
   if (STAGE2_TODAY_FEATURES.has("bundle") && bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
-  const ownTaskKeys=new Set(quoteFollowups.tasks.filter(task=>task.isMine===true).map(task=>'task:'+task.id));
+  const ownTaskKeys=new Set(followupsKnown?quoteFollowups.tasks.filter(task=>task.isMine===true).map(task=>'task:'+task.id):[]);
   const responsible=await withPrivilegedTenantTransaction(auth,tx=>readOrderResponsibilityForToday(tx,auth,items.flatMap(item=>item.orderId?[item.orderId]:[])));
   const mine=(item:TodayItem)=>ownTaskKeys.has(item.key)||item.kind!=='complaint'&&!!item.orderId&&responsible.get(item.orderId)===auth.userId;
   const sortedItems=sortTodayByResponsibility(items,mine);
   return {
     items:sortedItems,
-    datenluecken:support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[],
+    datenluecken:[...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
     collectionNotices,
     visibleFields: selected,
     layout,
