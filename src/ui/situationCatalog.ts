@@ -327,3 +327,5 @@ export const CUSTOMER_INVOICE_TERMS_COPY={
  incomplete:"Rechnung auf Ziel braucht vollständige Kundendaten.",
  unavailable:"Rechnung auf Ziel konnte nicht sicher freigeschaltet werden."
 } as const;
+
+export const MANAGED_USER_COPY={forbidden:"Nutzer dürfen nicht geändert werden."} as const;

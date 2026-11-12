@@ -11,7 +11,7 @@ import type {
   AuthorizationActionGrants,
   PermissionKey,
 } from "@/lib/auth/authorizationContract";
-import { isAppRole } from "@/lib/auth/authorizationContract";
+import { canUsePinLogin } from "@/lib/auth/authorizationContract";
 import {
   APP_TENANT_ID,
   clearAppSession,
@@ -161,7 +161,7 @@ export async function loginWithPin(
       return { ok: false, message: "Code falsch · bitte neu eingeben" };
     }
 
-    if (!isAppRole(user.role) || user.tenantId !== APP_TENANT_ID) {
+    if (!canUsePinLogin(user.role) || user.tenantId !== APP_TENANT_ID) {
       return { ok: false, message: "Code falsch · bitte neu eingeben" };
     }
 

@@ -1,3 +1,4 @@
+import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
 import {isDeepStrictEqual} from 'node:util';
 import {dispatchPolicyValid} from '../dispatchPolicy';
 import {STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
@@ -12,6 +13,7 @@ import {
   isAccessArea,
   isAccessAreaAllowedForRole,
   isAppRole,
+  canManageUserTarget,
   normalizeAccessAreasForRole,
   type AccessArea,
   type AppRole,
@@ -296,7 +298,7 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
 }
 
 export async function updateManagedUser(context: SystemSettingsContext, input: unknown) {
-  if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Nutzer dürfen nicht geändert werden." };
+  if (!context.canManage) return { code: "FORBIDDEN" as const, message: MANAGED_USER_COPY.forbidden };
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Nutzerdaten sind ungültig." };
   const value = input as Record<string, unknown>;
   if (Object.keys(value).sort().join(",") !== "active,designation,fullName,pin,shortCode,userId") return { code: "VALIDATION_ERROR" as const, message: "Logindaten sind unvollständig." };
@@ -327,6 +329,7 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
       `);
       if (targets.length !== 1 || !targets[0]) throw new Error("USER_WRITE_NOT_FOUND");
       const target = targets[0];
+      if (!canManageUserTarget(context.actorId, normalized.userId, target.role)) throw new Error("USER_TARGET_FORBIDDEN");
       if (normalized.userId === context.actorId && !normalized.active) throw new Error("USER_SELF_DEACTIVATION");
       if (target.active && target.has_logins && !normalized.active) {
         const rows = await tx.execute<{ count: number }>(sql`
@@ -349,6 +352,7 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
     return { code: "OK" as const };
   } catch (error) {
     logSystemSettingsPortFailure("MANAGED_USER_WRITE_FAILED", error);
+    if (error instanceof Error && error.message === "USER_TARGET_FORBIDDEN") return { code: "FORBIDDEN" as const, message: MANAGED_USER_COPY.forbidden };
     if (error instanceof Error && error.message === "USER_SELF_DEACTIVATION") return { code: "CONFLICT" as const, message: "Der aktuell angemeldete Nutzer kann sich nicht selbst deaktivieren." };
     if (error instanceof Error && error.message === "USER_LAST_LOGINS_DEACTIVATION") return { code: "CONFLICT" as const, message: "Mindestens ein aktiver Login mit dem Bereich Logins & Rechte muss erhalten bleiben." };
     if (error instanceof Error && error.message === "USER_ACTIVE_PIN_REQUIRED") return { code: "VALIDATION_ERROR" as const, message: "Ein aktiver Nutzer braucht eine vierstellige PIN." };
