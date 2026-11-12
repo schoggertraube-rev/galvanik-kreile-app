@@ -260,7 +260,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const sortedItems=sortTodayByResponsibility(items,mine);
   return {
     items:sortedItems,
-    ...(moneyAllowed?{moneyMetric:{code:'OK' as const,count:overdueInvoices.length,sources:overdueInvoices.map(row=>({id:row.id,version:row.payment_version}))}}:{}),
+    ...(moneyAllowed?{moneyMetric:{code:'OK' as const,count:support.invoices.length,sources:support.invoices.map(row=>({id:row.id,version:row.payment_version}))}}:{}),
     ...(graphAllowed?{assignmentMetric:assignmentMessages?{code:'OK' as const,count:assignmentMessages.length,sources:assignmentMessages.map(row=>({id:row.id,version:row.version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
     datenluecken:[...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
     collectionNotices,

@@ -7,6 +7,7 @@ import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarn
 import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readTodayDashboard} from '@/lib/server/todayDashboard';
+import {setPaymentModeAction} from '@/app/actions/payments.actions';
 import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 
@@ -15,10 +16,11 @@ it('T05-3 counts all 25 historical invoice fixtures while limiting the list and 
  const ids:string[]=[];
  for(let index=0;index<25;index++){
   const order=await intakeOrderFixture('TEST S05 historisch '+index,customerId),id=randomUUID();ids.push(id);
+  if(index===24)expect(await withSession(full,()=>setPaymentModeAction({orderId:order.receipt.orderId,paymentMode:'vorkasse',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   // Explicit synthetic historical invoice boundary, not an invoice-writer proof.
   // The order uses its real intake command; the read/auth/DB are real.
   await sql`INSERT INTO public.invoices(id,tenant_id,order_id,customer_id,invoice_number,amount_total,status,due_date,gross_amount_cents,payment_contract_version,payment_mode,payment_status,payment_open_amount_cents,payment_paid_amount_cents,payment_currency,payment_version)
-   VALUES(${id}::uuid,${tenant},${order.receipt.orderId},${customerId},${'TEST-S05-'+String(index).padStart(3,'0')},119.00,'issued',(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1,11900,1,'rechnung','offen',11900,0,'EUR',0)`;
+   VALUES(${id}::uuid,${tenant},${order.receipt.orderId},${customerId},${'TEST-S05-'+String(index).padStart(3,'0')},119.00,'issued',(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1,11900,1,${index===24?'vorkasse':'rechnung'},'offen',11900,0,'EUR',0)`;
  }
  const read=async(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
  const first=await read(full),again=await read(full);
