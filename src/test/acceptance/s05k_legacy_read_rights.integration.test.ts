@@ -50,3 +50,18 @@ it('S05K A10 inventory hides money and filters tenant with the existing rights r
  expect(await withSession(full,()=>getInventoryItemAction(own))).toMatchObject({ok:true,data:{id:own,pricePerUnit:2.5}});
  expect(await withSession(operator,()=>getInventoryItemAction(own))).toMatchObject({ok:true,data:{id:own}});
 });
+
+it('S05K A10 timeline readers keep tenant boundaries and customer rights',async()=>{
+ const {getTimelineForOrderDb,getTimelineForCustomerDb,getGlobalTimelineDb}=await import('@/app/actions/timeline.actions');
+ const customerId=await customerFixture('A10 timeline'),created=await intakeOrderFixture('A10 timeline',customerId),orderId=created.receipt.orderId;
+ const operator=await createFixture(['auftraege']),money=await createFixture(['geld']);
+ const own=randomUUID(),foreign=randomUUID(),foreignTenant='TEST-foreign-'+randomUUID();
+ // Explicit synthetic legacy event rows isolate tenant filtering; intake events above are actual.
+ await sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,payload) VALUES(${own},${tenant},${orderId},'TEST_A10_TIMELINE','{}'::jsonb),(${foreign},${foreignTenant},NULL,'TEST_A10_TIMELINE_FOREIGN','{}'::jsonb)`;
+ expect(await withSession(money,()=>getTimelineForOrderDb(orderId))).toMatchObject({ok:false,error:'FORBIDDEN'});
+ expect(await withSession(operator,()=>getTimelineForCustomerDb(customerId))).toMatchObject({ok:false,error:'FORBIDDEN'});
+ const orderRead=await withSession(operator,()=>getTimelineForOrderDb(orderId));expect(orderRead).toMatchObject({ok:true});if(!orderRead.ok)throw Error('A10_TIMELINE');expect(orderRead.data.map(row=>row.id)).toContain(own);expect(orderRead.data.map(row=>row.id)).not.toContain(foreign);
+ const global=await withSession(operator,()=>getGlobalTimelineDb());expect(global).toMatchObject({ok:true});if(!global.ok)throw Error('A10_GLOBAL');expect(global.data.some(row=>row.type==='customer')).toBe(false);expect(global.data.map(row=>row.id)).not.toContain(foreign);
+ const customerRead=await withSession(full,()=>getTimelineForCustomerDb(customerId));expect(customerRead).toMatchObject({ok:true});if(!customerRead.ok)throw Error('A10_CUSTOMER_TIMELINE');expect(customerRead.data.map(row=>row.id)).toContain(own);expect(customerRead.data.map(row=>row.id)).not.toContain(foreign);
+ expect(await withSession(operator,()=>getTimelineForOrderDb(orderId))).toMatchObject({ok:true,data:expect.arrayContaining([expect.objectContaining({id:own})])});
+});
