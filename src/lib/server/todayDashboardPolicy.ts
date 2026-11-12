@@ -339,3 +339,27 @@ export function projectTodayInvoiceMoney(source:{code:'OK';data:ReadonlyArray<{i
   today:sources.filter(row=>row.dueDate<=calendar.today).length,upcoming:sources.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
  return missing.length?{code:'SOURCE_INCOMPLETE' as const,knownTotals:totals,sources,missing}:{code:'OK' as const,...totals,sources};
 }
+
+/** V45 concern/day rows consume the existing quote facts; PL09:05 makes an
+ * accepted promise independent of its former acceptance deadline. */
+export function projectQuoteSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:ReadonlyArray<{quoteId:string;version:number;facts:Readonly<Record<string,unknown>>;validUntil:string|null;followupAt:string|null}>;missingQuoteIds:readonly string[]},calendar:ReturnType<typeof readTodayCalendar>){
+ const missing=source.code==='OK'?[]:['QUOTE_SCHEDULE_SOURCE',...source.missingQuoteIds.map(id=>'QUOTE_SCHEDULE_CARD:'+id)];
+ const rows=new Map<string,{id:string;version:number;state:'active'|'waiting';dueDate:string|null}>(),conflicts=new Set<string>();
+ for(const quote of source.rows){
+  if(conflicts.has(quote.quoteId))continue;
+  const facts=quote.facts;
+  if(['converted','rejected','conditional','expired','sent','accepted'].some(key=>typeof facts[key]!=='boolean')){missing.push('QUOTE_SCHEDULE_FACTS:'+quote.quoteId);continue;}
+  if(facts.converted||facts.rejected)continue;
+  const raw=facts.accepted?null:quote.followupAt!==null?quote.followupAt:quote.validUntil;
+  if(raw!==null&&(typeof raw!=='string'||!parseDateKey(raw))){missing.push('QUOTE_SCHEDULE_DATE:'+quote.quoteId);continue;}
+  const dueDate=raw;
+  const active=!facts.accepted&&(facts.conditional||facts.expired||!facts.sent||quote.followupAt!==null&&dueDate!==null&&dueDate<=calendar.today);
+  const row={id:quote.quoteId,version:quote.version,state:active?'active' as const:'waiting' as const,dueDate};
+  const prior=rows.get(quote.quoteId);
+  if(prior&&(prior.version!==row.version||prior.state!==row.state||prior.dueDate!==row.dueDate)){rows.delete(quote.quoteId);conflicts.add(quote.quoteId);missing.push('QUOTE_SCHEDULE_VERSION:'+quote.quoteId);continue;}
+  rows.set(quote.quoteId,row);
+ }
+ const sources=[...rows.values()],counts={active:sources.filter(row=>row.state==='active').length,waiting:sources.filter(row=>row.state==='waiting').length,
+  today:sources.filter(row=>row.dueDate!==null&&row.dueDate<=calendar.today).length,upcoming:sources.filter(row=>row.dueDate!==null&&row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
+ return missing.length?{code:'SOURCE_INCOMPLETE' as const,knownCounts:counts,sources,missing}:{code:'OK' as const,...counts,sources};
+}

@@ -1,5 +1,5 @@
 import type {U2Read} from '@/lib/domain/u2ReadContract';
-import {projectTodayInvoiceMoney,projectOrderSchedule,readTodayCalendar,projectTodayChallenges} from '../todayDashboardPolicy';
+import {projectQuoteSchedule,projectTodayInvoiceMoney,projectOrderSchedule,readTodayCalendar,projectTodayChallenges} from '../todayDashboardPolicy';
 import {sortTodayByResponsibility} from '../todayDashboardPolicy';
 import { describe, expect, it } from "vitest";
 import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/server/todayDashboardPolicy";
@@ -200,4 +200,17 @@ it('keeps all open invoice amounts and separates overdue/today/upcoming without 
   const partial=projectTodayInvoiceMoney({code:'OK',data:[rows[1],invalid]},calendar);
   expect(partial).toMatchObject({code:'SOURCE_INCOMPLETE',knownTotals:{openCount:1,openCents:2500}});expect(partial).not.toHaveProperty('openCents');
  }
+});
+
+// Synthetic quote-clock boundaries; persisted lifecycle proof is AK-02.
+it('keeps quote active/waiting and dates on the same lifecycle, preserving accepted validity',()=>{
+ const calendar=readTodayCalendar(new Date('2026-11-12T12:00:00Z'));
+ const base={version:1,facts:{converted:false,rejected:false,conditional:false,expired:false,sent:true,accepted:false},validUntil:'2026-11-30',followupAt:null};
+ const due={...base,quoteId:'TEST-due',followupAt:'2026-11-12'},future={...base,quoteId:'TEST-future',followupAt:'2026-11-19'};
+ const accepted={...base,quoteId:'TEST-accepted',facts:{...base.facts,accepted:true},validUntil:'2026-10-01'};
+ const first=projectQuoteSchedule({code:'OK',rows:[due,due,future,accepted],missingQuoteIds:[]},calendar);
+ expect(first).toMatchObject({code:'OK',active:1,waiting:2,today:1,upcoming:1});expect(first.sources.find(row=>row.id==='TEST-accepted')?.dueDate).toBeNull();
+ expect(projectQuoteSchedule({code:'OK',rows:[],missingQuoteIds:[]},calendar)).toMatchObject({code:'OK',active:0,waiting:0,today:0,upcoming:0});
+ expect(projectQuoteSchedule({code:'SOURCE_INCOMPLETE',rows:[due],missingQuoteIds:['TEST-missing']},calendar)).toMatchObject({code:'SOURCE_INCOMPLETE',knownCounts:{active:1,today:1}});
+ expect(projectQuoteSchedule({code:'OK',rows:[due,{...due,version:2},due],missingQuoteIds:[]},calendar)).toMatchObject({code:'SOURCE_INCOMPLETE',sources:[],knownCounts:{active:0}});
 });

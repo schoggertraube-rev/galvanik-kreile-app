@@ -1330,15 +1330,18 @@ it('AK-02: quote followups prioritize their actual recipient rather than the quo
  expect(first.quoteActions).toMatchObject({code:'OK',missingQuoteIds:[]});expect(first.quoteActions?.rows).toHaveLength(2);
  expect(first.quoteActions?.rows.find(row=>row.quoteId===ids[0])?.read).toEqual(quoteRead.nextActionRule);
  expect(first.quoteActions?.rows.every(row=>row.facts.sent===true&&row.facts.accepted===false)).toBe(true);
+ expect(first.quoteSchedule).toMatchObject({code:'OK',active:2,waiting:0,today:2});
  expect(await withSession(a,()=>changeQuoteLifecycleAction({action:'accept',quoteId:ids[0],clientEventId:randomUUID(),expectedVersion:quoteRead.quote.version,edition:1,evidence:'TEST S05 telefonisch ohne Vorbehalt zugesagt'}))).toMatchObject({code:'OK'});
  const after=await day();expect(after.items.filter(row=>row.kind==='task')).toHaveLength(1);expect(after.items.find(row=>row.kind==='task')?.target).toEqual({screen:'kv',arg:ids[1]});
  expect(after.quoteActions?.rows.find(row=>row.quoteId===ids[0])).toMatchObject({version:quoteRead.quote.version+1,facts:{accepted:true,expired:false},followupAt:null});
+ expect(after.quoteSchedule).toMatchObject({code:'OK',active:1,waiting:0,today:1});
  expect((await day()).items).toEqual(after.items);
  expect(await withSession(b,()=>changeQuoteLifecycleAction({action:'conditional',quoteId:ids[1],clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST S05 ja, aber nicht zu diesem Preis'}))).toMatchObject({code:'OK'});
  const withoutMoney=await day();expect(withoutMoney.challenges?.groups.some(row=>row.quoteId===ids[1])).toBe(false);
  const conditional=await day(b),group=conditional.challenges?.groups.find(row=>row.quoteId===ids[1]);
  expect(conditional.items.filter(row=>row.kind==='task')).toHaveLength(0);expect(group).toMatchObject({key:'quote:'+ids[1],rank:5,reasons:[{textKey:'day.challenge_condition',sourceId:ids[1]}]});
  expect(conditional.quoteActions?.rows.find(row=>row.quoteId===ids[1])).toMatchObject({version:3,facts:{conditional:true,accepted:false}});
+ expect(withoutMoney.quoteSchedule).toMatchObject({code:'OK',active:0,waiting:0});expect(conditional.quoteSchedule).toMatchObject({code:'OK',active:1,waiting:1});
  expect((await day(b)).challenges).toEqual(conditional.challenges);
 
 
