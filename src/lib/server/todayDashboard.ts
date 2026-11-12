@@ -1,5 +1,5 @@
 import "server-only";
-import {readOrderResponsibilityForToday,recordInvalidOrderAssignmentForToday} from "@/lib/server/orderTaskAssignmentRead";
+import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentRead";
 
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -40,6 +40,7 @@ export type TodayCollectionNotice = {
 };
 
 export type TodayDashboard = {
+  datenluecken?:readonly string[];
   items: TodayItem[];
   /**
    * Open collections are deliberately not actions until AP-ABS-b provides the
@@ -182,8 +183,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
             AND active=true
         `) : Promise.resolve([]),
       ]);
-      for(const row of assignments)if(!row.integrity_ok)await recordInvalidOrderAssignmentForToday(tx,auth,row.order_id);
-      return { preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignments:assignments.filter(row=>row.integrity_ok) };
+      return { preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignmentSourceIncomplete:assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
     }),
     ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints():Promise.resolve({code:'OK' as const,complaints:[]}),
     moneyAllowed&&ordersAllowed?readQuoteFollowups():Promise.resolve({code:'OK' as const,tasks:[]}),
@@ -260,6 +260,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const sortedItems=sortTodayByResponsibility(items,mine);
   return {
     items:sortedItems,
+    datenluecken:support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[],
     collectionNotices,
     visibleFields: selected,
     layout,
