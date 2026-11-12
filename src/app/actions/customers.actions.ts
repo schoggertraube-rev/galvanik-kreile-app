@@ -1,4 +1,6 @@
 "use server";
+import {openIntakePredicate} from '@/modules/eingang/server-public';
+
 
 import { db } from "@/db";
 import { customers } from "@/db/schema";
@@ -44,7 +46,7 @@ export async function getCustomerSummaryAction(input: { customerId: string }) {
       ? { code: "UNAVAILABLE" as const, message: "Kundenkarte ist derzeit nicht verfügbar." }
       : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  return readCustomerSummary(authorization.data, input);
+  return readCustomerSummary(authorization.data, input,openIntakePredicate());
 }
 
 async function customerAuthorization() {
@@ -185,7 +187,7 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     ).orderBy(customers.createdAt);
-    const signals=await readCustomerListSignals(authRes.data,dbCustomers.map(customer=>customer.id));
+    const signals=await readCustomerListSignals(authRes.data,dbCustomers.map(customer=>customer.id),openIntakePredicate());
     const data = dbCustomers.map((record) => {
       const customer=mapDbCustomer(record),signal=signals.get(record.id);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');
       const readiness=kundeVollstaendigkeit({...customer,customerType:customer.type as CustomerStoredProfile['customerType']},{geld:hasAuthorizationArea(authRes.data,'geld')});

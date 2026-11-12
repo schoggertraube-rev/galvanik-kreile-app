@@ -1,3 +1,4 @@
+import {openIntakePredicate} from './openIntakePredicate';
 import {readIntakeActorTraces} from './actorRead';
 import {intakeCaptureSnapshot} from './intakeCapture';
 import {readMessageNextAction} from './messageNextAction';
@@ -16,7 +17,7 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
   const result=await resolveAuthorization();if(!result.ok)return {code:result.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED',message:'Sitzung konnte nicht geprüft werden. Code: INTAKE_MESSAGES_SESSION.'};
   const auth=result.data;if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Nachrichten benötigen das Recht Mails.'};
   return await withPrivilegedTenantTransaction(auth,async tx=>{
-   const matches=filter==='offen'?sql`candidate.aussortiert IS NULL AND (candidate.einsatz='offen' OR candidate.richtung='rein' AND candidate.zuordnung='offen')`
+   const matches=filter==='offen'?openIntakePredicate('candidate')
     :filter==='zuordnen'?sql`candidate.aussortiert IS NULL AND candidate.zuordnung='offen'`
     :filter==='erledigt'?sql`candidate.aussortiert IS NULL AND candidate.einsatz IN ('erledigt','info')`
     :filter==='aussortiert'?sql`candidate.aussortiert IS NOT NULL`

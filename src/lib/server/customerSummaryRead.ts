@@ -1,6 +1,6 @@
 import "server-only";
 
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import { overdueInvoiceCondition } from "@/lib/server/paymentContract";
@@ -23,7 +23,7 @@ const MAX_ID_LENGTH = 128;
 const AGREEMENT_TYPES = new Set<string>(CUSTOMER_AGREEMENT_TYPES);
 
 /** One batched projection for the list and card; hidden money/mail reasons never leave this port. */
-export async function readCustomerListSignals(auth:AuthorizationSnapshot,customerIds:readonly string[]):Promise<Map<string,CustomerListSignals>> {
+export async function readCustomerListSignals(auth:AuthorizationSnapshot,customerIds:readonly string[],openCondition:SQL):Promise<Map<string,CustomerListSignals>> {
   if(!hasAuthorizationArea(auth,'kunden'))throw Error('CUSTOMER_SIGNALS_FORBIDDEN');
   if(!customerIds.length)return new Map();
   if(customerIds.some(id=>typeof id!=='string'||!id||id.length>128))throw Error('CUSTOMER_SIGNALS_IDS_INVALID');
@@ -35,10 +35,10 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
       (SELECT count(*)::integer FROM private.v_open_quotes_v1 quote WHERE quote.tenant_id=customer.tenant_id AND quote.customer_id=customer.id) AS active_quotes,
       (SELECT count(*)::integer FROM public.invoices invoice WHERE ${money} AND invoice.tenant_id=customer.tenant_id AND invoice.customer_id=customer.id
         AND ${overdueInvoiceCondition()}) AS overdue,
-      (SELECT count(*)::integer FROM public.intake_item source WHERE source.tenant_id=customer.tenant_id AND source.richtung IN ('rein','intern') AND source.einsatz='offen' AND source.aussortiert IS NULL AND source.zuordnung='offen'
+      (SELECT count(*)::integer FROM public.intake_item source WHERE source.tenant_id=customer.tenant_id AND source.richtung IN ('rein','intern') AND ${openCondition} AND source.zuordnung='offen'
         AND (${mails} OR source.kanal<>'mail' AND ${intake} AND source.erstellt_von=${auth.userId}::uuid)
         AND (source.kunde_id=customer.id OR source.kunde_id IS NULL AND customer.email IS NOT NULL AND lower(btrim(source.absender_adresse))=lower(btrim(customer.email)))) AS unassigned,
-      (SELECT count(*)::integer FROM public.intake_item source WHERE source.tenant_id=customer.tenant_id AND source.richtung IN ('rein','intern') AND source.einsatz='offen' AND source.aussortiert IS NULL AND source.zuordnung<>'offen' AND source.kunde_id=customer.id
+      (SELECT count(*)::integer FROM public.intake_item source WHERE source.tenant_id=customer.tenant_id AND source.richtung IN ('rein','intern') AND ${openCondition} AND source.zuordnung<>'offen' AND source.kunde_id=customer.id
         AND (${mails} OR source.kanal<>'mail' AND ${intake} AND source.erstellt_von=${auth.userId}::uuid)) AS open_messages,
       (SELECT coalesce(jsonb_agg(jsonb_build_object('text',agreement.bezeichnung||': '||agreement.wert) ORDER BY agreement.position,agreement.id),'[]'::jsonb)
         FROM public.customer_agreements agreement WHERE agreement.tenant_id=customer.tenant_id AND agreement.customer_id=customer.id AND agreement.order_id IS NULL
@@ -60,7 +60,7 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
     if(row.unassigned)hints.push({kind:'message',text:`${row.unassigned} ${row.unassigned===1?'Nachricht':'Nachrichten'} zuordnen`,urgent:false});
     if(row.open_messages)hints.push({kind:'message',text:`${row.open_messages} ${row.open_messages===1?'Nachricht':'Nachrichten'} offen`,urgent:false});
     hints.push(...row.agreements.map(value=>({kind:'agreement' as const,text:value.text,urgent:false})),...row.complaints.map(value=>({kind:'complaint' as const,text:value.text,urgent:true})),...row.tasks.map(value=>({kind:'task' as const,text:value.text,urgent:false})));
-    return [row.id,{activeOrderCount:row.active_orders,activeQuoteCount:row.active_quotes,openComplaintCount:row.complaints.length,...(mails?{openMessageCount:row.open_messages}:{}),asOf:row.as_of,hints}];
+    return [row.id,{activeOrderCount:row.active_orders,activeQuoteCount:row.active_quotes,openComplaintCount:row.complaints.length,...(mails?{openMessageCount:row.open_messages+row.unassigned}:{}),asOf:row.as_of,hints}];
   }));
 }
 
@@ -471,6 +471,7 @@ function mapSummary(
 export async function readCustomerSummary(
   authorization: AuthorizationSnapshot,
   input: { customerId: string },
+  openCondition: SQL,
 ): Promise<CustomerSummaryReadResult> {
   if (!exactObject(input, ["customerId"]) || !validId(input.customerId)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Kundenkennung." };
@@ -518,7 +519,7 @@ export async function readCustomerSummary(
        }
        return summary;
     });
-    if(data){const signals=await readCustomerListSignals(authorization,[input.customerId]);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;data.nextActionRule=readV45CustomerRule(authorization,data,signal);}
+    if(data){const signals=await readCustomerListSignals(authorization,[input.customerId],openCondition);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;data.nextActionRule=readV45CustomerRule(authorization,data,signal);}
     return data
       ? { code: "OK", data }
       : { code: "NOT_FOUND", message: "Kunde nicht verfügbar." };

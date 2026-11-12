@@ -1,3 +1,4 @@
+import {AsyncLocalStorage} from 'node:async_hooks';
 // @vitest-environment node
 import {randomUUID} from 'node:crypto';
 import postgres from 'postgres';
@@ -23,23 +24,25 @@ it('reads actual hints in one tenant projection and withholds money and mail fac
     VALUES(${randomUUID()}::uuid,${tenant},${randomUUID()},'notiz','intern','geraet',${actor}::uuid,'TEST offene Nachricht',${customer},'hand','offen')`;
  });
  const auth:AuthorizationSnapshot={tenantId:tenant,userId:actor,displayName:'TEST R53 Leser',role:'meister',active:true,areas:['kunden'],permissions:[]};
- const restricted=(await readCustomerListSignals(auth,[customer])).get(customer);
+ const restricted=(await readCustomerListSignals(auth,[customer],(await import('@/modules/eingang/server-public')).openIntakePredicate())).get(customer);
  expect(restricted).toMatchObject({activeOrderCount:0,activeQuoteCount:0});
  expect(restricted?.hints).toContainEqual({kind:'agreement',text:'TEST Sichtbar: TEST Verpackung',urgent:false});
  expect(JSON.stringify(restricted)).not.toContain('TEST nur mit Geld');
  expect(restricted?.hints.some(hint=>hint.kind==='message'||hint.kind==='payment')).toBe(false);
- const allowed=(await readCustomerListSignals({...auth,areas:['kunden','geld','mails']},[customer])).get(customer);
+ const allowed=(await readCustomerListSignals({...auth,areas:['kunden','geld','mails']},[customer],(await import('@/modules/eingang/server-public')).openIntakePredicate())).get(customer);
  expect(allowed?.hints).toContainEqual({kind:'agreement',text:'TEST Geld-Grund: TEST nur mit Geld',urgent:false});
  expect(allowed?.hints).toContainEqual({kind:'message',text:'1 Nachricht offen',urgent:false});
- expect((await readCustomerListSignals({...auth,tenantId:'TEST-r53-other-tenant'},[customer])).size).toBe(0);
+ expect((await readCustomerListSignals({...auth,tenantId:'TEST-r53-other-tenant'},[customer],(await import('@/modules/eingang/server-public')).openIntakePredicate())).size).toBe(0);
  // The card and the hint projection must enforce the same existing money area.
  // Even a zero amount is a financial fact; absence must not become a fake zero.
- const card=await readCustomerSummary(auth,{customerId:customer});
+ const card=await readCustomerSummary(auth,{customerId:customer},(await import('@/modules/eingang/server-public')).openIntakePredicate());
  expect(card.code).toBe('OK');
  if(card.code!=='OK')throw Error('TEST_CUSTOMER_CARD_READ:'+card.code);
  expect(card.data).not.toHaveProperty('invoiceRevenueCents');
  expect(card.data).not.toHaveProperty('invoiceOpenCents');
- expect(await readCustomerSummary({...auth,areas:['kunden','geld']},{customerId:customer}))
+ expect(await readCustomerSummary({...auth,areas:['kunden','geld']},{customerId:customer},(await import('@/modules/eingang/server-public')).openIntakePredicate()))
   .toMatchObject({code:'OK',data:{invoiceRevenueCents:0,invoiceOpenCents:0}});
- expect(await readCustomerSummary({...auth,areas:[]},{customerId:customer})).toMatchObject({code:'FORBIDDEN'});
+ expect(await readCustomerSummary({...auth,areas:[]},{customerId:customer},(await import('@/modules/eingang/server-public')).openIntakePredicate())).toMatchObject({code:'FORBIDDEN'});
 });
+
+(globalThis as typeof globalThis & {AsyncLocalStorage:typeof AsyncLocalStorage}).AsyncLocalStorage=AsyncLocalStorage;

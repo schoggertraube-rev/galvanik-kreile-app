@@ -1,3 +1,4 @@
+import {AsyncLocalStorage} from 'node:async_hooks';
 // @vitest-environment node
 
 import { randomUUID } from "node:crypto";
@@ -154,7 +155,7 @@ describe("PATH1 customer persistence", () => {
       role: "buero",
       tenantId: KREILE_TENANT_SLUG,
       userId: users.buero,
-    }, { customerId: foreign.receipt.customerId });
+    }, { customerId: foreign.receipt.customerId },(await import('@/modules/eingang/server-public')).openIntakePredicate());
     expect(ownRead).toMatchObject({ code: "NOT_FOUND" });
   });
 
@@ -199,3 +200,5 @@ describe("PATH1 customer persistence", () => {
     expect(count?.count).toBe(0);
   });
 });
+
+(globalThis as typeof globalThis & {AsyncLocalStorage:typeof AsyncLocalStorage}).AsyncLocalStorage=AsyncLocalStorage;
