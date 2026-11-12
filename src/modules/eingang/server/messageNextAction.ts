@@ -5,10 +5,9 @@ import {readAuthorizedV45Action} from '@/lib/server/v45RuleRead';
 import {readV45ActionValues} from '@/lib/server/v45ActionValuesRead';
 import {readV45FirstLook} from '@/lib/server/v45FirstLookRead';
 import {messageTone,type IntakeMessage,type readFallbackMessagePriority} from '../messageContract';
-import {canReadComplaintOrderChoices} from '@/lib/server/authorization';
+import {canReadComplaintOrderChoices,canAssignIntakeCustomer} from '@/lib/auth/authorizationContract';
 import {MESSAGE_COMPLAINT_ACTION_COPY} from '@/ui/situationCatalog';
 import type {IntakeCaptureResult} from '../captureContract';
-import {canAssignIntakeCustomer} from './intakeAssignment';
 
 /** R13/PL22:06: the stored message and the existing priority/tone readers are
  * the sole facts. This is a partial U2 binding; unsupported specialist command

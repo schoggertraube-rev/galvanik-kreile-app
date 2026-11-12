@@ -3,7 +3,7 @@ import {sql} from 'drizzle-orm';
 import {isDeepStrictEqual} from 'node:util';
 import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
+import {ACCESS_AREAS,canAssignIntakeCustomer} from '@/lib/auth/authorizationContract';
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 import type {CustomerWriter} from '@/lib/server/commands/orderIntakeCommand';
 import type {CustomerCreateCommandResult} from '@/modules/customers/public';
@@ -53,7 +53,7 @@ async function event(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,r
 }
 /** The existing source-assignment gate, shared with read-only U2 binding.
  * Target-specific customer/supplier checks still run in the same writer. */
-export function canAssignIntakeCustomer(auth:AuthorizationSnapshot){return hasAuthorizationArea(auth,'eingang')&&(hasAuthorizationArea(auth,'kunden')||hasAuthorizationArea(auth,'geld'));}
+export {canAssignIntakeCustomer} from '@/lib/auth/authorizationContract';
 export async function assignIntakeCustomer(input:unknown,readCustomer:CustomerReader):Promise<AssignmentResult>{
  if(!object(input)||Object.keys(input).sort().join(',')!=='clientEventId,customerId,itemId,mode,version'||!validIdentity(input)||typeof input.customerId!=='string'||!input.customerId.trim()||input.customerId.length>128||!['confirm','manual','move'].includes(String(input.mode)))return {code:'VALIDATION_ERROR',message:'Kunde oder Eingangsstand ist ungültig.'};
  const value=input as AssignmentInput;
