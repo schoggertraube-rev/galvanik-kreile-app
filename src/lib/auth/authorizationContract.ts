@@ -193,3 +193,6 @@ export function canAssignIntakeCustomer(auth:Parameters<typeof hasAuthorizationA
 
 /** S05 VORAB 4: following up a quote is a mail operation, not money access. */
 export function canReadQuoteFollowups(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'mails');}
+
+/** Existing mailbox import authority, shared by source readers and the fetch composition. */
+export function canSynchronizeIntakeMailbox(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,"eingang")&&hasAuthorizationArea(auth,"mails");}

@@ -1,3 +1,4 @@
+import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
 import {isDeepStrictEqual} from 'node:util';
 import {dispatchPolicyValid} from '../dispatchPolicy';
@@ -6,7 +7,7 @@ import "server-only";
 
 import bcrypt from "bcryptjs";
 import { sql } from "drizzle-orm";
-import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, withTenantSavepoint, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {
   ROLE_ACCESS_AREA_TEMPLATES,
   getFixedAccessAreasForRole,
@@ -518,4 +519,48 @@ export async function changeOwnPin(context: { tenantId: string; actorId: string 
     logSystemSettingsPortFailure("OWN_PIN_WRITE_FAILED", error);
     return { code: "UNAVAILABLE" as const, message: "Code konnte nicht sicher gespeichert werden. Fehlercode: OWN_PIN_WRITE_FAILED." };
   }
+}
+
+
+type MailboxSyncAuth=Parameters<typeof canSynchronizeIntakeMailbox>[0]&{tenantId:string};
+/** Technical fetch progress stays on the existing settings row, never creates company data. */
+export async function readMailboxFetchState(auth:MailboxSyncAuth){
+ if(!canSynchronizeIntakeMailbox(auth))return {code:'FORBIDDEN' as const};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<{id:string;state:Record<string,unknown>|null}>(sql`SELECT id,mailbox_fetch_state AS state FROM public.company_settings WHERE tenant_id=${auth.tenantId} LIMIT 2`);
+  if(rows.length!==1)throw Error('MAILBOX_SETTINGS_CARDINALITY');
+  const state=rows[0].state;
+  if(state!==null&&(typeof state!=='object'||Array.isArray(state)))throw Error('MAILBOX_PROGRESS_SOURCE_INVALID');
+  return {code:'OK' as const,settingsId:rows[0].id,state};
+ });}catch(error){console.error('[MAILBOX_STATE_READ_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const};}
+}
+/** Compare-and-swap preserves concurrent mailbox progress and every commercial setting. */
+export async function writeMailboxFetchState(auth:MailboxSyncAuth,input:{settingsId:string;before:Record<string,unknown>|null;after:Record<string,unknown>;retryMailbox?:string;forceRetry?:boolean},onFailure?:(tx:PrivilegedTenantTransaction,source:{key:string;actorId:string;mailbox:string})=>Promise<string>){
+ if(!canSynchronizeIntakeMailbox(auth))return {code:'FORBIDDEN' as const};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const expected=input.before===null?sql`NULL`:sql`${JSON.stringify(input.before)}::jsonb`;
+  try{return await withTenantSavepoint(tx,async nested=>{
+   if(input.forceRetry)throw Error('MAILBOX_ORIGINAL_OBSERVATION_RETRY');
+   const rows=await nested.execute<{state:unknown}>(sql`UPDATE public.company_settings SET mailbox_fetch_state=${JSON.stringify(input.after)}::jsonb WHERE tenant_id=${auth.tenantId} AND id=${input.settingsId} AND mailbox_fetch_state IS NOT DISTINCT FROM ${expected} RETURNING mailbox_fetch_state AS state`);
+   if(rows.length===0)return {code:'CONFLICT' as const};
+   if(rows.length!==1||!isDeepStrictEqual(rows[0].state,input.after))throw Error('MAILBOX_STATE_RECEIPT_REQUIRED');
+   return {code:'OK' as const};
+  });}catch(error){
+   if(!onFailure||!input.retryMailbox||input.before===null)throw error;
+   // The committed batch reservation is the sole retry source. No client source
+   // or commercial setting is accepted here; marker and task commit together.
+   const locked=await tx.execute<{state:Record<string,unknown>}>(sql`SELECT mailbox_fetch_state AS state FROM public.company_settings WHERE tenant_id=${auth.tenantId} AND id=${input.settingsId} FOR UPDATE`);
+   if(locked.length!==1||!isDeepStrictEqual(locked[0].state,input.before))throw Error('MAILBOX_RETRY_SOURCE_CHANGED');
+   const frame=input.before[input.retryMailbox];
+   if(!frame||typeof frame!=='object'||Array.isArray(frame))throw Error('MAILBOX_RETRY_FRAME_REQUIRED');
+   const source=frame as Record<string,unknown>,uuid=/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
+   if(typeof source.retryKey!=='string'||!uuid.test(source.retryKey)||typeof source.retryActorId!=='string'||!uuid.test(source.retryActorId))throw Error('MAILBOX_RETRY_IDENTITY_REQUIRED');
+   const retryState={...input.before,[input.retryMailbox]:{...source,retryRequired:true}};
+   const marker=await tx.execute<{state:unknown}>(sql`UPDATE public.company_settings SET mailbox_fetch_state=${JSON.stringify(retryState)}::jsonb WHERE tenant_id=${auth.tenantId} AND id=${input.settingsId} RETURNING mailbox_fetch_state AS state`);
+   if(marker.length!==1||!isDeepStrictEqual(marker[0].state,retryState))throw Error('MAILBOX_RETRY_MARKER_REQUIRED');
+   const taskId=await onFailure(tx,{key:source.retryKey,actorId:source.retryActorId,mailbox:input.retryMailbox});
+   if(typeof taskId!=='string'||!uuid.test(taskId))throw Error('MAILBOX_RETRY_TASK_REQUIRED');
+   return {code:'RETRY_REQUIRED' as const};
+  }
+ });}catch(error){console.error('[MAILBOX_STATE_WRITE_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const};}
 }

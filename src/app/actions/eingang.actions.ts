@@ -1,4 +1,5 @@
 "use server";
+import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {repairProductionPricingTask} from '@/lib/server/productionSnapshotPort';
 import {offlinePartition} from "@/lib/server/offlinePartition";
 import {PACKAGE_ASSIGN_COPY} from "@/ui/situationCatalog";
@@ -28,7 +29,7 @@ async function withPackageExpectation(result:IntakeCaptureResult):Promise<Intake
  return result;
 }
 
-import { createHash } from "node:crypto";
+import { createHash,randomUUID } from "node:crypto";
 import { after } from "next/server";
 import {revalidatePath} from "next/cache";
 import { getAppSession } from "@/lib/server/appSession";
@@ -43,7 +44,7 @@ import {selectIntakeConcern,finishIntakeUse,reopenIntake} from '@/modules/eingan
 export async function selectIntakeConcernAction(input:unknown){return selectIntakeConcern(input);}
 export async function finishIntakeUseAction(input:unknown){return finishIntakeUse(input);}
 export async function reopenIntakeAction(input:unknown){return reopenIntake(input);}
-import {saveTask,completeTask,readTask,createMissingGoodsTask,createOrderHandoverTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
+import {createMailboxFetchRetryTask,saveTask,completeTask,readTask,createMissingGoodsTask,createOrderHandoverTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
 import {createDispatchCall,recordDispatchCallResult,readDispatchCallRequirement,protectDispatchCallTask,readCompletedDispatchCallReceipt} from '@/lib/server/dispatchCallPort';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {createStorageFinalTask,readStorageFinalTaskReceipt,protectStorageFinalTask} from '@/lib/server/storageFinalStagePort';
@@ -137,21 +138,54 @@ import {readOpenIntakeMails} from '@/modules/eingang/server-public';
 import {saveIntakeProspect} from '@/modules/eingang/server-public';
 export async function saveIntakeProspectAction(input:unknown){return saveIntakeProspect(input,createCustomerInTransaction,readCustomerProfile);}
 export async function getOpenIntakeMailsAction(){const notice=await syncIntakeMailbox();const result=await readOpenIntakeMails();return result.code==='OK'?{...result,...(notice?{notice}:{})}:result;}
-import {listMicrosoftGraphInbox} from '@/lib/server/microsoftGraph';
+import {listMicrosoftGraphInbox,readMicrosoftGraphMailbox} from '@/lib/server/microsoftGraph';
+import {observeIntakeMailboxImport,readIntakeMailboxWatermark} from '@/modules/eingang/server-public';
+import {readMailboxFetchState,writeMailboxFetchState} from '@/modules/fundament/server-public';
+import {MAILBOX_SYNC_COPY} from '@/ui/situationCatalog';
 import {importOutlookMailAction} from '@/app/actions/communications.actions';
 async function syncIntakeMailbox():Promise<string|null>{
  const authorization=await resolveAuthorization();
- if(!authorization.ok||!hasAuthorizationArea(authorization.data,'eingang')||!hasAuthorizationArea(authorization.data,'mails'))return null;
+ if(!authorization.ok||!canSynchronizeIntakeMailbox(authorization.data))return null;
  try{
-  const inbox=await listMicrosoftGraphInbox();
+  const mailbox=readMicrosoftGraphMailbox();
+  if(!mailbox){const missing=await listMicrosoftGraphInbox();return missing.code==='OK'?MAILBOX_SYNC_COPY.unavailable:missing.message;}
+  const source=await readIntakeMailboxWatermark(authorization.data,mailbox);
+  if(source.code!=='OK')return MAILBOX_SYNC_COPY.unavailable;
+  const state=await readMailboxFetchState(authorization.data);
+  if(state.code!=='OK')return MAILBOX_SYNC_COPY.unavailable;
+  const frames=state.state===null?{}:state.state;
+  const saved=frames[mailbox];
+  let cursorUrl:string|null=null,remaining:number|null=null;
+  if(saved!==undefined&&saved!==null){
+   if(typeof saved!=='object'||Array.isArray(saved))throw Error('MAILBOX_CURSOR_SOURCE_INVALID');
+   const frame=saved as Record<string,unknown>,at=typeof frame.at==='string'?Date.parse(frame.at):NaN;
+   if(typeof frame.url!=='string'||!Number.isFinite(at)||at>Date.now()||!(frame.remaining===null||typeof frame.remaining==='number'&&Number.isSafeInteger(frame.remaining)&&frame.remaining>=0))throw Error('MAILBOX_CURSOR_SOURCE_INVALID');
+   if(Date.now()-at<24*3600000){cursorUrl=frame.url;remaining=frame.remaining as number|null;}
+  }
+  const inbox=await listMicrosoftGraphInbox(process.env,fetch,{watermark:source.watermark,cursorUrl,remaining});
   if(inbox.code!=='OK')return inbox.message;
+  if(typeof inbox.startUrl!=='string'||inbox.cursorUrl===undefined||inbox.remaining===undefined)throw Error('MAILBOX_PROGRESS_REQUIRED');
+  // Commit the start marker before any original import. A failed completion
+  // can replay this exact batch instead of skipping physical originals.
+  const previous=saved&&typeof saved==='object'&&!Array.isArray(saved)?saved as Record<string,unknown>:null;
+  const retryIdentity=previous?.retryRequired===true?{retryKey:previous.retryKey,retryActorId:previous.retryActorId,retryRequired:true}:{retryKey:randomUUID(),retryActorId:authorization.data.userId,retryRequired:false};
+  const reserved={...frames,[mailbox]:{url:inbox.startUrl,at:new Date().toISOString(),remaining,...retryIdentity}};
+  const retryEffect=(tx:PrivilegedTenantTransaction,source:{key:string;actorId:string;mailbox:string})=>createMailboxFetchRetryTask(tx,authorization.data,source,taskEffects);
+  const reservation=await writeMailboxFetchState(authorization.data,{settingsId:state.settingsId,before:state.state,after:reserved});
+  if(reservation.code!=='OK')return MAILBOX_SYNC_COPY.unavailable;
+
   for(const mail of inbox.data){
    // Graph's flag excludes inline-only images; inspect attachments independently.
    const imported=await importOutlookMailAction(mail.id);
    if(imported.code!=='OK')return imported.message;
+   const observed=await observeIntakeMailboxImport(authorization.data,{mailbox,graphMessageId:mail.id});
+   if(observed.code!=='OK'){await writeMailboxFetchState(authorization.data,{settingsId:state.settingsId,before:reserved,after:reserved,retryMailbox:mailbox,forceRetry:true},retryEffect);return MAILBOX_SYNC_COPY.unavailable;}
   }
-  return null;
- }catch(error){console.error('[INTAKE_MAIL_SYNC_FAILED]',error);return 'Neue Mails momentan nicht abrufbar · bereits gesicherte Eingänge bleiben verfügbar.';}
+  const advanced={...reserved,[mailbox]:inbox.cursorUrl===null?null:{url:inbox.cursorUrl,at:new Date().toISOString(),remaining:inbox.remaining}};
+  const completed=await writeMailboxFetchState(authorization.data,{settingsId:state.settingsId,before:reserved,after:advanced,retryMailbox:mailbox},retryEffect);
+  if(completed.code!=='OK')return MAILBOX_SYNC_COPY.unavailable;
+  return inbox.cursorUrl===null?null:inbox.remaining===null?MAILBOX_SYNC_COPY.unavailable:MAILBOX_SYNC_COPY.pending(inbox.remaining);
+ }catch(error){console.error('[INTAKE_MAIL_SYNC_FAILED]',error);return MAILBOX_SYNC_COPY.unavailable;}
 }
 import { processIntakeDeviceRequest, discardIntakeCapture, chooseIntakeCaptureKind } from "@/modules/eingang/server-public";
 export async function chooseIntakeCaptureKindAction(input: unknown) { return chooseIntakeCaptureKind(input); }

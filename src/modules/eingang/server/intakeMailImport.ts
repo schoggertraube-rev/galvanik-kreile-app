@@ -1,3 +1,4 @@
+import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import 'server-only';
 import {createHash} from 'node:crypto';
 import {sql} from 'drizzle-orm';
@@ -32,7 +33,7 @@ function replyChainFromOriginal(bytes:Uint8Array):ReplyChain{
 
 /** A completed immutable capture is the primary source, even if Outlook is now unavailable. */
 export async function readIntakeMailImportReceipt(auth:AuthorizationSnapshot,identity:{graphMessageId:string}|{itemId:string}){
- if(!hasAuthorizationArea(auth,'eingang')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:'Mail-Original benötigt Eingang und Mails.'};
+ if(!canSynchronizeIntakeMailbox(auth))return {code:'FORBIDDEN' as const,message:'Mail-Original benötigt Eingang und Mails.'};
  try{
   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<Mail&{itemId:string;receipt:{fileIds:string[];originalCount:number;filteredAttachments:number}}>(sql`
    SELECT source.id::text AS "itemId",source.graph_message_id AS id,source.internet_message_id AS "internetMessageId",source.betreff AS subject,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",source.empfangen_am::text AS "receivedAt",source.text AS body,complete.nachher AS receipt,(SELECT original.nachher->'replyChain' FROM public.intake_event original WHERE original.tenant_id=source.tenant_id AND original.item_id=source.id AND original.art='angelegt' ORDER BY original.zeit,original.id LIMIT 1) AS "replyChain",
@@ -50,7 +51,7 @@ export async function readIntakeMailImportReceipt(auth:AuthorizationSnapshot,ide
 
 /** One Graph identity, one existing intake, and the existing original-file writer. */
 export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail,originals:Original[],readPrevious?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,graphId:string)=>Promise<{customerId:string|null;orderId:string|null}|null>,filteredAttachments=0){
- if(!hasAuthorizationArea(auth,'eingang')||!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:'Mail-Import benötigt Eingang und Mails.'};
+ if(!canSynchronizeIntakeMailbox(auth))return {code:'FORBIDDEN' as const,message:'Mail-Import benötigt Eingang und Mails.'};
  if(!mail.id||mail.id.length>1024||!Number.isFinite(Date.parse(mail.receivedAt))||mail.body.length>20000||originals.filter(file=>file.mime==='message/rfc822').length!==1||new Set(originals.map(file=>file.key)).size!==originals.length||!Number.isSafeInteger(filteredAttachments)||filteredAttachments<0)return {code:'VALIDATION_ERROR' as const,message:'Mail oder unverändertes Original fehlt.'};
  try{
   const replyChain=replyChainFromOriginal(originals.find(file=>file.mime==='message/rfc822')!.bytes);
@@ -97,7 +98,7 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
 
 /** Old Outlook buttons adapt to the same assignment writers; originals are never copied. */
 export async function linkImportedMail(auth:AuthorizationSnapshot,input:{itemId:string;targetType:'CUSTOMER'|'ORDER';targetId:string},readTarget:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,type:'CUSTOMER'|'ORDER',id:string)=>Promise<{customerId:string;orderId:string|null}|null>,readCustomer:Parameters<typeof assignIntakeCustomer>[1]){
- if(!hasAuthorizationArea(auth,'eingang')||!hasAuthorizationArea(auth,'mails')||!['CUSTOMER','ORDER'].includes(input.targetType)||!input.targetId||input.targetId.length>128)return {code:'FORBIDDEN' as const,message:'Zuordnen benötigt Eingang, Mails und ein gültiges Ziel.'};
+ if(!canSynchronizeIntakeMailbox(auth)||!['CUSTOMER','ORDER'].includes(input.targetType)||!input.targetId||input.targetId.length>128)return {code:'FORBIDDEN' as const,message:'Zuordnen benötigt Eingang, Mails und ein gültiges Ziel.'};
  if(input.targetType==='ORDER'&&!hasAuthorizationArea(auth,'auftraege')&&!hasAuthorizationArea(auth,'kunden'))return {code:'FORBIDDEN' as const,message:'Auftrag zuordnen benötigt Aufträge oder Kunden.'};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-assignment:'||${auth.tenantId},0))`);
@@ -111,4 +112,32 @@ export async function linkImportedMail(auth:AuthorizationSnapshot,input:{itemId:
   const assigned=await assignInTransaction(tx,auth,{itemId:input.itemId,version:row.version,customerId:target.customerId,clientEventId,mode:'manual'},readCustomer);
   return assigned.code==='ALREADY_ASSIGNED'?{code:'CONFLICT' as const,message:'Diese Mail wurde inzwischen zugeordnet.'}:assigned;
  });}catch(error){console.error('[INTAKE_MAIL_LINK_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const,message:'Mail-Zuordnung nicht sicher bestätigt · Eingang und Originale bleiben erhalten.'};}
+}
+
+
+/** Mailbox provenance is observed by the existing server Graph import, never guessed for old originals. */
+export async function observeIntakeMailboxImport(auth:AuthorizationSnapshot,input:{mailbox:string;graphMessageId:string}){
+ if(!canSynchronizeIntakeMailbox(auth))return {code:'FORBIDDEN' as const};
+ if(!input.mailbox||input.mailbox.length>320||input.mailbox!==input.mailbox.trim()||!input.graphMessageId)return {code:'VALIDATION_ERROR' as const};
+ const receipt=await readIntakeMailImportReceipt(auth,{graphMessageId:input.graphMessageId});
+ if(receipt.code!=='OK')return receipt;
+ const mailbox=input.mailbox.toLowerCase(),key=intakeMailIdentity('mailbox-observed:'+mailbox+':'+input.graphMessageId);
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-mailbox:'||${auth.tenantId}||':'||${key},0))`);
+  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) SELECT ${auth.tenantId},${receipt.itemId}::uuid,'einsatz',${key}::uuid,${auth.userId},jsonb_build_object('action','mailbox_observed','mailbox',${mailbox}::text,'graphMessageId',${input.graphMessageId}::text) WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND befehl_id=${key}::uuid)`);
+  const rows=await tx.execute(sql`SELECT id FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${receipt.itemId}::uuid AND befehl_id=${key}::uuid AND art='einsatz' AND nachher->>'action'='mailbox_observed' AND nachher->>'mailbox'=${mailbox} AND nachher->>'graphMessageId'=${input.graphMessageId}`);
+  if(rows.length!==1)throw Error('INTAKE_MAILBOX_OBSERVATION_NOT_SAVED');
+  return {code:'OK' as const};
+ });}catch(error){console.error('[INTAKE_MAILBOX_OBSERVATION_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const};}
+}
+/** Candidate lookup only; the existing immutable-original receipt remains the sole qualifier. */
+export async function readIntakeMailboxWatermark(auth:AuthorizationSnapshot,mailbox:string){
+ if(!canSynchronizeIntakeMailbox(auth))return {code:'FORBIDDEN' as const};
+ try{
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{graph_id:string}>(sql`SELECT source.graph_message_id AS graph_id FROM public.intake_item source WHERE source.tenant_id=${auth.tenantId} AND source.kanal='mail' AND source.graph_message_id IS NOT NULL AND EXISTS(SELECT 1 FROM public.intake_event observed WHERE observed.tenant_id=source.tenant_id AND observed.item_id=source.id AND observed.art='einsatz' AND observed.nachher->>'action'='mailbox_observed' AND observed.nachher->>'mailbox'=${mailbox.toLowerCase()} AND observed.nachher->>'graphMessageId'=source.graph_message_id) ORDER BY source.empfangen_am DESC NULLS LAST,source.id DESC LIMIT 1`));
+  if(rows.length===0)return {code:'OK' as const,watermark:null};
+  const receipt=await readIntakeMailImportReceipt(auth,{graphMessageId:rows[0].graph_id});
+  if(receipt.code!=='OK')return {code:'UNAVAILABLE' as const};
+  return {code:'OK' as const,watermark:receipt.message.receivedAt};
+ }catch(error){console.error('[INTAKE_MAILBOX_WATERMARK_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const};}
 }

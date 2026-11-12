@@ -1,3 +1,5 @@
+import {canSynchronizeIntakeMailbox} from '@/lib/auth/authorizationContract';
+import {MAILBOX_SYNC_COPY} from '@/ui/situationCatalog';
 import {canReadQuoteFollowups} from '@/lib/auth/authorizationContract';
 import {readProductionPricingRetrySource,readProductionPricingRetryKeys} from '@/lib/server/productionSnapshotPort';
 import {PRODUCTION_PRICING_RETRY_COPY} from '@/ui/situationCatalog';
@@ -369,4 +371,15 @@ export async function settleProductionPricingRetryTasks(tx:PrivilegedTenantTrans
  const keys=await readProductionPricingRetryKeys(tx,auth,eventId);if(!keys.length)return;
  const tasks=await tx.execute<{id:string;version:number;client_key:string}>(sql`SELECT id::text,version,client_key::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=ANY(ARRAY[${sql.join(keys.map(key=>sql`${key}::uuid`),sql`, `)}]) AND status='offen' FOR UPDATE NOWAIT`);
  for(const task of tasks){const source=await readProductionPricingRetrySource(tx,auth,task.client_key);if(!source||source.pending)continue;if(source.actorId!==auth.userId)throw Error('PRODUCTION_PRICING_SETTLEMENT_ACTOR');await finishTask(tx,auth,{taskId:task.id,version:task.version,note:null},deps);}
+}
+
+/** R2 mailbox reservation is qualified by the owning port before this callback.
+ * Persistence, actor, recipient, visible history and receipts use the normal writer. */
+export async function createMailboxFetchRetryTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,source:{key:string;actorId:string;mailbox:string},deps:Dependencies){
+ if(!canSynchronizeIntakeMailbox(auth)||!taskUuid(source.key)||!taskUuid(source.actorId)||!source.mailbox)throw Error('MAILBOX_TASK_SOURCE_INVALID');
+ const prior=await tx.execute<{id:string;erstellt_von:string;art:string;bezug_typ:string;bezug_id:string|null}>(sql`SELECT id::text,erstellt_von::text,art,bezug_typ,bezug_id FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${source.key}::uuid FOR UPDATE`);
+ if(prior.length){if(prior.length!==1||prior[0].erstellt_von!==source.actorId||prior[0].art!=='aufgabe'||prior[0].bezug_typ!=='allgemein'||prior[0].bezug_id!==null)throw Error('MAILBOX_TASK_RECEIPT_CHANGED');return prior[0].id;}
+ if(source.actorId!==auth.userId)throw Error('MAILBOX_TASK_ORIGINAL_ACTOR_REQUIRED');
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ return (await persistTask(tx,auth,{clientKey:source.key,version:0,kind:'aufgabe',title:MAILBOX_SYNC_COPY.retryTask,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'allgemein',id:null},note:MAILBOX_SYNC_COPY.retryTask},deps)).task.id;
 }

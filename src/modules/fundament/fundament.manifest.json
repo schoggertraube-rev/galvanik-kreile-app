@@ -33,6 +33,8 @@
     "@/modules/fundament/server-public#readCompanyDocumentSettings",
     "@/modules/fundament/server-public#setManagedUserArea",
     "@/modules/fundament/server-public#updateCompanySettings",
+    "@/modules/fundament/server-public#readMailboxFetchState",
+    "@/modules/fundament/server-public#writeMailboxFetchState",
     "@/modules/fundament/server-public#updateManagedUser",
     "@/modules/fundament/server-public#TenantFeatureContext",
     "@/modules/fundament/server-public#isFeatureEnabled",

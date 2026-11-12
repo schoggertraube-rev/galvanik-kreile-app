@@ -145,6 +145,8 @@
     "@/modules/eingang/server-public#linkImportedMail",
     "@/modules/eingang/server-public#readLinkedIntakeMails",
     "@/modules/eingang/server-public#readIntakeMailImportReceipt",
+    "@/modules/eingang/server-public#observeIntakeMailboxImport",
+    "@/modules/eingang/server-public#readIntakeMailboxWatermark",
     "@/modules/eingang/server-public#recordIntakeComplaintEffect",
     "@/modules/eingang/public#ComplaintDialogs",
     "@/modules/eingang/public#ComplaintPorts",
