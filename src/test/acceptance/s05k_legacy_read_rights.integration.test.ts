@@ -94,3 +94,14 @@ it('S05K A10 PL0014 deferred tenantless sources deny after canonical rights with
  }
  expect(await withSession(operator,()=>getBathsDb())).toMatchObject({ok:false,message:text});
 });
+
+it('S05K A10 generic data context requires its actual canonical area and keeps original identity',async()=>{
+ const {createAuthorizedDataContext}=await import('@/lib/supabase/server');
+ const operator=await createFixture(['auftraege']),money=await createFixture(['geld']);
+ await expect(withSession(operator,()=>createAuthorizedDataContext('geld'))).rejects.toThrow('Keine Berechtigung');
+ const context=await withSession(operator,()=>createAuthorizedDataContext('auftraege'));
+ expect(context.authorization).toMatchObject({tenantId:tenant,userId:operator.actorId});
+ const moneyContext=await withSession(money,()=>createAuthorizedDataContext('geld'));
+ expect(moneyContext.authorization).toMatchObject({tenantId:tenant,userId:money.actorId});
+ expect((await withSession(operator,()=>createAuthorizedDataContext('auftraege'))).authorization.userId).toBe(operator.actorId);
+});

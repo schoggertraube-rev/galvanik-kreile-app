@@ -22,7 +22,7 @@ export type PeriodenabschlussCommandDenial = {
 };
 
 export async function getPeriodenabschlussStatusAction(): Promise<PeriodenabschlussStatus | null> {
-  const supabase = await createAuthorizedDataClient('read');
+  const supabase = await createAuthorizedDataClient('geld');
   const { data, error } = await supabase
     .from('v_periodenabschluss_status')
     .select('*')

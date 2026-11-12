@@ -1,13 +1,13 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockCheckAppAuthorization = vi.fn();
+const mockReadAuthorizedArea = vi.fn();
 const mockCreateSupabaseClient = vi.fn();
 const mockCreateServerClient = vi.fn();
 const mockCookies = vi.fn();
 
 vi.mock("@/lib/server/authHelper", () => ({
-  checkAppAuthorization: mockCheckAppAuthorization,
+  readAuthorizedArea: mockReadAuthorizedArea,
 }));
 
 vi.mock("@supabase/supabase-js", () => ({
@@ -36,21 +36,21 @@ describe("authorized Supabase server data client", () => {
   });
 
   it("fails closed before creating a privileged client", async () => {
-    mockCheckAppAuthorization.mockResolvedValue({
+    mockReadAuthorizedArea.mockResolvedValue({
       ok: false,
       error: "UNAUTHORIZED",
       message: "AUTH_ERROR: Nicht angemeldet",
     });
     const { createAuthorizedDataClient } = await import("@/lib/supabase/server");
 
-    await expect(createAuthorizedDataClient("read")).rejects.toThrow(
+    await expect(createAuthorizedDataClient("geld")).rejects.toThrow(
       "AUTH_ERROR: Nicht angemeldet",
     );
     expect(mockCreateSupabaseClient).not.toHaveBeenCalled();
   });
 
   it("checks the requested access mode before using the server-only key", async () => {
-    mockCheckAppAuthorization.mockResolvedValue({
+    mockReadAuthorizedArea.mockResolvedValue({
       ok: true,
       data: {
         userId: "223e4567-e89b-12d3-a456-426614174001",
@@ -63,10 +63,10 @@ describe("authorized Supabase server data client", () => {
     });
     const { createAuthorizedDataClient } = await import("@/lib/supabase/server");
 
-    await expect(createAuthorizedDataClient("write")).resolves.toEqual({
+    await expect(createAuthorizedDataClient("geld")).resolves.toEqual({
       kind: "data-client",
     });
-    expect(mockCheckAppAuthorization).toHaveBeenCalledWith("write");
+    expect(mockReadAuthorizedArea).toHaveBeenCalledWith("geld");
     expect(mockCreateSupabaseClient).toHaveBeenCalledWith(
       "https://example.supabase.co",
       "service-role-test-key",
@@ -88,13 +88,13 @@ describe("authorized Supabase server data client", () => {
       permissions: [],
       active: true,
     };
-    mockCheckAppAuthorization.mockResolvedValue({
+    mockReadAuthorizedArea.mockResolvedValue({
       ok: true,
       data: authorization,
     });
     const { createAuthorizedDataContext } = await import("@/lib/supabase/server");
 
-    await expect(createAuthorizedDataContext("write")).resolves.toEqual({
+    await expect(createAuthorizedDataContext("geld")).resolves.toEqual({
       client: { kind: "data-client" },
       authorization,
     });
@@ -109,22 +109,22 @@ describe("authorized Supabase server data client", () => {
       permissions: [],
       active: true,
     };
-    mockCheckAppAuthorization.mockResolvedValue({
+    mockReadAuthorizedArea.mockResolvedValue({
       ok: true,
       data: authorization,
     });
     const { createAuthorizedSessionContext } = await import("@/lib/supabase/server");
 
-    await expect(createAuthorizedSessionContext("write")).resolves.toEqual({
+    await expect(createAuthorizedSessionContext("geld")).resolves.toEqual({
       client: { kind: "session-client" },
       authorization,
     });
-    expect(mockCheckAppAuthorization).toHaveBeenCalledWith("write");
+    expect(mockReadAuthorizedArea).toHaveBeenCalledWith("geld");
     expect(mockCreateServerClient).toHaveBeenCalledOnce();
   });
 
   it("does not fall back to a browser key when server configuration is missing", async () => {
-    mockCheckAppAuthorization.mockResolvedValue({
+    mockReadAuthorizedArea.mockResolvedValue({
       ok: true,
       data: {
         userId: "223e4567-e89b-12d3-a456-426614174001",
@@ -138,7 +138,7 @@ describe("authorized Supabase server data client", () => {
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
     const { createAuthorizedDataClient } = await import("@/lib/supabase/server");
 
-    await expect(createAuthorizedDataClient("read")).rejects.toThrow(
+    await expect(createAuthorizedDataClient("geld")).rejects.toThrow(
       "Serverseitiger Supabase-Datenzugriff ist nicht konfiguriert.",
     );
     expect(mockCreateSupabaseClient).not.toHaveBeenCalled();

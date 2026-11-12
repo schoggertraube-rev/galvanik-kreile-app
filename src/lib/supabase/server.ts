@@ -1,7 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-import { checkAppAuthorization } from '@/lib/server/authHelper'
+import {readAuthorizedArea} from '@/lib/server/authHelper'
+import type {AccessArea} from '@/lib/auth/authorizationContract'
 
 export async function createClient() {
   const cookieStore = await cookies()
@@ -30,8 +31,8 @@ export async function createClient() {
   )
 }
 
-export async function createAuthorizedSessionContext(mode: 'read' | 'write') {
-  const authorization = await checkAppAuthorization(mode)
+export async function createAuthorizedSessionContext(area: AccessArea) {
+  const authorization = await readAuthorizedArea(area)
   if (!authorization.ok) {
     throw new Error(authorization.message)
   }
@@ -46,12 +47,12 @@ export async function createAuthorizedSessionContext(mode: 'read' | 'write') {
  * Privileged Data-API client for authenticated server code that must access a
  * table whose anon/authenticated grants are intentionally revoked.
  *
- * Every caller must state whether it reads or writes; authorization happens
+ * Every caller names its canonical access area; authorization happens
  * before the service-role client is created. Do not use this as a blanket
  * replacement for session-bound clients or as a substitute for tenant filters.
  */
-export async function createAuthorizedDataClient(mode: 'read' | 'write') {
-  const { client } = await createAuthorizedDataContext(mode)
+export async function createAuthorizedDataClient(area: AccessArea) {
+  const { client } = await createAuthorizedDataContext(area)
   return client
 }
 
@@ -61,8 +62,8 @@ export async function createAuthorizedDataClient(mode: 'read' | 'write') {
  * must use this identity instead of Supabase Auth: PIN sessions are app
  * sessions and the service-role client intentionally has no end-user session.
  */
-export async function createAuthorizedDataContext(mode: 'read' | 'write') {
-  const authorization = await checkAppAuthorization(mode)
+export async function createAuthorizedDataContext(area: AccessArea) {
+  const authorization = await readAuthorizedArea(area)
   if (!authorization.ok) {
     throw new Error(authorization.message)
   }
