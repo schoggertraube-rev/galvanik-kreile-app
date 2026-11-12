@@ -491,14 +491,14 @@ it('KV-06/07b/08 records reply decisions and exactly their concern in one transa
 
 
 it('KV-09 uses one canonical follow-up task and a protected quote projection, with Today readback and completion evidence',async()=>{
- const fixture=await createFixture();
+ const fixture=await createFixture(true,['eingang','auftraege','kunden','geld','mails']);
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,kv_nachfass_tage,updated_at) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST KV followup',5,statement_timestamp() WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
  const {getIntakeTaskAction,saveIntakeTaskAction}=await import('@/app/actions/eingang.actions');
  const {berlinCalendarDay}=await import('@/lib/domain/workingDays');
  const today=berlinCalendarDay(),clock=new Date(today+'T12:00:00Z');clock.setUTCDate(clock.getUTCDate()-1);const past=clock.toISOString().slice(0,10);
  const create=()=>withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',validUntil:'2027-05-20',note:'TEST KV Nachfassen',positions:[{name:'TEST Halter',quantity:1,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
- const created=await create();if(created.code!=='OK')throw Error('TEST_FOLLOWUP_QUOTE:'+created.code);const quoteId=created.quote.quoteId;
+ const created=await create();if(created.code!=='OK')throw Error('TEST_FOLLOWUP_QUOTE:'+created.code);const quoteId=created.quote.quoteId;const ownedIds=[quoteId];const ownFollowups=async()=>{const result=await withSession(fixture,()=>getQuoteFollowupsForTodayAction());return result.code==='OK'?{...result,tasks:result.tasks.filter(row=>ownedIds.includes(row.quoteId))}:result;};
  const sent={action:'sent' as const,quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck' as const,evidence:'TEST KV-Nachfass Fassung gedruckt'};
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction(sent))).toMatchObject({code:'OK',quote:{version:2,lifecycle:{followupAt:expect.any(String)}}});
  const [task]=await sql`SELECT id::text,faellig_am::text,client_key::text,bezug_typ,bezug_id,status,titel FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quoteId}`;
@@ -506,27 +506,27 @@ it('KV-09 uses one canonical follow-up task and a protected quote projection, wi
  expect((await sql`SELECT nachfass_am::text FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0].nachfass_am).toBe(task.faellig_am);
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction(sent))).toMatchObject({code:'OK',replayed:true});
  expect((await sql`SELECT count(*)::int n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${quoteId}`)[0].n).toBe(1);
- expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[]});
+ expect(await ownFollowups()).toMatchObject({code:'OK',tasks:[]});
  const editDue=async(taskId:string)=>{const read=await withSession(fixture,()=>getIntakeTaskAction({taskId}));if(read.code!=='OK'||!read.task)throw Error('TEST_FOLLOWUP_TASK_READ');const value=read.task;return withSession(fixture,()=>saveIntakeTaskAction({clientKey:value.client_key,taskId:value.id,version:value.version,kind:value.art,title:value.titel,dueDate:past,time:value.uhrzeit,forLogin:value.fuer_login,forArea:value.fuer_bereich,reference:{type:value.bezug_typ,id:value.bezug_id},note:value.notiz}));};
  expect(await editDue(task.id)).toMatchObject({code:'OK',task:{version:2,faellig_am:past}});
  expect((await sql`SELECT quote.nachfass_am::text,task.faellig_am::text FROM private.quotes quote JOIN public.tasks task ON task.tenant_id=quote.tenant_id AND task.bezug_id=quote.id::text WHERE quote.tenant_id=${KREILE_TENANT_SLUG} AND quote.id=${quoteId}::uuid`)[0]).toMatchObject({nachfass_am:past,faellig_am:past});
  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:2,lifecycle:{followupAt:past}}});
- expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[{id:task.id,dueDate:past,quoteId}]});
+ expect(await ownFollowups()).toMatchObject({code:'OK',tasks:[{id:task.id,dueDate:past,quoteId}]});
  const dashboard=()=>withSession(fixture,async()=>{const {resolveAuthorization}=await import('@/lib/server/authorization');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_FOLLOWUP_AUTH');const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
- expect((await dashboard()).items).toContainEqual(expect.objectContaining({key:'task:'+task.id,kind:'task',target:{screen:'aufgabe',arg:task.id}}));
+ expect((await dashboard()).items).toContainEqual(expect.objectContaining({key:'task:'+task.id,kind:'task',target:{screen:'kv',arg:quoteId}}));
  await expect(sql`UPDATE private.quotes SET nachfass_am='2040-01-01'::date WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`).rejects.toThrow('QUOTE_FOLLOWUP_REQUIRES_CANONICAL_TASK');
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST Kunde hat zugesagt'}))).toMatchObject({code:'OK',quote:{lifecycle:{stage:'zugesagt',followupAt:null}}});
  expect((await sql`SELECT status,version,erledigt_notiz FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${task.id}::uuid`)[0]).toMatchObject({status:'erledigt',version:3,erledigt_notiz:'KV zugesagt'});
  expect((await sql`SELECT count(*)::int n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND nachher->>'taskId'=${task.id} AND nachher->>'action'='aufgabe.erledigt'`)[0].n).toBe(1);
  expect((await dashboard()).items.some(item=>item.key==='task:'+task.id)).toBe(false);
  expect(await withSession(fixture,()=>getIntakeTaskAction({taskId:task.id}))).toMatchObject({code:'OK',task:{status:'erledigt'}});
- const expiring=await create();if(expiring.code!=='OK')throw Error('TEST_EXPIRING_QUOTE');const expiryId=expiring.quote.quoteId;
+ const expiring=await create();if(expiring.code!=='OK')throw Error('TEST_EXPIRING_QUOTE');const expiryId=expiring.quote.quoteId;ownedIds.push(expiryId);
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({...sent,quoteId:expiryId,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  const [expiryTask]=await sql`SELECT id::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${expiryId}`;expect(await editDue(expiryTask.id)).toMatchObject({code:'OK'});
  // Only this new TEST fixture represents elapsed calendar time; no product decision is mocked.
  await sql`UPDATE private.quotes SET valid_until=${past}::date WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${expiryId}::uuid`;
  expect(await withSession(fixture,()=>readQuoteAction({quoteId:expiryId}))).toMatchObject({code:'OK',quote:{lifecycle:{stage:'abgelaufen'}}});
- expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[]});
+ expect(await ownFollowups()).toMatchObject({code:'OK',tasks:[]});
  expect((await sql`SELECT id::text,status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${expiryTask.id}::uuid`)[0]).toMatchObject({id:expiryTask.id,status:'offen'});
 });
 
@@ -880,7 +880,7 @@ it('U246 price follow-up text uses fixed setup and proportional material matchin
 
 });
 it.each([false,true])('U246 onsite request existing/new customer %s uses the real writers, retries and rejects changed intent',async(newCustomer)=>{
- const fixture=await createFixture();
+ const fixture=await createFixture(true,['eingang','auftraege','kunden','geld','mails']);
  const {saveIntakeNoteAction}=await import('@/app/actions/eingang.actions');
  const {receiveOnsiteQuoteAction,getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
  const itemId=randomUUID(),photoIds=[randomUUID(),randomUUID()];
@@ -935,7 +935,7 @@ it.each([false,true])('U246 onsite request existing/new customer %s uses the rea
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientRequestId}::uuid AND event_type='QUOTE_ONSITE_REQUESTED_V04'`)[0].n).toBe(1);
  const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
  expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{commercialQuote:{plannedHours:newCustomer?null:'3.0000',totalNetCents:3000,positions:[{quantity:3,lineTotalCents:3000}]}}}});
- expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[]});
+ const followups=await withSession(fixture,()=>getQuoteFollowupsForTodayAction());expect(followups.code).toBe('OK');if(followups.code!=='OK')throw Error('TEST_FOLLOWUP_SOURCE');expect(followups.tasks.filter(row=>row.quoteId===received.quote.quoteId)).toEqual([]);
  const finishDraft=await withSession(fixture,()=>getIntakeDraftsAction());if(finishDraft.code!=='OK')throw Error('TEST final draft');
  expect(await withSession(fixture,()=>discardIntakeDraftAction({id:input.clientRequestId,clientEventId:randomUUID(),reason:'TEST Auftrag erfolgreich übernommen',expectedVersion:finishDraft.drafts.find(row=>row.id===input.clientRequestId)!.version}))).toMatchObject({code:'OK'});
  expect(await sql`SELECT payload->>'reason' AS reason FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='INTAKE_DRAFT_DISCARDED_V1' AND payload->>'draftId'=${input.clientRequestId} AND user_id=${fixture.actorId}::uuid`).toEqual([{reason:'TEST Auftrag erfolgreich übernommen'}]);
@@ -945,7 +945,7 @@ it.each([false,true])('U246 onsite request existing/new customer %s uses the rea
 
 it('U246 multi-position price uses the same text and goods proposal without invented hours',async()=>{
  const newCustomer=true;
- const fixture=await createFixture();
+ const fixture=await createFixture(true,['eingang','auftraege','kunden','geld','mails']);
  const {saveIntakeNoteAction}=await import('@/app/actions/eingang.actions');
  const {receiveOnsiteQuoteAction,getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
  const itemId=randomUUID(),photoIds=[randomUUID(),randomUUID()];
@@ -972,7 +972,7 @@ it('U246 multi-position price uses the same text and goods proposal without inve
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientRequestId}::uuid AND event_type='QUOTE_ONSITE_REQUESTED_V04'`)[0].n).toBe(1);
  const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
  expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{commercialQuote:{plannedHours:newCustomer?null:'3.0000',totalNetCents:5200,positions:[{quantity:3,lineTotalCents:3200},{quantity:4,lineTotalCents:2000}]}}}});
- expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[]});
+ const followups=await withSession(fixture,()=>getQuoteFollowupsForTodayAction());expect(followups.code).toBe('OK');if(followups.code!=='OK')throw Error('TEST_FOLLOWUP_SOURCE');expect(followups.tasks.filter(row=>row.quoteId===received.quote.quoteId)).toEqual([]);
   expect(await sql`SELECT name,quantity::float8 AS quantity FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} ORDER BY name`).toEqual([{name:'TEST Fehlteil',quantity:4},{name:'TEST Halter',quantity:3}]);
   const {createQuoteAction,prepareQuoteTextChangeAction}=await import('@/app/actions/quotes.actions');
   const quote=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2026-12-01',note:'TEST gleicher Mehrpositions-Textpreis',calculation:{hours:'4',hourlyRateCents:1000,setupCents:1200,materialCents:800},positions:[{name:'TEST Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000},{name:'TEST Fehlteil',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:500}]}));
@@ -1299,7 +1299,7 @@ it('AK-02: quote followups prioritize their actual recipient rather than the quo
   expect(await withSession(actor,()=>changeQuoteLifecycleAction({action:'sent',quoteId:result.quote.quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck',evidence:'TEST AK tatsaechlich persoenlich ausgehaendigt'}))).toMatchObject({code:'OK'});
  }
  const {readQuoteFollowupTasksForToday}=await import('@/modules/tasks/server-public');const {resolveAuthorization}=await import('@/lib/server/authorization');const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
- const read=async(actor:Fixture)=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK task auth');return withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data,'2030-12-31'));});
+ const read=async(actor:Fixture)=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST AK task auth');const all=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data,'2030-12-31'));return all.filter(row=>ids.includes(row.quoteId));});
  const unassigned=await read(a);expect(unassigned).toHaveLength(2);expect(unassigned.every(task=>!task.isMine)).toBe(true);
  const mailOnly=await createFixture(true,['mails']),noMail=await createFixture();
  expect(await read(mailOnly)).toHaveLength(2);expect(await read(noMail)).toEqual([]);
@@ -1315,10 +1315,10 @@ it('AK-02: quote followups prioritize their actual recipient rather than the quo
  const mineA=await read(a),mineB=await read(b);expect(mineA).toHaveLength(2);expect(mineB).toHaveLength(2);
  const {listOpenQuotesAction}=await import('@/app/actions/quotes.actions');
  const refs=await withSession(mailOnly,()=>listOpenQuotesAction({purpose:'today'}));expect(refs).toMatchObject({code:'OK'});
- if(refs.code!=='OK')throw Error('TEST S05 quote references');expect(refs.quotes).toHaveLength(2);expect(refs.quotes.every(row=>Object.keys(row).sort().join(',')==='quoteId,version')).toBe(true);
+ if(refs.code!=='OK')throw Error('TEST S05 quote references');expect(refs.quotes.filter(row=>ids.includes(row.quoteId))).toHaveLength(2);expect(refs.quotes.every(row=>Object.keys(row).sort().join(',')==='quoteId,version')).toBe(true);
  expect(await withSession(noMail,()=>listOpenQuotesAction({purpose:'today'}))).toMatchObject({code:'FORBIDDEN'});
  const publicRead=await withSession(mailOnly,()=>getQuoteFollowupsForTodayAction());expect(publicRead).toMatchObject({code:'OK',tasks:expect.any(Array)});
- if(publicRead.code!=='OK')throw Error('TEST S05 mail followups');expect(publicRead.tasks).toHaveLength(2);expect(JSON.stringify(publicRead)).not.toContain('991,00');
+ if(publicRead.code!=='OK')throw Error('TEST S05 mail followups');expect(publicRead.tasks.filter(row=>ids.includes(row.quoteId))).toHaveLength(2);expect(JSON.stringify(publicRead)).not.toContain('991,00');
  expect(await withSession(mailOnly,()=>getIntakeTaskAction({taskId:unassigned[0].id}))).toMatchObject({code:'OK',canEdit:false,canComplete:false,canOpenReference:false});
  const {readQuoteAction}=await import('@/app/actions/quotes.actions');
  const quoteRead=await withSession(mailOnly,()=>readQuoteAction({quoteId:ids[0],purpose:'operations'}));expect(quoteRead).toMatchObject({code:'OK',canEdit:false});
@@ -1326,22 +1326,24 @@ it('AK-02: quote followups prioritize their actual recipient rather than the quo
  expect(mineA[0]).toMatchObject({quoteId:ids[1],isMine:true});expect(mineB[0]).toMatchObject({quoteId:ids[0],isMine:true});expect(new Set(mineA.map(row=>row.id))).toEqual(new Set(mineB.map(row=>row.id)));
  const {readTodayDashboard}=await import('@/lib/server/todayDashboard'),{getComplaints}=await import('@/app/actions/complaints.actions');
  const day=(actor=mailOnly)=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST S05 followup auth');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
- const first=await day();expect(first.items.filter(row=>row.kind==='task').map(row=>row.target?.screen)).toEqual(['kv','kv']);expect(JSON.stringify(first)).not.toContain('991,00');expect(first).not.toHaveProperty('invoiceMoney');
- expect(first.quoteActions).toMatchObject({code:'OK',missingQuoteIds:[]});expect(first.quoteActions?.rows).toHaveLength(2);
+ const ownTasks=(value:Awaited<ReturnType<typeof day>>)=>value.items.filter(row=>row.kind==='task'&&row.target?.screen==='kv'&&ids.includes(row.target.arg));
+ const first=await day();expect(ownTasks(first).map(row=>row.target?.screen)).toEqual(['kv','kv']);expect(JSON.stringify(first)).not.toContain('991,00');expect(first).not.toHaveProperty('invoiceMoney');
+ expect(first.quoteActions).toMatchObject({code:'OK',missingQuoteIds:[]});expect(first.quoteActions?.rows.filter(row=>ids.includes(row.quoteId))).toHaveLength(2);
  expect(first.quoteActions?.rows.find(row=>row.quoteId===ids[0])?.read).toEqual(quoteRead.nextActionRule);
- expect(first.quoteActions?.rows.every(row=>row.facts.sent===true&&row.facts.accepted===false)).toBe(true);
- expect(first.quoteSchedule).toMatchObject({code:'OK',active:2,waiting:0,today:2});
+ expect(first.quoteActions?.rows.filter(row=>ids.includes(row.quoteId)).every(row=>row.facts.sent===true&&row.facts.accepted===false)).toBe(true);
+ expect(first.quoteSchedule?.code).toBe('OK');if(first.quoteSchedule?.code!=='OK')throw Error('TEST_S05_INITIAL_CALENDAR_SOURCE');const otherActive=first.quoteSchedule!.active!-2,otherToday=first.quoteSchedule!.today!-2;expect(otherActive).toBeGreaterThanOrEqual(0);expect(otherToday).toBeGreaterThanOrEqual(0);
  expect(await withSession(a,()=>changeQuoteLifecycleAction({action:'accept',quoteId:ids[0],clientEventId:randomUUID(),expectedVersion:quoteRead.quote.version,edition:1,evidence:'TEST S05 telefonisch ohne Vorbehalt zugesagt'}))).toMatchObject({code:'OK'});
- const after=await day();expect(after.items.filter(row=>row.kind==='task')).toHaveLength(1);expect(after.items.find(row=>row.kind==='task')?.target).toEqual({screen:'kv',arg:ids[1]});
+ const after=await day();expect(ownTasks(after)).toHaveLength(1);expect(ownTasks(after)[0]?.target).toEqual({screen:'kv',arg:ids[1]});
  expect(after.quoteActions?.rows.find(row=>row.quoteId===ids[0])).toMatchObject({version:quoteRead.quote.version+1,facts:{accepted:true,expired:false},followupAt:null});
- expect(after.quoteSchedule).toMatchObject({code:'OK',active:1,waiting:0,today:1});
+ expect(after.quoteSchedule).toMatchObject({code:'OK',active:otherActive+1,waiting:first.quoteSchedule!.waiting,today:otherToday+1});
  expect((await day()).items).toEqual(after.items);
+ const fullBeforeConditional=await day(b);if(fullBeforeConditional.quoteSchedule?.code!=='OK')throw Error('TEST_S05_FULL_CALENDAR_SOURCE');
  expect(await withSession(b,()=>changeQuoteLifecycleAction({action:'conditional',quoteId:ids[1],clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST S05 ja, aber nicht zu diesem Preis'}))).toMatchObject({code:'OK'});
  const withoutMoney=await day();expect(withoutMoney.challenges?.groups.some(row=>row.quoteId===ids[1])).toBe(false);
  const conditional=await day(b),group=conditional.challenges?.groups.find(row=>row.quoteId===ids[1]);
- expect(conditional.items.filter(row=>row.kind==='task')).toHaveLength(0);expect(group).toMatchObject({key:'quote:'+ids[1],rank:5,reasons:[{textKey:'day.challenge_condition',sourceId:ids[1]}]});
+ expect(ownTasks(conditional)).toHaveLength(0);expect(group).toMatchObject({key:'quote:'+ids[1],rank:5,reasons:[{textKey:'day.challenge_condition',sourceId:ids[1]}]});
  expect(conditional.quoteActions?.rows.find(row=>row.quoteId===ids[1])).toMatchObject({version:3,facts:{conditional:true,accepted:false}});
- expect(withoutMoney.quoteSchedule).toMatchObject({code:'OK',active:0,waiting:0});expect(conditional.quoteSchedule).toMatchObject({code:'OK',active:1,waiting:1});
+ expect(withoutMoney.quoteSchedule).toMatchObject({code:'OK',active:otherActive,waiting:first.quoteSchedule!.waiting});expect(conditional.quoteSchedule).toMatchObject({code:'OK',active:fullBeforeConditional.quoteSchedule!.active,waiting:fullBeforeConditional.quoteSchedule!.waiting});
  expect((await day(b)).challenges).toEqual(conditional.challenges);
 
 
