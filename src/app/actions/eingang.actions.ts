@@ -121,7 +121,13 @@ export async function createStorageFinalTaskAction(input:{customerId:string;hand
  const members=candidates.filter(order=>letter.orderIds.includes(order.id));
  return createStorageFinalTask(auth.data,input,letter,members.map(order=>({id:order.id,number:order.orderNumber,version:order.version})),settings.settings.updatedAt,(tx,request)=>createOrderHandoverTask(tx,auth.data,request,taskEffects));
 }
-export async function getIntakeTaskAction(input:TaskOpenRequest){
+export async function getIntakeTaskAction(input:{calendar:true}):Promise<import('@/modules/tasks/public').TaskCalendarRead>;
+export async function getIntakeTaskAction(input:TaskOpenRequest):Promise<Awaited<ReturnType<typeof readSingleIntakeTask>>>;
+export async function getIntakeTaskAction(input:TaskOpenRequest|{calendar:true}){
+ if(input&&typeof input==='object'&&'calendar'in input)return readTask(input);
+ return readSingleIntakeTask(input);
+}
+async function readSingleIntakeTask(input:TaskOpenRequest){
  const result=await readTask(input);if(result.code!=='OK'||!result.task)return result;
  const auth=await resolveAuthorization();if(!auth.ok)return result;
  try{const call=await readDispatchCallRequirement(auth.data,result.task.id),postal=await readStoragePostalTask(auth.data,result.task.id);return {...result,...(call?{dispatchCall:call}:{}),...(postal?{postalLetter:postal}:{})};}

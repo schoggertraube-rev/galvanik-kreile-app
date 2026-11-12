@@ -465,7 +465,7 @@ export async function listOpenQuotesCommand(authorization: QuoteCommandContext, 
   if(customerId!==undefined&&!UUID_PATTERN.test(customerId))return {code:'VALIDATION_ERROR',message:'Kunde ist ungültig.'};
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id FROM private.v_open_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id WHERE (${customerId??null}::text IS NULL OR projection.customer_id=${customerId??null}::text) ORDER BY projection.updated_at DESC, projection.quote_number ASC LIMIT 100`);
+      const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id FROM private.v_open_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id WHERE (${customerId??null}::text IS NULL OR projection.customer_id=${customerId??null}::text) ORDER BY projection.updated_at DESC, projection.quote_number ASC`);
       const quotes = rows.map((row) => quoteFromRow(row, authorization.tenantId));
       if (quotes.some((quote) => quote === null)) throw new Error("QUOTE_LIST_READBACK_INVALID");
         const goods=await readQuoteGoodsSummariesForQuotes(tx,authorization.tenantId,quotes.filter(quote=>quote?.lifecycle).map(quote=>quote!.quoteId));

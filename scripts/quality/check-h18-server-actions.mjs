@@ -61,6 +61,17 @@ function inventoryServerActions(sourceRoot = path.join(ROOT, "src")) {
   return [...new Set(actions)].sort();
 }
 
+// Read the complete trusted base blob. The child-process default (1 MiB)
+// truncates valid generated TypeScript before action classification can run.
+function readGitSource(reference) {
+  const sizeText = execFileSync("git", ["cat-file", "-s", reference], { cwd: ROOT, encoding: "utf8" }).trim();
+  const size = Number(sizeText);
+  if (!/^\d+$/.test(sizeText) || !Number.isSafeInteger(size) || size < 0 || !Number.isSafeInteger(size + 1)) throw new Error("H18_GIT_BLOB_SIZE_INVALID");
+  const source = execFileSync("git", ["show", reference], { cwd: ROOT, encoding: "utf8", maxBuffer: size + 1 });
+  if (Buffer.byteLength(source, "utf8") !== size) throw new Error("H18_GIT_BLOB_LENGTH_MISMATCH");
+  return source;
+}
+
 function newlyExportedActions() {
   const base = process.env.GITHUB_BASE_SHA || "origin/main";
   const changed = execFileSync("git", ["diff", "--no-renames", "--name-status", base, "--", "src"], { cwd: ROOT, encoding: "utf8" });
@@ -69,7 +80,7 @@ function newlyExportedActions() {
     const [status, relative] = line.split("\t");
     if (!/[.]tsx?$/.test(relative) || relative.includes("/test/") || relative.includes("/__tests__/") || status === "D") continue;
     const current = fs.readFileSync(path.join(ROOT, relative), "utf8");
-    const before = status === "A" ? "" : execFileSync("git", ["show", `${base}:${relative}`], { cwd: ROOT, encoding: "utf8" });
+    const before = status === "A" ? "" : readGitSource(`${base}:${relative}`);
     const previous = new Set(exportedActions(before, relative));
     result.push(...exportedActions(current, relative).filter((id) => !previous.has(id)));
   }

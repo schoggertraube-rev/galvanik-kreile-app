@@ -1,6 +1,17 @@
 [
   {
     "datum": "2026-11-12",
+    "pr": 216,
+    "seite": "tag",
+    "punkte": [
+      "Deine Tageslage nutzt dieselben gespeicherten Aufträge, Nachrichten und Rechnungen wie die Karten. Eine Teilzahlung ändert den offenen Restbetrag auch dort.",
+      "Die nächste Handlung gehört zum angezeigten Vorgang und seinem aktuellen Stand. Gibt es nichts zu tun, bleibt sie leer.",
+      "Fehlt eine Quelle, bleibt die Lücke erkennbar. Bereits lesbare Zahlen und Vorgänge bleiben erhalten."
+    ],
+    "ziel": "/tag"
+  },
+  {
+    "datum": "2026-11-12",
     "pr": 215,
     "seite": "auftraege",
     "punkte": [

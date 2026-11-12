@@ -1,3 +1,4 @@
+import {canReadQuoteFollowups} from '@/lib/auth/authorizationContract';
 import {readProductionPricingRetrySource,readProductionPricingRetryKeys} from '@/lib/server/productionSnapshotPort';
 import {PRODUCTION_PRICING_RETRY_COPY} from '@/ui/situationCatalog';
 import {readCanceledInvoiceMailTaskSource,isCanceledInvoiceMailTask,bindCanceledInvoiceMailTask,readCanceledInvoiceTaskCompletion} from '@/lib/server/communicationDocumentPort';
@@ -17,7 +18,7 @@ import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization,readClarificationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AccessArea} from '@/lib/auth/authorizationContract';
-import {TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference,type TaskRecord,type TaskReferenceRead,type TaskSaveInput,type TaskFailure,type TaskResult,type TaskReadResult,type TaskCompleteInput,type TaskOpenRequest} from '../contract';
+import {TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference,type TaskRecord,type TaskReferenceRead,type TaskSaveInput,type TaskFailure,type TaskResult,type TaskReadResult,type TaskCompleteInput,type TaskOpenRequest,type TaskCalendarRead} from '../contract';
 
 export type TaskEffectRequest={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:TaskReferenceRead;itemId?:string;itemVersion?:number};
 export type TaskEffects=(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>Promise<void|TaskFailure>;
@@ -228,11 +229,35 @@ export async function restrictCollectionTaskForAppointment(tx:PrivilegedTenantTr
  const saved=await persistTask(tx,auth,value,deps,false,false,true);
  return {version:saved.task.version,note:scope.note,freezes:scope.freezes};
 }
-export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
+export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>;
+export async function readTask(request:{calendar:true}):Promise<TaskCalendarRead>;
+export async function readTask(request:TaskOpenRequest|{calendar:true}):Promise<TaskReadResult|TaskCalendarRead>{
+ if(request&&typeof request==='object'&&!Array.isArray(request)&&'calendar'in request){
+  if(Object.keys(request).join(',')!=='calendar'||request.calendar!==true)return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};
+  const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
+  if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:DISPATCH_CALL_COPY.forbidden};
+  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+   const refs=await tx.execute<{id:string;version:number}>(sql`SELECT id::text,version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND status='offen' AND art IN ('rueckruf','frist','aufgabe') AND item_id IS NOT NULL ORDER BY faellig_am,id`);
+   const rows:Extract<TaskCalendarRead,{rows:unknown}>['rows']=[],missingTaskIds:string[]=[];
+   for(const ref of refs){
+    try{
+     const read=await withTenantSavepoint(tx,nested=>readTaskInTransaction(nested,auth,{taskId:ref.id}));
+     if(read.code!=='OK'||!read.task||read.task.version!==ref.version||read.task.status!=='offen'||!read.task.item_id){missingTaskIds.push(ref.id);continue;}
+     rows.push({id:read.task.id,version:read.task.version,itemId:read.task.item_id,dueDate:read.task.faellig_am,canComplete:read.canComplete,canOpenReference:read.canOpenReference});
+     if(read.pricingSource==='SOURCE_INCOMPLETE')missingTaskIds.push(ref.id);
+    }catch{missingTaskIds.push(ref.id);}
+   }
+   return {code:missingTaskIds.length?'SOURCE_INCOMPLETE' as const:'OK' as const,rows,missingTaskIds};
+  });}catch(error){return resultError(error);}
+ }
  if(!request||typeof request!=='object'||Array.isArray(request)||('taskId'in request?!taskUuid(request.taskId):!validTaskReference(request.reference)))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};
  if('taskId'in request?Object.keys(request).join(',')!=='taskId':Object.keys(request).some(key=>!['reference','kind','itemId'].includes(key))||request.kind!==undefined&&!TASK_KINDS.includes(request.kind)||request.itemId!==undefined&&!taskUuid(request.itemId))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf enthält ungültige Felder.'};
  const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  return readTaskInTransaction(tx,auth,request);
+ });}catch(error){return resultError(error);}
+}
+async function readTaskInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,request:TaskOpenRequest):Promise<TaskReadResult>{
   const task='taskId'in request?await find(tx,auth,request.taskId):null;
   if('taskId'in request&&!task)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
   const currentOrder=task?.bezug_typ==='auftrag'?await readCollectionTaskCurrentOrder(tx,auth,task.id):null;
@@ -245,8 +270,8 @@ export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>{
   if(task){try{pricing=await withTenantSavepoint(tx,nested=>readProductionPricingRetrySource(nested,auth,task.client_key));}catch{pricingSource='SOURCE_INCOMPLETE';}}
 
   return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,canEdit,canComplete:!!task&&task.status==='offen'&&(canEdit||canceledCustomer!==null)&&task.art!=='rechnung',...(pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
- });}catch(error){return resultError(error);}
 }
+
 
 
 export type QuoteFollowupRequest={quoteId:string;quoteNumber:string;customerName:string;edition:number;sentEdition:number|null;action:'sent'|'cancel';dueDate:string|null;reason:string};
@@ -264,17 +289,19 @@ export async function syncQuoteFollowupTask(tx:PrivilegedTenantTransaction,auth:
  const current=rows.find(row=>row.client_key===currentKey);
  if(current?.status==='erledigt')return null;
  if(input.dueDate===null)return current?.faellig_am??null;
- const customer=input.customerName.length>120?input.customerName.slice(0,119)+'…':input.customerName;
- const value:TaskSaveInput={clientKey:currentKey,version:current?.version??0,...(current?{taskId:current.id}:{}),kind:'aufgabe',title:'Bei '+customer+' wegen KV '+input.quoteNumber+' nachfragen',dueDate:input.dueDate,time:null,forLogin:null,forArea:'geld',reference:{type:'kv',id:input.quoteId},note:'Nachfassen zur versendeten KV-Fassung '+input.edition};
+ const value:TaskSaveInput={clientKey:currentKey,version:current?.version??0,...(current?{taskId:current.id}:{}),kind:'aufgabe',title:quoteFollowupTitle(input.customerName,input.quoteNumber),dueDate:input.dueDate,time:null,forLogin:null,forArea:'geld',reference:{type:'kv',id:input.quoteId},note:'Nachfassen zur versendeten KV-Fassung '+input.edition};
  if(Object.keys(taskValidation(value)).length)reject('VALIDATION_ERROR','KV-Nachfassdatum oder Bezug ist unvollständig.');
  return (await persistTask(tx,auth,value,deps)).task.faellig_am;
 }
+function quoteFollowupTitle(name:string,number:string){const customer=name.length>120?name.slice(0,119)+'…':name;return 'Bei '+customer+' wegen KV '+number+' nachfragen';}
 export async function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,today=berlinCalendarDay()){
- if(!hasAuthorizationArea(auth,'geld')||!hasAuthorizationArea(auth,'auftraege'))return [];
+ if(!canReadQuoteFollowups(auth))return [];
  const tasks=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND bezug_typ='kv' AND art='aufgabe' AND status='offen' AND faellig_am<=${today}::date ORDER BY faellig_am,id`);
- const candidates=tasks.filter(task=>taskUuid(task.bezug_id)&&allowed(auth,task));
+ // Narrow shared projection only: exact canonical followup key and live quote
+ // are verified below. Generic task read/edit authority is unchanged.
+ const candidates=tasks.filter(task=>taskUuid(task.bezug_id));
  const facts=await readQuoteFollowupFacts(tx,auth.tenantId,[...new Set(candidates.map(task=>task.bezug_id!))]);
- return candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];if(!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');return [{id:task.id,title:task.titel,dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,isMine:task.fuer_login===auth.userId}];}).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
+ return candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');if(quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];return [{id:task.id,title:hasAuthorizationArea(auth,'geld')?task.titel:quoteFollowupTitle(quote.customerName,quote.number),dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,isMine:task.fuer_login===auth.userId}];}).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
 }
 
 /** Only the persisted physical command can create this normal shared clarification task. */

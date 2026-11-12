@@ -1,4 +1,6 @@
 "use server";
+import type {ListOpenQuotesResult} from '@/modules/quotes/public';
+import {canReadQuoteFollowups} from '@/lib/auth/authorizationContract';
 import {createInitialOrderPrintJobs} from '@/modules/orders/server-public';
 import {quoteCommandContext,quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
@@ -190,7 +192,9 @@ export async function readQuoteAction(input: { quoteId: string;receivedQuantitie
   }catch(error){console.error('[QUOTE_CONVERSION_DEFAULTS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV konnte nicht sicher gelesen werden.'};}
 }
 
-export async function listOpenQuotesAction() {
+export async function listOpenQuotesAction():Promise<ListOpenQuotesResult>;
+export async function listOpenQuotesAction(input:{purpose:'today'}):Promise<{code:'OK';quotes:Array<{quoteId:string;version:number}>}|Exclude<ListOpenQuotesResult,{code:'OK'}>>;
+export async function listOpenQuotesAction(input?:{purpose:'today'}) {
   noStore();
   let authorization;
   try {
@@ -200,6 +204,11 @@ export async function listOpenQuotesAction() {
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
+  if(input?.purpose==='today'){
+    if(!canReadQuoteFollowups(authorization.data))return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
+    const result=await listOpenQuotesCommand(quoteOperationContext(authorization.data));
+    return result.code==='OK'?{code:'OK' as const,quotes:result.quotes.map(({quoteId,version})=>({quoteId,version}))}:result;
+  }
   return listOpenQuotesCommand(quoteCommandContext(authorization.data));
 }
 
@@ -404,7 +413,7 @@ export async function readQuotePdfAction(input: { quoteId: string }) {
 export async function getQuoteFollowupsForTodayAction(){
  noStore();
  try{const auth=await resolveAuthorization();const denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
-  if(!quoteCommandContext(auth.data).capabilities.canReadQuote)return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
+  if(!canReadQuoteFollowups(auth.data))return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
   const tasks=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data));
   return {code:'OK' as const,tasks};
  }catch(error){console.error('[QUOTE_FOLLOWUP_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Nachfassaufgaben konnten nicht geladen werden.'};}

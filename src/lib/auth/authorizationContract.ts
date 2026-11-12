@@ -180,3 +180,6 @@ export function hasAuthorizationArea(
 export function canReadComplaintOrderChoices(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'auftraege');}
 export function canTransportInvoiceDocument(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'geld');}
 export function canAssignIntakeCustomer(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'eingang')&&(hasAuthorizationArea(auth,'kunden')||hasAuthorizationArea(auth,'geld'));}
+
+/** S05 VORAB 4: following up a quote is a mail operation, not money access. */
+export function canReadQuoteFollowups(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'mails');}

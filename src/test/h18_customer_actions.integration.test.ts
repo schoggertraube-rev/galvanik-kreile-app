@@ -1452,3 +1452,46 @@ describe('AP-KREISLAUF AF-1',()=>{
   }
  });
 });
+
+
+// Load the existing read dependencies before the case clock, not while an Action is being asserted.
+const [s05Day,s05Complaints,s05Quotes]=await Promise.all([import('@/lib/server/todayDashboard'),import('@/app/actions/complaints.actions'),import('@/app/actions/quotes.actions')]);
+
+describe('S05 existing intake task calendar source',()=>{
+ it('keeps an open real task after its source concern is closed, rereads a changed date and removes only completed work',async()=>{
+  const actor=await goodsActorFixture(['auftraege','kunden','geld','eingang','mails']);
+  const {saveIntakeNoteAction,saveIntakeTaskAction,getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+  const {readTodayCalendar}=await import('@/lib/server/todayDashboardPolicy');
+  const calendar=readTodayCalendar();
+  const itemId=randomUUID();
+  const captured=await withSession(actor,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'SYNTHETISCH bitte zur\u00fcckrufen',context:{customerId:actor.customerId},concerns:['rueckruf']}));
+  if(captured.code!=='OK')throw Error('TEST_S05_TASK_CAPTURE:'+JSON.stringify(captured));
+  const {readTodayDashboard}=s05Day;
+  const {getComplaints}=s05Complaints;
+  const {getQuoteFollowupsForTodayAction}=s05Quotes;
+  const day=(currentActor:Fixture=actor)=>withSession(currentActor,async()=>{const {resolveAuthorization}=await import('@/lib/server/authorization');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_TASK_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+  const input:TaskSaveInput={clientKey:randomUUID(),version:0,kind:'rueckruf',title:'TEST S05 callback',dueDate:calendar.today,time:null,forLogin:actor.actorId,forArea:null,reference:{type:'eingang',id:itemId},note:null,itemId,itemVersion:captured.capture.version};
+  const messages=await withSession(actor,async()=>{const {getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');return getIntakeMessagesAction('alle');});if(messages.code!=='OK')throw Error('TEST_S05_MESSAGE_SOURCE');const original=messages.messages.find(row=>row.id===itemId)!;
+  expect((await day()).messageActions?.rows.find(row=>row.messageId===itemId)).toEqual({messageId:itemId,version:original.version,read:original.nextActionRule});
+  const saved=await withSession(actor,()=>saveIntakeTaskAction(input));
+  if(saved.code!=='OK')throw Error('TEST_S05_TASK_SAVE:'+saved.code);
+  expect(await sql`SELECT einsatz,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual([{einsatz:'erledigt',anliegen_offen:[]}]);
+  const reader=()=>withSession(actor,()=>getIntakeTaskAction({calendar:true}));
+  const first=await reader();if(!('rows'in first))throw Error('TEST_S05_TASK_READ:'+first.code);
+  expect(first.rows.find(row=>row.id===saved.task.id)).toEqual({id:saved.task.id,version:1,itemId,dueDate:calendar.today,canComplete:true,canOpenReference:true});
+  expect(await reader()).toEqual(first);
+  expect((await day()).messageActions?.rows.some(row=>row.messageId===itemId)).toBe(false);
+  const changedInput={...input,taskId:saved.task.id,version:1,itemVersion:undefined,dueDate:calendar.throughDate};
+  const changed=await withSession(actor,()=>saveIntakeTaskAction(changedInput));if(changed.code!=='OK')throw Error('TEST_S05_TASK_CHANGE:'+changed.code);
+  expect((await day()).taskSchedule?.rows.find(row=>row.id===saved.task.id)).toMatchObject({id:saved.task.id,version:changed.task.version,dueDate:calendar.throughDate});
+  const noMails=await createFixture('meister',['eingang']);
+  expect(await day(noMails)).not.toHaveProperty('messageActions');
+  expect(await withSession(noMails,()=>getIntakeTaskAction({calendar:true}))).toMatchObject({code:'FORBIDDEN'});
+  const completeInput={taskId:saved.task.id,version:changed.task.version,note:'TEST S05 callback complete'};
+  const completed=await withSession(actor,()=>completeIntakeTaskAction(completeInput));expect(completed.code).toBe('OK');
+  expect(await withSession(actor,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(completeInput))))).toMatchObject({code:'OK',replayed:true});
+  const final=await reader();if(!('rows'in final))throw Error('TEST_S05_TASK_FINAL:'+final.code);
+  expect(final.rows.some(row=>row.id===saved.task.id)).toBe(false);
+  expect((await day()).taskSchedule?.rows.some(row=>row.id===saved.task.id)).toBe(false);
+ });
+});

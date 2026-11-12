@@ -1,3 +1,4 @@
+import type {U2Read,U2Action} from '@/lib/domain/u2ReadContract';
 import type { AppRole } from "@/lib/auth/authorizationContract";
 
 const TERMINAL_ORDER_STATES = new Set(["abgeholt", "versendet", "raus", "storniert", "cancelled", "canceled", "completed", "done", "erledigt"]);
@@ -45,6 +46,12 @@ function parseDateKey(value: string | undefined): CalendarDay | null {
 function addCalendarDays(day: CalendarDay, amount: number): CalendarDay {
   const value = new Date(Date.UTC(day.year, day.month - 1, day.day + amount));
   return { year: value.getUTCFullYear(), month: value.getUTCMonth() + 1, day: value.getUTCDate() };
+}
+
+/** S05: one server read clock, with seven calendar days in Europe/Berlin. */
+export function readTodayCalendar(now=new Date()){
+ const day=berlinClock(now);
+ return {readStartedAt:now.toISOString(),today:dateKey(day),throughDate:dateKey(addCalendarDays(day,7))};
 }
 
 function nextWorkday(day: CalendarDay): CalendarDay {
@@ -231,4 +238,152 @@ export function classifyMoneyForToday(candidate: TodayMoneyCandidate, today: str
 /** Personal ownership is only a tie breaker after actual urgency and deadline. */
 export function sortTodayByResponsibility<T extends {urgency:'conflict'|'decision'|'warning';dueDate?:string}>(items:readonly T[],isMine:(item:T)=>boolean):T[]{
  const rank={conflict:0,decision:1,warning:2};return [...items].sort((a,b)=>rank[a.urgency]-rank[b.urgency]||(a.dueDate??'9999').localeCompare(b.dueDate??'9999')||Number(isMine(b))-Number(isMine(a)));
+}
+
+export type TodayChallengeReason={textKey:'day.challenge_late'|'day.challenge_debt'|'day.challenge_condition';werte:Readonly<Record<string,string|number>>;sourceId:string};
+export type TodayChallenge={key:string;orderId:string|null;orderNumber:string|null;quoteId?:string;quoteNumber?:string|null;rank:number;dueDate:string|null;reasons:TodayChallengeReason[];action:U2Action|null};
+/** S05: only evidenced lateness/debt here, never a guessed capacity conflict.
+ * Inputs are the same qualified U2 cards and already rights-filtered invoices. */
+export function projectTodayChallenges(orderRows:ReadonlyArray<{orderId:string;version:number;read:U2Read}>,invoices:ReadonlyArray<{id:string;orderId:string;number:string;dueDate:string;amountCents:number|string|null;amount:string|null}>,today:string,quotes:ReadonlyArray<{quoteId:string;version:number;read:U2Read;facts:Readonly<Record<string,unknown>>;validUntil:string|null}>=[]){
+ const groups=new Map<string,TodayChallenge>(),missing:string[]=[];
+ const cards=new Map(orderRows.map(row=>[row.orderId,row]));
+ const add=(input:{orderId:string|null;orderNumber:string|null;rank:number;dueDate:string;action:U2Action|null;reason:TodayChallengeReason})=>{
+  const key=input.orderId?'order:'+input.orderId:'invoice:'+input.reason.sourceId;
+  const old=groups.get(key);
+  if(old){old.rank=Math.min(old.rank,input.rank);old.dueDate=old.dueDate!==null&&old.dueDate<input.dueDate?old.dueDate:input.dueDate;old.reasons.push(input.reason);if(input.reason.textKey==='day.challenge_debt')old.action=null;}
+  else groups.set(key,{key,orderId:input.orderId,orderNumber:input.orderNumber,rank:input.rank,dueDate:input.dueDate,reasons:[input.reason],action:input.action});
+ };
+ for(const row of orderRows){
+  const field=(key:string)=>row.read.erstblick.find(value=>value.key===key)?.werte;
+  const location=field('auftrag.lage'),station=location?.station,number=location?.nummer;
+  if(typeof station!=='string'||typeof number!=='string'){missing.push('CHALLENGE_ORDER_IDENTITY:'+row.orderId);continue;}
+  if(['complaint','work_update','term_update'].includes(row.read.zustand??''))missing.push('CHALLENGE_REASON_BINDING:'+row.orderId);
+  if(!['angenommen','wareneingang','galvanik'].includes(station))continue;
+  const rawDue=field('auftrag.termin')?.datum,parts=field('auftrag.teile')?.teile;
+  if(typeof rawDue!=='string'||!parseDateKey(rawDue.slice(0,10))||!Array.isArray(parts)||!parts.length||parts.some(part=>!part||typeof part!=='object'||typeof (part as Record<string,unknown>).fertig!=='boolean')){missing.push('CHALLENGE_ORDER_FACTS:'+row.orderId);continue;}
+  const dueDate=rawDue.slice(0,10),allDone=parts.every(part=>(part as Record<string,unknown>).fertig===true);
+  if(!allDone)missing.push('CHALLENGE_PLANNING_SOURCE:'+row.orderId);
+  if(dueDate>=today||allDone)continue;
+  add({orderId:row.orderId,orderNumber:number,rank:15,dueDate,action:row.read.hauptaktion,reason:{textKey:'day.challenge_late',werte:{date:dueDate},sourceId:row.orderId}});
+ }
+ for(const invoice of invoices){
+  if(!Number.isSafeInteger(Number(invoice.amountCents))||Number(invoice.amountCents)<=0||typeof invoice.amount!=='string'||!invoice.amount||!parseDateKey(invoice.dueDate)||invoice.dueDate>=today){missing.push('CHALLENGE_INVOICE_FACTS:'+invoice.id);continue;}
+  const card=cards.get(invoice.orderId),number=card?.read.erstblick.find(value=>value.key==='auftrag.lage')?.werte.nummer;
+  add({orderId:invoice.orderId||null,orderNumber:typeof number==='string'?number:null,rank:10,dueDate:invoice.dueDate,action:null,reason:{textKey:'day.challenge_debt',werte:{amount:invoice.amount,date:invoice.dueDate,number:invoice.number},sourceId:invoice.id}});
+  // The financial U2 command/step is explicitly incomplete until S08b.
+  missing.push('CHALLENGE_PAYMENT_ACTION:'+invoice.id);
+ }
+ for(const quote of quotes){
+  if(quote.facts.converted===true||quote.facts.rejected===true)continue;
+  if(quote.facts.converted!==false||quote.facts.rejected!==false||typeof quote.facts.conditional!=='boolean'){missing.push('CHALLENGE_QUOTE_FACTS:'+quote.quoteId);continue;}
+  if(!quote.facts.conditional)continue;
+  const number=quote.read.erstblick.find(field=>field.key==='kv.lage')?.werte.nummer;
+  if(typeof number!=='string')missing.push('CHALLENGE_QUOTE_IDENTITY:'+quote.quoteId);
+  const dueDate=quote.validUntil!==null&&parseDateKey(quote.validUntil)?quote.validUntil:null;
+  if(quote.validUntil!==null&&dueDate===null)missing.push('CHALLENGE_QUOTE_DATE:'+quote.quoteId);
+  const key='quote:'+quote.quoteId;
+  groups.set(key,{key,orderId:null,orderNumber:null,quoteId:quote.quoteId,quoteNumber:typeof number==='string'?number:null,rank:5,dueDate,
+   reasons:[{textKey:'day.challenge_condition',werte:{},sourceId:quote.quoteId}],action:quote.read.hauptaktion});
+ }
+ return {groups:[...groups.values()].sort((a,b)=>a.rank-b.rank||(a.dueDate??'9999').localeCompare(b.dueDate??'9999')||(a.orderNumber??a.quoteNumber??a.key).localeCompare(b.orderNumber??b.quoteNumber??b.key)),missing};
+}
+
+export type TodayOrderScheduleRow={orderId:string;version:number;read:U2Read;pickupSchedule?:{code:'OK';date:string|null;eventId:string|null;freezeId:string}|{code:'SOURCE_INCOMPLETE'}};
+/** Production-calendar slice of U3; finished/pickup dates are deliberately not
+ * replaced by their former production date. Those need their own source. */
+export function projectOrderSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:ReadonlyArray<TodayOrderScheduleRow>;missingOrderIds:readonly string[]},calendar:ReturnType<typeof readTodayCalendar>){
+ const missing=source.code==='OK'?[]:['ORDER_SCHEDULE_SOURCE',...source.missingOrderIds.map(id=>'ORDER_SCHEDULE_CARD:'+id)];
+ const dates=new Map<string,{id:string;version:number;dueDate:string;appointmentEventId?:string;freezeId?:string}>(),conflicts=new Set<string>();
+ for(const row of source.rows){
+  if(conflicts.has(row.orderId))continue;
+  const station=row.read.erstblick.find(field=>field.key==='auftrag.lage')?.werte.station;
+  if(row.read.zustand==='closed')continue;
+  let appointmentEventId:string|undefined,freezeId:string|undefined,raw:unknown;
+  if(station==='fertig'&&row.pickupSchedule?.code==='OK'){
+   if(row.pickupSchedule.date===null){
+    if(row.read.zustand===null||['payment','debt'].includes(row.read.zustand))missing.push('ORDER_SCHEDULE_FINANCIAL_SOURCE:'+row.orderId);
+    continue;
+   }
+   if(!row.pickupSchedule.eventId||!row.pickupSchedule.freezeId){missing.push('ORDER_SCHEDULE_PICKUP_EVIDENCE:'+row.orderId);continue;}
+   raw=row.pickupSchedule.date;appointmentEventId=row.pickupSchedule.eventId;freezeId=row.pickupSchedule.freezeId;
+  }else if(typeof station==='string'&&['angenommen','wareneingang','galvanik'].includes(station))raw=row.read.erstblick.find(field=>field.key==='auftrag.termin')?.werte.datum;
+  else{missing.push('ORDER_SCHEDULE_NON_PRODUCTION:'+row.orderId);continue;}
+
+  if(typeof raw!=='string'||!parseDateKey(raw.slice(0,10))){missing.push('ORDER_SCHEDULE_DATE:'+row.orderId);continue;}
+  const dueDate=raw.slice(0,10),previous=dates.get(row.orderId);
+  if(previous&&(previous.version!==row.version||previous.dueDate!==dueDate||previous.appointmentEventId!==appointmentEventId||previous.freezeId!==freezeId)){dates.delete(row.orderId);conflicts.add(row.orderId);missing.push('ORDER_SCHEDULE_VERSION:'+row.orderId);continue;}
+  dates.set(row.orderId,{id:row.orderId,version:row.version,dueDate,...(appointmentEventId&&freezeId?{appointmentEventId,freezeId}:{})});
+ }
+ const sources=[...dates.values()],counts={today:sources.filter(row=>row.dueDate<=calendar.today).length,upcoming:sources.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
+ return missing.length?{code:'SOURCE_INCOMPLETE' as const,knownCounts:counts,missing,sources}:{code:'OK' as const,...counts,sources};
+}
+
+/** Financial slice uses the same persisted open-invoice rows, never the visible
+ * twenty-row list. An unreadable amount/date is a gap, not a zero balance. */
+export type TodayInvoiceMoneyRow={id:string;payment_version:number;due_date:Date|string|null;open_amount_cents:number|string|null;customer_country:string|null;payment_mode:string;payment_status:string|null;station:string};
+/** Same canonical classification for the metric, complete list, amounts and challenges. */
+export function isOverdueInvoiceForToday(row:TodayInvoiceMoneyRow,today:string){
+ const raw=row.due_date instanceof Date?row.due_date.toISOString():row.due_date;
+ return classifyMoneyForToday({customerCountry:row.customer_country,dueDate:raw===null?null:raw.slice(0,10),goodsOutRecorded:false,paymentMode:row.payment_mode,paymentStatus:row.payment_status,station:row.station},today)==='overdue_invoice';
+}
+export function projectTodayInvoiceMoney(source:{code:'OK';data:ReadonlyArray<TodayInvoiceMoneyRow>}|{code:'SOURCE_INCOMPLETE'},calendar:ReturnType<typeof readTodayCalendar>){
+ const missing:string[]=[],sources:Array<{id:string;version:number;dueDate:string;amountCents:number}>=[];
+ if(source.code!=='OK')return {code:'SOURCE_INCOMPLETE' as const,missing:['INVOICE_MONEY_SOURCE']};
+ const overdueIds=new Set<string>();
+ let openCents=0,overdueCents=0;
+ for(const row of source.data){
+  const amount=row.open_amount_cents===null?NaN:Number(row.open_amount_cents);
+  const raw=row.due_date instanceof Date?(Number.isFinite(row.due_date.getTime())?row.due_date.toISOString():null):row.due_date;
+  const dueDate=typeof raw==='string'?raw.slice(0,10):null;
+  if(typeof row.payment_mode!=='string'||typeof row.station!=='string'||!row.id||!Number.isSafeInteger(row.payment_version)||!Number.isSafeInteger(amount)||amount<=0||!dueDate||!parseDateKey(dueDate)){
+   missing.push('INVOICE_MONEY_FACTS:'+row.id);continue;
+  }
+  const overdue=isOverdueInvoiceForToday(row,calendar.today);
+  if(!Number.isSafeInteger(openCents+amount)||!Number.isSafeInteger(overdueCents+(overdue?amount:0))){missing.push('INVOICE_MONEY_RANGE:'+row.id);continue;}
+  openCents+=amount;if(overdue){overdueCents+=amount;overdueIds.add(row.id);}
+  sources.push({id:row.id,version:row.payment_version,dueDate,amountCents:amount});
+ }
+ const totals={openCount:sources.length,openCents,overdueCount:overdueIds.size,overdueCents,
+  today:sources.filter(row=>overdueIds.has(row.id)||row.dueDate===calendar.today).length,upcoming:sources.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
+ return missing.length?{code:'SOURCE_INCOMPLETE' as const,knownTotals:totals,sources,missing}:{code:'OK' as const,...totals,sources};
+}
+
+/** V45 concern/day rows consume the existing quote facts; PL09:05 makes an
+ * accepted promise independent of its former acceptance deadline. */
+export function projectQuoteSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:ReadonlyArray<{quoteId:string;version:number;facts:Readonly<Record<string,unknown>>;validUntil:string|null;followupAt:string|null}>;missingQuoteIds:readonly string[]},calendar:ReturnType<typeof readTodayCalendar>){
+ const missing=source.code==='OK'?[]:['QUOTE_SCHEDULE_SOURCE',...source.missingQuoteIds.map(id=>'QUOTE_SCHEDULE_CARD:'+id)];
+ const rows=new Map<string,{id:string;version:number;state:'active'|'waiting';dueDate:string|null}>(),conflicts=new Set<string>();
+ for(const quote of source.rows){
+  if(conflicts.has(quote.quoteId))continue;
+  const facts=quote.facts;
+  if(['converted','rejected','conditional','expired','sent','accepted'].some(key=>typeof facts[key]!=='boolean')){missing.push('QUOTE_SCHEDULE_FACTS:'+quote.quoteId);continue;}
+  if(facts.converted||facts.rejected)continue;
+  const raw=facts.accepted?null:quote.followupAt!==null?quote.followupAt:quote.validUntil;
+  if(raw!==null&&(typeof raw!=='string'||!parseDateKey(raw))){missing.push('QUOTE_SCHEDULE_DATE:'+quote.quoteId);continue;}
+  const dueDate=raw;
+  const active=!facts.accepted&&(facts.conditional||facts.expired||!facts.sent||quote.followupAt!==null&&dueDate!==null&&dueDate<=calendar.today);
+  const row={id:quote.quoteId,version:quote.version,state:active?'active' as const:'waiting' as const,dueDate};
+  const prior=rows.get(quote.quoteId);
+  if(prior&&(prior.version!==row.version||prior.state!==row.state||prior.dueDate!==row.dueDate)){rows.delete(quote.quoteId);conflicts.add(quote.quoteId);missing.push('QUOTE_SCHEDULE_VERSION:'+quote.quoteId);continue;}
+  rows.set(quote.quoteId,row);
+ }
+ const sources=[...rows.values()],counts={active:sources.filter(row=>row.state==='active').length,waiting:sources.filter(row=>row.state==='waiting').length,
+  today:sources.filter(row=>row.dueDate!==null&&row.dueDate<=calendar.today).length,upcoming:sources.filter(row=>row.dueDate!==null&&row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
+ return missing.length?{code:'SOURCE_INCOMPLETE' as const,knownCounts:counts,sources,missing}:{code:'OK' as const,...counts,sources};
+}
+
+
+/** V45 dayRows: a real task is active through its due day, waiting afterwards
+ * in the future; closed source messages never stand in for task completion. */
+export function projectIntakeTaskSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:ReadonlyArray<{id:string;version:number;itemId:string;dueDate:string;canComplete:boolean;canOpenReference:boolean}>;missingTaskIds:readonly string[]},calendar:ReturnType<typeof readTodayCalendar>){
+ const missingTaskIds=new Set(source.missingTaskIds),conflicts=new Set<string>(),rows=new Map<string,typeof source.rows[number]&{state:'active'|'waiting'}>();
+ for(const row of source.rows){
+  if(conflicts.has(row.id))continue;
+  if(!row.id||!row.itemId||!Number.isSafeInteger(row.version)||!parseDateKey(row.dueDate)){rows.delete(row.id);conflicts.add(row.id);missingTaskIds.add(row.id);continue;}
+  const prior=rows.get(row.id);
+  if(prior&&(prior.version!==row.version||prior.dueDate!==row.dueDate||prior.itemId!==row.itemId)){rows.delete(row.id);conflicts.add(row.id);missingTaskIds.add(row.id);continue;}
+  rows.set(row.id,{...row,state:row.dueDate<=calendar.today?'active':'waiting'});
+ }
+ const qualified=[...rows.values()],counts={active:qualified.filter(row=>row.state==='active').length,waiting:qualified.filter(row=>row.state==='waiting').length,today:qualified.filter(row=>row.dueDate<=calendar.today).length,upcoming:qualified.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
+ return source.code!=='OK'||missingTaskIds.size?{code:'SOURCE_INCOMPLETE' as const,knownCounts:counts,rows:qualified,missingTaskIds:[...missingTaskIds]}:{code:'OK' as const,...counts,rows:qualified,missingTaskIds:[]};
 }
