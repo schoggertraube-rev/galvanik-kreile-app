@@ -9,7 +9,7 @@ import {readSecuredOrderPhotoIds} from '@/lib/server/domainAttachment';
 import type { ComplaintState } from '@/modules/complaints/public';
 
 type Failure = Exclude<ComplaintWriteResult, {code:'OK'}>;
-type Row = { complaint_id:string; source_order_id:string; customer_id:string; nummer:string; stand:ComplaintState; version:number; bewertung:string|null; massnahme:string|null; nacharbeit_auftrag_id:string|null; begruendung:string|null; gutschrift_betrag:string|null; gutschrift_nr:string|null };
+type Row = { complaint_id:string; source_order_id:string; customer_id:string; nummer:string; stand:ComplaintState; version:number; bewertung:string|null; massnahme:string|null; nacharbeit_auftrag_id:string|null; rework_order_number:string|null; begruendung:string|null; gutschrift_betrag:string|null; gutschrift_nr:string|null };
 type Success = Extract<ComplaintWriteResult,{code:'OK'}>;
 export type ComplaintSourceEffect = (tx:PrivilegedTenantTransaction, auth:AuthorizationSnapshot, input:{itemId:string;version:number;clientKey:string;complaintId:string;number:string;customerId:string;orderId:string})=>Promise<void>;
 
@@ -115,7 +115,10 @@ export async function executeComplaint(input:unknown,sourceEffect:ComplaintSourc
           }
           if(input.kind==='zurueckgezogen'&&before.stand==='massnahme_nacharbeit'){
             const allowed=await tx.execute(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${before.nacharbeit_auftrag_id} AND station='angenommen' AND ware IN ('erwartet','da') FOR UPDATE`);
-            if(allowed.length!==1)reject('VALIDATION_ERROR','Nacharbeit läuft – schließt mit dem Warenausgang.');
+            if(allowed.length!==1){
+              if(!before.rework_order_number)throw Error('REWORK_ORDER_NUMBER_REQUIRED');
+              reject('VALIDATION_ERROR',COMPLAINT_ORDER_COPY.reworkRunning(before.rework_order_number));
+            }
           }
           change=sql`stand='abgeschlossen',abschluss_art=${input.kind},abschluss_notiz=${input.note},abgeschlossen_am=statement_timestamp(),abgeschlossen_von=${auth.userId}::uuid`;
         }
