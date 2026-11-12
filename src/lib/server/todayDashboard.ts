@@ -45,6 +45,9 @@ export type TodayCollectionNotice = {
 
 export type TodayQuoteActionRow={quoteId:string;version:number;read:U2Read;facts:Readonly<Record<string,unknown>>;validUntil:string|null;followupAt:string|null};
 export type TodayDashboard = {
+  hauptaktion?:U2Read['hauptaktion'];
+  hauptaktionsQuelle?:{key:string;id:string;version:number}|null;
+  messageActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:Array<{messageId:string;version:number;read:U2Read}>;missingMessageIds:string[]};
   taskSchedule?:ReturnType<typeof projectIntakeTaskSchedule>;
   quoteSchedule?:ReturnType<typeof projectQuoteSchedule>;
   quoteActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:TodayQuoteActionRow[];missingQuoteIds:string[]};
@@ -256,6 +259,15 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const taskKnown=taskRead?.code==='OK';
   const taskSchedule=projectIntakeTaskSchedule(taskRead&&'rows'in taskRead?taskRead:{code:'SOURCE_INCOMPLETE',rows:[],missingTaskIds:[]},calendar);
 
+  const messageActionRows:Array<{messageId:string;version:number;read:U2Read}>=[],missingMessageIds:string[]=[];
+  if(graph.code==='OK')for(const message of graph.messages){
+    if(['erledigt','info'].includes(message.usage)||message.discardReason!==null)continue;
+    const read=message.nextActionRule;
+    if(message.usage!=='offen'||!read||read.code!=='OK'||read.source.kind!=='intake'||read.source.id!==message.id||read.source.version!==message.version||read.nutzung!==message.usage||read.zuordnung!==message.assignment){missingMessageIds.push(message.id);continue;}
+    messageActionRows.push({messageId:message.id,version:message.version,read});
+  }
+  const messageActions={code:graph.code==='OK'&&missingMessageIds.length===0?'OK' as const:'SOURCE_INCOMPLETE' as const,rows:messageActionRows,missingMessageIds};
+
   const allowed = allowedTodayFields(auth);
   const suggestedLayout = defaultTodayLayout(auth.role, allowed);
   const storedLayout = parseTodayLayout(support.preferences[0]?.layout);
@@ -288,7 +300,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     add({ key: `order:${order.id}:${guidance.caseId}:${guidance.reason}`, field: guidance.field, kind: "order", title: `${order.orderNumber} · ${caseTitle}`, meta: `${order.customerName ?? "Kunde"} · ${reason}`, urgency: order.risk === "red" || order.risk === "blocked" ? "conflict" : "warning", orderId: order.id, orderVersion: order.version, dueDate: order.dueDate, assignedToName: assignment?.assigned_to_name, assignmentVersion: assignment?.current_order_version, primaryActionLabel: guidance.primaryActionLabel });
   }
 
-  const assignmentMessages=graph.code==='OK'?graph.messages.filter(row=>row.channel==='mail'&&row.direction==='rein'&&row.assignment==='offen'):null;
+  const assignmentMessages=graph.code==='OK'?graph.messages.filter(row=>row.channel==='mail'&&row.direction==='rein'&&row.usage==='offen'&&row.assignment==='offen'):null;
   // Legacy mail opener consumes only a real provider ID; native IDs stay in U3 sources.
   if(assignmentMessages)for(const mail of assignmentMessages.filter(row=>row.graphMessageId).slice(0,5))add({key:`mail:${mail.id}`,field:'assign',kind:'mail',title:mail.subject||'Mail ohne Betreff',meta:`${mail.senderName} · ${new Intl.DateTimeFormat('de-DE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Berlin'}).format(new Date(mail.at))}`,urgency:'decision',graphMessageId:mail.graphMessageId!});
 
@@ -338,9 +350,73 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const challenges=projectTodayChallenges(orderActions.rows,overdueInvoiceRows.map(row=>({id:row.id,orderId:row.order_id,number:row.invoice_number,dueDate:dateOnly(row.due_date!),amountCents:row.open_amount_cents,amount:Number.isSafeInteger(Number(row.open_amount_cents))&&Number(row.open_amount_cents)>0?euro(row.open_amount_cents):null})),today,moneyAllowed?quoteActions.rows:[]);
   const challengeMissing=[...challenges.missing,...(graphAllowed&&moneyAllowed&&quoteActions.code!=='OK'?['CHALLENGE_QUOTE_SOURCE']:[]),...(orderActions.code!=='OK'?['CHALLENGE_ORDER_SOURCE']:[]),...(support.invoiceSource.code!=='OK'?['CHALLENGE_INVOICE_SOURCE']:[]),...(!complaintsKnown||complaintCases.length?['CHALLENGE_COMPLAINT_SOURCE']:[]),...(graphAllowed&&(graph.code!=='OK'||graph.messages.some(row=>row.usage==='offen'&&(row.sendState==='unklar'||row.sendState==='fehler'||row.openConcerns.some(kind=>['kv_annahme','kv_ablehnung','reklamation'].includes(kind)))))?['CHALLENGE_CONCERN_SOURCE']:[])];
 
+  // PL16:17: bind the existing most urgent case to its very same U2 command.
+  // Missing specialist bindings remain gaps; no substitute sender/command.
+  let hauptaktion:U2Read['hauptaktion']=null;
+  let hauptaktionsQuelle:{key:string;id:string;version:number}|null=null;
+  const mainMissing:string[]=[];
+  const challengeFocus=challenges.groups[0];
+  if(challengeFocus){
+    const source=challengeFocus.quoteId?quoteActions.rows.find(row=>row.quoteId===challengeFocus.quoteId):orderActions.rows.find(row=>row.orderId===challengeFocus.orderId);
+    if(challengeFocus.action&&source?.read.hauptaktion){
+      hauptaktion=source.read.hauptaktion;
+      hauptaktionsQuelle={key:challengeFocus.key,id:'quoteId'in source?source.quoteId:source.orderId,version:source.version};
+    }else mainMissing.push('TODAY_MAIN_U2:'+challengeFocus.key);
+  }else{
+    // Bundle is a later-stage feature, not a new S05 main action.
+    const focus=sortedItems.find(item=>item.kind!=='bundle');
+    let selected:{key:string;id:string;version:number;read:U2Read}|undefined;
+    if(focus){
+      if(focus.target?.screen==='kv'){
+        const source=quoteActions.rows.find(row=>row.quoteId===focus.target!.arg);
+        if(source)selected={key:focus.key,id:source.quoteId,version:source.version,read:source.read};
+      }else if(focus.kind==='mail'&&graph.code==='OK'){
+        const originals=graph.messages.filter(row=>row.graphMessageId===focus.graphMessageId);
+        const source=originals.length===1?messageActions.rows.find(row=>row.messageId===originals[0].id):undefined;
+        if(source)selected={key:focus.key,id:source.messageId,version:source.version,read:source.read};
+      }else if(focus.orderId){
+        const source=orderActions.rows.find(row=>row.orderId===focus.orderId);
+        if(source)selected={key:focus.key,id:source.orderId,version:source.version,read:source.read};
+      }
+      if(!selected)mainMissing.push('TODAY_MAIN_SOURCE:'+focus.key);
+    }else{
+      // Normal production and active quotes remain daily work before becoming
+      // late. Dates/facts and commands are already qualified above, not reread.
+      const dates=new Map(orderSchedule.sources.map(row=>[row.id,row.dueDate]));
+      const candidates:Array<{key:string;id:string;version:number;read:U2Read;date:string|null;number:string}>=[];
+      for(const row of orderActions.rows){
+        const location=row.read.erstblick.find(field=>field.key==='auftrag.lage')?.werte;
+        if(!['angenommen','wareneingang','galvanik'].includes(String(location?.station)))continue;
+        candidates.push({key:'order:'+row.orderId,id:row.orderId,version:row.version,read:row.read,date:dates.get(row.orderId)??null,number:typeof location?.nummer==='string'?location.nummer:row.orderId});
+      }
+      for(const schedule of quoteSchedule.sources){
+        if(schedule.state!=='active')continue;
+        const row=quoteActions.rows.find(value=>value.quoteId===schedule.id&&value.version===schedule.version);
+        if(!row){mainMissing.push('TODAY_MAIN_QUOTE_SOURCE:'+schedule.id);continue;}
+        const number=row.read.erstblick.find(field=>field.key==='kv.lage')?.werte.nummer;
+        candidates.push({key:'quote:'+row.quoteId,id:row.quoteId,version:row.version,read:row.read,date:schedule.dueDate,number:typeof number==='string'?number:row.quoteId});
+      }
+      for(const row of messageActions.rows){
+        const original=graph.code==='OK'?graph.messages.find(value=>value.id===row.messageId&&value.version===row.version):undefined;
+        if(!original){mainMissing.push('TODAY_MAIN_MESSAGE_SOURCE:'+row.messageId);continue;}
+        if(original.fallbackPriority?.code==='OK'&&original.fallbackPriority.rank===8)continue;
+        candidates.push({key:'message:'+row.messageId,id:row.messageId,version:row.version,read:row.read,date:null,number:row.messageId});
+      }
+      selected=candidates.sort((a,b)=>(a.date??'9999').localeCompare(b.date??'9999')||a.number.localeCompare(b.number))[0];
+    }
+    if(selected){
+      hauptaktion=selected.read.hauptaktion;
+      hauptaktionsQuelle={key:selected.key,id:selected.id,version:selected.version};
+      if(!hauptaktion&&selected.read.datenluecken.length)mainMissing.push('TODAY_MAIN_U2:'+selected.key);
+    }
+  }
+
+  if(graphAllowed)for(const task of taskSchedule.rows)if(task.state==='active')mainMissing.push('TODAY_TASK_MAIN_BINDING:'+task.id);
+
   return {
+    hauptaktion,hauptaktionsQuelle,
     calendar,
-    ...(graphAllowed?{quoteActions,quoteSchedule,taskSchedule}:{}),
+    ...(graphAllowed?{quoteActions,quoteSchedule,taskSchedule,messageActions}:{}),
     items:sortedItems,
     challenges:{code:challengeMissing.length?'SOURCE_INCOMPLETE':'OK',groups:challenges.groups,missing:challengeMissing},
     ...(ordersAllowed?{orderActions,orderSchedule}:{}),
@@ -348,7 +424,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     ...(moneyAllowed?{moneySources:{invoices:countTodaySource(support.invoiceSource),prepayments:countTodaySource(support.prepaymentSource),collections:countTodaySource(support.collectionSource)}}:{}),
     ...(moneyAllowed?{moneyMetric:invoiceMoney.code==='OK'?{code:'OK' as const,count:overdueInvoiceRows.length,sources:overdueInvoiceRows.map(row=>({id:row.id,version:row.payment_version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
     ...(graphAllowed?{assignmentMetric:assignmentMessages?{code:'OK' as const,count:assignmentMessages.length,sources:assignmentMessages.map(row=>({id:row.id,version:row.version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
-    datenluecken:[...challengeMissing,...(graphAllowed&&!taskKnown?['INTAKE_TASK_SOURCE']:[]),...(graphAllowed&&quoteSchedule.code==='SOURCE_INCOMPLETE'?quoteSchedule.missing:[]),...(graphAllowed&&quoteActions.code!=='OK'?['QUOTE_ACTION_SOURCE']:[]),...(moneyAllowed&&invoiceMoney.code==='SOURCE_INCOMPLETE'?invoiceMoney.missing:[]),...(ordersAllowed&&orderSchedule.code==='SOURCE_INCOMPLETE'?orderSchedule.missing:[]),...(ordersAllowed&&orderSource.code!=='OK'?['ORDER_SOURCE']:[]),...(ordersAllowed&&orderActions.code!=='OK'?['ORDER_ACTION_SOURCE']:[]),...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
+    datenluecken:[...mainMissing,...challengeMissing,...(graphAllowed&&messageActions.code!=='OK'?['MESSAGE_ACTION_SOURCE']:[]),...(graphAllowed&&!taskKnown?['INTAKE_TASK_SOURCE']:[]),...(graphAllowed&&quoteSchedule.code==='SOURCE_INCOMPLETE'?quoteSchedule.missing:[]),...(graphAllowed&&quoteActions.code!=='OK'?['QUOTE_ACTION_SOURCE']:[]),...(moneyAllowed&&invoiceMoney.code==='SOURCE_INCOMPLETE'?invoiceMoney.missing:[]),...(ordersAllowed&&orderSchedule.code==='SOURCE_INCOMPLETE'?orderSchedule.missing:[]),...(ordersAllowed&&orderSource.code!=='OK'?['ORDER_SOURCE']:[]),...(ordersAllowed&&orderActions.code!=='OK'?['ORDER_ACTION_SOURCE']:[]),...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
     ...(support.collectionSource.code==='OK'?{collectionNotices}:{}),
     visibleFields: selected,
     layout,

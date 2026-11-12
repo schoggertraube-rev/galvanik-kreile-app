@@ -12,6 +12,8 @@ import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 
 it('reads the exact same three real versioned U2 order actions into U3 and hides them without order rights',async()=>{
+ const empty=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_EMPTY_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ expect(empty).toMatchObject({hauptaktion:null,hauptaktionsQuelle:null,challenges:{groups:[]},orderSchedule:{code:'OK',today:0,upcoming:0},invoiceMoney:{code:'OK',openCount:0,openCents:0},assignmentMetric:{code:'OK',count:0}});
  const customerId=await customerFixture('TEST S05 U2 U3');
  const orders:Awaited<ReturnType<typeof intakeOrderFixture>>[]=[];for(let index=0;index<3;index++)orders.push(await intakeOrderFixture('TEST S05 Naht '+index,customerId));
  const [dates]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS today,((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+1)::text AS tomorrow,((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+8)::text AS later`;
@@ -19,6 +21,7 @@ it('reads the exact same three real versioned U2 order actions into U3 and hides
  const read=(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
  const day=await read(full);expect(day.orderSchedule).toMatchObject({code:'OK',today:1,upcoming:1});expect(day.orderActions).toMatchObject({code:'OK',missingOrderIds:[]});
  expect(day.orderActions?.rows).toHaveLength(3);
+ const focus=day.orderActions!.rows.find(row=>row.orderId===day.hauptaktionsQuelle?.id);expect(focus).toBeDefined();expect(day.hauptaktion).toEqual(focus!.read.hauptaktion);expect(day.hauptaktionsQuelle).toMatchObject({id:orders[0].receipt.orderId,version:2});
  for(const order of orders){
   const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.receipt.orderId}));if(card.code!=='OK')throw Error('TEST_S05_CARD');
   expect(day.orderActions?.rows.find(row=>row.orderId===order.receipt.orderId)).toEqual({orderId:order.receipt.orderId,version:card.data.card.version,read:card.data.nextActionRule});
@@ -29,6 +32,7 @@ it('reads the exact same three real versioned U2 order actions into U3 and hides
  const changed=await read(full),card=await withSession(full,()=>getLiveOrderCardAction({orderId:firstOrder}));if(card.code!=='OK')throw Error('TEST_S05_CHANGED_CARD');
  expect(changed.orderActions?.rows.find(row=>row.orderId===firstOrder)).toEqual({orderId:firstOrder,version:3,read:card.data.nextActionRule});
  expect(day.orderActions?.rows.find(row=>row.orderId===firstOrder)?.version).toBe(2);
+ expect(changed.hauptaktion).toEqual(card.data.nextActionRule!.hauptaktion);expect(changed.hauptaktionsQuelle).toMatchObject({id:firstOrder,version:3});
  const noOrders=await createFixture(['mails']);const hidden=await read(noOrders);expect(hidden).not.toHaveProperty('orderActions');expect(hidden).not.toHaveProperty('orderSchedule');
 });
 
