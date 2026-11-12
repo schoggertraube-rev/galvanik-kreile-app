@@ -4,6 +4,8 @@ import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentR
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
+import type {U2Read} from '@/lib/domain/u2ReadContract';
+import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
@@ -41,6 +43,7 @@ export type TodayCollectionNotice = {
 
 export type TodayDashboard = {
   datenluecken?:readonly string[];
+  orderActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:Array<{orderId:string;version:number;read:U2Read}>;missingOrderIds:string[]};
   moneySources?:{invoices:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'};prepayments:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'};collections:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'}};
   moneyMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
   assignmentMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
@@ -116,8 +119,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
   const graphAllowed = hasAuthorizationArea(auth, "mails");
   const moneyAllowed = hasAuthorizationArea(auth, "geld");
-  const [orders, graph, support, complaints,quoteFollowups] = await Promise.all([
-    ordersAllowed ? getOperationalOrders(auth) : Promise.resolve([]),
+  const [orderSource, graph, support, complaints,quoteFollowups] = await Promise.all([
+    ordersAllowed ? getOperationalOrders(auth).then(data=>({code:'OK' as const,data})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})) : Promise.resolve({code:'OK' as const,data:[]}),
     graphAllowed ? getIntakeMessagesAction('zuordnen') : Promise.resolve({ code: "FORBIDDEN" as const, message: "" }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
       const invoiceSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<InvoiceRow>(sql`
@@ -195,6 +198,21 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     graphAllowed?readQuoteFollowups().catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'})):Promise.resolve({code:'OK' as const,tasks:[]}),
   ]);
 
+  const orders=orderSource.code==='OK'?orderSource.data:[];
+  // U3 reuses the complete U2 response, qualified by the same order version.
+  // A changed/unreadable card cannot silently supply a command for an older row.
+  const orderActionReads=ordersAllowed?await Promise.all(orders.map(async order=>{
+    try{
+      const card=await getLiveOrderCardAction({orderId:order.id});
+      if(card.code==='OK'&&card.data.card.version===order.version&&card.data.nextActionRule)
+        return {orderId:order.id,version:order.version,read:card.data.nextActionRule};
+    }catch{return {orderId:order.id,version:order.version,read:null};}
+    return {orderId:order.id,version:order.version,read:null};
+  })):[];
+  const orderActions={code:orderSource.code==='OK'&&orderActionReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
+    rows:orderActionReads.flatMap(row=>row.read?[{orderId:row.orderId,version:row.version,read:row.read}]:[]),
+    missingOrderIds:orderActionReads.filter(row=>row.read===null).map(row=>row.orderId)};
+
   const allowed = allowedTodayFields(auth);
   const suggestedLayout = defaultTodayLayout(auth.role, allowed);
   const storedLayout = parseTodayLayout(support.preferences[0]?.layout);
@@ -267,10 +285,11 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const sortedItems=sortTodayByResponsibility(items,mine);
   return {
     items:sortedItems,
+    ...(ordersAllowed?{orderActions}:{}),
     ...(moneyAllowed?{moneySources:{invoices:countTodaySource(support.invoiceSource),prepayments:countTodaySource(support.prepaymentSource),collections:countTodaySource(support.collectionSource)}}:{}),
     ...(moneyAllowed?{moneyMetric:support.invoiceSource.code==='OK'?{code:'OK' as const,count:support.invoices.length,sources:support.invoices.map(row=>({id:row.id,version:row.payment_version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
     ...(graphAllowed?{assignmentMetric:assignmentMessages?{code:'OK' as const,count:assignmentMessages.length,sources:assignmentMessages.map(row=>({id:row.id,version:row.version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
-    datenluecken:[...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
+    datenluecken:[...(ordersAllowed&&orderSource.code!=='OK'?['ORDER_SOURCE']:[]),...(ordersAllowed&&orderActions.code!=='OK'?['ORDER_ACTION_SOURCE']:[]),...(moneyAllowed&&support.prepaymentSource.code!=='OK'?['PREPAYMENT_SOURCE']:[]),...(moneyAllowed&&support.collectionSource.code!=='OK'?['COLLECTION_SOURCE']:[]),...(moneyAllowed&&support.invoiceSource.code!=='OK'?['INVOICE_SOURCE']:[]),...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
     ...(support.collectionSource.code==='OK'?{collectionNotices}:{}),
     visibleFields: selected,
     layout,
