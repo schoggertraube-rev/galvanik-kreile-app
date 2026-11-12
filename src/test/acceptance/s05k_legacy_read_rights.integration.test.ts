@@ -37,3 +37,16 @@ it('S05K A10 maintenance statistics reject business-only rights and count only r
  expect(read).toMatchObject({reachable:true,orders:expected.orders,customers:expected.customers,users:expected.users});
  expect(await withSession(maintenance,()=>getSystemStats())).toMatchObject({reachable:true,orders:expected.orders,customers:expected.customers,users:expected.users});
 });
+
+it('S05K A10 inventory hides money and filters tenant with the existing rights resolver',async()=>{
+ const {getInventoryItemsAction,getInventoryItemAction}=await import('@/app/actions/inventory.actions');
+ const operator=await createFixture(['auftraege']),moneyOnly=await createFixture(['geld']);
+ const own='TEST-'+randomUUID(),foreign='TEST-'+randomUUID();
+ // Explicit synthetic inventory master data; no inventory write-command claim.
+ await sql`INSERT INTO public.inventory_items(id,tenant_id,name,category,current_stock,min_stock,unit,einkaufspreis_eur) VALUES(${own},${tenant},'TEST A10 stock','chemical',10,1,'kg',2.5),(${foreign},${tenant+'-foreign'},'TEST A10 foreign','chemical',20,1,'kg',999)`;
+ expect(await withSession(moneyOnly,()=>getInventoryItemsAction())).toMatchObject({ok:false,error:'FORBIDDEN'});
+ const read=await withSession(operator,()=>getInventoryItemsAction());expect(read).toMatchObject({ok:true});if(!read.ok)throw Error('A10_INVENTORY');expect(read.data.map(row=>row.id)).toEqual([own]);expect(read.data[0].pricePerUnit).toBeUndefined();
+ expect(await withSession(operator,()=>getInventoryItemAction(foreign))).toMatchObject({ok:true,data:null});
+ expect(await withSession(full,()=>getInventoryItemAction(own))).toMatchObject({ok:true,data:{id:own,pricePerUnit:2.5}});
+ expect(await withSession(operator,()=>getInventoryItemAction(own))).toMatchObject({ok:true,data:{id:own}});
+});
