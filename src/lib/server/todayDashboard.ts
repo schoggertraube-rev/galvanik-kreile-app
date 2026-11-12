@@ -11,7 +11,7 @@ import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
-import { projectQuoteSchedule,projectTodayInvoiceMoney,type TodayOrderScheduleRow,projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
+import { projectIntakeTaskSchedule,projectQuoteSchedule,projectTodayInvoiceMoney,type TodayOrderScheduleRow,projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -45,7 +45,7 @@ export type TodayCollectionNotice = {
 
 export type TodayQuoteActionRow={quoteId:string;version:number;read:U2Read;facts:Readonly<Record<string,unknown>>;validUntil:string|null;followupAt:string|null};
 export type TodayDashboard = {
-  taskSchedule?:{code:'OK'|'SOURCE_INCOMPLETE';active:number|null;today:number|null;upcoming:number|null;rows:Array<{id:string;version:number;itemId:string;dueDate:string;canComplete:boolean;canOpenReference:boolean}>;missingTaskIds:string[]};
+  taskSchedule?:ReturnType<typeof projectIntakeTaskSchedule>;
   quoteSchedule?:ReturnType<typeof projectQuoteSchedule>;
   quoteActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:TodayQuoteActionRow[];missingQuoteIds:string[]};
   calendar?:ReturnType<typeof readTodayCalendar>;
@@ -253,9 +253,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     rows:quoteReads.flatMap(row=>row.read?[row as TodayQuoteActionRow]:[]),missingQuoteIds:quoteReads.filter(row=>row.read===null).map(row=>row.quoteId)};
 
   const taskRead=graphAllowed?await getIntakeTaskAction({calendar:true}):null;
-  const taskRows=taskRead&&'rows'in taskRead?taskRead.rows:[];
   const taskKnown=taskRead?.code==='OK';
-  const taskSchedule={code:taskKnown?'OK' as const:'SOURCE_INCOMPLETE' as const,active:taskKnown?taskRows.length:null,today:taskKnown?taskRows.filter(row=>row.dueDate===calendar.today).length:null,upcoming:taskKnown?taskRows.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length:null,rows:taskRows,missingTaskIds:taskRead&&'missingTaskIds'in taskRead?taskRead.missingTaskIds:[]};
+  const taskSchedule=projectIntakeTaskSchedule(taskRead&&'rows'in taskRead?taskRead:{code:'SOURCE_INCOMPLETE',rows:[],missingTaskIds:[]},calendar);
 
   const allowed = allowedTodayFields(auth);
   const suggestedLayout = defaultTodayLayout(auth.role, allowed);

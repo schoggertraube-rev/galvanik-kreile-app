@@ -363,3 +363,19 @@ export function projectQuoteSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:
   today:sources.filter(row=>row.dueDate!==null&&row.dueDate<=calendar.today).length,upcoming:sources.filter(row=>row.dueDate!==null&&row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
  return missing.length?{code:'SOURCE_INCOMPLETE' as const,knownCounts:counts,sources,missing}:{code:'OK' as const,...counts,sources};
 }
+
+
+/** V45 dayRows: a real task is active through its due day, waiting afterwards
+ * in the future; closed source messages never stand in for task completion. */
+export function projectIntakeTaskSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:ReadonlyArray<{id:string;version:number;itemId:string;dueDate:string;canComplete:boolean;canOpenReference:boolean}>;missingTaskIds:readonly string[]},calendar:ReturnType<typeof readTodayCalendar>){
+ const missingTaskIds=new Set(source.missingTaskIds),conflicts=new Set<string>(),rows=new Map<string,typeof source.rows[number]&{state:'active'|'waiting'}>();
+ for(const row of source.rows){
+  if(conflicts.has(row.id))continue;
+  if(!row.id||!row.itemId||!Number.isSafeInteger(row.version)||!parseDateKey(row.dueDate)){rows.delete(row.id);conflicts.add(row.id);missingTaskIds.add(row.id);continue;}
+  const prior=rows.get(row.id);
+  if(prior&&(prior.version!==row.version||prior.dueDate!==row.dueDate||prior.itemId!==row.itemId)){rows.delete(row.id);conflicts.add(row.id);missingTaskIds.add(row.id);continue;}
+  rows.set(row.id,{...row,state:row.dueDate<=calendar.today?'active':'waiting'});
+ }
+ const qualified=[...rows.values()],counts={active:qualified.filter(row=>row.state==='active').length,waiting:qualified.filter(row=>row.state==='waiting').length,today:qualified.filter(row=>row.dueDate<=calendar.today).length,upcoming:qualified.filter(row=>row.dueDate>calendar.today&&row.dueDate<=calendar.throughDate).length};
+ return source.code!=='OK'||missingTaskIds.size?{code:'SOURCE_INCOMPLETE' as const,knownCounts:counts,rows:qualified,missingTaskIds:[...missingTaskIds]}:{code:'OK' as const,...counts,rows:qualified,missingTaskIds:[]};
+}

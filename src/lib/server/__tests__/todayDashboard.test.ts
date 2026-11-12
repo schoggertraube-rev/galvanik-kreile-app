@@ -1,5 +1,5 @@
 import type {U2Read} from '@/lib/domain/u2ReadContract';
-import {projectQuoteSchedule,projectTodayInvoiceMoney,projectOrderSchedule,readTodayCalendar,projectTodayChallenges} from '../todayDashboardPolicy';
+import {projectIntakeTaskSchedule,projectQuoteSchedule,projectTodayInvoiceMoney,projectOrderSchedule,readTodayCalendar,projectTodayChallenges} from '../todayDashboardPolicy';
 import {sortTodayByResponsibility} from '../todayDashboardPolicy';
 import { describe, expect, it } from "vitest";
 import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/server/todayDashboardPolicy";
@@ -213,4 +213,15 @@ it('keeps quote active/waiting and dates on the same lifecycle, preserving accep
  expect(projectQuoteSchedule({code:'OK',rows:[],missingQuoteIds:[]},calendar)).toMatchObject({code:'OK',active:0,waiting:0,today:0,upcoming:0});
  expect(projectQuoteSchedule({code:'SOURCE_INCOMPLETE',rows:[due],missingQuoteIds:['TEST-missing']},calendar)).toMatchObject({code:'SOURCE_INCOMPLETE',knownCounts:{active:1,today:1}});
  expect(projectQuoteSchedule({code:'OK',rows:[due,{...due,version:2},due],missingQuoteIds:[]},calendar)).toMatchObject({code:'SOURCE_INCOMPLETE',sources:[],knownCounts:{active:0}});
+});
+
+
+it('V45 intake-task dates include overdue and today, separate future waiting and retain known rows beside a source gap',()=>{
+ const calendar=readTodayCalendar(new Date('2026-11-12T12:00:00Z'));
+ const task=(id:string,dueDate:string)=>({id,itemId:'TEST-source-'+id,version:1,dueDate,canComplete:true,canOpenReference:true});
+ const rows=[task('TEST-overdue','2026-11-11'),task('TEST-today','2026-11-12'),task('TEST-in7','2026-11-19'),task('TEST-in8','2026-11-20')];
+ expect(projectIntakeTaskSchedule({code:'OK',rows:[...rows,rows[0]],missingTaskIds:[]},calendar)).toMatchObject({code:'OK',active:2,waiting:2,today:2,upcoming:1,rows:[{id:'TEST-overdue',state:'active'},{id:'TEST-today',state:'active'},{id:'TEST-in7',state:'waiting'},{id:'TEST-in8',state:'waiting'}]});
+ expect(projectIntakeTaskSchedule({code:'OK',rows:[],missingTaskIds:[]},calendar)).toMatchObject({code:'OK',active:0,waiting:0,today:0,upcoming:0});
+ expect(projectIntakeTaskSchedule({code:'SOURCE_INCOMPLETE',rows,missingTaskIds:['TEST-overdue']},calendar)).toMatchObject({code:'SOURCE_INCOMPLETE',knownCounts:{active:2,waiting:2,today:2,upcoming:1},rows,missingTaskIds:['TEST-overdue']});
+ expect(projectIntakeTaskSchedule({code:'OK',rows:[rows[0],{...rows[0],version:2}],missingTaskIds:[]},calendar)).toMatchObject({code:'SOURCE_INCOMPLETE',knownCounts:{active:0,today:0},rows:[],missingTaskIds:['TEST-overdue']});
 });
