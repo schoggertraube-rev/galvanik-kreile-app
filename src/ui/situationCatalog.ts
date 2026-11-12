@@ -317,3 +317,13 @@ export const CUSTOMER_INVOICE_ACTION_COPY={numbers:(numbers:readonly string[])=>
  if(prefix){const shown=prefix.split(', ').length;return prefix+` und ${numbers.length-shown} weitere`;}
  const suffix=` und ${numbers.length-1} weitere`;let short='';for(const char of numbers[0]){if(short.length+char.length+1+suffix.length>120)break;short+=char;}return short+'…'+suffix;
 }} as const;
+
+/** S05K A11: existing invoice-terms messages, corrected UTF-8 in one text source. */
+export const CUSTOMER_INVOICE_TERMS_COPY={
+ invalid:"Zahlungsziel oder Skonto ist ungültig.",
+ forbidden:"Rechnung auf Ziel darf nur mit dem Bereich Geld freigeschaltet werden.",
+ notFound:"Kunde ist nicht verfügbar.",
+ conflict:ORDER_REQUEST_COPY.intentConflict,
+ incomplete:"Rechnung auf Ziel braucht vollständige Kundendaten.",
+ unavailable:"Rechnung auf Ziel konnte nicht sicher freigeschaltet werden."
+} as const;

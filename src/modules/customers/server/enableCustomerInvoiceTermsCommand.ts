@@ -1,4 +1,5 @@
 import "server-only";
+import {CUSTOMER_INVOICE_TERMS_COPY} from "@/ui/situationCatalog";
 
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -23,9 +24,9 @@ function normalize(input: unknown): EnableCustomerInvoiceTermsInput | null {
 
 export async function enableCustomerInvoiceTermsCommand(context: CustomerCommandContext, input: unknown) {
   const value = normalize(input);
-  if (!value) return { code: "VALIDATION_ERROR" as const, message: "Zahlungsziel oder Skonto ist ungÃ¼ltig." };
+  if (!value) return { code: "VALIDATION_ERROR" as const, message: CUSTOMER_INVOICE_TERMS_COPY.invalid };
   if (!context.capabilities.canCreateCustomer || !context.capabilities.canManageMoney) {
-    return { code: "FORBIDDEN" as const, message: "Rechnung auf Ziel darf nur mit dem Bereich Geld freigeschaltet werden." };
+    return { code: "FORBIDDEN" as const, message: CUSTOMER_INVOICE_TERMS_COPY.forbidden };
   }
   try {
     return await withPrivilegedTenantTransaction(context, async (tx) => {
@@ -41,15 +42,15 @@ export async function enableCustomerInvoiceTermsCommand(context: CustomerCommand
       }
       if (row.result_code === "OK") return { code: "OK" as const, replayed: row.replayed };
       const messages = {
-        NOT_FOUND: "Kunde ist nicht verfÃ¼gbar.",
-        CONFLICT: "Anfragekennung wurde bereits anders verwendet.",
-        VALIDATION_ERROR: "Zahlungsziel oder Skonto ist ungÃ¼ltig.",
-        INCOMPLETE: "Rechnung auf Ziel braucht vollstÃ¤ndige Kundendaten.",
+        NOT_FOUND: CUSTOMER_INVOICE_TERMS_COPY.notFound,
+        CONFLICT: CUSTOMER_INVOICE_TERMS_COPY.conflict,
+        VALIDATION_ERROR: CUSTOMER_INVOICE_TERMS_COPY.invalid,
+        INCOMPLETE: CUSTOMER_INVOICE_TERMS_COPY.incomplete,
       } as const;
       return { code: row.result_code as keyof typeof messages, message: messages[row.result_code as keyof typeof messages] };
     });
   } catch (error) {
     console.error("customer_invoice_terms_command_failed", error);
-    return { code: "UNAVAILABLE" as const, message: "Rechnung auf Ziel konnte nicht sicher freigeschaltet werden." };
+    return { code: "UNAVAILABLE" as const, message: CUSTOMER_INVOICE_TERMS_COPY.unavailable };
   }
 }

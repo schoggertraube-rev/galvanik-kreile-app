@@ -79,4 +79,15 @@ describe("customer payment guards", () => {
     }, input)).resolves.toMatchObject({ code: "OK", replayed: false });
     expect(execute.mock.calls[0]?.[0].text).toContain("private.enable_customer_invoice_terms_v1");
   });
+  it("returns readable UTF-8 invoice-terms validation and source errors", async () => {
+    const { enableCustomerInvoiceTermsCommand } = await import("../server/enableCustomerInvoiceTermsCommand");
+    const auth = {...context, capabilities:{...context.capabilities,canManageMoney:true}};
+    const input={clientEventId:"33333333-3333-4333-8333-333333333333",customerId:"customer-1",targetDays:14,cashDiscountPercent:2,cashDiscountDays:10};
+    await expect(enableCustomerInvoiceTermsCommand(auth,null)).resolves.toMatchObject({code:"VALIDATION_ERROR",message:"Zahlungsziel oder Skonto ist ungültig."});
+    for(const [code,message] of [["NOT_FOUND","Kunde ist nicht verfügbar."],["VALIDATION_ERROR","Zahlungsziel oder Skonto ist ungültig."],["INCOMPLETE","Rechnung auf Ziel braucht vollständige Kundendaten."]]){
+      execute.mockResolvedValueOnce([{result_code:code,replayed:false}]);
+      await expect(enableCustomerInvoiceTermsCommand(auth,input)).resolves.toMatchObject({code,message});
+    }
+  });
+
 });
