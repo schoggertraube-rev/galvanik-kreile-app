@@ -55,6 +55,7 @@ export type OrderCardItem = {
 };
 
 export type LiveOrderCard = {
+  operationalFacts?:{rework:boolean;pricesMissing:boolean;complaint?:boolean};
   actors?:OrderActorSummary;
   actorReadError?:string;
   shippingService?:string|null;
@@ -874,10 +875,12 @@ export async function readLiveOrderCard(
       const [handoverEvent]=await tx.execute<{payload:{receipt:{orderId:string;orderVersion:number;message:string;taskId:string|null;mailActor:{originalItemId:string}}}}>(sql`SELECT payload FROM public.events WHERE tenant_id=${authorization.tenantId} AND order_id=${input.orderId} AND event_type='ORDER_HANDOVER_MAIL_V1' AND event_schema_version=1 AND status='success' ORDER BY aggregate_version DESC,created_at DESC,id DESC LIMIT 1`);
       const handover=handoverEvent?.payload?.receipt;
       if(handover&&(handover.orderId!==queue.id||!Number.isSafeInteger(handover.orderVersion)||handover.orderVersion>queue.version||typeof handover.message!=='string'||!handover.message.trim()||!UUID_PATTERN.test(handover.mailActor?.originalItemId)||handover.taskId!==null&&!UUID_PATTERN.test(handover.taskId)))throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');
+      const activeComplaint=queue.station!=='fertig'?await (await import('./orderReleaseRead')).readOpenOrderComplaint(tx,authorization.tenantId,input.orderId):undefined;
       return {
         ...(handover?{handoverNotice:{message:handover.message,taskId:handover.taskId,originalItemId:handover.mailActor.originalItemId}}:{}),
         ...(commercialQuote?{commercialQuote}:{}),
         ...(cancellationRows[0]?{cancellation:cancellationRows[0]}:{}),
+        operationalFacts:{rework:isReworkOrder,pricesMissing:!isReworkOrder&&items.some(item=>item.unitPriceCents===null),...(activeComplaint!==undefined?{complaint:activeComplaint!==null}:{})},
         id: queue.id,
         version: queue.version,
         orderNumber: queue.order_number,

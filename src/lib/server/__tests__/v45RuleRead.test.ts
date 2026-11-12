@@ -64,3 +64,12 @@ describe('S04 canonical authorization across every imported rule',()=>{
   expect(readAuthorizedV45Rule(snapshot('meister'),'auftrag',{})).toMatchObject({code:'SOURCE_INCOMPLETE'});
  });
 });
+
+// R15 absent capture paths are distinct from a broken existing read source.
+it('R15 continues only past explicitly unrecorded facts and retains named gaps',()=>{
+ const facts={returning:false,inTransit:false,closed:false,complaint:true};
+ expect(readV45Rule('auftrag',facts,['workProblem','deliveryRequest','termUpdatePending'])).toMatchObject({code:'OK',ruleId:'auftrag.rekla',datenluecken:['workProblem','deliveryRequest','termUpdatePending']});
+ expect(readV45Rule('auftrag',facts)).toMatchObject({code:'SOURCE_INCOMPLETE',missing:['workProblem']});
+ expect(readV45Rule('auftrag',{...facts,workProblem:null},['workProblem'])).toMatchObject({code:'SOURCE_INCOMPLETE',missing:['workProblem']});
+ expect(readV45Rule('auftrag',{...facts,workProblem:true},['workProblem'])).toMatchObject({code:'OK',ruleId:'auftrag.bearbeitungsstopp'});
+});

@@ -87,3 +87,24 @@ it('reads the physical pickup first look from the same real card without money o
  expect(JSON.stringify(read.data.nextActionRule)).not.toMatch(/netto|Cents|unitPrice|vatRate/);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(count);
 });
+
+it('R15 active intake exposes the same versioned first look and existing start command without money',async()=>{
+ const {customerFixture,intakeOrderFixture}=await import('../../../e2e/ablauf/orderFixture');
+ const customer=await customerFixture('TEST R15 active');
+ const created=await intakeOrderFixture('TEST R15 active',customer);
+ const {getLiveOrderCardAction,transitionWareneingangToGalvanikAction}=await import('@/app/actions/orders.actions');
+ const login=await createFixture(['auftraege'],'werkstatt');
+ const read=await withSession(login,()=>getLiveOrderCardAction({orderId:created.receipt.orderId}));
+ console.info('TEST_R15_SOURCE',JSON.stringify(read.code==='OK'?read.data.nextActionRule:read));
+ expect(read).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK',zustand:'received',hauptaktion:{elementId:'order.start',befehl:{funktion:'transitionWareneingangToGalvanikAction',argumente:{orderId:created.receipt.orderId,expectedVersion:1}}},datenluecken:expect.arrayContaining(['workProblem','deliveryRequest','termUpdatePending','workUpdatePending','extraPending'])}}});
+ if(read.code!=='OK'||read.data.nextActionRule?.code!=='OK'||!read.data.nextActionRule.hauptaktion)throw Error('TEST_ACTIVE_U2_REQUIRED');
+ const rule=read.data.nextActionRule;
+ expect(rule.source.version).toBe(read.data.card.version);expect(rule.erstblick.length).toBeLessThanOrEqual(5);
+ expect(JSON.stringify(rule)).not.toMatch(/Cents|unitPrice|netto|vatRate/);
+ if(!rule.hauptaktion||typeof rule.hauptaktion!=='object'||!('befehl'in rule.hauptaktion))throw Error('TEST_COMMAND_REQUIRED');
+ const args=JSON.parse(JSON.stringify(rule.hauptaktion.befehl.argumente));
+ const input={...args,clientEventId:randomUUID()};
+ expect(await withSession(login,()=>transitionWareneingangToGalvanikAction(input))).toMatchObject({code:'OK'});
+ expect(await withSession(login,()=>transitionWareneingangToGalvanikAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(login,()=>getLiveOrderCardAction({orderId:created.receipt.orderId}))).toMatchObject({code:'OK',data:{card:{station:'galvanik'}}});
+});

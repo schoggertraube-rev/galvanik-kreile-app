@@ -7,26 +7,31 @@ import {V45_RULES,V45_SOURCE_HASHES,V45_PREVIEW_SHA,V45_ELEMENTS} from '@/ui/v45
  * Unknown is never false: stop at the first still-possible higher-priority rule.
  * The ordered rules themselves remain solely in the hash-bound V45 projection.
  */
-export function readV45Rule(area:string,facts:Readonly<Record<string,unknown>>){
+export function readV45Rule(area:string,facts:Readonly<Record<string,unknown>>,unrecordedFacts:readonly string[]=[]){
+ const datenluecken=[...new Set(unrecordedFacts)].filter(key=>!Object.hasOwn(facts,key));
+ const gaps=datenluecken.length?{datenluecken}:{};
  const rules=V45_RULES.filter(rule=>rule.bereich===area);
  if(!rules.length)return {code:'VALIDATION_ERROR' as const};
  for(const rule of rules){
   const conditions=Object.entries(rule.wenn);
+  // R15: only facts explicitly audited as having no capture path are absent.
+  // Present-but-unreadable values never enter this exception.
+  if(conditions.some(([key])=>datenluecken.includes(key)))continue;
   const known=(key:string,value:string|boolean|number)=>Object.hasOwn(facts,key)&&typeof facts[key]===typeof value&&(typeof facts[key]!=='number'||Number.isFinite(facts[key]));
   if(conditions.some(([key,value])=>known(key,value)&&facts[key]!==value))continue;
   const missing=conditions.filter(([key,value])=>!known(key,value)).map(([key])=>key);
-  if(missing.length)return {code:'SOURCE_INCOMPLETE' as const,ruleId:rule.id,missing};
-  return {code:'OK' as const,ruleId:rule.id,...rule.dann,quelle:{rule:rule.id,source:rule.quelle,sha256:V45_SOURCE_HASHES['regeln.json'],previewSha256:V45_PREVIEW_SHA}};
+  if(missing.length)return {code:'SOURCE_INCOMPLETE' as const,ruleId:rule.id,missing,...gaps};
+  return {code:'OK' as const,ruleId:rule.id,...rule.dann,...gaps,quelle:{rule:rule.id,source:rule.quelle,sha256:V45_SOURCE_HASHES['regeln.json'],previewSha256:V45_PREVIEW_SHA}};
  }
- return {code:'SOURCE_INCOMPLETE' as const,missing:['MATCHING_V45_RULE']};
+ return {code:'SOURCE_INCOMPLETE' as const,missing:['MATCHING_V45_RULE'],...gaps};
 }
 
 /** One rights-filtered rule seam for the later U2 domain composition.
  * It never returns caller facts or example amounts, and grants no command right.
  */
-export function readAuthorizedV45Rule(auth:AuthorizationSnapshot,area:string,facts:Readonly<Record<string,unknown>>,commandRights?:Readonly<Record<string,boolean>>){
+export function readAuthorizedV45Rule(auth:AuthorizationSnapshot,area:string,facts:Readonly<Record<string,unknown>>,commandRights?:Readonly<Record<string,boolean>>,unrecordedFacts:readonly string[]=[]){
  if(!auth.active)return {code:'FORBIDDEN' as const};
- const selected=readV45Rule(area,facts);
+ const selected=readV45Rule(area,facts,unrecordedFacts);
  if(selected.code!=='OK')return selected;
  if(selected.hauptaktion===null)return {...selected,gesperrt:[]};
  const action=readAuthorizedV45Action(auth,selected.hauptaktion,commandRights);
