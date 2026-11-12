@@ -4,7 +4,7 @@ import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentR
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
-import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
+import {getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
 import { sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
@@ -41,6 +41,7 @@ export type TodayCollectionNotice = {
 
 export type TodayDashboard = {
   datenluecken?:readonly string[];
+  assignmentMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
   items: TodayItem[];
   /**
    * Open collections are deliberately not actions until AP-ABS-b provides the
@@ -61,7 +62,6 @@ type ReminderRow = { item_key: string; reminder_until: Date | string };
 type InvoiceRow = { id: string; invoice_number: string; order_id: string; customer_name: string; customer_country: string | null; due_date: Date | string; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string };
 type PrepaymentRow = { order_id: string; order_number: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; invoice_id: string | null; open_amount_cents: number | string | null; payment_status: string | null; station: string; goods_out_event_count: number | string };
 type UserRow = { id: string; full_name: string };
-type GraphThreadRow = { source: string };
 type AssignmentRow = { integrity_ok:boolean;order_id: string; assigned_to_name: string; current_order_version: number };
 type CollectionRow = { id: string; customer_name: string; monat: Date | string; order_count: number | string };
 
@@ -108,9 +108,9 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const moneyAllowed = hasAuthorizationArea(auth, "geld");
   const [orders, graph, support, complaints,quoteFollowups] = await Promise.all([
     ordersAllowed ? getOperationalOrders(auth) : Promise.resolve([]),
-    graphAllowed ? listMicrosoftGraphInbox() : Promise.resolve({ code: "IN_KLAERUNG" as const, message: "Outlook ist für dieses Profil nicht eingeblendet." }),
+    graphAllowed ? getIntakeMessagesAction('zuordnen') : Promise.resolve({ code: "FORBIDDEN" as const, message: "" }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
-      const [preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignments] = await Promise.all([
+      const [preferences, reminders, invoices, prepayments, collections, delegationTargets, assignments] = await Promise.all([
         tx.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`),
         tx.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`),
         moneyAllowed ? tx.execute<InvoiceRow>(sql`
@@ -174,7 +174,6 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
             )
           ORDER BY users.full_name, users.id
         `) : Promise.resolve([]),
-        graphAllowed ? tx.execute<GraphThreadRow>(sql`SELECT source FROM public.communication_threads WHERE tenant_id=${auth.tenantId} AND source LIKE 'MS_GRAPH_IN:%'`) : Promise.resolve([]),
         ordersAllowed ? tx.execute<AssignmentRow>(sql`
           SELECT order_id, assigned_to_name, current_order_version, integrity_ok
           FROM private.v_order_task_assignment_v1
@@ -183,7 +182,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
             AND active=true
         `) : Promise.resolve([]),
       ]);
-      return { preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignmentSourceIncomplete:assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
+      return { preferences, reminders, invoices, prepayments, collections, delegationTargets, assignmentSourceIncomplete:assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
     }),
     ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints().catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'})):Promise.resolve({code:'OK' as const,complaints:[]}),
     graphAllowed?readQuoteFollowups().catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'})):Promise.resolve({code:'OK' as const,tasks:[]}),
@@ -214,8 +213,9 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     add({ key: `order:${order.id}:${guidance.caseId}:${guidance.reason}`, field: guidance.field, kind: "order", title: `${order.orderNumber} · ${caseTitle}`, meta: `${order.customerName ?? "Kunde"} · ${reason}`, urgency: order.risk === "red" || order.risk === "blocked" ? "conflict" : "warning", orderId: order.id, orderVersion: order.version, dueDate: order.dueDate, assignedToName: assignment?.assigned_to_name, assignmentVersion: assignment?.current_order_version, primaryActionLabel: guidance.primaryActionLabel });
   }
 
-  const importedGraphIds = new Set(support.graphThreads.map((row) => row.source.slice("MS_GRAPH_IN:".length)));
-  if (graph.code === "OK") for (const mail of graph.data.filter((entry) => !importedGraphIds.has(entry.id)).slice(0, 5)) add({ key: `mail:${mail.id}`, field: "assign", kind: "mail", title: mail.subject || "Mail ohne Betreff", meta: `${mail.senderName} · ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(mail.receivedAt))}`, urgency: "decision", graphMessageId: mail.id });
+  const assignmentMessages=graph.code==='OK'?graph.messages.filter(row=>row.channel==='mail'&&row.direction==='rein'&&row.assignment==='offen'):null;
+  // Legacy mail opener consumes only a real provider ID; native IDs stay in U3 sources.
+  if(assignmentMessages)for(const mail of assignmentMessages.filter(row=>row.graphMessageId).slice(0,5))add({key:`mail:${mail.id}`,field:'assign',kind:'mail',title:mail.subject||'Mail ohne Betreff',meta:`${mail.senderName} · ${new Intl.DateTimeFormat('de-DE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Berlin'}).format(new Date(mail.at))}`,urgency:'decision',graphMessageId:mail.graphMessageId!});
 
   for (const invoice of support.invoices) {
     const dueDate = dateOnly(invoice.due_date);
@@ -260,7 +260,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const sortedItems=sortTodayByResponsibility(items,mine);
   return {
     items:sortedItems,
-    datenluecken:[...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
+    ...(graphAllowed?{assignmentMetric:assignmentMessages?{code:'OK' as const,count:assignmentMessages.length,sources:assignmentMessages.map(row=>({id:row.id,version:row.version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
+    datenluecken:[...(graphAllowed&&graph.code!=='OK'?['MESSAGE_SOURCE']:[]),...(!complaintsKnown?['COMPLAINT_SOURCE']:[]),...(!followupsKnown?['QUOTE_FOLLOWUP_SOURCE']:[]),...(support.assignmentSourceIncomplete||responsible.unavailableOrderIds.length?['ORDER_ASSIGNMENT_SOURCE']:[])],
     collectionNotices,
     visibleFields: selected,
     layout,

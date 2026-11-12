@@ -51,6 +51,13 @@ it('R13 imports a real original and reads the assignment main action with the ac
   const imported=await withSession(full,()=>importOutlookMailAction(graphId));if(imported.code!=='OK')throw Error('TEST_U2_IMPORT:'+imported.code);
   const read=await withSession(full,()=>getIntakeMessagesAction('alle'));if(read.code!=='OK')throw Error('TEST_U2_MESSAGES');
   const message=read.messages.find(row=>row.id===imported.itemId);expect(message).toBeDefined();
+  const dashboard=()=>withSession(full,async()=>{
+   const {resolveAuthorization}=await import('@/lib/server/authorization');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_U3_AUTH');
+   const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);
+  });
+  const beforeAssignment=await dashboard();expect(beforeAssignment.assignmentMetric).toMatchObject({code:'OK',count:1,sources:[{id:imported.itemId,version:message?.version}]});
+  expect(beforeAssignment.items).toEqual(expect.arrayContaining([expect.objectContaining({kind:'mail',graphMessageId:graphId})]));
+
   expect(message).toMatchObject({fallbackPriority:{code:'OK',rank:6},nextActionRule:{code:'OK',zustand:'orange',farbe:'warn',prioritaet:6,hauptaktion:{elementId:'message.assign',textKey:'messages.assign',befehl:{funktion:'getIntakeAssignmentAction',argumente:{itemId:imported.itemId,mode:'normal'}}}}});
   const rule=message?.nextActionRule;if(rule?.code!=='OK'||!rule.hauptaktion)throw Error('TEST_U2_ASSIGN_PRIMARY');
   expect(rule.erstblick.length).toBeLessThanOrEqual(5);
@@ -63,6 +70,8 @@ it('R13 imports a real original and reads the assignment main action with the ac
   expect(await withSession(full,()=>assignIntakeCustomerAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
   const after=await withSession(full,()=>getIntakeMessagesAction('alle'));if(after.code!=='OK')throw Error('TEST_U2_REREAD');
   expect(after.messages.find(row=>row.id===imported.itemId)).toMatchObject({customerId,nextActionRule:{code:'OK',hauptaktion:null,prioritaet:8}});
+  expect((await dashboard()).assignmentMetric).toEqual({code:'OK',count:0,sources:[]});
+  expect((await dashboard()).items.some(row=>row.graphMessageId===graphId)).toBe(false);
   expect(await sql`SELECT id FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND mime='message/rfc822'`).toHaveLength(1);
  }finally{vi.restoreAllMocks();}
 });
