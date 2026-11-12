@@ -65,3 +65,12 @@ it('S05K A10 timeline readers keep tenant boundaries and customer rights',async(
  const customerRead=await withSession(full,()=>getTimelineForCustomerDb(customerId));expect(customerRead).toMatchObject({ok:true});if(!customerRead.ok)throw Error('A10_CUSTOMER_TIMELINE');expect(customerRead.data.map(row=>row.id)).toContain(own);expect(customerRead.data.map(row=>row.id)).not.toContain(foreign);
  expect(await withSession(operator,()=>getTimelineForOrderDb(orderId))).toMatchObject({ok:true,data:expect.arrayContaining([expect.objectContaining({id:own})])});
 });
+
+it('S05K A10 analysis consumes every denied auth result before any provider read',async()=>{
+ const {getAnalyseOverview,getAnalyseTileDetail,getAnalyseLinkedEntities}=await import('@/features/analyse/analyse.actions');
+ const denied=await createFixture([]),fetches=vi.spyOn(globalThis,'fetch');
+ expect(await withSession(denied,()=>getAnalyseOverview('month'))).toMatchObject({data:[],error:'Keine Berechtigung für diese Aktion.'});
+ expect(await withSession(denied,()=>getAnalyseTileDetail('werkstatt_puls','month'))).toMatchObject({data:null,error:'Keine Berechtigung für diese Aktion.'});
+ expect(await withSession(denied,()=>getAnalyseLinkedEntities('werkstatt_puls'))).toMatchObject({data:[],error:'Keine Berechtigung für diese Aktion.'});
+ expect(fetches).not.toHaveBeenCalled();fetches.mockRestore();
+});

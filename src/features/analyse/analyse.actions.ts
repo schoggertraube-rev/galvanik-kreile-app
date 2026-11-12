@@ -212,7 +212,8 @@ export async function getAnalyseOverview(
 ): Promise<AnalyseActionResult<AnalyseTileSummary[]>> {
   void filters;
   try {
-    await checkAppAuth();
+    const authorization = await checkAppAuth();
+    if (!authorization.ok) return {data:[],error:authorization.message};
     const supabase = await createClient();
 
     // Werkstatt Puls
@@ -309,7 +310,8 @@ export async function getAnalyseTileDetail(
   filters?: unknown,
 ): Promise<AnalyseActionResult<AnalyseTileDetail | null>> {
   try {
-    await checkAppAuth();
+    const authorization = await checkAppAuth();
+    if (!authorization.ok) return {data:null,error:authorization.message};
     
     // We get the summary for this tile
     const { data: overviews } = await getAnalyseOverview(period, filters);
@@ -512,7 +514,8 @@ export async function getAnalyseLinkedEntities(
 ): Promise<AnalyseActionResult<AnalyseEntityLink[]>> {
   void filters;
   try {
-    await checkAppAuth();
+    const authorization = await checkAppAuth();
+    if (!authorization.ok) return {data:[],error:authorization.message};
     
     if (tileKey === "werkstatt_puls") {
       // In future: load delayed orders
