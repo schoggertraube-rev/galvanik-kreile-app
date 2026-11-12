@@ -109,7 +109,7 @@ describe("system settings port", () => {
     const { readSystemSettings, updateCompanySettings, updateManagedUser } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings({ ...context, canManage: false })).resolves.toMatchObject({ code: "FORBIDDEN" });
     await expect(updateCompanySettings(context, {})).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
-    await expect(updateManagedUser(context, { userId: "invalid" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(updateManagedUser(context, { userId: "invalid" },async()=>{})).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
@@ -130,7 +130,7 @@ describe("system settings port", () => {
       designation: "",
       active: true,
       pin: "0000",
-    })).resolves.toEqual({ code: "OK" });
+    },async()=>{})).resolves.toEqual({ code: "OK" });
     expect(hash).toHaveBeenCalledWith("0000", 12);
     expect(execute.mock.calls[1]?.[0].text).toContain("tenant_id");
   });
@@ -177,7 +177,7 @@ describe("system settings port", () => {
       designation: "x".repeat(121),
       active: true,
       pin: null,
-    })).resolves.toEqual({ code: "VALIDATION_ERROR", message: "Bezeichnung darf höchstens 120 Zeichen haben." });
+    },async()=>{})).resolves.toEqual({ code: "VALIDATION_ERROR", message: "Bezeichnung darf höchstens 120 Zeichen haben." });
     expect(withTransaction).not.toHaveBeenCalled();
   });
 

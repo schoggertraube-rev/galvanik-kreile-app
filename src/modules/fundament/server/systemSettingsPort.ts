@@ -297,7 +297,9 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   }
 }
 
-export async function updateManagedUser(context: SystemSettingsContext, input: unknown) {
+type PinChangeEffect=(tx:PrivilegedTenantTransaction,phase:'lock'|'reset',userId:string)=>Promise<void>;
+
+export async function updateManagedUser(context: SystemSettingsContext, input: unknown, pinChangeEffect:PinChangeEffect) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: MANAGED_USER_COPY.forbidden };
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Nutzerdaten sind ungültig." };
   const value = input as Record<string, unknown>;
@@ -319,6 +321,7 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
   const pinHash = normalized.pin ? await bcrypt.hash(normalized.pin, 12) : null;
   try {
     await withPrivilegedTenantTransaction(context, async (tx) => {
+      if (pinHash) await pinChangeEffect(tx,'lock',normalized.userId);
       const targets = await tx.execute<{ id: string; role: string; active: boolean; has_pin: boolean; has_logins: boolean }>(sql`
         SELECT users.id::text AS id, users.role, users.active, users.pin_hash IS NOT NULL AS has_pin,
                EXISTS (SELECT 1 FROM public.app_user_rights rights WHERE rights.tenant_id=users.tenant_id AND rights.user_id=users.id AND rights.bereich='logins') AS has_logins
@@ -347,6 +350,7 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
           ? await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, active=${normalized.active}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`)
           : await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`);
       if (rows.length !== 1) throw new Error("USER_WRITE_NOT_FOUND");
+      if (pinHash) await pinChangeEffect(tx,'reset',normalized.userId);
       await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_updated', jsonb_build_object('actorId', ${context.actorId}::text, 'userId', ${normalized.userId}::text))`);
     });
     return { code: "OK" as const };
@@ -494,7 +498,7 @@ export async function setManagedUserArea(context: SystemSettingsContext, input: 
   }
 }
 
-export async function changeOwnPin(context: { tenantId: string; actorId: string }, input: unknown) {
+export async function changeOwnPin(context: { tenantId: string; actorId: string }, input: unknown, pinChangeEffect:PinChangeEffect) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Code ist ungültig." };
   const value = input as Record<string, unknown>;
   if (Object.keys(value).join(",") !== "pin" || typeof value.pin !== "string" || !/^\d{4}$/.test(value.pin)) {
@@ -503,8 +507,10 @@ export async function changeOwnPin(context: { tenantId: string; actorId: string 
   const pinHash = await bcrypt.hash(value.pin, 12);
   try {
     await withPrivilegedTenantTransaction(context, async (tx) => {
+      await pinChangeEffect(tx,'lock',context.actorId);
       const rows = await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET pin_hash=${pinHash}, updated_at=statement_timestamp() WHERE tenant_id=${context.tenantId} AND id=${context.actorId}::uuid AND active=true RETURNING id::text AS id`);
       if (rows.length !== 1) throw new Error("USER_WRITE_NOT_FOUND");
+      await pinChangeEffect(tx,'reset',context.actorId);
       await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'own_pin_changed', jsonb_build_object('actorId', ${context.actorId}::text))`);
     });
     return { code: "OK" as const };

@@ -1,6 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import {PIN_LOGIN_COPY} from "@/ui/situationCatalog";
 import { offlinePartition } from "@/lib/server/offlinePartition";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -18,7 +19,8 @@ import {
   setAppSession,
   SESSION_TTL_MS,
 } from "@/lib/server/appSession";
-import { runPinAttempt } from "@/lib/server/pinRateLimit";
+import type {PrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
+import {trustedPinClientIp, runPinAttempt } from "@/lib/server/pinRateLimit";
 import {
   isValidPinLoginHandle,
   resolvePinLoginCandidate,
@@ -101,6 +103,7 @@ export async function getMyPermissionsAction() {
 async function verifyAndMigratePin(
   user: { id: string; pinHash: string | null },
   pin: string,
+  tx:PrivilegedTenantTransaction,
 ): Promise<boolean> {
   if (!user.pinHash) return false;
 
@@ -112,7 +115,7 @@ async function verifyAndMigratePin(
 
   const hashed = await bcrypt.hash(pin, 12);
   const updatedAt = new Date();
-  await db
+  await tx
     .update(appUsers)
     .set({ pinHash: hashed, updatedAt })
     .where(
@@ -157,29 +160,26 @@ export async function loginWithPin(
       );
     const user = resolvePinLoginCandidate(loginHandle, candidates);
 
-    if (!user) {
-      return { ok: false, message: "Code falsch · bitte neu eingeben" };
-    }
-
-    if (!canUsePinLogin(user.role) || user.tenantId !== APP_TENANT_ID) {
-      return { ok: false, message: "Code falsch · bitte neu eingeben" };
-    }
+    const loginRole=user&&canUsePinLogin(user.role)?user.role:null;
+    const eligible=user!==undefined&&user!==null&&loginRole!==null&&user.tenantId===APP_TENANT_ID;
+    const clientIp=process.env.VERCEL==='1'?trustedPinClientIp(await (await import('next/headers')).headers()):null;
 
     const pinAttempt = await runPinAttempt(
-      user.id,
-      () => verifyAndMigratePin(user, pin),
+      eligible?user.id:null,
+      async (tx) => {
+        if(!eligible)return false;
+        // A PIN reset uses the same operator lock. Read its persisted value
+        // after obtaining that lock, never verify a previously read old PIN.
+        const [current] = await tx.select({id:appUsers.id,pinHash:appUsers.pinHash})
+          .from(appUsers).where(and(eq(appUsers.id,user.id),eq(appUsers.tenantId,APP_TENANT_ID),eq(appUsers.active,true)));
+        return current ? verifyAndMigratePin(current,pin,tx) : false;
+      },
+      clientIp,
     );
     if (pinAttempt.status === "blocked") {
-      if (pinAttempt.locked) {
-        return {
-          ok: false,
-          message: "Konto gesperrt. Bitte Administrator kontaktieren.",
-        };
-      }
-
       return {
         ok: false,
-        message: `Zu viele Fehlversuche. Bitte in ${pinAttempt.retryAfterMinutes} Minute(n) erneut versuchen.`,
+        message: PIN_LOGIN_COPY.blocked(new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'}).format(new Date(pinAttempt.retryAtMs))),
       };
     }
 
@@ -187,11 +187,12 @@ export async function loginWithPin(
       return { ok: false, message: "Code falsch · bitte neu eingeben" };
     }
 
+    if(!eligible||loginRole===null)throw Error("PIN_IDENTITY_REQUIRED");
     const now = Date.now();
     await setAppSession({
       userId: user.id,
       tenantId: user.tenantId,
-      role: user.role,
+      role: loginRole,
       displayName: user.fullName,
       issuedAt: now,
       expiresAt: now + SESSION_TTL_MS,
@@ -203,7 +204,7 @@ export async function loginWithPin(
       return { ok: false, message: "Login konnte nicht sicher bestätigt werden." };
     }
 
-    return { ok: true, role: user.role };
+    return { ok: true, role: loginRole };
   } catch {
     console.error("PIN login failed.");
     return { ok: false, message: "Server-Fehler beim Login." };
