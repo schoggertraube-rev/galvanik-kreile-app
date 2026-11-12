@@ -1,6 +1,6 @@
 // erzeugt â€“ nie von Hand Ã¤ndern; Quelle V45, Quell-SHA-256 siehe V45_SOURCE_HASHES.
-// Generator-SHA-256: b56367e4f1dd2a7067bc1f3a25098328fdd5d911a50ded47f2641712030d140a
-export const V45_PREVIEW_SHA = "c49d2336b21b7dc8bb8a2e7a3f37dc0c429d2a5e7a3e71533cc67288da183f65";
+// Generator-SHA-256: f2d3e7dc322e9c478db254a0c4613e0e97ca6adafcd6356649c5b34c7b3e9694
+export const V45_PREVIEW_SHA = "2f15957a77ce7998d4ea7f16a67cf5e2435f8f1d24b6d4ec786e51fe4d1a352d";
 export const V45_SOURCE_HASHES = {
   "regeln.json": "ca7bd55a3b1ed8decfbef7e3b6760340a68e21a9f66b1a5a6ee856dbf289d053",
   "texte.json": "a103a730cc5fae2fbb95c8ff415edd48eeea95ad500d8aa2a1745f7ba2dc7d41",
