@@ -158,7 +158,7 @@ it('the actual full-freeze correction reverses a prior item completion once with
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{station:'galvanik',version:reopened.receipt.aggregateVersion,items:[expect.objectContaining({id:itemId,finished:false})]}}});
 });
 
-it('completion without a price remains possible; a missing snapshot receipt rolls the real finish back and fresh retry saves exactly once',async()=>{
+it('completion without a price remains possible; a missing snapshot receipt preserves the real finish with a basis task and fresh retry repairs it exactly once',async()=>{
  const customer=await customerFixture('Ohne-Preis'),created=await intakeOrderFixture('Ohne-Preis',customer),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
  const changed=await withSession(full,()=>changeOrderContentAction({orderId,expectedVersion:1,clientEventId:randomUUID(),note:'TEST noch ohne Preis',items:[{id:itemId,catalogServiceId:null,name:'TEST Preis offen',quantity:3,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:null,vatRateBasisPoints:null}]}));if(changed.code!=='OK')throw Error('UNPRICED_CONTENT');
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:changed.receipt.aggregateVersion,clientEventId:randomUUID()}));if(moved.code!=='OK')throw Error('UNPRICED_MOVE');
@@ -167,10 +167,21 @@ it('completion without a price remains possible; a missing snapshot receipt roll
  await sql.unsafe(`CREATE FUNCTION private.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.order_id='${orderId}' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
  await sql.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON private.order_production_snapshots FOR EACH ROW EXECUTE FUNCTION private.${name}()`);
  try{
-  expect(await withSession(full,()=>setOrderItemFinishedAction(input))).toMatchObject({code:'UNAVAILABLE'});
-  expect(await sql`SELECT version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{version:moved.receipt.aggregateVersion}]);
-  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(0);
+  const saved=await withSession(full,()=>setOrderItemFinishedAction(input));expect(saved).toMatchObject({code:'OK'});if(saved.code!=='OK')throw Error('TEST_PHYSICAL_FINISH');
+  expect(await sql`SELECT version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{version:saved.receipt.aggregateVersion}]);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(1);
+  expect(await sql`SELECT event_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toHaveLength(0);
+  const markers=await sql`SELECT id,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND event_type='ORDER_PRODUCTION_PRICING_RETRY_REQUIRED_V1'`;expect(markers).toHaveLength(1);expect(markers[0].payload).toMatchObject({phase:'basis',productionEventId:saved.receipt.eventId,itemId});
+  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${markers[0].id}::uuid`).toEqual([{status:'offen'}]);
  }finally{await sql.unsafe(`DROP TRIGGER ${name} ON private.order_production_snapshots`);await sql.unsafe(`DROP FUNCTION private.${name}()`);}
+ // PL19:01/R2: repair the preserved basis through the existing task command.
+ const {getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+ const [task]=await sql`SELECT task.id::text FROM public.tasks task JOIN public.events marker ON marker.tenant_id=task.tenant_id AND marker.id=task.client_key::text WHERE task.tenant_id=${KREILE_TENANT_SLUG} AND marker.order_id=${orderId} AND marker.event_type='ORDER_PRODUCTION_PRICING_RETRY_REQUIRED_V1'`;
+ const taskRead=await withSession(full,()=>getIntakeTaskAction({taskId:task.id}));if(taskRead.code!=='OK'||!taskRead.task)throw Error('TEST_BASIS_TASK_READ');
+ expect(taskRead).toMatchObject({pricingSource:'KNOWN',canComplete:true});
+ const repair={taskId:task.id,version:taskRead.task.version,note:null};
+ expect(await withSession(full,()=>completeIntakeTaskAction(repair))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(repair))))).toMatchObject({code:'OK',replayed:true});
  const finished=await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(input))));if(finished.code!=='OK')throw Error('UNPRICED_FINISH');
  expect(await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT quantity::text,net_cents,valuation FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{quantity:'3.000',net_cents:null,valuation:'captured'}]);
