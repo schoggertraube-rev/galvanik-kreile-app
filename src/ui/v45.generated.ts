@@ -1,5 +1,5 @@
 // erzeugt â€“ nie von Hand Ã¤ndern; Quelle V45, Quell-SHA-256 siehe V45_SOURCE_HASHES.
-// Generator-SHA-256: f2d3e7dc322e9c478db254a0c4613e0e97ca6adafcd6356649c5b34c7b3e9694
+// Generator-SHA-256: f6fa2891a328266ea816e7f8025027fdc52143b3f4a850d8964915ff2e453e3f
 export const V45_PREVIEW_SHA = "2f15957a77ce7998d4ea7f16a67cf5e2435f8f1d24b6d4ec786e51fe4d1a352d";
 export const V45_SOURCE_HASHES = {
   "regeln.json": "ca7bd55a3b1ed8decfbef7e3b6760340a68e21a9f66b1a5a6ee856dbf289d053",
@@ -8,8 +8,8 @@ export const V45_SOURCE_HASHES = {
   "bedienung.json": "cc6cf08c6172e1e939c8bc11b86930192ed648237e9499bee652d763a7aacdd9",
   "tokens.css": "fe9fbcd67c5cf8745311bfb101ae66a754f99ed954ffb5495ff0885814efadd9",
   "elemente.json": "9477cc234feb9a0a32563e5fb58216018e2067d7ed9e42c9c9822121fcd4c80e",
-  "ERWARTUNG.json": "50b8509f04878e24f1ec100bad476b0c50ae1374d0b6e7b3d119d3ea3c99fba1",
-  "KLICKFOLGE.jsonl": "11854931f2874facb571b087f91c6df4cb95ec953dd93c20868beac316adeb5d"
+  "ERWARTUNG.json": "5419b88e2334fd2ea321673f622d9b0923a8d5474e29e8141fef07dd040cf3a2",
+  "KLICKFOLGE.jsonl": "074de7db0d6040cc5e3fa9811100e57c25c4008715b30b8a5c546314cf57886a"
 } as const;
 export const V45_PROJECTION_SHA = "1f2525eab0d7373877b9ec6d2ddb2695073cade8b091dfdc9655a9c065daa842";
 export const V45_PROJECTED_TEXT = {

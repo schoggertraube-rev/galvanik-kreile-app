@@ -21,8 +21,8 @@ const SOURCE_BINDING={
     "bedienung.json": "cc6cf08c6172e1e939c8bc11b86930192ed648237e9499bee652d763a7aacdd9",
     "tokens.css": "fe9fbcd67c5cf8745311bfb101ae66a754f99ed954ffb5495ff0885814efadd9",
     "elemente.json": "9477cc234feb9a0a32563e5fb58216018e2067d7ed9e42c9c9822121fcd4c80e",
-    "ERWARTUNG.json": "50b8509f04878e24f1ec100bad476b0c50ae1374d0b6e7b3d119d3ea3c99fba1",
-    "KLICKFOLGE.jsonl": "11854931f2874facb571b087f91c6df4cb95ec953dd93c20868beac316adeb5d"
+    "ERWARTUNG.json": "5419b88e2334fd2ea321673f622d9b0923a8d5474e29e8141fef07dd040cf3a2",
+    "KLICKFOLGE.jsonl": "074de7db0d6040cc5e3fa9811100e57c25c4008715b30b8a5c546314cf57886a"
   },
   "projection": "1f2525eab0d7373877b9ec6d2ddb2695073cade8b091dfdc9655a9c065daa842"
 };
