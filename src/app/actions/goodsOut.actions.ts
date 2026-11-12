@@ -1,4 +1,5 @@
 "use server";
+import {readInvoiceVat} from "@/modules/accounting/server-public";
 
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
@@ -35,7 +36,7 @@ export async function recordGoodsOutAction(
   const result = await recordGoodsOut(input,{
     beforeOrderLock:async(tx,auth)=>{if(invoiceInput&&invoicePort)await invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput);callTaskIds=await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);finalTasks=await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId);},
     ...(invoiceInput&&invoicePort?{beforeWrite:async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction)=>{
-      const invoice=await invoicePort.createInvoice(invoiceInput,tx);
+      const invoice=await invoicePort.createInvoice(invoiceInput,tx,readInvoiceVat);
       return invoice.code==='OK'?null:{code:invoice.code,message:invoice.message};
     }}:{}),
     afterWriteFailure:async(tx,auth,receipt)=>{await createGoodsOutClarificationTask(tx,auth,{orderId:receipt.orderId,eventId:receipt.eventId},{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});},

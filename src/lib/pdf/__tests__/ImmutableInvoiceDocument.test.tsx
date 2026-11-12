@@ -5,11 +5,25 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  createImmutableInvoiceCancellationPdfDocument,
-  createImmutableInvoicePdfDocument,
+  createImmutableInvoiceCancellationPdfDocument as renderCancellationInvoice,
+  createImmutableInvoicePdfDocument as renderOriginalInvoice,
   type ImmutableInvoiceLine,
   type ImmutableInvoiceSnapshot,
+  type ImmutableInvoiceDocumentProps,
+  type ImmutableInvoiceCancellationDocumentProps,
 } from "../ImmutableInvoiceDocument";
+
+// Synthetic normalized VAT props test PDF presentation, not the VAT reader or writer.
+// The real composition is independently covered by the Action/Auth/DB acceptance case.
+import type {InvoiceVatRead} from '@/modules/accounting/public';
+function fixtureVat(snapshot:ImmutableInvoiceSnapshot):InvoiceVatRead{
+ const t=snapshot.totals,rate=t.vatRateBasisPoints;
+ const groups:InvoiceVatRead["groups"]|undefined=snapshot.schemaVersion===2?t.vatBreakdown:rate===700||rate===1900?[{rateBp:rate,netCents:t.netAmountCents,vatCents:t.vatAmountCents,grossCents:t.grossAmountCents}]:undefined;
+ if(!groups)throw Error('TEST_VAT_FIXTURE_REQUIRED');
+ return {groups,netAmountCents:t.netAmountCents,vatAmountCents:t.vatAmountCents,grossAmountCents:t.grossAmountCents,headRate:rate,reverseCharge:groups.every(row=>row.rateBp===0)};
+}
+function createImmutableInvoicePdfDocument(props:Omit<ImmutableInvoiceDocumentProps,'vat'>){return renderOriginalInvoice({...props,vat:fixtureVat(props.snapshot)});}
+function createImmutableInvoiceCancellationPdfDocument(props:Omit<ImmutableInvoiceCancellationDocumentProps,'vat'>){return renderCancellationInvoice({...props,vat:fixtureVat(props.snapshot)});}
 
 /**
  * F1.4 — real content evidence for the immutable invoice and cancellation
@@ -589,4 +603,19 @@ describe("fail-closed date formatting", () => {
       snapshot: base,
     }))).rejects.toThrow();
   }, 60_000);
+});
+
+
+it('PL0014 schema2 PDF binds both rate-group net amounts and VAT to rendered bytes',async()=>{
+ const snapshot:ImmutableInvoiceSnapshot={...snapshotFor(1900),schemaVersion:2,lines:[
+ {type:'BASE',itemId:'TEST-VAT19',name:'TEST neunzehn',quantity:1,unitNetAmountCents:10000,lineNetAmountCents:10000,vat_rate_basis_points:1900},
+ {type:'BASE',itemId:'TEST-VAT7',name:'TEST sieben',quantity:1,unitNetAmountCents:10000,lineNetAmountCents:10000,vat_rate_basis_points:700}
+ ],totals:{netAmountCents:20000,vatRateBasisPoints:null,vatAmountCents:2600,grossAmountCents:22600,vatBreakdown:[{rateBp:1900,netCents:10000,vatCents:1900,grossCents:11900},{rateBp:700,netCents:10000,vatCents:700,grossCents:10700}]}};
+ const original=await readPdfEvidence(await renderToBuffer(createImmutableInvoicePdfDocument({invoiceNumber:ORIGINAL_INVOICE_NUMBER,dueDate:DUE_DATE,snapshot})));
+ expectBindings(original.compactText,[
+ {label:'nineteen net',parts:['Netto (19 %)',eur('100,00')]},
+ {label:'nineteen VAT',parts:['zzgl. USt (19 %)',eur('19,00')]},
+ {label:'seven net',parts:['Netto (7 %)',eur('100,00')]},
+ {label:'seven VAT',parts:['zzgl. USt (7 %)',eur('7,00')]},
+ {label:'gross',parts:['Rechnungsbetrag brutto',eur('226,00')]}]);
 });

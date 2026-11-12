@@ -8,6 +8,7 @@ it('an actual cancellation of an initially historical invoice subtracts its net 
  const {getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
  const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
  const {createImmutableInvoicePdfDocument}=await import('@/lib/pdf/ImmutableInvoiceDocument');
+ const {readInvoiceVat}=await import('@/modules/accounting/server-public');
  const {renderToBuffer}=await import('@react-pdf/renderer');
  const {createHash}=await import('node:crypto');
  const order=await readyInvoiceOrder('L3-Altrechnung');
@@ -21,7 +22,7 @@ it('an actual cancellation of an initially historical invoice subtracts its net 
  const snapshot={...template.row.snapshot,issuedAt,serviceDate:dates.day};
  const id=randomUUID(),key=randomUUID(),eventId=randomUUID(),correlation=randomUUID();
  const number='R-'+dates.day.slice(0,4)+'-900001';
- const pdf=await renderToBuffer(createImmutableInvoicePdfDocument({invoiceNumber:number,dueDate,snapshot}));
+ const pdf=await renderToBuffer(createImmutableInvoicePdfDocument({invoiceNumber:number,dueDate,snapshot,vat:readInvoiceVat(snapshot)}));
  const hash=createHash('sha256').update(pdf).digest('hex');
  await sql.begin(async tx=>{
   await tx`INSERT INTO public.events SELECT (jsonb_populate_record(NULL::public.events,to_jsonb(event)||jsonb_build_object('id',${eventId}::text,'client_event_id',${key}::text,'correlation_id',${correlation}::text,'created_at',${issuedAt}::timestamptz AT TIME ZONE 'UTC','payload',event.payload||jsonb_build_object('invoiceId',${id}::text,'invoiceNumber',${number}::text,'pdfSha256',${hash}::text)))).* FROM public.events event WHERE event.id=${template.row.issue_event_id}`;

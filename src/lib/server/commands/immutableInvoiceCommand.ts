@@ -1,3 +1,4 @@
+import type {InvoiceVatReader} from '@/modules/accounting/public';
 import "server-only";
 import {QUOTE_COMMERCIAL_SOURCE_COPY} from '@/ui/situationCatalog';
 import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
@@ -917,7 +918,7 @@ export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantI
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:order:' || ${tenantId} || ':' || ${input.orderId}, 0))`);
 }
 
-export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction): Promise<CreateInvoiceResult> {
+export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Rechnungsanfrage." };
   }
@@ -1154,7 +1155,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       let pdfBuffer: Buffer;
       try {
         pdfBuffer = await renderToBuffer(
-          createImmutableInvoicePdfDocument({ invoiceNumber, dueDate, snapshot }),
+          createImmutableInvoicePdfDocument({ invoiceNumber, dueDate, snapshot,vat:requireVatReader(readVat)(snapshot) }),
         );
       } catch {
         throw new Error("INVOICE_PDF_RENDER_FAILED");
@@ -1275,7 +1276,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
   }
 }
 
-export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult> {
+export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): Promise<CancelInvoiceResult> {
   if (!isValidCancelInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Stornoanfrage." };
   }
@@ -1433,6 +1434,7 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
             cancelledAt,
             cancelReason: input.reason,
             snapshot,
+            vat:requireVatReader(readVat)(snapshot),
           }),
         );
       } catch {
@@ -1538,4 +1540,10 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
   } catch {
     return { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher storniert werden." };
   }
+}
+
+
+function requireVatReader(reader:InvoiceVatReader|undefined):InvoiceVatReader{
+ if(!reader)throw Error('INVOICE_VAT_READER_REQUIRED');
+ return reader;
 }

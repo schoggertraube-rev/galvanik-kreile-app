@@ -1,3 +1,5 @@
+import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
+import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import React, { type ReactElement } from "react";
 import { Document, Page, StyleSheet, Text, View, type DocumentProps } from "@react-pdf/renderer";
 
@@ -15,6 +17,7 @@ export type ImmutableInvoiceBaseLine = {
   quantity: number;
   unitNetAmountCents: number;
   lineNetAmountCents: number;
+  vat_rate_basis_points?:0|700|1900;
 };
 
 export type ImmutableInvoiceExtraWorkLine = {
@@ -25,12 +28,13 @@ export type ImmutableInvoiceExtraWorkLine = {
   minutes: number;
   hourlyRateCents: number;
   amountCents: number;
+  vat_rate_basis_points?:0|700|1900;
 };
 
 export type ImmutableInvoiceLine = ImmutableInvoiceBaseLine | ImmutableInvoiceExtraWorkLine;
 
 export type ImmutableInvoiceSnapshot = {
-  schemaVersion: 1;
+  schemaVersion: 1|2;
   seller: {
     companyName: string;
     street: string;
@@ -50,6 +54,7 @@ export type ImmutableInvoiceSnapshot = {
     zip: string;
     city: string;
     country: string;
+    vatId?:string|null;
   };
   order: {
     orderId: string;
@@ -61,7 +66,8 @@ export type ImmutableInvoiceSnapshot = {
   lines: ImmutableInvoiceLine[];
   totals: {
     netAmountCents: number;
-    vatRateBasisPoints: number;
+    vatRateBasisPoints: number|null;
+    vatBreakdown?:InvoiceVatGroup[];
     vatAmountCents: number;
     grossAmountCents: number;
   };
@@ -71,12 +77,14 @@ export type ImmutableInvoiceSnapshot = {
 };
 
 export type ImmutableInvoiceDocumentProps = {
+  vat:InvoiceVatRead;
   invoiceNumber: string;
   dueDate: string;
   snapshot: ImmutableInvoiceSnapshot;
 };
 
 export type ImmutableInvoiceCancellationDocumentProps = {
+  vat:InvoiceVatRead;
   invoiceNumber: string;
   cancelledAt: string;
   cancelReason: string;
@@ -391,8 +399,9 @@ function lineTotalAmount(line: ImmutableInvoiceLine): number {
   return line.type === "BASE" ? line.lineNetAmountCents : line.amountCents;
 }
 
-export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot }: ImmutableInvoiceDocumentProps) {
-  const { seller, customer, order, lines, totals } = snapshot;
+export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat }: ImmutableInvoiceDocumentProps) {
+  const { seller, customer, order, lines } = snapshot;
+  const totals=vat;
 
   return (
     <Document>
@@ -453,16 +462,17 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot }: I
             <Text style={styles.totalsLabel}>Netto</Text>
             <Text style={styles.totalsValue}>{formatCents(totals.netAmountCents)}</Text>
           </View>
-          <View style={styles.totalsRow}>
-            <Text style={styles.totalsLabel}>zzgl. USt ({formatVatRate(totals.vatRateBasisPoints)})</Text>
-            <Text style={styles.totalsValue}>{formatCents(totals.vatAmountCents)}</Text>
-          </View>
+          {totals.groups.map(group=><View key={group.rateBp}>
+            {snapshot.schemaVersion===2&&<View style={styles.totalsRow}><Text style={styles.totalsLabel}>{INVOICE_VAT_COPY.groupNet(formatVatRate(group.rateBp))}</Text><Text style={styles.totalsValue}>{formatCents(group.netCents)}</Text></View>}
+            <View style={styles.totalsRow}><Text style={styles.totalsLabel}>{INVOICE_VAT_COPY.groupVat(formatVatRate(group.rateBp))}</Text><Text style={styles.totalsValue}>{formatCents(group.vatCents)}</Text></View>
+          </View>)}
           <View style={styles.totalsRowFinal}>
             <Text style={styles.totalsFinalLabel}>Rechnungsbetrag brutto</Text>
             <Text style={styles.totalsFinalValue}>{formatCents(totals.grossAmountCents)}</Text>
           </View>
         </View>
 
+        {totals.reverseCharge&&<View><Text>{INVOICE_VAT_COPY.reverseCharge}</Text><Text>{INVOICE_VAT_COPY.vatId} {customer.vatId} · {seller.taxId}</Text></View>}
         <View style={styles.paymentBlock}>
           <Text>Zahlungsziel: {snapshot.paymentTermDays} Tage netto, fällig am {formatCalendarDate(dueDate)}.</Text>
           <Text>Bitte überweisen Sie den Rechnungsbetrag unter Angabe der Rechnungsnummer {invoiceNumber}.</Text>
@@ -491,8 +501,10 @@ export function ImmutableInvoiceCancellationDocument({
   cancelledAt,
   cancelReason,
   snapshot,
+  vat,
 }: ImmutableInvoiceCancellationDocumentProps) {
-  const { seller, customer, order, lines, totals } = snapshot;
+  const { seller, customer, order, lines } = snapshot;
+  const totals=vat;
 
   return (
     <Document>
@@ -559,10 +571,10 @@ export function ImmutableInvoiceCancellationDocument({
             <Text style={styles.totalsLabel}>Storno netto</Text>
             <Text style={styles.totalsValue}>{formatCents(-Math.abs(totals.netAmountCents))}</Text>
           </View>
-          <View style={styles.totalsRow}>
-            <Text style={styles.totalsLabel}>Storno USt ({formatVatRate(totals.vatRateBasisPoints)})</Text>
-            <Text style={styles.totalsValue}>{formatCents(-Math.abs(totals.vatAmountCents))}</Text>
-          </View>
+          {totals.groups.map(group=><View key={group.rateBp}>
+            {snapshot.schemaVersion===2&&<View style={styles.totalsRow}><Text style={styles.totalsLabel}>{INVOICE_VAT_COPY.cancelNet(formatVatRate(group.rateBp))}</Text><Text style={styles.totalsValue}>{formatCents(-group.netCents)}</Text></View>}
+            <View style={styles.totalsRow}><Text style={styles.totalsLabel}>{INVOICE_VAT_COPY.cancelVat(formatVatRate(group.rateBp))}</Text><Text style={styles.totalsValue}>{formatCents(-group.vatCents)}</Text></View>
+          </View>)}
           <View style={styles.totalsRowFinal}>
             <Text style={styles.totalsFinalLabel}>Stornobetrag brutto</Text>
             <Text style={styles.totalsFinalValue}>{formatCents(-Math.abs(totals.grossAmountCents))}</Text>
