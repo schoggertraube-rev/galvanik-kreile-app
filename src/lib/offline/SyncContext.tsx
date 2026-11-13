@@ -13,10 +13,7 @@ import React, { createContext, useContext, useEffect, useCallback, useSyncExtern
 import type { OfflineOutboxItem } from "./OfflineOutbox";
 import {readPendingEntries,retainQuarantinedPending} from "./pendingStore";
 import {usePermissions} from "@/lib/auth/PermissionsContext";
-import {syncPendingFiles} from './syncPendingFiles';
-import {replayOfflineWorkshopHttp} from './replayWorkshopHttp';
-import {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
-import {uploadIntakeOriginal} from '@/modules/eingang/public';
+import {syncOriginals} from './syncOriginals';
 import { createId } from "@paralleldrive/cuid2";
 
 interface SyncContextValue {
@@ -129,18 +126,38 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     activeScope=scope;
     const refresh=()=>{void refreshOutboxSnapshot(scope);};
+    let timer:ReturnType<typeof setTimeout>|undefined,disposed=false;
+    let timerGeneration=0;
+    const run=(flushDelayed=false,keepalive=false)=>{
+      if(!scope||!navigator.onLine||activeScope!==scope)return;
+      void syncOriginals(scope,()=>activeScope,{flushDelayed,keepalive,workshopOnly:keepalive}).then(()=>keepalive?undefined:refreshFullDeviceStand(scope,offline24h)).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
+    };
+    const schedule=async()=>{
+      const generation=++timerGeneration;if(timer)clearTimeout(timer);
+      if(!scope||!navigator.onLine)return;
+      try{
+        const entries=await readPendingEntries(scope);
+        if(disposed||generation!==timerGeneration||activeScope!==scope)return;
+        const due=entries.filter(entry=>entry.kind==='workshop'&&entry.notBefore!==undefined&&entry.dispatchStartedAt===undefined).map(entry=>Date.parse((entry as {notBefore:string}).notBefore));
+        if(due.length)timer=setTimeout(()=>run(),Math.max(0,Math.min(...due)-Date.now()));
+      }catch(error){console.error('[OFFLINE_DELAYED_READ_FAILED]',error instanceof Error?error.name:'UnknownError');}
+    };
+    const changed=()=>{refresh();void schedule();};
+    const leave=()=>run(true,true);
+    const hidden=()=>{if(document.visibilityState==='hidden')leave();};
     const refreshStand=()=>{void refreshDeviceSnapshot(scope,offline24h);};
     refreshStand();window.addEventListener('kreile-device-stand-changed',refreshStand);
-    refresh();window.addEventListener('kreile-pending-changed',refresh);
-    if(scope&&isOnline)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopHttp,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))}).then(()=>refreshFullDeviceStand(scope,offline24h)).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
-    return ()=>{window.removeEventListener('kreile-pending-changed',refresh);window.removeEventListener('kreile-device-stand-changed',refreshStand);if(activeScope===scope)activeScope=null;};
+    refresh();window.addEventListener('kreile-pending-changed',changed);
+    window.addEventListener('pagehide',leave);document.addEventListener('visibilitychange',hidden);
+    if(scope&&isOnline)run(true);
+    return ()=>{disposed=true;++timerGeneration;if(timer)clearTimeout(timer);window.removeEventListener('kreile-pending-changed',changed);window.removeEventListener('pagehide',leave);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('kreile-device-stand-changed',refreshStand);if(activeScope===scope)activeScope=null;};
   }, [scope,isOnline,offline24h]);
 
   const syncNow = useCallback(async () => {
     // Retry the same canonical queue; each command checks its current server
     // rights. Customer/order notes do not require the Eingang area on the client.
     if (!isOnline||!scope||activeScope!==scope) return;
-    await syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopHttp,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))});
+    await syncOriginals(scope,()=>activeScope);
     await refreshOutboxSnapshot(scope);
     await refreshFullDeviceStand(scope,offline24h);
   }, [isOnline,scope,offline24h]);

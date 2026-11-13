@@ -1,4 +1,4 @@
-import {readPendingEntries,retainQuarantinedPending,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal} from './pendingStore';
+import {readPendingEntries,retainQuarantinedPending,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal,claimPendingWorkshop} from './pendingStore';
 import type {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
 import {recognizeNoteConcerns} from '@/lib/domain/noteConcerns';
 import type {PendingWorkshopOriginal} from './pendingStore';
@@ -8,8 +8,8 @@ type Ports={workshopAcknowledged?:(proof:WorkshopAcknowledgement)=>void;saveNote
 type Outcome={secured:number;acknowledged:number;blocked:number};
 const running=new Map<string,Promise<Outcome>>();
 /** Reuses the original registration, immutable-byte upload and secured-original receipt. */
-export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
- const existing=running.get(scope);if(existing)return existing;
+export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?:boolean;workshopOnly?:boolean}={}):Promise<Outcome>{
+ const existing=running.get(scope);if(existing)return options.flushDelayed?existing.then(()=>syncPendingFiles(scope,ports,options)):existing;
  const work=(async()=>{
   const outcome={secured:0,acknowledged:0,blocked:0};
   // IndexedDB getAll follows random UUID keys. Replay known capture times in
@@ -37,7 +37,10 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
    if(entry.kind==='workshop'){
     try{
      if(!ports.workshop||!entry.deviceCapturedAt){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
-     const result=await ports.workshop(scope,entry);
+     const claimed=await claimPendingWorkshop(scope,entry.id,options.flushDelayed===true);
+     if(!claimed){blockedItems.add(entry.itemId);continue;}
+     if(ports.currentScope()!==scope)break;
+     const result=await ports.workshop(scope,claimed);
      if((result.code!=='OK'&&result.code!=='PRESERVED')||!('offlineReceipt' in result)){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
      outcome.secured++;
      if(ports.currentScope()!==scope)break;
@@ -45,6 +48,7 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
     }catch(error){outcome.blocked++;blockedItems.add(entry.itemId);console.error('[OFFLINE_WORKSHOP_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
     continue;
    }
+   if(options.workshopOnly)continue;
    if(entry.kind==='note'){
     if(entry.expectedVersion===undefined||!entry.deviceCapturedAt){
      await retainQuarantinedPending(scope,{id:entry.id,kind:'quarantine',capturedAt:entry.deviceCapturedAt??'',payload:{reason:'NOTE_SYNC_METADATA_MISSING',original:entry}});

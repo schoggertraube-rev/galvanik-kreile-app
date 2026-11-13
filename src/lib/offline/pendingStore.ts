@@ -8,14 +8,15 @@ export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file:
   | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number};
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingWorkshopCommand={command:'item.finished';input:Parameters<typeof setOrderItemFinishedAction>[0]}|{command:'item.extraWork';input:Parameters<typeof changeOrderItemExtraWorkAction>[0]};
-export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:string;kind:'workshop';deviceCapturedAt?:string;queueSequence?:number};
+export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:string;kind:'workshop';deviceCapturedAt?:string;queueSequence?:number;notBefore?:string;dispatchStartedAt?:string};
 export type PendingWorkshopReceipt={scope:string;clientEventId:string;deviceCapturedAt:string;eventId:string;actorId:string};
 export type PendingEntry=PendingOriginal|PendingWorkshopOriginal|PendingQuarantine;
 export function isPendingWorkshopOriginal(value:unknown):value is PendingWorkshopOriginal{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>,input=row.input;
  if(row.kind!=='workshop'||!input||typeof input!=='object'||Array.isArray(input))return false;
- if(Object.keys(row).some(key=>!['id','itemId','kind','command','input','deviceCapturedAt','queueSequence'].includes(key)))return false;
+ if(Object.keys(row).some(key=>!['id','itemId','kind','command','input','deviceCapturedAt','queueSequence','notBefore','dispatchStartedAt'].includes(key)))return false;
+ for(const key of ['notBefore','dispatchStartedAt'])if(row[key]!==undefined&&(typeof row[key]!=='string'||!Number.isFinite(Date.parse(row[key] as string))))return false;
  if(row.deviceCapturedAt!==undefined&&(typeof row.deviceCapturedAt!=='string'||!Number.isFinite(Date.parse(row.deviceCapturedAt))))return false;
  if(row.queueSequence!==undefined&&(typeof row.queueSequence!=='number'||!Number.isSafeInteger(row.queueSequence)||row.queueSequence<1))return false;
  const data=input as Record<string,unknown>,uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(v);
@@ -273,6 +274,33 @@ export async function retainPendingOriginal(scope: string, original: PendingOrig
 export async function retainPendingWorkshopOriginal(scope:string,original:PendingWorkshopOriginal):Promise<void>{
  if(!isPendingWorkshopOriginal(original))throw Error('OFFLINE_WORKSHOP_ORIGINAL_INVALID');
  return retainOriginal(scope,original);
+}
+/** U291: claim and withdraw serialize on the original store. Once an attempt
+ * starts, response loss cannot reopen the undo window or replace its N5 key. */
+export async function claimPendingWorkshop(scope:string,id:string,flush=false):Promise<PendingWorkshopOriginal|null>{
+ return changeDelayedWorkshop(scope,id,'claim',flush) as Promise<PendingWorkshopOriginal|null>;
+}
+export async function withdrawPendingWorkshop(scope:string,id:string):Promise<boolean>{
+ return changeDelayedWorkshop(scope,id,'withdraw',false) as Promise<boolean>;
+}
+async function changeDelayedWorkshop(scope:string,id:string,mode:'claim'|'withdraw',flush:boolean):Promise<PendingWorkshopOriginal|null|boolean>{
+ const db=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.get(id);let result:PendingWorkshopOriginal|null|boolean=mode==='claim'?null:false;
+  read.onsuccess=()=>{
+   const row:unknown=read.result;if(!isPendingWorkshopOriginal(row))return;
+   const now=new Date(),due=row.notBefore===undefined||Date.parse(row.notBefore)<=now.getTime();
+   if(mode==='withdraw'){
+    if(row.notBefore===undefined||row.dispatchStartedAt!==undefined||due)return;
+    store.delete(id);result=true;return;
+   }
+   if(!flush&&!due&&row.dispatchStartedAt===undefined)return;
+   const claimed=row.notBefore!==undefined&&row.dispatchStartedAt===undefined?{...row,dispatchStartedAt:now.toISOString()}:row;
+   if(claimed!==row)store.put(claimed);result=claimed;
+  };
+  tx.oncomplete=()=>{db.close();if(mode==='withdraw'&&result===true)window.dispatchEvent(new Event('kreile-pending-changed'));resolve(result);};
+  tx.onabort=()=>{db.close();reject(Error('OFFLINE_WORKSHOP_QUEUE_ABORTED'));};
+ });
 }
 type RequiredDeviceStand={loginScope:string;cacheGeneration:number;serverReadAt:string};
 async function retainOriginal(scope:string,original:PendingOriginal|PendingWorkshopOriginal,requiredStand?:RequiredDeviceStand):Promise<void>{

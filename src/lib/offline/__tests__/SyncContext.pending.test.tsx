@@ -13,7 +13,32 @@ vi.mock('@/app/actions/offlineWorkshop.actions',()=>({replayOfflineWorkshopActio
 vi.mock('@/modules/eingang/public',()=>({uploadIntakeOriginal:vi.fn()}));
 vi.mock('../syncPendingFiles',()=>({syncPendingFiles:ports.sync}));
 vi.mock('../pendingStore',()=>({readPendingEntries:ports.read,retainQuarantinedPending:ports.retain}));
-afterEach(()=>{cleanup();state.offline24h=false;vi.clearAllMocks();});
+afterEach(()=>{cleanup();state.offline24h=false;vi.clearAllMocks();vi.restoreAllMocks();vi.useRealTimers();});
+it('pagehide and hidden flush the same queue with keepalive, and stop after unmount',async()=>{
+ state.scope='8'.repeat(64);state.status='authenticated';ports.read.mockResolvedValue([]);
+ const view=render(<SyncProvider><Count/></SyncProvider>);
+ await waitFor(()=>expect(ports.sync).toHaveBeenCalled());ports.sync.mockClear();
+ fireEvent(window,new Event('pagehide'));
+ expect(ports.sync).toHaveBeenCalledWith(state.scope,expect.any(Object),{flushDelayed:true,keepalive:true,workshopOnly:true});
+ vi.spyOn(document,'visibilityState','get').mockReturnValue('hidden');fireEvent(document,new Event('visibilitychange'));
+ expect(ports.sync).toHaveBeenCalledTimes(2);
+ view.unmount();fireEvent(window,new Event('pagehide'));expect(ports.sync).toHaveBeenCalledTimes(2);
+});
+it('offline leaving never sends the retained queue',async()=>{
+ state.scope='9'.repeat(64);state.status='authenticated';ports.read.mockResolvedValue([]);
+ vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
+ render(<SyncProvider><Count/></SyncProvider>);fireEvent(window,new Event('pagehide'));
+ expect(ports.sync).not.toHaveBeenCalled();
+});
+it('a newly committed delayed original waits until its actual deadline',async()=>{
+ vi.useFakeTimers();state.scope='0'.repeat(64);state.status='authenticated';ports.read.mockResolvedValue([]);
+ render(<SyncProvider><Count/></SyncProvider>);await act(async()=>{await Promise.resolve();});ports.sync.mockClear();
+ ports.read.mockResolvedValue([{id:'TEST-delay',kind:'workshop',itemId:'TEST-order',notBefore:new Date(Date.now()+10000).toISOString()}]);
+ await act(async()=>{window.dispatchEvent(new Event('kreile-pending-changed'));await Promise.resolve();});
+ await act(async()=>{await vi.advanceTimersByTimeAsync(9999);});expect(ports.sync).not.toHaveBeenCalled();
+ await act(async()=>{await vi.advanceTimersByTimeAsync(1);});expect(ports.sync).toHaveBeenCalledOnce();
+ expect(ports.sync.mock.calls[0][2]).toEqual({flushDelayed:false,keepalive:false,workshopOnly:false});
+});
 function Count(){const {outboxItems}=useSync();return <output data-testid="pending">{outboxItems.length}</output>;}
 function StorageState(){const {pendingStorageUnavailable}=useSync();return <output data-testid="storage">{pendingStorageUnavailable?'unavailable':'readable'}</output>;}
 function StandState(){const {deviceStand}=useSync();return <output data-testid="stand">{deviceStand.code}</output>;}
