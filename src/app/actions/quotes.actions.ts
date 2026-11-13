@@ -397,11 +397,11 @@ async function convertQuoteToOrder(input:ConvertQuoteInput,newGoodsInput?:unknow
     || persisted.receipt.orderId !== order.receipt.orderId
     || persisted.receipt.orderIntakeEventId !== order.receipt.eventId
     || persisted.quote.linkedOrderId !== order.receipt.orderId) {
-    return { code: "UNAVAILABLE" as const, message: "Auftrag wurde angelegt, der sichere KV-Readback ist noch nicht verfügbar." };
+    return { code: "UNAVAILABLE" as const, message: QUOTE_CYCLE_COPY.orderReadbackUnavailable };
   }
 
   if(input.goodsReceiptId){try{await withPrivilegedTenantTransaction(authorization.data,tx=>synchronizeQuoteOrderRetryTask(tx,authorization.data,input.goodsReceiptId!,retryTaskEffects,'settle'));}
-  catch(error){console.error('[QUOTE_ORDER_RETRY_TASK_SETTLEMENT_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:'Auftrag wurde angelegt, der sichere KV-Readback ist noch nicht verfügbar.'};}}
+  catch(error){console.error('[QUOTE_ORDER_RETRY_TASK_SETTLEMENT_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:QUOTE_CYCLE_COPY.orderReadbackUnavailable};}}
 
   revalidatePath("/orders");
   revalidatePath(`/orders/${order.receipt.orderId}`);

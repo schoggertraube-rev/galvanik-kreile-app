@@ -45,7 +45,7 @@ it.each([{name:'full',operational:false,missingReceipt:false},{name:'operational
   expect(failed).toMatchObject({code:'UNAVAILABLE',message:expect.stringContaining('Auftrag aus KV '+created.quote.quoteNumber+' anlegen')});
   expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId}`).toEqual([{n:0}]);
   const tasks=await sql`SELECT id::text,titel,status,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quoteId}`;
-  expect(tasks).toEqual([{id:expect.any(String),titel:'Auftrag aus KV '+created.quote.quoteNumber+' anlegen',status:'offen',fuer_bereich:'geld'}]);
+  expect(tasks).toEqual([{id:expect.any(String),titel:'Auftrag aus KV '+created.quote.quoteNumber+' anlegen · Ware ist da, der Auftrag fehlt noch',status:'offen',fuer_bereich:'geld'}]);
   const {getIntakeTaskAction}=await import('@/app/actions/eingang.actions');
   expect(await withSession(full,()=>getIntakeTaskAction({taskId:tasks[0].id}))).toMatchObject({code:'OK',task:{titel:tasks[0].titel,status:'offen'},reference:{type:'kv',id:quoteId}});
   expect((await withSession(actor,()=>convertQuoteToOrderAction(JSON.parse(JSON.stringify(award)),JSON.parse(JSON.stringify(goods))))).code).not.toBe('OK');
