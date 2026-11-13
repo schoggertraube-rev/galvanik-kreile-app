@@ -228,7 +228,8 @@ export function OrdersAppAdapter() {
           return;
         }
         if(active&&revision===loadRevision)setState({ kind: "data", orders: result.data.map(toOrderListRow), loadedAt: result.serverReadAt??new Date().toISOString(),source:device?'device':"online" });
-      } catch {
+      } catch (error) {
+        console.error('[ORDERS_READ_FAILED]',error instanceof Error?error.name:'UnknownError');
         if (active&&revision===loadRevision) setState({ kind: "error", message: "Aufträge konnten nicht sicher geladen werden." });
       }
     };

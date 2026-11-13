@@ -41,7 +41,7 @@ it('offline takeover uses the existing login namespace without simulating a serv
 });
 it('double click keeps one pending adoption and a late old-login reply cannot bind it',async()=>{
  state.entries=[{id:'TEST-late',payload:{text:'TEST delayed original'}}];let release:(value:unknown)=>void=()=>{};ports.scope.mockReturnValue(new Promise(resolve=>{release=resolve;}));const close=vi.fn();
- const view=render(<QuarantinedOriginals onClose={close}/>);fireEvent.click(screen.getByText('Als Eingang übernehmen'));fireEvent.click(screen.getByText('Als Eingang übernehmen'));expect(ports.scope).toHaveBeenCalledOnce();
+ const view=render(<QuarantinedOriginals onClose={close}/>);fireEvent.click(screen.getByText('Als Eingang übernehmen'));fireEvent.click(screen.getByText('Als Eingang übernehmen'));await waitFor(()=>expect(ports.scope).toHaveBeenCalledOnce());
  const oldScope=state.scope;state.scope='b'.repeat(64);view.rerender(<QuarantinedOriginals onClose={close}/>);release({code:'OK',scope:oldScope});
  await waitFor(()=>expect(screen.getByText('Als Eingang übernehmen')).toBeEnabled());expect(ports.adopt).not.toHaveBeenCalled();expect(ports.open).not.toHaveBeenCalled();expect(close).not.toHaveBeenCalled();
 });

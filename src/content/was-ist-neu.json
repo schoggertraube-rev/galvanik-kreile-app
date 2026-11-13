@@ -1,6 +1,17 @@
 [
   {
     "datum": "2026-11-13",
+    "pr": 218,
+    "seite": "kunden",
+    "punkte": [
+      "Du kannst dich auch anmelden, wenn der Offline-Speicher deines Browsers fehlt oder gestört ist.",
+      "Im freigeschalteten Offline-Modus kannst du gespeicherte Aufträge und Kunden suchen. Wartende Eingaben bleiben bis zum bestätigten Abgleich auf dem Gerät.",
+      "Zurückgehaltene Notizen und Dateien kannst du als Eingang übernehmen. Die ursprünglichen Daten bleiben erhalten."
+    ],
+    "ziel": "/customers"
+  },
+  {
+    "datum": "2026-11-13",
     "pr": 217,
     "seite": "auftraege",
     "punkte": [

@@ -9,7 +9,7 @@ import { loginWithPin } from "@/app/actions/auth.actions";
 import { usePageView } from "@/hooks/usePageView";
 import { useHydrated } from "@/hooks/useHydrated";
 import {clearPrivateReadStateBeforeLogin} from '@/lib/offline/privateReadCache';
-import {PIN_LOGIN_COPY} from '@/ui/situationCatalog';
+import {PIN_LOGIN_COPY,OFFLINE_DEVICE_STATUS_COPY} from '@/ui/situationCatalog';
 import type { StartUserDto } from "@/lib/auth/userDtos";
 import styles from "./StartScreenClient.module.css";
 
@@ -71,7 +71,8 @@ function StartContent({
     submittingRef.current = true;
     setPinPending(true);
     try {
-      await clearPrivateReadStateBeforeLogin();
+      const cleanup=await clearPrivateReadStateBeforeLogin();
+      if(cleanup?.code==='UNAVAILABLE')setMessage(OFFLINE_DEVICE_STATUS_COPY.unavailable);
       const result = await loginWithPin(selected.loginHandle, nextPin);
       if (result.ok) {
         window.localStorage.setItem(LAST_LOGIN_KEY, selected.loginHandle);
@@ -120,8 +121,8 @@ function StartContent({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     startEmailTransition(async () => {
-      try {await clearPrivateReadStateBeforeLogin();}
-      catch {setMessage(PIN_LOGIN_COPY.incomplete);return;}
+      const cleanup=await clearPrivateReadStateBeforeLogin();
+      if(cleanup?.code==='UNAVAILABLE')setMessage(OFFLINE_DEVICE_STATUS_COPY.unavailable);
       await login(formData);
     });
   }

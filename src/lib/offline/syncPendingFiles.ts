@@ -8,7 +8,7 @@ type Ports={workshopAcknowledged?:(proof:WorkshopAcknowledgement)=>void;saveNote
 type Outcome={secured:number;acknowledged:number;blocked:number};
 const running=new Map<string,Promise<Outcome>>();
 /** Reuses the original registration, immutable-byte upload and secured-original receipt. */
-export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?:boolean;workshopOnly?:boolean}={}):Promise<Outcome>{
+export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?:boolean;workshopOnly?:boolean;offline24h?:boolean}={}):Promise<Outcome>{
  const existing=running.get(scope);if(existing)return options.flushDelayed?existing.then(()=>syncPendingFiles(scope,ports,options)):existing;
  const work=(async()=>{
   const outcome={secured:0,acknowledged:0,blocked:0};
@@ -66,7 +66,7 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
    }
    // Historical fingerprints are not guessed; the existing capture dialog can resume them.
    if(!Object.hasOwn(entry,'deviceId')){
-    await retainQuarantinedPending(scope,{id:entry.id,kind:'quarantine',capturedAt:entry.deviceCapturedAt??'',payload:{reason:'FILE_SYNC_DEVICE_ID_MISSING',original:entry}});
+    if(options.offline24h===true)await retainQuarantinedPending(scope,{id:entry.id,kind:'quarantine',capturedAt:entry.deviceCapturedAt??'',payload:{reason:'FILE_SYNC_DEVICE_ID_MISSING',original:entry}});
     outcome.blocked++;blockedItems.add(entry.itemId);continue;
    }
    try{

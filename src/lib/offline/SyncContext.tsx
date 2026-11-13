@@ -2,12 +2,6 @@
 import {refreshDeviceStand} from './collectDeviceStand';
 import {readDeviceStandResponse} from './devicePortRead';
 import {readCacheScopeMarker} from './cacheScopeMarker';
-import {getOrdersDb,getLiveOrderCardAction} from '@/app/actions/orders.actions';
-import {getCustomersDb,getCustomerSummaryAction} from '@/app/actions/customers.actions';
-import {getTodayDeviceAction} from '@/app/actions/today.actions';
-
-import {getIntakeMessagesAction} from '@/app/actions/eingang.actions';
-import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
 import {OFFLINE_NOTE_QUARANTINE_COPY} from '@/ui/situationCatalog';
 import React, { createContext, useContext, useEffect, useLayoutEffect,useCallback, useSyncExternalStore } from "react";
 import type { OfflineOutboxItem } from "./OfflineOutbox";
@@ -46,12 +40,14 @@ let outboxSnapshot: OfflineOutboxItem[] = EMPTY_OUTBOX;
 const EMPTY_QUARANTINE:PendingQuarantine[]=[];
 let quarantineSnapshot:PendingQuarantine[]=EMPTY_QUARANTINE;
 const outboxListeners = new Set<() => void>();
+// Load the existing Server Action references only when their port is used.
+// Rendering a client provider must not evaluate an unused server bootstrap.
 const deviceStandPorts={
-  orders:{list:getOrdersDb,read:(id:string)=>getLiveOrderCardAction({orderId:id})},
-  customers:{list:getCustomersDb,read:(id:string)=>getCustomerSummaryAction({customerId:id})},
-  quotes:{list:()=>listOpenQuotesAction({purpose:'device'}),read:(id:string)=>readQuoteAction({quoteId:id,purpose:'operations'})},
-  messages:{read:()=>getIntakeMessagesAction({purpose:'device'})},
-  today:{read:getTodayDeviceAction},currentScope:()=>activeScope,
+  orders:{list:async()=>(await import('@/app/actions/orders.actions')).getOrdersDb(),read:async(id:string)=>(await import('@/app/actions/orders.actions')).getLiveOrderCardAction({orderId:id})},
+  customers:{list:async()=>(await import('@/app/actions/customers.actions')).getCustomersDb(),read:async(id:string)=>(await import('@/app/actions/customers.actions')).getCustomerSummaryAction({customerId:id})},
+  quotes:{list:async()=>(await import('@/app/actions/quotes.actions')).listOpenQuotesAction({purpose:'device'}),read:async(id:string)=>(await import('@/app/actions/quotes.actions')).readQuoteAction({quoteId:id,purpose:'operations'})},
+  messages:{read:async()=>(await import('@/app/actions/eingang.actions')).getIntakeMessagesAction({purpose:'device'})},
+  today:{read:async()=>(await import('@/app/actions/today.actions')).getTodayDeviceAction()},currentScope:()=>activeScope,
 };
 
 function subscribeToOutbox(onStoreChange: () => void): () => void {
@@ -127,7 +123,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     let timerGeneration=0;
     const run=(flushDelayed=false,keepalive=false)=>{
       if(!scope||!readServerReachability()||activeScope!==scope)return;
-      void syncOriginals(scope,()=>activeScope,{flushDelayed,keepalive,workshopOnly:keepalive}).then(()=>keepalive?undefined:refreshFullDeviceStand(scope,offline24h)).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
+      void syncOriginals(scope,()=>activeScope,{flushDelayed,keepalive,workshopOnly:keepalive,offline24h}).then(()=>keepalive?undefined:refreshFullDeviceStand(scope,offline24h)).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     };
     const schedule=async()=>{
       const generation=++timerGeneration;if(timer)clearTimeout(timer);
@@ -159,7 +155,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     // Retry the same canonical queue; each command checks its current server
     // rights. Customer/order notes do not require the Eingang area on the client.
     if (!isOnline||!scope||activeScope!==scope) return;
-    await syncOriginals(scope,()=>activeScope);
+    await syncOriginals(scope,()=>activeScope,{offline24h});
     await refreshOutboxSnapshot(scope);
     await refreshFullDeviceStand(scope,offline24h);
   }, [isOnline,scope,offline24h]);

@@ -2,7 +2,6 @@
 import {useLayoutEffect,useRef,useState} from 'react';
 import {Dialog} from '@/ui/kr';
 import {usePermissions} from '@/lib/auth/PermissionsContext';
-import {getIntakePendingScopeAction} from '@/app/actions/eingang.actions';
 import {getIntakeDeviceId,requestGlobalCreate} from '@/modules/eingang/public';
 import {OFFLINE_TAKEOVER_COPY} from '@/ui/situationCatalog';
 import {useSync} from './SyncContext';
@@ -44,7 +43,7 @@ export function QuarantinedOriginals({onClose}:{onClose:()=>void}){
   try{
    // Offline this is only the existing login's local namespace. The real
    // capture command still checks the original actor and Eingang on replay.
-   await readWithDeviceFallback(async()=>{const checked=await getIntakePendingScopeAction();if(checked.code!=='OK'||checked.scope!==offlineScope)throw Error('OFFLINE_TAKEOVER_SCOPE_REQUIRED');},async()=>undefined,true);
+   await readWithDeviceFallback(async()=>{const checked=await(await import('@/app/actions/eingang.actions')).getIntakePendingScopeAction();if(checked.code!=='OK'||checked.scope!==offlineScope)throw Error('OFFLINE_TAKEOVER_SCOPE_REQUIRED');},async()=>undefined,true);
    if(currentScope.current!==offlineScope)return;
    const saved=await adoptQuarantinedOriginal(offlineScope,id,getIntakeDeviceId(),()=>currentScope.current);
    if(saved.code!=='OK')throw Error('OFFLINE_TAKEOVER_SOURCE_INCOMPLETE');
