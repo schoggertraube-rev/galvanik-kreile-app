@@ -1,4 +1,5 @@
 "use client";
+import {captureDeviceReadFence,retainDevicePortResponse} from '@/lib/offline/devicePortRead';
 import {capturePendingItemFinished} from '@/lib/offline/pendingStore';
 import type {WorkshopAcknowledgement} from '@/lib/offline/syncPendingFiles';
 import {OFFLINE_ITEM_FINISHED_COPY,OFFLINE_RECONCILIATION_COPY,ACTOR_COPY} from "@/ui/situationCatalog";
@@ -314,6 +315,7 @@ export function OrderCardAppAdapter({
       if (!preserve) setState({ kind: "loading" });
       if (!preserve) setFeedback({ kind: "idle", message: "" });
       try {
+        const readFence=offlineScope?await captureDeviceReadFence(offlineScope,offline24h):null;
         const result = await invokeOrderCardLoadStep(
           "ORDER_CARD_ACTION_FAILED",
           () => getLiveOrderCardAction({ orderId }),
@@ -324,6 +326,11 @@ export function OrderCardAppAdapter({
           return null;
         }
         const card = result.data.card;
+        if(offline24h&&offlineScope){
+          if(result.data.serverReadAt&&result.data.cacheLoginScope&&result.data.nextActionRule){
+            await retainDevicePortResponse(offlineScope,true,{port:'order.u2',portVersion:1,objectId:card.id,serverReadAt:result.data.serverReadAt,sourceLoginScope:result.data.cacheLoginScope,response:result.data.nextActionRule},readFence);
+          }else console.error('[OFFLINE_ORDER_U2_SOURCE_INCOMPLETE]');
+        }
         const [masterResult, paymentResult, catalogResult] = await Promise.all([
           invokeOrderCardLoadStep(
             "ORDER_CARD_EXTRA_WORK_ACTION_FAILED",
@@ -369,7 +376,7 @@ export function OrderCardAppAdapter({
         return null;
       }
     },
-    [orderId],
+    [orderId,offline24h,offlineScope],
   );
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);

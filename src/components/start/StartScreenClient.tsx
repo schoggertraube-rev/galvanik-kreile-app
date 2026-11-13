@@ -8,6 +8,8 @@ import { login } from "@/app/actions/auth";
 import { loginWithPin } from "@/app/actions/auth.actions";
 import { usePageView } from "@/hooks/usePageView";
 import { useHydrated } from "@/hooks/useHydrated";
+import {clearPrivateReadStateBeforeLogin} from '@/lib/offline/privateReadCache';
+import {PIN_LOGIN_COPY,OFFLINE_DEVICE_STATUS_COPY} from '@/ui/situationCatalog';
 import type { StartUserDto } from "@/lib/auth/userDtos";
 import styles from "./StartScreenClient.module.css";
 
@@ -69,6 +71,8 @@ function StartContent({
     submittingRef.current = true;
     setPinPending(true);
     try {
+      const cleanup=await clearPrivateReadStateBeforeLogin();
+      if(cleanup?.code==='UNAVAILABLE')setMessage(OFFLINE_DEVICE_STATUS_COPY.unavailable);
       const result = await loginWithPin(selected.loginHandle, nextPin);
       if (result.ok) {
         window.localStorage.setItem(LAST_LOGIN_KEY, selected.loginHandle);
@@ -77,7 +81,7 @@ function StartContent({
       }
       setMessage(result.message);
     } catch {
-      setMessage("Anmeldung konnte nicht sicher abgeschlossen werden.");
+      setMessage(PIN_LOGIN_COPY.incomplete);
     }
     setPin("");
     setShaking(true);
@@ -117,6 +121,8 @@ function StartContent({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     startEmailTransition(async () => {
+      const cleanup=await clearPrivateReadStateBeforeLogin();
+      if(cleanup?.code==='UNAVAILABLE')setMessage(OFFLINE_DEVICE_STATUS_COPY.unavailable);
       await login(formData);
     });
   }
@@ -166,7 +172,7 @@ function StartContent({
         <input id="email" name="email" type="email" autoComplete="username" required autoFocus onChange={() => setShowServerMessage(false)} />
         <label htmlFor="password">Passwort</label>
         <input id="password" name="password" type="password" autoComplete="current-password" required />
-        {serverMessage ? <p className={styles.errorText} role="alert" aria-live="polite">{serverMessage}</p> : null}
+        {message || serverMessage ? <p className={styles.errorText} role="alert" aria-live="polite">{message ?? serverMessage}</p> : null}
         <button className={styles.emailSubmit} data-spec-id="login.email-anmelden" type="submit" disabled={!interactive || emailPending}>{emailPending ? "Anmeldung läuft …" : "Anmelden"}</button>
         <button className={styles.emailLink} type="button" disabled={!interactive} onClick={() => setMode("pin")}>Mit Code anmelden</button>
       </form>}

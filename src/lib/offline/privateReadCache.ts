@@ -1,5 +1,5 @@
-import {readCacheScopeMarker} from './cacheScopeMarker';
-import {readPendingShellMetadata,changePendingShellMetadata} from './pendingStore';
+import {readCacheScopeMarker,removeCacheScopeMarker} from './cacheScopeMarker';
+import {readPendingShellMetadata,changePendingShellMetadata,revokeUnmarkedPendingDeviceReads} from './pendingStore';
 import {privateReadCachePrefix} from './logoutReadState';
 
 export function qualifiedPrivateCacheName(scope:string,loginScope:string,generation:number):string{
@@ -8,9 +8,25 @@ export function qualifiedPrivateCacheName(scope:string,loginScope:string,generat
 }
 /** Retry failed deletion before any cached content is considered. Originals are in IDB. */
 export async function clearUnmarkedPrivateCaches():Promise<void>{
- if(readCacheScopeMarker()||typeof caches==='undefined')return;
+ if(readCacheScopeMarker())return;
+ await revokeUnmarkedPendingDeviceReads();
+ if(typeof caches==='undefined')return;
  const known=/^kreile-private-[a-f0-9]{64}-[a-f0-9]{64}-[1-9][0-9]*$/;
  for(const name of await caches.keys())if(known.test(name)&&!await caches.delete(name)&&(await caches.keys()).includes(name))throw Error('OFFLINE_CACHE_DELETE_NOT_CONFIRMED');
+}
+/** Revoke reading first; a broken browser store must never block login.
+ * Cleanup remains retryable and never consumes queued originals.
+ */
+export async function clearPrivateReadStateBeforeLogin():Promise<{code:'CLEARED'|'UNAVAILABLE'}>{
+ try{
+  removeCacheScopeMarker();
+  if(readCacheScopeMarker()!==null)throw Error('OFFLINE_CACHE_MARKER_REVOKE_NOT_CONFIRMED');
+  await clearUnmarkedPrivateCaches();
+  return {code:'CLEARED'};
+ }catch(error){
+  console.error('[OFFLINE_LOGIN_CACHE_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');
+  return {code:'UNAVAILABLE'};
+ }
 }
 /** The sole read seam for scoped private responses; no broad caches.match fallback. */
 export async function readScopedPrivateResponse(scope:string,loginScope:string,request:RequestInfo|URL):Promise<Response|null>{
@@ -54,6 +70,9 @@ export async function warmScopedPrivateResponse(scope:string,loginScope:string,u
    const activated=await changePendingShellMetadata(scope,loginScope,null,true);
    if(activated.code!=='OK')return false;
    state={code:'OK',metadata:activated.metadata};
+   // The initial full reader may already have observed NO_SHELL while this
+   // real HTML request was in flight. Wake that same reader after the commit.
+   window.dispatchEvent(new CustomEvent('kreile-offline-shell-ready',{detail:{scope,loginScope}}));
   }
   if(state.code!=='OK'||state.metadata.scope!==loginScope||readCacheScopeMarker()!==loginScope)return false;
   const name=qualifiedPrivateCacheName(scope,loginScope,state.metadata.cacheGeneration);

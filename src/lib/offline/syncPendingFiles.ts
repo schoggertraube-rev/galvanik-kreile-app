@@ -1,4 +1,4 @@
-import {readPendingEntries,retainQuarantinedPending,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal} from './pendingStore';
+import {readPendingEntries,retainQuarantinedPending,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal,claimPendingWorkshop} from './pendingStore';
 import type {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
 import {recognizeNoteConcerns} from '@/lib/domain/noteConcerns';
 import type {PendingWorkshopOriginal} from './pendingStore';
@@ -8,8 +8,8 @@ type Ports={workshopAcknowledged?:(proof:WorkshopAcknowledgement)=>void;saveNote
 type Outcome={secured:number;acknowledged:number;blocked:number};
 const running=new Map<string,Promise<Outcome>>();
 /** Reuses the original registration, immutable-byte upload and secured-original receipt. */
-export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
- const existing=running.get(scope);if(existing)return existing;
+export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?:boolean;workshopOnly?:boolean;offline24h?:boolean}={}):Promise<Outcome>{
+ const existing=running.get(scope);if(existing)return options.flushDelayed?existing.then(()=>syncPendingFiles(scope,ports,options)):existing;
  const work=(async()=>{
   const outcome={secured:0,acknowledged:0,blocked:0};
   // IndexedDB getAll follows random UUID keys. Replay known capture times in
@@ -24,7 +24,7 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
   const sequenced=ordered.filter(hasSequence).sort((a,b)=>a.queueSequence!-b.queueSequence!);
   let sequenceCursor=0;
   const blockedItems=new Set<string>();
-  for(const entry of inventory)if(entry.kind==='quarantine'&&entry.payload?.reason==='NOTE_SYNC_METADATA_MISSING'){
+  for(const entry of inventory)if(entry.kind==='quarantine'&&(entry.payload?.reason==='NOTE_SYNC_METADATA_MISSING'||entry.payload?.reason==='FILE_SYNC_DEVICE_ID_MISSING')){
    const original=entry.payload.original;if(original&&typeof original==='object'&&'itemId'in original&&typeof original.itemId==='string')blockedItems.add(original.itemId);
   }
   // Keep legacy entries in their existing time-based slots; never invent a
@@ -37,7 +37,10 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
    if(entry.kind==='workshop'){
     try{
      if(!ports.workshop||!entry.deviceCapturedAt){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
-     const result=await ports.workshop(scope,entry);
+     const claimed=await claimPendingWorkshop(scope,entry.id,options.flushDelayed===true);
+     if(!claimed){blockedItems.add(entry.itemId);continue;}
+     if(ports.currentScope()!==scope)break;
+     const result=await ports.workshop(scope,claimed);
      if((result.code!=='OK'&&result.code!=='PRESERVED')||!('offlineReceipt' in result)){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
      outcome.secured++;
      if(ports.currentScope()!==scope)break;
@@ -45,6 +48,7 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
     }catch(error){outcome.blocked++;blockedItems.add(entry.itemId);console.error('[OFFLINE_WORKSHOP_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
     continue;
    }
+   if(options.workshopOnly)continue;
    if(entry.kind==='note'){
     if(entry.expectedVersion===undefined||!entry.deviceCapturedAt){
      await retainQuarantinedPending(scope,{id:entry.id,kind:'quarantine',capturedAt:entry.deviceCapturedAt??'',payload:{reason:'NOTE_SYNC_METADATA_MISSING',original:entry}});
@@ -52,20 +56,23 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
     }
     try{
      const concerns=recognizeNoteConcerns(entry.text).map(item=>item.id).filter(id=>!entry.dismissed.includes(id));
-     const saved=await ports.saveNote({itemId:entry.itemId,textstand:entry.textstand,text:entry.text,concerns,expectedVersion:entry.expectedVersion,deviceCapturedAt:entry.deviceCapturedAt,...(entry.context?{context:entry.context}:{})},scope);
+     const saved=await ports.saveNote({itemId:entry.itemId,textstand:entry.textstand,text:entry.text,concerns,expectedVersion:entry.expectedVersion,deviceCapturedAt:entry.deviceCapturedAt,...(entry.context?{context:entry.context}:{}),...(entry.takeover?{takeover:entry.takeover}:{})},scope);
      if(saved.code!=='OK'||saved.capture.text!==entry.text){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
      outcome.secured++;
      if(ports.currentScope()!==scope)break;
-     await acknowledgePendingOriginal(scope,entry.id,entry.textstand);outcome.acknowledged++;
+     await acknowledgePendingOriginal(scope,entry.id,entry.textstand,saved.capture.takeovers);outcome.acknowledged++;
     }catch(error){outcome.blocked++;blockedItems.add(entry.itemId);console.error('[OFFLINE_NOTE_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
     continue;
    }
    // Historical fingerprints are not guessed; the existing capture dialog can resume them.
-   if(entry.kind!=='file'||!Object.hasOwn(entry,'deviceId'))continue;
+   if(!Object.hasOwn(entry,'deviceId')){
+    if(options.offline24h===true)await retainQuarantinedPending(scope,{id:entry.id,kind:'quarantine',capturedAt:entry.deviceCapturedAt??'',payload:{reason:'FILE_SYNC_DEVICE_ID_MISSING',original:entry}});
+    outcome.blocked++;blockedItems.add(entry.itemId);continue;
+   }
    try{
     const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await entry.file.arrayBuffer())),byte=>byte.toString(16).padStart(2,'0')).join('');
     if(ports.currentScope()!==scope)break;
-    const grant=await ports.prepare({itemId:entry.itemId,fileId:entry.id,name:entry.file.name,mime:entry.file.type||'application/octet-stream',bytes:entry.file.size,sha256,...(entry.deviceId?{deviceId:entry.deviceId}:{}),...(entry.deviceCapturedAt?{deviceCapturedAt:entry.deviceCapturedAt}:{}),...(entry.captureOrigin?{captureOrigin:entry.captureOrigin}:{})},scope);
+    const grant=await ports.prepare({itemId:entry.itemId,fileId:entry.id,name:entry.file.name,mime:entry.file.type||'application/octet-stream',bytes:entry.file.size,sha256,...(entry.deviceId?{deviceId:entry.deviceId}:{}),...(entry.deviceCapturedAt?{deviceCapturedAt:entry.deviceCapturedAt}:{}),...(entry.captureOrigin?{captureOrigin:entry.captureOrigin}:{}),...(entry.takeover?{takeover:entry.takeover}:{})},scope);
     if(grant.code!=='OK'){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
     if(grant.upload)await ports.upload(grant.upload,entry.file);
     if(ports.currentScope()!==scope)break;
@@ -74,9 +81,9 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
     outcome.secured++;
     // Goods photos need their real receipt association, not merely a stored blob.
     if(entry.context||entry.captureOrigin==='warenfoto'||ports.currentScope()!==scope)continue;
-    await acknowledgePendingOriginal(scope,entry.id);outcome.acknowledged++;
+    await acknowledgePendingOriginal(scope,entry.id,undefined,finished.capture.takeovers);outcome.acknowledged++;
    }catch(error){outcome.blocked++;blockedItems.add(entry.itemId);console.error('[OFFLINE_ORIGINAL_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
   }
   return outcome;
- })();running.set(scope,work);void work.finally(()=>{if(running.get(scope)===work)running.delete(scope);}).catch(()=>{});return work;
+ })();running.set(scope,work);void work.finally(()=>{if(running.get(scope)===work)running.delete(scope);}).catch(error=>{console.error('[OFFLINE_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');});return work;
 }

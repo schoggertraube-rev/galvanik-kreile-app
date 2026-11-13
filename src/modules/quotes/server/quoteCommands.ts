@@ -1,4 +1,5 @@
 import "server-only";
+import {OFFLINE_DEVICE_READ_COPY} from '@/ui/situationCatalog';
 
 import { createHash,randomUUID } from "node:crypto";
 import {calculateQuote,type QuoteCalculation} from "../quoteCalculation";
@@ -460,12 +461,15 @@ export async function readQuoteCommand(authorization: QuoteCommandContext, input
 }
 
 /** Lists only the caller's tenant-bound draft aggregates. */
-export async function listOpenQuotesCommand(authorization: QuoteCommandContext, customerId?:string): Promise<ListOpenQuotesResult> {
+export async function listOpenQuotesCommand(authorization: QuoteCommandContext, customerId?:string,changedSince?:string): Promise<ListOpenQuotesResult> {
   if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Offene KVs dürfen mit dieser Rolle nicht gelesen werden." };
   if(customerId!==undefined&&!UUID_PATTERN.test(customerId))return {code:'VALIDATION_ERROR',message:'Kunde ist ungültig.'};
+  if(changedSince!==undefined&&(typeof changedSince!=='string'||!Number.isFinite(Date.parse(changedSince))||new Date(changedSince).toISOString()!==changedSince))return {code:'VALIDATION_ERROR',message:OFFLINE_DEVICE_READ_COPY.invalidWindow};
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id FROM private.v_open_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id WHERE (${customerId??null}::text IS NULL OR projection.customer_id=${customerId??null}::text) ORDER BY projection.updated_at DESC, projection.quote_number ASC`);
+      const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id FROM private.v_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id WHERE (${customerId??null}::text IS NULL OR projection.customer_id=${customerId??null}::text)
+      AND (EXISTS(SELECT 1 FROM private.v_open_quotes_v1 opened WHERE opened.tenant_id=projection.tenant_id AND opened.quote_id=projection.quote_id) OR (${changedSince??null}::timestamptz IS NOT NULL AND projection.updated_at>=${changedSince??null}::timestamptz))
+      ORDER BY projection.updated_at DESC, projection.quote_number ASC`);
       const quotes = rows.map((row) => quoteFromRow(row, authorization.tenantId));
       if (quotes.some((quote) => quote === null)) throw new Error("QUOTE_LIST_READBACK_INVALID");
         const goods=await readQuoteGoodsSummariesForQuotes(tx,authorization.tenantId,quotes.filter(quote=>quote?.lifecycle).map(quote=>quote!.quoteId));

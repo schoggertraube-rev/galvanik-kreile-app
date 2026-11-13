@@ -69,7 +69,7 @@ export function GlobalCreateAppAdapter() {
     }
     return null;
   });
-  const { canAction, hasArea, name, role, areas } = usePermissions();
+  const { canAction, hasArea, name, role, areas,offlineScope } = usePermissions();
   const complaintPorts=useMemo<ComplaintPorts>(()=>({areas,...(canAction('createQuote')?{createQuote:(source:{id:string;number:string;customerId:string})=>requestGlobalCreate({intent:'QUOTE',prefill:{sourceComplaint:source}})}:{}),read:getComplaintDialogAction,listDeliveredOrders:getComplaintOrderChoicesAction,write:reklamationAusfuehrenAction,rework:nacharbeitAnlegenAction,sendResult:sendeReklamationErgebnisAction,sendReminder:sendeNacharbeitBegleitscheinAction,openOrder,ResultMail:input=><CommunicationPanel targetType="ORDER" targetId={input.orderId} composer={input}/>,
     addPhoto:async(orderId,file)=>({code:'OK',id:await uploadDomainAttachment('ORDER',orderId,file)}),
     openPhoto:async(photoId,_sourceItemId,orderId)=>{
@@ -154,7 +154,8 @@ export function GlobalCreateAppAdapter() {
 
   return (
     <><ComplaintDialogs ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs ports={invoicePorts} allowed={hasArea('geld')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs ports={objectPorts} onOpenCustomer={openCustomer} onOpenOrder={openOrder} onOpenQuote={openQuote} customerOverlayId={activeCustomerOverlayId} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('geld')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
-      ports={{
+      key={offlineScope??'no-offline-actor'} ports={{
+        offlineScope,
         readIntakeOrderSource: async (orderId) => {
           const result = await getLiveOrderCardAction({ orderId });
           if (result.code !== "OK") return result;

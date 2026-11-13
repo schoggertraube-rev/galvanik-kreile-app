@@ -197,6 +197,7 @@ export type Customer = {
   creditRating?: string;
 
   createdAt?: string;
+  /** Persisted server change stamp; a missing legacy source stays unknown. */
   updatedAt?: string;
 };
 

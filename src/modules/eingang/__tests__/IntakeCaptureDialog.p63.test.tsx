@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GlobalCreatePorts } from "../GlobalCreateFlow";
 import { IntakeCaptureDialog } from "../ui/IntakeCaptureDialog";
 import type { IntakeCapture } from "../captureContract";
+import {readPendingOriginals,acknowledgePendingOriginal} from '../pendingOriginals';
 
 vi.mock("../pendingOriginals", () => ({
   readPendingOriginals: vi.fn(async () => []),
@@ -10,7 +11,21 @@ vi.mock("../pendingOriginals", () => ({
   acknowledgePendingOriginal: vi.fn(async () => undefined),
 }));
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup();vi.mocked(readPendingOriginals).mockResolvedValue([]);vi.clearAllMocks();vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it('resumes the selected offline original and binds its actual capture command to the original login scope',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
+ const id=crypto.randomUUID(),scope='a'.repeat(64),textstand=crypto.randomUUID(),deviceCapturedAt='2026-11-13T10:00:00.000Z',takeover={sourceId:'quarantine:TEST-held',deviceId:crypto.randomUUID(),sha256:'b'.repeat(64),originalRecord:'TEST synthetic source descriptor'};
+ vi.mocked(readPendingOriginals).mockResolvedValue([{kind:'note',id,itemId:id,text:'TEST held original',textstand,dismissed:[],expectedVersion:0,deviceCapturedAt,takeover}]);
+ const capture:IntakeCapture={id,version:1,text:'TEST held original',customerId:null,orderId:null,assignment:'offen',usage:'info',concerns:[],files:[],takeovers:[{...takeover,actorId:crypto.randomUUID(),actorName:'TEST original actor'}]};
+ const save=vi.fn(async()=>({code:'OK',capture})),getScope=vi.fn();
+ const ports={offlineScope:scope,getCaptureScope:getScope,saveCaptureNote:save} as unknown as GlobalCreatePorts;
+ render(<IntakeCaptureDialog resumePendingId={id} ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ await screen.findByDisplayValue('TEST held original');expect(getScope).not.toHaveBeenCalled();
+ fireEvent.click(await screen.findByRole('button',{name:'Später zuordnen'}));
+ await waitFor(()=>expect(save).toHaveBeenCalledWith(expect.objectContaining({itemId:id,textstand,text:'TEST held original',takeover,deviceCapturedAt,expectedVersion:0}),scope));
+ await waitFor(()=>expect(acknowledgePendingOriginal).toHaveBeenCalledWith(scope,id,textstand,capture.takeovers));
+});
 
 it('PE204 loads package expectation once per version outside the file polling interval',async()=>{
  vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));

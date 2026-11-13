@@ -4,6 +4,7 @@ export type GlobalCreateRequest = {
   intent: GlobalCreateIntent;
   handoverToken?: string;
   draftId?: string;
+  pendingOriginalId?:string;
   prefill?: {
     orderCopyId?: string;
     sourceComplaint?: {id:string;number:string;customerId:string};

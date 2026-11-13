@@ -101,7 +101,10 @@ describe("F1-R0 root route containment", () => {
     expect(source).toContain("<HomeAppAdapter");
     expect(adapter).toContain("@/modules/orders/public");
     expect(adapter).toContain("<OfficeHome");
-    const home = readFileSync(resolve(process.cwd(), "src/components/home/OfficeHome.tsx"), "utf8");
+    const homeAdapter = readFileSync(resolve(process.cwd(), "src/components/home/OfficeHome.tsx"), "utf8");
+    expect(homeAdapter).toContain("import {loadOfficeHome} from '@/lib/server/officeHomeRead'");
+    expect(homeAdapter).toContain("model={await loadOfficeHome(authorization)}");
+    const home = readFileSync(resolve(process.cwd(), "src/lib/server/officeHomeRead.ts"), "utf8");
     expect(home).toContain("hasAnyAuthorizationArea(authorization)");
     expect(home).toContain('hasAuthorizationArea(authorization, "auftraege")');
     expect(home).not.toContain('authorization.role !== "developer"');

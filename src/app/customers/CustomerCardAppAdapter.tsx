@@ -1,4 +1,5 @@
 "use client";
+import {captureDeviceReadFence,retainDevicePortResponse} from '@/lib/offline/devicePortRead';
 import {useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
 import {
@@ -25,18 +26,20 @@ export function CustomerCardAppAdapter({customerId,takeover,onOpenOrder,onClose,
   const router=useRouter();
   const storeOrder=useOverlayStore(state=>state.openOrder);
   const storeClose=useOverlayStore(state=>state.pop);
-  const {hasArea}=usePermissions();
+  const {hasArea,offlineScope,offline24h}=usePermissions();
   const [resolvedId,mode]=customerId.split("#");
   const [state,setState]=useState<CustomerCardState>({kind:"loading"});
   const load=useCallback(async():Promise<boolean>=>{
+    const readFence=offlineScope?await captureDeviceReadFence(offlineScope,offline24h):null;
     const result=await getCustomerSummaryAction({customerId:resolvedId});
     if(result.code!=="OK"){
       const kind=result.code==="FORBIDDEN"||result.code==="UNAUTHENTICATED"?"denied":result.code==="NOT_FOUND"?"not-found":result.code==="VALIDATION_ERROR"?"conflict":"error";
       setState({kind,message:result.message});return false;
     }
+    if(offline24h&&offlineScope){if(result.data.nextActionRule&&result.cacheLoginScope)await retainDevicePortResponse(offlineScope,true,{port:'customer.u2',portVersion:1,objectId:resolvedId,serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:result.data.nextActionRule},readFence);else console.error('[OFFLINE_CUSTOMER_U2_SOURCE_INCOMPLETE]');}
     setState({kind:"data",card:toCard(result.data)});
     return true;
-  },[resolvedId]);
+  },[resolvedId,offlineScope,offline24h]);
   useEffect(()=>{
     let active=true;
     const timer=window.setTimeout(()=>void load().catch(error=>{

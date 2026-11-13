@@ -1,12 +1,14 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const ports = vi.hoisted(() => ({ search: vi.fn(), openOrder: vi.fn(), openCustomer: vi.fn(), openInvoice: vi.fn(), push: vi.fn() }));
+const ports = vi.hoisted(() => ({ search: vi.fn(),offlineSearch:vi.fn(), openOrder: vi.fn(), openCustomer: vi.fn(), openInvoice: vi.fn(), push: vi.fn() }));
+const auth=vi.hoisted(()=>({offline24h:false,offlineScope:'a'.repeat(64),permissions:['perm_view_leitstand']}));
+vi.mock('@/lib/offline/searchDeviceStand',()=>({searchDeviceStand:ports.offlineSearch}));
 
 vi.mock("@/app/actions/search.actions", () => ({ searchTenantAction: ports.search }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push }) }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
-  usePermissions: () => ({ hasPermission: () => true }),
+  usePermissions: () => ({...auth,hasPermission: () => true }),
 }));
 vi.mock("@/lib/overlayStore", () => ({
   useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openCustomer: typeof ports.openCustomer; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openCustomer: ports.openCustomer, openInvoice: ports.openInvoice }),
@@ -14,10 +16,18 @@ vi.mock("@/lib/overlayStore", () => ({
 
 import { GlobalSearch } from "../GlobalSearch";
 
-beforeEach(() => { vi.useFakeTimers(); vi.clearAllMocks(); });
-afterEach(() => vi.useRealTimers());
+beforeEach(() => { vi.useFakeTimers(); vi.clearAllMocks();auth.offline24h=false;auth.permissions=['perm_view_leitstand']; });
+afterEach(() => {vi.useRealTimers();vi.restoreAllMocks();});
 
 describe("W2C GlobalSearch real Lane-0 contract", () => {
+  it('offline uses only the cached search port and preserves the canonical search authority',async()=>{
+    auth.offline24h=true;vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
+    ports.offlineSearch.mockResolvedValue({code:'OK',query:'Müler',hits:[],checkedSources:['Kundenstamm'],checkedAt:'2026-11-13T10:00:00.000Z',coverage:{returnedHits:0,matchingHitsAtLeast:0,truncated:false}});
+    const view=render(<GlobalSearch onOpenChange={vi.fn()} open/>);fireEvent.change(screen.getByPlaceholderText('Suchen oder tun'),{target:{value:'Müler'}});await act(()=>vi.runAllTimersAsync());
+    expect(ports.offlineSearch).toHaveBeenCalledWith(auth.offlineScope,true,'Müler');expect(ports.search).not.toHaveBeenCalled();
+    auth.permissions=[];view.rerender(<GlobalSearch onOpenChange={vi.fn()} open/>);fireEvent.change(screen.getByPlaceholderText('Suchen oder tun'),{target:{value:'intern'}});await act(()=>vi.runAllTimersAsync());
+    expect(screen.getByText(/aktuelle Sitzung nicht freigegeben/)).toBeInTheDocument();expect(ports.offlineSearch).toHaveBeenCalledTimes(1);expect(ports.search).not.toHaveBeenCalled();
+  });
   it("renders only while open and contains no unavailable shell", () => {
     const { rerender } = render(<GlobalSearch onOpenChange={vi.fn()} open={false} />);
     expect(screen.queryByRole("dialog")).toBeNull();

@@ -16,7 +16,7 @@ it('reads the stored send state and actor for U2 without inferring an unclear di
  await sql`UPDATE public.intake_item SET kanal='mail',richtung='raus',sendestatus='unklar',einsatz='offen' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`;
  const read=await withSession(full,()=>getIntakeMessagesAction('alle'));if(read.code!=='OK')throw Error('TEST_MESSAGE_READ');
  expect(read.messages.find(row=>row.id===itemId)).toMatchObject({fallbackPriority:{code:'OK',rank:1,source:{kind:'intake',id:itemId}},sendState:'unklar',direction:'raus',createdBy:full.actorId,text:'TEST normale Nachricht, kein Status aus Text'});
- expect(await withSession(full,()=>getIntakeMessagesAction('alle'))).toEqual(read);
+ const repeated=await withSession(full,()=>getIntakeMessagesAction('alle'));expect(repeated).toEqual({...read,serverReadAt:expect.any(String),cacheLoginScope:expect.stringMatching(/^[a-f0-9]{64}$/)});if(repeated.code==='OK')expect(Number.isFinite(Date.parse(repeated.serverReadAt))).toBe(true);
  await sql`UPDATE public.intake_item SET sendestatus='gesendet' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`;
  const after=await withSession(full,()=>getIntakeMessagesAction('alle'));if(after.code!=='OK')throw Error('TEST_MESSAGE_REREAD');
  expect(after.messages.find(row=>row.id===itemId)).toMatchObject({fallbackPriority:{code:'SOURCE_INCOMPLETE',missing:['QUESTION_REPLY_HISTORY']},nextActionRule:{code:'OK',hauptaktion:null,weitere:null,datenluecken:['QUESTION_REPLY_HISTORY','MESSAGE_ALTERNATIVE_ACTION_BINDING']},sendState:'gesendet',createdBy:full.actorId});
@@ -135,7 +135,7 @@ it('uses secured original image evidence for complaint routing and never treats 
   hasPhoto=false;graphId='TEST-U2-only-mime-'+randomUUID();const mimeOnly=await open();
   const after=await withSession(full,()=>getIntakeMessagesAction('alle'));if(after.code!=='OK')throw Error('TEST_MIME_U2');
   expect(after.messages.find(row=>row.id===mimeOnly)?.nextActionRule).toMatchObject({code:'OK',hauptaktion:null,prioritaet:3,weitere:null,datenluecken:['COMPLAINT_PHOTO_ACTION_BINDING','MESSAGE_ALTERNATIVE_ACTION_BINDING']});
-  expect(await withSession(full,()=>getIntakeMessagesAction('alle'))).toEqual(after);
+  expect(await withSession(full,()=>getIntakeMessagesAction('alle'))).toEqual({...after,serverReadAt:expect.any(String),cacheLoginScope:expect.stringMatching(/^[a-f0-9]{64}$/)});
  }finally{vi.restoreAllMocks();}
 });
 
@@ -149,6 +149,6 @@ it('PL23:08 keeps first-look facts and explicit gaps when a specialist command i
   expect(row?.nextActionRule).toMatchObject({code:'OK',prioritaet:rank,hauptaktion:null,weitere:null,datenluecken:['MESSAGE_SPECIALIST_ACTION_BINDING','MESSAGE_ALTERNATIVE_ACTION_BINDING'],source:{id:itemId,version:2}});
   if(row?.nextActionRule?.code!=='OK')throw Error('TEST_DEFERRED_FIRST_LOOK');expect(row.nextActionRule.erstblick).toHaveLength(3);
   expect(row.nextActionRule.erstblick.find(field=>field.key==='nachrichten.inhalt')?.werte).toMatchObject({text:row.text});
-  expect(await withSession(full,()=>getIntakeMessagesAction('alle'))).toEqual(read);
+  expect(await withSession(full,()=>getIntakeMessagesAction('alle'))).toEqual({...read,serverReadAt:expect.any(String),cacheLoginScope:expect.stringMatching(/^[a-f0-9]{64}$/)});
  }
 });

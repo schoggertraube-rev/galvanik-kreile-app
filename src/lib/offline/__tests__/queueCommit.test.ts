@@ -6,7 +6,7 @@ import {retainQuarantinedPending} from '../pendingStore';
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('the canonical queue acknowledges only commit, never an aborted write',async()=>{
  const request={result:undefined};
- const tx={oncomplete:null as null|(()=>void),onabort:null as null|(()=>void),onerror:null as null|(()=>void),error:null as Error|null,objectStore:()=>({put:()=>request})};
+ const tx={oncomplete:null as null|(()=>void),onabort:null as null|(()=>void),onerror:null as null|(()=>void),error:null as Error|null,objectStore:()=>({put:()=>request,get:()=>{const read={result:undefined,onsuccess:null as null|(()=>void)};queueMicrotask(()=>read.onsuccess?.());return read;}})};
  const db={close:vi.fn(),transaction:()=>tx};
  vi.stubGlobal('indexedDB',{open:()=>{const opened={result:db,onsuccess:null as null|(()=>void)};queueMicrotask(()=>opened.onsuccess?.());return opened;}});
  const write=()=>retainQuarantinedPending('a'.repeat(64),{id:'TEST-stable-click',kind:'quarantine',capturedAt:'2026-11-10T00:00:00Z',payload:{clientEventId:'TEST-stable-click'}});

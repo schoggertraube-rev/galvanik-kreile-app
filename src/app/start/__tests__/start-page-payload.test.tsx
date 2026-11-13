@@ -32,6 +32,11 @@ vi.mock("@/app/actions/auth.actions", () => ({
   loginWithPin: ports.loginWithPin,
 }));
 vi.mock("@/app/actions/auth", () => ({ login: vi.fn() }));
+// This component probe isolates PIN keyboard handling. Native deletion failures,
+// retries and original preservation are covered by offline_logout_cleanup.browser.
+vi.mock("@/lib/offline/privateReadCache", () => ({
+  clearPrivateReadStateBeforeLogin: vi.fn().mockResolvedValue(undefined),
+}));
 
 const activeUsers = [
   { loginHandle: "synthetic-rolf-handle", fullName: "Rolf", shortCode: "R", designation: "Meister", role: "meister" as const, emailLoginAvailable: false },

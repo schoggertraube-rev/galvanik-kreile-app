@@ -40,4 +40,6 @@ export type OperationalOrder = {
   dueLabel: string;
   dueValue: string;
   createdAt: string | undefined;
+  /** Latest persisted business-event server time; null means no qualified source. */
+  serverChangedAt?: string | null;
 };

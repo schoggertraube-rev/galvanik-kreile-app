@@ -7,14 +7,15 @@ const ports = vi.hoisted(() => ({
   getCustomersDb: vi.fn(),
   openCustomer: vi.fn(),
   requestGlobalCreate: vi.fn(),
-  canAction: vi.fn(),
+  canAction: vi.fn(),offline24h:false,offlineScope:null as string|null,readDevice:vi.fn(),retainDevice:vi.fn(),
 }));
 
 vi.mock("@/app/actions/customers.actions", () => ({ getCustomersDb: ports.getCustomersDb }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestGlobalCreate }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
-  usePermissions: () => ({ canAction: ports.canAction, loading: false }),
+  usePermissions: () => ({ canAction: ports.canAction, loading: false,offline24h:ports.offline24h,offlineScope:ports.offlineScope }),
 }));
+vi.mock('@/lib/offline/devicePortRead',()=>({captureDeviceReadFence:vi.fn().mockResolvedValue(null),readDevicePortResponse:ports.readDevice,retainDevicePortResponse:ports.retainDevice}));
 vi.mock("@/lib/overlayStore", () => ({
   useOverlayStore: (selector: (state: { openCustomer: typeof ports.openCustomer }) => unknown) =>
     selector({ openCustomer: ports.openCustomer }),
@@ -31,12 +32,29 @@ const customer = (overrides: Partial<Customer> = {}): Customer => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  ports.canAction.mockReturnValue(false);
+  ports.canAction.mockReturnValue(false);ports.offline24h=false;ports.offlineScope=null;ports.readDevice.mockResolvedValue({code:'EMPTY'});
 });
 
-afterEach(() => cleanup());
+afterEach(() => {cleanup();vi.restoreAllMocks();});
 
 describe("CustomersAppAdapter", () => {
+  // Explicit synthetic component boundaries; native Auth/DB/IDB proof remains separate.
+  it('reads the retained list offline and uses the canonical name alternative',async()=>{
+    ports.offline24h=true;ports.offlineScope='a'.repeat(64);vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
+    ports.readDevice.mockResolvedValue({code:'OK',value:{port:'customers.list',response:{result:{ok:true,data:[{...customer({name:'TEST Müller'}),activeOrderCount:1}]},datenluecken:[]}}});
+    render(<CustomersAppAdapter/>);await screen.findByText('TEST Müller');
+    fireEvent.change(screen.getByPlaceholderText('Name, Ort, Auftrag oder Stichwort'),{target:{value:'Müler'}});
+    expect(screen.getByText('TEST Müller')).toBeInTheDocument();expect(screen.getByText(/Klingt gleich/)).toBeInTheDocument();expect(ports.getCustomersDb).not.toHaveBeenCalled();
+  });
+  it('keeps a retained canonical denial distinct from an empty or old list',async()=>{
+    ports.offline24h=true;ports.offlineScope='a'.repeat(64);vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
+    ports.readDevice.mockResolvedValue({code:'OK',value:{port:'customers.list',response:{result:{ok:false,error:'FORBIDDEN',message:'TEST canonical denial'},datenluecken:[]}}});
+    render(<CustomersAppAdapter/>);expect(await screen.findByText('Kundenstamm ist für diese Sitzung nicht freigegeben.')).toBeInTheDocument();expect(screen.queryByText('Noch keine Kunden.')).not.toBeInTheDocument();expect(ports.getCustomersDb).not.toHaveBeenCalled();
+  });
+  it('does not turn a missing device source into a successful empty list',async()=>{
+    ports.offline24h=true;ports.offlineScope='a'.repeat(64);vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
+    render(<CustomersAppAdapter/>);expect(await screen.findByRole('alert')).toHaveTextContent('Kundenstamm konnte nicht sicher geladen werden.');expect(screen.queryByText('Noch keine Kunden.')).not.toBeInTheDocument();
+  });
   it("shows loading until the customer read has settled", () => {
     ports.getCustomersDb.mockReturnValue(new Promise(() => undefined));
     render(<CustomersAppAdapter />);

@@ -15,7 +15,7 @@ import { IntakeDraftList } from "@/modules/eingang/public";
 import { getIntakeDraftsAction, discardIntakeDraftAction } from "@/app/actions/eingang.actions";
 import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
-type OfficeIdentity = { role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard };
+type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard };
 export type OfficeHomeModel =
   | ({ kind: "data"; projection: OrdersHomeProjection } & OfficeIdentity)
   | ({ kind: "empty"; projection: OrdersHomeProjection } & OfficeIdentity)
@@ -50,6 +50,8 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
   const openOrder = useOverlayStore((state) => state.openOrder);
   const openInvoice = useOverlayStore((state) => state.openInvoice);
   const { hasArea, loading: permissionsLoading } = usePermissions();
+  // SyncProvider refreshes U3 through its canonical Action with a pre-request
+  // generation fence. An RSC model must never adopt a newer cache generation.
   const router = useRouter();
   const device = useSyncExternalStore(subscribeDevice, readDevice, () => "desktop" as const);
   const [filter, setFilter] = useState<HandlungsArt | "alle">("alle");

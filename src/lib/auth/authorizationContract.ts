@@ -196,3 +196,5 @@ export function canReadQuoteFollowups(auth:Parameters<typeof hasAuthorizationAre
 
 /** Existing mailbox import authority, shared by source readers and the fetch composition. */
 export function canSynchronizeIntakeMailbox(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,"eingang")&&hasAuthorizationArea(auth,"mails");}
+/** Existing search authority, shared by its server action and offline projection. */
+export function canSearchTenant(auth:{permissions:readonly string[]}){return auth.permissions.includes('perm_view_leitstand');}

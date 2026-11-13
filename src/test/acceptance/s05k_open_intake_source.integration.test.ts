@@ -33,5 +33,5 @@ it('S05K A3 keeps one open predicate while the sorting selection additionally re
  const day=await withSession(full,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction));
  expect(day.messageActions?.rows.map(row=>row.messageId).sort()).toEqual([...active].sort());
  expect(day.messageActions?.code).toBe('OK');
- expect((await withSession(full,()=>getIntakeMessagesAction('offen')))).toEqual(read);
+ expect((await withSession(full,()=>getIntakeMessagesAction('offen')))).toEqual({...read,serverReadAt:expect.any(String),cacheLoginScope:expect.stringMatching(/^[a-f0-9]{64}$/)});
 });

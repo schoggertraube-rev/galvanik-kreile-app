@@ -7,19 +7,21 @@ import {hasAuthorizationArea,resolveAuthorization} from "@/lib/server/authorizat
 import { analyzeWithAzureDocumentIntelligence } from "@/lib/server/azureDocumentIntelligence";
 import {recognizeInvoiceFields,recognizeInvoiceXml} from './invoiceRecognition';
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
-import { intakeCaptureSnapshot } from "./intakeCapture";
+import { intakeCaptureSnapshot,validIntakeOriginalTakeover } from "./intakeCapture";
 import { captureRecognition } from "../captureRecognition";
+import {isIntakeOriginalTakeover} from '../captureContract';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUCKET = "scans";
 type Failure = Exclude<IntakeCaptureResult, { code: "OK" }>;
 type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument"; aufgenommen_von:string };
-async function fileAuthorization(){const result=await resolveAuthorization();if(!result.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung ist nicht verfügbar.'};if(!hasAuthorizationArea(result.data,'eingang')&&!hasAuthorizationArea(result.data,'geld'))return {code:'FORBIDDEN' as const,message:'Originale benötigen Eingang oder einen Rechnungsbezug mit Geld.'};return result.data;}
+async function fileAuthorization(takeover=false){const result=await resolveAuthorization();if(!result.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung ist nicht verfügbar.'};if(!hasAuthorizationArea(result.data,'eingang')&&(takeover||!hasAuthorizationArea(result.data,'geld')))return {code:'FORBIDDEN' as const,message:'Originale benötigen Eingang oder einen Rechnungsbezug mit Geld.'};return result.data;}
 function recognitionClaimKey(attempt:string){const bytes=createHash('sha1').update('intake-recognition-start-v1:'+attempt).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const hex=bytes.subarray(0,16).toString('hex');return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;}
 function inputFile(value: unknown): value is IntakeFileInput {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
-  return Object.keys(item).every(key => ["itemId", "fileId", "name", "mime", "bytes", "sha256", "deviceId", "captureOrigin", "deviceCapturedAt"].includes(key))
+  return Object.keys(item).every(key => ["itemId", "fileId", "name", "mime", "bytes", "sha256", "deviceId", "captureOrigin", "deviceCapturedAt", "takeover"].includes(key))
+    && (item.takeover===undefined||validIntakeOriginalTakeover(item.takeover)&&item.takeover.deviceId===item.deviceId&&item.deviceCapturedAt!==undefined)
     && typeof item.itemId === "string" && UUID.test(item.itemId) && typeof item.fileId === "string" && UUID.test(item.fileId)
     && typeof item.name === "string" && item.name.trim().length > 0 && item.name.length <= 255 && !/[\u0000-\u001f]/.test(item.name)
     && typeof item.mime === "string" && /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(item.mime) && item.mime.length <= 128
@@ -31,7 +33,7 @@ function inputFile(value: unknown): value is IntakeFileInput {
 }
 export async function prepareIntakeFile(input: unknown, ensureOriginal=false): Promise<IntakeFileGrant | Failure> {
   if (!inputFile(input)) return { code: "VALIDATION_ERROR", message: "Datei benötigt Name, Typ, SHA-256 und 1 bis 150 MB Inhalt." };
-  const auth = await fileAuthorization();
+  const auth = await fileAuthorization(input.takeover!==undefined);
   if ("code" in auth) return auth as Failure;
   if((input.mime==='message/rfc822'||input.name.toLowerCase().endsWith('.eml'))&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
   try {
@@ -58,9 +60,9 @@ export async function prepareIntakeFile(input: unknown, ensureOriginal=false): P
       if (files.length !== 1 || row.item_id !== input.itemId || row.dateiname !== input.name || row.mime !== input.mime || Number(row.bytes) !== input.bytes || row.sha256 !== input.sha256 || row.aufgenommen_auf !== (input.deviceId ?? null) || row.aufnahme_herkunft !== (input.captureOrigin ?? "dokument")) throw new Error("INTAKE_FILE_CLIENT_KEY_CONFLICT");
       if(input.deviceCapturedAt!==undefined){
         if(row.aufgenommen_von!==auth.userId)return {code:"FORBIDDEN" as const,message:"Anfragekennung wurde bereits anders verwendet."};
-        const origin={action:"offline_original_captured",fileId:input.fileId,sha256:input.sha256,deviceCapturedAt:input.deviceCapturedAt,deviceId:input.deviceId??null};
+        const origin={action:"offline_original_captured",fileId:input.fileId,sha256:input.sha256,deviceCapturedAt:input.deviceCapturedAt,deviceId:input.deviceId??null,...(input.takeover?{takeover:input.takeover,takeoverLogin:auth.displayName}:{})};
         const prior=await tx.execute<{nachher:typeof origin}>(sql`SELECT nachher FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${input.itemId}::uuid AND art='einsatz' AND befehl_id=${input.fileId}::uuid`);
-        if(prior.length){if(prior.length!==1||prior[0].nachher.action!==origin.action||prior[0].nachher.fileId!==origin.fileId||prior[0].nachher.sha256!==origin.sha256||prior[0].nachher.deviceCapturedAt!==origin.deviceCapturedAt||prior[0].nachher.deviceId!==origin.deviceId)return {code:"CONFLICT" as const,message:"Anfragekennung wurde bereits anders verwendet."};}
+        if(prior.length){const previous=prior[0].nachher.takeover;if(prior.length!==1||prior[0].nachher.action!==origin.action||prior[0].nachher.fileId!==origin.fileId||prior[0].nachher.sha256!==origin.sha256||prior[0].nachher.deviceCapturedAt!==origin.deviceCapturedAt||prior[0].nachher.deviceId!==origin.deviceId||input.takeover&&(!isIntakeOriginalTakeover(previous)||previous.sourceId!==input.takeover.sourceId||previous.deviceId!==input.takeover.deviceId||previous.sha256!==input.takeover.sha256))return {code:"CONFLICT" as const,message:"Anfragekennung wurde bereits anders verwendet."};}
         else{const saved=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${auth.tenantId},${input.itemId}::uuid,'einsatz',${input.fileId}::uuid,${auth.userId},${JSON.stringify(origin)}::jsonb) RETURNING id`);if(saved.length!==1)throw Error("INTAKE_DEVICE_ORIGIN_NOT_SAVED");}
       }
       return row;

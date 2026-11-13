@@ -1,4 +1,5 @@
 "use server";
+import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {openIntakePredicate} from '@/modules/eingang/server-public';
 
 import type {ListOpenQuotesResult} from '@/modules/quotes/public';
@@ -190,13 +191,15 @@ export async function readQuoteAction(input: { quoteId: string;receivedQuantitie
     if(preview.code!=='OK')return preview;
     const {readV45QuoteRule}=await import('@/lib/server/v45QuoteRead');
     const canEdit=financial&&context.capabilities.canUpdateQuote,canReceive=hasAuthorizationArea(authorization.data,'eingang');
-    return {...result,nextActionRule:readV45QuoteRule(authorization.data,result.quote,{financial,commandRights:{'quote.receive':canReceive,'quote.revise':canEdit,'quote.send':hasAuthorizationArea(authorization.data,'mails'),'quote.followup':hasAuthorizationArea(authorization.data,'mails'),'quote.convert':operationalContext.capabilities.canConvertQuote,'quote.accept':operationalContext.capabilities.canReadQuote&&(operationalContext.capabilities.canUpdateQuote||operationalContext.capabilities.canDecideQuote),'quote.extend':operationalContext.capabilities.canReadQuote&&(operationalContext.capabilities.canUpdateQuote||operationalContext.capabilities.canDecideQuote),'quote.return_goods':authorization.data.active}}),undo:await readQuoteUndoContext(context,result.quote),quote:quoteForUi(annotated,financial),canEdit,canOperate:true,canReceive,conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:financial?preview.totalNetCents:null,plannedHours:preview.calculation?.hours??null,positions:preview.positions.map(row=>({position:row.position,quantity:row.quantity,lineTotalCents:financial?row.lineTotalCents:null}))}};
+    return {...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope(),nextActionRule:readV45QuoteRule(authorization.data,result.quote,{financial,commandRights:{'quote.receive':canReceive,'quote.revise':canEdit,'quote.send':hasAuthorizationArea(authorization.data,'mails'),'quote.followup':hasAuthorizationArea(authorization.data,'mails'),'quote.convert':operationalContext.capabilities.canConvertQuote,'quote.accept':operationalContext.capabilities.canReadQuote&&(operationalContext.capabilities.canUpdateQuote||operationalContext.capabilities.canDecideQuote),'quote.extend':operationalContext.capabilities.canReadQuote&&(operationalContext.capabilities.canUpdateQuote||operationalContext.capabilities.canDecideQuote),'quote.return_goods':authorization.data.active}}),undo:await readQuoteUndoContext(context,result.quote),quote:quoteForUi(annotated,financial),canEdit,canOperate:true,canReceive,conversion:{handoverMode,paymentMode:payment?.ok?payment.mode:null},preview:{totalNetCents:financial?preview.totalNetCents:null,plannedHours:preview.calculation?.hours??null,positions:preview.positions.map(row=>({position:row.position,quantity:row.quantity,lineTotalCents:financial?row.lineTotalCents:null}))}};
   }catch(error){console.error('[QUOTE_CONVERSION_DEFAULTS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV konnte nicht sicher gelesen werden.'};}
 }
 
+export type DeviceQuoteListResult={code:'OK';quotes:Array<{quoteId:string;version:number;updatedAt:string}>;serverReadAt:string;cacheLoginScope?:string}|Exclude<ListOpenQuotesResult,{code:'OK'}>;
 export async function listOpenQuotesAction():Promise<ListOpenQuotesResult>;
 export async function listOpenQuotesAction(input:{purpose:'today'}):Promise<{code:'OK';quotes:Array<{quoteId:string;version:number}>}|Exclude<ListOpenQuotesResult,{code:'OK'}>>;
-export async function listOpenQuotesAction(input?:{purpose:'today'}) {
+export async function listOpenQuotesAction(input:{purpose:'device'}):Promise<DeviceQuoteListResult>;
+export async function listOpenQuotesAction(input?:{purpose:'today'|'device'}) {
   noStore();
   let authorization;
   try {
@@ -206,6 +209,11 @@ export async function listOpenQuotesAction(input?:{purpose:'today'}) {
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
+  if(input?.purpose==='device'){
+    const since=new Date(Date.now()-24*60*60*1000).toISOString();
+    const result=await listOpenQuotesCommand(quoteOperationContext(authorization.data),undefined,since);
+    return result.code==='OK'?{code:'OK' as const,quotes:result.quotes.map(({quoteId,version,updatedAt})=>({quoteId,version,updatedAt})),serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;
+  }
   if(input?.purpose==='today'){
     if(!canReadQuoteFollowups(authorization.data))return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
     const result=await listOpenQuotesCommand(quoteOperationContext(authorization.data));

@@ -1,4 +1,5 @@
 "use server";
+import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 
 export async function getProductionWeekAction(input?:{onDate?:string}){
  noStore();
@@ -228,7 +229,7 @@ async function resolveOrderCardAuthorization(): Promise<
 
 export async function getLiveOrderCardAction(
   input: { orderId: string },
-): Promise<OrderCardActionResult<{ nextActionRule?:ReturnType<typeof import('@/lib/server/v45OrderRead').readV45OrderRule>; card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>>; pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>> }>> {
+): Promise<OrderCardActionResult<{ serverReadAt?:string; cacheLoginScope?:string; nextActionRule?:ReturnType<typeof import('@/lib/server/v45OrderRead').readV45OrderRule>; card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>>; pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>> }>> {
   noStore();
   try {
     const authorization = await resolveOrderCardAuthorization();
@@ -266,7 +267,7 @@ export async function getLiveOrderCardAction(
     const {readOrderPickupAppointment}=await import('@/lib/server/pickupAppointmentPort');
     const pickupAppointment=await readOrderPickupAppointment(authorization.data,input.orderId);
     const {readV45OrderRule}=await import('@/lib/server/v45OrderRead');
-    return { code: "OK", data: { nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data}),card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
+    return { code: "OK", data: { serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope(),nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data}),card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,
@@ -456,10 +457,10 @@ async function resolveOperationalReadAuthorization(): Promise<ActionResult<Autho
   return { ok: true, data: authorization.data };
 }
 
-export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
+export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {serverReadAt?:string;cacheLoginScope?:string}> {
   noStore();
   const authorization = await resolveOperationalReadAuthorization();
-  if (!authorization.ok) return authorization;
+  if (!authorization.ok) return authorization.error==='FORBIDDEN'||authorization.error==='UNAUTHORIZED'?{...authorization,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:authorization;
 
   try {
     const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
@@ -488,7 +489,7 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
             : `ORDER_CARD_${cardRead?.code ?? "READ_FAILED"}`,
       };
     });
-    return { ok: true, data };
+    return { ok: true, data,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope() };
   } catch (error: unknown) {
     console.error("[ORDER_READ_ERROR]", error);
     return {
@@ -563,7 +564,7 @@ export async function getOrderRegisterDb(
         title: order.title,
         dueDate: order.dueDate,
         status: order.status,
-        changedAt: order.createdAt ?? null,
+        changedAt: order.serverChangedAt ?? null,
       })),
       ...quoteResult.quotes.map((quote) => ({
         kind: "QUOTE" as const,

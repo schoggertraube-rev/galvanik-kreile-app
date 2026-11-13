@@ -53,6 +53,7 @@ describe("W2C-B2M5G customer mutation fail-closed", () => {
       ok: false,
       error: "FORBIDDEN",
       message: "Kundenstamm ist für diesen Login nicht freigegeben.",
+      serverReadAt:expect.any(String),cacheLoginScope:undefined,
     });
     expect(hasAuthorizationArea).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "synthetic-tenant" }),

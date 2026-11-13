@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KreileHeader } from "@/components/layout/KreileHeader";
+import type {DeviceStandSnapshot} from '@/lib/offline/SyncContext';
 
 type RealtimeStatus = "active" | "connecting" | "disconnected" | "disabled";
 type OutboxStatus = "draft" | "queued" | "syncing" | "synced" | "failed" | "conflict";
@@ -15,10 +16,13 @@ const boundary = vi.hoisted(() => {
     onMenuToggle: vi.fn(),
     requestGlobalCreate: vi.fn(),
     realtime: { status: "disabled" as RealtimeStatus },
+    offline24h:false,
     routerReplace: vi.fn(),
     sync: {
       isOnline: true,
       outboxItems: [] as Array<{ status: OutboxStatus }>,
+      deviceStand:{code:'LOADING'} as DeviceStandSnapshot,
+      pendingStorageUnavailable:false,
       syncNow,
     },
     syncNow,
@@ -44,7 +48,7 @@ vi.mock("@/components/layout/RealtimeSyncManager", () => ({
   useRealtimeStatus: () => boundary.realtime,
 }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
-  usePermissions: () => ({ initials: "", name: "", status: "unauthenticated" }),
+  usePermissions: () => ({ initials: "", name: "", status: "unauthenticated",offline24h:boundary.offline24h }),
 }));
 vi.mock("@/lib/offline/SyncContext", () => ({
   useSync: () => boundary.sync,
@@ -62,6 +66,7 @@ beforeEach(() => {
   boundary.realtime.status = "disabled";
   boundary.sync.isOnline = true;
   boundary.sync.outboxItems = [];
+  boundary.offline24h=false;boundary.sync.deviceStand={code:'LOADING'};boundary.sync.pendingStorageUnavailable=false;
 });
 
 afterEach(() => {
@@ -69,6 +74,21 @@ afterEach(() => {
 });
 
 describe("W2C header truth", () => {
+  it('S06 uses one visible server-stand line and keeps quarantine outside the waiting count',()=>{
+    boundary.offline24h=true;boundary.sync.isOnline=false;
+    boundary.sync.deviceStand={code:'COMPLETE',serverReadAt:'2026-11-13T09:30:00.000Z'};
+    boundary.sync.outboxItems=[{status:'queued'},{status:'conflict'},{status:'synced'}];
+    const clock=vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-11-13T09:31:00.000Z'));
+    try{renderHeader();const line=screen.getByRole('status',{name:'Netzwerkstatus'});expect(line).toHaveTextContent('Offline – Stand 10:30, 1 Änderungen warten');expect(line).toHaveTextContent('1 Eingaben zurückgehalten - tippe zum Zuordnen');expect(line.className).not.toContain('hidden');expect(screen.getAllByRole('status',{name:'Netzwerkstatus'})).toHaveLength(1);expect(boundary.syncNow).not.toHaveBeenCalled();}finally{clock.mockRestore();}
+  });
+  it('S06 exposes storage failure while existing pending originals remain visible in the projection',()=>{
+    boundary.offline24h=true;boundary.sync.pendingStorageUnavailable=true;boundary.sync.outboxItems=[{status:'queued'}];
+    renderHeader();expect(screen.getByRole('status',{name:'Netzwerkstatus'})).toHaveTextContent('Offline-Speicher auf diesem Gerät nicht verfügbar - Eingaben gehen nur mit Netz');expect(boundary.sync.outboxItems).toHaveLength(1);expect(boundary.syncNow).not.toHaveBeenCalled();
+  });
+  it('S06 never displays network availability as a completed stand when its source is incomplete',()=>{
+    boundary.offline24h=true;boundary.sync.deviceStand={code:'INCOMPLETE'};
+    renderHeader();expect(screen.getByRole('status',{name:'Netzwerkstatus'})).toHaveTextContent('Noch nicht alle Daten auf diesem Gerät – mit Netz lädt die App den Rest automatisch.');expect(screen.queryByText('Netzwerk verfügbar')).toBeNull();
+  });
   it("renders online without pending work as a non-interactive device signal", () => {
     const { container } = renderHeader();
 
