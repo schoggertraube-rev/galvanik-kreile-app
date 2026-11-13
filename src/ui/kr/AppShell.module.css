@@ -1,0 +1,2 @@
+/* The optional PL16:32 status occupies a real row; a null slot leaves V45 unchanged. */
+.withStatus:has(>[data-spec-id="offline.zeile"]){grid-template-rows:var(--kopf) auto minmax(0,1fr)}

@@ -344,6 +344,9 @@ export const MANAGED_USER_COPY={forbidden:"Nutzer dürfen nicht geändert werden
 
 export const OFFLINE_DEVICE_READ_COPY={invalidWindow:'Die Geräteuhr passt nicht zum letzten Stand - neue Eingaben erst wieder mit Verbindung.'} as const;
 export const OFFLINE_DEVICE_STATUS_COPY={
+ pending:(count:number)=>`${count} lokal ausstehend`,
+ invalidWindow:OFFLINE_DEVICE_READ_COPY.invalidWindow,
+ persistence:'Dieses Gerät kann Offline-Daten selbst löschen – Eingaben gehen sofort raus, sobald Netz da ist',
  stand:(time:string,count:number)=>`Offline – Stand ${time}, ${count} Änderungen warten`,
  expired:'Seit über 24 Stunden kein Netz – neue Eingaben erst wieder mit Verbindung',
  unavailable:'Offline-Speicher auf diesem Gerät nicht verfügbar - Eingaben gehen nur mit Netz',

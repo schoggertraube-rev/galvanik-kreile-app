@@ -6,6 +6,7 @@ import { Chip } from './Chip';
 import { useHydrated } from '@/hooks/useHydrated';
 import type { Geraet } from './typen';
 import { cx } from './typen';
+import styles from './AppShell.module.css';
 export type Bereich = 'tag' | 'nachrichten' | 'werkstatt' | 'auftraege' | 'kunden' | 'geld' | 'einstellungen';
 export interface NavEintrag { id: Bereich; text: string; icon: IconName; badge?: { n: number; rot?: boolean }; }
 export interface AppShellProps {
@@ -19,7 +20,7 @@ export interface AppShellProps {
   onNav: (b: Bereich | 'mehr') => void; onStart: () => void; onKonto: () => void;
   onNeuerEingang?: () => void; onWareRaus?: () => void;
   /** nur variante=werkstatt */ onAuftragOeffnen?: () => void; onMehrarbeit?: () => void; onFertigMelden?: () => void;
-  ebene?: ReactNode; children: ReactNode;
+  ebene?: ReactNode; zustand?:ReactNode;children: ReactNode;
 }
 const NAV: NavEintrag[] = [
   { id: 'tag', text: 'Der Tag', icon: 'sun' }, { id: 'nachrichten', text: 'Nachrichten', icon: 'mail' }, { id: 'werkstatt', text: 'Werkstatt', icon: 'flask' },
@@ -50,14 +51,14 @@ export function AppShell(p: AppShellProps) {
       ['Auftrag öffnen / scannen', 'Öffnen', 'open', p.onAuftragOeffnen, 'kr-aktion kr-aktion--primaer'],
       ['Mehrarbeit', 'Mehrarbeit', 'layers', p.onMehrarbeit, 'kr-aktion'], ['Fertig melden', 'Fertig', 'check', p.onFertigMelden, 'kr-aktion'],
       ['Neu erfassen', 'Erfassen', 'inbox', p.onNeuerEingang, 'kr-aktion kr-aktion--ruhig'], ['Ware raus', 'Raus', 'truck', p.onWareRaus, 'kr-aktion kr-aktion--ruhig']];
-    return (<><div className="kr-streifen" /><div className="kr-tshell kr-wshell">{kopf}<main className="kr-inhalt">{p.children}</main>
+    return (<><div className="kr-streifen" /><div className="kr-tshell kr-wshell">{kopf}{p.zustand}<main className="kr-inhalt">{p.children}</main>
       <nav className="kr-aktionsleiste" aria-label="Werkstatt-Aktionen">{A.filter(([, , , f]) => Boolean(f)).map(([t, k, ic, f, c]) => <button key={t} type="button" className={c} disabled={!interactive} onClick={f}><Icon name={ic} />{handy ? k : t}</button>)}</nav></div>{p.ebene}</>);
   }
   if (p.geraet === 'desktop') {
     const nav = (n: NavEintrag) => { const b = p.badges?.[n.id]; return (
       <button key={n.id} type="button" data-spec-id={`navigation.${n.id}`} className={cx('kr-nav', p.aktiv === n.id && 'kr-nav--aktiv')} aria-current={p.aktiv === n.id ? 'page' : undefined} disabled={!interactive} onClick={() => p.onNav(n.id)}>
         <Icon name={n.icon} /><span>{n.text}</span>{b && <span className={cx('kr-nav-badge', b.rot && 'kr-nav-badge--rot')}>{b.n}</span>}</button>); };
-    return (<><div className="kr-streifen" /><div className="kr-shell">{kopf}
+    return (<><div className="kr-streifen" /><div className={cx('kr-shell',styles.withStatus)}>{kopf}{p.zustand}
       <nav className="kr-seitenleiste kr-scroll" aria-label="Hauptnavigation">
         {p.onNeuerEingang && <button type="button" className="kr-nav kr-nav--schnell" disabled={!interactive} onClick={p.onNeuerEingang}><Icon name="inbox" /><span>Neu erfassen</span></button>}
         {p.onWareRaus && <button type="button" className="kr-nav kr-nav--schnell" disabled={!interactive} onClick={p.onWareRaus}><Icon name="truck" /><span>Ware raus</span></button>}
@@ -68,7 +69,7 @@ export function AppShell(p: AppShellProps) {
       </nav>
       <main className="kr-inhalt">{p.children}</main></div>{p.ebene}</>);
   }
-  return (<><div className="kr-streifen" /><div className="kr-tshell">{kopf}<main className="kr-inhalt">{p.children}</main>
+  return (<><div className="kr-streifen" /><div className="kr-tshell">{kopf}{p.zustand}<main className="kr-inhalt">{p.children}</main>
     <nav className="kr-dock" aria-label="Hauptnavigation">{DOCK.filter(d => d.id === 'mehr' || !aus.includes(d.id as Bereich)).map(d => { const b = d.id !== 'mehr' ? p.badges?.[d.id] : undefined; return (
       <button key={d.id} type="button" className={cx('kr-dock-el', p.aktiv === d.id && 'kr-dock-el--aktiv')} disabled={!interactive} onClick={() => p.onNav(d.id)}><Icon name={d.icon} />{d.text}{b?.rot && <span className="kr-dock-badge">{b.n}</span>}</button>); })}</nav></div>{p.ebene}</>);
 }

@@ -5,6 +5,7 @@ import {captureDeviceReadFence,retainDevicePortResponse,readDevicePortResponse} 
 import {foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
 import {SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
 import { getCustomersDb } from "@/app/actions/customers.actions";
+import {readServerReachability,readWithDeviceFallback,subscribeServerReachability} from '@/lib/offline/serverReachability';
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
@@ -43,17 +44,20 @@ export function CustomersAppAdapter() {
       const revision=++loadRevision;
       setState({ kind: "loading" });
       try {
-        const device=!!(offline24h&&offlineScope&&navigator.onLine===false);
+        let device=!!(offline24h&&offlineScope&&!readServerReachability());
         let result:Awaited<ReturnType<typeof getCustomersDb>>;
-        if(device&&offlineScope){
+        const readDevice=async()=>{
+          if(!offlineScope)throw Error('OFFLINE_CUSTOMER_SCOPE_REQUIRED');
+          device=true;
           const read=await readDevicePortResponse(offlineScope,true,{port:'customers.list',objectId:'customers'});
           if(read.code!=='OK'||read.value.port!=='customers.list')throw Error('OFFLINE_CUSTOMER_LIST_SOURCE_INCOMPLETE');
-          result=read.value.response.result;
-        }else{
+          return read.value.response.result;
+        };
+        if(device){result=await readDevice();}else{
           const fence=offlineScope?await captureDeviceReadFence(offlineScope,offline24h):null;
-          result=await getCustomersDb();
+          result=await readWithDeviceFallback(getCustomersDb,readDevice,!!(offline24h&&offlineScope));
           if(!active||revision!==loadRevision)return;
-          if(offline24h&&offlineScope&&result.serverReadAt&&result.cacheLoginScope&&(result.ok||result.error==='FORBIDDEN'||result.error==='UNAUTHORIZED'))await retainDevicePortResponse(offlineScope,true,{port:'customers.list',portVersion:1,objectId:'customers',serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:{result:result.ok?{ok:true,data:result.data}:{ok:false,error:result.error,message:result.message},datenluecken:[]}},fence);
+          if(!device&&offline24h&&offlineScope&&result.serverReadAt&&result.cacheLoginScope&&(result.ok||result.error==='FORBIDDEN'||result.error==='UNAUTHORIZED'))await retainDevicePortResponse(offlineScope,true,{port:'customers.list',portVersion:1,objectId:'customers',serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:{result:result.ok?{ok:true,data:result.data}:{ok:false,error:result.error,message:result.message},datenluecken:[]}},fence);
         }
         if(!active||revision!==loadRevision)return;
         setFromDevice(device);
@@ -86,11 +90,11 @@ export function CustomersAppAdapter() {
     };
     void load();
     window.addEventListener("kreile-sync-customers", load);
-    window.addEventListener("online",load);
+    const unsubscribe=subscribeServerReachability(()=>void load());
     return () => {
       active = false;
       window.removeEventListener("kreile-sync-customers", load);
-      window.removeEventListener("online",load);
+      unsubscribe();
     };
   }, [offline24h,offlineScope]);
 

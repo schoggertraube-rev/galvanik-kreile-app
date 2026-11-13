@@ -5,6 +5,7 @@ import { searchTenantAction } from "@/app/actions/search.actions";
 import {searchDeviceStand} from '@/lib/offline/searchDeviceStand';
 import {canSearchTenant} from '@/lib/auth/authorizationContract';
 import {TENANT_SEARCH_COPY} from '@/ui/situationCatalog';
+import {readWithDeviceFallback} from '@/lib/offline/serverReachability';
 import { useRouter } from "next/navigation";
 import { useOverlayStore } from "@/lib/overlayStore";
 import { SearchDialog, type SearchHit } from "@/modules/suche/public";
@@ -24,9 +25,10 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   const permissions = usePermissions();
   const {offline24h,offlineScope,permissions:grants}=permissions;
   const search=useCallback((query:string)=>{
-    if(navigator.onLine||!offline24h)return searchTenantAction(query);
-    if(!canSearchTenant({permissions:grants}))return Promise.resolve({code:'FORBIDDEN' as const,message:TENANT_SEARCH_COPY.denied});
-    return searchDeviceStand(offlineScope,true,query);
+    return readWithDeviceFallback(()=>searchTenantAction(query),()=>{
+      if(!canSearchTenant({permissions:grants}))return Promise.resolve({code:'FORBIDDEN' as const,message:TENANT_SEARCH_COPY.denied});
+      return searchDeviceStand(offlineScope,true,query);
+    },offline24h);
   },[offline24h,offlineScope,grants]);
 
   const selectHit = (hit: SearchHit) => {

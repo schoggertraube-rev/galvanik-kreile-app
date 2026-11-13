@@ -14,5 +14,5 @@ it('never calls missing or unreadable storage a completed empty stand',()=>{
  expect(deviceStandNotice({...source,stand:{code:'INCOMPLETE'}}).warning).toBe(true);
  expect(deviceStandNotice({...source,storageUnavailable:true}).text).toBe('Offline-Speicher auf diesem Gerät nicht verfügbar - Eingaben gehen nur mit Netz');
  expect(deviceStandNotice({...source,stand:{code:'UNAVAILABLE'}}).text).toBe('Offline-Speicher auf diesem Gerät nicht verfügbar - Eingaben gehen nur mit Netz');
- expect(deviceStandNotice({...source,online:true,quarantined:0})).toEqual({text:null,warning:false,quarantine:null});
+ expect(deviceStandNotice({...source,online:true,quarantined:0})).toEqual({text:'2 lokal ausstehend',warning:false,quarantine:null});
 });

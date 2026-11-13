@@ -1,0 +1,3 @@
+.line{grid-column:1/-1;flex:none;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;width:100%;min-width:0;padding:8px 14px;font-size:13px;line-height:1.4;overflow-wrap:anywhere;background:var(--info-bg);color:var(--info);border-bottom:1px solid var(--line)}
+.line[data-tone="warn"]{background:var(--warn-bg);color:var(--warn-fg)}
+.line button{border:0;padding:0;background:transparent;color:inherit;text-align:left;font:inherit;text-decoration:underline;cursor:pointer}
