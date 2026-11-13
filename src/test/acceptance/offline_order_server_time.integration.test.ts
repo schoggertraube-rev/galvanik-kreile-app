@@ -31,4 +31,12 @@ it('reads the persisted server event time through the canonical order list, incl
  expect((await read()).serverChangedAt).toBe(after.serverChangedAt);
  const denied=await createFixture(['mails'],'werkstatt');
  expect(await withSession(denied,()=>getOrdersDb())).toMatchObject({ok:false});
+ // Explicit synthetic INITIAL legacy row without business-event history.
+ // Its TEST tenant/title carry isolation; canonical numbers cannot contain TEST.
+ const legacyId=randomUUID(),legacyNumber=`A-${new Date().getUTCFullYear()}-900001`;
+ await sql`INSERT INTO public.orders SELECT (jsonb_populate_record(NULL::public.orders,to_jsonb(initial_order)||jsonb_build_object('id',${legacyId}::text,'order_number',${legacyNumber}::text,'print_symbol_slot',NULL,'print_symbol_generation',NULL,'print_symbol_active',false))).* FROM public.orders initial_order WHERE initial_order.tenant_id=${tenant} AND initial_order.id=${orderId}`;
+ const legacy=await withSession(full,()=>getOrdersDb());
+ if(!legacy.ok)throw Error('TEST_LEGACY_LIST_REQUIRED');
+ expect(legacy.data.find(row=>row.id===legacyId)).toMatchObject({serverChangedAt:null});
+
 });
