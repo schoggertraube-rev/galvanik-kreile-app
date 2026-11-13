@@ -58,3 +58,28 @@ export async function readDevicePortResponse(scope:string,enabled:boolean,target
   return await readPendingDeviceRead(scope,login,shell.metadata.cacheGeneration,target);
  }catch(error){console.error('[OFFLINE_DEVICE_PORT_READ_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const};}
 }
+
+export type CollectedDeviceReads={code:'COLLECTED';values:PendingDeviceRead[];serverReadAt:string}|{code:'STALE'|'SOURCE_INCOMPLETE'};
+type CohortResult={code:'DISABLED'|'STALE'|'SOURCE_INCOMPLETE'}|{code:'STORED';readCount:number};
+const refreshingCohorts=new Map<string,Promise<CohortResult>>();
+/** One request-generation fence, coalescer and existing cache writer for all
+ * current domain refresh callers. Collection does not itself commit or mark
+ * a whole multi-domain stand complete. */
+export async function refreshDevicePortCohort(scope:string,enabled:boolean,port:'quote.u2'|'message.u2'|'today.u3',currentScope:()=>string|null,collect:(fence:DeviceReadFence)=>Promise<CollectedDeviceReads>):Promise<CohortResult>{
+ if(!enabled)return {code:'DISABLED'};
+ const fence=await captureDeviceReadFence(scope,true);if(!fence||currentScope()!==scope)return {code:'STALE'};
+ const key=[port,scope,fence.loginScope,fence.generation].join(':');
+ const existing=refreshingCohorts.get(key);if(existing)return existing;
+ const work=(async():Promise<CohortResult>=>{
+  try{
+   const collected=await collect(fence);if(collected.code!=='COLLECTED')return collected;
+   if(currentScope()!==scope)return {code:'STALE'};
+   if(collected.values.some(row=>row.port!==port)||port==='today.u3'&&collected.values.length!==1)return {code:'SOURCE_INCOMPLETE'};
+   const stored=port==='today.u3'
+    ?await retainDevicePortResponse(scope,true,collected.values[0],fence)
+    :await retainDevicePortResponse(scope,true,collected.values,fence,collected.serverReadAt,port);
+   return stored.code==='STORED'?{code:'STORED',readCount:collected.values.length}:stored.code==='STALE'?{code:'STALE'}:{code:'SOURCE_INCOMPLETE'};
+  }catch(error){console.error('[OFFLINE_DEVICE_REFRESH_FAILED]',port,error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE'};}
+ })();
+ refreshingCohorts.set(key,work);try{return await work;}finally{if(refreshingCohorts.get(key)===work)refreshingCohorts.delete(key);}
+}
