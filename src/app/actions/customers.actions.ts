@@ -47,7 +47,8 @@ export async function getCustomerSummaryAction(input: { customerId: string }) {
       ? { code: "UNAVAILABLE" as const, message: "Kundenkarte ist derzeit nicht verfügbar." }
       : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  return readCustomerSummary(authorization.data, input,openIntakePredicate());
+  const result=await readCustomerSummary(authorization.data, input,openIntakePredicate());
+  return result.code==="OK"?{...result,serverReadAt:new Date().toISOString()}:result;
 }
 
 async function customerAuthorization() {
