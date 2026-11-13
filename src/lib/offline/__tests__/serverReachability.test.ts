@@ -13,11 +13,30 @@ it('a failed actual fetch makes the single predicate offline until a successful 
 });
 it.each([502,503,504])('HTTP %s marks the server unreachable',async status=>{fetcher.mockResolvedValueOnce(new Response(null,{status}));await window.fetch('/TEST-server');expect(network.readServerReachability()).toBe(false);});
 it.each([400,401,403,409,422])('HTTP %s remains a business/auth response, not offline',async status=>{fetcher.mockResolvedValueOnce(new Response(null,{status}));await window.fetch('/TEST-server');expect(network.readServerReachability()).toBe(true);await vi.advanceTimersByTimeAsync(30_000);expect(fetcher).toHaveBeenCalledOnce();});
-it('an actual request timeout remains eight seconds and aborts that request',async()=>{
- fetcher.mockImplementationOnce((_input:unknown,init:RequestInit)=>new Promise((_resolve,reject)=>init.signal?.addEventListener('abort',()=>reject(new DOMException('TEST deadline','AbortError')))));
- const request=window.fetch('/TEST-server');const rejected=expect(request).rejects.toThrow('TEST deadline');
+it('a twelve-second Action finishes with its original signal while a successful heartbeat keeps it online',async()=>{
+ const controller=new AbortController(),init={method:'POST',body:'TEST original Action bytes',keepalive:true,signal:controller.signal};
+ fetcher.mockImplementationOnce(()=>new Promise(resolve=>setTimeout(()=>resolve(new Response('TEST actual reply',{status:200})),12_000)));
+ const request=window.fetch('/TEST-action',init);
+ await vi.advanceTimersByTimeAsync(7_999);expect(fetcher).toHaveBeenCalledOnce();expect(network.readServerReachability()).toBe(true);
+ await vi.advanceTimersByTimeAsync(1);expect(fetcher.mock.calls[0][1]).toBe(init);expect(fetcher.mock.calls[1][0]).toBe('/api/offline/heartbeat');expect(controller.signal.aborted).toBe(false);expect(network.readServerReachability()).toBe(true);
+ await vi.advanceTimersByTimeAsync(4_000);expect(await(await request).text()).toBe('TEST actual reply');expect(controller.signal.aborted).toBe(false);expect(network.readServerReachability()).toBe(true);
+});
+it('a failed independent heartbeat marks offline but never cancels a twelve-second Action',async()=>{
+ const controller=new AbortController();let completed=false;
+ fetcher.mockImplementationOnce(()=>new Promise(resolve=>setTimeout(()=>{completed=true;resolve(new Response(null,{status:200}));},12_000)));
+ fetcher.mockRejectedValueOnce(new TypeError('TEST blocked heartbeat'));
+ const request=window.fetch('/TEST-action',{signal:controller.signal});
  await vi.advanceTimersByTimeAsync(7_999);expect(network.readServerReachability()).toBe(true);
- await vi.advanceTimersByTimeAsync(1);await rejected;expect(network.readServerReachability()).toBe(false);
+ await vi.advanceTimersByTimeAsync(1);expect(network.readServerReachability()).toBe(false);expect(completed).toBe(false);expect(controller.signal.aborted).toBe(false);
+ await vi.advanceTimersByTimeAsync(4_000);expect((await request).status).toBe(200);expect(network.readServerReachability()).toBe(false);expect(controller.signal.aborted).toBe(false);
+});
+it('only the heartbeat timeout establishes failure when the main request remains unanswered',async()=>{
+ let signal:AbortSignal|undefined;
+ fetcher.mockImplementationOnce((_input:unknown,init?:RequestInit)=>{signal=init?.signal??undefined;return new Promise(()=>{});});
+ fetcher.mockImplementationOnce((_input:unknown,init:RequestInit)=>new Promise((_resolve,reject)=>init.signal?.addEventListener('abort',()=>reject(new DOMException('TEST health deadline','AbortError')))));
+ void window.fetch('/TEST-still-working');
+ await vi.advanceTimersByTimeAsync(15_999);expect(network.readServerReachability()).toBe(true);expect(signal).toBeUndefined();
+ await vi.advanceTimersByTimeAsync(1);expect(network.readServerReachability()).toBe(false);expect(signal).toBeUndefined();
 });
 it('an explicit navigation abort and an external-provider failure do not declare the app offline',async()=>{
  const controller=new AbortController();controller.abort();fetcher.mockRejectedValueOnce(new DOMException('TEST navigation','AbortError'));

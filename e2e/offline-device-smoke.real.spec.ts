@@ -36,9 +36,9 @@ test('U292 actual app stand, offline line and evicted-storage rejection',async({
  await page.evaluate(async()=>{const url='/__TEST/offline-probe.mjs',probe=await import(/* webpackIgnore: true */ url);(window as unknown as {TESToffline:unknown}).TESToffline=probe;});
  await expect.poll(()=>page.evaluate(async value=>{const p=(window as unknown as {TESToffline:{readDeviceStandResponse:(scope:string,enabled:boolean)=>Promise<{code:string}>}}).TESToffline;return(await p.readDeviceStandResponse(value,true)).code;},scope)).toBe('OK');
  const line=page.getByRole('status',{name:'Netzwerkstatus'});await expect(line).toContainText('Dieses Gerät kann Offline-Daten selbst löschen');
- // Remove the actual HttpOnly fixture session, rather than relying on the
- // intercepted browser request's credentials option to omit it.
- await context.clearCookies({name:COOKIE_NAME});let denied:number;
+ // Playwright's filtered clearCookies clears ALL cookies before restoring
+ // survivors. Preserve the native read marker while testing an invalid session.
+ await context.addCookies([{name:COOKIE_NAME,value:'TEST-invalid-signature',url:'http://localhost:3001',httpOnly:true,sameSite:'Lax'}]);let denied:number;
  try{denied=await page.evaluate(async original=>{const response=await fetch('/api/offline/replay',{method:'POST',credentials:'omit',headers:{'content-type':'application/json'},body:JSON.stringify(original)});return response.status;},{scope,original:{kind:'workshop',command:'item.finished',id:actor,itemId:actor,deviceCapturedAt:new Date().toISOString(),input:{orderId:actor,itemId:actor,clientEventId:actor,expectedVersion:1,finished:true}}});}
  finally{await context.addCookies([{name:COOKIE_NAME,value:token,url:'http://localhost:3001',httpOnly:true,sameSite:'Lax'}]);}
  expect(denied).toBe(401);await expect(line).not.toContainText('Offline – Stand');

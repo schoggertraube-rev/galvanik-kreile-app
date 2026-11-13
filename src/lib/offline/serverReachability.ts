@@ -23,35 +23,38 @@ export function installServerReachability(){
   let disposed=false,timer:ReturnType<typeof setTimeout>|undefined,pinging=false;
   const publish=()=>listeners.forEach(listener=>listener());
   const schedule=()=>{if(!disposed&&!reachable&&!timer)timer=setTimeout(()=>{timer=undefined;void heartbeat();},30_000);};
-  const offline=()=>{if(reachable){reachable=false;publish();}schedule();};
-  async function bounded(input:RequestInfo|URL,init?:RequestInit){
-   const controller=new AbortController(),parent=init?.signal??(input instanceof Request?input.signal:null);
-   let expired=false;
-   const abort=()=>controller.abort(parent?.reason);
-   if(parent?.aborted)abort();else parent?.addEventListener('abort',abort,{once:true});
-   const deadline=setTimeout(()=>{expired=true;controller.abort();},8_000);
+  const offline=()=>{if(disposed)return;if(reachable){reachable=false;publish();}schedule();};
+  async function observe(input:RequestInfo|URL,init?:RequestInit){
+   const parent=init?.signal??(input instanceof Request?input.signal:null);
+   // PL18:25: slow work is not failure. Do not replace its signal, body,
+   // keepalive or deadline; independently check reachability after eight seconds.
+   const deadline=setTimeout(()=>{if(reachable)void heartbeat();},8_000);
    try{
-    const response=await original.call(window,input,{...init,signal:controller.signal});
+    const response=await original.call(window,input,init);
     if([502,503,504].includes(response.status))offline();
     return response;
-   }catch(error){if(expired||!parent?.aborted)offline();throw error;}
-   finally{clearTimeout(deadline);parent?.removeEventListener('abort',abort);}
+   }catch(error){if(!parent?.aborted)offline();throw error;}
+   finally{clearTimeout(deadline);}
   }
   async function heartbeat(){
    if(disposed||pinging)return;
    if(!navigator.onLine){offline();schedule();return;}
    pinging=true;
+   // Only this no-data health request owns a timeout. Its failure may change
+   // the transport fact; it never cancels the application request that caused it.
+   const controller=new AbortController(),deadline=setTimeout(()=>controller.abort(),8_000);
    try{
-    const response=await bounded('/api/offline/heartbeat',{method:'GET',cache:'no-store',credentials:'same-origin'});
+    const response=await original.call(window,'/api/offline/heartbeat',{method:'GET',cache:'no-store',credentials:'same-origin',signal:controller.signal});
     // An expired login is still a confirmed server response (PL16:05).
     // It must permit the existing PIN path, never grant authorization itself.
     if(!disposed&&navigator.onLine&&(response.ok||[400,401,403,409,422].includes(response.status))){const changed=!reachable;reachable=true;if(timer){clearTimeout(timer);timer=undefined;}if(changed)publish();}
-   }catch(error){console.error('[OFFLINE_HEARTBEAT_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');}
-   finally{pinging=false;schedule();}
+    else offline();
+   }catch(error){offline();console.error('[OFFLINE_HEARTBEAT_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');}
+   finally{clearTimeout(deadline);pinging=false;schedule();}
   }
   const wrapped:typeof fetch=(input,init)=>{
    const url=new URL(typeof input==='string'||input instanceof URL?input:input.url,window.location.href);
-   return url.origin===window.location.origin?bounded(input,init):original.call(window,input,init);
+   return url.origin===window.location.origin?observe(input,init):original.call(window,input,init);
   };
   const browserOnline=()=>{void heartbeat();};
   window.fetch=wrapped;
