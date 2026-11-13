@@ -1,5 +1,5 @@
 import "server-only";
-import {OFFLINE_DEVICE_READ_COPY} from '@/ui/situationCatalog';
+import {OFFLINE_DEVICE_READ_COPY,QUOTE_CYCLE_COPY,SITUATION_COPY} from '@/ui/situationCatalog';
 
 import { createHash,randomUUID } from "node:crypto";
 import {scaleQuoteCalculation,type QuoteCalculation} from "../quoteCalculation";
@@ -642,6 +642,10 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       if(!normalized.goodsReceiptId)return {code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${quote.quoteNumber} annehmen`};
       if(!quote.lifecycle||!pendingAcceptance&&(quote.lifecycle.acceptedEdition!==quote.lifecycle.edition||!quote.lifecycle.acceptedAt||!quote.lifecycle.acceptanceEvidence?.trim())||quote.lifecycle.declinedAt)return {code:'VALIDATION_ERROR',message:'Aktuelle KV-Fassung ohne Vorbehalt zusagen; danach Ware zum Auftrag buchen.'};
       const goods=quote.lifecycle.goods?.find(row=>row.id===normalized.goodsReceiptId);
+      if(goods?.blocked&&!pendingAcceptance){
+        const reason=goods.deviations?.join(', ')||goods.procedureNote||SITUATION_COPY.goods.inspection(goods.condition??null,goods.packagesReceived??null,goods.packagesTotal??null);
+        return {code:'VALIDATION_ERROR',message:QUOTE_CYCLE_COPY.retainedGoodsBlocked(reason)};
+      }
       if((!goods&&!(options.planOnly&&!quote.linkedOrderId&&options.pendingGoodsId===normalized.goodsReceiptId))||(goods&&(goods.blocked&&!pendingAcceptance||goods.orderId!==quote.linkedOrderId)))return {code:'VALIDATION_ERROR',message:'Passender angenommener Warenbeleg fehlt oder ist gesperrt.'};
       if(quote.linkedOrderId){
         const prior=await tx.execute<{order_id:string;intent_sha256:string}>(sql`SELECT order_id,intent_sha256 FROM private.quote_conversion_receipts WHERE tenant_id=${authorization.tenantId} AND quote_id=${normalized.quoteId}::uuid AND actor_id=${authorization.userId}::uuid AND client_event_id=${normalized.clientEventId}::uuid`);

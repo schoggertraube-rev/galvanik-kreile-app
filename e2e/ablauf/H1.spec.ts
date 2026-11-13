@@ -152,7 +152,7 @@ it.each([{vat:1900,extra:false,outside:false,unpriced:false},{vat:700,extra:true
  expect(snapshots).toHaveLength(scenario.outside?2:1);
  if(scenario.outside)expect(snapshots.find(row=>row.item_id===outsideItemId)).toMatchObject({quantity:'2.000',net_cents:scenario.unpriced?null:3000,kind:'item',quote_id:null});
  if(scenario.unpriced){
-  expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{items:expect.arrayContaining([expect.objectContaining({id:outsideItemId,finished:true,unitPriceCents:null})])}}});
+  expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{operationalFacts:{pricesMissing:true},items:expect.arrayContaining([expect.objectContaining({id:outsideItemId,finished:true,unitPriceCents:null})])}}});
   if(!outsideFinish)throw Error('TEST_S07_UNPRICED_FINISH_MISSING');
   expect(await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(outsideFinish))))).toMatchObject({code:'OK',replayed:true});
   const tasks=await sql`SELECT id,fuer_bereich,status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='auftrag' AND bezug_id=${orderId}`;
@@ -185,6 +185,8 @@ it.each([{vat:1900,extra:false,outside:false,unpriced:false},{vat:700,extra:true
  expect(issued,JSON.stringify({issued,invoiceSource})).toMatchObject({code:'OK'});if(issued.code!=='OK')throw Error('H1_INVOICE:'+issued.code);
  if(scenario.unpriced)expect(issued.receipt).toMatchObject({netAmountCents:13000,vatAmountCents:910,grossAmountCents:13910});
  if(scenario.extra){
+  const [freezeTotal]=await sql`SELECT sum(net_cents)::integer AS net_cents FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND direction=1`;
+  expect(issued.receipt.netAmountCents).toBe(freezeTotal.net_cents);
   expect(issued.receipt).toMatchObject(scenario.outside?{netAmountCents:27000,vatAmountCents:3930,grossAmountCents:30930}:{netAmountCents:24000,vatAmountCents:1680,grossAmountCents:25680});
   const [original]=await sql`SELECT snapshot FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${issued.receipt.invoiceId}::uuid`;
   expect(original.snapshot.lines.map((line:{vat_rate_basis_points:number})=>line.vat_rate_basis_points)).toEqual(scenario.outside?[700,1900,1900]:[700,700]);

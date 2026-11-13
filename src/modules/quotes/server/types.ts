@@ -83,7 +83,7 @@ export type QuoteReadback = {
     acceptedEdition:number|null; acceptedAt:string|null; acceptanceEvidence:string|null;
     conditional?:{edition:number;recordedAt:string;reason:string}|null;
     calculation?:QuoteCalculation|null;
-    goods?:Array<{id:string;orderId:string|null;edition:number;location:string;blocked:boolean;version:number;packagesReceived?:number|null;packagesTotal?:number|null;condition?:string|null;deviations?:string[];clearance?:{reason:string;actorId:string;at:string}|null;expectedPositions?:Array<{position:number;quantity:number}>}>;
+    goods?:Array<{id:string;orderId:string|null;edition:number;location:string;blocked:boolean;version:number;packagesReceived?:number|null;packagesTotal?:number|null;condition?:string|null;deviations?:string[];procedureNote?:string|null;clearance?:{reason:string;actorId:string;at:string}|null;expectedPositions?:Array<{position:number;quantity:number}>}>;
     declinedAt:string|null; declineReason:string|null; followupAt:string|null;
     sourceItemId:string|null; sourceMessageId:string|null; specialRequests:string|null;deliveryWeeks:number|null;
   };

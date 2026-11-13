@@ -125,6 +125,7 @@ export const ACTOR_COPY={
  mail:(sender:string)=>'Mail von '+sender,
 };
 export const QUOTE_CYCLE_COPY={
+ retainedGoodsBlocked:(reason:string)=>`Die Ware ist gespeichert, aber gesperrt: ${reason}. Klaere die Abweichung an der KV-Ware, dann entsteht der Auftrag.`,
  goodsUnavailable:'KV-Warenannahme konnte nicht sicher bestätigt werden. Eingaben und Kennung behalten.',
  orderRetry:(number:string)=>'Auftrag aus KV '+number+' anlegen',
  orderRetryTask:(number:string)=>'Auftrag aus KV '+number+' anlegen · Ware ist da, der Auftrag fehlt noch',
