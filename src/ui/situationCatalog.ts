@@ -6,7 +6,7 @@ export const DEFERRED_LEGACY_COPY={unavailable:"Kommt nach dem Start dazu - bis 
 export const LEGACY_ACTION_ACCESS_COPY={forbidden:"Keine Berechtigung für diese Aktion."} as const;
 export const MAIL_IMPORT_COPY={timeUnknown:'Eingangszeit fehlt',failed:'Import fehlgeschlagen',detail:(failure:{reason:string|null;graphMessageId:string|null})=>['Import fehlgeschlagen',failure.reason??MAILBOX_SYNC_COPY.unavailable,failure.graphMessageId??MAILBOX_SYNC_COPY.unavailable].join(' · '),task:(id:string)=>`Mail ${id} importieren – Import fehlgeschlagen`} as const;
 export const MAILBOX_SYNC_COPY={retryTask:'Mailabruf fortsetzen – Fortschritt konnte nicht gesichert werden',unavailable:'Neue Mails momentan nicht abrufbar · bereits gesicherte Eingänge bleiben verfügbar.',pending:(count:number)=>`Mailabruf: noch ${count} Mails offen, der nächste Abruf holt sie`} as const;
-export const PIN_LOGIN_COPY={blocked:(time:string)=>`Zu viele Versuche. Versuch es um ${time} wieder.`} as const;
+export const PIN_LOGIN_COPY={incomplete:'Anmeldung konnte nicht sicher abgeschlossen werden.',blocked:(time:string)=>`Zu viele Versuche. Versuch es um ${time} wieder.`} as const;
 /** PL12.11.00:11: a missing historical time stays explicit, never today. */
 export const OFFLINE_NOTE_QUARANTINE_COPY={notice:(time:string|null)=>`Notiz von ${time??'TODO_PL'} konnte nicht abgeglichen werden`} as const;
 /** R8 TODO_PL: complaint original has photographs, but no chosen order number. */

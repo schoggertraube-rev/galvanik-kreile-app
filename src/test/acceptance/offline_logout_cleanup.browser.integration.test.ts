@@ -7,7 +7,7 @@ import {randomUUID} from 'node:crypto';
 import {build} from 'esbuild';
 
 it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('revokes native reading state despite cache failure and preserves queued original bytes and actor partition',async()=>{
- const compiled=await build({stdin:{contents:`export * from './src/lib/offline/pendingStore.ts';export * from './src/lib/offline/logoutReadState.ts';`,resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser'});
+ const compiled=await build({stdin:{contents:`export * from './src/lib/offline/pendingStore.ts';export * from './src/lib/offline/logoutReadState.ts';export {clearPrivateReadStateBeforeLogin} from './src/lib/offline/privateReadCache.ts';`,resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser'});
  const server=createServer((req,res)=>{res.setHeader('Content-Type',req.url==='/queue.mjs'?'text/javascript':'text/html');res.end(req.url==='/queue.mjs'?compiled.outputFiles[0].text:'<!doctype html><title>TEST native logout cache cleanup; not an app-start proof</title>');});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();if(!address||typeof address==='string')throw Error('TEST_LOOPBACK');
  const execute=promisify(execFile),session='TEST-logout-'+randomUUID();
@@ -33,6 +33,17 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('revokes native reading state d
    if((await caches.keys()).includes(own)||!(await caches.keys()).includes(foreign))throw Error('TEST_CACHE_PARTITION_DELETE');
    const originals=await p.readPendingEntries(scope),foreignOriginals=await p.readPendingEntries(other);
    if(originals.length!==1||await originals[0].file.text()!=='TEST immutable bytes'||originals[0].deviceCapturedAt!==capturedAt||foreignOriginals.length!==1)throw Error('TEST_ORIGINAL_LOST_OR_REASSIGNED');
+   const pendingCache=p.privateReadCachePrefix(scope)+login+'-2';
+   await (await caches.open(pendingCache)).put('/TEST-pending-read',new Response('TEST retained until cleanup'));
+   document.cookie='kreile_offline_cache_scope='+login+'; Path=/';
+   let nextLogin=0,failed=false;
+   CacheStorage.prototype.keys=async function(){throw Error('TEST next-start deletion failure');};
+   try{await p.clearPrivateReadStateBeforeLogin();nextLogin++;}catch{failed=true;}finally{CacheStorage.prototype.keys=nativeKeys;}
+   if(!failed||nextLogin!==0||!(await caches.keys()).includes(pendingCache))throw Error('TEST_LOGIN_PASSED_PENDING_CLEANUP');
+   await p.clearPrivateReadStateBeforeLogin();nextLogin++;
+   if(nextLogin!==1||(await caches.keys()).includes(pendingCache))throw Error('TEST_LOGIN_CLEANUP_RETRY_NOT_FINISHED');
+   const afterCleanup=await p.readPendingEntries(scope),otherAfterCleanup=await p.readPendingEntries(other);
+   if(afterCleanup.length!==1||await afterCleanup[0].file.text()!=='TEST immutable bytes'||otherAfterCleanup.length!==1)throw Error('TEST_LOGIN_CLEANUP_DELETED_ORIGINAL');
    return {nativeRevocation:true,cacheFailureVisible:true,originalBytesPreserved:true,foreignActorPreserved:true};
   }`;
   const encoded=Buffer.from('('+code+')').toString('base64');

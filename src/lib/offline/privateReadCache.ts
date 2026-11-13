@@ -1,4 +1,4 @@
-import {readCacheScopeMarker} from './cacheScopeMarker';
+import {readCacheScopeMarker,removeCacheScopeMarker} from './cacheScopeMarker';
 import {readPendingShellMetadata,changePendingShellMetadata} from './pendingStore';
 import {privateReadCachePrefix} from './logoutReadState';
 
@@ -11,6 +11,14 @@ export async function clearUnmarkedPrivateCaches():Promise<void>{
  if(readCacheScopeMarker()||typeof caches==='undefined')return;
  const known=/^kreile-private-[a-f0-9]{64}-[a-f0-9]{64}-[1-9][0-9]*$/;
  for(const name of await caches.keys())if(known.test(name)&&!await caches.delete(name)&&(await caches.keys()).includes(name))throw Error('OFFLINE_CACHE_DELETE_NOT_CONFIRMED');
+}
+/** Finish pending read-cache deletion before an existing login action may run.
+ * This removes reading state only; queued originals keep their actor partition.
+ */
+export async function clearPrivateReadStateBeforeLogin():Promise<void>{
+ removeCacheScopeMarker();
+ if(readCacheScopeMarker()!==null)throw Error('OFFLINE_CACHE_MARKER_REVOKE_NOT_CONFIRMED');
+ await clearUnmarkedPrivateCaches();
 }
 /** The sole read seam for scoped private responses; no broad caches.match fallback. */
 export async function readScopedPrivateResponse(scope:string,loginScope:string,request:RequestInfo|URL):Promise<Response|null>{
