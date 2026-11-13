@@ -28,3 +28,15 @@ it('qualifies whole EU reverse charge with both identities only',()=>{
  original.customer.vatId='';expect(()=>readInvoiceVat(original)).toThrow();
  original.customer.vatId='ATU12345678';original.customer.country='DE';expect(()=>readInvoiceVat(original)).toThrow();
 });
+
+it('binds persisted scalar amounts to the original without inventing a schema2 head rate',()=>{
+ const snapshot=mixed();
+ const row={snapshot,net_amount_cents:'20000',vat_amount_cents:2600,gross_amount_cents:22600,vat_rate_basis_points:null};
+ expect(readInvoiceVat(row)).toEqual(readInvoiceVat(snapshot));
+ expect(()=>readInvoiceVat({...row,vat_rate_basis_points:1900})).toThrow('INVOICE_VAT_PERSISTED_TOTALS_INVALID');
+ expect(()=>readInvoiceVat({...row,net_amount_cents:null})).toThrow();
+ expect(()=>readInvoiceVat({...row,vat_amount_cents:2599})).toThrow('INVOICE_VAT_PERSISTED_TOTALS_INVALID');
+ const legacy={snapshot:{schemaVersion:1,totals:{netAmountCents:10000,vatRateBasisPoints:700,vatAmountCents:700,grossAmountCents:10700}},net_amount_cents:10000,vat_amount_cents:700,gross_amount_cents:10700,vat_rate_basis_points:'700'};
+ expect(readInvoiceVat(legacy).headRate).toBe(700);
+ expect(()=>readInvoiceVat({...legacy,vat_rate_basis_points:null})).toThrow();
+});

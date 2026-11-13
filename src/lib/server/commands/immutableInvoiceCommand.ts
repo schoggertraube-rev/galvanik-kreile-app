@@ -242,6 +242,9 @@ type LockedInvoice = {
   pdf_ref: string;
   pdf_sha256: string;
   pdf_content: Buffer | Uint8Array;
+  net_amount_cents: number | string | null;
+  vat_rate_basis_points: number | string | null;
+  vat_amount_cents: number | string | null;
   gross_amount_cents: number | string | null;
   payment_contract_version: number | string | null;
   payment_mode: string | null;
@@ -489,13 +492,14 @@ function parseExtraWorkLines(value: unknown): ImmutableInvoiceExtraWorkLine[] {
   });
 }
 
-function parseStoredLine(value: unknown): ImmutableInvoiceLine {
+function parseStoredLine(value: unknown, schemaVersion: 1|2): ImmutableInvoiceLine {
   if (!plainObject(value) || typeof value.type !== "string") {
     throw new Error("INVOICE_SNAPSHOT_LINE_INVALID");
   }
   if (value.type === "BASE") {
     if (!exactKeys(value, [
       "itemId", "lineNetAmountCents", "name", "quantity", "type", "unitNetAmountCents",
+      ...(schemaVersion === 2 ? ["vat_rate_basis_points"] : []),
     ])) throw new Error("INVOICE_SNAPSHOT_BASE_LINE_SHAPE_INVALID");
     const parsed = parseBaseLines([{
       itemId: value.itemId,
@@ -506,12 +510,13 @@ function parseStoredLine(value: unknown): ImmutableInvoiceLine {
     }]);
     const line = parsed[0];
     if (!line) throw new Error("INVOICE_SNAPSHOT_BASE_LINE_INVALID");
-    return line;
+    return schemaVersion === 2 ? {...value,...line} as ImmutableInvoiceLine : line;
   }
   if (value.type === "EXTRA_WORK") {
     if (!exactKeys(value, [
       "amountCents", "catalogPositionId", "catalogPositionName", "hourlyRateCents",
       "itemId", "minutes", "type",
+      ...(schemaVersion === 2 ? ["vat_rate_basis_points"] : []),
     ])) throw new Error("INVOICE_SNAPSHOT_EXTRA_WORK_LINE_SHAPE_INVALID");
     const parsed = parseExtraWorkLines([{
       amountCents: value.amountCents,
@@ -523,17 +528,17 @@ function parseStoredLine(value: unknown): ImmutableInvoiceLine {
     }]);
     const line = parsed[0];
     if (!line) throw new Error("INVOICE_SNAPSHOT_EXTRA_WORK_LINE_INVALID");
-    return line;
+    return schemaVersion === 2 ? {...value,...line} as ImmutableInvoiceLine : line;
   }
   throw new Error("INVOICE_SNAPSHOT_LINE_TYPE_INVALID");
 }
 
-function parseStoredSnapshot(value: unknown, invoice: LockedInvoice): ImmutableInvoiceSnapshot {
+function parseStoredSnapshot(value: unknown, invoice: LockedInvoice, readVat: InvoiceVatReader): ImmutableInvoiceSnapshot {
   if (!plainObject(value) || !exactKeys(value, [
     "customer", "issuedAt", "lines", "order", "paymentTermDays", "schemaVersion",
     "seller", "serviceDate", "totals",
   ])) throw new Error("INVOICE_SNAPSHOT_SHAPE_INVALID");
-  if (value.schemaVersion !== 1 || !plainObject(value.seller) || !plainObject(value.customer)
+  if ((value.schemaVersion !== 1 && value.schemaVersion !== 2) || !plainObject(value.seller) || !plainObject(value.customer)
     || !plainObject(value.order) || !plainObject(value.totals) || !Array.isArray(value.lines)) {
     throw new Error("INVOICE_SNAPSHOT_TYPE_INVALID");
   }
@@ -542,31 +547,29 @@ function parseStoredSnapshot(value: unknown, invoice: LockedInvoice): ImmutableI
   ])) throw new Error("INVOICE_SNAPSHOT_SELLER_SHAPE_INVALID");
   if (!exactKeys(value.customer, [
     "city", "companyName", "contactPerson", "country", "name", "street", "zip",
+    ...(value.schemaVersion === 2 ? ["vatId"] : []),
   ])) throw new Error("INVOICE_SNAPSHOT_CUSTOMER_SHAPE_INVALID");
   if (!exactKeys(value.order, ["freezeId", "orderId", "orderNumber", "orderVersion", "title"])) {
     throw new Error("INVOICE_SNAPSHOT_ORDER_SHAPE_INVALID");
   }
   if (!exactKeys(value.totals, [
     "grossAmountCents", "netAmountCents", "vatAmountCents", "vatRateBasisPoints",
+    ...(value.schemaVersion === 2 ? ["vatBreakdown"] : []),
   ])) throw new Error("INVOICE_SNAPSHOT_TOTALS_SHAPE_INVALID");
 
   const orderVersion = toSafeInteger(value.order.orderVersion, "INVOICE_SNAPSHOT_ORDER_VERSION_INVALID");
-  const netAmountCents = toSafeInteger(value.totals.netAmountCents, "INVOICE_SNAPSHOT_NET_INVALID");
-  const vatRateBasisPoints = toSafeInteger(value.totals.vatRateBasisPoints, "INVOICE_SNAPSHOT_VAT_RATE_INVALID");
-  const vatAmountCents = toSafeInteger(value.totals.vatAmountCents, "INVOICE_SNAPSHOT_VAT_INVALID");
-  const grossAmountCents = toSafeInteger(value.totals.grossAmountCents, "INVOICE_SNAPSHOT_GROSS_INVALID");
+  const vat = readVat(invoice);
+  const {netAmountCents,vatAmountCents,grossAmountCents,headRate:vatRateBasisPoints} = vat;
   const paymentTermDays = toSafeInteger(value.paymentTermDays, "INVOICE_SNAPSHOT_PAYMENT_TERM_INVALID");
   const issuedAt = toIso(value.issuedAt);
   const serviceDate = toDateOnly(value.serviceDate);
-  const lines = value.lines.map(parseStoredLine);
+  const schemaVersion = value.schemaVersion;
+  const lines = value.lines.map(line => parseStoredLine(line, schemaVersion));
   if (
     value.order.orderId !== invoice.order_id
     || orderVersion < 1
     || lines.length < 1
     || netAmountCents < 0
-    || ![700, 1900].includes(vatRateBasisPoints)
-    || vatAmountCents !== Math.round((netAmountCents * vatRateBasisPoints) / 10000)
-    || grossAmountCents !== netAmountCents + vatAmountCents
     || paymentTermDays < 1
     || paymentTermDays > 365
   ) throw new Error("INVOICE_SNAPSHOT_INTEGRITY_INVALID");
@@ -577,7 +580,7 @@ function parseStoredSnapshot(value: unknown, invoice: LockedInvoice): ImmutableI
   };
 
   return {
-    schemaVersion: 1,
+    schemaVersion,
     seller: {
       companyName: requiredText(value.seller.companyName, "INVOICE_SNAPSHOT_SELLER_NAME_INVALID"),
       street: requiredText(value.seller.street, "INVOICE_SNAPSHOT_SELLER_STREET_INVALID"),
@@ -597,6 +600,7 @@ function parseStoredSnapshot(value: unknown, invoice: LockedInvoice): ImmutableI
       zip: requiredText(value.customer.zip, "INVOICE_SNAPSHOT_CUSTOMER_ZIP_INVALID"),
       city: requiredText(value.customer.city, "INVOICE_SNAPSHOT_CUSTOMER_CITY_INVALID"),
       country: requiredText(value.customer.country, "INVOICE_SNAPSHOT_CUSTOMER_COUNTRY_INVALID"),
+      ...(schemaVersion === 2 ? {vatId:optionalSnapshotText(value.customer.vatId,"INVOICE_SNAPSHOT_CUSTOMER_VAT_ID_INVALID")} : {}),
     },
     order: {
       orderId: requiredText(value.order.orderId, "INVOICE_SNAPSHOT_ORDER_ID_INVALID"),
@@ -606,7 +610,9 @@ function parseStoredSnapshot(value: unknown, invoice: LockedInvoice): ImmutableI
       freezeId: requiredText(value.order.freezeId, "INVOICE_SNAPSHOT_FREEZE_ID_INVALID"),
     },
     lines,
-    totals: { netAmountCents, vatRateBasisPoints, vatAmountCents, grossAmountCents },
+    totals: { netAmountCents, vatRateBasisPoints, vatAmountCents, grossAmountCents,
+      ...(schemaVersion === 2 ? {vatBreakdown:vat.groups} : {}),
+    },
     serviceDate,
     issuedAt,
     paymentTermDays,
@@ -1369,6 +1375,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): P
         SELECT
           id, tenant_id, order_id, invoice_number, status, aggregate_version,
           snapshot, due_date, pdf_ref, pdf_sha256, pdf_content,
+          net_amount_cents, vat_rate_basis_points, vat_amount_cents,
           gross_amount_cents, payment_contract_version, payment_mode,
           payment_status, payment_open_amount_cents, payment_paid_amount_cents,
           payment_currency, payment_method, payment_paid_at,
@@ -1412,7 +1419,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): P
       if (createHash("sha256").update(originalPdf).digest("hex") !== invoice.pdf_sha256) {
         throw new Error("INVOICE_CANCEL_ORIGINAL_PDF_INVALID");
       }
-      const snapshot = parseStoredSnapshot(invoice.snapshot, invoice);
+      const snapshot = parseStoredSnapshot(invoice.snapshot, invoice, requireVatReader(readVat));
 
       // Exactly one cancellation instant, reused for invoice, lifecycle event,
       // cancellation document and receipt.

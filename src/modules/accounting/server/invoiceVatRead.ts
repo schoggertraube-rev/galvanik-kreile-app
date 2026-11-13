@@ -8,6 +8,12 @@ function rounded(net:number,rate:number){return Number((BigInt(net)*BigInt(rate)
 function total(groups:InvoiceVatGroup[],field:'netCents'|'vatCents'|'grossCents'){return cents(groups.reduce((sum,row)=>sum+row[field],0));}
 /** PL13.11.00:14: the only original-VAT reader. Schema 1 is never rewritten. */
 export function readInvoiceVat(beleg:unknown):InvoiceVatRead{
+ if(!object(beleg))throw Error('INVOICE_VAT_ORIGINAL_REQUIRED');
+ const stored=beleg;
+ if(Object.prototype.hasOwnProperty.call(stored,'snapshot')){
+  if(!object(stored.snapshot))throw Error('INVOICE_VAT_ORIGINAL_REQUIRED');
+  beleg=stored.snapshot;
+ }
  if(!object(beleg)||!object(beleg.totals))throw Error('INVOICE_VAT_ORIGINAL_REQUIRED');
  const totals=beleg.totals,net=cents(totals.netAmountCents),vat=cents(totals.vatAmountCents),gross=cents(totals.grossAmountCents);
  let groups:InvoiceVatGroup[],headRate:number|null;
@@ -40,5 +46,15 @@ export function readInvoiceVat(beleg:unknown):InvoiceVatRead{
   }
   headRate=null;
  }else throw Error('INVOICE_VAT_SCHEMA_INVALID');
+ if(Object.prototype.hasOwnProperty.call(stored,'snapshot')){
+  const persistedCents=(value:unknown):number=>{
+   if(typeof value==='string'&&/^(0|[1-9][0-9]*)$/.test(value))return cents(Number(value));
+   return cents(value);
+  };
+  if(persistedCents(stored.net_amount_cents)!==net
+    ||persistedCents(stored.vat_amount_cents)!==vat
+    ||persistedCents(stored.gross_amount_cents)!==gross
+    ||(headRate===null?stored.vat_rate_basis_points!==null:persistedCents(stored.vat_rate_basis_points)!==headRate))throw Error('INVOICE_VAT_PERSISTED_TOTALS_INVALID');
+ }
  return {groups,netAmountCents:net,vatAmountCents:vat,grossAmountCents:gross,headRate,reverseCharge:groups.every(row=>row.rateBp===0)};
 }
