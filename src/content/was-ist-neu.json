@@ -1,6 +1,17 @@
 [
   {
     "datum": "2026-11-13",
+    "pr": 219,
+    "seite": "kunden",
+    "punkte": [
+      "Im freigeschalteten Offline-Modus siehst du unter dem Kopf den Gerätestand und wie viele Eingaben noch auf den Abgleich warten.",
+      "Ist der Server nicht erreichbar, nutzen Listen und Suche deinen gespeicherten Gerätestand. Laufende Eingaben werden durch die Verbindungsprüfung nicht abgebrochen.",
+      "Kann dein Browser Offline-Daten nicht dauerhaft aufbewahren, zeigt dir die App einen Hinweis."
+    ],
+    "ziel": "/customers"
+  },
+  {
+    "datum": "2026-11-13",
     "pr": 218,
     "seite": "kunden",
     "punkte": [
