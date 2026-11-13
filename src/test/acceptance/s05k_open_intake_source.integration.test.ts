@@ -32,5 +32,5 @@ it('S05K A3 reads the same open set in customer, message, mail selection and dai
  const day=await withSession(full,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction));
  expect(day.messageActions?.rows.map(row=>row.messageId).sort()).toEqual([...active].sort());
  expect(day.messageActions?.code).toBe('OK');
- expect((await withSession(full,()=>getIntakeMessagesAction('offen')))).toEqual(read);
+ expect((await withSession(full,()=>getIntakeMessagesAction('offen')))).toEqual({...read,serverReadAt:expect.any(String),cacheLoginScope:expect.stringMatching(/^[a-f0-9]{64}$/)});
 });

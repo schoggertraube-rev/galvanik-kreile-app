@@ -17,7 +17,7 @@ it('H8 quote creation retry cannot switch customer, price or actor and rereads t
  const other=await createFixture(['eingang','mails','kunden','auftraege','geld','einstellungen']);
  expect(await withSession(other,()=>createQuoteAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(full,()=>createQuoteAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,quote:{quoteId:created.quote.quoteId,customerId:first,totalNetCents:2500}});
- expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toEqual(snapshot);
+ expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toEqual({...snapshot,serverReadAt:expect.any(String),cacheLoginScope:expect.stringMatching(/^[a-f0-9]{64}$/)});
  expect(await sql`SELECT count(*)::integer AS n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id IN (${first},${second})`).toEqual([{n:1}]);
  expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
 });
