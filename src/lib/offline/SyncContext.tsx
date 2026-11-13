@@ -132,7 +132,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     let timerGeneration=0;
     const run=(flushDelayed=false,keepalive=false)=>{
       if(!scope||!navigator.onLine||activeScope!==scope)return;
-      void syncOriginals(scope,()=>activeScope,{flushDelayed,keepalive,workshopOnly:keepalive}).then(()=>keepalive?undefined:refreshFullDeviceStand(scope,offline24h)).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
+      void syncOriginals(scope,()=>activeScope,{flushDelayed,keepalive,workshopOnly:keepalive,offline24h}).then(()=>keepalive?undefined:refreshFullDeviceStand(scope,offline24h)).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     };
     const schedule=async()=>{
       const generation=++timerGeneration;if(timer)clearTimeout(timer);
@@ -164,7 +164,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     // Retry the same canonical queue; each command checks its current server
     // rights. Customer/order notes do not require the Eingang area on the client.
     if (!isOnline||!scope||activeScope!==scope) return;
-    await syncOriginals(scope,()=>activeScope);
+    await syncOriginals(scope,()=>activeScope,{offline24h});
     await refreshOutboxSnapshot(scope);
     await refreshFullDeviceStand(scope,offline24h);
   }, [isOnline,scope,offline24h]);

@@ -14,13 +14,19 @@ export async function clearUnmarkedPrivateCaches():Promise<void>{
  const known=/^kreile-private-[a-f0-9]{64}-[a-f0-9]{64}-[1-9][0-9]*$/;
  for(const name of await caches.keys())if(known.test(name)&&!await caches.delete(name)&&(await caches.keys()).includes(name))throw Error('OFFLINE_CACHE_DELETE_NOT_CONFIRMED');
 }
-/** Finish pending read-cache deletion before an existing login action may run.
- * This removes reading state only; queued originals keep their actor partition.
+/** Revoke reading first; a broken browser store must never block login.
+ * Cleanup remains retryable and never consumes queued originals.
  */
-export async function clearPrivateReadStateBeforeLogin():Promise<void>{
- removeCacheScopeMarker();
- if(readCacheScopeMarker()!==null)throw Error('OFFLINE_CACHE_MARKER_REVOKE_NOT_CONFIRMED');
- await clearUnmarkedPrivateCaches();
+export async function clearPrivateReadStateBeforeLogin():Promise<{code:'CLEARED'|'UNAVAILABLE'}>{
+ try{
+  removeCacheScopeMarker();
+  if(readCacheScopeMarker()!==null)throw Error('OFFLINE_CACHE_MARKER_REVOKE_NOT_CONFIRMED');
+  await clearUnmarkedPrivateCaches();
+  return {code:'CLEARED'};
+ }catch(error){
+  console.error('[OFFLINE_LOGIN_CACHE_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');
+  return {code:'UNAVAILABLE'};
+ }
 }
 /** The sole read seam for scoped private responses; no broad caches.match fallback. */
 export async function readScopedPrivateResponse(scope:string,loginScope:string,request:RequestInfo|URL):Promise<Response|null>{

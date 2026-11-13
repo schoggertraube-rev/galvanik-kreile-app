@@ -39,9 +39,9 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('revokes native reading state d
    let nextLogin=0,failed=false;
    CacheStorage.prototype.keys=async function(){throw Error('TEST next-start deletion failure');};
    try{await p.clearPrivateReadStateBeforeLogin();nextLogin++;}catch{failed=true;}finally{CacheStorage.prototype.keys=nativeKeys;}
-   if(!failed||nextLogin!==0||!(await caches.keys()).includes(pendingCache))throw Error('TEST_LOGIN_PASSED_PENDING_CLEANUP');
+   if(failed||nextLogin!==1||document.cookie.includes('kreile_offline_cache_scope=')||!(await caches.keys()).includes(pendingCache))throw Error('TEST_LOGIN_BLOCKED_BY_PENDING_CLEANUP');
    await p.clearPrivateReadStateBeforeLogin();nextLogin++;
-   if(nextLogin!==1||(await caches.keys()).includes(pendingCache))throw Error('TEST_LOGIN_CLEANUP_RETRY_NOT_FINISHED');
+   if(nextLogin!==2||(await caches.keys()).includes(pendingCache))throw Error('TEST_LOGIN_CLEANUP_RETRY_NOT_FINISHED');
    const afterCleanup=await p.readPendingEntries(scope),otherAfterCleanup=await p.readPendingEntries(other);
    if(afterCleanup.length!==1||await afterCleanup[0].file.text()!=='TEST immutable bytes'||otherAfterCleanup.length!==1)throw Error('TEST_LOGIN_CLEANUP_DELETED_ORIGINAL');
    const pendingLogin='${'d'.repeat(64)}';document.cookie='kreile_offline_cache_scope='+pendingLogin+'; Path=/';await p.changePendingShellMetadata(scope,pendingLogin,null,true);
@@ -51,14 +51,14 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('revokes native reading state d
    document.cookie='kreile_offline_cache_scope=; Path=/; Max-Age=0';const nativeTransaction=IDBDatabase.prototype.transaction;
    IDBDatabase.prototype.transaction=function(names,mode,...rest){const tx=nativeTransaction.call(this,names,mode,...rest);if(this.name==='kreile-pending-originals-v1-'+scope&&mode==='readwrite'&&Array.from(names).includes('deviceReads'))queueMicrotask(()=>tx.abort());return tx;};
    let blockedDeviceLogin=false;
-   try{const aborted=await p.clearLoggedOutReadState(scope);if(aborted.cacheCleared)throw Error('TEST_ABORTED_DEVICE_DELETE_CLAIMED');try{await p.clearPrivateReadStateBeforeLogin();}catch{blockedDeviceLogin=true;}}finally{IDBDatabase.prototype.transaction=nativeTransaction;}
+   try{const aborted=await p.clearLoggedOutReadState(scope);if(aborted.cacheCleared)throw Error('TEST_ABORTED_DEVICE_DELETE_CLAIMED');blockedDeviceLogin=(await p.clearPrivateReadStateBeforeLogin()).code==='UNAVAILABLE';}finally{IDBDatabase.prototype.transaction=nativeTransaction;}
    if(!blockedDeviceLogin||await rawCount()!==1)throw Error('TEST_DEVICE_DELETE_FAILURE_NOT_RETAINED');
    await p.clearPrivateReadStateBeforeLogin();if(await rawCount()!==0)throw Error('TEST_DEVICE_DELETE_NOT_RETRIED_BEFORE_LOGIN');
    const revoked=await p.readPendingShellMetadata(scope,pendingLogin);if(revoked.code!=='OK'||revoked.metadata.scope!==null)throw Error('TEST_SCOPE_NOT_ATOMIC_WITH_DEVICE_DELETE');
    const finalOwn=await p.readPendingEntries(scope),finalOther=await p.readPendingEntries(other);if(finalOwn.length!==1||await finalOwn[0].file.text()!=='TEST immutable bytes'||finalOther.length!==1)throw Error('TEST_DEVICE_RETRY_LOST_ORIGINALS');
    const raceLogin='${'e'.repeat(64)}';document.cookie='kreile_offline_cache_scope='+raceLogin+'; Path=/';await p.changePendingShellMetadata(scope,raceLogin,null,true);await p.retainPendingDeviceRead(scope,raceLogin,1,{...device,sourceLoginScope:raceLogin});
    const nativeGetAll=IDBObjectStore.prototype.getAll;IDBObjectStore.prototype.getAll=function(...args){const req=nativeGetAll.apply(this,args);if(this.name==='shellMetadata'&&this.transaction.db.name==='kreile-pending-originals-v1-'+scope&&this.transaction.mode==='readwrite')req.addEventListener('success',()=>{document.cookie='kreile_offline_cache_scope='+raceLogin+'; Path=/';});return req;};
-   let concurrentLoginPreserved=false;try{await p.clearPrivateReadStateBeforeLogin();}catch{concurrentLoginPreserved=true;}finally{IDBObjectStore.prototype.getAll=nativeGetAll;}
+   let concurrentLoginPreserved=false;try{concurrentLoginPreserved=(await p.clearPrivateReadStateBeforeLogin()).code==='UNAVAILABLE';}finally{IDBObjectStore.prototype.getAll=nativeGetAll;}
    const raceState=await p.readPendingShellMetadata(scope,raceLogin);if(!concurrentLoginPreserved||await rawCount()!==1||raceState.code!=='OK'||raceState.metadata.scope!==raceLogin)throw Error('TEST_LATE_START_CLEANUP_ERASED_ACTIVE_LOGIN');
    await p.clearPrivateReadStateBeforeLogin();if(await rawCount()!==0||await (await p.readPendingEntries(scope))[0].file.text()!=='TEST immutable bytes')throw Error('TEST_RACE_RETRY_ORIGINAL_LOST');
    return {nativeRevocation:true,cacheFailureVisible:true,originalBytesPreserved:true,foreignActorPreserved:true};

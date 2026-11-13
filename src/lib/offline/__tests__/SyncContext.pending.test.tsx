@@ -19,7 +19,7 @@ it('pagehide and hidden flush the same queue with keepalive, and stop after unmo
  const view=render(<SyncProvider><Count/></SyncProvider>);
  await waitFor(()=>expect(ports.sync).toHaveBeenCalled());ports.sync.mockClear();
  fireEvent(window,new Event('pagehide'));
- expect(ports.sync).toHaveBeenCalledWith(state.scope,expect.any(Object),{flushDelayed:true,keepalive:true,workshopOnly:true});
+ expect(ports.sync).toHaveBeenCalledWith(state.scope,expect.any(Object),{flushDelayed:true,keepalive:true,workshopOnly:true,offline24h:false});
  vi.spyOn(document,'visibilityState','get').mockReturnValue('hidden');fireEvent(document,new Event('visibilitychange'));
  expect(ports.sync).toHaveBeenCalledTimes(2);
  view.unmount();fireEvent(window,new Event('pagehide'));expect(ports.sync).toHaveBeenCalledTimes(2);
@@ -37,7 +37,7 @@ it('a newly committed delayed original waits until its actual deadline',async()=
  await act(async()=>{window.dispatchEvent(new Event('kreile-pending-changed'));await Promise.resolve();});
  await act(async()=>{await vi.advanceTimersByTimeAsync(9999);});expect(ports.sync).not.toHaveBeenCalled();
  await act(async()=>{await vi.advanceTimersByTimeAsync(1);});expect(ports.sync).toHaveBeenCalledOnce();
- expect(ports.sync.mock.calls[0][2]).toEqual({flushDelayed:false,keepalive:false,workshopOnly:false});
+ expect(ports.sync.mock.calls[0][2]).toEqual({flushDelayed:false,keepalive:false,workshopOnly:false,offline24h:false});
 });
 function Count(){const {outboxItems}=useSync();return <output data-testid="pending">{outboxItems.length}</output>;}
 function StorageState(){const {pendingStorageUnavailable}=useSync();return <output data-testid="storage">{pendingStorageUnavailable?'unavailable':'readable'}</output>;}
