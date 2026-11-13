@@ -314,7 +314,7 @@ describe("W4 operational order read actions", () => {
       ports.resolveAuthorization.mockResolvedValueOnce({ ok: true, data: authorization });
       const { getOrdersDb } = await import("../orders.actions");
 
-      await expect(getOrdersDb()).resolves.toEqual({ ok: true, data: [] });
+      await expect(getOrdersDb()).resolves.toEqual({ ok: true, data: [],serverReadAt:expect.any(String),cacheLoginScope:undefined });
 
       expect(ports.resolveAuthorization).toHaveBeenCalledOnce();
       expect(ports.getOperationalOrders).toHaveBeenCalledWith(authorization);
@@ -346,6 +346,7 @@ describe("W4 operational order read actions", () => {
       ok: false,
       error: "UNAUTHORIZED",
       message: "Sitzung oder Berechtigung ist nicht verfügbar.",
+      serverReadAt:expect.any(String),cacheLoginScope:undefined,
     });
 
     ports.resolveAuthorization.mockResolvedValueOnce({
@@ -356,6 +357,7 @@ describe("W4 operational order read actions", () => {
       ok: false,
       error: "FORBIDDEN",
       message: "Auftragsansicht ist nicht erlaubt.",
+      serverReadAt:expect.any(String),cacheLoginScope:undefined,
     });
 
     ports.resolveAuthorization.mockRejectedValueOnce(new Error("raw resolver throw"));
@@ -388,7 +390,7 @@ describe("W4 operational order read actions", () => {
 
     await expect(adversarialCall({ tenantId: "tenant-b" })).resolves.toEqual({
       ok: true,
-      data: [],
+      data: [],serverReadAt:expect.any(String),cacheLoginScope:undefined,
     });
     expect(ports.getOperationalOrders).toHaveBeenCalledWith(snapshot());
     expect(ports.getOperationalOrders).not.toHaveBeenCalledWith(

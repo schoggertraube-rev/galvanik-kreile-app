@@ -7,6 +7,10 @@ function messageMetadata(read:import('@/lib/domain/u2ReadContract').U2Read){
  return {...read,erstblick:read.erstblick.map(field=>field.key==='nachrichten.inhalt'?{...field,werte:Object.fromEntries(Object.entries(field.werte).filter(([key])=>key!=='text'))}:field),datenluecken:[...new Set([...read.datenluecken,'OFFLINE_MESSAGE_TEXT_NOT_CACHED'])]};
 }
 function metadataForDevice(value:PendingDeviceRead):PendingDeviceRead{
+ if(value.port==='orders.list'){
+  if(!value.response.result.ok)return value;
+  return {...value,response:{result:{ok:true,data:value.response.result.data.map(order=>({...order,parts:order.parts.map(part=>({...part,photo:null,photoIds:null}))}))},datenluecken:[...new Set([...value.response.datenluecken,'OFFLINE_PHOTO_NOT_CACHED'])]}};
+ }
  if(value.port==='today.u3')return {...value,response:{...value.response,...(value.response.messageActions?{messageActions:{...value.response.messageActions,rows:value.response.messageActions.rows.map(row=>({...row,read:messageMetadata(row.read)}))}}:{})}};
  if(value.port!=='message.u2')return value;
  return {...value,response:messageMetadata(value.response)};

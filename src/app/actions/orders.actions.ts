@@ -457,10 +457,10 @@ async function resolveOperationalReadAuthorization(): Promise<ActionResult<Autho
   return { ok: true, data: authorization.data };
 }
 
-export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
+export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {serverReadAt?:string;cacheLoginScope?:string}> {
   noStore();
   const authorization = await resolveOperationalReadAuthorization();
-  if (!authorization.ok) return authorization;
+  if (!authorization.ok) return authorization.error==='FORBIDDEN'||authorization.error==='UNAUTHORIZED'?{...authorization,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:authorization;
 
   try {
     const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
@@ -489,7 +489,7 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
             : `ORDER_CARD_${cardRead?.code ?? "READ_FAILED"}`,
       };
     });
-    return { ok: true, data };
+    return { ok: true, data,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope() };
   } catch (error: unknown) {
     console.error("[ORDER_READ_ERROR]", error);
     return {

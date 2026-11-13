@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
+import {retainDevicePortResponse,readDevicePortResponse} from '@/lib/offline/devicePortRead';
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { OrdersListItem } from "@/modules/orders/public";
 import {
@@ -177,7 +178,7 @@ function OrderRow({ order, onOpen,onCustomer,onPhoto }: { order: OrderListRow; o
 export function OrdersAppAdapter() {
   const openOrder = useOverlayStore((state) => state.openOrder);
   const openCustomer=useOverlayStore(state=>state.openCustomer);
-  const { hasPermission, loading: permissionsLoading } = usePermissions();
+  const { hasPermission, loading: permissionsLoading,offline24h,offlineScope } = usePermissions();
   const [state, setState] = useState<OrdersState>({ kind: "loading" });
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("liste");
@@ -197,11 +198,24 @@ export function OrdersAppAdapter() {
 
   useEffect(() => {
     let active = true;
+    let loadRevision=0;
     const load = async () => {
+      const revision=++loadRevision;
       setState({ kind: "loading" });
       try {
+        if(offline24h&&offlineScope&&navigator.onLine===false){
+          const stored=await readDevicePortResponse(offlineScope,true,{port:'orders.list',objectId:'orders'});
+          if(!active||revision!==loadRevision)return;
+          if(stored.code!=='OK'||stored.value.port!=='orders.list')throw Error('OFFLINE_ORDER_LIST_SOURCE_INCOMPLETE');
+          const result=stored.value.response.result;
+          if(!result.ok){setState({kind:'denied',message:result.message});return;}
+          setState({kind:'data',orders:result.data.map(toOrderListRow),loadedAt:stored.value.serverReadAt});
+          return;
+        }
         const result = await getOrdersDb();
-        if (!active) return;
+        if (!active||revision!==loadRevision) return;
+        if(offline24h&&offlineScope&&result.serverReadAt&&result.cacheLoginScope&&(result.ok||result.error==='FORBIDDEN'||result.error==='UNAUTHORIZED'))await retainDevicePortResponse(offlineScope,true,{port:'orders.list',portVersion:1,objectId:'orders',serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:{result:result.ok?{ok:true,data:result.data}:{ok:false,error:result.error,message:result.message},datenluecken:[]}});
+        if(!active||revision!==loadRevision)return;
         if (!result.ok) {
           setState({
             kind: result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN" ? "denied" : result.error === "CONFLICT" ? "conflict" : "error",
@@ -209,18 +223,20 @@ export function OrdersAppAdapter() {
           });
           return;
         }
-        setState({ kind: "data", orders: result.data.map(toOrderListRow), loadedAt: new Date().toISOString() });
+        if(active&&revision===loadRevision)setState({ kind: "data", orders: result.data.map(toOrderListRow), loadedAt: result.serverReadAt??new Date().toISOString() });
       } catch {
-        if (active) setState({ kind: "error", message: "Aufträge konnten nicht sicher geladen werden." });
+        if (active&&revision===loadRevision) setState({ kind: "error", message: "Aufträge konnten nicht sicher geladen werden." });
       }
     };
     void load();
     window.addEventListener("kreile-sync-orders", load);
+    window.addEventListener("online",load);
     return () => {
       active = false;
       window.removeEventListener("kreile-sync-orders", load);
+      window.removeEventListener("online",load);
     };
-  }, []);
+  }, [offline24h,offlineScope]);
 
   const orders = useMemo(() => {
     if (state.kind !== "data") return [];
