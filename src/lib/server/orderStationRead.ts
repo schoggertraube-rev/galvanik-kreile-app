@@ -33,6 +33,7 @@ type QueueRow = {
   due_date: Date | string | null;
   due_date_text: string | null;
   created_at: Date | string | null;
+  server_changed_at?: Date | string | null;
   tenant_integrity_ok: boolean;
   parts: unknown;
 };
@@ -231,6 +232,7 @@ function mapOperationalQueueRow(row: QueueRow, tenantId: string): OperationalOrd
     dueLabel: priority.dueLabel,
     dueValue: priority.dueValue,
     createdAt: toSafeIsoDate(row.created_at) || undefined,
+    ...('server_changed_at' in row ? {serverChangedAt:toSafeIsoDate(row.server_changed_at)||null} : {}),
   };
 }
 
@@ -252,7 +254,9 @@ export async function readTenantOperationalOrders(
 ): Promise<OperationalOrder[]> {
   return withPrivilegedTenantTransaction(authorization, async (tx) => {
     const rows = await tx.execute<QueueRow>(sql`
-      SELECT queue.*, queue.due_date::date::text AS due_date_text
+      SELECT queue.*, queue.due_date::date::text AS due_date_text,
+        (SELECT max(event.created_at) FROM public.events event
+         WHERE event.tenant_id = queue.tenant_id AND event.order_id = queue.id) AS server_changed_at
       FROM private.v_operational_station_queue_v1 queue
       ORDER BY created_at DESC, id
     `);
