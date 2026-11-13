@@ -1,2 +1,4 @@
 #!/usr/bin/env sh
+set -e
+git diff --check --cached
 npm run verify:precommit
