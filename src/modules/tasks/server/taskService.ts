@@ -3,6 +3,8 @@ import {canSynchronizeIntakeMailbox} from '@/lib/auth/authorizationContract';
 import {MAILBOX_SYNC_COPY} from '@/ui/situationCatalog';
 import {canReadQuoteFollowups} from '@/lib/auth/authorizationContract';
 import {readProductionPricingRetrySource,readProductionPricingRetryKeys} from '@/lib/server/productionSnapshotPort';
+import {readCancellationCreditSource} from '@/lib/server/commands/customerCreditCommand';
+import {CUSTOMER_CREDIT_COPY,SITUATION_COPY} from '@/ui/situationCatalog';
 import {PRODUCTION_PRICING_RETRY_COPY} from '@/ui/situationCatalog';
 import {readCanceledInvoiceMailTaskSource,isCanceledInvoiceMailTask,bindCanceledInvoiceMailTask,readCanceledInvoiceTaskCompletion} from '@/lib/server/communicationDocumentPort';
 import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
@@ -273,8 +275,11 @@ async function readTaskInTransaction(tx:PrivilegedTenantTransaction,auth:Authori
   let pricing:Awaited<ReturnType<typeof readProductionPricingRetrySource>>=null;
   let pricingSource:'KNOWN'|'SOURCE_INCOMPLETE'='KNOWN';
   if(task){try{pricing=await withTenantSavepoint(tx,nested=>readProductionPricingRetrySource(nested,auth,task.client_key));}catch{pricingSource='SOURCE_INCOMPLETE';}}
+  let credit:Awaited<ReturnType<typeof readCancellationCreditSource>>=null;
+  let creditSource:'KNOWN'|'SOURCE_INCOMPLETE'='KNOWN';
+  if(task){try{credit=await withTenantSavepoint(tx,nested=>readCancellationCreditSource(nested,auth.tenantId,task.client_key));}catch{creditSource='SOURCE_INCOMPLETE';}}
 
-  return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,canEdit,canComplete:!!task&&task.status==='offen'&&(canEdit||canceledCustomer!==null)&&task.art!=='rechnung',...(pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
+  return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,creditSource,canEdit,canComplete:!!task&&task.status==='offen'&&(canEdit||canceledCustomer!==null)&&task.art!=='rechnung',...(credit?{completeLabel:SITUATION_COPY.retry}:pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
 }
 
 
@@ -369,6 +374,26 @@ export async function createProductionPricingRetryTask(tx:PrivilegedTenantTransa
  if(prior.length){if(prior.length!==1||prior[0].erstellt_von!==source.actorId||prior[0].bezug_id!==source.orderId||prior[0].art!=='aufgabe'||prior[0].bezug_typ!=='auftrag')throw Error('PRODUCTION_PRICING_TASK_CHANGED');return prior[0].id;}
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  return (await persistTask(tx,auth,{clientKey:markerId,version:0,kind:'aufgabe',title:source.title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:source.orderId},note:source.description},deps,false)).task.id;
+}
+
+/** Same task writer, keyed to the immutable cancellation; no new task truth. */
+export async function synchronizeCancellationCreditRetryTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string,deps:Dependencies,mode:'ensure'|'settle'){
+ const prior=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid FOR UPDATE NOWAIT`);
+ if(mode==='settle'&&!prior.length)return;
+ const source=await readCancellationCreditSource(tx,auth.tenantId,key);
+ if(!source||source.cancelledBy!==auth.userId||prior.length>1||prior.some(task=>task.bezug_typ!=='auftrag'||task.bezug_id!==source.orderId||task.art!=='aufgabe'||task.erstellt_von!==source.cancelledBy))throw Error('CUSTOMER_CREDIT_TASK_SOURCE_INVALID');
+ if(mode==='settle'){
+  if(source.pending)throw Error('CUSTOMER_CREDIT_TASK_NOT_REPAIRED');
+  if(prior[0]?.status==='offen')await finishTask(tx,auth,{taskId:prior[0].id,version:prior[0].version,note:null},deps);
+  return;
+ }
+ if(!source.pending)throw Error('CUSTOMER_CREDIT_TASK_NOT_PENDING');
+ if(prior.length)return;
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ const fullTitle=CUSTOMER_CREDIT_COPY.retryTask(source.invoiceNumber),budget=120-CUSTOMER_CREDIT_COPY.retryTask('').length;
+ const title=CUSTOMER_CREDIT_COPY.retryTask(source.invoiceNumber.length>budget?source.invoiceNumber.slice(0,budget-1)+'…':source.invoiceNumber);
+ const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:source.orderId},note:fullTitle};
+ await persistTask(tx,auth,value,deps,false);
 }
 
 /** Narrow R2 composition for the already authorized KV operation, using the

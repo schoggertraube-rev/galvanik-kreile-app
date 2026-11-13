@@ -16,7 +16,8 @@ vi.mock("@/lib/server/authorization", () => ({
     && area === "geld"
     && authorization.permissions.includes("perm_view_prices"),
 }));
-vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
+// Unit SQL fixture only; native savepoint/rollback is proven by the S08 real DB cases.
+vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction,withTenantSavepoint:async(tx:unknown,work:(tx:unknown)=>Promise<unknown>)=>work(tx) }));
 vi.mock("@react-pdf/renderer", () => ({ renderToBuffer }));
 vi.mock("@/lib/pdf/ImmutableInvoiceDocument", () => ({
   createImmutableInvoicePdfDocument: vi.fn(() => ({ type: "Document" })),
@@ -316,6 +317,7 @@ describe("cancelInvoice", () => {
   it("replays only the exact immutable cancellation intent without a second write", async () => {
     execute.mockImplementation((query: { text: string }) => {
       if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if(query.text.includes('LEFT JOIN public.customer_credit_entries'))return Promise.resolve([{invoice_id:INVOICE,invoice_number:'R-2026-0007',order_id:ORDER,customer_id:'TEST-unit-customer',event_id:EVENT,actor_id:ACTOR,paid_cents:'0',entry_id:null}]);
       if (query.text.includes("private.v_invoice_receipt_v1")) {
         return Promise.resolve([validCancellationReceiptRow]);
       }
@@ -366,34 +368,16 @@ describe("cancelInvoice", () => {
   });
 
   it.each([
-    ["a one-cent partial payment", {
-      payment_status: "teilbezahlt",
-      payment_open_amount_cents: 11_899,
-      payment_paid_amount_cents: 1,
-      payment_method: "ueberweisung",
-      payment_paid_at: "2026-09-16T08:00:00.000Z",
-      payment_receipt_id: "receipt:partial",
-      payment_event_id: EVENT,
-      payment_correlation_id: CORRELATION,
-      payment_version: 1,
-    }],
-    ["a full payment", {
-      payment_status: "bezahlt",
-      payment_open_amount_cents: 0,
-      payment_paid_amount_cents: 11_900,
-      payment_method: "bar",
-      payment_paid_at: "2026-09-16T09:00:00.000Z",
-      payment_receipt_id: "receipt:paid",
-      payment_event_id: EVENT,
-      payment_correlation_id: CORRELATION,
-      payment_version: 1,
-    }],
+    // Paid/partial rejection is replaced by PL A08-1/-2 real positive cases.
     ["an internally inconsistent payment state", {
       payment_contract_version: null,
     }],
   ])("fails closed before PDF, event or invoice mutation for %s", async (_label, paymentDelta) => {
     execute.mockImplementation((query: { text: string }) => {
       if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if(query.text.includes('SELECT customer_id FROM public.invoices'))return Promise.resolve([{customer_id:'TEST-unit-customer'}]);
+      if(query.text.includes('private.lock_customer_credit_v1'))return Promise.resolve([]);
+      if(query.text.includes('private.v_payment_summary_v1'))return Promise.resolve([{...validLockedInvoice,...paymentDelta,integrity_ok:false}]);
       if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([]);
       if (query.text.includes("SELECT id") && query.text.includes("FROM public.events")) {
         return Promise.resolve([]);
@@ -410,7 +394,7 @@ describe("cancelInvoice", () => {
     const { cancelInvoice } = await import("../immutableInvoiceCommand");
     await expect(cancelInvoice(validCancelInput)).resolves.toEqual({
       code: "CONFLICT",
-      message: "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
+      message: "Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Das Guthaben entsteht, sobald die Zahlung mit Betrag und Datum erfasst ist.",
     });
 
     const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");

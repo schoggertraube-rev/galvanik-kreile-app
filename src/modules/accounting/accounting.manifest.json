@@ -9,12 +9,15 @@
     "@/modules/accounting/public#InvoiceVatGroup",
     "@/modules/accounting/public#InvoiceVatRead",
     "@/modules/accounting/public#InvoiceVatReader",
-    "@/modules/accounting/public#readInvoiceVat"
+    "@/modules/accounting/public#readInvoiceVat",
+    "@/modules/accounting/public#CustomerCredit",
+    "@/modules/accounting/public#CustomerCreditResult",
+    "@/modules/accounting/server-public#readCustomerCredit"
   ],
   "capabilities": [],
-  "migrations": [],
-  "viewsFunctions": [],
-  "ownsTables": [],
+  "migrations": ["20261113215222_customer_credit_entries.sql"],
+  "viewsFunctions": ["private.lock_customer_credit_v1","private.guard_customer_credit_append_v1","private.guard_customer_credit_source_v1"],
+  "ownsTables": ["public.customer_credit_entries"],
   "storagePurposes": [],
   "events": {
     "emits": [],

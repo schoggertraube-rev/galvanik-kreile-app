@@ -2,6 +2,9 @@
   "version": 1,
   "inventorySha256": "4f53fa32a202e826c6ba47c196a41d1e4535fb02a8b28bf161f008067b02a9cf",
   "testedWriteActions": {
+    "src/app/actions/invoices.actions.ts#getCustomerCreditAction": [
+      "src/test/acceptance/s08_customer_credit.integration.test.ts"
+    ],
     "src/app/actions/today.actions.ts#getTodayDeviceAction": [
       "src/test/acceptance/offline_workshop_sync.browser.integration.test.ts"
     ],

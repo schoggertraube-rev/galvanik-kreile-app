@@ -125,7 +125,7 @@ export const ACTOR_COPY={
  mail:(sender:string)=>'Mail von '+sender,
 };
 export const QUOTE_CYCLE_COPY={
- retainedGoodsBlocked:(reason:string)=>`Die Ware ist gespeichert, aber gesperrt: ${reason}. Klaere die Abweichung an der KV-Ware, dann entsteht der Auftrag.`,
+ retainedGoodsBlocked:(reason:string)=>`Die Ware ist gespeichert, aber gesperrt: ${reason}. Kläre die Abweichung an der KV-Ware, dann entsteht der Auftrag.`,
  goodsUnavailable:'KV-Warenannahme konnte nicht sicher bestätigt werden. Eingaben und Kennung behalten.',
  orderRetry:(number:string)=>'Auftrag aus KV '+number+' anlegen',
  orderRetryTask:(number:string)=>'Auftrag aus KV '+number+' anlegen · Ware ist da, der Auftrag fehlt noch',
@@ -358,4 +358,14 @@ export const OFFLINE_DEVICE_STATUS_COPY={
  unavailable:'Offline-Speicher auf diesem Gerät nicht verfügbar - Eingaben gehen nur mit Netz',
  quarantine:(count:number)=>`${count} Eingaben zurückgehalten - tippe zum Zuordnen`,
  incomplete:'Noch nicht alle Daten auf diesem Gerät – mit Netz lädt die App den Rest automatisch.',
+} as const;
+// R8 S08: PL13.11.23:25.
+export const CUSTOMER_CREDIT_COPY={
+ retryTask:(number:string)=>'TODO_PL customer_credit.retry '+number,
+ invalid:'Betrag oder Rechnung fehlt. Trag beides ein, dann verrechne ich das Guthaben.',
+ forbidden:'Guthaben verrechnen darf nur, wer das Recht Geld hat.',
+ unavailable:'Das Guthaben ist gerade nicht erreichbar. Deine Angaben bleiben erhalten – versuch es gleich noch einmal.',
+ notFound:'Für diesen Kunden gibt es dieses Guthaben nicht mehr. Lade den aktuellen Stand.',
+ pending:'Der Storno ist noch nicht fertig gespeichert. Das Guthaben steht bereit, sobald er durch ist – versuch es gleich noch einmal.',
+ paymentUnknown:'Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Das Guthaben entsteht, sobald die Zahlung mit Betrag und Datum erfasst ist.',
 } as const;
