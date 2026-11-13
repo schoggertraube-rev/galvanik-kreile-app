@@ -564,7 +564,7 @@ export async function getOrderRegisterDb(
         title: order.title,
         dueDate: order.dueDate,
         status: order.status,
-        changedAt: order.createdAt ?? null,
+        changedAt: order.serverChangedAt ?? null,
       })),
       ...quoteResult.quotes.map((quote) => ({
         kind: "QUOTE" as const,
