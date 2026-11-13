@@ -7,12 +7,12 @@
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
     "page_routes": 15,
-    "api_routes": 3,
+    "api_routes": 4,
     "server_action_groups": 46,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 90
+    "total": 91
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -503,6 +503,7 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/today.actions.ts",
       "exported_functions": [
+        "getTodayDeviceAction",
         "saveTodayPreferencesAction",
         "saveTodayReminderAction"
       ],
@@ -1387,6 +1388,16 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "AP-EIN direct entry into the same requestGlobalCreate capture; exact-SHA independent acceptance remains pending."
+    },
+    {
+      "stable_id": "api.offline.replay",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/offline/replay/route.ts",
+      "route": "/api/offline/replay",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "S06 same-origin authenticated transport to the existing N5 replay writer; exact-head independent acceptance pending."
     },
     {
       "stable_id": "api.device-file-changes",

@@ -2,12 +2,6 @@
 import {refreshDeviceStand} from './collectDeviceStand';
 import {readDeviceStandResponse} from './devicePortRead';
 import {readCacheScopeMarker} from './cacheScopeMarker';
-import {getOrdersDb,getLiveOrderCardAction} from '@/app/actions/orders.actions';
-import {getCustomersDb,getCustomerSummaryAction} from '@/app/actions/customers.actions';
-import {getTodayDeviceAction} from '@/app/actions/today.actions';
-
-import {getIntakeMessagesAction} from '@/app/actions/eingang.actions';
-import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
 import {OFFLINE_NOTE_QUARANTINE_COPY} from '@/ui/situationCatalog';
 import React, { createContext, useContext, useEffect, useCallback, useSyncExternalStore } from "react";
 import type { OfflineOutboxItem } from "./OfflineOutbox";
@@ -43,12 +37,14 @@ let outboxSnapshot: OfflineOutboxItem[] = EMPTY_OUTBOX;
 const EMPTY_QUARANTINE:PendingQuarantine[]=[];
 let quarantineSnapshot:PendingQuarantine[]=EMPTY_QUARANTINE;
 const outboxListeners = new Set<() => void>();
+// Load the existing Server Action references only when their port is used.
+// Rendering a client provider must not evaluate an unused server bootstrap.
 const deviceStandPorts={
-  orders:{list:getOrdersDb,read:(id:string)=>getLiveOrderCardAction({orderId:id})},
-  customers:{list:getCustomersDb,read:(id:string)=>getCustomerSummaryAction({customerId:id})},
-  quotes:{list:()=>listOpenQuotesAction({purpose:'device'}),read:(id:string)=>readQuoteAction({quoteId:id,purpose:'operations'})},
-  messages:{read:()=>getIntakeMessagesAction({purpose:'device'})},
-  today:{read:getTodayDeviceAction},currentScope:()=>activeScope,
+  orders:{list:async()=>(await import('@/app/actions/orders.actions')).getOrdersDb(),read:async(id:string)=>(await import('@/app/actions/orders.actions')).getLiveOrderCardAction({orderId:id})},
+  customers:{list:async()=>(await import('@/app/actions/customers.actions')).getCustomersDb(),read:async(id:string)=>(await import('@/app/actions/customers.actions')).getCustomerSummaryAction({customerId:id})},
+  quotes:{list:async()=>(await import('@/app/actions/quotes.actions')).listOpenQuotesAction({purpose:'device'}),read:async(id:string)=>(await import('@/app/actions/quotes.actions')).readQuoteAction({quoteId:id,purpose:'operations'})},
+  messages:{read:async()=>(await import('@/app/actions/eingang.actions')).getIntakeMessagesAction({purpose:'device'})},
+  today:{read:async()=>(await import('@/app/actions/today.actions')).getTodayDeviceAction()},currentScope:()=>activeScope,
 };
 
 function subscribeToNetworkStatus(onStoreChange: () => void): () => void {
