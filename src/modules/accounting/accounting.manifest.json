@@ -8,7 +8,8 @@
     "@/modules/accounting/server-public#readInvoiceVat",
     "@/modules/accounting/public#InvoiceVatGroup",
     "@/modules/accounting/public#InvoiceVatRead",
-    "@/modules/accounting/public#InvoiceVatReader"
+    "@/modules/accounting/public#InvoiceVatReader",
+    "@/modules/accounting/public#readInvoiceVat"
   ],
   "capabilities": [],
   "migrations": [],

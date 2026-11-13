@@ -1,4 +1,5 @@
 import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
+import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
@@ -1087,8 +1088,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         source.extra_work_lines=source.extra_work_lines.map(line=>{
           if(!plainObject(line)||typeof line.itemId!=='string')throw Error('INVOICE_QUOTE_EXTRA_WORK_SOURCE_INVALID');
           const positions=commercial.positions.filter(position=>position.itemId===line.itemId);
-          if(positions.length!==1)throw Error('INVOICE_QUOTE_EXTRA_WORK_SOURCE_INVALID');
-          return {...line,vat_rate_basis_points:positions[0].vatRateBasisPoints??commercial.vatRateBasisPoints??null};
+          return {...line,vat_rate_basis_points:positions.length===1?(positions[0].vatRateBasisPoints??commercial.vatRateBasisPoints??null):line.vat_rate_basis_points};
         });
         // The existing canonical awarded-quote port proves these prices; no price is copied into an intake intent.
         source.base_line_count=commercial.positions.length;source.base_net_amount_cents=commercial.totalNetCents;
@@ -1587,6 +1587,5 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): P
 
 
 function requireVatReader(reader:InvoiceVatReader|undefined):InvoiceVatReader{
- if(!reader)throw Error('INVOICE_VAT_READER_REQUIRED');
- return reader;
+ return reader??readInvoiceVat;
 }

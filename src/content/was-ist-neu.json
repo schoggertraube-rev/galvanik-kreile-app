@@ -1,5 +1,16 @@
 [
   {
+    "datum": "2026-11-13",
+    "pr": 217,
+    "seite": "auftraege",
+    "punkte": [
+      "Rechnungen rechnen unterschiedliche Steuersätze je Position getrennt und zeigen die passenden Summen.",
+      "Nach einem unterbrochenen Mailabruf setzt die App beim gesicherten Stand fort. Bereits eingelesene Nachrichten bleiben erhalten.",
+      "Wiederholte falsche PIN-Eingaben werden begrenzt."
+    ],
+    "ziel": "/auftraege"
+  },
+  {
     "datum": "2026-11-12",
     "pr": 216,
     "seite": "tag",

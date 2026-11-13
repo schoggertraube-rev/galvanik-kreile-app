@@ -1,4 +1,5 @@
 import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
+import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
 
 import { sql } from "drizzle-orm";
@@ -552,4 +553,4 @@ export async function readInvoicePdf(
   }
 }
 
-function requireVat(reader:InvoiceVatReader|undefined):InvoiceVatReader{if(!reader)throw Error("INVOICE_VAT_READER_REQUIRED");return reader;}
+function requireVat(reader:InvoiceVatReader|undefined):InvoiceVatReader{return reader??readInvoiceVat;}

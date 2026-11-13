@@ -24,6 +24,8 @@ Keine Skills oder Unteragenten für Planung und Prüfung.
 
 **Nie:** Merge, Secrets in Dateien, Vercel-CLI-Deploy, `git stash`, Force-Push, Clones, Worktrees, zweiter Schreiber. Production und Remote-Migration nur in S50/S51 mit PL-Zeile „Owner-Freigabe Production Sxx“. Kostenpflichtige Dienste nur, wo OWNER_ENTSCHEIDUNGEN sie freigibt (U-236).
 
+**„Nie Merge“ heißt (PL 13.11.11:25, BAUREGELN §7):** Codex merged nie einen PR und schreibt nie auf `main`. Pflicht ist dagegen, nach jedem Owner-Merge `origin/main` normal in den eigenen Arbeitszweig zu mergen (`git merge origin/main`, kein Rebase, kein Squash), Konflikte so aufzulösen, dass beide Stände erhalten bleiben, danach die betroffenen Tests gezielt.
+
 Modulgrenzen: Andere Module nur über `src/modules/<fach>/public.ts` und Lese-Ports ansprechen. Die Modul-Gates in CI gelten.
 
 Modulnähte: docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md bleibt ausschließlich für die bestehenden Modul-Gates maßgeblich.

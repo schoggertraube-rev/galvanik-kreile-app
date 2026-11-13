@@ -11,6 +11,7 @@ import {createOrderIntakeAction} from '@/app/actions/eingang.actions';
 import {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,freezeOrderAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction} from '@/app/actions/orders.actions';
 import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
 import {getInvoiceTruthAction,getInvoiceReceiptAction,getInvoiceSummariesAction,setInvoiceItemPricesAction,issueInvoiceAction} from '@/app/actions/invoices.actions';
+import {createInvoice} from '@/lib/server/commands/immutableInvoiceCommand';
 
 beforeAll(()=>{
  const url=process.env.DATABASE_URL;
@@ -19,6 +20,7 @@ beforeAll(()=>{
 
 it.each([
  {name:'19 percent',rates:[1900],country:'DE',vatId:null,vat:1900,valid:true},
+ {name:'default command 19 percent',rates:[1900],country:'DE',vatId:null,vat:1900,valid:true,directCommand:true},
  {name:'7 percent',rates:[700],country:'DE',vatId:null,vat:700,valid:true},
  {name:'mixed 19 and 7',rates:[1900,700],country:'DE',vatId:null,vat:2600,valid:true},
  {name:'round whole rate group',rates:[1900,1900,1900],country:'DE',vatId:null,vat:1,valid:true,unitNet:1},
@@ -66,7 +68,7 @@ it.each([
   if(priced.code!=='OK')throw Error('TEST_A4_FREE_TEXT_PRICE:'+priced.code);invoiceVersion=priced.receipt.aggregateVersion;
  }
  const input={orderId,expectedVersion:invoiceVersion,clientEventId:randomUUID()};
- const result=await withSession(full,()=>issueInvoiceAction(input));
+ const result=await withSession(full,()=>'directCommand' in scenario&&scenario.directCommand?createInvoice(input):issueInvoiceAction(input));
  if(!scenario.valid){
   expect(result).toMatchObject({code:'VALIDATION_ERROR'});
   if(missingCompany)expect(result).toMatchObject({message:expect.stringContaining('Einstellungen unter Firmendaten')});
