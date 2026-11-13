@@ -10,12 +10,26 @@ import {adoptQuarantinedOriginal} from './pendingStore';
 
 function preview(value:unknown){
  const seen=new WeakSet<object>();
- return JSON.stringify(value,(_key,entry)=>{
-  if(typeof entry==='bigint')return String(entry);
-  if(typeof File!=='undefined'&&entry instanceof File)return {name:entry.name,type:entry.type,size:entry.size};
-  if(entry&&typeof entry==='object'){if(seen.has(entry))return OFFLINE_TAKEOVER_COPY.reference;seen.add(entry);}
-  return entry;
- },2);
+ const parts:string[]=[];
+ function read(entry:unknown,inheritedDate?:string){
+  if(!entry||typeof entry!=='object'||seen.has(entry))return;
+  seen.add(entry);
+  const row=entry as Record<string,unknown>;
+  const rawDate=row.deviceCapturedAt??row.capturedAt??inheritedDate;
+  const date=typeof rawDate==='string'&&rawDate&&Number.isFinite(Date.parse(rawDate))?rawDate:inheritedDate;
+  const file=typeof File!=='undefined'&&row.file instanceof File?row.file:null;
+  const text=typeof row.text==='string'?row.text:null;
+  const name=file?.name??(row.kind==='file'&&typeof row.name==='string'?row.name:null);
+  if(text||name){
+   parts.push(name?OFFLINE_TAKEOVER_COPY.file:OFFLINE_TAKEOVER_COPY.note);
+   if(date)parts.push(new Date(date).toLocaleString('de-DE'));
+   parts.push(name??text!.slice(0,200));
+   return;
+  }
+  read(row.original,date);if(parts.length===0)read(row.payload,date);
+ }
+ read(value);
+ return parts.length?parts.join(' · '):OFFLINE_TAKEOVER_COPY.unreadable;
 }
 
 /** Reads the same queue projection as the header; never discards an original. */
@@ -42,7 +56,7 @@ export function QuarantinedOriginals({onClose}:{onClose:()=>void}){
   {error&&<p role="alert">{error}</p>}
   {!hasArea('eingang')&&<p>{OFFLINE_TAKEOVER_COPY.noRight}</p>}
   {quarantinedOriginals.map(original=><section key={original.id} data-spec-id="offline.original">
-   <pre>{preview(original.payload)}</pre>
+   <p>{preview(original)}</p>
    {hasArea('eingang')&&<button type="button" disabled={busy!==null} onClick={()=>void adopt(original.id)}>{OFFLINE_TAKEOVER_COPY.adopt}</button>}
   </section>)}
  </Dialog>;

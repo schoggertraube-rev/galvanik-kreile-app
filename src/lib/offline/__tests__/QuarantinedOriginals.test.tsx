@@ -15,6 +15,14 @@ it('shows one and many actual projected originals, without a discard action',()=
  expect(screen.getByText(/TEST original one/)).toBeInTheDocument();expect(screen.getByText(/TEST original two/)).toBeInTheDocument();
  expect(screen.getAllByText('Als Eingang übernehmen')).toHaveLength(2);expect(screen.queryByText(/Verwerfen/)).not.toBeInTheDocument();
 });
+it('PL15:50 displays bounded readable rows, file names and the explicit unreadable state without exposing raw records',()=>{
+ const long='TEST '.repeat(60),payload={original:{text:long,deviceCapturedAt:'2026-11-13T10:00:00Z'},secretMetadata:'TEST internal retained'};
+ state.entries=[{id:'TEST-note',payload},{id:'TEST-file',payload:{original:{file:new File(['TEST bytes'],'TEST-photo.png',{type:'image/png'})}}},{id:'TEST-unknown',payload:{opaque:42}}];
+ const before=JSON.stringify(payload);const view=render(<QuarantinedOriginals onClose={()=>{}}/>);
+ expect(screen.getByText(/Notiz ·/).textContent).toContain(long.slice(0,200));expect(screen.getByText(/Notiz ·/).textContent).not.toContain(long.slice(0,201));
+ expect(screen.getByText('Datei · TEST-photo.png')).toBeInTheDocument();expect(screen.getByText('Inhalt nicht lesbar – das Original bleibt gespeichert.')).toBeInTheDocument();
+ expect(view.container.querySelector('pre')).toBeNull();expect(screen.queryByText(/TEST internal retained/)).toBeNull();expect(JSON.stringify(payload)).toBe(before);
+});
 it('retains the original view without Eingang and offers no takeover button',()=>{
  state.allowed=false;state.entries=[{id:'TEST-one',payload:{text:'TEST retained without right'}}];render(<QuarantinedOriginals onClose={()=>{}}/>);
  expect(screen.getByText('Zuordnen kann, wer den Eingang bearbeiten darf')).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Als Eingang übernehmen'})).not.toBeInTheDocument();

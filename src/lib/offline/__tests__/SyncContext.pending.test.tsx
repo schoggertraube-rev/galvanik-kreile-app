@@ -42,6 +42,14 @@ it('a newly committed delayed original waits until its actual deadline',async()=
 function Count(){const {outboxItems}=useSync();return <output data-testid="pending">{outboxItems.length}</output>;}
 function StorageState(){const {pendingStorageUnavailable}=useSync();return <output data-testid="storage">{pendingStorageUnavailable?'unavailable':'readable'}</output>;}
 function StandState(){const {deviceStand}=useSync();return <output data-testid="stand">{deviceStand.code}</output>;}
+it('restarts the same full reader when the real login shell becomes ready after the initial read, ignoring another login',async()=>{
+ state.scope='4'.repeat(64);state.status='authenticated';state.offline24h=true;document.cookie='kreile_offline_cache_scope='+('4'.repeat(64))+'; Path=/';
+ ports.read.mockResolvedValue([]);ports.readStand.mockResolvedValue({code:'EMPTY',reason:'NO_STAND'});ports.refreshStand.mockResolvedValueOnce({code:'STALE'}).mockResolvedValue({code:'STORED'});
+ render(<SyncProvider><StandState/></SyncProvider>);await waitFor(()=>expect(ports.refreshStand).toHaveBeenCalledOnce());
+ fireEvent(window,new CustomEvent('kreile-offline-shell-ready',{detail:{scope:'3'.repeat(64),loginScope:'3'.repeat(64)}}));expect(ports.refreshStand).toHaveBeenCalledOnce();
+ fireEvent(window,new CustomEvent('kreile-offline-shell-ready',{detail:{scope:state.scope,loginScope:'4'.repeat(64)}}));
+ await waitFor(()=>expect(ports.refreshStand).toHaveBeenCalledTimes(2));expect(ports.retain).not.toHaveBeenCalled();
+});
 it('ignores an older failed refresh after a newer successful same-login refresh',async()=>{
  state.scope='5'.repeat(64);state.status='authenticated';state.offline24h=true;document.cookie='kreile_offline_cache_scope='+('5'.repeat(64))+'; Path=/';
  ports.read.mockResolvedValue([{id:'TEST-retained-race',itemId:'TEST-item',kind:'note'}]);ports.readStand.mockResolvedValue({code:'OK',serverReadAt:'2026-11-13T09:30:00.000Z',cacheGeneration:4});

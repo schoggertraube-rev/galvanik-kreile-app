@@ -16,8 +16,8 @@ export const MESSAGE_COMPLAINT_ACTION_COPY={key:'messages.complaint_customer',te
 export const OFFLINE_LOGOUT_COPY={cachePending:'Du bist abgemeldet. Die gespeicherten Daten auf diesem Gerät werden beim nächsten Start gelöscht.',pending:(count:number)=>`${count} Aktionen warten auf Netz - sie gehen raus, sobald du wieder angemeldet und online bist`} as const;
 /** Existing search messages, unchanged for the cached read boundary. */
 export const TENANT_SEARCH_COPY={unavailable:'Die internen Bestände konnten nicht sicher durchsucht werden.',denied:'Diese Suche ist für die aktuelle Sitzung nicht freigegeben.'} as const;
-/** PL13:29. TODO_PL: title/unavailable wording for the read-only original view (R8). */
-export const OFFLINE_TAKEOVER_COPY={title:'Zurückgehaltene Originale',adopt:'Als Eingang übernehmen',noRight:'Zuordnen kann, wer den Eingang bearbeiten darf',taken:(login:string)=>`Original übernommen von ${login}`,reference:'Verweis auf ein bereits angezeigtes Originalfeld',unavailable:'Das Original konnte noch nicht übernommen werden. Es bleibt erhalten.'} as const;
+/** PL13:29 / PL15:50, same original source and read-only preview. */
+export const OFFLINE_TAKEOVER_COPY={title:'Zurückgehaltene Eingaben',adopt:'Als Eingang übernehmen',noRight:'Zuordnen kann, wer den Eingang bearbeiten darf',taken:(login:string)=>`Original übernommen von ${login}`,note:'Notiz',file:'Datei',unreadable:'Inhalt nicht lesbar – das Original bleibt gespeichert.',unavailable:'Übernehmen hat gerade nicht geklappt. Die Eingabe bleibt auf diesem Gerät – versuch es gleich noch einmal.'} as const;
 export const ORDER_TERMINAL_COPY={dateLocked:'Der Auftrag wurde bereits herausgegeben. Du kannst den Liefertermin nicht mehr ändern.'} as const;
 export const MAIL_REQUEST_CONFLICT_COPY='Diese Anfragekennung gehört zu einer anderen Nachricht. Öffne den gespeicherten Versand.';
 export const INTAKE_PENDING_WORKFLOW_COPY={quoteRequest:'Lege zuerst den KV zur Anfrage an'} as const;
@@ -348,6 +348,5 @@ export const OFFLINE_DEVICE_STATUS_COPY={
  expired:'Seit über 24 Stunden kein Netz – neue Eingaben erst wieder mit Verbindung',
  unavailable:'Offline-Speicher auf diesem Gerät nicht verfügbar - Eingaben gehen nur mit Netz',
  quarantine:(count:number)=>`${count} Eingaben zurückgehalten - tippe zum Zuordnen`,
- // TODO_PL: device.stand_incomplete – the actual source is not yet complete.
- incomplete:'Gerätestand noch nicht vollständig - mit Netz erneut abgleichen',
+ incomplete:'Noch nicht alle Daten auf diesem Gerät – mit Netz lädt die App den Rest automatisch.',
 } as const;

@@ -87,7 +87,7 @@ describe("W2C header truth", () => {
   });
   it('S06 never displays network availability as a completed stand when its source is incomplete',()=>{
     boundary.offline24h=true;boundary.sync.deviceStand={code:'INCOMPLETE'};
-    renderHeader();expect(screen.getByRole('status',{name:'Netzwerkstatus'})).toHaveTextContent('Gerätestand noch nicht vollständig');expect(screen.queryByText('Netzwerk verfügbar')).toBeNull();
+    renderHeader();expect(screen.getByRole('status',{name:'Netzwerkstatus'})).toHaveTextContent('Noch nicht alle Daten auf diesem Gerät – mit Netz lädt die App den Rest automatisch.');expect(screen.queryByText('Netzwerk verfügbar')).toBeNull();
   });
   it("renders online without pending work as a non-interactive device signal", () => {
     const { container } = renderHeader();

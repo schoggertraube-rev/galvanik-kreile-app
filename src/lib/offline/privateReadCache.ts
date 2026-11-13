@@ -64,6 +64,9 @@ export async function warmScopedPrivateResponse(scope:string,loginScope:string,u
    const activated=await changePendingShellMetadata(scope,loginScope,null,true);
    if(activated.code!=='OK')return false;
    state={code:'OK',metadata:activated.metadata};
+   // The initial full reader may already have observed NO_SHELL while this
+   // real HTML request was in flight. Wake that same reader after the commit.
+   window.dispatchEvent(new CustomEvent('kreile-offline-shell-ready',{detail:{scope,loginScope}}));
   }
   if(state.code!=='OK'||state.metadata.scope!==loginScope||readCacheScopeMarker()!==loginScope)return false;
   const name=qualifiedPrivateCacheName(scope,loginScope,state.metadata.cacheGeneration);

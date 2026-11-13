@@ -152,11 +152,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     const leave=()=>run(true,true);
     const hidden=()=>{if(document.visibilityState==='hidden')leave();};
     const refreshStand=()=>{void refreshDeviceSnapshot(scope,offline24h);};
+    const shellReady=(event:Event)=>{
+      const detail=(event as CustomEvent<{scope:string;loginScope:string}>).detail;
+      if(detail?.scope===scope&&detail.loginScope===readCacheScopeMarker())run(true);
+    };
     refreshStand();window.addEventListener('kreile-device-stand-changed',refreshStand);
+    window.addEventListener('kreile-offline-shell-ready',shellReady);
     refresh();window.addEventListener('kreile-pending-changed',changed);
     window.addEventListener('pagehide',leave);document.addEventListener('visibilitychange',hidden);
     if(scope&&isOnline)run(true);
-    return ()=>{disposed=true;++timerGeneration;if(timer)clearTimeout(timer);window.removeEventListener('kreile-pending-changed',changed);window.removeEventListener('pagehide',leave);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('kreile-device-stand-changed',refreshStand);if(activeScope===scope)activeScope=null;};
+    return ()=>{disposed=true;++timerGeneration;if(timer)clearTimeout(timer);window.removeEventListener('kreile-pending-changed',changed);window.removeEventListener('pagehide',leave);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('kreile-device-stand-changed',refreshStand);window.removeEventListener('kreile-offline-shell-ready',shellReady);if(activeScope===scope)activeScope=null;};
   }, [scope,isOnline,offline24h]);
 
   const syncNow = useCallback(async () => {
