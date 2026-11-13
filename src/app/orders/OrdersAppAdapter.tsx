@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
+import {SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
 import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
@@ -25,11 +27,12 @@ type OrderFilter = "alle" | "galvanik" | "angenommen" | "fertig";
 type OrdersState =
   | { kind: "loading" }
   | { kind: "denied" | "error" | "conflict"; message: string }
-  | { kind: "data"; orders: OrderListRow[]; loadedAt: string };
+  | { kind: "data"; orders: OrderListRow[]; loadedAt: string;source: "online"|"device" };
 
 type OrderListRow =
   & Pick<OrdersListItem, "id" | "orderNumber" | "station" | "status" | "risk">
   & Pick<OrderResponse,'customerId'>
+  & {offlineMatchReason?:string}
   & Pick<
     OrderResponse,
     | "customerName"
@@ -69,9 +72,9 @@ function toOrderListRow(order: OrderResponse): OrderListRow {
   };
 }
 
-function matchesQuery(order: OrderListRow, query: string): boolean {
+function matchesQuery(order: OrderListRow, query: string,folded=false): boolean {
   if (!query) return true;
-  return normalized([
+  return (folded?foldSearchText:normalized)([
     order.orderNumber,
     order.customerName ?? "",
     order.title,
@@ -167,7 +170,7 @@ function OrderRow({ order, onOpen,onCustomer,onPhoto }: { order: OrderListRow; o
     id={order.orderNumber}
     kundeKurz={order.customerName ?? "Kunde nicht hinterlegt"}
     titel={orderSubject(order)}
-    meta={detailText(order)}
+    meta={[detailText(order),order.offlineMatchReason].filter(Boolean).join(" · ")||undefined}
     ton={rowTone(order)}
     status={{ text: order.cardReadErrorCode ?? (order.dueValue || order.statusText), ton: rowTone(order) }}
     karte
@@ -209,7 +212,7 @@ export function OrdersAppAdapter() {
           if(stored.code!=='OK'||stored.value.port!=='orders.list')throw Error('OFFLINE_ORDER_LIST_SOURCE_INCOMPLETE');
           const result=stored.value.response.result;
           if(!result.ok){setState({kind:'denied',message:result.message});return;}
-          setState({kind:'data',orders:result.data.map(toOrderListRow),loadedAt:stored.value.serverReadAt});
+          setState({kind:'data',orders:result.data.map(toOrderListRow),loadedAt:stored.value.serverReadAt,source:'device'});
           return;
         }
         const readFence=offlineScope?await captureDeviceReadFence(offlineScope,offline24h):null;
@@ -224,7 +227,7 @@ export function OrdersAppAdapter() {
           });
           return;
         }
-        if(active&&revision===loadRevision)setState({ kind: "data", orders: result.data.map(toOrderListRow), loadedAt: result.serverReadAt??new Date().toISOString() });
+        if(active&&revision===loadRevision)setState({ kind: "data", orders: result.data.map(toOrderListRow), loadedAt: result.serverReadAt??new Date().toISOString(),source:"online" });
       } catch {
         if (active&&revision===loadRevision) setState({ kind: "error", message: "Aufträge konnten nicht sicher geladen werden." });
       }
@@ -241,8 +244,13 @@ export function OrdersAppAdapter() {
 
   const orders = useMemo(() => {
     if (state.kind !== "data") return [];
-    const needle = normalized(query);
-    return state.orders.filter((order) => matchesFilter(order, filter) && matchesQuery(order, needle));
+    const device=state.source==='device';
+    const needle = device?foldSearchText(query):normalized(query);
+    return state.orders.filter(order=>matchesFilter(order,filter)).flatMap(order=>{
+      if(matchesQuery(order,needle,device))return [order];
+      const alternative=device?nameSearchAlternative(order.customerName??null,query):null;
+      return alternative?[{...order,offlineMatchReason:SEARCH_NAME_MATCH_COPY[alternative]}]:[];
+    });
   }, [filter, query, state]);
   const canCreateOrder = !permissionsLoading && hasPermission("perm_data_orders");
   const updateQuery = (value: string) => {

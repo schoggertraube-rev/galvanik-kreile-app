@@ -68,6 +68,19 @@ describe("OrdersAppAdapter V1.1", () => {
     expect(ports.getOrdersDb).not.toHaveBeenCalled();
     expect(ports.readDevice).toHaveBeenCalledWith(ports.offlineScope,true,{port:'orders.list',objectId:'orders'});
   });
+  it('uses the canonical name alternative for retained offline rows, with its existing match reason',async()=>{
+    ports.offline24h=true;ports.offlineScope='a'.repeat(64);
+    vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
+    ports.readDevice.mockResolvedValue({code:'OK',value:{port:'orders.list',serverReadAt:'2026-11-13T10:00:00.000Z',response:{result:{ok:true,data:[{...order,customerName:'TEST Müller'}]},datenluecken:[]}}});
+    render(<OrdersAppAdapter/>);
+    await screen.findByText(order.orderNumber);
+    fireEvent.change(screen.getByRole('textbox'),{target:{value:'Müler'}});
+    expect(screen.getByText(order.orderNumber)).toBeInTheDocument();
+    expect(screen.getByText(/Klingt gleich/)).toBeInTheDocument();
+    expect(ports.getOrdersDb).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole('textbox'),{target:{value:'Unverwandt'}});
+    expect(screen.queryByText(order.orderNumber)).not.toBeInTheDocument();
+  });
   it('retains canonical denial instead of displaying an old list or inventing an empty list',async()=>{
     ports.offline24h=true;ports.offlineScope='a'.repeat(64);
     vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
