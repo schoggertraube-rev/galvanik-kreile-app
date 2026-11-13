@@ -1,3 +1,4 @@
+import type {CustomerListResponse} from '@/app/actions/customers.actions';
 import type {ActionResult} from '@/lib/server/authHelper';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {readCacheScopeMarker} from './cacheScopeMarker';
@@ -45,16 +46,17 @@ export type PendingShellMetadata={scope:string|null;cacheGeneration:number;updat
 /** Exact metadata-only U2 response, already filtered by the server port. */
 type DeviceEnvelope={portVersion:1;objectId:string;serverReadAt:string;sourceLoginScope:string};
 type DeviceDashboard={items:readonly unknown[];visibleFields:readonly unknown[];layout:readonly unknown[];defaultLayout:readonly unknown[];allowedFields:readonly unknown[];delegationTargets:readonly unknown[];outlookMessage:string|null;messageActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:readonly {messageId:string;version:number;read:import('@/lib/domain/u2ReadContract').U2Read}[];missingMessageIds:readonly string[]}};
-export type PendingDeviceRead=DeviceEnvelope&({port:'order.u2'|'customer.u2'|'quote.u2'|'message.u2';response:import('@/lib/domain/u2ReadContract').U2Read}|{port:'today.u3';response:DeviceDashboard}|{port:'orders.list';response:{result:ActionResult<OrderResponse[]>;datenluecken:string[]}});
+export type PendingDeviceRead=DeviceEnvelope&({port:'order.u2'|'customer.u2'|'quote.u2'|'message.u2';response:import('@/lib/domain/u2ReadContract').U2Read}|{port:'today.u3';response:DeviceDashboard}|{port:'orders.list';response:{result:ActionResult<OrderResponse[]>;datenluecken:string[]}}|{port:'customers.list';response:{result:ActionResult<CustomerListResponse[]>;datenluecken:string[]}});
 function isDeviceRead(value:unknown):value is PendingDeviceRead{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>,response=row.response;
- if(Object.keys(row).sort().join(',')!=='objectId,port,portVersion,response,serverReadAt,sourceLoginScope'||typeof row.sourceLoginScope!=='string'||! /^[a-f0-9]{64}$/.test(row.sourceLoginScope)||!['order.u2','customer.u2','quote.u2','message.u2','today.u3','orders.list'].includes(String(row.port))||row.portVersion!==1||typeof row.objectId!=='string'||!row.objectId.length||row.objectId.length>128||typeof row.serverReadAt!=='string'||!Number.isFinite(Date.parse(row.serverReadAt))||!response||typeof response!=='object'||Array.isArray(response))return false;
+ if(Object.keys(row).sort().join(',')!=='objectId,port,portVersion,response,serverReadAt,sourceLoginScope'||typeof row.sourceLoginScope!=='string'||! /^[a-f0-9]{64}$/.test(row.sourceLoginScope)||!['order.u2','customer.u2','quote.u2','message.u2','today.u3','orders.list','customers.list'].includes(String(row.port))||row.portVersion!==1||typeof row.objectId!=='string'||!row.objectId.length||row.objectId.length>128||typeof row.serverReadAt!=='string'||!Number.isFinite(Date.parse(row.serverReadAt))||!response||typeof response!=='object'||Array.isArray(response))return false;
  const u2=response as Record<string,unknown>;
- if(row.port==='orders.list'){
+ if(row.port==='orders.list'||row.port==='customers.list'){
   if(!Array.isArray(u2.datenluecken)||!u2.datenluecken.every(gap=>typeof gap==='string')||!u2.result||typeof u2.result!=='object'||Array.isArray(u2.result))return false;
   const result=u2.result as Record<string,unknown>;
   if(result.ok===false)return Object.keys(result).sort().join(',')==='error,message,ok'&&(result.error==='FORBIDDEN'||result.error==='UNAUTHORIZED')&&typeof result.message==='string';
+  if(row.port==='customers.list')return result.ok===true&&Object.keys(result).sort().join(',')==='data,ok'&&Array.isArray(result.data)&&result.data.every(customer=>customer&&typeof customer==='object'&&['id','customerNumber','name','type'].every(key=>typeof customer[key]==='string')&&Number.isSafeInteger(customer.activeOrderCount)&&Number.isSafeInteger(customer.activeQuoteCount)&&Array.isArray(customer.hints)&&typeof customer.complete==='boolean');
   return result.ok===true&&Object.keys(result).sort().join(',')==='data,ok'&&Array.isArray(result.data)&&result.data.every(order=>order&&typeof order==='object'&&['id','customerId','orderNumber','station','status','risk','title','statusText','dueDate','dueValue'].every(key=>typeof order[key]==='string')&&Array.isArray(order.parts)&&order.parts.every((part:Record<string,unknown>)=>part&&typeof part.id==='string'&&typeof part.name==='string'));
  }
  if(row.port==='today.u3')return ['items','visibleFields','layout','defaultLayout','allowedFields','delegationTargets'].every(key=>Array.isArray(u2[key]))&&(u2.outlookMessage===null||typeof u2.outlookMessage==='string');

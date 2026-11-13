@@ -165,15 +165,13 @@ function mapDbCustomer(c: DbCustomer): Customer {
   };
 }
 
-export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
-  activeOrderCount: number;
-  activeQuoteCount:number;hints:CustomerListSignals['hints'];complete:boolean;
-}>>> {
+export type CustomerListResponse=Customer & {activeOrderCount:number;activeQuoteCount:number;hints:CustomerListSignals['hints'];complete:boolean};
+export async function getCustomersDb(): Promise<ActionResult<CustomerListResponse[]> & {serverReadAt?:string;cacheLoginScope?:string}> {
   noStore();
   const authRes = await resolveAuthorization();
-  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message,...(authRes.reason==='AUTHORIZATION_UNAVAILABLE'?{}:{serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}) };
   if (!hasAuthorizationArea(authRes.data, "kunden")) {
-    return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben." };
+    return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben.",serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope() };
   }
   const tenantId = authRes.data.tenantId;
 
@@ -194,7 +192,7 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
       const hints=[...signal.hints,...(!readiness.vollstaendig?[{kind:'incomplete' as const,text:readiness.text.replace('Unvollständig – für Auftrag fehlt:','Für Auftrag fehlt:').replace('Unvollständig – ',''),urgent:false}]:[])];
       return {...customer,...signal,hints,complete:readiness.vollstaendig};
     }).filter(customer=>customer.type!=="lieferant"||hasAuthorizationArea(authRes.data,"geld")).sort((a,b)=>Number(b.hints.length>0)-Number(a.hints.length>0)||customerSortKey({...a,customerType:a.type}).localeCompare(customerSortKey({...b,customerType:b.type}),"de")||a.id.localeCompare(b.id));
-    return { ok: true, data };
+    return { ok: true, data,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope() };
   } catch (error) {
     console.error("Failed to get customers from DB:", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Laden der Kunden", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
