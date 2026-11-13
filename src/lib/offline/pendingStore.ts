@@ -64,9 +64,9 @@ function isDeviceRead(value:unknown):value is PendingDeviceRead{
 }
 const deviceKey=(loginScope:string,generation:number,read:Pick<PendingDeviceRead,'port'|'objectId'>)=>[loginScope,generation,read.port,read.objectId];
 /** Same DB and generation as the reading fence; never touches queued originals. */
-export async function retainPendingDeviceRead(scope:string,loginScope:string,generation:number,value:PendingDeviceRead|PendingDeviceRead[],replace?:{port:'quote.u2';serverReadAt:string}):Promise<{code:'STORED'|'STALE'}>{
+export async function retainPendingDeviceRead(scope:string,loginScope:string,generation:number,value:PendingDeviceRead|PendingDeviceRead[],replace?:{port:'quote.u2'|'message.u2';serverReadAt:string}):Promise<{code:'STORED'|'STALE'}>{
  const values=Array.isArray(value)?value:[value];
- if(!Number.isSafeInteger(generation)||generation<1||values.some(row=>!isDeviceRead(row))||Array.isArray(value)!==!!replace||replace&&(replace.port!=='quote.u2'||!Number.isFinite(Date.parse(replace.serverReadAt))||values.some(row=>row.port!==replace.port)||new Set(values.map(row=>row.objectId)).size!==values.length))throw Error('OFFLINE_DEVICE_RESPONSE_INVALID');
+ if(!Number.isSafeInteger(generation)||generation<1||values.some(row=>!isDeviceRead(row))||Array.isArray(value)!==!!replace||replace&&(!['quote.u2','message.u2'].includes(replace.port)||!Number.isFinite(Date.parse(replace.serverReadAt))||values.some(row=>row.port!==replace.port)||new Set(values.map(row=>row.objectId)).size!==values.length))throw Error('OFFLINE_DEVICE_RESPONSE_INVALID');
  if(readCacheScopeMarker()!==loginScope||values.some(row=>row.sourceLoginScope!==loginScope))return {code:'STALE'};
  const metadataKey=shellKey(loginScope),connection=await database(scope);
  return new Promise((resolve,reject)=>{

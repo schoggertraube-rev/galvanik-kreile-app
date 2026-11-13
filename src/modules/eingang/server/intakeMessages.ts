@@ -1,3 +1,4 @@
+import {OFFLINE_DEVICE_READ_COPY} from '@/ui/situationCatalog';
 import {mailImportFailureProjection} from './intakeMailFailureRead';
 import {openIntakePredicate} from './openIntakePredicate';
 import {readIntakeActorTraces} from './actorRead';
@@ -11,14 +12,16 @@ import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
 import {readFallbackMessagePriority,MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult} from '../messageContract';
 
 /** One projection of intake_item; no communications/phone_notes shadow inbox. */
-export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string):Promise<IntakeMessagesResult>{
+export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string,changedSince?:string):Promise<IntakeMessagesResult>{
+ if(changedSince!==undefined&&(!Number.isFinite(Date.parse(changedSince))||new Date(changedSince).toISOString()!==changedSince))return {code:'VALIDATION_ERROR',message:OFFLINE_DEVICE_READ_COPY.invalidWindow};
  if(sourceItemId!==undefined&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceItemId))return {code:'VALIDATION_ERROR',message:'Originalantwort ist ungültig.'};
  if(!MESSAGE_FILTERS.includes(filter as MessageFilter))return {code:'VALIDATION_ERROR',message:'Nachrichtenfilter ist ungültig.'};
  try{
   const result=await resolveAuthorization();if(!result.ok)return {code:result.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED',message:'Sitzung konnte nicht geprüft werden. Code: INTAKE_MESSAGES_SESSION.'};
   const auth=result.data;if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Nachrichten benötigen das Recht Mails.'};
   return await withPrivilegedTenantTransaction(auth,async tx=>{
-   const matches=filter==='offen'?openIntakePredicate('candidate')
+   const deviceMatches=(alias:'source'|'candidate')=>{const row=sql.identifier(alias);return sql`(${openIntakePredicate(alias)} OR EXISTS(SELECT 1 FROM public.intake_event changed WHERE changed.tenant_id=${row}.tenant_id AND changed.item_id=${row}.id AND changed.zeit>=${changedSince}::timestamptz))`;};
+   const matches=changedSince!==undefined?deviceMatches('candidate'):filter==='offen'?openIntakePredicate('candidate')
     :filter==='zuordnen'?sql`candidate.aussortiert IS NULL AND candidate.zuordnung='offen'`
     :filter==='erledigt'?sql`candidate.aussortiert IS NULL AND candidate.einsatz IN ('erledigt','info')`
     :filter==='aussortiert'?sql`candidate.aussortiert IS NOT NULL`
@@ -38,8 +41,8 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
       SELECT 1 FROM public.intake_event created WHERE source.fortsetzung_von IS NOT NULL AND created.tenant_id=source.tenant_id
         AND created.item_id=source.id AND created.art='angelegt' AND jsonb_exists(created.nachher->'originalFileIds',file.id::text)))) AS files
     FROM public.intake_item source LEFT JOIN private.v_intake_message_contexts_v1 context ON context.tenant_id=source.tenant_id AND context.item_id=source.id
-    WHERE source.tenant_id=${auth.tenantId} AND ${sourceItemId?sql`source.id=${sourceItemId}::uuid`:sql`true`} AND ${filter==='aussortiert'?sql`source.aussortiert IS NOT NULL`:sql`source.aussortiert IS NULL`}
-    AND (source.einsatz='offen' OR source.erstellt_am>=statement_timestamp()-interval '90 days')
+    WHERE source.tenant_id=${auth.tenantId} AND ${sourceItemId?sql`source.id=${sourceItemId}::uuid`:sql`true`} AND ${changedSince!==undefined?sql`true`:filter==='aussortiert'?sql`source.aussortiert IS NOT NULL`:sql`source.aussortiert IS NULL`}
+    AND ${changedSince!==undefined?deviceMatches('source'):sql`(source.einsatz='offen' OR source.erstellt_am>=statement_timestamp()-interval '90 days')`}
     AND EXISTS(SELECT 1 FROM public.intake_item candidate WHERE candidate.tenant_id=source.tenant_id AND ${matches}
      AND (source.kunde_id IS NOT NULL AND candidate.kunde_id=source.kunde_id OR source.kunde_id IS NULL AND candidate.kunde_id IS NULL
       AND (source.gruppe_adresse IS NOT NULL AND candidate.gruppe_adresse=source.gruppe_adresse OR candidate.id=source.id)))

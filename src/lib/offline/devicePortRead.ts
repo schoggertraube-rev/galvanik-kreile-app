@@ -32,12 +32,12 @@ function metadataForDevice(value:PendingDeviceRead):PendingDeviceRead{
  return {...value,response:messageMetadata(value.response)};
 }
 /** Consumes the actual canonical U2 metadata response, never the mail/body/blob DTO. */
-export async function retainDevicePortResponse(scope:string,enabled:boolean,value:PendingDeviceRead|PendingDeviceRead[],fence?:DeviceReadFence|null,replaceSnapshotAt?:string):Promise<{code:'DISABLED'|'STALE'|'STORED'|'SOURCE_INCOMPLETE'}>{
+export async function retainDevicePortResponse(scope:string,enabled:boolean,value:PendingDeviceRead|PendingDeviceRead[],fence?:DeviceReadFence|null,replaceSnapshotAt?:string,replacePort:'quote.u2'|'message.u2'='quote.u2'):Promise<{code:'DISABLED'|'STALE'|'STORED'|'SOURCE_INCOMPLETE'}>{
  if(!enabled)return {code:'DISABLED'};
  const login=readCacheScopeMarker();if(!login)return {code:'STALE'};
  if(fence!==undefined){
   if(!fence||fence.scope!==scope||fence.loginScope!==login)return {code:'STALE'};
-  try{return await retainPendingDeviceRead(scope,login,fence.generation,Array.isArray(value)?value.map(metadataForDevice):metadataForDevice(value),replaceSnapshotAt===undefined?undefined:{port:'quote.u2',serverReadAt:replaceSnapshotAt});}
+  try{return await retainPendingDeviceRead(scope,login,fence.generation,Array.isArray(value)?value.map(metadataForDevice):metadataForDevice(value),replaceSnapshotAt===undefined?undefined:{port:replacePort,serverReadAt:replaceSnapshotAt});}
   catch(error){console.error('[OFFLINE_DEVICE_PORT_WRITE_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE'};}
  }
  if(Array.isArray(value)||replaceSnapshotAt!==undefined)return {code:'STALE'};
