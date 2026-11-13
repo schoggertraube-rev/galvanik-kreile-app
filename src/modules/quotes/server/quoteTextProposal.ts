@@ -21,8 +21,14 @@ export async function prepareQuoteTextChangeCommand(auth:QuoteCommandContext,quo
   if(matches.length!==1||!Number.isSafeInteger(edit.value)||edit.value<1)missing.push('Position und positive Menge eindeutig zuordnen');
   else{
    const {position:original,index}=matches[0];if(edit.previous!==undefined&&edit.previous!==original.quantity)missing.push('Genannte Ausgangsmenge passt nicht zum aktuellen KV');const next=edit.mode==='add'?original.quantity+edit.value:edit.value;
-   positions[index].quantity=next;positions[index].lineTotalCents=Number((BigInt(original.lineTotalCents)*BigInt(next)+BigInt(original.quantity)/BigInt(2))/BigInt(original.quantity));changes.push('Menge: '+original.quantity+' → '+next);
-   if(calculation){if(positions.length===1){const scaled=scaleQuoteCalculation(calculation,original.quantity,next);if(scaled.code!=='OK')missing.push(scaled.message);else{Object.assign(calculation,scaled.calculation);positions[index].lineTotalCents=scaled.totalNetCents;}}else{const scaled=scaleQuotePositions(calculation,before.positions,positions.map((row,index)=>({position:before.positions[index].position,quantity:row.quantity})));if(scaled.code!=='OK')missing.push(scaled.message);else for(const line of scaled.positions){const target=positions[before.positions.findIndex(row=>row.position===line.position)];target.lineTotalCents=line.lineTotalCents;}missing.push('Arbeitszeit fuer geaenderten Umfang bestaetigen');}}
+   positions[index].quantity=next;changes.push('Menge: '+original.quantity+' → '+next);
+   const scaled=scaleQuotePositions(calculation??null,before.positions,positions.map((row,index)=>({position:before.positions[index].position,quantity:row.quantity})));
+   if(scaled.code!=='OK')missing.push(scaled.message);
+   else{
+    for(const line of scaled.positions){const target=positions[before.positions.findIndex(row=>row.position===line.position)];target.lineTotalCents=line.lineTotalCents;}
+    if(calculation&&scaled.calculation)Object.assign(calculation,scaled.calculation);
+   }
+   if(calculation&&positions.length!==1)missing.push('Arbeitszeit fuer geaenderten Umfang bestaetigen');
   }
  }
  if(command?.hours!==undefined||command?.targetNetCents!==undefined){
@@ -40,7 +46,7 @@ export async function prepareQuoteTextChangeCommand(auth:QuoteCommandContext,quo
    else positions[0].lineTotalCents=total.totalNetCents;
   }
  }
- if(calculation){const total=calculateQuote(calculation);if(total.code!=='OK'||total.totalNetCents!==positions.reduce((sum,position)=>sum+(position.lineTotalCents??position.quantity*position.unitPriceCents),0))missing.push('Kalkulation und Positionspreise angleichen');}
+ if(calculation&&scaleQuoteCalculation(calculation,1,1).code!=='OK')missing.push('Kalkulation und Positionspreise angleichen');
  if(!changes.length)missing.push('Keine eindeutige Aenderung erkannt');
  const dateOnly=changes.length===1&&changes[0]==='Liefertermin';
  // Preserve the persisted position shape on a date-only change: adding an equivalent

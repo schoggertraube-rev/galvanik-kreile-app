@@ -148,7 +148,7 @@ for(const storedGoods of [false,true,'operational','automatic','conditional'] as
  await receipt.getByLabel('Lager vor Galvanik · Regal / Kiste',{exact:true}).fill('TEST Regal Telefon');
  if(!storedGoods){await receipt.getByRole('checkbox',{name:/hat am Telefon zugesagt/}).check();
  await receipt.getByLabel('Wortlaut der Zusage',{exact:true}).fill('TEST Kunde bestaetigt am Telefon die aktuelle Fassung');}
- await expect(receipt.getByText('48,75 € netto',{exact:true})).toBeVisible({timeout:15000});
+ await expect(receipt.getByText('45,75 € netto',{exact:true})).toBeVisible({timeout:15000});
  await expect(receipt.getByText('3 × TEST UI Halter · verchromen',{exact:true})).toBeVisible();
  await receipt.locator('.kr-dialog-inhalt').evaluate(element=>{element.scrollTop=0;});
  await receipt.screenshot({path:path.join(process.env.TEMP??'.','kreile-kv-goods-desktop.png')});
@@ -215,7 +215,7 @@ for(const storedGoods of [false,true,'operational','automatic','conditional'] as
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id='galvanik-kreile' AND payload->>'quoteId'=${quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='accept'`)[0].n).toBe(1);
  await expect(page.getByRole('dialog',{name:/Auftragskarte A-2026-/})).toBeVisible({timeout:10000});
  const orderRead=await action(page,'getLiveOrderCardAction',{orderId:stored.linked_order_id},'src/app/actions/orders.actions.ts');
- if(storedGoods==='operational'){expect(orderRead?.data.card.commercialQuote).toBeUndefined();expect((await sql`SELECT user_id::text FROM public.events WHERE tenant_id='galvanik-kreile' AND payload->>'quoteId'=${quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='accept'`)[0].user_id).toBe(generatedFlowRuntime.logins.login_werkstatt.id);}else expect(orderRead?.data.card.commercialQuote).toMatchObject({quoteId,totalNetCents:4875,positions:[{quantity:3,lineTotalCents:4875}]});
+ if(storedGoods==='operational'){expect(orderRead?.data.card.commercialQuote).toBeUndefined();expect((await sql`SELECT user_id::text FROM public.events WHERE tenant_id='galvanik-kreile' AND payload->>'quoteId'=${quoteId} AND event_type='QUOTE_LIFECYCLE_V04' AND payload->>'action'='accept'`)[0].user_id).toBe(generatedFlowRuntime.logins.login_werkstatt.id);}else expect(orderRead?.data.card.commercialQuote).toMatchObject({quoteId,totalNetCents:4575,positions:[{quantity:3,lineTotalCents:4575}]});
  await expect(page.getByText('TEST-Etikett.png',{exact:true})).toBeVisible();
  await expect(page.getByText('TEST-Inhalt.png',{exact:true})).toBeVisible();
  await page.evaluate(id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:id}})),quoteId);
@@ -354,13 +354,13 @@ test('quote quantity change: real proposed amount requires a new acceptance',asy
  await card.getByRole('textbox',{name:'Was soll geändert werden?',exact:true}).fill('3 Halter statt 4');
  await card.getByRole('button',{name:'Änderungsvorschlag anzeigen',exact:true}).click();
  await expect(card.getByText('TEST Kopierte Halter · 4 → 3',{exact:true})).toBeVisible();
- await expect(card.getByText('Preis netto · 61,00 € → 48,75 €',{exact:true})).toBeVisible();
+ await expect(card.getByText('Preis netto · 61,00 € → 45,75 €',{exact:true})).toBeVisible();
  await card.getByRole('button',{name:'Fassung 2 anlegen',exact:true}).dblclick();
  await expect(card.getByText('KV geändert · neue Fassung sicher gespeichert.',{exact:true})).toBeVisible();
  const [stored]=await sql`SELECT version,fassung,zugesagt_fassung,total_net_cents::text,linked_order_id FROM private.quotes WHERE tenant_id='galvanik-kreile' AND id=${source.id}::uuid`;
- expect(stored).toMatchObject({version:4,fassung:2,zugesagt_fassung:1,total_net_cents:'4875',linked_order_id:null});
+ expect(stored).toMatchObject({version:4,fassung:2,zugesagt_fassung:1,total_net_cents:'4575',linked_order_id:null});
  const read=await action(page,'readQuoteAction',{quoteId:source.id});expect(read.quote.lifecycle).toMatchObject({edition:2,acceptedEdition:1,stage:'geaendert_seit_versand'});
- expect(read.quote.positions[0]).toMatchObject({quantity:3,lineTotalCents:4875});
+ expect(read.quote.positions[0]).toMatchObject({quantity:3,lineTotalCents:4575});
  await expect(card.getByRole('button',{name:/hat am Telefon zugesagt/})).toHaveCount(0);
 });
 
