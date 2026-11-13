@@ -76,6 +76,11 @@ function withAuthCookieCleanup(
 }
 
 export async function proxy(request: NextRequest) {
+  // A no-data transport heartbeat proves only that this server is reachable.
+  // It neither reads a session nor grants access to any authenticated route.
+  if (request.nextUrl.pathname === '/api/offline/heartbeat') {
+    return NextResponse.next({ request })
+  }
   const isApiRoute = request.nextUrl.pathname.startsWith('/api/')
 
   if (!isApiRoute && !isSalesStageOneRoute(request.nextUrl.pathname)) {

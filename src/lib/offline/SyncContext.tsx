@@ -105,8 +105,8 @@ export function useSync() {
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  useLayoutEffect(()=>installServerReachability(),[]);
   const {offlineScope,status,offline24h}=usePermissions();
+  useLayoutEffect(()=>offline24h?installServerReachability():undefined,[offline24h]);
   const scope=status==="authenticated"?offlineScope:null;
   const isOnline = useSyncExternalStore(subscribeServerReachability,readServerReachability,serverReachabilitySnapshot);
   const storagePersistence=useSyncExternalStore(subscribeStoragePersistence,readStoragePersistence,serverStoragePersistence);

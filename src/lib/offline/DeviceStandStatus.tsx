@@ -24,7 +24,7 @@ export function DeviceStandStatus(){
  const persistence=storagePersistence==='DENIED'||storagePersistence==='UNAVAILABLE'?OFFLINE_DEVICE_STATUS_COPY.persistence:null;
  if(!notice.text&&!notice.quarantine&&!persistence)return null;
  return <>
-  <div role="status" aria-label="Netzwerkstatus" aria-live="polite" data-spec-id="offline.zeile" data-tone={notice.warning||persistence?'warn':'info'} className={styles.line}>
+  <div role="status" aria-label={OFFLINE_DEVICE_STATUS_COPY.networkStatus} aria-live="polite" data-spec-id="offline.zeile" data-tone={notice.warning||persistence?'warn':'info'} className={styles.line}>
    {notice.text&&<span>{notice.text}</span>}{persistence&&<span>{persistence}</span>}
    {notice.quarantine&&<button type="button" onClick={()=>setQuarantineOpen(true)}>{notice.quarantine}</button>}
   </div>
