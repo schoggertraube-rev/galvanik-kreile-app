@@ -1,10 +1,10 @@
 "use client";
-import {refreshDeviceToday} from './refreshDeviceToday';
+import {refreshDeviceStand} from './collectDeviceStand';
+import {getOrdersDb,getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {getCustomersDb,getCustomerSummaryAction} from '@/app/actions/customers.actions';
 import {getTodayDeviceAction} from '@/app/actions/today.actions';
 
-import {refreshDeviceMessages} from './refreshDeviceMessages';
 import {getIntakeMessagesAction} from '@/app/actions/eingang.actions';
-import {refreshDeviceQuotes} from './refreshDeviceQuotes';
 import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
 import {OFFLINE_NOTE_QUARANTINE_COPY} from '@/ui/situationCatalog';
 import React, { createContext, useContext, useEffect, useCallback, useSyncExternalStore } from "react";
@@ -32,6 +32,13 @@ let activeScope: string|null=null;
 let snapshotGeneration=0;
 let outboxSnapshot: OfflineOutboxItem[] = EMPTY_OUTBOX;
 const outboxListeners = new Set<() => void>();
+const deviceStandPorts={
+  orders:{list:getOrdersDb,read:(id:string)=>getLiveOrderCardAction({orderId:id})},
+  customers:{list:getCustomersDb,read:(id:string)=>getCustomerSummaryAction({customerId:id})},
+  quotes:{list:()=>listOpenQuotesAction({purpose:'device'}),read:(id:string)=>readQuoteAction({quoteId:id,purpose:'operations'})},
+  messages:{read:()=>getIntakeMessagesAction({purpose:'device'})},
+  today:{read:getTodayDeviceAction},currentScope:()=>activeScope,
+};
 
 function subscribeToNetworkStatus(onStoreChange: () => void): () => void {
   if (typeof window === "undefined") return () => {};
@@ -90,7 +97,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     activeScope=scope;
     const refresh=()=>{void refreshOutboxSnapshot(scope);};
     refresh();window.addEventListener('kreile-pending-changed',refresh);
-    if(scope&&isOnline)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))}).then(()=>refreshDeviceQuotes(scope,offline24h,{list:()=>listOpenQuotesAction({purpose:'device'}),read:id=>readQuoteAction({quoteId:id,purpose:'operations'}),currentScope:()=>activeScope})).then(()=>refreshDeviceMessages(scope,offline24h,{read:()=>getIntakeMessagesAction({purpose:'device'}),currentScope:()=>activeScope})).then(()=>refreshDeviceToday(scope,offline24h,{read:getTodayDeviceAction,currentScope:()=>activeScope})).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
+    if(scope&&isOnline)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))}).then(()=>refreshDeviceStand(scope,offline24h,deviceStandPorts)).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     return ()=>{window.removeEventListener('kreile-pending-changed',refresh);if(activeScope===scope)activeScope=null;};
   }, [scope,isOnline,offline24h]);
 
@@ -100,9 +107,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     if (!isOnline||!scope||activeScope!==scope) return;
     await syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))});
     await refreshOutboxSnapshot(scope);
-    await refreshDeviceQuotes(scope,offline24h,{list:()=>listOpenQuotesAction({purpose:'device'}),read:id=>readQuoteAction({quoteId:id,purpose:'operations'}),currentScope:()=>activeScope});
-    await refreshDeviceMessages(scope,offline24h,{read:()=>getIntakeMessagesAction({purpose:'device'}),currentScope:()=>activeScope});
-    await refreshDeviceToday(scope,offline24h,{read:getTodayDeviceAction,currentScope:()=>activeScope});
+    await refreshDeviceStand(scope,offline24h,deviceStandPorts);
   }, [isOnline,scope,offline24h]);
 
   const addToOutbox = useCallback(async (itemData: Omit<OfflineOutboxItem, "id" | "status" | "retryCount" | "createdAt" | "updatedAt">) => {

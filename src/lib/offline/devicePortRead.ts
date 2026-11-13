@@ -1,5 +1,6 @@
+import type {DeviceStandCollection} from './collectDeviceStand';
 import {readCacheScopeMarker} from './cacheScopeMarker';
-import {readPendingShellMetadata,retainPendingDeviceRead,readPendingDeviceRead,type PendingDeviceRead} from './pendingStore';
+import {readPendingShellMetadata,retainPendingDeviceRead,readPendingDeviceRead,readPendingDeviceStand,type PendingDeviceRead} from './pendingStore';
 
 export type DeviceReadFence={scope:string;loginScope:string;generation:number};
 /** Capture before requesting the server. A response must not adopt a newer
@@ -59,7 +60,7 @@ export async function readDevicePortResponse(scope:string,enabled:boolean,target
  }catch(error){console.error('[OFFLINE_DEVICE_PORT_READ_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const};}
 }
 
-export type CollectedDeviceReads={code:'COLLECTED';values:PendingDeviceRead[];serverReadAt:string}|{code:'STALE'|'SOURCE_INCOMPLETE'};
+export type CollectedDeviceReads={code:'COLLECTED';values:PendingDeviceRead[];serverReadAt:string;denial?:{code:'FORBIDDEN';message:string}}|{code:'STALE'|'SOURCE_INCOMPLETE'};
 type CohortResult={code:'DISABLED'|'STALE'|'SOURCE_INCOMPLETE'}|{code:'STORED';readCount:number};
 const refreshingCohorts=new Map<string,Promise<CohortResult>>();
 /** One request-generation fence, coalescer and existing cache writer for all
@@ -82,4 +83,27 @@ export async function refreshDevicePortCohort(scope:string,enabled:boolean,port:
   }catch(error){console.error('[OFFLINE_DEVICE_REFRESH_FAILED]',port,error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE'};}
  })();
  refreshingCohorts.set(key,work);try{return await work;}finally{if(refreshingCohorts.get(key)===work)refreshingCohorts.delete(key);}
+}
+
+/** One complete source pass, one existing cache writer transaction. This is
+ * not server authority, and it never modifies pending user originals. */
+export async function retainDeviceStandResponse(scope:string,enabled:boolean,collection:DeviceStandCollection,fence:DeviceReadFence|null){
+ if(!enabled)return {code:'DISABLED' as const};
+ if(!fence||fence.scope!==scope||readCacheScopeMarker()!==fence.loginScope)return {code:'STALE' as const};
+ if(collection.code!=='COLLECTED'||collection.sources.map(row=>row.source).join(',')!=='orders,customers,quotes,messages,today'||collection.sources.some(row=>row.result.code!=='COLLECTED'))return {code:'SOURCE_INCOMPLETE' as const};
+ const families={orders:['orders.list','order.u2'],customers:['customers.list','customer.u2'],quotes:['quote.u2'],messages:['message.u2'],today:['today.u3']} as const;
+ const values:PendingDeviceRead[]=[];
+ for(const source of collection.sources){if(source.result.code!=='COLLECTED')return {code:'SOURCE_INCOMPLETE' as const};if(source.result.values.some(row=>!(families[source.source] as readonly string[]).includes(row.port)))return {code:'SOURCE_INCOMPLETE' as const};values.push(...source.result.values);}
+ const today=collection.sources[4].result;if(today.code!=='COLLECTED')return {code:'SOURCE_INCOMPLETE' as const};
+ try{
+  const stored=await retainPendingDeviceRead(scope,fence.loginScope,fence.generation,values.map(metadataForDevice),{port:'stand',serverReadAt:today.serverReadAt});
+  if(readCacheScopeMarker()!==fence.loginScope)return {code:'STALE' as const};
+  if(stored.code==='STORED')window.dispatchEvent(new Event('kreile-device-stand-changed'));
+  return stored;
+ }catch(error){console.error('[OFFLINE_DEVICE_STAND_WRITE_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const};}
+}
+export async function readDeviceStandResponse(scope:string,enabled:boolean){
+ if(!enabled)return {code:'DISABLED' as const};
+ const login=readCacheScopeMarker();if(!login)return {code:'STALE' as const};
+ try{return await readPendingDeviceStand(scope,login);}catch(error){console.error('[OFFLINE_DEVICE_STAND_READ_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const};}
 }

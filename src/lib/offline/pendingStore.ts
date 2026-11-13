@@ -47,10 +47,26 @@ export type PendingShellMetadata={scope:string|null;cacheGeneration:number;updat
 type DeviceEnvelope={serverChangedAt?:string|null;portVersion:1;objectId:string;serverReadAt:string;sourceLoginScope:string};
 type DeviceDashboard={items:readonly unknown[];visibleFields:readonly unknown[];layout:readonly unknown[];defaultLayout:readonly unknown[];allowedFields:readonly unknown[];delegationTargets:readonly unknown[];outlookMessage:string|null;messageActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:readonly {messageId:string;version:number;read:import('@/lib/domain/u2ReadContract').U2Read}[];missingMessageIds:readonly string[]}};
 export type PendingDeviceRead=DeviceEnvelope&({port:'order.u2'|'customer.u2'|'quote.u2'|'message.u2';response:import('@/lib/domain/u2ReadContract').U2Read}|{port:'today.u3';response:DeviceDashboard}|{port:'orders.list';response:{result:ActionResult<OrderResponse[]>;datenluecken:string[]}}|{port:'customers.list';response:{result:ActionResult<CustomerListResponse[]>;datenluecken:string[]}});
+export const DEVICE_READ_PORTS=['order.u2','customer.u2','quote.u2','message.u2','today.u3','orders.list','customers.list'] as const;
+const standKey=(loginScope:string,generation:number)=>[loginScope,generation,'stand.complete','stand'];
+type CompleteDeviceStand={schemaVersion:1;loginScope:string;serverReadAt:string;ports:readonly PendingDeviceRead['port'][]};
+function completeDeviceStand(value:unknown,loginScope:string):value is CompleteDeviceStand{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const row=value as Record<string,unknown>;
+ return Object.keys(row).sort().join(',')==='loginScope,ports,schemaVersion,serverReadAt'&&row.schemaVersion===1&&row.loginScope===loginScope&&typeof row.serverReadAt==='string'&&Number.isFinite(Date.parse(row.serverReadAt))&&Array.isArray(row.ports)&&row.ports.join(',')===DEVICE_READ_PORTS.join(',');
+}
+function fullDeviceValues(values:PendingDeviceRead[],serverReadAt:string){
+ if(new Set(values.map(row=>row.port+'\0'+row.objectId)).size!==values.length||values.some(row=>Date.parse(row.serverReadAt)>Date.parse(serverReadAt)))return false;
+ const orders=values.find(row=>row.port==='orders.list'),customers=values.find(row=>row.port==='customers.list');
+ if(!orders||orders.port!=='orders.list'||orders.objectId!=='orders'||!customers||customers.port!=='customers.list'||customers.objectId!=='customers'||values.filter(row=>row.port==='orders.list').length!==1||values.filter(row=>row.port==='customers.list').length!==1||values.filter(row=>row.port==='today.u3'&&row.objectId==='today').length!==1||values.filter(row=>row.port==='today.u3').length!==1)return false;
+ const matches=(ids:string[],port:PendingDeviceRead['port'])=>{const actual=values.filter(row=>row.port===port).map(row=>row.objectId);return actual.length===ids.length&&new Set(ids).size===ids.length&&actual.every(id=>ids.includes(id));};
+ if(!orders.response.result.ok&&orders.response.result.error!=='FORBIDDEN'||!customers.response.result.ok&&customers.response.result.error!=='FORBIDDEN')return false;
+ return matches(orders.response.result.ok?orders.response.result.data.map(row=>row.id):[],'order.u2')&&matches(customers.response.result.ok?customers.response.result.data.map(row=>row.id):[],'customer.u2');
+}
 function isDeviceRead(value:unknown):value is PendingDeviceRead{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>,response=row.response;
- if(Object.keys(row).filter(key=>key!=='serverChangedAt').sort().join(',')!=='objectId,port,portVersion,response,serverReadAt,sourceLoginScope'||Object.prototype.hasOwnProperty.call(row,'serverChangedAt')&&row.serverChangedAt!==null&&(typeof row.serverChangedAt!=='string'||!Number.isFinite(Date.parse(row.serverChangedAt)))||typeof row.sourceLoginScope!=='string'||! /^[a-f0-9]{64}$/.test(row.sourceLoginScope)||!['order.u2','customer.u2','quote.u2','message.u2','today.u3','orders.list','customers.list'].includes(String(row.port))||row.portVersion!==1||typeof row.objectId!=='string'||!row.objectId.length||row.objectId.length>128||typeof row.serverReadAt!=='string'||!Number.isFinite(Date.parse(row.serverReadAt))||!response||typeof response!=='object'||Array.isArray(response))return false;
+ if(Object.keys(row).filter(key=>key!=='serverChangedAt').sort().join(',')!=='objectId,port,portVersion,response,serverReadAt,sourceLoginScope'||Object.prototype.hasOwnProperty.call(row,'serverChangedAt')&&row.serverChangedAt!==null&&(typeof row.serverChangedAt!=='string'||!Number.isFinite(Date.parse(row.serverChangedAt)))||typeof row.sourceLoginScope!=='string'||! /^[a-f0-9]{64}$/.test(row.sourceLoginScope)||!DEVICE_READ_PORTS.includes(row.port as PendingDeviceRead['port'])||row.portVersion!==1||typeof row.objectId!=='string'||!row.objectId.length||row.objectId.length>128||typeof row.serverReadAt!=='string'||!Number.isFinite(Date.parse(row.serverReadAt))||!response||typeof response!=='object'||Array.isArray(response))return false;
  const u2=response as Record<string,unknown>;
  if(row.port==='orders.list'||row.port==='customers.list'){
   if(!Array.isArray(u2.datenluecken)||!u2.datenluecken.every(gap=>typeof gap==='string')||!u2.result||typeof u2.result!=='object'||Array.isArray(u2.result))return false;
@@ -64,9 +80,9 @@ function isDeviceRead(value:unknown):value is PendingDeviceRead{
 }
 const deviceKey=(loginScope:string,generation:number,read:Pick<PendingDeviceRead,'port'|'objectId'>)=>[loginScope,generation,read.port,read.objectId];
 /** Same DB and generation as the reading fence; never touches queued originals. */
-export async function retainPendingDeviceRead(scope:string,loginScope:string,generation:number,value:PendingDeviceRead|PendingDeviceRead[],replace?:{port:'quote.u2'|'message.u2';serverReadAt:string}):Promise<{code:'STORED'|'STALE'}>{
+export async function retainPendingDeviceRead(scope:string,loginScope:string,generation:number,value:PendingDeviceRead|PendingDeviceRead[],replace?:{port:'quote.u2'|'message.u2'|'stand';serverReadAt:string}):Promise<{code:'STORED'|'STALE'}>{
  const values=Array.isArray(value)?value:[value];
- if(!Number.isSafeInteger(generation)||generation<1||values.some(row=>!isDeviceRead(row))||Array.isArray(value)!==!!replace||replace&&(!['quote.u2','message.u2'].includes(replace.port)||!Number.isFinite(Date.parse(replace.serverReadAt))||values.some(row=>row.port!==replace.port)||new Set(values.map(row=>row.objectId)).size!==values.length))throw Error('OFFLINE_DEVICE_RESPONSE_INVALID');
+ if(!Number.isSafeInteger(generation)||generation<1||values.some(row=>!isDeviceRead(row))||Array.isArray(value)!==!!replace||replace&&(!['quote.u2','message.u2','stand'].includes(replace.port)||!Number.isFinite(Date.parse(replace.serverReadAt))||(replace.port==='stand'?!fullDeviceValues(values,replace.serverReadAt):values.some(row=>row.port!==replace.port)||new Set(values.map(row=>row.objectId)).size!==values.length)))throw Error('OFFLINE_DEVICE_RESPONSE_INVALID');
  if(readCacheScopeMarker()!==loginScope||values.some(row=>row.sourceLoginScope!==loginScope))return {code:'STALE'};
  const metadataKey=shellKey(loginScope),connection=await database(scope);
  return new Promise((resolve,reject)=>{
@@ -75,6 +91,22 @@ export async function retainPendingDeviceRead(scope:string,loginScope:string,gen
   read.onsuccess=()=>{
    if(readCacheScopeMarker()!==loginScope||!shellMetadata(read.result,loginScope)||read.result.scope!==loginScope||read.result.cacheGeneration!==generation)return;
    const store=tx.objectStore(DEVICE_STORE);
+   if(replace?.port==='stand'){
+    if(generation>=Number.MAX_SAFE_INTEGER-1)throw Error('OFFLINE_DEVICE_GENERATION_EXHAUSTED');
+    // Seal a new reading generation in this same transaction. Old in-flight
+    // requests cannot adopt it, and no prior login's cache bytes survive.
+    const nextGeneration=generation+1,cursor=store.openCursor();
+    cursor.onsuccess=()=>{
+     if(readCacheScopeMarker()!==loginScope){revoked=true;tx.abort();return;}
+     const current=cursor.result;if(current){current.delete();current.continue();return;}
+     for(const row of values)store.put(row,deviceKey(loginScope,nextGeneration,row));
+     tx.objectStore(SHELL_STORE).put({...read.result,cacheGeneration:nextGeneration},metadataKey);
+     store.put({schemaVersion:1,loginScope,serverReadAt:replace.serverReadAt,ports:DEVICE_READ_PORTS},standKey(loginScope,nextGeneration));
+     if(readCacheScopeMarker()!==loginScope){revoked=true;tx.abort();return;}
+     code='STORED';
+    };
+    return;
+   }
    if(replace){
     const incoming=new Map(values.map(row=>[row.objectId,row])),newer=new Set<string>();
     const cursor=store.openCursor(IDBKeyRange.bound([loginScope,generation,replace.port],[loginScope,generation,replace.port,[]]));
@@ -115,6 +147,25 @@ export async function readPendingDeviceRead(scope:string,loginScope:string,gener
    resolve(isDeviceRead(read.result)&&read.result.sourceLoginScope===loginScope&&read.result.port===target.port&&read.result.objectId===target.objectId?{code:'OK',value:read.result}:{code:'SOURCE_INCOMPLETE'});
   };
   tx.onabort=()=>{connection.close();reject(Error('OFFLINE_DEVICE_READ_ABORTED'));};
+ });
+}
+/** Completion provenance is technical metadata in the existing read store.
+ * Queued originals and the scope/generation/time shell contract are untouched. */
+export async function readPendingDeviceStand(scope:string,loginScope:string):Promise<{code:'EMPTY'|'STALE'|'SOURCE_INCOMPLETE'}|{code:'OK';serverReadAt:string;cacheGeneration:number}>{
+ if(readCacheScopeMarker()!==loginScope)return {code:'STALE'};
+ const connection=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=connection.transaction([SHELL_STORE,DEVICE_STORE],'readonly'),state=tx.objectStore(SHELL_STORE).get(shellKey(loginScope));let marker:unknown;
+  state.onsuccess=()=>{if(shellMetadata(state.result,loginScope)&&state.result.scope===loginScope){const read=tx.objectStore(DEVICE_STORE).get(standKey(loginScope,state.result.cacheGeneration));read.onsuccess=()=>{marker=read.result;};}};
+  tx.oncomplete=()=>{
+   connection.close();if(readCacheScopeMarker()!==loginScope){resolve({code:'STALE'});return;}
+   if(state.result===undefined){resolve({code:'EMPTY'});return;}
+   if(!shellMetadata(state.result,loginScope)){resolve({code:'SOURCE_INCOMPLETE'});return;}
+   if(state.result.scope!==loginScope){resolve({code:'STALE'});return;}
+   if(marker===undefined){resolve({code:'EMPTY'});return;}
+   resolve(completeDeviceStand(marker,loginScope)?{code:'OK',serverReadAt:marker.serverReadAt,cacheGeneration:state.result.cacheGeneration}:{code:'SOURCE_INCOMPLETE'});
+  };
+  tx.onabort=()=>{connection.close();reject(Error('OFFLINE_DEVICE_STAND_READ_ABORTED'));};
  });
 }
 type ShellRead={code:'EMPTY'}|{code:'QUARANTINE'}|{code:'OK';metadata:PendingShellMetadata};
