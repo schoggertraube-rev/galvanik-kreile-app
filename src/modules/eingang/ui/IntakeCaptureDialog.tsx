@@ -303,8 +303,8 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
     }
     if (!saveCaptureNote) { setError("Speichern ist nicht verbunden. Code: INTAKE_NOTE_WRITE_PORT_UNAVAILABLE."); return null; }
     const pendingOriginal=(await readPendingOriginals(scope)).find(original=>original.id===itemId&&original.kind==='note');
-    const result = await saveCaptureNote({ itemId, textstand: savingStand, text, ...(createContext ? { context: { customerId: createContext.customerId } } : {}),...(pendingOriginal?.takeover?{takeover:pendingOriginal.takeover,deviceCapturedAt:pendingOriginal.deviceCapturedAt,expectedVersion:pendingOriginal.kind==='note'?pendingOriginal.expectedVersion:undefined}:{}),
-      concerns: concerns.filter(value => !dismissed.includes(value.id)).map(value => value.id) });
+    const noteInput={ itemId, textstand: savingStand, text, ...(createContext ? { context: { customerId: createContext.customerId } } : {}),...(pendingOriginal?.takeover?{takeover:pendingOriginal.takeover,deviceCapturedAt:pendingOriginal.deviceCapturedAt,expectedVersion:pendingOriginal.kind==='note'?pendingOriginal.expectedVersion:undefined}:{}),concerns: concerns.filter(value => !dismissed.includes(value.id)).map(value => value.id) };
+    const result=pendingOriginal?.takeover?await saveCaptureNote(noteInput,scope):await saveCaptureNote(noteInput);
     if (result.code !== "OK") { setError(result.message); return null; }
     setCapture(result.capture); savedCapture.current = result.capture; lastSaved.current = key;
     try { await acknowledgePendingOriginal(scope, itemId, savingStand,result.capture.takeovers); }
@@ -323,14 +323,15 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
         const digest = await crypto.subtle.digest("SHA-256", bytes);
         const sha256 = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
         await retainPendingOriginal(scope, { id: entry.id, itemId: entry.itemId, kind: "file", file: entry.file, captureOrigin: entry.captureOrigin, deviceId:getIntakeDeviceId() });
-        const grant = await ports.prepareCaptureFile({ itemId: entry.itemId, fileId: entry.id, name: entry.file.name, mime: entry.file.type || "application/octet-stream", bytes: entry.file.size, sha256, deviceId: getIntakeDeviceId(), captureOrigin: entry.captureOrigin,...(entry.takeover?{takeover:entry.takeover,deviceCapturedAt:entry.deviceCapturedAt}:{}) });
+        const fileInput={ itemId: entry.itemId, fileId: entry.id, name: entry.file.name, mime: entry.file.type || "application/octet-stream", bytes: entry.file.size, sha256, deviceId: getIntakeDeviceId(), captureOrigin: entry.captureOrigin,...(entry.takeover?{takeover:entry.takeover,deviceCapturedAt:entry.deviceCapturedAt}:{}) };
+        const grant=entry.takeover?await ports.prepareCaptureFile(fileInput,scope):await ports.prepareCaptureFile(fileInput);
         if (grant.code !== "OK") { setAutomaticRetry(grant.code === "UNAVAILABLE"); setError(grant.message); return; }
         if (grant.upload) {
           const result = await uploadIntakeOriginal(grant.upload, entry.file);
           // An interrupted retry can meet the already stored immutable hash. The server verifies it.
           if (!result.ok) console.error("[INTAKE_FILE_UPLOAD_REQUIRES_VERIFICATION]", { code: "UNCONFIRMED" });
         }
-        const finished = await ports.finishCaptureFile(entry.id);
+        const finished=entry.takeover?await ports.finishCaptureFile(entry.id,scope):await ports.finishCaptureFile(entry.id);
         if (finished.code !== "OK") { setAutomaticRetry(finished.code === "UNAVAILABLE"); setError(finished.message); return; }
         try { await acknowledgePendingOriginal(scope, entry.id,undefined,finished.capture.takeovers); }
         catch (cause) { console.error("[INTAKE_FILE_LOCAL_ACK_FAILED]", cause); setCapture(finished.capture); setError("Original ist auf dem Server gesichert · lokale Bestätigung fehlgeschlagen. Bitte erneut übertragen. Code: INTAKE_FILE_LOCAL_ACK_FAILED."); return; }
@@ -406,17 +407,18 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
     let retry: number | undefined;
     if (!getCaptureScope) return;
     const initialize = async () => { for (let attempt=0;attempt<3&&current;attempt+=1) { try {
-      const result = await getCaptureScope();
-      if (result.code !== "OK") throw new Error("INTAKE_PENDING_SCOPE_UNAVAILABLE");
-      const originals = (await readPendingOriginals(result.scope)).filter(original=>(original.kind!=='file'||!original.context)&&(!resumePendingId||original.itemId===resumePendingId));
+      let knownScope:string;
+      if(!navigator.onLine&&ports.offlineScope)knownScope=ports.offlineScope;
+      else{const result=await getCaptureScope();if(result.code!=='OK')throw Error('INTAKE_PENDING_SCOPE_UNAVAILABLE');knownScope=result.scope;}
+      const originals = (await readPendingOriginals(knownScope)).filter(original=>(original.kind!=='file'||!original.context)&&(!resumePendingId||original.itemId===resumePendingId));
       if (current) {
-        setScope(result.scope);
+        setScope(knownScope);
         setError(message=>message?.includes("INTAKE_PENDING_RESUME_FAILED")||message?.includes("Lokale Sicherung wird vorbereitet")?null:message);
       }
       if (!current) return;
       if (earlyNote.current?.text.trim()) {
         const note = earlyNote.current;
-        await retainPendingOriginal(result.scope,{id:itemId,itemId,kind:"note",text:note.text,textstand:note.stand,dismissed:note.dismissed});
+        await retainPendingOriginal(knownScope,{id:itemId,itemId,kind:"note",text:note.text,textstand:note.stand,dismissed:note.dismissed});
       }
       if(!originals.length&&resumePendingId&&getCapture){const saved=await getCapture(resumePendingId);if(current&&saved.code==='OK'){setItemId(saved.capture.id);setCapture(saved.capture);setText(saved.capture.text??'');setCameraRequested(false);}return;}
       if (!originals.length || handoverToken || localInput.current) return;
@@ -434,7 +436,7 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
     } } };
     void initialize();
     return () => { current = false; if(retry!==undefined)clearTimeout(retry); };
-  }, [getCaptureScope, handoverToken, itemId,resumePendingId,getCapture]);
+  }, [getCaptureScope, handoverToken, itemId,resumePendingId,getCapture,ports.offlineScope]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => { if (pending.length || text.trim() && lastSaved.current !== JSON.stringify([text, concerns.filter(value => !dismissed.includes(value.id)).map(value => value.id)])) { event.preventDefault(); event.returnValue = ""; } };
     const resume = () => { if (pending.length && !inFlight.current) void upload(pending); };

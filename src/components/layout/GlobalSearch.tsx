@@ -1,6 +1,10 @@
 "use client";
+import {useCallback} from 'react';
 
 import { searchTenantAction } from "@/app/actions/search.actions";
+import {searchDeviceStand} from '@/lib/offline/searchDeviceStand';
+import {canSearchTenant} from '@/lib/auth/authorizationContract';
+import {TENANT_SEARCH_COPY} from '@/ui/situationCatalog';
 import { useRouter } from "next/navigation";
 import { useOverlayStore } from "@/lib/overlayStore";
 import { SearchDialog, type SearchHit } from "@/modules/suche/public";
@@ -18,6 +22,12 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   const openCustomer = useOverlayStore((state) => state.openCustomer);
   const openInvoice = useOverlayStore((state) => state.openInvoice);
   const permissions = usePermissions();
+  const {offline24h,offlineScope,permissions:grants}=permissions;
+  const search=useCallback((query:string)=>{
+    if(navigator.onLine||!offline24h)return searchTenantAction(query);
+    if(!canSearchTenant({permissions:grants}))return Promise.resolve({code:'FORBIDDEN' as const,message:TENANT_SEARCH_COPY.denied});
+    return searchDeviceStand(offlineScope,true,query);
+  },[offline24h,offlineScope,grants]);
 
   const selectHit = (hit: SearchHit) => {
     if (hit.type === "ORDER") openOrder(hit.id);
@@ -33,7 +43,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
     onOpenChange={onOpenChange}
     onSelect={selectHit}
     open={open}
-    search={searchTenantAction}
+    search={search}
     commands={{
       onNewIntake: canCreate ? () => requestGlobalCreate("DIRECT_INTAKE") : undefined,
       onGoodsOut: canWorkOrders ? () => router.push("/orders?station=fertig") : undefined,

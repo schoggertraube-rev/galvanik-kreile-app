@@ -363,7 +363,8 @@ function containsBinary(value:unknown,seen=new WeakSet<object>()):boolean{
  if(value instanceof Blob||value instanceof ArrayBuffer||ArrayBuffer.isView(value))return true;
  return Object.values(value).some(entry=>containsBinary(entry,seen));
 }
-export async function adoptQuarantinedOriginal(scope:string,sourceId:string,deviceId:string){
+export async function adoptQuarantinedOriginal(scope:string,sourceId:string,deviceId:string,currentScope:()=>string|null=()=>scope){
+ const login=readCacheScopeMarker();if(currentScope()!==scope)return {code:'SOURCE_INCOMPLETE' as const};
  const rows=await transaction<unknown[]>(scope,'readonly',store=>store.getAll());
  const isSource=(row:unknown):row is Record<string,unknown>=>!!row&&typeof row==='object'&&!Array.isArray(row)&&'id'in row&&'quarantine:'+quarantineKey(row.id)===sourceId;
  const raw=rows.find(isSource);if(!raw)return {code:'SOURCE_INCOMPLETE' as const};
@@ -381,6 +382,7 @@ export async function adoptQuarantinedOriginal(scope:string,sourceId:string,devi
  return new Promise<{code:'OK';original:PendingOriginal}|{code:'SOURCE_INCOMPLETE'}>((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.getAll();let saved:PendingOriginal|undefined;
   read.onsuccess=()=>{
+   if(currentScope()!==scope||readCacheScopeMarker()!==login)return;
    const values=read.result as unknown[],current=values.find(isSource);
    if(!current||quarantineCanonical(current)!==serialized)return;
    const previous=values.find(row=>!!row&&typeof row==='object'&&'takeover'in row&&(row as PendingOriginal).takeover?.sourceId===sourceId) as PendingOriginal|undefined;

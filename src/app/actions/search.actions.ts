@@ -1,6 +1,8 @@
 "use server";
 
 import { resolveAuthorization } from "@/lib/server/authorization";
+import {canSearchTenant} from '@/lib/auth/authorizationContract';
+import {TENANT_SEARCH_COPY} from '@/ui/situationCatalog';
 import { searchOrderIntakeCustomers } from "@/lib/server/orderIntakeRead";
 import { readTenantOperationalOrders } from "@/lib/server/orderStationRead";
 import {
@@ -15,8 +17,8 @@ import { readInvoiceSummaries } from "@/lib/server/invoiceRead";
 import { readAuxiliarySearchRecords } from "@/lib/server/searchAuxiliaryRead";
 import { buildSearchProviders } from "./search.providers";
 
-const UNAVAILABLE_MESSAGE = "Die internen Bestände konnten nicht sicher durchsucht werden.";
-const DENIAL_MESSAGE = "Diese Suche ist für die aktuelle Sitzung nicht freigegeben.";
+const UNAVAILABLE_MESSAGE = TENANT_SEARCH_COPY.unavailable;
+const DENIAL_MESSAGE = TENANT_SEARCH_COPY.denied;
 const CUSTOMER_READ_PORT_LIMIT = 10;
 
 function diagnosticFields(error: unknown): { message?: string; details?: string; hint?: string } {
@@ -51,7 +53,7 @@ export async function searchTenantAction(query: string): Promise<SearchTenantRes
       ? { code: "UNAVAILABLE", message: UNAVAILABLE_MESSAGE }
       : { code: "UNAUTHENTICATED", message: DENIAL_MESSAGE };
   }
-  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
+  if (!canSearchTenant(authorization.data)) {
     return { code: "FORBIDDEN", message: DENIAL_MESSAGE };
   }
 

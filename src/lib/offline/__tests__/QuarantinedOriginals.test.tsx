@@ -8,7 +8,7 @@ vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({hasArea:()=>s
 vi.mock('@/app/actions/eingang.actions',()=>({getIntakePendingScopeAction:ports.scope}));
 vi.mock('../pendingStore',()=>({adoptQuarantinedOriginal:ports.adopt}));
 vi.mock('@/modules/eingang/public',()=>({getIntakeDeviceId:()=> 'TEST-device',requestGlobalCreate:ports.open}));
-afterEach(()=>{cleanup();vi.clearAllMocks();state.allowed=true;state.entries=[];});
+afterEach(()=>{cleanup();vi.clearAllMocks();vi.restoreAllMocks();state.allowed=true;state.entries=[];state.scope='a'.repeat(64);});
 it('shows one and many actual projected originals, without a discard action',()=>{
  state.entries=[{id:'TEST-one',payload:{original:{text:'TEST original one'}}},{id:'TEST-two',payload:{original:{text:'TEST original two'}}}];
  render(<QuarantinedOriginals onClose={()=>{}}/>);
@@ -24,7 +24,18 @@ it('opens the existing capture dialog for exactly the retained original, after s
  state.entries=[{id:'TEST-selected',payload:{text:'TEST selected original'}}];ports.scope.mockResolvedValue({code:'OK',scope:state.scope});ports.adopt.mockResolvedValue({code:'OK',original:{itemId:'TEST-real-target'}});const close=vi.fn();
  render(<QuarantinedOriginals onClose={close}/>);fireEvent.click(screen.getByText('Als Eingang übernehmen'));
  await waitFor(()=>expect(ports.open).toHaveBeenCalledWith({intent:'DIRECT_INTAKE',pendingOriginalId:'TEST-real-target'}));
- expect(ports.adopt).toHaveBeenCalledWith(state.scope,'TEST-selected','TEST-device');expect(close).toHaveBeenCalledOnce();
+ expect(ports.adopt).toHaveBeenCalledWith(state.scope,'TEST-selected','TEST-device',expect.any(Function));expect(close).toHaveBeenCalledOnce();
+});
+it('offline takeover uses the existing login namespace without simulating a server reply',async()=>{
+ vi.spyOn(navigator,'onLine','get').mockReturnValue(false);state.entries=[{id:'TEST-offline',payload:{text:'TEST offline original'}}];ports.adopt.mockResolvedValue({code:'OK',original:{itemId:'TEST-offline-target'}});
+ render(<QuarantinedOriginals onClose={()=>{}}/>);fireEvent.click(screen.getByText('Als Eingang übernehmen'));
+ await waitFor(()=>expect(ports.open).toHaveBeenCalledWith({intent:'DIRECT_INTAKE',pendingOriginalId:'TEST-offline-target'}));expect(ports.scope).not.toHaveBeenCalled();
+});
+it('double click keeps one pending adoption and a late old-login reply cannot bind it',async()=>{
+ state.entries=[{id:'TEST-late',payload:{text:'TEST delayed original'}}];let release:(value:unknown)=>void=()=>{};ports.scope.mockReturnValue(new Promise(resolve=>{release=resolve;}));const close=vi.fn();
+ const view=render(<QuarantinedOriginals onClose={close}/>);fireEvent.click(screen.getByText('Als Eingang übernehmen'));fireEvent.click(screen.getByText('Als Eingang übernehmen'));expect(ports.scope).toHaveBeenCalledOnce();
+ const oldScope=state.scope;state.scope='b'.repeat(64);view.rerender(<QuarantinedOriginals onClose={close}/>);release({code:'OK',scope:oldScope});
+ await waitFor(()=>expect(screen.getByText('Als Eingang übernehmen')).toBeEnabled());expect(ports.adopt).not.toHaveBeenCalled();expect(ports.open).not.toHaveBeenCalled();expect(close).not.toHaveBeenCalled();
 });
 it('a changed server login never adopts, never closes and retains the visible original',async()=>{
  state.entries=[{id:'TEST-held',payload:{text:'TEST never discarded'}}];ports.scope.mockResolvedValue({code:'OK',scope:'b'.repeat(64)});const close=vi.fn();

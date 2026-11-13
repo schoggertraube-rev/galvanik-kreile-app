@@ -218,11 +218,12 @@ export type GlobalCreatePorts = {
   assignCaptureCustomer?: (input: import("./assignmentContract").AssignmentInput) => Promise<import("./assignmentContract").AssignmentResult>;
   getCapture?: (id: string,context?:import('./captureContract').IntakeContext,options?:{packageExpectation?:boolean}) => Promise<IntakeCaptureResult>;
   getCaptureScope?: () => Promise<{ code: "OK"; scope: string } | { code: "FORBIDDEN"; message: string }>;
-  saveCaptureNote?: (input: IntakeNoteInput) => Promise<IntakeCaptureResult>;
+  offlineScope?:string|null;
+  saveCaptureNote?: (input: IntakeNoteInput,pendingScope?:string) => Promise<IntakeCaptureResult>;
   readCaptureOriginal?: (input:{fileId:string;clientEventId:string}) => Promise<import("./originalContract").OriginalReadResult>;
   readCaptureNote?: (text: string) => Promise<{ code: "OK"; data: IntakeNoteReading } | { code: "FORBIDDEN" | "VALIDATION_ERROR"; message: string }>;
-  prepareCaptureFile?: (input: IntakeFileInput) => Promise<IntakeFileGrant>;
-  finishCaptureFile?: (id: string) => Promise<IntakeCaptureResult>;
+  prepareCaptureFile?: (input: IntakeFileInput,pendingScope?:string) => Promise<IntakeFileGrant>;
+  finishCaptureFile?: (id: string,pendingScope?:string) => Promise<IntakeCaptureResult>;
   chooseCaptureKind?: (input: IntakeCaptureKindInput) => Promise<IntakeCaptureResult>;
   openCaptureObject?: (target: "mailein" | "original" | "ware" | "rechnungein" | "kvware", arg: string) => boolean;
   canCreateOrder: boolean;
