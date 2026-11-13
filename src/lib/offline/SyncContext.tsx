@@ -14,7 +14,7 @@ import type { OfflineOutboxItem } from "./OfflineOutbox";
 import {readPendingEntries,retainQuarantinedPending} from "./pendingStore";
 import {usePermissions} from "@/lib/auth/PermissionsContext";
 import {syncPendingFiles} from './syncPendingFiles';
-import {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
+import {replayOfflineWorkshopHttp} from './replayWorkshopHttp';
 import {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
 import {uploadIntakeOriginal} from '@/modules/eingang/public';
 import { createId } from "@paralleldrive/cuid2";
@@ -132,7 +132,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     const refreshStand=()=>{void refreshDeviceSnapshot(scope,offline24h);};
     refreshStand();window.addEventListener('kreile-device-stand-changed',refreshStand);
     refresh();window.addEventListener('kreile-pending-changed',refresh);
-    if(scope&&isOnline)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))}).then(()=>refreshFullDeviceStand(scope,offline24h)).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
+    if(scope&&isOnline)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopHttp,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))}).then(()=>refreshFullDeviceStand(scope,offline24h)).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     return ()=>{window.removeEventListener('kreile-pending-changed',refresh);window.removeEventListener('kreile-device-stand-changed',refreshStand);if(activeScope===scope)activeScope=null;};
   }, [scope,isOnline,offline24h]);
 
@@ -140,7 +140,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     // Retry the same canonical queue; each command checks its current server
     // rights. Customer/order notes do not require the Eingang area on the client.
     if (!isOnline||!scope||activeScope!==scope) return;
-    await syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))});
+    await syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopHttp,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))});
     await refreshOutboxSnapshot(scope);
     await refreshFullDeviceStand(scope,offline24h);
   }, [isOnline,scope,offline24h]);
