@@ -34,7 +34,7 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('retains actual native-IDB work
    if(!aborted||(await p.readPendingEntries(scope)).some(row=>row.id===ids.aborted))throw Error('TEST_ABORT_FALSE_CAPTURE_SUCCESS');
    const extra={kind:'workshop',id:ids.extraKey,itemId:ids.order,command:'item.extraWork',input:{orderId:ids.order,itemId:ids.item,clientEventId:ids.extraKey,lineId:ids.line,catalogPositionId:ids.catalog,minutes:25,active:true,expectedLineVersion:0,expectedOrderVersion:7}};
    await p.retainPendingWorkshopOriginal(scope,extra);
-   const raw=await new Promise((resolve,reject)=>{const r=indexedDB.open('kreile-pending-originals-v1-'+scope,2);r.onerror=()=>reject(r.error);r.onsuccess=()=>resolve(r.result);});
+   const raw=await new Promise((resolve,reject)=>{const r=indexedDB.open('kreile-pending-originals-v1-'+scope,3);r.onerror=()=>reject(r.error);r.onsuccess=()=>resolve(r.result);});
    await new Promise((resolve,reject)=>{const tx=raw.transaction('originals','readwrite');tx.objectStore('originals').put({...original,id:'TEST-unknown-command',command:'unapproved.command'});tx.objectStore('originals').put({...original,id:ids.invalid,input:{...original.input,clientEventId:ids.invalid},deviceCapturedAt:'not-a-device-time'});tx.objectStore('originals').put({...extra,unapprovedAuthority:'TEST must stay quarantined'});tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);});raw.close();
    const rows=await p.readPendingEntries(scope);
    if(rows.filter(row=>row.kind==='workshop').length!==1||rows.filter(row=>row.kind==='quarantine').length!==3)throw Error('TEST_UNKNOWN_COMMAND_OR_METADATA_EXECUTABLE');
