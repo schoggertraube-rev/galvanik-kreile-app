@@ -14,7 +14,7 @@ import {readTodayDashboard} from '@/lib/server/todayDashboard';
 import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 
-it('S05K A3 reads the same open set in customer, message, mail selection and daily sources',async()=>{
+it('S05K A3 keeps one open predicate while the sorting selection additionally requires unassigned mail',async()=>{
  const customers:string[]=[],active:string[]=[];
  for(const [index,state] of [{usage:'offen',assignment:'offen',discard:null},{usage:'offen',assignment:'hand',discard:null},{usage:'info',assignment:'offen',discard:null},{usage:'erledigt',assignment:'offen',discard:null},{usage:'offen',assignment:'offen',discard:'junk'}].entries()){
   const customerId=await customerFixture('TEST A3 '+index),itemId=randomUUID();customers.push(customerId);
@@ -25,7 +25,8 @@ it('S05K A3 reads the same open set in customer, message, mail selection and dai
  const read=await withSession(full,()=>getIntakeMessagesAction('offen'));if(read.code!=='OK')throw Error('TEST_A3_MESSAGES:'+read.code);
  expect(read.messages.map(row=>row.id).sort()).toEqual([...active].sort());
  const mails=await withSession(full,()=>readOpenIntakeMails());if(mails.code!=='OK')throw Error('TEST_A3_MAILS:'+mails.code);
- expect(mails.mails.map(row=>row.id).sort()).toEqual([...active].sort());
+ // PL13.11.05:18: sorting is the unassigned subset; counts/messages stay open.
+ expect(mails.mails.map(row=>row.id)).toEqual([active[0]]);
  const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_A3_AUTH');
  const signals=await readCustomerListSignals(auth.data,customers,(await import('@/modules/eingang/server-public')).openIntakePredicate());
  expect([...signals.values()].reduce((sum,row)=>sum+Number(row.openMessageCount),0)).toBe(2);

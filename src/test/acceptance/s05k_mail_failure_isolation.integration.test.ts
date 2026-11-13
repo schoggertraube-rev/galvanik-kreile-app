@@ -87,7 +87,10 @@ it('S05K A2 keeps the third real failure when the normal task receipt fails, the
  await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON public.intake_event FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
  try{
   const third=await withSession(full,()=>getOpenIntakeMailsAction());expect(third.code).toBe('OK');
-  if(third.code!=='OK')throw Error('TEST_A2_THIRD');expect(third.mails.find(row=>row.id===source.id)?.importFailure).toMatchObject({attempts:3,taskId:null,state:'FAILED'});
+  if(third.code!=='OK')throw Error('TEST_A2_THIRD');expect(third.mails.some(row=>row.id===source.id)).toBe(false);
+  // Assigned mail leaves the sorting list (PL13.11.05:18), not its linked original.
+  const linkedThird=await withSession(full,()=>listOutlookInboxAction({targetType:'CUSTOMER',targetId:supplierId}));
+  if(linkedThird.code!=='OK')throw Error('TEST_A2_LINKED_THIRD');expect(linkedThird.data.find(row=>row.id===id)).toMatchObject({importFailure:{attempts:3,taskId:null,state:'FAILED'}});
   const [attempts]=await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${tenant} AND item_id=${source.id}::uuid AND nachher->>'action'='mail_import_failed'`;expect(attempts.n).toBe(3);
   const tasks=()=>sql`SELECT id::text AS id,erstellt_von::text AS actor,fuer_bereich AS area FROM public.tasks WHERE tenant_id=${tenant} AND bezug_typ='eingang' AND bezug_id=${source.id}`;
   expect(await tasks()).toHaveLength(0);
@@ -98,7 +101,9 @@ it('S05K A2 keeps the third real failure when the normal task receipt fails, the
   const saved=await tasks();expect(saved).toHaveLength(1);expect(saved[0]).toMatchObject({actor:other.actorId,area:'eingang'});
   expect(await withSession(other,()=>getIntakeTaskAction({taskId:saved[0].id}))).toMatchObject({code:'OK',canComplete:true,canOpenReference:false,reference:{customerId:null}});
   expect(await withSession(other,()=>saveIntakeTaskAction({clientKey:randomUUID(),version:0,kind:'aufgabe',title:'TEST arbitrary supplier task',dueDate:'2027-01-01',time:null,forLogin:null,forArea:'eingang',reference:{type:'eingang',id:source.id},note:'TEST'}))).toMatchObject({code:'FORBIDDEN'});
-  if(retry.code!=='OK')throw Error('TEST_A2_RETRY');expect(retry.mails.find(row=>row.id===source.id)?.importFailure).toMatchObject({attempts:4,taskId:saved[0].id});
+  if(retry.code!=='OK')throw Error('TEST_A2_RETRY');expect(retry.mails.some(row=>row.id===source.id)).toBe(false);
+  const linkedRetry=await withSession(full,()=>listOutlookInboxAction({targetType:'CUSTOMER',targetId:supplierId}));
+  if(linkedRetry.code!=='OK')throw Error('TEST_A2_LINKED_RETRY');expect(linkedRetry.data.find(row=>row.id===id)).toMatchObject({importFailure:{attempts:4,taskId:saved[0].id}});
   await withSession(full,()=>getOpenIntakeMailsAction());expect(await tasks()).toEqual(saved);
  }finally{await sql.unsafe(`DROP TRIGGER IF EXISTS ${fault} ON public.intake_event`);await sql.unsafe(`DROP FUNCTION IF EXISTS private.${fault}()`);}
 });

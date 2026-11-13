@@ -1,4 +1,5 @@
 import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
+import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
@@ -1586,6 +1587,5 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): P
 
 
 function requireVatReader(reader:InvoiceVatReader|undefined):InvoiceVatReader{
- if(!reader)throw Error('INVOICE_VAT_READER_REQUIRED');
- return reader;
+ return reader??readInvoiceVat;
 }
