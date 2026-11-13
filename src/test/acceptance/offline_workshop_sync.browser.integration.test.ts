@@ -24,6 +24,10 @@ if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTE
 it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('KORR S03 offline restart exactly-once conflict task and actual logout retain pending originals',async()=>{
  const customerId=await customerFixture('Browser Werkstatt'),created=await intakeOrderFixture('Browser Werkstatt',customerId),orderId=created.receipt.orderId,itemId=created.receipt.items[0].id;
  const quoteCreated=await withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',validUntil:'2027-05-31',note:'TEST device metadata source',positions:[{name:'TEST device part',quantity:2,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:12345,lineTotalCents:24690}]}));if(quoteCreated.code!=='OK')throw Error('TEST_DEVICE_QUOTE');
+ const customerSource=await withSession(full,()=>getCustomersDb());
+ if(!customerSource.ok)throw Error('TEST_CUSTOMER_CHANGE_SOURCE');
+ const [customerTime]=await sql`SELECT updated_at FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}::text`;
+ expect(customerSource.data.find(row=>row.id===customerId)?.updatedAt).toBe(new Date(customerTime.updated_at).toISOString());
  const graphId='TEST-device-message-'+randomUUID(),privateBody='TEST PRIVATE BODY '+randomUUID();installMailProvider(graphId,privateBody,'TEST-'+randomUUID()+'@example.invalid','TEST metadata only subject');const imported=await withSession(full,()=>importOutlookMailAction(graphId));vi.restoreAllMocks();if(imported.code!=='OK'||!imported.itemId)throw Error('TEST_DEVICE_MIME_IMPORT');
  const messageSource=await withSession(full,()=>getIntakeMessagesAction('alle'));
  if(messageSource.code!=='OK')throw Error('TEST_MESSAGE_TIME_SOURCE');
