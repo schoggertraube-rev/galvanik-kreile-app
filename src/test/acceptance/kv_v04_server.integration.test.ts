@@ -454,7 +454,13 @@ it('KV-03 snapshots explicit configured calculations, preserves sent prices and 
  expect(await withSession(fixture,()=>updateQuoteAction(edit))).toMatchObject({code:'OK',replayed:true});
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='QUOTE_CALCULATION_V04' AND payload->>'requestKey'=${edit.clientEventId}`)[0].n).toBe(1);
  expect(await withSession(fixture,()=>createQuoteAction({...input,clientEventId:randomUUID(),calculation:{...calculation,hourlyRateCents:null}}))).toMatchObject({code:'VALIDATION_ERROR'});
- expect(await withSession(fixture,()=>createQuoteAction({...input,clientEventId:randomUUID(),calculation:{...calculation,hours:'9'}}))).toMatchObject({code:'VALIDATION_ERROR'});
+ // PL13.11.21:45: displayed calculation approaches do not replace the agreed line price.
+ const displayOnly={...input,clientEventId:randomUUID(),calculation:{...calculation,hours:'9'}};
+ const displayCreated=await withSession(fixture,()=>createQuoteAction(displayOnly));
+ expect(displayCreated).toMatchObject({code:'OK',quote:{totalNetCents:60300,lifecycle:{calculation:{hours:'9.0000',hourlyRateCents:7500,setupCents:100,materialCents:200}}}});
+ if(displayCreated.code!=='OK')throw Error('TEST_DISPLAY_CALC_CREATE:'+displayCreated.code);
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId:displayCreated.quote.quoteId}))).toMatchObject({code:'OK',quote:{totalNetCents:60300,lifecycle:{calculation:{hours:'9.0000'}}}});
+ expect(await withSession(fixture,()=>createQuoteAction(JSON.parse(JSON.stringify(displayOnly))))).toMatchObject({code:'OK',replayed:true,quote:{quoteId:displayCreated.quote.quoteId,totalNetCents:60300}});
 });
 
 
