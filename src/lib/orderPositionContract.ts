@@ -73,6 +73,13 @@ export function isOrderIntakeFreeTextPrice(cents: unknown, vat: unknown): boolea
     || typeof cents === "number" && orderPositionPriceError(cents, false) === null && vat === FREE_TEXT_VAT_RATE_BASIS_POINTS;
 }
 
+/** The existing content command accepts a separate, nullable line VAT. Its
+ * persisted events must be read under that same contract, not the intake one. */
+export function isOrderContentPrice(cents: unknown, vat: unknown): boolean {
+  return (cents === null || typeof cents === "number" && Number.isSafeInteger(cents) && cents >= 0 && cents <= 999_999_999)
+    && (vat === null || [0, 700, 1900].includes(Number(vat)));
+}
+
 export function orderPositionEffortError(minutes: number | null, required: boolean): string | null {
   if (minutes === null) return required ? "Aufwand fehlt" : null;
   return Number.isSafeInteger(minutes) && minutes >= 0 && minutes <= 6000 && minutes % 5 === 0

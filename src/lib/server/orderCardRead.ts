@@ -3,7 +3,7 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import {readOrderCommercialQuote,type OrderCommercialQuote} from "./orderQuoteReadPort";
-import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice } from "@/lib/orderPositionContract";
+import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice, isOrderContentPrice } from "@/lib/orderPositionContract";
 import { orderPositionQuantityError, orderPositionUnitLabel, orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeExecutionRequested, OrderIntakeSource } from "@/lib/server/commands/orderIntakeCommand";
@@ -328,7 +328,7 @@ function toSafeInteger(value: unknown, error: string): number {
   return parsed;
 }
 
-export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
+export function mapOrderCardIntakeItems(value: unknown,source:'intake'|'content'='intake'): OrderCardItem[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > 20) {
     throw new Error("ORDER_CARD_INTAKE_ITEMS_INVALID");
   }
@@ -357,7 +357,7 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
         typeof entry.unit === "string"
         && isOrderIntakeFreeTextUnit(entry.unit)
       ))
-      && isOrderIntakeFreeTextPrice(entry.unitPriceCents, entry.vatRateBasisPoints);
+      && (source==='content'?isOrderContentPrice(entry.unitPriceCents, entry.vatRateBasisPoints):isOrderIntakeFreeTextPrice(entry.unitPriceCents, entry.vatRateBasisPoints));
     if (
       typeof entry.id !== "string"
       || !UUID_PATTERN.test(entry.id)
@@ -675,7 +675,7 @@ export async function readLiveOrderCard(
       `);
       const contentEvent = contentEvents[0] ?? null;
       const eventPayload = contentEvent?.payload as { note?: unknown; items?: unknown } | null;
-      const eventItems = contentEvent ? mapOrderCardIntakeItems(eventPayload?.items) : null;
+      const eventItems = contentEvent ? mapOrderCardIntakeItems(eventPayload?.items,'content') : null;
       if (contentEvent && (
         contentEvent.tenant_id !== authorization.tenantId
         || contentEvent.order_id !== queue.id

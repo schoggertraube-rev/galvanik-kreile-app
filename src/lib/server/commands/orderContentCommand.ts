@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionQuantityError, orderPositionSurfaceLabel, orderPositionUnitLabel } from "@/lib/orderPositionContract";
+import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionQuantityError, orderPositionSurfaceLabel, orderPositionUnitLabel, isOrderContentPrice } from "@/lib/orderPositionContract";
 import {
   getAuthorizationActionGrants,
   hasAuthorizationArea,
@@ -15,7 +15,6 @@ import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY,PRODUCTION_PRICING_RETRY
 import {appendProductionCompletion,appendProductionPricing,appendProductionReversals,ProductionPricingRetryNeeded,recordProductionPricingRetry,readProductionPricingRetrySource,repairProductionCompletionPricing} from '@/lib/server/productionSnapshotPort';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const VAT = new Set([0, 700, 1900]);
 
 export type OrderContentItemInput = {
   id: string;
@@ -205,8 +204,7 @@ function normalizeItems(value: unknown): OrderContentItemInput[] | null {
       || !name || material === undefined || !surface
       || typeof item.quantity !== "number" || orderPositionQuantityError(item.quantity,unit)!==null
       || item.unit!==null&&unit===null
-      || (item.unitPriceCents !== null && (typeof item.unitPriceCents !== "number" || !Number.isSafeInteger(item.unitPriceCents) || item.unitPriceCents < 0 || item.unitPriceCents > 999_999_999))
-      || (item.vatRateBasisPoints !== null && !VAT.has(Number(item.vatRateBasisPoints)))) return null;
+      || !isOrderContentPrice(item.unitPriceCents,item.vatRateBasisPoints)) return null;
     items.push({
       id: String(item.id), catalogServiceId: item.catalogServiceId === null ? null : String(item.catalogServiceId),
       name, quantity: item.quantity, material, surface, unit,

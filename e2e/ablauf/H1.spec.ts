@@ -9,7 +9,7 @@ import {storeIntakeGoodsPhoto,storeOrderPhoto,storeItemPhoto} from './photoFixtu
 
 // Extends the proven prefix through completion; invoice/payment/outgoing remain
 // red until accepted quote prices survive conversion in the canonical writer.
-it.each([{vat:1900,extra:false},{vat:700,extra:true}])('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice boundary VAT $vat',async scenario=>{
+it.each([{vat:1900,extra:false,outside:false},{vat:700,extra:true,outside:false},{vat:700,extra:true,outside:true}])('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice boundary VAT $vat outside $outside',async scenario=>{
  const itemId=await requestMailStep('H1');
  const customerId=await customerFixture('H1-KV');
  const {updateCustomerAction}=await import('@/app/actions/customers.actions');
@@ -117,6 +117,16 @@ it.each([{vat:1900,extra:false},{vat:700,extra:true}])('H1 T25 to payment: real 
  if(scenario.extra)await sql`UPDATE public.company_settings SET invoice_vat_rate_basis_points=1900 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const {setOrderItemFinishedAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction,freezeOrderAction}=await import('@/app/actions/orders.actions');
  let orderVersion=moved.receipt.aggregateVersion;
+ let outsideItemId:string|undefined;
+ if(scenario.outside){
+  const current=await withSession(full,()=>getLiveOrderCardAction({orderId}));
+  expect(current).toMatchObject({code:'OK'});if(current.code!=='OK')throw Error('TEST_S07_OUTSIDE_CARD');
+  outsideItemId=randomUUID();
+  const {changeOrderContentAction}=await import('@/app/actions/orders.actions');
+  const changed=await withSession(full,()=>changeOrderContentAction({orderId,expectedVersion:orderVersion,clientEventId:randomUUID(),note:current.data.card.note,items:[...current.data.card.items.map(item=>({id:item.id,catalogServiceId:item.catalogServiceId,name:item.name,quantity:item.quantity,material:item.material,surface:item.surfaceRequested,unit:item.unit,unitPriceCents:item.unitPriceCents,vatRateBasisPoints:item.vatRateBasisPoints})),{id:outsideItemId!,catalogServiceId:null,name:'TEST S07 additional part outside quote',quantity:2,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:1500,vatRateBasisPoints:null}]}));
+  expect(changed).toMatchObject({code:'OK'});if(changed.code!=='OK')throw Error('TEST_S07_OUTSIDE_CONTENT:'+changed.code);
+  orderVersion=changed.receipt.aggregateVersion;
+ }
  const actualParts=await sql`SELECT id FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} ORDER BY id`;
  const master=await withSession(full,()=>getExtraWorkMasterDataAction());
  expect(master.code).toBe('OK');if(master.code!=='OK')throw Error('H1_MASTER:'+master.code);
@@ -124,8 +134,8 @@ it.each([{vat:1900,extra:false},{vat:700,extra:true}])('H1 T25 to payment: real 
  if(scenario.extra){
   const {configureExtraWorkCatalogPositionAction,changeOrderItemExtraWorkAction}=await import('@/app/actions/orders.actions');
   const positionId=randomUUID();
-  expect(await withSession(full,()=>configureExtraWorkCatalogPositionAction({positionId,expectedVersion:0,name:'TEST A4 KV Zusatz',standardMinutes:60,active:true,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
-  const extra=await withSession(full,()=>changeOrderItemExtraWorkAction({lineId:randomUUID(),orderId,itemId:actualParts[0].id,catalogPositionId:positionId,minutes:60,active:true,expectedLineVersion:0,expectedOrderVersion:orderVersion,clientEventId:randomUUID()}));
+  expect(await withSession(full,()=>configureExtraWorkCatalogPositionAction({positionId,expectedVersion:0,name:scenario.outside?'TEST A4 Zusatz am eigenen Teil':'TEST A4 KV Zusatz',standardMinutes:60,active:true,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const extra=await withSession(full,()=>changeOrderItemExtraWorkAction({lineId:randomUUID(),orderId,itemId:outsideItemId??actualParts[0].id,catalogPositionId:positionId,minutes:60,active:true,expectedLineVersion:0,expectedOrderVersion:orderVersion,clientEventId:randomUUID()}));
   expect(extra).toMatchObject({code:'OK'});if(extra.code!=='OK')throw Error('TEST_A4_KV_EXTRA:'+extra.code);orderVersion=extra.receipt.aggregateVersion;
  }
  for(const part of actualParts){
@@ -134,7 +144,10 @@ it.each([{vat:1900,extra:false},{vat:700,extra:true}])('H1 T25 to payment: real 
   if(finished.code!=='OK')throw Error('H1_FINISH:'+finished.code);
   orderVersion=finished.receipt.aggregateVersion;
  }
- expect(await sql`SELECT quantity::text,net_cents::int,price_source->>'kind' AS kind,price_source->>'quoteId' AS quote_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND component='base' AND direction=1`).toEqual([{quantity:'4.000',net_cents:10000,kind:'quote',quote_id:created.quote.quoteId}]);
+ const snapshots=await sql`SELECT item_id,quantity::text,net_cents::int,price_source->>'kind' AS kind,price_source->>'quoteId' AS quote_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND component='base' AND direction=1`;
+ expect(snapshots.filter(row=>row.kind==='quote').map(({item_id:_,...row})=>{void _;return row;})).toEqual([{quantity:'4.000',net_cents:10000,kind:'quote',quote_id:created.quote.quoteId}]);
+ expect(snapshots).toHaveLength(scenario.outside?2:1);
+ if(scenario.outside)expect(snapshots.find(row=>row.item_id===outsideItemId)).toMatchObject({quantity:'2.000',net_cents:3000,kind:'item',quote_id:null});
  await storeOrderPhoto(orderId);
  for(const item of actualParts)await storeItemPhoto(orderId,item.id);
  const freeze={orderId,freezeId:randomUUID(),expectedVersion:orderVersion,clientEventId:randomUUID()};
@@ -148,9 +161,9 @@ it.each([{vat:1900,extra:false},{vat:700,extra:true}])('H1 T25 to payment: real 
  const invoiceSource=issued.code==='OK'?null:await sql.begin(async tx=>{await tx`SELECT set_config('app.tenant_id',${KREILE_TENANT_SLUG},true)`;return tx`SELECT seller_config_complete,customer_config_complete,base_prices_complete,effective_integrity_ok,invoice_payment_term_days,invoice_vat_rate_basis_points FROM private.v_invoice_issue_source_v2 WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;});
  expect(issued,JSON.stringify({issued,invoiceSource})).toMatchObject({code:'OK'});if(issued.code!=='OK')throw Error('H1_INVOICE:'+issued.code);
  if(scenario.extra){
-  expect(issued.receipt).toMatchObject({netAmountCents:24000,vatAmountCents:1680,grossAmountCents:25680});
+  expect(issued.receipt).toMatchObject(scenario.outside?{netAmountCents:27000,vatAmountCents:3930,grossAmountCents:30930}:{netAmountCents:24000,vatAmountCents:1680,grossAmountCents:25680});
   const [original]=await sql`SELECT snapshot FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${issued.receipt.invoiceId}::uuid`;
-  expect(original.snapshot.lines.map((line:{vat_rate_basis_points:number})=>line.vat_rate_basis_points)).toEqual([700,700]);
+  expect(original.snapshot.lines.map((line:{vat_rate_basis_points:number})=>line.vat_rate_basis_points)).toEqual(scenario.outside?[700,1900,1900]:[700,700]);
  }
  expect(await withSession(full,()=>getInvoiceReceiptAction({orderId,clientEventId:issue.clientEventId}))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>issueInvoiceAction(structuredClone(issue)))).toMatchObject({code:'OK',replayed:true});
