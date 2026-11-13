@@ -40,6 +40,7 @@
     "@/modules/eingang/public#IntakeCapture",
     "@/modules/eingang/public#IntakeCaptureResult",
     "@/modules/eingang/public#IntakeNoteInput",
+    "@/modules/eingang/public#IntakeOriginalTakeover",
     "@/modules/eingang/public#IntakeNoteReading",
     "@/modules/eingang/public#IntakeContext",
     "@/modules/eingang/public#IntakeConcern",

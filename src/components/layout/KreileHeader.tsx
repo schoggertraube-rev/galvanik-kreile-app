@@ -5,11 +5,13 @@ import Image from "next/image";
 import { Search, Camera, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
+import {createPortal} from 'react-dom';
 import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
 import {deviceStandNotice} from '@/lib/offline/deviceStandNotice';
+import {QuarantinedOriginals} from '@/lib/offline/QuarantinedOriginals';
 import { requestGlobalCreate } from "./globalCreateRequest";
 import { useRouter } from "next/navigation";
 
@@ -20,6 +22,7 @@ interface KreileHeaderProps {
 export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [quarantineOpen,setQuarantineOpen]=useState(false);
   const logoUrl = "/assets/logo/kreile-wordmark-skyline.svg";
 
   const { initials, status, name,offline24h } = usePermissions();
@@ -179,7 +182,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           title="Gerätesignal: zeigt Netzwerkverfügbarkeit und lokal ausstehende Einträge; kein Server- oder Synchronisierungsnachweis."
         >
           <span className={`w-2 h-2 rounded-full ${deviceNotice?.warning||!isOnline ? "bg-accent-orange" : (pendingOutboxCount > 0 ? "bg-gold-500 animate-pulse" : "bg-success-green")}`} />
-          <span>{deviceNotice?.text??pendingNotice??(!isOnline ? "Offline" : (pendingOutboxCount > 0 ? `${pendingOutboxCount} lokal ausstehend` : "Netzwerk verfügbar"))}{deviceNotice?.quarantine&&<small className="block">{deviceNotice.quarantine}</small>}</span>
+          <span>{deviceNotice?.text??pendingNotice??(!isOnline ? "Offline" : (pendingOutboxCount > 0 ? `${pendingOutboxCount} lokal ausstehend` : "Netzwerk verfügbar"))}{deviceNotice?.quarantine&&<button type="button" className="block text-left" onClick={()=>setQuarantineOpen(true)}>{deviceNotice.quarantine}</button>}</span>
         </div>
 
         {/* Live-Sync Indicator */}
@@ -234,6 +237,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
       </div>
 
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
+      {quarantineOpen&&createPortal(<QuarantinedOriginals onClose={()=>setQuarantineOpen(false)}/>,document.body)}
     </header>
   );
 }

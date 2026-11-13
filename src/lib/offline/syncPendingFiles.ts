@@ -56,11 +56,11 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
     }
     try{
      const concerns=recognizeNoteConcerns(entry.text).map(item=>item.id).filter(id=>!entry.dismissed.includes(id));
-     const saved=await ports.saveNote({itemId:entry.itemId,textstand:entry.textstand,text:entry.text,concerns,expectedVersion:entry.expectedVersion,deviceCapturedAt:entry.deviceCapturedAt,...(entry.context?{context:entry.context}:{})},scope);
+     const saved=await ports.saveNote({itemId:entry.itemId,textstand:entry.textstand,text:entry.text,concerns,expectedVersion:entry.expectedVersion,deviceCapturedAt:entry.deviceCapturedAt,...(entry.context?{context:entry.context}:{}),...(entry.takeover?{takeover:entry.takeover}:{})},scope);
      if(saved.code!=='OK'||saved.capture.text!==entry.text){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
      outcome.secured++;
      if(ports.currentScope()!==scope)break;
-     await acknowledgePendingOriginal(scope,entry.id,entry.textstand);outcome.acknowledged++;
+     await acknowledgePendingOriginal(scope,entry.id,entry.textstand,saved.capture.takeovers);outcome.acknowledged++;
     }catch(error){outcome.blocked++;blockedItems.add(entry.itemId);console.error('[OFFLINE_NOTE_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
     continue;
    }
@@ -72,7 +72,7 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
    try{
     const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await entry.file.arrayBuffer())),byte=>byte.toString(16).padStart(2,'0')).join('');
     if(ports.currentScope()!==scope)break;
-    const grant=await ports.prepare({itemId:entry.itemId,fileId:entry.id,name:entry.file.name,mime:entry.file.type||'application/octet-stream',bytes:entry.file.size,sha256,...(entry.deviceId?{deviceId:entry.deviceId}:{}),...(entry.deviceCapturedAt?{deviceCapturedAt:entry.deviceCapturedAt}:{}),...(entry.captureOrigin?{captureOrigin:entry.captureOrigin}:{})},scope);
+    const grant=await ports.prepare({itemId:entry.itemId,fileId:entry.id,name:entry.file.name,mime:entry.file.type||'application/octet-stream',bytes:entry.file.size,sha256,...(entry.deviceId?{deviceId:entry.deviceId}:{}),...(entry.deviceCapturedAt?{deviceCapturedAt:entry.deviceCapturedAt}:{}),...(entry.captureOrigin?{captureOrigin:entry.captureOrigin}:{}),...(entry.takeover?{takeover:entry.takeover}:{})},scope);
     if(grant.code!=='OK'){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
     if(grant.upload)await ports.upload(grant.upload,entry.file);
     if(ports.currentScope()!==scope)break;
@@ -81,7 +81,7 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
     outcome.secured++;
     // Goods photos need their real receipt association, not merely a stored blob.
     if(entry.context||entry.captureOrigin==='warenfoto'||ports.currentScope()!==scope)continue;
-    await acknowledgePendingOriginal(scope,entry.id);outcome.acknowledged++;
+    await acknowledgePendingOriginal(scope,entry.id,undefined,finished.capture.takeovers);outcome.acknowledged++;
    }catch(error){outcome.blocked++;blockedItems.add(entry.itemId);console.error('[OFFLINE_ORIGINAL_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
   }
   return outcome;

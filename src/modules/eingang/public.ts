@@ -1,4 +1,5 @@
 export type {TaskPorts} from '@/modules/tasks/public';
+export type {IntakeOriginalTakeover} from './captureContract';
 export {IntakeMessages} from './ui/IntakeMessages';
 export type {IntakeMessagesPorts} from './messageContract';
 export type {AssignmentPorts} from './assignmentContract';

@@ -14,6 +14,8 @@ export const MESSAGE_COMPLAINT_ACTION_COPY={key:'messages.complaint_customer',te
 
 /** One presentation catalogue. Facts are projections of existing readers, never stored here. */
 export const OFFLINE_LOGOUT_COPY={cachePending:'Du bist abgemeldet. Die gespeicherten Daten auf diesem Gerät werden beim nächsten Start gelöscht.',pending:(count:number)=>`${count} Aktionen warten auf Netz - sie gehen raus, sobald du wieder angemeldet und online bist`} as const;
+/** PL13:29. TODO_PL: title/unavailable wording for the read-only original view (R8). */
+export const OFFLINE_TAKEOVER_COPY={title:'Zurückgehaltene Originale',adopt:'Als Eingang übernehmen',noRight:'Zuordnen kann, wer den Eingang bearbeiten darf',taken:(login:string)=>`Original übernommen von ${login}`,reference:'Verweis auf ein bereits angezeigtes Originalfeld',unavailable:'Das Original konnte noch nicht übernommen werden. Es bleibt erhalten.'} as const;
 export const ORDER_TERMINAL_COPY={dateLocked:'Der Auftrag wurde bereits herausgegeben. Du kannst den Liefertermin nicht mehr ändern.'} as const;
 export const MAIL_REQUEST_CONFLICT_COPY='Diese Anfragekennung gehört zu einer anderen Nachricht. Öffne den gespeicherten Versand.';
 export const INTAKE_PENDING_WORKFLOW_COPY={quoteRequest:'Lege zuerst den KV zur Anfrage an'} as const;

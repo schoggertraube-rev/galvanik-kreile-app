@@ -1,5 +1,6 @@
 "use client";
 import {PACKAGE_ASSIGN_COPY} from '@/ui/situationCatalog';
+import {OFFLINE_TAKEOVER_COPY} from '@/ui/situationCatalog';
 import {PackageOnsiteEditor} from "./PackageOnsiteEditor";
 import {PACKAGE_ONSITE_COPY} from "@/ui/situationCatalog";
 
@@ -17,14 +18,14 @@ import {intakeStartTitle,SITUATION_COPY,CAPTURE_COPY,type IntakeQuoteCandidate} 
 import {IntakeSituation} from "./IntakeSituation";
 import type { CaptureKind } from "../captureRecognition";
 
-type Props = { resumeSourceId?:string|null; ports: GlobalCreatePorts; handoverToken?: string | null; mode?:"eingang"|"datei"|"eingangsfoto"|"visitenkarte"; onClose: (message?: string) => void;
+type Props = { resumePendingId?:string|null;resumeSourceId?:string|null; ports: GlobalCreatePorts; handoverToken?: string | null; mode?:"eingang"|"datei"|"eingangsfoto"|"visitenkarte"; onClose: (message?: string) => void;
   onAdopt?:(capture:IntakeCapture,message:string)=>void; onOrder: (customerId?: string, capture?: IntakeCapture) => void; onCustomer: (capture?: IntakeCapture) => void | string };
-type PendingFile = { file: File; id: string; itemId: string; captureOrigin: "warenfoto" | "dokument" };
+type PendingFile = { file: File; id: string; itemId: string; captureOrigin: "warenfoto" | "dokument";takeover?:import('../captureContract').IntakeOriginalTakeover;deviceCapturedAt?:string };
 const CAMERA_DEVICE_QUERY = "(max-width: 1279px), (pointer: coarse)";
 const subscribeDevice = (changed: () => void) => { const query = matchMedia(CAMERA_DEVICE_QUERY); query.addEventListener("change", changed); return () => query.removeEventListener("change", changed); };
 const deviceSnapshot = () => matchMedia(CAMERA_DEVICE_QUERY).matches;
 const serverDeviceSnapshot = () => false;
-export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode, onAdopt, onClose, onOrder, onCustomer }: Props) {
+export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, handoverToken, mode, onAdopt, onClose, onOrder, onCustomer }: Props) {
   const { readCaptureNote, searchIntakeCustomers, getCaptureScope, getCapture:readCapture, deviceRequest, saveCaptureNote, discardCapture } = ports;
   const getCapture=useMemo(()=>readCapture?async(id:string)=>readCapture(id,undefined,{packageExpectation:false}):undefined,[readCapture]);
   const [onsite,setOnsite]=useState(Boolean(resumeSourceId));
@@ -296,16 +297,17 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     const savingStand = textstand.current;
     await pendingNoteWrites.current;
     if (lastSaved.current === key && savedCapture.current) {
-      try { await acknowledgePendingOriginal(scope, itemId, savingStand); }
+      try { await acknowledgePendingOriginal(scope, itemId, savingStand,savedCapture.current.takeovers); }
       catch (cause) { console.error("[INTAKE_NOTE_LOCAL_ACK_FAILED]", cause); setError("Notiz ist auf dem Server gespeichert · lokale Bestätigung fehlgeschlagen. Bitte erneut prüfen. Code: INTAKE_NOTE_LOCAL_ACK_FAILED."); return null; }
       return savedCapture.current;
     }
     if (!saveCaptureNote) { setError("Speichern ist nicht verbunden. Code: INTAKE_NOTE_WRITE_PORT_UNAVAILABLE."); return null; }
-    const result = await saveCaptureNote({ itemId, textstand: savingStand, text, ...(createContext ? { context: { customerId: createContext.customerId } } : {}),
+    const pendingOriginal=(await readPendingOriginals(scope)).find(original=>original.id===itemId&&original.kind==='note');
+    const result = await saveCaptureNote({ itemId, textstand: savingStand, text, ...(createContext ? { context: { customerId: createContext.customerId } } : {}),...(pendingOriginal?.takeover?{takeover:pendingOriginal.takeover,deviceCapturedAt:pendingOriginal.deviceCapturedAt,expectedVersion:pendingOriginal.kind==='note'?pendingOriginal.expectedVersion:undefined}:{}),
       concerns: concerns.filter(value => !dismissed.includes(value.id)).map(value => value.id) });
     if (result.code !== "OK") { setError(result.message); return null; }
     setCapture(result.capture); savedCapture.current = result.capture; lastSaved.current = key;
-    try { await acknowledgePendingOriginal(scope, itemId, savingStand); }
+    try { await acknowledgePendingOriginal(scope, itemId, savingStand,result.capture.takeovers); }
     catch (cause) { console.error("[INTAKE_NOTE_LOCAL_ACK_FAILED]", cause); setError("Notiz ist auf dem Server gespeichert · lokale Bestätigung fehlgeschlagen. Bitte erneut prüfen. Code: INTAKE_NOTE_LOCAL_ACK_FAILED."); return null; }
     return result.capture;
   }, [text,capture,scope,concerns,dismissed,itemId,saveCaptureNote,createContext]);
@@ -321,7 +323,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         const digest = await crypto.subtle.digest("SHA-256", bytes);
         const sha256 = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
         await retainPendingOriginal(scope, { id: entry.id, itemId: entry.itemId, kind: "file", file: entry.file, captureOrigin: entry.captureOrigin, deviceId:getIntakeDeviceId() });
-        const grant = await ports.prepareCaptureFile({ itemId: entry.itemId, fileId: entry.id, name: entry.file.name, mime: entry.file.type || "application/octet-stream", bytes: entry.file.size, sha256, deviceId: getIntakeDeviceId(), captureOrigin: entry.captureOrigin });
+        const grant = await ports.prepareCaptureFile({ itemId: entry.itemId, fileId: entry.id, name: entry.file.name, mime: entry.file.type || "application/octet-stream", bytes: entry.file.size, sha256, deviceId: getIntakeDeviceId(), captureOrigin: entry.captureOrigin,...(entry.takeover?{takeover:entry.takeover,deviceCapturedAt:entry.deviceCapturedAt}:{}) });
         if (grant.code !== "OK") { setAutomaticRetry(grant.code === "UNAVAILABLE"); setError(grant.message); return; }
         if (grant.upload) {
           const result = await uploadIntakeOriginal(grant.upload, entry.file);
@@ -330,7 +332,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         }
         const finished = await ports.finishCaptureFile(entry.id);
         if (finished.code !== "OK") { setAutomaticRetry(finished.code === "UNAVAILABLE"); setError(finished.message); return; }
-        try { await acknowledgePendingOriginal(scope, entry.id); }
+        try { await acknowledgePendingOriginal(scope, entry.id,undefined,finished.capture.takeovers); }
         catch (cause) { console.error("[INTAKE_FILE_LOCAL_ACK_FAILED]", cause); setCapture(finished.capture); setError("Original ist auf dem Server gesichert · lokale Bestätigung fehlgeschlagen. Bitte erneut übertragen. Code: INTAKE_FILE_LOCAL_ACK_FAILED."); return; }
         setCapture(finished.capture); setItemId(finished.capture.id); remaining.shift(); setPending([...remaining]);
         setProgress({ done: files.length - remaining.length, total: files.length });
@@ -406,7 +408,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     const initialize = async () => { for (let attempt=0;attempt<3&&current;attempt+=1) { try {
       const result = await getCaptureScope();
       if (result.code !== "OK") throw new Error("INTAKE_PENDING_SCOPE_UNAVAILABLE");
-      const originals = (await readPendingOriginals(result.scope)).filter(original=>original.kind!=='file'||!original.context);
+      const originals = (await readPendingOriginals(result.scope)).filter(original=>(original.kind!=='file'||!original.context)&&(!resumePendingId||original.itemId===resumePendingId));
       if (current) {
         setScope(result.scope);
         setError(message=>message?.includes("INTAKE_PENDING_RESUME_FAILED")||message?.includes("Lokale Sicherung wird vorbereitet")?null:message);
@@ -416,12 +418,13 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         const note = earlyNote.current;
         await retainPendingOriginal(result.scope,{id:itemId,itemId,kind:"note",text:note.text,textstand:note.stand,dismissed:note.dismissed});
       }
+      if(!originals.length&&resumePendingId&&getCapture){const saved=await getCapture(resumePendingId);if(current&&saved.code==='OK'){setItemId(saved.capture.id);setCapture(saved.capture);setText(saved.capture.text??'');setCameraRequested(false);}return;}
       if (!originals.length || handoverToken || localInput.current) return;
       const firstId = originals[0].itemId;
       setItemId(firstId);
       const note = originals.find(original => original.kind === "note" && original.itemId === firstId);
       if (note?.kind === "note") { setText(note.text); setDismissed(note.dismissed); textstand.current = note.textstand; }
-      const files = originals.filter(original => original.kind === "file" && original.itemId === firstId).map(original => ({ id: original.id, itemId: original.itemId, file: (original as Extract<typeof original, { kind: "file" }>).file, captureOrigin: (original as Extract<typeof original, { kind: "file" }>).captureOrigin ?? "dokument" as const }));
+      const files = originals.filter(original => original.kind === "file" && original.itemId === firstId).map(original => ({ id: original.id, itemId: original.itemId, file: (original as Extract<typeof original, { kind: "file" }>).file, captureOrigin: (original as Extract<typeof original, { kind: "file" }>).captureOrigin ?? "dokument" as const,...(original.takeover?{takeover:original.takeover,deviceCapturedAt:original.deviceCapturedAt}:{}) }));
       if (files.length) setPending(files);
       return;
     } catch(cause) {
@@ -431,7 +434,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
     } } };
     void initialize();
     return () => { current = false; if(retry!==undefined)clearTimeout(retry); };
-  }, [getCaptureScope, handoverToken, itemId]);
+  }, [getCaptureScope, handoverToken, itemId,resumePendingId,getCapture]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => { if (pending.length || text.trim() && lastSaved.current !== JSON.stringify([text, concerns.filter(value => !dismissed.includes(value.id)).map(value => value.id)])) { event.preventDefault(); event.returnValue = ""; } };
     const resume = () => { if (pending.length && !inFlight.current) void upload(pending); };
@@ -546,6 +549,7 @@ export function IntakeCaptureDialog({ resumeSourceId, ports, handoverToken, mode
         <Button data-spec-id="rein.wem-gehoert" art="leise" text={CAPTURE_COPY.assign} disabled={busy} onClick={() => void assign()} /> : null}
       </>:null}
     </>}>
+    {capture?.takeovers?.map(source=><p key={source.sourceId} data-spec-id="offline.original-uebernommen">{OFFLINE_TAKEOVER_COPY.taken(source.actorName)}</p>)}
     <div data-spec-id="rein" className={`ev-rein${mode ? " ev-rein--erg" : ""}`} onKeyDown={event => {
       if (showCamera && (event.key === " " || event.key === "Enter") && !(event.target as HTMLElement).closest("input,textarea,select,button,a,[contenteditable=true]")) { event.preventDefault(); takePhoto(); }
     }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); chooseFiles(event.dataTransfer.files); }}

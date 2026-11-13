@@ -2,10 +2,11 @@ import type {CustomerListResponse} from '@/app/actions/customers.actions';
 import type {ActionResult} from '@/lib/server/authHelper';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {readCacheScopeMarker} from './cacheScopeMarker';
+import type {IntakeOriginalTakeover} from '@/modules/eingang/public';
 import type {setOrderItemFinishedAction,changeOrderItemExtraWorkAction,OrderResponse} from '@/app/actions/orders.actions';
 // Unacknowledged originals in one scoped queue. Server remains authoritative.
 export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
-  | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number};
+  | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number;takeover?:IntakeOriginalTakeover;takeoverSourceCanonical?:string};
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingWorkshopCommand={command:'item.finished';input:Parameters<typeof setOrderItemFinishedAction>[0]}|{command:'item.extraWork';input:Parameters<typeof changeOrderItemExtraWorkAction>[0]};
 export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:string;kind:'workshop';deviceCapturedAt?:string;queueSequence?:number;notBefore?:string;dispatchStartedAt?:string};
@@ -327,6 +328,7 @@ async function retainOriginal(scope:string,original:PendingOriginal|PendingWorks
    // provenance while it still awaits the server receipt.
    if(original.kind==='file'&&previous?.kind==='file'){store.put(previous);return;}
    const value={...original};delete value.deviceCapturedAt;
+   if(value.kind==='note'&&previous?.kind==='note'&&previous.takeover){value.takeover=previous.takeover;value.takeoverSourceCanonical=previous.takeoverSourceCanonical;}
    if(value.kind==='note'){delete value.expectedVersion;if(expectedVersion!==undefined)value.expectedVersion=expectedVersion;}
    if(deviceCapturedAt)value.deviceCapturedAt=deviceCapturedAt;
    // Assign order in the same serialized IDB transaction as the original.
@@ -351,6 +353,46 @@ function quarantineKey(key:unknown):string{
  if(key instanceof ArrayBuffer||ArrayBuffer.isView(key)){const bytes=key instanceof ArrayBuffer?new Uint8Array(key):new Uint8Array(key.buffer,key.byteOffset,key.byteLength);return 'binary:'+Array.from(bytes,byte=>byte.toString(16).padStart(2,'0')).join('');}
  throw Error('INTAKE_PENDING_MALFORMED_KEY');
 }
+/** Explicit takeover preserves the raw quarantined row until its real capture
+ * receipt. A double click reuses the already retained original and N5 key. */
+function quarantineCanonical(value:unknown):string{
+ return canonicalJson(JSON.parse(JSON.stringify(value,(_key,entry)=>typeof File!=='undefined'&&entry instanceof File?{name:entry.name,type:entry.type,size:entry.size,lastModified:entry.lastModified}:entry)));
+}
+function containsBinary(value:unknown,seen=new WeakSet<object>()):boolean{
+ if(!value||typeof value!=='object'||seen.has(value))return false;seen.add(value);
+ if(value instanceof Blob||value instanceof ArrayBuffer||ArrayBuffer.isView(value))return true;
+ return Object.values(value).some(entry=>containsBinary(entry,seen));
+}
+export async function adoptQuarantinedOriginal(scope:string,sourceId:string,deviceId:string){
+ const rows=await transaction<unknown[]>(scope,'readonly',store=>store.getAll());
+ const isSource=(row:unknown):row is Record<string,unknown>=>!!row&&typeof row==='object'&&!Array.isArray(row)&&'id'in row&&'quarantine:'+quarantineKey(row.id)===sourceId;
+ const raw=rows.find(isSource);if(!raw)return {code:'SOURCE_INCOMPLETE' as const};
+ const wrapper=raw.kind==='quarantine'&&raw.payload&&typeof raw.payload==='object'?raw.payload as Record<string,unknown>:raw;
+ let source=wrapper.original&&typeof wrapper.original==='object'&&!Array.isArray(wrapper.original)?wrapper.original as Record<string,unknown>:wrapper;
+ if(source.text===undefined&&source.file===undefined&&source.payload&&typeof source.payload==='object'&&!Array.isArray(source.payload))source=source.payload as Record<string,unknown>;
+ const file=typeof File!=='undefined'&&source.file instanceof File?source.file:null;
+ const text=typeof source.text==='string'&&source.text.trim()?source.text:!file&&!containsBinary(source)?quarantineCanonical(source):null;
+ if(!file&&(!text||text.length>20000))return {code:'SOURCE_INCOMPLETE' as const};
+ const serialized=quarantineCanonical(raw);if(serialized.length>250000)return {code:'SOURCE_INCOMPLETE' as const};
+ const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(serialized))),byte=>byte.toString(16).padStart(2,'0')).join('');
+ const id=crypto.randomUUID(),metadata={takeover:{sourceId,deviceId,sha256:hash,originalRecord:serialized},takeoverSourceCanonical:serialized,deviceCapturedAt:new Date().toISOString()};
+ const original:PendingOriginal=file?{...metadata,kind:'file',id,itemId:crypto.randomUUID(),file,deviceId,captureOrigin:'dokument'}:{...metadata,kind:'note',id,itemId:id,text:text!,textstand:crypto.randomUUID(),dismissed:[],expectedVersion:0};
+ const db=await database(scope);
+ return new Promise<{code:'OK';original:PendingOriginal}|{code:'SOURCE_INCOMPLETE'}>((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.getAll();let saved:PendingOriginal|undefined;
+  read.onsuccess=()=>{
+   const values=read.result as unknown[],current=values.find(isSource);
+   if(!current||quarantineCanonical(current)!==serialized)return;
+   const previous=values.find(row=>!!row&&typeof row==='object'&&'takeover'in row&&(row as PendingOriginal).takeover?.sourceId===sourceId) as PendingOriginal|undefined;
+   if(previous){if(previous.takeover?.sha256===hash)saved=previous;return;}
+   const maximum=values.reduce<number>((max,row)=>{const sequence=row&&typeof row==='object'&&'queueSequence'in row?row.queueSequence:undefined;return typeof sequence==='number'&&Number.isSafeInteger(sequence)&&sequence>max?sequence:max;},0);
+   if(maximum>=Number.MAX_SAFE_INTEGER){tx.abort();return;}
+   original.queueSequence=maximum+1;store.put(original);saved=original;
+  };
+  tx.oncomplete=()=>{db.close();if(saved){window.dispatchEvent(new Event('kreile-pending-changed'));resolve({code:'OK',original:saved});}else resolve({code:'SOURCE_INCOMPLETE'});};
+  tx.onabort=()=>{db.close();reject(Error('OFFLINE_TAKEOVER_STORAGE_ABORTED'));};
+ });
+}
 export async function readPendingEntries(scope:string):Promise<PendingEntry[]> {
  const rows=await transaction<unknown[]>(scope,"readonly",store=>store.getAll());
  return rows.map(value=>{
@@ -366,9 +408,11 @@ export async function readPendingEntries(scope:string):Promise<PendingEntry[]> {
   return {id:projectedId,kind:"quarantine",capturedAt:"",payload:row};
  });
 }
-export async function retainQuarantinedPending(scope:string,entry:PendingQuarantine):Promise<void>{await transaction(scope,"readwrite",store=>store.put(entry));}
+export async function retainQuarantinedPending(scope:string,entry:PendingQuarantine):Promise<void>{
+ const db=await database(scope);return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.get(entry.id);read.onsuccess=()=>{if(read.result?.kind!=='quarantine')store.put(entry);};tx.oncomplete=()=>{db.close();window.dispatchEvent(new Event('kreile-pending-changed'));resolve();};tx.onabort=()=>{db.close();reject(Error('INTAKE_PENDING_STORAGE_ABORTED'));};});
+}
 export async function readPendingOriginals(scope: string): Promise<PendingOriginal[]> {return (await readPendingEntries(scope)).filter((entry):entry is PendingOriginal=>entry.kind==="file"||entry.kind==="note");}
-export async function acknowledgePendingOriginal(scope: string, id: string, textstand?: string): Promise<void> {
+export async function acknowledgePendingOriginal(scope: string, id: string, textstand?: string,takeoverProof?:Array<IntakeOriginalTakeover&{actorId:string}>): Promise<void> {
   const connection = await database(scope);
   return new Promise((resolve, reject) => {
     const transaction = connection.transaction(STORE, "readwrite");
@@ -377,6 +421,11 @@ export async function acknowledgePendingOriginal(scope: string, id: string, text
     request.onsuccess = () => {
       const original = request.result as PendingOriginal | undefined;
       if (!original || (original.kind!=="file"&&original.kind!=="note") || textstand && (original.kind !== "note" || original.textstand !== textstand)) return;
+      if(original.takeover){
+        const source=original.takeover;
+        if(!takeoverProof?.some(proof=>proof.sourceId===source.sourceId&&proof.deviceId===source.deviceId&&proof.sha256===source.sha256&&proof.originalRecord===source.originalRecord&&typeof proof.actorId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(proof.actorId))){transaction.abort();return;}
+        const sources=store.getAll();sources.onsuccess=()=>{for(const raw of sources.result as Array<Record<string,unknown>>)if('id'in raw&&'quarantine:'+quarantineKey(raw.id)===source.sourceId){if(quarantineCanonical(raw)!==original.takeoverSourceCanonical){transaction.abort();return;}store.delete(raw.id as IDBValidKey);}};
+      }
       store.delete(id);
     };
     transaction.oncomplete = () => { connection.close(); window.dispatchEvent(new Event("kreile-pending-changed")); resolve(); };

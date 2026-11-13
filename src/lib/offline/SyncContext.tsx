@@ -11,6 +11,7 @@ import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions
 import {OFFLINE_NOTE_QUARANTINE_COPY} from '@/ui/situationCatalog';
 import React, { createContext, useContext, useEffect, useCallback, useSyncExternalStore } from "react";
 import type { OfflineOutboxItem } from "./OfflineOutbox";
+import type {PendingQuarantine} from './pendingStore';
 import {readPendingEntries,retainQuarantinedPending} from "./pendingStore";
 import {usePermissions} from "@/lib/auth/PermissionsContext";
 import {syncOriginals} from './syncOriginals';
@@ -19,6 +20,7 @@ import { createId } from "@paralleldrive/cuid2";
 interface SyncContextValue {
   isOnline: boolean;
   outboxItems: OfflineOutboxItem[];
+  quarantinedOriginals:PendingQuarantine[];
   deviceStand:DeviceStandSnapshot;
   pendingStorageUnavailable:boolean;
   addToOutbox: (item: Omit<OfflineOutboxItem, "id" | "status" | "retryCount" | "createdAt" | "updatedAt">) => Promise<void>;
@@ -38,6 +40,8 @@ let snapshotScope: string|null=null;
 let activeScope: string|null=null;
 let snapshotGeneration=0;
 let outboxSnapshot: OfflineOutboxItem[] = EMPTY_OUTBOX;
+const EMPTY_QUARANTINE:PendingQuarantine[]=[];
+let quarantineSnapshot:PendingQuarantine[]=EMPTY_QUARANTINE;
 const outboxListeners = new Set<() => void>();
 const deviceStandPorts={
   orders:{list:getOrdersDb,read:(id:string)=>getLiveOrderCardAction({orderId:id})},
@@ -98,6 +102,7 @@ async function refreshOutboxSnapshot(scope:string|null): Promise<void> {
     const entries=await readPendingEntries(scope);
     if(activeScope!==scope||generation!==snapshotGeneration)return;
     outboxSnapshot=entries.map(entry=>({id:entry.id,entityType:entry.kind==='file'?'photo':entry.kind==='note'?'phone_note':entry.kind==='workshop'?'item':'communication_draft',actionType:'create',localEntityId:'itemId' in entry?entry.itemId:entry.id,payload:{},...(entry.kind==='quarantine'&&entry.payload?.reason==='NOTE_SYNC_METADATA_MISSING'?{lastError:OFFLINE_NOTE_QUARANTINE_COPY.notice(entry.capturedAt||null)}:{}),status:entry.kind==='quarantine'?'conflict':'queued',retryCount:0,createdAt:entry.kind==='quarantine'?entry.capturedAt:'',updatedAt:entry.kind==='quarantine'?entry.capturedAt:''}));
+    quarantineSnapshot=entries.filter((entry):entry is PendingQuarantine=>entry.kind==='quarantine');
     snapshotScope=scope;
     pendingStorageFailureScope=null;publishSnapshots();
   } catch (error) {
@@ -120,6 +125,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const scope=status==="authenticated"?offlineScope:null;
   const isOnline = useSyncExternalStore(subscribeToNetworkStatus, getOnlineSnapshot, () => true);
   const outboxItems = useSyncExternalStore(subscribeToOutbox, ()=>getOutboxSnapshot(scope), () => EMPTY_OUTBOX);
+  const quarantinedOriginals=useSyncExternalStore(subscribeToOutbox,()=>scope&&snapshotScope===scope?quarantineSnapshot:EMPTY_QUARANTINE,()=>EMPTY_QUARANTINE);
   const deviceStand=useSyncExternalStore(subscribeToOutbox,()=>!offline24h?DISABLED_DEVICE:scope&&deviceSnapshotScope===scope&&deviceSnapshotLogin===readCacheScopeMarker()?deviceSnapshot:LOADING_DEVICE,()=>LOADING_DEVICE);
   const pendingStorageUnavailable=useSyncExternalStore(subscribeToOutbox,()=>!!scope&&pendingStorageFailureScope===scope,()=>false);
 
@@ -185,7 +191,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
 
   return (
-    <SyncContext.Provider value={{ isOnline, outboxItems, deviceStand,pendingStorageUnavailable,addToOutbox, removeItem, syncNow }}>
+    <SyncContext.Provider value={{ isOnline, outboxItems,quarantinedOriginals,deviceStand,pendingStorageUnavailable,addToOutbox, removeItem, syncNow }}>
       {children}
     </SyncContext.Provider>
   );
