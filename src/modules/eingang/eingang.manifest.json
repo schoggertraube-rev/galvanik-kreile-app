@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "owner": "Verkaufsstufe 1 Eingang (Paket/persoenlich)",
   "publicExports": [
+    "@/modules/eingang/server-public#openIntakePredicate",
     "@/modules/eingang/server-public#readOrderIntakeOriginals",
     "@/modules/eingang/server-public#readInvoiceTaskContext",
     "@/modules/eingang/public#IncomingInvoiceDialogs",
@@ -144,6 +145,8 @@
     "@/modules/eingang/server-public#linkImportedMail",
     "@/modules/eingang/server-public#readLinkedIntakeMails",
     "@/modules/eingang/server-public#readIntakeMailImportReceipt",
+    "@/modules/eingang/server-public#observeIntakeMailboxImport",
+    "@/modules/eingang/server-public#readIntakeMailboxWatermark",
     "@/modules/eingang/server-public#recordIntakeComplaintEffect",
     "@/modules/eingang/public#ComplaintDialogs",
     "@/modules/eingang/public#ComplaintPorts",
@@ -159,7 +162,10 @@
     "@/modules/eingang/server-public#readIntakeHandoverMail",
     "@/modules/eingang/server-public#recordIntakeHandoverEffect",
     "@/modules/eingang/server-public#readPackageExpectation",
-    "@/modules/eingang/server-public#writeIntakeNoteInTransaction"
+    "@/modules/eingang/server-public#writeIntakeNoteInTransaction",
+    "@/modules/eingang/server-public#parkIntakeMailImportFailure",
+    "@/modules/eingang/server-public#readFailedIntakeMailImports",
+    "@/modules/eingang/public#MailImportFailure"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"

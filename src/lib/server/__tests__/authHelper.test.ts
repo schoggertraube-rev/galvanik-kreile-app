@@ -3,7 +3,7 @@ process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 /**
  * authHelper.test.ts
  *
- * Unit-Tests für checkAppSession() und checkAppAuth().
+ * Unit-Tests für checkAppSession() und readAuthorizedArea("kunden").
  */
 
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
@@ -146,13 +146,13 @@ describe("checkAppSession() – typisierte Fehlergründe (A-11)", () => {
   });
 });
 
-describe("checkAppAuth() – Kompatibilität (A-12)", () => {
+describe("readAuthorizedArea – kanonische Bereiche (A10)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(db.select().from(appUsers).where).mockReset();
   });
 
-  it("gültige Session, Rolle in READ_ROLES → ok: true, data = Rollenstring", async () => {
+  it("gültige Session mit Kundenbereich → kanonischer Akteur", async () => {
     setMockCookie(makeSession({ role: "meister" }));
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
@@ -163,13 +163,13 @@ describe("checkAppAuth() – Kompatibilität (A-12)", () => {
       }
     ] as unknown as Array<typeof appUsers.$inferSelect>);
 
-    const { checkAppAuth } = await import("@/lib/server/authHelper");
-    const result = await checkAppAuth("read");
+    const { readAuthorizedArea } = await import("@/lib/server/authHelper");
+    const result = await readAuthorizedArea("kunden");
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data).toBe("meister");
+    if (result.ok) expect(result.data.role).toBe("meister");
   });
 
-  it("gültige Session, Rolle NICHT in WRITE_ROLES (readonly) → FORBIDDEN", async () => {
+  it("gültige readonly-Session ohne Auftragsbereich → FORBIDDEN", async () => {
     setMockCookie(makeSession({ role: "readonly" }));
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
@@ -180,21 +180,21 @@ describe("checkAppAuth() – Kompatibilität (A-12)", () => {
       }
     ] as unknown as Array<typeof appUsers.$inferSelect>);
 
-    const { checkAppAuth } = await import("@/lib/server/authHelper");
-    const result = await checkAppAuth("write");
+    const { readAuthorizedArea } = await import("@/lib/server/authHelper");
+    const result = await readAuthorizedArea("auftraege");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe("FORBIDDEN");
   });
 
   it("keine Session → UNAUTHORIZED (Weitergabe von checkAppSession)", async () => {
     clearMockCookie();
-    const { checkAppAuth } = await import("@/lib/server/authHelper");
-    const result = await checkAppAuth();
+    const { readAuthorizedArea } = await import("@/lib/server/authHelper");
+    const result = await readAuthorizedArea("kunden");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe("UNAUTHORIZED");
   });
 
-  it("gültige Session, admin → ok: true im write-Modus", async () => {
+  it("gültige admin-Session mit Auftragsbereich → OK", async () => {
     setMockCookie(makeSession({ role: "admin" }));
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
@@ -205,9 +205,9 @@ describe("checkAppAuth() – Kompatibilität (A-12)", () => {
       }
     ] as unknown as Array<typeof appUsers.$inferSelect>);
 
-    const { checkAppAuth } = await import("@/lib/server/authHelper");
-    const result = await checkAppAuth("write");
+    const { readAuthorizedArea } = await import("@/lib/server/authHelper");
+    const result = await readAuthorizedArea("auftraege");
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data).toBe("admin");
+    if (result.ok) expect(result.data.role).toBe("admin");
   });
 });

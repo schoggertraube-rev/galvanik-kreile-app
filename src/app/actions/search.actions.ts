@@ -10,6 +10,7 @@ import {
   type SearchTenantResult,
 } from "@/modules/suche/public";
 import { listOpenQuotesCommand, type QuoteCommandContext } from "@/modules/quotes/server-public";
+import {readInvoiceVat} from "@/modules/accounting/server-public";
 import { readInvoiceSummaries } from "@/lib/server/invoiceRead";
 import { readAuxiliarySearchRecords } from "@/lib/server/searchAuxiliaryRead";
 import { buildSearchProviders } from "./search.providers";
@@ -88,7 +89,7 @@ export async function searchTenantAction(query: string): Promise<SearchTenantRes
           canConvertQuote: false,
         },
       } satisfies QuoteCommandContext),
-      readInvoices: () => readInvoiceSummaries(authorization.data),
+      readInvoices: () => readInvoiceSummaries(authorization.data,readInvoiceVat),
       readAuxiliary: () => readAuxiliarySearchRecords(authorization.data),
     }),
     readTimestamp: () => new Date().toISOString(),

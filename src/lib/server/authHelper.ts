@@ -1,6 +1,9 @@
+import type {AccessArea} from '@/lib/auth/authorizationContract';
+import {DEFERRED_LEGACY_COPY,LEGACY_ACTION_ACCESS_COPY} from '@/ui/situationCatalog';
 import { readAppSession, type AppSession, type SessionReadResult } from "@/lib/server/appSession";
 import {
   resolveAuthorization,
+  hasAuthorizationArea,
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
 
@@ -21,12 +24,6 @@ export type ActionResult<T> =
       message: string;
       details?: unknown;
     };
-
-const WRITE_PERMISSIONS = new Set([
-  "perm_sys_toggles", "perm_sys_diag", "perm_sys_users", "perm_data_csv",
-  "perm_data_customers", "perm_data_orders", "perm_op_status", "perm_op_risk",
-  "perm_op_photos", "perm_op_qa",
-]);
 
 const SESSION_ERROR_MESSAGES: Record<
   Exclude<SessionReadResult, { ok: true }>["reason"],
@@ -65,53 +62,21 @@ export async function checkAppSession(): Promise<ActionResult<AppSession>> {
   }
 }
 
-/**
- * Kompatibler Rollen-Guard auf Basis von resolveAuthorization().
- */
-export async function checkAppAuthorization(
-  mode: "read" | "write" = "read",
-): Promise<ActionResult<AuthorizationSnapshot>> {
-  const result = await resolveAuthorization();
-
-  if (!result.ok) {
-    const errorMap: Record<string, "UNAUTHORIZED" | "DB_ERROR" | "UNKNOWN"> = {
-      NO_SESSION: "UNAUTHORIZED",
-      INVALID_SESSION: "UNAUTHORIZED",
-      USER_NOT_FOUND: "UNAUTHORIZED",
-      USER_INACTIVE: "UNAUTHORIZED",
-      ROLE_MISMATCH: "UNAUTHORIZED",
-      SESSION_REVOKED: "UNAUTHORIZED",
-      UNKNOWN_ROLE: "UNAUTHORIZED",
-      AUTHORIZATION_UNAVAILABLE: "DB_ERROR",
-    };
-
-    return {
-      ok: false,
-      error: errorMap[result.reason] || "UNKNOWN",
-      message: result.message,
-    };
-  }
-
-  const permitted = mode === "write"
-    ? result.data.permissions.some((permission) => WRITE_PERMISSIONS.has(permission))
-    : result.data.permissions.length > 0;
-  if (!permitted) {
-    return {
-      ok: false,
-      error: "FORBIDDEN",
-      message: "Keine Berechtigung für diese Aktion.",
-    };
-  }
-
-  return { ok: true, data: result.data };
+/** PL13.11.00:14: shared canonical area check; no compatibility role/mode policy. */
+export async function readAuthorizedArea(area:AccessArea):Promise<ActionResult<AuthorizationSnapshot>>{
+ const result=await resolveAuthorization();
+ if(!result.ok)return {ok:false,error:result.reason==='AUTHORIZATION_UNAVAILABLE'?'DB_ERROR':'UNAUTHORIZED',message:result.message};
+ if(!hasAuthorizationArea(result.data,area))return {ok:false,error:'FORBIDDEN',message:LEGACY_ACTION_ACCESS_COPY.forbidden};
+ return result;
 }
-
-export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<ActionResult<string>> {
-  const result = await checkAppAuthorization(mode);
-
-  if (!result.ok) {
-    return result;
-  }
-
-  return { ok: true, data: result.data.role.toLowerCase() };
+/** Deferred sources have no tenant authority yet. Authorization precedes denial. */
+export async function deferredLegacyResult(area:AccessArea):Promise<ActionResult<never>>{
+ const auth=await readAuthorizedArea(area);
+ if(!auth.ok)return auth;
+ return {ok:false,error:'CONFLICT',message:DEFERRED_LEGACY_COPY.unavailable};
+}
+export async function rejectDeferredLegacy(area:AccessArea):Promise<never>{
+ const result=await deferredLegacyResult(area);
+ if(!result.ok)throw Error(result.message);
+ throw Error(DEFERRED_LEGACY_COPY.unavailable);
 }

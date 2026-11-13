@@ -1,4 +1,6 @@
 "use server";
+import {rejectDeferredLegacy} from "@/lib/server/authHelper";
+
 
 import { db } from "@/db";
 import { aktion, touchpoint, kanal, segment } from "@/db/schema_marketing";
@@ -6,6 +8,8 @@ import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export async function getAktionen() {
+  await rejectDeferredLegacy("geld");
+
   const data = await db
     .select({
       id: aktion.id,
@@ -24,11 +28,15 @@ export async function getAktionen() {
 }
 
 export async function getAktionById(id: string) {
+  await rejectDeferredLegacy("geld");
+
   const result = await db.select().from(aktion).where(eq(aktion.id, id)).limit(1);
   return result[0] || null;
 }
 
 export async function createAktion(formData: FormData) {
+  await rejectDeferredLegacy("geld");
+
   throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
 
   const titel = formData.get("titel")?.toString() ?? "";
@@ -53,6 +61,8 @@ export async function createAktion(formData: FormData) {
 }
 
 export async function changeAktionStatus(id: string, newStatus: string) {
+  await rejectDeferredLegacy("geld");
+
   throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
 
   const target = await getAktionById(id);

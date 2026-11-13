@@ -130,3 +130,13 @@ it('uses the existing normal send control for a legacy new PREPARE without a res
  expect(actions.send.mock.calls[1][0]).toMatchObject({clientRequestId:requestId,subject:'TEST Betreff',body:'TEST Original bleibt'});
  expect(actions.send.mock.calls[1][0]).not.toHaveProperty('confirmedResend');
 });
+
+
+it('A2 linked failed-mail metadata keeps its label and unknown time instead of a1970 timestamp',async()=>{
+ // Explicit synthetic read boundary; actual rendering, no provider/write claim.
+ actions.getStatus.mockResolvedValue({code:'OK'});actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});
+ actions.listGlobal.mockResolvedValue({code:'OK',data:[{id:'TEST-incomplete-mail',subject:'TEST parked',body:'TEST partial metadata',preview:'TEST',senderName:'TEST',senderAddress:'test@example.invalid',receivedAt:null,hasAttachments:null,importFailure:{state:'FAILED',label:'Import fehlgeschlagen',reason:'TEST provider unavailable',graphMessageId:'TEST-incomplete-mail',attempts:1,mailbox:'test@example.invalid',taskId:null}}]});
+ render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer"/>);
+ expect(await screen.findByText('Import fehlgeschlagen · TEST parked')).toBeInTheDocument();
+ expect(screen.getByText(/Eingangszeit fehlt/)).toBeInTheDocument();expect(screen.queryByText(/1970/)).toBeNull();
+});

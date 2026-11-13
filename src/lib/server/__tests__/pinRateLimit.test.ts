@@ -68,7 +68,7 @@ describe("runPinAttempt", () => {
   });
 
   it("zählt einen falschen PIN innerhalb derselben Transaktion", async () => {
-    executeResults.push([], [], []);
+    executeResults.push([], [], [makeRow(1,0)]);
     const verifyPin = vi.fn().mockResolvedValue(false);
     const { runPinAttempt } = await import("@/lib/server/pinRateLimit");
 
@@ -82,8 +82,8 @@ describe("runPinAttempt", () => {
     );
   });
 
-  it("blockiert nach fünf frischen Fehlversuchen vor dem PIN-Vergleich", async () => {
-    executeResults.push([], [makeRow(5, 5)]);
+  it("blockiert nach zehn frischen Fehlversuchen vor dem PIN-Vergleich", async () => {
+    executeResults.push([], [makeRow(10, 5)]);
     const verifyPin = vi.fn().mockResolvedValue(true);
     const { runPinAttempt } = await import("@/lib/server/pinRateLimit");
 
@@ -97,20 +97,17 @@ describe("runPinAttempt", () => {
     expect(mockTxExecute).toHaveBeenCalledTimes(2);
   });
 
-  it("sperrt ab zwanzig Fehlversuchen dauerhaft", async () => {
-    executeResults.push([], [makeRow(20, 120)]);
+  it("sperrt nach zwanzig Fehlversuchen fuer dreissig Minuten, niemals dauerhaft", async () => {
+    executeResults.push([], [makeRow(20, 29)]);
     const verifyPin = vi.fn().mockResolvedValue(true);
     const { runPinAttempt } = await import("@/lib/server/pinRateLimit");
 
-    await expect(runPinAttempt("operator-1", verifyPin)).resolves.toEqual({
-      status: "blocked",
-      locked: true,
-    });
+    await expect(runPinAttempt("operator-1", verifyPin)).resolves.toMatchObject({status:"blocked",retryAtMs:expect.any(Number),retryAfterMinutes:1});
     expect(verifyPin).not.toHaveBeenCalled();
   });
 
   it("lässt nach Ablauf der temporären Sperre genau den serialisierten Versuch zu", async () => {
-    executeResults.push([], [makeRow(5, 15)], []);
+    executeResults.push([], [makeRow(10, 15)], []);
     const verifyPin = vi.fn().mockResolvedValue(true);
     const { runPinAttempt } = await import("@/lib/server/pinRateLimit");
 
@@ -119,4 +116,38 @@ describe("runPinAttempt", () => {
     });
     expect(verifyPin).toHaveBeenCalledOnce();
   });
+  it.each([11,19,21,99])("startet zwischen Zehnergrenzen keine neue Sperre (%s)",async count=>{
+    executeResults.push([],[makeRow(count,0)],[makeRow(count+1,0)]);
+    const {runPinAttempt}=await import("@/lib/server/pinRateLimit");
+    const verifyPin=vi.fn().mockResolvedValue(false);
+    const result=await runPinAttempt("operator-1",verifyPin);
+    expect(result.status).toBe((count+1)%10===0?"blocked":"invalid");
+    expect(verifyPin).toHaveBeenCalledOnce();
+  });
+  it.each([[20,31],[100,1441]])("laesst abgelaufene Sperren wieder frei (%s)",async(count,minutes)=>{
+    executeResults.push([],[makeRow(count,minutes)],[]);
+    const {runPinAttempt}=await import("@/lib/server/pinRateLimit");
+    expect(await runPinAttempt("operator-1",async()=>true)).toEqual({status:"valid"});
+  });
+  it("quittiert fehlenden echten Zaehlerbeleg nicht als Fehlversuch",async()=>{
+    executeResults.push([],[],[]);
+    const {runPinAttempt}=await import("@/lib/server/pinRateLimit");
+    await expect(runPinAttempt("operator-1",async()=>false)).rejects.toThrow("PIN_RATE_LIMIT_RECEIPT_REQUIRED");
+  });
+
+});
+
+
+it("PL19:45 trusts only Vercel provider headers and ignores the client forwarding chain",async()=>{
+  const original=process.env.VERCEL;
+  const {trustedPinClientIp}=await import("@/lib/server/pinRateLimit");
+  try{
+    process.env.VERCEL='1';
+    expect(trustedPinClientIp(new Headers({'x-vercel-forwarded-for':'198.51.100.6, 203.0.113.1','x-real-ip':'203.0.113.2'}))).toBe('198.51.100.6');
+    expect(trustedPinClientIp(new Headers({'x-real-ip':'203.0.113.2, 203.0.113.3'}))).toBe('203.0.113.2');
+    expect(trustedPinClientIp(new Headers({'x-forwarded-for':'198.51.100.6'}))).toBeNull();
+    expect(()=>trustedPinClientIp(new Headers({'x-vercel-forwarded-for':'not-an-ip'}))).toThrow('PIN_IP_SOURCE_INVALID');
+    delete process.env.VERCEL;
+    expect(trustedPinClientIp(new Headers({'x-vercel-forwarded-for':'198.51.100.6'}))).toBeNull();
+  }finally{if(original===undefined)delete process.env.VERCEL;else process.env.VERCEL=original;}
 });

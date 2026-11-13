@@ -35,6 +35,9 @@ const auth = (permissions: string[], areas: string[] = ["eingang"]) => ({
   },
 });
 
+// Compile the real action graph before the command-case clock; mocks and assertions stay unchanged.
+const {createOrderIntakeAction}=await import("@/app/actions/eingang.actions");
+
 describe("F1 order intake actions", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -47,7 +50,6 @@ describe("F1 order intake actions", () => {
   });
 
   it("delegates the command without accepting client authorization or tenant fields", async () => {
-    const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const input = { geprueft: true, clientEventId: "x", customer: {}, dueDate: "x", note: null, items: [] } as never;
     await expect(createOrderIntakeAction(input)).resolves.toMatchObject({ code: "OK" });
     expect(ports.create).toHaveBeenCalledWith(input,expect.any(Function),{before:expect.any(Function),after:expect.any(Function)});

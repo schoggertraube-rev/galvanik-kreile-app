@@ -1,3 +1,5 @@
+import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
+import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
 import {isDeepStrictEqual} from 'node:util';
 import {dispatchPolicyValid} from '../dispatchPolicy';
 import {STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
@@ -5,13 +7,14 @@ import "server-only";
 
 import bcrypt from "bcryptjs";
 import { sql } from "drizzle-orm";
-import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, withTenantSavepoint, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {
   ROLE_ACCESS_AREA_TEMPLATES,
   getFixedAccessAreasForRole,
   isAccessArea,
   isAccessAreaAllowedForRole,
   isAppRole,
+  canManageUserTarget,
   normalizeAccessAreasForRole,
   type AccessArea,
   type AppRole,
@@ -295,8 +298,10 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   }
 }
 
-export async function updateManagedUser(context: SystemSettingsContext, input: unknown) {
-  if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Nutzer dürfen nicht geändert werden." };
+type PinChangeEffect=(tx:PrivilegedTenantTransaction,phase:'lock'|'reset',userId:string)=>Promise<void>;
+
+export async function updateManagedUser(context: SystemSettingsContext, input: unknown, pinChangeEffect:PinChangeEffect) {
+  if (!context.canManage) return { code: "FORBIDDEN" as const, message: MANAGED_USER_COPY.forbidden };
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Nutzerdaten sind ungültig." };
   const value = input as Record<string, unknown>;
   if (Object.keys(value).sort().join(",") !== "active,designation,fullName,pin,shortCode,userId") return { code: "VALIDATION_ERROR" as const, message: "Logindaten sind unvollständig." };
@@ -317,6 +322,7 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
   const pinHash = normalized.pin ? await bcrypt.hash(normalized.pin, 12) : null;
   try {
     await withPrivilegedTenantTransaction(context, async (tx) => {
+      if (pinHash) await pinChangeEffect(tx,'lock',normalized.userId);
       const targets = await tx.execute<{ id: string; role: string; active: boolean; has_pin: boolean; has_logins: boolean }>(sql`
         SELECT users.id::text AS id, users.role, users.active, users.pin_hash IS NOT NULL AS has_pin,
                EXISTS (SELECT 1 FROM public.app_user_rights rights WHERE rights.tenant_id=users.tenant_id AND rights.user_id=users.id AND rights.bereich='logins') AS has_logins
@@ -327,6 +333,7 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
       `);
       if (targets.length !== 1 || !targets[0]) throw new Error("USER_WRITE_NOT_FOUND");
       const target = targets[0];
+      if (!canManageUserTarget(context.actorId, normalized.userId, target.role)) throw new Error("USER_TARGET_FORBIDDEN");
       if (normalized.userId === context.actorId && !normalized.active) throw new Error("USER_SELF_DEACTIVATION");
       if (target.active && target.has_logins && !normalized.active) {
         const rows = await tx.execute<{ count: number }>(sql`
@@ -344,11 +351,13 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
           ? await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, active=${normalized.active}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`)
           : await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`);
       if (rows.length !== 1) throw new Error("USER_WRITE_NOT_FOUND");
+      if (pinHash) await pinChangeEffect(tx,'reset',normalized.userId);
       await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_updated', jsonb_build_object('actorId', ${context.actorId}::text, 'userId', ${normalized.userId}::text))`);
     });
     return { code: "OK" as const };
   } catch (error) {
     logSystemSettingsPortFailure("MANAGED_USER_WRITE_FAILED", error);
+    if (error instanceof Error && error.message === "USER_TARGET_FORBIDDEN") return { code: "FORBIDDEN" as const, message: MANAGED_USER_COPY.forbidden };
     if (error instanceof Error && error.message === "USER_SELF_DEACTIVATION") return { code: "CONFLICT" as const, message: "Der aktuell angemeldete Nutzer kann sich nicht selbst deaktivieren." };
     if (error instanceof Error && error.message === "USER_LAST_LOGINS_DEACTIVATION") return { code: "CONFLICT" as const, message: "Mindestens ein aktiver Login mit dem Bereich Logins & Rechte muss erhalten bleiben." };
     if (error instanceof Error && error.message === "USER_ACTIVE_PIN_REQUIRED") return { code: "VALIDATION_ERROR" as const, message: "Ein aktiver Nutzer braucht eine vierstellige PIN." };
@@ -490,7 +499,7 @@ export async function setManagedUserArea(context: SystemSettingsContext, input: 
   }
 }
 
-export async function changeOwnPin(context: { tenantId: string; actorId: string }, input: unknown) {
+export async function changeOwnPin(context: { tenantId: string; actorId: string }, input: unknown, pinChangeEffect:PinChangeEffect) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Code ist ungültig." };
   const value = input as Record<string, unknown>;
   if (Object.keys(value).join(",") !== "pin" || typeof value.pin !== "string" || !/^\d{4}$/.test(value.pin)) {
@@ -499,8 +508,10 @@ export async function changeOwnPin(context: { tenantId: string; actorId: string 
   const pinHash = await bcrypt.hash(value.pin, 12);
   try {
     await withPrivilegedTenantTransaction(context, async (tx) => {
+      await pinChangeEffect(tx,'lock',context.actorId);
       const rows = await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET pin_hash=${pinHash}, updated_at=statement_timestamp() WHERE tenant_id=${context.tenantId} AND id=${context.actorId}::uuid AND active=true RETURNING id::text AS id`);
       if (rows.length !== 1) throw new Error("USER_WRITE_NOT_FOUND");
+      await pinChangeEffect(tx,'reset',context.actorId);
       await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'own_pin_changed', jsonb_build_object('actorId', ${context.actorId}::text))`);
     });
     return { code: "OK" as const };
@@ -508,4 +519,50 @@ export async function changeOwnPin(context: { tenantId: string; actorId: string 
     logSystemSettingsPortFailure("OWN_PIN_WRITE_FAILED", error);
     return { code: "UNAVAILABLE" as const, message: "Code konnte nicht sicher gespeichert werden. Fehlercode: OWN_PIN_WRITE_FAILED." };
   }
+}
+
+
+type MailboxSyncAuth=Parameters<typeof canSynchronizeIntakeMailbox>[0]&{tenantId:string};
+/** Technical fetch progress stays on the existing settings row, never creates company data. */
+export async function readMailboxFetchState(auth:MailboxSyncAuth){
+ if(!canSynchronizeIntakeMailbox(auth))return {code:'FORBIDDEN' as const};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<{id:string;state:Record<string,unknown>|null}>(sql`SELECT id,mailbox_fetch_state AS state FROM public.company_settings WHERE tenant_id=${auth.tenantId} LIMIT 2`);
+  if(rows.length!==1)throw Error('MAILBOX_SETTINGS_CARDINALITY');
+  const state=rows[0].state;
+  if(state!==null&&(typeof state!=='object'||Array.isArray(state)))throw Error('MAILBOX_PROGRESS_SOURCE_INVALID');
+  return {code:'OK' as const,settingsId:rows[0].id,state};
+ });}catch(error){console.error('[MAILBOX_STATE_READ_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const};}
+}
+/** Compare-and-swap preserves concurrent mailbox progress and every commercial setting. */
+export async function writeMailboxFetchState(auth:MailboxSyncAuth,input:{settingsId:string;before:Record<string,unknown>|null;after:Record<string,unknown>;retryMailbox?:string;forceRetry?:boolean},onFailure?:(tx:PrivilegedTenantTransaction,source:{key:string;actorId:string;mailbox:string})=>Promise<string>){
+ if(!canSynchronizeIntakeMailbox(auth))return {code:'FORBIDDEN' as const};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const expected=input.before===null?sql`NULL`:sql`${JSON.stringify(input.before)}::jsonb`;
+  try{return await withTenantSavepoint(tx,async nested=>{
+   if(input.forceRetry)throw Error('MAILBOX_ORIGINAL_OBSERVATION_RETRY');
+   const rows=await nested.execute<{state:unknown}>(sql`UPDATE public.company_settings SET mailbox_fetch_state=${JSON.stringify(input.after)}::jsonb WHERE tenant_id=${auth.tenantId} AND id=${input.settingsId} AND mailbox_fetch_state IS NOT DISTINCT FROM ${expected} RETURNING mailbox_fetch_state AS state`);
+   if(rows.length===0)return {code:'CONFLICT' as const};
+   if(rows.length!==1||!isDeepStrictEqual(rows[0].state,input.after))throw Error('MAILBOX_STATE_RECEIPT_REQUIRED');
+   return {code:'OK' as const};
+  });}catch(error){
+   if(!onFailure||!input.retryMailbox||input.before===null)throw error;
+   // The committed batch reservation is the sole retry source. No client source
+   // or commercial setting is accepted here; marker and task commit together.
+   const locked=await tx.execute<{state:Record<string,unknown>}>(sql`SELECT mailbox_fetch_state AS state FROM public.company_settings WHERE tenant_id=${auth.tenantId} AND id=${input.settingsId} FOR UPDATE`);
+   if(locked.length!==1||!isDeepStrictEqual(locked[0].state,input.before))throw Error('MAILBOX_RETRY_SOURCE_CHANGED');
+   const frame=input.before[input.retryMailbox];
+   if(!frame||typeof frame!=='object'||Array.isArray(frame))throw Error('MAILBOX_RETRY_FRAME_REQUIRED');
+   const source=frame as Record<string,unknown>,uuid=/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
+   if(typeof source.retryKey!=='string'||!uuid.test(source.retryKey)||typeof source.retryActorId!=='string'||!uuid.test(source.retryActorId))throw Error('MAILBOX_RETRY_IDENTITY_REQUIRED');
+   const target=input.forceRetry?input.after[input.retryMailbox]:source;
+   if(!target||typeof target!=='object'||Array.isArray(target))throw Error('MAILBOX_RETRY_PROGRESS_REQUIRED');
+   const retryState={...(input.forceRetry?input.after:input.before),[input.retryMailbox]:{...target,retryKey:source.retryKey,retryActorId:source.retryActorId,retryRequired:true}};
+   const marker=await tx.execute<{state:unknown}>(sql`UPDATE public.company_settings SET mailbox_fetch_state=${JSON.stringify(retryState)}::jsonb WHERE tenant_id=${auth.tenantId} AND id=${input.settingsId} RETURNING mailbox_fetch_state AS state`);
+   if(marker.length!==1||!isDeepStrictEqual(marker[0].state,retryState))throw Error('MAILBOX_RETRY_MARKER_REQUIRED');
+   const taskId=await onFailure(tx,{key:source.retryKey,actorId:source.retryActorId,mailbox:input.retryMailbox});
+   if(typeof taskId!=='string'||!uuid.test(taskId))throw Error('MAILBOX_RETRY_TASK_REQUIRED');
+   return {code:'RETRY_REQUIRED' as const};
+  }
+ });}catch(error){console.error('[MAILBOX_STATE_WRITE_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const};}
 }

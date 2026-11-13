@@ -31,12 +31,12 @@ beforeAll(async()=>{
  full=await createFixture(['eingang','mails','kunden','auftraege','geld','einstellungen']);
 });
 afterAll(async()=>{vi.restoreAllMocks();for(const key of Object.keys(process.env))if(!(key in originalEnv))delete process.env[key];Object.assign(process.env,originalEnv);await sql.end({timeout:5});});
-async function withRequest<T>(cookie: string, work: () => Promise<T>,flushAfter=false): Promise<T> {
+async function withRequest<T>(cookie: string, work: () => Promise<T>,flushAfter=false,requestHeaders:Record<string,string>={}): Promise<T> {
   const { NextRequest } = await import("next/server");
   const { createRequestStoreForAPI } = await import("next/dist/server/async-storage/request-store");
   const { workAsyncStorage } = await import("next/dist/server/app-render/work-async-storage.external");
   const { workUnitAsyncStorage } = await import("next/dist/server/app-render/work-unit-async-storage.external");
-  const request = new NextRequest("http://127.0.0.1/TEST-ein34-mail", { headers: { cookie } });
+  const request = new NextRequest("http://127.0.0.1/TEST-ein34-mail", { headers: { ...requestHeaders,cookie } });
   const afterJobs:Promise<unknown>[]=[],closeCallbacks:Array<()=>void>=[],afterErrors:unknown[]=[];
   const {AfterContext}=await import('next/dist/server/after/after-context');
   const nativeAfter=flushAfter?new AfterContext({waitUntil:promise=>{afterJobs.push(promise);},onClose:callback=>{closeCallbacks.push(callback);},onTaskError:error=>{afterErrors.push(error);}}):{};
@@ -65,7 +65,7 @@ async function withRequest<T>(cookie: string, work: () => Promise<T>,flushAfter=
   return workAsyncStorage.run(workStore, () => workUnitAsyncStorage.run(requestStore,async()=>{const result=await work();if(flushAfter){for(const close of closeCallbacks)close();await Promise.all(afterJobs);if(afterErrors.length)throw new AggregateError(afterErrors,'TEST_NEXT_AFTER_FAILED');}return result;}));
 }
 
-async function withSession<T>(fixture: Fixture, work: () => Promise<T>,flushAfter=false): Promise<T> {
+async function withSession<T>(fixture: Fixture, work: () => Promise<T>,flushAfter=false,requestHeaders:Record<string,string>={}): Promise<T> {
   const { COOKIE_NAME, getSecretKey, signAppSession } = await import("@/lib/server/appSession");
   const session: AppSession = {
     userId: fixture.actorId,
@@ -75,7 +75,7 @@ async function withSession<T>(fixture: Fixture, work: () => Promise<T>,flushAfte
     issuedAt: fixture.actorIssuedAt,
     expiresAt: Date.now() + 5 * 60_000,
   };
-  return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work,flushAfter);
+  return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work,flushAfter,requestHeaders);
 }
 
 async function createFixture(rights: string[],role:AppSession['role']='meister'): Promise<Fixture> {

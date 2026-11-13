@@ -161,6 +161,16 @@ export function isAppRole(value: unknown): value is AppRole {
   return typeof value === "string" && (APP_ROLES as readonly string[]).includes(value);
 }
 
+/** Developer access uses its dedicated code path, never a managed PIN. */
+export function canUsePinLogin(value: unknown): value is Exclude<AppRole, "developer"> {
+  return isAppRole(value) && value !== "developer";
+}
+
+/** Existing management rights remain required by the caller. */
+export function canManageUserTarget(actorId: string, targetId: string, targetRole: unknown): boolean {
+  return isAppRole(targetRole) && (targetRole !== "developer" || actorId === targetId);
+}
+
 export function getRoleLabel(role: AppRole): string {
   return ROLE_LABELS[role] || role;
 }
@@ -183,3 +193,6 @@ export function canAssignIntakeCustomer(auth:Parameters<typeof hasAuthorizationA
 
 /** S05 VORAB 4: following up a quote is a mail operation, not money access. */
 export function canReadQuoteFollowups(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'mails');}
+
+/** Existing mailbox import authority, shared by source readers and the fetch composition. */
+export function canSynchronizeIntakeMailbox(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,"eingang")&&hasAuthorizationArea(auth,"mails");}

@@ -1,4 +1,5 @@
 "use server";
+import {applyPinChangeRateLimit} from "@/lib/server/pinRateLimit";
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization,hasAuthorizationArea } from "@/lib/server/authorization";
@@ -162,7 +163,7 @@ export async function saveManagedUserAction(input: UpdateManagedUserInput) {
   try {
     const resolved = await settingsContext();
     if (!resolved?.authorization.areas?.includes("logins")) return { code: "FORBIDDEN" as const, message: "Logins dürfen nicht geändert werden." };
-    const result = await updateManagedUser(resolved.context, input);
+    const result = await updateManagedUser(resolved.context, input,(tx,phase,userId)=>applyPinChangeRateLimit(tx,resolved.context.tenantId,userId,phase));
     if (result.code === "OK") {
       if (input.userId === resolved.authorization.userId) {
         await refreshSettingsSession({ ...resolved.authorization, displayName: input.fullName });
@@ -200,7 +201,7 @@ export async function changeOwnPinAction(input: { pin: string }) {
   try {
     const resolved = await settingsContext();
     if (!resolved) return { code: "FORBIDDEN" as const, message: "Der eigene Code kann momentan nicht geändert werden." };
-    const result = await changeOwnPin({ tenantId: resolved.authorization.tenantId, actorId: resolved.authorization.userId }, input);
+    const result = await changeOwnPin({ tenantId: resolved.authorization.tenantId, actorId: resolved.authorization.userId }, input,(tx,phase,userId)=>applyPinChangeRateLimit(tx,resolved.authorization.tenantId,userId,phase));
     if (result.code === "OK") {
       await refreshSettingsSession(resolved.authorization);
     }

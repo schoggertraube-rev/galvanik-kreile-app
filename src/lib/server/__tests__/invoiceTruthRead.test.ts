@@ -34,6 +34,7 @@ describe("invoice truth read", () => {
       customer_id: "customer-1",
       order_id: "order-1",
       status: "issued",
+      snapshot:{schemaVersion:1,totals:{netAmountCents:7500,vatRateBasisPoints:1900,vatAmountCents:1425,grossAmountCents:8925}},
       net_amount_cents: 7500,
       vat_rate_basis_points: 1900,
       vat_amount_cents: 1425,
@@ -45,7 +46,7 @@ describe("invoice truth read", () => {
       payment_open_amount_cents: 0,
     }]);
     const { readInvoiceTruth } = await import("../invoiceTruthRead");
-    await expect(readInvoiceTruth(authorization, { customerId: "customer-1" })).resolves.toEqual({
+    await expect(readInvoiceTruth(authorization, { customerId: "customer-1" },readInvoiceVat)).resolves.toEqual({
       code: "OK",
       data: [expect.objectContaining({
         invoiceNumber: "R-2026-0002",
@@ -58,9 +59,24 @@ describe("invoice truth read", () => {
     expect(execute.mock.calls[0]?.[0].text).not.toContain("ausgangsrechnung");
   });
 
+  it('rejects malformed root filters before any database call',async()=>{
+    const {readInvoiceTruth}=await import('../invoiceTruthRead');
+    for(const filter of [null,[],{customerId:42},{from:'invalid'},{unexpected:true}]){
+      await expect(readInvoiceTruth(authorization,filter as never)).resolves.toMatchObject({code:'VALIDATION_ERROR'});
+    }
+    expect(withTransaction).not.toHaveBeenCalled();
+  });
+
   it("denies the read without the money view permission", async () => {
     const { readInvoiceTruth } = await import("../invoiceTruthRead");
     await expect(readInvoiceTruth({ ...authorization, permissions: [] })).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();
   });
 });
+
+// Explicit synthetic dependency boundary; VAT arithmetic is tested in the accounting module and real DB cases.
+function readInvoiceVat(value:unknown){
+ const row=value as Record<string,unknown>;
+ if(Number(row.net_amount_cents)!==7500||row.net_amount_cents===null||Number(row.vat_rate_basis_points)!==1900||row.vat_rate_basis_points===null||Number(row.vat_amount_cents)!==1425||Number(row.gross_amount_cents)!==8925)throw Error('TEST_DECLARED_ORIGINAL_MISMATCH');
+ return {groups:[{rateBp:1900 as const,netCents:7500,vatCents:1425,grossCents:8925}],netAmountCents:7500,vatAmountCents:1425,grossAmountCents:8925,headRate:1900,reverseCharge:false};
+}

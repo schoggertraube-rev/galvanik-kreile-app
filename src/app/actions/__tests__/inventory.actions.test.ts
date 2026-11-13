@@ -28,7 +28,7 @@ vi.mock("@/db/schema", () => ({
   },
   stockMovements: {},
 }));
-vi.mock("@/lib/server/authHelper", () => ({ checkAppAuthorization: mockCheckAppAuthorization }));
+vi.mock("@/lib/server/authorization", async()=>{const contract=await import("@/lib/auth/authorizationContract");return {resolveAuthorization:mockCheckAppAuthorization,hasAuthorizationArea:contract.hasAuthorizationArea};});
 vi.mock("drizzle-orm", () => ({ and: vi.fn(), desc: mockDesc, eq: mockEq }));
 vi.mock("next/cache", () => ({ revalidatePath: mockRevalidatePath }));
 

@@ -12,12 +12,7 @@ export const APP_TENANT_ID = KREILE_TENANT_SLUG;
 // ─── Secret Key ──────────────────────────────────────────────────────────────
 export function getSecretKey(): string {
   const secret = process.env.APP_SESSION_SECRET;
-  if (!secret) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("CRITICAL: APP_SESSION_SECRET is not set in production!");
-    }
-    return "dev-secret-fallback-do-not-use-in-prod";
-  }
+  if (!secret) throw new Error("APP_SESSION_SECRET_REQUIRED");
   return secret;
 }
 

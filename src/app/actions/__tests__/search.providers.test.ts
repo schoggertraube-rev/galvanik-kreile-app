@@ -50,6 +50,7 @@ const invoice: ImmutableInvoiceSummary = {
   orderVersion: 3,
   netAmountCents: 42000,
   vatRateBasisPoints: 1900,
+  vatGroups:[{rateBp:1900 as const,netCents:42000,vatCents:7980,grossCents:49980}],
   vatAmountCents: 7980,
   grossAmountCents: 49980,
   serviceDate: "2026-10-25",

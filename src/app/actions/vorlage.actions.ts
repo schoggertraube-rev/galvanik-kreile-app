@@ -25,7 +25,7 @@ type SuggestedItem = {
 };
 
 export async function getVorlageFuerAuftrag(auftrag_id: string) {
-  const { client: supabase, authorization } = await createAuthorizedDataContext('read');
+  const { client: supabase, authorization } = await createAuthorizedDataContext('auftraege');
   const sessionClient = await createClient();
 
   // 1. Get items for the order to get the name and surface_requested
@@ -159,7 +159,7 @@ export async function getVorlageFuerAuftrag(auftrag_id: string) {
 }
 
 export async function getWahrscheinlicheArtikel(auftrag_id: string) {
-  const { client: supabase, authorization } = await createAuthorizedDataContext('read');
+  const { client: supabase, authorization } = await createAuthorizedDataContext('auftraege');
   const sessionClient = await createClient();
 
   // Get surface and name

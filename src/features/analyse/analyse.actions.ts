@@ -1,7 +1,6 @@
 "use server";
-import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
-import { checkAppAuth } from "@/lib/server/authHelper";
+import { readAuthorizedArea } from "@/lib/server/authHelper";
 import { createClient } from "@/lib/supabase/server";
 import {
   AnalyseTileKey,
@@ -212,7 +211,8 @@ export async function getAnalyseOverview(
 ): Promise<AnalyseActionResult<AnalyseTileSummary[]>> {
   void filters;
   try {
-    await checkAppAuth();
+    const authorization = await readAuthorizedArea('geld');
+    if (!authorization.ok) return {data:[],error:authorization.message};
     const supabase = await createClient();
 
     // Werkstatt Puls
@@ -309,7 +309,8 @@ export async function getAnalyseTileDetail(
   filters?: unknown,
 ): Promise<AnalyseActionResult<AnalyseTileDetail | null>> {
   try {
-    await checkAppAuth();
+    const authorization = await readAuthorizedArea('geld');
+    if (!authorization.ok) return {data:null,error:authorization.message};
     
     // We get the summary for this tile
     const { data: overviews } = await getAnalyseOverview(period, filters);
@@ -350,7 +351,7 @@ export async function getAnalyseTileDetail(
       // Hole echte verspätete Aufträge
       const { data: delayedOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await supabase.from('orders')
         .select('id, order_number, title, customer_id, customers(name), station, promised_due_date, completed_date, status')
-        .eq('tenant_id', KREILE_TENANT_SLUG)
+        .eq('tenant_id', authorization.data.tenantId)
         .not('promised_due_date', 'is', null)
         .is('completed_date', null)
         .lt('promised_due_date', new Date().toISOString())
@@ -358,7 +359,7 @@ export async function getAnalyseTileDetail(
 
       const { data: missingDueOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await supabase.from('orders')
         .select('id, order_number, title, customer_id, customers(name), station, promised_due_date, completed_date, status')
-        .eq('tenant_id', KREILE_TENANT_SLUG)
+        .eq('tenant_id', authorization.data.tenantId)
         .is('promised_due_date', null)
         .neq('status', 'storniert')
         .limit(10);
@@ -370,7 +371,7 @@ export async function getAnalyseTileDetail(
       const { count: openOrdersCount } = await supabase
         .from('orders')
         .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', KREILE_TENANT_SLUG)
+        .eq('tenant_id', authorization.data.tenantId)
         .is('completed_date', null);
 
       const avgTage = d?.avg_tage ?? null;
@@ -512,7 +513,8 @@ export async function getAnalyseLinkedEntities(
 ): Promise<AnalyseActionResult<AnalyseEntityLink[]>> {
   void filters;
   try {
-    await checkAppAuth();
+    const authorization = await readAuthorizedArea('geld');
+    if (!authorization.ok) return {data:[],error:authorization.message};
     
     if (tileKey === "werkstatt_puls") {
       // In future: load delayed orders

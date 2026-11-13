@@ -306,7 +306,7 @@ export async function getAuftragDbRanking(limit = 10): Promise<AuftragDbRankingR
 export async function getWhatIfKontext(): Promise<KontextDaten> {
   await requireCockpitRead();
   const supabase = await createClient();
-  const privileged = await createAuthorizedDataClient('read');
+  const privileged = await createAuthorizedDataClient('wartung');
   
   const kontext: KontextDaten = {
     db_marge_je_ks: {},
@@ -423,7 +423,7 @@ export async function getAuftragDbDetails(orderId: string): Promise<AuftragDbDet
 export async function getForecastDaten(): Promise<ForecastDaten> {
   await requireCockpitRead();
   const supabase = await createClient();
-  const privileged = await createAuthorizedDataClient('read');
+  const privileged = await createAuthorizedDataClient('wartung');
   const { data: results, error } = await supabase.from('v_monatsergebnis')
     .select('monat, erloes_netto, ergebnis')
     .order('monat', { ascending: true })
@@ -497,7 +497,7 @@ export async function getAgingRechnungen(bucket: string): Promise<AgingInvoiceRo
 
 export async function getAktiveWarnungen(): Promise<ActiveWarning[]> {
   await requireCockpitRead();
-  const supabase = await createAuthorizedDataClient('read');
+  const supabase = await createAuthorizedDataClient('wartung');
   const { data, error } = await supabase
     .from('warning_event')
     .select('*')
@@ -534,7 +534,7 @@ export async function refreshWarnungen() {
 
 export async function getAktiverJahresplan(jahr: number) {
   await requireCockpitRead();
-  const supabase = await createAuthorizedDataClient('read');
+  const supabase = await createAuthorizedDataClient('wartung');
   const { data, error } = await supabase
     .from('forecast_version')
     .select('*')

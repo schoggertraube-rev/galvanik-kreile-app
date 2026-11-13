@@ -1,10 +1,12 @@
 "use server";
+import {openIntakePredicate} from '@/modules/eingang/server-public';
+
 
 import { db } from "@/db";
 import { customers } from "@/db/schema";
 import { eq, ilike, or, and, sql } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import type { ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import {
@@ -13,6 +15,7 @@ import {
   resolveAuthorization,
 } from "@/lib/server/authorization";
 import { readCustomerSummary,readCustomerListSignals } from "@/lib/server/customerSummaryRead";
+import {readInvoiceVat} from "@/modules/accounting/server-public";
 import { readInvoiceTruth } from "@/lib/server/invoiceTruthRead";
 import {CUSTOMER_LOOKUP_COPY} from '@/ui/situationCatalog';
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -44,7 +47,7 @@ export async function getCustomerSummaryAction(input: { customerId: string }) {
       ? { code: "UNAVAILABLE" as const, message: "Kundenkarte ist derzeit nicht verfügbar." }
       : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  return readCustomerSummary(authorization.data, input);
+  return readCustomerSummary(authorization.data, input,openIntakePredicate());
 }
 
 async function customerAuthorization() {
@@ -165,9 +168,6 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
   activeQuoteCount:number;hints:CustomerListSignals['hints'];complete:boolean;
 }>>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
-
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
   if (!hasAuthorizationArea(authRes.data, "kunden")) {
@@ -185,7 +185,7 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     ).orderBy(customers.createdAt);
-    const signals=await readCustomerListSignals(authRes.data,dbCustomers.map(customer=>customer.id));
+    const signals=await readCustomerListSignals(authRes.data,dbCustomers.map(customer=>customer.id),openIntakePredicate());
     const data = dbCustomers.map((record) => {
       const customer=mapDbCustomer(record),signal=signals.get(record.id);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');
       const readiness=kundeVollstaendigkeit({...customer,customerType:customer.type as CustomerStoredProfile['customerType']},{geld:hasAuthorizationArea(authRes.data,'geld')});
@@ -201,9 +201,6 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
 
 export async function getCustomerByIdDb(id: string): Promise<ActionResult<Customer | null>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
-
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
   if (!hasAuthorizationArea(authRes.data, "kunden")) return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben." };
@@ -243,9 +240,6 @@ export async function updateCustomerDb(id: string, changes: Partial<Customer>): 
 
 export async function searchCustomersDb(query: string): Promise<ActionResult<Customer[]>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
-
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
   if (!hasAuthorizationArea(authRes.data, "kunden")) return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben." };
@@ -286,7 +280,7 @@ export async function getTopKunden(limit = 5) {
     const authRes = await resolveAuthorization();
     if (!authRes.ok) return [];
     const tenantId = authRes.data.tenantId;
-    const invoiceTruth = await readInvoiceTruth(authRes.data);
+    const invoiceTruth = await readInvoiceTruth(authRes.data,{},readInvoiceVat);
     if (invoiceTruth.code !== "OK") return [];
     const revenueByCustomer = new Map<string, number>();
     for (const invoice of invoiceTruth.data) {

@@ -41,6 +41,7 @@ const validReceiptRow = {
   intent_expected_version: 3,
   current_status: "issued",
   current_version: 1,
+  snapshot:{schemaVersion:1,totals:{netAmountCents:5000,vatRateBasisPoints:1900,vatAmountCents:950,grossAmountCents:5950}},
   net_amount_cents: 5000,
   vat_rate_basis_points: 1900,
   vat_amount_cents: 950,
@@ -73,7 +74,8 @@ describe("readInvoiceReceipt", () => {
   });
 
   it("rejects malformed input before opening a transaction", async () => {
-    const { readInvoiceReceipt } = await import("../invoiceRead");
+    const { readInvoiceReceipt: readPort } = await import("../invoiceRead");
+    const readInvoiceReceipt=(authorization:Parameters<typeof readPort>[0],input:unknown)=>readPort(authorization,input,readInvoiceVat);
     await expect(readInvoiceReceipt(buero, null)).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(readInvoiceReceipt(buero, { orderId: ORDER })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(readInvoiceReceipt(buero, { orderId: ORDER, clientEventId: "not-a-uuid" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
@@ -81,7 +83,8 @@ describe("readInvoiceReceipt", () => {
   });
 
   it("forbids missing invoice-read permission without a transaction", async () => {
-    const { readInvoiceReceipt } = await import("../invoiceRead");
+    const { readInvoiceReceipt: readPort } = await import("../invoiceRead");
+    const readInvoiceReceipt=(authorization:Parameters<typeof readPort>[0],input:unknown)=>readPort(authorization,input,readInvoiceVat);
     await expect(readInvoiceReceipt(werkstatt, { orderId: ORDER, clientEventId: CLIENT }))
       .resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();
@@ -89,7 +92,8 @@ describe("readInvoiceReceipt", () => {
 
   it("uses the tenant-scoped privileged transaction port and returns null when nothing matches", async () => {
     execute.mockResolvedValueOnce([]);
-    const { readInvoiceReceipt } = await import("../invoiceRead");
+    const { readInvoiceReceipt: readPort } = await import("../invoiceRead");
+    const readInvoiceReceipt=(authorization:Parameters<typeof readPort>[0],input:unknown)=>readPort(authorization,input,readInvoiceVat);
     await expect(readInvoiceReceipt(buero, { orderId: ORDER, clientEventId: CLIENT })).resolves.toEqual({ code: "OK", data: null });
     expect(withTransaction).toHaveBeenCalledWith(buero, expect.any(Function));
     expect(execute.mock.calls[0]?.[0].text).toContain("private.v_invoice_receipt_v1");
@@ -97,7 +101,8 @@ describe("readInvoiceReceipt", () => {
 
   it("returns the exact stored receipt bytes unchanged for a valid contract row", async () => {
     execute.mockResolvedValueOnce([validReceiptRow]);
-    const { readInvoiceReceipt } = await import("../invoiceRead");
+    const { readInvoiceReceipt: readPort } = await import("../invoiceRead");
+    const readInvoiceReceipt=(authorization:Parameters<typeof readPort>[0],input:unknown)=>readPort(authorization,input,readInvoiceVat);
     await expect(readInvoiceReceipt(buero, { orderId: ORDER, clientEventId: CLIENT })).resolves.toEqual({
       code: "OK",
       data: {
@@ -126,7 +131,8 @@ describe("readInvoiceReceipt", () => {
   });
 
   it("fails closed to UNAVAILABLE on an ambiguous match, an integrity-broken row, or a database error", async () => {
-    const { readInvoiceReceipt } = await import("../invoiceRead");
+    const { readInvoiceReceipt: readPort } = await import("../invoiceRead");
+    const readInvoiceReceipt=(authorization:Parameters<typeof readPort>[0],input:unknown)=>readPort(authorization,input,readInvoiceVat);
 
     execute.mockResolvedValueOnce([validReceiptRow, { ...validReceiptRow, event_id: CORRELATION }]);
     await expect(readInvoiceReceipt(buero, { orderId: ORDER, clientEventId: CLIENT })).resolves.toMatchObject({ code: "UNAVAILABLE" });
@@ -278,7 +284,8 @@ describe("readInvoiceSummaries", () => {
       customer_id: "f1-4-customer-text-id",
       invoice_number: "R-2026-0009",
       status: "issued",
-      net_amount_cents: 5000,
+      snapshot:{schemaVersion:1,totals:{netAmountCents:5000,vatRateBasisPoints:1900,vatAmountCents:950,grossAmountCents:5950}},
+  net_amount_cents: 5000,
       vat_rate_basis_points: 1900,
       vat_amount_cents: 950,
       gross_amount_cents: 5950,
@@ -299,7 +306,8 @@ describe("readInvoiceSummaries", () => {
       integrity_ok: true,
     };
     execute.mockResolvedValueOnce([base]);
-    const { readInvoiceSummaries } = await import("../invoiceRead");
+    const { readInvoiceSummaries: readPort } = await import("../invoiceRead");
+    const readInvoiceSummaries=(authorization:Parameters<typeof readPort>[0])=>readPort(authorization,readInvoiceVat);
     const issued = await readInvoiceSummaries(buero);
     expect(issued).toMatchObject({
       code: "OK",
@@ -328,3 +336,10 @@ describe("readInvoiceSummaries", () => {
     });
   });
 });
+
+// Explicit synthetic dependency boundary; VAT arithmetic is tested in the accounting module and real DB cases.
+function readInvoiceVat(value:unknown){
+ const row=value as Record<string,unknown>;
+ if(Number(row.net_amount_cents)!==5000||row.net_amount_cents===null||Number(row.vat_rate_basis_points)!==1900||row.vat_rate_basis_points===null||Number(row.vat_amount_cents)!==950||Number(row.gross_amount_cents)!==5950)throw Error('TEST_DECLARED_ORIGINAL_MISMATCH');
+ return {groups:[{rateBp:1900 as const,netCents:5000,vatCents:950,grossCents:5950}],netAmountCents:5000,vatAmountCents:950,grossAmountCents:5950,headRate:1900,reverseCharge:false};
+}

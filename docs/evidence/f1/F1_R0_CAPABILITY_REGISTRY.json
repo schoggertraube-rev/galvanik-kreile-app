@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 15,
     "api_routes": 3,
-    "server_action_groups": 49,
+    "server_action_groups": 46,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 93
+    "total": 90
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -581,7 +581,8 @@
         "cancelInvoiceAction",
         "getInvoiceReceiptAction",
         "getInvoiceCancellationReceiptAction",
-        "getInvoiceSummariesAction"
+        "getInvoiceSummariesAction",
+        "getInvoiceTruthAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "F1.4 immutable invoice issue, cancellation and receipt/readback candidate. Real local E2E and independent exact-SHA acceptance are pending.",
@@ -705,20 +706,6 @@
       "open_reason": "PDF label/delivery note generation. No verified contract.",
       "visible": false,
       "reachable": true
-    },
-    {
-      "stable_id": "server-actions.performance",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/performance.actions.ts",
-      "exported_functions": [
-        "getOrdersKPIs",
-        "getInquiriesFunnel",
-        "getUsageStats"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Performance KPI actions. Supabase-connected but no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
     },
     {
       "stable_id": "server-actions.price-lines",
@@ -937,31 +924,6 @@
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Marketing analytics. No verified external data source. ROI action uses getSparzaehlerAnalysisAction for real data but neukundenUmsatz is hardcoded (see page.buchhaltung LEGACY_REMOVE).",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "server-actions.marketing-attribution",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/marketing/attribution/actions.ts",
-      "exported_functions": [
-        "getAttributionData"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Marketing attribution. No verified external provider integration.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "server-actions.marketing-einwilligungen",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/marketing/einwilligungen/actions.ts",
-      "exported_functions": [
-        "getEinwilligungen",
-        "checkEinwilligung"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Marketing consent management. Supabase-connected, no verified E2E.",
       "visible": false,
       "reachable": false
     },

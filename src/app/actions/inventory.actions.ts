@@ -6,10 +6,9 @@ import {
   inventoryItems,
   stockMovements,
 } from "@/db/schema";
-import {
-  checkAppAuthorization,
-  type ActionResult,
-} from "@/lib/server/authHelper";
+import type {ActionResult} from "@/lib/server/authHelper";
+import {resolveAuthorization,hasAuthorizationArea} from "@/lib/server/authorization";
+import {LEGACY_ACTION_ACCESS_COPY} from "@/ui/situationCatalog";
 import type {
   CreateStockMovementInput,
   InventoryCategory,
@@ -68,7 +67,7 @@ function toFiniteNumber(value: string | number | null): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function toInventoryItem(row: InventoryRow): InventoryItem {
+function toInventoryItem(row: InventoryRow,showPrices:boolean): InventoryItem {
   const category = toCategory(row.category);
 
   return {
@@ -79,7 +78,7 @@ function toInventoryItem(row: InventoryRow): InventoryItem {
     currentStock: row.currentStock ?? 0,
     minStock: row.minStock ?? 0,
     isConsumable: category !== "tooling",
-    pricePerUnit: toFiniteNumber(row.einkaufspreisEur),
+    pricePerUnit: showPrices?toFiniteNumber(row.einkaufspreisEur):undefined,
   };
 }
 
@@ -149,8 +148,9 @@ function databaseFailure<T>(message: string, error: unknown): ActionResult<T> {
 }
 
 export async function getInventoryItemsAction(): Promise<ActionResult<InventoryItem[]>> {
-  const auth = await checkAppAuthorization("read");
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return {ok:false,error:"UNAUTHORIZED",message:auth.message};
+  if (!hasAuthorizationArea(auth.data,"auftraege")) return {ok:false,error:"FORBIDDEN",message:LEGACY_ACTION_ACCESS_COPY.forbidden};
 
   try {
     const rows = await db
@@ -159,15 +159,16 @@ export async function getInventoryItemsAction(): Promise<ActionResult<InventoryI
       .where(eq(inventoryItems.tenantId, auth.data.tenantId))
       .orderBy(inventoryItems.name);
 
-    return { ok: true, data: rows.map(toInventoryItem) };
+    return { ok: true, data: rows.map(row=>toInventoryItem(row,hasAuthorizationArea(auth.data,"geld"))) };
   } catch (error) {
     return databaseFailure("getInventoryItemsAction failed:", error);
   }
 }
 
 export async function getInventoryMovementsAction(): Promise<ActionResult<StockMovement[]>> {
-  const auth = await checkAppAuthorization("read");
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return {ok:false,error:"UNAUTHORIZED",message:auth.message};
+  if (!hasAuthorizationArea(auth.data,"auftraege")) return {ok:false,error:"FORBIDDEN",message:LEGACY_ACTION_ACCESS_COPY.forbidden};
 
   try {
     const rows = await db
@@ -175,9 +176,9 @@ export async function getInventoryMovementsAction(): Promise<ActionResult<StockM
       .from(stockMovements)
       .leftJoin(
         inventoryItems,
-        eq(inventoryItems.id, stockMovements.inventoryItemId),
+        and(eq(inventoryItems.id, stockMovements.inventoryItemId),eq(inventoryItems.tenantId,auth.data.tenantId)),
       )
-      .leftJoin(appUsers, eq(appUsers.id, stockMovements.erfasstVon))
+      .leftJoin(appUsers, and(eq(appUsers.id, stockMovements.erfasstVon),eq(appUsers.tenantId,auth.data.tenantId)))
       .where(eq(stockMovements.tenantId, auth.data.tenantId))
       .orderBy(desc(stockMovements.createdAt));
 
@@ -190,8 +191,9 @@ export async function getInventoryMovementsAction(): Promise<ActionResult<StockM
 export async function getInventoryItemAction(
   rawId: string,
 ): Promise<ActionResult<InventoryItem | null>> {
-  const auth = await checkAppAuthorization("read");
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return {ok:false,error:"UNAUTHORIZED",message:auth.message};
+  if (!hasAuthorizationArea(auth.data,"auftraege")) return {ok:false,error:"FORBIDDEN",message:LEGACY_ACTION_ACCESS_COPY.forbidden};
 
   let id: string;
   try {
@@ -215,7 +217,7 @@ export async function getInventoryItemAction(
       )
       .limit(1);
 
-    return { ok: true, data: row ? toInventoryItem(row) : null };
+    return { ok: true, data: row ? toInventoryItem(row,hasAuthorizationArea(auth.data,"geld")) : null };
   } catch (error) {
     return databaseFailure("getInventoryItemAction failed:", error);
   }
@@ -224,8 +226,9 @@ export async function getInventoryItemAction(
 export async function getInventoryMovementsByItemAction(
   rawInventoryItemId: string,
 ): Promise<ActionResult<StockMovement[]>> {
-  const auth = await checkAppAuthorization("read");
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return {ok:false,error:"UNAUTHORIZED",message:auth.message};
+  if (!hasAuthorizationArea(auth.data,"auftraege")) return {ok:false,error:"FORBIDDEN",message:LEGACY_ACTION_ACCESS_COPY.forbidden};
 
   let inventoryItemId: string;
   try {
@@ -243,9 +246,9 @@ export async function getInventoryMovementsByItemAction(
       .from(stockMovements)
       .leftJoin(
         inventoryItems,
-        eq(inventoryItems.id, stockMovements.inventoryItemId),
+        and(eq(inventoryItems.id, stockMovements.inventoryItemId),eq(inventoryItems.tenantId,auth.data.tenantId)),
       )
-      .leftJoin(appUsers, eq(appUsers.id, stockMovements.erfasstVon))
+      .leftJoin(appUsers, and(eq(appUsers.id, stockMovements.erfasstVon),eq(appUsers.tenantId,auth.data.tenantId)))
       .where(
         and(
           eq(stockMovements.tenantId, auth.data.tenantId),

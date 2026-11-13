@@ -55,7 +55,7 @@ export async function listOutlookInboxAction(input?: TargetInput) {
   const canonical=await readLinkedIntakeMails(authorizationResult.data,input);
   if(canonical.code!=='OK')return canonical;
   const unique=new Map([...legacy.data,...canonical.data].map(message=>[message.id,message]));
-  return {code:'OK' as const,data:[...unique.values()].sort((a,b)=>Date.parse(b.receivedAt)-Date.parse(a.receivedAt))};
+  return {code:'OK' as const,data:[...unique.values()].sort((a,b)=>{const left=a.receivedAt===null?NaN:Date.parse(a.receivedAt),right=b.receivedAt===null?NaN:Date.parse(b.receivedAt);return !Number.isFinite(left)?!Number.isFinite(right)?0:1:!Number.isFinite(right)?-1:right-left;})};
 }
 
 export async function attachOutlookMailAction(input: TargetInput & { graphMessageId: string }) {

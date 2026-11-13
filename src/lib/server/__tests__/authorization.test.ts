@@ -11,7 +11,7 @@ import {
 import * as appSessionModule from "../appSession";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
-import { checkAppSession, checkAppAuth } from "../authHelper";
+import { checkAppSession, readAuthorizedArea } from "../authHelper";
 import {
   getAuthorizationSnapshotAction,
   getMyPermissionsAction,
@@ -300,7 +300,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("12. checkAppAuth() nutzt ausschließlich Resolver", async () => {
+  it("12. readAuthorizedArea() nutzt ausschließlich Resolver", async () => {
     vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
       ok: true,
       session: {
@@ -322,10 +322,10 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       },
     ] as unknown as Array<typeof appUsers.$inferSelect>);
 
-    const result = await checkAppAuth("write");
+    const result = await readAuthorizedArea("einstellungen");
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data).toBe("admin");
+      expect(result.data.role).toBe("admin");
     }
   });
 

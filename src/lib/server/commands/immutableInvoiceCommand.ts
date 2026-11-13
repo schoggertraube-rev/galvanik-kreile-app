@@ -1,7 +1,8 @@
+import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
+import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
-import {QUOTE_COMMERCIAL_SOURCE_COPY} from '@/ui/situationCatalog';
+import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
-import {customerCountryLabel} from "@/modules/customers/public";
 
 import { createHash, randomUUID } from "node:crypto";
 import { renderToBuffer } from "@react-pdf/renderer";
@@ -61,7 +62,7 @@ type ImmutableInvoiceReceiptBase = {
   orderVersion: number;
   status: "issued";
   netAmountCents: number;
-  vatRateBasisPoints: number;
+  vatRateBasisPoints: number|null;
   vatAmountCents: number;
   grossAmountCents: number;
   serviceDate: string;
@@ -171,6 +172,7 @@ type SourceRow = {
   customer_zip: string | null;
   customer_city: string | null;
   customer_country: string | null;
+  customer_vat_id: string | null;
   seller_company_name: string | null;
   seller_street: string | null;
   seller_zip: string | null;
@@ -217,7 +219,8 @@ type ReceiptRow = {
   current_status: string;
   current_version: number;
   net_amount_cents: number | string;
-  vat_rate_basis_points: number;
+  vat_rate_basis_points: number|null;
+  snapshot: unknown;
   vat_amount_cents: number | string;
   gross_amount_cents: number | string;
   service_date: Date | string;
@@ -241,6 +244,9 @@ type LockedInvoice = {
   pdf_ref: string;
   pdf_sha256: string;
   pdf_content: Buffer | Uint8Array;
+  net_amount_cents: number | string | null;
+  vat_rate_basis_points: number | string | null;
+  vat_amount_cents: number | string | null;
   gross_amount_cents: number | string | null;
   payment_contract_version: number | string | null;
   payment_mode: string | null;
@@ -324,6 +330,16 @@ function isValidCancelInput(input: unknown): input is CancelInvoiceInput {
  * VALIDATION_ERROR result *before* an invoice number is allocated.
  */
 class InvoiceMasterDataError extends Error {}
+class InvoiceVatRateError extends InvoiceMasterDataError {
+  constructor(readonly part:string,readonly missingCompany=false){super("INVOICE_LINE_VAT_RATE_MISSING");}
+}
+const INVOICE_EU_OUTSIDE_DE=new Set(['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE']);
+function invoiceLineVat(value:unknown,part:string,reverseCharge:boolean,companyRate:number|null):0|700|1900{
+  if(reverseCharge)return 0;
+  if(value===null){if(companyRate===700||companyRate===1900)return companyRate;throw new InvoiceVatRateError(part,true);}
+  if(value!==700&&value!==1900)throw new InvoiceVatRateError(part);
+  return value;
+}
 
 function toIso(value: unknown): string {
   const parsed = value instanceof Date ? value : new Date(value as string);
@@ -435,11 +451,12 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[]):
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 }
 
-function parseBaseLines(value: unknown): ImmutableInvoiceBaseLine[] {
+function parseBaseLines(value: unknown, vat?:{reverseCharge:boolean;companyRate:number|null}): ImmutableInvoiceBaseLine[] {
   if (!Array.isArray(value)) throw new Error("INVOICE_BASE_LINES_INVALID");
   return value.map((entry) => {
     if (!plainObject(entry) || !exactKeys(entry, [
       "itemId", "lineNetAmountCents", "name", "quantity", "unitNetAmountCents",
+      ...(vat ? ["vat_rate_basis_points"] : []),
     ])) throw new Error("INVOICE_BASE_LINE_SHAPE_INVALID");
     const quantity = toSafeInteger(entry.quantity, "INVOICE_BASE_LINE_QUANTITY_INVALID");
     const unitNetAmountCents = toSafeInteger(entry.unitNetAmountCents, "INVOICE_BASE_LINE_UNIT_INVALID");
@@ -454,15 +471,18 @@ function parseBaseLines(value: unknown): ImmutableInvoiceBaseLine[] {
     if (lineNetAmountCents < 0 || unitNetAmountCents !== Number((BigInt(lineNetAmountCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity))) {
       throw new Error("INVOICE_BASE_LINE_INTEGRITY_INVALID");
     }
-    return { type: "BASE" as const, itemId, name, quantity, unitNetAmountCents, lineNetAmountCents };
+    return { type: "BASE" as const, itemId, name, quantity, unitNetAmountCents, lineNetAmountCents,
+      ...(vat ? {vat_rate_basis_points:invoiceLineVat(entry.vat_rate_basis_points,name,vat.reverseCharge,vat.companyRate)} : {}),
+    };
   });
 }
 
-function parseExtraWorkLines(value: unknown): ImmutableInvoiceExtraWorkLine[] {
+function parseExtraWorkLines(value: unknown, vat?:{reverseCharge:boolean;companyRate:number|null}): ImmutableInvoiceExtraWorkLine[] {
   if (!Array.isArray(value)) throw new Error("INVOICE_EXTRA_WORK_LINES_INVALID");
   return value.map((entry) => {
     if (!plainObject(entry) || !exactKeys(entry, [
       "amountCents", "catalogPositionId", "catalogPositionName", "hourlyRateCents", "itemId", "minutes",
+      ...(vat ? ["vat_rate_basis_points"] : []),
     ])) throw new Error("INVOICE_EXTRA_WORK_LINE_SHAPE_INVALID");
     const minutes = toSafeInteger(entry.minutes, "INVOICE_EXTRA_WORK_MINUTES_INVALID");
     const hourlyRateCents = toSafeInteger(entry.hourlyRateCents, "INVOICE_EXTRA_WORK_RATE_INVALID");
@@ -484,17 +504,19 @@ function parseExtraWorkLines(value: unknown): ImmutableInvoiceExtraWorkLine[] {
       minutes,
       hourlyRateCents,
       amountCents,
+      ...(vat ? {vat_rate_basis_points:invoiceLineVat(entry.vat_rate_basis_points,catalogPositionName,vat.reverseCharge,vat.companyRate)} : {}),
     };
   });
 }
 
-function parseStoredLine(value: unknown): ImmutableInvoiceLine {
+function parseStoredLine(value: unknown, schemaVersion: 1|2): ImmutableInvoiceLine {
   if (!plainObject(value) || typeof value.type !== "string") {
     throw new Error("INVOICE_SNAPSHOT_LINE_INVALID");
   }
   if (value.type === "BASE") {
     if (!exactKeys(value, [
       "itemId", "lineNetAmountCents", "name", "quantity", "type", "unitNetAmountCents",
+      ...(schemaVersion === 2 ? ["vat_rate_basis_points"] : []),
     ])) throw new Error("INVOICE_SNAPSHOT_BASE_LINE_SHAPE_INVALID");
     const parsed = parseBaseLines([{
       itemId: value.itemId,
@@ -505,12 +527,13 @@ function parseStoredLine(value: unknown): ImmutableInvoiceLine {
     }]);
     const line = parsed[0];
     if (!line) throw new Error("INVOICE_SNAPSHOT_BASE_LINE_INVALID");
-    return line;
+    return schemaVersion === 2 ? {...value,...line} as ImmutableInvoiceLine : line;
   }
   if (value.type === "EXTRA_WORK") {
     if (!exactKeys(value, [
       "amountCents", "catalogPositionId", "catalogPositionName", "hourlyRateCents",
       "itemId", "minutes", "type",
+      ...(schemaVersion === 2 ? ["vat_rate_basis_points"] : []),
     ])) throw new Error("INVOICE_SNAPSHOT_EXTRA_WORK_LINE_SHAPE_INVALID");
     const parsed = parseExtraWorkLines([{
       amountCents: value.amountCents,
@@ -522,17 +545,17 @@ function parseStoredLine(value: unknown): ImmutableInvoiceLine {
     }]);
     const line = parsed[0];
     if (!line) throw new Error("INVOICE_SNAPSHOT_EXTRA_WORK_LINE_INVALID");
-    return line;
+    return schemaVersion === 2 ? {...value,...line} as ImmutableInvoiceLine : line;
   }
   throw new Error("INVOICE_SNAPSHOT_LINE_TYPE_INVALID");
 }
 
-function parseStoredSnapshot(value: unknown, invoice: LockedInvoice): ImmutableInvoiceSnapshot {
+function parseStoredSnapshot(value: unknown, invoice: LockedInvoice, readVat: InvoiceVatReader): ImmutableInvoiceSnapshot {
   if (!plainObject(value) || !exactKeys(value, [
     "customer", "issuedAt", "lines", "order", "paymentTermDays", "schemaVersion",
     "seller", "serviceDate", "totals",
   ])) throw new Error("INVOICE_SNAPSHOT_SHAPE_INVALID");
-  if (value.schemaVersion !== 1 || !plainObject(value.seller) || !plainObject(value.customer)
+  if ((value.schemaVersion !== 1 && value.schemaVersion !== 2) || !plainObject(value.seller) || !plainObject(value.customer)
     || !plainObject(value.order) || !plainObject(value.totals) || !Array.isArray(value.lines)) {
     throw new Error("INVOICE_SNAPSHOT_TYPE_INVALID");
   }
@@ -541,31 +564,29 @@ function parseStoredSnapshot(value: unknown, invoice: LockedInvoice): ImmutableI
   ])) throw new Error("INVOICE_SNAPSHOT_SELLER_SHAPE_INVALID");
   if (!exactKeys(value.customer, [
     "city", "companyName", "contactPerson", "country", "name", "street", "zip",
+    ...(value.schemaVersion === 2 ? ["vatId"] : []),
   ])) throw new Error("INVOICE_SNAPSHOT_CUSTOMER_SHAPE_INVALID");
   if (!exactKeys(value.order, ["freezeId", "orderId", "orderNumber", "orderVersion", "title"])) {
     throw new Error("INVOICE_SNAPSHOT_ORDER_SHAPE_INVALID");
   }
   if (!exactKeys(value.totals, [
     "grossAmountCents", "netAmountCents", "vatAmountCents", "vatRateBasisPoints",
+    ...(value.schemaVersion === 2 ? ["vatBreakdown"] : []),
   ])) throw new Error("INVOICE_SNAPSHOT_TOTALS_SHAPE_INVALID");
 
   const orderVersion = toSafeInteger(value.order.orderVersion, "INVOICE_SNAPSHOT_ORDER_VERSION_INVALID");
-  const netAmountCents = toSafeInteger(value.totals.netAmountCents, "INVOICE_SNAPSHOT_NET_INVALID");
-  const vatRateBasisPoints = toSafeInteger(value.totals.vatRateBasisPoints, "INVOICE_SNAPSHOT_VAT_RATE_INVALID");
-  const vatAmountCents = toSafeInteger(value.totals.vatAmountCents, "INVOICE_SNAPSHOT_VAT_INVALID");
-  const grossAmountCents = toSafeInteger(value.totals.grossAmountCents, "INVOICE_SNAPSHOT_GROSS_INVALID");
+  const vat = readVat(invoice);
+  const {netAmountCents,vatAmountCents,grossAmountCents,headRate:vatRateBasisPoints} = vat;
   const paymentTermDays = toSafeInteger(value.paymentTermDays, "INVOICE_SNAPSHOT_PAYMENT_TERM_INVALID");
   const issuedAt = toIso(value.issuedAt);
   const serviceDate = toDateOnly(value.serviceDate);
-  const lines = value.lines.map(parseStoredLine);
+  const schemaVersion = value.schemaVersion;
+  const lines = value.lines.map(line => parseStoredLine(line, schemaVersion));
   if (
     value.order.orderId !== invoice.order_id
     || orderVersion < 1
     || lines.length < 1
     || netAmountCents < 0
-    || ![700, 1900].includes(vatRateBasisPoints)
-    || vatAmountCents !== Math.round((netAmountCents * vatRateBasisPoints) / 10000)
-    || grossAmountCents !== netAmountCents + vatAmountCents
     || paymentTermDays < 1
     || paymentTermDays > 365
   ) throw new Error("INVOICE_SNAPSHOT_INTEGRITY_INVALID");
@@ -576,7 +597,7 @@ function parseStoredSnapshot(value: unknown, invoice: LockedInvoice): ImmutableI
   };
 
   return {
-    schemaVersion: 1,
+    schemaVersion,
     seller: {
       companyName: requiredText(value.seller.companyName, "INVOICE_SNAPSHOT_SELLER_NAME_INVALID"),
       street: requiredText(value.seller.street, "INVOICE_SNAPSHOT_SELLER_STREET_INVALID"),
@@ -596,6 +617,7 @@ function parseStoredSnapshot(value: unknown, invoice: LockedInvoice): ImmutableI
       zip: requiredText(value.customer.zip, "INVOICE_SNAPSHOT_CUSTOMER_ZIP_INVALID"),
       city: requiredText(value.customer.city, "INVOICE_SNAPSHOT_CUSTOMER_CITY_INVALID"),
       country: requiredText(value.customer.country, "INVOICE_SNAPSHOT_CUSTOMER_COUNTRY_INVALID"),
+      ...(schemaVersion === 2 ? {vatId:optionalSnapshotText(value.customer.vatId,"INVOICE_SNAPSHOT_CUSTOMER_VAT_ID_INVALID")} : {}),
     },
     order: {
       orderId: requiredText(value.order.orderId, "INVOICE_SNAPSHOT_ORDER_ID_INVALID"),
@@ -605,7 +627,9 @@ function parseStoredSnapshot(value: unknown, invoice: LockedInvoice): ImmutableI
       freezeId: requiredText(value.order.freezeId, "INVOICE_SNAPSHOT_FREEZE_ID_INVALID"),
     },
     lines,
-    totals: { netAmountCents, vatRateBasisPoints, vatAmountCents, grossAmountCents },
+    totals: { netAmountCents, vatRateBasisPoints, vatAmountCents, grossAmountCents,
+      ...(schemaVersion === 2 ? {vatBreakdown:vat.groups} : {}),
+    },
     serviceDate,
     issuedAt,
     paymentTermDays,
@@ -629,10 +653,13 @@ type PreparedInvoiceContent = {
 function prepareInvoiceContent(
   source: SourceRow,
   order: LockedOrder,
-  vatRateBasisPoints: number,
 ): PreparedInvoiceContent {
-  const baseLines = parseBaseLines(source.base_lines);
-  const extraWorkLines = parseExtraWorkLines(source.extra_work_lines);
+  const customerCountry=masterDataText(source.customer_country,"INVOICE_CUSTOMER_COUNTRY_INVALID");
+  const customerVatId=optionalText(source.customer_vat_id);
+  const reverseCharge=INVOICE_EU_OUTSIDE_DE.has(customerCountry)&&customerVatId!==null;
+  const vatSource={reverseCharge,companyRate:source.invoice_vat_rate_basis_points};
+  const baseLines = parseBaseLines(source.base_lines,vatSource);
+  const extraWorkLines = parseExtraWorkLines(source.extra_work_lines,vatSource);
   if (
     baseLines.length !== toSafeInteger(source.base_line_count, "INVOICE_BASE_LINE_COUNT_INVALID")
     || extraWorkLines.length !== toSafeInteger(source.extra_work_line_count, "INVOICE_EXTRA_WORK_LINE_COUNT_INVALID")
@@ -649,8 +676,21 @@ function prepareInvoiceContent(
   ) throw new Error("INVOICE_LINE_TOTAL_MISMATCH");
 
   const netAmountCents = baseNetAmountCents + extraWorkNetAmountCents;
-  const vatAmountCents = Math.round((netAmountCents * vatRateBasisPoints) / 10000);
-  const grossAmountCents = netAmountCents + vatAmountCents;
+  const byRate=new Map<0|700|1900,number>();
+  for(const line of [...baseLines,...extraWorkLines]){
+    const rate=line.vat_rate_basis_points;
+    if(rate===undefined)throw Error("INVOICE_LINE_RATE_REQUIRED");
+    const amount=line.type==="BASE"?line.lineNetAmountCents:line.amountCents;
+    const accumulated=(byRate.get(rate)??0)+amount;
+    if(!Number.isSafeInteger(accumulated))throw Error("INVOICE_AMOUNT_UNSAFE");
+    byRate.set(rate,accumulated);
+  }
+  const vatBreakdown:InvoiceVatGroup[]=[...byRate].map(([rateBp,netCents])=>{
+    const vatCents=Number((BigInt(netCents)*BigInt(rateBp)+BigInt(5000))/BigInt(10000));
+    return {rateBp,netCents,vatCents,grossCents:netCents+vatCents};
+  });
+  const vatAmountCents=vatBreakdown.reduce((sum,group)=>sum+group.vatCents,0);
+  const grossAmountCents=vatBreakdown.reduce((sum,group)=>sum+group.grossCents,0);
   if (
     !Number.isSafeInteger(netAmountCents)
     || !Number.isSafeInteger(vatAmountCents)
@@ -677,7 +717,8 @@ function prepareInvoiceContent(
       street: masterDataText(source.customer_street, "INVOICE_CUSTOMER_STREET_INVALID"),
       zip: masterDataText(source.customer_zip, "INVOICE_CUSTOMER_ZIP_INVALID"),
       city: masterDataText(source.customer_city, "INVOICE_CUSTOMER_CITY_INVALID"),
-      country: customerCountryLabel(masterDataText(source.customer_country, "INVOICE_CUSTOMER_COUNTRY_INVALID")),
+      country: customerCountry,
+      vatId:customerVatId,
     },
     order: {
       orderId: order.id,
@@ -687,20 +728,17 @@ function prepareInvoiceContent(
       freezeId: requiredText(source.freeze_id, "INVOICE_FREEZE_ID_INVALID"),
     },
     lines: [...baseLines, ...extraWorkLines] as ImmutableInvoiceLine[],
-    totals: { netAmountCents, vatRateBasisPoints, vatAmountCents, grossAmountCents },
+    totals: { netAmountCents, vatRateBasisPoints:null, vatBreakdown, vatAmountCents, grossAmountCents },
   };
 }
 
-function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string): ImmutableInvoiceReceipt {
+function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string,readVat:InvoiceVatReader): ImmutableInvoiceReceipt {
   const orderVersion = toSafeInteger(row.order_version, "INVOICE_RECEIPT_ORDER_VERSION_INVALID");
   const intentExpectedVersion = toSafeInteger(
     row.intent_expected_version,
     "INVOICE_RECEIPT_INTENT_VERSION_INVALID",
   );
-  const netAmountCents = toSafeInteger(row.net_amount_cents, "INVOICE_RECEIPT_NET_INVALID");
-  const vatAmountCents = toSafeInteger(row.vat_amount_cents, "INVOICE_RECEIPT_VAT_INVALID");
-  const grossAmountCents = toSafeInteger(row.gross_amount_cents, "INVOICE_RECEIPT_GROSS_INVALID");
-  const vatRateBasisPoints = toSafeInteger(row.vat_rate_basis_points, "INVOICE_RECEIPT_RATE_INVALID");
+  const {netAmountCents,vatAmountCents,grossAmountCents,headRate:vatRateBasisPoints}=readVat(row);
   const aggregateVersion = toSafeInteger(row.aggregate_version, "INVOICE_RECEIPT_VERSION_INVALID");
   const eventSchemaVersion = toSafeInteger(row.event_schema_version, "INVOICE_RECEIPT_SCHEMA_INVALID");
   const serviceDate = toDateOnly(row.service_date);
@@ -737,9 +775,7 @@ function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string): Immutab
     || row.original_pdf_sha256 !== row.pdf_sha256
     || netAmountCents < 0
     || vatAmountCents < 0
-    || ![700, 1900].includes(vatRateBasisPoints)
     || grossAmountCents !== netAmountCents + vatAmountCents
-    || vatAmountCents !== Math.round((netAmountCents * vatRateBasisPoints) / 10000)
   ) throw new Error("INVOICE_RECEIPT_INVALID");
 
   const receipt: ImmutableInvoiceReceiptBase = {
@@ -917,7 +953,7 @@ export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantI
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:order:' || ${tenantId} || ':' || ${input.orderId}, 0))`);
 }
 
-export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction): Promise<CreateInvoiceResult> {
+export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Rechnungsanfrage." };
   }
@@ -954,7 +990,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         // Validate the complete persisted original before comparing the caller.
         // A valid receipt owned by another actor is a key conflict, not an outage;
         // damaged receipts still fail the unchanged integrity validator.
-        const receipt = mapReceipt(replayRows[0], tenantId, replayRows[0].actor_id);
+        const receipt = mapReceipt(replayRows[0], tenantId, replayRows[0].actor_id,requireVatReader(readVat));
         return receipt.issuedBy === actorId && receiptMatchesIntent(receipt, input)
           ? { code: "OK", receipt, replayed: true }
           : { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
@@ -1044,19 +1080,19 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       }
       const commercial=source.has_quote?await readOrderCommercialQuote(tx,tenantId,order.id):null;
       if(commercial){
-        const rate=commercial.vatRateBasisPoints??source.invoice_vat_rate_basis_points;
-        if(rate===null)return {code:'VALIDATION_ERROR',message:QUOTE_COMMERCIAL_SOURCE_COPY.missingVat};
-        // This invoice contract has one VAT rate: never replace an awarded
-        // position's different rate with today's company setting.
-        if(commercial.positions.some(row=>row.vatRateBasisPoints!=null&&row.vatRateBasisPoints!==rate))return {code:'VALIDATION_ERROR',message:'Stammdaten für die Rechnungsausgabe sind unvollständig.'};
         source.base_lines=commercial.positions.map(row=>{
           const quantity=row.quantity;
-          return {itemId:row.itemId,name:row.name,quantity,unitNetAmountCents:Number((BigInt(row.lineTotalCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity)),lineNetAmountCents:row.lineTotalCents};
+          return {itemId:row.itemId,name:row.name,quantity,unitNetAmountCents:Number((BigInt(row.lineTotalCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity)),lineNetAmountCents:row.lineTotalCents,vat_rate_basis_points:row.vatRateBasisPoints??commercial.vatRateBasisPoints};
+        });
+        if(!Array.isArray(source.extra_work_lines))throw Error('INVOICE_QUOTE_EXTRA_WORK_SOURCE_INVALID');
+        source.extra_work_lines=source.extra_work_lines.map(line=>{
+          if(!plainObject(line)||typeof line.itemId!=='string')throw Error('INVOICE_QUOTE_EXTRA_WORK_SOURCE_INVALID');
+          const positions=commercial.positions.filter(position=>position.itemId===line.itemId);
+          return {...line,vat_rate_basis_points:positions.length===1?(positions[0].vatRateBasisPoints??commercial.vatRateBasisPoints??null):line.vat_rate_basis_points};
         });
         // The existing canonical awarded-quote port proves these prices; no price is copied into an intake intent.
         source.base_line_count=commercial.positions.length;source.base_net_amount_cents=commercial.totalNetCents;
         source.base_prices_complete=source.base_line_count>0&&commercial.positions.every(row=>Number.isSafeInteger(row.lineTotalCents)&&row.lineTotalCents>=0);
-        source.invoice_vat_rate_basis_points=rate;
         // Recompose the existing structural guards with the canonical quote price proof.
         // The legacy SQL projection includes item prices in integrity_ok, which are
         // deliberately absent for a quote-backed intake. No structural guard is waived.
@@ -1075,7 +1111,6 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         || !source.seller_config_complete
         || !source.customer_config_complete
         || !source.base_prices_complete
-        || source.invoice_vat_rate_basis_points === null
       ) {
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
@@ -1084,13 +1119,11 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       const requestedPaymentTermDays = agreement?.type === "zahlungsziel"
         ? agreement.targetDays
         : sourcePaymentTermDays;
-      const vatRateBasisPoints = toSafeInteger(source.invoice_vat_rate_basis_points, "INVOICE_VAT_RATE_INVALID");
       if (
         typeof requestedPaymentTermDays !== "number"
         || !Number.isSafeInteger(requestedPaymentTermDays)
         || requestedPaymentTermDays < 1
         || requestedPaymentTermDays > 365
-        || ![700, 1900].includes(vatRateBasisPoints)
       ) {
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
@@ -1100,17 +1133,27 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       // an incomplete tenant, customer, order or position cannot consume one.
       let content: PreparedInvoiceContent;
       try {
-        content = prepareInvoiceContent(source, order, vatRateBasisPoints);
+        content = prepareInvoiceContent(source, order);
       } catch (error) {
+        if (error instanceof InvoiceVatRateError) return {code:"VALIDATION_ERROR",message:error.missingCompany?INVOICE_VAT_COPY.missingCompanyRate(error.part):INVOICE_VAT_COPY.missingRate(error.part)};
         if (error instanceof InvoiceMasterDataError) {
           return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
         }
         throw error;
       }
-      const { netAmountCents, vatAmountCents, grossAmountCents } = content.totals;
+      const { netAmountCents, vatRateBasisPoints, vatAmountCents, grossAmountCents } = content.totals;
       if(commercial){
         const bound=await bindOrderQuoteCommercialTerms(tx,authorization.data,order.id);
-        if(bound.vatRateBasisPoints!==vatRateBasisPoints||bound.totalNetCents!==commercial.totalNetCents)throw Error('QUOTE_COMMERCIAL_TERMS_CHANGED_DURING_INVOICE');
+        const unchanged=bound.quoteId===commercial.quoteId&&bound.edition===commercial.edition
+          &&bound.totalNetCents===commercial.totalNetCents&&bound.positions.length===commercial.positions.length
+          &&new Set(bound.positions.map(position=>position.itemId)).size===bound.positions.length
+          &&bound.positions.every(position=>{
+            const prior=commercial.positions.filter(original=>original.itemId===position.itemId);
+            return prior.length===1&&prior[0].quantity===position.quantity&&prior[0].lineTotalCents===position.lineTotalCents
+              &&(prior[0].vatRateBasisPoints??commercial.vatRateBasisPoints??source.invoice_vat_rate_basis_points)
+                ===(position.vatRateBasisPoints??bound.vatRateBasisPoints??source.invoice_vat_rate_basis_points);
+          });
+        if(!unchanged)throw Error('QUOTE_COMMERCIAL_TERMS_CHANGED_DURING_INVOICE');
       }
 
       // Exactly one issue instant per invoice. Berlin is the only legal
@@ -1140,7 +1183,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       }
 
       const snapshot: ImmutableInvoiceSnapshot = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         seller: content.seller,
         customer: content.customer,
         order: content.order,
@@ -1154,7 +1197,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       let pdfBuffer: Buffer;
       try {
         pdfBuffer = await renderToBuffer(
-          createImmutableInvoicePdfDocument({ invoiceNumber, dueDate, snapshot }),
+          createImmutableInvoicePdfDocument({ invoiceNumber, dueDate, snapshot,vat:requireVatReader(readVat)(snapshot) }),
         );
       } catch {
         throw new Error("INVOICE_PDF_RENDER_FAILED");
@@ -1244,7 +1287,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
 
       const receiptRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
       if (receiptRows.length !== 1 || !receiptRows[0]) throw new Error("INVOICE_RECEIPT_MISSING");
-      const receipt = mapReceipt(receiptRows[0], tenantId, actorId);
+      const receipt = mapReceipt(receiptRows[0], tenantId, actorId,requireVatReader(readVat));
       if (
         !receiptMatchesIntent(receipt, input)
         || receipt.invoiceId !== invoiceId
@@ -1275,7 +1318,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
   }
 }
 
-export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult> {
+export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): Promise<CancelInvoiceResult> {
   if (!isValidCancelInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Stornoanfrage." };
   }
@@ -1368,6 +1411,7 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
         SELECT
           id, tenant_id, order_id, invoice_number, status, aggregate_version,
           snapshot, due_date, pdf_ref, pdf_sha256, pdf_content,
+          net_amount_cents, vat_rate_basis_points, vat_amount_cents,
           gross_amount_cents, payment_contract_version, payment_mode,
           payment_status, payment_open_amount_cents, payment_paid_amount_cents,
           payment_currency, payment_method, payment_paid_at,
@@ -1411,7 +1455,7 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
       if (createHash("sha256").update(originalPdf).digest("hex") !== invoice.pdf_sha256) {
         throw new Error("INVOICE_CANCEL_ORIGINAL_PDF_INVALID");
       }
-      const snapshot = parseStoredSnapshot(invoice.snapshot, invoice);
+      const snapshot = parseStoredSnapshot(invoice.snapshot, invoice, requireVatReader(readVat));
 
       // Exactly one cancellation instant, reused for invoice, lifecycle event,
       // cancellation document and receipt.
@@ -1433,6 +1477,7 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
             cancelledAt,
             cancelReason: input.reason,
             snapshot,
+            vat:requireVatReader(readVat)(snapshot),
           }),
         );
       } catch {
@@ -1538,4 +1583,9 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
   } catch {
     return { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher storniert werden." };
   }
+}
+
+
+function requireVatReader(reader:InvoiceVatReader|undefined):InvoiceVatReader{
+ return reader??readInvoiceVat;
 }

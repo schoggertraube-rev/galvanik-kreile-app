@@ -71,7 +71,7 @@ describe("W2C-B2M5N Jahresplan fail-closed", () => {
     const reader = source.match(/export async function getAktiverJahresplan\([^]*?\n}\n\nexport async function speichereJahresplan/);
 
     expect(writer?.[0]).toBe(`export async function speichereJahresplan(jahr: number, monate: Record<string, number>) {\n  void jahr;\n  void monate;\n  return { ok: false as const, error: "NOT_AVAILABLE" as const, message: "${denial}" };\n}\n\nexport async function savePhoneNote`);
-    expect(reader?.[0]).toContain("createAuthorizedDataClient('read')");
+    expect(reader?.[0]).toContain("createAuthorizedDataClient('wartung')");
     expect(reader?.[0]).toContain(".from('forecast_version')");
     expect(reader?.[0]).toContain(".eq('tenant_id', KREILE_TENANT_SLUG)");
     expect(reader?.[0]).toContain(".eq('jahr', jahr)");
@@ -107,7 +107,7 @@ describe("W2C-B2M5N Jahresplan fail-closed", () => {
     expect(screen.queryByText(/gespeichert/i)).not.toBeInTheDocument();
     expect(ports.createAuthorizedDataContext).not.toHaveBeenCalled();
     expect(ports.resolveAuthorization).toHaveBeenCalledOnce();
-    expect(ports.createAuthorizedDataClient).toHaveBeenCalledWith("read");
+    expect(ports.createAuthorizedDataClient).toHaveBeenCalledWith("wartung");
     expect(ports.resolveAuthorization.mock.invocationCallOrder[0]).toBeLessThan(
       ports.createAuthorizedDataClient.mock.invocationCallOrder[0],
     );

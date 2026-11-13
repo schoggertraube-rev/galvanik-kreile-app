@@ -127,3 +127,42 @@ it.each(['ok','ambiguous','foreign','recipient','no_pdf'] as const)('AF9 sent-do
  }else expect(result.code).toBe('UNAVAILABLE');
  expect(fetchPort.mock.calls.every(call=>!call[1]?.method||call[1].method==='GET'||String(call[0]).startsWith('https://login.microsoftonline.com/'))).toBe(true);
 });
+
+
+it('S05K A1 follows ascending pages up to500 and resumes the exact validated provider cursor',async()=>{
+ const row=(index:number)=>({id:'TEST-page-'+index,subject:'TEST',from:{emailAddress:{address:'test@example.invalid'}},receivedDateTime:'2026-11-12T12:00:00Z',body:{content:'TEST'}});
+ const requests:string[]=[];
+ const fetchPort=vi.fn(async(input:Parameters<typeof fetch>[0])=>{
+  const url=new URL(String(input));
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-token'.repeat(5)});
+  requests.push(url.href);const offset=Number(url.searchParams.get('$skip')??0);
+  return Response.json({value:Array.from({length:50},(_,i)=>row(offset+i)),'@odata.count':550,...(offset<500?{'@odata.nextLink':'https://graph.microsoft.com/v1.0/users/mailbox%40example.invalid/mailFolders/inbox/messages?$top=50&$skip='+(offset+50)}:{})});
+ });
+ const first=await listMicrosoftGraphInbox(env,fetchPort,{watermark:'2026-11-12T12:00:00Z',cursorUrl:null,remaining:null});
+ expect(first.code).toBe('OK');if(first.code!=='OK')throw Error('TEST_A1_FIRST');
+ expect(first.data).toHaveLength(500);expect(first.remaining).toBe(50);
+ expect(requests).toHaveLength(10);
+ expect(new URL(requests[0]).searchParams.get('$filter')).toBe('receivedDateTime ge 2026-11-12T11:55:00.000Z');
+ expect(first.cursorUrl).toContain('$skip=500');
+ const second=await listMicrosoftGraphInbox(env,fetchPort,{watermark:null,cursorUrl:first.cursorUrl!,remaining:first.remaining!});
+ expect(second).toMatchObject({code:'OK',cursorUrl:null,remaining:0});
+ if(second.code!=='OK')throw Error('TEST_A1_SECOND');expect(second.data).toHaveLength(50);
+ expect(requests[10]).toBe(first.cursorUrl);
+});
+it('S05K A1 never forwards its token to another host or mailbox via a persisted cursor',async()=>{
+ for(const cursorUrl of ['https://evil.invalid/messages','https://graph.microsoft.com/v1.0/users/other%40example.invalid/mailFolders/inbox/messages']){
+  const fetchPort=vi.fn();expect(await listMicrosoftGraphInbox(env,fetchPort,{watermark:null,cursorUrl,remaining:null})).toMatchObject({code:'UNAVAILABLE'});expect(fetchPort).not.toHaveBeenCalled();
+ }
+});
+
+
+it('S05K A2 shares the500 mail budget with persisted failures and leaves an unfetched cursor timestamp to its caller',async()=>{
+ const cursorUrl='https://graph.microsoft.com/v1.0/users/mailbox%40example.invalid/mailFolders/inbox/messages?$top=50&$skip=50';
+ const fetchPort=vi.fn();
+ expect(await listMicrosoftGraphInbox(env,fetchPort,{watermark:null,cursorUrl,remaining:450,maxMessages:49})).toMatchObject({code:'OK',data:[],startUrl:cursorUrl,cursorUrl,remaining:450,incomplete:[]});
+ expect(fetchPort).not.toHaveBeenCalled();
+});
+it('S05K A2 retains an incomplete list row identity for the existing full-message importer instead of silently dropping it',async()=>{
+ const fetchPort=vi.fn().mockResolvedValueOnce(Response.json({access_token:'TEST-token'.repeat(5)})).mockResolvedValueOnce(Response.json({value:[{id:'TEST-missing-summary'}],'@odata.count':1}));
+ expect(await listMicrosoftGraphInbox(env,fetchPort,{watermark:null,cursorUrl:null,remaining:null,maxMessages:500})).toMatchObject({code:'OK',data:[],incomplete:[{id:'TEST-missing-summary'}],cursorUrl:null});
+});

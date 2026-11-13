@@ -139,7 +139,7 @@ describe("W2C-B2M5S Cockpit Read Guard", () => {
     await expect(actions.getAktiveWarnungen()).resolves.toEqual([]);
 
     expect(ports.createClient).toHaveBeenCalledTimes(3);
-    expect(ports.createAuthorizedDataClient).toHaveBeenCalledWith("read");
+    expect(ports.createAuthorizedDataClient).toHaveBeenCalledWith("wartung");
     expect(ports.from).toHaveBeenCalledWith("orders");
     expect(ports.from).toHaveBeenCalledWith("v_auftrag_db");
     expect(ports.from).toHaveBeenCalledWith("v_kunde_clv");

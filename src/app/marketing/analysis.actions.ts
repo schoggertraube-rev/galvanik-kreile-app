@@ -1,4 +1,6 @@
 "use server";
+import {rejectDeferredLegacy} from "@/lib/server/authHelper";
+
 
 import { db } from "@/db";
 import { and, gte, lte, eq, sql } from "drizzle-orm";
@@ -21,6 +23,8 @@ function generateInsight() {
 }
 
 export async function getMarketingAnfragenAnalysisAction(von: string, bis: string) {
+  await rejectDeferredLegacy("geld");
+
   const anfragen = await db.select().from(touchpoint)
     .where(and(gte(touchpoint.ausgefuehrtAm, new Date(von)), lte(touchpoint.ausgefuehrtAm, new Date(bis))));
     
@@ -49,6 +53,8 @@ export async function getMarketingAnfragenAnalysisAction(von: string, bis: strin
 }
 
 export async function getMarketingUmsatzAnalysisAction(von: string, bis: string) {
+  await rejectDeferredLegacy("geld");
+
   const result = await db.select({ umsatz: sql`sum(${attribution.umsatz})` }).from(attribution)
     .leftJoin(touchpoint, eq(attribution.touchpointId, touchpoint.id))
     .where(and(gte(touchpoint.ausgefuehrtAm, new Date(von)), lte(touchpoint.ausgefuehrtAm, new Date(bis))));
@@ -70,6 +76,8 @@ export async function getMarketingUmsatzAnalysisAction(von: string, bis: string)
 }
 
 export async function getMarketingRoiAnalysisAction(von: string, bis: string) {
+  await rejectDeferredLegacy("geld");
+
   // Für echten ROI: (Umsatz - Kosten) / Kosten
   const umsatzRes = await db.select({ val: sql`sum(${attribution.umsatz})` }).from(attribution)
     .leftJoin(touchpoint, eq(attribution.touchpointId, touchpoint.id))

@@ -1,16 +1,18 @@
 "use server";
-import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import { db } from "@/db";
 import { events, orders, customers } from "@/db/schema";
 import { readComplaints } from "@/modules/complaints/server-public";
-import { eq, desc } from "drizzle-orm";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import { eq, desc, and, sql } from "drizzle-orm";
+import type {ActionResult} from "@/lib/server/authHelper";
+import {resolveAuthorization,hasAuthorizationArea} from "@/lib/server/authorization";
+import {LEGACY_ACTION_ACCESS_COPY} from "@/ui/situationCatalog";
 import { TimelineEntry } from "@/lib/repositories/timelineRepository";
 
 export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return {ok:false,error:"UNAUTHORIZED",message:auth.message};
+  if (!hasAuthorizationArea(auth.data,"auftraege")) return {ok:false,error:"FORBIDDEN",message:LEGACY_ACTION_ACCESS_COPY.forbidden};
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
@@ -24,7 +26,7 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
       title: orders.title,
       orderNumber: orders.orderNumber,
       createdAt: orders.createdAt
-    }).from(orders).where(eq(orders.tenantId, KREILE_TENANT_SLUG)).orderBy(desc(orders.createdAt)).limit(20);
+    }).from(orders).where(eq(orders.tenantId, auth.data.tenantId)).orderBy(desc(orders.createdAt)).limit(20);
     
     dbOrders.forEach(o => {
       entries.push({
@@ -47,8 +49,8 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
       eventType: events.eventType,
       createdAt: events.createdAt
     }).from(events)
-      .leftJoin(orders, eq(events.orderId, orders.id))
-      .where(eq(events.tenantId, KREILE_TENANT_SLUG))
+      .leftJoin(orders, and(eq(events.orderId, orders.id),eq(orders.tenantId,auth.data.tenantId)))
+      .where(eq(events.tenantId, auth.data.tenantId))
       .orderBy(desc(events.createdAt))
       .limit(20);
       
@@ -93,11 +95,11 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
     });
 
     // 3. Letzte Kundenanlagen
-    const dbCustomers = await db.select({
+    const dbCustomers = hasAuthorizationArea(auth.data,"kunden")?await db.select({
       id: customers.id,
       name: customers.name,
       createdAt: customers.createdAt
-    }).from(customers).orderBy(desc(customers.createdAt)).limit(10);
+    }).from(customers).where(and(eq(customers.tenantId,auth.data.tenantId),sql`(${customers.type} IS DISTINCT FROM 'lieferant' OR ${hasAuthorizationArea(auth.data,"geld")})`)).orderBy(desc(customers.createdAt)).limit(10):[];
     
     dbCustomers.forEach(c => {
       entries.push({
@@ -120,8 +122,11 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
 }
 
 export async function getTimelineForCustomerDb(customerId: string): Promise<ActionResult<TimelineEntry[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return {ok:false,error:"UNAUTHORIZED",message:auth.message};
+  if (!hasAuthorizationArea(auth.data,"auftraege")) return {ok:false,error:"FORBIDDEN",message:LEGACY_ACTION_ACCESS_COPY.forbidden};
+
+  if (!hasAuthorizationArea(auth.data,"kunden")) return {ok:false,error:"FORBIDDEN",message:LEGACY_ACTION_ACCESS_COPY.forbidden};
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
@@ -134,8 +139,8 @@ export async function getTimelineForCustomerDb(customerId: string): Promise<Acti
       eventType: events.eventType,
       createdAt: events.createdAt
     }).from(events)
-      .leftJoin(orders, eq(events.orderId, orders.id))
-      .where(eq(orders.customerId, customerId));
+      .leftJoin(orders, and(eq(events.orderId, orders.id),eq(orders.tenantId,auth.data.tenantId)))
+      .where(and(eq(orders.customerId, customerId),eq(orders.tenantId,auth.data.tenantId),eq(events.tenantId,auth.data.tenantId)));
       
     dbEvents.forEach(e => {
       let severity: TimelineEntry["severity"] = "neutral";
@@ -206,8 +211,9 @@ export async function getTimelineForCustomerDb(customerId: string): Promise<Acti
 }
 
 export async function getTimelineForOrderDb(orderId: string): Promise<ActionResult<TimelineEntry[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return {ok:false,error:"UNAUTHORIZED",message:auth.message};
+  if (!hasAuthorizationArea(auth.data,"auftraege")) return {ok:false,error:"FORBIDDEN",message:LEGACY_ACTION_ACCESS_COPY.forbidden};
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
@@ -220,8 +226,8 @@ export async function getTimelineForOrderDb(orderId: string): Promise<ActionResu
       createdAt: events.createdAt,
       payload: events.payload
     }).from(events)
-      .leftJoin(orders, eq(events.orderId, orders.id))
-      .where(eq(events.orderId, orderId));
+      .leftJoin(orders, and(eq(events.orderId, orders.id),eq(orders.tenantId,auth.data.tenantId)))
+      .where(and(eq(events.orderId, orderId),eq(events.tenantId,auth.data.tenantId)));
       
     const entries = dbEvents.map(e => {
       let severity: TimelineEntry["severity"] = "neutral";

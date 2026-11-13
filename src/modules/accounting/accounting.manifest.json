@@ -4,14 +4,22 @@
   "owner": "Path-1 Accounting-minimal (Rechnungseinstieg)",
   "publicExports": [
     "@/modules/accounting/public#AccountingEntry",
-    "@/modules/accounting/public#canViewAccounting"
+    "@/modules/accounting/public#canViewAccounting",
+    "@/modules/accounting/server-public#readInvoiceVat",
+    "@/modules/accounting/public#InvoiceVatGroup",
+    "@/modules/accounting/public#InvoiceVatRead",
+    "@/modules/accounting/public#InvoiceVatReader",
+    "@/modules/accounting/public#readInvoiceVat"
   ],
   "capabilities": [],
   "migrations": [],
   "viewsFunctions": [],
   "ownsTables": [],
   "storagePurposes": [],
-  "events": { "emits": [], "consumes": [] },
+  "events": {
+    "emits": [],
+    "consumes": []
+  },
   "config": {},
   "dependencies": []
 }

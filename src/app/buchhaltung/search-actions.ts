@@ -1,10 +1,14 @@
 "use server";
+import {rejectDeferredLegacy} from "@/lib/server/authHelper";
+
 
 import { db } from "@/db";
 import { beleg } from "@/db/schema_buchhaltung";
 import { ilike, or } from "drizzle-orm";
 
 export async function searchBelegeByOcrTextAction(term: string) {
+  await rejectDeferredLegacy("geld");
+
   if (!term || term.length < 2) return [];
 
   try {

@@ -71,7 +71,7 @@ describe("W2C-B2M5H Periodenabschluss fail-closed", () => {
   it("retains the status read and its authorized read port", () => {
     const actions = source(actionsPath);
     expect(actions).toContain("export async function getPeriodenabschlussStatusAction");
-    expect(actions).toMatch(/createAuthorizedDataClient\('read'\)/);
+    expect(actions).toMatch(/createAuthorizedDataClient\('geld'\)/);
     expect(actions).toContain(".from('v_periodenabschluss_status')");
   });
 

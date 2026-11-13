@@ -1,3 +1,4 @@
+import type {InvoiceVatReader} from '@/modules/accounting/public';
 import { db } from "@/db";
 import { beleg } from "@/db/schema_buchhaltung";
 import { orders, customers } from "@/db/schema";
@@ -68,13 +69,13 @@ export function extractZeitraum(query: string) {
   };
 }
 
-export async function buildDataContext(zeitraum: { startDate: Date, endDate: Date, label: string, comparisonLabel?: string, assumption?: string }) {
+export async function buildDataContext(zeitraum: { startDate: Date, endDate: Date, label: string, comparisonLabel?: string, assumption?: string },readVat?:InvoiceVatReader) {
   const startStr = zeitraum.startDate.toISOString().split('T')[0];
   const endStr = zeitraum.endDate.toISOString().split('T')[0];
 
   const authorization = await resolveAuthorization();
   if (!authorization.ok) throw new Error(authorization.message);
-  const invoiceTruth = await readInvoiceTruth(authorization.data, { from: startStr, to: endStr });
+  const invoiceTruth = await readInvoiceTruth(authorization.data, { from: startStr, to: endStr },readVat);
   if (invoiceTruth.code !== "OK") throw new Error(invoiceTruth.message);
   const issuedInvoices = invoiceTruth.data.filter((invoice) => invoice.status === "issued");
 

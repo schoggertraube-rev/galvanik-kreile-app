@@ -1,3 +1,12 @@
+/** PL13.11.00:14 immutable invoice VAT display. */
+export const INVOICE_VAT_COPY={missingCompanyRate:(part:string)=>`Für ${part} fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.`,missingRate:(part:string)=>`Für ${part} fehlt der Steuersatz (19 % oder 7 %).`,groupNet:(rate:string)=>"Netto ("+rate+")",groupVat:(rate:string)=>"zzgl. USt ("+rate+")",cancelNet:(rate:string)=>"Storno netto ("+rate+")",cancelVat:(rate:string)=>"Storno USt ("+rate+")",reverseCharge:"Steuerschuldnerschaft des Leistungsempfängers",vatId:"USt-IdNr.:"} as const;
+/** PL13.11.00:14 deferred sales-stage sources. */
+export const DEFERRED_LEGACY_COPY={unavailable:"Kommt nach dem Start dazu - bis dahin ausgeschaltet."} as const;
+/** Existing compatibility denial text, now shared by canonical area gates. */
+export const LEGACY_ACTION_ACCESS_COPY={forbidden:"Keine Berechtigung für diese Aktion."} as const;
+export const MAIL_IMPORT_COPY={timeUnknown:'Eingangszeit fehlt',failed:'Import fehlgeschlagen',detail:(failure:{reason:string|null;graphMessageId:string|null})=>['Import fehlgeschlagen',failure.reason??MAILBOX_SYNC_COPY.unavailable,failure.graphMessageId??MAILBOX_SYNC_COPY.unavailable].join(' · '),task:(id:string)=>`Mail ${id} importieren – Import fehlgeschlagen`} as const;
+export const MAILBOX_SYNC_COPY={retryTask:'Mailabruf fortsetzen – Fortschritt konnte nicht gesichert werden',unavailable:'Neue Mails momentan nicht abrufbar · bereits gesicherte Eingänge bleiben verfügbar.',pending:(count:number)=>`Mailabruf: noch ${count} Mails offen, der nächste Abruf holt sie`} as const;
+export const PIN_LOGIN_COPY={blocked:(time:string)=>`Zu viele Versuche. Versuch es um ${time} wieder.`} as const;
 /** PL12.11.00:11: a missing historical time stays explicit, never today. */
 export const OFFLINE_NOTE_QUARANTINE_COPY={notice:(time:string|null)=>`Notiz von ${time??'TODO_PL'} konnte nicht abgeglichen werden`} as const;
 /** R8 TODO_PL: complaint original has photographs, but no chosen order number. */
@@ -9,7 +18,7 @@ export const ORDER_TERMINAL_COPY={dateLocked:'Der Auftrag wurde bereits herausge
 export const MAIL_REQUEST_CONFLICT_COPY='Diese Anfragekennung gehört zu einer anderen Nachricht. Öffne den gespeicherten Versand.';
 export const INTAKE_PENDING_WORKFLOW_COPY={quoteRequest:'Lege zuerst den KV zur Anfrage an'} as const;
 export const SEARCH_NAME_MATCH_COPY={phonetic:'Klingt gleich',spelling:'Ähnliche Schreibweise'} as const;
-export const COMPLAINT_ORDER_COPY={notReady:'Du kannst eine Reklamation aufnehmen, sobald die Ware fertig ist oder bereits herausgegeben wurde.',releaseBlocked:(number:string|null)=>`Du kannst die Ware noch nicht herausgeben: ${number?'Reklamation '+number:'Eine Reklamation'} ist offen. Kläre zuerst die Reklamation.`} as const;
+export const COMPLAINT_ORDER_COPY={reworkRunning:(number:string)=>`Die Nacharbeit läuft schon in Auftrag ${number}. Schließ sie zuerst ab.`,notReady:'Du kannst eine Reklamation aufnehmen, sobald die Ware fertig ist oder bereits herausgegeben wurde.',releaseBlocked:(number:string|null)=>`Du kannst die Ware noch nicht herausgeben: ${number?'Reklamation '+number:'Eine Reklamation'} ist offen. Kläre zuerst die Reklamation.`} as const;
 export type SituationCommand='open-order'|'receive-quote'|'open-assignment'|'open-task'|'receive-order'|'convert-quote'|'save-blocked-goods'|'prepare-quote'|'preview-quote-change'|'request-photos'|'save-document'|'open-document'|'undo-document'|'undo-order'|'open-quote'|'create-customer';
 export type SituationCandidate={id:string;kind:'customer'|'quote'|'order';label:string;reason:string};
 export type SituationFacts={originalCount:number;context?:'capture'|'quote';recognizedText?:boolean;actor?:string|null;kind?:'ware'|'anfrage'|'rechnung'|'dokument'|'kontakt'|'notiz'|'unklar';customerId?:string|null;customerName?:string|null;candidates?:SituationCandidate[];recognized?:Array<{label:string;value:string|null|undefined;uncertain?:boolean}>;quote?:{id:string;number:string;customer:string;accepted:boolean;sent:boolean;goodsHere:boolean;location?:string|null;edition:number};match?:'ambiguous'|'chosen'|'unique-reader';requiredComplete?:boolean;document?:{number:string;complete:boolean;missing:string[]};complaint?:{orderNumber:string;photoCount:number};textChange?:{quoteNumber:string};completed?:{kind:'order'|'document';id:string;number:string;quoteNumber?:string;undoAvailable:boolean;booked?:boolean}};
@@ -317,3 +326,15 @@ export const CUSTOMER_INVOICE_ACTION_COPY={numbers:(numbers:readonly string[])=>
  if(prefix){const shown=prefix.split(', ').length;return prefix+` und ${numbers.length-shown} weitere`;}
  const suffix=` und ${numbers.length-1} weitere`;let short='';for(const char of numbers[0]){if(short.length+char.length+1+suffix.length>120)break;short+=char;}return short+'…'+suffix;
 }} as const;
+
+/** S05K A11: existing invoice-terms messages, corrected UTF-8 in one text source. */
+export const CUSTOMER_INVOICE_TERMS_COPY={
+ invalid:"Zahlungsziel oder Skonto ist ungültig.",
+ forbidden:"Rechnung auf Ziel darf nur mit dem Bereich Geld freigeschaltet werden.",
+ notFound:"Kunde ist nicht verfügbar.",
+ conflict:ORDER_REQUEST_COPY.intentConflict,
+ incomplete:"Rechnung auf Ziel braucht vollständige Kundendaten.",
+ unavailable:"Rechnung auf Ziel konnte nicht sicher freigeschaltet werden."
+} as const;
+
+export const MANAGED_USER_COPY={forbidden:"Nutzer dürfen nicht geändert werden."} as const;

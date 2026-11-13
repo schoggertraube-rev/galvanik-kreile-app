@@ -1,4 +1,5 @@
 "use client";
+import {MAIL_IMPORT_COPY} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
@@ -23,7 +24,7 @@ export type OfficeHomeModel =
   | { kind: "error"; message: string };
 type BasicResult = { code: string; message?: string };
 type AssignmentResult = BasicResult & { receipt?: { aggregateVersion: number } };
-type MailPreview = { id: string; subject: string; senderName: string; senderAddress: string; receivedAt: string; preview: string; body: string };
+type MailPreview = { id: string; subject: string; senderName: string; senderAddress: string; receivedAt: string|null; preview: string; body: string };
 export type OfficeHomePorts = {
   savePreferences: (layout: TodayLayoutItem[]) => Promise<BasicResult>;
   saveReminder: (input: { itemKey: string; mode: TodayReminderMode; dueDate?: string }) => Promise<BasicResult>;
@@ -174,7 +175,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
     {mailId ? <Dialog titel="Mail" icon="mail" groesse="breit" onSchliessen={() => setMailId(null)}><div className="kr-stapel">
       {!mailPreview && !mailMessage ? <Hinweis>Mail wird gelesen …</Hinweis> : null}
       {mailMessage ? <Hinweis ton="warn">{mailMessage}</Hinweis> : null}
-      {mailPreview ? <><Fakten zeilen={[{ k: "Von", v: `${mailPreview.senderName} · ${mailPreview.senderAddress}` }, { k: "Eingegangen", v: new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(mailPreview.receivedAt)) }]} /><h3>{mailPreview.subject || "Mail ohne Betreff"}</h3><p>{mailPreview.body || mailPreview.preview || "Keine lesbare Nachricht vorhanden."}</p></> : null}
+      {mailPreview ? <><Fakten zeilen={[{ k: "Von", v: `${mailPreview.senderName} · ${mailPreview.senderAddress}` }, { k: "Eingegangen", v: mailPreview.receivedAt===null?MAIL_IMPORT_COPY.timeUnknown:new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(mailPreview.receivedAt)) }]} /><h3>{mailPreview.subject || "Mail ohne Betreff"}</h3><p>{mailPreview.body || mailPreview.preview || "Keine lesbare Nachricht vorhanden."}</p></> : null}
     </div></Dialog> : null}
     {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel">{model.dashboard.delegationTargets.map((target) => <Button key={target.userId} data-spec-id="hbmehr.weitergeben" text={`an ${target.displayName} geben`} icon="handoff" disabled={busy} onClick={() => void delegate(target)} />)}<Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
   </section>;

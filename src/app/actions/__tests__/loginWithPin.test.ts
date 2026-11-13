@@ -83,8 +83,8 @@ describe("loginWithPin() active app user security", () => {
     ports.bcryptCompare.mockResolvedValue(true);
     ports.bcryptHash.mockResolvedValue("$2b$10$synthetic-migrated-hash");
     ports.runPinAttempt.mockImplementation(
-      async (_operatorId: string, verifyPin: () => Promise<boolean>) =>
-        (await verifyPin()) ? { status: "valid" } : { status: "invalid" },
+      async (_operatorId: string, verifyPin: (tx:unknown) => Promise<boolean>) =>
+        (await verifyPin((await import("@/db")).db)) ? { status: "valid" } : { status: "invalid" },
     );
     ports.dbUpdateWhere.mockResolvedValue(undefined);
     ports.setAppSession.mockResolvedValue(undefined);
@@ -141,13 +141,13 @@ describe("loginWithPin() active app user security", () => {
 
   it("blocks before PIN comparison when rate limited", async () => {
     ports.dbSelect.mockResolvedValue([makeUser()]);
-    ports.runPinAttempt.mockResolvedValue({ status: "blocked", retryAfterMinutes: 15 });
+    ports.runPinAttempt.mockResolvedValue({ status: "blocked", retryAfterMinutes: 15, retryAtMs: Date.parse("2026-11-12T12:15:00Z") });
     const { loginWithPin } = await import("@/app/actions/auth.actions");
 
     await expect(loginWithPin(handleFor("synthetic-phillip-id"), "1234"))
       .resolves.toEqual({
         ok: false,
-        message: "Zu viele Fehlversuche. Bitte in 15 Minute(n) erneut versuchen.",
+        message: "Zu viele Versuche. Versuch es um 13:15 wieder.",
       });
     expect(ports.bcryptCompare).not.toHaveBeenCalled();
   });

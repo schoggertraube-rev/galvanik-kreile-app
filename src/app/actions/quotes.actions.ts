@@ -1,4 +1,6 @@
 "use server";
+import {openIntakePredicate} from '@/modules/eingang/server-public';
+
 import type {ListOpenQuotesResult} from '@/modules/quotes/public';
 import {canReadQuoteFollowups} from '@/lib/auth/authorizationContract';
 import {createInitialOrderPrintJobs} from '@/modules/orders/server-public';
@@ -387,7 +389,7 @@ export async function readQuotePdfAction(input: { quoteId: string }) {
   const quoteResult = await readQuoteCommand(quoteCommandContext(authorization.data), input);
   if (quoteResult.code !== "OK") return quoteResult;
   const [customerResult, companyResult] = await Promise.all([
-    readCustomerSummary(authorization.data, { customerId: quoteResult.quote.customerId }),
+    readCustomerSummary(authorization.data, { customerId: quoteResult.quote.customerId },openIntakePredicate()),
     readCompanyDocumentSettings({
       tenantId: authorization.data.tenantId,
       actorId: authorization.data.userId,
@@ -441,7 +443,7 @@ export async function prepareQuoteFromIntakeAction(input:{sourceItemId:string;cu
   const customerId=source.customer?.id??input.customerId??null;
   const customer=customerId?await withPrivilegedTenantTransaction(auth,tx=>readCustomerProfile(tx,auth.tenantId,customerId)):null;
   if(customerId&&!customer)return {code:'NOT_FOUND' as const,message:'Gewählter Kunde ist nicht verfügbar.'};
-  const hints=customerId?(await readCustomerListSignals(auth,[customerId])).get(customerId)?.hints.filter(hint=>hint.kind==='agreement').map(hint=>hint.text)??[]:[];
+  const hints=customerId?(await readCustomerListSignals(auth,[customerId],openIntakePredicate())).get(customerId)?.hints.filter(hint=>hint.kind==='agreement').map(hint=>hint.text)??[]:[];
   const specialRequests=[...hints,...(recognition.instructions??[]).map(value=>value.text)];
   return {code:'OK' as const,preparation:{source:{itemId:source.itemId,version:source.version,message:source.channel==='mail'},text,files:source.files,customer:customer?{id:customer.id,name:customer.name}:null,customerQuery:matches.query,proposals:matches.customers.map(value=>({id:value.id,name:value.name,reason:'Treffer im Original: '+matches.query})),recognition,confirmedCustomerHints:hints,specialRequests:specialRequests.length?[...new Set(specialRequests)].join('\n'):null}};
  }catch(error){console.error('[QUOTE_INTAKE_PREPARATION_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Vorbereitung konnte nicht sicher gelesen werden. Original bleibt erhalten.'};}

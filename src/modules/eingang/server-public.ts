@@ -32,3 +32,9 @@ export {returnQuoteGoodsReceipt,readQuoteGoodsReturns} from "./server/quoteGoods
 export {readPackageExpectation} from './server/packageExpectation';
 
 export {writeIntakeNoteInTransaction} from './server/intakeCapture';
+
+export {openIntakePredicate} from './server/openIntakePredicate';
+
+export {observeIntakeMailboxImport,readIntakeMailboxWatermark} from "./server/intakeMailImport";
+
+export {parkIntakeMailImportFailure,readFailedIntakeMailImports} from './server/intakeMailImport';

@@ -3,7 +3,9 @@
 import { db } from "@/db";
 import { priceLines } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import type { ActionResult } from "@/lib/server/authHelper";
+import {resolveAuthorization,hasAuthorizationArea} from "@/lib/server/authorization";
+import {LEGACY_ACTION_ACCESS_COPY} from "@/ui/situationCatalog";
 
 type PriceLineListItem = {
   id: string;
@@ -36,18 +38,20 @@ export type PriceLinePayload = {
 };
 
 export async function getPriceLinesDb(orderId: string, itemId?: string | null): Promise<ActionResult<PriceLineListItem[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return {ok:false,error:"UNAUTHORIZED",message:auth.message};
+  if (!hasAuthorizationArea(auth.data,"geld")) return {ok:false,error:"FORBIDDEN",message:LEGACY_ACTION_ACCESS_COPY.forbidden};
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
-    let query = db.select().from(priceLines).where(eq(priceLines.orderId, orderId));
+    let query = db.select().from(priceLines).where(and(eq(priceLines.orderId, orderId),eq(priceLines.tenantId,auth.data.tenantId)));
     
     if (itemId) {
       query = db.select().from(priceLines).where(
         and(
           eq(priceLines.orderId, orderId),
+          eq(priceLines.tenantId, auth.data.tenantId),
           eq(priceLines.itemId, itemId)
         )
       );

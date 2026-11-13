@@ -1,3 +1,5 @@
+import {mailImportFailureProjection} from './intakeMailFailureRead';
+import {openIntakePredicate} from './openIntakePredicate';
 import {readIntakeActorTraces} from './actorRead';
 import {intakeCaptureSnapshot} from './intakeCapture';
 import {readMessageNextAction} from './messageNextAction';
@@ -16,12 +18,12 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
   const result=await resolveAuthorization();if(!result.ok)return {code:result.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED',message:'Sitzung konnte nicht geprüft werden. Code: INTAKE_MESSAGES_SESSION.'};
   const auth=result.data;if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Nachrichten benötigen das Recht Mails.'};
   return await withPrivilegedTenantTransaction(auth,async tx=>{
-   const matches=filter==='offen'?sql`candidate.aussortiert IS NULL AND (candidate.einsatz='offen' OR candidate.richtung='rein' AND candidate.zuordnung='offen')`
+   const matches=filter==='offen'?openIntakePredicate('candidate')
     :filter==='zuordnen'?sql`candidate.aussortiert IS NULL AND candidate.zuordnung='offen'`
     :filter==='erledigt'?sql`candidate.aussortiert IS NULL AND candidate.einsatz IN ('erledigt','info')`
     :filter==='aussortiert'?sql`candidate.aussortiert IS NOT NULL`
     :sql`candidate.einsatz='offen' OR candidate.erstellt_am>=statement_timestamp()-interval '90 days'`;
-   const messages=await tx.execute<IntakeMessage>(sql`SELECT source.id::text,source.graph_message_id AS "graphMessageId",source.version,source.kanal AS channel,source.richtung AS direction,source.sendestatus AS "sendState",
+   const messages=await tx.execute<IntakeMessage>(sql`SELECT ${mailImportFailureProjection()} AS "importFailure",source.id::text,source.graph_message_id AS "graphMessageId",source.version,source.kanal AS channel,source.richtung AS direction,source.sendestatus AS "sendState",
     source.zuordnung AS assignment,source.einsatz AS usage,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",source.gruppe_adresse AS "groupAddress",source.betreff AS subject,
     coalesce(source.text,(SELECT original.nachher->>'text' FROM public.intake_event created JOIN public.intake_event original
       ON original.tenant_id=created.tenant_id AND original.item_id::text=created.nachher->>'textSourceId' AND original.id::text=created.nachher->>'originalTextEventId'

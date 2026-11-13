@@ -1,4 +1,5 @@
 "use server";
+import {readInvoiceVat} from "@/modules/accounting/server-public";
 
 import { revalidatePath } from "next/cache";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -43,7 +44,7 @@ async function resolveActionAuthorization(): Promise<ActionAuthorizationResult> 
 
 export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<CreateInvoiceResult> {
   const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
-  const result = await createInvoice(input);
+  const result = await createInvoice(input,undefined,readInvoiceVat);
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
     revalidatePath("/warendurchlauf");
@@ -65,7 +66,7 @@ export async function setInvoiceItemPricesAction(
 
 export async function cancelInvoiceAction(input: CancelInvoiceInput): Promise<CancelInvoiceResult> {
   const { cancelInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
-  const result = await cancelInvoice(input);
+  const result = await cancelInvoice(input,readInvoiceVat);
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
     revalidatePath("/warendurchlauf");
@@ -83,7 +84,7 @@ export async function getInvoiceReceiptAction(
   const authorization = await resolveActionAuthorization();
   if (!authorization.ok) return authorization.result;
   const { readInvoiceReceipt } = await import("@/lib/server/invoiceRead");
-  return readInvoiceReceipt(authorization.data, input);
+  return readInvoiceReceipt(authorization.data, input,readInvoiceVat);
 }
 
 export type GetInvoiceCancellationReceiptActionResult =
@@ -107,5 +108,13 @@ export async function getInvoiceSummariesAction(): Promise<GetInvoiceSummariesAc
   const authorization = await resolveActionAuthorization();
   if (!authorization.ok) return authorization.result;
   const { readInvoiceSummaries } = await import("@/lib/server/invoiceRead");
-  return readInvoiceSummaries(authorization.data);
+  return readInvoiceSummaries(authorization.data,readInvoiceVat);
+}
+
+/** Existing truth port composed at the same root as issue/read/cancellation. */
+export async function getInvoiceTruthAction(filter:{from?:string;to?:string;customerId?:string}={}){
+ const authorization=await resolveActionAuthorization();
+ if(!authorization.ok)return authorization.result;
+ const {readInvoiceTruth}=await import('@/lib/server/invoiceTruthRead');
+ return readInvoiceTruth(authorization.data,filter,readInvoiceVat);
 }

@@ -183,26 +183,65 @@ async function graphGetMessage(
   });
 }
 
+/** Current server-configured identity; contains no credential and is never accepted from a client. */
+export function readMicrosoftGraphMailbox(env:Environment=process.env):string|null{return readConfig(env)?.mailbox.toLowerCase()??null;}
+
+export type GraphInboxContinuation={watermark:string|null;cursorUrl:string|null;remaining:number|null;maxMessages?:number};
+type GraphInboxProgress={startRemaining:number|null;startUrl:string;cursorUrl:string|null;remaining:number|null;incomplete:Array<{id:string}>};
 export async function listMicrosoftGraphInbox(
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
-): Promise<GraphResult<GraphInboxMessage[]>> {
+  continuation?:GraphInboxContinuation,
+): Promise<GraphResult<GraphInboxMessage[]> & Partial<GraphInboxProgress>> {
   const config = readConfig(env);
   if (!config) return { code: "IN_KLAERUNG", message: "Microsoft 365 ist noch nicht für die Preview verbunden." };
   try {
-    const token = await accessToken(config, fetchPort);
-    const query = new URLSearchParams({
-      "$top": "20",
-      "$orderby": "receivedDateTime desc",
-      "$select": "id,internetMessageId,subject,from,receivedDateTime,bodyPreview,body,hasAttachments",
+    const query=new URLSearchParams({
+      "$top":"50", "$count":"true", "$orderby":"receivedDateTime asc",
+      "$select":"id,internetMessageId,subject,from,receivedDateTime,bodyPreview,body,hasAttachments",
     });
-    const response = await graphGetMessage(config, token, `mailFolders/inbox/messages?${query}`, fetchPort);
-    if (!response.ok) await providerFailure(response, "GRAPH_INBOX");
-    const payload = (await response.json()) as { value?: unknown };
-    if (!Array.isArray(payload.value)) throw new Error("GRAPH_INBOX_INVALID");
-    return { code: "OK", data: payload.value.map(parseMessage).filter((item): item is GraphInboxMessage => item !== null) };
-  } catch (error) {
-    return unavailable("Der Outlook-Posteingang ist momentan nicht sicher erreichbar.", error);
+    if(continuation?.watermark!==null&&continuation?.watermark!==undefined){
+      const time=Date.parse(continuation.watermark);
+      if(!Number.isFinite(time))throw Error('GRAPH_WATERMARK_INVALID');
+      query.set('$filter','receivedDateTime ge '+new Date(time-5*60000).toISOString());
+    }
+    const base=new URL(`${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/`);
+    const inbox=new URL('mailFolders/inbox/messages?'+query,base);
+    const checked=(value:string)=>{
+      const url=new URL(value);
+      if(url.origin!==inbox.origin||url.pathname.toLowerCase()!==inbox.pathname.toLowerCase()||url.username||url.password||url.hash)throw Error('GRAPH_INBOX_CURSOR_INVALID');
+      return url;
+    };
+    const start=checked(continuation?.cursorUrl??inbox.href);
+    const maximum=continuation?.maxMessages??500;
+    if(!Number.isSafeInteger(maximum)||maximum<0||maximum>500)throw Error('GRAPH_INBOX_BUDGET_INVALID');
+    if(maximum<50)return {code:'OK',data:[],...(continuation?{startRemaining:continuation.remaining,startUrl:start.href,cursorUrl:start.href,remaining:continuation.remaining,incomplete:[]}:{})};
+    const token=await accessToken(config,fetchPort);
+    const data:GraphInboxMessage[]=[],incomplete:Array<{id:string}>=[],seen=new Set<string>();
+    let next:URL|null=start,walked=0,total:number|null=continuation?.cursorUrl?continuation.remaining:null;
+    let startRemaining=total;
+    while(next!==null&&walked+50<=maximum&&seen.size<500){
+      if(seen.has(next.href))throw Error('GRAPH_INBOX_CURSOR_CYCLE');
+      seen.add(next.href);
+      const response=await graphGetMessage(config,token,next.pathname.slice(base.pathname.length)+next.search,fetchPort);
+      if(!response.ok)await providerFailure(response,'GRAPH_INBOX');
+      const payload=await response.json() as {value?:unknown;'@odata.nextLink'?:unknown;'@odata.count'?:unknown};
+      if(!Array.isArray(payload.value)||payload.value.length>50)throw Error('GRAPH_INBOX_INVALID');
+      if(total===null&&continuation?.cursorUrl==null&&typeof payload['@odata.count']==='number'&&Number.isSafeInteger(payload['@odata.count'])&&payload['@odata.count']>=0){total=payload['@odata.count'];startRemaining=total;}
+      walked+=payload.value.length;
+      for(const raw of payload.value){
+        const parsed=parseMessage(raw);
+        if(parsed)data.push(parsed);
+        else {if(!raw||typeof raw!=='object'||typeof raw.id!=='string'||!raw.id||raw.id.length>1024)throw Error('GRAPH_INBOX_MESSAGE_ID_REQUIRED');incomplete.push({id:raw.id});}
+      }
+      const link=payload['@odata.nextLink'];
+      if(link===null||link===undefined)next=null;
+      else {if(typeof link!=='string'||!link)throw Error('GRAPH_INBOX_CURSOR_INVALID');next=checked(link);}
+    }
+    const progress:GraphInboxProgress={startRemaining,startUrl:start.href,cursorUrl:next?.href??null,incomplete,remaining:next===null?0:total===null||total<=walked?null:total-walked};
+    return {code:'OK',data,...(continuation?progress:{})};
+  } catch(error) {
+    return unavailable("Der Outlook-Posteingang ist momentan nicht sicher erreichbar.",error);
   }
 }
 

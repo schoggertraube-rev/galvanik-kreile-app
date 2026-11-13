@@ -22,6 +22,7 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
+  getSecretKey,
   signAppSession,
   verifyAppSessionToken,
   COOKIE_NAME,
@@ -49,6 +50,17 @@ vi.mock("next/headers", () => ({
 
 // APP_SESSION_SECRET auf Testschlüssel setzen
 process.env.APP_SESSION_SECRET = TEST_SECRET;
+
+describe("mandatory session secret",()=>{
+  it.each(["development","test","production"] as const)("refuses an absent secret in %s",environment=>{
+    vi.stubEnv("NODE_ENV",environment);
+    vi.stubEnv("APP_SESSION_SECRET",undefined);
+    try{expect(()=>getSecretKey()).toThrow();}
+    finally{vi.unstubAllEnvs();}
+  });
+  it("uses the explicitly supplied isolated test secret",()=>{expect(getSecretKey()).toBe(TEST_SECRET);});
+});
+
 
 // ─── Hilfsfunktion ──────────────────────────────────────────────────────────
 function makeSession(overrides?: Partial<AppSession>): AppSession {
