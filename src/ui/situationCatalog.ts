@@ -8,9 +8,9 @@ export const MAIL_IMPORT_COPY={timeUnknown:'Eingangszeit fehlt',failed:'Import f
 export const MAILBOX_SYNC_COPY={retryTask:'Mailabruf fortsetzen – Fortschritt konnte nicht gesichert werden',unavailable:'Neue Mails momentan nicht abrufbar · bereits gesicherte Eingänge bleiben verfügbar.',pending:(count:number)=>`Mailabruf: noch ${count} Mails offen, der nächste Abruf holt sie`} as const;
 export const PIN_LOGIN_COPY={incomplete:'Anmeldung konnte nicht sicher abgeschlossen werden.',blocked:(time:string)=>`Zu viele Versuche. Versuch es um ${time} wieder.`} as const;
 /** PL12.11.00:11: a missing historical time stays explicit, never today. */
-export const OFFLINE_NOTE_QUARANTINE_COPY={notice:(time:string|null)=>`Notiz von ${time??'TODO_PL'} konnte nicht abgeglichen werden`} as const;
-/** R8 TODO_PL: complaint original has photographs, but no chosen order number. */
-export const MESSAGE_COMPLAINT_ACTION_COPY={key:'messages.complaint_customer',text:'TODO_PL'} as const;
+export const OFFLINE_NOTE_QUARANTINE_COPY={notice:(time:string|null)=>time?`Notiz von ${time} zurückgehalten - tippe zum Zuordnen`:'Notiz zurückgehalten - tippe zum Zuordnen'} as const;
+/** PL13.11.09:23: photographs are present; choose the actual order. */
+export const MESSAGE_COMPLAINT_ACTION_COPY={key:'messages.complaint_customer',text:'Reklamation mit Fotos aufnehmen - Auftrag wählen'} as const;
 
 /** One presentation catalogue. Facts are projections of existing readers, never stored here. */
 export const OFFLINE_LOGOUT_COPY={cachePending:'Du bist abgemeldet. Die gespeicherten Daten auf diesem Gerät werden beim nächsten Start gelöscht.',pending:(count:number)=>`Du bist abgemeldet. ${count} Eingaben warten noch auf Netz und werden übertragen, sobald es da ist.`} as const;
@@ -301,9 +301,8 @@ export const OFFLINE_ITEM_FINISHED_COPY={pending:(part:string)=>`Teil ${part} fe
 /** PL11.11.12:42 / R2; actual part and immutable pricing receipt date. */
 const productionPricingDescription=(part:string,day:string)=>`Wochenwert für ${part} nachtragen – Preisbuchung vom ${day} ist gescheitert`;
 export const PRODUCTION_PRICING_RETRY_COPY={
- // TODO_PL R8: no price or booking date is invented for a missing base receipt.
  baseTitle:(part:string)=>{const prefix='Wochenwert für ',suffix=' nachtragen';if(prefix.length+part.length+suffix.length<=120)return prefix+part+suffix;let short='';for(const char of part){if(prefix.length+short.length+char.length+suffix.length+1>120)break;short+=char;}return prefix+short+'…'+suffix;},
- baseDescription:(part:string)=>`Wochenwert für ${part} nachtragen – Bewertung der belegten Fertigmeldung fehlt`,
+ baseDescription:(part:string)=>`Wochenwert für ${part} nachtragen - die Fertigmeldung hat noch keinen Preis`,
  description:productionPricingDescription,
  title:(part:string,day:string)=>{
   const full=productionPricingDescription(part,day);if(full.length<=120)return full;
@@ -312,7 +311,7 @@ export const PRODUCTION_PRICING_RETRY_COPY={
   for(const char of part){if(short.length+char.length>room-1)break;short+=char;}
   return productionPricingDescription(short+'…',day);
  },
- retry:"Nachtrag erneut auslösen",/* TODO_PL R8: only the already-saved follow-up task completion is unavailable. */taskPending:"Der Wochenwert ist gespeichert. Die Aufgabe konnte noch nicht abgeschlossen werden."
+ retry:"Nachtrag erneut auslösen",taskPending:"Wochenwert gespeichert. Die Aufgabe ist noch offen - tippe, um sie abzuschließen."
 } as const;
 
 /** PL11.11.17:05: shared wording for conflicting request identities. */
@@ -339,4 +338,4 @@ export const CUSTOMER_INVOICE_TERMS_COPY={
 
 export const MANAGED_USER_COPY={forbidden:"Nutzer dürfen nicht geändert werden."} as const;
 
-export const OFFLINE_DEVICE_READ_COPY={invalidWindow:'TODO_PL'} as const;
+export const OFFLINE_DEVICE_READ_COPY={invalidWindow:'Die Geräteuhr passt nicht zum letzten Stand - neue Eingaben erst wieder mit Verbindung.'} as const;
