@@ -2,6 +2,12 @@ import {it,expect} from 'vitest';
 import {readInvoiceVat} from '../../server-public';
 // Explicit synthetic immutable-original boundaries, not writer evidence.
 const mixed=()=>({schemaVersion:2,lines:[{type:'BASE',lineNetAmountCents:10000,vat_rate_basis_points:1900},{type:'EXTRA_WORK',amountCents:10000,vat_rate_basis_points:700}],totals:{netAmountCents:20000,vatRateBasisPoints:null,vatAmountCents:2600,grossAmountCents:22600,vatBreakdown:[{rateBp:1900,netCents:10000,vatCents:1900,grossCents:11900},{rateBp:700,netCents:10000,vatCents:700,grossCents:10700}]}});
+it('reads historical persisted amounts without inventing an original',()=>{
+ const row={snapshot:null,net_amount_cents:'10000',vat_amount_cents:'700',gross_amount_cents:'10700',vat_rate_basis_points:700};
+ expect(readInvoiceVat(row)).toMatchObject({groups:[{rateBp:700,netCents:10000,vatCents:700,grossCents:10700}],headRate:700});
+ expect(()=>readInvoiceVat({...row,gross_amount_cents:'10701'})).toThrow();
+ expect(()=>readInvoiceVat({...row,snapshot:{schemaVersion:2}})).toThrow();
+});
 it('reads schema1 as one unchanged group',()=>{
  const original={schemaVersion:1,totals:{netAmountCents:10000,vatRateBasisPoints:700,vatAmountCents:700,grossAmountCents:10700}},before=structuredClone(original);
  expect(readInvoiceVat(original)).toMatchObject({headRate:700,groups:[{rateBp:700,netCents:10000,vatCents:700,grossCents:10700}],reverseCharge:false});

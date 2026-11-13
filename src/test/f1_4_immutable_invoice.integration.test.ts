@@ -587,7 +587,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
                WHERE id = $2 AND tenant_id = $3`,
             [variant.value, field.id, TENANT_ID],
           );
-          await expectNoWrite(label, MASTER_DATA_REJECTION, () => createInvoice({
+          await expectNoWrite(label, field.table === "company_settings" && field.column === "invoice_vat_rate_basis_points" ? {code:"VALIDATION_ERROR",message:"Für F1.4 Synthetic Position fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein."} : MASTER_DATA_REJECTION, () => createInvoice({
             orderId: ORDER_ID,
             expectedVersion: ORDER_VERSION,
             clientEventId: randomUUID(),

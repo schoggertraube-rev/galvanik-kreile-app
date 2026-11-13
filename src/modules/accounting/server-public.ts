@@ -1,2 +1,2 @@
 import 'server-only';
-export {readInvoiceVat} from './server/invoiceVatRead';
+export {readInvoiceVat} from './invoiceVatContract';

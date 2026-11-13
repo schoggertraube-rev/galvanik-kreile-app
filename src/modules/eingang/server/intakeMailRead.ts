@@ -30,7 +30,7 @@ export async function readOpenIntakeMails():Promise<IntakeMailSelectionResult>{
   const mails=await tx.execute<IntakeMailSummary>(sql`SELECT ${mailImportFailureProjection()} AS "importFailure",source.id::text,source.betreff AS subject,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",
     source.empfangen_am::text AS "receivedAt",source.kunde_id AS "customerId",
     CASE WHEN ${MAIL_IMPORT_COPY.failed}=ANY(source.kennzeichen) THEN NULL ELSE (SELECT count(*)::int FROM public.intake_file file WHERE file.tenant_id=source.tenant_id AND file.item_id=source.id AND file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml') END AS "fileCount"
-    FROM public.intake_item source WHERE source.tenant_id=${auth.tenantId} AND source.kanal='mail' AND ${openIntakePredicate()}
+    FROM public.intake_item source WHERE source.tenant_id=${auth.tenantId} AND source.kanal='mail' AND ${openIntakePredicate()} AND source.zuordnung='offen'
     ORDER BY source.empfangen_am DESC NULLS LAST,source.id DESC`);
   return {code:'OK' as const,mails};
  });}
