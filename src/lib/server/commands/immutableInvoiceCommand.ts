@@ -1087,8 +1087,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         source.extra_work_lines=source.extra_work_lines.map(line=>{
           if(!plainObject(line)||typeof line.itemId!=='string')throw Error('INVOICE_QUOTE_EXTRA_WORK_SOURCE_INVALID');
           const positions=commercial.positions.filter(position=>position.itemId===line.itemId);
-          if(positions.length!==1)throw Error('INVOICE_QUOTE_EXTRA_WORK_SOURCE_INVALID');
-          return {...line,vat_rate_basis_points:positions[0].vatRateBasisPoints??commercial.vatRateBasisPoints??null};
+          return {...line,vat_rate_basis_points:positions.length===1?(positions[0].vatRateBasisPoints??commercial.vatRateBasisPoints??null):line.vat_rate_basis_points};
         });
         // The existing canonical awarded-quote port proves these prices; no price is copied into an intake intent.
         source.base_line_count=commercial.positions.length;source.base_net_amount_cents=commercial.totalNetCents;
