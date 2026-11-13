@@ -273,11 +273,19 @@ export async function retainPendingWorkshopOriginal(scope:string,original:Pendin
  if(!isPendingWorkshopOriginal(original))throw Error('OFFLINE_WORKSHOP_ORIGINAL_INVALID');
  return retainOriginal(scope,original);
 }
-async function retainOriginal(scope:string,original:PendingOriginal|PendingWorkshopOriginal):Promise<void>{
+type RequiredDeviceStand={loginScope:string;cacheGeneration:number;serverReadAt:string};
+async function retainOriginal(scope:string,original:PendingOriginal|PendingWorkshopOriginal,requiredStand?:RequiredDeviceStand):Promise<void>{
  const connection=await database(scope);
  return new Promise((resolve,reject)=>{
-  const tx=connection.transaction(STORE,"readwrite"),store=tx.objectStore(STORE),read=store.get(original.id);
+  const tx=connection.transaction(requiredStand?[STORE,SHELL_STORE,DEVICE_STORE]:STORE,"readwrite"),store=tx.objectStore(STORE);
+  const shell=requiredStand?tx.objectStore(SHELL_STORE).get(shellKey(requiredStand.loginScope)):null;
+  const stand=requiredStand?tx.objectStore(DEVICE_STORE).get(standKey(requiredStand.loginScope,requiredStand.cacheGeneration)):null;
+  const read=store.get(original.id);let staleStand=false;
   read.onsuccess=()=>{const previous=read.result as PendingOriginal|PendingWorkshopOriginal|undefined;
+   if(requiredStand){
+    const age=new Date().getTime()-Date.parse(requiredStand.serverReadAt);
+    if(readCacheScopeMarker()!==requiredStand.loginScope||!shellMetadata(shell?.result,requiredStand.loginScope)||shell?.result.scope!==requiredStand.loginScope||shell.result.cacheGeneration!==requiredStand.cacheGeneration||!completeDeviceStand(stand?.result,requiredStand.loginScope)||stand?.result.serverReadAt!==requiredStand.serverReadAt||!Number.isFinite(age)||age<0||age>=24*60*60*1000){staleStand=true;tx.abort();return;}
+   }
    if(original.kind==='workshop'&&previous){
     if(!isPendingWorkshopOriginal(previous)||previous.command!==original.command||canonicalJson(previous.input)!==canonicalJson(original.input)){tx.abort();return;}
     store.put(previous);return;
@@ -301,7 +309,7 @@ async function retainOriginal(scope:string,original:PendingOriginal|PendingWorks
     value.queueSequence=maximum+1;store.put(value);
    };};
   tx.oncomplete=()=>{connection.close();window.dispatchEvent(new Event("kreile-pending-changed"));resolve();};
-  tx.onabort=()=>{connection.close();reject(new Error("INTAKE_PENDING_STORAGE_ABORTED"));};
+  tx.onabort=()=>{connection.close();reject(new Error(staleStand?"OFFLINE_WORKSHOP_STAND_STALE":"INTAKE_PENDING_STORAGE_ABORTED"));};
  });
 }
 // IDB keys can be numbers, dates, binary values or arrays. An unknown legacy
@@ -366,10 +374,13 @@ export async function capturePendingItemFinished(scope:string,enabled:boolean,in
  if(!enabled||input.finished!==true)return {code:'NETWORK_REQUIRED' as const};
  const {readCacheScopeMarker}=await import('./cacheScopeMarker');
  const login=readCacheScopeMarker();if(!login)return {code:'NETWORK_REQUIRED' as const};
- const state=await readPendingShellMetadata(scope,login),now=new Date();
- if(state.code!=='OK'||state.metadata.scope!==login)return {code:'NETWORK_REQUIRED' as const};
- const age=now.getTime()-Date.parse(state.metadata.updatedAt);
+ const state=await readPendingDeviceStand(scope,login),now=new Date();
+ if(state.code!=='OK')return {code:'NETWORK_REQUIRED' as const};
+ const age=now.getTime()-Date.parse(state.serverReadAt);
  if(!Number.isFinite(age)||age<0||age>=24*60*60*1000||readCacheScopeMarker()!==login)return {code:'NETWORK_REQUIRED' as const};
- await retainPendingWorkshopOriginal(scope,{kind:'workshop',command:'item.finished',id:input.clientEventId,itemId:input.orderId,input,deviceCapturedAt:now.toISOString()});
+ const original:PendingWorkshopOriginal={kind:'workshop',command:'item.finished',id:input.clientEventId,itemId:input.orderId,input,deviceCapturedAt:now.toISOString()};
+ if(!isPendingWorkshopOriginal(original))throw Error('OFFLINE_WORKSHOP_ORIGINAL_INVALID');
+ try{await retainOriginal(scope,original,{loginScope:login,cacheGeneration:state.cacheGeneration,serverReadAt:state.serverReadAt});}
+ catch(error){if(error instanceof Error&&error.message==='OFFLINE_WORKSHOP_STAND_STALE')return {code:'NETWORK_REQUIRED' as const};throw error;}
  return {code:'QUEUED' as const};
 }

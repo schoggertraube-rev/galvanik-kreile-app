@@ -43,7 +43,13 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('retains actual native-IDB work
    // Explicit synthetic login marker/clock boundaries, native same-store gate.
    const producerScope='${'9'.repeat(64)}',login='${'8'.repeat(64)}';
    document.cookie='kreile_offline_cache_scope='+login+'; Path=/; SameSite=Lax';
-   await p.changePendingShellMetadata(producerScope,login,null,true);
+   const warm=await p.changePendingShellMetadata(producerScope,login,null,true);if(warm.code!=='OK')throw Error('TEST_WARM_METADATA');
+   if((await p.capturePendingItemFinished(producerScope,true,original.input)).code!=='NETWORK_REQUIRED'||(await p.readPendingEntries(producerScope)).length)throw Error('TEST_SHELL_TIME_IS_NOT_SERVER_COMPLETION');
+   // Explicit synthetic completion/clock boundary only. Real source provenance
+   // and the full cache writer are covered by the actual-source native suite.
+   const serverReadAt=new Date(Date.now()-60*60*1000).toISOString();
+   const standDb=await new Promise((resolve,reject)=>{const r=indexedDB.open('kreile-pending-originals-v1-'+producerScope,3);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+   await new Promise((resolve,reject)=>{const tx=standDb.transaction('deviceReads','readwrite');tx.objectStore('deviceReads').put({schemaVersion:1,loginScope:login,serverReadAt,ports:p.DEVICE_READ_PORTS},[login,warm.metadata.cacheGeneration,'stand.complete','stand']);tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);});standDb.close();
    if((await p.capturePendingItemFinished(producerScope,false,original.input)).code!=='NETWORK_REQUIRED')throw Error('TEST_FLAG_IGNORED');
    if((await p.capturePendingItemFinished(producerScope,true,{...original.input,finished:false})).code!=='NETWORK_REQUIRED')throw Error('TEST_OFFLINE_REOPEN');
    if((await p.capturePendingItemFinished(producerScope,true,original.input)).code!=='QUEUED')throw Error('TEST_PRODUCER_NOT_CAPTURED');
@@ -51,6 +57,12 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('retains actual native-IDB work
    if(captured.kind!=='workshop'||captured.input.clientEventId!==original.input.clientEventId)throw Error('TEST_PRODUCER_KEY_CHANGED');
    const SavedDate=Date;try{window.Date=class extends SavedDate{constructor(...args){super(...(args.length?args:[SavedDate.now()+25*60*60*1000]));}static now(){return SavedDate.now()+25*60*60*1000;}};
     if((await p.capturePendingItemFinished(producerScope,true,{...original.input,clientEventId:ids.invalid})).code!=='NETWORK_REQUIRED')throw Error('TEST_25H_WRITE_ALLOWED');
+   }finally{window.Date=SavedDate;}
+   try{window.Date=class extends SavedDate{constructor(...args){super(...(args.length?args:[SavedDate.now()+23*60*60*1000+1000]));}static now(){return SavedDate.now()+23*60*60*1000+1000;}};
+    if((await p.capturePendingItemFinished(producerScope,true,{...original.input,clientEventId:ids.invalid})).code!=='NETWORK_REQUIRED')throw Error('TEST_FRESH_SHELL_CANNOT_EXTEND_SERVER_AGE');
+   }finally{window.Date=SavedDate;}
+   try{window.Date=class extends SavedDate{constructor(...args){super(...(args.length?args:[Date.parse(serverReadAt)-1000]));}static now(){return Date.parse(serverReadAt)-1000;}};
+    if((await p.capturePendingItemFinished(producerScope,true,{...original.input,clientEventId:ids.invalid})).code!=='NETWORK_REQUIRED')throw Error('TEST_BACKWARDS_CLOCK_CAPTURED');
    }finally{window.Date=SavedDate;}
    if(JSON.stringify((await p.readPendingEntries(producerScope))[0])!==JSON.stringify(captured))throw Error('TEST_EXPIRED_ORIGINAL_CHANGED');
    return {oneNativeQueue:true,immutableIntent:true,receiptRequired:true,quarantinePreserved:true,abortPreserved:true};
