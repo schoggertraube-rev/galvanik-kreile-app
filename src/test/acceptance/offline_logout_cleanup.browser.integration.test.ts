@@ -44,6 +44,23 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('revokes native reading state d
    if(nextLogin!==1||(await caches.keys()).includes(pendingCache))throw Error('TEST_LOGIN_CLEANUP_RETRY_NOT_FINISHED');
    const afterCleanup=await p.readPendingEntries(scope),otherAfterCleanup=await p.readPendingEntries(other);
    if(afterCleanup.length!==1||await afterCleanup[0].file.text()!=='TEST immutable bytes'||otherAfterCleanup.length!==1)throw Error('TEST_LOGIN_CLEANUP_DELETED_ORIGINAL');
+   const pendingLogin='${'d'.repeat(64)}';document.cookie='kreile_offline_cache_scope='+pendingLogin+'; Path=/';await p.changePendingShellMetadata(scope,pendingLogin,null,true);
+   const device={port:'order.u2',portVersion:1,objectId:'TEST-cache-only',serverReadAt:'2026-11-13T01:00:00.000Z',sourceLoginScope:pendingLogin,response:{code:'OK',zustand:'TEST synthetic metadata',farbe:null,erstblick:[],hauptaktion:null,weitere:[],gesperrt:[],datenluecken:[],quelle:{test:'TEST storage boundary'}}};
+   if((await p.retainPendingDeviceRead(scope,pendingLogin,1,device)).code!=='STORED')throw Error('TEST_DEVICE_SETUP');
+   const rawCount=()=>new Promise((resolve,reject)=>{const r=indexedDB.open('kreile-pending-originals-v1-'+scope);r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,tx=db.transaction('deviceReads','readonly'),count=tx.objectStore('deviceReads').count();tx.oncomplete=()=>{db.close();resolve(count.result);};tx.onabort=()=>reject(tx.error);};});
+   document.cookie='kreile_offline_cache_scope=; Path=/; Max-Age=0';const nativeTransaction=IDBDatabase.prototype.transaction;
+   IDBDatabase.prototype.transaction=function(names,mode,...rest){const tx=nativeTransaction.call(this,names,mode,...rest);if(this.name==='kreile-pending-originals-v1-'+scope&&mode==='readwrite'&&Array.from(names).includes('deviceReads'))queueMicrotask(()=>tx.abort());return tx;};
+   let blockedDeviceLogin=false;
+   try{const aborted=await p.clearLoggedOutReadState(scope);if(aborted.cacheCleared)throw Error('TEST_ABORTED_DEVICE_DELETE_CLAIMED');try{await p.clearPrivateReadStateBeforeLogin();}catch{blockedDeviceLogin=true;}}finally{IDBDatabase.prototype.transaction=nativeTransaction;}
+   if(!blockedDeviceLogin||await rawCount()!==1)throw Error('TEST_DEVICE_DELETE_FAILURE_NOT_RETAINED');
+   await p.clearPrivateReadStateBeforeLogin();if(await rawCount()!==0)throw Error('TEST_DEVICE_DELETE_NOT_RETRIED_BEFORE_LOGIN');
+   const revoked=await p.readPendingShellMetadata(scope,pendingLogin);if(revoked.code!=='OK'||revoked.metadata.scope!==null)throw Error('TEST_SCOPE_NOT_ATOMIC_WITH_DEVICE_DELETE');
+   const finalOwn=await p.readPendingEntries(scope),finalOther=await p.readPendingEntries(other);if(finalOwn.length!==1||await finalOwn[0].file.text()!=='TEST immutable bytes'||finalOther.length!==1)throw Error('TEST_DEVICE_RETRY_LOST_ORIGINALS');
+   const raceLogin='${'e'.repeat(64)}';document.cookie='kreile_offline_cache_scope='+raceLogin+'; Path=/';await p.changePendingShellMetadata(scope,raceLogin,null,true);await p.retainPendingDeviceRead(scope,raceLogin,1,{...device,sourceLoginScope:raceLogin});
+   const nativeGetAll=IDBObjectStore.prototype.getAll;IDBObjectStore.prototype.getAll=function(...args){const req=nativeGetAll.apply(this,args);if(this.name==='shellMetadata'&&this.transaction.db.name==='kreile-pending-originals-v1-'+scope&&this.transaction.mode==='readwrite')req.addEventListener('success',()=>{document.cookie='kreile_offline_cache_scope='+raceLogin+'; Path=/';});return req;};
+   let concurrentLoginPreserved=false;try{await p.clearPrivateReadStateBeforeLogin();}catch{concurrentLoginPreserved=true;}finally{IDBObjectStore.prototype.getAll=nativeGetAll;}
+   const raceState=await p.readPendingShellMetadata(scope,raceLogin);if(!concurrentLoginPreserved||await rawCount()!==1||raceState.code!=='OK'||raceState.metadata.scope!==raceLogin)throw Error('TEST_LATE_START_CLEANUP_ERASED_ACTIVE_LOGIN');
+   await p.clearPrivateReadStateBeforeLogin();if(await rawCount()!==0||await (await p.readPendingEntries(scope))[0].file.text()!=='TEST immutable bytes')throw Error('TEST_RACE_RETRY_ORIGINAL_LOST');
    return {nativeRevocation:true,cacheFailureVisible:true,originalBytesPreserved:true,foreignActorPreserved:true};
   }`;
   const encoded=Buffer.from('('+code+')').toString('base64');

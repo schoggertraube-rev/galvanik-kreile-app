@@ -146,14 +146,15 @@ export async function readPendingShellInventory(scope:string):Promise<ShellInven
 }
 /** One atomic privacy fence for all known cached logins of this actor.
  * Originals and unknown metadata are never deleted or reassigned. */
-export async function revokePendingShells(scope:string):Promise<{loginScopes:string[];quarantined:number}>{
+export async function revokePendingShells(scope:string,unmarkedOnly=false):Promise<{loginScopes:string[];quarantined:number}>{
  const connection=await database(scope);
  return new Promise((resolve,reject)=>{
   const tx=connection.transaction([SHELL_STORE,DEVICE_STORE],'readwrite'),store=tx.objectStore(SHELL_STORE),keys=store.getAllKeys(),values=store.getAll();
-  tx.objectStore(DEVICE_STORE).clear();
   let keysReady=false,valuesReady=false,result:{loginScopes:string[];quarantined:number}={loginScopes:[],quarantined:0};
   const revoke=()=>{
    if(!keysReady||!valuesReady)return;
+   if(unmarkedOnly&&readCacheScopeMarker()!==null){tx.abort();return;}
+   tx.objectStore(DEVICE_STORE).clear();
    const inventory=shellInventory(keys.result,values.result);result={loginScopes:inventory.entries.map(entry=>entry.loginScope),quarantined:inventory.quarantined};
    for(const entry of inventory.entries)if(entry.metadata.scope!==null)store.put({scope:null,cacheGeneration:Math.min(entry.metadata.cacheGeneration+1,Number.MAX_SAFE_INTEGER-1),updatedAt:new Date().toISOString()},shellKey(entry.loginScope));
   };
@@ -161,6 +162,18 @@ export async function revokePendingShells(scope:string):Promise<{loginScopes:str
   tx.oncomplete=()=>{connection.close();resolve(result);};
   tx.onabort=()=>{connection.close();reject(Error('OFFLINE_SHELL_REVOCATION_ABORTED'));};
  });
+}
+/** Retry reading-state deletion before a new login; original stores are untouched. */
+export async function revokeUnmarkedPendingDeviceReads():Promise<void>{
+ if(readCacheScopeMarker()!==null)throw Error('OFFLINE_CLEANUP_SCOPE_CHANGED');
+ if(typeof indexedDB==='undefined'||typeof indexedDB.databases!=='function')throw Error('OFFLINE_DEVICE_INVENTORY_UNAVAILABLE');
+ const databases=await indexedDB.databases();
+ for(const entry of databases){
+  const match=entry.name?.match(/^kreile-pending-originals-v1-([a-f0-9]{64})$/);
+  if(!match)continue;
+  if(readCacheScopeMarker()!==null)throw Error('OFFLINE_CLEANUP_SCOPE_CHANGED');
+  await revokePendingShells(match[1],true);
+ }
 }
 async function transaction<T>(scope: string, mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const connection = await database(scope);
