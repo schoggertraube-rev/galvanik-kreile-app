@@ -3,12 +3,13 @@ import {readPendingShellMetadata,retainPendingDeviceRead,readPendingDeviceRead,t
 
 /** ABNAHMEFAELLE S06: metadata only. Keep the online port unchanged and make
  * the deliberately unavailable offline mail body explicit in its read result. */
+function messageMetadata(read:import('@/lib/domain/u2ReadContract').U2Read){
+ return {...read,erstblick:read.erstblick.map(field=>field.key==='nachrichten.inhalt'?{...field,werte:Object.fromEntries(Object.entries(field.werte).filter(([key])=>key!=='text'))}:field),datenluecken:[...new Set([...read.datenluecken,'OFFLINE_MESSAGE_TEXT_NOT_CACHED'])]};
+}
 function metadataForDevice(value:PendingDeviceRead):PendingDeviceRead{
+ if(value.port==='today.u3')return {...value,response:{...value.response,...(value.response.messageActions?{messageActions:{...value.response.messageActions,rows:value.response.messageActions.rows.map(row=>({...row,read:messageMetadata(row.read)}))}}:{})}};
  if(value.port!=='message.u2')return value;
- return {...value,response:{...value.response,
-  erstblick:value.response.erstblick.map(field=>field.key==='nachrichten.inhalt'?{...field,werte:Object.fromEntries(Object.entries(field.werte).filter(([key])=>key!=='text'))}:field),
-  datenluecken:[...new Set([...value.response.datenluecken,'OFFLINE_MESSAGE_TEXT_NOT_CACHED'])],
- }};
+ return {...value,response:messageMetadata(value.response)};
 }
 /** Consumes the actual canonical U2 metadata response, never the mail/body/blob DTO. */
 export async function retainDevicePortResponse(scope:string,enabled:boolean,value:PendingDeviceRead):Promise<{code:'DISABLED'|'STALE'|'STORED'|'SOURCE_INCOMPLETE'}>{

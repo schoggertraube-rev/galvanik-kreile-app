@@ -35,7 +35,7 @@ export function CustomerCardAppAdapter({customerId,takeover,onOpenOrder,onClose,
       const kind=result.code==="FORBIDDEN"||result.code==="UNAUTHENTICATED"?"denied":result.code==="NOT_FOUND"?"not-found":result.code==="VALIDATION_ERROR"?"conflict":"error";
       setState({kind,message:result.message});return false;
     }
-    if(offline24h&&offlineScope){if(result.data.nextActionRule)await retainDevicePortResponse(offlineScope,true,{port:'customer.u2',portVersion:1,objectId:resolvedId,serverReadAt:result.serverReadAt,response:result.data.nextActionRule});else console.error('[OFFLINE_CUSTOMER_U2_SOURCE_INCOMPLETE]');}
+    if(offline24h&&offlineScope){if(result.data.nextActionRule&&result.cacheLoginScope)await retainDevicePortResponse(offlineScope,true,{port:'customer.u2',portVersion:1,objectId:resolvedId,serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:result.data.nextActionRule});else console.error('[OFFLINE_CUSTOMER_U2_SOURCE_INCOMPLETE]');}
     setState({kind:"data",card:toCard(result.data)});
     return true;
   },[resolvedId,offlineScope,offline24h]);

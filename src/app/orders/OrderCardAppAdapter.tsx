@@ -326,8 +326,8 @@ export function OrderCardAppAdapter({
         }
         const card = result.data.card;
         if(offline24h&&offlineScope){
-          if(result.data.serverReadAt&&result.data.nextActionRule){
-            await retainDevicePortResponse(offlineScope,true,{port:'order.u2',portVersion:1,objectId:card.id,serverReadAt:result.data.serverReadAt,response:result.data.nextActionRule});
+          if(result.data.serverReadAt&&result.data.cacheLoginScope&&result.data.nextActionRule){
+            await retainDevicePortResponse(offlineScope,true,{port:'order.u2',portVersion:1,objectId:card.id,serverReadAt:result.data.serverReadAt,sourceLoginScope:result.data.cacheLoginScope,response:result.data.nextActionRule});
           }else console.error('[OFFLINE_ORDER_U2_SOURCE_INCOMPLETE]');
         }
         const [masterResult, paymentResult, catalogResult] = await Promise.all([

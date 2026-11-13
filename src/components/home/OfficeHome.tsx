@@ -1,3 +1,4 @@
+import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {getQuoteFollowupsForTodayAction} from "@/app/actions/quotes.actions";
 import {getComplaints} from '@/app/actions/complaints.actions';
 import { hasAnyAuthorizationArea, hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -36,6 +37,7 @@ export async function loadOfficeHome(authorization: AuthorizationSnapshot): Prom
   try {
     const [orders, dashboard] = await Promise.all([getOperationalOrders(authorization), readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction)]);
     const common = {
+      cacheLoginScope:await readCacheLoginScope(),
       role: authorization.role,
       canCreateOrder: hasAuthorizationArea(authorization, "eingang"),
       canWorkOrders: hasAuthorizationArea(authorization, "auftraege"),

@@ -1,4 +1,5 @@
 "use server";
+import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {openIntakePredicate} from '@/modules/eingang/server-public';
 
 
@@ -48,7 +49,7 @@ export async function getCustomerSummaryAction(input: { customerId: string }) {
       : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
   const result=await readCustomerSummary(authorization.data, input,openIntakePredicate());
-  return result.code==="OK"?{...result,serverReadAt:new Date().toISOString()}:result;
+  return result.code==="OK"?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;
 }
 
 async function customerAuthorization() {

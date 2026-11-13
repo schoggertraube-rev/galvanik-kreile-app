@@ -1,4 +1,5 @@
 "use server";
+import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {repairProductionPricingTask} from '@/lib/server/productionSnapshotPort';
 import {offlinePartition} from "@/lib/server/offlinePartition";
@@ -34,7 +35,7 @@ import { after } from "next/server";
 import {revalidatePath} from "next/cache";
 import { getAppSession } from "@/lib/server/appSession";
 import {readIntakeMessages} from '@/modules/eingang/server-public';
-export async function getIntakeMessagesAction(filter:unknown='offen'){const result=await readIntakeMessages(filter);return result.code==='OK'?{...result,serverReadAt:new Date().toISOString()}:result;}
+export async function getIntakeMessagesAction(filter:unknown='offen'){const result=await readIntakeMessages(filter);return result.code==='OK'?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;}
 import {readIntakeAssignment,assignIntakeCustomer,setIntakeNoBusiness,createCustomerForIntake} from '@/modules/eingang/server-public';
 export async function getIntakeAssignmentAction(input:unknown){return readIntakeAssignment(input,readCustomerProfile);}
 export async function assignIntakeCustomerAction(input:unknown){return assignIntakeCustomer(input,readCustomerProfile);}

@@ -42,19 +42,22 @@ async function database(scope: string): Promise<IDBDatabase> {
 }
 export type PendingShellMetadata={scope:string|null;cacheGeneration:number;updatedAt:string};
 /** Exact metadata-only U2 response, already filtered by the server port. */
-export type PendingDeviceRead={port:'order.u2'|'customer.u2'|'quote.u2'|'message.u2';portVersion:1;objectId:string;serverReadAt:string;response:import('@/lib/domain/u2ReadContract').U2Read};
+type DeviceEnvelope={portVersion:1;objectId:string;serverReadAt:string;sourceLoginScope:string};
+type DeviceDashboard={items:readonly unknown[];visibleFields:readonly unknown[];layout:readonly unknown[];defaultLayout:readonly unknown[];allowedFields:readonly unknown[];delegationTargets:readonly unknown[];outlookMessage:string|null;messageActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:readonly {messageId:string;version:number;read:import('@/lib/domain/u2ReadContract').U2Read}[];missingMessageIds:readonly string[]}};
+export type PendingDeviceRead=DeviceEnvelope&({port:'order.u2'|'customer.u2'|'quote.u2'|'message.u2';response:import('@/lib/domain/u2ReadContract').U2Read}|{port:'today.u3';response:DeviceDashboard});
 function isDeviceRead(value:unknown):value is PendingDeviceRead{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>,response=row.response;
- if(Object.keys(row).sort().join(',')!=='objectId,port,portVersion,response,serverReadAt'||!['order.u2','customer.u2','quote.u2','message.u2'].includes(String(row.port))||row.portVersion!==1||typeof row.objectId!=='string'||!row.objectId.length||row.objectId.length>128||typeof row.serverReadAt!=='string'||!Number.isFinite(Date.parse(row.serverReadAt))||!response||typeof response!=='object'||Array.isArray(response))return false;
+ if(Object.keys(row).sort().join(',')!=='objectId,port,portVersion,response,serverReadAt,sourceLoginScope'||typeof row.sourceLoginScope!=='string'||! /^[a-f0-9]{64}$/.test(row.sourceLoginScope)||!['order.u2','customer.u2','quote.u2','message.u2','today.u3'].includes(String(row.port))||row.portVersion!==1||typeof row.objectId!=='string'||!row.objectId.length||row.objectId.length>128||typeof row.serverReadAt!=='string'||!Number.isFinite(Date.parse(row.serverReadAt))||!response||typeof response!=='object'||Array.isArray(response))return false;
  const u2=response as Record<string,unknown>;
+ if(row.port==='today.u3')return ['items','visibleFields','layout','defaultLayout','allowedFields','delegationTargets'].every(key=>Array.isArray(u2[key]))&&(u2.outlookMessage===null||typeof u2.outlookMessage==='string');
  return u2.code==='OK'&&(typeof u2.zustand==='string'||u2.zustand===null)&&(typeof u2.farbe==='string'||u2.farbe===null)&&Array.isArray(u2.erstblick)&&(u2.hauptaktion===null||typeof u2.hauptaktion==='object')&&(u2.weitere===null||Array.isArray(u2.weitere))&&Array.isArray(u2.gesperrt)&&Array.isArray(u2.datenluecken)&&!!u2.quelle&&typeof u2.quelle==='object';
 }
 const deviceKey=(loginScope:string,generation:number,read:Pick<PendingDeviceRead,'port'|'objectId'>)=>[loginScope,generation,read.port,read.objectId];
 /** Same DB and generation as the reading fence; never touches queued originals. */
 export async function retainPendingDeviceRead(scope:string,loginScope:string,generation:number,value:PendingDeviceRead):Promise<{code:'STORED'|'STALE'}>{
  if(!Number.isSafeInteger(generation)||generation<1||!isDeviceRead(value))throw Error('OFFLINE_DEVICE_RESPONSE_INVALID');
- if(readCacheScopeMarker()!==loginScope)return {code:'STALE'};
+ if(readCacheScopeMarker()!==loginScope||value.sourceLoginScope!==loginScope)return {code:'STALE'};
  const metadataKey=shellKey(loginScope),connection=await database(scope);
  return new Promise((resolve,reject)=>{
   const tx=connection.transaction([SHELL_STORE,DEVICE_STORE],'readwrite'),read=tx.objectStore(SHELL_STORE).get(metadataKey);
@@ -80,7 +83,7 @@ export async function readPendingDeviceRead(scope:string,loginScope:string,gener
    connection.close();
    if(readCacheScopeMarker()!==loginScope||!shellMetadata(state.result,loginScope)||state.result.scope!==loginScope||state.result.cacheGeneration!==generation){resolve({code:'STALE'});return;}
    if(read.result===undefined){resolve({code:'EMPTY'});return;}
-   resolve(isDeviceRead(read.result)&&read.result.port===target.port&&read.result.objectId===target.objectId?{code:'OK',value:read.result}:{code:'SOURCE_INCOMPLETE'});
+   resolve(isDeviceRead(read.result)&&read.result.sourceLoginScope===loginScope&&read.result.port===target.port&&read.result.objectId===target.objectId?{code:'OK',value:read.result}:{code:'SOURCE_INCOMPLETE'});
   };
   tx.onabort=()=>{connection.close();reject(Error('OFFLINE_DEVICE_READ_ABORTED'));};
  });

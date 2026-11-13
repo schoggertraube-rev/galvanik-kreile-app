@@ -53,15 +53,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
   const result = await resolveAuthorization();
 
   if (result.ok) {
-    let offlineLoginScope:string|undefined;
-    try{
-      const credential=(await cookies()).get(COOKIE_NAME)?.value;
-      if(credential)offlineLoginScope=cacheScopeFromCredential(credential);
-    }catch(error){
-      // No cookie/token details in diagnostics. Missing cache identity never
-      // changes the independently resolved authorization or enables a cache.
-      console.error('[OFFLINE_CACHE_SCOPE_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');
-    }
+    const offlineLoginScope=await readCacheLoginScope();
     return {
       status: "authenticated",
       user: {
@@ -94,4 +86,17 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
     status: "error",
     message: "Der Produktzugang ist momentan nicht sicher verfügbar.",
   };
+}
+
+/** Existing credential projection only; callers still resolve their own server rights. */
+export async function readCacheLoginScope():Promise<string|undefined>{
+    try{
+      const credential=(await cookies()).get(COOKIE_NAME)?.value;
+      if(credential)return cacheScopeFromCredential(credential);
+    }catch(error){
+      // No cookie/token details in diagnostics. Missing cache identity never
+      // changes the independently resolved authorization or enables a cache.
+      console.error('[OFFLINE_CACHE_SCOPE_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');
+    }
+  return undefined;
 }

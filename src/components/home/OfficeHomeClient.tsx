@@ -1,7 +1,8 @@
 "use client";
 import {MAIL_IMPORT_COPY} from "@/ui/situationCatalog";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import {retainDevicePortResponse} from '@/lib/offline/devicePortRead';
 import { useRouter } from "next/navigation";
 import { listOutlookInboxAction } from "@/app/actions/communications.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
@@ -15,7 +16,7 @@ import { IntakeDraftList } from "@/modules/eingang/public";
 import { getIntakeDraftsAction, discardIntakeDraftAction } from "@/app/actions/eingang.actions";
 import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
-type OfficeIdentity = { role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard };
+type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard };
 export type OfficeHomeModel =
   | ({ kind: "data"; projection: OrdersHomeProjection } & OfficeIdentity)
   | ({ kind: "empty"; projection: OrdersHomeProjection } & OfficeIdentity)
@@ -49,7 +50,12 @@ function assignmentDeadline(value?: string) { return value ? `Frist ${new Intl.D
 export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; ports: OfficeHomePorts }) {
   const openOrder = useOverlayStore((state) => state.openOrder);
   const openInvoice = useOverlayStore((state) => state.openInvoice);
-  const { hasArea, loading: permissionsLoading } = usePermissions();
+  const { hasArea, loading: permissionsLoading,offlineScope,offline24h } = usePermissions();
+  useEffect(()=>{
+    if(!offline24h||!offlineScope||(model.kind!=='data'&&model.kind!=='empty'))return;
+    if(!model.cacheLoginScope){console.error('[OFFLINE_U3_IDENTITY_INCOMPLETE]');return;}
+    void retainDevicePortResponse(offlineScope,true,{port:'today.u3',portVersion:1,objectId:'today',serverReadAt:model.projection.loadedAt,sourceLoginScope:model.cacheLoginScope,response:model.dashboard});
+  },[model,offlineScope,offline24h]);
   const router = useRouter();
   const device = useSyncExternalStore(subscribeDevice, readDevice, () => "desktop" as const);
   const [filter, setFilter] = useState<HandlungsArt | "alle">("alle");

@@ -106,6 +106,6 @@ async function createFixture(rights: string[],role:AppSession['role']='meister')
 }
 
 
-export {sql,full,withSession,nativeFetch,storageApi,createFixture};
+export {sql,full,withSession,withRequest,nativeFetch,storageApi,createFixture};
 
 afterEach(()=>{vi.restoreAllMocks();});
