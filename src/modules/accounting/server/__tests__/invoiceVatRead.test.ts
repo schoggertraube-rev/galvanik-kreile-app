@@ -40,3 +40,17 @@ it('binds persisted scalar amounts to the original without inventing a schema2 h
  expect(readInvoiceVat(legacy).headRate).toBe(700);
  expect(()=>readInvoiceVat({...legacy,vat_rate_basis_points:null})).toThrow();
 });
+
+it.each([0,500,1600])('KORR-S05K-5 retains historical rate %i and stored cents without recalculation',rate=>{
+ const row={snapshot:null,net_amount_cents:'10000',vat_amount_cents:'1601',gross_amount_cents:'11601',vat_rate_basis_points:String(rate)};
+ expect(readInvoiceVat(row)).toMatchObject({headRate:rate,vatAmountCents:1601,grossAmountCents:11601,groups:[{rateBp:rate,netCents:10000,vatCents:1601,grossCents:11601}],reverseCharge:false});
+ expect(()=>readInvoiceVat({...row,gross_amount_cents:'11600'})).toThrow();
+ expect(()=>readInvoiceVat({...row,net_amount_cents:-1})).toThrow();
+});
+it('KORR-S05K-5 preserves a schema1 historical original with its stored line rounding',()=>{
+ const original={schemaVersion:1,totals:{netAmountCents:10000,vatRateBasisPoints:1600,vatAmountCents:1601,grossAmountCents:11601}};
+ expect(readInvoiceVat(original)).toMatchObject({headRate:1600,vatAmountCents:1601,grossAmountCents:11601});
+});
+it('does not invent reverse charge from a historical zero rate alone',()=>{
+ expect(readInvoiceVat({schemaVersion:1,totals:{netAmountCents:10000,vatRateBasisPoints:0,vatAmountCents:0,grossAmountCents:10000}})).toMatchObject({headRate:0,reverseCharge:false});
+});

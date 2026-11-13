@@ -4,12 +4,20 @@ import type {InvoiceVatGroup,InvoiceVatRead} from '../invoiceVatContract';
 const EU_OUTSIDE_DE=new Set(['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE']);
 function object(value:unknown):value is Record<string,unknown>{return !!value&&typeof value==='object'&&!Array.isArray(value);}
 function cents(value:unknown):number{if(typeof value!=='number'||!Number.isSafeInteger(value)||value<0)throw Error('INVOICE_VAT_CENTS_INVALID');return value;}
+function persistedCents(value:unknown):number{return cents(typeof value==='string'&&/^(0|[1-9][0-9]*)$/.test(value)?Number(value):value);}
 function rounded(net:number,rate:number){return Number((BigInt(net)*BigInt(rate)+BigInt(5000))/BigInt(10000));}
 function total(groups:InvoiceVatGroup[],field:'netCents'|'vatCents'|'grossCents'){return cents(groups.reduce((sum,row)=>sum+row[field],0));}
 /** PL13.11.00:14: the only original-VAT reader. Schema 1 is never rewritten. */
 export function readInvoiceVat(beleg:unknown):InvoiceVatRead{
  if(!object(beleg))throw Error('INVOICE_VAT_ORIGINAL_REQUIRED');
  const stored=beleg;
+ // PL13.11.08:01 KORR-S05K-5: old persisted cents are the historical truth.
+ // Never apply current rates or group-rounding rules to an old invoice.
+ if(Object.prototype.hasOwnProperty.call(stored,'snapshot')&&stored.snapshot===null){
+  const net=persistedCents(stored.net_amount_cents),vat=persistedCents(stored.vat_amount_cents),gross=persistedCents(stored.gross_amount_cents),rate=persistedCents(stored.vat_rate_basis_points);
+  if(gross!==net+vat)throw Error('INVOICE_VAT_LEGACY_INVALID');
+  return {groups:[{rateBp:rate,netCents:net,vatCents:vat,grossCents:gross}],netAmountCents:net,vatAmountCents:vat,grossAmountCents:gross,headRate:rate,reverseCharge:false};
+ }
  if(Object.prototype.hasOwnProperty.call(stored,'snapshot')){
   if(!object(stored.snapshot))throw Error('INVOICE_VAT_ORIGINAL_REQUIRED');
   beleg=stored.snapshot;
@@ -18,8 +26,8 @@ export function readInvoiceVat(beleg:unknown):InvoiceVatRead{
  const totals=beleg.totals,net=cents(totals.netAmountCents),vat=cents(totals.vatAmountCents),gross=cents(totals.grossAmountCents);
  let groups:InvoiceVatGroup[],headRate:number|null;
  if(beleg.schemaVersion===1){
-  const rate=totals.vatRateBasisPoints;
-  if(rate!==700&&rate!==1900||vat!==rounded(net,rate)||gross!==net+vat)throw Error('INVOICE_VAT_LEGACY_INVALID');
+  const rate=persistedCents(totals.vatRateBasisPoints);
+  if(gross!==net+vat)throw Error('INVOICE_VAT_LEGACY_INVALID');
   groups=[{rateBp:rate,netCents:net,vatCents:vat,grossCents:gross}];headRate=rate;
  }else if(beleg.schemaVersion===2){
   if(totals.vatRateBasisPoints!==null||!Array.isArray(totals.vatBreakdown)||!totals.vatBreakdown.length||!Array.isArray(beleg.lines)||!beleg.lines.length)throw Error('INVOICE_VAT_GROUPS_REQUIRED');
@@ -47,14 +55,10 @@ export function readInvoiceVat(beleg:unknown):InvoiceVatRead{
   headRate=null;
  }else throw Error('INVOICE_VAT_SCHEMA_INVALID');
  if(Object.prototype.hasOwnProperty.call(stored,'snapshot')){
-  const persistedCents=(value:unknown):number=>{
-   if(typeof value==='string'&&/^(0|[1-9][0-9]*)$/.test(value))return cents(Number(value));
-   return cents(value);
-  };
   if(persistedCents(stored.net_amount_cents)!==net
     ||persistedCents(stored.vat_amount_cents)!==vat
     ||persistedCents(stored.gross_amount_cents)!==gross
     ||(headRate===null?stored.vat_rate_basis_points!==null:persistedCents(stored.vat_rate_basis_points)!==headRate))throw Error('INVOICE_VAT_PERSISTED_TOTALS_INVALID');
  }
- return {groups,netAmountCents:net,vatAmountCents:vat,grossAmountCents:gross,headRate,reverseCharge:groups.every(row=>row.rateBp===0)};
+ return {groups,netAmountCents:net,vatAmountCents:vat,grossAmountCents:gross,headRate,reverseCharge:beleg.schemaVersion===2&&groups.every(row=>row.rateBp===0)};
 }
