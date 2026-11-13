@@ -338,3 +338,5 @@ export const CUSTOMER_INVOICE_TERMS_COPY={
 } as const;
 
 export const MANAGED_USER_COPY={forbidden:"Nutzer dürfen nicht geändert werden."} as const;
+
+export const OFFLINE_DEVICE_READ_COPY={invalidWindow:'TODO_PL'} as const;

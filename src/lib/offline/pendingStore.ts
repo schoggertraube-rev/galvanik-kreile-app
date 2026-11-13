@@ -64,23 +64,43 @@ function isDeviceRead(value:unknown):value is PendingDeviceRead{
 }
 const deviceKey=(loginScope:string,generation:number,read:Pick<PendingDeviceRead,'port'|'objectId'>)=>[loginScope,generation,read.port,read.objectId];
 /** Same DB and generation as the reading fence; never touches queued originals. */
-export async function retainPendingDeviceRead(scope:string,loginScope:string,generation:number,value:PendingDeviceRead):Promise<{code:'STORED'|'STALE'}>{
- if(!Number.isSafeInteger(generation)||generation<1||!isDeviceRead(value))throw Error('OFFLINE_DEVICE_RESPONSE_INVALID');
- if(readCacheScopeMarker()!==loginScope||value.sourceLoginScope!==loginScope)return {code:'STALE'};
+export async function retainPendingDeviceRead(scope:string,loginScope:string,generation:number,value:PendingDeviceRead|PendingDeviceRead[],replace?:{port:'quote.u2';serverReadAt:string}):Promise<{code:'STORED'|'STALE'}>{
+ const values=Array.isArray(value)?value:[value];
+ if(!Number.isSafeInteger(generation)||generation<1||values.some(row=>!isDeviceRead(row))||Array.isArray(value)!==!!replace||replace&&(replace.port!=='quote.u2'||!Number.isFinite(Date.parse(replace.serverReadAt))||values.some(row=>row.port!==replace.port)||new Set(values.map(row=>row.objectId)).size!==values.length))throw Error('OFFLINE_DEVICE_RESPONSE_INVALID');
+ if(readCacheScopeMarker()!==loginScope||values.some(row=>row.sourceLoginScope!==loginScope))return {code:'STALE'};
  const metadataKey=shellKey(loginScope),connection=await database(scope);
  return new Promise((resolve,reject)=>{
   const tx=connection.transaction([SHELL_STORE,DEVICE_STORE],'readwrite'),read=tx.objectStore(SHELL_STORE).get(metadataKey);
-  let code:'STORED'|'STALE'='STALE';
+  let code:'STORED'|'STALE'='STALE',revoked=false;
   read.onsuccess=()=>{
    if(readCacheScopeMarker()!==loginScope||!shellMetadata(read.result,loginScope)||read.result.scope!==loginScope||read.result.cacheGeneration!==generation)return;
-   const store=tx.objectStore(DEVICE_STORE),key=deviceKey(loginScope,generation,value),previous=store.get(key);
+   const store=tx.objectStore(DEVICE_STORE);
+   if(replace){
+    const incoming=new Map(values.map(row=>[row.objectId,row])),newer=new Set<string>();
+    const cursor=store.openCursor(IDBKeyRange.bound([loginScope,generation,replace.port],[loginScope,generation,replace.port,[]]));
+    cursor.onsuccess=()=>{
+     if(readCacheScopeMarker()!==loginScope){revoked=true;tx.abort();return;}
+     const current=cursor.result;
+     if(current){
+      const existing:unknown=current.value;
+      const next=isDeviceRead(existing)?incoming.get(existing.objectId):undefined;
+      if(isDeviceRead(existing)&&existing.port===replace.port&&Array.isArray(current.primaryKey)&&current.primaryKey[3]===existing.objectId&&existing.sourceLoginScope===loginScope&&Date.parse(existing.serverReadAt)>Date.parse(next?.serverReadAt??replace.serverReadAt))newer.add(existing.objectId);
+      else current.delete();
+      current.continue();return;
+     }
+     for(const row of values)if(!newer.has(row.objectId))store.put(row,deviceKey(loginScope,generation,row));
+     code='STORED';
+    };
+    return;
+   }
+   const single=values[0],key=deviceKey(loginScope,generation,single),previous=store.get(key);
    previous.onsuccess=()=>{
-    if(readCacheScopeMarker()!==loginScope||isDeviceRead(previous.result)&&Date.parse(previous.result.serverReadAt)>Date.parse(value.serverReadAt))return;
-    store.put(value,key);code='STORED';
+    if(readCacheScopeMarker()!==loginScope||isDeviceRead(previous.result)&&Date.parse(previous.result.serverReadAt)>Date.parse(single.serverReadAt))return;
+    store.put(single,key);code='STORED';
    };
   };
   tx.oncomplete=()=>{connection.close();resolve({code});};
-  tx.onabort=()=>{connection.close();reject(Error('OFFLINE_DEVICE_WRITE_ABORTED'));};
+  tx.onabort=()=>{connection.close();if(revoked)resolve({code:'STALE'});else reject(Error('OFFLINE_DEVICE_WRITE_ABORTED'));};
  });
 }
 export async function readPendingDeviceRead(scope:string,loginScope:string,generation:number,target:Pick<PendingDeviceRead,'port'|'objectId'>):Promise<{code:'EMPTY'|'STALE'|'SOURCE_INCOMPLETE'}|{code:'OK';value:PendingDeviceRead}>{

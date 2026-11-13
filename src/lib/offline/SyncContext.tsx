@@ -1,5 +1,7 @@
 "use client";
 
+import {refreshDeviceQuotes} from './refreshDeviceQuotes';
+import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
 import {OFFLINE_NOTE_QUARANTINE_COPY} from '@/ui/situationCatalog';
 import React, { createContext, useContext, useEffect, useCallback, useSyncExternalStore } from "react";
 import type { OfflineOutboxItem } from "./OfflineOutbox";
@@ -75,7 +77,7 @@ export function useSync() {
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const {offlineScope,status}=usePermissions();
+  const {offlineScope,status,offline24h}=usePermissions();
   const scope=status==="authenticated"?offlineScope:null;
   const isOnline = useSyncExternalStore(subscribeToNetworkStatus, getOnlineSnapshot, () => true);
   const outboxItems = useSyncExternalStore(subscribeToOutbox, ()=>getOutboxSnapshot(scope), () => EMPTY_OUTBOX);
@@ -84,9 +86,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     activeScope=scope;
     const refresh=()=>{void refreshOutboxSnapshot(scope);};
     refresh();window.addEventListener('kreile-pending-changed',refresh);
-    if(scope&&isOnline)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))}).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
+    if(scope&&isOnline)void syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))}).then(()=>refreshDeviceQuotes(scope,offline24h,{list:()=>listOpenQuotesAction({purpose:'device'}),read:id=>readQuoteAction({quoteId:id,purpose:'operations'}),currentScope:()=>activeScope})).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     return ()=>{window.removeEventListener('kreile-pending-changed',refresh);if(activeScope===scope)activeScope=null;};
-  }, [scope,isOnline]);
+  }, [scope,isOnline,offline24h]);
 
   const syncNow = useCallback(async () => {
     // Retry the same canonical queue; each command checks its current server
@@ -94,7 +96,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     if (!isOnline||!scope||activeScope!==scope) return;
     await syncPendingFiles(scope,{saveNote:saveIntakeNoteAction,prepare:prepareIntakeFileAction,finish:finishIntakeFileAction,upload:uploadIntakeOriginal,currentScope:()=>activeScope,workshop:replayOfflineWorkshopAction,workshopAcknowledged:proof=>window.dispatchEvent(new CustomEvent('kreile-workshop-acknowledged',{detail:proof}))});
     await refreshOutboxSnapshot(scope);
-  }, [isOnline,scope]);
+    await refreshDeviceQuotes(scope,offline24h,{list:()=>listOpenQuotesAction({purpose:'device'}),read:id=>readQuoteAction({quoteId:id,purpose:'operations'}),currentScope:()=>activeScope});
+  }, [isOnline,scope,offline24h]);
 
   const addToOutbox = useCallback(async (itemData: Omit<OfflineOutboxItem, "id" | "status" | "retryCount" | "createdAt" | "updatedAt">) => {
     const newItem: OfflineOutboxItem = {

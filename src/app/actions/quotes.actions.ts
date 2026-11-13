@@ -195,9 +195,11 @@ export async function readQuoteAction(input: { quoteId: string;receivedQuantitie
   }catch(error){console.error('[QUOTE_CONVERSION_DEFAULTS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV konnte nicht sicher gelesen werden.'};}
 }
 
+export type DeviceQuoteListResult={code:'OK';quotes:Array<{quoteId:string;version:number;updatedAt:string}>;serverReadAt:string;cacheLoginScope?:string}|Exclude<ListOpenQuotesResult,{code:'OK'}>;
 export async function listOpenQuotesAction():Promise<ListOpenQuotesResult>;
 export async function listOpenQuotesAction(input:{purpose:'today'}):Promise<{code:'OK';quotes:Array<{quoteId:string;version:number}>}|Exclude<ListOpenQuotesResult,{code:'OK'}>>;
-export async function listOpenQuotesAction(input?:{purpose:'today'}) {
+export async function listOpenQuotesAction(input:{purpose:'device'}):Promise<DeviceQuoteListResult>;
+export async function listOpenQuotesAction(input?:{purpose:'today'|'device'}) {
   noStore();
   let authorization;
   try {
@@ -207,6 +209,11 @@ export async function listOpenQuotesAction(input?:{purpose:'today'}) {
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
+  if(input?.purpose==='device'){
+    const since=new Date(Date.now()-24*60*60*1000).toISOString();
+    const result=await listOpenQuotesCommand(quoteOperationContext(authorization.data),undefined,since);
+    return result.code==='OK'?{code:'OK' as const,quotes:result.quotes.map(({quoteId,version,updatedAt})=>({quoteId,version,updatedAt})),serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;
+  }
   if(input?.purpose==='today'){
     if(!canReadQuoteFollowups(authorization.data))return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
     const result=await listOpenQuotesCommand(quoteOperationContext(authorization.data));
