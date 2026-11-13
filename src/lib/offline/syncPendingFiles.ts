@@ -24,7 +24,7 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
   const sequenced=ordered.filter(hasSequence).sort((a,b)=>a.queueSequence!-b.queueSequence!);
   let sequenceCursor=0;
   const blockedItems=new Set<string>();
-  for(const entry of inventory)if(entry.kind==='quarantine'&&entry.payload?.reason==='NOTE_SYNC_METADATA_MISSING'){
+  for(const entry of inventory)if(entry.kind==='quarantine'&&(entry.payload?.reason==='NOTE_SYNC_METADATA_MISSING'||entry.payload?.reason==='FILE_SYNC_DEVICE_ID_MISSING')){
    const original=entry.payload.original;if(original&&typeof original==='object'&&'itemId'in original&&typeof original.itemId==='string')blockedItems.add(original.itemId);
   }
   // Keep legacy entries in their existing time-based slots; never invent a
@@ -61,7 +61,10 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
     continue;
    }
    // Historical fingerprints are not guessed; the existing capture dialog can resume them.
-   if(entry.kind!=='file'||!Object.hasOwn(entry,'deviceId'))continue;
+   if(!Object.hasOwn(entry,'deviceId')){
+    await retainQuarantinedPending(scope,{id:entry.id,kind:'quarantine',capturedAt:entry.deviceCapturedAt??'',payload:{reason:'FILE_SYNC_DEVICE_ID_MISSING',original:entry}});
+    outcome.blocked++;blockedItems.add(entry.itemId);continue;
+   }
    try{
     const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await entry.file.arrayBuffer())),byte=>byte.toString(16).padStart(2,'0')).join('');
     if(ports.currentScope()!==scope)break;
