@@ -2,8 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import type { Beleg, BelegDetail, BelegFilter, Ausgangsrechnung, RechnungFilter, AusgangsrechnungPosition , Kostenposten, KostenpostenFilter } from '@/lib/buchhaltung/types'
-import { resolveAuthorization } from '@/lib/server/authorization'
-import { readInvoiceTruth, type InvoiceTruthRow } from '@/lib/server/invoiceTruthRead'
+import type {InvoiceTruthRow} from '@/lib/server/invoiceTruthRead';
+import {getInvoiceTruthAction} from '@/app/actions/invoices.actions'
 
 type BelegRow = {
   id: string;
@@ -164,9 +164,7 @@ export async function listOffenePostenAction(): Promise<Ausgangsrechnung[]> {
 }
 
 async function canonicalInvoices(from?: string, to?: string, customerId?: string): Promise<InvoiceTruthRow[]> {
-  const authorization = await resolveAuthorization();
-  if (!authorization.ok) throw new Error(authorization.message);
-  const result = await readInvoiceTruth(authorization.data, { from, to, customerId });
+  const result = await getInvoiceTruthAction({from,to,customerId});
   if (result.code !== 'OK') throw new Error(result.message);
   return result.data;
 }
@@ -188,7 +186,7 @@ function mapInvoiceTruthToClient(invoice: InvoiceTruthRow): Ausgangsrechnung {
     faelligAm: invoice.dueDate,
     brutto: invoice.grossAmountCents / 100,
     netto: invoice.netAmountCents / 100,
-    ustSatz: invoice.vatRateBasisPoints / 100,
+    ...(invoice.vatRateBasisPoints===null?{}:{ustSatz:invoice.vatRateBasisPoints/100}),
     ustBetrag: invoice.vatAmountCents / 100,
     status,
     mahnstufe: 0,
@@ -296,10 +294,11 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
   // Einnahmen & USt aus Rechnungen grouped by ustSatz
   const invoiceRows = (await canonicalInvoices(von, bis)).filter((invoice) => invoice.status === 'issued');
   const rechnungenGrouped = [...invoiceRows.reduce((grouped, invoice) => {
-    const current = grouped.get(invoice.vatRateBasisPoints) ?? { ustSatz: invoice.vatRateBasisPoints / 100, nettoSum: 0, ustSum: 0 };
-    current.nettoSum += invoice.netAmountCents / 100;
-    current.ustSum += invoice.vatAmountCents / 100;
-    grouped.set(invoice.vatRateBasisPoints, current);
+    for(const group of invoice.vatGroups){
+      const current=grouped.get(group.rateBp)??{ustSatz:group.rateBp/100,nettoSum:0,ustSum:0};
+      current.nettoSum+=group.netCents/100;current.ustSum+=group.vatCents/100;
+      grouped.set(group.rateBp,current);
+    }
     return grouped;
   }, new Map<number, { ustSatz: number; nettoSum: number; ustSum: number }>()).values()];
 

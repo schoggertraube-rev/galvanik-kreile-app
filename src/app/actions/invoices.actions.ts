@@ -84,7 +84,7 @@ export async function getInvoiceReceiptAction(
   const authorization = await resolveActionAuthorization();
   if (!authorization.ok) return authorization.result;
   const { readInvoiceReceipt } = await import("@/lib/server/invoiceRead");
-  return readInvoiceReceipt(authorization.data, input);
+  return readInvoiceReceipt(authorization.data, input,readInvoiceVat);
 }
 
 export type GetInvoiceCancellationReceiptActionResult =
@@ -108,5 +108,13 @@ export async function getInvoiceSummariesAction(): Promise<GetInvoiceSummariesAc
   const authorization = await resolveActionAuthorization();
   if (!authorization.ok) return authorization.result;
   const { readInvoiceSummaries } = await import("@/lib/server/invoiceRead");
-  return readInvoiceSummaries(authorization.data);
+  return readInvoiceSummaries(authorization.data,readInvoiceVat);
+}
+
+/** Existing truth port composed at the same root as issue/read/cancellation. */
+export async function getInvoiceTruthAction(filter:{from?:string;to?:string;customerId?:string}={}){
+ const authorization=await resolveActionAuthorization();
+ if(!authorization.ok)return authorization.result;
+ const {readInvoiceTruth}=await import('@/lib/server/invoiceTruthRead');
+ return readInvoiceTruth(authorization.data,filter,readInvoiceVat);
 }

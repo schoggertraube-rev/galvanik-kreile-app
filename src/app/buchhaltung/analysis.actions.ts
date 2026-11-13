@@ -6,13 +6,11 @@ import { db } from '@/db';
 import { beleg } from '@/db/schema_buchhaltung';
 import { and, gte, lte, ne } from 'drizzle-orm';
 import { generateInsight } from '@/lib/analyse/insights';
-import { resolveAuthorization } from '@/lib/server/authorization';
-import { readInvoiceTruth, type InvoiceTruthRow } from '@/lib/server/invoiceTruthRead';
+import type {InvoiceTruthRow} from '@/lib/server/invoiceTruthRead';
+import {getInvoiceTruthAction} from '@/app/actions/invoices.actions';
 
 async function invoiceRows(from?: string, to?: string): Promise<InvoiceTruthRow[]> {
-  const authorization = await resolveAuthorization();
-  if (!authorization.ok) throw new Error(authorization.message);
-  const result = await readInvoiceTruth(authorization.data, { from, to });
+  const result = await getInvoiceTruthAction({from,to});
   if (result.code !== 'OK') throw new Error(result.message);
   return result.data;
 }
@@ -29,12 +27,13 @@ export async function getUstvaAnalysisAction(von: string, bis: string) {
 
   let umsatz19 = 0, umsatz7 = 0;
   for (const r of rechnungen) {
-    const netto = r.netAmountCents / 100;
-    if (r.vatRateBasisPoints === 1900) umsatz19 += netto;
-    else if (r.vatRateBasisPoints === 700) umsatz7 += netto;
+    for(const group of r.vatGroups){
+      if(group.rateBp===1900)umsatz19+=group.netCents/100;
+      else if(group.rateBp===700)umsatz7+=group.netCents/100;
+    }
   }
-  const ust19 = umsatz19 * 0.19;
-  const ust7 = umsatz7 * 0.07;
+  const ust19 = rechnungen.flatMap(row=>row.vatGroups).filter(group=>group.rateBp===1900).reduce((sum,group)=>sum+group.vatCents,0)/100;
+  const ust7 = rechnungen.flatMap(row=>row.vatGroups).filter(group=>group.rateBp===700).reduce((sum,group)=>sum+group.vatCents,0)/100;
   const ustTotal = ust19 + ust7;
   
   const vorsteuerTotal = belege.reduce((sum, b) => sum + (Number(b.ustBetrag) || 0), 0);

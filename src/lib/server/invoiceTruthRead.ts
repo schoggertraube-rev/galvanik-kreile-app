@@ -1,3 +1,4 @@
+import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
 import "server-only";
 
 import { sql } from "drizzle-orm";
@@ -11,7 +12,8 @@ export type InvoiceTruthRow = {
   orderId: string;
   status: "issued" | "cancelled";
   netAmountCents: number;
-  vatRateBasisPoints: number;
+  vatRateBasisPoints: number|null;
+  vatGroups:InvoiceVatGroup[];
   vatAmountCents: number;
   grossAmountCents: number;
   dueDate: string;
@@ -32,7 +34,8 @@ type InvoiceTruthDbRow = {
   order_id: string;
   status: string;
   net_amount_cents: number | string;
-  vat_rate_basis_points: number | string;
+  vat_rate_basis_points: number | string | null;
+  snapshot:unknown;
   vat_amount_cents: number | string;
   gross_amount_cents: number | string;
   due_date: Date | string;
@@ -60,7 +63,8 @@ function instant(value: Date | string): string {
   return parsed.toISOString();
 }
 
-function mapRow(row: InvoiceTruthDbRow): InvoiceTruthRow {
+function mapRow(row: InvoiceTruthDbRow,readVat:InvoiceVatReader): InvoiceTruthRow {
+  const vat=readVat(row);
   if (
     (row.status !== "issued" && row.status !== "cancelled")
     || (row.payment_status !== null && !["offen", "teilbezahlt", "bezahlt"].includes(row.payment_status))
@@ -71,10 +75,11 @@ function mapRow(row: InvoiceTruthDbRow): InvoiceTruthRow {
     customerId: row.customer_id,
     orderId: row.order_id,
     status: row.status,
-    netAmountCents: cents(row.net_amount_cents, "INVOICE_TRUTH_NET_INVALID"),
-    vatRateBasisPoints: cents(row.vat_rate_basis_points, "INVOICE_TRUTH_RATE_INVALID"),
-    vatAmountCents: cents(row.vat_amount_cents, "INVOICE_TRUTH_VAT_INVALID"),
-    grossAmountCents: cents(row.gross_amount_cents, "INVOICE_TRUTH_GROSS_INVALID"),
+    netAmountCents:vat.netAmountCents,
+    vatRateBasisPoints:vat.headRate,
+    vatGroups:vat.groups,
+    vatAmountCents:vat.vatAmountCents,
+    grossAmountCents:vat.grossAmountCents,
     dueDate: dateOnly(row.due_date),
     issuedAt: instant(row.issued_at),
     paymentStatus: row.payment_status as InvoiceTruthRow["paymentStatus"],
@@ -90,6 +95,7 @@ function validDate(value: unknown): value is string {
 export async function readInvoiceTruth(
   authorization: AuthorizationSnapshot,
   filter: { from?: string; to?: string; customerId?: string } = {},
+  readVat?:InvoiceVatReader,
 ): Promise<InvoiceTruthReadResult> {
   if (!authorization.permissions.includes("perm_view_prices")) {
     return { code: "FORBIDDEN", message: "Rechnungsdaten sind mit diesem Login nicht erlaubt." };
@@ -108,6 +114,7 @@ export async function readInvoiceTruth(
                invoice.customer_id,
                invoice.order_id,
                invoice.status,
+               invoice.snapshot,
                invoice.net_amount_cents,
                invoice.vat_rate_basis_points,
                invoice.vat_amount_cents,
@@ -127,7 +134,7 @@ export async function readInvoiceTruth(
         LIMIT 1001
       `);
       if (rows.length > 1000) throw new Error("INVOICE_TRUTH_LIMIT_EXCEEDED");
-      return rows.map(mapRow);
+      return rows.map(row=>{if(!readVat)throw Error("INVOICE_VAT_READER_REQUIRED");return mapRow(row,readVat);});
     });
     return { code: "OK", data };
   } catch (error) {

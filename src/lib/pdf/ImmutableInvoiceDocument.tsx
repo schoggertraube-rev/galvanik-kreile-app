@@ -1,3 +1,4 @@
+import {customerCountryLabel} from '@/modules/customers/public';
 import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import React, { type ReactElement } from "react";
@@ -430,7 +431,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
             {customer.companyName && customer.contactPerson ? <Text>{customer.contactPerson}</Text> : null}
             <Text>{customer.street}</Text>
             <Text>{customer.zip} {customer.city}</Text>
-            <Text>{customer.country}</Text>
+            <Text>{snapshot.schemaVersion===2?customerCountryLabel(customer.country):customer.country}</Text>
           </View>
           <View style={styles.serviceBlock}>
             <Text style={styles.sectionLabel}>Leistungsbezug</Text>
@@ -539,7 +540,7 @@ export function ImmutableInvoiceCancellationDocument({
             {customer.companyName && customer.contactPerson ? <Text>{customer.contactPerson}</Text> : null}
             <Text>{customer.street}</Text>
             <Text>{customer.zip} {customer.city}</Text>
-            <Text>{customer.country}</Text>
+            <Text>{snapshot.schemaVersion===2?customerCountryLabel(customer.country):customer.country}</Text>
           </View>
           <View style={styles.serviceBlock}>
             <Text style={styles.sectionLabel}>Leistungsbezug</Text>

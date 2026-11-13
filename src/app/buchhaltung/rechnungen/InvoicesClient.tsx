@@ -206,7 +206,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
                     </div>
                     <div className="text-left lg:text-right">
                       <p className="font-display text-2xl font-bold text-navy-900">{formatMoney(row.grossAmountCents)}</p>
-                      <p className="text-xs text-text-muted">inkl. {(row.vatRateBasisPoints / 100).toLocaleString("de-DE")} % USt</p>
+                      <p className="text-xs text-text-muted">inkl. {row.vatGroups.map(group=>(group.rateBp/100).toLocaleString("de-DE")).join(" / ")} % USt</p>
                     </div>
                   </div>
 

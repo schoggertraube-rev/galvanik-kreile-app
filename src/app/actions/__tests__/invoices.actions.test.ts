@@ -99,9 +99,9 @@ describe("F1.4 invoice server actions", () => {
       clientEventId: "55555555-5555-4555-8555-555555555555",
     });
     await getInvoiceSummariesAction();
-    expect(ports.readInvoiceReceipt).toHaveBeenCalledWith(authorization.data, expect.any(Object));
+    expect(ports.readInvoiceReceipt).toHaveBeenCalledWith(authorization.data, expect.any(Object),expect.any(Function));
     expect(ports.readInvoiceCancellationReceipt).toHaveBeenCalledWith(authorization.data, expect.any(Object));
-    expect(ports.readInvoiceSummaries).toHaveBeenCalledWith(authorization.data);
+    expect(ports.readInvoiceSummaries).toHaveBeenCalledWith(authorization.data,expect.any(Function));
 
     ports.resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "NO_SESSION", message: "no" });
     await expect(getInvoiceSummariesAction()).resolves.toMatchObject({ code: "UNAUTHENTICATED" });

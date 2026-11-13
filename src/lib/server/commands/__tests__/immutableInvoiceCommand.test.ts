@@ -79,6 +79,7 @@ const validReceiptRow = {
   intent_expected_version: 3,
   current_status: "issued",
   current_version: 1,
+  snapshot:{schemaVersion:1,totals:{netAmountCents:10000,vatRateBasisPoints:1900,vatAmountCents:1900,grossAmountCents:11900}},
   net_amount_cents: 10000,
   vat_rate_basis_points: 1900,
   vat_amount_cents: 1900,
@@ -139,7 +140,8 @@ describe("createInvoice", () => {
   });
 
   it("rejects malformed runtime input before auth or database access", async () => {
-    const { createInvoice } = await import("../immutableInvoiceCommand");
+    const {createInvoice:command}=await import("../immutableInvoiceCommand");
+    const createInvoice=(input:unknown)=>command(input,undefined,fixtureVatReader);
     await expect(createInvoice(null)).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(createInvoice({ ...validInput, orderId: "" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(createInvoice({ ...validInput, clientEventId: "not-a-uuid" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
@@ -150,7 +152,8 @@ describe("createInvoice", () => {
   });
 
   it("fails closed on missing session, unavailable authorization, missing permission, and developer", async () => {
-    const { createInvoice } = await import("../immutableInvoiceCommand");
+    const {createInvoice:command}=await import("../immutableInvoiceCommand");
+    const createInvoice=(input:unknown)=>command(input,undefined,fixtureVatReader);
 
     resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "NO_SESSION", message: "no" });
     await expect(createInvoice(validInput)).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
@@ -172,7 +175,8 @@ describe("createInvoice", () => {
 
   it("maps any database error inside the transaction to UNAVAILABLE, never a success or NOT_AVAILABLE result", async () => {
     execute.mockRejectedValueOnce(new Error("db unreachable"));
-    const { createInvoice } = await import("../immutableInvoiceCommand");
+    const {createInvoice:command}=await import("../immutableInvoiceCommand");
+    const createInvoice=(input:unknown)=>command(input,undefined,fixtureVatReader);
     await expect(createInvoice(validInput)).resolves.toEqual({
       code: "UNAVAILABLE",
       message: "Rechnung konnte nicht sicher ausgestellt werden.",
@@ -185,7 +189,8 @@ describe("createInvoice", () => {
       if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([validReceiptRow]);
       throw new Error(`unexpected SQL in replay test: ${query.text}`);
     });
-    const { createInvoice } = await import("../immutableInvoiceCommand");
+    const {createInvoice:command}=await import("../immutableInvoiceCommand");
+    const createInvoice=(input:unknown)=>command(input,undefined,fixtureVatReader);
     const result = await createInvoice(validInput);
     expect(result).toEqual({
       code: "OK",
@@ -230,7 +235,8 @@ describe("createInvoice", () => {
       if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([v2ReceiptRow]);
       throw new Error(`unexpected SQL in V2 replay test: ${query.text}`);
     });
-    const { createInvoice } = await import("../immutableInvoiceCommand");
+    const {createInvoice:command}=await import("../immutableInvoiceCommand");
+    const createInvoice=(input:unknown)=>command(input,undefined,fixtureVatReader);
     await expect(createInvoice(validInput)).resolves.toMatchObject({
       code: "OK",
       replayed: true,
@@ -249,7 +255,8 @@ describe("createInvoice", () => {
       }
       throw new Error(`unexpected SQL: ${query.text}`);
     });
-    const { createInvoice } = await import("../immutableInvoiceCommand");
+    const {createInvoice:command}=await import("../immutableInvoiceCommand");
+    const createInvoice=(input:unknown)=>command(input,undefined,fixtureVatReader);
     await expect(createInvoice(validInput)).resolves.toMatchObject({ code: "UNAVAILABLE" });
   });
 
@@ -259,7 +266,8 @@ describe("createInvoice", () => {
       if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([validReceiptRow]);
       throw new Error(`unexpected SQL in intent collision test: ${query.text}`);
     });
-    const { createInvoice } = await import("../immutableInvoiceCommand");
+    const {createInvoice:command}=await import("../immutableInvoiceCommand");
+    const createInvoice=(input:unknown)=>command(input,undefined,fixtureVatReader);
     await expect(createInvoice({ ...validInput, expectedVersion: 4 })).resolves.toEqual({
       code: "CONFLICT",
       message: "Anfragekennung wurde bereits anders verwendet.",
@@ -277,7 +285,8 @@ describe("createInvoice", () => {
       }
       throw new Error(`unexpected SQL: ${query.text}`);
     });
-    const { createInvoice } = await import("../immutableInvoiceCommand");
+    const {createInvoice:command}=await import("../immutableInvoiceCommand");
+    const createInvoice=(input:unknown)=>command(input,undefined,fixtureVatReader);
     await expect(createInvoice(validInput)).resolves.toMatchObject({ code: "CONFLICT" });
   });
 });
@@ -416,3 +425,10 @@ describe("cancelInvoice", () => {
     expect(renderToBuffer).not.toHaveBeenCalled();
   });
 });
+
+// Synthetic composition dependency only; actual VAT parsing is covered by accounting and DB tests.
+function fixtureVatReader(value:unknown){
+ const row=value as Record<string,unknown>;
+ if(row.snapshot!==validReceiptRow.snapshot||row.net_amount_cents!==10000||row.vat_rate_basis_points!==1900||row.vat_amount_cents!==1900||row.gross_amount_cents!==11900)throw Error('TEST_DECLARED_VAT_ORIGINAL_REQUIRED');
+ return {groups:[{rateBp:1900 as const,netCents:10000,vatCents:1900,grossCents:11900}],netAmountCents:10000,vatAmountCents:1900,grossAmountCents:11900,headRate:1900,reverseCharge:false};
+}

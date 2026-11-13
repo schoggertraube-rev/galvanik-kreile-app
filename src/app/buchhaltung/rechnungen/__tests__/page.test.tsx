@@ -32,6 +32,7 @@ const issuedRow = {
   orderVersion: 4,
   netAmountCents: 10000,
   vatRateBasisPoints: 1900,
+  vatGroups:[{rateBp:1900 as const,netCents:10000,vatCents:1900,grossCents:11900}],
   vatAmountCents: 1900,
   grossAmountCents: 11900,
   serviceDate: "2026-08-20",

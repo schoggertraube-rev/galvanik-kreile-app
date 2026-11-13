@@ -1,3 +1,4 @@
+import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
 import "server-only";
 
 import { sql } from "drizzle-orm";
@@ -62,7 +63,8 @@ export type ImmutableInvoiceSummary = {
   aggregateVersion: 1 | 2;
   orderVersion: number;
   netAmountCents: number;
-  vatRateBasisPoints: number;
+  vatRateBasisPoints: number|null;
+  vatGroups:InvoiceVatGroup[];
   vatAmountCents: number;
   grossAmountCents: number;
   serviceDate: string;
@@ -100,7 +102,8 @@ type ReceiptRow = {
   current_status: string;
   current_version: number;
   net_amount_cents: number | string;
-  vat_rate_basis_points: number;
+  vat_rate_basis_points: number|null;
+  snapshot: unknown;
   vat_amount_cents: number | string;
   gross_amount_cents: number | string;
   service_date: Date | string;
@@ -130,7 +133,8 @@ type SummaryRow = {
   invoice_number: string;
   status: string;
   net_amount_cents: number | string;
-  vat_rate_basis_points: number | string;
+  vat_rate_basis_points: number | string | null;
+  snapshot: unknown;
   vat_amount_cents: number | string;
   gross_amount_cents: number | string;
   service_date: Date | string;
@@ -221,16 +225,13 @@ function hasCommonReceiptIntegrity(row: ReceiptRow, authorization: Authorization
     && HEX64_PATTERN.test(row.original_pdf_sha256);
 }
 
-function mapIssueReceipt(row: ReceiptRow, authorization: AuthorizationSnapshot): ImmutableInvoiceReceipt {
+function mapIssueReceipt(row: ReceiptRow, authorization: AuthorizationSnapshot,readVat:InvoiceVatReader): ImmutableInvoiceReceipt {
   const orderVersion = toSafeInteger(row.order_version, "INVOICE_READ_ORDER_VERSION_INVALID");
   const intentExpectedVersion = toSafeInteger(
     row.intent_expected_version,
     "INVOICE_READ_INTENT_VERSION_INVALID",
   );
-  const netAmountCents = toSafeInteger(row.net_amount_cents, "INVOICE_READ_NET_INVALID");
-  const vatAmountCents = toSafeInteger(row.vat_amount_cents, "INVOICE_READ_VAT_INVALID");
-  const grossAmountCents = toSafeInteger(row.gross_amount_cents, "INVOICE_READ_GROSS_INVALID");
-  const vatRateBasisPoints = toSafeInteger(row.vat_rate_basis_points, "INVOICE_READ_RATE_INVALID");
+  const {netAmountCents,vatAmountCents,grossAmountCents,headRate:vatRateBasisPoints}=readVat(row);
   const aggregateVersion = toSafeInteger(row.aggregate_version, "INVOICE_READ_VERSION_INVALID");
   const serviceDate = toDateOnly(row.service_date);
   const dueDate = toDateOnly(row.due_date);
@@ -256,9 +257,7 @@ function mapIssueReceipt(row: ReceiptRow, authorization: AuthorizationSnapshot):
     || row.pdf_sha256 !== row.original_pdf_sha256
     || netAmountCents < 0
     || vatAmountCents < 0
-    || ![700, 1900].includes(vatRateBasisPoints)
     || grossAmountCents !== netAmountCents + vatAmountCents
-    || vatAmountCents !== Math.round((netAmountCents * vatRateBasisPoints) / 10000)
   ) throw new Error("INVOICE_READ_RECEIPT_INVALID");
 
   return {
@@ -331,13 +330,10 @@ function mapCancellationReceipt(
   };
 }
 
-function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): ImmutableInvoiceSummary {
+function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot,readVat:InvoiceVatReader): ImmutableInvoiceSummary {
   const aggregateVersion = toSafeInteger(row.aggregate_version, "INVOICE_SUMMARY_VERSION_INVALID");
   const orderVersion = toSafeInteger(row.order_version, "INVOICE_SUMMARY_ORDER_VERSION_INVALID");
-  const netAmountCents = toSafeInteger(row.net_amount_cents, "INVOICE_SUMMARY_NET_INVALID");
-  const vatRateBasisPoints = toSafeInteger(row.vat_rate_basis_points, "INVOICE_SUMMARY_RATE_INVALID");
-  const vatAmountCents = toSafeInteger(row.vat_amount_cents, "INVOICE_SUMMARY_VAT_INVALID");
-  const grossAmountCents = toSafeInteger(row.gross_amount_cents, "INVOICE_SUMMARY_GROSS_INVALID");
+  const {netAmountCents,vatAmountCents,grossAmountCents,headRate:vatRateBasisPoints,groups:vatGroups}=readVat(row);
   const commonValid = row.integrity_ok === true
     && row.tenant_id === authorization.tenantId
     && UUID_PATTERN.test(row.id)
@@ -349,8 +345,6 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Immu
     && orderVersion > 0
     && netAmountCents >= 0
     && vatAmountCents >= 0
-    && [700, 1900].includes(vatRateBasisPoints)
-    && vatAmountCents === Math.round((netAmountCents * vatRateBasisPoints) / 10000)
     && grossAmountCents === netAmountCents + vatAmountCents
     && row.order_number.trim().length > 0
     && row.customer_name.trim().length > 0;
@@ -389,6 +383,7 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Immu
     orderVersion,
     netAmountCents,
     vatRateBasisPoints,
+    vatGroups,
     vatAmountCents,
     grossAmountCents,
     serviceDate: toDateOnly(row.service_date),
@@ -407,6 +402,7 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Immu
 export async function readInvoiceReceipt(
   authorization: AuthorizationSnapshot,
   input: unknown,
+  readVat?: InvoiceVatReader,
 ): Promise<ReadInvoiceReceiptResult> {
   if (!isReceiptInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Belegabfrage." };
@@ -425,7 +421,7 @@ export async function readInvoiceReceipt(
         LIMIT 2
       `);
       if (rows.length > 1) throw new Error("INVOICE_READ_AMBIGUOUS");
-      return rows[0] ? mapIssueReceipt(rows[0], authorization) : null;
+      return rows[0] ? mapIssueReceipt(rows[0], authorization,requireVat(readVat)) : null;
     });
     return { code: "OK", data };
   } catch {
@@ -464,6 +460,7 @@ export async function readInvoiceCancellationReceipt(
 
 export async function readInvoiceSummaries(
   authorization: AuthorizationSnapshot,
+  readVat?:InvoiceVatReader,
 ): Promise<ReadInvoiceSummariesResult> {
   if (!canReadInvoices(authorization)) {
     return { code: "FORBIDDEN", message: "Rechnungsliste ist mit dieser Rolle nicht erlaubt." };
@@ -476,7 +473,7 @@ export async function readInvoiceSummaries(
         ORDER BY issued_at DESC, invoice_number DESC
         LIMIT 250
       `);
-      return rows.map((row) => mapSummary(row, authorization));
+      return rows.map((row) => mapSummary(row, authorization,requireVat(readVat)));
     });
     return { code: "OK", data };
   } catch {
@@ -554,3 +551,5 @@ export async function readInvoicePdf(
     return { code: "UNAVAILABLE", message: "Rechnungs-PDF konnte nicht sicher geladen werden." };
   }
 }
+
+function requireVat(reader:InvoiceVatReader|undefined):InvoiceVatReader{if(!reader)throw Error("INVOICE_VAT_READER_REQUIRED");return reader;}

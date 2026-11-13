@@ -15,6 +15,7 @@ import {
   resolveAuthorization,
 } from "@/lib/server/authorization";
 import { readCustomerSummary,readCustomerListSignals } from "@/lib/server/customerSummaryRead";
+import {readInvoiceVat} from "@/modules/accounting/server-public";
 import { readInvoiceTruth } from "@/lib/server/invoiceTruthRead";
 import {CUSTOMER_LOOKUP_COPY} from '@/ui/situationCatalog';
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -279,7 +280,7 @@ export async function getTopKunden(limit = 5) {
     const authRes = await resolveAuthorization();
     if (!authRes.ok) return [];
     const tenantId = authRes.data.tenantId;
-    const invoiceTruth = await readInvoiceTruth(authRes.data);
+    const invoiceTruth = await readInvoiceTruth(authRes.data,{},readInvoiceVat);
     if (invoiceTruth.code !== "OK") return [];
     const revenueByCustomer = new Map<string, number>();
     for (const invoice of invoiceTruth.data) {
