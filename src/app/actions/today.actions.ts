@@ -1,5 +1,6 @@
 "use server";
 
+import {LEGACY_ACTION_ACCESS_COPY} from '@/ui/situationCatalog';
 import type { AccessArea } from "@/lib/auth/authorizationContract";
 import { hasAnyAuthorizationArea, hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import { saveTodayPreferences, saveTodayReminder, type TodayLayoutItem } from "@/lib/server/todayDashboard";
@@ -9,6 +10,16 @@ async function auth(requiredArea?: AccessArea) {
   if (!result.ok) return { ok: false as const, result: { code: result.reason === "AUTHORIZATION_UNAVAILABLE" ? "UNAVAILABLE" as const : "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." } };
   if (!hasAnyAuthorizationArea(result.data) || (requiredArea && !hasAuthorizationArea(result.data, requiredArea))) return { ok: false as const, result: { code: "FORBIDDEN" as const, message: "Der Tag ist für dieses Profil nicht freigegeben." } };
   return { ok: true as const, data: result.data };
+}
+
+/** S06 thin read facade: the same U3 loader as the actual home page. */
+export async function getTodayDeviceAction(){
+ const authorization=await auth();if(!authorization.ok)return authorization.result;
+ const {loadOfficeHome}=await import('@/lib/server/officeHomeRead');
+ const model=await loadOfficeHome(authorization.data);
+ if(model.kind==='data'||model.kind==='empty')return {code:'OK' as const,dashboard:model.dashboard,serverReadAt:model.projection.loadedAt,cacheLoginScope:model.cacheLoginScope};
+ if(model.kind==='error'||model.kind==='denied')return {code:'UNAVAILABLE' as const,message:model.message};
+ return {code:'FORBIDDEN' as const,message:LEGACY_ACTION_ACCESS_COPY.forbidden};
 }
 
 export async function saveTodayPreferencesAction(layout: TodayLayoutItem[]) {
