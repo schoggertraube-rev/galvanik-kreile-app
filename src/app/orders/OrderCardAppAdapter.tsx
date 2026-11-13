@@ -1,6 +1,7 @@
 "use client";
 import {captureDeviceReadFence,retainDevicePortResponse} from '@/lib/offline/devicePortRead';
 import {capturePendingItemFinished} from '@/lib/offline/pendingStore';
+import {readServerReachability} from '@/lib/offline/serverReachability';
 import type {WorkshopAcknowledgement} from '@/lib/offline/syncPendingFiles';
 import {OFFLINE_ITEM_FINISHED_COPY,OFFLINE_RECONCILIATION_COPY,ACTOR_COPY} from "@/ui/situationCatalog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -833,16 +834,18 @@ export function OrderCardAppAdapter({
     setFeedback({ kind: "submitting", message: finished ? "Teil wird fertig gemeldet." : "Teil wird wieder geöffnet." });
     const key = `item:${itemId}:${finished}`;
     const clientEventId = (requests.current[key] ??= crypto.randomUUID());
-    if(!navigator.onLine){
+    const queueOriginal=async()=>{
       try{
         if(!offlineScope||authStatus!=='authenticated'){setFeedback({kind:'error',message:OFFLINE_ITEM_FINISHED_COPY.networkRequired});return;}
         const held=await capturePendingItemFinished(offlineScope,offline24h&&hasPermission('perm_op_status'),{orderId,itemId,expectedVersion:snapshot.card.version,clientEventId,finished});
         if(held.code!=='QUEUED'){setFeedback({kind:'error',message:OFFLINE_ITEM_FINISHED_COPY.networkRequired});return;}
         setFeedback({kind:'pending',message:OFFLINE_ITEM_FINISHED_COPY.pending(snapshot.card.items.find(item=>item.id===itemId)?.name??itemId)});
       }catch{setFeedback({kind:'error',message:OFFLINE_ITEM_FINISHED_COPY.notSaved});}
-      return;
-    }
-    const result = await setOrderItemFinishedAction({ orderId, itemId, expectedVersion: snapshot.card.version, clientEventId, finished });
+    };
+    if(!readServerReachability()){await queueOriginal();return;}
+    let result:Awaited<ReturnType<typeof setOrderItemFinishedAction>>;
+    try{result=await setOrderItemFinishedAction({ orderId, itemId, expectedVersion: snapshot.card.version, clientEventId, finished });}
+    catch(error){if(!readServerReachability()){await queueOriginal();return;}throw error;}
     if (result.code !== "OK") { await fail(result); return; }
     const fresh = await load(true);
     if (fresh?.card.version !== result.receipt.aggregateVersion) {

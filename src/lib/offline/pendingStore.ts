@@ -460,7 +460,10 @@ export async function capturePendingItemFinished(scope:string,enabled:boolean,in
  if(!enabled||input.finished!==true)return {code:'NETWORK_REQUIRED' as const};
  const {readCacheScopeMarker}=await import('./cacheScopeMarker');
  const login=readCacheScopeMarker();if(!login)return {code:'NETWORK_REQUIRED' as const};
- const state=await readPendingDeviceStand(scope,login),now=new Date();
+ let state:Awaited<ReturnType<typeof readPendingDeviceStand>>;
+ try{state=await readPendingDeviceStand(scope,login);}
+ catch(error){console.error('[OFFLINE_WORKSHOP_STAND_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');return {code:'NETWORK_REQUIRED' as const};}
+ const now=new Date();
  if(state.code!=='OK')return {code:'NETWORK_REQUIRED' as const};
  const age=now.getTime()-Date.parse(state.serverReadAt);
  if(!Number.isFinite(age)||age<0||age>=24*60*60*1000||readCacheScopeMarker()!==login)return {code:'NETWORK_REQUIRED' as const};

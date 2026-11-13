@@ -7,6 +7,9 @@ vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:
 // Projection boundaries only; the actual Action/IDB source writer is exercised
 // independently by offline_device_stand_atomic.browser.integration.test.ts.
 vi.mock('../collectDeviceStand',()=>({refreshDeviceStand:ports.refreshStand}));
+// Consumer projection only; the real fetch/heartbeat predicate has its own
+// transport tests and is exercised in the actual Next browser smoke.
+vi.mock('../serverReachability',()=>({installServerReachability:()=>()=>{},readServerReachability:()=>navigator.onLine,serverReachabilitySnapshot:()=>true,subscribeServerReachability:(listener:()=>void)=>{window.addEventListener('online',listener);window.addEventListener('offline',listener);return()=>{window.removeEventListener('online',listener);window.removeEventListener('offline',listener);};}}));
 vi.mock('../devicePortRead',()=>({readDeviceStandResponse:ports.readStand}));
 vi.mock('@/app/actions/eingang.actions',()=>({prepareIntakeFileAction:vi.fn(),finishIntakeFileAction:vi.fn(),saveIntakeNoteAction:vi.fn()}));
 vi.mock('@/app/actions/offlineWorkshop.actions',()=>({replayOfflineWorkshopAction:vi.fn()}));

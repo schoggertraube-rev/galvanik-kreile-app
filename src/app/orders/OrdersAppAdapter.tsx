@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
 import {SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
 import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
+import {readWithDeviceFallback,subscribeServerReachability} from '@/lib/offline/serverReachability';
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import {captureDeviceReadFence,retainDevicePortResponse,readDevicePortResponse} from '@/lib/offline/devicePortRead';
@@ -206,19 +207,18 @@ export function OrdersAppAdapter() {
       const revision=++loadRevision;
       setState({ kind: "loading" });
       try {
-        if(offline24h&&offlineScope&&navigator.onLine===false){
+        let device=false;
+        const readDevice=async():Promise<Awaited<ReturnType<typeof getOrdersDb>>>=>{
+          if(!offlineScope)throw Error('OFFLINE_ORDER_SCOPE_REQUIRED');
+          device=true;
           const stored=await readDevicePortResponse(offlineScope,true,{port:'orders.list',objectId:'orders'});
-          if(!active||revision!==loadRevision)return;
           if(stored.code!=='OK'||stored.value.port!=='orders.list')throw Error('OFFLINE_ORDER_LIST_SOURCE_INCOMPLETE');
-          const result=stored.value.response.result;
-          if(!result.ok){setState({kind:'denied',message:result.message});return;}
-          setState({kind:'data',orders:result.data.map(toOrderListRow),loadedAt:stored.value.serverReadAt,source:'device'});
-          return;
-        }
+          return {...stored.value.response.result,serverReadAt:stored.value.serverReadAt};
+        };
         const readFence=offlineScope?await captureDeviceReadFence(offlineScope,offline24h):null;
-        const result = await getOrdersDb();
+        const result = await readWithDeviceFallback(getOrdersDb,readDevice,!!(offline24h&&offlineScope));
         if (!active||revision!==loadRevision) return;
-        if(offline24h&&offlineScope&&result.serverReadAt&&result.cacheLoginScope&&(result.ok||result.error==='FORBIDDEN'||result.error==='UNAUTHORIZED'))await retainDevicePortResponse(offlineScope,true,{port:'orders.list',portVersion:1,objectId:'orders',serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:{result:result.ok?{ok:true,data:result.data}:{ok:false,error:result.error,message:result.message},datenluecken:[]}},readFence);
+        if(!device&&offline24h&&offlineScope&&result.serverReadAt&&result.cacheLoginScope&&(result.ok||result.error==='FORBIDDEN'||result.error==='UNAUTHORIZED'))await retainDevicePortResponse(offlineScope,true,{port:'orders.list',portVersion:1,objectId:'orders',serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:{result:result.ok?{ok:true,data:result.data}:{ok:false,error:result.error,message:result.message},datenluecken:[]}},readFence);
         if(!active||revision!==loadRevision)return;
         if (!result.ok) {
           setState({
@@ -227,7 +227,7 @@ export function OrdersAppAdapter() {
           });
           return;
         }
-        if(active&&revision===loadRevision)setState({ kind: "data", orders: result.data.map(toOrderListRow), loadedAt: result.serverReadAt??new Date().toISOString(),source:"online" });
+        if(active&&revision===loadRevision)setState({ kind: "data", orders: result.data.map(toOrderListRow), loadedAt: result.serverReadAt??new Date().toISOString(),source:device?'device':"online" });
       } catch (error) {
         console.error('[ORDERS_READ_FAILED]',error instanceof Error?error.name:'UnknownError');
         if (active&&revision===loadRevision) setState({ kind: "error", message: "Aufträge konnten nicht sicher geladen werden." });
@@ -235,11 +235,11 @@ export function OrdersAppAdapter() {
     };
     void load();
     window.addEventListener("kreile-sync-orders", load);
-    window.addEventListener("online",load);
+    const unsubscribe=subscribeServerReachability(()=>void load());
     return () => {
       active = false;
       window.removeEventListener("kreile-sync-orders", load);
-      window.removeEventListener("online",load);
+      unsubscribe();
     };
   }, [offline24h,offlineScope]);
 

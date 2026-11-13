@@ -3,16 +3,19 @@ import {refreshDeviceStand} from './collectDeviceStand';
 import {readDeviceStandResponse} from './devicePortRead';
 import {readCacheScopeMarker} from './cacheScopeMarker';
 import {OFFLINE_NOTE_QUARANTINE_COPY} from '@/ui/situationCatalog';
-import React, { createContext, useContext, useEffect, useCallback, useSyncExternalStore } from "react";
+import React, { createContext, useContext, useEffect, useLayoutEffect,useCallback, useSyncExternalStore } from "react";
 import type { OfflineOutboxItem } from "./OfflineOutbox";
 import type {PendingQuarantine} from './pendingStore';
 import {readPendingEntries,retainQuarantinedPending} from "./pendingStore";
 import {usePermissions} from "@/lib/auth/PermissionsContext";
 import {syncOriginals} from './syncOriginals';
+import {installServerReachability,readServerReachability,subscribeServerReachability,serverReachabilitySnapshot} from './serverReachability';
+import {requestStoragePersistence,readStoragePersistence,subscribeStoragePersistence,serverStoragePersistence,type StoragePersistence} from './storagePersistence';
 import { createId } from "@paralleldrive/cuid2";
 
 interface SyncContextValue {
   isOnline: boolean;
+  storagePersistence:StoragePersistence;
   outboxItems: OfflineOutboxItem[];
   quarantinedOriginals:PendingQuarantine[];
   deviceStand:DeviceStandSnapshot;
@@ -46,21 +49,6 @@ const deviceStandPorts={
   messages:{read:async()=>(await import('@/app/actions/eingang.actions')).getIntakeMessagesAction({purpose:'device'})},
   today:{read:async()=>(await import('@/app/actions/today.actions')).getTodayDeviceAction()},currentScope:()=>activeScope,
 };
-
-function subscribeToNetworkStatus(onStoreChange: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-
-  window.addEventListener("online", onStoreChange);
-  window.addEventListener("offline", onStoreChange);
-  return () => {
-    window.removeEventListener("online", onStoreChange);
-    window.removeEventListener("offline", onStoreChange);
-  };
-}
-
-function getOnlineSnapshot(): boolean {
-  return typeof window === "undefined" || navigator.onLine;
-}
 
 function subscribeToOutbox(onStoreChange: () => void): () => void {
   outboxListeners.add(onStoreChange);
@@ -118,8 +106,11 @@ export function useSync() {
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
   const {offlineScope,status,offline24h}=usePermissions();
+  useLayoutEffect(()=>offline24h?installServerReachability():undefined,[offline24h]);
   const scope=status==="authenticated"?offlineScope:null;
-  const isOnline = useSyncExternalStore(subscribeToNetworkStatus, getOnlineSnapshot, () => true);
+  const isOnline = useSyncExternalStore(subscribeServerReachability,readServerReachability,serverReachabilitySnapshot);
+  const storagePersistence=useSyncExternalStore(subscribeStoragePersistence,readStoragePersistence,serverStoragePersistence);
+  useEffect(()=>{if(scope&&offline24h)void requestStoragePersistence();},[scope,offline24h]);
   const outboxItems = useSyncExternalStore(subscribeToOutbox, ()=>getOutboxSnapshot(scope), () => EMPTY_OUTBOX);
   const quarantinedOriginals=useSyncExternalStore(subscribeToOutbox,()=>scope&&snapshotScope===scope?quarantineSnapshot:EMPTY_QUARANTINE,()=>EMPTY_QUARANTINE);
   const deviceStand=useSyncExternalStore(subscribeToOutbox,()=>!offline24h?DISABLED_DEVICE:scope&&deviceSnapshotScope===scope&&deviceSnapshotLogin===readCacheScopeMarker()?deviceSnapshot:LOADING_DEVICE,()=>LOADING_DEVICE);
@@ -131,12 +122,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     let timer:ReturnType<typeof setTimeout>|undefined,disposed=false;
     let timerGeneration=0;
     const run=(flushDelayed=false,keepalive=false)=>{
-      if(!scope||!navigator.onLine||activeScope!==scope)return;
+      if(!scope||!readServerReachability()||activeScope!==scope)return;
       void syncOriginals(scope,()=>activeScope,{flushDelayed,keepalive,workshopOnly:keepalive,offline24h}).then(()=>keepalive?undefined:refreshFullDeviceStand(scope,offline24h)).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
     };
     const schedule=async()=>{
       const generation=++timerGeneration;if(timer)clearTimeout(timer);
-      if(!scope||!navigator.onLine)return;
+      if(!scope||!readServerReachability())return;
       try{
         const entries=await readPendingEntries(scope);
         if(disposed||generation!==timerGeneration||activeScope!==scope)return;
@@ -192,7 +183,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
 
   return (
-    <SyncContext.Provider value={{ isOnline, outboxItems,quarantinedOriginals,deviceStand,pendingStorageUnavailable,addToOutbox, removeItem, syncNow }}>
+    <SyncContext.Provider value={{ isOnline,storagePersistence, outboxItems,quarantinedOriginals,deviceStand,pendingStorageUnavailable,addToOutbox, removeItem, syncNow }}>
       {children}
     </SyncContext.Provider>
   );

@@ -18,6 +18,7 @@ import { MoreMenu } from "./MoreMenu";
 import { requestGlobalCreate } from "./GlobalCreateFlow";
 import styles from "./TargetShell.module.css";
 import {WasIstNeu} from './WasIstNeu';
+import {DeviceStandStatus} from '@/lib/offline/DeviceStandStatus';
 
 function readDevice(): Geraet {
   if (window.innerWidth < 768) return "handy";
@@ -115,6 +116,7 @@ export function KreileAppShell({ children, globalCreate,loginHandle }: { childre
         <KrApp geraet={device}>
           <AppShell
           geraet={device}
+          zustand={permissions.offline24h?<DeviceStandStatus/>:null}
           variante={workshop ? "werkstatt" : "buero"}
           aktiv={areaForPath(pathname)}
           kuerzel={permissions.initials || "K"}

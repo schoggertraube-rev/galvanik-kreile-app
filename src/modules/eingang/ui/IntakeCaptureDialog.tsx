@@ -1,5 +1,6 @@
 "use client";
 import {PACKAGE_ASSIGN_COPY} from '@/ui/situationCatalog';
+import {readServerReachability,readWithDeviceFallback,subscribeServerReachability} from '@/lib/offline/serverReachability';
 import {OFFLINE_TAKEOVER_COPY} from '@/ui/situationCatalog';
 import {PackageOnsiteEditor} from "./PackageOnsiteEditor";
 import {PACKAGE_ONSITE_COPY} from "@/ui/situationCatalog";
@@ -407,9 +408,7 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
     let retry: number | undefined;
     if (!getCaptureScope) return;
     const initialize = async () => { for (let attempt=0;attempt<3&&current;attempt+=1) { try {
-      let knownScope:string;
-      if(!navigator.onLine&&ports.offlineScope)knownScope=ports.offlineScope;
-      else{const result=await getCaptureScope();if(result.code!=='OK')throw Error('INTAKE_PENDING_SCOPE_UNAVAILABLE');knownScope=result.scope;}
+      const knownScope=await readWithDeviceFallback(async()=>{const result=await getCaptureScope();if(result.code!=='OK')throw Error('INTAKE_PENDING_SCOPE_UNAVAILABLE');return result.scope;},async()=>{if(!ports.offlineScope)throw Error('INTAKE_PENDING_SCOPE_UNAVAILABLE');return ports.offlineScope;},!!ports.offlineScope);
       const originals = (await readPendingOriginals(knownScope)).filter(original=>(original.kind!=='file'||!original.context)&&(!resumePendingId||original.itemId===resumePendingId));
       if (current) {
         setScope(knownScope);
@@ -439,11 +438,11 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
   }, [getCaptureScope, handoverToken, itemId,resumePendingId,getCapture,ports.offlineScope]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => { if (pending.length || text.trim() && lastSaved.current !== JSON.stringify([text, concerns.filter(value => !dismissed.includes(value.id)).map(value => value.id)])) { event.preventDefault(); event.returnValue = ""; } };
-    const resume = () => { if (pending.length && !inFlight.current) void upload(pending); };
-    window.addEventListener("beforeunload", warn); window.addEventListener("online", resume);
+    const resume = () => { if (readServerReachability()&&pending.length && !inFlight.current) void upload(pending); };
+    window.addEventListener("beforeunload", warn); const unsubscribe=subscribeServerReachability(resume);
     const retry = pending.length && !busy && automaticRetry && scope
-      ? setTimeout(() => { if (navigator.onLine && !inFlight.current) void upload(pending); }, 1_000) : null;
-    return () => { if (retry !== null) clearTimeout(retry); window.removeEventListener("beforeunload", warn); window.removeEventListener("online", resume); };
+      ? setTimeout(() => { if (readServerReachability() && !inFlight.current) void upload(pending); }, 1_000) : null;
+    return () => { if (retry !== null) clearTimeout(retry); window.removeEventListener("beforeunload", warn); unsubscribe(); };
   });
   const changeText = (value: string) => {
     localInput.current = true;
