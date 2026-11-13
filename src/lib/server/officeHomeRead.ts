@@ -51,4 +51,3 @@ export async function loadOfficeHome(authorization: AuthorizationSnapshot): Prom
     return { kind: "error", message: "Die aktuellen Auftragsdaten konnten nicht sicher geladen werden." };
   }
 }
-
