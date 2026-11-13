@@ -7,7 +7,7 @@ import { createPinLoginHandle } from "../../src/lib/server/pinLoginHandle";
 import { berlinCalendarDay, isWorkingDay, plusWorkingDays, previousWorkingDay } from "../../src/lib/domain/workingDays";
 import { generatedFlowRuntime } from "./_model";
 import { localReplayStorageEnvironment } from "../../src/test/localReplayStorage";
-import { retryFixtureResetDeadlock } from "./_fixtureReset";
+import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets } from "./_fixtureReset";
 
 export type FlowExpectation = {
   id?: string;
@@ -192,19 +192,18 @@ async function resetGeneratedDomain() {
     baselineSettings = rows.map((row) => completeSyntheticReplaySettings(row.row));
   }
   const names = [...new Set([...Object.values(databaseMapping).map((entry) => `${entry.schema ?? "public"}.${entry.table}`), "public.events"])];
-  const present = await sql<{ schema: string; name: string }[]>`SELECT schemaname AS schema, tablename AS name FROM pg_tables WHERE schemaname || '.' || tablename = ANY(${names}::text[]) ORDER BY schemaname, tablename`;
-  if (present.some((row) => !/^[a-z_]+$/.test(row.name) || !["public", "private"].includes(row.schema))) throw new Error("FLOW_REPLAY_TABLE_NAME_INVALID");
-  const targets = present.map((row) => `"${row.schema}"."${row.name}"`).join(", ");
-  const protectedRows = await sql<{ relname: string }[]>`WITH RECURSIVE affected(oid) AS (
+  const affectedTables = await sql<{ schema:string;name:string }[]>`WITH RECURSIVE affected(oid) AS (
     SELECT relation.oid FROM pg_class relation JOIN pg_namespace schema ON schema.oid = relation.relnamespace
     WHERE schema.nspname || '.' || relation.relname = ANY(${names}::text[])
     UNION SELECT constraint_row.conrelid FROM pg_constraint constraint_row JOIN affected ON affected.oid = constraint_row.confrelid WHERE constraint_row.contype = 'f'
-  ) SELECT relation.relname FROM affected JOIN pg_class relation ON relation.oid = affected.oid
-    WHERE relation.relname IN ('app_users', 'app_user_rights')`;
-  if (protectedRows.length) throw new Error("FLOW_REPLAY_CLEANUP_SCOPE_INVALID");
+  ) SELECT schema.nspname AS schema,relation.relname AS name FROM affected JOIN pg_class relation ON relation.oid = affected.oid JOIN pg_namespace schema ON schema.oid=relation.relnamespace
+    ORDER BY schema.nspname,relation.relname`;
+  if (affectedTables.some(row=>['app_users','app_user_rights'].includes(row.name))) throw new Error("FLOW_REPLAY_CLEANUP_SCOPE_INVALID");
+  const targets=fixtureResetTargets(affectedTables);
   // Fixture cleanup only, on the guarded local replay connection. Append-only
   // tables may be reset here; real app connections retain every trigger.
   await retryFixtureResetDeadlock(() => sql.begin(async (cleanup) => {
+    await lockFixtureResetTables(cleanup,affectedTables);
     await cleanup.unsafe("SET LOCAL session_replication_role = replica");
     await cleanup.unsafe(`TRUNCATE TABLE ${targets} CASCADE`);
   }));
