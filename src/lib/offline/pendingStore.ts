@@ -1,4 +1,5 @@
 import {canonicalJson} from '@/lib/domain/canonicalJson';
+import {readCacheScopeMarker} from './cacheScopeMarker';
 import type {setOrderItemFinishedAction,changeOrderItemExtraWorkAction} from '@/app/actions/orders.actions';
 // Unacknowledged originals in one scoped queue. Server remains authoritative.
 export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
@@ -23,14 +24,16 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
 }
 const STORE = "originals";
 const SHELL_STORE = "shellMetadata";
+const DEVICE_STORE = "deviceReads";
 async function database(scope: string): Promise<IDBDatabase> {
   if (!/^[0-9a-f]{64}$/.test(scope)) throw new Error("INTAKE_PENDING_SCOPE_REQUIRED");
   return new Promise((resolve, reject) => {
     let abandoned=false;
-    const request = indexedDB.open(`kreile-pending-originals-v1-${scope}`, 2);
+    const request = indexedDB.open(`kreile-pending-originals-v1-${scope}`, 3);
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE, { keyPath: "id" });
       if (!request.result.objectStoreNames.contains(SHELL_STORE)) request.result.createObjectStore(SHELL_STORE);
+      if (!request.result.objectStoreNames.contains(DEVICE_STORE)) request.result.createObjectStore(DEVICE_STORE);
     };
     request.onsuccess = () => {if(abandoned){request.result.close();return;}request.result.onversionchange=()=>request.result.close();resolve(request.result);};
     request.onerror = () => reject(new Error("INTAKE_PENDING_STORAGE_UNAVAILABLE"));
@@ -38,6 +41,46 @@ async function database(scope: string): Promise<IDBDatabase> {
   });
 }
 export type PendingShellMetadata={scope:string|null;cacheGeneration:number;updatedAt:string};
+/** Exact metadata-only U2 response, already filtered by the server port. */
+export type PendingDeviceRead={port:'order.u2'|'customer.u2'|'quote.u2'|'message.u2';portVersion:1;objectId:string;serverReadAt:string;response:import('@/lib/domain/u2ReadContract').U2Read};
+function isDeviceRead(value:unknown):value is PendingDeviceRead{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const row=value as Record<string,unknown>,response=row.response;
+ if(Object.keys(row).sort().join(',')!=='objectId,port,portVersion,response,serverReadAt'||!['order.u2','customer.u2','quote.u2','message.u2'].includes(String(row.port))||row.portVersion!==1||typeof row.objectId!=='string'||!row.objectId.length||row.objectId.length>128||typeof row.serverReadAt!=='string'||!Number.isFinite(Date.parse(row.serverReadAt))||!response||typeof response!=='object'||Array.isArray(response))return false;
+ const u2=response as Record<string,unknown>;
+ return u2.code==='OK'&&(typeof u2.zustand==='string'||u2.zustand===null)&&(typeof u2.farbe==='string'||u2.farbe===null)&&Array.isArray(u2.erstblick)&&(u2.hauptaktion===null||typeof u2.hauptaktion==='object')&&(u2.weitere===null||Array.isArray(u2.weitere))&&Array.isArray(u2.gesperrt)&&Array.isArray(u2.datenluecken)&&!!u2.quelle&&typeof u2.quelle==='object';
+}
+const deviceKey=(loginScope:string,generation:number,read:Pick<PendingDeviceRead,'port'|'objectId'>)=>[loginScope,generation,read.port,read.objectId];
+/** Same DB and generation as the reading fence; never touches queued originals. */
+export async function retainPendingDeviceRead(scope:string,loginScope:string,generation:number,value:PendingDeviceRead):Promise<{code:'STORED'|'STALE'}>{
+ if(!Number.isSafeInteger(generation)||generation<1||!isDeviceRead(value))throw Error('OFFLINE_DEVICE_RESPONSE_INVALID');
+ if(readCacheScopeMarker()!==loginScope)return {code:'STALE'};
+ const metadataKey=shellKey(loginScope),connection=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=connection.transaction([SHELL_STORE,DEVICE_STORE],'readwrite'),read=tx.objectStore(SHELL_STORE).get(metadataKey);
+  let code:'STORED'|'STALE'='STALE';
+  read.onsuccess=()=>{
+   if(readCacheScopeMarker()!==loginScope||!shellMetadata(read.result,loginScope)||read.result.scope!==loginScope||read.result.cacheGeneration!==generation)return;
+   tx.objectStore(DEVICE_STORE).put(value,deviceKey(loginScope,generation,value));code='STORED';
+  };
+  tx.oncomplete=()=>{connection.close();resolve({code});};
+  tx.onabort=()=>{connection.close();reject(Error('OFFLINE_DEVICE_WRITE_ABORTED'));};
+ });
+}
+export async function readPendingDeviceRead(scope:string,loginScope:string,generation:number,target:Pick<PendingDeviceRead,'port'|'objectId'>):Promise<{code:'EMPTY'|'STALE'|'SOURCE_INCOMPLETE'}|{code:'OK';value:PendingDeviceRead}>{
+ if(readCacheScopeMarker()!==loginScope)return {code:'STALE'};
+ const metadataKey=shellKey(loginScope),connection=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=connection.transaction([SHELL_STORE,DEVICE_STORE],'readonly'),state=tx.objectStore(SHELL_STORE).get(metadataKey),read=tx.objectStore(DEVICE_STORE).get(deviceKey(loginScope,generation,target));
+  tx.oncomplete=()=>{
+   connection.close();
+   if(readCacheScopeMarker()!==loginScope||!shellMetadata(state.result,loginScope)||state.result.scope!==loginScope||state.result.cacheGeneration!==generation){resolve({code:'STALE'});return;}
+   if(read.result===undefined){resolve({code:'EMPTY'});return;}
+   resolve(isDeviceRead(read.result)&&read.result.port===target.port&&read.result.objectId===target.objectId?{code:'OK',value:read.result}:{code:'SOURCE_INCOMPLETE'});
+  };
+  tx.onabort=()=>{connection.close();reject(Error('OFFLINE_DEVICE_READ_ABORTED'));};
+ });
+}
 type ShellRead={code:'EMPTY'}|{code:'QUARANTINE'}|{code:'OK';metadata:PendingShellMetadata};
 function shellMetadata(value:unknown,scope:string):value is PendingShellMetadata{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
@@ -99,7 +142,8 @@ export async function readPendingShellInventory(scope:string):Promise<ShellInven
 export async function revokePendingShells(scope:string):Promise<{loginScopes:string[];quarantined:number}>{
  const connection=await database(scope);
  return new Promise((resolve,reject)=>{
-  const tx=connection.transaction(SHELL_STORE,'readwrite'),store=tx.objectStore(SHELL_STORE),keys=store.getAllKeys(),values=store.getAll();
+  const tx=connection.transaction([SHELL_STORE,DEVICE_STORE],'readwrite'),store=tx.objectStore(SHELL_STORE),keys=store.getAllKeys(),values=store.getAll();
+  tx.objectStore(DEVICE_STORE).clear();
   let keysReady=false,valuesReady=false,result:{loginScopes:string[];quarantined:number}={loginScopes:[],quarantined:0};
   const revoke=()=>{
    if(!keysReady||!valuesReady)return;
