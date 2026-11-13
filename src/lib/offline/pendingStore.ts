@@ -61,7 +61,11 @@ export async function retainPendingDeviceRead(scope:string,loginScope:string,gen
   let code:'STORED'|'STALE'='STALE';
   read.onsuccess=()=>{
    if(readCacheScopeMarker()!==loginScope||!shellMetadata(read.result,loginScope)||read.result.scope!==loginScope||read.result.cacheGeneration!==generation)return;
-   tx.objectStore(DEVICE_STORE).put(value,deviceKey(loginScope,generation,value));code='STORED';
+   const store=tx.objectStore(DEVICE_STORE),key=deviceKey(loginScope,generation,value),previous=store.get(key);
+   previous.onsuccess=()=>{
+    if(readCacheScopeMarker()!==loginScope||isDeviceRead(previous.result)&&Date.parse(previous.result.serverReadAt)>Date.parse(value.serverReadAt))return;
+    store.put(value,key);code='STORED';
+   };
   };
   tx.oncomplete=()=>{connection.close();resolve({code});};
   tx.onabort=()=>{connection.close();reject(Error('OFFLINE_DEVICE_WRITE_ABORTED'));};

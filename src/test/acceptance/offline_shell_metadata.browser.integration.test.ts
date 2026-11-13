@@ -24,6 +24,7 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('upgrades the existing native q
    const syntheticResponse={code:'OK',zustand:'TEST-open',farbe:null,erstblick:[],hauptaktion:null,weitere:[],gesperrt:[],datenluecken:[],quelle:{test:'TEST synthetic U2 boundary'}};
    const device={port:'order.u2',portVersion:1,objectId:'TEST-order',serverReadAt:'2026-11-13T01:00:00.000Z',response:syntheticResponse};
    if((await p.retainPendingDeviceRead(scope,login,1,device)).code!=='STORED')throw Error('TEST_DEVICE_WRITE');
+   if((await p.retainPendingDeviceRead(scope,login,1,{...device,serverReadAt:'2026-11-12T23:00:00.000Z',response:{...syntheticResponse,zustand:'TEST older response'}})).code!=='STALE')throw Error('TEST_LATE_OLD_U2_OVERWROTE_DEVICE');
    const reread=await p.readPendingDeviceRead(scope,login,1,device);if(reread.code!=='OK'||JSON.stringify(reread.value)!==JSON.stringify(device))throw Error('TEST_DEVICE_RESPONSE_CHANGED');
    const logout=await p.changePendingShellMetadata(scope,login,1,false);if(logout.code!=='OK'||logout.metadata.scope!==null||logout.metadata.cacheGeneration!==2)throw Error('TEST_DEACTIVATE');
    if((await p.retainPendingDeviceRead(scope,login,1,device)).code!=='STALE'||(await p.readPendingDeviceRead(scope,login,1,device)).code!=='STALE')throw Error('TEST_DEVICE_STALE_GENERATION_ACCEPTED');
