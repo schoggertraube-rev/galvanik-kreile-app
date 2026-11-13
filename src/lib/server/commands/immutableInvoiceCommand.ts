@@ -1083,6 +1083,13 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
           const quantity=row.quantity;
           return {itemId:row.itemId,name:row.name,quantity,unitNetAmountCents:Number((BigInt(row.lineTotalCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity)),lineNetAmountCents:row.lineTotalCents,vat_rate_basis_points:row.vatRateBasisPoints??commercial.vatRateBasisPoints};
         });
+        if(!Array.isArray(source.extra_work_lines))throw Error('INVOICE_QUOTE_EXTRA_WORK_SOURCE_INVALID');
+        source.extra_work_lines=source.extra_work_lines.map(line=>{
+          if(!plainObject(line)||typeof line.itemId!=='string')throw Error('INVOICE_QUOTE_EXTRA_WORK_SOURCE_INVALID');
+          const positions=commercial.positions.filter(position=>position.itemId===line.itemId);
+          if(positions.length!==1)throw Error('INVOICE_QUOTE_EXTRA_WORK_SOURCE_INVALID');
+          return {...line,vat_rate_basis_points:positions[0].vatRateBasisPoints??commercial.vatRateBasisPoints??null};
+        });
         // The existing canonical awarded-quote port proves these prices; no price is copied into an intake intent.
         source.base_line_count=commercial.positions.length;source.base_net_amount_cents=commercial.totalNetCents;
         source.base_prices_complete=source.base_line_count>0&&commercial.positions.every(row=>Number.isSafeInteger(row.lineTotalCents)&&row.lineTotalCents>=0);
@@ -1137,7 +1144,16 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       const { netAmountCents, vatRateBasisPoints, vatAmountCents, grossAmountCents } = content.totals;
       if(commercial){
         const bound=await bindOrderQuoteCommercialTerms(tx,authorization.data,order.id);
-        if(bound.vatRateBasisPoints!==commercial.vatRateBasisPoints||bound.totalNetCents!==commercial.totalNetCents)throw Error('QUOTE_COMMERCIAL_TERMS_CHANGED_DURING_INVOICE');
+        const unchanged=bound.quoteId===commercial.quoteId&&bound.edition===commercial.edition
+          &&bound.totalNetCents===commercial.totalNetCents&&bound.positions.length===commercial.positions.length
+          &&new Set(bound.positions.map(position=>position.itemId)).size===bound.positions.length
+          &&bound.positions.every(position=>{
+            const prior=commercial.positions.filter(original=>original.itemId===position.itemId);
+            return prior.length===1&&prior[0].quantity===position.quantity&&prior[0].lineTotalCents===position.lineTotalCents
+              &&(prior[0].vatRateBasisPoints??commercial.vatRateBasisPoints??source.invoice_vat_rate_basis_points)
+                ===(position.vatRateBasisPoints??bound.vatRateBasisPoints??source.invoice_vat_rate_basis_points);
+          });
+        if(!unchanged)throw Error('QUOTE_COMMERCIAL_TERMS_CHANGED_DURING_INVOICE');
       }
 
       // Exactly one issue instant per invoice. Berlin is the only legal

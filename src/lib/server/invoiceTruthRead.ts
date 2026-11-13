@@ -101,9 +101,11 @@ export async function readInvoiceTruth(
     return { code: "FORBIDDEN", message: "Rechnungsdaten sind mit diesem Login nicht erlaubt." };
   }
   if (
-    (filter.from !== undefined && !validDate(filter.from))
+    !filter||typeof filter!=='object'||Array.isArray(filter)
+    ||Object.keys(filter).some(key=>!['from','to','customerId'].includes(key))
+    ||(filter.from !== undefined && !validDate(filter.from))
     || (filter.to !== undefined && !validDate(filter.to))
-    || (filter.customerId !== undefined && (filter.customerId.trim() !== filter.customerId || filter.customerId.length < 1 || filter.customerId.length > 128))
+    || (filter.customerId !== undefined && (typeof filter.customerId!=="string" || filter.customerId.trim() !== filter.customerId || filter.customerId.length < 1 || filter.customerId.length > 128))
   ) return { code: "VALIDATION_ERROR", message: "Rechnungsfilter ist ungültig." };
 
   try {

@@ -9,7 +9,7 @@ import {storeIntakeGoodsPhoto,storeOrderPhoto,storeItemPhoto} from './photoFixtu
 
 // Extends the proven prefix through completion; invoice/payment/outgoing remain
 // red until accepted quote prices survive conversion in the canonical writer.
-it('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice boundary',async()=>{
+it.each([{vat:1900,extra:false},{vat:700,extra:true}])('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice boundary VAT $vat',async scenario=>{
  const itemId=await requestMailStep('H1');
  const customerId=await customerFixture('H1-KV');
  const {updateCustomerAction}=await import('@/app/actions/customers.actions');
@@ -26,6 +26,7 @@ it('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice bound
  const noBusinessKey=randomUUID();
  expect(await withSession(full,()=>setIntakeNoBusinessAction({itemId,version:source.capture.version,clientEventId:noBusinessKey,reason:'info'}))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${noBusinessKey}::uuid`).toEqual([{n:0}]);
+ await sql`UPDATE public.company_settings SET invoice_vat_rate_basis_points=${scenario.vat} WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const {createQuoteAction,readQuoteAction,readQuotePdfAction}=await import('@/app/actions/quotes.actions');
  const input={clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',note:'TEST H1 KV aus echtem Original',positions:[{name:'TEST Trompete',quantity:4,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:2500,lineTotalCents:10000}],source:{itemId,version:source.capture.version,message:true}};
  const created=await withSession(full,()=>createQuoteAction(input));
@@ -45,7 +46,7 @@ it('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice bound
  WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
  // requestMailStep may already have created this run's minimal sender fixture.
  if(!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('H1_TEST_COMPANY_ONLY');
- await sql`UPDATE public.company_settings SET street='TEST Weg 1',zip='70176',city='Stuttgart',country='Deutschland',iban='DE02120300000000202051',bic='BYLADEM1001',bank_name='TEST Bank',tax_id='DE123456789',invoice_vat_rate_basis_points=1900,invoice_payment_term_days=14 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ await sql`UPDATE public.company_settings SET street='TEST Weg 1',zip='70176',city='Stuttgart',country='Deutschland',iban='DE02120300000000202051',bic='BYLADEM1001',bank_name='TEST Bank',tax_id='DE123456789',invoice_vat_rate_basis_points=${scenario.vat},invoice_payment_term_days=14 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const pdf=await withSession(full,()=>readQuotePdfAction({quoteId:created.quote.quoteId}));
  expect(pdf.code).toBe('OK');if(pdf.code!=='OK')throw Error('H1_PDF:'+pdf.code);
  expect(pdf.pdf.subarray(0,5).toString()).toBe('%PDF-');
@@ -113,9 +114,20 @@ it('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice bound
  expect(await withSession(full,()=>transitionWareneingangToGalvanikAction(structuredClone(handoff)))).toMatchObject({code:'OK',replayed:true});
  if(moved.code!=='OK')throw Error('H1_HANDOFF:'+moved.code);
  const orderId=converted.orderReceipt.orderId;
+ if(scenario.extra)await sql`UPDATE public.company_settings SET invoice_vat_rate_basis_points=1900 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const {setOrderItemFinishedAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction,freezeOrderAction}=await import('@/app/actions/orders.actions');
  let orderVersion=moved.receipt.aggregateVersion;
  const actualParts=await sql`SELECT id FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} ORDER BY id`;
+ const master=await withSession(full,()=>getExtraWorkMasterDataAction());
+ expect(master.code).toBe('OK');if(master.code!=='OK')throw Error('H1_MASTER:'+master.code);
+ if(!master.data.currentRate)expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ if(scenario.extra){
+  const {configureExtraWorkCatalogPositionAction,changeOrderItemExtraWorkAction}=await import('@/app/actions/orders.actions');
+  const positionId=randomUUID();
+  expect(await withSession(full,()=>configureExtraWorkCatalogPositionAction({positionId,expectedVersion:0,name:'TEST A4 KV Zusatz',standardMinutes:60,active:true,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const extra=await withSession(full,()=>changeOrderItemExtraWorkAction({lineId:randomUUID(),orderId,itemId:actualParts[0].id,catalogPositionId:positionId,minutes:60,active:true,expectedLineVersion:0,expectedOrderVersion:orderVersion,clientEventId:randomUUID()}));
+  expect(extra).toMatchObject({code:'OK'});if(extra.code!=='OK')throw Error('TEST_A4_KV_EXTRA:'+extra.code);orderVersion=extra.receipt.aggregateVersion;
+ }
  for(const part of actualParts){
   const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId:part.id,expectedVersion:orderVersion,clientEventId:randomUUID(),finished:true}));
   expect(finished,JSON.stringify(finished)).toMatchObject({code:'OK'});
@@ -123,9 +135,6 @@ it('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice bound
   orderVersion=finished.receipt.aggregateVersion;
  }
  expect(await sql`SELECT quantity::text,net_cents::int,price_source->>'kind' AS kind,price_source->>'quoteId' AS quote_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND component='base' AND direction=1`).toEqual([{quantity:'4.000',net_cents:10000,kind:'quote',quote_id:created.quote.quoteId}]);
- const master=await withSession(full,()=>getExtraWorkMasterDataAction());
- expect(master.code).toBe('OK');if(master.code!=='OK')throw Error('H1_MASTER:'+master.code);
- if(!master.data.currentRate)expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  await storeOrderPhoto(orderId);
  for(const item of actualParts)await storeItemPhoto(orderId,item.id);
  const freeze={orderId,freezeId:randomUUID(),expectedVersion:orderVersion,clientEventId:randomUUID()};
@@ -138,6 +147,11 @@ it('H1 T25 to payment: real PDF mail, reply, goods, completion and invoice bound
  const issued=await withSession(full,()=>issueInvoiceAction(issue));
  const invoiceSource=issued.code==='OK'?null:await sql.begin(async tx=>{await tx`SELECT set_config('app.tenant_id',${KREILE_TENANT_SLUG},true)`;return tx`SELECT seller_config_complete,customer_config_complete,base_prices_complete,effective_integrity_ok,invoice_payment_term_days,invoice_vat_rate_basis_points FROM private.v_invoice_issue_source_v2 WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;});
  expect(issued,JSON.stringify({issued,invoiceSource})).toMatchObject({code:'OK'});if(issued.code!=='OK')throw Error('H1_INVOICE:'+issued.code);
+ if(scenario.extra){
+  expect(issued.receipt).toMatchObject({netAmountCents:24000,vatAmountCents:1680,grossAmountCents:25680});
+  const [original]=await sql`SELECT snapshot FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${issued.receipt.invoiceId}::uuid`;
+  expect(original.snapshot.lines.map((line:{vat_rate_basis_points:number})=>line.vat_rate_basis_points)).toEqual([700,700]);
+ }
  expect(await withSession(full,()=>getInvoiceReceiptAction({orderId,clientEventId:issue.clientEventId}))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>issueInvoiceAction(structuredClone(issue)))).toMatchObject({code:'OK',replayed:true});
  const {getOrderPaymentStateAction,confirmPaymentAction}=await import('@/app/actions/payments.actions');

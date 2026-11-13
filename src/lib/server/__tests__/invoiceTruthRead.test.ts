@@ -59,6 +59,14 @@ describe("invoice truth read", () => {
     expect(execute.mock.calls[0]?.[0].text).not.toContain("ausgangsrechnung");
   });
 
+  it('rejects malformed root filters before any database call',async()=>{
+    const {readInvoiceTruth}=await import('../invoiceTruthRead');
+    for(const filter of [null,[],{customerId:42},{from:'invalid'},{unexpected:true}]){
+      await expect(readInvoiceTruth(authorization,filter as never)).resolves.toMatchObject({code:'VALIDATION_ERROR'});
+    }
+    expect(withTransaction).not.toHaveBeenCalled();
+  });
+
   it("denies the read without the money view permission", async () => {
     const { readInvoiceTruth } = await import("../invoiceTruthRead");
     await expect(readInvoiceTruth({ ...authorization, permissions: [] })).resolves.toMatchObject({ code: "FORBIDDEN" });
