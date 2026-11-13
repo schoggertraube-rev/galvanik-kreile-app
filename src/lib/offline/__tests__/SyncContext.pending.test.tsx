@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {SyncProvider,useSync} from '../SyncContext';
 const state=vi.hoisted(()=>({scope:'a'.repeat(64),status:'authenticated',offline24h:false}));
 const ports=vi.hoisted(()=>({read:vi.fn(),retain:vi.fn(),readStand:vi.fn(),refreshStand:vi.fn(async()=>({code:'DISABLED'})),sync:vi.fn(async(...args:unknown[])=>{void args;return {secured:0,acknowledged:0,blocked:1};})}));
@@ -17,6 +17,19 @@ afterEach(()=>{cleanup();state.offline24h=false;vi.clearAllMocks();});
 function Count(){const {outboxItems}=useSync();return <output data-testid="pending">{outboxItems.length}</output>;}
 function StorageState(){const {pendingStorageUnavailable}=useSync();return <output data-testid="storage">{pendingStorageUnavailable?'unavailable':'readable'}</output>;}
 function StandState(){const {deviceStand}=useSync();return <output data-testid="stand">{deviceStand.code}</output>;}
+it('ignores an older failed refresh after a newer successful same-login refresh',async()=>{
+ state.scope='5'.repeat(64);state.status='authenticated';state.offline24h=true;document.cookie='kreile_offline_cache_scope='+('5'.repeat(64))+'; Path=/';
+ ports.read.mockResolvedValue([{id:'TEST-retained-race',itemId:'TEST-item',kind:'note'}]);ports.readStand.mockResolvedValue({code:'OK',serverReadAt:'2026-11-13T09:30:00.000Z',cacheGeneration:4});
+ let release:(value:{code:string})=>void=()=>{};const first=new Promise<{code:string}>(resolve=>{release=resolve;});
+ ports.refreshStand.mockImplementationOnce(()=>first).mockResolvedValueOnce({code:'STORED'});
+ render(<SyncProvider><Count/><StandState/><Retry/></SyncProvider>);
+ await waitFor(()=>expect(ports.refreshStand).toHaveBeenCalledTimes(1));
+ fireEvent.click(screen.getByText('TEST retry'));await waitFor(()=>expect(ports.refreshStand).toHaveBeenCalledTimes(2));
+ await act(async()=>{window.dispatchEvent(new Event('kreile-device-stand-changed'));});
+ await waitFor(()=>expect(screen.getByTestId('stand').textContent).toBe('COMPLETE'));
+ await act(async()=>{release({code:'SOURCE_INCOMPLETE'});await first;});
+ expect(screen.getByTestId('stand').textContent).toBe('COMPLETE');expect(screen.getByTestId('pending')).toHaveTextContent('1');
+});
 it('marks a failed complete refresh incomplete while retaining the previous confirmed source and originals',async()=>{
  state.scope='6'.repeat(64);state.status='authenticated';state.offline24h=true;document.cookie='kreile_offline_cache_scope='+('6'.repeat(64))+'; Path=/';
  ports.read.mockResolvedValue([{id:'TEST-kept-before-write-failure',itemId:'TEST-item',kind:'note'}]);

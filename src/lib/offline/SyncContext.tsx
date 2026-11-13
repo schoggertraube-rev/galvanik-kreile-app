@@ -35,6 +35,7 @@ export type DeviceStandSnapshot={code:'DISABLED'|'LOADING'|'INCOMPLETE'|'UNAVAIL
 const LOADING_DEVICE:DeviceStandSnapshot={code:'LOADING'},DISABLED_DEVICE:DeviceStandSnapshot={code:'DISABLED'};
 let deviceSnapshot:DeviceStandSnapshot=LOADING_DEVICE,deviceSnapshotScope:string|null=null,deviceReadGeneration=0;
 let deviceSnapshotLogin:string|null=null;
+let fullRefreshGeneration=0;
 let pendingStorageFailureScope:string|null=null;
 let snapshotScope: string|null=null;
 let activeScope: string|null=null;
@@ -82,10 +83,11 @@ async function refreshDeviceSnapshot(scope:string|null,enabled:boolean){
   deviceSnapshotScope=scope;deviceSnapshotLogin=login;publishSnapshots();
 }
 async function refreshFullDeviceStand(scope:string,enabled:boolean){
+  const request=++fullRefreshGeneration,login=readCacheScopeMarker();
   const result=await refreshDeviceStand(scope,enabled,deviceStandPorts);
-  if(enabled&&result.code==='SOURCE_INCOMPLETE'&&activeScope===scope){
+  if(enabled&&result.code==='SOURCE_INCOMPLETE'&&activeScope===scope&&request===fullRefreshGeneration&&readCacheScopeMarker()===login){
     await refreshDeviceSnapshot(scope,true);
-    if(activeScope===scope&&deviceSnapshotScope===scope&&deviceSnapshotLogin===readCacheScopeMarker()&&deviceSnapshot.code!=='UNAVAILABLE'){
+    if(activeScope===scope&&request===fullRefreshGeneration&&readCacheScopeMarker()===login&&deviceSnapshotScope===scope&&deviceSnapshotLogin===login&&deviceSnapshot.code!=='UNAVAILABLE'){
       deviceSnapshot={code:'INCOMPLETE'};publishSnapshots();
     }
   }
