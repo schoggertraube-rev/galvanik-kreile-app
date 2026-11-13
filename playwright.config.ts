@@ -23,6 +23,8 @@ export default defineConfig({
     },
   ],
   webServer: {
+    // PL 12.11.19:45: after the single failed infrastructure retry, CI only.
+    timeout: process.env.CI ? 180_000 : 60_000,
     command: 'npm run dev -- --hostname 127.0.0.1 --port 3001',
     url: 'http://localhost:3001',
     reuseExistingServer: !process.env.CI,
