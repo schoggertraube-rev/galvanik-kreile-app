@@ -151,18 +151,19 @@ export async function readPendingDeviceRead(scope:string,loginScope:string,gener
 }
 /** Completion provenance is technical metadata in the existing read store.
  * Queued originals and the scope/generation/time shell contract are untouched. */
-export async function readPendingDeviceStand(scope:string,loginScope:string):Promise<{code:'EMPTY'|'STALE'|'SOURCE_INCOMPLETE'}|{code:'OK';serverReadAt:string;cacheGeneration:number}>{
+export async function readPendingDeviceStand(scope:string,loginScope:string):Promise<{code:'EMPTY';reason:'NO_SHELL'|'NO_COMPLETION'}|{code:'STALE'|'SOURCE_INCOMPLETE'}|{code:'OK';serverReadAt:string;cacheGeneration:number}>{
  if(readCacheScopeMarker()!==loginScope)return {code:'STALE'};
  const connection=await database(scope);
  return new Promise((resolve,reject)=>{
-  const tx=connection.transaction([SHELL_STORE,DEVICE_STORE],'readonly'),state=tx.objectStore(SHELL_STORE).get(shellKey(loginScope));let marker:unknown;
+  let tx:IDBTransaction;try{tx=connection.transaction([SHELL_STORE,DEVICE_STORE],'readonly');}catch(error){connection.close();reject(error);return;}
+  const state=tx.objectStore(SHELL_STORE).get(shellKey(loginScope));let marker:unknown;
   state.onsuccess=()=>{if(shellMetadata(state.result,loginScope)&&state.result.scope===loginScope){const read=tx.objectStore(DEVICE_STORE).get(standKey(loginScope,state.result.cacheGeneration));read.onsuccess=()=>{marker=read.result;};}};
   tx.oncomplete=()=>{
    connection.close();if(readCacheScopeMarker()!==loginScope){resolve({code:'STALE'});return;}
-   if(state.result===undefined){resolve({code:'EMPTY'});return;}
+   if(state.result===undefined){resolve({code:'EMPTY',reason:'NO_SHELL'});return;}
    if(!shellMetadata(state.result,loginScope)){resolve({code:'SOURCE_INCOMPLETE'});return;}
    if(state.result.scope!==loginScope){resolve({code:'STALE'});return;}
-   if(marker===undefined){resolve({code:'EMPTY'});return;}
+   if(marker===undefined){resolve({code:'EMPTY',reason:'NO_COMPLETION'});return;}
    resolve(completeDeviceStand(marker,loginScope)?{code:'OK',serverReadAt:marker.serverReadAt,cacheGeneration:state.result.cacheGeneration}:{code:'SOURCE_INCOMPLETE'});
   };
   tx.onabort=()=>{connection.close();reject(Error('OFFLINE_DEVICE_STAND_READ_ABORTED'));};

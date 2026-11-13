@@ -1,16 +1,38 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {SyncProvider,useSync} from '../SyncContext';
-const state=vi.hoisted(()=>({scope:'a'.repeat(64),status:'authenticated'}));
-const ports=vi.hoisted(()=>({read:vi.fn(),retain:vi.fn(),sync:vi.fn(async(...args:unknown[])=>{void args;return {secured:0,acknowledged:0,blocked:1};})}));
-vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:state.scope,status:state.status,hasArea:()=>false})}));
+const state=vi.hoisted(()=>({scope:'a'.repeat(64),status:'authenticated',offline24h:false}));
+const ports=vi.hoisted(()=>({read:vi.fn(),retain:vi.fn(),readStand:vi.fn(),refreshStand:vi.fn(async()=>({code:'DISABLED'})),sync:vi.fn(async(...args:unknown[])=>{void args;return {secured:0,acknowledged:0,blocked:1};})}));
+vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:state.scope,status:state.status,offline24h:state.offline24h,hasArea:()=>false})}));
+// Projection boundaries only; the actual Action/IDB source writer is exercised
+// independently by offline_device_stand_atomic.browser.integration.test.ts.
+vi.mock('../collectDeviceStand',()=>({refreshDeviceStand:ports.refreshStand}));
+vi.mock('../devicePortRead',()=>({readDeviceStandResponse:ports.readStand}));
 vi.mock('@/app/actions/eingang.actions',()=>({prepareIntakeFileAction:vi.fn(),finishIntakeFileAction:vi.fn(),saveIntakeNoteAction:vi.fn()}));
 vi.mock('@/app/actions/offlineWorkshop.actions',()=>({replayOfflineWorkshopAction:vi.fn()}));
 vi.mock('@/modules/eingang/public',()=>({uploadIntakeOriginal:vi.fn()}));
 vi.mock('../syncPendingFiles',()=>({syncPendingFiles:ports.sync}));
 vi.mock('../pendingStore',()=>({readPendingEntries:ports.read,retainQuarantinedPending:ports.retain}));
-afterEach(()=>{cleanup();vi.clearAllMocks();});
+afterEach(()=>{cleanup();state.offline24h=false;vi.clearAllMocks();});
 function Count(){const {outboxItems}=useSync();return <output data-testid="pending">{outboxItems.length}</output>;}
+function StorageState(){const {pendingStorageUnavailable}=useSync();return <output data-testid="storage">{pendingStorageUnavailable?'unavailable':'readable'}</output>;}
+function StandState(){const {deviceStand}=useSync();return <output data-testid="stand">{deviceStand.code}</output>;}
+it('marks a failed complete refresh incomplete while retaining the previous confirmed source and originals',async()=>{
+ state.scope='6'.repeat(64);state.status='authenticated';state.offline24h=true;document.cookie='kreile_offline_cache_scope='+('6'.repeat(64))+'; Path=/';
+ ports.read.mockResolvedValue([{id:'TEST-kept-before-write-failure',itemId:'TEST-item',kind:'note'}]);
+ ports.readStand.mockResolvedValue({code:'OK',serverReadAt:'2026-11-13T09:30:00.000Z',cacheGeneration:3});ports.refreshStand.mockResolvedValueOnce({code:'SOURCE_INCOMPLETE'});
+ render(<SyncProvider><Count/><StandState/></SyncProvider>);
+ await waitFor(()=>expect(screen.getByTestId('stand')).toHaveTextContent('INCOMPLETE'));
+ expect(screen.getByTestId('pending')).toHaveTextContent('1');expect(ports.retain).not.toHaveBeenCalled();expect(ports.readStand).toHaveBeenCalledWith(state.scope,true);
+});
+it('retains confirmed originals and exposes storage failure instead of an empty successful queue',async()=>{
+ state.scope='7'.repeat(64);state.status='authenticated';ports.read.mockResolvedValue([{id:'TEST-kept',itemId:'TEST-item',kind:'note'}]);
+ render(<SyncProvider><Count/><StorageState/></SyncProvider>);
+ await waitFor(()=>expect(screen.getByTestId('pending')).toHaveTextContent('1'));
+ ports.read.mockRejectedValue(new Error('TEST_IDB_READ_FAILED'));window.dispatchEvent(new Event('kreile-pending-changed'));
+ await waitFor(()=>expect(screen.getByTestId('storage')).toHaveTextContent('unavailable'));
+ expect(screen.getByTestId('pending')).toHaveTextContent('1');expect(ports.retain).not.toHaveBeenCalled();
+});
 function Kinds(){const {outboxItems}=useSync();return <output data-testid="kinds">{outboxItems.map(item=>item.entityType+':'+item.status).join(',')}</output>;}
 it('counts a retained workshop original as a pending item, never as a sent mail',async()=>{
  state.scope='f'.repeat(64);state.status='authenticated';ports.read.mockResolvedValue([{id:'TEST-workshop',itemId:'TEST-order',kind:'workshop'},{id:'TEST-unknown',kind:'quarantine',capturedAt:''}]);

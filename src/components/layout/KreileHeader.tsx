@@ -9,6 +9,7 @@ import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
+import {deviceStandNotice} from '@/lib/offline/deviceStandNotice';
 import { requestGlobalCreate } from "./globalCreateRequest";
 import { useRouter } from "next/navigation";
 
@@ -21,11 +22,15 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const logoUrl = "/assets/logo/kreile-wordmark-skyline.svg";
 
-  const { initials, status, name } = usePermissions();
+  const { initials, status, name,offline24h } = usePermissions();
   const { status: realtimeStatus } = useRealtimeStatus();
-  const { isOnline, outboxItems } = useSync();
+  const { isOnline, outboxItems,deviceStand,pendingStorageUnavailable } = useSync();
   const pendingNotice=outboxItems.find(item=>typeof item.lastError==='string')?.lastError;
-  const pendingOutboxCount = outboxItems.filter((item) => item.status !== "synced").length;
+  const pendingOutboxCount = outboxItems.filter((item) => item.status !== "synced"&&(!offline24h||item.status!=='conflict')).length;
+  const [deviceNow,setDeviceNow]=useState(()=>Date.now());
+  useEffect(()=>{if(!offline24h)return;const timer=window.setTimeout(()=>setDeviceNow(Date.now()),0);return()=>window.clearTimeout(timer);},[offline24h,deviceStand]);
+  useEffect(()=>{if(!offline24h)return;const tick=()=>setDeviceNow(Date.now()),remaining=deviceStand?.code==='COMPLETE'?Date.parse(deviceStand.serverReadAt)+24*60*60*1000-Date.now():0,timer=window.setTimeout(tick,remaining>0?Math.max(1,Math.min(30000,remaining)):30000);window.addEventListener('focus',tick);document.addEventListener('visibilitychange',tick);return()=>{window.clearTimeout(timer);window.removeEventListener('focus',tick);document.removeEventListener('visibilitychange',tick);};},[offline24h,deviceStand,deviceNow]);
+  const deviceNotice=offline24h?deviceStandNotice({stand:deviceStand,storageUnavailable:pendingStorageUnavailable,online:isOnline,pending:pendingOutboxCount,quarantined:outboxItems.filter(item=>item.status==='conflict').length,now:deviceNow}):null;
 
   // User Dropdown State
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -163,17 +168,18 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         {/* Lokales Gerätesignal; kein Nachweis einer Server-Synchronisierung */}
         <div
           aria-label="Netzwerkstatus"
+          data-spec-id={offline24h?'offline.zeile':undefined}
           aria-live="polite"
           role="status"
-          className={`hidden sm:flex items-center gap-2 rounded-full px-3 h-9 text-sm font-bold border transition-all duration-300 shadow-sm hover:bg-white hover:border-neutral-gray-200 ${
+          className={`${offline24h?'flex min-h-9':'hidden sm:flex h-9'} items-center gap-2 rounded-full px-3 text-sm font-bold border transition-all duration-300 shadow-sm hover:bg-white hover:border-neutral-gray-200 ${
             !isOnline || pendingOutboxCount > 0
               ? "bg-bg-app-soft/50 backdrop-blur-sm border-white/60 text-text-muted"
               : "bg-white/50 backdrop-blur-sm border-white/60 text-navy-900"
           }`}
           title="Gerätesignal: zeigt Netzwerkverfügbarkeit und lokal ausstehende Einträge; kein Server- oder Synchronisierungsnachweis."
         >
-          <span className={`w-2 h-2 rounded-full ${!isOnline ? "bg-accent-orange" : (pendingOutboxCount > 0 ? "bg-gold-500 animate-pulse" : "bg-success-green")}`} />
-          <span>{pendingNotice??(!isOnline ? "Offline" : (pendingOutboxCount > 0 ? `${pendingOutboxCount} lokal ausstehend` : "Netzwerk verfügbar"))}</span>
+          <span className={`w-2 h-2 rounded-full ${deviceNotice?.warning||!isOnline ? "bg-accent-orange" : (pendingOutboxCount > 0 ? "bg-gold-500 animate-pulse" : "bg-success-green")}`} />
+          <span>{deviceNotice?.text??pendingNotice??(!isOnline ? "Offline" : (pendingOutboxCount > 0 ? `${pendingOutboxCount} lokal ausstehend` : "Netzwerk verfügbar"))}{deviceNotice?.quarantine&&<small className="block">{deviceNotice.quarantine}</small>}</span>
         </div>
 
         {/* Live-Sync Indicator */}

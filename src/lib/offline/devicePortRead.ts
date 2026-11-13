@@ -105,5 +105,5 @@ export async function retainDeviceStandResponse(scope:string,enabled:boolean,col
 export async function readDeviceStandResponse(scope:string,enabled:boolean){
  if(!enabled)return {code:'DISABLED' as const};
  const login=readCacheScopeMarker();if(!login)return {code:'STALE' as const};
- try{return await readPendingDeviceStand(scope,login);}catch(error){console.error('[OFFLINE_DEVICE_STAND_READ_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const};}
+ try{return await readPendingDeviceStand(scope,login);}catch(error){console.error('[OFFLINE_DEVICE_STAND_READ_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const,reason:'STORAGE_UNAVAILABLE' as const};}
 }

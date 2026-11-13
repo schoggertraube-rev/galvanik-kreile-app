@@ -339,3 +339,11 @@ export const CUSTOMER_INVOICE_TERMS_COPY={
 export const MANAGED_USER_COPY={forbidden:"Nutzer dürfen nicht geändert werden."} as const;
 
 export const OFFLINE_DEVICE_READ_COPY={invalidWindow:'Die Geräteuhr passt nicht zum letzten Stand - neue Eingaben erst wieder mit Verbindung.'} as const;
+export const OFFLINE_DEVICE_STATUS_COPY={
+ stand:(time:string,count:number)=>`Offline – Stand ${time}, ${count} Änderungen warten`,
+ expired:'Seit über 24 Stunden kein Netz – neue Eingaben erst wieder mit Verbindung',
+ unavailable:'Offline-Speicher auf diesem Gerät nicht verfügbar - Eingaben gehen nur mit Netz',
+ quarantine:(count:number)=>`${count} Eingaben zurückgehalten - tippe zum Zuordnen`,
+ // TODO_PL: device.stand_incomplete – the actual source is not yet complete.
+ incomplete:'Gerätestand noch nicht vollständig - mit Netz erneut abgleichen',
+} as const;
