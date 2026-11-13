@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
-import {retainDevicePortResponse,readDevicePortResponse} from '@/lib/offline/devicePortRead';
+import {captureDeviceReadFence,retainDevicePortResponse,readDevicePortResponse} from '@/lib/offline/devicePortRead';
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { OrdersListItem } from "@/modules/orders/public";
 import {
@@ -212,9 +212,10 @@ export function OrdersAppAdapter() {
           setState({kind:'data',orders:result.data.map(toOrderListRow),loadedAt:stored.value.serverReadAt});
           return;
         }
+        const readFence=offlineScope?await captureDeviceReadFence(offlineScope,offline24h):null;
         const result = await getOrdersDb();
         if (!active||revision!==loadRevision) return;
-        if(offline24h&&offlineScope&&result.serverReadAt&&result.cacheLoginScope&&(result.ok||result.error==='FORBIDDEN'||result.error==='UNAUTHORIZED'))await retainDevicePortResponse(offlineScope,true,{port:'orders.list',portVersion:1,objectId:'orders',serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:{result:result.ok?{ok:true,data:result.data}:{ok:false,error:result.error,message:result.message},datenluecken:[]}});
+        if(offline24h&&offlineScope&&result.serverReadAt&&result.cacheLoginScope&&(result.ok||result.error==='FORBIDDEN'||result.error==='UNAUTHORIZED'))await retainDevicePortResponse(offlineScope,true,{port:'orders.list',portVersion:1,objectId:'orders',serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:{result:result.ok?{ok:true,data:result.data}:{ok:false,error:result.error,message:result.message},datenluecken:[]}},readFence);
         if(!active||revision!==loadRevision)return;
         if (!result.ok) {
           setState({

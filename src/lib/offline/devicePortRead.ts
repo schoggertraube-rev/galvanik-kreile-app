@@ -1,6 +1,18 @@
 import {readCacheScopeMarker} from './cacheScopeMarker';
 import {readPendingShellMetadata,retainPendingDeviceRead,readPendingDeviceRead,type PendingDeviceRead} from './pendingStore';
 
+export type DeviceReadFence={scope:string;loginScope:string;generation:number};
+/** Capture before requesting the server. A response must not adopt a newer
+ * generation when logout and login happen while the request is in flight. */
+export async function captureDeviceReadFence(scope:string,enabled:boolean):Promise<DeviceReadFence|null>{
+ if(!enabled)return null;
+ const login=readCacheScopeMarker();if(!login)return null;
+ try{
+  const shell=await readPendingShellMetadata(scope,login);
+  return shell.code==='OK'&&shell.metadata.scope===login?{scope,loginScope:login,generation:shell.metadata.cacheGeneration}:null;
+ }catch(error){console.error('[OFFLINE_DEVICE_FENCE_FAILED]',error instanceof Error?error.name:'UnknownError');return null;}
+}
+
 /** ABNAHMEFAELLE S06: metadata only. Keep the online port unchanged and make
  * the deliberately unavailable offline mail body explicit in its read result. */
 function messageMetadata(read:import('@/lib/domain/u2ReadContract').U2Read){
@@ -16,9 +28,14 @@ function metadataForDevice(value:PendingDeviceRead):PendingDeviceRead{
  return {...value,response:messageMetadata(value.response)};
 }
 /** Consumes the actual canonical U2 metadata response, never the mail/body/blob DTO. */
-export async function retainDevicePortResponse(scope:string,enabled:boolean,value:PendingDeviceRead):Promise<{code:'DISABLED'|'STALE'|'STORED'|'SOURCE_INCOMPLETE'}>{
+export async function retainDevicePortResponse(scope:string,enabled:boolean,value:PendingDeviceRead,fence?:DeviceReadFence|null):Promise<{code:'DISABLED'|'STALE'|'STORED'|'SOURCE_INCOMPLETE'}>{
  if(!enabled)return {code:'DISABLED'};
  const login=readCacheScopeMarker();if(!login)return {code:'STALE'};
+ if(fence!==undefined){
+  if(!fence||fence.scope!==scope||fence.loginScope!==login)return {code:'STALE'};
+  try{return await retainPendingDeviceRead(scope,login,fence.generation,metadataForDevice(value));}
+  catch(error){console.error('[OFFLINE_DEVICE_PORT_WRITE_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE'};}
+ }
  try{
   const shell=await readPendingShellMetadata(scope,login);
   if(shell.code!=='OK'||shell.metadata.scope!==login)return {code:'STALE'};

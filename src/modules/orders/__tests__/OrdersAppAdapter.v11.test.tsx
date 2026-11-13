@@ -18,7 +18,7 @@ vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: po
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({ loading: false, hasPermission: () => true,offline24h:ports.offline24h,offlineScope:ports.offlineScope }),
 }));
-vi.mock('@/lib/offline/devicePortRead',()=>({readDevicePortResponse:ports.readDevice,retainDevicePortResponse:ports.retainDevice}));
+vi.mock('@/lib/offline/devicePortRead',()=>({captureDeviceReadFence:vi.fn().mockResolvedValue(null),readDevicePortResponse:ports.readDevice,retainDevicePortResponse:ports.retainDevice}));
 vi.mock("@/lib/overlayStore", () => ({
   useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder;openCustomer:typeof ports.openCustomer }) => unknown) => selector({ openOrder: ports.openOrder,openCustomer:ports.openCustomer }),
 }));
