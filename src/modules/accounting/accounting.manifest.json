@@ -12,11 +12,13 @@
     "@/modules/accounting/public#readInvoiceVat",
     "@/modules/accounting/public#CustomerCredit",
     "@/modules/accounting/public#CustomerCreditResult",
-    "@/modules/accounting/server-public#readCustomerCredit"
+    "@/modules/accounting/server-public#readCustomerCredit",
+    "@/modules/accounting/public#CustomerCreditApplyInput",
+    "@/modules/accounting/server-public#readCustomerCreditInTransaction"
   ],
   "capabilities": [],
-  "migrations": ["20261113215222_customer_credit_entries.sql"],
-  "viewsFunctions": ["private.lock_customer_credit_v1","private.guard_customer_credit_append_v1","private.guard_customer_credit_source_v1"],
+  "migrations": ["20261113215222_customer_credit_entries.sql","20261113231315_customer_credit_payment_method.sql","20261113233449_customer_credit_amount_contract.sql"],
+  "viewsFunctions": ["private.lock_customer_credit_v1","private.guard_customer_credit_append_v1","private.guard_customer_credit_source_v1","private.customer_credit_payment_receipt_v1","private.guard_invoice_credit_receipt_v1"],
   "ownsTables": ["public.customer_credit_entries"],
   "storagePurposes": [],
   "events": {

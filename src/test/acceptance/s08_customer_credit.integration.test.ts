@@ -8,13 +8,94 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder,customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {confirmPaymentAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
-import {cancelInvoiceAction,getInvoiceCancellationReceiptAction,getCustomerCreditAction} from '@/app/actions/invoices.actions';
+import {cancelInvoiceAction,getInvoiceCancellationReceiptAction,getCustomerCreditAction,applyCustomerCreditAction} from '@/app/actions/invoices.actions';
 import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingang.actions';
 
 beforeAll(()=>{
  const databaseUrl=process.env.DATABASE_URL;
  if(!databaseUrl||databaseUrl!==process.env.H18_EXPECTED_DATABASE_URL)throw Error('TEST_S08_EXPECTED_DATABASE_URL_REQUIRED');
  expect(new URL(databaseUrl).hostname).toBe('127.0.0.1');
+});
+
+it.each([4000,10000])('A08-3/-4/-5 applies actual credit %i through one payment writer with double-click and fresh retry, not cash income',async(paidAmount)=>{
+ const source=await readyInvoiceOrder('S08 application source '+paidAmount,'pickup',false,undefined,8403);
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:source.invoice.invoiceId,amount:paidAmount,method:'bar',expectedVersion:0,expectedOpenAmountCents:10000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:source.invoice.invoiceId,expectedVersion:1,reason:'TEST S08 Guthaben zur Verrechnung',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const target=await readyInvoiceOrder('S08 application target '+paidAmount,'pickup',false,source.customerId,5042);
+ expect(target.invoice.grossAmountCents).toBe(6000);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:target.orderId}))).toMatchObject({code:'OK',data:{payment:{openAmountCents:6000,paidAmountCents:0,paymentVersion:0}}});
+ const input={invoiceId:target.invoice.invoiceId,amount:Math.min(paidAmount,6000),expectedVersion:0,expectedOpenAmountCents:6000,expectedCreditVersion:1,clientEventId:randomUUID()};
+ const {expectedCreditVersion:creditVersion,...ordinaryPayment}=input;
+ expect(creditVersion).toBe(1);
+ expect(await withSession(full,()=>confirmPaymentAction({...ordinaryPayment,method:'guthaben'}))).toMatchObject({code:'FORBIDDEN'});
+ const noMoney=await createFixture(['kunden','auftraege'],'buero');
+ const denied=await withSession(noMoney,()=>applyCustomerCreditAction(input));
+ expect(denied).toMatchObject({code:'FORBIDDEN'});expect('currentCreditBalanceCents' in denied).toBe(false);
+ expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:paidAmount,version:1}});
+ const results=await Promise.all([withSession(full,()=>applyCustomerCreditAction(input)),withSession(full,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(input))))]);
+ for(const result of results)expect(result).toMatchObject({code:'OK',receipt:{method:'guthaben',amountCents:input.amount,paidAmountCents:input.amount,openAmountCents:6000-input.amount,creditVersion:1,confirmedBy:full.actorId}});
+ expect(results.filter(result=>result.code==='OK'&&!result.replayed)).toHaveLength(1);
+ expect(await withSession(full,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>applyCustomerCreditAction({...input,expectedCreditVersion:2}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:paidAmount-input.amount,version:2}});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:target.orderId}))).toMatchObject({code:'OK',data:{payment:{method:'guthaben',openAmountCents:6000-input.amount,paidAmountCents:input.amount,paymentVersion:1}}});
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='PAYMENT_CONFIRMED_V1' AND client_event_id=${input.clientEventId}::uuid`).toEqual([{n:1}]);
+ expect(await sql`SELECT amount_cents::text,actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND kind='verrechnung' AND invoice_id=${input.invoiceId}::uuid`).toEqual([{amount_cents:String(-input.amount),actor_user_id:full.actorId}]);
+ expect(await sql`SELECT count(*)::int AS n FROM public.payments WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{n:0}]);
+});
+
+it('A08-9 rejects a stale invoice with the actual zero remainder without consuming customer credit',async()=>{
+ const source=await readyInvoiceOrder('S08 stale credit source','pickup',false,undefined,8403);
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:source.invoice.invoiceId,amount:4000,method:'bar',expectedVersion:0,expectedOpenAmountCents:10000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:source.invoice.invoiceId,expectedVersion:1,reason:'TEST S08 stale invoice credit',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const target=await readyInvoiceOrder('S08 stale credit target','pickup',false,source.customerId,5042);
+ const input={invoiceId:target.invoice.invoiceId,amount:4000,expectedVersion:0,expectedOpenAmountCents:6000,expectedCreditVersion:1,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:target.invoice.invoiceId,amount:6000,method:'ueberweisung',expectedVersion:0,expectedOpenAmountCents:6000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>applyCustomerCreditAction(input))).toMatchObject({code:'CONFLICT',currentOpenAmountCents:0});
+ expect(await withSession(full,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'CONFLICT',currentOpenAmountCents:0});
+ expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:4000,version:1}});
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{n:0}]);
+ expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${target.invoice.invoiceId}::uuid`).toEqual([{n:0}]);
+});
+
+it('A08 application rolls debit and payment back when the actual payment receipt is suppressed, then retries one effect',async()=>{
+ const source=await readyInvoiceOrder('S08 atomic credit source','pickup',false,undefined,8403);
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:source.invoice.invoiceId,amount:4000,method:'bar',expectedVersion:0,expectedOpenAmountCents:10000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:source.invoice.invoiceId,expectedVersion:1,reason:'TEST S08 missing payment receipt',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const target=await readyInvoiceOrder('S08 atomic credit target','pickup',false,source.customerId,5042);
+ const input={invoiceId:target.invoice.invoiceId,amount:4000,expectedVersion:0,expectedOpenAmountCents:6000,expectedCreditVersion:1,clientEventId:randomUUID()};
+ const fault='test_s08_apply_'+randomUUID().replaceAll('-','');
+ if(!/^[A-Za-z0-9-]+$/.test(KREILE_TENANT_SLUG))throw Error('TEST_TENANT_LITERAL_INVALID');
+ await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='PAYMENT_CONFIRMED_V1' AND NEW.client_event_id='${input.clientEventId}'::uuid THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
+ try{
+  expect(await withSession(full,()=>applyCustomerCreditAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:4000,version:1}});
+  expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:target.orderId}))).toMatchObject({code:'OK',data:{payment:{openAmountCents:6000,paidAmountCents:0,paymentVersion:0}}});
+  expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${target.invoice.invoiceId}::uuid`).toEqual([{n:0}]);
+ }finally{
+  await sql.unsafe(`DROP TRIGGER ${fault} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${fault}()`);
+ }
+ expect(await withSession(full,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:false});
+ expect(await withSession(full,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:0,version:2}});
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{n:1}]);
+});
+
+it('A08 two actual invoices with distinct N5 keys cannot overdraw the same customer credit',async()=>{
+ const source=await readyInvoiceOrder('S08 parallel credit source','pickup',false,undefined,8403);
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:source.invoice.invoiceId,amount:4000,method:'bar',expectedVersion:0,expectedOpenAmountCents:10000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:source.invoice.invoiceId,expectedVersion:1,reason:'TEST S08 shared credit lock',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const targets=[await readyInvoiceOrder('S08 parallel credit target A','pickup',false,source.customerId,5042),await readyInvoiceOrder('S08 parallel credit target B','pickup',false,source.customerId,5042)];
+ const requests=targets.map(target=>({invoiceId:target.invoice.invoiceId,amount:4000,expectedVersion:0,expectedOpenAmountCents:6000,expectedCreditVersion:1,clientEventId:randomUUID()}));
+ expect(await withSession(full,()=>applyCustomerCreditAction({...requests[0],amount:5000,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT',currentCreditBalanceCents:4000});
+ const results=await Promise.all(requests.map(request=>withSession(full,()=>applyCustomerCreditAction(request))));
+ expect(results.map(result=>result.code).sort()).toEqual(['CONFLICT','OK']);
+ const winning=results.findIndex(result=>result.code==='OK');
+ expect(await withSession(full,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(requests[winning]))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:0,version:2}});
+ for(let index=0;index<targets.length;index++)expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:targets[index].orderId}))).toMatchObject({code:'OK',data:{payment:{openAmountCents:index===winning?2000:6000,paidAmountCents:index===winning?4000:0}}});
+ expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${source.customerId} AND kind='verrechnung'`).toEqual([{n:1}]);
 });
 
 it('A08 empty credit is proven zero only for an existing customer and the real money authorization',async()=>{

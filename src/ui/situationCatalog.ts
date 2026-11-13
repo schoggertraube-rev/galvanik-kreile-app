@@ -361,7 +361,10 @@ export const OFFLINE_DEVICE_STATUS_COPY={
 } as const;
 // R8 S08: PL13.11.23:25.
 export const CUSTOMER_CREDIT_COPY={
- retryTask:(number:string)=>'TODO_PL customer_credit.retry '+number,
+ methodLabel:'Guthaben',
+ applyLabel:(amount:string,number:string)=>`Guthaben ${amount} mit Rechnung ${number} verrechnen`,
+ changed:'Das Guthaben oder der Rechnungsrest hat sich geändert. Lade die aktuelle Verrechnung; deine Angaben bleiben erhalten.',
+ retryTask:(number:string)=>`Guthaben aus Storno ${number} bilden · die Zahlung ist da, das Guthaben fehlt noch`,
  invalid:'Betrag oder Rechnung fehlt. Trag beides ein, dann verrechne ich das Guthaben.',
  forbidden:'Guthaben verrechnen darf nur, wer das Recht Geld hat.',
  unavailable:'Das Guthaben ist gerade nicht erreichbar. Deine Angaben bleiben erhalten – versuch es gleich noch einmal.',

@@ -96,7 +96,7 @@ export type OrderCardPayment = {
     eventId: string;
     actorId: string;
     occurredAt: string;
-    method: "bar" | "ueberweisung" | "karte";
+    method: "bar" | "ueberweisung" | "karte" | "guthaben";
   };
   goodsOut: null | {
     eventId: string;

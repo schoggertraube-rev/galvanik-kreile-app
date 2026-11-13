@@ -1,5 +1,5 @@
 "use client";
-import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY} from "@/ui/situationCatalog";
+import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY,CUSTOMER_CREDIT_COPY} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import {
@@ -104,7 +104,8 @@ function paymentModeLabel(mode: "vorkasse" | "abholung" | "rechnung" | "keiner")
   return "Rechnung";
 }
 
-function paymentMethodLabel(method: "bar" | "ueberweisung" | "karte"): string {
+function paymentMethodLabel(method: "bar" | "ueberweisung" | "karte" | "guthaben"): string {
+  if (method === "guthaben") return CUSTOMER_CREDIT_COPY.methodLabel;
   if (method === "bar") return "Bar";
   if (method === "ueberweisung") return "Überweisung";
   return "Karte";

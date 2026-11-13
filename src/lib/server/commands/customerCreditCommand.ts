@@ -4,6 +4,9 @@ import {sql} from 'drizzle-orm';
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import type {ImmutableInvoiceCancellationReceipt} from './immutableInvoiceCommand';
+import type {CustomerCreditApplyInput,CustomerCreditResult} from '@/modules/accounting/public';
+import {confirmPayment,type ConfirmPaymentResult} from './confirmPaymentCommand';
+import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
 
 type CancellationIdentity=Pick<ImmutableInvoiceCancellationReceipt,'invoiceId'|'eventId'|'clientEventId'|'cancelledBy'>;
 
@@ -66,4 +69,42 @@ export async function repairCancellationCreditTask(tx:PrivilegedTenantTransactio
  if(source.pending)await appendCancellationCredit(tx,auth.tenantId,source);
  const proof=await readCancellationCreditSource(tx,auth.tenantId,task.client_key);
  if(!proof||proof.pending)throw Error('CUSTOMER_CREDIT_TASK_REPAIR_NOT_PROVEN');
+}
+
+type CreditReader=(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerCreditResult>;
+
+/** No second payment writer: the ordinary command owns event, aggregate,
+ * ledger debit, locks and their one transaction/receipt. */
+export async function applyCustomerCredit(input:unknown,readCredit:CreditReader):Promise<ConfirmPaymentResult>{
+ if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).sort().join(',')!=='amount,clientEventId,expectedCreditVersion,expectedOpenAmountCents,expectedVersion,invoiceId')return {code:'VALIDATION_ERROR',message:CUSTOMER_CREDIT_COPY.invalid};
+ const value=input as CustomerCreditApplyInput;
+ if(!Number.isSafeInteger(value.expectedCreditVersion)||value.expectedCreditVersion<0||value.expectedCreditVersion>2147483647||!Number.isSafeInteger(value.expectedOpenAmountCents)||value.expectedOpenAmountCents<0)return {code:'VALIDATION_ERROR',message:CUSTOMER_CREDIT_COPY.invalid};
+ const {expectedCreditVersion,...payment}=value;
+ return confirmPayment({...payment,method:'guthaben'},{expectedVersion:expectedCreditVersion,
+  prepare:async(tx,auth,request)=>{
+   const rows=await tx.execute<{customer_id:string|null}>(sql`SELECT customer_id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${request.invoiceId}::uuid LIMIT 2`);
+   if(rows.length!==1||!rows[0].customer_id)return {code:'NOT_FOUND',message:CUSTOMER_CREDIT_COPY.notFound};
+   const customerId=rows[0].customer_id;
+   await tx.execute(sql`SELECT private.lock_customer_credit_v1(${auth.tenantId},${customerId})`);
+   const read=await readCredit(tx,auth.tenantId,customerId);if(read.code!=='OK')return read;
+   if(read.credit.version!==expectedCreditVersion||request.amount>read.credit.balanceCents)return {code:'CONFLICT',message:CUSTOMER_CREDIT_COPY.changed,currentCreditBalanceCents:read.credit.balanceCents};
+   return {code:'OK',customerId};
+  },
+  debit:async(tx,auth,request,customerId)=>{
+   const rows=await tx.execute<{id:string}>(sql`INSERT INTO public.customer_credit_entries(id,tenant_id,customer_id,kind,amount_cents,invoice_id,actor_user_id,idempotency_key)
+    VALUES(${randomUUID()}::uuid,${auth.tenantId},${customerId},'verrechnung',${-request.amount},${request.invoiceId}::uuid,${auth.userId}::uuid,${request.clientEventId}) RETURNING id::text`);
+   if(rows.length!==1)throw Error('CUSTOMER_CREDIT_DEBIT_NOT_SAVED');
+  },
+  verify:async(tx,auth,receipt)=>{
+   const rows=await tx.execute<{kind:string;amount_cents:string;actor_id:string;customer_id:string;invoice_customer_id:string;invoice_id:string}>(sql`
+    SELECT entry.kind,entry.amount_cents::text,entry.actor_user_id::text AS actor_id,entry.customer_id,invoice.customer_id AS invoice_customer_id,entry.invoice_id::text
+    FROM public.customer_credit_entries entry JOIN public.invoices invoice ON invoice.tenant_id=entry.tenant_id AND invoice.id=entry.invoice_id
+    WHERE entry.tenant_id=${auth.tenantId} AND entry.idempotency_key=${receipt.clientEventId}
+   `);
+   const row=rows[0];
+   if(rows.length!==1||!row||row.kind!=='verrechnung'||row.amount_cents!==String(-receipt.amountCents)||row.actor_id!==receipt.confirmedBy||row.invoice_id!==receipt.invoiceId||row.customer_id!==row.invoice_customer_id)throw Error('CUSTOMER_CREDIT_DEBIT_RECEIPT_MISSING');
+   await tx.execute(sql`SET CONSTRAINTS customer_credit_source_guard,invoices_customer_credit_receipt_guard IMMEDIATE`);
+   await tx.execute(sql`SET CONSTRAINTS customer_credit_source_guard,invoices_customer_credit_receipt_guard DEFERRED`);
+  },
+ });
 }
