@@ -7,6 +7,7 @@ import {readQuoteGoodsContext} from '@/lib/server/quoteGoodsContextPort';
 import {parseQuoteGoodsReceiptInput,type GoodsReceiptRecord} from '../goodsReceiptContract';
 import type {GoodsReceiptResult} from './goodsReceipt';
 import {recordIntakeQuoteEffect} from './intakeQuoteEffect';
+import {QUOTE_CYCLE_COPY} from '@/ui/situationCatalog';
 
 /** The KV branch of the existing goods receipt writer; never creates a second store. */
 export async function saveQuoteGoodsReceipt(raw:unknown,options:{transaction?:PrivilegedTenantTransaction;authorization?:AuthorizationSnapshot;allowAccepted?:boolean}={}):Promise<GoodsReceiptResult>{
@@ -71,7 +72,7 @@ export async function saveQuoteGoodsReceipt(raw:unknown,options:{transaction?:Pr
   if(rows.length!==1||rows[0].auftrag_id!==null||rows[0].gesperrt!==(!quote.accepted||input.condition!=='unauffaellig'||input.deviations.length>0||input.packagesReceived!==input.packagesTotal||input.procedure!=='stimmt'))throw Error('QUOTE_GOODS_READBACK_INVALID');
   await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES(${auth.tenantId},${input.itemId}::uuid,'ware',${input.clientEventId}::uuid,${auth.userId},NULL,${JSON.stringify({action:'kv.ware_angenommen',receiptId:input.id,intent,after:rows[0]})}::jsonb)`);
   return {code:'OK',receipt:rows[0],replayed:false};
- };return options.transaction?await run(options.transaction):await withPrivilegedTenantTransaction(auth,run);}catch(error){console.error('[QUOTE_GOODS_RECEIPT_FAILED]',error);return {code:'UNAVAILABLE',message:'KV-Warenannahme konnte nicht sicher bestätigt werden. Eingaben und Kennung behalten.'};}
+ };return options.transaction?await run(options.transaction):await withPrivilegedTenantTransaction(auth,run);}catch(error){console.error('[QUOTE_GOODS_RECEIPT_FAILED]',error);return {code:'UNAVAILABLE',message:QUOTE_CYCLE_COPY.goodsUnavailable};}
 }
 
 /** The UI submits identity/version/reason only; inspection facts are reread, never fabricated. */

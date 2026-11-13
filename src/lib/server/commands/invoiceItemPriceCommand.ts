@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {appendProductionPricing} from '@/lib/server/productionSnapshotPort';
+import {readOrderCommercialQuote} from '@/lib/server/orderQuoteReadPort';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -136,7 +137,7 @@ export async function setInvoiceItemPrices(inputValue: unknown): Promise<SetInvo
           : { code: "CONFLICT" as const, message: "Anfragekennung wurde bereits anders verwendet." };
       }
 
-      const orders = await tx.execute<{ id: string; version: number; station: string; status: string; frozen: boolean; invoiced: boolean }>(sql`
+      const orders = await tx.execute<{ id: string; version: number; station: string; status: string; frozen: boolean; invoiced: boolean; has_quote:boolean }>(sql`
         SELECT o.id, o.version, o.station, o.status,
           EXISTS (
             SELECT 1 FROM private.v_order_freeze_state_v1 freeze_state
@@ -147,7 +148,8 @@ export async function setInvoiceItemPrices(inputValue: unknown): Promise<SetInvo
             SELECT 1 FROM public.invoices invoice
             WHERE invoice.order_id = o.id AND invoice.tenant_id = o.tenant_id
               AND invoice.status = 'issued'
-          ) AS invoiced
+          ) AS invoiced,
+          EXISTS(SELECT 1 FROM private.quote_conversion_receipts receipt WHERE receipt.tenant_id=o.tenant_id AND receipt.order_id=o.id) AS has_quote
         FROM public.orders o
         WHERE o.tenant_id = ${authorization.data.tenantId} AND o.id = ${input.orderId}
         FOR UPDATE
@@ -165,7 +167,8 @@ export async function setInvoiceItemPrices(inputValue: unknown): Promise<SetInvo
         WHERE tenant_id = ${authorization.data.tenantId} AND order_id = ${input.orderId}
         FOR UPDATE
       `);
-      const missing = items.filter((item) => item.preis_netto === null && item.catalog_service_id === null).map((item) => item.id).sort();
+      const awardedItems=order.has_quote?new Set((await readOrderCommercialQuote(tx,authorization.data.tenantId,order.id)).positions.map(item=>item.itemId)):new Set<string>();
+      const missing = items.filter((item) => item.preis_netto === null && item.catalog_service_id === null && !awardedItems.has(item.id)).map((item) => item.id).sort();
       const supplied = input.prices.map((price) => price.itemId).sort();
       if (missing.length !== supplied.length || missing.some((id, index) => id !== supplied[index])) {
         return { code: "VALIDATION_ERROR" as const, message: "Bitte alle preislosen Freitext-Positionen genau einmal ausfüllen." };

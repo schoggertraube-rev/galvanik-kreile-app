@@ -30,6 +30,21 @@ export async function quoteHasCreatedOrder(tx:PrivilegedTenantTransaction,tenant
  return rows.length===1;
 }
 
+/** R2 task provenance comes from the existing physical goods receipt and KV,
+ * never from a submitted title, task reference or a second retry store. */
+export async function readQuoteGoodsOrderRetrySource(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,receiptId:string){
+ const rows=await tx.execute<{quoteId:string}>(sql`SELECT kv_id::text AS "quoteId" FROM public.goods_receipt WHERE tenant_id=${auth.tenantId} AND id=${receiptId}::uuid AND status='angenommen' AND kv_id IS NOT NULL`);
+ if(!rows.length)return null;
+ if(rows.length!==1)throw Error('QUOTE_ORDER_RETRY_GOODS_SOURCE_INVALID');
+ const quote=await readQuoteGoodsContext(tx,auth,rows[0].quoteId);
+ if(!quote)throw Error('QUOTE_ORDER_RETRY_QUOTE_SOURCE_MISSING');
+ const goods=(await readQuoteGoodsSummaries(tx,auth.tenantId,quote.id)).filter(row=>row.id===receiptId);
+ if(goods.length!==1)throw Error('QUOTE_ORDER_RETRY_GOODS_PROJECTION_MISSING');
+ const receipt=goods[0];
+ const completed=quote.linkedOrderId!==null&&receipt.orderId===quote.linkedOrderId&&await quoteHasCreatedOrder(tx,auth.tenantId,quote.id,quote.linkedOrderId);
+ return {quoteId:quote.id,quoteNumber:quote.number,receiptId,pending:quote.accepted&&!quote.declined&&quote.linkedOrderId===null&&receipt.orderId===null&&!receipt.blocked,completed};
+}
+
 export type QuoteFollowupFact={id:string;edition:number;stage:string;number:string;customerName:string;integrity:boolean};
 export async function readQuoteFollowupFacts(tx:PrivilegedTenantTransaction,tenantId:string,ids:readonly string[]){
  if(!ids.length)return [];

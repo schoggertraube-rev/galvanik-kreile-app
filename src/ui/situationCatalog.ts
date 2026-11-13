@@ -125,6 +125,10 @@ export const ACTOR_COPY={
  mail:(sender:string)=>'Mail von '+sender,
 };
 export const QUOTE_CYCLE_COPY={
+ goodsUnavailable:'KV-Warenannahme konnte nicht sicher bestätigt werden. Eingaben und Kennung behalten.',
+ orderRetry:(number:string)=>'Auftrag aus KV '+number+' anlegen',
+ // TODO_PL S07/R8: task-specific R2 reason; until supplied, A07-5's approved action label.
+ orderRetryTask:(number:string):string=>QUOTE_CYCLE_COPY.orderRetry(number),
  editionWarning:(before:number,after:number,customer:string)=>`Du änderst Fassung ${before} zu Fassung ${after} – die Zusage von ${customer} gilt dann nicht mehr. Termin allein ändert nichts.`,
  editionConfirm:'Neue Fassung speichern · Zusage aufheben',
  acceptanceInvalid:(edition:number)=>`Zusage zu Fassung ${edition} ist ungültig · aktuelle Fassung bestätigen lassen`,
