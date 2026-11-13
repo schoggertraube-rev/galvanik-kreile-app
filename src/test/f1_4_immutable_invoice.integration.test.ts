@@ -1,3 +1,4 @@
+import {readInvoiceVat} from '@/modules/accounting/server-public';
 // @vitest-environment node
 
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
@@ -1020,21 +1021,19 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     }
     expect(sevenPercentInvoice.receipt.invoiceNumber).toMatch(/^R-[0-9]{4}-0003$/);
     const [sevenPercentStored] = await sql<{
+      snapshot:unknown;
       net_amount_cents: number;
-      vat_rate_basis_points: number;
+      vat_rate_basis_points: number|null;
       vat_amount_cents: number;
       gross_amount_cents: number;
     }[]>`
-      SELECT net_amount_cents, vat_rate_basis_points, vat_amount_cents, gross_amount_cents
+      SELECT snapshot, net_amount_cents, vat_rate_basis_points, vat_amount_cents, gross_amount_cents
       FROM public.invoices
       WHERE tenant_id = ${TENANT_ID} AND id = ${sevenPercentInvoice.receipt.invoiceId}::uuid
     `;
-    expect(sevenPercentStored).toEqual({
-      net_amount_cents: 10000,
-      vat_rate_basis_points: 700,
-      vat_amount_cents: 700,
-      gross_amount_cents: 10700,
-    });
+    const sevenPercentVat=readInvoiceVat(sevenPercentStored);
+    expect(sevenPercentVat.headRate).toBeNull();
+    expect(sevenPercentVat.groups).toEqual([{rateBp:700,netCents:10000,vatCents:700,grossCents:10700}]);
     await expect(mutationCounts()).resolves.toEqual({
       invoice_count: 3,
       created_event_count: 3,
