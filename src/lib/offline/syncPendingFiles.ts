@@ -81,5 +81,5 @@ export function syncPendingFiles(scope:string,ports:Ports):Promise<Outcome>{
    }catch(error){outcome.blocked++;blockedItems.add(entry.itemId);console.error('[OFFLINE_ORIGINAL_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
   }
   return outcome;
- })();running.set(scope,work);void work.finally(()=>{if(running.get(scope)===work)running.delete(scope);}).catch(()=>{});return work;
+ })();running.set(scope,work);void work.finally(()=>{if(running.get(scope)===work)running.delete(scope);}).catch(error=>{console.error('[OFFLINE_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');});return work;
 }

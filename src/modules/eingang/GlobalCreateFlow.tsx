@@ -726,7 +726,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         }
         setIntakeCustomerResults(result.customers.slice(0, 3));
         setIntakeCustomerSearchState(result.customers.length > 0 ? "ready" : "empty");
-      }).catch(() => {
+      }).catch((error: unknown) => {
+        console.error('[INTAKE_CUSTOMER_SEARCH_FAILED]', error instanceof Error ? error.name : 'UnknownError');
         if (sequence !== intakeCustomerSearchSeq.current) return;
         setIntakeCustomerResults([]);
         setIntakeCustomerSearchState("error");
