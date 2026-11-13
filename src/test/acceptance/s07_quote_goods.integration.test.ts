@@ -9,7 +9,7 @@ import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarn
 import {customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {storeIntakeGoodsPhoto} from '../../../e2e/ablauf/photoFixture';
 
-it.each([{name:'full',operational:false,missingReceipt:false},{name:'operational',operational:true,missingReceipt:false},{name:'missing-task-receipt',operational:true,missingReceipt:true}])('A07-5 $name retains actual photographed goods after order SQL failure and recovers exactly once',async scenario=>{
+it.each([{name:'full',operational:false,missingReceipt:false},{name:'operational',operational:true,missingReceipt:false},{name:'missing-task-receipt',operational:true,missingReceipt:true},{name:'missing-completion-receipt',operational:true,missingReceipt:false}])('A07-5 $name retains actual photographed goods after order SQL failure and recovers exactly once',async scenario=>{
  const actor=scenario.operational?await createFixture(['eingang'],'werkstatt'):full;
  const customerId=await customerFixture('S07 real retained goods');
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
@@ -52,6 +52,19 @@ it.each([{name:'full',operational:false,missingReceipt:false},{name:'operational
   expect(await sql`SELECT count(*)::integer AS n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quoteId}`).toEqual([{n:1}]);
   expect(await withSession(full,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:null,lifecycle:{goods:[expect.objectContaining({id:goods.id,orderId:null})]}}});
  }finally{await sql.unsafe(`DROP TRIGGER ${fault} ON public.orders`);await sql.unsafe(`DROP FUNCTION private.${fault}()`);}
+ if(scenario.name==='missing-completion-receipt'){
+  const settlementFault='test_s07_settle_'+randomUUID().replaceAll('-','');
+  await sql.unsafe(`CREATE FUNCTION private.${settlementFault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.event_type='QUOTE_ORDER_TASK_V1' AND NEW.payload->>'quoteId'='${quoteId}' AND NEW.payload->>'action'='erledigt' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+  await sql.unsafe(`CREATE TRIGGER ${settlementFault} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${settlementFault}()`);
+  try{
+   expect(await withSession(actor,()=>convertQuoteToOrderAction(JSON.parse(JSON.stringify(award)),JSON.parse(JSON.stringify(goods))))).toMatchObject({code:'UNAVAILABLE',message:'Auftrag ist angelegt. Die KV-Ansicht zeigt ihn gleich, lade die Seite in einem Moment neu.'});
+   expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId}`).toEqual([{n:1}]);
+   expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quoteId}`).toEqual([{status:'offen'}]);
+   expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='QUOTE_ORDER_TASK_V1' AND payload->>'quoteId'=${quoteId} AND payload->>'action'='erledigt'`).toEqual([{n:0}]);
+   const persisted=await withSession(full,()=>readQuoteAction({quoteId}));
+   expect(persisted).toMatchObject({code:'OK',quote:{linkedOrderId:expect.any(String),lifecycle:{goods:[expect.objectContaining({id:goods.id,orderId:expect.any(String)})]}}});
+  }finally{await sql.unsafe(`DROP TRIGGER ${settlementFault} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${settlementFault}()`);}
+ }
  const recovered=await withSession(actor,()=>convertQuoteToOrderAction(JSON.parse(JSON.stringify(award)),JSON.parse(JSON.stringify(goods))));
  expect(recovered).toMatchObject({code:'OK'});if(recovered.code!=='OK')throw Error('TEST_S07_ORDER_RECOVERY');
  expect(await withSession(actor,()=>convertQuoteToOrderAction(JSON.parse(JSON.stringify(award)),JSON.parse(JSON.stringify(goods))))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId:recovered.orderReceipt.orderId}});
