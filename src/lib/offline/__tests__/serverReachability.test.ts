@@ -4,6 +4,23 @@ let stop:(()=>void)|undefined;
 let fetcher:ReturnType<typeof vi.fn>;
 beforeEach(async()=>{vi.resetModules();vi.useFakeTimers();vi.spyOn(navigator,'onLine','get').mockReturnValue(true);fetcher=vi.fn(async()=>new Response(null,{status:204}));vi.stubGlobal('fetch',fetcher);network=await import('../serverReachability');stop=network.installServerReachability();});
 afterEach(()=>{stop?.();vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals();});
+it('with no enabled owner a 503 leaves the original fetch and navigator status unchanged',async()=>{
+ stop?.();stop=undefined;
+ expect(window.fetch).toBe(fetcher);
+ fetcher.mockResolvedValueOnce(new Response(null,{status:503}));
+ expect((await window.fetch('/TEST-flag-off')).status).toBe(503);
+ expect(network.readServerReachability()).toBe(true);
+ await vi.advanceTimersByTimeAsync(60_000);expect(fetcher).toHaveBeenCalledOnce();
+ const changed=vi.fn(),unsubscribe=network.subscribeServerReachability(changed);
+ vi.spyOn(navigator,'onLine','get').mockReturnValue(false);window.dispatchEvent(new Event('offline'));
+ expect(network.readServerReachability()).toBe(false);expect(changed).toHaveBeenCalledOnce();unsubscribe();
+});
+it('disabling the last owner restores navigator behavior after an observed failure',async()=>{
+ fetcher.mockResolvedValueOnce(new Response(null,{status:503}));await window.fetch('/TEST-enabled');
+ expect(network.readServerReachability()).toBe(false);
+ stop?.();stop=undefined;expect(window.fetch).toBe(fetcher);expect(network.readServerReachability()).toBe(true);
+ await vi.advanceTimersByTimeAsync(60_000);expect(fetcher).toHaveBeenCalledOnce();
+});
 it('a failed actual fetch makes the single predicate offline until a successful 30s heartbeat',async()=>{
  fetcher.mockRejectedValueOnce(new TypeError('TEST network failure'));
  await expect(window.fetch('/TEST-server')).rejects.toThrow('TEST network failure');expect(network.readServerReachability()).toBe(false);

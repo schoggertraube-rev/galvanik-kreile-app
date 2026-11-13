@@ -3,8 +3,11 @@ const listeners=new Set<()=>void>();
 let reachable=true;
 let owners=0;
 let stop:(()=>void)|undefined;
-export function readServerReachability(){return typeof navigator==='undefined'||navigator.onLine&&reachable;}
-export function subscribeServerReachability(listener:()=>void){listeners.add(listener);return()=>{listeners.delete(listener);};}
+export function readServerReachability(){return typeof navigator==='undefined'||navigator.onLine&&(owners===0||reachable);}
+export function subscribeServerReachability(listener:()=>void){
+ listeners.add(listener);window.addEventListener('online',listener);window.addEventListener('offline',listener);
+ return()=>{listeners.delete(listener);window.removeEventListener('online',listener);window.removeEventListener('offline',listener);};
+}
 export const serverReachabilitySnapshot=()=>true;
 /** The transport observer settles its fact before an online reader rejects.
  * Preserve business/auth failures; only a real offline fact selects the cache. */
@@ -62,5 +65,5 @@ export function installServerReachability(){
   if(!navigator.onLine)offline();else if(!reachable)void heartbeat();
   stop=()=>{disposed=true;if(timer)clearTimeout(timer);window.removeEventListener('offline',offline);window.removeEventListener('online',browserOnline);if(window.fetch===wrapped)window.fetch=original;};
  }
- return()=>{owners--;if(owners===0){stop?.();stop=undefined;}};
+ return()=>{owners--;if(owners===0){stop?.();stop=undefined;reachable=true;listeners.forEach(listener=>listener());}};
 }

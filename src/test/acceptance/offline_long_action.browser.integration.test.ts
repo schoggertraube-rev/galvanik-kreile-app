@@ -18,6 +18,7 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('CB18:25 preserves twelve-secon
  let blocked=false,reads=0,heartbeats=0;
  const server=createServer((req,res)=>{void(async()=>{
   if(req.url==='/module.mjs'){res.setHeader('content-type','text/javascript');res.end(compiled.outputFiles[0].text);return;}
+  if(req.url==='/TEST-503'){res.writeHead(503);res.end('TEST server unavailable');return;}
   if(req.url==='/api/offline/heartbeat'){
    heartbeats++;if(blocked){req.socket.destroy();return;}
    const reply=await GET();res.writeHead(reply.status,Object.fromEntries(reply.headers));res.end(await reply.text());return;
@@ -36,7 +37,11 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('CB18:25 preserves twelve-secon
  try{
   await cli(['open',`http://127.0.0.1:${address.port}/TEST`]);
   const code=`async()=>{
-   const p=await import('/module.mjs'),stop=p.installServerReachability();
+   const p=await import('/module.mjs'),originalFetch=window.fetch;
+   if((await fetch('/TEST-503')).status!==503||!p.readServerReachability()||window.fetch!==originalFetch)throw Error('TEST_FLAG_OFF_CHANGED_NAVIGATOR_BEHAVIOR');
+   const offAction=await(await fetch('/slow-read?flagoff=1',{method:'POST',body:'TEST flag OFF original Action'})).json();
+   if(!offAction.ok||!p.readServerReachability()||window.fetch!==originalFetch)throw Error('TEST_FLAG_OFF_BLOCKED_REAL_ACTION');
+   const stop=p.installServerReachability();
    try{
     for(const blocked of [false,true]){
      const controller=new AbortController(),started=Date.now();
@@ -46,10 +51,10 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('CB18:25 preserves twelve-secon
      const response=await pending,result=await response.json();
      if(Date.now()-started<12_000||!result.ok||!Array.isArray(result.data)||controller.signal.aborted||p.readServerReachability()===blocked)throw Error('TEST_REAL_LONG_ACTION_DID_NOT_FINISH');
     }
-    return {realLongActions:2,originalsNeverAborted:true,independentHeartbeat:true};
+    return {realLongActions:3,flagOff503Unchanged:true,originalsNeverAborted:true,independentHeartbeat:true};
    }finally{stop();}
   }`;
   const result=await cli(['eval',`async()=>await(eval(atob('${Buffer.from('('+code+')').toString('base64')}')))()`]);
-  expect(result.stdout).not.toContain('### Error');expect(result.stdout).toContain('"realLongActions": 2');expect(reads).toBe(2);expect(heartbeats).toBe(2);
+  expect(result.stdout).not.toContain('### Error');expect(result.stdout).toContain('"realLongActions": 3');expect(result.stdout).toContain('"flagOff503Unchanged": true');expect(reads).toBe(3);expect(heartbeats).toBe(2);
  }finally{await cli(['close']).catch(()=>{});await new Promise<void>(resolve=>server.close(()=>resolve()));}
 },120_000);

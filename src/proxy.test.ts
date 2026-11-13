@@ -57,6 +57,17 @@ describe("proxy auth boundary", () => {
     expectRedirectToStart(await proxy(request("/")));
   });
 
+  it('lets only the data-free heartbeat bypass a failing session provider',async()=>{
+    const {proxy}=await import('@/proxy');
+    mockGetUser.mockRejectedValue(new Error('TEST session provider unavailable'));
+    const cookie='sb-TEST-auth-token=TEST-expired-session';
+    expect((await proxy(request('/api/offline/heartbeat',cookie))).status).toBe(200);
+    expect(mockGetUser).not.toHaveBeenCalled();
+    const denied=await proxy(request('/api/offline/replay',cookie));
+    expect(denied.status).toBe(401);expect(await denied.json()).toEqual({error:'UNAUTHORIZED'});
+    expect(mockGetUser).toHaveBeenCalledOnce();
+  });
+
   it("matches protected pages and API routes", async () => {
     const { config } = await import("@/proxy");
 
