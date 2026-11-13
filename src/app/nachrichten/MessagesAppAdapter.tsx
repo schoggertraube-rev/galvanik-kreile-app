@@ -13,7 +13,7 @@ export function MessagesAppAdapter({ports,initialGroup}:{ports:IntakeMessagesPor
   if(result.code==='OK'&&offline24h&&offlineScope){
    if(!result.serverReadAt||!result.cacheLoginScope)console.error('[OFFLINE_MESSAGE_U2_SOURCE_INCOMPLETE]');
    else for(const row of result.messages){
-    if(row.nextActionRule)await retainDevicePortResponse(offlineScope,true,{port:'message.u2',portVersion:1,objectId:row.id,serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:row.nextActionRule},readFence);
+    if(row.nextActionRule)await retainDevicePortResponse(offlineScope,true,{port:'message.u2',portVersion:1,objectId:row.id,serverChangedAt:row.serverChangedAt??null,serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:row.nextActionRule},readFence);
     else console.error('[OFFLINE_MESSAGE_U2_SOURCE_INCOMPLETE]');
    }
   }

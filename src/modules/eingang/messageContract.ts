@@ -9,6 +9,7 @@ export const MESSAGE_FILTERS=['offen','zuordnen','alle','erledigt','aussortiert'
 export const INTAKE_CHANGED_EVENT='kreile:intake-changed';
 export type MessageFilter=typeof MESSAGE_FILTERS[number];
 export type IntakeMessage={
+ serverChangedAt?:string|null;
  importFailure?:import('./mailSelectionContract').MailImportFailure|null;
  fallbackPriority?:ReturnType<typeof readFallbackMessagePriority>;
  nextActionRule?:MessageNextActionRead;

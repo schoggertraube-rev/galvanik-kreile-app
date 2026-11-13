@@ -44,13 +44,13 @@ async function database(scope: string): Promise<IDBDatabase> {
 }
 export type PendingShellMetadata={scope:string|null;cacheGeneration:number;updatedAt:string};
 /** Exact metadata-only U2 response, already filtered by the server port. */
-type DeviceEnvelope={portVersion:1;objectId:string;serverReadAt:string;sourceLoginScope:string};
+type DeviceEnvelope={serverChangedAt?:string|null;portVersion:1;objectId:string;serverReadAt:string;sourceLoginScope:string};
 type DeviceDashboard={items:readonly unknown[];visibleFields:readonly unknown[];layout:readonly unknown[];defaultLayout:readonly unknown[];allowedFields:readonly unknown[];delegationTargets:readonly unknown[];outlookMessage:string|null;messageActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:readonly {messageId:string;version:number;read:import('@/lib/domain/u2ReadContract').U2Read}[];missingMessageIds:readonly string[]}};
 export type PendingDeviceRead=DeviceEnvelope&({port:'order.u2'|'customer.u2'|'quote.u2'|'message.u2';response:import('@/lib/domain/u2ReadContract').U2Read}|{port:'today.u3';response:DeviceDashboard}|{port:'orders.list';response:{result:ActionResult<OrderResponse[]>;datenluecken:string[]}}|{port:'customers.list';response:{result:ActionResult<CustomerListResponse[]>;datenluecken:string[]}});
 function isDeviceRead(value:unknown):value is PendingDeviceRead{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>,response=row.response;
- if(Object.keys(row).sort().join(',')!=='objectId,port,portVersion,response,serverReadAt,sourceLoginScope'||typeof row.sourceLoginScope!=='string'||! /^[a-f0-9]{64}$/.test(row.sourceLoginScope)||!['order.u2','customer.u2','quote.u2','message.u2','today.u3','orders.list','customers.list'].includes(String(row.port))||row.portVersion!==1||typeof row.objectId!=='string'||!row.objectId.length||row.objectId.length>128||typeof row.serverReadAt!=='string'||!Number.isFinite(Date.parse(row.serverReadAt))||!response||typeof response!=='object'||Array.isArray(response))return false;
+ if(Object.keys(row).filter(key=>key!=='serverChangedAt').sort().join(',')!=='objectId,port,portVersion,response,serverReadAt,sourceLoginScope'||Object.prototype.hasOwnProperty.call(row,'serverChangedAt')&&row.serverChangedAt!==null&&(typeof row.serverChangedAt!=='string'||!Number.isFinite(Date.parse(row.serverChangedAt)))||typeof row.sourceLoginScope!=='string'||! /^[a-f0-9]{64}$/.test(row.sourceLoginScope)||!['order.u2','customer.u2','quote.u2','message.u2','today.u3','orders.list','customers.list'].includes(String(row.port))||row.portVersion!==1||typeof row.objectId!=='string'||!row.objectId.length||row.objectId.length>128||typeof row.serverReadAt!=='string'||!Number.isFinite(Date.parse(row.serverReadAt))||!response||typeof response!=='object'||Array.isArray(response))return false;
  const u2=response as Record<string,unknown>;
  if(row.port==='orders.list'||row.port==='customers.list'){
   if(!Array.isArray(u2.datenluecken)||!u2.datenluecken.every(gap=>typeof gap==='string')||!u2.result||typeof u2.result!=='object'||Array.isArray(u2.result))return false;
