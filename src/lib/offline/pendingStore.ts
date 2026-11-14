@@ -11,7 +11,8 @@ export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file:
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingFinancialCommand=
  | {command:'invoice.cancel';input:Parameters<typeof cancelInvoiceAction>[0]}
- | {command:'credit.apply';input:import('@/modules/accounting/public').CustomerCreditApplyInput};
+ | {command:'credit.apply';input:import('@/modules/accounting/public').CustomerCreditApplyInput}
+ | {command:'credit.payout';input:import('@/modules/accounting/public').CustomerCreditPayoutInput};
 export type PendingWorkshopCommand={command:'item.finished';input:Parameters<typeof setOrderItemFinishedAction>[0]}|{command:'item.extraWork';input:Parameters<typeof changeOrderItemExtraWorkAction>[0]}|PendingFinancialCommand;
 export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:string;kind:'workshop';deviceCapturedAt?:string;queueSequence?:number;notBefore?:string;dispatchStartedAt?:string};
 export type PendingPhysicalWorkshopOriginal=Extract<PendingWorkshopOriginal,{command:'item.finished'|'item.extraWork'}>;
@@ -26,6 +27,7 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  if(row.deviceCapturedAt!==undefined&&(typeof row.deviceCapturedAt!=='string'||!Number.isFinite(Date.parse(row.deviceCapturedAt))))return false;
  if(row.queueSequence!==undefined&&(typeof row.queueSequence!=='number'||!Number.isSafeInteger(row.queueSequence)||row.queueSequence<1))return false;
  const data=input as Record<string,unknown>,uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(v);
+ if(row.command==='credit.payout')return Object.keys(data).sort().join(',')==='amount,clientEventId,customerId,expectedCreditVersion,method,note,reference'&&typeof data.customerId==='string'&&data.customerId.length>0&&data.customerId.length<=128&&row.itemId===data.customerId&&uuid(data.clientEventId)&&row.id===data.clientEventId&&Number.isSafeInteger(data.amount)&&Number(data.amount)>0&&Number.isSafeInteger(data.expectedCreditVersion)&&Number(data.expectedCreditVersion)>=0&&['bar','ueberweisung'].includes(String(data.method))&&(data.note===null||typeof data.note==='string')&&(data.reference===null||typeof data.reference==='object'&&!Array.isArray(data.reference));
  if(row.command==='invoice.cancel'||row.command==='credit.apply'){
   if(!uuid(data.invoiceId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.invoiceId||!Number.isSafeInteger(data.expectedVersion)||Number(data.expectedVersion)<0)return false;
   const keys=Object.keys(data).sort().join(',');
@@ -457,7 +459,7 @@ export function isPendingWorkshopReceipt(scope:string,entry:PendingWorkshopOrigi
 export function isPendingWorkshopAcknowledgement(scope:string,entry:PendingWorkshopOriginal,value:unknown):boolean{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const result=value as Record<string,unknown>;
- if(entry.command==='invoice.cancel'||entry.command==='credit.apply'){
+ if(entry.command==='invoice.cancel'||entry.command==='credit.apply'||entry.command==='credit.payout'){
   if(result.code!=='OK'||result.financialCommand!==entry.command)return false;
  }else if(result.code!=='OK'&&result.code!=='PRESERVED')return false;
  return isPendingWorkshopReceipt(scope,entry,result.offlineReceipt);

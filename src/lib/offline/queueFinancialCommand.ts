@@ -9,7 +9,7 @@ type FinancialFailure=Exclude<WorkshopAcknowledgement['result'],{code:'OK'|'PRES
  * Queue absence or a cancellation PDF alone is never financial success. */
 export async function queueFinancialCommand(scope:string,command:PendingFinancialCommand,currentScope:()=>string|null){
  if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:CUSTOMER_CREDIT_COPY.unavailable};
- const original:PendingWorkshopOriginal={...command,id:command.input.clientEventId,itemId:command.input.invoiceId,kind:'workshop',deviceCapturedAt:new Date().toISOString()};
+ const original:PendingWorkshopOriginal={...command,id:command.input.clientEventId,itemId:command.command==='credit.payout'?command.input.customerId:command.input.invoiceId,kind:'workshop',deviceCapturedAt:new Date().toISOString()};
  const acknowledgement:{value:FinancialAcknowledgement|null}={value:null};
  const failure:{value:FinancialFailure|null}={value:null};
  const accepted=(event:Event)=>{

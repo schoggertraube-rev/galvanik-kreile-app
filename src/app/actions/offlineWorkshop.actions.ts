@@ -7,7 +7,7 @@ import {setOrderItemFinishedAction,changeOrderItemExtraWorkAction} from './order
 import {createOfflineWorkshopConflictTask} from '@/modules/tasks/server-public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
-import {cancelInvoiceAction,applyCustomerCreditAction} from './invoices.actions';
+import {cancelInvoiceAction,applyCustomerCreditAction,payoutCustomerCreditAction} from './invoices.actions';
 
 /** Transport composition only. Business changes still use the existing writers,
  * their real session/rights and their original N5 key. No alternate actor exists.
@@ -22,8 +22,8 @@ async function replayCommand(scope:string,original:PendingWorkshopOriginal){
  if(!isPendingWorkshopOriginal(original)||!original.deviceCapturedAt||!Number.isFinite(Date.parse(original.deviceCapturedAt)))return {code:'VALIDATION_ERROR' as const};
  // Money originals share this transport/store/N5, but never the physical
  // conflict-preservation acknowledgement. Only a real financial OK is final.
- if(original.command==='invoice.cancel'||original.command==='credit.apply'){
-  const result=original.command==='invoice.cancel'?await cancelInvoiceAction(original.input):await applyCustomerCreditAction(original.input);
+ if(original.command==='invoice.cancel'||original.command==='credit.apply'||original.command==='credit.payout'){
+  const result=original.command==='invoice.cancel'?await cancelInvoiceAction(original.input):original.command==='credit.apply'?await applyCustomerCreditAction(original.input):await payoutCustomerCreditAction(original.input);
   if(result.code!=='OK')return result;
   return {...result,financialCommand:original.command,offlineReceipt:{scope,clientEventId:original.input.clientEventId,deviceCapturedAt:original.deviceCapturedAt,eventId:result.receipt.eventId,actorId:auth.data.userId}};
  }

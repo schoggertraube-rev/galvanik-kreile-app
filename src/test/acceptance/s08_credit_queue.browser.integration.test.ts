@@ -13,7 +13,7 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {confirmPaymentAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
-import {getCustomerCreditAction} from '@/app/actions/invoices.actions';
+import {getCustomerCreditAction,cancelInvoiceAction} from '@/app/actions/invoices.actions';
 import {COOKIE_NAME,signAppSession,getSecretKey} from '@/lib/server/appSession';
 import {offlinePartition} from '@/lib/server/offlinePartition';
 import {POST} from '@/app/api/offline/replay/route';
@@ -68,10 +68,21 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
   await cli(['goto',url]);await cli(['eval',setup]);
   await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'credit.apply',input:${JSON.stringify(apply.input)}},()=>'${scope}');if(result.code!=='OK'||!result.replayed||(await p.readPendingEntries('${scope}')).length!==0||acks[0].result.financialCommand!=='credit.apply')throw Error('TEST_APPLY_RELOAD_RETRY_FAILED');return true;}`]);
   expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:0,version:2}});
-  expect(calls).toBe(5);for(const key of [cancellationKey,applicationKey]){expect(receipts.get(key)).toHaveLength(2);expect(receipts.get(key)![0]).toBe(receipts.get(key)![1]);}
+  expect(calls).toBe(5);
+  // S08b reuses this exact browser queue/dispatcher and the same customer ledger.
+  const additional=await readyInvoiceOrder('S08b native payout source','pickup',false,source.customerId,8403);
+  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:additional.invoice.invoiceId,amount:4000,method:'bar',expectedVersion:0,expectedOpenAmountCents:10000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:additional.invoice.invoiceId,expectedVersion:1,reason:'TEST native payout source',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const payoutKey=randomUUID(),payout={customerId:source.customerId,clientEventId:payoutKey,amount:4000,expectedCreditVersion:3,method:'bar',reference:null,note:'TEST native payout original'};
+  loseResponse=true;
+  await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'credit.payout',input:${JSON.stringify(payout)}},()=>'${scope}');if(result.code!=='UNAVAILABLE'||(await p.readPendingEntries('${scope}')).length!==1)throw Error('TEST_PAYOUT_LOST_RESPONSE_FALSE_ACK');return true;}`]);
+  expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:0,version:4}});
+  await cli(['goto',url]);await cli(['eval',setup]);
+  await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'credit.payout',input:${JSON.stringify(payout)}},()=>'${scope}');if(result.code!=='OK'||!result.replayed||result.financialCommand!=='credit.payout'||(await p.readPendingEntries('${scope}')).length!==0)throw Error('TEST_PAYOUT_RELOAD_RETRY_FAILED');return true;}`]);
+  expect(calls).toBe(7);for(const key of [cancellationKey,applicationKey,payoutKey]){expect(receipts.get(key)).toHaveLength(2);expect(receipts.get(key)![0]).toBe(receipts.get(key)![1]);}
   const stale={...apply.input,clientEventId:randomUUID()};
   await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'credit.apply',input:${JSON.stringify(stale)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='CONFLICT'||result.currentCreditBalanceCents!==0||!result.message||pending.length!==1||pending[0].id!=='${stale.clientEventId}')throw Error('TEST_STALE_ORIGINAL_FALSE_ACK_OR_HIDDEN_REASON');return true;}`]);
-  expect(calls).toBe(6);
-  expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND customer_id=${source.customerId}`).toEqual([{n:2}]);
+  expect(calls).toBe(8);
+  expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND customer_id=${source.customerId}`).toEqual([{n:4}]);
  }finally{await execute(process.execPath,[process.env.KREILE_PLAYWRIGHT_CLI_JS!,`-s=${session}`,'close'],{timeout:30000}).catch(()=>{});await new Promise<void>(resolve=>server.close(()=>resolve()));}
 },120000);

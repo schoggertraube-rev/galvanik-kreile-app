@@ -361,6 +361,12 @@ export const OFFLINE_DEVICE_STATUS_COPY={
 } as const;
 // R8 S08: PL13.11.23:25.
 export const CUSTOMER_CREDIT_COPY={
+ payoutLabel:(amount:string,customer:string,method:'bar'|'ueberweisung')=>`${amount} Guthaben an ${customer} ausgezahlt (${method==='bar'?'bar':'Überweisung'})`,
+ payoutMethodMissing:'Wie wurde ausgezahlt? Wähle bar oder Überweisung',
+ payoutReferenceMissing:'Referenz der Überweisung fehlt – trag Datum und Verwendungszweck ein',
+ payoutInvalid:'TODO_PL geld.erstattung.ungueltig',
+ payoutForbidden:'TODO_PL geld.erstattung.kein_recht',
+ payoutChanged:'TODO_PL geld.erstattung.geaendert',
  methodLabel:'Guthaben',
  applyLabel:(amount:string,number:string)=>`Guthaben ${amount} mit Rechnung ${number} verrechnen`,
  changed:'Das Guthaben oder der Rechnungsrest hat sich geändert. Lade die aktuelle Verrechnung; deine Angaben bleiben erhalten.',

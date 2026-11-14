@@ -1,9 +1,9 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
-import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
-import type {CustomerCreditResult} from './customerCreditContract';
+import type {CustomerCreditResult,CustomerCreditPayoutReceipt} from './customerCreditContract';
 type CustomerSource=(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<{id:string}|null>;
 
 /** The one balance reader. An absent customer is not an invented zero balance. */
@@ -23,9 +23,18 @@ export async function readCustomerCreditInTransaction(tx:PrivilegedTenantTransac
  return {code:'OK',credit:{customerId,balanceCents,version}};
 }
 
-export async function readCustomerCredit(authorization:AuthorizationSnapshot,customerId:unknown,readCustomer:CustomerSource):Promise<CustomerCreditResult>{
+export async function readCustomerCredit(authorization:AuthorizationSnapshot,customerId:unknown,readCustomer:CustomerSource,readPayouts?:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerCreditPayoutReceipt[]>):Promise<CustomerCreditResult>{
  if(!hasAuthorizationArea(authorization,'geld'))return {code:'FORBIDDEN',message:CUSTOMER_CREDIT_COPY.forbidden};
  if(typeof customerId!=='string'||customerId.length<1||customerId.length>128||customerId.trim()!==customerId)return {code:'VALIDATION_ERROR',message:CUSTOMER_CREDIT_COPY.invalid};
- try{return await withPrivilegedTenantTransaction(authorization,tx=>readCustomerCreditInTransaction(tx,authorization.tenantId,customerId,readCustomer));}
+ try{return await withPrivilegedTenantTransaction(authorization,async tx=>{
+  const source=await readCustomerCreditInTransaction(tx,authorization.tenantId,customerId,readCustomer);
+  if(source.code!=='OK'||!readPayouts)return source;
+  try{
+   const entries=await withTenantSavepoint(tx,async nested=>{
+    return readPayouts(nested,authorization.tenantId,customerId);
+   });
+   return {...source,payoutHistory:{code:'OK' as const,entries}};
+  }catch{return {...source,payoutHistory:{code:'SOURCE_INCOMPLETE' as const}};}
+ });}
  catch{return {code:'UNAVAILABLE',message:CUSTOMER_CREDIT_COPY.unavailable};}
 }

@@ -85,7 +85,8 @@ export async function cancelInvoiceAction(input: CancelInvoiceInput): Promise<Ca
 export async function getCustomerCreditAction(customerId:string):Promise<CustomerCreditResult>{
   const authorization=await resolveActionAuthorization();
   if(!authorization.ok)return authorization.result;
-  return readCustomerCredit(authorization.data,customerId,readCustomerProfile);
+  const {readCustomerCreditPayoutHistory}=await import('@/lib/server/commands/customerCreditCommand');
+  return readCustomerCredit(authorization.data,customerId,readCustomerProfile,readCustomerCreditPayoutHistory);
 }
 
 export async function applyCustomerCreditAction(input:CustomerCreditApplyInput){
@@ -94,6 +95,13 @@ export async function applyCustomerCreditAction(input:CustomerCreditApplyInput){
  if(result.code==='OK'){
   revalidatePath('/buchhaltung/rechnungen');revalidatePath('/warendurchlauf');revalidatePath('/customers');
  }
+ return result;
+}
+
+export async function payoutCustomerCreditAction(input:import('@/modules/accounting/public').CustomerCreditPayoutInput){
+ const {payoutCustomerCredit}=await import('@/lib/server/commands/customerCreditCommand');
+ const result=await payoutCustomerCredit(input,(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile),readCustomerProfile);
+ if(result.code==='OK'){revalidatePath('/buchhaltung/rechnungen');revalidatePath('/customers');}
  return result;
 }
 
