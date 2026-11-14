@@ -1,6 +1,17 @@
 [
   {
     "datum": "2026-11-14",
+    "pr": 223,
+    "seite": "rechnungen",
+    "punkte": [
+      "Deine Rechnungen berücksichtigen die konfigurierte Versandpauschale einmal je Sendung. Gemeinsam versendete Aufträge und im KV enthaltene Versandkosten werden dabei berücksichtigt.",
+      "Du kannst zusätzliche Versandkosten getrennt berechnen oder beim Wechsel zur Abholung mit Storno und Neuausstellung entfernen. Ursprüngliche Rechnungen und Zahlungen bleiben belegt.",
+      "Fehlt nach einem bestätigten Storno noch die neue Rechnung ohne Versand, bleibt die Ware gesperrt. Eine Aufgabe führt dich zur Wiederholung, ohne doppelt zu buchen."
+    ],
+    "ziel": "/buchhaltung/rechnungen"
+  },
+  {
+    "datum": "2026-11-14",
     "pr": 222,
     "seite": "rechnungen",
     "punkte": [
