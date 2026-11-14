@@ -49,7 +49,7 @@ export function v45OrderFacts(card:Pick<LiveOrderCard,'station'|'handoverMode'|'
  // It proves customer receipt only for a known pickup, never for shipping.
  const transportUnknown=card.station==='versendet'||card.station==='abgeholt'&&card.handoverMode!=='pickup';
  // Existing start command consumes the persisted angenommen station; V45 names it wareneingang.
- return {station:ORDER_U2_BINDINGS.stations[card.station]??card.station,...shipping,...(card.operationalFacts&&typeof card.operationalFacts.pricesMissing==='boolean'&&typeof card.operationalFacts.rework==='boolean'?{rework:card.operationalFacts.rework,pricesMissing:card.operationalFacts.pricesMissing,...(typeof card.operationalFacts.complaint==='boolean'?{complaint:card.operationalFacts.complaint}:{})}:{}),
+ return {station:ORDER_U2_BINDINGS.stations[card.station]??card.station,...shipping,...(card.operationalFacts?{rework:card.operationalFacts.rework,...(typeof card.operationalFacts.pricesMissing==='boolean'?{pricesMissing:card.operationalFacts.pricesMissing}:{}),...(typeof card.operationalFacts.complaint==='boolean'?{complaint:card.operationalFacts.complaint}:{})}:{}),
   ...(!transportUnknown?{closed:card.station==='abgeholt',inTransit:false,returning:false}:{}),
   ...(card.operationalFacts?.rework===false?{reworkRemainder:false}:{}),
   allDone:card.items.length>0&&card.items.every(item=>item.finished)};

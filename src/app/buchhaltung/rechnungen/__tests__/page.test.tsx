@@ -2,12 +2,16 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
-  cancelInvoiceAction: vi.fn(),
+  queueFinancialCommand: vi.fn(),
   getInvoiceCancellationReceiptAction: vi.fn(),
   getInvoiceSummariesAction: vi.fn(),
 }));
 
 vi.mock("@/app/actions/invoices.actions", () => ports);
+// Synthetic DOM boundary only; the real queue/Auth/DB roundtrip is in
+// acceptance/s08_credit_queue.browser.integration.test.ts.
+vi.mock('@/lib/offline/queueFinancialCommand',()=>({queueFinancialCommand:ports.queueFinancialCommand}));
+vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:'a'.repeat(64)})}));
 vi.mock("@/components/ui/Breadcrumb", () => ({ Breadcrumb: () => <nav aria-label="Breadcrumb" /> }));
 vi.mock("@/components/ui/BackButton", () => ({ BackButton: () => <a href="/buchhaltung">Buchhaltung</a> }));
 
@@ -117,7 +121,7 @@ describe("F1.4 immutable invoice page states", () => {
   });
 
   it("confirms cancellation only after command, receipt readback and refreshed summary agree", async () => {
-    ports.cancelInvoiceAction.mockResolvedValueOnce({ code: "OK", receipt: cancellationReceipt, replayed: false });
+    ports.queueFinancialCommand.mockResolvedValueOnce({ code: "OK", receipt: cancellationReceipt, replayed: false });
     ports.getInvoiceCancellationReceiptAction.mockResolvedValueOnce({ code: "OK", data: cancellationReceipt });
     ports.getInvoiceSummariesAction.mockResolvedValueOnce({ code: "OK", data: [cancelledRow] });
     const { InvoicesClient } = await import("../InvoicesClient");
@@ -129,6 +133,7 @@ describe("F1.4 immutable invoice page states", () => {
     fireEvent.click(screen.getByRole("button", { name: "Rechnung stornieren" }));
 
     await waitFor(() => expect(ports.getInvoiceCancellationReceiptAction).toHaveBeenCalledTimes(1));
+    expect(ports.queueFinancialCommand).toHaveBeenCalledWith('a'.repeat(64),{command:'invoice.cancel',input:{invoiceId:INVOICE,expectedVersion:1,reason:cancellationReceipt.reason,clientEventId:expect.any(String)}},expect.any(Function));
     await waitFor(() => expect(ports.getInvoiceSummariesAction).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Storno und gespeicherter Beleg sind bestätigt.")).toBeVisible();
     expect(screen.getByTestId("invoice-cancellation-pdf-R-2026-0001")).toHaveAttribute(
@@ -138,7 +143,7 @@ describe("F1.4 immutable invoice page states", () => {
   });
 
   it("surfaces a command conflict without reading a false receipt", async () => {
-    ports.cancelInvoiceAction.mockResolvedValueOnce({
+    ports.queueFinancialCommand.mockResolvedValueOnce({
       code: "CONFLICT",
       message: "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
     });

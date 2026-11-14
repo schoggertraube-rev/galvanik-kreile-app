@@ -1,5 +1,9 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  issueInvoiceAction, cancelInvoiceAction, getInvoiceReceiptAction,
+  getInvoiceCancellationReceiptAction, getInvoiceSummariesAction,
+} from "../invoices.actions";
 
 const ports = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
@@ -13,6 +17,9 @@ const ports = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: ports.revalidatePath }));
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: ports.resolveAuthorization }));
+// These unit cases exercise action composition, never a database transaction.
+// Real credit/task/Auth/DB roundtrips are covered by S08 acceptance.
+vi.mock("@/db", () => ({ db: { transaction: () => { throw new Error("UNIT_DATABASE_ACCESS_UNEXPECTED"); } } }));
 vi.mock("@/lib/server/commands/immutableInvoiceCommand", () => ({
   createInvoice: ports.createInvoice,
   cancelInvoice: ports.cancelInvoice,
@@ -44,7 +51,6 @@ describe("F1.4 invoice server actions", () => {
   it("revalidates invoice and work routes only after a successful issue or cancellation", async () => {
     ports.createInvoice.mockResolvedValueOnce({ code: "OK", receipt: {}, replayed: false });
     ports.cancelInvoice.mockResolvedValueOnce({ code: "OK", receipt: {}, replayed: false });
-    const { issueInvoiceAction, cancelInvoiceAction } = await import("../invoices.actions");
 
     await issueInvoiceAction({
       orderId: "22222222-2222-4222-8222-222222222222",
@@ -70,7 +76,6 @@ describe("F1.4 invoice server actions", () => {
       message: "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
     };
     ports.cancelInvoice.mockResolvedValueOnce(conflict);
-    const { cancelInvoiceAction } = await import("../invoices.actions");
     await expect(cancelInvoiceAction({
       invoiceId: "44444444-4444-4444-8444-444444444444",
       expectedVersion: 1,
@@ -84,11 +89,6 @@ describe("F1.4 invoice server actions", () => {
     ports.readInvoiceReceipt.mockResolvedValueOnce({ code: "OK", data: null });
     ports.readInvoiceCancellationReceipt.mockResolvedValueOnce({ code: "OK", data: null });
     ports.readInvoiceSummaries.mockResolvedValueOnce({ code: "OK", data: [] });
-    const {
-      getInvoiceReceiptAction,
-      getInvoiceCancellationReceiptAction,
-      getInvoiceSummariesAction,
-    } = await import("../invoices.actions");
 
     await getInvoiceReceiptAction({
       orderId: "22222222-2222-4222-8222-222222222222",

@@ -16,7 +16,7 @@ export const ORDER_PAYMENT_MODES = ["vorkasse", "abholung", "rechnung", "keiner"
 export type PaymentMode = (typeof PAYMENT_MODES)[number];
 export type OrderPaymentMode = (typeof ORDER_PAYMENT_MODES)[number];
 export type PaymentStatus = "offen" | "teilbezahlt" | "bezahlt";
-export type PaymentMethod = "bar" | "ueberweisung" | "karte";
+export type PaymentMethod = "bar" | "ueberweisung" | "karte" | "guthaben";
 export type PaymentCurrency = "EUR";
 
 export type PaymentSummary = {
@@ -178,8 +178,8 @@ function isPaymentStatus(value: unknown): value is PaymentStatus {
   return value === "offen" || value === "teilbezahlt" || value === "bezahlt";
 }
 
-function isPaymentMethod(value: unknown): value is PaymentMethod {
-  return value === "bar" || value === "ueberweisung" || value === "karte";
+export function isPaymentMethod(value: unknown): value is PaymentMethod {
+  return value === "bar" || value === "ueberweisung" || value === "karte" || value === "guthaben";
 }
 
 export function mapPaymentSummaryRow(

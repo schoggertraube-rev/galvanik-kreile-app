@@ -6,7 +6,7 @@ import {OFFLINE_NOTE_QUARANTINE_COPY} from '@/ui/situationCatalog';
 import React, { createContext, useContext, useEffect, useLayoutEffect,useCallback, useSyncExternalStore } from "react";
 import type { OfflineOutboxItem } from "./OfflineOutbox";
 import type {PendingQuarantine} from './pendingStore';
-import {readPendingEntries,retainQuarantinedPending} from "./pendingStore";
+import {readPendingEntries,rejectedWorkshopProjection,retainQuarantinedPending} from "./pendingStore";
 import {usePermissions} from "@/lib/auth/PermissionsContext";
 import {syncOriginals} from './syncOriginals';
 import {installServerReachability,readServerReachability,subscribeServerReachability,serverReachabilitySnapshot} from './serverReachability';
@@ -85,8 +85,8 @@ async function refreshOutboxSnapshot(scope:string|null): Promise<void> {
   try {
     const entries=await readPendingEntries(scope);
     if(activeScope!==scope||generation!==snapshotGeneration)return;
-    outboxSnapshot=entries.map(entry=>({id:entry.id,entityType:entry.kind==='file'?'photo':entry.kind==='note'?'phone_note':entry.kind==='workshop'?'item':'communication_draft',actionType:'create',localEntityId:'itemId' in entry?entry.itemId:entry.id,payload:{},...(entry.kind==='quarantine'&&entry.payload?.reason==='NOTE_SYNC_METADATA_MISSING'?{lastError:OFFLINE_NOTE_QUARANTINE_COPY.notice(entry.capturedAt||null)}:{}),status:entry.kind==='quarantine'?'conflict':'queued',retryCount:0,createdAt:entry.kind==='quarantine'?entry.capturedAt:'',updatedAt:entry.kind==='quarantine'?entry.capturedAt:''}));
-    quarantineSnapshot=entries.filter((entry):entry is PendingQuarantine=>entry.kind==='quarantine');
+    outboxSnapshot=entries.map(entry=>({id:entry.id,entityType:entry.kind==='file'?'photo':entry.kind==='note'?'phone_note':entry.kind==='workshop'?'item':'communication_draft',actionType:'create',localEntityId:'itemId' in entry?entry.itemId:entry.id,payload:{},...(entry.kind==='quarantine'&&entry.payload?.reason==='NOTE_SYNC_METADATA_MISSING'?{lastError:OFFLINE_NOTE_QUARANTINE_COPY.notice(entry.capturedAt||null)}:{}),status:entry.kind==='quarantine'||entry.kind==='workshop'&&entry.rejection?'conflict':'queued',retryCount:0,createdAt:entry.kind==='quarantine'?entry.capturedAt:'',updatedAt:entry.kind==='quarantine'?entry.capturedAt:''}));
+    quarantineSnapshot=entries.flatMap(entry=>{if(entry.kind==='quarantine')return [entry];const rejected=entry.kind==='workshop'?rejectedWorkshopProjection(entry):null;return rejected?[rejected]:[];});
     snapshotScope=scope;
     pendingStorageFailureScope=null;publishSnapshots();
   } catch (error) {

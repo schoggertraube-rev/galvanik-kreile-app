@@ -11,7 +11,7 @@ import type {
   OrderTaskAssigneeOption,
   OrderTaskAssignmentState,
 } from "@/lib/server/orderTaskAssignmentRead";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction,withTenantSavepoint } from "@/lib/server/privilegedDb";
 import type { CustomerAgreementRecord } from "@/modules/customers/public";
 import {
   readEffectiveCustomerAgreement,
@@ -55,7 +55,7 @@ export type OrderCardItem = {
 };
 
 export type LiveOrderCard = {
-  operationalFacts?:{rework:boolean;pricesMissing:boolean;complaint?:boolean;reworkComplaintId?:string};
+  operationalFacts?:{rework:boolean;pricesMissing:boolean|null;complaint?:boolean;reworkComplaintId?:string};
   actors?:OrderActorSummary;
   actorReadError?:string;
   shippingService?:string|null;
@@ -873,7 +873,11 @@ export async function readLiveOrderCard(
       const cancellationRows=queue.status==='storniert'?await tx.execute<{reason:string;at:string;actor:string;quoteId:string|null;quoteNumber:string|null}>(sql`SELECT event.notes AS reason,event.created_at::text AS at,coalesce(actor.full_name,'Name fehlt') AS actor,event.payload->>'quoteId' AS "quoteId",quote.quote_number AS "quoteNumber" FROM public.events event LEFT JOIN public.app_users actor ON actor.tenant_id=event.tenant_id AND actor.id=event.user_id LEFT JOIN private.quotes quote ON quote.tenant_id=event.tenant_id AND quote.id::text=event.payload->>'quoteId' WHERE event.tenant_id=${authorization.tenantId} AND event.order_id=${input.orderId} AND event.event_type='ORDER_CANCELLED_V1' AND event.status='success' ORDER BY event.created_at DESC,event.id DESC LIMIT 1`):[];
       // The awarded edition also owns operational unit facts. Read it once on
       // the server; monetary fields still leave this reader only with geld.
-      const awardedQuote=origin.has_commercial_quote&&queue.status!=='storniert'?await readOrderCommercialQuote(tx,authorization.tenantId,input.orderId):undefined;
+      let awardedQuote:OrderCommercialQuote|undefined,awardedQuoteUnavailable=false;
+      if(origin.has_commercial_quote&&queue.status!=='storniert'){
+        try{awardedQuote=await withTenantSavepoint(tx,nested=>readOrderCommercialQuote(nested,authorization.tenantId,input.orderId));}
+        catch(error){awardedQuoteUnavailable=true;console.error('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',{orderId:queue.id,name:error instanceof Error?error.name:'UnknownError'});}
+      }
       const commercialQuote=canReadMoney?awardedQuote:undefined;
       const cardItems=items.map(item=>{
         const awarded=awardedQuote?.positions.find(position=>position.itemId===item.id);
@@ -887,7 +891,7 @@ export async function readLiveOrderCard(
         ...(handover?{handoverNotice:{message:handover.message,taskId:handover.taskId,originalItemId:handover.mailActor.originalItemId}}:{}),
         ...(commercialQuote?{commercialQuote}:{}),
         ...(cancellationRows[0]?{cancellation:cancellationRows[0]}:{}),
-        operationalFacts:{rework:isReworkOrder,...(isReworkOrder?{reworkComplaintId:origin.nacharbeit_zu!}:{}),pricesMissing:!isReworkOrder&&items.some(item=>item.unitPriceCents===null&&!awardedQuote?.positions.some(position=>position.itemId===item.id)),...(activeComplaint!==undefined?{complaint:activeComplaint!==null}:{})},
+        operationalFacts:{rework:isReworkOrder,...(isReworkOrder?{reworkComplaintId:origin.nacharbeit_zu!}:{}),pricesMissing:awardedQuoteUnavailable?null:!isReworkOrder&&items.some(item=>item.unitPriceCents===null&&!awardedQuote?.positions.some(position=>position.itemId===item.id)),...(activeComplaint!==undefined?{complaint:activeComplaint!==null}:{})},
         id: queue.id,
         version: queue.version,
         orderNumber: queue.order_number,

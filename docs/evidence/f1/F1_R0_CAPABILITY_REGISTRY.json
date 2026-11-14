@@ -583,7 +583,10 @@
         "getInvoiceReceiptAction",
         "getInvoiceCancellationReceiptAction",
         "getInvoiceSummariesAction",
-        "getInvoiceTruthAction"
+        "getInvoiceTruthAction",
+      "getCustomerCreditAction",
+      "applyCustomerCreditAction",
+      "payoutCustomerCreditAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "F1.4 immutable invoice issue, cancellation and receipt/readback candidate. Real local E2E and independent exact-SHA acceptance are pending.",

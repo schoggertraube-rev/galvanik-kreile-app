@@ -10,7 +10,9 @@ import {storeItemPhoto} from '../../../e2e/ablauf/photoFixture';
 import {createOrderIntakeAction} from '@/app/actions/eingang.actions';
 import {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,freezeOrderAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction} from '@/app/actions/orders.actions';
 import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
-import {getInvoiceTruthAction,getInvoiceReceiptAction,getInvoiceSummariesAction,setInvoiceItemPricesAction,issueInvoiceAction} from '@/app/actions/invoices.actions';
+import {getInvoiceTruthAction,getInvoiceReceiptAction,getInvoiceSummariesAction,setInvoiceItemPricesAction,issueInvoiceAction,cancelInvoiceAction,getCustomerCreditAction} from '@/app/actions/invoices.actions';
+import {confirmPaymentAction} from '@/app/actions/payments.actions';
+import {readInvoiceVat} from '@/modules/accounting/server-public';
 import {createInvoice} from '@/lib/server/commands/immutableInvoiceCommand';
 
 beforeAll(()=>{
@@ -103,4 +105,20 @@ it.each([
   else {expect(rendered).toContain('Steuerschuldnerschaft des Leistungsempfängers');expect(rendered).toContain('ATU12345678');expect(rendered).toContain('DE123456789');}
  }
  expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:result.receipt.invoiceId}});
+ if(scenario.name==='mixed 19 and 7'){
+  // A08-10: actual paid mixed-rate original; only the canonical VAT reader.
+  const vat=readInvoiceVat(original.snapshot);expect(vat.groups).toHaveLength(2);
+  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:result.receipt.invoiceId,amount:22600,method:'bar',expectedVersion:0,expectedOpenAmountCents:22600,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const cancel={invoiceId:result.receipt.invoiceId,expectedVersion:1,reason:'TEST A08-10 beide Steuersatzgruppen',clientEventId:randomUUID()};
+  expect(await withSession(full,()=>cancelInvoiceAction(cancel))).toMatchObject({code:'OK'});
+  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(cancel))))).toMatchObject({code:'OK',replayed:true});
+  expect(await withSession(full,()=>getCustomerCreditAction(customerId))).toMatchObject({code:'OK',credit:{balanceCents:22600,version:1}});
+  const [cancelled]=await sql`SELECT snapshot,pdf_sha256,cancellation_pdf_content FROM public.invoices WHERE tenant_id=${tenant} AND id=${result.receipt.invoiceId}::uuid`;
+  expect(cancelled.snapshot).toEqual(original.snapshot);expect(cancelled.pdf_sha256).toBe(original.pdf_sha256);
+  expect(readInvoiceVat(cancelled.snapshot)).toEqual(vat);
+  const pdf=await getDocument({data:new Uint8Array(cancelled.cancellation_pdf_content),useSystemFonts:true}).promise;
+  const text:string[]=[];for(let page=1;page<=pdf.numPages;page++){const content=await(await pdf.getPage(page)).getTextContent();text.push(content.items.map(item=>'str'in item?item.str:'').join(' '));}
+  const rendered=text.join(' ');expect(rendered).toMatch(/19.*%/);expect(rendered).toMatch(/7.*%/);
+  expect(rendered).toContain('-19,00');expect(rendered).toContain('-7,00');expect(rendered).toContain('-226,00');
+ }
 });

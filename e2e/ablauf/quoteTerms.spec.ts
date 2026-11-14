@@ -1,8 +1,8 @@
-import {readInvoiceVat} from '@/modules/accounting/server-public';
 import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
+import {readInvoiceVat} from '@/modules/accounting/server-public';
 
 it('H8 quote creation retry cannot switch customer, price or actor and rereads the one stored quote',async()=>{
  const {customerFixture}=await import('./orderFixture');

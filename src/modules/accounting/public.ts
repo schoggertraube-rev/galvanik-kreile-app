@@ -3,3 +3,6 @@ export { canViewAccounting } from "./accountingAccess";
 export type {InvoiceVatGroup,InvoiceVatRead,InvoiceVatReader} from './invoiceVatContract';
 
 export {readInvoiceVat} from './invoiceVatContract';
+export type {CustomerCredit,CustomerCreditResult} from './customerCreditContract';
+export type {CustomerCreditApplyInput,CustomerCreditApplicationRead} from './customerCreditContract';
+export type {CustomerCreditPayoutInput,CustomerCreditPayoutReceipt,CustomerCreditPayoutResult} from './customerCreditContract';

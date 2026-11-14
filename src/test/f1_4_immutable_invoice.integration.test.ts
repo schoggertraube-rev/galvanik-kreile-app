@@ -1111,10 +1111,10 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     expect(restoredTerm?.invoice_payment_term_days).toBe(originalPaymentTermDays);
 
     // Payment truth and cancellation share the same locked invoice row. A
-    // missing payment contract, a one-cent partial payment and a full payment
-    // must all leave invoice, PDF and payment facts untouched by cancellation.
+    // missing payment contract fails closed; A08 now permits paid/partpaid
+    // cancellation while preserving PDF/payment facts and recording credit.
     setSyntheticSession();
-    const paymentGuardInvoice = await createInvoice({
+    let paymentGuardInvoice = await createInvoice({
       orderId: ORDER_ID,
       expectedVersion: ORDER_VERSION,
       clientEventId: ISSUE_PAYMENT_GUARD_CLIENT_EVENT_ID,
@@ -1124,7 +1124,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       throw new Error(`F1_4_PAYMENT_GUARD_ISSUE_FAILED:${paymentGuardInvoice.code}`);
     }
 
-    const readGuardState = async () => {
+    const readGuardState = async (invoiceId:string) => {
       const [state] = await sql<{
         status: string;
         aggregate_version: number;
@@ -1154,10 +1154,10 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
             FROM public.events event
             WHERE event.tenant_id = ${TENANT_ID}
               AND event.event_type = 'INVOICE_CANCELLED_V1'
-              AND event.payload ->> 'invoiceId' = ${paymentGuardInvoice.receipt.invoiceId}
+              AND event.payload ->> 'invoiceId' = ${invoiceId}
           ) AS cancellation_event_count
         FROM public.invoices invoice
-        WHERE invoice.id = ${paymentGuardInvoice.receipt.invoiceId}::uuid
+        WHERE invoice.id = ${invoiceId}::uuid
       `;
       if (!state) throw new Error("F1_4_PAYMENT_GUARD_STATE_MISSING");
       return state;
@@ -1177,7 +1177,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     } finally {
       await sql.unsafe("ALTER TABLE public.invoices ENABLE TRIGGER invoices_f14_update_guard");
     }
-    const corruptState = await readGuardState();
+    const corruptState = await readGuardState(paymentGuardInvoice.receipt.invoiceId);
     setSyntheticSession();
     await expect(cancelInvoice({
       invoiceId: paymentGuardInvoice.receipt.invoiceId,
@@ -1185,7 +1185,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       reason: "Beschädigter Zahlungsstand darf nicht storniert werden",
       clientEventId: CANCEL_CORRUPT_CLIENT_EVENT_ID,
     })).resolves.toMatchObject({ code: "CONFLICT" });
-    expect(await readGuardState()).toEqual(corruptState);
+    expect(await readGuardState(paymentGuardInvoice.receipt.invoiceId)).toEqual(corruptState);
 
     await sql.unsafe("ALTER TABLE public.invoices DISABLE TRIGGER invoices_f14_update_guard");
     try {
@@ -1218,22 +1218,31 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       paymentStatus: "teilbezahlt",
       paymentVersion: 1,
     });
-    const partialState = await readGuardState();
+    const partialState = await readGuardState(paymentGuardInvoice.receipt.invoiceId);
     setSyntheticSession();
-    await expect(cancelInvoice({
+    const partialCancellation=await cancelInvoice({
       invoiceId: paymentGuardInvoice.receipt.invoiceId,
       expectedVersion: 1,
-      reason: "Teilbezahlte Rechnung darf nicht storniert werden",
+      reason: "TEST A08 teilbezahlte Rechnung mit erhaltenem Zahlungsbeleg stornieren",
       clientEventId: CANCEL_PARTIAL_CLIENT_EVENT_ID,
-    })).resolves.toMatchObject({ code: "CONFLICT" });
-    expect(await readGuardState()).toEqual(partialState);
+    });
+    expect(partialCancellation.code).toBe('OK');
+    if(partialCancellation.code!=='OK')throw Error('F1_4_PARTIAL_CANCEL_REQUIRED');
+    expect(await readGuardState(paymentGuardInvoice.receipt.invoiceId)).toEqual({...partialState,status:'cancelled',aggregate_version:2,cancel_event_id:partialCancellation.receipt.eventId,cancellation_event_count:1});
+    expect(await sql`SELECT amount_cents::text FROM public.customer_credit_entries WHERE tenant_id=${TENANT_ID} AND invoice_id=${paymentGuardInvoice.receipt.invoiceId}::uuid`).toEqual([{amount_cents:'1'}]);
+    expect(await cancelInvoice({invoiceId:paymentGuardInvoice.receipt.invoiceId,expectedVersion:1,reason:'TEST A08 teilbezahlte Rechnung mit erhaltenem Zahlungsbeleg stornieren',clientEventId:CANCEL_PARTIAL_CLIENT_EVENT_ID})).toMatchObject({code:'OK',replayed:true});
+
+    // Separate actual reissue for the fully paid boundary; the cancelled
+    // partial invoice and its original payment remain immutable.
+    paymentGuardInvoice=await createInvoice({orderId:ORDER_ID,expectedVersion:ORDER_VERSION,clientEventId:randomUUID()});
+    if(paymentGuardInvoice.code!=='OK')throw Error('F1_4_PAID_REISSUE_REQUIRED');
 
     setSyntheticSession();
     const fullPayment = await confirmPayment({
       invoiceId: paymentGuardInvoice.receipt.invoiceId,
-      amount: paymentGuardInvoice.receipt.grossAmountCents - 1,
+      amount: paymentGuardInvoice.receipt.grossAmountCents,
       method: "bar",
-      expectedVersion: 1,
+      expectedVersion: 0,
       clientEventId: FULL_PAYMENT_CLIENT_EVENT_ID,
     });
     expect(fullPayment.code).toBe("OK");
@@ -1244,20 +1253,23 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       paidAmountCents: paymentGuardInvoice.receipt.grossAmountCents,
       openAmountCents: 0,
       paymentStatus: "bezahlt",
-      paymentVersion: 2,
+      paymentVersion: 1,
     });
-    const paidState = await readGuardState();
+    const paidState = await readGuardState(paymentGuardInvoice.receipt.invoiceId);
     setSyntheticSession();
-    await expect(cancelInvoice({
+    const paidCancellation=await cancelInvoice({
       invoiceId: paymentGuardInvoice.receipt.invoiceId,
       expectedVersion: 1,
-      reason: "Bezahlte Rechnung darf nicht storniert werden",
+      reason: "TEST A08 bezahlte Rechnung mit erhaltenem Zahlungsbeleg stornieren",
       clientEventId: CANCEL_PAID_CLIENT_EVENT_ID,
-    })).resolves.toMatchObject({ code: "CONFLICT" });
-    expect(await readGuardState()).toEqual(paidState);
+    });
+    expect(paidCancellation.code).toBe('OK');
+    if(paidCancellation.code!=='OK')throw Error('F1_4_PAID_CANCEL_REQUIRED');
+    expect(await readGuardState(paymentGuardInvoice.receipt.invoiceId)).toEqual({...paidState,status:'cancelled',aggregate_version:2,cancel_event_id:paidCancellation.receipt.eventId,cancellation_event_count:1});
+    expect(await sql`SELECT amount_cents::text FROM public.customer_credit_entries WHERE tenant_id=${TENANT_ID} AND invoice_id=${paymentGuardInvoice.receipt.invoiceId}::uuid`).toEqual([{amount_cents:String(paymentGuardInvoice.receipt.grossAmountCents)}]);
 
     // A separate unpaid invoice proves real row-lock serialization. Exactly
-    // one command wins; the final row can never be cancelled and paid.
+    // cancellation succeeds; a payment committed first is retained as credit.
     setSyntheticSession();
     const raceInvoice = await createInvoice({
       orderId: RACE_ORDER_ID,
@@ -1284,7 +1296,8 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
         clientEventId: RACE_PAYMENT_CLIENT_EVENT_ID,
       }),
     ]);
-    expect([raceCancellation.code, racePayment.code].sort()).toEqual(["CONFLICT", "OK"]);
+    expect(raceCancellation.code).toBe('OK');
+    expect(['OK','CONFLICT']).toContain(racePayment.code);
     const [raceState] = await sql<{
       status: string;
       payment_status: string;
@@ -1317,7 +1330,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       GROUP BY invoice.id
     `;
     expect(raceState).toBeDefined();
-    if (raceCancellation.code === "OK") {
+    if (racePayment.code !== "OK") {
       expect(raceState).toMatchObject({
         status: "cancelled",
         payment_status: "offen",
@@ -1332,18 +1345,18 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     } else {
       expect(racePayment.code).toBe("OK");
       expect(raceState).toMatchObject({
-        status: "issued",
+        status: "cancelled",
         payment_status: "teilbezahlt",
         payment_open_amount_cents: raceInvoice.receipt.grossAmountCents - 1,
         payment_paid_amount_cents: 1,
         payment_version: 1,
-        cancellation_event_count: 0,
+        cancellation_event_count: 1,
         payment_event_count: 1,
       });
-      expect(raceState?.cancel_event_id).toBeNull();
+      expect(raceState?.cancel_event_id).not.toBeNull();
       expect(raceState?.payment_event_id).not.toBeNull();
     }
-    expect(!(raceState?.status === "cancelled" && raceState.payment_paid_amount_cents > 0)).toBe(true);
+    expect(await sql`SELECT amount_cents::text FROM public.customer_credit_entries WHERE tenant_id=${TENANT_ID} AND invoice_id=${raceInvoice.receipt.invoiceId}::uuid`).toEqual(racePayment.code==='OK'?[{amount_cents:'1'}]:[]);
 
     await expect(readInvoiceReceipt(foreignAuthorization, {
       orderId: ORDER_ID,

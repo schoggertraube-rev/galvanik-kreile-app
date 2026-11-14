@@ -1,5 +1,16 @@
 [
   {
+    "datum": "2026-11-14",
+    "pr": 222,
+    "seite": "rechnungen",
+    "punkte": [
+      "Stornierst du eine bezahlte oder teilbezahlte Rechnung, bleiben die Zahlungsbelege erhalten. Der bezahlte Betrag wird als Kundenguthaben gesichert und nicht automatisch mit anderen Rechnungen verrechnet.",
+      "Nach einem unterbrochenen Abgleich kannst du den gespeicherten Stornovorgang wieder aufnehmen, ohne doppelt zu buchen.",
+      "Im freigeschalteten Offline-Modus bleiben abgelehnte Befehle lesbar. Eine neu bestätigte Eingabe kann danach weitergehen."
+    ],
+    "ziel": "/buchhaltung/rechnungen"
+  },
+  {
     "datum": "2026-11-13",
     "pr": 220,
     "seite": "auftraege",

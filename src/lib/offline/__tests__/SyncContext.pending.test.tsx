@@ -15,7 +15,7 @@ vi.mock('@/app/actions/eingang.actions',()=>({prepareIntakeFileAction:vi.fn(),fi
 vi.mock('@/app/actions/offlineWorkshop.actions',()=>({replayOfflineWorkshopAction:vi.fn()}));
 vi.mock('@/modules/eingang/public',()=>({uploadIntakeOriginal:vi.fn()}));
 vi.mock('../syncPendingFiles',()=>({syncPendingFiles:ports.sync}));
-vi.mock('../pendingStore',()=>({readPendingEntries:ports.read,retainQuarantinedPending:ports.retain}));
+vi.mock('../pendingStore',async importOriginal=>({...await importOriginal<typeof import('../pendingStore')>(),readPendingEntries:ports.read,retainQuarantinedPending:ports.retain}));
 afterEach(()=>{cleanup();state.offline24h=false;vi.clearAllMocks();vi.restoreAllMocks();vi.useRealTimers();});
 it('pagehide and hidden flush the same queue with keepalive, and stop after unmount',async()=>{
  state.scope='8'.repeat(64);state.status='authenticated';ports.read.mockResolvedValue([]);

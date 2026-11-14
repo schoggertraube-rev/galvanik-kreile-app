@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "owner": "AP-EIN Teil 4 – Aufgabe",
   "publicExports": [
+    "@/modules/tasks/server-public#synchronizeCancellationCreditRetryTask",
     "@/modules/tasks/server-public#synchronizeQuoteOrderRetryTask",
     "@/modules/tasks/server-public#createCanceledInvoiceMailTask",
     "@/modules/tasks/server-public#completeOrderCallbackTask",

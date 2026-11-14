@@ -9,20 +9,20 @@ export async function customerFixture(label:string){
  return customerId;
 }
 
-export async function intakeOrderFixture(label:string,customerId:string,handoverMode:'pickup'|'shipping'='pickup',quantity=1){
+export async function intakeOrderFixture(label:string,customerId:string,handoverMode:'pickup'|'shipping'='pickup',quantity=1,unitPriceCents=10000){
  const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
- const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode,paymentMode:'rechnung',note:'TEST '+label,items:[{catalogServiceId:null,name:'TEST '+label+' Teil',quantity,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
+ const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode,paymentMode:'rechnung',note:'TEST '+label,items:[{catalogServiceId:null,name:'TEST '+label+' Teil',quantity,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents,vatRateBasisPoints:1900}]}));
  if(created.code!=='OK')throw Error('FIXTURE_ORDER:'+created.code);
  return created;
 }
 
 /** Synthetic initial state for later boundaries, using the actual order writers. */
-export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'shipping'='pickup',options:boolean|number=false,existingCustomerId?:string){
+export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'shipping'='pickup',options:boolean|number=false,existingCustomerId?:string,unitPriceCents=10000){
  const concurrentIssue=typeof options==='boolean'?options:false;
  const quantity=typeof options==='number'?options:1;
  const customerId=existingCustomerId??await customerFixture(label);
  const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,setExtraWorkHourlyRateAction,freezeOrderAction,getExtraWorkMasterDataAction}=await import('@/app/actions/orders.actions');
- const created=await intakeOrderFixture(label,customerId,handoverMode,quantity);
+ const created=await intakeOrderFixture(label,customerId,handoverMode,quantity,unitPriceCents);
  const orderId=created.receipt.orderId;
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));
  if(moved.code!=='OK')throw Error('FIXTURE_HANDOFF:'+moved.code);

@@ -1,5 +1,6 @@
 "use client";
-import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY} from "@/ui/situationCatalog";
+import {formatEuro} from '@/lib/domain/formatEuro';
+import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY,CUSTOMER_CREDIT_COPY} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import {
@@ -44,7 +45,7 @@ const STATIONS = ["angenommen", "galvanik", "fertig", "zahlung", "abgeholt"] as 
 const SURFACE_OPTIONS = ["Verchromen", "Vernickeln", "Verzinken", "Entchromen / prüfen", "noch zu klären"] as const;
 
 function money(cents: number | null) {
-  return cents === null ? "Nicht belegt" : new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(cents / 100);
+  return cents === null ? "Nicht belegt" : formatEuro(cents);
 }
 
 function dueLabel(value: string | null) {
@@ -104,7 +105,8 @@ function paymentModeLabel(mode: "vorkasse" | "abholung" | "rechnung" | "keiner")
   return "Rechnung";
 }
 
-function paymentMethodLabel(method: "bar" | "ueberweisung" | "karte"): string {
+function paymentMethodLabel(method: "bar" | "ueberweisung" | "karte" | "guthaben"): string {
+  if (method === "guthaben") return CUSTOMER_CREDIT_COPY.methodLabel;
   if (method === "bar") return "Bar";
   if (method === "ueberweisung") return "Überweisung";
   return "Karte";

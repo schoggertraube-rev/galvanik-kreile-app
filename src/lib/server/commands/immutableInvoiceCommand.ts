@@ -2,20 +2,26 @@ import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public
 import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
+import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
+import {appendCancellationCredit} from './customerCreditCommand';
 import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
 
 import { createHash, randomUUID } from "node:crypto";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { sql } from "drizzle-orm";
-import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization,type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { readEffectiveCustomerAgreement } from "@/lib/server/effectiveCustomerAgreementRead";
 import {
   withPrivilegedTenantTransaction,
+  withTenantSavepoint,
   type PrivilegedTenantTransaction,
 } from "@/lib/server/privilegedDb";
 import {
   isPaymentMode,
   PAYMENT_CONTRACT_VERSION,
+  mapPaymentSummaryRow,
+  type PaymentSummaryRow,
+  type PaymentSummary,
   type PaymentMode,
 } from "@/lib/server/paymentContract";
 import {
@@ -371,53 +377,6 @@ function toSafeInteger(value: unknown, error: string): number {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isSafeInteger(parsed)) throw new Error(error);
   return parsed;
-}
-
-/**
- * Cancellation is legal only for the single, fully unpaid F1.5 state. The
- * invoice row is already held FOR UPDATE when this is evaluated, so payment
- * confirmation and cancellation can never both commit against the same
- * version. Any legacy, partial, paid or internally inconsistent state is a
- * business conflict, not an infrastructure fallback.
- */
-function hasClearlyUnpaidPaymentState(invoice: LockedInvoice): boolean {
-  try {
-    const grossAmountCents = toSafeInteger(
-      invoice.gross_amount_cents,
-      "INVOICE_CANCEL_PAYMENT_GROSS_INVALID",
-    );
-    const openAmountCents = toSafeInteger(
-      invoice.payment_open_amount_cents,
-      "INVOICE_CANCEL_PAYMENT_OPEN_INVALID",
-    );
-    const paidAmountCents = toSafeInteger(
-      invoice.payment_paid_amount_cents,
-      "INVOICE_CANCEL_PAYMENT_PAID_INVALID",
-    );
-    const paymentVersion = toSafeInteger(
-      invoice.payment_version,
-      "INVOICE_CANCEL_PAYMENT_VERSION_INVALID",
-    );
-    return grossAmountCents > 0
-      && toSafeInteger(
-        invoice.payment_contract_version,
-        "INVOICE_CANCEL_PAYMENT_CONTRACT_INVALID",
-      ) === PAYMENT_CONTRACT_VERSION
-      && isPaymentMode(invoice.payment_mode)
-      && invoice.payment_status === "offen"
-      && openAmountCents === grossAmountCents
-      && paidAmountCents === 0
-      && paidAmountCents + openAmountCents === grossAmountCents
-      && invoice.payment_currency === "EUR"
-      && invoice.payment_method === null
-      && invoice.payment_paid_at === null
-      && invoice.payment_receipt_id === null
-      && invoice.payment_event_id === null
-      && invoice.payment_correlation_id === null
-      && paymentVersion === 0;
-  } catch {
-    return false;
-  }
 }
 
 function requiredText(value: unknown, error: string): string {
@@ -1325,7 +1284,8 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
   }
 }
 
-export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): Promise<CancelInvoiceResult> {
+export type CancellationCreditComposition={failed:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>;settled:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>};
+export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,creditComposition?:CancellationCreditComposition): Promise<CancelInvoiceResult> {
   if (!isValidCancelInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Stornoanfrage." };
   }
@@ -1376,7 +1336,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): P
         }
         const receipt = mapCancellationReceipt(replayRows[0], tenantId, replayRows[0].actor_id);
         return receipt.cancelledBy === actorId && cancellationReceiptMatchesIntent(receipt, input)
-          ? { code: "OK", receipt, replayed: true }
+          ? await completeCancellationCredit(tx,authorization.data,receipt,true,creditComposition)
           : { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
       }
 
@@ -1394,6 +1354,13 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): P
       // Payment confirmation locks the order before the invoice. Cancellation
       // uses the same order to avoid an invoice->order / order->invoice
       // deadlock through the cancellation event's order foreign key.
+      const customerRows=await tx.execute<{customer_id:string|null}>(sql`
+        SELECT customer_id FROM public.invoices
+        WHERE tenant_id=${tenantId} AND id=${input.invoiceId}::uuid LIMIT 2
+      `);
+      if(customerRows.length!==1||!customerRows[0]?.customer_id)return {code:'NOT_FOUND',message:CUSTOMER_CREDIT_COPY.notFound};
+      // All credit commands acquire the same customer lock before order/invoice locks.
+      await tx.execute(sql`SELECT private.lock_customer_credit_v1(${tenantId},${customerRows[0].customer_id})`);
       const orderRows = await tx.execute<LockedCancellationOrder>(sql`
         SELECT orders.id, orders.tenant_id
         FROM public.invoices invoice
@@ -1443,12 +1410,15 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): P
       if (input.expectedVersion !== 1) {
         return { code: "CONFLICT", message: "Rechnung wurde bereits verändert." };
       }
-      if (!hasClearlyUnpaidPaymentState(invoice)) {
-        return {
-          code: "CONFLICT",
-          message: "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
-        };
-      }
+      const paymentRows=await tx.execute<PaymentSummaryRow>(sql`
+        SELECT * FROM private.v_payment_summary_v1
+        WHERE tenant_id=${tenantId} AND invoice_id=${invoice.id}::uuid LIMIT 2
+      `);
+      let cancellationPayment:PaymentSummary;
+      try{
+        if(paymentRows.length!==1||!paymentRows[0])throw Error('INVOICE_CANCEL_PAYMENT_SOURCE_MISSING');
+        cancellationPayment=mapPaymentSummaryRow(paymentRows[0],authorization.data);
+      }catch{return {code:'CONFLICT',message:CUSTOMER_CREDIT_COPY.paymentUnknown};}
       if (
         invoice.tenant_id !== tenantId
         || !INVOICE_NUMBER_PATTERN.test(invoice.invoice_number)
@@ -1548,16 +1518,11 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): P
           AND aggregate_version = ${input.expectedVersion}
           AND payment_contract_version = ${PAYMENT_CONTRACT_VERSION}
           AND payment_mode IN ('vorkasse', 'abholung', 'rechnung')
-          AND payment_status = 'offen'
-          AND payment_paid_amount_cents = 0
-          AND payment_open_amount_cents = gross_amount_cents
+          AND payment_status = ${cancellationPayment.status}
+          AND payment_paid_amount_cents = ${cancellationPayment.paidAmountCents}
+          AND payment_open_amount_cents = ${cancellationPayment.openAmountCents}
           AND payment_currency = 'EUR'
-          AND payment_method IS NULL
-          AND payment_paid_at IS NULL
-          AND payment_receipt_id IS NULL
-          AND payment_event_id IS NULL
-          AND payment_correlation_id IS NULL
-          AND payment_version = 0
+          AND payment_version = ${cancellationPayment.paymentVersion}
         RETURNING id
       `);
       if (updatedRows.length !== 1 || updatedRows[0]?.id !== invoice.id) {
@@ -1585,10 +1550,25 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader): P
         || receipt.cancelledAt !== cancelledAt
       ) throw new Error("INVOICE_CANCEL_RECEIPT_MISMATCH");
 
-      return { code: "OK", receipt, replayed: false };
+      return completeCancellationCredit(tx,authorization.data,receipt,false,creditComposition);
     });
   } catch {
     return { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher storniert werden." };
+  }
+}
+
+async function completeCancellationCredit(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:ImmutableInvoiceCancellationReceipt,replayed:boolean,composition?:CancellationCreditComposition):Promise<CancelInvoiceResult>{
+  try{
+    await withTenantSavepoint(tx,nested=>appendCancellationCredit(nested,auth.tenantId,receipt));
+    if(composition)await withTenantSavepoint(tx,nested=>composition.settled(nested,auth,receipt.clientEventId));
+    return {code:'OK',receipt,replayed};
+  }catch(error){
+    console.error('[CUSTOMER_CREDIT_FOLLOWUP_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});
+    // Cancellation remains committed. Its original N5/actor/receipt is the
+    // retry marker even when the ordinary task's own receipt is unavailable.
+    try{if(!composition)throw Error('CUSTOMER_CREDIT_TASK_PORT_MISSING');await withTenantSavepoint(tx,nested=>composition.failed(nested,auth,receipt.clientEventId));}
+    catch(taskError){console.error('[CUSTOMER_CREDIT_TASK_PENDING]',{name:taskError instanceof Error?taskError.name:'UnknownError'});}
+    return {code:'UNAVAILABLE',message:CUSTOMER_CREDIT_COPY.pending};
   }
 }
 
