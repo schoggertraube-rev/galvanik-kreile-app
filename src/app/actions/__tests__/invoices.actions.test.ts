@@ -13,6 +13,11 @@ const ports = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: ports.revalidatePath }));
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: ports.resolveAuthorization }));
+// Unit-only facade boundaries; real credit/task/Auth/DB roundtrips are in S08 acceptance.
+vi.mock("@/modules/accounting/server-public", () => ({ readInvoiceVat: vi.fn(), readCustomerCredit: vi.fn(), readCustomerCreditInTransaction: vi.fn() }));
+vi.mock("@/modules/customers/server-public", () => ({ readCustomerProfile: vi.fn() }));
+vi.mock("@/modules/tasks/server-public", () => ({ synchronizeCancellationCreditRetryTask: vi.fn() }));
+vi.mock("@/modules/eingang/server-public", () => ({ recordIntakeTaskEffect: vi.fn() }));
 vi.mock("@/lib/server/commands/immutableInvoiceCommand", () => ({
   createInvoice: ports.createInvoice,
   cancelInvoice: ports.cancelInvoice,
