@@ -4,7 +4,7 @@ const state=vi.hoisted(()=>({offline24h:false}));
 const ports=vi.hoisted(()=>({sync:vi.fn(async(...args:unknown[])=>{void args;return {secured:0,acknowledged:0,blocked:0};})}));
 vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:'b'.repeat(64),status:'authenticated',offline24h:state.offline24h})}));
 // Isolated root-composition probe; no Action/SQL/receipt result is claimed here.
-vi.mock('../pendingStore',()=>({readPendingEntries:async()=>[],retainQuarantinedPending:vi.fn()}));
+vi.mock('../pendingStore',async importOriginal=>({...await importOriginal<typeof import('../pendingStore')>(),readPendingEntries:async()=>[],retainQuarantinedPending:vi.fn()}));
 vi.mock('../collectDeviceStand',()=>({refreshDeviceStand:async()=>({code:'DISABLED'})}));
 vi.mock('../devicePortRead',()=>({readDeviceStandResponse:async()=>({code:'EMPTY',reason:'NO_SHELL'})}));
 vi.mock('../syncOriginals',()=>({syncOriginals:ports.sync}));

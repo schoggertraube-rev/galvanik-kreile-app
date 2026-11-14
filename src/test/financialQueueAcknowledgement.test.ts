@@ -1,5 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {isPendingWorkshopAcknowledgement,isPendingWorkshopOriginal,type PendingWorkshopOriginal} from '@/lib/offline/pendingStore';
+import {isWorkshopRejectionReceipt} from '@/lib/offline/workshopRejectionContract';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 // Isolated synthetic protocol envelopes, never a product writer proof.
 const scope='a'.repeat(64),id='11111111-1111-4111-8111-111111111111',invoiceId='22222222-2222-4222-8222-222222222222',deviceCapturedAt='2026-11-14T00:00:00.000Z';
@@ -23,8 +25,13 @@ describe('financial queue acknowledgement protocol',()=>{
   expect(isPendingWorkshopAcknowledgement(scope,financial,{code:'OK',financialCommand:financial.command,offlineReceipt:{...receipt,clientEventId:invoiceId}})).toBe(false);
   expect(isPendingWorkshopAcknowledgement(scope,financial,{code:'OK',financialCommand:financial.command,offlineReceipt:receipt})).toBe(true);
  });
- it('retains the existing physical conflict-preservation contract',()=>{
+ it('PL14Nov10:20 keeps physical rejection distinct from successful acknowledgement, with a separately bound non-effect receipt',()=>{
   const physical:PendingWorkshopOriginal={kind:'workshop',command:'item.finished',id,itemId:invoiceId,deviceCapturedAt,input:{orderId:invoiceId,itemId:invoiceId,clientEventId:id,expectedVersion:1,finished:true}};
-  expect(isPendingWorkshopAcknowledgement(scope,physical,{code:'PRESERVED',offlineReceipt:receipt})).toBe(true);
+  const rejected={...receipt,taskId:invoiceId,rejection:'CONFLICT',originalCanonical:canonicalJson({command:physical.command,input:physical.input,deviceCapturedAt})};
+  expect(isPendingWorkshopAcknowledgement(scope,physical,{code:'PRESERVED',offlineReceipt:receipt})).toBe(false);
+  expect(isPendingWorkshopAcknowledgement(scope,physical,{code:'PRESERVED',rejectionReceipt:rejected})).toBe(false);
+  expect(isWorkshopRejectionReceipt(scope,physical,rejected)).toBe(true);
+  expect(isWorkshopRejectionReceipt('b'.repeat(64),physical,rejected)).toBe(false);
+  expect(isWorkshopRejectionReceipt(scope,{...physical,input:{...physical.input,finished:false}},rejected)).toBe(false);
  });
 });

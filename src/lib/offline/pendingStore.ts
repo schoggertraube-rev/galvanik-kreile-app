@@ -1,6 +1,7 @@
 import type {CustomerListResponse} from '@/app/actions/customers.actions';
 import type {ActionResult} from '@/lib/server/authHelper';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
+import {isWorkshopRejectionReceipt,type WorkshopRejectionReceipt} from './workshopRejectionContract';
 import {readCacheScopeMarker} from './cacheScopeMarker';
 import type {IntakeOriginalTakeover} from '@/modules/eingang/public';
 import type {setOrderItemFinishedAction,changeOrderItemExtraWorkAction,OrderResponse} from '@/app/actions/orders.actions';
@@ -14,7 +15,7 @@ export type PendingFinancialCommand=
  | {command:'credit.apply';input:import('@/modules/accounting/public').CustomerCreditApplyInput}
  | {command:'credit.payout';input:import('@/modules/accounting/public').CustomerCreditPayoutInput};
 export type PendingWorkshopCommand={command:'item.finished';input:Parameters<typeof setOrderItemFinishedAction>[0]}|{command:'item.extraWork';input:Parameters<typeof changeOrderItemExtraWorkAction>[0]}|PendingFinancialCommand;
-export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:string;kind:'workshop';deviceCapturedAt?:string;queueSequence?:number;notBefore?:string;dispatchStartedAt?:string};
+export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:string;kind:'workshop';deviceCapturedAt?:string;queueSequence?:number;notBefore?:string;dispatchStartedAt?:string;rejection?:WorkshopRejectionReceipt};
 export type PendingPhysicalWorkshopOriginal=Extract<PendingWorkshopOriginal,{command:'item.finished'|'item.extraWork'}>;
 export type PendingWorkshopReceipt={scope:string;clientEventId:string;deviceCapturedAt:string;eventId:string;actorId:string};
 export type PendingEntry=PendingOriginal|PendingWorkshopOriginal|PendingQuarantine;
@@ -22,7 +23,8 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>,input=row.input;
  if(row.kind!=='workshop'||!input||typeof input!=='object'||Array.isArray(input))return false;
- if(Object.keys(row).some(key=>!['id','itemId','kind','command','input','deviceCapturedAt','queueSequence','notBefore','dispatchStartedAt'].includes(key)))return false;
+ if(Object.keys(row).some(key=>!['id','itemId','kind','command','input','deviceCapturedAt','queueSequence','notBefore','dispatchStartedAt','rejection'].includes(key)))return false;
+ if(row.rejection!==undefined&&(!row.rejection||typeof row.rejection!=='object'||!('scope'in row.rejection)||typeof row.rejection.scope!=='string'||!isWorkshopRejectionReceipt(row.rejection.scope,row as unknown as PendingWorkshopOriginal,row.rejection)))return false;
  for(const key of ['notBefore','dispatchStartedAt'])if(row[key]!==undefined&&(typeof row[key]!=='string'||!Number.isFinite(Date.parse(row[key] as string))))return false;
  if(row.deviceCapturedAt!==undefined&&(typeof row.deviceCapturedAt!=='string'||!Number.isFinite(Date.parse(row.deviceCapturedAt))))return false;
  if(row.queueSequence!==undefined&&(typeof row.queueSequence!=='number'||!Number.isSafeInteger(row.queueSequence)||row.queueSequence<1))return false;
@@ -302,7 +304,7 @@ async function changeDelayedWorkshop(scope:string,id:string,mode:'claim'|'withdr
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.get(id);let result:PendingWorkshopOriginal|null|boolean=mode==='claim'?null:false;
   read.onsuccess=()=>{
-   const row:unknown=read.result;if(!isPendingWorkshopOriginal(row))return;
+   const row:unknown=read.result;if(!isPendingWorkshopOriginal(row)||row.rejection)return;
    const now=new Date(),due=row.notBefore===undefined||Date.parse(row.notBefore)<=now.getTime();
    if(mode==='withdraw'){
     if(row.notBefore===undefined||row.dispatchStartedAt!==undefined||due)return;
@@ -417,7 +419,10 @@ export async function readPendingEntries(scope:string):Promise<PendingEntry[]> {
   const projectedId="quarantine:"+quarantineKey(row.id);
   const isOriginal=typeof row.id==='string'&&typeof row.itemId==="string"&&(row.kind==="note"&&typeof row.text==="string"&&typeof row.textstand==="string"&&Array.isArray(row.dismissed)&&row.dismissed.every(item=>typeof item==="string")||row.kind==="file"&&typeof row.file==="object"&&row.file!==null&&typeof (row.file as File).arrayBuffer==="function"&&typeof (row.file as File).name==="string");
   if(isOriginal)return original;
-  if(isPendingWorkshopOriginal(row))return row;
+  if(isPendingWorkshopOriginal(row)){
+   if(!row.rejection||isWorkshopRejectionReceipt(scope,row,row.rejection))return row;
+   return {id:projectedId,kind:'quarantine',capturedAt:'',payload:row};
+  }
   if(row.kind==="quarantine"&&typeof row.capturedAt==="string"&&row.payload&&typeof row.payload==="object"&&!Array.isArray(row.payload))return {...row,id:projectedId} as unknown as PendingQuarantine;
   // Read-only quarantine projection: preserve the exact unknown record in its original store.
   return {id:projectedId,kind:"quarantine",capturedAt:"",payload:row};
@@ -461,7 +466,7 @@ export function isPendingWorkshopAcknowledgement(scope:string,entry:PendingWorks
  const result=value as Record<string,unknown>;
  if(entry.command==='invoice.cancel'||entry.command==='credit.apply'||entry.command==='credit.payout'){
   if(result.code!=='OK'||result.financialCommand!==entry.command)return false;
- }else if(result.code!=='OK'&&result.code!=='PRESERVED')return false;
+ }else if(result.code!=='OK')return false;
  return isPendingWorkshopReceipt(scope,entry,result.offlineReceipt);
 }
 /** A command cannot be erased by the legacy file/note acknowledgement. */
@@ -470,10 +475,28 @@ export async function acknowledgePendingWorkshopOriginal(scope:string,entry:Pend
  const db=await database(scope);
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.get(entry.id);let removed=false;
-  read.onsuccess=()=>{const current=read.result;if(!isPendingWorkshopOriginal(current)||current.command!==entry.command||current.deviceCapturedAt!==entry.deviceCapturedAt||canonicalJson(current.input)!==canonicalJson(entry.input))return;store.delete(entry.id);removed=true;};
+  read.onsuccess=()=>{const current=read.result;if(!isPendingWorkshopOriginal(current)||current.rejection||current.command!==entry.command||current.deviceCapturedAt!==entry.deviceCapturedAt||canonicalJson(current.input)!==canonicalJson(entry.input))return;store.delete(entry.id);removed=true;};
   tx.oncomplete=()=>{db.close();if(removed)window.dispatchEvent(new Event('kreile-pending-changed'));resolve(removed);};
   tx.onabort=()=>{db.close();reject(Error('OFFLINE_WORKSHOP_ACK_ABORTED'));};
  });
+}
+
+/** PL14Nov10:20: same original, separately proved non-effect; never deleted. */
+export async function retainRejectedWorkshopOriginal(scope:string,entry:PendingWorkshopOriginal,receipt:WorkshopRejectionReceipt):Promise<boolean>{
+ if(!isWorkshopRejectionReceipt(scope,entry,receipt))throw Error('OFFLINE_WORKSHOP_REJECTION_PROOF_REQUIRED');
+ const db=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.get(entry.id);let retained=false;
+  read.onsuccess=()=>{const current=read.result;if(!isPendingWorkshopOriginal(current)||current.command!==entry.command||current.deviceCapturedAt!==entry.deviceCapturedAt||canonicalJson(current.input)!==canonicalJson(entry.input))return;
+   if(current.rejection&&canonicalJson(current.rejection)!==canonicalJson(receipt)){tx.abort();return;}
+   store.put({...current,rejection:receipt});retained=true;};
+  tx.oncomplete=()=>{db.close();if(retained)window.dispatchEvent(new Event('kreile-pending-changed'));resolve(retained);};
+  tx.onabort=()=>{db.close();reject(Error('OFFLINE_WORKSHOP_REJECTION_STORE_ABORTED'));};
+ });
+}
+/** Read projection only; STORE keeps the original key and body. */
+export function rejectedWorkshopProjection(entry:PendingWorkshopOriginal):PendingQuarantine|null{
+ return entry.rejection?{id:'rejected:'+entry.id,kind:'quarantine',capturedAt:entry.deviceCapturedAt!,payload:{reason:'WORKSHOP_REJECTED_WITHOUT_EFFECT',original:entry}}:null;
 }
 
 /** PL11:01 producer gate. This is a device reading fence, never server authority.

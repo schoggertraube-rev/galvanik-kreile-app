@@ -1,4 +1,6 @@
-import {retainPendingWorkshopOriginal,type PendingFinancialCommand,type PendingWorkshopOriginal} from './pendingStore';
+import {retainPendingWorkshopOriginal,isPendingWorkshopAcknowledgement,type PendingFinancialCommand,type PendingWorkshopOriginal} from './pendingStore';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
+import {isWorkshopRejectionReceipt} from './workshopRejectionContract';
 import {syncOriginals} from './syncOriginals';
 import type {WorkshopAcknowledgement} from './syncPendingFiles';
 import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
@@ -15,11 +17,16 @@ export async function queueFinancialCommand(scope:string,command:PendingFinancia
  const accepted=(event:Event)=>{
   const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
   if(!proof||currentScope()!==scope||proof.scope!==scope||proof.entry.id!==original.id||proof.entry.command!==original.command)return;
-  if(proof.result.code==='OK'&&'financialCommand'in proof.result&&proof.result.financialCommand===original.command)acknowledgement.value=proof.result;
+  if(proof.result.code==='OK'&&'financialCommand'in proof.result&&proof.result.financialCommand===original.command
+   &&canonicalJson(proof.entry.input)===canonicalJson(original.input)&&isPendingWorkshopAcknowledgement(scope,proof.entry,proof.result))acknowledgement.value=proof.result;
  };
  const rejected=(event:Event)=>{
   const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
-  if(!proof||currentScope()!==scope||proof.scope!==scope||proof.entry.id!==original.id||proof.entry.command!==original.command||proof.result.code==='OK'||proof.result.code==='PRESERVED')return;
+  if(!proof||currentScope()!==scope||proof.scope!==scope||proof.entry.id!==original.id||proof.entry.command!==original.command||proof.result.code==='OK')return;
+  if('rejectionReceipt'in proof.result&&isWorkshopRejectionReceipt(scope,proof.entry,proof.result.rejectionReceipt)){
+   failure.value={...proof.result,code:proof.result.rejectionReceipt.rejection,message:'message'in proof.result&&typeof proof.result.message==='string'?proof.result.message:CUSTOMER_CREDIT_COPY.unavailable};return;
+  }
+  if(proof.result.code==='PRESERVED')return;
   failure.value={...proof.result,message:'message'in proof.result&&typeof proof.result.message==='string'?proof.result.message:CUSTOMER_CREDIT_COPY.unavailable};
  };
  window.addEventListener('kreile-workshop-acknowledged',accepted);

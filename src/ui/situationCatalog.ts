@@ -302,7 +302,13 @@ export const MAIL_RESEND_COPY={
  canceledTaskDescription:(invoice:string,customer:string,sentAt:string|null)=>'Kunde: '+customer+'\nRechnung: '+invoice+'\nSendezeit: '+(sentAt?new Intl.DateTimeFormat('de-DE',{dateStyle:'medium',timeStyle:'medium',timeZone:'Europe/Berlin'}).format(new Date(sentAt)):'nicht belegt'),
  canceled:(invoice:string)=>'Rechnung '+invoice+' ist storniert – Versand nicht mehr nötig'
 };
-export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich'} as const;
+export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich',rejected:'abgelehnt, ohne Wirkung',originalCommand:{
+ 'item.finished':'TODO_PL offline.original.item_finished',
+ 'item.extraWork':'TODO_PL offline.original.item_extra_work',
+ 'invoice.cancel':'TODO_PL offline.original.invoice_cancel',
+ 'credit.apply':'TODO_PL offline.original.credit_apply',
+ 'credit.payout':'TODO_PL offline.original.credit_payout',
+}} as const;
 
 /** PL11.11.11:01: pending is not a successful server completion. */
 export const OFFLINE_ITEM_FINISHED_COPY={pending:(part:string)=>`Teil ${part} fertig – wird übertragen, sobald Netz da ist`,networkRequired:'Geht nur mit Netz',notSaved:'Teilstatus ist noch nicht gesichert. Erneut speichern.'} as const;
@@ -364,9 +370,9 @@ export const CUSTOMER_CREDIT_COPY={
  payoutLabel:(amount:string,customer:string,method:'bar'|'ueberweisung')=>`${amount} Guthaben an ${customer} ausgezahlt (${method==='bar'?'bar':'Überweisung'})`,
  payoutMethodMissing:'Wie wurde ausgezahlt? Wähle bar oder Überweisung',
  payoutReferenceMissing:'Referenz der Überweisung fehlt – trag Datum und Verwendungszweck ein',
- payoutInvalid:'TODO_PL geld.erstattung.ungueltig',
- payoutForbidden:'TODO_PL geld.erstattung.kein_recht',
- payoutChanged:'TODO_PL geld.erstattung.geaendert',
+ payoutInvalid:'Betrag oder Nachweis fehlt. Trag beides ein, dann speichere ich die Erstattung.',
+ payoutForbidden:'Erstattungen speichern darf nur, wer das Recht Geld hat.',
+ payoutChanged:'Der Erstattungsbetrag oder sein Zahlungsbeleg hat sich geändert. Lade den aktuellen Stand; dein Nachweis bleibt erhalten.',
  methodLabel:'Guthaben',
  applyLabel:(amount:string,number:string)=>`Guthaben ${amount} mit Rechnung ${number} verrechnen`,
  changed:'Das Guthaben oder der Rechnungsrest hat sich geändert. Lade die aktuelle Verrechnung; deine Angaben bleiben erhalten.',

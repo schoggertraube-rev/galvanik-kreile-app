@@ -1,4 +1,5 @@
-import {readPendingEntries,retainQuarantinedPending,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal,claimPendingWorkshop,isPendingWorkshopAcknowledgement} from './pendingStore';
+import {readPendingEntries,retainQuarantinedPending,retainRejectedWorkshopOriginal,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal,claimPendingWorkshop,isPendingWorkshopAcknowledgement} from './pendingStore';
+import {isWorkshopRejectionReceipt} from './workshopRejectionContract';
 import type {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
 import {recognizeNoteConcerns} from '@/lib/domain/noteConcerns';
 import type {PendingWorkshopOriginal} from './pendingStore';
@@ -31,6 +32,7 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
   // historical sequence. Newly captured originals retain their actual order.
   for(const entry of ordered.map(entry=>hasSequence(entry)?sequenced[sequenceCursor++]:entry)){
    if(ports.currentScope()!==scope)break;
+   if(entry.kind==='workshop'&&entry.rejection)continue;
    // Dependent originals must not create the intake before its earlier note.
    // Other intake groups keep their existing independent recovery path.
    if(blockedItems.has(entry.itemId)){outcome.blocked++;continue;}
@@ -41,6 +43,13 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
      if(!claimed){blockedItems.add(entry.itemId);continue;}
      if(ports.currentScope()!==scope)break;
      const result=await ports.workshop(scope,claimed);
+     if('rejectionReceipt'in result&&isWorkshopRejectionReceipt(scope,entry,result.rejectionReceipt)){
+      if(ports.currentScope()!==scope)break;
+      if(!await retainRejectedWorkshopOriginal(scope,entry,result.rejectionReceipt)){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
+      outcome.secured++;
+      if(ports.currentScope()===scope)ports.workshopRejected?.({scope,entry,result});
+      continue;
+     }
      if(!isPendingWorkshopAcknowledgement(scope,entry,result)||!('offlineReceipt' in result)){outcome.blocked++;blockedItems.add(entry.itemId);if(ports.currentScope()===scope)ports.workshopRejected?.({scope,entry,result});continue;}
      outcome.secured++;
      if(ports.currentScope()!==scope)break;
