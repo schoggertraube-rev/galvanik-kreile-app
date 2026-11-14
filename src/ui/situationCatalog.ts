@@ -140,9 +140,9 @@ export const QUOTE_CYCLE_COPY={
 };
 
 export const ORDER_HANDOVER_COPY={
- permission:'error.permission',invalid:'TODO_PL order.handover.invalid',missing:'TODO_PL order.handover.missing',
- conflict:'TODO_PL order.handover.conflict',unavailable:'TODO_PL order.handover.unavailable',
- manualChanged:(number:string,mode:'pickup'|'shipping')=>'TODO_PL order.handover.changed '+number+' '+mode,
+ permission:'error.permission',invalid:'Diese Übergabeart passt nicht zum Auftrag. Wähle Abholen oder Versand.',missing:'Wähle Abholen oder Versand für diesen Auftrag.',
+ conflict:'Der Auftrag wurde inzwischen geändert. Lade den aktuellen Stand und wähle die Übergabe erneut.',unavailable:'Die Übergabeart ist noch nicht gespeichert. Versuch es gleich noch einmal – deine Auswahl bleibt stehen.',
+ manualChanged:(number:string,mode:'pickup'|'shipping')=>mode==='pickup'?`${number} wird jetzt abgeholt.`:`${number} geht jetzt in den Versand.`,
  chooseOrder:"Wähle den Auftrag zu dieser Mail",choose:(number:string)=>"Übergabe für "+number+" übernehmen",
  mode:(mode:'pickup'|'shipping')=>mode==='pickup'?'Abholen':'Versand',
  label:(mode:'pickup'|'shipping'|null|undefined,service:string|null|undefined,error?:string)=>mode==='pickup'?'Abholen':mode==='shipping'?'Versand · '+(service??error??'Versanddienst fehlt'):'Übergabeart fehlt',
@@ -389,15 +389,18 @@ export const CUSTOMER_CREDIT_COPY={
 // S09: package text is fixed; additional failure copy stays in the same catalog (R8).
 export const SHIPPING_FEE_COPY={
  reissueForbidden:'error.permission',
- reissuePending:'TODO_PL shipping.invoice.reissue_pending',
- reissueTask:(number:string)=>`TODO_PL shipping.invoice.reissue_retry ${number}`,
+ reissuePending:'Der Storno ist gespeichert, das Guthaben steht. Die neue Rechnung ohne Versand fehlt noch – dafür liegt eine Aufgabe am Auftrag.',
+ reissueTaskPending:'TODO_PL shipping.invoice.reissue_task_pending',
+ reissueTaskCompletionPending:'TODO_PL shipping.invoice.reissue_task_completion_pending',
+ reissueUnpaidPending:'TODO_PL shipping.invoice.reissue_unpaid_pending',
+ reissueTask:(number:string)=>`Rechnung zu ${number} ohne Versand neu ausstellen`,
  additional:(amount:string,customer:string)=>`Versandkosten ${amount} netto an ${customer} berechnen`,
  relatedInvoice:(number:string)=>`Versandkosten zu Rechnung ${number}`,
- changed:'TODO_PL shipping.invoice.changed',
+ changed:'Versandkosten neu berechnet – die Rechnung zeigt den aktuellen Stand.',
  line:'Versand',
  inInvoice:(number:string)=>`Versand in Rechnung ${number}`,
  included:'Versand enthalten',
- includedChanged:'TODO_PL quote.shipping_included.changed',
+ includedChanged:'Versand im KV geändert. Ein schon gesendeter KV bekommt dafür eine neue Fassung.',
  missing:'Versandpauschale fehlt in den Einstellungen – trag sie dort ein',
  invalid:'Der Versandpreis muss ein Betrag ab 0,00 € sein. Leer heißt: kein Standard.',
  forbidden:'Den Standardversand ändern darf nur, wer Einstellungen ändern darf.',

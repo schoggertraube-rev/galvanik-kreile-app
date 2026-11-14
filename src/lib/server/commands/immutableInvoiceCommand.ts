@@ -8,7 +8,7 @@ import "server-only";
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
 import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
-import {appendCancellationCredit} from './customerCreditCommand';
+import {appendCancellationCredit,readCancellationCreditSource} from './customerCreditCommand';
 import {readManualHandoverSource} from '@/lib/server/orderHandoverSourcePort';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
@@ -1811,17 +1811,22 @@ async function issueInvoiceReplacement(tx:PrivilegedTenantTransaction,auth:Autho
 }
 
 async function completeInvoiceReissueFollowups(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:ImmutableInvoiceCancellationReceipt,replayed:boolean,readVat:InvoiceVatReader,composition?:CancellationCreditComposition):Promise<CancelInvoiceResult>{
+ let creditAmount:number|null=null,replacementReady=false,taskReady=false;
  try{
   await withTenantSavepoint(tx,nested=>appendCancellationCredit(nested,auth.tenantId,receipt));
+  const credit=await withTenantSavepoint(tx,nested=>readCancellationCreditSource(nested,auth.tenantId,receipt.clientEventId));
+  if(!credit||credit.pending)throw Error('INVOICE_REISSUE_CREDIT_NOT_PROVEN');
+  creditAmount=credit.paidAmountCents;
   const replacementReceipt=await withTenantSavepoint(tx,nested=>issueInvoiceReplacement(nested,auth,receipt.clientEventId,readVat));
+  replacementReady=true;
   if(composition)await withTenantSavepoint(tx,nested=>composition.settled(nested,auth,receipt.clientEventId));
   return {code:'OK',receipt,replacementReceipt,replayed};
  }catch(error){
   const cause=error&&typeof error==='object'&&'cause'in error?error.cause:undefined;
   console.error('[INVOICE_REISSUE_FOLLOWUP_FAILED]',cause instanceof Error?cause.message:error instanceof Error?error.message:'UnknownError');
-  try{if(!composition)throw Error('INVOICE_REISSUE_TASK_PORT_MISSING');await withTenantSavepoint(tx,nested=>composition.failed(nested,auth,receipt.clientEventId));}
+  try{if(!composition)throw Error('INVOICE_REISSUE_TASK_PORT_MISSING');await withTenantSavepoint(tx,nested=>composition.failed(nested,auth,receipt.clientEventId));taskReady=true;}
   catch(taskError){console.error('[INVOICE_REISSUE_TASK_PENDING]',taskError instanceof Error?taskError.message:'UnknownError');}
-  return {code:'UNAVAILABLE',message:SHIPPING_FEE_COPY.reissuePending};
+  return {code:'UNAVAILABLE',message:creditAmount===null?CUSTOMER_CREDIT_COPY.pending:replacementReady?SHIPPING_FEE_COPY.reissueTaskCompletionPending:!taskReady?SHIPPING_FEE_COPY.reissueTaskPending:creditAmount===0?SHIPPING_FEE_COPY.reissueUnpaidPending:SHIPPING_FEE_COPY.reissuePending};
  }
 }
 

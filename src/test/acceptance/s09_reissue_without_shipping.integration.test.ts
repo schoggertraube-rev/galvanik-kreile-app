@@ -13,10 +13,11 @@ import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingan
 import {offlinePartition} from '@/lib/server/offlinePartition';
 import {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
 import {isPendingWorkshopAcknowledgement} from '@/lib/offline/pendingStore';
+import {SHIPPING_FEE_COPY,CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
 beforeAll(()=>{const u=process.env.DATABASE_URL;if(!u||u!==process.env.H18_EXPECTED_DATABASE_URL||new URL(u).hostname!=='127.0.0.1')throw Error('TEST_S09_LOOPBACK_REQUIRED');});
-async function source(title:string){
+async function source(title:string,paid=true){
  const order=await readyInvoiceOrder(title,'shipping',false,undefined,10000);
- expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,expectedVersion:0,expectedOpenAmountCents:order.invoice.grossAmountCents,method:'ueberweisung',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ if(paid)expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,expectedVersion:0,expectedOpenAmountCents:order.invoice.grossAmountCents,method:'ueberweisung',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  const manual=await withSession(full,()=>changeOrderPickupNoticeAction({command:'handover_manual',orderId:order.orderId,expectedVersion:order.version,handoverMode:'pickup',clientEventId:randomUUID()}));
  expect(manual).toMatchObject({code:'OK',receipt:{handoverMode:'pickup',outcome:'changed'}});
  if(manual.code!=='OK'||!manual.receipt||typeof manual.receipt!=='object'||!('eventId'in manual.receipt)||typeof manual.receipt.eventId!=='string')throw Error('TEST_MANUAL_PICKUP_REQUIRED');
@@ -88,17 +89,64 @@ it('A09-7 R2 missing real task-history proof never acknowledges the cancellation
  await sql.unsafe(`CREATE FUNCTION private.${history}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.nachher->>'action'='aufgabe.angelegt' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
  await sql.unsafe(`CREATE TRIGGER ${history} BEFORE INSERT ON public.intake_event FOR EACH ROW EXECUTE FUNCTION private.${history}()`);
  try{
-  expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'UNAVAILABLE',message:SHIPPING_FEE_COPY.reissueTaskPending});
   expect(await sql`SELECT status FROM public.invoices WHERE tenant_id=${tenant} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{status:'cancelled'}]);
   expect(await sql`SELECT count(*)::int AS n FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`).toEqual([{n:0}]);
   expect(await withSession(full,()=>getCustomerCreditAction(order.customerId))).toMatchObject({code:'OK',credit:{balanceCents:order.invoice.grossAmountCents}});
   await sql.unsafe(`DROP TRIGGER ${history} ON public.intake_event`);
-  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE',message:SHIPPING_FEE_COPY.reissuePending});
   expect(await sql`SELECT count(*)::int AS n FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`).toEqual([{n:1}]);
   await sql.unsafe(`DROP TRIGGER ${fault} ON public.invoices`);
   expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,replacementReceipt:{netAmountCents:10000}});
   expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`).toEqual([{status:'erledigt'}]);
  }finally{await sql.unsafe(`DROP TRIGGER IF EXISTS ${history} ON public.intake_event`);await sql.unsafe(`DROP FUNCTION private.${history}()`);await sql.unsafe(`DROP TRIGGER IF EXISTS ${fault} ON public.invoices`);await sql.unsafe(`DROP FUNCTION private.${fault}()`);}
+});
+
+it('A09-7 a real credit SQL failure never claims credit already exists; another money actor repairs the same original and actual task',async()=>{
+ const {order,input}=await source('TEST S09 actual credit pending');
+ const fault='test_s09_credit_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.invoice_id='${input.invoiceId}'::uuid THEN PERFORM 1/0; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON public.customer_credit_entries FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
+ try{
+  expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'UNAVAILABLE',message:CUSTOMER_CREDIT_COPY.pending});
+  expect(await sql`SELECT status FROM public.invoices WHERE tenant_id=${tenant} AND id=${input.invoiceId}::uuid`).toEqual([{status:'cancelled'}]);
+  expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{n:0}]);
+  expect(await sql`SELECT count(*)::int AS n FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`).toEqual([{n:1}]);
+ }finally{await sql.unsafe(`DROP TRIGGER ${fault} ON public.customer_credit_entries`);await sql.unsafe(`DROP FUNCTION private.${fault}()`);}
+ const repair=await createFixture(['geld'],'buero');
+ expect(await withSession(repair,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,replacementReceipt:{issuedBy:repair.actorId}});
+ expect(await withSession(full,()=>getCustomerCreditAction(order.customerId))).toMatchObject({code:'OK',credit:{balanceCents:order.invoice.grossAmountCents}});
+ expect(await sql`SELECT actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{actor_user_id:full.actorId}]);
+});
+
+it('A09-7 an unpaid original with a failed replacement never claims a positive credit',async()=>{
+ const {order,input}=await source('TEST S09 unpaid pending',false),fault='test_s09_unpaid_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.client_event_id='${input.reissueWithoutShipping.replacementClientEventId}'::uuid THEN PERFORM 1/0; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON public.invoices FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
+ try{expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'UNAVAILABLE',message:SHIPPING_FEE_COPY.reissueUnpaidPending});}
+ finally{await sql.unsafe(`DROP TRIGGER ${fault} ON public.invoices`);await sql.unsafe(`DROP FUNCTION private.${fault}()`);}
+ expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{n:0}]);
+ expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replacementReceipt:{grossAmountCents:11900}});
+ expect(await withSession(full,()=>getCustomerCreditAction(order.customerId))).toMatchObject({code:'OK',credit:{balanceCents:0}});
+});
+
+it('A09-7 R2 failed task completion preserves the actual replacement instead of falsely saying it is missing',async()=>{
+ const {order,input}=await source('TEST S09 task completion pending'),fault='test_s09_reissue_'+randomUUID().replaceAll('-',''),history='test_s09_done_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.client_event_id='${input.reissueWithoutShipping.replacementClientEventId}'::uuid THEN PERFORM 1/0; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON public.invoices FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
+ await sql.unsafe(`CREATE FUNCTION private.${history}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.nachher->>'action'='aufgabe.erledigt' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ try{
+  expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  await sql.unsafe(`DROP TRIGGER ${fault} ON public.invoices`);
+  await sql.unsafe(`CREATE TRIGGER ${history} BEFORE INSERT ON public.intake_event FOR EACH ROW EXECUTE FUNCTION private.${history}()`);
+  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE',message:SHIPPING_FEE_COPY.reissueTaskCompletionPending});
+  expect(await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${order.orderId}`).toEqual([{n:2}]);
+  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`).toEqual([{status:'offen'}]);
+  await sql.unsafe(`DROP TRIGGER ${history} ON public.intake_event`);
+  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+  expect(await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${order.orderId}`).toEqual([{n:2}]);
+  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`).toEqual([{status:'erledigt'}]);
+ }finally{await sql.unsafe(`DROP TRIGGER IF EXISTS ${fault} ON public.invoices`);await sql.unsafe(`DROP FUNCTION private.${fault}()`);await sql.unsafe(`DROP TRIGGER IF EXISTS ${history} ON public.intake_event`);await sql.unsafe(`DROP FUNCTION private.${history}()`);}
 });
 
 it('A09-7 R2 an intervening real pickup-person note does not strand the immutable reissue intent; repair uses the current order version and the old goods',async()=>{
