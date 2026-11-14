@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import type {
   ConfirmPaymentInput,
   ConfirmPaymentResult,
@@ -76,7 +77,11 @@ export async function getOrderPaymentStateAction(
     const authorization = await resolveActionAuthorization();
     if (!authorization.ok) return authorization.result;
     const { getPaymentState } = await import("@/lib/server/paymentSummaryRead");
-    return getPaymentState(authorization.data, input.orderId);
+    const readCredit=hasAuthorizationArea(authorization.data,'geld')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
+      const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
+      return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
+    }:undefined;
+    return getPaymentState(authorization.data, input.orderId,readCredit);
   } catch (error) {
     console.error("[ORDER_CARD_PAYMENT_ACTION_ERROR]", {
       orderId: input.orderId,

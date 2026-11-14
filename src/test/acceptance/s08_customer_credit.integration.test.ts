@@ -1,6 +1,7 @@
 // @vitest-environment node
 // PL A08: isolated TEST data, actual invoice/payment/cancellation Actions/Auth/DB/Storage.
 import {randomUUID} from 'node:crypto';
+import {sql as statement} from 'drizzle-orm';
 import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -17,6 +18,19 @@ beforeAll(()=>{
  expect(new URL(databaseUrl).hostname).toBe('127.0.0.1');
 });
 
+it('A08 a real SQL failure in the credit subsource preserves the existing invoice read as incomplete, never zero',async()=>{
+ const order=await readyInvoiceOrder('S08 real credit read failure','pickup',false,undefined,5042);
+ const result=await withSession(full,async()=>{
+  const [{resolveAuthorization},{getPaymentState}]=await Promise.all([import('@/lib/server/authorization'),import('@/lib/server/paymentSummaryRead')]);
+  const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_ACTUAL_CREDIT_READ_AUTH');
+  return getPaymentState(auth.data,order.orderId,async tx=>{await tx.execute(statement`SELECT 1/0 AS test_credit_source_unavailable`);throw Error('TEST_SQL_MUST_FAIL');});
+ });
+ expect(result).toMatchObject({code:'OK',data:{payment:{invoiceId:order.invoice.invoiceId,openAmountCents:6000,paidAmountCents:0},creditApplication:{code:'SOURCE_INCOMPLETE'}}});
+ if(result.code!=='OK')throw Error('TEST_MAIN_PAYMENT_READ_LOST');
+ expect(result.data.creditApplication).toEqual({code:'SOURCE_INCOMPLETE'});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{creditApplication:{code:'OK',credit:{balanceCents:0,version:0},proposal:null}}});
+});
+
 it.each([4000,10000])('A08-3/-4/-5 applies actual credit %i through one payment writer with double-click and fresh retry, not cash income',async(paidAmount)=>{
  const source=await readyInvoiceOrder('S08 application source '+paidAmount,'pickup',false,undefined,8403);
  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:source.invoice.invoiceId,amount:paidAmount,method:'bar',expectedVersion:0,expectedOpenAmountCents:10000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
@@ -24,13 +38,19 @@ it.each([4000,10000])('A08-3/-4/-5 applies actual credit %i through one payment 
  const target=await readyInvoiceOrder('S08 application target '+paidAmount,'pickup',false,source.customerId,5042);
  expect(target.invoice.grossAmountCents).toBe(6000);
  expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:target.orderId}))).toMatchObject({code:'OK',data:{payment:{openAmountCents:6000,paidAmountCents:0,paymentVersion:0}}});
- const input={invoiceId:target.invoice.invoiceId,amount:Math.min(paidAmount,6000),expectedVersion:0,expectedOpenAmountCents:6000,expectedCreditVersion:1,clientEventId:randomUUID()};
+ const proposed=await withSession(full,()=>getOrderPaymentStateAction({orderId:target.orderId}));
+ if(proposed.code!=='OK'||proposed.data.creditApplication?.code!=='OK'||!proposed.data.creditApplication.proposal)throw Error('TEST_REAL_CREDIT_PROPOSAL_REQUIRED');
+ const proposal=proposed.data.creditApplication.proposal;
+ expect(proposal).toMatchObject({command:'credit.apply',input:{invoiceId:target.invoice.invoiceId,amount:Math.min(paidAmount,6000),expectedVersion:0,expectedOpenAmountCents:6000,expectedCreditVersion:1}});
+ expect(proposal.label).toBe(`Guthaben ${paidAmount===4000?'40,00':'60,00'} € mit Rechnung ${target.invoice.invoiceNumber} verrechnen`);
+ const input={...JSON.parse(JSON.stringify(proposal.input)),clientEventId:randomUUID()};
  const {expectedCreditVersion:creditVersion,...ordinaryPayment}=input;
  expect(creditVersion).toBe(1);
  expect(await withSession(full,()=>confirmPaymentAction({...ordinaryPayment,method:'guthaben'}))).toMatchObject({code:'FORBIDDEN'});
  const noMoney=await createFixture(['kunden','auftraege'],'buero');
  const denied=await withSession(noMoney,()=>applyCustomerCreditAction(input));
  expect(denied).toMatchObject({code:'FORBIDDEN'});expect('currentCreditBalanceCents' in denied).toBe(false);
+ const hidden=await withSession(noMoney,()=>getOrderPaymentStateAction({orderId:target.orderId}));expect(hidden).toMatchObject({code:'FORBIDDEN'});expect('data'in hidden).toBe(false);
  expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:paidAmount,version:1}});
  const results=await Promise.all([withSession(full,()=>applyCustomerCreditAction(input)),withSession(full,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(input))))]);
  for(const result of results)expect(result).toMatchObject({code:'OK',receipt:{method:'guthaben',amountCents:input.amount,paidAmountCents:input.amount,openAmountCents:6000-input.amount,creditVersion:1,confirmedBy:full.actorId}});
@@ -39,6 +59,7 @@ it.each([4000,10000])('A08-3/-4/-5 applies actual credit %i through one payment 
  expect(await withSession(full,()=>applyCustomerCreditAction({...input,expectedCreditVersion:2}))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:paidAmount-input.amount,version:2}});
  expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:target.orderId}))).toMatchObject({code:'OK',data:{payment:{method:'guthaben',openAmountCents:6000-input.amount,paidAmountCents:input.amount,paymentVersion:1}}});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:target.orderId}))).toMatchObject({code:'OK',data:{creditApplication:{code:'OK',proposal:null}}});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='PAYMENT_CONFIRMED_V1' AND client_event_id=${input.clientEventId}::uuid`).toEqual([{n:1}]);
  expect(await sql`SELECT amount_cents::text,actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND kind='verrechnung' AND invoice_id=${input.invoiceId}::uuid`).toEqual([{amount_cents:String(-input.amount),actor_user_id:full.actorId}]);
  expect(await sql`SELECT count(*)::int AS n FROM public.payments WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{n:0}]);
@@ -50,7 +71,9 @@ it('A08-9 rejects a stale invoice with the actual zero remainder without consumi
  expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:source.invoice.invoiceId,expectedVersion:1,reason:'TEST S08 stale invoice credit',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  const target=await readyInvoiceOrder('S08 stale credit target','pickup',false,source.customerId,5042);
  const input={invoiceId:target.invoice.invoiceId,amount:4000,expectedVersion:0,expectedOpenAmountCents:6000,expectedCreditVersion:1,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:target.orderId}))).toMatchObject({code:'OK',data:{creditApplication:{code:'OK',proposal:{command:'credit.apply',input:{expectedOpenAmountCents:6000}}}}});
  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:target.invoice.invoiceId,amount:6000,method:'ueberweisung',expectedVersion:0,expectedOpenAmountCents:6000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:target.orderId}))).toMatchObject({code:'OK',data:{creditApplication:{code:'OK',proposal:null}}});
  expect(await withSession(full,()=>applyCustomerCreditAction(input))).toMatchObject({code:'CONFLICT',currentOpenAmountCents:0});
  expect(await withSession(full,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'CONFLICT',currentOpenAmountCents:0});
  expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:4000,version:1}});

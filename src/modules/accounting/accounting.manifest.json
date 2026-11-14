@@ -14,6 +14,7 @@
     "@/modules/accounting/public#CustomerCreditResult",
     "@/modules/accounting/server-public#readCustomerCredit",
     "@/modules/accounting/public#CustomerCreditApplyInput",
+    "@/modules/accounting/public#CustomerCreditApplicationRead",
     "@/modules/accounting/server-public#readCustomerCreditInTransaction"
   ],
   "capabilities": [],

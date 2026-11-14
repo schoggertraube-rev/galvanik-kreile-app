@@ -4,4 +4,4 @@ export type {InvoiceVatGroup,InvoiceVatRead,InvoiceVatReader} from './invoiceVat
 
 export {readInvoiceVat} from './invoiceVatContract';
 export type {CustomerCredit,CustomerCreditResult} from './customerCreditContract';
-export type {CustomerCreditApplyInput} from './customerCreditContract';
+export type {CustomerCreditApplyInput,CustomerCreditApplicationRead} from './customerCreditContract';

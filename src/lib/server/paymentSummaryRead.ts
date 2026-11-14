@@ -13,7 +13,9 @@ import {
   type PaymentSummary,
   type PaymentSummaryRow,
 } from "@/lib/server/paymentContract";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import type {CustomerCreditResult,CustomerCreditApplicationRead} from '@/modules/accounting/public';
+import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
 
 export type PaymentSummaryReadResult =
   | { code: "OK"; data: PaymentSummary[] }
@@ -21,7 +23,7 @@ export type PaymentSummaryReadResult =
   | { code: "UNAVAILABLE"; message: string };
 
 export type OrderPaymentStateReadResult =
-  | { code: "OK"; data: OrderPaymentState & {complaintHold:{blocked:boolean;reason:'open_complaint';complaintIds:string[]};customerDeliveryBlock:{blocked:boolean;reason:'overdue_invoice';invoiceIds:string[]}} }
+  | { code: "OK"; data: OrderPaymentState & {creditApplication?:CustomerCreditApplicationRead;complaintHold:{blocked:boolean;reason:'open_complaint';complaintIds:string[]};customerDeliveryBlock:{blocked:boolean;reason:'overdue_invoice';invoiceIds:string[]}} }
   | { code: "NOT_FOUND"; message: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
@@ -71,6 +73,7 @@ export async function readPaymentSummary(
 export async function getPaymentState(
   authorization: AuthorizationSnapshot,
   orderId: unknown,
+  readCredit?:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerCreditResult>,
 ): Promise<OrderPaymentStateReadResult> {
   if (
     typeof orderId !== "string"
@@ -84,8 +87,8 @@ export async function getPaymentState(
 
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<OrderPaymentStateRow & { customer_overdue_invoice_ids: string[] }>(sql`
-        SELECT state.*, ARRAY (
+      const rows = await tx.execute<OrderPaymentStateRow & { credit_customer_id:string;customer_overdue_invoice_ids: string[] }>(sql`
+        SELECT state.*, parent.customer_id AS credit_customer_id, ARRAY (
           SELECT invoice.id::text FROM public.invoices invoice
           JOIN public.orders orders
             ON orders.tenant_id = invoice.tenant_id
@@ -96,6 +99,7 @@ export async function getPaymentState(
           ORDER BY invoice.due_date,invoice.id
         ) AS customer_overdue_invoice_ids
         FROM private.v_goods_out_ui_state_v1 state
+        JOIN public.orders parent ON parent.tenant_id=state.tenant_id AND parent.id=state.order_id
         WHERE state.order_id = ${orderId}
         LIMIT 2
       `);
@@ -104,7 +108,16 @@ export async function getPaymentState(
       if (!Array.isArray(rows[0].customer_overdue_invoice_ids) || rows[0].customer_overdue_invoice_ids.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id))) throw new Error("ORDER_CUSTOMER_DEBT_STATE_INVALID");
       const mapped = mapOrderPaymentStateRow(rows[0], authorization);
       const complaint=await readOpenOrderComplaint(tx,authorization.tenantId,mapped.orderId);
-      return { ...mapped,complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].payment_mode!=="keiner"&&rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
+      let creditApplication:CustomerCreditApplicationRead|undefined;
+      if(readCredit){
+        try{creditApplication=await withTenantSavepoint(tx,async nested=>{
+          const source=await readCredit(nested,authorization.tenantId,rows[0].credit_customer_id);
+          if(source.code!=='OK')return {code:'SOURCE_INCOMPLETE' as const};
+          const payment=mapped.payment,amount=payment?Math.min(source.credit.balanceCents,payment.openAmountCents):0;
+          return {code:'OK' as const,credit:source.credit,proposal:payment&&amount>0?{label:CUSTOMER_CREDIT_COPY.applyLabel(new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(amount/100),payment.invoiceNumber),command:'credit.apply' as const,input:{invoiceId:payment.invoiceId,amount,expectedVersion:payment.paymentVersion,expectedOpenAmountCents:payment.openAmountCents,expectedCreditVersion:source.credit.version}}:null};
+        });}catch{creditApplication={code:'SOURCE_INCOMPLETE'};}
+      }
+      return { ...mapped,...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].payment_mode!=="keiner"&&rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
     });
     return data
       ? { code: "OK", data }
