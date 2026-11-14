@@ -1,4 +1,6 @@
 // @vitest-environment node
+// Ausgangsfakt synthetisch, Writer-Nachweis in collection_reminder.integration.test.ts
+// und dispatch_call.integration.test.ts; Brief/Post/Task danach echte Writer.
 import {vi,it,expect} from 'vitest';
 import {randomUUID,createHash} from 'node:crypto';
 import {writeFileSync} from 'node:fs';
@@ -15,14 +17,16 @@ import {previewStorageLetterAction,prepareStoragePostalLetterAction} from '@/app
 import {updateCustomerAction} from '@/app/actions/customers.actions';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
-import {markOrderInformedByPhoneAction,setOrderPickupAppointmentAction} from '@/app/actions/orders.actions';
+import {markOrderInformedByPhoneAction,setOrderPickupAppointmentAction,getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
 import {emptyDispatchPolicy} from '@/modules/fundament/public';
 import {COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import {pickupStorageDue} from '@/lib/server/pickupAppointmentPort';
+import {readHistoricalDispatchClock} from '../../../e2e/ablauf/historicalDispatchFixture';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('STORAGE_LETTER_LOOPBACK_REQUIRED');
 
 async function prepareLetter(label:string,endCall=true,shared=false){
+ const clock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId);
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-storage-letter-token'.repeat(4),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail'))return new Response(null,{status:202});return nativeFetch(input,init);});
  const order=await readyInvoiceOrder(label);
  expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Ware fertig',body:'TEST Ware fertig',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
@@ -31,23 +35,25 @@ async function prepareLetter(label:string,endCall=true,shared=false){
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('LETTER_SETTINGS');
  expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),reminderDays:0,secondReminderDays:0,callAfterDays:0,storageAfterDays:0,finalStageAfterLetterDays:4,holdMinutes:0}}))).toMatchObject({code:'OK'});
  async function plan(){const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('LETTER_QUEUE');return queue.data.find(row=>row.id===order.orderId)?.finishedDispatch;}
- const mailRequests:Array<Parameters<typeof sendCustomerMailAction>[0]>=[];for(const stage of ['E1','E2'] as const){const p=await plan(),mail={targetType:'CUSTOMER' as const,targetId:order.customerId,clientRequestId:randomUUID(),subject:'TEST '+stage,body:'TEST Bitte abholen',collectionReminder:{stage,handover:'pickup' as const,dueDate:p!.reminder!.due!}};mailRequests.push(mail);expect(await withSession(full,()=>sendCustomerMailAction(mail))).toMatchObject({code:'OK'});}
- const initial=await plan(),call=await withSession(full,()=>createDispatchCallTaskAction({customerId:order.customerId,handover:'pickup',dueDate:initial!.reminder!.due!,clientKey:initial!.reminder!.clientKey!}));if(call.code!=='OK')throw Error('LETTER_CALL');
- const task=await withSession(full,()=>getIntakeTaskAction({taskId:call.taskId}));if(task.code!=='OK'||!task.task)throw Error('LETTER_CALL_TASK');
- if(endCall)expect(await withSession(full,()=>completeIntakeTaskAction({taskId:call.taskId,version:task.task!.version,note:'TEST nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
+ const orderIds=[order.orderId,...(second?[second.orderId]:[])];
+ for(const id of orderIds)await clock.addNotice(id,8);
+ const first=await clock.addReminder(order.customerId,orderIds,'E1',6),secondMail=await clock.addReminder(order.customerId,orderIds,'E2',4);
+ const mailRequests:Array<Parameters<typeof sendCustomerMailAction>[0]>=[first.request,secondMail.request];
+ let call:{taskId:string};
+ if(endCall)call=await clock.addUnreachedCall(order.customerId,orderIds,2);
+ else{const initial=await plan(),created=await withSession(full,()=>createDispatchCallTaskAction({customerId:order.customerId,handover:'pickup',dueDate:initial!.reminder!.due!,clientKey:initial!.reminder!.clientKey!}));if(created.code!=='OK')throw Error('LETTER_CALL');call=created;}
  const due=await plan(),request={customerId:order.customerId,handover:'pickup' as const,clientKey:endCall?due!.storage!.letter!.clientKey:due!.reminder!.clientKey!};
  return {order,request,plan,callTaskId:call.taskId,second,mailRequests};
 }
 async function prepareWithoutMail(label:string){
+ const clock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId,async orderId=>{const read=await withSession(full,()=>getLiveOrderCardAction({orderId}));return read.code==='OK'&&read.data.customerInformed?.code==='OK'?read.data.customerInformed.freezeId:null;});
  const order=await readyInvoiceOrder(label);
  expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('NO_MAIL_SETTINGS');
  expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),storageAfterDays:0,finalStageAfterLetterDays:0,finalStageRecipientId:full.actorId}}))).toMatchObject({code:'OK'});
  async function plan(){const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('NO_MAIL_QUEUE');return queue.data.find(row=>row.id===order.orderId);}
  const row=await plan(),initial=row?.finishedDispatch?.reminder;expect(initial).toMatchObject({stage:'E3',state:'DUE'});if(!initial?.due||!initial.clientKey)throw Error('NO_MAIL_INITIAL');
- const call=await withSession(full,()=>createDispatchCallTaskAction({customerId:order.customerId,handover:'pickup',dueDate:initial.due!,clientKey:initial.clientKey!}));if(call.code!=='OK')throw Error('NO_MAIL_CALL');
- const task=await withSession(full,()=>getIntakeTaskAction({taskId:call.taskId}));if(task.code!=='OK'||!task.task)throw Error('NO_MAIL_TASK');
- expect(await withSession(full,()=>completeIntakeTaskAction({taskId:call.taskId,version:task.task!.version,note:'TEST nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
+ await clock.addUnreachedCall(order.customerId,[order.orderId],2);
  const due=await plan();expect(due?.finishedDispatch?.storage).toMatchObject({state:'DUE'});
  const request={customerId:order.customerId,handover:'pickup' as const,clientKey:due!.finishedDispatch!.storage!.letter!.clientKey};return {order,request,plan};
 }
@@ -179,7 +185,7 @@ it('E4 preview renders a real customer/sender PDF without invoice-only settings,
  const before=await sql`SELECT (SELECT count(*) FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG})::int AS events,(SELECT count(*) FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG})::int AS tasks`;
  const result=await withSession(full,()=>previewStorageLetterAction(request));expect(result).toMatchObject({code:'OK',data:{sent:false,clientKey:request.clientKey,channel:'mail'}});if(result.code!=='OK')throw Error('LETTER_PREVIEW:'+result.code);
  const [customer]=await sql`SELECT name,zip_code,city FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
- expect(result.data.snapshot.recipient).toMatchObject({name:customer.name,zip:customer.zip_code,city:customer.city});expect(result.data.snapshot.body).toContain('Guten Tag '+customer.name+',');expect(result.data.snapshot.body).toContain('Ihre ');expect(result.data.snapshot.body).not.toContain('Deine');expect(result.data.snapshot.body).not.toContain('{');expect(result.data.snapshot.body).toContain('Bitte holen Sie die Teile bis '+result.data.snapshot.deadline!.due!.split('-').reverse().join('.')+' ab.');const actualOrders=await withSession(full,()=>getOrdersDb());if(!actualOrders.ok)throw Error('CUSTOMER_TEXT_ORDER_READ');expect(result.data.snapshot.customerText?.members[0].quantity).toBe(actualOrders.data.find(row=>row.id===order.orderId)!.parts.reduce((sum,part)=>sum+part.quantity,0));const originals=await sql`SELECT prepared.payload->'meta'->'customerMessage' AS copy,message.body,thread.subject FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId' JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' WHERE prepared.tenant_id=${KREILE_TENANT_SLUG} AND prepared.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND prepared.payload->'meta'->>'customerId'=${order.customerId} AND prepared.payload->'meta'->>'stage' IN ('E1','E2')`;expect(originals).toHaveLength(2);for(const original of originals){expect(original.body).toBe(original.copy.body);expect(original.subject).toBe(original.copy.subject);expect(original.body).toContain('Ihre 1 Teile aus Auftrag ');expect(original.body).not.toContain('TEST E');}
+ expect(result.data.snapshot.recipient).toMatchObject({name:customer.name,zip:customer.zip_code,city:customer.city});expect(result.data.snapshot.body).toContain('Guten Tag '+customer.name+',');expect(result.data.snapshot.body).toContain('Ihre ');expect(result.data.snapshot.body).not.toContain('Deine');expect(result.data.snapshot.body).not.toContain('{');expect(result.data.snapshot.body).toContain('Bitte holen Sie die Teile bis '+result.data.snapshot.deadline!.due!.split('-').reverse().join('.')+' ab.');const actualOrders=await withSession(full,()=>getOrdersDb());if(!actualOrders.ok)throw Error('CUSTOMER_TEXT_ORDER_READ');expect(result.data.snapshot.customerText?.members[0].quantity).toBe(actualOrders.data.find(row=>row.id===order.orderId)!.parts.reduce((sum,part)=>sum+part.quantity,0));const originals=await sql`SELECT prepared.payload->'meta'->'customerMessage' AS copy,message.body,thread.subject FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId' JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' WHERE prepared.tenant_id=${KREILE_TENANT_SLUG} AND prepared.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND prepared.payload->'meta'->>'customerId'=${order.customerId} AND prepared.payload->'meta'->>'stage' IN ('E1','E2')`;expect(originals).toHaveLength(2);for(const original of originals){expect(original.body).toBe(original.copy.body);expect(original.subject).toBe(original.copy.subject);expect(original.body).toContain('TEST synthetischer Ausgangsfakt');}
  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(mailRequests[1]))))).toMatchObject({code:'OK',data:{replayed:true}});
  const bytes=Buffer.from(result.data.pdfBase64,'base64');expect(bytes.subarray(0,5).toString()).toBe('%PDF-');expect(createHash('sha256').update(bytes).digest('hex')).toBe(result.data.pdfSha256);
  if(process.env.KREILE_STORAGE_LETTER_PROOF_PATH){const target=path.resolve(process.env.KREILE_STORAGE_LETTER_PROOF_PATH);if(target.toLowerCase().startsWith(process.cwd().toLowerCase()))throw Error('LETTER_PROOF_MUST_BE_OUTSIDE_REPO');writeFileSync(target,bytes);}

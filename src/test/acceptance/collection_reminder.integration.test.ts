@@ -21,12 +21,23 @@ async function configure(second:number|null=0,holdMinutes=0){
  return withSession(full,()=>saveShippingSettingsAction({service:read.settings.service,numberPattern:read.settings.numberPattern,numberHint:read.settings.numberHint,trackingUrl:read.settings.trackingUrl,expectedUpdatedAt:read.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),reminderDays:0,secondReminderDays:second,callAfterDays:0,holdMinutes}}));
 }
 async function proposal(orderId:string){const read=await withSession(full,()=>getOrdersDb());if(!read.ok)throw Error('COLLECTION_QUEUE');const result=read.data.find(row=>row.id===orderId)?.finishedDispatch?.reminder;if(!result)throw Error('COLLECTION_PROPOSAL');return result;}
+// PL02:30: the customer-copy proof belongs to the actual E1/E2 writer, not
+// to synthetic E1/E2 starting facts inside a later E4 preview test.
+async function assertActualCustomerCopy(key:string,count:number){
+ const rows=await sql`SELECT prepared.payload->'meta'->'customerMessage' AS copy,message.body,thread.subject
+  FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
+  JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing'
+  WHERE prepared.tenant_id=${KREILE_TENANT_SLUG} AND prepared.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND prepared.correlation_id=${key}::uuid`;
+ expect(rows).toHaveLength(1);const original=rows[0];
+ expect(original.body).toBe(original.copy.body);expect(original.subject).toBe(original.copy.subject);
+ expect(original.body).toContain(count===1?'Ihre 1 Teile aus Auftrag ':'Ihre Teile aus den Aufträgen ');expect(original.body).not.toContain('TEST E');
+}
 
 it('E1 actual approval uses the single sender, group proof and original retries with calendar-correct E2',async()=>{
  const clock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId);
  const bodies:string[]=[];
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-collection-token'.repeat(3),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){bodies.push(JSON.parse(String(init?.body)).message.body.content);return new Response(null,{status:202});}return nativeFetch(input,init);});
- const first=await readyInvoiceOrder('E1-Erster'),second=await readyInvoiceOrder('E1-Zweiter','pickup',false,first.customerId);
+ const first=await readyInvoiceOrder('Stufe eins zuerst'),second=await readyInvoiceOrder('Stufe eins danach','pickup',false,first.customerId);
  const noticeKey=randomUUID();
  const initialNotice=await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:first.orderId,clientRequestId:noticeKey,subject:'TEST Fertig',body:'TEST Fertigmeldung',expectedInvoiceIds:[first.invoice.invoiceId,second.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:first.invoice.invoiceId}}));
  expect(initialNotice).toMatchObject({code:'OK'});if(initialNotice.code!=='OK')throw Error('TEST_INITIAL_NOTICE_REQUIRED');
@@ -37,6 +48,7 @@ it('E1 actual approval uses the single sender, group proof and original retries 
  const input={targetType:'CUSTOMER' as const,targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST Erinnerung',body:'TEST Bitte hole Deine fertige Ware ab.',collectionReminder:{stage:'E1' as const,handover:'pickup' as const,dueDate:planned.due}};
  const sent=await withSession(operator,()=>sendCustomerMailAction(input));expect(sent).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('COLLECTION_E1:'+sent.code);
  expect(bodies).toHaveLength(2);
+ await assertActualCustomerCopy(input.clientRequestId,2);
  const numbers=await sql`SELECT order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${first.orderId},${second.orderId})`;for(const row of numbers)expect(bodies[1]).toContain(row.order_number);
  expect(await sql`SELECT user_id::text,payload->>'threadId' AS thread FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{user_id:operator.actorId,thread:sent.data.threadId}]);
  expect(await proposal(first.orderId)).toMatchObject({stage:'E2',...await clock.readSentFollowup(input.clientRequestId,0)});
@@ -46,24 +58,26 @@ it('E1 actual approval uses the single sender, group proof and original retries 
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND payload->'receipt'->>'threadId'=${initialNotice.data.threadId} AND order_id IN (${first.orderId},${second.orderId})`).toEqual([{n:2}]);
 });
 
-it('E2 from an explicitly synthetic historical E1 sends once under concurrency and yields calendar-correct E3',async()=>{
+it.each([1,2])('E2 from an explicitly synthetic historical E1 sends %i actual orders once under concurrency and yields calendar-correct E3',async(count)=>{
  const clock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId),bodies:string[]=[];
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-E2-token'.repeat(4),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){bodies.push(JSON.parse(String(init?.body)).message.body.content);return new Response(null,{status:202});}return nativeFetch(input,init);});
- const first=await readyInvoiceOrder('E2-Erster'),second=await readyInvoiceOrder('E2-Zweiter','pickup',false,first.customerId);
- expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:first.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertigmeldung',expectedInvoiceIds:[first.invoice.invoiceId,second.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:first.invoice.invoiceId}}))).toMatchObject({code:'OK'});
- await clock.addNotice(first.orderId,4);await clock.addNotice(second.orderId,4);
- await clock.addReminder(first.customerId,[first.orderId,second.orderId],'E1',2);
+ const first=await readyInvoiceOrder('Stufe zwei zuerst'),second=count===2?await readyInvoiceOrder('Stufe zwei danach','pickup',false,first.customerId):undefined;
+ const orders=[first,...(second?[second]:[])],orderIds=orders.map(row=>row.orderId);
+ expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:first.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertigmeldung',expectedInvoiceIds:orders.map(row=>row.invoice.invoiceId),attachment:{kind:'INVOICE',documentId:first.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ for(const order of orders)await clock.addNotice(order.orderId,4);
+ await clock.addReminder(first.customerId,orderIds,'E1',2);
  expect(await configure()).toMatchObject({code:'OK'});
- const next=await proposal(second.orderId);expect(next).toMatchObject({stage:'E2',state:'DUE'});if(!next.due)throw Error('COLLECTION_SECOND_DUE');
+ const next=await proposal(first.orderId);expect(next).toMatchObject({stage:'E2',state:'DUE'});if(!next.due)throw Error('COLLECTION_SECOND_DUE');
  const operator=await createFixture(['mails','auftraege','geld'],'buero');
  const secondInput={targetType:'CUSTOMER' as const,targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST E2',body:'TEST zweite Erinnerung',collectionReminder:{stage:'E2' as const,handover:'pickup' as const,dueDate:next.due}};
  const contenders=[secondInput,{...secondInput,clientRequestId:randomUUID()}];
  const concurrent=await Promise.all(contenders.map(request=>withSession(operator,()=>sendCustomerMailAction(request))));
  expect(concurrent.filter(result=>result.code==='OK')).toHaveLength(1);expect(concurrent.filter(result=>result.code==='CONFLICT')).toHaveLength(1);
  const winner=contenders[concurrent.findIndex(result=>result.code==='OK')];
+ await assertActualCustomerCopy(winner.clientRequestId,count);
  expect(await proposal(first.orderId)).toMatchObject({stage:'E3',...await clock.readSentFollowup(winner.clientRequestId,0)});expect(bodies).toHaveLength(2);
  expect(await withSession(operator,()=>sendCustomerMailAction(structuredClone(winner)))).toMatchObject({code:'OK',data:{replayed:true}});expect(bodies).toHaveLength(2);
- const numbers=await sql`SELECT order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${first.orderId},${second.orderId})`;for(const row of numbers)expect(bodies[1]).toContain(row.order_number);
+ const numbers=await sql`SELECT order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=ANY(${orderIds}::text[])`;for(const row of numbers)expect(bodies[1]).toContain(row.order_number);
  expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${winner.clientRequestId}::uuid`).toEqual([{user_id:operator.actorId}]);
 });
 
@@ -139,6 +153,7 @@ it.each([false,true])('S02 reminder reconciles its original from Sent Items with
  expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'OK',data:{replayed:true}});
  expect(sends).toBe(2);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${requestId}::uuid`).toHaveLength(1);
+ await assertActualCustomerCopy(requestId,1);
  expect(await proposal(order.orderId)).toMatchObject({stage:'E2',...await clock.readSentFollowup(requestId,0)});
 },120000);
 
