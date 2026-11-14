@@ -87,8 +87,9 @@ export async function saveManualTracking(auth:AuthorizationSnapshot,input:unknow
    &&prior[0].payload.receipt.trackingNumber===value.trackingNumber&&prior[0].payload.receipt.actorId===auth.userId
    ?{code:'OK' as const,receipt:prior[0].payload.receipt,replayed:true}:error('CONFLICT','TRACKING_KEY_CONFLICT');
   const settings=await ports.readSettings(tx,auth.tenantId);if(!settings)return error('VALIDATION_ERROR','SHIPPING_SETTINGS_MISSING');
-  if(!settings.numberPattern.trim())return error('VALIDATION_ERROR','TRACKING_PATTERN_MISSING');
-  let matches:boolean;try{matches=new RegExp(settings.numberPattern).test(value.trackingNumber);}catch{return error('VALIDATION_ERROR','TRACKING_PATTERN_INVALID');}
+  // A10-3b: an empty configured format disables only the format check.
+  // The nonempty-number, source, actor and parcel checks remain mandatory.
+  let matches:boolean;try{matches=!settings.numberPattern.trim()||new RegExp(settings.numberPattern).test(value.trackingNumber);}catch{return error('VALIDATION_ERROR','TRACKING_PATTERN_INVALID');}
   if(!matches&&!value.allowFormatMismatch)return error('VALIDATION_ERROR','TRACKING_FORMAT_CONFIRMATION_REQUIRED');
   const unlocked=await readOrder(tx,auth,value.orderId);if(!unlocked)return error('NOT_FOUND','ORDER_NOT_FOUND');
   await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${auth.tenantId},${unlocked.customer_id})`);

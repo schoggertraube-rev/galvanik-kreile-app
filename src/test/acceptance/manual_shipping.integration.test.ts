@@ -9,6 +9,30 @@ import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 const DATABASE_URL=process.env.DATABASE_URL,EXPECTED_DATABASE_URL=process.env.H18_EXPECTED_DATABASE_URL;
 if(!DATABASE_URL||DATABASE_URL!==EXPECTED_DATABASE_URL||new URL(DATABASE_URL).hostname!=='127.0.0.1')throw Error('MANUAL_SHIPPING_LOOPBACK_REPLAY_REQUIRED');
 
+it('A10-3b empty tracking format accepts a real nonempty number and retains the original across reload and actor-bound retry',async()=>{
+ const order=await readyInvoiceOrder('TEST S10 freies Nummernformat','shipping');
+ const {readShippingSettingsAction,saveShippingSettingsAction}=await import('@/app/actions/settings.actions');
+ const settings=await withSession(full,()=>readShippingSettingsAction());
+ if(settings.code!=='OK')throw Error('TEST_S10_SETTINGS:'+settings.code);
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:'TEST S10 Paket',numberPattern:'',numberHint:'',trackingUrl:null,expectedUpdatedAt:settings.settings.updatedAt}))).toMatchObject({code:'OK'});
+ const {getManualShippingAction,saveManualTrackingAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const login=await createFixture(['auftraege'],'werkstatt');
+ const input={orderId:order.orderId,shipmentId:randomUUID(),expectedUpdatedAt:null,trackingNumber:'TEST / frei 42',allowFormatMismatch:false,reason:null,clientEventId:randomUUID()};
+ const saved=await withSession(login,()=>saveManualTrackingAction(input));
+ expect(saved).toMatchObject({code:'OK',replayed:false,receipt:{trackingNumber:input.trackingNumber,actorId:login.actorId,formatOverride:false}});
+ if(saved.code!=='OK')throw Error('TEST_S10_TRACKING:'+saved.code);
+ expect(await withSession(login,()=>getManualShippingAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{shipments:[{id:input.shipmentId,trackingNumber:input.trackingNumber,status:'created'}]}});
+ expect(await withSession(login,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'fertig',version:order.version}}});
+ expect(await withSession(login,()=>saveManualTrackingAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:saved.receipt.eventId}});
+ const other=await createFixture(['auftraege'],'werkstatt');
+ expect(await withSession(other,()=>saveManualTrackingAction(structuredClone(input)))).toMatchObject({code:'CONFLICT',reason:'TRACKING_KEY_CONFLICT'});
+ const empty={...input,shipmentId:randomUUID(),trackingNumber:'',clientEventId:randomUUID()};
+ expect(await withSession(login,()=>saveManualTrackingAction(empty))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.shipments WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid AND event_type='SHIPMENT_MANUAL_TRACKING_SET_V1'`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${empty.clientEventId}::uuid`).toEqual([{n:0}]);
+});
+
 it('V13–V16 actual manual tracking keeps shipment, actor and history across reads/retries; rejected changes write nothing',async()=>{
  const order=await readyInvoiceOrder('V13-Manuell','shipping');
  const {readShippingSettingsAction,saveShippingSettingsAction}=await import('@/app/actions/settings.actions');
