@@ -7,6 +7,7 @@ import {
   canReadPaymentSummary,
   mapOrderPaymentStateRow,
   mapPaymentSummaryRow,
+  readOrderPaymentSummaries,
   overdueInvoiceCondition,
   type OrderPaymentState,
   type OrderPaymentStateRow,
@@ -16,6 +17,7 @@ import {
 import { withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type {CustomerCreditResult,CustomerCreditApplicationRead} from '@/modules/accounting/public';
 import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
+import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 
 export type PaymentSummaryReadResult =
   | { code: "OK"; data: PaymentSummary[] }
@@ -107,6 +109,21 @@ export async function getPaymentState(
       if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
       if (!Array.isArray(rows[0].customer_overdue_invoice_ids) || rows[0].customer_overdue_invoice_ids.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id))) throw new Error("ORDER_CUSTOMER_DEBT_STATE_INVALID");
       const mapped = mapOrderPaymentStateRow(rows[0], authorization);
+      const additionalPayments:NonNullable<OrderPaymentState['additionalPayments']>=[];
+      if(Number(rows[0].active_invoice_count)>1){
+        const payments=await readOrderPaymentSummaries(tx,authorization.tenantId,mapped.orderId);
+        if(payments.length!==Number(rows[0].active_invoice_count)||!mapped.payment)throw Error('ORDER_ADDITIONAL_PAYMENTS_SOURCE_MISSING');
+        const checked=payments.map(row=>mapPaymentSummaryRow(row,authorization));
+        if(checked.filter(payment=>payment.invoiceId===mapped.payment!.invoiceId).length!==1)throw Error('ORDER_MAIN_PAYMENT_SOURCE_MISSING');
+        for(const payment of checked){
+          if(payment.invoiceId===mapped.payment.invoiceId)continue; // known main, projected above
+          const source=payments.filter(row=>row.invoice_id===payment.invoiceId);
+          if(source.length!==1||source[0].belegart!=='versandkosten'||!source[0].ursprung_rechnung_id
+            ||!source[0].ursprung_rechnung_nummer)throw Error('ORDER_ADDITIONAL_INVOICE_ORIGIN_MISSING');
+          additionalPayments.push({...payment,belegart:'versandkosten',ursprungRechnungId:source[0].ursprung_rechnung_id,
+            ursprungRechnungNummer:source[0].ursprung_rechnung_nummer,label:SHIPPING_FEE_COPY.relatedInvoice(source[0].ursprung_rechnung_nummer)});
+        }
+      }
       const complaint=await readOpenOrderComplaint(tx,authorization.tenantId,mapped.orderId);
       let creditApplication:CustomerCreditApplicationRead|undefined;
       if(readCredit){
@@ -117,7 +134,7 @@ export async function getPaymentState(
           return {code:'OK' as const,credit:source.credit,proposal:payment&&amount>0?{label:CUSTOMER_CREDIT_COPY.applyLabel(new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(amount/100),payment.invoiceNumber),command:'credit.apply' as const,input:{invoiceId:payment.invoiceId,amount,expectedVersion:payment.paymentVersion,expectedOpenAmountCents:payment.openAmountCents,expectedCreditVersion:source.credit.version}}:null};
         });}catch{creditApplication={code:'SOURCE_INCOMPLETE'};}
       }
-      return { ...mapped,...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].payment_mode!=="keiner"&&rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
+      return { ...mapped,...(additionalPayments.length?{additionalPayments}:{}),...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].payment_mode!=="keiner"&&rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
     });
     return data
       ? { code: "OK", data }

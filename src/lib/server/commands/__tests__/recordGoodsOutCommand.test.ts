@@ -76,6 +76,7 @@ const pickedUpOrder = {
 };
 
 const invoice = {
+  belegart:'auftrag',
   id: INVOICE,
   tenant_id: KREILE_TENANT_SLUG,
   order_id: ORDER,

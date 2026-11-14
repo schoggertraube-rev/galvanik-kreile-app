@@ -61,9 +61,17 @@ export type CreateInvoiceInput = {
     version: number;
     type: "ausgabe_ohne_zahlung" | "zahlungsziel";
   };
+  shippingCosts?: {
+    invoiceId: string;
+    expectedVersion: number;
+    scope: string;
+    expectedFeeCents: number;
+  };
 };
 
 type ImmutableInvoiceReceiptBase = {
+  belegart?: 'versandkosten';
+  ursprungRechnungId?: string;
   invoiceId: string;
   invoiceNumber: string;
   orderId: string;
@@ -211,6 +219,9 @@ type SourceRow = {
 };
 
 type ReceiptRow = {
+  belegart: 'auftrag'|'versandkosten';
+  ursprung_rechnung_id: string|null;
+  shipping_costs_intent: unknown;
   event_id: string;
   tenant_id: string;
   order_id: string;
@@ -285,9 +296,10 @@ function isValidInput(input: unknown): input is CreateInvoiceInput {
   const hasAgreement = actual.length === expectedWithAgreement.length
     && actual.every((key, index) => key === expectedWithAgreement[index]);
   const agreement = value.agreement;
+  const hasShipping = actual.join(',') === [...expected,'shippingCosts'].sort().join(',');
   return (actual.length === expected.length
       && actual.every((key, index) => key === expected[index])
-      || hasAgreement)
+      || hasAgreement || hasShipping)
     && typeof value.orderId === "string"
     && value.orderId.trim() === value.orderId
     && value.orderId.length > 0
@@ -297,6 +309,7 @@ function isValidInput(input: unknown): input is CreateInvoiceInput {
     && typeof value.expectedVersion === "number"
     && Number.isSafeInteger(value.expectedVersion)
     && value.expectedVersion > 0
+    && (!hasShipping || validShippingCosts(value.shippingCosts,value.orderId as string))
     && (!hasAgreement || (
       agreement !== null
       && typeof agreement === "object"
@@ -310,6 +323,15 @@ function isValidInput(input: unknown): input is CreateInvoiceInput {
       && ((agreement as Record<string, unknown>).type === "ausgabe_ohne_zahlung"
         || (agreement as Record<string, unknown>).type === "zahlungsziel")
     ));
+}
+
+function validShippingCosts(value:unknown,orderId:string):value is NonNullable<CreateInvoiceInput['shippingCosts']>{
+  if(!plainObject(value)||Object.keys(value).sort().join(',')!=='expectedFeeCents,expectedVersion,invoiceId,scope')return false;
+  return typeof value.invoiceId==='string'&&UUID_PATTERN.test(value.invoiceId)
+    &&typeof value.expectedVersion==='number'&&Number.isSafeInteger(value.expectedVersion)&&value.expectedVersion>0
+    &&typeof value.expectedFeeCents==='number'&&Number.isSafeInteger(value.expectedFeeCents)&&value.expectedFeeCents>=0
+    &&typeof value.scope==='string'&&(value.scope==='order:'+orderId
+      ||value.scope.startsWith('sendung:')&&UUID_PATTERN.test(value.scope.slice(8))&&value.scope===value.scope.toLowerCase());
 }
 
 function isValidCancelInput(input: unknown): input is CancelInvoiceInput {
@@ -622,24 +644,27 @@ function prepareInvoiceContent(
   source: SourceRow,
   order: LockedOrder,
   shippingFees:Array<{shipmentGroupId:string;amountCents:number;name:string}>,
+  shippingOnly=false,
 ): PreparedInvoiceContent {
   const customerCountry=masterDataText(source.customer_country,"INVOICE_CUSTOMER_COUNTRY_INVALID");
   const customerVatId=optionalText(source.customer_vat_id);
   const reverseCharge=INVOICE_EU_OUTSIDE_DE.has(customerCountry)&&customerVatId!==null;
   const vatSource={reverseCharge,companyRate:source.invoice_vat_rate_basis_points};
-  const baseLines = parseBaseLines(source.base_lines,vatSource);
-  const extraWorkLines = parseExtraWorkLines(source.extra_work_lines,vatSource);
+  // PL14Nov05:45: this document bills only the selected real shipping source.
+  // Zero goods is known from its explicit kind, never a missing-price fallback.
+  const baseLines = shippingOnly?[]:parseBaseLines(source.base_lines,vatSource);
+  const extraWorkLines = shippingOnly?[]:parseExtraWorkLines(source.extra_work_lines,vatSource);
   const shippingLines:ImmutableInvoiceShippingLine[]=shippingFees.map(fee=>({type:'SHIPPING',shipmentGroupId:fee.shipmentGroupId,name:fee.name,amountCents:fee.amountCents,vat_rate_basis_points:invoiceLineVat(null,fee.name,reverseCharge,source.invoice_vat_rate_basis_points)}));
   if (
-    baseLines.length !== toSafeInteger(source.base_line_count, "INVOICE_BASE_LINE_COUNT_INVALID")
-    || extraWorkLines.length !== toSafeInteger(source.extra_work_line_count, "INVOICE_EXTRA_WORK_LINE_COUNT_INVALID")
+    !shippingOnly && (baseLines.length !== toSafeInteger(source.base_line_count, "INVOICE_BASE_LINE_COUNT_INVALID")
+    || extraWorkLines.length !== toSafeInteger(source.extra_work_line_count, "INVOICE_EXTRA_WORK_LINE_COUNT_INVALID"))
   ) throw new Error("INVOICE_LINE_COUNT_MISMATCH");
-  if (baseLines.length < 1) {
+  if ((!shippingOnly && baseLines.length < 1)||(shippingOnly&&shippingLines.length<1)) {
     throw new InvoiceMasterDataError("INVOICE_BASE_LINES_MISSING");
   }
 
-  const baseNetAmountCents = toSafeInteger(source.base_net_amount_cents, "INVOICE_BASE_AMOUNT_INVALID");
-  const extraWorkNetAmountCents = toSafeInteger(source.extra_work_net_amount_cents, "INVOICE_EXTRA_WORK_AMOUNT_TOTAL_INVALID");
+  const baseNetAmountCents = shippingOnly?0:toSafeInteger(source.base_net_amount_cents, "INVOICE_BASE_AMOUNT_INVALID");
+  const extraWorkNetAmountCents = shippingOnly?0:toSafeInteger(source.extra_work_net_amount_cents, "INVOICE_EXTRA_WORK_AMOUNT_TOTAL_INVALID");
   if (
     baseLines.reduce((sum, line) => sum + line.lineNetAmountCents, 0) !== baseNetAmountCents
     || extraWorkLines.reduce((sum, line) => sum + line.amountCents, 0) !== extraWorkNetAmountCents
@@ -702,7 +727,16 @@ function prepareInvoiceContent(
   };
 }
 
-function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string,readVat:InvoiceVatReader): ImmutableInvoiceReceipt {
+export function mapInvoiceIssueReceipt(row: ReceiptRow, tenantId: string, actorId: string,readVat:InvoiceVatReader): ImmutableInvoiceReceipt {
+  const kindValid=row.belegart==='auftrag'
+    ?row.ursprung_rechnung_id===null&&row.shipping_costs_intent===null
+    :row.belegart==='versandkosten'&&typeof row.ursprung_rechnung_id==='string'&&UUID_PATTERN.test(row.ursprung_rechnung_id)
+      &&validShippingCosts(row.shipping_costs_intent,row.order_id)
+      &&row.shipping_costs_intent.invoiceId===row.ursprung_rechnung_id
+      &&plainObject(row.snapshot)&&Array.isArray(row.snapshot.lines)&&row.snapshot.lines.length>0
+      &&row.snapshot.lines.every(line=>plainObject(line)&&line.type==='SHIPPING')
+      &&row.shipping_costs_intent.expectedFeeCents===toSafeInteger(row.net_amount_cents,'INVOICE_SHIPPING_NET_INVALID');
+  if(!kindValid)throw Error('INVOICE_RECEIPT_KIND_INVALID');
   const orderVersion = toSafeInteger(row.order_version, "INVOICE_RECEIPT_ORDER_VERSION_INVALID");
   const intentExpectedVersion = toSafeInteger(
     row.intent_expected_version,
@@ -729,6 +763,7 @@ function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string,readVat:I
     row.integrity_ok !== true
     || row.tenant_id !== tenantId
     || row.actor_id !== actorId
+    || !UUID_PATTERN.test(row.actor_id)
     || (row.event_type !== EVENT_TYPE && row.event_type !== EVENT_TYPE_V2)
     || (row.event_type === EVENT_TYPE ? eventSchemaVersion !== EVENT_SCHEMA_VERSION : eventSchemaVersion !== 2)
     || aggregateVersion !== 1
@@ -768,6 +803,7 @@ function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string,readVat:I
     clientEventId: row.client_event_id,
     correlationId: row.correlation_id,
     aggregateVersion: 1,
+    ...(row.belegart==='versandkosten'?{belegart:'versandkosten' as const,ursprungRechnungId:requiredText(row.ursprung_rechnung_id,'INVOICE_SHIPPING_ORIGIN_MISSING')} : {}),
   };
   return row.event_type === EVENT_TYPE_V2
     ? { ...receipt, eventSchemaVersion: 2, invoiceSourceState: "after_goods_out" }
@@ -834,17 +870,25 @@ function mapCancellationReceipt(
   };
 }
 
-function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInvoiceInput): boolean {
+function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInvoiceInput, row:ReceiptRow): boolean {
   return receipt.orderId === input.orderId
-    && receipt.orderVersion === input.expectedVersion;
+    && receipt.orderVersion === input.expectedVersion
+    && (input.shippingCosts===undefined
+      ?row.belegart==='auftrag'&&row.ursprung_rechnung_id===null&&row.shipping_costs_intent===null
+      :row.belegart==='versandkosten'&&row.ursprung_rechnung_id===input.shippingCosts.invoiceId
+        &&validShippingCosts(row.shipping_costs_intent,input.orderId)
+        &&row.shipping_costs_intent.invoiceId===input.shippingCosts.invoiceId
+        &&row.shipping_costs_intent.expectedVersion===input.shippingCosts.expectedVersion
+        &&row.shipping_costs_intent.scope===input.shippingCosts.scope
+        &&row.shipping_costs_intent.expectedFeeCents===input.shippingCosts.expectedFeeCents);
 }
 
-async function readCreateInvoiceReceipts(
+export async function readCreateInvoiceReceipts(
   tx: PrivilegedTenantTransaction,
   clientEventId: string,
 ): Promise<ReceiptRow[]> {
   return tx.execute<ReceiptRow>(sql`
-    SELECT *
+    WITH receipt AS (SELECT *
     FROM private.v_invoice_receipt_v1
     WHERE client_event_id = ${clientEventId}
       AND event_type = ${EVENT_TYPE}
@@ -853,6 +897,10 @@ async function readCreateInvoiceReceipts(
     FROM private.v_invoice_created_receipt_v2
     WHERE client_event_id = ${clientEventId}
       AND event_type = ${EVENT_TYPE_V2}
+    ) SELECT receipt.*,invoice.belegart,invoice.ursprung_rechnung_id::text,
+      event.payload->'shippingCosts' AS shipping_costs_intent
+    FROM receipt JOIN public.invoices invoice ON invoice.tenant_id=receipt.tenant_id AND invoice.id=receipt.invoice_id
+    JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id
     LIMIT 2
   `);
 }
@@ -969,7 +1017,7 @@ async function readShippingInvoiceLines(tx:PrivilegedTenantTransaction,tenantId:
       if(matching.length===1){
         const receipts=await readCreateInvoiceReceipts(tx,original.client_event_id);
         if(receipts.length!==1)throw Error('INVOICE_SHIPPING_ORIGINAL_RECEIPT_MISSING');
-        const receipt=mapReceipt(receipts[0],tenantId,original.issued_by,readVat);
+        const receipt=mapInvoiceIssueReceipt(receipts[0],tenantId,original.issued_by,readVat);
         if(receipt.invoiceId!==original.id||receipt.invoiceNumber!==original.invoice_number)throw Error('INVOICE_SHIPPING_ORIGINAL_RECEIPT_INVALID');
         charged.push({invoiceNumber:receipt.invoiceNumber});
       }
@@ -1024,8 +1072,8 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         // Validate the complete persisted original before comparing the caller.
         // A valid receipt owned by another actor is a key conflict, not an outage;
         // damaged receipts still fail the unchanged integrity validator.
-        const receipt = mapReceipt(replayRows[0], tenantId, replayRows[0].actor_id,requireVatReader(readVat));
-        return receipt.issuedBy === actorId && receiptMatchesIntent(receipt, input)
+        const receipt = mapInvoiceIssueReceipt(replayRows[0], tenantId, replayRows[0].actor_id,requireVatReader(readVat));
+        return receipt.issuedBy === actorId && receiptMatchesIntent(receipt, input,replayRows[0])
           ? { code: "OK", receipt, replayed: true }
           : { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
       }
@@ -1109,10 +1157,30 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         || source.current_order_version !== order.version
       ) throw new Error("INVOICE_SOURCE_INTEGRITY_INVALID");
 
-      if (!source.no_active_invoice) {
+      if (!source.no_active_invoice && input.shippingCosts===undefined) {
         return { code: "CONFLICT", message: "Für diesen Auftrag besteht bereits eine aktive Rechnung." };
       }
-      const commercial=source.has_quote?await readOrderCommercialQuote(tx,tenantId,order.id):null;
+      // The additional document references a fully qualified released original;
+      // it never changes or rebinds that document's goods prices.
+      let originalInvoiceNumber:string|undefined;
+      if(input.shippingCosts){
+        const originals=await tx.execute<LockedInvoice&{client_event_id:string;issued_by:string;belegart:string}>(sql`
+          SELECT * FROM public.invoices WHERE tenant_id=${tenantId} AND id=${input.shippingCosts.invoiceId}::uuid
+            AND contract_version=1 FOR UPDATE`);
+        const original=originals[0];
+        if(originals.length!==1||!original||original.order_id!==order.id||original.belegart!=='auftrag'
+          ||original.status!=='issued'||original.aggregate_version!==input.shippingCosts.expectedVersion){
+          return {code:'CONFLICT',message:SHIPPING_FEE_COPY.changed};
+        }
+        if(!original.pdf_content||createHash('sha256').update(original.pdf_content).digest('hex')!==original.pdf_sha256)throw Error('INVOICE_SHIPPING_ORIGIN_PDF_INVALID');
+        parseStoredSnapshot(original.snapshot,original,requireVatReader(readVat));
+        const receipts=await readCreateInvoiceReceipts(tx,original.client_event_id);
+        if(receipts.length!==1)throw Error('INVOICE_SHIPPING_ORIGIN_RECEIPT_MISSING');
+        const originalReceipt=mapInvoiceIssueReceipt(receipts[0],tenantId,original.issued_by,requireVatReader(readVat));
+        if(originalReceipt.invoiceId!==original.id)throw Error('INVOICE_SHIPPING_ORIGIN_RECEIPT_INVALID');
+        originalInvoiceNumber=originalReceipt.invoiceNumber;
+      }
+      const commercial=source.has_quote&&input.shippingCosts===undefined?await readOrderCommercialQuote(tx,tenantId,order.id):null;
       if(commercial){
         if(!Array.isArray(source.base_lines)||source.base_lines.some(line=>!plainObject(line)||typeof line.itemId!=='string'))throw Error('INVOICE_QUOTE_BASE_SOURCE_INVALID');
         const awardedItems=new Set(commercial.positions.map(row=>row.itemId));
@@ -1134,6 +1202,8 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         source.base_line_count=commercial.positions.length+additional.length;
         if(checkedAdditional!==null)source.base_net_amount_cents=commercial.totalNetCents+checkedAdditional.reduce((sum,line)=>sum+line.lineNetAmountCents,0);
         source.base_prices_complete=checkedAdditional!==null&&source.base_line_count>0&&commercial.positions.every(row=>Number.isSafeInteger(row.lineTotalCents)&&row.lineTotalCents>=0);
+      }
+      if(commercial||input.shippingCosts){
         // Recompose the existing structural guards with the canonical quote price proof.
         // The legacy SQL projection includes item prices in integrity_ok, which are
         // deliberately absent for a quote-backed intake. No structural guard is waived.
@@ -1142,7 +1212,8 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
             (SELECT count(*)=1 AND bool_and(receipt.integrity_ok) FROM private.v_goods_out_receipt_v2 receipt WHERE receipt.tenant_id=${tenantId} AND receipt.order_id=${order.id} AND receipt.order_version=${order.version}) AS handed_over
           FROM private.v_order_freeze_state_v1 frozen_state WHERE frozen_state.tenant_id=${tenantId} AND frozen_state.order_id=${order.id}
         `);
-        const structural=proofs.length===1&&proofs[0].frozen===true&&source.seller_config_complete&&source.customer_config_complete&&source.base_prices_complete;
+        const structural=proofs.length===1&&proofs[0].frozen===true&&source.seller_config_complete&&source.customer_config_complete
+          &&(input.shippingCosts!==undefined||source.base_prices_complete);
         source.post_goods_out_invoice_eligible=structural&&proofs[0].handed_over===true&&order.payment_mode==='rechnung'&&order.station==='abgeholt'&&order.status==='abgeholt';
         source.effective_integrity_ok=structural&&(order.station==='fertig'||source.post_goods_out_invoice_eligible);
       }
@@ -1151,7 +1222,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         || (afterGoodsOut && !source.post_goods_out_invoice_eligible)
         || !source.seller_config_complete
         || !source.customer_config_complete
-        || !source.base_prices_complete
+        || (input.shippingCosts===undefined&&!source.base_prices_complete)
       ) {
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
@@ -1181,7 +1252,15 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
           if(!settings||settings.shippingFeeCents===undefined)throw Error('INVOICE_SHIPPING_SETTINGS_SOURCE_MISSING');
           shippingFees=await readShippingInvoiceLines(tx,tenantId,order,settings.shippingFeeCents,requireVatReader(readVat));
         }
-        content = prepareInvoiceContent(source, order,shippingFees);
+        if(input.shippingCosts){
+          const intent=input.shippingCosts;
+          shippingFees=shippingFees.filter(line=>intent.scope.startsWith('sendung:')?line.shipmentGroupId===intent.scope:!line.shipmentGroupId.startsWith('sendung:'));
+          if(shippingFees.length===0||!shippingFees.some(line=>line.name===SHIPPING_FEE_COPY.line)
+            ||shippingFees.reduce((sum,line)=>sum+line.amountCents,0)!==intent.expectedFeeCents){
+            return {code:'CONFLICT',message:SHIPPING_FEE_COPY.changed};
+          }
+        }
+        content = prepareInvoiceContent(source, order,shippingFees,input.shippingCosts!==undefined);
       } catch (error) {
         if (error instanceof InvoiceVatRateError) return {code:"VALIDATION_ERROR",message:error.missingCompany?INVOICE_VAT_COPY.missingCompanyRate(error.part):INVOICE_VAT_COPY.missingRate(error.part)};
         if (error instanceof InvoiceMasterDataError) {
@@ -1245,7 +1324,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       let pdfBuffer: Buffer;
       try {
         pdfBuffer = await renderToBuffer(
-          createImmutableInvoicePdfDocument({ invoiceNumber, dueDate, snapshot,vat:requireVatReader(readVat)(snapshot) }),
+          createImmutableInvoicePdfDocument({ invoiceNumber, dueDate, snapshot,vat:requireVatReader(readVat)(snapshot),originalInvoiceNumber }),
         );
       } catch {
         throw new Error("INVOICE_PDF_RENDER_FAILED");
@@ -1272,6 +1351,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         grossAmountCents,
         pdfSha256,
         invoiceVersion: 1,
+        ...(input.shippingCosts?{shippingCosts:input.shippingCosts}:{}),
         ...(afterGoodsOut ? { invoiceSourceState: "after_goods_out" as const } : {}),
       };
 
@@ -1305,7 +1385,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
           payment_contract_version, payment_mode, payment_status,
           payment_open_amount_cents, payment_paid_amount_cents, payment_currency,
           payment_method, payment_paid_at, payment_receipt_id, payment_event_id,
-          payment_correlation_id, payment_version
+          payment_correlation_id, payment_version,belegart,ursprung_rechnung_id
         ) VALUES (
           ${invoiceId}::uuid, ${tenantId}, ${order.customer_id}, ${order.id},
           ${invoiceNumber}, (${grossAmountCents}::numeric / 100), 'issued', ${dueDate}::date,
@@ -1316,7 +1396,8 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
           ${event.event_id}, ${issuedAtIso}::timestamptz, ${actorId}::uuid,
           ${pdfRef}, ${pdfSha256}, ${pdfBuffer},
           ${PAYMENT_CONTRACT_VERSION}, ${order.payment_mode}, 'offen',
-          ${grossAmountCents}, 0, 'EUR', NULL, NULL, NULL, NULL, NULL, 0
+          ${grossAmountCents}, 0, 'EUR', NULL, NULL, NULL, NULL, NULL, 0,
+          ${input.shippingCosts?'versandkosten':'auftrag'},${input.shippingCosts?.invoiceId??null}::uuid
         )
         RETURNING id
       `);
@@ -1335,9 +1416,9 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
 
       const receiptRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
       if (receiptRows.length !== 1 || !receiptRows[0]) throw new Error("INVOICE_RECEIPT_MISSING");
-      const receipt = mapReceipt(receiptRows[0], tenantId, actorId,requireVatReader(readVat));
+      const receipt = mapInvoiceIssueReceipt(receiptRows[0], tenantId, actorId,requireVatReader(readVat));
       if (
-        !receiptMatchesIntent(receipt, input)
+        !receiptMatchesIntent(receipt, input,receiptRows[0])
         || receipt.invoiceId !== invoiceId
         || receipt.invoiceNumber !== invoiceNumber
         || receipt.netAmountCents !== netAmountCents
@@ -1359,6 +1440,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       : undefined;
     console.error("INVOICE_CREATE_UNAVAILABLE", {
       errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage:error instanceof Error?error.message:'UNKNOWN_INVOICE_ERROR',
       databaseCode: typeof cause?.code === "string" ? cause.code : null,
       constraint: typeof cause?.constraint_name === "string" ? cause.constraint_name : null,
     });

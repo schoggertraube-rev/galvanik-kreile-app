@@ -1,6 +1,7 @@
 import {customerCountryLabel} from '@/modules/customers/public';
 import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
+import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import React, { type ReactElement } from "react";
 import { Document, Page, StyleSheet, Text, View, type DocumentProps } from "@react-pdf/renderer";
 
@@ -79,6 +80,7 @@ export type ImmutableInvoiceSnapshot = {
 };
 
 export type ImmutableInvoiceDocumentProps = {
+  originalInvoiceNumber?:string;
   vat:InvoiceVatRead;
   invoiceNumber: string;
   dueDate: string;
@@ -401,7 +403,7 @@ function lineTotalAmount(line: ImmutableInvoiceLine): number {
   return line.type === "BASE" ? line.lineNetAmountCents : line.amountCents;
 }
 
-export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat }: ImmutableInvoiceDocumentProps) {
+export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat,originalInvoiceNumber }: ImmutableInvoiceDocumentProps) {
   const { seller, customer, order, lines } = snapshot;
   const totals=vat;
 
@@ -418,6 +420,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
           </View>
           <View style={styles.metaBlock}>
             <Text style={styles.documentTitle}>Rechnung</Text>
+            {originalInvoiceNumber&&<Text style={styles.metaLine}>{SHIPPING_FEE_COPY.relatedInvoice(originalInvoiceNumber)}</Text>}
             <Text style={styles.metaLine}>Rechnungsnummer: {invoiceNumber}</Text>
             <Text style={styles.metaLine}>Rechnungsdatum: {formatBerlinInstant(snapshot.issuedAt)}</Text>
             <Text style={styles.metaLine}>Leistungsdatum: {formatCalendarDate(snapshot.serviceDate)}</Text>

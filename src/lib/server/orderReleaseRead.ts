@@ -71,7 +71,7 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
    ORDER BY event.created_at ASC,event.id ASC LIMIT 1001`);
   if(rows.length>1000||rows.some(row=>row.proof_ok!==true||!Number.isFinite(Date.parse(row.payload.receipt.recordedAt))))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
   const order=await tx.execute<{customer_id:string;station:string;version:number;handover_mode:'pickup'|'shipping'|null;allowed:boolean;invoice_state:string;payment_allowed:boolean|null;frozen_at:string|null;freeze_id:string|null;debt_ids:string[]}>(sql`SELECT orders.customer_id,orders.station,orders.version,orders.handover_mode,private.order_release_allowed_v1(orders.tenant_id,orders.id) AS allowed,
-   state.invoice_state,state.payment_goods_out_allowed AS payment_allowed,freeze_state.frozen_at::text,freeze_state.freeze_id::text,
+   state.invoice_state,state.all_invoice_payments_allowed AS payment_allowed,freeze_state.frozen_at::text,freeze_state.freeze_id::text,
    ARRAY(SELECT invoice.id::text FROM public.invoices invoice WHERE invoice.tenant_id=orders.tenant_id AND invoice.customer_id=orders.customer_id AND ${overdueInvoiceCondition()} ORDER BY invoice.id) AS debt_ids
    FROM public.orders orders JOIN private.v_goods_out_ui_state_v1 state ON state.tenant_id=orders.tenant_id AND state.order_id=orders.id AND state.integrity_ok
    LEFT JOIN private.v_order_frozen_receipts_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok

@@ -12,10 +12,10 @@ import {
   isOrderPaymentMode,
   isPaymentMode,
   mapPaymentSummaryRow,
+  readOrderPaymentSummaries,
   overdueInvoiceCondition,
   type OrderPaymentMode,
   type PaymentStatus,
-  type PaymentSummaryRow,
 } from "@/lib/server/paymentContract";
 import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
@@ -125,6 +125,7 @@ type ReworkComplaint = {
 };
 
 type LockedInvoice = {
+  belegart:'auftrag'|'versandkosten';
   id: string;
   tenant_id: string;
   order_id: string;
@@ -290,34 +291,14 @@ async function readActiveInvoice(
   orderId: string,
 ): Promise<LockedInvoice[]> {
   return tx.execute<LockedInvoice>(sql`
-    SELECT id::text, tenant_id, order_id, status, contract_version, payment_contract_version
+    SELECT id::text, tenant_id, order_id, status, contract_version, payment_contract_version,belegart
     FROM public.invoices
     WHERE tenant_id = ${tenantId}
       AND order_id = ${orderId}
       AND contract_version = 1
       AND status = 'issued'
-    LIMIT 2
+    ORDER BY id
     FOR UPDATE
-  `);
-}
-
-async function readPaymentSummary(
-  tx: PrivilegedTenantTransaction,
-  tenantId: string,
-  orderId: string,
-): Promise<PaymentSummaryRow[]> {
-  return tx.execute<PaymentSummaryRow>(sql`
-    SELECT
-      invoice_id::text, tenant_id, order_id, order_number, invoice_number,
-      total_amount_cents, payment_contract_version, payment_mode, payment_status,
-      payment_open_amount_cents, payment_paid_amount_cents, payment_currency,
-      payment_method,
-      to_char(payment_paid_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS payment_paid_at,
-      payment_receipt_id, payment_event_id, payment_correlation_id::text,
-      payment_mode_version, payment_version, goods_out_allowed, integrity_ok
-    FROM private.v_payment_summary_v1
-    WHERE tenant_id = ${tenantId} AND order_id = ${orderId}
-    LIMIT 2
   `);
 }
 
@@ -788,12 +769,22 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
       const preparation=await composition?.beforeWrite?.(tx,authorization.data);
       if(preparation)return preparation;
       const invoices = await readActiveInvoice(tx, tenantId, order.id);
-      if (invoices.length > 1) {
+      const mainInvoices=invoices.filter(invoice=>invoice.belegart==='auftrag');
+      if ((invoices.length>0&&mainInvoices.length!==1)||invoices.some(invoice=>invoice.belegart!=='auftrag'&&invoice.belegart!=='versandkosten')) {
         return { code: "CONFLICT", message: "Warenausgang erfordert eine gültige Rechnung." };
       }
-      const invoice = invoices[0];
+      const invoice = mainInvoices[0];
       const invoiceNotIssued = invoices.length === 0;
       let summary: ReturnType<typeof mapPaymentSummaryRow> | null = null;
+      const checked:ReturnType<typeof mapPaymentSummaryRow>[]=[];
+      if(invoices.length){
+        const summaryRows=await readOrderPaymentSummaries(tx,tenantId,order.id);
+        const invoiceIds=new Set(invoices.map(invoice=>invoice.id));
+        if(summaryRows.length!==invoices.length||summaryRows.some(row=>!invoiceIds.has(row.invoice_id))||new Set(summaryRows.map(row=>row.invoice_id)).size!==invoices.length){
+          return {code:'CONFLICT',message:'Zahlungsfreigabe ist nicht verfügbar.'};
+        }
+        checked.push(...summaryRows.map(row=>mapPaymentSummaryRow(row,paymentAuthorization(authorization.data))));
+      }
       if (agreement?.type === "sammelrechnung") {
         if (!invoiceNotIssued) {
           return { code: "CONFLICT", message: "Sammelrechnung darf keine Einzelrechnung enthalten." };
@@ -831,12 +822,10 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
           return { code: "CONFLICT", message: "Warenausgang erfordert eine gültige Rechnung." };
         }
 
-        const summaryRows = await readPaymentSummary(tx, tenantId, order.id);
-        if (summaryRows.length !== 1 || !summaryRows[0] || summaryRows[0].invoice_id !== invoice.id) {
-          return { code: "CONFLICT", message: "Zahlungsfreigabe ist nicht verfügbar." };
-        }
-        summary = mapPaymentSummaryRow(summaryRows[0], paymentAuthorization(authorization.data));
-        if (summary.mode !== order.payment_mode || !summary.goodsOutAllowed) {
+        const main=checked.filter(row=>row.invoiceId===invoice.id);
+        if(main.length!==1)throw Error('GOODS_OUT_MAIN_PAYMENT_MISSING');
+        summary=main[0];
+        if (checked.some(payment=>payment.mode!==order.payment_mode||!payment.goodsOutAllowed)) {
           return { code: "CONFLICT", message: "Zahlung ist für den Warenausgang noch offen." };
         }
       }

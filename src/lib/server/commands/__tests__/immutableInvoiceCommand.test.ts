@@ -64,6 +64,7 @@ const authorization = {
 };
 
 const validReceiptRow = {
+  belegart:'auftrag',ursprung_rechnung_id:null,shipping_costs_intent:null,
   event_id: EVENT,
   tenant_id: KREILE_TENANT_SLUG,
   order_id: ORDER,
