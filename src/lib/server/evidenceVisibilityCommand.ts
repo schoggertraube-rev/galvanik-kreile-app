@@ -43,8 +43,13 @@ function orderIds(row:Source):string[]{
 /** The only S11 flag setter. Original bytes and source ownership never change. */
 export async function changeEvidenceVisibility(auth:AuthorizationSnapshot,input:unknown):Promise<Result>{
  if(!valid(input))return {code:'VALIDATION_ERROR',message:copy.invalid};
- try{
-  return await withPrivilegedTenantTransaction(auth,async (tx):Promise<Result>=>{
+ try{return await withPrivilegedTenantTransaction(auth,tx=>changeEvidenceVisibilityInTransaction(tx,auth,input));}
+ catch(error){console.error('[EVIDENCE_VISIBILITY_SAVE_UNAVAILABLE]',error instanceof Error?error.message:'unknown');return {code:'UNAVAILABLE',message:copy.save};}
+}
+
+/** Shared by direct edits, upload savepoints and the existing task repair. */
+export async function changeEvidenceVisibilityInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:ChangeEvidenceVisibilityInput):Promise<Result>{
+ if(!valid(input))return {code:'VALIDATION_ERROR',message:copy.invalid};
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'evidence-visibility-request:'+auth.tenantId+':'+input.clientEventId},0))`);
    const initial=await source(tx,auth,input.evidenceKey);
    if(!initial)return {code:'NOT_FOUND',message:copy.missing};
@@ -63,7 +68,7 @@ export async function changeEvidenceVisibility(auth:AuthorizationSnapshot,input:
    const visibility=mapEvidenceVisibility(current);
    const previous=await tx.execute<{evidence_key:string;version:number;customer_visible:boolean;actor_id:string;id:string;occurred_at:Date|string}>(sql`
     SELECT evidence_key,version,customer_visible,actor_id::text,id::text,occurred_at
-    FROM private.evidence_visibility_events WHERE tenant_id=${auth.tenantId} AND client_event_id=${input.clientEventId}::uuid`);
+    FROM private.evidence_visibility_events WHERE tenant_id=${auth.tenantId} AND client_event_id=${input.clientEventId}::uuid AND record_kind='change'`);
    if(previous.length>1)throw Error('EVIDENCE_VISIBILITY_REQUEST_AMBIGUOUS');
    if(previous[0]){
     const event=previous[0];
@@ -84,9 +89,4 @@ export async function changeEvidenceVisibility(auth:AuthorizationSnapshot,input:
    const saved=mapEvidenceVisibility(readback);
    if(saved.eventId!==id||saved.actorId!==auth.userId||saved.version!==visibility.version+1||saved.customerVisible!==input.customerVisible)throw Error('EVIDENCE_VISIBILITY_READBACK_INVALID');
    return {code:'OK',data:saved,replayed:false};
-  });
- }catch(error){
-  console.error('[EVIDENCE_VISIBILITY_SAVE_UNAVAILABLE]',error instanceof Error?error.message:'unknown');
-  return {code:'UNAVAILABLE',message:copy.save};
- }
 }

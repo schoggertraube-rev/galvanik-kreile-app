@@ -10,6 +10,16 @@ import { analyzeDomainAttachment } from "@/lib/server/documentIntelligencePort";
 import { readAzureDocumentIntelligenceStatus } from "@/lib/server/azureDocumentIntelligence";
 import { readOrderIntakeOriginals } from "@/modules/eingang/server-public";
 import {changeEvidenceVisibility} from '@/lib/server/evidenceVisibilityCommand';
+import {splitUploadVisibility,applyEvidenceUploadVisibility} from '@/lib/server/evidenceVisibilityUpload';
+import type {AuthorizationSnapshot} from '@/lib/server/authorization';
+import {EVIDENCE_VISIBILITY_COPY} from '@/ui/situationCatalog';
+
+async function finishUploadedEvidenceVisibility(auth:AuthorizationSnapshot,key:string,requested:boolean|undefined){
+  const [{synchronizeEvidenceVisibilityRetryTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([
+    import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+  return applyEvidenceUploadVisibility(auth,key,requested,{synchronizeTask:(tx,actor,id)=>synchronizeEvidenceVisibilityRetryTask(tx,actor,id,
+    {effect:(writeTx,writer,effect)=>recordIntakeTaskEffect(writeTx,writer,effect,readCustomerProfile)})});
+}
 
 async function authorization() {
   try {
@@ -27,8 +37,14 @@ export async function reserveDomainAttachmentAction(input: Parameters<typeof res
 }
 
 export async function finalizeDomainAttachmentAction(input: Parameters<typeof finalizeDomainAttachment>[1]) {
+  const option=splitUploadVisibility(input);
+  if(!option.valid)return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
   const auth = await authorization();
-  return auth.ok ? finalizeDomainAttachment(auth.data, input) : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  if(!auth.ok)return {code:auth.code,message:EVIDENCE_READ_COPY.unavailable};
+  const result=await finalizeDomainAttachment(auth.data,option.base);
+  if(result.code!=='OK')return result;
+  const flag=await finishUploadedEvidenceVisibility(auth.data,'legacy-scan-upload:'+result.data.receipt.attachmentId,option.requested);
+  return flag.code==='OK'?{...result,data:{...result.data,visibilityPending:flag.visibilityPending,...(flag.visibility?{visibility:flag.visibility}:{})}}:flag;
 }
 
 export async function setEvidenceVisibilityAction(input:Parameters<typeof changeEvidenceVisibility>[1]){

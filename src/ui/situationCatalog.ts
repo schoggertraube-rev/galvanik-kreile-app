@@ -9,6 +9,7 @@ export const EVIDENCE_VISIBILITY_COPY={
  toCustomer:'Für Kunden sichtbar machen',toInternal:'Nur intern zeigen',
  customerHistory:(name:string)=>`Foto ${name} für Kunden freigegeben`,
  internalHistory:(name:string)=>`Foto ${name} auf intern gesetzt`,
+ retryTask:(name:string)=>`TODO_PL evidence.visibility.retry ${name}`,
 } as const;
 export const INVOICE_VAT_COPY={missingCompanyRate:(part:string)=>`Für ${part} fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.`,missingRate:(part:string)=>`Für ${part} fehlt der Steuersatz (19 % oder 7 %).`,groupNet:(rate:string)=>"Netto ("+rate+")",groupVat:(rate:string)=>"zzgl. USt ("+rate+")",cancelNet:(rate:string)=>"Storno netto ("+rate+")",cancelVat:(rate:string)=>"Storno USt ("+rate+")",reverseCharge:"Steuerschuldnerschaft des Leistungsempfängers",vatId:"USt-IdNr.:"} as const;
 /** PL13.11.00:14 deferred sales-stage sources. */
