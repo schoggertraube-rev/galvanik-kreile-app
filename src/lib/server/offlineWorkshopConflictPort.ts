@@ -3,21 +3,32 @@ import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {isPendingWorkshopOriginal,type PendingWorkshopOriginal} from '@/lib/offline/pendingStore';
-import {isWorkshopRejectionCode,type WorkshopRejectionCode,type WorkshopRejectionReceipt} from '@/lib/offline/workshopRejectionContract';
+import {isWorkshopRejectionCode,type WorkshopRejectionCode,type WorkshopRejectionReceipt,type WorkshopRejectionSubject} from '@/lib/offline/workshopRejectionContract';
 import {OFFLINE_RECONCILIATION_COPY as copy} from '@/ui/situationCatalog';
-import type {AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 
 type Rejection=WorkshopRejectionCode;
-type Original=Pick<PendingWorkshopOriginal,'command'|'input'|'deviceCapturedAt'>;
+type OriginalFields<T extends PendingWorkshopOriginal>=T extends PendingWorkshopOriginal?Pick<T,'command'|'input'|'deviceCapturedAt'>:never;
+type Original=OriginalFields<PendingWorkshopOriginal>;
 function identity(auth:AuthorizationSnapshot,entry:PendingWorkshopOriginal){
  if(!isPendingWorkshopOriginal(entry)||!entry.deviceCapturedAt||!Number.isFinite(Date.parse(entry.deviceCapturedAt)))throw Error('OFFLINE_WORKSHOP_ORIGINAL_INVALID');
- const original:Original={command:entry.command,input:entry.input,deviceCapturedAt:entry.deviceCapturedAt};
+ const original={command:entry.command,input:entry.input,deviceCapturedAt:entry.deviceCapturedAt} as Original;
  const intent=canonicalJson(original),bytes=createHash('sha256').update('offline-workshop:'+auth.tenantId+':'+entry.id).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
  const h=bytes.subarray(0,16).toString('hex'),id=h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
  return {id,intent,original};
 }
-type Saved={id:string;user_id:string;payload:{intent:string;rejection:Rejection;message?:string};task_id:string|null;proof_ok:boolean};
+type Saved={id:string;user_id:string;payload:{intent:string;rejection:Rejection;message?:string;subject?:WorkshopRejectionSubject;financialContext?:{currentCreditBalanceCents:number}};task_id:string|null;proof_ok:boolean};
+async function originalReference(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,original:Original){
+ if(original.command==='credit.payout')return {orderId:null,customerId:original.input.customerId,invoice:null};
+ if(original.command==='invoice.cancel'||original.command==='credit.apply'){
+  const rows=await tx.execute<{order_id:string;invoice_number:string;gross_amount_cents:number}>(sql`SELECT order_id,invoice_number,gross_amount_cents FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${original.input.invoiceId}::uuid`);
+  if(rows.length>1)throw Error('OFFLINE_FINANCIAL_SOURCE_AMBIGUOUS');
+  return {orderId:rows[0]?.order_id??null,customerId:null,invoice:rows[0]??null};
+ }
+ const rows=await tx.execute<{id:string}>(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${original.input.orderId}`);
+ return {orderId:rows[0]?.id??null,customerId:null,invoice:null};
+}
 async function previous(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string){
  return tx.execute<Saved>(sql`SELECT original.id::text,original.user_id::text,original.payload,link.payload->>'taskId' AS task_id,
   (original.event_type='OFFLINE_WORKSHOP_REJECTED_V1' AND original.status='success' AND original.event_schema_version=1
@@ -34,30 +45,41 @@ async function previous(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapsho
  * terminal evidence: a later retry cannot silently turn it into a new command.
  * Infrastructure/session failures remain in the device queue, without a task.
  */
-export async function reconcileOfflineWorkshop<T extends {code:string}>(auth:AuthorizationSnapshot,entry:PendingWorkshopOriginal,apply:()=>Promise<T>,createTask:(tx:PrivilegedTenantTransaction,eventId:string)=>Promise<string>){
+export async function reconcileOfflineWorkshop<T extends {code:string}>(auth:AuthorizationSnapshot,entry:PendingWorkshopOriginal,apply:()=>Promise<T>,createTask:(tx:PrivilegedTenantTransaction,eventId:string)=>Promise<string>,readCustomer?:(tx:PrivilegedTenantTransaction,tenantId:string,id:string)=>Promise<{name:string}|null>){
  const source=identity(auth,entry);
- const buildReceipt=(taskId:string,rejection:Rejection):Omit<WorkshopRejectionReceipt,'scope'>=>({eventId:source.id,taskId,actorId:auth.userId,clientEventId:entry.id,deviceCapturedAt:entry.deviceCapturedAt!,originalCanonical:source.intent,rejection});
+ const buildReceipt=(taskId:string,rejection:Rejection,subject?:WorkshopRejectionSubject):Omit<WorkshopRejectionReceipt,'scope'>=>({eventId:source.id,taskId,actorId:auth.userId,clientEventId:entry.id,deviceCapturedAt:entry.deviceCapturedAt!,originalCanonical:source.intent,rejection,...(subject&&hasAuthorizationArea(auth,'geld')?{subject}:{})});
  return withPrivilegedTenantTransaction(auth,async tx=>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':offline-workshop:'+entry.id},0))`);
   const prior=await previous(tx,auth,source.id);
   if(prior.length){
    if(prior.length!==1||prior[0].id!==source.id||prior[0].user_id!==auth.userId||prior[0].payload.intent!==source.intent||prior[0].proof_ok!==true||!prior[0].task_id||!isWorkshopRejectionCode(prior[0].payload.rejection))throw Error('OFFLINE_WORKSHOP_ORIGINAL_CHANGED');
-   return {code:'PRESERVED' as const,eventId:source.id,taskId:prior[0].task_id,replayed:true,message:prior[0].payload.message??copy.reason,rejectionReceipt:buildReceipt(prior[0].task_id,prior[0].payload.rejection)};
+   return {...(hasAuthorizationArea(auth,'geld')?prior[0].payload.financialContext:{}),code:'PRESERVED' as const,eventId:source.id,taskId:prior[0].task_id,replayed:true,message:prior[0].payload.message??copy.reason,rejectionReceipt:buildReceipt(prior[0].task_id,prior[0].payload.rejection,prior[0].payload.subject)};
   }
   const result=await apply();
   if(!isWorkshopRejectionCode(result.code))return result;
-  const orderId='orderId'in entry.input?entry.input.orderId:null;
-  const [order]=orderId===null?[]:await tx.execute<{id:string}>(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${orderId}`);
+  const reference=await originalReference(tx,auth,source.original);
+  let subject:WorkshopRejectionSubject|undefined;
+  if((entry.command==='invoice.cancel'||entry.command==='credit.apply')&&reference.invoice){
+   const amountCents=entry.command==='credit.apply'?entry.input.amount:Number(reference.invoice.gross_amount_cents);
+   if(!Number.isSafeInteger(amountCents)||amountCents<0)throw Error('OFFLINE_FINANCIAL_AMOUNT_INVALID');
+   subject={kind:'invoice',id:entry.input.invoiceId,label:reference.invoice.invoice_number,amountCents};
+  }
+  if(entry.command==='credit.payout'){
+   if(!readCustomer)throw Error('OFFLINE_CUSTOMER_READER_REQUIRED');
+   const customer=await readCustomer(tx,auth.tenantId,entry.input.customerId);
+   if(customer)subject={kind:'customer',id:entry.input.customerId,label:customer.name,amountCents:entry.input.amount};
+  }
   const message='message'in result&&typeof result.message==='string'?result.message:copy.reason;
+  const financialContext='currentCreditBalanceCents'in result&&typeof result.currentCreditBalanceCents==='number'&&Number.isSafeInteger(result.currentCreditBalanceCents)&&result.currentCreditBalanceCents>=0?{currentCreditBalanceCents:result.currentCreditBalanceCents}:undefined;
   const inserted=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version)
-   VALUES(${source.id}::uuid,${auth.tenantId},${order?.id??null},'OFFLINE_WORKSHOP_REJECTED_V1',${copy.reason},${JSON.stringify({quelle:'offline_abgleich',reason:copy.reason,original:source.original,intent:source.intent,rejection:result.code,message})}::jsonb,'success',${auth.userId}::uuid,${source.id}::uuid,1) RETURNING id::text`);
+   VALUES(${source.id}::uuid,${auth.tenantId},${reference.orderId},'OFFLINE_WORKSHOP_REJECTED_V1',${copy.reason},${JSON.stringify({quelle:'offline_abgleich',reason:copy.reason,original:source.original,intent:source.intent,rejection:result.code,message,...(subject?{subject}:{}),...(financialContext?{financialContext}:{})})}::jsonb,'success',${auth.userId}::uuid,${source.id}::uuid,1) RETURNING id::text`);
   if(inserted.length!==1||inserted[0].id!==source.id)throw Error('OFFLINE_WORKSHOP_ORIGINAL_NOT_SAVED');
   const taskId=await createTask(tx,source.id);
   const linked=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version)
-   VALUES(gen_random_uuid(),${auth.tenantId},${order?.id??null},'OFFLINE_WORKSHOP_REJECTED_TASK_V1',${copy.reason},${JSON.stringify({taskId})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,${source.id}::uuid,1) RETURNING id::text`);
+   VALUES(gen_random_uuid(),${auth.tenantId},${reference.orderId},'OFFLINE_WORKSHOP_REJECTED_TASK_V1',${copy.reason},${JSON.stringify({taskId})}::jsonb,'success',${auth.userId}::uuid,${randomUUID()}::uuid,${source.id}::uuid,1) RETURNING id::text`);
   if(linked.length!==1)throw Error('OFFLINE_WORKSHOP_TASK_LINK_NOT_SAVED');
   const proof=await previous(tx,auth,source.id);if(proof.length!==1||proof[0].proof_ok!==true)throw Error('OFFLINE_WORKSHOP_RECEIPT_NOT_READABLE');
-  return {code:'PRESERVED' as const,eventId:source.id,taskId,replayed:false,message,rejectionReceipt:buildReceipt(taskId,result.code)};
+  return {...result,code:'PRESERVED' as const,eventId:source.id,taskId,replayed:false,message,rejectionReceipt:buildReceipt(taskId,result.code,subject)};
  });
 }
 
@@ -68,6 +90,7 @@ export async function readOfflineWorkshopConflictSource(tx:PrivilegedTenantTrans
  const row=rows[0];if(rows.length!==1||row.user_id!==auth.userId||row.payload.quelle!=='offline_abgleich'||row.payload.reason!==copy.reason||!['CONFLICT','FORBIDDEN','NOT_FOUND','VALIDATION_ERROR'].includes(row.payload.rejection))throw Error('OFFLINE_WORKSHOP_SOURCE_INVALID');
  const original=row.payload.original,itemId='orderId'in original.input?original.input.orderId:'invoiceId'in original.input?original.input.invoiceId:original.input.customerId;
  const entry={...original,kind:'workshop' as const,id:original.input.clientEventId,itemId} as PendingWorkshopOriginal;
- const expected=identity(auth,entry);if(expected.id!==row.id||expected.intent!==row.payload.intent||row.order_id!==null&&(!('orderId'in original.input)||row.order_id!==original.input.orderId))throw Error('OFFLINE_WORKSHOP_SOURCE_CHANGED');
- return {orderId:row.order_id,deviceCapturedAt:original.deviceCapturedAt!};
+ const expected=identity(auth,entry),reference=await originalReference(tx,auth,original);
+ if(expected.id!==row.id||expected.intent!==row.payload.intent||row.order_id!==reference.orderId)throw Error('OFFLINE_WORKSHOP_SOURCE_CHANGED');
+ return {orderId:row.order_id,customerId:reference.customerId,deviceCapturedAt:original.deviceCapturedAt!};
 }

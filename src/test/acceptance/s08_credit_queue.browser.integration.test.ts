@@ -15,7 +15,7 @@ import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablau
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {changeOrderPickupNoticeAction} from '@/app/actions/orders.actions';
 import {confirmPaymentAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
-import {getCustomerCreditAction,cancelInvoiceAction} from '@/app/actions/invoices.actions';
+import {getCustomerCreditAction,cancelInvoiceAction,getInvoiceSummariesAction} from '@/app/actions/invoices.actions';
 import {COOKIE_NAME,signAppSession,getSecretKey} from '@/lib/server/appSession';
 import {offlinePartition} from '@/lib/server/offlinePartition';
 import {POST} from '@/app/api/offline/replay/route';
@@ -141,5 +141,22 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
   expect(responseSeen).toBe(true);expect(direct).toMatchObject({code:'OK',replayed:true});
   await cli(['eval',`async()=>{const rows=await p.readPendingEntries('${scope}'),old=rows.find(e=>e.id==='${staleHandoverKey}');if(!old?.rejection||old.rejection.rejection!=='CONFLICT'||old.input.expectedVersion!==${staleHandover.expectedVersion}||rows.some(e=>e.id==='${freshHandoverKey}'))throw Error('TEST_NO_EFFECT_ORIGINAL_OR_NEW_ACK');return true;}`]);
   expect(await sql`SELECT count(*)::int AS n FROM public.events event JOIN public.tasks task ON task.tenant_id=event.tenant_id AND task.erstellt_von=event.user_id WHERE event.tenant_id=${tenant} AND event.event_type='OFFLINE_WORKSHOP_REJECTED_V1' AND event.payload#>>'{original,input,clientEventId}'=${staleHandoverKey} AND task.titel='Konflikt beim Abgleich' AND task.bezug_id=${shipping.orderId}`).toEqual([{n:1}]);
+  // PL14Nov10:20: known rejected originals remain readable, and must not hold
+  // the next explicitly confirmed command for the same invoice indefinitely.
+  const current=await withSession(full,()=>getInvoiceSummariesAction());
+  if(current.code!=='OK')throw Error('TEST_REAL_INVOICE_LIST_REQUIRED');
+  const actual=current.data.find(row=>row.invoiceId===target.invoice.invoiceId);if(!actual||actual.status!=='issued')throw Error('TEST_CURRENT_INVOICE_REQUIRED');
+  const rejectedKey=randomUUID(),rejectedInput={invoiceId:actual.invoiceId,expectedVersion:actual.aggregateVersion+1,reason:'TEST stale cancellation then explicit confirmation',clientEventId:rejectedKey};
+  await cli(['eval',`async()=>{window.TESTpriorAckCount=acks.length;const result=await p.queueFinancialCommand('${scope}',{command:'invoice.cancel',input:${JSON.stringify(rejectedInput)}},()=>'${scope}'),old=(await p.readPendingEntries('${scope}')).find(row=>row.id==='${rejectedKey}');if(result.code!=='CONFLICT'||!old?.rejection||old.rejection.rejection!=='CONFLICT'||acks.length!==window.TESTpriorAckCount)throw Error('TEST_REJECTION_NOT_DISTINCT_ORIGINAL');return true;}`]);
+  const refreshed=await withSession(full,()=>getInvoiceSummariesAction());if(refreshed.code!=='OK')throw Error('TEST_REAL_INVOICE_REFRESH_REQUIRED');
+  const fresh=refreshed.data.find(row=>row.invoiceId===actual.invoiceId);if(!fresh)throw Error('TEST_FRESH_REAL_INVOICE_REQUIRED');
+  const freshKey=randomUUID(),freshInput={...rejectedInput,expectedVersion:fresh.aggregateVersion,clientEventId:freshKey};
+  await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'invoice.cancel',input:${JSON.stringify(freshInput)}},()=>'${scope}'),rows=await p.readPendingEntries('${scope}');if(result.code!=='OK'||rows.some(row=>row.id==='${freshKey}')||!rows.some(row=>row.id==='${rejectedKey}'&&row.rejection)||acks.length!==window.TESTpriorAckCount+1)throw Error('TEST_FRESH_CONFIRMATION_BLOCKED');return true;}`]);
+  const sources=await sql`SELECT event.user_id::text,task.erstellt_von::text,task.id::text FROM public.events event JOIN public.events link ON link.tenant_id=event.tenant_id AND link.correlation_id::text=event.id::text AND link.event_type='OFFLINE_WORKSHOP_REJECTED_TASK_V1' JOIN public.tasks task ON task.tenant_id=event.tenant_id AND task.id::text=link.payload->>'taskId' WHERE event.tenant_id=${tenant} AND event.event_type='OFFLINE_WORKSHOP_REJECTED_V1' AND event.payload#>>'{original,input,clientEventId}'=${rejectedKey}`;
+  expect(sources).toHaveLength(1);expect(sources[0]).toMatchObject({user_id:full.actorId,erstellt_von:full.actorId});
+  await cli(['goto',url]);await cli(['eval',setup]);
+  await cli(['eval',`async()=>{const rows=await p.readPendingEntries('${scope}'),old=rows.find(row=>row.id==='${rejectedKey}');if(!old?.rejection||old.rejection.taskId!=='${sources[0].id}'||old.input.reason!==${JSON.stringify(rejectedInput.reason)}||rows.some(row=>row.id==='${freshKey}'))throw Error('TEST_REJECTED_ORIGINAL_LOST_ON_RELOAD');return true;}`]);
+  expect(await withSession(full,()=>getInvoiceSummariesAction())).toMatchObject({code:'OK',data:expect.arrayContaining([expect.objectContaining({invoiceId:target.invoice.invoiceId,status:'cancelled'})])});
+  expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:4000,version:5}});
  }finally{await execute(process.execPath,[process.env.KREILE_PLAYWRIGHT_CLI_JS!,`-s=${session}`,'close'],{timeout:30000}).catch(()=>{});await new Promise<void>(resolve=>server.close(()=>resolve()));}
 },120000);

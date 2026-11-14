@@ -142,29 +142,27 @@ it('actual payment mode changes race on one version and the same stored receipt 
  expect(await sql`SELECT payment_mode_version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${orderId}`).toEqual([{payment_mode_version:1}]);
 });
 
-it('H8 payment racing cancellation has one winner and never leaves a paid cancelled invoice',async()=>{
+it('H8 payment racing cancellation preserves one actual payment as exact customer credit when payment wins the lock',async()=>{
  const order=await readyInvoiceOrder('Zahlung-gegen-Storno');
- const {cancelInvoiceAction,getInvoiceSummariesAction}=await import('@/app/actions/invoices.actions');
- const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const {cancelInvoiceAction,getInvoiceSummariesAction,getCustomerCreditAction}=await import('@/app/actions/invoices.actions');
+ const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
  const cancellation={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST gleichzeitiges Storno',clientEventId:randomUUID()};
  const payment={invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
  const [cancelled,paid]=await Promise.all([withSession(full,()=>cancelInvoiceAction(structuredClone(cancellation))),withSession(full,()=>confirmPaymentAction(structuredClone(payment)))]);
- expect([cancelled.code,paid.code].sort()).toEqual(['CONFLICT','OK']);
+ // PL A08-1/-2: payment never prevents cancellation; a real prior payment becomes credit.
+ expect(cancelled.code).toBe('OK');if(cancelled.code!=='OK')throw Error('TEST_CANCEL_RACE:'+cancelled.code);
+ expect(['OK','CONFLICT']).toContain(paid.code);
+ const amount=paid.code==='OK'?order.invoice.grossAmountCents:0;
  const [row]=await sql`SELECT status,payment_status,payment_paid_amount_cents::integer AS paid,cancel_event_id::text FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`;
- const summary=await withSession(full,()=>getInvoiceSummariesAction());
- expect(summary).toMatchObject({code:'OK',data:expect.arrayContaining([expect.objectContaining({invoiceId:order.invoice.invoiceId,status:row.status})])});
- if(cancelled.code==='OK'){
-  expect(row).toMatchObject({status:'cancelled',payment_status:'offen',paid:0,cancel_event_id:cancelled.receipt.eventId});
-  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(cancellation))))).toMatchObject({code:'OK',replayed:true});
-  expect(await withSession(full,()=>confirmPaymentAction(structuredClone(payment)))).toMatchObject({code:'CONFLICT'});
- }else{
-  expect(row).toMatchObject({status:'issued',payment_status:'bezahlt',paid:order.invoice.grossAmountCents,cancel_event_id:null});
-  expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',openAmountCents:0}}});
-  expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(payment))))).toMatchObject({code:'OK',replayed:true});
-  expect(await withSession(full,()=>cancelInvoiceAction(structuredClone(cancellation)))).toMatchObject({code:'CONFLICT'});
- }
- const winningKey=cancelled.code==='OK'?cancellation.clientEventId:payment.clientEventId;
- expect(await sql`SELECT client_event_id::text,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array([cancellation.clientEventId,payment.clientEventId])}::uuid[])`).toEqual([{client_event_id:winningKey,user_id:full.actorId}]);
+ expect(row).toMatchObject({status:'cancelled',payment_status:amount?'bezahlt':'offen',paid:amount,cancel_event_id:cancelled.receipt.eventId});
+ expect(await withSession(full,()=>getInvoiceSummariesAction())).toMatchObject({code:'OK',data:expect.arrayContaining([expect.objectContaining({invoiceId:order.invoice.invoiceId,status:'cancelled'})])});
+ expect(await withSession(full,()=>getCustomerCreditAction(order.customerId))).toMatchObject({code:'OK',credit:{balanceCents:amount}});
+ expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(cancellation))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>confirmPaymentAction({...payment,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ const events=await sql`SELECT client_event_id::text,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array([cancellation.clientEventId,payment.clientEventId])}::uuid[]) ORDER BY client_event_id`;
+ const expected=[{client_event_id:cancellation.clientEventId,user_id:full.actorId},...(amount?[{client_event_id:payment.clientEventId,user_id:full.actorId}]:[])].sort((a,b)=>a.client_event_id.localeCompare(b.client_event_id));
+ expect(events).toEqual(expected);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${order.invoice.invoiceId}::uuid`).toEqual([{n:amount?1:0}]);
 });
 
 it('L5 an issued invoice blocks both price supplementation and order content edits without changing its source',async()=>{
@@ -214,23 +212,25 @@ it('the real PDF route downloads the stored original and cancellation unchanged 
  expect((await withSession(denied,()=>GET(request('cancellation'),context()))).status).toBe(403);
 });
 
-it('invoice cancellation rejects missing rights, a missing reason and an existing payment without changing the invoice or audit',async()=>{
+it('invoice cancellation rejects missing rights and a missing reason, then retains actual payment as credit under A08-1',async()=>{
  const order=await readyInvoiceOrder('Storno-Sperren');
- const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const {cancelInvoiceAction,getCustomerCreditAction}=await import('@/app/actions/invoices.actions');
  const denied=await createFixture(['auftraege']);
  const base={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST Storno',clientEventId:randomUUID()};
  expect(await withSession(denied,()=>cancelInvoiceAction(base))).toMatchObject({code:'FORBIDDEN'});
  const emptyKey=randomUUID();
  expect(await withSession(full,()=>cancelInvoiceAction({...base,clientEventId:emptyKey,reason:''}))).toMatchObject({code:'VALIDATION_ERROR'});
- const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
  const paid=await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,clientEventId:randomUUID()}));
  expect(paid).toMatchObject({code:'OK'});
  const before=await sql`SELECT status,aggregate_version,pdf_sha256,pdf_content,payment_status,payment_version,payment_paid_amount_cents,cancel_event_id FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`;
  const paidKey=randomUUID();
- expect(await withSession(full,()=>cancelInvoiceAction({...base,clientEventId:paidKey}))).toMatchObject({code:'CONFLICT'});
- expect(await sql`SELECT status,aggregate_version,pdf_sha256,pdf_content,payment_status,payment_version,payment_paid_amount_cents,cancel_event_id FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual(before);
- expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',paidAmountCents:order.invoice.grossAmountCents,openAmountCents:0}}});
- expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array([base.clientEventId,emptyKey,paidKey])}::uuid[])`).toEqual([{n:0}]);
+ const input={...base,clientEventId:paidKey},cancelled=await withSession(full,()=>cancelInvoiceAction(input));
+ expect(cancelled).toMatchObject({code:'OK'});if(cancelled.code!=='OK')throw Error('TEST_PAID_CANCEL:'+cancelled.code);
+ expect(await sql`SELECT status,aggregate_version,pdf_sha256,pdf_content,payment_status,payment_version,payment_paid_amount_cents,cancel_event_id FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{...before[0],status:'cancelled',aggregate_version:2,cancel_event_id:cancelled.receipt.eventId}]);
+ expect(await withSession(full,()=>getCustomerCreditAction(order.customerId))).toMatchObject({code:'OK',credit:{balanceCents:order.invoice.grossAmountCents}});
+ expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array([base.clientEventId,emptyKey])}::uuid[])`).toEqual([{n:0}]);
 });
 
 it('invoice cancellation keeps the original, replays once and permits one replacement while rejecting payment on the cancelled invoice',async()=>{

@@ -2,7 +2,7 @@ import {syncPendingFiles} from './syncPendingFiles';
 import {replayOfflineWorkshopHttp} from './replayWorkshopHttp';
 
 /** One queue and existing command ports for reconnect, explicit retry and exit. */
-export function syncOriginals(scope:string,currentScope:()=>string|null,options:{flushDelayed?:boolean;workshopOnly?:boolean;keepalive?:boolean;offline24h?:boolean}={}){
+export function syncOriginals(scope:string,currentScope:()=>string|null,options:{flushDelayed?:boolean;workshopOnly?:boolean;keepalive?:boolean;offline24h?:boolean;followUp?:boolean}={}){
  // Preserve synchronous queue/exit dispatch; only the used Action port loads
  // its server reference. Workshop keepalive never waits for an intake chunk.
  const saveIntakeNoteAction=async(...args:Parameters<typeof import('@/app/actions/eingang.actions').saveIntakeNoteAction>)=>(await import('@/app/actions/eingang.actions')).saveIntakeNoteAction(...args);

@@ -149,7 +149,7 @@ it.each([4000,0])('A08-2/-6 cancellation retains actual paid %i, removes the act
 });
 
 it('A08 R2 real credit SQL failure preserves cancellation and one normal task, repaired by its authorized different actor',async()=>{
- const resolver=await createFixture(['entscheiden'],'buero');
+ const resolver=await createFixture(['geld'],'buero'),originalActor=await createFixture(['entscheiden','geld'],'buero');
  const order=await readyInvoiceOrder('S08 credit SQL follow-up','pickup',false,undefined,8403);
  const paid=await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:10000,method:'bar',expectedVersion:0,expectedOpenAmountCents:10000,clientEventId:randomUUID()}));
  expect(paid).toMatchObject({code:'OK'});
@@ -160,24 +160,28 @@ it('A08 R2 real credit SQL failure preserves cancellation and one normal task, r
  await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON public.customer_credit_entries FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
  let taskId:string,taskVersion:number;
  try{
-  expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await withSession(originalActor,()=>cancelInvoiceAction(input))).toMatchObject({code:'UNAVAILABLE'});
   expect(await sql`SELECT status FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.invoiceId}::uuid`).toEqual([{status:'cancelled'}]);
   expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{n:0}]);
   const tasks=await sql`SELECT id::text,version,client_key::text,status,bezug_id,erstellt_von::text,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${input.clientEventId}::uuid`;
   expect(tasks).toHaveLength(1);taskId=tasks[0].id;taskVersion=tasks[0].version;
-  expect(tasks[0]).toMatchObject({status:'offen',bezug_id:order.orderId,erstellt_von:full.actorId,fuer_bereich:'entscheiden'});
+  expect(tasks[0]).toMatchObject({status:'offen',bezug_id:order.orderId,erstellt_von:originalActor.actorId,fuer_bereich:'geld'});
   expect(await withSession(full,()=>getIntakeTaskAction({taskId}))).toMatchObject({code:'OK',task:{id:taskId,status:'offen'},creditSource:'KNOWN',canComplete:true});
-  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await withSession(originalActor,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
   expect(await sql`SELECT count(*)::int AS n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${input.clientEventId}::uuid`).toEqual([{n:1}]);
  }finally{
   await sql.unsafe(`DROP TRIGGER ${fault} ON public.customer_credit_entries`);
   await sql.unsafe(`DROP FUNCTION private.${fault}()`);
  }
- const complete={taskId:taskId!,version:taskVersion!,note:null};
+  const complete={taskId:taskId!,version:taskVersion!,note:null};
+ await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${originalActor.actorId}::uuid AND bereich='geld'`;
+ expect(await withSession(originalActor,()=>getIntakeTaskAction({taskId:taskId!}))).toMatchObject({code:'OK',canComplete:false});
+ expect(await withSession(originalActor,()=>completeIntakeTaskAction(complete))).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT id FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${input.invoiceId}::uuid`).toEqual([]);
  expect(await withSession(resolver,()=>completeIntakeTaskAction(complete))).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:resolver.actorId}});
  expect(await withSession(resolver,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(complete))))).toMatchObject({code:'OK',replayed:true});
- expect(await sql`SELECT amount_cents::text,actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{amount_cents:'10000',actor_user_id:full.actorId}]);
- expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT amount_cents::text,actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{amount_cents:'10000',actor_user_id:originalActor.actorId}]);
+ expect(await withSession(originalActor,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'FORBIDDEN'});
  expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{n:1}]);
 });
 

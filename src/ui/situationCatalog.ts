@@ -311,13 +311,13 @@ export const MAIL_RESEND_COPY={
  canceled:(invoice:string)=>'Rechnung '+invoice+' ist storniert – Versand nicht mehr nötig'
 };
 export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich',rejected:'abgelehnt, ohne Wirkung',originalCommand:{
- 'item.finished':'TODO_PL offline.original.item_finished',
- 'item.extraWork':'TODO_PL offline.original.item_extra_work',
- 'order.handover':'TODO_PL offline.original.order_handover',
- 'invoice.issue':'TODO_PL offline.original.invoice_issue',
- 'invoice.cancel':'TODO_PL offline.original.invoice_cancel',
- 'credit.apply':'TODO_PL offline.original.credit_apply',
- 'credit.payout':'TODO_PL offline.original.credit_payout',
+ 'item.finished':'Teil fertig melden',
+ 'item.extraWork':'Mehrarbeit erfassen',
+ 'order.handover':'Übergabeart ändern',
+ 'invoice.issue':'Rechnung ausstellen',
+ 'invoice.cancel':'Rechnung stornieren',
+ 'credit.apply':'Guthaben verrechnen',
+ 'credit.payout':'Guthaben auszahlen',
 }} as const;
 
 /** PL11.11.11:01: pending is not a successful server completion. */
@@ -391,8 +391,9 @@ export const CUSTOMER_CREDIT_COPY={
  forbidden:'Guthaben verrechnen darf nur, wer das Recht Geld hat.',
  unavailable:'Das Guthaben ist gerade nicht erreichbar. Deine Angaben bleiben erhalten – versuch es gleich noch einmal.',
  notFound:'Für diesen Kunden gibt es dieses Guthaben nicht mehr. Lade den aktuellen Stand.',
- pending:'Der Storno ist noch nicht fertig gespeichert. Das Guthaben steht bereit, sobald er durch ist – versuch es gleich noch einmal.',
- paymentUnknown:'Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Das Guthaben entsteht, sobald die Zahlung mit Betrag und Datum erfasst ist.',
+ pending:'Der Storno ist noch nicht übertragen. Er wird gesendet, sobald die Verbindung steht.',
+ paymentUnknown:'Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Erfass zuerst Betrag und Datum der Zahlung, dann storniere die Rechnung erneut.',
+ tooHigh:(amount:string)=>`Der Betrag ist höher als das Guthaben von ${amount}.`,
 } as const;
 // S09: package text is fixed; additional failure copy stays in the same catalog (R8).
 export const SHIPPING_FEE_COPY={

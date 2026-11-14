@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {isPendingWorkshopAcknowledgement,isPendingWorkshopOriginal,type PendingWorkshopOriginal} from '@/lib/offline/pendingStore';
-import {isWorkshopRejectionReceipt} from '@/lib/offline/workshopRejectionContract';
+import {isWorkshopRejectionReceipt,releaseRejectedWorkshopRequest} from '@/lib/offline/workshopRejectionContract';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 // Isolated synthetic protocol envelopes, never a product writer proof.
@@ -33,5 +33,21 @@ describe('financial queue acknowledgement protocol',()=>{
   expect(isWorkshopRejectionReceipt(scope,physical,rejected)).toBe(true);
   expect(isWorkshopRejectionReceipt('b'.repeat(64),physical,rejected)).toBe(false);
   expect(isWorkshopRejectionReceipt(scope,{...physical,input:{...physical.input,finished:false}},rejected)).toBe(false);
+ });
+});
+
+// Synthetic controller state: the original proof is retained, only its consumed nonce is released.
+describe('rejected original controller continuation',()=>{
+ const proof={...receipt,taskId:invoiceId,rejection:'CONFLICT' as const,originalCanonical:canonicalJson({command:financial.command,input:financial.input,deviceCapturedAt})};
+ it('frees the consumed key while preserving the immutable original and proof',()=>{
+  const requests={cancel:id,other:invoiceId},before=JSON.stringify({financial,proof});
+  expect(releaseRejectedWorkshopRequest(scope,financial,proof,requests,'cancel')).toBe(true);
+  expect(requests).toEqual({other:invoiceId});expect(JSON.stringify({financial,proof})).toBe(before);
+  expect(releaseRejectedWorkshopRequest(scope,financial,proof,requests,'cancel')).toBe(false);
+ });
+ it('never clears a newer confirmation, another scope, or a receipt for changed input',()=>{
+  for(const [activeScope,original,key] of [[scope,financial,invoiceId],['b'.repeat(64),financial,id],[scope,{...financial,input:{...financial.input,reason:'TEST changed'}},id]] as const){
+   const requests={cancel:key};expect(releaseRejectedWorkshopRequest(activeScope,original,proof,requests,'cancel')).toBe(false);expect(requests.cancel).toBe(key);
+  }
  });
 });

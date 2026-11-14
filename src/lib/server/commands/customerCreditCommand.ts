@@ -6,8 +6,9 @@ import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import type {ImmutableInvoiceCancellationReceipt} from './immutableInvoiceCommand';
 import type {CustomerCreditApplyInput,CustomerCreditResult} from '@/modules/accounting/public';
 import {confirmPayment,type ConfirmPaymentResult} from './confirmPaymentCommand';
-import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
+import {CUSTOMER_CREDIT_COPY,LEGACY_ACTION_ACCESS_COPY} from '@/ui/situationCatalog';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
+import {formatEuro} from '@/lib/domain/formatEuro';
 import {hasAuthorizationArea,resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {CustomerCreditPayoutInput,CustomerCreditPayoutReceipt,CustomerCreditPayoutResult} from '@/modules/accounting/public';
@@ -70,7 +71,10 @@ export async function appendCancellationCredit(tx:PrivilegedTenantTransaction,te
 export async function repairCancellationCreditTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:{client_key:string;bezug_typ:string;bezug_id:string|null;erstellt_von:string}){
  const source=await readCancellationCreditSource(tx,auth.tenantId,task.client_key);if(!source)return;
  if(task.bezug_typ!=='auftrag'||task.bezug_id!==source.orderId||task.erstellt_von!==source.cancelledBy)throw Error('CUSTOMER_CREDIT_TASK_SOURCE_CHANGED');
- if(source.pending)await appendCancellationCredit(tx,auth.tenantId,source);
+ if(source.pending){
+  if(!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN' as const,message:LEGACY_ACTION_ACCESS_COPY.forbidden};
+  await appendCancellationCredit(tx,auth.tenantId,source);
+ }
  const proof=await readCancellationCreditSource(tx,auth.tenantId,task.client_key);
  if(!proof||proof.pending)throw Error('CUSTOMER_CREDIT_TASK_REPAIR_NOT_PROVEN');
 }
@@ -132,10 +136,10 @@ export async function payoutCustomerCredit(input:unknown,readCredit:CreditReader
    const customer=await readCustomer(tx,auth.tenantId,input.customerId);
    if(!customer)return {code:'NOT_FOUND',message:CUSTOMER_CREDIT_COPY.notFound};
    const balance=await readCredit(tx,auth.tenantId,input.customerId);if(balance.code!=='OK')return balance;
-   if(balance.credit.version!==input.expectedCreditVersion||input.amount>balance.credit.balanceCents)return {code:'CONFLICT',message:CUSTOMER_CREDIT_COPY.payoutChanged,currentCreditBalanceCents:balance.credit.balanceCents};
+   if(balance.credit.version!==input.expectedCreditVersion||input.amount>balance.credit.balanceCents)return {code:'CONFLICT',message:input.amount>balance.credit.balanceCents?CUSTOMER_CREDIT_COPY.tooHigh(formatEuro(balance.credit.balanceCents)):CUSTOMER_CREDIT_COPY.payoutChanged,currentCreditBalanceCents:balance.credit.balanceCents};
    const clock=await tx.execute<{at:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at`);
    if(clock.length!==1||!Number.isFinite(Date.parse(clock[0].at)))throw Error('CUSTOMER_CREDIT_PAYOUT_CLOCK_MISSING');
-   const receipt:CustomerCreditPayoutReceipt={eventId:randomUUID(),creditEntryId:randomUUID(),customerId:input.customerId,clientEventId:input.clientEventId,amountCents:input.amount,balanceCents:balance.credit.balanceCents-input.amount,creditVersion:balance.credit.version+1,method:input.method,reference,note:input.note,actorId:auth.userId,occurredAt:clock[0].at,description:CUSTOMER_CREDIT_COPY.payoutLabel((input.amount/100).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €',customer.name,input.method)};
+   const receipt:CustomerCreditPayoutReceipt={eventId:randomUUID(),creditEntryId:randomUUID(),customerId:input.customerId,clientEventId:input.clientEventId,amountCents:input.amount,balanceCents:balance.credit.balanceCents-input.amount,creditVersion:balance.credit.version+1,method:input.method,reference,note:input.note,actorId:auth.userId,occurredAt:clock[0].at,description:CUSTOMER_CREDIT_COPY.payoutLabel(formatEuro(input.amount),customer.name,input.method)};
    const event=await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,user_id,payload,status,client_event_id,event_schema_version,created_at)
     VALUES(${receipt.eventId},${auth.tenantId},'CUSTOMER_CREDIT_PAYOUT_V1',${receipt.description},${auth.userId}::uuid,
      ${JSON.stringify({creditEntryId:receipt.creditEntryId,customerId:input.customerId,amountCents:input.amount,method:input.method,reference,intent,receipt})}::jsonb,
@@ -166,7 +170,7 @@ export async function applyCustomerCredit(input:unknown,readCredit:CreditReader)
    const customerId=rows[0].customer_id;
    await tx.execute(sql`SELECT private.lock_customer_credit_v1(${auth.tenantId},${customerId})`);
    const read=await readCredit(tx,auth.tenantId,customerId);if(read.code!=='OK')return read;
-   if(read.credit.version!==expectedCreditVersion||request.amount>read.credit.balanceCents)return {code:'CONFLICT',message:CUSTOMER_CREDIT_COPY.changed,currentCreditBalanceCents:read.credit.balanceCents};
+   if(read.credit.version!==expectedCreditVersion||request.amount>read.credit.balanceCents)return {code:'CONFLICT',message:request.amount>read.credit.balanceCents?CUSTOMER_CREDIT_COPY.tooHigh(formatEuro(read.credit.balanceCents)):CUSTOMER_CREDIT_COPY.changed,currentCreditBalanceCents:read.credit.balanceCents};
    return {code:'OK',customerId};
   },
   debit:async(tx,auth,request,customerId)=>{
