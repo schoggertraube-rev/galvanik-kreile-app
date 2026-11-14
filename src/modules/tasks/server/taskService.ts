@@ -1,4 +1,7 @@
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
+import {canChangeOrderHandover} from '@/lib/auth/authorizationContract';
+import {readManualHandoverSource} from '@/lib/server/orderHandoverSourcePort';
+import {ORDER_HANDOVER_COPY} from '@/ui/situationCatalog';
 import {canSynchronizeIntakeMailbox} from '@/lib/auth/authorizationContract';
 import {MAILBOX_SYNC_COPY} from '@/ui/situationCatalog';
 import {canReadQuoteFollowups} from '@/lib/auth/authorizationContract';
@@ -74,11 +77,12 @@ export async function saveTask(input:unknown,deps:Dependencies):Promise<TaskResu
  try{return await withPrivilegedTenantTransaction(auth,tx=>persistTask(tx,auth,value,deps));}catch(error){return resultError(error);}
 }
 /** Both dialog saves and the goods command use this writer and the caller's transaction. */
-async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskSaveInput,deps:Dependencies,enforceReferenceVisibility=true,invoiceCommand=false,replyRestriction=false):Promise<Extract<TaskResult,{code:'OK'}>>{
+async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskSaveInput,deps:Dependencies,enforceReferenceVisibility=true,invoiceCommand=false,replyRestriction=false,qualifiedCreateId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${value.clientKey},0))`);
   const candidates=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${value.clientKey}::uuid FOR UPDATE`);
   if(candidates.length>1)throw Error('TASK_CLIENT_KEY_AMBIGUOUS');
   const before=value.taskId?await find(tx,auth,value.taskId,true):candidates[0]?await find(tx,auth,candidates[0].id,true):null;
+  if(qualifiedCreateId&&before&&before.id!==qualifiedCreateId)reject('CONFLICT',ORDER_HANDOVER_COPY.conflict);
   if(value.taskId&&!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
   if(before&&await isCanceledInvoiceMailTask(tx,auth,before.id))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
   if(before&&(before.client_key!==value.clientKey||!replyRestriction&&!allowed(auth,before)))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
@@ -99,7 +103,7 @@ async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnap
   if(before?.art==='rechnung'&&value.kind!=='rechnung')reject('FORBIDDEN','Rechnung klären kann nicht in eine andere Aufgabenart geändert werden.');
   // Existing-task authority was checked above; reference facts stay server-side in the history writer.
   const reference=await context(tx,auth,value.reference,true,!before&&enforceReferenceVisibility);await recipient(tx,auth,value);
-  const id=before?.id??randomUUID();
+  const id=before?.id??qualifiedCreateId??randomUUID();
   if(before)await tx.execute(sql`UPDATE public.tasks SET art=${value.kind},titel=${value.title.trim()},faellig_am=${value.dueDate}::date,uhrzeit=${value.time}::time,
    vorlauf_tage=${value.kind==='frist'?5:0},fuer_login=${value.forLogin}::uuid,fuer_bereich=${value.forArea},notiz=${value.note?.trim()||null},version=version+1
    WHERE tenant_id=${auth.tenantId} AND id=${id}::uuid AND version=${value.version}`);
@@ -124,12 +128,26 @@ export async function createMissingGoodsTask(tx:PrivilegedTenantTransaction,auth
 }
 
 /** U252: the checked order/mail command creates a normal visible callback task. */
-export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string;taskId?:string;version?:number;kind?:'aufgabe';forLogin?:string;dueDate?:string},deps:Dependencies,appointmentSource?:{taskId:string;appointmentEventId:string}){
- if(!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails')&&(!appointmentSource||!await storageTaskHasAppointmentSource(tx,auth,appointmentSource.taskId,appointmentSource.appointmentEventId)))reject('FORBIDDEN','Übergabe klären benötigt Mails und Aufträge.');
+export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string;taskId?:string;version?:number;kind?:'aufgabe';forLogin?:string;dueDate?:string},deps:Dependencies,appointmentSource?:{taskId:string;appointmentEventId:string},manualEventId?:string){
+ if(!canChangeOrderHandover(auth,'login'))reject('FORBIDDEN',ORDER_HANDOVER_COPY.permission);
+ let manual=false;
+ if(manualEventId){
+  const source=await readManualHandoverSource(tx,auth.tenantId,manualEventId),receipt=source.payload.receipt;
+  if(source.order_id!==input.orderId||source.actor_id!==auth.userId||source.client_event_id!==input.clientKey
+    ||source.current_order_version!==source.order_version||source.current_handover_mode!==receipt.handoverMode
+    ||receipt.outcome!=='call_customer'||receipt.taskClientKey!==input.clientKey||receipt.taskTitle!==input.title||receipt.message!==input.note
+    ||input.taskId!==undefined||input.version!==undefined||input.kind!==undefined||input.forLogin!==undefined||input.dueDate!==undefined||appointmentSource){
+    reject('FORBIDDEN',ORDER_HANDOVER_COPY.permission);
+  }
+  manual=true;
+ }
+ if(!canChangeOrderHandover(auth,'mail')&&!manual&&(!appointmentSource||!await storageTaskHasAppointmentSource(tx,auth,appointmentSource.taskId,appointmentSource.appointmentEventId)))reject('FORBIDDEN','Übergabe klären benötigt Mails und Aufträge.');
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  const value:TaskSaveInput={clientKey:input.clientKey,version:input.version??0,...(input.taskId?{taskId:input.taskId}:{}),kind:input.kind??'rueckruf',title:input.title,dueDate:input.dueDate??clock.today,time:null,forLogin:input.forLogin??null,forArea:input.forLogin?null:'auftraege',reference:{type:'auftrag',id:input.orderId},note:input.note};
  const errors=taskValidation(value);if(Object.keys(errors).length)reject('VALIDATION_ERROR','Rückruf-Aufgabe ist unvollständig.');
- return (await persistTask(tx,auth,value,deps)).task.id;
+ // A manual source reserves only its own UUID for the real TaskWriter row;
+ // an unrelated normal task with a coincident command key cannot be adopted.
+ return (await persistTask(tx,auth,value,deps,true,false,false,manual?manualEventId:undefined)).task.id;
 }
 
 export async function readOrderHandoverTaskState(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;taskId:string}){

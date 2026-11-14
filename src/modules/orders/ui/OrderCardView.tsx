@@ -150,8 +150,9 @@ function evidenceLabel(entry: OrderCardEvidence): string {
 function OrderHandoverPanel({card}:{card:OrderCardData}){
  const[error,setError]=useState<string|null>(null);
  const notice=card.handoverNotice;
+ const originalItemId=notice?.originalItemId;
  const open=(ziel:'aufgabe'|'mailein',arg:string)=>{if(window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel,arg}})))setError(ORDER_HANDOVER_COPY.targetUnavailable);};
- return <section className="kr-stapel" data-spec-id="auftrag.uebergabe"><h3 className="kr-naechste-t">{ORDER_HANDOVER_COPY.label(card.handoverMode,card.shippingService,card.shippingServiceError)}</h3>{notice?<Hinweis ton={notice.taskId&&notice.taskState!=='erledigt'?'warn':'ok'}><p>{notice.message}</p>{notice.taskId?notice.taskState==='offen'?<Button text={ORDER_HANDOVER_COPY.task} onClick={()=>open('aufgabe',notice.taskId!)}/>:<p>{notice.taskState==='erledigt'?ORDER_HANDOVER_COPY.completed:ORDER_HANDOVER_COPY.taskUnavailable}</p>:null}<Button art="sekundaer" text={ORDER_HANDOVER_COPY.original} onClick={()=>open('mailein',notice.originalItemId)}/></Hinweis>:null}{error?<Hinweis ton="warn">{error}</Hinweis>:null}</section>;
+ return <section className="kr-stapel" data-spec-id="auftrag.uebergabe"><h3 className="kr-naechste-t">{ORDER_HANDOVER_COPY.label(card.handoverMode,card.shippingService,card.shippingServiceError)}</h3>{notice?<Hinweis ton={notice.taskId&&notice.taskState!=='erledigt'?'warn':'ok'}><p>{notice.message}</p>{notice.taskId?notice.taskState==='offen'?<Button text={ORDER_HANDOVER_COPY.task} onClick={()=>open('aufgabe',notice.taskId!)}/>:<p>{notice.taskState==='erledigt'?ORDER_HANDOVER_COPY.completed:ORDER_HANDOVER_COPY.taskUnavailable}</p>:null}{originalItemId?<Button art="sekundaer" text={ORDER_HANDOVER_COPY.original} onClick={()=>open('mailein',originalItemId)}/>:null}</Hinweis>:null}{error?<Hinweis ton="warn">{error}</Hinweis>:null}</section>;
 }
 
 export function OrderCardView({

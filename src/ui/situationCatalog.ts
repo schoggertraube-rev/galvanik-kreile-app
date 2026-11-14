@@ -140,12 +140,20 @@ export const QUOTE_CYCLE_COPY={
 };
 
 export const ORDER_HANDOVER_COPY={
+ permission:'error.permission',invalid:'TODO_PL order.handover.invalid',missing:'TODO_PL order.handover.missing',
+ conflict:'TODO_PL order.handover.conflict',unavailable:'TODO_PL order.handover.unavailable',
+ manualChanged:(number:string,mode:'pickup'|'shipping')=>'TODO_PL order.handover.changed '+number+' '+mode,
  chooseOrder:"Wähle den Auftrag zu dieser Mail",choose:(number:string)=>"Übergabe für "+number+" übernehmen",
  mode:(mode:'pickup'|'shipping')=>mode==='pickup'?'Abholen':'Versand',
  label:(mode:'pickup'|'shipping'|null|undefined,service:string|null|undefined,error?:string)=>mode==='pickup'?'Abholen':mode==='shipping'?'Versand · '+(service??error??'Versanddienst fehlt'):'Übergabeart fehlt',
  original:'Original-Mail ansehen',task:'Rückruf-Aufgabe öffnen',completed:'Rückruf erledigt',taskUnavailable:'Rückruf-Aufgabe ist für diesen Login nicht verfügbar.',targetUnavailable:'Der gespeicherte Bezug konnte nicht geöffnet werden.',
  changed:(number:string,mode:'pickup'|'shipping',sender:string,at:string)=>'Du übernimmst '+(mode==='pickup'?'Abholen':'Versand')+' für '+number+' · so hat es '+sender+' am '+new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(at))+' geschrieben.',
- call:(customer:string,phone:string|null)=>'Ruf '+customer.slice(0,55)+' an: '+(phone??'Telefon fehlt'),
+ call:(customer:string,phone:string|null)=>{
+  const phoneValue=phone===null?'Telefon fehlt':phone.length>80?phone.slice(0,79)+'…':phone;
+  const limit=Math.min(55,120-'Ruf '.length-' an: '.length-phoneValue.length);
+  const name=customer.length>limit?customer.slice(0,limit-1)+'…':customer;
+  return 'Ruf '+name+' an: '+phoneValue;
+ },
  late:(number:string,customer:string,phone:string|null,carrier:string|null,mode:'pickup'|'shipping',label:boolean,passed:boolean)=>number+' · '+(passed?'Ware ist bereits übergeben':label?'Versandetikett ist bereits erstellt':'Paket ist bereits beim '+(carrier??'Versanddienst · Name fehlt'))+' · '+customer+' wollte '+(mode==='pickup'?'abholen':'Versand')+'. Ruf '+customer+' an: '+(phone??'Telefon fehlt')+'.',
 };
 

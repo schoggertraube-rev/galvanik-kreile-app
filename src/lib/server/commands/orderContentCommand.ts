@@ -13,6 +13,8 @@ import { type PrivilegedTenantTransaction, withPrivilegedTenantTransaction,withT
 import {intakeHandoverDirective} from '@/modules/eingang/public';
 import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY,PRODUCTION_PRICING_RETRY_COPY,ORDER_REQUEST_COPY} from '@/ui/situationCatalog';
 import {appendProductionCompletion,appendProductionPricing,appendProductionReversals,ProductionPricingRetryNeeded,recordProductionPricingRetry,readProductionPricingRetrySource,repairProductionCompletionPricing} from '@/lib/server/productionSnapshotPort';
+import {canChangeOrderHandover} from '@/lib/auth/authorizationContract';
+import {readManualHandoverReceipt,type ManualHandoverReceipt} from '@/lib/server/orderHandoverSourcePort';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -72,6 +74,7 @@ export async function readOrderPickupNotice(input:unknown){
 
 /** DA01/DA02: one explicit confirmation replaces the notice; the event preserves its predecessor. */
 export async function changeOrderPickupNotice(input:unknown,handover?:MailHandoverDependencies){
+  if(input&&typeof input==='object'&&'command'in input&&input.command==='handover_manual')return handover?changeHandoverManually(input,handover):{code:'UNAVAILABLE' as const,message:ORDER_HANDOVER_COPY.unavailable};
   if(input&&typeof input==='object'&&'command'in input&&input.command==='handover_from_mail')return handover?changeHandoverFromMail(input,handover):{code:'UNAVAILABLE' as const,message:'Mail-Übergabevertrag ist nicht angebunden.'};
   if(!input||typeof input!=="object"||Array.isArray(input))return {code:"VALIDATION_ERROR" as const,message:"Abholmitteilung ist ungültig."};
   const value=input as Record<string,unknown>;
@@ -119,18 +122,74 @@ type MailHandoverDependencies={
  recordEffect:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;orderId:string;clientEventId:string;taskId:string|null;mode:'pickup'|'shipping';requestedMode:'pickup'|'shipping'})=>Promise<void>;
  readCustomer:(tx:PrivilegedTenantTransaction,tenant:string,id:string)=>Promise<{id:string;name:string;phone:string|null;email:string|null;billingEmail:string|null}|null>;
  updateDefault:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{customerId:string;clientEventId:string;mode:'pickup'|'shipping'})=>Promise<{code:string}>;
- createTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string},effect:(id:string)=>Promise<void>)=>Promise<string>;
+ createTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string;manualEventId?:string},effect?: (id:string)=>Promise<void>)=>Promise<string>;
 };
+
+/** The sole handover-mode UPDATE and event INSERT for mail and login sources. */
+async function writeOrderHandover<R>(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{order:MailHandoverOrder;mode:'pickup'|'shipping';passed:boolean;clientEventId:string;eventId:string;eventType:'ORDER_HANDOVER_MAIL_V1'|'ORDER_HANDOVER_CHANGED_V1';requestHash:string;message:string;receipt:(version:number,at:string)=>R}){
+ const {order}=input;
+ const updated=input.passed?[{version:order.version}]:await tx.execute<{version:number}>(sql`UPDATE public.orders SET handover_mode=${input.mode},version=version+1
+  WHERE tenant_id=${auth.tenantId} AND id=${order.id} AND version=${order.version} RETURNING version`);
+ if(updated.length!==1)throw Error('HANDOVER_ORDER_VERSION_CONFLICT');
+ const clocks=await tx.execute<{at:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at`);
+ if(clocks.length!==1)throw Error('HANDOVER_CLOCK_MISSING');
+ const result=input.receipt(updated[0].version,clocks[0].at),payload={requestHash:input.requestHash,before:{handoverMode:order.handover_mode},receipt:result};
+ await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,aggregate_version,correlation_id,created_at)
+  VALUES(${input.eventId},${auth.tenantId},${order.id},${input.eventType},${input.message},${JSON.stringify(payload)}::jsonb,'success',${auth.userId}::uuid,${input.clientEventId}::uuid,1,${updated[0].version},gen_random_uuid(),${clocks[0].at}::timestamptz AT TIME ZONE 'UTC')`);
+ const proof=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${input.eventId}
+  AND order_id=${order.id} AND user_id=${auth.userId}::uuid AND client_event_id=${input.clientEventId}::uuid
+  AND event_type=${input.eventType} AND status='success' AND event_schema_version=1 AND aggregate_version=${updated[0].version}
+  AND payload=${JSON.stringify(payload)}::jsonb`);
+ if(proof.length!==1)throw Error('HANDOVER_EVENT_READBACK_MISSING');
+ return result;
+}
+
+async function readHandoverBoundary(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,order:MailHandoverOrder){
+ const shipments=await tx.execute<{carrier:string|null;label_url:string|null;status:string;shipped_at:unknown;delivered_at:unknown}>(sql`SELECT carrier,label_url,status,shipped_at,delivered_at FROM public.shipments WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} ORDER BY created_at,id FOR UPDATE`);
+ const shipped=shipments.find(row=>row.shipped_at||row.delivered_at||!['pending','created','cancelled','canceled'].includes(row.status));
+ const label=shipments.some(row=>Boolean(row.label_url?.trim())),passed=['abgeholt','versendet'].includes(order.station)||order.status==='storniert';
+ return {late:Boolean(shipped||label||passed),label,passed,carrier:shipped?.carrier??null};
+}
+
+async function changeHandoverManually(raw:unknown,deps:MailHandoverDependencies){
+ const value=raw as {command:'handover_manual';orderId:string;expectedVersion:number;clientEventId:string;handoverMode:'pickup'|'shipping'};
+ if(Object.keys(value).sort().join(',')!=='clientEventId,command,expectedVersion,handoverMode,orderId'||!validBase(value)||!['pickup','shipping'].includes(value.handoverMode))return {code:'VALIDATION_ERROR' as const,message:ORDER_HANDOVER_COPY.invalid};
+ const authorization=await resolveAuthorization();if(!authorization.ok)return {code:'UNAUTHENTICATED' as const,message:authorization.message};
+ const auth=authorization.data;if(!canChangeOrderHandover(auth,'login'))return {code:'FORBIDDEN' as const,message:ORDER_HANDOVER_COPY.permission};
+ const requestHash=hash({command:value.command,orderId:value.orderId,expectedVersion:value.expectedVersion,clientEventId:value.clientEventId,handoverMode:value.handoverMode});
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('order-mail-handover:'||${auth.tenantId}||':'||${value.clientEventId},0))`);
+  const prior=await tx.execute<{id:string;event_type:string;user_id:string;payload:{requestHash:string}}>(sql`SELECT id,event_type,user_id::text,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${value.clientEventId}::uuid LIMIT 2`);
+  if(prior.length){
+   if(prior.length!==1||prior[0].event_type!=='ORDER_HANDOVER_CHANGED_V1'||prior[0].user_id!==auth.userId||prior[0].payload.requestHash!==requestHash)return {code:'CONFLICT' as const,message:ORDER_HANDOVER_COPY.conflict};
+   return {code:'OK' as const,receipt:await readManualHandoverReceipt(tx,auth.tenantId,prior[0].id),replayed:true};
+  }
+  await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${auth.tenantId},(SELECT customer_id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${value.orderId}))`);
+  const orders=await tx.execute<MailHandoverOrder>(sql`SELECT id,order_number,customer_id,version,handover_mode,station,status FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${value.orderId} FOR UPDATE`);
+  const order=orders[0];if(orders.length!==1||!order)return {code:'NOT_FOUND' as const,message:ORDER_HANDOVER_COPY.missing};
+  if(order.version!==value.expectedVersion)return {code:'CONFLICT' as const,message:ORDER_HANDOVER_COPY.conflict};
+  if(order.handover_mode!=='pickup'&&order.handover_mode!=='shipping')return {code:'VALIDATION_ERROR' as const,message:ORDER_HANDOVER_COPY.invalid};
+  const customer=await deps.readCustomer(tx,auth.tenantId,order.customer_id);if(!customer)return {code:'NOT_FOUND' as const,message:ORDER_HANDOVER_COPY.missing};
+  const boundary=await readHandoverBoundary(tx,auth,order),eventId=randomUUID(),mode=boundary.late?order.handover_mode:value.handoverMode;
+  const message=boundary.late?ORDER_HANDOVER_COPY.late(order.order_number??order.id,customer.name,customer.phone,boundary.carrier,value.handoverMode,boundary.label,boundary.passed):ORDER_HANDOVER_COPY.manualChanged(order.order_number??order.id,value.handoverMode);
+  const taskTitle=boundary.late?ORDER_HANDOVER_COPY.call(customer.name,customer.phone):null;
+  await writeOrderHandover<ManualHandoverReceipt>(tx,auth,{order,mode,passed:boundary.passed,clientEventId:value.clientEventId,eventId,eventType:'ORDER_HANDOVER_CHANGED_V1',requestHash,message,
+   receipt:(version,at)=>({eventId,orderId:order.id,orderNumber:order.order_number,customerId:customer.id,expectedVersion:order.version,orderVersion:version,
+    handoverMode:mode,requestedHandoverMode:value.handoverMode,outcome:boundary.late?'call_customer':'changed',message,taskClientKey:boundary.late?value.clientEventId:null,taskTitle,passed:boundary.passed,actor:{kind:'login',id:auth.userId,at}})});
+  if(boundary.late&&taskTitle)await deps.createTask(tx,auth,{orderId:order.id,clientKey:value.clientEventId,title:taskTitle,note:message,manualEventId:eventId});
+  return {code:'OK' as const,receipt:await readManualHandoverReceipt(tx,auth.tenantId,eventId),replayed:false};
+ });}catch(error){console.error('[ORDER_MANUAL_HANDOVER_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:ORDER_HANDOVER_COPY.unavailable};}
+}
 async function changeHandoverFromMail(raw:unknown,deps:MailHandoverDependencies){
  const value=raw as MailHandoverInput;
  if(Object.keys(value).sort().join(',')!==['command','sourceItemId','sourceVersion','clientEventId',...(value.orderId!==undefined?['orderId','expectedVersion']:[])].sort().join(',')||![value.sourceItemId,value.clientEventId].every(id=>typeof id==='string'&&UUID.test(id))||!Number.isSafeInteger(value.sourceVersion)||value.sourceVersion<1||value.orderId!==undefined&&(typeof value.orderId!=='string'||!value.orderId.trim()||value.orderId.length>128||!Number.isSafeInteger(value.expectedVersion)||value.expectedVersion!<1))return {code:'VALIDATION_ERROR' as const,message:'Original-Mail, Version und eindeutiger Auftrag fehlen.'};
  const authorization=await resolveAuthorization();if(!authorization.ok)return {code:'UNAUTHENTICATED' as const,message:authorization.message};
- const auth=authorization.data;if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const,message:'Mail-Übergabe benötigt Mails und Aufträge.'};
+ const auth=authorization.data;if(!canChangeOrderHandover(auth,'mail'))return {code:'FORBIDDEN' as const,message:'Mail-Übergabe benötigt Mails und Aufträge.'};
  const requestHash=hash(value);
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('order-mail-handover:'||${auth.tenantId}||':'||${value.clientEventId},0))`);
-  const prior=await tx.execute<{id:string;user_id:string;payload:{requestHash:string;receipt:unknown}}>(sql`SELECT id,user_id::text,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${value.clientEventId}::uuid AND event_type='ORDER_HANDOVER_MAIL_V1'`);
-  if(prior.length)return prior.length===1&&prior[0].user_id===auth.userId&&prior[0].payload.requestHash===requestHash?{code:'OK' as const,receipt:prior[0].payload.receipt,replayed:true}:{code:'CONFLICT' as const,message:'Diese Mail-Anweisung wurde bereits anders gespeichert.'};
+  const prior=await tx.execute<{id:string;event_type:string;user_id:string;payload:{requestHash:string;receipt:unknown}}>(sql`SELECT id,event_type,user_id::text,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${value.clientEventId}::uuid LIMIT 2`);
+  if(prior.length)return prior.length===1&&prior[0].event_type==='ORDER_HANDOVER_MAIL_V1'&&prior[0].user_id===auth.userId&&prior[0].payload.requestHash===requestHash?{code:'OK' as const,receipt:prior[0].payload.receipt,replayed:true}:{code:'CONFLICT' as const,message:'Diese Mail-Anweisung wurde bereits anders gespeichert.'};
   const first=await deps.readMail(tx,auth,{itemId:value.sourceItemId,version:value.sourceVersion,lock:false});if(first.code!=='OK')return first;
   if(first.mail.otherReference)return {code:'CONFLICT' as const,message:'Die Mail ist einem anderen Vorgang zugeordnet.'};
   const directive=intakeHandoverDirective(first.mail.text);if(!directive)return {code:'VALIDATION_ERROR' as const,message:'Abholen oder Versenden ist im Mailtext nicht eindeutig. Original prüfen.'};
@@ -140,33 +199,27 @@ async function changeHandoverFromMail(raw:unknown,deps:MailHandoverDependencies)
   const target=first.mail.orderId??value.orderId;
   const candidates=target?await tx.execute<{id:string;number:string|null;version:number}>(sql`SELECT id,order_number AS number,version FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${target} AND customer_id=${customer.id}`):await tx.execute<{id:string;number:string|null;version:number}>(sql`SELECT id,order_number AS number,version FROM public.orders WHERE tenant_id=${auth.tenantId} AND customer_id=${customer.id} AND station IN ('angenommen','galvanik','fertig') AND status<>'storniert' ORDER BY created_at,id LIMIT 101`);
   if(candidates.length!==1)return {code:'VALIDATION_ERROR' as const,message:candidates.length?'Wähle den Auftrag zu dieser Original-Mail.':'Kein passender Auftrag zu dieser Original-Mail.',choices:candidates.map(row=>({id:row.id,number:row.number,version:row.version}))};
+  await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${auth.tenantId},${customer.id})`);
   const [order]=await tx.execute<MailHandoverOrder>(sql`SELECT id,order_number,customer_id,version,handover_mode,station,status FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${candidates[0].id} FOR UPDATE`);
   if(!order||order.customer_id!==customer.id)return {code:'NOT_FOUND' as const,message:'Auftrag gehört nicht zu diesem Kunden.'};
   if(!['pickup','shipping'].includes(order.handover_mode??''))return {code:'VALIDATION_ERROR' as const,message:'Übergabeart im bestehenden Auftrag fehlt. Auftrag zuerst prüfen.'};
   if(value.expectedVersion!==undefined&&value.expectedVersion!==order.version)return {code:'CONFLICT' as const,message:'Auftrag wurde inzwischen geändert. Neu lesen.'};
   const source=await deps.readMail(tx,auth,{itemId:value.sourceItemId,version:value.sourceVersion});if(source.code!=='OK')return source;
-  const shipments=await tx.execute<{carrier:string|null;label_url:string|null;status:string;shipped_at:unknown;delivered_at:unknown}>(sql`SELECT carrier,label_url,status,shipped_at,delivered_at FROM public.shipments WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} ORDER BY created_at,id FOR UPDATE`);
-  const shipped=shipments.find(row=>row.shipped_at||row.delivered_at||!['pending','created','cancelled','canceled'].includes(row.status));
-  const label=shipments.some(row=>Boolean(row.label_url?.trim()));
-  const passed=['abgeholt','versendet'].includes(order.station)||order.status==='storniert';
-  const late=Boolean(shipped||label||passed);
+  const {late,label,passed,carrier}=await readHandoverBoundary(tx,auth,order);
   if(directive.forFuture){
    const changed=await deps.updateDefault(tx,auth,{customerId:customer.id,clientEventId:handoverCustomerEventKey(value.clientEventId),mode:directive.mode});
    if(changed.code!=='OK')throw Error('HANDOVER_CUSTOMER_DEFAULT_'+changed.code);
   }
   const eventId=randomUUID();let taskId:string|null=null;
-  const carrier=shipped?.carrier??null;
   const message=late?ORDER_HANDOVER_COPY.late(order.order_number??order.id,customer.name,customer.phone,carrier,directive.mode,label,passed):ORDER_HANDOVER_COPY.changed(order.order_number??order.id,directive.mode,source.mail.sender,source.mail.receivedAt);
   const effect={itemId:source.mail.id,version:source.mail.version,orderId:order.id,clientEventId:value.clientEventId,mode:late?order.handover_mode!:directive.mode,requestedMode:directive.mode};
-  if(late)taskId=await deps.createTask(tx,auth,{orderId:order.id,clientKey:value.clientEventId,title:ORDER_HANDOVER_COPY.call(customer.name,customer.phone).slice(0,120),note:message},id=>deps.recordEffect(tx,auth,{...effect,taskId:id}));
+  if(late)taskId=await deps.createTask(tx,auth,{orderId:order.id,clientKey:value.clientEventId,title:ORDER_HANDOVER_COPY.call(customer.name,customer.phone),note:message},id=>deps.recordEffect(tx,auth,{...effect,taskId:id}));
   else await deps.recordEffect(tx,auth,{...effect,taskId:null});
-  const mode=late?order.handover_mode:directive.mode;
+  const mode=late?order.handover_mode!:directive.mode;
   // A callback about completed handover is a task, not another physical order mutation.
   // Keep the immutable goods-out receipt and its current order version valid.
-  const updated=passed?[{version:order.version}]:await tx.execute<{version:number}>(sql`UPDATE public.orders SET handover_mode=${mode},version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${order.id} AND version=${order.version} RETURNING version`);
-  if(updated.length!==1)throw Error('HANDOVER_ORDER_VERSION_CONFLICT');
-  const result={eventId,orderId:order.id,orderNumber:order.order_number,customerId:customer.id,orderVersion:updated[0].version,handoverMode:mode,requestedHandoverMode:directive.mode,taskId,outcome:late?'call_customer':'changed',message,mailActor:{kind:'mail',sender:source.mail.sender,at:source.mail.receivedAt,originalItemId:source.mail.id,originalVersion:source.mail.version,graphMessageId:source.mail.graphMessageId,originalSha256:source.mail.originalSha256}};
-  await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,aggregate_version,correlation_id) VALUES(${eventId},${auth.tenantId},${order.id},'ORDER_HANDOVER_MAIL_V1',${message},${JSON.stringify({requestHash,before:{handoverMode:order.handover_mode},receipt:result})}::jsonb,'success',${auth.userId}::uuid,${value.clientEventId}::uuid,1,${updated[0].version},gen_random_uuid())`);
+  const result=await writeOrderHandover(tx,auth,{order,mode,passed,clientEventId:value.clientEventId,eventId,eventType:'ORDER_HANDOVER_MAIL_V1',requestHash,message,
+   receipt:version=>({eventId,orderId:order.id,orderNumber:order.order_number,customerId:customer.id,orderVersion:version,handoverMode:mode,requestedHandoverMode:directive.mode,taskId,outcome:late?'call_customer':'changed',message,mailActor:{kind:'mail',sender:source.mail.sender,at:source.mail.receivedAt,originalItemId:source.mail.id,originalVersion:source.mail.version,graphMessageId:source.mail.graphMessageId,originalSha256:source.mail.originalSha256}})});
   return {code:'OK' as const,receipt:result,replayed:false};
  });}catch(error){console.error('[ORDER_MAIL_HANDOVER_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:'Übergabe-Anweisung nicht gespeichert. Original und dieselbe Kennung behalten.'};}
 }

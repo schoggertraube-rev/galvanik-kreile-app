@@ -23,6 +23,9 @@
     "src/lib/server/commands/complaintCommand.ts": [
       "public.v_complaint_rework_context_v1"
     ],
+    "src/lib/server/commands/customerCreditCommand.ts": [
+      "private.v_invoice_receipt_v1"
+    ],
     "src/lib/server/commands/extraWorkAdminCommand.ts": [
       "private.v_extra_work_catalog_receipts_v1",
       "private.v_extra_work_rate_receipts_v1"
@@ -32,7 +35,8 @@
       "private.v_invoice_created_receipt_v2",
       "private.v_invoice_issue_source_v2",
       "private.v_invoice_receipt_v1",
-      "private.v_order_freeze_state_v1"
+      "private.v_order_freeze_state_v1",
+      "private.v_payment_summary_v1"
     ],
     "src/lib/server/commands/invoiceItemPriceCommand.ts": [
       "private.v_order_freeze_state_v1"
@@ -62,7 +66,6 @@
     ],
     "src/lib/server/commands/recordGoodsOutCommand.ts": [
       "private.v_goods_out_ui_state_v1",
-      "private.v_payment_summary_v1",
       "public.v_complaint_rework_context_v1"
     ],
     "src/lib/server/communicationComplaintPort.ts": [
@@ -130,6 +133,9 @@
     "src/lib/server/orderFreezeRead.ts": [
       "private.v_order_frozen_receipts_v1"
     ],
+    "src/lib/server/orderHandoverSourcePort.ts": [
+      "private.v_order_handover_manual_source_v1"
+    ],
     "src/lib/server/orderIntakeRead.ts": [
       "private.v_order_intake_customers_v1",
       "private.v_order_intake_receipts_v1"
@@ -152,6 +158,9 @@
       "private.v_order_task_assignee_options_v1",
       "private.v_order_task_assignment_receipts_v1",
       "private.v_order_task_assignment_v1"
+    ],
+    "src/lib/server/paymentContract.ts": [
+      "private.v_payment_summary_v1"
     ],
     "src/lib/server/paymentSummaryRead.ts": [
       "private.v_goods_out_ui_state_v1",
@@ -362,6 +371,13 @@
         "private.v_intake_message_contexts_v1",
         "private.v_task_contexts_v1",
         "private.v_task_recipients_v1"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20261114063751_manual_handover_source.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_order_handover_manual_source_v1"
       ],
       "requiredLegacySource": null
     }

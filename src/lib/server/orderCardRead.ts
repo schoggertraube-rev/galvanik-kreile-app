@@ -1,5 +1,6 @@
 import type {OrderActorSummary} from "@/modules/orders/public";
 import "server-only";
+import {readManualHandoverReceipt} from './orderHandoverSourcePort';
 
 import { sql } from "drizzle-orm";
 import {readOrderCommercialQuote,type OrderCommercialQuote} from "./orderQuoteReadPort";
@@ -60,7 +61,7 @@ export type LiveOrderCard = {
   actorReadError?:string;
   shippingService?:string|null;
   shippingServiceError?:string;
-  handoverNotice?:{message:string;taskId:string|null;originalItemId:string;taskState?:'offen'|'erledigt'|'nicht_verfuegbar'};
+  handoverNotice?:{message:string;taskId:string|null;originalItemId:string|null;taskState?:'offen'|'erledigt'|'nicht_verfuegbar'};
   cancellation?:{reason:string;at:string;actor:string;quoteId:string|null;quoteNumber:string|null};
   commercialQuote?:OrderCommercialQuote;
   id: string;
@@ -883,12 +884,20 @@ export async function readLiveOrderCard(
         const awarded=awardedQuote?.positions.find(position=>position.itemId===item.id);
         return awarded?{...item,unit:awarded.unit==null?null:orderPositionUnitLabel(awarded.unit)}:item;
       });
-      const [handoverEvent]=await tx.execute<{payload:{receipt:{orderId:string;orderVersion:number;message:string;taskId:string|null;mailActor:{originalItemId:string}}}}>(sql`SELECT payload FROM public.events WHERE tenant_id=${authorization.tenantId} AND order_id=${input.orderId} AND event_type='ORDER_HANDOVER_MAIL_V1' AND event_schema_version=1 AND status='success' ORDER BY aggregate_version DESC,created_at DESC,id DESC LIMIT 1`);
-      const handover=handoverEvent?.payload?.receipt;
-      if(handover&&(handover.orderId!==queue.id||!Number.isSafeInteger(handover.orderVersion)||handover.orderVersion>queue.version||typeof handover.message!=='string'||!handover.message.trim()||!UUID_PATTERN.test(handover.mailActor?.originalItemId)||handover.taskId!==null&&!UUID_PATTERN.test(handover.taskId)))throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');
+      const [handoverEvent]=await tx.execute<{id:string;event_type:string;payload:{receipt:{orderId:string;orderVersion:number;message:string;taskId:string|null;mailActor:{originalItemId:string}}}}>(sql`SELECT id,event_type,payload FROM public.events WHERE tenant_id=${authorization.tenantId} AND order_id=${input.orderId} AND event_type IN ('ORDER_HANDOVER_MAIL_V1','ORDER_HANDOVER_CHANGED_V1') AND event_schema_version=1 AND status='success' ORDER BY aggregate_version DESC,created_at DESC,id DESC LIMIT 1`);
+      let handoverNotice:LiveOrderCard['handoverNotice'];
+      if(handoverEvent?.event_type==='ORDER_HANDOVER_CHANGED_V1'){
+        const source=await readManualHandoverReceipt(tx,authorization.tenantId,handoverEvent.id);
+        if(source.orderId!==queue.id||source.orderVersion>queue.version)throw Error('ORDER_CARD_MANUAL_HANDOVER_INVALID');
+        handoverNotice={message:source.message,taskId:source.taskId,originalItemId:null};
+      }else if(handoverEvent){
+        const handover=handoverEvent.payload?.receipt;
+        if(handoverEvent.event_type!=='ORDER_HANDOVER_MAIL_V1'||!handover||handover.orderId!==queue.id||!Number.isSafeInteger(handover.orderVersion)||handover.orderVersion>queue.version||typeof handover.message!=='string'||!handover.message.trim()||!UUID_PATTERN.test(handover.mailActor?.originalItemId)||handover.taskId!==null&&!UUID_PATTERN.test(handover.taskId))throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');
+        handoverNotice={message:handover.message,taskId:handover.taskId,originalItemId:handover.mailActor.originalItemId};
+      }
       const activeComplaint=queue.station!=='fertig'?await (await import('./orderReleaseRead')).readOpenOrderComplaint(tx,authorization.tenantId,input.orderId):undefined;
       return {
-        ...(handover?{handoverNotice:{message:handover.message,taskId:handover.taskId,originalItemId:handover.mailActor.originalItemId}}:{}),
+        ...(handoverNotice?{handoverNotice}:{}),
         ...(commercialQuote?{commercialQuote}:{}),
         ...(cancellationRows[0]?{cancellation:cancellationRows[0]}:{}),
         operationalFacts:{rework:isReworkOrder,...(isReworkOrder?{reworkComplaintId:origin.nacharbeit_zu!}:{}),pricesMissing:awardedQuoteUnavailable?null:!isReworkOrder&&items.some(item=>item.unitPriceCents===null&&!awardedQuote?.positions.some(position=>position.itemId===item.id)),...(activeComplaint!==undefined?{complaint:activeComplaint!==null}:{})},

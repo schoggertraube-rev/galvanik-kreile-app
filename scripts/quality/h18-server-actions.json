@@ -234,6 +234,7 @@
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#changeOrderPickupNoticeAction": [
+      "src/test/acceptance/s09_manual_handover.integration.test.ts",
       "src/test/acceptance/kv_v04_server.integration.test.ts",
       "src/test/h18_order_admin_actions.integration.test.ts"
     ],
