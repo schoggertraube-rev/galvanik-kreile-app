@@ -16,7 +16,8 @@ import {emptyDispatchPolicy} from '@/modules/fundament/public';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {updateCustomerAction} from '@/app/actions/customers.actions';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
-import {readHistoricalDispatchClock,dispatchFollowupBoundary} from '../../../e2e/ablauf/historicalDispatchFixture';
+import {readHistoricalDispatchClock,dispatchFollowupBoundary,historicalDispatchDate} from '../../../e2e/ablauf/historicalDispatchFixture';
+import {berlinCalendarDay} from '@/lib/domain/workingDays';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('DISPATCH_CALL_LOOPBACK_REQUIRED');
 async function proposal(id:string){const result=await withSession(full,()=>getOrdersDb());if(!result.ok)throw Error('CALL_QUEUE');const plan=result.data.find(row=>row.id===id)?.finishedDispatch?.reminder;if(!plan)throw Error('CALL_PLAN');return plan;}
 it('E5 settings persist an explicit final interval and active tenant login with actor, read-back and fresh retry',async()=>{
@@ -51,11 +52,35 @@ async function prepare(label:string){
  const plan=await proposal(first.orderId);expect(plan).toMatchObject({stage:'E3',state:'DUE'});if(!plan.due||!plan.clientKey)throw Error('CALL_DUE');
  return {first,second,clock,noticeThreadId:notified.data.threadId,request:{customerId:first.customerId,handover:'pickup' as const,dueDate:plan.due,clientKey:plan.clientKey}};
 }
+it('E5 after a synthetic expired E4 creates one real assigned task and closes only after both actual handovers',async()=>{
+ const {first,second,clock}=await prepare('Letzte Stufe mit historischem Brief');
+ const recipient=await createFixture(['auftraege'],'buero'),settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK'||!settings.settings.dispatchPolicy)throw Error('TEST_E5_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy,storageAfterDays:0,finalStageAfterLetterDays:3,finalStageRecipientId:recipient.actorId}}))).toMatchObject({code:'OK'});
+ const call=await clock.addUnreachedCall(first.customerId,[first.orderId,second.orderId],1),day=berlinCalendarDay(new Date(historicalDispatchDate(clock.databaseNow,0)));
+ const original=await clock.addReminder(first.customerId,[first.orderId,second.orderId],'E4',0,{callTaskId:call.taskId,freezes:call.meta.freezes,deadline:{date:day,due:day}});
+ const request={customerId:first.customerId,handover:'pickup' as const,clientKey:original.stageKey};
+ const before=await withSession(full,()=>getOrdersDb());if(!before.ok)throw Error('TEST_E5_SOURCE_READ');
+ expect(before.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter).toMatchObject({state:'SENT',threadId:original.threadId,finalStage:{state:'DUE',due:day}});
+ const denied=await createFixture(['kunden'],'werkstatt');expect(await withSession(denied,()=>createStorageFinalTaskAction(request))).toMatchObject({code:'FORBIDDEN'});
+ const attempts=await Promise.all([withSession(full,()=>createStorageFinalTaskAction(request)),withSession(full,()=>createStorageFinalTaskAction(JSON.parse(JSON.stringify(request))))]);
+ for(const result of attempts)expect(result).toMatchObject({code:'OK'});const created=attempts[0];if(created.code!=='OK')throw Error('TEST_E5_CREATE');
+ expect(attempts[1]).toMatchObject({taskId:created.taskId});expect(await withSession(full,()=>createStorageFinalTaskAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',taskId:created.taskId,replayed:true});
+ const task=await withSession(recipient,()=>getIntakeTaskAction({taskId:created.taskId}));expect(task).toMatchObject({code:'OK',canComplete:true,task:{status:'offen',fuer_login:recipient.actorId}});
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${created.taskId}`).toEqual([{n:1}]);
+ const operator=await createFixture(['auftraege','geld'],'buero');
+ const firstOut={orderId:first.orderId,expectedVersion:first.version,mode:'abholung' as const,clientEventId:randomUUID()};
+ expect(await withSession(operator,()=>recordGoodsOutAction(firstOut))).toMatchObject({code:'OK'});
+ expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.taskId}::uuid`).toEqual([{status:'offen'}]);
+ const secondOut={orderId:second.orderId,expectedVersion:second.version,mode:'abholung' as const,clientEventId:randomUUID()};
+ expect(await withSession(operator,()=>recordGoodsOutAction(secondOut))).toMatchObject({code:'OK'});
+ expect(await withSession(operator,()=>recordGoodsOutAction(JSON.parse(JSON.stringify(secondOut))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT status,erledigt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.taskId}::uuid`).toEqual([{status:'erledigt',erledigt_von:operator.actorId}]);
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CLOSED_V1' AND payload->>'taskId'=${created.taskId}`).toEqual([{n:1}]);
+});
+
 it('E4 uses the existing sender only after individual eligibility and starts the final interval at the actual sent receipt',async()=>{
- const {first,request}=await prepare('E4-Lagerfrist');
- const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('E4_CALL_CREATE');
- const task=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));if(task.code!=='OK'||!task.task)throw Error('E4_CALL_READ');
- expect(await withSession(full,()=>completeIntakeTaskAction({taskId:created.taskId,version:task.task!.version,note:'TEST nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
+ const {first,second,clock}=await prepare('E4-Lagerfrist');
+ await clock.addUnreachedCall(first.customerId,[first.orderId,second.orderId],1);
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK'||!settings.settings.dispatchPolicy)throw Error('E4_SETTINGS');
  const recipient=await createFixture(['auftraege'],'buero');
  expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy,storageAfterDays:0,finalStageAfterLetterDays:3,finalStageRecipientId:recipient.actorId}}))).toMatchObject({code:'OK'});
@@ -77,9 +102,17 @@ it('E4 uses the existing sender only after individual eligibility and starts the
  expect(await withSession(denied,()=>createStorageFinalTaskAction(finalRequest))).toMatchObject({code:'FORBIDDEN'});
  // The promised original deadline survives the later setting change (PL 12:06).
  expect(await withSession(full,()=>createStorageFinalTaskAction(finalRequest))).toMatchObject({code:'CONFLICT'});
- vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(Date.now()+7*24*60*60*1000);
- let attempts;
- try{attempts=await Promise.all([withSession(full,()=>createStorageFinalTaskAction(finalRequest)),withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))]);}finally{vi.useRealTimers();}
+});
+
+it('E5 expired original preserves task ownership, fresh retries and later-ware physical repair without changing clocks',async()=>{
+ const {first,second,clock}=await prepare('E5 abgelaufenes Original');
+ const recipient=await createFixture(['auftraege'],'buero'),settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK'||!settings.settings.dispatchPolicy)throw Error('E5_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy,storageAfterDays:0,finalStageAfterLetterDays:0,finalStageRecipientId:recipient.actorId}}))).toMatchObject({code:'OK'});
+ const call=await clock.addUnreachedCall(first.customerId,[first.orderId,second.orderId],1),day=berlinCalendarDay(new Date(historicalDispatchDate(clock.databaseNow,0)));
+ const original=await clock.addReminder(first.customerId,[first.orderId,second.orderId],'E4',0,{callTaskId:call.taskId,freezes:call.meta.freezes,deadline:{date:day,due:day}});
+ const finalRequest={customerId:first.customerId,handover:'pickup' as const,clientKey:original.stageKey};
+ const finalSettings=await withSession(full,()=>readShippingSettingsAction());if(finalSettings.code!=='OK')throw Error('E5_CURRENT_SETTINGS');
+ const attempts=await Promise.all([withSession(full,()=>createStorageFinalTaskAction(finalRequest)),withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))]);
  for(const attempt of attempts){if(attempt.code!=='OK')throw Error('E5_EXACT_FAILURE:'+JSON.stringify({attempt,queue:await withSession(full,()=>getOrdersDb())}));expect(attempt).toMatchObject({code:'OK'});}const finalTask=attempts[0];if(finalTask.code!=='OK')throw Error('E5_CREATE');
  expect(attempts[1]).toMatchObject({taskId:finalTask.taskId});
  const currentQueue=await withSession(full,()=>getOrdersDb());if(!currentQueue.ok)throw Error('E5_RETRY_QUEUE');const currentLetter=currentQueue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.storage?.letter;if(!currentLetter)throw Error('E5_RETRY_LETTER');expect(currentLetter.finalStage.state).toBe('TASK_PENDING');
@@ -99,20 +132,20 @@ it('E4 uses the existing sender only after individual eligibility and starts the
  const completed=await withSession(full,()=>getOrdersDb());expect(completed.ok&&completed.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'COMPLETED',taskId:finalTask.taskId});
  expect(await withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))).toMatchObject({code:'OK',taskId:finalTask.taskId,replayed:true});
  const later=await readyInvoiceOrder('E4-Spätere-Ware','pickup',false,first.customerId);
- expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:later.orderId,clientRequestId:randomUUID(),subject:'TEST Neue Ware fertig',body:'TEST Neue Ware fertig',expectedInvoiceIds:[later.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:later.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ const laterNotice=await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:later.orderId,clientRequestId:randomUUID(),subject:'TEST Neue Ware fertig',body:'TEST Neue Ware fertig',expectedInvoiceIds:[later.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:later.invoice.invoiceId}}));expect(laterNotice).toMatchObject({code:'OK'});if(laterNotice.code!=='OK')throw Error('E5_LATER_NOTICE');
  const newGroup=await withSession(full,()=>getOrdersDb());if(!newGroup.ok)throw Error('E4_NEW_GROUP_READ');
  expect(newGroup.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:'COMPLETED',taskId:finalTask.taskId});
- expect(newGroup.data.find(row=>row.id===later.orderId)?.finishedDispatch?.reminder).toMatchObject({stage:'E1',state:'DUE',orderIds:[later.orderId]});
+ expect(newGroup.data.find(row=>row.id===later.orderId)?.finishedDispatch?.reminder).toMatchObject({stage:'E1',...dispatchFollowupBoundary(laterNotice.data.recordedAt,0,clock.databaseNow),orderIds:[later.orderId]});
  expect(newGroup.data.find(row=>row.id===later.orderId)?.finishedDispatch?.storage).toBeUndefined();
- for(const stage of ['E1','E2'] as const){const plan=await proposal(later.orderId);expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST Neue Gruppe '+stage,body:'TEST Bitte abholen',collectionReminder:{stage,handover:'pickup',dueDate:plan.due!}}))).toMatchObject({code:'OK'});}
- const laterPlan=await proposal(later.orderId);if(!laterPlan.due||!laterPlan.clientKey)throw Error('E5_LATER_PLAN');
- const laterCall=await withSession(full,()=>createDispatchCallTaskAction({customerId:first.customerId,handover:'pickup',dueDate:laterPlan.due!,clientKey:laterPlan.clientKey!}));if(laterCall.code!=='OK')throw Error('E5_LATER_CALL');
- const laterTask=await withSession(full,()=>getIntakeTaskAction({taskId:laterCall.taskId}));if(laterTask.code!=='OK'||!laterTask.task)throw Error('E5_LATER_TASK');
- expect(await withSession(full,()=>completeIntakeTaskAction({taskId:laterCall.taskId,version:laterTask.task!.version,note:'TEST neue Gruppe nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
+ // A separate historical starting group for the following actual E5/output
+ // command; E1/E2/call/E4 writers are proved in their isolated stage cases.
+ await clock.addNotice(later.orderId,6);
+ await clock.addReminder(first.customerId,[later.orderId],'E1',4);await clock.addReminder(first.customerId,[later.orderId],'E2',2);
+ const laterCall=await clock.addUnreachedCall(first.customerId,[later.orderId],1);
+ const secondOriginal=await clock.addReminder(first.customerId,[later.orderId],'E4',0,{callTaskId:laterCall.taskId,freezes:laterCall.meta.freezes,deadline:{date:day,due:day}});
  const secondRead=await withSession(full,()=>getOrdersDb());if(!secondRead.ok)throw Error('E5_SECOND_READ');
  const secondOrder=secondRead.data.find(row=>row.id===later.orderId),secondLetter=secondOrder?.finishedDispatch?.storage?.letter;if(!secondOrder||!secondLetter)throw Error('E5_SECOND_LETTER');
- const secondSent=await withSession(full,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID(),collectionReminder:{...input.collectionReminder,dueDate:secondLetter.due,clientKey:secondLetter.clientKey}}));
- if(secondSent.code!=='OK')throw Error('E4_SECOND_SEND:'+JSON.stringify({result:secondSent,letter:secondLetter,plan:secondOrder.finishedDispatch?.reminder}));
+ expect(secondLetter).toMatchObject({state:'SENT',threadId:secondOriginal.threadId});
  const secondFinalRequest={...finalRequest,clientKey:secondLetter.clientKey};
  const secondFinal=await withSession(full,()=>createStorageFinalTaskAction(secondFinalRequest));if(secondFinal.code!=='OK')throw Error('E5_SECOND_FINAL');
  const operator=await createFixture(['auftraege','geld'],'buero');
@@ -134,7 +167,7 @@ it('E4 uses the existing sender only after individual eligibility and starts the
  await sql`UPDATE public.events SET payload=${sql.json(source.payload)}::jsonb WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${source.id}`;
  expect(await withSession(operator,()=>recordGoodsOutAction(structuredClone(goodsOut)))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>createStorageFinalTaskAction(structuredClone(secondFinalRequest)))).toMatchObject({code:'OK',taskId:secondFinal.taskId,replayed:true});
- await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'threadId'=${sent.data.threadId}`;
+ await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'threadId'=${original.threadId}`;
  const damaged=await withSession(full,()=>getOrdersDb());expect(damaged.ok&&damaged.data.find(row=>row.id===first.orderId)?.finishedDispatch?.state).toBe('unavailable');
  expect(await withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))).toMatchObject({code:'UNAVAILABLE'});
  expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${first.orderId}`).toEqual([{n:1}]);
