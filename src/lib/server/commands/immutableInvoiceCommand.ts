@@ -578,6 +578,34 @@ type PreparedInvoiceContent = {
  * customer, order or position leaves invoice, lifecycle event and counter
  * completely untouched.
  */
+/** The existing per-rate commercial rounding; no head-rate or second calculator. */
+function invoiceLineTotals(lines:readonly ImmutableInvoiceLine[]){
+  const netAmountCents=lines.reduce((sum,line)=>sum+(line.type==="BASE"?line.lineNetAmountCents:line.amountCents),0);
+  const byRate=new Map<0|700|1900,number>();
+  for(const line of lines){
+    const rate=line.vat_rate_basis_points;
+    if(rate===undefined)throw Error("INVOICE_LINE_RATE_REQUIRED");
+    const amount=line.type==="BASE"?line.lineNetAmountCents:line.amountCents;
+    const accumulated=(byRate.get(rate)??0)+amount;
+    if(!Number.isSafeInteger(accumulated))throw Error("INVOICE_AMOUNT_UNSAFE");
+    byRate.set(rate,accumulated);
+  }
+  const vatBreakdown:InvoiceVatGroup[]=[...byRate].map(([rateBp,netCents])=>{
+    const vatCents=Number((BigInt(netCents)*BigInt(rateBp)+BigInt(5000))/BigInt(10000));
+    return {rateBp,netCents,vatCents,grossCents:netCents+vatCents};
+  });
+  const vatAmountCents=vatBreakdown.reduce((sum,group)=>sum+group.vatCents,0);
+  const grossAmountCents=vatBreakdown.reduce((sum,group)=>sum+group.grossCents,0);
+  if (
+    !Number.isSafeInteger(netAmountCents)
+    || !Number.isSafeInteger(vatAmountCents)
+    || !Number.isSafeInteger(grossAmountCents)
+    || netAmountCents < 0
+  ) throw new Error("INVOICE_AMOUNT_UNSAFE");
+
+  return {netAmountCents,vatAmountCents,grossAmountCents,vatBreakdown};
+}
+
 function prepareInvoiceContent(
   source: SourceRow,
   order: LockedOrder,
@@ -608,28 +636,7 @@ function prepareInvoiceContent(
     || extraWorkLines.reduce((sum, line) => sum + line.amountCents, 0) !== extraWorkNetAmountCents
   ) throw new Error("INVOICE_LINE_TOTAL_MISMATCH");
 
-  const netAmountCents = baseNetAmountCents + extraWorkNetAmountCents+shippingLines.reduce((sum,line)=>sum+line.amountCents,0);
-  const byRate=new Map<0|700|1900,number>();
-  for(const line of [...baseLines,...extraWorkLines,...shippingLines]){
-    const rate=line.vat_rate_basis_points;
-    if(rate===undefined)throw Error("INVOICE_LINE_RATE_REQUIRED");
-    const amount=line.type==="BASE"?line.lineNetAmountCents:line.amountCents;
-    const accumulated=(byRate.get(rate)??0)+amount;
-    if(!Number.isSafeInteger(accumulated))throw Error("INVOICE_AMOUNT_UNSAFE");
-    byRate.set(rate,accumulated);
-  }
-  const vatBreakdown:InvoiceVatGroup[]=[...byRate].map(([rateBp,netCents])=>{
-    const vatCents=Number((BigInt(netCents)*BigInt(rateBp)+BigInt(5000))/BigInt(10000));
-    return {rateBp,netCents,vatCents,grossCents:netCents+vatCents};
-  });
-  const vatAmountCents=vatBreakdown.reduce((sum,group)=>sum+group.vatCents,0);
-  const grossAmountCents=vatBreakdown.reduce((sum,group)=>sum+group.grossCents,0);
-  if (
-    !Number.isSafeInteger(netAmountCents)
-    || !Number.isSafeInteger(vatAmountCents)
-    || !Number.isSafeInteger(grossAmountCents)
-    || netAmountCents < 0
-  ) throw new Error("INVOICE_AMOUNT_UNSAFE");
+  const {netAmountCents,vatAmountCents,grossAmountCents,vatBreakdown}=invoiceLineTotals([...baseLines,...extraWorkLines,...shippingLines]);
 
   return {
     seller: {
@@ -1254,7 +1261,6 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         }
         throw error;
       }
-      const { netAmountCents, vatRateBasisPoints, vatAmountCents, grossAmountCents } = content.totals;
       if(commercial){
         const bound=await bindOrderQuoteCommercialTerms(tx,authorization.data,order.id);
         const unchanged=bound.shippingIncluded===commercial.shippingIncluded&&bound.quoteId===commercial.quoteId&&bound.edition===commercial.edition
@@ -1269,155 +1275,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         if(!unchanged)throw Error('QUOTE_COMMERCIAL_TERMS_CHANGED_DURING_INVOICE');
       }
 
-      // Exactly one issue instant per invoice. Berlin is the only legal
-      // calendar truth for the invoice year and the due date; the same instant
-      // is reused for invoice, lifecycle event, snapshot and receipt.
-      const timeRows = await tx.execute<{ issued_at_iso: string; invoice_year: number; due_date: Date | string }>(sql`
-        WITH issue_instant AS (SELECT clock_timestamp() AS ts)
-        SELECT
-          to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS issued_at_iso,
-          extract(year FROM (ts AT TIME ZONE 'Europe/Berlin'))::integer AS invoice_year,
-          ((ts AT TIME ZONE 'Europe/Berlin')::date + ${paymentTermDays}::integer) AS due_date
-        FROM issue_instant
-      `);
-      const timeRow = timeRows[0];
-      if (timeRows.length !== 1 || !timeRow) throw new Error("INVOICE_TIME_UNAVAILABLE");
-      const issuedAtIso = requireIsoInstant(timeRow.issued_at_iso, "INVOICE_TIME_INVALID");
-      const invoiceYear = toSafeInteger(timeRow.invoice_year, "INVOICE_YEAR_INVALID");
-      const dueDate = toDateOnly(timeRow.due_date);
-      const serviceDate = toDateOnly(source.service_date);
-
-      const numberRows = await tx.execute<{ invoice_number: string }>(sql`
-        SELECT private.allocate_invoice_number(${tenantId}, ${invoiceYear}) AS invoice_number
-      `);
-      const invoiceNumber = numberRows[0]?.invoice_number;
-      if (!invoiceNumber || !INVOICE_NUMBER_PATTERN.test(invoiceNumber)) {
-        throw new Error("INVOICE_NUMBER_ALLOCATION_FAILED");
-      }
-
-      const snapshot: ImmutableInvoiceSnapshot = {
-        schemaVersion: 2,
-        seller: content.seller,
-        customer: content.customer,
-        order: content.order,
-        lines: content.lines,
-        totals: content.totals,
-        serviceDate,
-        issuedAt: issuedAtIso,
-        paymentTermDays,
-      };
-
-      let pdfBuffer: Buffer;
-      try {
-        pdfBuffer = await renderToBuffer(
-          createImmutableInvoicePdfDocument({ invoiceNumber, dueDate, snapshot,vat:requireVatReader(readVat)(snapshot),originalInvoiceNumber }),
-        );
-      } catch {
-        throw new Error("INVOICE_PDF_RENDER_FAILED");
-      }
-      if (pdfBuffer.byteLength < 1 || pdfBuffer.byteLength > 20 * 1024 * 1024) {
-        throw new Error("INVOICE_PDF_SIZE_INVALID");
-      }
-      const pdfSha256 = createHash("sha256").update(pdfBuffer).digest("hex");
-
-      const invoiceId = randomUUID();
-      const correlationId = randomUUID();
-      const pdfRef = `invoice://${invoiceId}/original`;
-      const invoiceEventType = afterGoodsOut ? EVENT_TYPE_V2 : EVENT_TYPE;
-      const invoiceEventSchemaVersion = afterGoodsOut ? 2 : EVENT_SCHEMA_VERSION;
-      const invoiceEventStation = afterGoodsOut ? "abgeholt" : STATION;
-      const eventPayload = {
-        invoiceId,
-        freezeId: source.freeze_id,
-        invoiceNumber,
-        orderVersion: order.version,
-        netAmountCents,
-        vatRateBasisPoints,
-        vatAmountCents,
-        grossAmountCents,
-        pdfSha256,
-        invoiceVersion: 1,
-        ...(input.shippingCosts?{shippingCosts:input.shippingCosts}:{}),
-        ...(afterGoodsOut ? { invoiceSourceState: "after_goods_out" as const } : {}),
-      };
-
-      const eventRows = await tx.execute<{ event_id: string }>(sql`
-        INSERT INTO public.events (
-          id, tenant_id, order_id, item_id, event_type, description, user_id,
-          payload, status, station, client_event_id, event_schema_version,
-          correlation_id, aggregate_version, from_station, created_at
-        ) VALUES (
-          gen_random_uuid()::text, ${tenantId}, ${order.id}, NULL,
-          ${invoiceEventType}, 'Unveränderliche Rechnung erstellt', ${actorId}::uuid,
-          ${JSON.stringify(eventPayload)}::jsonb,
-          'success', ${invoiceEventStation}, ${input.clientEventId}::uuid, ${invoiceEventSchemaVersion},
-          ${correlationId}::uuid, 1, ${invoiceEventStation},
-          ${issuedAtIso}::timestamptz AT TIME ZONE 'UTC'
-        )
-        RETURNING id AS event_id
-      `);
-      const event = eventRows[0];
-      if (eventRows.length !== 1 || !event || !UUID_PATTERN.test(event.event_id)) {
-        throw new Error("INVOICE_EVENT_INSERT_FAILED");
-      }
-
-      const invoiceRows = await tx.execute<{ id: string }>(sql`
-        INSERT INTO public.invoices (
-          id, tenant_id, customer_id, order_id, invoice_number, amount_total, status, due_date,
-          contract_version, freeze_id, snapshot, net_amount_cents, vat_rate_basis_points,
-          vat_amount_cents, gross_amount_cents, service_date, payment_term_days,
-          order_version, aggregate_version, client_event_id, correlation_id, issue_event_id,
-          issued_at, issued_by, pdf_ref, pdf_sha256, pdf_content,
-          payment_contract_version, payment_mode, payment_status,
-          payment_open_amount_cents, payment_paid_amount_cents, payment_currency,
-          payment_method, payment_paid_at, payment_receipt_id, payment_event_id,
-          payment_correlation_id, payment_version,belegart,ursprung_rechnung_id
-        ) VALUES (
-          ${invoiceId}::uuid, ${tenantId}, ${order.customer_id}, ${order.id},
-          ${invoiceNumber}, (${grossAmountCents}::numeric / 100), 'issued', ${dueDate}::date,
-          1, ${source.freeze_id}::uuid, ${JSON.stringify(snapshot)}::jsonb,
-          ${netAmountCents}, ${vatRateBasisPoints}, ${vatAmountCents}, ${grossAmountCents},
-          ${serviceDate}::date, ${paymentTermDays}, ${order.version}, 1,
-          ${input.clientEventId}::uuid, ${correlationId}::uuid,
-          ${event.event_id}, ${issuedAtIso}::timestamptz, ${actorId}::uuid,
-          ${pdfRef}, ${pdfSha256}, ${pdfBuffer},
-          ${PAYMENT_CONTRACT_VERSION}, ${order.payment_mode}, 'offen',
-          ${grossAmountCents}, 0, 'EUR', NULL, NULL, NULL, NULL, NULL, 0,
-          ${input.shippingCosts?'versandkosten':'auftrag'},${input.shippingCosts?.invoiceId??null}::uuid
-        )
-        RETURNING id
-      `);
-      const insertedInvoice = invoiceRows[0];
-      if (invoiceRows.length !== 1 || !insertedInvoice || insertedInvoice.id !== invoiceId) {
-        throw new Error("INVOICE_INSERT_FAILED");
-      }
-
-      await readInitialPaymentState(tx, {
-        tenantId,
-        invoiceId,
-        orderId: order.id,
-        grossAmountCents,
-        paymentMode: order.payment_mode,
-      });
-
-      const receiptRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
-      if (receiptRows.length !== 1 || !receiptRows[0]) throw new Error("INVOICE_RECEIPT_MISSING");
-      const receipt = mapInvoiceIssueReceipt(receiptRows[0], tenantId, actorId,requireVatReader(readVat));
-      if (
-        !receiptMatchesIntent(receipt, input,receiptRows[0])
-        || receipt.invoiceId !== invoiceId
-        || receipt.invoiceNumber !== invoiceNumber
-        || receipt.netAmountCents !== netAmountCents
-        || receipt.vatAmountCents !== vatAmountCents
-        || receipt.grossAmountCents !== grossAmountCents
-        || receipt.serviceDate !== serviceDate
-        || receipt.dueDate !== dueDate
-        || receipt.pdfSha256 !== pdfSha256
-        // One instant on invoice, event, snapshot and receipt — proven, not assumed.
-        || receipt.issuedAt !== issuedAtIso
-      ) throw new Error("INVOICE_RECEIPT_MISMATCH");
-
-      return { code: "OK", receipt, replayed: false };
+      return persistPreparedInvoice(tx,authorization.data,input,order,content,{paymentTermDays,serviceDate:source.service_date,freezeId:source.freeze_id,afterGoodsOut,originalInvoiceNumber},requireVatReader(readVat));
     };
     return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
   } catch (error) {
@@ -1432,6 +1290,163 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
     });
     return { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher ausgestellt werden." };
   }
+}
+
+/** Single existing number/PDF/payment/event/receipt writer, shared by qualified preparations. */
+async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,content:PreparedInvoiceContent,terms:{paymentTermDays:number;serviceDate:Date|string;freezeId:string;afterGoodsOut:boolean;originalInvoiceNumber?:string},readVat:InvoiceVatReader):Promise<Extract<CreateInvoiceResult,{code:'OK'}>>{
+  if(!isPaymentMode(order.payment_mode))throw Error('INVOICE_PAYMENT_MODE_INVALID');
+  const {tenantId,userId:actorId}=auth;
+  const {paymentTermDays,afterGoodsOut,originalInvoiceNumber}=terms;
+  const {netAmountCents,vatRateBasisPoints,vatAmountCents,grossAmountCents}=content.totals;
+  // Exactly one issue instant per invoice. Berlin is the only legal
+  // calendar truth for the invoice year and the due date; the same instant
+  // is reused for invoice, lifecycle event, snapshot and receipt.
+  const timeRows = await tx.execute<{ issued_at_iso: string; invoice_year: number; due_date: Date | string }>(sql`
+    WITH issue_instant AS (SELECT clock_timestamp() AS ts)
+    SELECT
+      to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS issued_at_iso,
+      extract(year FROM (ts AT TIME ZONE 'Europe/Berlin'))::integer AS invoice_year,
+      ((ts AT TIME ZONE 'Europe/Berlin')::date + ${paymentTermDays}::integer) AS due_date
+    FROM issue_instant
+  `);
+  const timeRow = timeRows[0];
+  if (timeRows.length !== 1 || !timeRow) throw new Error("INVOICE_TIME_UNAVAILABLE");
+  const issuedAtIso = requireIsoInstant(timeRow.issued_at_iso, "INVOICE_TIME_INVALID");
+  const invoiceYear = toSafeInteger(timeRow.invoice_year, "INVOICE_YEAR_INVALID");
+  const dueDate = toDateOnly(timeRow.due_date);
+  const serviceDate = toDateOnly(terms.serviceDate);
+
+  const numberRows = await tx.execute<{ invoice_number: string }>(sql`
+    SELECT private.allocate_invoice_number(${tenantId}, ${invoiceYear}) AS invoice_number
+  `);
+  const invoiceNumber = numberRows[0]?.invoice_number;
+  if (!invoiceNumber || !INVOICE_NUMBER_PATTERN.test(invoiceNumber)) {
+    throw new Error("INVOICE_NUMBER_ALLOCATION_FAILED");
+  }
+
+  const snapshot: ImmutableInvoiceSnapshot = {
+    schemaVersion: 2,
+    seller: content.seller,
+    customer: content.customer,
+    order: content.order,
+    lines: content.lines,
+    totals: content.totals,
+    serviceDate,
+    issuedAt: issuedAtIso,
+    paymentTermDays,
+  };
+
+  let pdfBuffer: Buffer;
+  try {
+    pdfBuffer = await renderToBuffer(
+      createImmutableInvoicePdfDocument({ invoiceNumber, dueDate, snapshot,vat:requireVatReader(readVat)(snapshot),originalInvoiceNumber }),
+    );
+  } catch {
+    throw new Error("INVOICE_PDF_RENDER_FAILED");
+  }
+  if (pdfBuffer.byteLength < 1 || pdfBuffer.byteLength > 20 * 1024 * 1024) {
+    throw new Error("INVOICE_PDF_SIZE_INVALID");
+  }
+  const pdfSha256 = createHash("sha256").update(pdfBuffer).digest("hex");
+
+  const invoiceId = randomUUID();
+  const correlationId = randomUUID();
+  const pdfRef = `invoice://${invoiceId}/original`;
+  const invoiceEventType = afterGoodsOut ? EVENT_TYPE_V2 : EVENT_TYPE;
+  const invoiceEventSchemaVersion = afterGoodsOut ? 2 : EVENT_SCHEMA_VERSION;
+  const invoiceEventStation = afterGoodsOut ? "abgeholt" : STATION;
+  const eventPayload = {
+    invoiceId,
+    freezeId: terms.freezeId,
+    invoiceNumber,
+    orderVersion: order.version,
+    netAmountCents,
+    vatRateBasisPoints,
+    vatAmountCents,
+    grossAmountCents,
+    pdfSha256,
+    invoiceVersion: 1,
+    ...(input.shippingCosts?{shippingCosts:input.shippingCosts}:{}),
+    ...(afterGoodsOut ? { invoiceSourceState: "after_goods_out" as const } : {}),
+  };
+
+  const eventRows = await tx.execute<{ event_id: string }>(sql`
+    INSERT INTO public.events (
+      id, tenant_id, order_id, item_id, event_type, description, user_id,
+      payload, status, station, client_event_id, event_schema_version,
+      correlation_id, aggregate_version, from_station, created_at
+    ) VALUES (
+      gen_random_uuid()::text, ${tenantId}, ${order.id}, NULL,
+      ${invoiceEventType}, 'Unveränderliche Rechnung erstellt', ${actorId}::uuid,
+      ${JSON.stringify(eventPayload)}::jsonb,
+      'success', ${invoiceEventStation}, ${input.clientEventId}::uuid, ${invoiceEventSchemaVersion},
+      ${correlationId}::uuid, 1, ${invoiceEventStation},
+      ${issuedAtIso}::timestamptz AT TIME ZONE 'UTC'
+    )
+    RETURNING id AS event_id
+  `);
+  const event = eventRows[0];
+  if (eventRows.length !== 1 || !event || !UUID_PATTERN.test(event.event_id)) {
+    throw new Error("INVOICE_EVENT_INSERT_FAILED");
+  }
+
+  const invoiceRows = await tx.execute<{ id: string }>(sql`
+    INSERT INTO public.invoices (
+      id, tenant_id, customer_id, order_id, invoice_number, amount_total, status, due_date,
+      contract_version, freeze_id, snapshot, net_amount_cents, vat_rate_basis_points,
+      vat_amount_cents, gross_amount_cents, service_date, payment_term_days,
+      order_version, aggregate_version, client_event_id, correlation_id, issue_event_id,
+      issued_at, issued_by, pdf_ref, pdf_sha256, pdf_content,
+      payment_contract_version, payment_mode, payment_status,
+      payment_open_amount_cents, payment_paid_amount_cents, payment_currency,
+      payment_method, payment_paid_at, payment_receipt_id, payment_event_id,
+      payment_correlation_id, payment_version,belegart,ursprung_rechnung_id
+    ) VALUES (
+      ${invoiceId}::uuid, ${tenantId}, ${order.customer_id}, ${order.id},
+      ${invoiceNumber}, (${grossAmountCents}::numeric / 100), 'issued', ${dueDate}::date,
+      1, ${terms.freezeId}::uuid, ${JSON.stringify(snapshot)}::jsonb,
+      ${netAmountCents}, ${vatRateBasisPoints}, ${vatAmountCents}, ${grossAmountCents},
+      ${serviceDate}::date, ${paymentTermDays}, ${order.version}, 1,
+      ${input.clientEventId}::uuid, ${correlationId}::uuid,
+      ${event.event_id}, ${issuedAtIso}::timestamptz, ${actorId}::uuid,
+      ${pdfRef}, ${pdfSha256}, ${pdfBuffer},
+      ${PAYMENT_CONTRACT_VERSION}, ${order.payment_mode}, 'offen',
+      ${grossAmountCents}, 0, 'EUR', NULL, NULL, NULL, NULL, NULL, 0,
+      ${input.shippingCosts?'versandkosten':'auftrag'},${input.shippingCosts?.invoiceId??null}::uuid
+    )
+    RETURNING id
+  `);
+  const insertedInvoice = invoiceRows[0];
+  if (invoiceRows.length !== 1 || !insertedInvoice || insertedInvoice.id !== invoiceId) {
+    throw new Error("INVOICE_INSERT_FAILED");
+  }
+
+  await readInitialPaymentState(tx, {
+    tenantId,
+    invoiceId,
+    orderId: order.id,
+    grossAmountCents,
+    paymentMode: order.payment_mode,
+  });
+
+  const receiptRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
+  if (receiptRows.length !== 1 || !receiptRows[0]) throw new Error("INVOICE_RECEIPT_MISSING");
+  const receipt = mapInvoiceIssueReceipt(receiptRows[0], tenantId, actorId,requireVatReader(readVat));
+  if (
+    !receiptMatchesIntent(receipt, input,receiptRows[0])
+    || receipt.invoiceId !== invoiceId
+    || receipt.invoiceNumber !== invoiceNumber
+    || receipt.netAmountCents !== netAmountCents
+    || receipt.vatAmountCents !== vatAmountCents
+    || receipt.grossAmountCents !== grossAmountCents
+    || receipt.serviceDate !== serviceDate
+    || receipt.dueDate !== dueDate
+    || receipt.pdfSha256 !== pdfSha256
+    // One instant on invoice, event, snapshot and receipt — proven, not assumed.
+    || receipt.issuedAt !== issuedAtIso
+  ) throw new Error("INVOICE_RECEIPT_MISMATCH");
+
+  return { code: "OK", receipt, replayed: false };
 }
 
 export type CancellationCreditComposition={failed:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>;settled:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>};
