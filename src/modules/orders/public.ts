@@ -45,3 +45,5 @@ export type {OrderActorEvidence,OrderActorSummary} from "./server/types";
 export type {InitialDispatchReminderPlan,PickupAppointmentProjection} from './domain/outputEscalation';
 
 export type {StorageEligibility} from './domain/storageEligibility';
+
+export type {ManualShipmentGroupState} from './server/types';

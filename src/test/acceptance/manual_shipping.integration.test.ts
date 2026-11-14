@@ -137,6 +137,15 @@ it('V13–V16 actual manual tracking keeps shipment, actor and history across re
  await sql`UPDATE public.customers SET street='TEST Weg' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
  const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
  const handover={orderId:order.orderId,mode:'versand' as const,expectedVersion:order.version,clientEventId:randomUUID()};
+ // S10: the separately confirmed format-override parcel above is a second
+ // physical shipment. Hand over that selected group first; it cannot close
+ // the order or consume the original parcel's later confirmation.
+ const currentGroups=await withSession(full,()=>getManualShippingAction({orderId:order.orderId}));
+ if(currentGroups.code!=='OK')throw Error('TEST_V13_GROUP_READ');
+ const extra=currentGroups.data.shipmentGroups.find(group=>group.members.some(member=>member.shipmentId===invalid.shipmentId));
+ if(!extra)throw Error('TEST_V13_SECOND_PARCEL');
+ expect(await withSession(full,()=>recordGoodsOutAction({orderId:order.orderId,groupId:extra.id,expectedGroupVersion:extra.version,clientEventId:randomUUID(),members:[{orderId:order.orderId,expectedVersion:order.version}]}))).toMatchObject({code:'OK'});
+ expect(await sql`SELECT station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{station:'fertig',version:order.version}]);
  const handedOver=await withSession(full,()=>recordGoodsOutAction(handover));
  expect(handedOver).toMatchObject({code:'OK'});if(handedOver.code!=='OK')throw Error('MANUAL_HANDOVER:'+handedOver.code);
  expect(await sql`SELECT status,shipped_at IS NOT NULL AS handed_over,delivered_at FROM public.shipments WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.shipmentId}::uuid`).toEqual([{status:'shipped',handed_over:true,delivered_at:null}]);
@@ -200,4 +209,27 @@ it('R15 active intake exposes the same versioned first look and existing start c
  console.info('TEST_R15_FINISH_SOURCE',JSON.stringify(finishRead.code==='OK'?finishRead.data.nextActionRule:finishRead));
  expect(finishRead).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK',zustand:'finish',hauptaktion:{elementId:'order.finish',befehl:{funktion:'freezeOrderAction'}}}}});
  expect(JSON.stringify(finishRead.code==='OK'?finishRead.data.nextActionRule:{})).not.toMatch(/Cents|unitPrice|netto|vatRate/);
+});
+
+it('S10 an original label without a number accepts its first real manual tracking proof without replacing the label',async()=>{
+ const order=await readyInvoiceOrder('TEST S10 Etikett vervollständigen','shipping');
+ const {readShippingSettingsAction,saveShippingSettingsAction}=await import('@/app/actions/settings.actions');
+ const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('TEST_S10_LABEL_SETTINGS');
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:'TEST S10 Paket',numberPattern:'',numberHint:'',trackingUrl:null,expectedUpdatedAt:settings.settings.updatedAt}))).toMatchObject({code:'OK'});
+ const shipmentId=randomUUID(),label='https://example.invalid/TEST-s10-original-label.pdf';
+ // Synthetic carrier boundary only, not a label purchase or a handover proof.
+ await sql`INSERT INTO public.shipments(id,tenant_id,order_id,carrier,status,label_url) VALUES(${shipmentId}::uuid,${KREILE_TENANT_SLUG},${order.orderId},'TEST S10 Paket','created',${label})`;
+ const {getManualShippingAction,saveManualTrackingAction}=await import('@/app/actions/orders.actions');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const output={orderId:order.orderId,expectedVersion:order.version,mode:'versand' as const,clientEventId:randomUUID()};
+ expect(await withSession(full,()=>recordGoodsOutAction(output))).toMatchObject({code:'VALIDATION_ERROR',message:'Sendungsnummer fehlt – trag sie ein'});
+ const read=await withSession(full,()=>getManualShippingAction({orderId:order.orderId}));if(read.code!=='OK')throw Error('TEST_S10_LABEL_READ');
+ const input={orderId:order.orderId,shipmentId,expectedUpdatedAt:read.data.shipments[0].updatedAt,trackingNumber:'TEST Label 17',allowFormatMismatch:false,reason:null,clientEventId:randomUUID()};
+ const saved=await withSession(full,()=>saveManualTrackingAction(input));expect(saved).toMatchObject({code:'OK'});if(saved.code!=='OK')throw Error('TEST_S10_LABEL_TRACKING');
+ expect(await withSession(full,()=>saveManualTrackingAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT label_url,tracking_number,status,shipped_at FROM public.shipments WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${shipmentId}::uuid`).toEqual([{label_url:label,tracking_number:input.trackingNumber,status:'created',shipped_at:null}]);
+ expect(await withSession(full,()=>saveManualTrackingAction({...input,clientEventId:randomUUID(),expectedUpdatedAt:saved.receipt.updatedAt,trackingNumber:'TEST replacement',reason:'TEST replace existing provider number'}))).toMatchObject({code:'CONFLICT',reason:'SHIPMENT_PROVIDER_LABEL_EXISTS'});
+ expect(await withSession(full,()=>recordGoodsOutAction(output))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>recordGoodsOutAction(JSON.parse(JSON.stringify(output))))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT label_url,status,shipped_at IS NOT NULL AS handed FROM public.shipments WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${shipmentId}::uuid`).toEqual([{label_url:label,status:'shipped',handed:true}]);
 });

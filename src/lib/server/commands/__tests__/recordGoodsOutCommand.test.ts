@@ -188,6 +188,7 @@ function configureSuccess(options: {
     if (text.includes("UPDATE public.shipments")) return Promise.resolve([]);
     // Synthetic secured parcel for the positive shipping cases. Real source
     // qualification and missing-number rejection are exercised against Replay.
+    if (text.includes("FROM public.shipments own JOIN") || text.includes("FROM public.shipments shipment") && text.includes("AND NOT (")) return Promise.resolve([]);
     if (text.includes("FROM public.shipments shipment")) return Promise.resolve([{id:"66666666-6666-4666-8666-666666666666"}]);
     if (text.includes("FROM public.events audit")) return Promise.resolve([]);
     // Synthetic SQL fixture: no pending invoice reissue in these output cases.
@@ -368,7 +369,8 @@ describe("recordGoodsOut", () => {
       execute.mockReset();
       execute.mockImplementation((query: Query) => {
         const text = queryText(query);
-        if (text.includes("FROM public.shipments shipment")) return Promise.resolve([{id:"66666666-6666-4666-8666-666666666666"}]);
+        if (text.includes("FROM public.shipments own JOIN") || text.includes("FROM public.shipments shipment") && text.includes("AND NOT (")) return Promise.resolve([]);
+    if (text.includes("FROM public.shipments shipment")) return Promise.resolve([{id:"66666666-6666-4666-8666-666666666666"}]);
         if (text.includes("pg_advisory_xact_lock") || text.includes("FROM public.events")) return Promise.resolve([]);
         if (text.includes("FROM public.orders")) return Promise.resolve([{ ...finishedOrder, payment_mode: "vorkasse" }]);
         if (text.includes("FROM public.complaints")) return Promise.resolve([]);

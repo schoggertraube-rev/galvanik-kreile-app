@@ -316,6 +316,7 @@ export const MAIL_RESEND_COPY={
 export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich',rejected:'abgelehnt, ohne Wirkung',originalCommand:{
  'item.finished':'Teil fertig melden',
  'document.deliveryNote':DELIVERY_NOTE_COPY.title,
+ 'shipment.handover':MANUAL_SHIPPING_HANDOVER_LABEL,
  'item.extraWork':'Mehrarbeit erfassen',
  'order.handover':'Übergabeart ändern',
  'invoice.issue':'Rechnung ausstellen',
@@ -422,3 +423,11 @@ export const SHIPPING_FEE_COPY={
  invalid:'Der Versandpreis muss ein Betrag ab 0,00 € sein. Leer heißt: kein Standard.',
  forbidden:'Die Versandpauschale ändert nur, wer das Recht Geld hat.',
 } as const;
+
+export const SHIPMENT_GROUP_COPY={
+ // TODO_PL R8: confirm group-specific wording; original source/rights stay unchanged.
+ invalid:'TODO_PL: Sendungsgruppe erneut wählen.',changed:'TODO_PL: Sendungsgruppe neu laden und erneut bestätigen.',
+ confirmGroup:'TODO_PL: Öffne die Versanddaten und bestätige die aktuelle Sendungsgruppe.',
+ blocked:(order:string,reason:string)=>`${order}: ${reason}`,
+ unavailable:'TODO_PL: Übergabe mit derselben Buchungskennung erneut speichern.'
+};

@@ -8,6 +8,7 @@ import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 import type {ShippingSettings} from '@/modules/fundament/public';
 import {MANUAL_SHIPPING_COPY,MANUAL_SHIPPING_FIELDS,SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
+import type {ManualShipmentGroupState} from './types';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const id=(value:unknown):value is string=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
@@ -17,7 +18,7 @@ export type ManualShippingPorts={
  readSettings:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<ShippingSettings|null>;
 };
 type Order={id:string;customer_id:string;order_number:string;handover_mode:string|null;station:string;version:number;allowed:boolean};
-type Shipment={id:string;order_id:string;orderNumber:string;orderVersion:number;sendungId:string|null;carrier:string|null;trackingNumber:string|null;updatedAt:string;status:string;weightKg:string|null;labelUrl:string|null};
+type Shipment={id:string;order_id:string;orderNumber:string;orderVersion:number;sendungId:string|null;carrier:string|null;trackingNumber:string|null;updatedAt:string;status:string;shippedAt:string|null;weightKg:string|null;labelUrl:string|null};
 export type SaveManualTrackingInput={orderId:string;shipmentId:string;expectedUpdatedAt:string|null;trackingNumber:string;allowFormatMismatch:boolean;reason:string|null;clientEventId:string;withOrder?:{orderId:string;shipmentId:string|null;expectedUpdatedAt:string|null}};
 type Receipt={shipmentId:string;orderId:string;trackingNumber:string;carrier:string;updatedAt:string;eventId:string;actorId:string;formatOverride:boolean;sendungId?:string};
 const error=(code:'FORBIDDEN'|'VALIDATION_ERROR'|'NOT_FOUND'|'CONFLICT'|'UNAVAILABLE',reason:keyof typeof MANUAL_SHIPPING_COPY)=>({code,reason,message:MANUAL_SHIPPING_COPY[reason]});
@@ -33,11 +34,11 @@ async function readOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapsh
   WHERE tenant_id=${auth.tenantId} AND id=${orderId} ${lock?sql`FOR UPDATE`:sql``}`);
  if(rows.length>1)throw Error('SHIPPING_ORDER_AMBIGUOUS');return rows[0]??null;
 }
-async function readShipments(tx:PrivilegedTenantTransaction,tenantId:string,filter:{orderId:string}|{shipmentId:string},lock=false,includeGroup=false){
- const rows=await tx.execute<Shipment>(sql`SELECT shipment.id::text,shipment.order_id,linked.order_number AS "orderNumber",linked.version AS "orderVersion",shipment.sendung_id::text AS "sendungId",shipment.carrier,shipment.tracking_number AS "trackingNumber",shipment.status,shipment.label_url AS "labelUrl",
+async function readShipments(tx:PrivilegedTenantTransaction,tenantId:string,filter:{orderId:string}|{shipmentId:string}|{orderIds:string[]},lock=false,includeGroup=false){
+ const rows=await tx.execute<Shipment>(sql`SELECT shipment.id::text,shipment.order_id,linked.order_number AS "orderNumber",linked.version AS "orderVersion",shipment.sendung_id::text AS "sendungId",shipment.carrier,shipment.tracking_number AS "trackingNumber",shipment.status,shipment.shipped_at::text AS "shippedAt",shipment.label_url AS "labelUrl",
   shipment.weight_kg::text AS "weightKg",to_char(shipment.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
   FROM public.shipments shipment JOIN public.orders linked ON linked.tenant_id=shipment.tenant_id AND linked.id=shipment.order_id
-  WHERE shipment.tenant_id=${tenantId} AND ${'orderId'in filter?sql`(shipment.order_id=${filter.orderId} OR (${includeGroup} AND shipment.sendung_id IN (SELECT own.sendung_id FROM public.shipments own WHERE own.tenant_id=${tenantId} AND own.order_id=${filter.orderId} AND own.sendung_id IS NOT NULL)))`:sql`shipment.id=${filter.shipmentId}::uuid`}
+  WHERE shipment.tenant_id=${tenantId} AND ${'orderIds'in filter?sql`shipment.order_id IN (${sql.join(filter.orderIds.map(value=>sql`${value}`),sql`,` )})`:'orderId'in filter?sql`(shipment.order_id=${filter.orderId} OR (${includeGroup} AND shipment.sendung_id IN (SELECT own.sendung_id FROM public.shipments own WHERE own.tenant_id=${tenantId} AND own.order_id=${filter.orderId} AND own.sendung_id IS NOT NULL)))`:sql`shipment.id=${filter.shipmentId}::uuid`}
   ORDER BY shipment.created_at,shipment.id LIMIT 101 ${lock?sql`FOR UPDATE OF shipment`:sql``}`);
  if(rows.length>100)throw Error('SHIPPING_LIMIT');return rows;
 }
@@ -50,6 +51,20 @@ function shipmentGroups(rows:Shipment[]){
   const members=[...entries].sort((a,b)=>a.id.localeCompare(b.id)).map(row=>({shipmentId:row.id,orderId:row.order_id,orderNumber:row.orderNumber,orderVersion:row.orderVersion,sendungId:row.sendungId,updatedAt:row.updatedAt,status:row.status,carrier:row.carrier,trackingNumber:row.trackingNumber}));
   return {id,version:createHash('sha256').update(JSON.stringify(members)).digest('hex'),members};
  });
+}
+/** Same membership/version source for an explicit group confirmation. Order
+ * locks precede this lock-aware read in the existing goods-out composition. */
+export async function readManualShipmentGroup(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,groupId:string,lock=false):Promise<ManualShipmentGroupState>{
+ if(!authorized(auth))throw Error('SHIPPING_FORBIDDEN');
+ const initial=await readShipments(tx,auth.tenantId,{orderId},false,true);
+ const selected=shipmentGroups(initial).find(group=>group.id===groupId);
+ if(!selected)return null;
+ const orderIds=[...new Set(selected.members.map(row=>row.orderId))].sort();
+ const all=await readShipments(tx,auth.tenantId,{orderIds},lock);
+ const group=shipmentGroups(all).find(row=>row.id===groupId);
+ if(!group)return null;
+ const ids=new Set(group.members.map(row=>row.shipmentId));
+ return {group,remainingOrderIds:orderIds.filter(id=>all.some(row=>row.order_id===id&&!ids.has(row.id)&&row.status!=='cancelled'&&row.shippedAt===null))};
 }
 export async function readManualShipping(auth:AuthorizationSnapshot,orderId:unknown,ports:ManualShippingPorts){
  if(!authorized(auth))return error('FORBIDDEN','SHIPPING_FORBIDDEN');
@@ -119,7 +134,10 @@ export async function saveManualTracking(auth:AuthorizationSnapshot,input:unknow
   if(old&&(old.order_id!==order.id||old.updatedAt!==value.expectedUpdatedAt))return error('CONFLICT','SHIPMENT_CHANGED');
   if(!old&&value.expectedUpdatedAt!==null)return error('CONFLICT','SHIPMENT_CHANGED');
   if(old&&!['pending','created'].includes(old.status))return error('CONFLICT','SHIPMENT_ALREADY_RELEASED');
-  if(old?.labelUrl)return error('CONFLICT','SHIPMENT_PROVIDER_LABEL_EXISTS');
+  // A bare retained label is not a parcel number or physical handover. Its
+  // first explicit manual number uses this same writer; a numbered provider
+  // original still cannot be replaced here. label_url is never changed.
+  if(old?.labelUrl&&old.trackingNumber)return error('CONFLICT','SHIPMENT_PROVIDER_LABEL_EXISTS');
   if(old?.carrier&&old.carrier!==settings.service)return error('CONFLICT','SHIPMENT_CARRIER_CHANGED');
   if(old?.trackingNumber&&old.trackingNumber!==value.trackingNumber&&!value.reason)return error('VALIDATION_ERROR','TRACKING_CHANGE_REASON_REQUIRED');
   let groupId=old?.sendungId??null;

@@ -1,4 +1,4 @@
-import {retainPendingWorkshopOriginal,isPendingWorkshopAcknowledgement,type PendingFinancialCommand,type PendingHandoverCommand,type PendingDeliveryNoteCommand,type PendingConfirmedCommand,type PendingWorkshopOriginal} from './pendingStore';
+import {retainPendingWorkshopOriginal,isPendingWorkshopAcknowledgement,type PendingFinancialCommand,type PendingHandoverCommand,type PendingDeliveryNoteCommand,type PendingShipmentGroupCommand,type PendingConfirmedCommand,type PendingWorkshopOriginal} from './pendingStore';
 import {syncOriginals} from './syncOriginals';
 import type {WorkshopAcknowledgement} from './syncPendingFiles';
 import {CUSTOMER_CREDIT_COPY,ORDER_HANDOVER_COPY,OFFLINE_ITEM_FINISHED_COPY,DELIVERY_NOTE_COPY} from '@/ui/situationCatalog';
@@ -8,6 +8,7 @@ import {isWorkshopRejectionReceipt,type WorkshopRejectionReceipt} from './worksh
 
 type FinancialAcknowledgement=Extract<WorkshopAcknowledgement['result'],{financialCommand:string}>;
 type HandoverAcknowledgement=Extract<WorkshopAcknowledgement['result'],{handoverCommand:string}>;
+type ShipmentAcknowledgement=Extract<WorkshopAcknowledgement['result'],{shipmentCommand:string}>;
 type DeliveryNoteAcknowledgement=Extract<WorkshopAcknowledgement['result'],{documentCommand:string}>;
 type FinancialFailure=Exclude<WorkshopAcknowledgement['result'],{code:'OK'|'PRESERVED'}>&{message:string;rejectionReceipt?:WorkshopRejectionReceipt};
 /** A08-11: retain first in the one scoped store, then use its one dispatcher.
@@ -15,22 +16,24 @@ type FinancialFailure=Exclude<WorkshopAcknowledgement['result'],{code:'OK'|'PRES
 export function queueFinancialCommand(scope:string,command:PendingFinancialCommand,currentScope:()=>string|null){return queueConfirmedCommand(scope,command,currentScope);}
 export function queueHandoverCommand(scope:string,command:PendingHandoverCommand,currentScope:()=>string|null){return queueConfirmedCommand(scope,command,currentScope);}
 export function queueDeliveryNoteCommand(scope:string,command:PendingDeliveryNoteCommand,currentScope:()=>string|null){return queueConfirmedCommand(scope,command,currentScope);}
+export function queueShipmentGroupCommand(scope:string,command:PendingShipmentGroupCommand,currentScope:()=>string|null){return queueConfirmedCommand(scope,command,currentScope);}
+function queueConfirmedCommand(scope:string,command:PendingShipmentGroupCommand,currentScope:()=>string|null):Promise<ShipmentAcknowledgement|FinancialFailure>;
 function queueConfirmedCommand(scope:string,command:PendingFinancialCommand,currentScope:()=>string|null):Promise<FinancialAcknowledgement|FinancialFailure>;
 function queueConfirmedCommand(scope:string,command:PendingHandoverCommand,currentScope:()=>string|null):Promise<HandoverAcknowledgement|FinancialFailure>;
 function queueConfirmedCommand(scope:string,command:PendingDeliveryNoteCommand,currentScope:()=>string|null):Promise<DeliveryNoteAcknowledgement|FinancialFailure>;
 async function queueConfirmedCommand(scope:string,command:PendingConfirmedCommand,currentScope:()=>string|null){
- const unavailable=command.command==='order.handover'?ORDER_HANDOVER_COPY.unavailable:command.command==='document.deliveryNote'?DELIVERY_NOTE_COPY.unavailable:CUSTOMER_CREDIT_COPY.unavailable;
+ const unavailable=command.command==='order.handover'||command.command==='shipment.handover'?ORDER_HANDOVER_COPY.unavailable:command.command==='document.deliveryNote'?DELIVERY_NOTE_COPY.unavailable:CUSTOMER_CREDIT_COPY.unavailable;
  if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:unavailable};
  // A-01 / PL16:36: this queue transports confirmed online financial commands;
  // it must not turn an offline click into a future money/numbering instruction.
- if(command.command!=='order.handover'&&!readServerReachability())return {code:'UNAVAILABLE' as const,message:OFFLINE_ITEM_FINISHED_COPY.networkRequired};
- const original:PendingWorkshopOriginal={...command,id:command.input.clientEventId,itemId:command.command==='document.deliveryNote'?command.input.orderIds[0]:command.command==='invoice.issue'||command.command==='order.handover'?command.input.orderId:command.command==='credit.payout'?command.input.customerId:command.input.invoiceId,kind:'workshop',deviceCapturedAt:new Date().toISOString()};
- const acknowledgement:{value:FinancialAcknowledgement|HandoverAcknowledgement|DeliveryNoteAcknowledgement|null}={value:null};
+ if(command.command!=='order.handover'&&command.command!=='shipment.handover'&&!readServerReachability())return {code:'UNAVAILABLE' as const,message:OFFLINE_ITEM_FINISHED_COPY.networkRequired};
+ const original:PendingWorkshopOriginal={...command,id:command.input.clientEventId,itemId:command.command==='document.deliveryNote'?command.input.orderIds[0]:command.command==='invoice.issue'||command.command==='order.handover'||command.command==='shipment.handover'?command.input.orderId:command.command==='credit.payout'?command.input.customerId:command.input.invoiceId,kind:'workshop',deviceCapturedAt:new Date().toISOString()};
+ const acknowledgement:{value:FinancialAcknowledgement|HandoverAcknowledgement|DeliveryNoteAcknowledgement|ShipmentAcknowledgement|null}={value:null};
  const failure:{value:FinancialFailure|null}={value:null};
  const accepted=(event:Event)=>{
   const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
   if(!proof||currentScope()!==scope||proof.scope!==scope||proof.entry.id!==original.id||proof.entry.command!==original.command)return;
-  if(proof.result.code==='OK'&&('financialCommand'in proof.result&&proof.result.financialCommand===original.command||'handoverCommand'in proof.result&&proof.result.handoverCommand===original.command||'documentCommand'in proof.result&&proof.result.documentCommand===original.command)
+  if(proof.result.code==='OK'&&('shipmentCommand'in proof.result&&proof.result.shipmentCommand===original.command||'financialCommand'in proof.result&&proof.result.financialCommand===original.command||'handoverCommand'in proof.result&&proof.result.handoverCommand===original.command||'documentCommand'in proof.result&&proof.result.documentCommand===original.command)
     &&canonicalJson(proof.entry.input)===canonicalJson(original.input)
     &&isPendingWorkshopAcknowledgement(scope,proof.entry,proof.result))acknowledgement.value=proof.result;
  };
