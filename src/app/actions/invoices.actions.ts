@@ -1,5 +1,10 @@
 "use server";
 import {readInvoiceVat} from "@/modules/accounting/server-public";
+import {readCustomerCredit,readCustomerCreditInTransaction} from "@/modules/accounting/server-public";
+import type {CustomerCreditResult,CustomerCreditApplyInput} from "@/modules/accounting/public";
+import {readCustomerProfile} from "@/modules/customers/server-public";
+import {synchronizeCancellationCreditRetryTask} from '@/modules/tasks/server-public';
+import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 
 import { revalidatePath } from "next/cache";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -66,12 +71,38 @@ export async function setInvoiceItemPricesAction(
 
 export async function cancelInvoiceAction(input: CancelInvoiceInput): Promise<CancelInvoiceResult> {
   const { cancelInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
-  const result = await cancelInvoice(input,readInvoiceVat);
+  const result = await cancelInvoice(input,readInvoiceVat,{
+    failed:async(tx,auth,key)=>synchronizeCancellationCreditRetryTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},'ensure'),
+    settled:async(tx,auth,key)=>synchronizeCancellationCreditRetryTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},'settle'),
+  });
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
     revalidatePath("/warendurchlauf");
   }
   return result;
+}
+
+export async function getCustomerCreditAction(customerId:string):Promise<CustomerCreditResult>{
+  const authorization=await resolveActionAuthorization();
+  if(!authorization.ok)return authorization.result;
+  const {readCustomerCreditPayoutHistory}=await import('@/lib/server/commands/customerCreditCommand');
+  return readCustomerCredit(authorization.data,customerId,readCustomerProfile,readCustomerCreditPayoutHistory);
+}
+
+export async function applyCustomerCreditAction(input:CustomerCreditApplyInput){
+ const {applyCustomerCredit}=await import('@/lib/server/commands/customerCreditCommand');
+ const result=await applyCustomerCredit(input,(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile));
+ if(result.code==='OK'){
+  revalidatePath('/buchhaltung/rechnungen');revalidatePath('/warendurchlauf');revalidatePath('/customers');
+ }
+ return result;
+}
+
+export async function payoutCustomerCreditAction(input:import('@/modules/accounting/public').CustomerCreditPayoutInput){
+ const {payoutCustomerCredit}=await import('@/lib/server/commands/customerCreditCommand');
+ const result=await payoutCustomerCredit(input,(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile),readCustomerProfile);
+ if(result.code==='OK'){revalidatePath('/buchhaltung/rechnungen');revalidatePath('/customers');}
+ return result;
 }
 
 export type GetInvoiceReceiptActionResult =

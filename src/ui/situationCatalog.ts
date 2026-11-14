@@ -125,6 +125,7 @@ export const ACTOR_COPY={
  mail:(sender:string)=>'Mail von '+sender,
 };
 export const QUOTE_CYCLE_COPY={
+ retainedGoodsBlocked:(reason:string)=>`Die Ware ist gespeichert, aber gesperrt: ${reason}. Kläre die Abweichung an der KV-Ware, dann entsteht der Auftrag.`,
  goodsUnavailable:'KV-Warenannahme konnte nicht sicher bestätigt werden. Eingaben und Kennung behalten.',
  orderRetry:(number:string)=>'Auftrag aus KV '+number+' anlegen',
  orderRetryTask:(number:string)=>'Auftrag aus KV '+number+' anlegen · Ware ist da, der Auftrag fehlt noch',
@@ -301,7 +302,13 @@ export const MAIL_RESEND_COPY={
  canceledTaskDescription:(invoice:string,customer:string,sentAt:string|null)=>'Kunde: '+customer+'\nRechnung: '+invoice+'\nSendezeit: '+(sentAt?new Intl.DateTimeFormat('de-DE',{dateStyle:'medium',timeStyle:'medium',timeZone:'Europe/Berlin'}).format(new Date(sentAt)):'nicht belegt'),
  canceled:(invoice:string)=>'Rechnung '+invoice+' ist storniert – Versand nicht mehr nötig'
 };
-export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich'} as const;
+export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich',rejected:'abgelehnt, ohne Wirkung',originalCommand:{
+ 'item.finished':'Teil fertig melden',
+ 'item.extraWork':'Mehrarbeit erfassen',
+ 'invoice.cancel':'Rechnung stornieren',
+ 'credit.apply':'Guthaben verrechnen',
+ 'credit.payout':'Guthaben auszahlen',
+}} as const;
 
 /** PL11.11.11:01: pending is not a successful server completion. */
 export const OFFLINE_ITEM_FINISHED_COPY={pending:(part:string)=>`Teil ${part} fertig – wird übertragen, sobald Netz da ist`,networkRequired:'Geht nur mit Netz',notSaved:'Teilstatus ist noch nicht gesichert. Erneut speichern.'} as const;
@@ -357,4 +364,24 @@ export const OFFLINE_DEVICE_STATUS_COPY={
  unavailable:'Offline-Speicher auf diesem Gerät nicht verfügbar - Eingaben gehen nur mit Netz',
  quarantine:(count:number)=>`${count} Eingaben zurückgehalten - tippe zum Zuordnen`,
  incomplete:'Noch nicht alle Daten auf diesem Gerät – mit Netz lädt die App den Rest automatisch.',
+} as const;
+// R8 S08: PL13.11.23:25.
+export const CUSTOMER_CREDIT_COPY={
+ payoutLabel:(amount:string,customer:string,method:'bar'|'ueberweisung')=>`${amount} Guthaben an ${customer} ausgezahlt (${method==='bar'?'bar':'Überweisung'})`,
+ payoutMethodMissing:'Wie wurde ausgezahlt? Wähle bar oder Überweisung',
+ payoutReferenceMissing:'Referenz der Überweisung fehlt – trag Datum und Verwendungszweck ein',
+ payoutInvalid:'Betrag oder Nachweis fehlt. Trag beides ein, dann speichere ich die Erstattung.',
+ payoutForbidden:'Erstattungen speichern darf nur, wer das Recht Geld hat.',
+ payoutChanged:'Der Erstattungsbetrag oder sein Zahlungsbeleg hat sich geändert. Lade den aktuellen Stand; dein Nachweis bleibt erhalten.',
+ methodLabel:'Guthaben',
+ applyLabel:(amount:string,number:string)=>`Guthaben ${amount} mit Rechnung ${number} verrechnen`,
+ changed:'Das Guthaben oder der Rechnungsrest hat sich geändert. Lade die aktuelle Verrechnung; deine Angaben bleiben erhalten.',
+ retryTask:(number:string)=>`Guthaben aus Storno ${number} bilden · die Zahlung ist da, das Guthaben fehlt noch`,
+ invalid:'Betrag oder Rechnung fehlt. Trag beides ein, dann verrechne ich das Guthaben.',
+ forbidden:'Guthaben verrechnen darf nur, wer das Recht Geld hat.',
+ unavailable:'Das Guthaben ist gerade nicht erreichbar. Deine Angaben bleiben erhalten – versuch es gleich noch einmal.',
+ notFound:'Für diesen Kunden gibt es dieses Guthaben nicht mehr. Lade den aktuellen Stand.',
+ pending:'Der Storno ist noch nicht übertragen. Er wird gesendet, sobald die Verbindung steht.',
+ paymentUnknown:'Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Erfass zuerst Betrag und Datum der Zahlung, dann storniere die Rechnung erneut.',
+ tooHigh:(amount:string)=>`Der Betrag ist höher als das Guthaben von ${amount}.`,
 } as const;

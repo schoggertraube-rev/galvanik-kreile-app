@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {
   isPaymentMode,
+  isPaymentMethod,
   type PaymentMethod,
   type PaymentMode,
   type PaymentStatus,
@@ -12,7 +13,9 @@ import {
   getAuthorizationActionGrants,
   hasAuthorizationArea,
   resolveAuthorization,
+  type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
+import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {
   withPrivilegedTenantTransaction,
@@ -62,6 +65,7 @@ export type ConfirmPaymentReceipt = {
   confirmedAt: string;
   confirmedBy: string;
   source: "manual";
+  creditVersion?:number;
 };
 
 export type ConfirmPaymentResult =
@@ -69,7 +73,7 @@ export type ConfirmPaymentResult =
   | { code: "UNAUTHENTICATED"; message: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "NOT_FOUND"; message: string }
-  | { code: "CONFLICT"; message: string; currentOpenAmountCents?: number }
+  | { code: "CONFLICT"; message: string; currentOpenAmountCents?: number;currentCreditBalanceCents?:number }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
@@ -131,10 +135,6 @@ type ParsedInvoiceState = {
 };
 
 type PaymentEventData = Omit<ConfirmPaymentReceipt, "invoiceNumber">;
-
-function isPaymentMethod(value: unknown): value is PaymentMethod {
-  return value === "bar" || value === "ueberweisung" || value === "karte";
-}
 
 function isSettledPaymentStatus(value: unknown): value is Exclude<PaymentStatus, "offen"> {
   return value === "teilbezahlt" || value === "bezahlt";
@@ -254,10 +254,11 @@ function parsePaymentEvent(row: PaymentEventRow, tenantId: string): PaymentEvent
   }
   const payload = row.payload as Record<string, unknown>;
   const expectedKeys = [
+    ...(payload.method==='guthaben'?['creditVersion']:[]),
     "amountCents", "currency", "grossAmountCents", "invoiceId", "method", "occurredAt",
     "openAmountCents", "orderId", "paidAmountCents", "paymentMode", "paymentStatus",
     "paymentVersion", "receiptId", "source",
-  ];
+  ].sort();
   const actualKeys = Object.keys(payload).sort();
   const amountCents = toSafeInteger(payload.amountCents);
   const grossAmountCents = toSafeInteger(payload.grossAmountCents);
@@ -265,6 +266,7 @@ function parsePaymentEvent(row: PaymentEventRow, tenantId: string): PaymentEvent
   const openAmountCents = toSafeInteger(payload.openAmountCents);
   const paymentVersion = toSafeInteger(payload.paymentVersion);
   const occurredAt = toIsoInstant(row.occurred_at);
+  const creditVersion=toSafeInteger(payload.creditVersion);
   if (
     row.event_type !== EVENT_TYPE
     || row.tenant_id !== tenantId
@@ -304,6 +306,7 @@ function parsePaymentEvent(row: PaymentEventRow, tenantId: string): PaymentEvent
     || (payload.paymentStatus === "teilbezahlt" && (openAmountCents <= 0 || paidAmountCents >= grossAmountCents))
     || (payload.paymentStatus === "bezahlt" && (openAmountCents !== 0 || paidAmountCents !== grossAmountCents))
     || !isPaymentMethod(payload.method)
+    || (payload.method==='guthaben'&&creditVersion===null)
     || payload.source !== PAYMENT_SOURCE
     || typeof payload.occurredAt !== "string"
     || !ISO_INSTANT_PATTERN.test(payload.occurredAt)
@@ -331,6 +334,7 @@ function parsePaymentEvent(row: PaymentEventRow, tenantId: string): PaymentEvent
     confirmedAt: payload.occurredAt,
     confirmedBy: row.actor_id,
     source: PAYMENT_SOURCE,
+    ...(creditVersion!==null?{creditVersion}:{}),
   };
 }
 
@@ -478,7 +482,13 @@ async function lockInvoiceOrder(
   `);
 }
 
-export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResult> {
+export type PaymentCreditComposition={
+ expectedVersion:number;
+ prepare:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:ConfirmPaymentInput)=>Promise<{code:'OK';customerId:string}|Exclude<ConfirmPaymentResult,{code:'OK'}>>;
+ debit:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:ConfirmPaymentInput,customerId:string)=>Promise<void>;
+ verify:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:ConfirmPaymentReceipt)=>Promise<void>;
+};
+export async function confirmPayment(input: unknown,credit?:PaymentCreditComposition): Promise<ConfirmPaymentResult> {
   if (!isValidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Zahlungsbestätigung." };
   }
@@ -496,6 +506,8 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
   }
   const actionGrants = getAuthorizationActionGrants(authorization.data);
   const canManageFinance = hasAuthorizationArea(authorization.data, "geld");
+  if(input.method==='guthaben'&&(!canManageFinance||!credit))return {code:'FORBIDDEN',message:CUSTOMER_CREDIT_COPY.forbidden};
+  if(credit&&(input.method!=='guthaben'||!Number.isSafeInteger(credit.expectedVersion)||credit.expectedVersion<0||credit.expectedVersion>MAX_INT4))return {code:'VALIDATION_ERROR',message:CUSTOMER_CREDIT_COPY.invalid};
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG
     || !actionGrants.confirmPayment
@@ -529,6 +541,10 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
           || !replayInvoices[0]
           || !replayReceiptMatchesInvoice(replayedReceipt, replayInvoices[0], tenantId)
         ) throw new Error("PAYMENT_REPLAY_READBACK_INVALID");
+        if(credit){
+          if(replayedReceipt.creditVersion!==credit.expectedVersion)return {code:'CONFLICT',message:CUSTOMER_CREDIT_COPY.changed};
+          await credit.verify(tx,authorization.data,{...replayedReceipt,invoiceNumber:replayInvoices[0].invoice_number});
+        }
         return {
           code: "OK",
           receipt: { ...replayedReceipt, invoiceNumber: replayInvoices[0].invoice_number },
@@ -536,7 +552,11 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
         };
       }
 
-      // All payment-axis commands lock the order first. That serializes mode
+      // Credit commands share the customer lock with cancellation/payout first.
+      // A rejected preparation has not debited anything.
+      const preparedCredit=credit?await credit.prepare(tx,authorization.data,input):null;
+      if(preparedCredit&&preparedCredit.code!=='OK')return preparedCredit;
+      // All payment-axis commands then lock the order. That serializes mode
       // changes, invoice issuance and payment confirmation without reversing
       // the createInvoice lock order.
       const orderRows = await lockInvoiceOrder(tx, tenantId, input.invoiceId);
@@ -564,13 +584,17 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
         return { code: "VALIDATION_ERROR", message: "Zahlungsvertrag der Rechnung ist nicht verfügbar." };
       }
       if (input.expectedOpenAmountCents!==undefined && current.openAmountCents!==input.expectedOpenAmountCents) {
-        return {code:"CONFLICT",message:"Zahlungsstand wurde bereits geändert.",currentOpenAmountCents:current.openAmountCents};
+        return {code:"CONFLICT",message:credit?CUSTOMER_CREDIT_COPY.changed:"Zahlungsstand wurde bereits geändert.",currentOpenAmountCents:current.openAmountCents};
       }
       if (current.paymentVersion !== input.expectedVersion) {
-        return { code: "CONFLICT", message: "Zahlungsstand wurde bereits geändert.", currentOpenAmountCents:current.openAmountCents };
+        return { code: "CONFLICT", message:credit?CUSTOMER_CREDIT_COPY.changed:"Zahlungsstand wurde bereits geändert.", currentOpenAmountCents:current.openAmountCents };
       }
       if (input.amount > current.openAmountCents) {
         return { code: "VALIDATION_ERROR", message: "Zahlungsbetrag übersteigt den offenen Betrag." };
+      }
+      if(credit){
+        if(!preparedCredit||preparedCredit.code!=='OK')throw Error('CUSTOMER_CREDIT_PREPARATION_MISSING');
+        await credit.debit(tx,authorization.data,input,preparedCredit.customerId);
       }
 
       const paymentVersion = current.paymentVersion + 1;
@@ -603,6 +627,7 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
         occurredAt: confirmedAt,
         paymentVersion,
         source: PAYMENT_SOURCE,
+        ...(credit?{creditVersion:credit.expectedVersion}:{}),
       };
       const eventRows = await tx.execute<{ event_id: string }>(sql`
         INSERT INTO public.events (
@@ -611,7 +636,7 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
           correlation_id, aggregate_version, from_station, created_at
         ) VALUES (
           gen_random_uuid()::text, ${tenantId}, ${invoice.order_id}, NULL,
-          ${EVENT_TYPE}, 'Zahlung manuell bestätigt', ${actorId}::uuid,
+          ${EVENT_TYPE}, ${credit?CUSTOMER_CREDIT_COPY.applyLabel((input.amount/100).toLocaleString('de-DE',{style:'currency',currency:'EUR'}),invoice.invoice_number):'Zahlung manuell bestätigt'}, ${actorId}::uuid,
           ${JSON.stringify(payload)}::jsonb, 'success', NULL, ${input.clientEventId}::uuid,
           ${EVENT_SCHEMA_VERSION}, ${correlationId}::uuid, ${paymentVersion}, NULL,
           ${confirmedAt}::timestamptz AT TIME ZONE 'UTC'
@@ -661,6 +686,7 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
         || !receiptMatchesIntent(persistedReceipt, input, actorId)
         || !receiptMatchesCurrentInvoice(persistedReceipt, persistedInvoices[0], tenantId)
       ) throw new Error("PAYMENT_RECEIPT_READBACK_MISMATCH");
+      if(credit)await credit.verify(tx,authorization.data,{...persistedReceipt,invoiceNumber:persistedInvoices[0].invoice_number});
 
       return {
         code: "OK",
@@ -668,7 +694,14 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
         replayed: false,
       };
     });
-  } catch {
+  } catch(error) {
+    const inner=error&&typeof error==='object'&&'cause' in error?error.cause:error;
+    const diagnostic=inner&&typeof inner==='object'?inner as Record<string,unknown>:{};
+    console.error('[PAYMENT_CONFIRM_FAILED]',{
+      code:typeof diagnostic.code==='string'?diagnostic.code:null,
+      constraint:typeof diagnostic.constraint_name==='string'?diagnostic.constraint_name:typeof diagnostic.constraint==='string'?diagnostic.constraint:null,
+      reason:typeof diagnostic.code==='string'&&typeof diagnostic.message==='string'?diagnostic.message.slice(0,500):error instanceof Error&&/^[A-Z0-9_]+$/.test(error.message)?error.message:error instanceof Error?error.name:'UnknownError',
+    });
     return { code: "UNAVAILABLE", message: "Zahlung konnte nicht sicher bestätigt werden." };
   }
 }

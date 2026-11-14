@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {readInvoiceVat} from '../../server-public';
+import {readInvoiceVat} from '../../invoiceVatContract';
 // Explicit synthetic immutable-original boundaries, not writer evidence.
 const mixed=()=>({schemaVersion:2,lines:[{type:'BASE',lineNetAmountCents:10000,vat_rate_basis_points:1900},{type:'EXTRA_WORK',amountCents:10000,vat_rate_basis_points:700}],totals:{netAmountCents:20000,vatRateBasisPoints:null,vatAmountCents:2600,grossAmountCents:22600,vatBreakdown:[{rateBp:1900,netCents:10000,vatCents:1900,grossCents:11900},{rateBp:700,netCents:10000,vatCents:700,grossCents:10700}]}});
 it('reads historical persisted amounts without inventing an original',()=>{
