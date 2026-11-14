@@ -23,6 +23,9 @@
     "src/lib/server/commands/complaintCommand.ts": [
       "public.v_complaint_rework_context_v1"
     ],
+    "src/lib/server/commands/customerCreditCommand.ts": [
+      "private.v_invoice_receipt_v1"
+    ],
     "src/lib/server/commands/extraWorkAdminCommand.ts": [
       "private.v_extra_work_catalog_receipts_v1",
       "private.v_extra_work_rate_receipts_v1"
@@ -32,7 +35,8 @@
       "private.v_invoice_created_receipt_v2",
       "private.v_invoice_issue_source_v2",
       "private.v_invoice_receipt_v1",
-      "private.v_order_freeze_state_v1"
+      "private.v_order_freeze_state_v1",
+      "private.v_payment_summary_v1"
     ],
     "src/lib/server/commands/invoiceItemPriceCommand.ts": [
       "private.v_order_freeze_state_v1"
