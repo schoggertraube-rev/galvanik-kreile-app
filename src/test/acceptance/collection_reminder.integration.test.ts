@@ -1,4 +1,6 @@
 // @vitest-environment node
+// Ausgangsfakt synthetisch (markierte E1-Faelle), Writer-Nachweis in
+// v45_order_release_source.integration.test.ts; subsequent mail writer is real.
 import {vi,it,expect} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -10,6 +12,7 @@ import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 import {getOrdersDb} from '@/app/actions/orders.actions';
 import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
 import {emptyDispatchPolicy} from '@/modules/fundament/public';
+import {readHistoricalDispatchClock} from '../../../e2e/ablauf/historicalDispatchFixture';
 const DATABASE_URL=process.env.DATABASE_URL,EXPECTED_DATABASE_URL=process.env.H18_EXPECTED_DATABASE_URL;
 if(!DATABASE_URL||DATABASE_URL!==EXPECTED_DATABASE_URL||new URL(DATABASE_URL).hostname!=='127.0.0.1')throw Error('COLLECTION_REMINDER_LOOPBACK_REQUIRED');
 
@@ -48,9 +51,11 @@ it('E1/E2 actual approval uses the single sender, one group proof and original r
 });
 
 it('an existing generic mail cannot become a qualified reminder just by reusing its key and identical body',async()=>{
+ const deadlineClock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId);
  let sends=0;vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-purpose-token'.repeat(3),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){sends++;void init;return new Response(null,{status:202});}return nativeFetch(input,init);});
  const order=await readyInvoiceOrder('E1-Zweckbindung');
  expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertig',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ await deadlineClock.addNotice(order.orderId);
  expect(await configure()).toMatchObject({code:'OK'});const planned=await proposal(order.orderId);if(!planned.due)throw Error('PURPOSE_DUE');
  const clientRequestId=randomUUID(),body='TEST Bitte abholen.',subject='TEST Erinnerung';
  const [row]=await sql`SELECT order_number FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
@@ -64,10 +69,12 @@ it('an existing generic mail cannot become a qualified reminder just by reusing 
 });
 
 it('failed E1 does not advance and a second key cannot duplicate an uncertain outgoing mail; a configured hold is never bypassed',async()=>{
+ const clock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId);
  let attempts=0,fail=false;
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-collection-failure-token'.repeat(3),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){attempts++;void init;return new Response(null,{status:fail?503:202});}return nativeFetch(input,init);});
  const order=await readyInvoiceOrder('E1-Fehler');
  expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertig',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ await clock.addNotice(order.orderId);
  expect(await configure(0,5)).toMatchObject({code:'OK'});
  const due=(await proposal(order.orderId)).due;if(!due)throw Error('COLLECTION_FAILURE_DUE');
  const input={targetType:'CUSTOMER' as const,targetId:order.customerId,clientRequestId:randomUUID(),subject:'TEST Erinnerung',body:'TEST Erinnerung ohne Gebühren.',collectionReminder:{stage:'E1' as const,handover:'pickup' as const,dueDate:due}};
@@ -117,6 +124,7 @@ it.each([false,true])('S02 reminder reconciles its original from Sent Items with
 },120000);
 
 it('S02 a financial reminder retains its original money requirement after payment',async()=>{
+ const deadlineClock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId);
  const order=await readyInvoiceOrder('N5 Geldbrief');
  const sender=await createFixture(['auftraege','mails','geld'],'buero');
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
@@ -129,6 +137,7 @@ it('S02 a financial reminder retains its original money requirement after paymen
   return nativeFetch(request,init);
  });
  expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Original',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ await deadlineClock.addNotice(order.orderId);
  expect(await configure()).toMatchObject({code:'OK'});const plan=await proposal(order.orderId);if(!plan.due)throw Error('N5_MONEY_DUE');
  requestId=randomUUID();const input={targetType:'CUSTOMER' as const,targetId:order.customerId,clientRequestId:requestId,subject:'TEST Geldbrief',body:'TEST Originalfreigabe',collectionReminder:{stage:'E1' as const,handover:'pickup' as const,dueDate:plan.due}};
  const clock='test_money_clock_'+randomUUID().replaceAll('-','');
