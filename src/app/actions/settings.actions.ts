@@ -75,9 +75,11 @@ function presentShippingSettings<T extends object>(result:T,canReadMoney:boolean
  for(const key of ['settings','current']){
   const settings=presented[key];if(!settings||typeof settings!=='object'||Array.isArray(settings))continue;
   const value=settings as Record<string,unknown>,policy=value.dispatchPolicy;
+  const operationalSettings={...value};delete operationalSettings.shippingFeeCents;
+  presented[key]=operationalSettings;
   if(policy&&typeof policy==='object'&&!Array.isArray(policy)){
    const operational={...policy} as Record<string,unknown>;delete operational.storageWeeklyCents;
-   presented[key]={...value,dispatchPolicy:operational};
+   presented[key]={...operationalSettings,dispatchPolicy:operational};
   }
  }
  return presented as T;

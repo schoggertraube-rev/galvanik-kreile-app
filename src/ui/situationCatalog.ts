@@ -378,3 +378,9 @@ export const CUSTOMER_CREDIT_COPY={
  pending:'Der Storno ist noch nicht fertig gespeichert. Das Guthaben steht bereit, sobald er durch ist – versuch es gleich noch einmal.',
  paymentUnknown:'Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Das Guthaben entsteht, sobald die Zahlung mit Betrag und Datum erfasst ist.',
 } as const;
+// S09: package text is fixed; additional failure copy stays in the same catalog (R8).
+export const SHIPPING_FEE_COPY={
+ missing:'Versandpauschale fehlt in den Einstellungen – trag sie dort ein',
+ invalid:'TODO_PL versand.pauschale_ungueltig',
+ forbidden:'TODO_PL versand.pauschale_keine_berechtigung',
+} as const;
