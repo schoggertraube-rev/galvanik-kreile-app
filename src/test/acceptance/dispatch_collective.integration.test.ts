@@ -1,4 +1,6 @@
 // @vitest-environment node
+// Ausgangsfakt synthetisch, Writer-Nachweis in collection_reminder.integration.test.ts
+// und dispatch_call.integration.test.ts; Outlook-Ablage und Versand danach echt.
 import {vi,it,expect} from 'vitest';
 import {randomUUID,createHash} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -8,10 +10,12 @@ import {sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablau
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {readHistoricalDispatchClock,dispatchFollowupBoundary} from '../../../e2e/ablauf/historicalDispatchFixture';
 const DATABASE_URL=process.env.DATABASE_URL,EXPECTED_DATABASE_URL=process.env.H18_EXPECTED_DATABASE_URL;
 if(!DATABASE_URL||DATABASE_URL!==EXPECTED_DATABASE_URL||new URL(DATABASE_URL).hostname!=='127.0.0.1')throw Error('DISPATCH_COLLECTIVE_LOOPBACK_REQUIRED');
 
-it('K10 saves a real Outlook reply before reaction checking; an unbound Outlook reference never becomes an app reaction or blocks E1/E2/E4',async()=>{
+it.each(['E1','E2','E4'] as const)('K10 saves a real Outlook reply before reaction checking; an unbound Outlook reference never blocks %s',async(stage)=>{
+ const clock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId);
  const order=await readyInvoiceOrder('K10-Outlook-Antwort');
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
  let outage=true,sends=0;
@@ -32,7 +36,7 @@ it('K10 saves a real Outlook reply before reaction checking; an unbound Outlook 
  expect(await withSession(full,()=>attachOutlookMailAction(attachment))).toMatchObject({code:'OK'});
  const attached=await withSession(full,()=>listOutlookInboxAction({targetType:'CUSTOMER',targetId:order.customerId}));
  expect(attached.code).toBe('OK');if(attached.code!=='OK')throw Error('K10_SAVED_READ');expect(attached.data.some(message=>message.id===graphId)).toBe(true);
- expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='DISPATCH_REPLY_RETRY_REQUIRED_V1'`).toHaveLength(1);
+ expect(await sql`SELECT event.id FROM public.events event JOIN public.intake_item item ON item.tenant_id=event.tenant_id AND item.id::text=event.payload->>'itemId' WHERE event.tenant_id=${KREILE_TENANT_SLUG} AND event.event_type='DISPATCH_REPLY_RETRY_REQUIRED_V1' AND item.graph_message_id=${graphId}`).toHaveLength(1);
  outage=false;
  const retryInput=JSON.parse(JSON.stringify(attachment));
  expect(await withSession(full,()=>attachOutlookMailAction(retryInput))).toMatchObject({code:'OK'});
@@ -45,26 +49,28 @@ it('K10 saves a real Outlook reply before reaction checking; an unbound Outlook 
  const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  const reminderOperator=await createFixture(['mails','auftraege'],'buero');
- for(const stage of ['E1','E2'] as const){
-  const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('K10_QUEUE');
-  const reminder=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder;
-  expect(reminder).toMatchObject({stage,state:'DUE'});if(!reminder?.due)throw Error('K10_DUE');
-  const dueDate=reminder.due;
-  expect(await withSession(reminderOperator,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:order.customerId,subject:'TEST Erinnerung',body:'TEST Abholung',clientRequestId:randomUUID(),collectionReminder:{stage,handover:'pickup',dueDate}}))).toMatchObject({code:'OK'});
+ await clock.addNotice(order.orderId,6);
+ if(stage==='E2'||stage==='E4')await clock.addReminder(order.customerId,[order.orderId],'E1',4);
+ if(stage==='E4'){
+  await clock.addReminder(order.customerId,[order.orderId],'E2',2);
+  await clock.addUnreachedCall(order.customerId,[order.orderId],1);
  }
- const {createDispatchCallTaskAction,getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
- const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('K10_CALL_QUEUE');
- const next=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder;if(!next?.due||!next.clientKey)throw Error('K10_CALL_PLAN');
- const call=await withSession(full,()=>createDispatchCallTaskAction({customerId:order.customerId,handover:'pickup',dueDate:next.due!,clientKey:next.clientKey!}));if(call.code!=='OK')throw Error('K10_CALL');
- const task=await withSession(full,()=>getIntakeTaskAction({taskId:call.taskId}));if(task.code!=='OK'||!task.task)throw Error('K10_CALL_TASK');
- expect(await withSession(full,()=>completeIntakeTaskAction({taskId:call.taskId,version:task.task!.version,note:'TEST K10 nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
- const afterCall=await withSession(full,()=>getOrdersDb());if(!afterCall.ok)throw Error('K10_STORAGE_QUEUE');
- const letter=afterCall.data.find(row=>row.id===order.orderId)?.finishedDispatch?.storage?.letter;if(!letter)throw Error('K10_STORAGE_PLAN');
- expect(await withSession(reminderOperator,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:order.customerId,subject:'TEST E4',body:'TEST E4',clientRequestId:randomUUID(),collectionReminder:{stage:'E4',handover:'pickup',dueDate:letter.due,clientKey:letter.clientKey}}))).toMatchObject({code:'OK'});
- expect(sends).toBe(4);
+ const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('K10_STAGE_QUEUE');
+ const row=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch;
+ const target=stage==='E4'?row?.storage?.letter:row?.reminder;
+ expect(target).toMatchObject({state:'DUE'});if(!target?.due)throw Error('K10_STAGE_DUE');
+ if(stage==='E4'&&!target.clientKey)throw Error('K10_E4_KEY');
+ const key=randomUUID(),dueDate=target.due;
+ expect(await withSession(reminderOperator,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:order.customerId,subject:'TEST Erinnerung',body:'TEST Abholung',clientRequestId:key,collectionReminder:{stage,handover:'pickup',dueDate,...(stage==='E4'?{clientKey:target.clientKey!}:{} )}}))).toMatchObject({code:'OK'});
+ if(stage!=='E4'){
+  const after=await withSession(full,()=>getOrdersDb());if(!after.ok)throw Error('K10_FOLLOWUP');
+  expect(after.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder).toMatchObject({stage:stage==='E1'?'E2':'E3',...await clock.readSentFollowup(key,0)});
+ }
+ expect(sends).toBe(2);
 });
 
 it('E06 one actual invoice mail includes the ready cohort and original PDFs, preserves the oldest per-order notice and replays its original cohort',async()=>{
+ const clock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId);
  const requests:Array<{body:{content:string};attachments:Array<{name:string;contentBytes:string}>;internetMessageHeaders?:Array<{name:string;value:string}>}>=[];
  let replySender='',replyTo='',replyKey='',lookups=0;
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
@@ -110,7 +116,7 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  const {getOrdersDb}=await import('@/app/actions/orders.actions');
  const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('COHORT_QUEUE');
  const group=queue.data.find(row=>row.id===first.orderId)?.finishedDispatch?.reminder;
- expect(group).toMatchObject({state:'DUE',oldestNoticeAt:original.recordedAt,automaticSend:false,requiresResponseCheck:false,responseState:'NONE',needsNotice:[third.orderId]});
+ expect(group).toMatchObject({...dispatchFollowupBoundary(original.recordedAt,0,clock.databaseNow),oldestNoticeAt:original.recordedAt,automaticSend:false,requiresResponseCheck:false,responseState:'NONE',needsNotice:[third.orderId]});
  expect(group!.orderIds.slice().sort()).toEqual([first.orderId,second.orderId,companion.orderId,third.orderId].sort());
  expect(queue.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder?.clientKey).toBe(group!.clientKey);
  expect(requests[1].internetMessageHeaders).toEqual([{name:'x-kreile-request-id',value:input.clientRequestId}]);
@@ -140,16 +146,16 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
  expect(await withSession(full,()=>sendCustomerMailAction({...initial,targetId:afterReply.orderId,expectedInvoiceIds:[third.invoice.invoiceId,afterReply.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:afterReply.invoice.invoiceId},clientRequestId:randomUUID()}))).toMatchObject({code:'OK'});
  const laterQueue=await withSession(full,()=>getOrdersDb());if(!laterQueue.ok)throw Error('REPLY_SCOPE_QUEUE');
  for(const id of [second.orderId,companion.orderId])expect(laterQueue.data.find(row=>row.id===id)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED'});
- for(const id of [third.orderId,afterReply.orderId])expect(laterQueue.data.find(row=>row.id===id)?.finishedDispatch?.reminder).toMatchObject({stage:'E1',state:'DUE'});
+ for(const id of [third.orderId,afterReply.orderId])expect(laterQueue.data.find(row=>row.id===id)?.finishedDispatch?.reminder).toMatchObject({stage:'E1',...dispatchFollowupBoundary(original.recordedAt,0,clock.databaseNow)});
  expect(laterQueue.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder?.orderIds.slice().sort()).toEqual([first.orderId,third.orderId,afterReply.orderId].sort());
  replyKey=randomUUID(); // A proved different outgoing request is not a reaction to this notice.
  const unrelated=await withSession(full,()=>getOrdersDb());if(!unrelated.ok)throw Error('COHORT_UNRELATED_READ');
  expect(unrelated.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED'});
- expect(unrelated.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'DUE',responseState:'NONE'});
+ expect(unrelated.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({...dispatchFollowupBoundary(original.recordedAt,0,clock.databaseNow),responseState:'NONE'});
  replyKey='TEST-invalid-header';
  const uncertain=await withSession(full,()=>getOrdersDb());if(!uncertain.ok)throw Error('COHORT_UNCERTAIN_READ');
  expect(uncertain.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'STOPPED',responseState:'REPLIED'});
- expect(uncertain.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({state:'DUE',responseState:'NONE',requiresResponseCheck:false});
+ expect(uncertain.data.find(row=>row.id===third.orderId)?.finishedDispatch?.reminder).toMatchObject({...dispatchFollowupBoundary(original.recordedAt,0,clock.databaseNow),responseState:'NONE',requiresResponseCheck:false});
  const operational=await createFixture(['auftraege'],'werkstatt'),beforeLookup=lookups;
  const limited=await withSession(operational,()=>getOrdersDb());if(!limited.ok)throw Error('COHORT_LIMITED_READ');
  expect(limited.data.find(row=>row.id===second.orderId)?.finishedDispatch?.reminder).toMatchObject({responseState:'REPLIED',requiresResponseCheck:false});

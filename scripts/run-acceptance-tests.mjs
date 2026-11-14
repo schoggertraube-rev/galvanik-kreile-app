@@ -22,8 +22,11 @@ for(const file of isolated){
  if(!Array.isArray(rows)||!rows.length||rows.some(row=>typeof row.name!=='string'||resolve(row.file)!==resolve(file)))throw Error('ACCEPTANCE_CASE_INVENTORY_INVALID');
  const names=rows.map(row=>row.name);
  if(new Set(names).size!==names.length)throw Error('ACCEPTANCE_CASE_NAMES_AMBIGUOUS');
- for(let offset=0;offset<names.length;offset+=6){
-  const selected=names.slice(offset,offset+6);
+ // Deliberately damaged call evidence must not burden a later case in the
+ // same tenant. Each call case owns a fixed worker/tenant; limits stay intact.
+ const groupSize=file.endsWith('dispatch_call.integration.test.ts')?1:6;
+ for(let offset=0;offset<names.length;offset+=groupSize){
+  const selected=names.slice(offset,offset+groupSize);
   const pattern='^(?:'+selected.map(escape).join('|')+')$';
   if(names.filter(name=>new RegExp(pattern).test(name)).length!==selected.length)throw Error('ACCEPTANCE_CASE_PARTITION_INVALID');
   console.log(`ACCEPTANCE_GROUP ${file} ${offset+1}-${offset+selected.length}/${names.length}`);
