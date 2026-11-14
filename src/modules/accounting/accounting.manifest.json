@@ -21,9 +21,24 @@
     "@/modules/accounting/server-public#readCustomerCreditInTransaction"
   ],
   "capabilities": [],
-  "migrations": ["20261113215222_customer_credit_entries.sql","20261113231315_customer_credit_payment_method.sql","20261113233449_customer_credit_amount_contract.sql","20261114033058_customer_credit_payout_receipt.sql"],
-  "viewsFunctions": ["private.lock_customer_credit_v1","private.guard_customer_credit_append_v1","private.guard_customer_credit_source_v1","private.customer_credit_payment_receipt_v1","private.guard_invoice_credit_receipt_v1"],
-  "ownsTables": ["public.customer_credit_entries"],
+  "migrations": [
+    "20261113215222_customer_credit_entries.sql",
+    "20261113231315_customer_credit_payment_method.sql",
+    "20261113233449_customer_credit_amount_contract.sql",
+    "20261114033058_customer_credit_payout_receipt.sql",
+    "20261114040021_invoice_shipping_line.sql"
+  ],
+  "viewsFunctions": [
+    "private.lock_customer_credit_v1",
+    "private.guard_customer_credit_append_v1",
+    "private.guard_customer_credit_source_v1",
+    "private.customer_credit_payment_receipt_v1",
+    "private.guard_invoice_credit_receipt_v1",
+    "private.invoice_original_vat_valid"
+  ],
+  "ownsTables": [
+    "public.customer_credit_entries"
+  ],
   "storagePurposes": [],
   "events": {
     "emits": [],

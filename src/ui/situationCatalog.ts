@@ -380,7 +380,8 @@ export const CUSTOMER_CREDIT_COPY={
 } as const;
 // S09: package text is fixed; additional failure copy stays in the same catalog (R8).
 export const SHIPPING_FEE_COPY={
+ line:'Versand',
  missing:'Versandpauschale fehlt in den Einstellungen – trag sie dort ein',
- invalid:'TODO_PL versand.pauschale_ungueltig',
- forbidden:'TODO_PL versand.pauschale_keine_berechtigung',
+ invalid:'Der Versandpreis muss ein Betrag ab 0,00 € sein. Leer heißt: kein Standard.',
+ forbidden:'Den Standardversand ändern darf nur, wer Einstellungen ändern darf.',
 } as const;

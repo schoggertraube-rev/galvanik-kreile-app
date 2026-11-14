@@ -34,7 +34,8 @@ export function readInvoiceVat(beleg:unknown):InvoiceVatRead{
   if(totals.vatRateBasisPoints!==null||!Array.isArray(totals.vatBreakdown)||!totals.vatBreakdown.length||!Array.isArray(beleg.lines)||!beleg.lines.length)throw Error('INVOICE_VAT_GROUPS_REQUIRED');
   const lineGroups=new Map<number,number>();
   for(const line of beleg.lines){
-   if(!object(line)||(line.type!=='BASE'&&line.type!=='EXTRA_WORK'))throw Error('INVOICE_VAT_LINE_INVALID');
+   if(!object(line)||(line.type!=='BASE'&&line.type!=='EXTRA_WORK'&&line.type!=='SHIPPING'))throw Error('INVOICE_VAT_LINE_INVALID');
+   if(line.type==='SHIPPING'&&(typeof line.shipmentGroupId!=='string'||!line.shipmentGroupId||typeof line.name!=='string'||!line.name.trim()))throw Error('INVOICE_VAT_SHIPPING_SOURCE_INVALID');
    const rate=line.vat_rate_basis_points;
    if(rate!==0&&rate!==700&&rate!==1900)throw Error('INVOICE_VAT_LINE_RATE_INVALID');
    const amount=cents(line.type==='BASE'?line.lineNetAmountCents:line.amountCents);

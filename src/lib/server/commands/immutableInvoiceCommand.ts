@@ -3,6 +3,7 @@ import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
+import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import {appendCancellationCredit} from './customerCreditCommand';
 import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
 
@@ -29,6 +30,7 @@ import {
   createImmutableInvoicePdfDocument,
   type ImmutableInvoiceBaseLine,
   type ImmutableInvoiceExtraWorkLine,
+  type ImmutableInvoiceShippingLine,
   type ImmutableInvoiceLine,
   type ImmutableInvoiceSnapshot,
 } from "@/lib/pdf/ImmutableInvoiceDocument";
@@ -142,6 +144,7 @@ type LockedOrder = {
   version: number;
   payment_mode: string;
   payment_mode_version: number;
+  handover_mode:string|null;
 };
 
 type InvoicePaymentInitializationRow = {
@@ -472,6 +475,12 @@ function parseStoredLine(value: unknown, schemaVersion: 1|2): ImmutableInvoiceLi
   if (!plainObject(value) || typeof value.type !== "string") {
     throw new Error("INVOICE_SNAPSHOT_LINE_INVALID");
   }
+  if(value.type==='SHIPPING'){
+    if(schemaVersion!==2||!exactKeys(value,['type','shipmentGroupId','name','amountCents','vat_rate_basis_points']))throw Error('INVOICE_SNAPSHOT_SHIPPING_SHAPE_INVALID');
+    const rate=value.vat_rate_basis_points;
+    if(rate!==0&&rate!==700&&rate!==1900)throw Error('INVOICE_SNAPSHOT_SHIPPING_RATE_INVALID');
+    return {type:'SHIPPING',shipmentGroupId:requiredText(value.shipmentGroupId,'INVOICE_SNAPSHOT_SHIPPING_SOURCE_INVALID'),name:requiredText(value.name,'INVOICE_SNAPSHOT_SHIPPING_NAME_INVALID'),amountCents:toSafeInteger(value.amountCents,'INVOICE_SNAPSHOT_SHIPPING_AMOUNT_INVALID'),vat_rate_basis_points:rate};
+  }
   if (value.type === "BASE") {
     if (!exactKeys(value, [
       "itemId", "lineNetAmountCents", "name", "quantity", "type", "unitNetAmountCents",
@@ -612,6 +621,7 @@ type PreparedInvoiceContent = {
 function prepareInvoiceContent(
   source: SourceRow,
   order: LockedOrder,
+  shippingFee:{shipmentGroupId:string;amountCents:number}|null,
 ): PreparedInvoiceContent {
   const customerCountry=masterDataText(source.customer_country,"INVOICE_CUSTOMER_COUNTRY_INVALID");
   const customerVatId=optionalText(source.customer_vat_id);
@@ -619,6 +629,7 @@ function prepareInvoiceContent(
   const vatSource={reverseCharge,companyRate:source.invoice_vat_rate_basis_points};
   const baseLines = parseBaseLines(source.base_lines,vatSource);
   const extraWorkLines = parseExtraWorkLines(source.extra_work_lines,vatSource);
+  const shippingLines:ImmutableInvoiceShippingLine[]=shippingFee===null?[]:[{type:'SHIPPING',shipmentGroupId:shippingFee.shipmentGroupId,name:SHIPPING_FEE_COPY.line,amountCents:shippingFee.amountCents,vat_rate_basis_points:invoiceLineVat(null,SHIPPING_FEE_COPY.line,reverseCharge,source.invoice_vat_rate_basis_points)}];
   if (
     baseLines.length !== toSafeInteger(source.base_line_count, "INVOICE_BASE_LINE_COUNT_INVALID")
     || extraWorkLines.length !== toSafeInteger(source.extra_work_line_count, "INVOICE_EXTRA_WORK_LINE_COUNT_INVALID")
@@ -634,9 +645,9 @@ function prepareInvoiceContent(
     || extraWorkLines.reduce((sum, line) => sum + line.amountCents, 0) !== extraWorkNetAmountCents
   ) throw new Error("INVOICE_LINE_TOTAL_MISMATCH");
 
-  const netAmountCents = baseNetAmountCents + extraWorkNetAmountCents;
+  const netAmountCents = baseNetAmountCents + extraWorkNetAmountCents+shippingLines.reduce((sum,line)=>sum+line.amountCents,0);
   const byRate=new Map<0|700|1900,number>();
-  for(const line of [...baseLines,...extraWorkLines]){
+  for(const line of [...baseLines,...extraWorkLines,...shippingLines]){
     const rate=line.vat_rate_basis_points;
     if(rate===undefined)throw Error("INVOICE_LINE_RATE_REQUIRED");
     const amount=line.type==="BASE"?line.lineNetAmountCents:line.amountCents;
@@ -686,7 +697,7 @@ function prepareInvoiceContent(
       title: masterDataText(source.order_title, "INVOICE_ORDER_TITLE_INVALID"),
       freezeId: requiredText(source.freeze_id, "INVOICE_FREEZE_ID_INVALID"),
     },
-    lines: [...baseLines, ...extraWorkLines] as ImmutableInvoiceLine[],
+    lines: [...baseLines, ...extraWorkLines,...shippingLines] as ImmutableInvoiceLine[],
     totals: { netAmountCents, vatRateBasisPoints:null, vatBreakdown, vatAmountCents, grossAmountCents },
   };
 }
@@ -912,7 +923,7 @@ export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantI
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:order:' || ${tenantId} || ':' || ${input.orderId}, 0))`);
 }
 
-export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader): Promise<CreateInvoiceResult> {
+export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader,readShippingSettings?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Rechnungsanfrage." };
   }
@@ -969,7 +980,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       const orderRows = await tx.execute<LockedOrder>(sql`
         SELECT
           id, tenant_id, customer_id, station, status, version,
-          payment_mode, payment_mode_version
+          payment_mode, payment_mode_version,handover_mode
         FROM public.orders
         WHERE id = ${input.orderId}
           AND tenant_id = ${tenantId}
@@ -1099,7 +1110,14 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       // an incomplete tenant, customer, order or position cannot consume one.
       let content: PreparedInvoiceContent;
       try {
-        content = prepareInvoiceContent(source, order);
+        let shippingFee:{shipmentGroupId:string;amountCents:number}|null=null;
+        if(order.handover_mode==='shipping'){
+          if(!readShippingSettings)throw Error('INVOICE_SHIPPING_SETTINGS_PORT_MISSING');
+          const settings=await readShippingSettings(tx,tenantId);
+          if(!settings||settings.shippingFeeCents===undefined)throw Error('INVOICE_SHIPPING_SETTINGS_SOURCE_MISSING');
+          if(settings.shippingFeeCents!==null)shippingFee={shipmentGroupId:'order:'+order.id,amountCents:settings.shippingFeeCents};
+        }
+        content = prepareInvoiceContent(source, order,shippingFee);
       } catch (error) {
         if (error instanceof InvoiceVatRateError) return {code:"VALIDATION_ERROR",message:error.missingCompany?INVOICE_VAT_COPY.missingCompanyRate(error.part):INVOICE_VAT_COPY.missingRate(error.part)};
         if (error instanceof InvoiceMasterDataError) {
