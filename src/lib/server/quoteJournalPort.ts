@@ -30,7 +30,7 @@ export async function quoteJournalActorIsActive(tx:PrivilegedTenantTransaction,a
   const rows=await tx.execute(sql`SELECT id FROM public.app_users WHERE tenant_id=${actor.tenantId} AND id=${actor.userId}::uuid AND active IS TRUE FOR SHARE`);
   return rows.length===1;
 }
-export async function appendQuoteJournal(tx:PrivilegedTenantTransaction,actor:Actor,input:{id:string;type:'QUOTE_ORDER_TASK_V1'|'QUOTE_COMPLAINT_LINKED_V1'|'QUOTE_FOLLOWUP_COMPLETED_V1'|'QUOTE_ONSITE_REQUESTED_V04'|'QUOTE_ONSITE_PHASE_V04'|'QUOTE_LIFECYCLE_V04'|'QUOTE_SETTINGS_UPDATED_V04'|'QUOTE_CALCULATION_V04';clientEventId:string;correlationId:string;version:number|null;description:string;payload:Record<string,unknown>}) {
+export async function appendQuoteJournal(tx:PrivilegedTenantTransaction,actor:Actor,input:{id:string;type:'QUOTE_SHIPPING_INCLUDED_SET_V1'|'QUOTE_ORDER_TASK_V1'|'QUOTE_COMPLAINT_LINKED_V1'|'QUOTE_FOLLOWUP_COMPLETED_V1'|'QUOTE_ONSITE_REQUESTED_V04'|'QUOTE_ONSITE_PHASE_V04'|'QUOTE_LIFECYCLE_V04'|'QUOTE_SETTINGS_UPDATED_V04'|'QUOTE_CALCULATION_V04';clientEventId:string;correlationId:string;version:number|null;description:string;payload:Record<string,unknown>}) {
   if (!await quoteJournalActorIsActive(tx,actor)) throw Error('QUOTE_JOURNAL_ACTOR_INACTIVE');
   await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,user_id,client_event_id,event_schema_version,correlation_id,aggregate_version,status,description,payload)
     VALUES(${input.id},${actor.tenantId},${input.type},${actor.userId}::uuid,${input.clientEventId}::uuid,1,${input.correlationId}::uuid,${input.version},'success',${input.description},${JSON.stringify(input.payload)}::jsonb)`);

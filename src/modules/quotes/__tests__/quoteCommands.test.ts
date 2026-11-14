@@ -40,6 +40,7 @@ const authorization = {
   capabilities: { canCreateQuote: true, canReadQuote: true, canUpdateQuote: true, canConvertQuote: true },
 };
 const quoteRow = {
+  shipping_included:false,
   commercial_terms:[{position:1,unit:null,minutes:null,vat:null}],
   quote_id: QUOTE, tenant_id: TENANT, quote_number: "KV-2026-0042", customer_id: CUSTOMER,
   customer_number: "K-2026-0041", customer_display_name: "Synthetischer Kunde", status: "draft",

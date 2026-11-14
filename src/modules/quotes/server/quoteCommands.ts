@@ -1,9 +1,11 @@
+import {isDeepStrictEqual} from 'node:util';
+import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import "server-only";
 import {OFFLINE_DEVICE_READ_COPY,QUOTE_CYCLE_COPY,SITUATION_COPY} from '@/ui/situationCatalog';
 
 import { createHash,randomUUID } from "node:crypto";
 import {scaleQuoteCalculation,type QuoteCalculation} from "../quoteCalculation";
-import {appendQuoteJournal,quoteHasPreparedDocument,readQuoteComplaintSource} from "@/lib/server/quoteJournalPort";
+import {appendQuoteJournal,readQuoteJournal,onsitePhaseKey,quoteHasPreparedDocument,readQuoteComplaintSource} from "@/lib/server/quoteJournalPort";
 import {readQuoteReceivedQuantities,readQuoteGoodsSummaries,readQuoteGoodsSummariesForQuotes} from "@/lib/server/quoteGoodsContextPort";
 import { sql } from "drizzle-orm";
 import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionSurfaceLabel, orderPositionUnitLabel, orderPositionQuantityError, orderPositionPriceError } from "@/lib/orderPositionContract";
@@ -33,6 +35,7 @@ const TERM_STATUS_VALUES = ["wunsch", "bestaetigt", "verschoben", "gegenvorschla
 const INTAKE_SOURCE_VALUES = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"] as const;
 
 type QuoteRow = {
+  shipping_included:boolean;
   commercial_terms?:Array<{position:number;unit:string|null;minutes:number|null;vat:0|700|1900|null}>;
   fassung?:number;
   kalk_stunden?:string|number|null;stundensatz_cents?:string|number|null;ruest_cents?:string|number|null;material_cents?:string|number|null;
@@ -143,7 +146,8 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
   const hasIntakeMetadata = Object.hasOwn(value, "validUntil") || Object.hasOwn(value, "termStatus") || Object.hasOwn(value, "intakeSource");
   if (!exactKeys(value, ["clientEventId", "customerId", "dueDate", "note", "positions",
     ...["validUntil", "termStatus", "intakeSource"].filter(key=>Object.hasOwn(value,key)),
-    ...['sourceComplaintId','source','specialRequests','deliveryWeeks','calculation'].filter(key=>Object.hasOwn(value,key))])) return null;
+    ...['sourceComplaintId','source','specialRequests','deliveryWeeks','calculation','shippingIncluded'].filter(key=>Object.hasOwn(value,key))])) return null;
+  if(Object.hasOwn(value,'shippingIncluded')&&typeof value.shippingIncluded!=='boolean')return null;
   if(Object.hasOwn(value,'sourceComplaintId')&&(typeof value.sourceComplaintId!=='string'||!UUID_PATTERN.test(value.sourceComplaintId)||Object.hasOwn(value,'source')))return null;
   if (Object.hasOwn(value,'source')&&(!plainObject(value.source)||!exactKeys(value.source,['itemId','version','message'])||typeof value.source.itemId!=='string'||!UUID_PATTERN.test(value.source.itemId)||!Number.isSafeInteger(value.source.version)||Number(value.source.version)<1||typeof value.source.message!=='boolean')) return null;
   if (Object.hasOwn(value,'specialRequests')&&value.specialRequests!==null&&(typeof value.specialRequests!=='string'||value.specialRequests.trim().length<1||value.specialRequests.length>4000)) return null;
@@ -174,6 +178,7 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
   return {
     clientEventId: value.clientEventId, customerId, dueDate: value.dueDate, note, positions,
     ...(calculation?{calculation}:{}),
+    ...(Object.hasOwn(value,'shippingIncluded')?{shippingIncluded:value.shippingIncluded as boolean}:{}),
     ...(Object.hasOwn(value,'sourceComplaintId')?{sourceComplaintId:value.sourceComplaintId as string}:{}),
     ...(hasIntakeMetadata ? {
       validUntil: value.validUntil===undefined?null:value.validUntil as string|null,
@@ -201,14 +206,14 @@ function normalizeConvert(value: unknown): ConvertQuoteInput | null {
 }
 
 function normalizeUpdate(value: unknown): UpdateQuoteInput | null {
-  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "dueDate", "expectedVersion", "note", "positions", "quoteId",...["calculation","source","termStatus"].filter(key=>Object.hasOwn(value,key))])) return null;
+  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "dueDate", "expectedVersion", "note", "positions", "quoteId",...["calculation","source","termStatus","shippingIncluded"].filter(key=>Object.hasOwn(value,key))])) return null;
   if (typeof value.quoteId !== "string" || !UUID_PATTERN.test(value.quoteId)
     || typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)
     || typeof value.expectedVersion !== "number" || !Number.isSafeInteger(value.expectedVersion) || value.expectedVersion < 1) return null;
   const created = normalizeCreate({
     clientEventId: value.clientEventId,
     customerId: "placeholder",
-    ...Object.fromEntries(["calculation","source","termStatus"].filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]])),
+    ...Object.fromEntries(["calculation","source","termStatus","shippingIncluded"].filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]])),
     dueDate: value.dueDate,
     note: value.note,
     positions: value.positions,
@@ -222,6 +227,7 @@ function normalizeUpdate(value: unknown): UpdateQuoteInput | null {
     note: created.note,
     positions: created.positions,
     ...(created.calculation?{calculation:created.calculation}:{}),
+    ...(Object.hasOwn(created,'shippingIncluded')?{shippingIncluded:created.shippingIncluded}:{}),
     ...(created.source?{source:created.source}:{}),
     ...(Object.hasOwn(value,"termStatus")?{termStatus:created.termStatus}:{}),
   };
@@ -231,7 +237,7 @@ function hashIntent(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
 }
 
-function quoteContent(quote:QuoteReadback){return JSON.stringify({customerId:quote.customerId,validUntil:quote.validUntil,intakeSource:quote.intakeSource,note:quote.note,positions:quote.positions.map(p=>({name:p.name,quantity:p.quantity,material:p.material,surface:p.surfaceRequested,price:p.unitPriceCents,total:p.lineTotalCents})),calculation:quote.lifecycle?.calculation,specialRequests:quote.lifecycle?.specialRequests,deliveryWeeks:quote.lifecycle?.deliveryWeeks});}
+function quoteContent(quote:QuoteReadback){return JSON.stringify({shippingIncluded:quote.shippingIncluded,customerId:quote.customerId,validUntil:quote.validUntil,intakeSource:quote.intakeSource,note:quote.note,positions:quote.positions.map(p=>({name:p.name,quantity:p.quantity,material:p.material,surface:p.surfaceRequested,price:p.unitPriceCents,total:p.lineTotalCents})),calculation:quote.lifecycle?.calculation,specialRequests:quote.lifecycle?.specialRequests,deliveryWeeks:quote.lifecycle?.deliveryWeeks});}
 
 /** Holds the quote only during pending-mail preparation, never during Graph I/O. */
 export async function lockQuoteDeliverySnapshot(tx:PrivilegedTenantTransaction,tenantId:string,input:{id:string;version:number;edition:number}){
@@ -304,6 +310,7 @@ function parsePositions(value: unknown): QuotePosition[] | null {
 }
 
 function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
+  if(typeof row.shipping_included!=='boolean')return null;
   let lifecycle:QuoteReadback['lifecycle'];
   if (row.fassung!==undefined) {
     if (!Number.isSafeInteger(row.fassung)||row.fassung<1||!['entwurf','versendet','geaendert_seit_versand','zugesagt','umgewandelt','abgesagt','abgelaufen'].includes(row.derived_status??'')) return null;
@@ -334,7 +341,7 @@ function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
     || !["draft", "converted"].includes(row.status) || !Number.isSafeInteger(row.version) || row.version < 1
     || row.currency !== "EUR" || !UUID_PATTERN.test(row.created_by)) return null;
   return {
-    ...(lifecycle?{lifecycle}:{}),quoteId: row.quote_id, quoteNumber: row.quote_number, customerId: row.customer_id,
+    shippingIncluded:row.shipping_included,...(lifecycle?{lifecycle}:{}),quoteId: row.quote_id, quoteNumber: row.quote_number, customerId: row.customer_id,
     customerNumber: row.customer_number, customerDisplayName: row.customer_display_name,
     status: row.status as QuoteReadback["status"], version: row.version, currency: "EUR",
     dueDate, validUntil, termStatus: row.intake_term_status as QuoteReadback["termStatus"],
@@ -355,7 +362,7 @@ function diagnostic(error: unknown, key: "message" | "details" | "hint" | "code"
 }
 
 export async function readQuote(tx: PrivilegedTenantTransaction, tenantId: string, quoteId: string): Promise<QuoteReadback | null> {
-  const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id,
+  const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.versand_enthalten AS shipping_included,original.quelle_reklamation_id AS source_complaint_id,
     (SELECT coalesce(jsonb_agg(jsonb_build_object('position',terms.position,'unit',terms.unit,'minutes',terms.aufwand_min,'vat',terms.vat_rate_basis_points) ORDER BY terms.position),'[]'::jsonb) FROM private.quote_positions terms WHERE terms.tenant_id=projection.tenant_id AND terms.quote_id=projection.quote_id AND terms.revision=projection.version) AS commercial_terms
     FROM private.v_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id WHERE projection.quote_id = ${quoteId}::uuid LIMIT 2`);
   if (rows.length === 0) return null;
@@ -375,6 +382,19 @@ export async function readQuote(tx: PrivilegedTenantTransaction, tenantId: strin
 export type QuoteFollowupBinding=(tx:PrivilegedTenantTransaction,input:{quote:QuoteReadback;action:'sent'|'changed'|'accept'|'reject'|'conditional';phase:'before'|'after'})=>Promise<string|null>;
 export type QuoteSourceBinding=(tx:PrivilegedTenantTransaction,input:{source:NonNullable<CreateQuoteInput['source']>;quoteId:string;customerId:string;clientEventId:string;effect?:'ware'|'accept'|'reject'|'conditional'|'amend'})=>Promise<void|{code:'FORBIDDEN'|'NOT_FOUND'|'CONFLICT'|'VALIDATION_ERROR'|'UNAVAILABLE';message:string}>;
 class QuoteSourceFailure extends Error {constructor(readonly result:Exclude<CreateQuoteResult,{code:'OK'}>){super(result.message);}}
+async function writeQuoteShippingIncluded(tx:PrivilegedTenantTransaction,auth:QuoteCommandContext,quoteId:string,requestKey:string,before:boolean,after:boolean,beforeEdition?:number,frozenEdition=false){
+ let rows=await tx.execute<{edition:number;version:number;value:boolean}>(sql`UPDATE private.quotes SET versand_enthalten=${after} WHERE tenant_id=${auth.tenantId} AND id=${quoteId}::uuid RETURNING fassung AS edition,version,versand_enthalten AS value`);
+ if(rows.length!==1||rows[0].value!==after)throw Error('QUOTE_SHIPPING_WRITE_MISSING');
+ if(beforeEdition!==undefined&&rows[0].edition===beforeEdition&&(frozenEdition||await quoteHasPreparedDocument(tx,auth.tenantId,quoteId,beforeEdition))){
+  rows=await tx.execute<{edition:number;version:number;value:boolean}>(sql`UPDATE private.quotes SET fassung=fassung+1 WHERE tenant_id=${auth.tenantId} AND id=${quoteId}::uuid RETURNING fassung AS edition,version,versand_enthalten AS value`);
+  if(rows.length!==1||rows[0].edition!==beforeEdition+1||rows[0].value!==after)throw Error('QUOTE_SHIPPING_EDITION_MISSING');
+ }
+ const clientEventId=onsitePhaseKey(requestKey,'shipping-included'),eventId=randomUUID(),payload={quoteId,requestKey,beforeEdition:beforeEdition??null,edition:rows[0].edition,version:rows[0].version,before,after};
+ await appendQuoteJournal(tx,auth,{id:eventId,type:'QUOTE_SHIPPING_INCLUDED_SET_V1',clientEventId,correlationId:requestKey,version:rows[0].version,description:SHIPPING_FEE_COPY.includedChanged,payload});
+ const recorded=await readQuoteJournal<typeof payload>(tx,auth,clientEventId);
+ if(recorded.length!==1||recorded[0].id!==eventId||recorded[0].eventType!=='QUOTE_SHIPPING_INCLUDED_SET_V1'||!isDeepStrictEqual(recorded[0].payload,payload))throw Error('QUOTE_SHIPPING_RECEIPT_MISSING');
+}
+
 export async function createQuoteCommand(authorization: QuoteCommandContext, input: unknown,bindSource?:QuoteSourceBinding): Promise<CreateQuoteResult> {
   const normalized = normalizeCreate(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollständig oder ungültig." };
@@ -412,6 +432,7 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
         }
         if (normalized.source||Object.hasOwn(normalized,'specialRequests')||Object.hasOwn(normalized,'deliveryWeeks')) await tx.execute(sql`UPDATE private.quotes SET quelle_intake_item_id=${normalized.source?.itemId??null}::uuid,quelle_nachricht_id=${normalized.source?.message?normalized.source.itemId:null}::uuid,sonderwuensche=${normalized.specialRequests??null},lieferzeit_wochen=${normalized.deliveryWeeks??null} WHERE tenant_id=${authorization.tenantId} AND id=${outcome.result_quote_id}::uuid`);
       }
+      if(!outcome.replayed&&normalized.shippingIncluded===true)await writeQuoteShippingIncluded(tx,authorization,outcome.result_quote_id,normalized.clientEventId,false,true);
       if(!outcome.replayed&&normalized.calculation)await writeCalculationSnapshot(tx,authorization,outcome.result_quote_id,normalized.clientEventId,normalized.calculation,null);
       const quote = await readQuote(tx, authorization.tenantId, outcome.result_quote_id);
       const receipts = await tx.execute<CreateReceiptRow>(sql`
@@ -424,6 +445,7 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
         || receipt.quote_id !== quote.quoteId || receipt.customer_id !== normalized.customerId
         || receipt.actor_id !== authorization.userId || receipt.client_event_id !== normalized.clientEventId
         || receipt.intent_sha256 !== intentSha256 || !recordedAt
+        || (Object.hasOwn(normalized,'shippingIncluded')&&quote.shippingIncluded!==normalized.shippingIncluded)
         || quote.validUntil !== (normalized.validUntil ?? null)
         || quote.termStatus !== (normalized.termStatus ?? null)
         || quote.intakeSource !== (normalized.intakeSource ?? null)) throw new Error("QUOTE_CREATE_READBACK_INVALID");
@@ -467,7 +489,7 @@ export async function listOpenQuotesCommand(authorization: QuoteCommandContext, 
   if(changedSince!==undefined&&(typeof changedSince!=='string'||!Number.isFinite(Date.parse(changedSince))||new Date(changedSince).toISOString()!==changedSince))return {code:'VALIDATION_ERROR',message:OFFLINE_DEVICE_READ_COPY.invalidWindow};
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.quelle_reklamation_id AS source_complaint_id FROM private.v_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id WHERE (${customerId??null}::text IS NULL OR projection.customer_id=${customerId??null}::text)
+      const rows = await tx.execute<QuoteRow>(sql`SELECT projection.*,original.versand_enthalten AS shipping_included,original.quelle_reklamation_id AS source_complaint_id FROM private.v_quotes_v1 projection JOIN private.quotes original ON original.tenant_id=projection.tenant_id AND original.id=projection.quote_id WHERE (${customerId??null}::text IS NULL OR projection.customer_id=${customerId??null}::text)
       AND (EXISTS(SELECT 1 FROM private.v_open_quotes_v1 opened WHERE opened.tenant_id=projection.tenant_id AND opened.quote_id=projection.quote_id) OR (${changedSince??null}::timestamptz IS NOT NULL AND projection.updated_at>=${changedSince??null}::timestamptz))
       ORDER BY projection.updated_at DESC, projection.quote_number ASC`);
       const quotes = rows.map((row) => quoteFromRow(row, authorization.tenantId));
@@ -506,6 +528,10 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
         }
         throw new Error("QUOTE_UPDATE_RESULT_INVALID");
       }
+      if(!outcome.replayed&&Object.hasOwn(normalized,'shippingIncluded')){
+        if(typeof before?.shippingIncluded!=='boolean'||typeof normalized.shippingIncluded!=='boolean')throw Error('QUOTE_SHIPPING_SOURCE_MISSING');
+        if(before.shippingIncluded!==normalized.shippingIncluded)await writeQuoteShippingIncluded(tx,authorization,normalized.quoteId,normalized.clientEventId,before.shippingIncluded,normalized.shippingIncluded,before.lifecycle?.edition,before.lifecycle!==undefined&&(before.lifecycle.sentEdition===before.lifecycle.edition||before.lifecycle.acceptedEdition===before.lifecycle.edition));
+      }
       if(!outcome.replayed&&normalized.calculation)await writeCalculationSnapshot(tx,authorization,normalized.quoteId,normalized.clientEventId,normalized.calculation,calculationBefore);
       if(!outcome.replayed&&Object.hasOwn(normalized,'termStatus'))await tx.execute(sql`UPDATE private.quotes SET intake_term_status=${normalized.termStatus??null} WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid`);
       let quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
@@ -530,6 +556,7 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
         || receipt.quote_id !== normalized.quoteId || receipt.actor_id !== authorization.userId
         || receipt.client_event_id !== normalized.clientEventId || receipt.intent_sha256 !== intentSha256
         || receipt.expected_version !== normalized.expectedVersion || receipt.aggregate_version !== normalized.expectedVersion + 1
+        || (Object.hasOwn(normalized,'shippingIncluded')&&quote.shippingIncluded!==normalized.shippingIncluded)
         || quote.version !== receipt.aggregate_version || !recordedAt) throw new Error("QUOTE_UPDATE_READBACK_INVALID");
       return { code: "OK", quote, replayed: outcome.replayed, receipt: {
         receiptId: receipt.receipt_id, eventId: receipt.event_id, quoteId: receipt.quote_id, actorId: receipt.actor_id,

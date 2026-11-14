@@ -942,6 +942,17 @@ async function readShippingInvoiceLines(tx:PrivilegedTenantTransaction,tenantId:
         ORDER BY shipment.order_id,shipment.id`);
     if(members.length===0||members.some(member=>member.customer_id!==order.customer_id)||!members.some(member=>member.order_id===order.id))throw Error('INVOICE_SHIPPING_GROUP_SOURCE_INVALID');
     const orderIds=[...new Set(members.map(member=>member.order_id))];
+    const quoteOrders=await tx.execute<{order_id:string}>(sql`SELECT DISTINCT order_id FROM private.quote_conversion_receipts
+      WHERE tenant_id=${tenantId} AND order_id IN (${sql.join(orderIds.map(value=>sql`${value}`),sql`,`)}) ORDER BY order_id`);
+    let included=false;
+    for(const member of quoteOrders){
+      const commercial=await readOrderCommercialQuote(tx,tenantId,member.order_id);
+      if(typeof commercial.shippingIncluded!=='boolean')throw Error('INVOICE_SHIPPING_QUOTE_SOURCE_MISSING');
+      if(commercial.shippingIncluded)included=true;
+    }
+    // PL13Nov22:20: explicitly included in one awarded quote means the whole
+    // actual shipment is included. Unknown source throws above, never false.
+    if(included)continue;
     const sourceKeys=new Set([groupKey,...members.flatMap(member=>['order:'+member.order_id,...(member.shipment_id===null?[]:['shipment:'+member.shipment_id])])]);
     const originals=await tx.execute<LockedInvoice&{client_event_id:string;issued_by:string}>(sql`
       SELECT invoice.* FROM public.invoices invoice
@@ -1181,7 +1192,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       const { netAmountCents, vatRateBasisPoints, vatAmountCents, grossAmountCents } = content.totals;
       if(commercial){
         const bound=await bindOrderQuoteCommercialTerms(tx,authorization.data,order.id);
-        const unchanged=bound.quoteId===commercial.quoteId&&bound.edition===commercial.edition
+        const unchanged=bound.shippingIncluded===commercial.shippingIncluded&&bound.quoteId===commercial.quoteId&&bound.edition===commercial.edition
           &&bound.totalNetCents===commercial.totalNetCents&&bound.positions.length===commercial.positions.length
           &&new Set(bound.positions.map(position=>position.itemId)).size===bound.positions.length
           &&bound.positions.every(position=>{
