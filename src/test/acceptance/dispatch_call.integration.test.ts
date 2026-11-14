@@ -1,4 +1,6 @@
 // @vitest-environment node
+// Ausgangsfakt synthetisch (Informiert/E1/E2), Writer-Nachweis in
+// v45_order_release_source.integration.test.ts und collection_reminder.integration.test.ts.
 import {vi,it,expect} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -14,6 +16,7 @@ import {emptyDispatchPolicy} from '@/modules/fundament/public';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {updateCustomerAction} from '@/app/actions/customers.actions';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
+import {readHistoricalDispatchClock,dispatchFollowupBoundary} from '../../../e2e/ablauf/historicalDispatchFixture';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('DISPATCH_CALL_LOOPBACK_REQUIRED');
 async function proposal(id:string){const result=await withSession(full,()=>getOrdersDb());if(!result.ok)throw Error('CALL_QUEUE');const plan=result.data.find(row=>row.id===id)?.finishedDispatch?.reminder;if(!plan)throw Error('CALL_PLAN');return plan;}
 it('E5 settings persist an explicit final interval and active tenant login with actor, read-back and fresh retry',async()=>{
@@ -36,14 +39,17 @@ it('E5 settings persist an explicit final interval and active tenant login with 
  expect(await sql`SELECT count(*)::integer AS n FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='shipping_settings_updated'`).toEqual([{n:2}]);
 });
 async function prepare(label:string){
+ const clock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId);
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-call-token'.repeat(4),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail'))return new Response(null,{status:202});return nativeFetch(input,init);});
  const first=await readyInvoiceOrder(label),second=await readyInvoiceOrder(label+'-2','pickup',false,first.customerId);
- expect(await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:first.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertig',expectedInvoiceIds:[first.invoice.invoiceId,second.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:first.invoice.invoiceId}}))).toMatchObject({code:'OK'});
+ const notified=await withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:first.orderId,clientRequestId:randomUUID(),subject:'TEST Fertig',body:'TEST Fertig',expectedInvoiceIds:[first.invoice.invoiceId,second.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:first.invoice.invoiceId}}));expect(notified).toMatchObject({code:'OK'});if(notified.code!=='OK')throw Error('TEST_CALL_NOTICE_REQUIRED');
+ await clock.addNotice(first.orderId,6);await clock.addNotice(second.orderId,6);
  const read=await withSession(full,()=>readShippingSettingsAction());if(read.code!=='OK')throw Error('CALL_SETTINGS');
  expect(await withSession(full,()=>saveShippingSettingsAction({service:read.settings.service,numberPattern:read.settings.numberPattern,numberHint:read.settings.numberHint,trackingUrl:read.settings.trackingUrl,expectedUpdatedAt:read.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),reminderDays:0,secondReminderDays:0,callAfterDays:0,holdMinutes:0}}))).toMatchObject({code:'OK'});
- for(const stage of ['E1','E2'] as const){const plan=await proposal(first.orderId);if(!plan.due)throw Error('CALL_DUE');expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST '+stage,body:'TEST Bitte abholen',collectionReminder:{stage,handover:'pickup',dueDate:plan.due!}}))).toMatchObject({code:'OK'});}
+ await clock.addReminder(first.customerId,[first.orderId,second.orderId],'E1',4);
+ await clock.addReminder(first.customerId,[first.orderId,second.orderId],'E2',2);
  const plan=await proposal(first.orderId);expect(plan).toMatchObject({stage:'E3',state:'DUE'});if(!plan.due||!plan.clientKey)throw Error('CALL_DUE');
- return {first,second,request:{customerId:first.customerId,handover:'pickup' as const,dueDate:plan.due,clientKey:plan.clientKey}};
+ return {first,second,clock,noticeThreadId:notified.data.threadId,request:{customerId:first.customerId,handover:'pickup' as const,dueDate:plan.due,clientKey:plan.clientKey}};
 }
 it('E4 uses the existing sender only after individual eligibility and starts the final interval at the actual sent receipt',async()=>{
  const {first,request}=await prepare('E4-Lagerfrist');
@@ -175,14 +181,16 @@ it('E5 creation racing both physical handovers leaves no open task for ware that
  if(created.code==='OK')expect(actual).toEqual([{id:created.taskId,status:'erledigt'}]);
 });
 it('not reached remains explicit without inventing a storage deadline; generic tasks cannot inject a result and damaged call evidence is never treated as no call',async()=>{
- const {first,request}=await prepare('E3-NichtErreicht');const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('CALL_CREATE');
+ const {first,request,clock}=await prepare('E3-NichtErreicht');const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('CALL_CREATE');
  const read=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));if(read.code!=='OK'||!read.task)throw Error('CALL_TASK');
  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:created.taskId,version:read.task!.version,note:'TEST nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
  expect(await proposal(first.orderId)).toMatchObject({stage:'E3',state:'CALL_NOT_REACHED'});
  let queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.storage).toMatchObject({state:'NEEDS_SETTING',eligibleOn:null});
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK'||!settings.settings.dispatchPolicy)throw Error('CALL_STORAGE_SETTINGS');
  expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,storageAfterDays:0}}))).toMatchObject({code:'OK'});
- queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.storage).toMatchObject({state:'DUE'});
+ const [completed]=await sql`SELECT erledigt_am::text AS at FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.taskId}::uuid`;
+ const next=dispatchFollowupBoundary(completed.at,0,clock.databaseNow);
+ queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.storage).toMatchObject({state:next.state,eligibleOn:next.due});
  const generic=await withSession(full,()=>saveIntakeTaskAction({clientKey:randomUUID(),version:0,kind:'rueckruf',title:'TEST normaler Rückruf',dueDate:request.dueDate,time:null,forLogin:null,forArea:'auftraege',reference:{type:'auftrag',id:first.orderId},note:null}));if(generic.code!=='OK')throw Error('CALL_GENERIC');
  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:generic.task.id,version:generic.task.version,note:null,callResult:'reached'}))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:generic.task.id,version:generic.task.version,note:null}))).toMatchObject({code:'OK'});
@@ -236,7 +244,7 @@ it('a customer without email goes directly to one call without reminder settings
  expect(external).toBe(0);
 });
 it('handing over the remaining goods completes the existing callback atomically without inventing a phone call, and goods-out retry repeats no history',async()=>{
- const {first,second,request}=await prepare('E3-Abgeholt');
+ const {first,second,request,noticeThreadId}=await prepare('E3-Abgeholt');
  const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('CALL_GONE_CREATE');
  const releaseFirst={orderId:first.orderId,expectedVersion:first.version,mode:'abholung' as const,clientEventId:randomUUID()};
  expect(await withSession(full,()=>recordGoodsOutAction(releaseFirst))).toMatchObject({code:'OK'});
@@ -271,7 +279,7 @@ it('handing over the remaining goods completes the existing callback atomically 
  const [history]=await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND nachher->>'taskId'=${created.taskId}`;
  expect(await withSession(full,()=>recordGoodsOutAction(JSON.parse(JSON.stringify(release))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT count(*)::integer AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND nachher->>'taskId'=${created.taskId}`).toEqual([{n:history.n}]);
- expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND order_id IN (${first.orderId},${second.orderId})`).toEqual([{n:2}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND payload->'receipt'->>'threadId'=${noticeThreadId} AND order_id IN (${first.orderId},${second.orderId})`).toEqual([{n:2}]);
 });
 it('PL07:00 keeps reached cohorts stopped and starts a distinct ladder for later ware, even on the same due day; original retries never open the new task',async()=>{
  const {first,second,request}=await prepare('E3-NeueLeiter');
