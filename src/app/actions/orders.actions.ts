@@ -252,7 +252,7 @@ export async function getLiveOrderCardAction(
       if(settings.code!=='OK')card.data.shippingServiceError=settings.message;
     }
     const [{readInvoiceShippingConsequences},{readInvoiceVat},{readShippingSettingsInTransaction}]=await Promise.all([import('@/lib/server/commands/immutableInvoiceCommand'),import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public')]);
-    const handoverConsequences=await readInvoiceShippingConsequences(authorization.data,{orderId:card.data.id,expectedVersion:card.data.version},readInvoiceVat,readShippingSettingsInTransaction);
+    const handoverConsequences=await readInvoiceShippingConsequences(authorization.data,{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId},readInvoiceVat,readShippingSettingsInTransaction);
     const evidence = await readEvidenceRecordsByTarget(authorization.data, {
       targetType: "ORDER",
       targetId: input.orderId,

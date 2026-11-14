@@ -61,7 +61,7 @@ export type LiveOrderCard = {
   actorReadError?:string;
   shippingService?:string|null;
   shippingServiceError?:string;
-  handoverNotice?:{message:string;taskId:string|null;originalItemId:string|null;taskState?:'offen'|'erledigt'|'nicht_verfuegbar'};
+  handoverNotice?:{message:string;taskId:string|null;originalItemId:string|null;manualEventId?:string;taskState?:'offen'|'erledigt'|'nicht_verfuegbar'};
   cancellation?:{reason:string;at:string;actor:string;quoteId:string|null;quoteNumber:string|null};
   commercialQuote?:OrderCommercialQuote;
   id: string;
@@ -889,7 +889,7 @@ export async function readLiveOrderCard(
       if(handoverEvent?.event_type==='ORDER_HANDOVER_CHANGED_V1'){
         const source=await readManualHandoverReceipt(tx,authorization.tenantId,handoverEvent.id);
         if(source.orderId!==queue.id||source.orderVersion>queue.version)throw Error('ORDER_CARD_MANUAL_HANDOVER_INVALID');
-        handoverNotice={message:source.message,taskId:source.taskId,originalItemId:null};
+        handoverNotice={message:source.message,taskId:source.taskId,originalItemId:null,manualEventId:source.eventId};
       }else if(handoverEvent){
         const handover=handoverEvent.payload?.receipt;
         if(handoverEvent.event_type!=='ORDER_HANDOVER_MAIL_V1'||!handover||handover.orderId!==queue.id||!Number.isSafeInteger(handover.orderVersion)||handover.orderVersion>queue.version||typeof handover.message!=='string'||!handover.message.trim()||!UUID_PATTERN.test(handover.mailActor?.originalItemId)||handover.taskId!==null&&!UUID_PATTERN.test(handover.taskId))throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');

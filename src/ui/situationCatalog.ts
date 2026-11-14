@@ -388,6 +388,8 @@ export const CUSTOMER_CREDIT_COPY={
 } as const;
 // S09: package text is fixed; additional failure copy stays in the same catalog (R8).
 export const SHIPPING_FEE_COPY={
+ reissue:(number:string)=>`Rechnung ${number} stornieren und ohne Versand neu ausstellen`,
+ reissueReason:'Übergabeart Versand → Abholung',
  reissueForbidden:'error.permission',
  reissuePending:'Der Storno ist gespeichert, das Guthaben steht. Die neue Rechnung ohne Versand fehlt noch – dafür liegt eine Aufgabe am Auftrag.',
  reissueTaskPending:'TODO_PL shipping.invoice.reissue_task_pending',

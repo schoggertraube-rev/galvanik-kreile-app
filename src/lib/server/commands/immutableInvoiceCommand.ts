@@ -1033,9 +1033,18 @@ function shippingLinesForScope<T extends {shipmentGroupId:string}>(lines:T[],sco
  return lines.filter(line=>scope.startsWith('sendung:')?line.shipmentGroupId===scope:!line.shipmentGroupId.startsWith('sendung:'));
 }
 
+/** One source predicate for both the proposal and the locked cancellation. */
+function manualHandoverAllowsReissue(manual:Awaited<ReturnType<typeof readManualHandoverSource>>,orderId:string,snapshot:ImmutableInvoiceSnapshot){
+ return manual.order_id===orderId&&manual.current_order_version===manual.order_version&&manual.current_handover_mode==='pickup'
+  &&manual.payload.receipt.outcome==='changed'&&manual.payload.receipt.handoverMode==='pickup'
+  &&snapshot.schemaVersion===2&&snapshot.lines.some(line=>line.type==='SHIPPING')&&snapshot.lines.some(line=>line.type!=='SHIPPING');
+}
+type InvoiceReissueProposal={originalInvoiceNumber:string;label:string;befehl:{datei:'src/app/actions/invoices.actions.ts';funktion:'cancelInvoiceAction';
+ argumente:Omit<CancelInvoiceInput,'clientEventId'|'reissueWithoutShipping'>&{reissueWithoutShipping:{handoverEventId:string}}}};
+
 /** N2 read projection only: same fee allocator and qualified original receipts
  * as issuance. No number, reservation, new click key or financial effect on read. */
-export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:{orderId:string;expectedVersion:number},readVat:InvoiceVatReader,readSettings:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>){
+export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:{orderId:string;expectedVersion:number;manualHandoverEventId?:string},readVat:InvoiceVatReader,readSettings:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>){
  if(!hasAuthorizationArea(auth,'geld'))return undefined;
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${auth.tenantId},(SELECT customer_id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId}))`);
@@ -1054,20 +1063,31 @@ export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot
   const main=active.filter(value=>value.row.belegart==='auftrag');
   if(main.length>1||active.length>0&&main.length!==1||source.no_active_invoice!==(main.length===0))throw Error('SHIPPING_PROPOSAL_ORIGINAL_AMBIGUOUS');
   const additionalInvoices:Array<{originalInvoiceNumber:string;label:string;befehl:{datei:'src/app/actions/invoices.actions.ts';funktion:'issueInvoiceAction';argumente:Omit<CreateInvoiceInput,'clientEventId'>}}>=[];
+  let reissueWithoutShipping:InvoiceReissueProposal|null=null;
+  const datenluecken:string[]=[];
   if(main.length===1){
+   const parent=main[0],snapshot=parseStoredSnapshot(parent.row.snapshot,parent.row,readVat);
+   if(order.handover_mode==='pickup'&&snapshot.schemaVersion===2&&snapshot.lines.some(line=>line.type==='SHIPPING')){
+    try{
+     if(!input.manualHandoverEventId)throw Error('SHIPPING_PROPOSAL_MANUAL_HANDOVER_MISSING');
+     const manual=await withTenantSavepoint(tx,nested=>readManualHandoverSource(nested,auth.tenantId,input.manualHandoverEventId!));
+     if(!manualHandoverAllowsReissue(manual,order.id,snapshot)||manual.current_order_version!==order.version)throw Error('SHIPPING_PROPOSAL_MANUAL_HANDOVER_STALE');
+     reissueWithoutShipping={originalInvoiceNumber:parent.receipt.invoiceNumber,label:SHIPPING_FEE_COPY.reissue(parent.receipt.invoiceNumber),
+      befehl:{datei:'src/app/actions/invoices.actions.ts',funktion:'cancelInvoiceAction',argumente:{invoiceId:parent.receipt.invoiceId,expectedVersion:parent.row.current_version,reason:SHIPPING_FEE_COPY.reissueReason,reissueWithoutShipping:{handoverEventId:manual.event_id}}}};
+    }catch(error){console.error('[INVOICE_REISSUE_PROPOSAL_SOURCE_INCOMPLETE]',error instanceof Error?error.message:'UnknownError');datenluecken.push('MANUAL_HANDOVER_SOURCE');}
+   }
    const scopes=[...new Set(lines.map(line=>line.shipmentGroupId.startsWith('sendung:')?line.shipmentGroupId:'order:'+order.id))];
    for(const scope of scopes){
     const selected=shippingLinesForScope(lines,scope);if(!selected.some(line=>line.name===SHIPPING_FEE_COPY.line))continue;
-    const amount=selected.reduce((sum,line)=>sum+line.amountCents,0),parent=main[0];
+    const amount=selected.reduce((sum,line)=>sum+line.amountCents,0);
     if(!Number.isSafeInteger(amount)||amount<0)throw Error('SHIPPING_PROPOSAL_AMOUNT_INVALID');
     // Customer display is already part of the immutable qualified invoice, not
     // a second lookup or a client-provided invoice/customer association.
-    const snapshot=parseStoredSnapshot(parent.row.snapshot,parent.row,readVat);
     additionalInvoices.push({originalInvoiceNumber:parent.receipt.invoiceNumber,label:SHIPPING_FEE_COPY.additional(formatShippingFee(amount),snapshot.customer.name),
      befehl:{datei:'src/app/actions/invoices.actions.ts',funktion:'issueInvoiceAction',argumente:{orderId:order.id,expectedVersion:order.version,shippingCosts:{invoiceId:parent.receipt.invoiceId,expectedVersion:parent.row.current_version,scope,expectedFeeCents:amount}}}});
    }
   }
-  return {code:'OK' as const,orderId:order.id,orderVersion:order.version,feeCents:settings.shippingFeeCents,lines,additionalInvoices,...(settings.shippingFeeCents===null?{hintKey:'versand.pauschale_fehlt' as const}: {})};
+  return {code:'OK' as const,orderId:order.id,orderVersion:order.version,feeCents:settings.shippingFeeCents,lines,additionalInvoices,reissueWithoutShipping,...(datenluecken.length?{datenluecken}:{}),...(settings.shippingFeeCents===null?{hintKey:'versand.pauschale_fehlt' as const}: {})};
  });}catch(error){console.error('[INVOICE_SHIPPING_PROPOSAL_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const,orderId:input.orderId,orderVersion:input.expectedVersion,datenluecken:['SHIPPING_INVOICE_SOURCE']};}
 }
 function formatShippingFee(cents:number){return new Intl.NumberFormat('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(cents/100)+' €';}
@@ -1642,9 +1662,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
       let reissue:InvoiceReissueIntent|undefined;
       if(input.reissueWithoutShipping){
         const manual=await readManualHandoverSource(tx,tenantId,input.reissueWithoutShipping.handoverEventId);
-        if(manual.order_id!==invoice.order_id||manual.current_order_version!==manual.order_version||manual.current_handover_mode!=='pickup'
-          ||manual.payload.receipt.outcome!=='changed'||manual.payload.receipt.handoverMode!=='pickup'
-          ||snapshot.schemaVersion!==2||!snapshot.lines.some(line=>line.type==='SHIPPING')||!snapshot.lines.some(line=>line.type!=='SHIPPING'))return {code:'CONFLICT',message:SHIPPING_FEE_COPY.changed};
+        if(!manualHandoverAllowsReissue(manual,invoice.order_id,snapshot))return {code:'CONFLICT',message:SHIPPING_FEE_COPY.changed};
         reissue={...input.reissueWithoutShipping,originalPdfSha256:invoice.pdf_sha256,orderVersion:manual.order_version,confirmedBy:actorId};
       }
 
