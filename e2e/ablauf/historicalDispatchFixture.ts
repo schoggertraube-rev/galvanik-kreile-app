@@ -45,9 +45,9 @@ export async function readHistoricalDispatchClock(sql:typeof replaySql,tenantId:
   const rows=await sql`SELECT created_at::text AS sent_at FROM public.events WHERE tenant_id=${tenantId} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${key}::uuid`;
   if(rows.length!==1)throw Error('TEST_ACTUAL_REMINDER_RECEIPT_REQUIRED');
   return dispatchFollowupBoundary(rows[0].sent_at,days,databaseNow,holidays);
- },async addReminder(customerId:string,orderIds:string[],stage:'E1'|'E2'|'E4',days:number,storage?:{callTaskId:string;freezes:Array<{orderId:string;freezeId:string}>;deadline:{date:string;due:string}}){
+ },async addReminder(customerId:string,orderIds:string[],stage:'E1'|'E2'|'E4',days:number,storage?:{callTaskId?:string;appointmentEventId?:string;replyEventId?:string;freezes:Array<{orderId:string;freezeId:string}>;deadline:{date:string;due:string}}){
   if(!orderIds.length||new Set(orderIds).size!==orderIds.length)throw Error('TEST_HISTORICAL_COHORT_REQUIRED');
-  if((stage==='E4')!==!!storage||storage&&(storage.freezes.length!==orderIds.length||storage.freezes.some(row=>!orderIds.includes(row.orderId))))throw Error('TEST_HISTORICAL_STORAGE_SOURCE_REQUIRED');
+  if((stage==='E4')!==!!storage||storage&&([storage.callTaskId,storage.appointmentEventId,storage.replyEventId].filter(Boolean).length!==1||storage.freezes.length!==orderIds.length||storage.freezes.some(row=>!orderIds.includes(row.orderId))))throw Error('TEST_HISTORICAL_STORAGE_SOURCE_REQUIRED');
   const recordedAt=historicalDispatchDate(databaseNow,days),threadId=randomUUID(),messageId=randomUUID(),key=randomUUID(),stageKey=randomUUID();
   const subject='TEST synthetisches historisches '+stage+'-Original',body='TEST synthetischer Ausgangsfakt; kein Versandnachweis des Produkt-Writers';
   const request={targetId:customerId,clientRequestId:key,subject,body,collectionReminder:{stage,handover:'pickup' as const,dueDate:berlinCalendarDay(new Date(recordedAt)),...(stage==='E4'?{clientKey:stageKey}:{})}};
@@ -55,7 +55,7 @@ export async function readHistoricalDispatchClock(sql:typeof replaySql,tenantId:
   await sql.begin(async tx=>{
    const orders=await tx`SELECT id,order_number AS number,version FROM public.orders WHERE tenant_id=${tenantId} AND customer_id=${customerId} AND station='fertig' AND id=ANY(${orderIds}::text[]) ORDER BY id`;
    if(orders.length!==orderIds.length)throw Error('TEST_REAL_REMINDER_ORDERS_REQUIRED');
-   const meta={stage,customerId,handover:'pickup',dueDate:request.collectionReminder.dueDate,stageKey,intent:collectionReminderIntent(request),orders:orders.map(row=>({id:row.id,number:row.number,version:row.version})),customerMessage:{subject,body},moneyRequired:true,...(storage?{storageOrigin:{callTaskId:storage.callTaskId,freezes:storage.freezes},storageDeadline:storage.deadline}:{})};
+   const meta={stage,customerId,handover:'pickup',dueDate:request.collectionReminder.dueDate,stageKey,intent:collectionReminderIntent(request),orders:orders.map(row=>({id:row.id,number:row.number,version:row.version})),customerMessage:{subject,body},moneyRequired:true,...(storage?{storageOrigin:{...(storage.callTaskId?{callTaskId:storage.callTaskId}:{}),...(storage.appointmentEventId?{appointmentEventId:storage.appointmentEventId}:{}),...(storage.replyEventId?{replyEventId:storage.replyEventId}:{}),freezes:storage.freezes},storageDeadline:storage.deadline}:{})};
    await tx`INSERT INTO public.communication_threads(id,tenant_id,customer_id,order_id,source,subject,status,created_by,created_at,updated_at)
     VALUES(${threadId}::uuid,${tenantId},${customerId},NULL,${'MS_GRAPH_OUT:'+key},${subject},'sent',${actorId}::uuid,${recordedAt}::timestamptz,${recordedAt}::timestamptz)`;
    await tx`INSERT INTO public.communication_messages(id,tenant_id,thread_id,direction,channel,body,created_by,created_at)

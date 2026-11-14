@@ -24,12 +24,13 @@ async function proposal(orderId:string){const read=await withSession(full,()=>ge
 // PL02:30: the customer-copy proof belongs to the actual E1/E2 writer, not
 // to synthetic E1/E2 starting facts inside a later E4 preview test.
 async function assertActualCustomerCopy(key:string,count:number){
- const rows=await sql`SELECT prepared.payload->'meta'->'customerMessage' AS copy,message.body,thread.subject
+ const rows=await sql`SELECT prepared.payload->'meta'->'customerMessage' AS copy,prepared.payload->'meta' AS meta,message.body,thread.subject
   FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
   JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing'
   WHERE prepared.tenant_id=${KREILE_TENANT_SLUG} AND prepared.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND prepared.correlation_id=${key}::uuid`;
  expect(rows).toHaveLength(1);const original=rows[0];
  expect(original.body).toBe(original.copy.body);expect(original.subject).toBe(original.copy.subject);
+ if(count>1){const numbers=original.meta.orders.map((row:{number:string})=>row.number).join(', ');expect(original.subject).toBe(original.meta.stage==='E1'?'Abholbereit: Aufträge '+numbers:'Erinnerung: Aufträge '+numbers+' warten auf Abholung');}
  expect(original.body).toContain(count===1?'Ihre 1 Teile aus Auftrag ':'Ihre Teile aus den Aufträgen ');expect(original.body).not.toContain('TEST E');
 }
 
