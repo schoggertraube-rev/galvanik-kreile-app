@@ -366,6 +366,7 @@
     "src/app/actions/pdf.actions.ts#generateDeliveryNote": [
       "src/test/acceptance/s10_delivery_note.integration.test.ts",
       "src/test/acceptance/s10_delivery_note_review.integration.test.ts",
+      "src/test/acceptance/s10_delivery_note_source_proof.integration.test.ts",
       "src/test/acceptance/s10_delivery_note_many.integration.test.ts",
       "src/test/acceptance/s08_credit_queue.browser.integration.test.ts"
     ],

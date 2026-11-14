@@ -8,7 +8,7 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {readyInvoiceOrder,deliveryNoteInputFixture} from '../../../e2e/ablauf/orderFixture';
 import {generateDeliveryNote} from '@/app/actions/pdf.actions';
 import {confirmPaymentAction} from '@/app/actions/payments.actions';
 import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
@@ -20,7 +20,7 @@ it('A10-4/5 paid invoice produces one real immutable-byte delivery original, nev
  expect(paid).toMatchObject({code:'OK'});if(paid.code!=='OK')throw Error('TEST_S10_REAL_PAYMENT');
  const invoiceBefore=await sql`SELECT id,status,gross_amount_cents,payment_paid_amount_cents,payment_version,pdf_sha256 FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const paymentsBefore=await sql`SELECT id,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='PAYMENT_CONFIRMED_V1' ORDER BY id`;
- const input={orderIds:[order.orderId],clientEventId:randomUUID(),expectedVersions:{[order.orderId]:order.version}};
+ const input=await deliveryNoteInputFixture([order.orderId]);
  const [created,retry]=await Promise.all([withSession(full,()=>generateDeliveryNote(input)),withSession(full,()=>generateDeliveryNote(JSON.parse(JSON.stringify(input)) as typeof input))]);
  expect(created,JSON.stringify(created.code==='OK'?created.receipt:created)).toMatchObject({code:'OK'});
  expect(retry).toMatchObject({code:'OK'});if(created.code!=='OK'||retry.code!=='OK')throw Error('TEST_S10_REAL_DELIVERY_ORIGINAL');
@@ -51,20 +51,24 @@ it('A10-4/5 paid invoice produces one real immutable-byte delivery original, nev
 
 it('N8 denies real missing rights/session and unpaid sources without writing a document',async()=>{
  const order=await readyInvoiceOrder('TEST S10 Lieferschein Rechte');
- const input={orderIds:[order.orderId],clientEventId:randomUUID(),expectedVersions:{[order.orderId]:order.version}};
+ const input={orderIds:[order.orderId],clientEventId:randomUUID(),expectedVersions:{[order.orderId]:order.version}} as unknown as import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput;
  const moneyOnly=await createFixture(['geld']),goodsOnly=await createFixture(['auftraege']);
  expect(await withSession(moneyOnly,()=>generateDeliveryNote(input))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(goodsOnly,()=>generateDeliveryNote(input))).toMatchObject({code:'FORBIDDEN'});
  expect(await withRequest('',()=>generateDeliveryNote(input))).toMatchObject({code:'UNAUTHENTICATED'});
  expect(await withSession(full,()=>generateDeliveryNote(input))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type IN ('DELIVERY_NOTE_ORIGINAL_V1','DELIVERY_NOTE_REQUESTED_V1')`).toEqual([{n:0}]);
+ const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId,includeDeliveryNoteSource:true}))).toMatchObject({code:'OK',deliveryNoteSource:{code:'VALIDATION_ERROR'}});
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const own=await deliveryNoteInputFixture([order.orderId]);
  // Explicit synthetic source in a different TEST tenant, not a nonexistent ID.
  // A real signed login for this tenant must never obtain that source.
  const foreignTenant='TEST-ablauf-'+randomUUID(),foreignCustomer=randomUUID(),foreignOrder=randomUUID();
  await sql`INSERT INTO public.customers(id,tenant_id,name,type) VALUES(${foreignCustomer},${foreignTenant},'TEST S10 fremder Kunde','privat')`;
  await sql`INSERT INTO public.orders(id,tenant_id,customer_id,order_number,title) VALUES(${foreignOrder},${foreignTenant},${foreignCustomer},${'TEST-S10-'+foreignOrder},'TEST S10 fremder Auftrag')`;
  expect(await sql`SELECT tenant_id FROM public.orders WHERE id=${foreignOrder}`).toEqual([{tenant_id:foreignTenant}]);
- expect(await withSession(full,()=>generateDeliveryNote({orderIds:[foreignOrder],expectedVersions:{[foreignOrder]:1},clientEventId:randomUUID()}))).toMatchObject({code:'NOT_FOUND'});
+ expect(await withSession(full,()=>generateDeliveryNote({orderIds:[foreignOrder],expectedVersions:{[foreignOrder]:1},expectedSources:{[foreignOrder]:own.expectedSources[order.orderId]},clientEventId:randomUUID()}))).toMatchObject({code:'NOT_FOUND'});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE order_id=${foreignOrder} AND event_type IN ('DELIVERY_NOTE_ORIGINAL_V1','DELIVERY_NOTE_REQUESTED_V1')`).toEqual([{n:0}]);
 });
 
@@ -73,7 +77,7 @@ it('N8 a missing SQL receipt retains the secured original bytes and the same req
  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,expectedOpenAmountCents:order.invoice.grossAmountCents,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  const storage=await import('@/lib/server/domainAttachmentStorage');
  const observed=vi.spyOn(storage,'storeDomainAttachmentBytes'); // observes the real, unchanged implementation
- const input={orderIds:[order.orderId],expectedVersions:{[order.orderId]:order.version},clientEventId:randomUUID()};
+ const input=await deliveryNoteInputFixture([order.orderId]);
  const suffix=randomUUID().replaceAll('-',''),fn='test_s10_request_'+suffix,trigger='test_s10_request_'+suffix;
  if(!/^TEST-ablauf-[a-f0-9-]+$/.test(KREILE_TENANT_SLUG))throw Error('TEST_S10_TENANT_REQUIRED');
  // TEST-only SQL fault, restricted to this exact original key. No protected

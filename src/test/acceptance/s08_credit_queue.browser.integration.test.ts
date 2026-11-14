@@ -12,7 +12,7 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {readyInvoiceOrder,deliveryNoteInputFixture} from '../../../e2e/ablauf/orderFixture';
 import {changeOrderPickupNoticeAction} from '@/app/actions/orders.actions';
 import {confirmPaymentAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
 import {getCustomerCreditAction,cancelInvoiceAction,getInvoiceSummariesAction} from '@/app/actions/invoices.actions';
@@ -173,7 +173,7 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
   // acknowledges a newly generated delivery note before its actual receipt.
   const documentOrder=await readyInvoiceOrder('TEST S10 native delivery original');
   expect(await withSession(full,()=>confirmPaymentAction({invoiceId:documentOrder.invoice.invoiceId,amount:documentOrder.invoice.grossAmountCents,expectedVersion:0,expectedOpenAmountCents:documentOrder.invoice.grossAmountCents,method:'bar',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
-  const documentKey=randomUUID(),documentInput={orderIds:[documentOrder.orderId],expectedVersions:{[documentOrder.orderId]:documentOrder.version},clientEventId:documentKey};
+  const documentKey=randomUUID(),documentInput=await deliveryNoteInputFixture([documentOrder.orderId],documentKey);
   const documentInvoiceBefore=await sql`SELECT id,payment_version,payment_paid_amount_cents FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${documentOrder.orderId}`;
   loseResponse=true;
   await cli(['eval',`async()=>{const result=await p.queueDeliveryNoteCommand('${scope}',{command:'document.deliveryNote',input:${JSON.stringify(documentInput)}},()=>'${scope}');if(result.code!=='UNAVAILABLE'||!(await p.readPendingEntries('${scope}')).some(row=>row.id==='${documentKey}'))throw Error('TEST_DOCUMENT_RESPONSE_LOSS_FALSE_ACK');return true;}`]);

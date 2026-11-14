@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession} from './replayHarness';
-import {readyInvoiceOrder} from './orderFixture';
+import {readyInvoiceOrder,manualTrackingFixture} from './orderFixture';
 
 it('H8 released orders remain reachable through search, customer history and their immutable invoice receipt',async()=>{
  const order=await readyInvoiceOrder('H8-Verknuepfung');
@@ -64,6 +64,7 @@ it('H8 active order still accepts a due date change with actor, readback and the
 // Quote conversion/rework/concurrent-tab/undo branches still need coverage.
 it.each([['abholung','pickup'],['versand','shipping']] as const)('H8 %s: real reread/retry creates one invoice/payment/release, then rejects a new due date',async(mode,handoverMode)=>{
  const order=await readyInvoiceOrder('H8',handoverMode);
+ if(mode==='versand')await manualTrackingFixture(order.orderId);
  const {issueInvoiceAction,getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');
  expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:order.issueInput.clientEventId}))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>issueInvoiceAction(structuredClone(order.issueInput)))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:order.invoice.invoiceId}});

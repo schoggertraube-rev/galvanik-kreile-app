@@ -18,24 +18,41 @@ const styles=StyleSheet.create({page:{padding:40,fontFamily:'Helvetica',fontSize
 const date=(value:string)=>new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date(value));
 /** Existing configured image source, with local files confined to public assets.
  * No fake logo or arbitrary file:// path is substituted for an unavailable logo. */
-function companyLogo(value:string|null|undefined):string|Buffer|null{
+async function companyLogo(value:string|null|undefined):Promise<Buffer|null>{
  if(!value?.trim())return null;
- if(/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/.test(value))return value;
- if(value.startsWith('/')&&!value.startsWith('//')){
-  const root=realpathSync(path.join(process.cwd(),'public'));
-  const actual=realpathSync(path.resolve(root,'.'+value));
-  if(!actual.startsWith(root+path.sep))throw Error('DELIVERY_NOTE_LOGO_PATH_INVALID');
-  return readFileSync(actual);
+ try{
+  let bytes:Buffer;
+  if(value.startsWith('data:')){
+   if(!/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/.test(value))throw Error('LOGO_FORMAT_UNSUPPORTED');
+   bytes=Buffer.from(value.slice(value.indexOf(',')+1),'base64');
+  }else if(value.startsWith('/')&&!value.startsWith('//')){
+   const root=realpathSync(path.join(process.cwd(),'public'));
+   const actual=realpathSync(path.resolve(root,'.'+value));
+   if(!actual.startsWith(root+path.sep))throw Error('LOGO_PATH_INVALID');
+   bytes=readFileSync(actual);
+  }else{
+   const url=new URL(value);
+   if(url.protocol!=='https:'||url.username||url.password)throw Error('LOGO_SOURCE_UNSUPPORTED');
+   const response=await fetch(url,{signal:AbortSignal.timeout(8000)});
+   if(!response.ok)throw Error('LOGO_SOURCE_UNAVAILABLE');
+   bytes=Buffer.from(await response.arrayBuffer());
+  }
+  const png=bytes.length>=8&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+  const jpeg=bytes.length>=3&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255;
+  if(!png&&!jpeg)throw Error('LOGO_FORMAT_UNSUPPORTED');
+  return bytes;
+ }catch(error){
+  // Optional decoration only: one bounded attempt before rendering, never a
+  // failed document/queue retry. Do not log configured URLs or their tokens.
+  console.warn('[DELIVERY_NOTE_LOGO_SKIPPED]',{code:error instanceof Error&&/^[A-Z_]+$/.test(error.message)?error.message:'LOGO_SOURCE_UNAVAILABLE'});
+  return null;
  }
- const url=new URL(value);
- if(url.protocol!=='https:'||url.username||url.password)throw Error('DELIVERY_NOTE_LOGO_SOURCE_INVALID');
- return url.href;
 }
 
-export const DeliveryNoteDocument=({snapshot:s}:{snapshot:PaidDeliveryNoteSnapshot})=>(
+export const DeliveryNoteDocument=({snapshot:s,logo}:{snapshot:PaidDeliveryNoteSnapshot;logo:Buffer|null})=>(
  <Document title={copy.title} author={s.company.companyName} creationDate={new Date(s.createdAt)} modificationDate={new Date(s.createdAt)}>
   <Page size="A4" style={styles.page}>
-   <View style={styles.header}><View>{s.company.logoUrl?.trim()?<PdfImage src={companyLogo(s.company.logoUrl)!} style={{width:120,height:50,objectFit:'contain',marginBottom:10}}/>:null}<Text style={styles.title}>{copy.title}</Text><Text>{copy.date} {date(s.createdAt)}</Text></View><View style={styles.company}><Text>{s.company.companyName}</Text><Text>{s.company.street}</Text><Text>{s.company.zip} {s.company.city}</Text><Text>{s.company.country}</Text>{s.company.phone?.trim()?<Text>{sourceCopy.phone} {s.company.phone}</Text>:null}</View></View>
+   <View style={styles.header}><View>{logo?<PdfImage src={logo} style={{width:120,height:50,objectFit:'contain',marginBottom:10}}/>:null}<Text style={styles.title}>{copy.title}</Text><Text>{copy.date} {date(s.createdAt)}</Text></View><View style={styles.company}><Text>{s.company.companyName}</Text><Text>{s.company.street}</Text><Text>{s.company.zip} {s.company.city}</Text><Text>{s.company.country}</Text>{s.company.phone?.trim()?<Text>{sourceCopy.phone} {s.company.phone}</Text>:null}</View></View>
    <View style={styles.recipient}><Text>{s.customer.name}</Text><Text>{s.customer.street}</Text><Text>{s.customer.zip} {s.customer.city}</Text><Text>{s.customer.country}</Text></View>
    <View style={[styles.row,styles.tableHead]}><Text style={styles.order}>{copy.order}</Text><Text style={styles.description}>{copy.description}</Text><Text style={styles.quantity}>{copy.quantity}</Text></View>
    {s.orders.flatMap(order=>order.parts.map(part=><View key={order.id+':'+part.itemId} style={styles.row} wrap={false}><Text style={styles.order}>{order.number}</Text><Text style={styles.description}>{order.title ? order.title+' · '+part.name : part.name}</Text><Text style={styles.quantity}>{part.quantity.toLocaleString('de-DE')}</Text></View>))}
@@ -46,4 +63,4 @@ export const DeliveryNoteDocument=({snapshot:s}:{snapshot:PaidDeliveryNoteSnapsh
   </Page>
  </Document>
 );
-export function createDeliveryNotePdfDocument(snapshot:PaidDeliveryNoteSnapshot):ReactElement<DocumentProps>{return <DeliveryNoteDocument snapshot={snapshot}/>;}
+export async function createDeliveryNotePdfDocument(snapshot:PaidDeliveryNoteSnapshot):Promise<ReactElement<DocumentProps>>{const logo=await companyLogo(snapshot.company.logoUrl);return <DeliveryNoteDocument snapshot={snapshot} logo={logo}/>;}

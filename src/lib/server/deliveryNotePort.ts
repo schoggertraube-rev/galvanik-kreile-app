@@ -99,10 +99,16 @@ export async function readDeliveryNoteSource(auth:AuthorizationSnapshot,orderIds
  * failed DB commit cannot force a retry to regenerate or replace an original. */
 export async function generatePaidDeliveryNote(auth:AuthorizationSnapshot,input:DeliveryNoteInput|string|string[],ports:Ports):Promise<DeliveryNoteResult>{
  if(!auth.active||!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'geld'))return fail('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
- const legacy=typeof input==='string'||Array.isArray(input);
- if(!legacy&&!isDeliveryNoteInput(input))return fail('VALIDATION_ERROR',copy.invalid);
- const ids=legacy?(typeof input==='string'?[input]:input):input.orderIds;
- if(!Array.isArray(ids)||!ids.length||ids.some(id=>typeof id!=='string'||!id.trim()||id!==id.trim()||id.length>128)||new Set(ids).size!==ids.length||!legacy&&!isDeliveryNoteInput(input))return fail('VALIDATION_ERROR',copy.invalid);
+ // The old string adapter captures the current canonical source server-side,
+ // then delegates to exactly the same source-checked object command.
+ if(typeof input==='string'||Array.isArray(input)){
+  const read=await readDeliveryNoteSource(auth,typeof input==='string'?[input]:input,ports);
+  if(read.code!=='OK')return read;
+  return generatePaidDeliveryNote(auth,{...read.source,clientEventId:uuid('delivery-request-v2:'+auth.tenantId+':'+auth.userId+':'+canonicalJson(read.source))},ports);
+ }
+ if(!isDeliveryNoteInput(input))return fail('VALIDATION_ERROR',copy.invalid);
+ const command=input;
+ const ids=command.orderIds;
  const selected=[...ids].sort();
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':delivery-note:'+canonicalJson(selected)},0))`);
@@ -110,8 +116,8 @@ export async function generatePaidDeliveryNote(auth:AuthorizationSnapshot,input:
    const found=await tx.execute<{id:string;user_id:string;event_type:string;status:string;event_schema_version:number;payload:{orderIds:string[];receipt:DeliveryNoteReceipt}}>(sql`SELECT id,user_id::text,event_type,status,event_schema_version,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${key}::uuid`);
    if(!found.length)return null;
    const row=found[0];if(found.length!==1||row.user_id!==auth.userId||row.event_type!=='DELIVERY_NOTE_REQUESTED_V1'||row.status!=='success'||row.event_schema_version!==1||canonicalJson(row.payload.orderIds)!==canonicalJson(selected)||canonicalJson(row.payload.receipt.orderIds)!==canonicalJson(selected)||row.payload.receipt.actorId!==auth.userId||row.payload.receipt.clientEventId!==key||row.payload.receipt.eventId!==row.id
-    ||!legacy&&canonicalJson((row.payload as {expectedVersions?:unknown}).expectedVersions)!==canonicalJson(input.expectedVersions)
-    ||!legacy&&canonicalJson((row.payload as {expectedSources?:unknown}).expectedSources??null)!==canonicalJson(input.expectedSources??null))return fail('CONFLICT',copy.changed);
+    ||canonicalJson((row.payload as {expectedVersions?:unknown}).expectedVersions)!==canonicalJson(command.expectedVersions)
+    ||canonicalJson((row.payload as {expectedSources?:unknown}).expectedSources??null)!==canonicalJson(command.expectedSources??null))return fail('CONFLICT',copy.changed);
    return load(row.payload.receipt,true);
   }
   async function load(receipt:DeliveryNoteReceipt,replayed:boolean):Promise<DeliveryNoteResult>{
@@ -124,10 +130,9 @@ export async function generatePaidDeliveryNote(auth:AuthorizationSnapshot,input:
    if(document.pdfSha256!==receipt.pdfSha256||document.actorId!==row.user_id||canonicalJson(document.snapshot)!==canonicalJson(p.snapshot)||canonicalJson(document.snapshot.orders.map(order=>order.id))!==canonicalJson(selected))throw Error('DELIVERY_NOTE_STORED_PROOF_MISMATCH');
    return {code:'OK',receipt,pdfBase64:document.pdfBase64,replayed};
   }
-  if(!legacy){const prior=await fromRequest(input.clientEventId);if(prior)return prior;}
-  const source=await readSource(tx,auth,selected,ports,legacy?undefined:input.expectedSources);if(!source)return fail('VALIDATION_ERROR',copy.sourceMissing);
-  const sourceHash=sourceHashOf(source),key=legacy?uuid('delivery-request:'+auth.tenantId+':'+auth.userId+':'+sourceHash):input.clientEventId;
-  if(legacy){const prior=await fromRequest(key);if(prior)return prior;}
+  const prior=await fromRequest(command.clientEventId);if(prior)return prior;
+  const source=await readSource(tx,auth,selected,ports,command.expectedSources);if(!source)return fail('VALIDATION_ERROR',copy.sourceMissing);
+  const sourceHash=sourceHashOf(source),key=command.clientEventId;
   const originalId=uuid('delivery-original:'+auth.tenantId+':'+sourceHash),storagePath='domain-attachments/v1/'+originalId+'.json';
   const existing=await tx.execute<Stored>(sql`SELECT id,user_id::text,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${originalId} AND event_type='DELIVERY_NOTE_ORIGINAL_V1' AND status='success'`);
   let document:Original,fileBytes:number,version:number;
@@ -159,7 +164,7 @@ export async function generatePaidDeliveryNote(auth:AuthorizationSnapshot,input:
   }
   const eventId=uuid('delivery-request-event:'+auth.tenantId+':'+key),receipt:DeliveryNoteReceipt={eventId,originalEventId:originalId,clientEventId:key,actorId:auth.userId,version,orderIds:selected,pdfSha256:document.pdfSha256,storagePath};
   const requested=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,payload,status,client_event_id,event_schema_version,aggregate_version)
-   VALUES(${eventId},${auth.tenantId},${selected[0]},'DELIVERY_NOTE_REQUESTED_V1',${copy.title},${auth.userId}::uuid,${JSON.stringify({orderIds:selected,expectedVersions:legacy?null:input.expectedVersions,...(!legacy&&input.expectedSources?{expectedSources:input.expectedSources}:{}),receipt})}::jsonb,'success',${key}::uuid,1,${version}) RETURNING id`);
+   VALUES(${eventId},${auth.tenantId},${selected[0]},'DELIVERY_NOTE_REQUESTED_V1',${copy.title},${auth.userId}::uuid,${JSON.stringify({orderIds:selected,expectedVersions:command.expectedVersions,expectedSources:command.expectedSources,receipt})}::jsonb,'success',${key}::uuid,1,${version}) RETURNING id`);
   if(requested.length!==1||requested[0].id!==eventId)throw Error('DELIVERY_NOTE_REQUEST_NOT_SAVED');
   const proof=await fromRequest(key);if(!proof||proof.code!=='OK')throw Error('DELIVERY_NOTE_READBACK_FAILED');
   return {...proof,replayed:existing.length===1};

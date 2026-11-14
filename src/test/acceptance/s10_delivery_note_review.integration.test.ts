@@ -9,16 +9,16 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {SALES_STAGE_FEATURES} from '@/modules/fundament/public';
 import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
-import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {readyInvoiceOrder,deliveryNoteInputFixture} from '../../../e2e/ablauf/orderFixture';
 import {getOrderPaymentStateAction,confirmPaymentAction} from '@/app/actions/payments.actions';
 import {generateDeliveryNote} from '@/app/actions/pdf.actions';
 import {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
 import {offlinePartition} from '@/lib/server/offlinePartition';
 async function paid(label:string){const order=await readyInvoiceOrder(label);expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,expectedVersion:0,method:'bar',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});return order;}
-const request=(order:{orderId:string;version:number})=>({orderIds:[order.orderId],clientEventId:randomUUID(),expectedVersions:{[order.orderId]:order.version}});
+const request=(order:{orderId:string;version:number})=>deliveryNoteInputFixture([order.orderId]);
 async function textOf(base64:string){const task=getDocument({data:new Uint8Array(Buffer.from(base64,'base64')),useSystemFonts:true});try{const pdf=await task.promise;const text=[];for(let i=1;i<=pdf.numPages;i++){const page=await pdf.getPage(i),content=await page.getTextContent();text.push(content.items.map(item=>'str'in item?item.str:'').join(' '));}return text.join(' ');}finally{await task.destroy();}}
 it('KORR19:24-1 source-specific company, address and mixed-customer errors preserve the real settings/customer escape without document effects',async()=>{
- const order=await paid('TEST S10 review source causes'),input=request(order);
+ const order=await paid('TEST S10 review source causes'),input=await request(order);
  // Isolated TEST tenant: seed the complete canonical settings feature set.
  for(const feature of SALES_STAGE_FEATURES)await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES(${KREILE_TENANT_SLUG},${feature.id},${feature.defaultEnabled}) ON CONFLICT(tenant,feature_id) DO NOTHING`;
  const [company]=await sql`SELECT street FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`;
@@ -34,13 +34,13 @@ it('KORR19:24-1 source-specific company, address and mixed-customer errors prese
   expect(result).toMatchObject({code:'VALIDATION_ERROR',message:'Straße fehlt beim Kunden. Trag es in den Kundendaten ein.',remedy:{field:'street',funktion:'getCustomerSummaryAction',argumente:{customerId:order.customerId}}});
  }finally{await sql`UPDATE public.customers SET street='TEST Weg' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;}
  const other=await paid('TEST S10 other customer');
- const mixed={orderIds:[order.orderId,other.orderId],expectedVersions:{[order.orderId]:order.version,[other.orderId]:other.version},clientEventId:randomUUID()};
+ const mixed={orderIds:[order.orderId,other.orderId],expectedVersions:{[order.orderId]:order.version,[other.orderId]:other.version},expectedSources:{...input.expectedSources,...(await request(other)).expectedSources},clientEventId:randomUUID()};
  expect(await withSession(full,()=>generateDeliveryNote(mixed))).toMatchObject({code:'VALIDATION_ERROR',message:'Ein Lieferschein gilt für einen Kunden. Wähle nur dessen Aufträge.'});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${[input.clientEventId,mixed.clientEventId]}::uuid[])`).toEqual([{n:0}]);
  expect(await withSession(full,()=>generateDeliveryNote(JSON.parse(JSON.stringify(input)) as typeof input))).toMatchObject({code:'OK'});
 });
 it('KORR19:24-1 an unreadable real company source stays retryable and never creates a conflict task',async()=>{
- const order=await paid('TEST S10 ambiguous company'),input=request(order),duplicate=randomUUID();
+ const order=await paid('TEST S10 ambiguous company'),input=await request(order),duplicate=randomUUID();
  const original={kind:'workshop' as const,command:'document.deliveryNote' as const,id:input.clientEventId,itemId:order.orderId,input,deviceCapturedAt:new Date().toISOString()};
  const scope=offlinePartition({tenantId:KREILE_TENANT_SLUG,userId:full.actorId});
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country) VALUES(${duplicate}::uuid,${KREILE_TENANT_SLUG},'TEST S10 duplicate company','TEST Weg 2','70176','Stuttgart','Deutschland')`;
@@ -59,10 +59,10 @@ it('KORR19:24-3 actual PDFs retain both signature fields and configured logo/con
  const [before]=await sql`SELECT phone,tax_id,logo_url FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  try{
   await sql`UPDATE public.company_settings SET phone='TEST 0711 1234',tax_id='DE123456789',logo_url='/logo.png' WHERE tenant_id=${KREILE_TENANT_SLUG}`;
-  const result=await withSession(full,()=>generateDeliveryNote(request(order)));expect(result).toMatchObject({code:'OK'});if(result.code!=='OK')throw Error('TEST_S10_RENDER');
+  const result=await withSession(full,async()=>generateDeliveryNote(await request(order)));expect(result).toMatchObject({code:'OK'});if(result.code!=='OK')throw Error('TEST_S10_RENDER');
   const text=await textOf(result.pdfBase64);expect(text).toContain('Übergabe (Firma)');expect(text).toContain('Übernahme (Kunde)');expect(text).toContain('TEST 0711 1234');expect(text).toContain('DE123456789');expect(Buffer.from(result.pdfBase64,'base64').toString('latin1')).toContain('/Subtype /Image');
   await sql`UPDATE public.company_settings SET phone=NULL,tax_id=NULL,logo_url=NULL WHERE tenant_id=${KREILE_TENANT_SLUG}`;
-  const plain=await withSession(full,()=>generateDeliveryNote(request(order)));expect(plain).toMatchObject({code:'OK'});if(plain.code!=='OK')throw Error('TEST_S10_RENDER_OPTIONAL');
+  const plain=await withSession(full,async()=>generateDeliveryNote(await request(order)));expect(plain).toMatchObject({code:'OK'});if(plain.code!=='OK')throw Error('TEST_S10_RENDER_OPTIONAL');
   const plainText=await textOf(plain.pdfBase64);expect(plainText).toContain('Übergabe (Firma)');expect(plainText).toContain('Übernahme (Kunde)');expect(plainText).not.toContain('TEST 0711 1234');expect(plainText).not.toContain('DE123456789');
   const {writeFileSync}=await import('node:fs');writeFileSync('.git/kreile-s10-delivery-note-review.pdf',Buffer.from(result.pdfBase64,'base64'));
  }finally{await sql`UPDATE public.company_settings SET phone=${before.phone},tax_id=${before.tax_id},logo_url=${before.logo_url} WHERE tenant_id=${KREILE_TENANT_SLUG}`;}
@@ -102,7 +102,12 @@ it('KORR19:24-2 actual paid-invoice cancellation rejects a changed payment/invoi
  const original=await withSession(full,()=>generateDeliveryNote(input));if(original.code!=='OK')throw Error('TEST_S10_BEFORE_CANCELLATION');
  const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
  expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST S10 changed source',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
- const stale={...input,clientEventId:randomUUID()};expect(await withSession(full,()=>generateDeliveryNote(stale))).toMatchObject({code:'CONFLICT'});
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));if(card.code!=='OK')throw Error('TEST_S10_REISSUE_CARD');
+ const replacement=await withSession(full,()=>issueInvoiceAction({orderId:order.orderId,expectedVersion:card.data.card.version,clientEventId:randomUUID()}));expect(replacement).toMatchObject({code:'OK'});if(replacement.code!=='OK')throw Error('TEST_S10_REISSUE_INVOICE');
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:replacement.receipt.invoiceId,amount:replacement.receipt.grossAmountCents,expectedVersion:0,method:'bar',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const stale={...input,clientEventId:randomUUID()};expect(await withSession(full,()=>generateDeliveryNote(stale))).toMatchObject({code:'CONFLICT',message:'Die Zahlung hat sich geändert. Lade den Auftrag neu und erzeuge den Lieferschein erneut.'});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${stale.clientEventId}::uuid`).toEqual([{n:0}]);
  expect(await withSession(full,()=>generateDeliveryNote(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,pdfBase64:original.pdfBase64});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='DELIVERY_NOTE_ORIGINAL_V1'`).toEqual([{n:1}]);

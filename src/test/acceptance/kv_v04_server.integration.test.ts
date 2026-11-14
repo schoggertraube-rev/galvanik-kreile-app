@@ -1462,6 +1462,13 @@ it.each(['early','label','two','future','delivered'] as const)('AF19 real mail h
   expect(await withSession(fixture,()=>setOrderItemFinishedAction({orderId,itemId:created.receipt.items[0].id,expectedVersion:2,clientEventId:randomUUID(),finished:true}))).toMatchObject({code:'OK'});
   await seedSyntheticItemPhotos(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,orderId});
   expect(await withSession(fixture,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:3,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  // Explicit isolated carrier configuration; the number/receipt use the real
+  // canonical writer, so this case reaches its already-delivered prerequisite.
+  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,versand_dienst,versand_nummer_format,versand_nummer_hinweis)
+   SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST AF19 shipping','TEST AF19 Parcel','','' WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+  await sql`UPDATE public.company_settings SET versand_dienst='TEST AF19 Parcel',versand_nummer_format='',versand_nummer_hinweis='' WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+  const {saveManualTrackingAction}=await import('@/app/actions/orders.actions');
+  expect(await withSession(fixture,()=>saveManualTrackingAction({orderId,shipmentId:randomUUID(),expectedUpdatedAt:null,trackingNumber:'TEST AF19 '+randomUUID(),allowFormatMismatch:false,reason:null,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await withSession(fixture,()=>recordGoodsOutAction({orderId,mode:'versand',expectedVersion:4,clientEventId:randomUUID(),agreement:{id:agreement.agreement.id,type:'sammelrechnung',version:agreement.agreement.version}}))).toMatchObject({code:'OK'});
  }
  const itemId=randomUUID(),fileId=randomUUID(),originalHash='e'.repeat(64),sender='kv-'+fixture.customerId+'@local.invalid',text=kind==='future'?'Ab jetzt immer abholen.':'Hole ich ab.';

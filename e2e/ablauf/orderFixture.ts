@@ -67,3 +67,16 @@ export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'ship
  if(issued.code!=='OK')throw Error('FIXTURE_INVOICE:'+issued.code+':'+('message'in issued?issued.message:''));
  return {customerId,orderId,invoice:issued.receipt,version:issued.receipt.orderVersion,issueInput,items:prepared.items,issuanceResults};
 }
+
+/** Read the real source projection for a confirmed TEST document command. */
+export async function deliveryNoteInputFixture(orderIds:string[],clientEventId=randomUUID()):Promise<import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput>{
+ const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const input:import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput={orderIds,clientEventId,expectedVersions:{},expectedSources:{}};
+ for(const orderId of orderIds){
+  const read=await withSession(full,()=>getOrderPaymentStateAction({orderId,includeDeliveryNoteSource:true}));
+  if(read.code!=='OK'||read.deliveryNoteSource?.code!=='OK')throw Error('FIXTURE_DELIVERY_NOTE_SOURCE:'+read.code);
+  Object.assign(input.expectedVersions,read.deliveryNoteSource.source.expectedVersions);
+  Object.assign(input.expectedSources,read.deliveryNoteSource.source.expectedSources);
+ }
+ return input;
+}

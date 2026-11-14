@@ -11,7 +11,7 @@ import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {getOrderPaymentStateAction,confirmPaymentAction} from '@/app/actions/payments.actions';
 import {generateDeliveryNote} from '@/app/actions/pdf.actions';
 it('S10 R3 zero selection is rejected; two paid orders of the same customer produce one PDF with both actual payment originals and no new booking',async()=>{
- expect(await withSession(full,()=>generateDeliveryNote({orderIds:[],expectedVersions:{},clientEventId:randomUUID()}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(full,()=>generateDeliveryNote({orderIds:[],expectedVersions:{},expectedSources:{},clientEventId:randomUUID()}))).toMatchObject({code:'VALIDATION_ERROR'});
  const a=await readyInvoiceOrder('TEST S10 same customer A'),b=await readyInvoiceOrder('TEST S10 same customer B','pickup',false,a.customerId);
  const input:{orderIds:string[];expectedVersions:Record<string,number>;expectedSources:Record<string,{paymentHash:string;contentHash:string}>;clientEventId:string}={orderIds:[b.orderId,a.orderId],expectedVersions:{},expectedSources:{},clientEventId:randomUUID()};
  for(const order of [a,b]){
