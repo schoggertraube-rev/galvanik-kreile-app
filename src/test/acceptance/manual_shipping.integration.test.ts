@@ -5,9 +5,44 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {readyInvoiceOrder,readyOrderForInvoice,manualTrackingFixture} from '../../../e2e/ablauf/orderFixture';
 const DATABASE_URL=process.env.DATABASE_URL,EXPECTED_DATABASE_URL=process.env.H18_EXPECTED_DATABASE_URL;
 if(!DATABASE_URL||DATABASE_URL!==EXPECTED_DATABASE_URL||new URL(DATABASE_URL).hostname!=='127.0.0.1')throw Error('MANUAL_SHIPPING_LOOPBACK_REPLAY_REQUIRED');
+
+it('S10 group confirmation reads zero, one and two real members with the same current version from either order',async()=>{
+ // Form the real group before invoice issuance, as S09 requires. A fee line
+ // remains an issued shipping original even when its configured amount is zero.
+ const a=await readyOrderForInvoice('TEST S10 Gruppe A','shipping');
+ const b=await readyOrderForInvoice('TEST S10 Gruppe B','shipping',a.customerId);
+ const {getManualShippingAction,saveManualTrackingAction}=await import('@/app/actions/orders.actions');
+ const empty=await withSession(full,()=>getManualShippingAction({orderId:a.orderId}));
+ expect(empty).toMatchObject({code:'OK',data:{shipments:[],shipmentGroups:[]}});
+ const single=await manualTrackingFixture(a.orderId);
+ const one=await withSession(full,()=>getManualShippingAction({orderId:a.orderId}));
+ expect(one).toMatchObject({code:'OK',data:{shipmentGroups:[{id:single.shipmentId,members:[{shipmentId:single.shipmentId,orderId:a.orderId,orderVersion:a.version}]}]}});
+ const grouped=await withSession(full,()=>saveManualTrackingAction({orderId:a.orderId,shipmentId:single.shipmentId,expectedUpdatedAt:single.updatedAt,trackingNumber:single.trackingNumber,allowFormatMismatch:false,reason:null,clientEventId:randomUUID(),withOrder:{orderId:b.orderId,shipmentId:null,expectedUpdatedAt:null}}));
+ expect(grouped,JSON.stringify(grouped)).toMatchObject({code:'OK'});if(grouped.code!=='OK')throw Error('TEST_S10_GROUP_CREATE');
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const login=await createFixture(['auftraege'],'werkstatt');
+ const readA=await withSession(login,()=>getManualShippingAction({orderId:a.orderId})),readB=await withSession(login,()=>getManualShippingAction({orderId:b.orderId}));
+ if(readA.code!=='OK'||readB.code!=='OK')throw Error('TEST_S10_GROUP_READ');
+ expect(readA.data.shipments).toHaveLength(1);expect(readB.data.shipments).toHaveLength(1);
+ expect(readA.data.shipmentGroups).toEqual(readB.data.shipmentGroups);
+ expect(readA.data.shipmentGroups).toHaveLength(1);
+ const group=readA.data.shipmentGroups[0];
+ expect(group.id).toBe(grouped.receipt.sendungId);expect(group.version).toMatch(/^[a-f0-9]{64}$/);
+ expect(group.members.map(row=>row.orderId).sort()).toEqual([a.orderId,b.orderId].sort());
+ expect(JSON.stringify(group)).not.toMatch(/Cents|netto|invoice|payment/);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
+ const denied=await createFixture(['kunden']);
+ expect(await withSession(denied,()=>getManualShippingAction({orderId:b.orderId}))).toMatchObject({code:'FORBIDDEN'});
+ const member=readB.data.shipments[0];
+ expect(await withSession(login,()=>saveManualTrackingAction({orderId:b.orderId,shipmentId:member.id,expectedUpdatedAt:member.updatedAt,trackingNumber:single.trackingNumber,allowFormatMismatch:false,reason:null,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const changed=await withSession(login,()=>getManualShippingAction({orderId:a.orderId}));if(changed.code!=='OK')throw Error('TEST_S10_GROUP_RELOAD');
+ expect(changed.data.shipmentGroups[0].version).not.toBe(group.version);
+ expect(group.members.find(row=>row.orderId===b.orderId)?.trackingNumber).toBe(null);
+ expect(changed.data.shipmentGroups[0].members.find(row=>row.orderId===b.orderId)?.trackingNumber).toBe(single.trackingNumber);
+});
 
 it('A10-1/3 a label without a secured tracking receipt cannot release the actual goods',async()=>{
  const order=await readyInvoiceOrder('TEST S10 Etikett ist keine Übergabe','shipping');

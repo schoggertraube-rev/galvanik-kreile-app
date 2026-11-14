@@ -17,7 +17,7 @@ export type ManualShippingPorts={
  readSettings:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<ShippingSettings|null>;
 };
 type Order={id:string;customer_id:string;order_number:string;handover_mode:string|null;station:string;version:number;allowed:boolean};
-type Shipment={id:string;order_id:string;sendungId:string|null;carrier:string|null;trackingNumber:string|null;updatedAt:string;status:string;weightKg:string|null;labelUrl:string|null};
+type Shipment={id:string;order_id:string;orderNumber:string;orderVersion:number;sendungId:string|null;carrier:string|null;trackingNumber:string|null;updatedAt:string;status:string;weightKg:string|null;labelUrl:string|null};
 export type SaveManualTrackingInput={orderId:string;shipmentId:string;expectedUpdatedAt:string|null;trackingNumber:string;allowFormatMismatch:boolean;reason:string|null;clientEventId:string;withOrder?:{orderId:string;shipmentId:string|null;expectedUpdatedAt:string|null}};
 type Receipt={shipmentId:string;orderId:string;trackingNumber:string;carrier:string;updatedAt:string;eventId:string;actorId:string;formatOverride:boolean;sendungId?:string};
 const error=(code:'FORBIDDEN'|'VALIDATION_ERROR'|'NOT_FOUND'|'CONFLICT'|'UNAVAILABLE',reason:keyof typeof MANUAL_SHIPPING_COPY)=>({code,reason,message:MANUAL_SHIPPING_COPY[reason]});
@@ -33,12 +33,23 @@ async function readOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapsh
   WHERE tenant_id=${auth.tenantId} AND id=${orderId} ${lock?sql`FOR UPDATE`:sql``}`);
  if(rows.length>1)throw Error('SHIPPING_ORDER_AMBIGUOUS');return rows[0]??null;
 }
-async function readShipments(tx:PrivilegedTenantTransaction,tenantId:string,filter:{orderId:string}|{shipmentId:string},lock=false){
- const rows=await tx.execute<Shipment>(sql`SELECT id::text,order_id,sendung_id::text AS "sendungId",carrier,tracking_number AS "trackingNumber",status,label_url AS "labelUrl",
-  weight_kg::text AS "weightKg",to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
-  FROM public.shipments WHERE tenant_id=${tenantId} AND ${'orderId'in filter?sql`order_id=${filter.orderId}`:sql`id=${filter.shipmentId}::uuid`}
-  ORDER BY created_at,id LIMIT 101 ${lock?sql`FOR UPDATE`:sql``}`);
+async function readShipments(tx:PrivilegedTenantTransaction,tenantId:string,filter:{orderId:string}|{shipmentId:string},lock=false,includeGroup=false){
+ const rows=await tx.execute<Shipment>(sql`SELECT shipment.id::text,shipment.order_id,linked.order_number AS "orderNumber",linked.version AS "orderVersion",shipment.sendung_id::text AS "sendungId",shipment.carrier,shipment.tracking_number AS "trackingNumber",shipment.status,shipment.label_url AS "labelUrl",
+  shipment.weight_kg::text AS "weightKg",to_char(shipment.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
+  FROM public.shipments shipment JOIN public.orders linked ON linked.tenant_id=shipment.tenant_id AND linked.id=shipment.order_id
+  WHERE shipment.tenant_id=${tenantId} AND ${'orderId'in filter?sql`(shipment.order_id=${filter.orderId} OR (${includeGroup} AND shipment.sendung_id IN (SELECT own.sendung_id FROM public.shipments own WHERE own.tenant_id=${tenantId} AND own.order_id=${filter.orderId} AND own.sendung_id IS NOT NULL)))`:sql`shipment.id=${filter.shipmentId}::uuid`}
+  ORDER BY shipment.created_at,shipment.id LIMIT 101 ${lock?sql`FOR UPDATE OF shipment`:sql``}`);
  if(rows.length>100)throw Error('SHIPPING_LIMIT');return rows;
+}
+/** Version only of the real membership and row/order versions, no group table
+ * or persisted parallel state. Both involved order readers see this same key. */
+function shipmentGroups(rows:Shipment[]){
+ const groups=new Map<string,Shipment[]>();
+ for(const row of rows){const key=row.sendungId??row.id;const entries=groups.get(key);if(entries)entries.push(row);else groups.set(key,[row]);}
+ return [...groups].map(([id,entries])=>{
+  const members=[...entries].sort((a,b)=>a.id.localeCompare(b.id)).map(row=>({shipmentId:row.id,orderId:row.order_id,orderNumber:row.orderNumber,orderVersion:row.orderVersion,sendungId:row.sendungId,updatedAt:row.updatedAt,status:row.status,carrier:row.carrier,trackingNumber:row.trackingNumber}));
+  return {id,version:createHash('sha256').update(JSON.stringify(members)).digest('hex'),members};
+ });
 }
 export async function readManualShipping(auth:AuthorizationSnapshot,orderId:unknown,ports:ManualShippingPorts){
  if(!authorized(auth))return error('FORBIDDEN','SHIPPING_FORBIDDEN');
@@ -49,7 +60,7 @@ export async function readManualShipping(auth:AuthorizationSnapshot,orderId:unkn
   const customer=await ports.readCustomer(tx,auth.tenantId,order.customer_id);
   if(!customer)throw Error('SHIPPING_CUSTOMER_MISSING');
   const settings=await ports.readSettings(tx,auth.tenantId);
-  const shipments=await readShipments(tx,auth.tenantId,{orderId});
+  const shipments=await readShipments(tx,auth.tenantId,{orderId},false,true);
   const fields={name:customer.companyName??customer.name,street:customer.street,houseNumber:customer.houseNumber,
    zipCode:customer.zipCode,city:customer.city,country:customer.country,phone:customer.phone,email:customer.email,
    reference:customer.customerNumber};
@@ -57,7 +68,8 @@ export async function readManualShipping(auth:AuthorizationSnapshot,orderId:unkn
   const copyText=Object.entries(fields).map(([key,value])=>`${MANUAL_SHIPPING_FIELDS[key as keyof typeof MANUAL_SHIPPING_FIELDS]}: ${value??''}`).join('\n');
   return {code:'OK' as const,data:{orderId,orderVersion:order.version,fields,copyText,missing,
    releaseAllowed:order.allowed,service:settings?.service??null,numberHint:settings?.numberHint??null,
-   shipments:shipments.map(shipment=>({id:shipment.id,sendungId:shipment.sendungId,carrier:shipment.carrier,trackingNumber:shipment.trackingNumber,updatedAt:shipment.updatedAt,status:shipment.status,weightKg:shipment.weightKg,labelUrl:shipment.labelUrl,trackingUrl:settings&&shipment.carrier===settings.service?trackingLink(settings,shipment.trackingNumber):null})),
+   shipmentGroups:shipmentGroups(shipments),
+   shipments:shipments.filter(shipment=>shipment.order_id===orderId).map(shipment=>({id:shipment.id,sendungId:shipment.sendungId,carrier:shipment.carrier,trackingNumber:shipment.trackingNumber,updatedAt:shipment.updatedAt,status:shipment.status,weightKg:shipment.weightKg,labelUrl:shipment.labelUrl,trackingUrl:settings&&shipment.carrier===settings.service?trackingLink(settings,shipment.trackingNumber):null})),
    gaps:[...(!settings?['SHIPPING_SETTINGS_MISSING']:[]),'SERVICE_BROWSER_URL_NOT_CONFIGURED','DIMENSIONS_NOT_RECORDED']}};
  });}catch(cause){console.error('MANUAL_SHIPPING_READ_FAILED',cause);return error('UNAVAILABLE','MANUAL_SHIPPING_READ_FAILED');}
 }
