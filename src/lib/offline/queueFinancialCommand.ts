@@ -1,12 +1,12 @@
 import {retainPendingWorkshopOriginal,isPendingWorkshopAcknowledgement,type PendingFinancialCommand,type PendingWorkshopOriginal} from './pendingStore';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
-import {isWorkshopRejectionReceipt} from './workshopRejectionContract';
+import {isWorkshopRejectionReceipt,type WorkshopRejectionReceipt} from './workshopRejectionContract';
 import {syncOriginals} from './syncOriginals';
 import type {WorkshopAcknowledgement} from './syncPendingFiles';
 import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
 
 type FinancialAcknowledgement=Extract<WorkshopAcknowledgement['result'],{financialCommand:string}>;
-type FinancialFailure=Exclude<WorkshopAcknowledgement['result'],{code:'OK'|'PRESERVED'}>&{message:string};
+type FinancialFailure=Exclude<WorkshopAcknowledgement['result'],{code:'OK'|'PRESERVED'}>&{message:string;rejectionReceipt?:WorkshopRejectionReceipt};
 /** A08-11: retain first in the one scoped store, then use its one dispatcher.
  * Queue absence or a cancellation PDF alone is never financial success. */
 export async function queueFinancialCommand(scope:string,command:PendingFinancialCommand,currentScope:()=>string|null){
@@ -22,11 +22,11 @@ export async function queueFinancialCommand(scope:string,command:PendingFinancia
  };
  const rejected=(event:Event)=>{
   const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
-  if(!proof||currentScope()!==scope||proof.scope!==scope||proof.entry.id!==original.id||proof.entry.command!==original.command||proof.result.code==='OK')return;
-  if('rejectionReceipt'in proof.result&&isWorkshopRejectionReceipt(scope,proof.entry,proof.result.rejectionReceipt)){
+  if(!proof||currentScope()!==scope||proof.scope!==scope||proof.entry.id!==original.id||proof.entry.command!==original.command||canonicalJson(proof.entry.input)!==canonicalJson(original.input)||proof.result.code==='OK')return;
+  if('rejectionReceipt'in proof.result){
+   if(!isWorkshopRejectionReceipt(scope,proof.entry,proof.result.rejectionReceipt))return;
    failure.value={...proof.result,code:proof.result.rejectionReceipt.rejection,message:'message'in proof.result&&typeof proof.result.message==='string'?proof.result.message:CUSTOMER_CREDIT_COPY.unavailable};return;
   }
-  if(proof.result.code==='PRESERVED')return;
   failure.value={...proof.result,message:'message'in proof.result&&typeof proof.result.message==='string'?proof.result.message:CUSTOMER_CREDIT_COPY.unavailable};
  };
  window.addEventListener('kreile-workshop-acknowledged',accepted);

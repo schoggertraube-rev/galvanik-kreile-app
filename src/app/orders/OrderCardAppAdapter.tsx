@@ -2,6 +2,7 @@
 import {captureDeviceReadFence,retainDevicePortResponse} from '@/lib/offline/devicePortRead';
 import {capturePendingItemFinished} from '@/lib/offline/pendingStore';
 import {readServerReachability} from '@/lib/offline/serverReachability';
+import {releaseRejectedWorkshopRequest} from '@/lib/offline/workshopRejectionContract';
 import type {WorkshopAcknowledgement} from '@/lib/offline/syncPendingFiles';
 import {OFFLINE_ITEM_FINISHED_COPY,OFFLINE_RECONCILIATION_COPY,ACTOR_COPY} from "@/ui/situationCatalog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -829,8 +830,17 @@ export function OrderCardAppAdapter({
         }else if(result.code==='PRESERVED')setFeedback({kind:'conflict',message:OFFLINE_RECONCILIATION_COPY.reason});
       })();
     };
-    window.addEventListener('kreile-workshop-acknowledged',acknowledged);return()=>{active=false;window.removeEventListener('kreile-workshop-acknowledged',acknowledged);};
-  },[offlineScope,orderId,load,success]);
+    const rejected=(event:Event)=>{
+      const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
+      if(!active||authStatus!=='authenticated'||!offlineScope||!proof||proof.scope!==offlineScope||proof.entry?.command!=='item.finished'||!proof.entry.input.finished||proof.entry.input.orderId!==orderId||!('rejectionReceipt'in proof.result))return;
+      if(!releaseRejectedWorkshopRequest(offlineScope,proof.entry,proof.result.rejectionReceipt,requests.current,`item:${proof.entry.input.itemId}:true`))return;
+      setFeedback({kind:'conflict',message:OFFLINE_RECONCILIATION_COPY.reason});
+      void load(true);
+    };
+    window.addEventListener('kreile-workshop-acknowledged',acknowledged);
+    window.addEventListener('kreile-workshop-rejected',rejected);
+    return()=>{active=false;window.removeEventListener('kreile-workshop-acknowledged',acknowledged);window.removeEventListener('kreile-workshop-rejected',rejected);};
+  },[offlineScope,orderId,load,success,authStatus]);
   const onToggleItemFinished = useCallback(async (itemId: string, finished: boolean) => {
     if (!snapshot) return;
     setFeedback({ kind: "submitting", message: finished ? "Teil wird fertig gemeldet." : "Teil wird wieder geöffnet." });

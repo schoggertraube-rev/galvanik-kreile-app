@@ -4,6 +4,11 @@ import type {PendingWorkshopOriginal} from './pendingStore';
 export type WorkshopRejectionCode='CONFLICT'|'FORBIDDEN'|'NOT_FOUND'|'VALIDATION_ERROR';
 export type WorkshopRejectionReceipt={scope:string;eventId:string;taskId:string;actorId:string;clientEventId:string;deviceCapturedAt:string;originalCanonical:string;rejection:WorkshopRejectionCode};
 export function isWorkshopRejectionCode(value:unknown):value is WorkshopRejectionCode{return ['CONFLICT','FORBIDDEN','NOT_FOUND','VALIDATION_ERROR'].includes(String(value));}
+/** Release only the consumed controller key; retained original and disposition stay untouched. */
+export function releaseRejectedWorkshopRequest(scope:string,original:PendingWorkshopOriginal,receipt:unknown,requests:Record<string,string>,key:string):boolean{
+ if(requests[key]!==original.id||!isWorkshopRejectionReceipt(scope,original,receipt))return false;
+ delete requests[key];return true;
+}
 /** A distinct disposition proof. It cannot acknowledge any business effect. */
 export function isWorkshopRejectionReceipt(scope:string,original:PendingWorkshopOriginal,value:unknown):value is WorkshopRejectionReceipt{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;

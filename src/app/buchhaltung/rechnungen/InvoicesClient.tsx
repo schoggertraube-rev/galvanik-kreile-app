@@ -96,6 +96,13 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
       if(!offlineScope)throw Error('INVOICE_QUEUE_SCOPE_REQUIRED');
       const command = await queueFinancialCommand(offlineScope,{command:'invoice.cancel',input},()=>currentScope.current);
       if (command.code !== "OK") {
+        if(currentScope.current===offlineScope&&'rejectionReceipt'in command&&command.rejectionReceipt?.clientEventId===clientEventId&&requestIds.current[row.invoiceId]===clientEventId){
+          delete requestIds.current[row.invoiceId];
+          const fresh=await getInvoiceSummariesAction();
+          if(currentScope.current!==offlineScope)return;
+          if(fresh.code==='OK'){setRows(fresh.data);setPageState(fresh.data.length?'DATA':'EMPTY');setPageMessage(null);}
+          else{setPageState(fresh.code==='UNAUTHENTICATED'||fresh.code==='FORBIDDEN'?'DENIAL':'ERROR');setPageMessage(fresh.message);}
+        }
         setRowMessages((current) => ({
           ...current,
           [row.invoiceId]: { kind: "error", text: command.message },
