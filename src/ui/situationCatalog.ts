@@ -2,6 +2,8 @@
 export const INVOICE_VAT_COPY={missingCompanyRate:(part:string)=>`Für ${part} fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.`,missingRate:(part:string)=>`Für ${part} fehlt der Steuersatz (19 % oder 7 %).`,groupNet:(rate:string)=>"Netto ("+rate+")",groupVat:(rate:string)=>"zzgl. USt ("+rate+")",cancelNet:(rate:string)=>"Storno netto ("+rate+")",cancelVat:(rate:string)=>"Storno USt ("+rate+")",reverseCharge:"Steuerschuldnerschaft des Leistungsempfängers",vatId:"USt-IdNr.:"} as const;
 /** PL13.11.00:14 deferred sales-stage sources. */
 export const DEFERRED_LEGACY_COPY={unavailable:"Kommt nach dem Start dazu - bis dahin ausgeschaltet."} as const;
+// PL14Nov18:09: one payment line per real existing invoice payment.
+export const DELIVERY_NOTE_COPY={title:'Lieferschein',date:'Datum:',order:'Auftrag',description:'Beschreibung',quantity:'Anzahl Teile',payment:(date:string,amount:string)=>`Bezahlt am ${date}: ${amount}`,invalid:'Wähle den Auftrag erneut.',sourceMissing:'Für diesen Auftrag ist noch keine Rechnung bezahlt. Öffne die Zahlung am Auftrag.',changed:'Die Zahlung hat sich geändert. Lade den Auftrag neu und erzeuge den Lieferschein erneut.',unavailable:'Geht nur mit Netz'} as const;
 /** Existing compatibility denial text, now shared by canonical area gates. */
 export const LEGACY_ACTION_ACCESS_COPY={forbidden:"Keine Berechtigung für diese Aktion."} as const;
 export const MAIL_IMPORT_COPY={timeUnknown:'Eingangszeit fehlt',failed:'Import fehlgeschlagen',detail:(failure:{reason:string|null;graphMessageId:string|null})=>['Import fehlgeschlagen',failure.reason??MAILBOX_SYNC_COPY.unavailable,failure.graphMessageId??MAILBOX_SYNC_COPY.unavailable].join(' · '),task:(id:string)=>`Mail ${id} importieren – Import fehlgeschlagen`} as const;
@@ -313,6 +315,7 @@ export const MAIL_RESEND_COPY={
 };
 export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich',rejected:'abgelehnt, ohne Wirkung',originalCommand:{
  'item.finished':'Teil fertig melden',
+ 'document.deliveryNote':DELIVERY_NOTE_COPY.title,
  'item.extraWork':'Mehrarbeit erfassen',
  'order.handover':'Übergabeart ändern',
  'invoice.issue':'Rechnung ausstellen',

@@ -248,14 +248,21 @@ describe("W2C company settings read containment", () => {
     expect(mockRenderToBuffer).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the delivery note and company-settings reader fail-closed", async () => {
+  it("denies the delivery note before any read without its real session and both required areas", async () => {
     const { companySettingsRepository } = await import("@/lib/repositories/companySettingsRepository");
     const companySettingsGetSettings = vi.spyOn(companySettingsRepository, "getSettings");
     const { generateDeliveryNote } = await import("@/app/actions/pdf.actions");
 
-    await expect(generateDeliveryNote("order-3")).rejects.toThrow(readDenial);
+    mockResolveAuthorization.mockResolvedValueOnce({ok:false,reason:'UNAUTHENTICATED',message:'TEST Anmeldung fehlt'});
+    await expect(generateDeliveryNote("order-3")).rejects.toThrow('TEST Anmeldung fehlt');
+    for(const missing of ['auftraege','geld']){
+      mockHasAuthorizationArea.mockImplementation((_auth,area)=>area!==missing);
+      await expect(generateDeliveryNote("order-3")).rejects.toThrow('Keine Berechtigung für diese Aktion.');
+    }
 
     expect(companySettingsGetSettings).not.toHaveBeenCalled();
+    expect(mockWithPrivilegedTenantTransaction).not.toHaveBeenCalled();
+    expect(mockRenderToBuffer).not.toHaveBeenCalled();
   });
 
   it("keeps the static header logo without a company-settings action", async () => {
@@ -280,7 +287,7 @@ describe("W2C company settings read containment", () => {
     }
   });
 
-  it("proves the delivery note stays denied and the label stays tenant-authorized", async () => {
+  it("retains the old settings denial while the approved delivery note uses its tenant-authorized source port", async () => {
     const [repositorySource, pdfSource] = await Promise.all([
       readFile("src/lib/repositories/companySettingsRepository.ts", "utf8"),
       readFile("src/app/actions/pdf.actions.ts", "utf8"),
@@ -288,10 +295,14 @@ describe("W2C company settings read containment", () => {
     const repository = sourceFile(repositorySource, "companySettingsRepository.ts");
     const pdf = sourceFile(pdfSource, "pdf.actions.ts");
     const getSettings = getSettingsMethod(repository);
-    const deliveryNote = functionDeclaration(pdf, "generateDeliveryNote");
+    void pdf;
 
     expectExactDenial(getSettings, readDenial, 1);
-    expectExactDenial(deliveryNote, readDenial, 2);
+    // PL14Nov17:40 explicitly replaces this former unconditional W3 denial.
+    // The real no-session/no-area/unpaid-source actions are tested separately.
+    expect(pdfSource).toContain('generatePaidDeliveryNote');
+    expect(pdfSource).toContain("hasAuthorizationArea(auth.data,'auftraege')");
+    expect(pdfSource).toContain("hasAuthorizationArea(auth.data,'geld')");
     expectNoRuntimePortImports(repository, ["@/lib/offline/OfflineManager", "@/lib/supabase/client"]);
     expectNoPortNodes(getSettings, ["OfflineManager", "createClient", "from", "select", "eq", "single"]);
     expect(pdfSource).toContain("resolveAuthorization");

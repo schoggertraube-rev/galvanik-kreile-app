@@ -20,7 +20,9 @@ function assertPath(path: string) {
 
 function status(error: unknown): number | null {
   if (!error || typeof error !== "object") return null;
-  const value = (error as Record<string, unknown>).status ?? (error as Record<string, unknown>).statusCode;
+  // Storage reports Object-not-found as HTTP 400 with its actual statusCode
+  // "404". Prefer that API code; authentication/other failures stay failures.
+  const value = (error as Record<string, unknown>).statusCode ?? (error as Record<string, unknown>).status;
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isInteger(parsed) ? parsed : null;
 }
@@ -61,6 +63,13 @@ export async function readStableDomainAttachment(path: string, expected: { fileB
   if (before.id !== after.id || before.version !== after.version || before.createdAt !== after.createdAt
     || before.size !== after.size || before.contentType !== after.contentType) throw new DomainAttachmentStorageError("MISMATCH");
   return { info: before, bytes };
+}
+
+/** Read an existing original before rendering anything on retry. The path is
+ * derived and tenant-authorized by its existing command, never browser input. */
+export async function readExistingDomainAttachment(path:string){
+ const existing=await info(path);
+ return readStableDomainAttachment(path,{fileBytes:existing.size,mimeType:existing.contentType});
 }
 
 export async function createDomainAttachmentDownloadUrl(path: string, downloadName: string) {

@@ -1,245 +1,31 @@
-import React from "react";
-import { Page, Text, View, Document, StyleSheet, Image as PdfImage } from "@react-pdf/renderer";
-import type { Order } from "@/lib/repositories/ordersRepository";
-import type { Customer } from "@/lib/repositories/customersRepository";
-import type { CompanySettings } from "@/lib/repositories/companySettingsRepository";
-import { format } from "date-fns";
+import React,{type ReactElement} from 'react';
+import {Document,Page,StyleSheet,Text,View,type DocumentProps} from '@react-pdf/renderer';
+import {DELIVERY_NOTE_COPY as copy} from '@/ui/situationCatalog';
+import {formatEuro} from '@/lib/domain/formatEuro';
 
-const styles = StyleSheet.create({
-  page: {
-    flexDirection: "column",
-    backgroundColor: "#FFFFFF",
-    padding: 40,
-    fontFamily: "Helvetica",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 40,
-  },
-  logoPlaceholder: {
-    width: 120,
-    height: 40,
-    backgroundColor: "#EEEEEE",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  logoText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#666666",
-  },
-  companyInfo: {
-    fontSize: 9,
-    color: "#666666",
-    textAlign: "right",
-    lineHeight: 1.4,
-  },
-  documentTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  customerBox: {
-    marginBottom: 30,
-    lineHeight: 1.5,
-  },
-  customerText: {
-    fontSize: 10,
-  },
-  customerName: {
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  table: {
-    width: "auto",
-    borderStyle: "solid",
-    borderWidth: 1,
-    borderRightWidth: 0,
-    borderBottomWidth: 0,
-    borderColor: "#DDDDDD",
-    marginBottom: 30,
-  },
-  tableRow: {
-    margin: "auto",
-    flexDirection: "row",
-  },
-  tableColHeader: {
-    width: "25%",
-    borderStyle: "solid",
-    borderWidth: 1,
-    borderLeftWidth: 0,
-    borderTopWidth: 0,
-    borderColor: "#DDDDDD",
-    backgroundColor: "#F8F8F8",
-    padding: 5,
-  },
-  tableCol: {
-    width: "25%",
-    borderStyle: "solid",
-    borderWidth: 1,
-    borderLeftWidth: 0,
-    borderTopWidth: 0,
-    borderColor: "#DDDDDD",
-    padding: 5,
-  },
-  tableColDescHeader: {
-    width: "50%",
-    borderStyle: "solid",
-    borderWidth: 1,
-    borderLeftWidth: 0,
-    borderTopWidth: 0,
-    borderColor: "#DDDDDD",
-    backgroundColor: "#F8F8F8",
-    padding: 5,
-  },
-  tableColDesc: {
-    width: "50%",
-    borderStyle: "solid",
-    borderWidth: 1,
-    borderLeftWidth: 0,
-    borderTopWidth: 0,
-    borderColor: "#DDDDDD",
-    padding: 5,
-  },
-  tableCellHeader: {
-    margin: 2,
-    fontSize: 9,
-    fontWeight: "bold",
-  },
-  tableCell: {
-    margin: 2,
-    fontSize: 9,
-  },
-  signatureBox: {
-    marginTop: 50,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  signatureLine: {
-    width: 200,
-    borderTopWidth: 1,
-    borderTopColor: "#000000",
-    paddingTop: 5,
-  },
-  signatureText: {
-    fontSize: 9,
-    color: "#666666",
-  },
-  footer: {
-    position: "absolute",
-    bottom: 30,
-    left: 40,
-    right: 40,
-    textAlign: "center",
-    fontSize: 8,
-    color: "#999999",
-    borderTopWidth: 1,
-    borderTopColor: "#EEEEEE",
-    paddingTop: 10,
-  }
-});
-
-interface DeliveryNoteProps {
-  orders: Order[];
-  customer: Customer;
-  settings: CompanySettings;
-}
-
-export const DeliveryNoteDocument = ({ orders, customer, settings }: DeliveryNoteProps) => {
-  const currentDate = format(new Date(), "dd.MM.yyyy");
-
-  return (
-    <Document>
-      <Page size="A4" style={styles.page}>
-        {/* Header */}
-        <View style={styles.header}>
-          {settings.logoUrl && !settings.logoUrl.endsWith(".svg") ? (
-            <PdfImage src={settings.logoUrl} style={{ width: 120, objectFit: "contain" }} />
-          ) : (
-            <View style={styles.logoPlaceholder}>
-              <Text style={styles.logoText}>{settings.companyName.toUpperCase()}</Text>
-            </View>
-          )}
-          <View style={styles.companyInfo}>
-            <Text style={{ fontWeight: "bold", color: "#000000" }}>{settings.companyName}</Text>
-            <Text>{settings.street}</Text>
-            <Text>{settings.zip} {settings.city}</Text>
-            <Text>Tel: {settings.phone}</Text>
-          </View>
-        </View>
-
-        {/* Title */}
-        <Text style={styles.documentTitle}>Lieferschein</Text>
-
-        {/* Customer & Date */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 30 }}>
-          <View style={styles.customerBox}>
-            <Text style={styles.customerName}>{customer.name}</Text>
-            <Text style={styles.customerText}>{customer.address}</Text>
-            <Text style={styles.customerText}>{customer.city}</Text>
-          </View>
-          <View>
-            <Text style={{ fontSize: 10, fontWeight: "bold" }}>Datum:</Text>
-            <Text style={{ fontSize: 10 }}>{currentDate}</Text>
-          </View>
-        </View>
-
-        {/* Table */}
-        <View style={styles.table}>
-          {/* Table Header */}
-          <View style={styles.tableRow}>
-            <View style={styles.tableColHeader}>
-              <Text style={styles.tableCellHeader}>Auftrag</Text>
-            </View>
-            <View style={styles.tableColDescHeader}>
-              <Text style={styles.tableCellHeader}>Beschreibung</Text>
-            </View>
-            <View style={styles.tableColHeader}>
-              <Text style={styles.tableCellHeader}>Anzahl Teile</Text>
-            </View>
-          </View>
-          
-          {/* Table Rows */}
-          {orders.map((order) => (
-            <View style={styles.tableRow} key={order.id}>
-              <View style={styles.tableCol}>
-                <Text style={styles.tableCell}>{order.orderNumber}</Text>
-              </View>
-              <View style={styles.tableColDesc}>
-                <Text style={{ ...styles.tableCell, fontWeight: "bold" }}>{order.task || order.title}</Text>
-                {order.parts?.map((p: Record<string, unknown>, idx: number) => (
-                  <Text key={idx} style={{ fontSize: 8, color: "#666", margin: "2 2 0 2" }}>
-                    - {String(p.quantity ?? "")}x {String(p.name ?? "")} ({String(p.material ?? "")}, {String(p.surfaceRequested || p.finish || "")})
-                  </Text>
-                ))}
-              </View>
-              <View style={styles.tableCol}>
-                <Text style={styles.tableCell}>{order.parts?.reduce((sum: number, p: Record<string, unknown>) => sum + (Number(p.quantity) || 0), 0) || 0} Stk.</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Signatures */}
-        <View style={styles.signatureBox}>
-          <View>
-            <View style={styles.signatureLine} />
-            <Text style={styles.signatureText}>Übergabe ({settings.companyName})</Text>
-          </View>
-          <View>
-            <View style={styles.signatureLine} />
-            <Text style={styles.signatureText}>Übernahme ({customer.name})</Text>
-          </View>
-        </View>
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text>{settings.companyName} • {settings.street} • {settings.zip} {settings.city} • USt-IdNr.: {settings.taxId}</Text>
-          <Text>Gerichtsstand ist {settings.city}. Es gelten unsere Allgemeinen Geschäftsbedingungen.</Text>
-        </View>
-      </Page>
-    </Document>
-  );
+/** Frozen, already authorized facts only. No repository or current clock in
+ * the renderer; the private original remains byte-identical on retry. */
+export type PaidDeliveryNoteSnapshot={
+ schemaVersion:1;createdAt:string;
+ company:{companyName:string;street:string;zip:string;city:string;country:string};
+ customer:{id:string;name:string;street:string;zip:string;city:string;country:string};
+ orders:Array<{id:string;number:string;version:number;title:string;parts:Array<{itemId:string;name:string;quantity:number}>;
+  payments:Array<{invoiceId:string;invoiceNumber:string;invoiceEventId:string;invoiceSha256:string;paymentEventId:string;paymentReceiptId:string;paymentVersion:number;amountCents:number;paidAt:string}>}>;
 };
+const styles=StyleSheet.create({page:{padding:40,fontFamily:'Helvetica',fontSize:10,color:'#161616'},header:{flexDirection:'row',justifyContent:'space-between',marginBottom:32},company:{fontSize:9,textAlign:'right',lineHeight:1.5},title:{fontSize:24,marginBottom:20},recipient:{lineHeight:1.5,marginBottom:25},row:{flexDirection:'row',paddingVertical:7,borderBottomWidth:1,borderBottomColor:'#DDDDDD'},order:{width:'25%'},description:{width:'50%'},quantity:{width:'25%',textAlign:'right'},tableHead:{backgroundColor:'#F8F8F8',fontSize:9},section:{marginTop:22,marginBottom:6,fontSize:12},payment:{lineHeight:1.6,fontSize:9},footer:{position:'absolute',bottom:26,left:40,right:40,fontSize:8,color:'#666666'}});
+const date=(value:string)=>new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date(value));
+
+export const DeliveryNoteDocument=({snapshot:s}:{snapshot:PaidDeliveryNoteSnapshot})=>(
+ <Document title={copy.title} author={s.company.companyName} creationDate={new Date(s.createdAt)} modificationDate={new Date(s.createdAt)}>
+  <Page size="A4" style={styles.page}>
+   <View style={styles.header}><View><Text style={styles.title}>{copy.title}</Text><Text>{copy.date} {date(s.createdAt)}</Text></View><View style={styles.company}><Text>{s.company.companyName}</Text><Text>{s.company.street}</Text><Text>{s.company.zip} {s.company.city}</Text><Text>{s.company.country}</Text></View></View>
+   <View style={styles.recipient}><Text>{s.customer.name}</Text><Text>{s.customer.street}</Text><Text>{s.customer.zip} {s.customer.city}</Text><Text>{s.customer.country}</Text></View>
+   <View style={[styles.row,styles.tableHead]}><Text style={styles.order}>{copy.order}</Text><Text style={styles.description}>{copy.description}</Text><Text style={styles.quantity}>{copy.quantity}</Text></View>
+   {s.orders.flatMap(order=>order.parts.map(part=><View key={order.id+':'+part.itemId} style={styles.row} wrap={false}><Text style={styles.order}>{order.number}</Text><Text style={styles.description}>{part.name}</Text><Text style={styles.quantity}>{part.quantity.toLocaleString('de-DE')}</Text></View>))}
+   <View style={styles.section}/>
+   {s.orders.flatMap(order=>order.payments.map(payment=><Text key={payment.invoiceId} style={styles.payment}>{order.number} · {payment.invoiceNumber} · {copy.payment(date(payment.paidAt),formatEuro(payment.amountCents))}</Text>))}
+   <Text style={styles.footer} fixed>{s.company.companyName} · {s.company.street} · {s.company.zip} {s.company.city}</Text>
+  </Page>
+ </Document>
+);
+export function createDeliveryNotePdfDocument(snapshot:PaidDeliveryNoteSnapshot):ReactElement<DocumentProps>{return <DeliveryNoteDocument snapshot={snapshot}/>;}
