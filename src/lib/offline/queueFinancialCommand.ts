@@ -34,8 +34,8 @@ export async function queueFinancialCommand(scope:string,command:PendingFinancia
  try{
   await retainPendingWorkshopOriginal(scope,original);
   if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:CUSTOMER_CREDIT_COPY.unavailable};
-  await syncOriginals(scope,currentScope);
+  await syncOriginals(scope,currentScope,{followUp:true});
   if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:CUSTOMER_CREDIT_COPY.unavailable};
-  return acknowledgement.value??failure.value??{code:'UNAVAILABLE' as const,message:CUSTOMER_CREDIT_COPY.unavailable};
+  return acknowledgement.value??failure.value??{code:'UNAVAILABLE' as const,message:command.command==='invoice.cancel'?CUSTOMER_CREDIT_COPY.pending:CUSTOMER_CREDIT_COPY.unavailable};
  }finally{window.removeEventListener('kreile-workshop-acknowledged',accepted);window.removeEventListener('kreile-workshop-rejected',rejected);}
 }

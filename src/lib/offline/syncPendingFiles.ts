@@ -9,8 +9,10 @@ type Ports={workshopAcknowledged?:(proof:WorkshopAcknowledgement)=>void;workshop
 type Outcome={secured:number;acknowledged:number;blocked:number};
 const running=new Map<string,Promise<Outcome>>();
 /** Reuses the original registration, immutable-byte upload and secured-original receipt. */
-export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?:boolean;workshopOnly?:boolean;offline24h?:boolean}={}):Promise<Outcome>{
- const existing=running.get(scope);if(existing)return options.flushDelayed?existing.then(()=>syncPendingFiles(scope,ports,options)):existing;
+export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?:boolean;workshopOnly?:boolean;offline24h?:boolean;followUp?:boolean}={}):Promise<Outcome>{
+ // A caller may have retained an original after the active run's inventory.
+ // Await that run, then read the same queue again for this caller's original.
+ const existing=running.get(scope);if(existing)return options.flushDelayed||options.followUp?existing.then(()=>syncPendingFiles(scope,ports,options)):existing;
  const work=(async()=>{
   const outcome={secured:0,acknowledged:0,blocked:0};
   // IndexedDB getAll follows random UUID keys. Replay known capture times in

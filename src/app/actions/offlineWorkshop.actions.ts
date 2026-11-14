@@ -24,7 +24,7 @@ async function replayCommand(scope:string,original:PendingWorkshopOriginal){
  if(!isPendingWorkshopOriginal(original)||!original.deviceCapturedAt||!Number.isFinite(Date.parse(original.deviceCapturedAt)))return {code:'VALIDATION_ERROR' as const};
  try{
   const result=await reconcileOfflineWorkshop(auth.data,original,()=>applyKnownCommand(auth.data,scope,original),
-   (tx,eventId)=>createOfflineWorkshopConflictTask(tx,auth.data,eventId,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
+   (tx,eventId)=>createOfflineWorkshopConflictTask(tx,auth.data,eventId,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}),readCustomerProfile);
   if(result.code==='PRESERVED'&&'rejectionReceipt'in result)return {...result,rejectionReceipt:{...result.rejectionReceipt,scope}};
   return result;
  }catch(error){console.error('[OFFLINE_WORKSHOP_RECONCILIATION_FAILED]',{name:error instanceof Error?error.name:'UnknownError',code:error instanceof Error&&/^[A-Z0-9_]+$/.test(error.message)?error.message:'UNAVAILABLE'});return {code:'UNAVAILABLE' as const};}

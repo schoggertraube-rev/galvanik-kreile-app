@@ -1,3 +1,4 @@
+import {formatEuro} from '@/lib/domain/formatEuro';
 import "server-only";
 import {readOpenOrderComplaint} from './orderReleaseRead';
 
@@ -114,7 +115,7 @@ export async function getPaymentState(
           const source=await readCredit(nested,authorization.tenantId,rows[0].credit_customer_id);
           if(source.code!=='OK')return {code:'SOURCE_INCOMPLETE' as const};
           const payment=mapped.payment,amount=payment?Math.min(source.credit.balanceCents,payment.openAmountCents):0;
-          return {code:'OK' as const,credit:source.credit,proposal:payment&&amount>0?{label:CUSTOMER_CREDIT_COPY.applyLabel(new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(amount/100),payment.invoiceNumber),command:'credit.apply' as const,input:{invoiceId:payment.invoiceId,amount,expectedVersion:payment.paymentVersion,expectedOpenAmountCents:payment.openAmountCents,expectedCreditVersion:source.credit.version}}:null};
+          return {code:'OK' as const,credit:source.credit,proposal:payment&&amount>0?{label:CUSTOMER_CREDIT_COPY.applyLabel(formatEuro(amount),payment.invoiceNumber),command:'credit.apply' as const,input:{invoiceId:payment.invoiceId,amount,expectedVersion:payment.paymentVersion,expectedOpenAmountCents:payment.openAmountCents,expectedCreditVersion:source.credit.version}}:null};
         });}catch{creditApplication={code:'SOURCE_INCOMPLETE'};}
       }
       return { ...mapped,...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].payment_mode!=="keiner"&&rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };

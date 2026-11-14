@@ -42,7 +42,7 @@ it('A08b-1/-5/-8 pays actual credit once through the existing queue and retains 
  const rows=await sql`SELECT event.description,event.user_id::text,entry.amount_cents::text,entry.invoice_id,entry.payment_method FROM public.events event JOIN public.customer_credit_entries entry ON entry.tenant_id=event.tenant_id AND entry.idempotency_key=event.client_event_id::text WHERE event.tenant_id=${KREILE_TENANT_SLUG} AND event.client_event_id=${input.clientEventId}::uuid`;
  expect(rows).toHaveLength(1);expect(rows[0]).toMatchObject({user_id:full.actorId,amount_cents:'-4000',invoice_id:null,payment_method:'bar'});
  const customer=await sql`SELECT name FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.customerId}`;
- expect(rows[0].description).toBe(`40,00 € Guthaben an ${customer[0].name} ausgezahlt (bar)`);
+ expect(rows[0].description).toBe(`40,00 € Guthaben an ${customer[0].name} ausgezahlt (bar)`);
  expect(await withSession(full,()=>getCustomerCreditAction(input.customerId))).toMatchObject({code:'OK',payoutHistory:{code:'OK',entries:[{description:rows[0].description,amountCents:4000,actorId:full.actorId,method:'bar'}]}});
  expect(await sql`SELECT event_type,count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN ('PAYMENT_CONFIRMED_V1','ORDER_ITEM_FINISHED_V1','ORDER_FINISHED_V1') GROUP BY event_type ORDER BY event_type`).toEqual(before);
  expect(await sql`SELECT id,amount_eur::text,method,status FROM public.payments WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${source.invoice.invoiceId}::uuid ORDER BY id`).toEqual(paymentsBefore);

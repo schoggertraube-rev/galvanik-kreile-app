@@ -8,6 +8,13 @@ import {isPendingWorkshopOriginal} from './pendingStore';
 import {useSync} from './SyncContext';
 import {adoptQuarantinedOriginal} from './pendingStore';
 import {readWithDeviceFallback} from './serverReachability';
+import {formatEuro} from '@/lib/domain/formatEuro';
+
+function rejectedSubject(value:unknown){
+ if(!isPendingWorkshopOriginal(value))return null;
+ const subject=value.rejection?.subject;
+ return subject?subject.label+' · '+formatEuro(subject.amountCents):null;
+}
 
 function preview(value:unknown){
  const seen=new WeakSet<object>();
@@ -57,7 +64,7 @@ export function QuarantinedOriginals({onClose}:{onClose:()=>void}){
   {error&&<p role="alert">{error}</p>}
   {!hasArea('eingang')&&<p>{OFFLINE_TAKEOVER_COPY.noRight}</p>}
   {quarantinedOriginals.map(original=><section key={original.id} data-spec-id="offline.original">
-   {original.payload.reason==='WORKSHOP_REJECTED_WITHOUT_EFFECT'?<><p>{OFFLINE_RECONCILIATION_COPY.rejected}</p><p>{isPendingWorkshopOriginal(original.payload.original)?OFFLINE_RECONCILIATION_COPY.originalCommand[original.payload.original.command]:OFFLINE_TAKEOVER_COPY.unreadable}</p><p>{new Date(original.capturedAt).toLocaleString('de-DE')}</p></>:<p>{preview(original)}</p>}
+   {original.payload.reason==='WORKSHOP_REJECTED_WITHOUT_EFFECT'?<><p>{OFFLINE_RECONCILIATION_COPY.rejected}</p><p>{isPendingWorkshopOriginal(original.payload.original)?OFFLINE_RECONCILIATION_COPY.originalCommand[original.payload.original.command]:OFFLINE_TAKEOVER_COPY.unreadable}</p>{hasArea('geld')&&rejectedSubject(original.payload.original)&&<p>{rejectedSubject(original.payload.original)}</p>}<p>{new Date(original.capturedAt).toLocaleString('de-DE')}</p></>:<p>{preview(original)}</p>}
    {original.payload.reason!=='WORKSHOP_REJECTED_WITHOUT_EFFECT'&&hasArea('eingang')&&<button type="button" disabled={busy!==null} onClick={()=>void adopt(original.id)}>{OFFLINE_TAKEOVER_COPY.adopt}</button>}
   </section>)}
  </Dialog>;

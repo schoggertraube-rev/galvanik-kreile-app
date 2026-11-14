@@ -2,6 +2,7 @@ import {afterEach,expect,it,vi} from 'vitest';
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {QuarantinedOriginals} from '../QuarantinedOriginals';
 import {OFFLINE_RECONCILIATION_COPY} from '@/ui/situationCatalog';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
 const state=vi.hoisted(()=>({scope:'a'.repeat(64),allowed:true,entries:[] as Array<{id:string;capturedAt?:string;payload:Record<string,unknown>}>}));
 const ports=vi.hoisted(()=>({scope:vi.fn(),adopt:vi.fn(),open:vi.fn()}));
 vi.mock('../SyncContext',()=>({useSync:()=>({quarantinedOriginals:state.entries})}));
@@ -10,6 +11,17 @@ vi.mock('@/app/actions/eingang.actions',()=>({getIntakePendingScopeAction:ports.
 vi.mock('../pendingStore',async importOriginal=>({...await importOriginal<typeof import('../pendingStore')>(),adoptQuarantinedOriginal:ports.adopt}));
 vi.mock('@/modules/eingang/public',()=>({getIntakeDeviceId:()=> 'TEST-device',requestGlobalCreate:ports.open}));
 afterEach(()=>{cleanup();vi.clearAllMocks();vi.restoreAllMocks();state.allowed=true;state.entries=[];state.scope='a'.repeat(64);});
+it('PL13:55 shows the bound original customer and amount only with money rights, without mutable/current replacement data',()=>{
+ // Synthetic consumer envelope; actual receipt/reference is tested against DB.
+ const id='11111111-1111-4111-8111-111111111111',at='2026-11-14T10:00:00.000Z';
+ const original={kind:'workshop',command:'credit.payout',id,itemId:'TEST-customer',deviceCapturedAt:at,input:{customerId:'TEST-customer',clientEventId:id,amount:4000,expectedCreditVersion:1,method:'bar',reference:null,note:null}};
+ const rejection={scope:state.scope,eventId:'22222222-2222-4222-8222-222222222222',taskId:'33333333-3333-4333-8333-333333333333',actorId:'44444444-4444-4444-8444-444444444444',clientEventId:id,deviceCapturedAt:at,rejection:'CONFLICT',originalCanonical:canonicalJson({command:original.command,input:original.input,deviceCapturedAt:at}),subject:{kind:'customer',id:'TEST-customer',label:'TEST Originalkunde',amountCents:4000}};
+ state.entries=[{id:'rejected:'+id,capturedAt:at,payload:{reason:'WORKSHOP_REJECTED_WITHOUT_EFFECT',original:{...original,rejection}}}];
+ const before=JSON.stringify(state.entries),view=render(<QuarantinedOriginals onClose={()=>{}}/>);
+ expect(screen.getByText(/TEST Originalkunde · 40,00/)).toBeInTheDocument();
+ state.allowed=false;view.rerender(<QuarantinedOriginals onClose={()=>{}}/>);
+ expect(screen.queryByText(/TEST Originalkunde/)).toBeNull();expect(screen.getByText(OFFLINE_RECONCILIATION_COPY.rejected)).toBeInTheDocument();expect(JSON.stringify(state.entries)).toBe(before);
+});
 it('PL14Nov10:20 shows the retained known rejection without raw money/receipt metadata or an unrelated intake takeover',()=>{
  // Explicit synthetic consumer boundary; the receipt itself is proved in the real replay tests.
  const id='11111111-1111-4111-8111-111111111111',at='2026-11-14T10:00:00.000Z';

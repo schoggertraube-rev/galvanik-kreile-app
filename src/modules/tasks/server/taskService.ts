@@ -279,7 +279,7 @@ async function readTaskInTransaction(tx:PrivilegedTenantTransaction,auth:Authori
   let creditSource:'KNOWN'|'SOURCE_INCOMPLETE'='KNOWN';
   if(task){try{credit=await withTenantSavepoint(tx,nested=>readCancellationCreditSource(nested,auth.tenantId,task.client_key));}catch{creditSource='SOURCE_INCOMPLETE';}}
 
-  return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,creditSource,canEdit,canComplete:!!task&&task.status==='offen'&&(canEdit||canceledCustomer!==null)&&task.art!=='rechnung',...(credit?{completeLabel:SITUATION_COPY.retry}:pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
+  return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,creditSource,canEdit,canComplete:!!task&&task.status==='offen'&&(canEdit||canceledCustomer!==null)&&task.art!=='rechnung'&&(!credit?.pending||hasAuthorizationArea(auth,'geld')),...(credit?{completeLabel:SITUATION_COPY.retry}:pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
 }
 
 
@@ -362,7 +362,7 @@ export async function createOfflineWorkshopConflictTask(tx:PrivilegedTenantTrans
  const source=await readOfflineWorkshopConflictSource(tx,auth,eventId);
  const key=eventKey(eventId,0,'offline-workshop-conflict');
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
- const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title:OFFLINE_RECONCILIATION_COPY.reason,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:source.orderId?{type:'auftrag',id:source.orderId}:{type:'allgemein',id:null},note:new Date(source.deviceCapturedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})};
+ const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title:OFFLINE_RECONCILIATION_COPY.reason,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:source.orderId?{type:'auftrag',id:source.orderId}:source.customerId?{type:'kunde',id:source.customerId}:{type:'allgemein',id:null},note:new Date(source.deviceCapturedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})};
  return (await persistTask(tx,auth,value,deps,false)).task.id;
 }
 
@@ -392,7 +392,7 @@ export async function synchronizeCancellationCreditRetryTask(tx:PrivilegedTenant
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  const fullTitle=CUSTOMER_CREDIT_COPY.retryTask(source.invoiceNumber),budget=120-CUSTOMER_CREDIT_COPY.retryTask('').length;
  const title=CUSTOMER_CREDIT_COPY.retryTask(source.invoiceNumber.length>budget?source.invoiceNumber.slice(0,budget-1)+'…':source.invoiceNumber);
- const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:source.orderId},note:fullTitle};
+ const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'geld',reference:{type:'auftrag',id:source.orderId},note:fullTitle};
  await persistTask(tx,auth,value,deps,false);
 }
 

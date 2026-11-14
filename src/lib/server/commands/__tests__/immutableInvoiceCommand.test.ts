@@ -394,7 +394,7 @@ describe("cancelInvoice", () => {
     const { cancelInvoice } = await import("../immutableInvoiceCommand");
     await expect(cancelInvoice(validCancelInput)).resolves.toEqual({
       code: "CONFLICT",
-      message: "Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Das Guthaben entsteht, sobald die Zahlung mit Betrag und Datum erfasst ist.",
+      message: "Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Erfass zuerst Betrag und Datum der Zahlung, dann storniere die Rechnung erneut.",
     });
 
     const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");

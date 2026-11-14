@@ -22,9 +22,7 @@ export type InvoicePageInitialState =
 
 type InvoicePageState = InvoicePageInitialState["state"] | "LOADING";
 
-function formatMoney(cents: number): string {
-  return (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
-}
+import {formatEuro as formatMoney} from '@/lib/domain/formatEuro';
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("de-DE").format(new Date(value));

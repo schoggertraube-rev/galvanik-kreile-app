@@ -381,6 +381,7 @@ export const CUSTOMER_CREDIT_COPY={
  forbidden:'Guthaben verrechnen darf nur, wer das Recht Geld hat.',
  unavailable:'Das Guthaben ist gerade nicht erreichbar. Deine Angaben bleiben erhalten – versuch es gleich noch einmal.',
  notFound:'Für diesen Kunden gibt es dieses Guthaben nicht mehr. Lade den aktuellen Stand.',
- pending:'Der Storno ist noch nicht fertig gespeichert. Das Guthaben steht bereit, sobald er durch ist – versuch es gleich noch einmal.',
- paymentUnknown:'Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Das Guthaben entsteht, sobald die Zahlung mit Betrag und Datum erfasst ist.',
+ pending:'Der Storno ist noch nicht übertragen. Er wird gesendet, sobald die Verbindung steht.',
+ paymentUnknown:'Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Erfass zuerst Betrag und Datum der Zahlung, dann storniere die Rechnung erneut.',
+ tooHigh:(amount:string)=>`Der Betrag ist höher als das Guthaben von ${amount}.`,
 } as const;
