@@ -1,7 +1,8 @@
 import {retainPendingWorkshopOriginal,isPendingWorkshopAcknowledgement,type PendingFinancialCommand,type PendingHandoverCommand,type PendingConfirmedCommand,type PendingWorkshopOriginal} from './pendingStore';
 import {syncOriginals} from './syncOriginals';
 import type {WorkshopAcknowledgement} from './syncPendingFiles';
-import {CUSTOMER_CREDIT_COPY,ORDER_HANDOVER_COPY} from '@/ui/situationCatalog';
+import {CUSTOMER_CREDIT_COPY,ORDER_HANDOVER_COPY,OFFLINE_ITEM_FINISHED_COPY} from '@/ui/situationCatalog';
+import {readServerReachability} from './serverReachability';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {isWorkshopRejectionReceipt,type WorkshopRejectionReceipt} from './workshopRejectionContract';
 
@@ -17,6 +18,9 @@ function queueConfirmedCommand(scope:string,command:PendingHandoverCommand,curre
 async function queueConfirmedCommand(scope:string,command:PendingConfirmedCommand,currentScope:()=>string|null){
  const unavailable=command.command==='order.handover'?ORDER_HANDOVER_COPY.unavailable:CUSTOMER_CREDIT_COPY.unavailable;
  if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:unavailable};
+ // A-01 / PL16:36: this queue transports confirmed online financial commands;
+ // it must not turn an offline click into a future money/numbering instruction.
+ if(command.command!=='order.handover'&&!readServerReachability())return {code:'UNAVAILABLE' as const,message:OFFLINE_ITEM_FINISHED_COPY.networkRequired};
  const original:PendingWorkshopOriginal={...command,id:command.input.clientEventId,itemId:command.command==='invoice.issue'||command.command==='order.handover'?command.input.orderId:command.command==='credit.payout'?command.input.customerId:command.input.invoiceId,kind:'workshop',deviceCapturedAt:new Date().toISOString()};
  const acknowledgement:{value:FinancialAcknowledgement|HandoverAcknowledgement|null}={value:null};
  const failure:{value:FinancialFailure|null}={value:null};

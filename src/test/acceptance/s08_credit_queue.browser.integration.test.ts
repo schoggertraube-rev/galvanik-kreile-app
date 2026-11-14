@@ -31,10 +31,11 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
  const apply={kind:'workshop',command:'credit.apply',id:applicationKey,itemId:target.invoice.invoiceId,deviceCapturedAt,input:{invoiceId:target.invoice.invoiceId,amount:4000,expectedVersion:0,expectedOpenAmountCents:6000,expectedCreditVersion:1,clientEventId:applicationKey}};
  // Plain browser bridge externalizes unused Next Action references. Financial
  // execution still goes through the actual HTTP route and its real writers.
- const compiled=await build({stdin:{contents:"export * from './src/lib/offline/pendingStore';export {syncPendingFiles} from './src/lib/offline/syncPendingFiles';export {replayOfflineWorkshopHttp} from './src/lib/offline/replayWorkshopHttp';export {queueFinancialCommand,queueHandoverCommand} from './src/lib/offline/queueFinancialCommand';",resolveDir:process.cwd()},external:['@/app/actions/*','@/modules/eingang/public'],bundle:true,write:false,format:'esm',platform:'browser'});
+ const compiled=await build({stdin:{contents:"export * from './src/lib/offline/pendingStore';export {syncPendingFiles} from './src/lib/offline/syncPendingFiles';export {replayOfflineWorkshopHttp} from './src/lib/offline/replayWorkshopHttp';export {queueFinancialCommand,queueHandoverCommand} from './src/lib/offline/queueFinancialCommand';export {installServerReachability,readServerReachability} from './src/lib/offline/serverReachability';",resolveDir:process.cwd()},external:['@/app/actions/*','@/modules/eingang/public'],bundle:true,write:false,format:'esm',platform:'browser'});
  const foreign=await createFixture(['geld'],'buero');let actor=full,loseResponse=true,calls=0;
  const receipts=new Map<string,string[]>();
  const server=createServer(async(req,res)=>{
+  if(req.url==='/TEST-unreachable'){res.writeHead(503,{'cache-control':'no-store'});res.end('TEST actual unavailable server');return;}
   if(req.url==='/api/offline/replay'){
    try{
     calls++;const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));
@@ -55,6 +56,12 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
  const setup=`async()=>{window.p=await import('/queue.mjs');window.acks=[];window.addEventListener('kreile-workshop-acknowledged',e=>window.acks.push(e.detail));window.ports={currentScope:()=>'${scope}',workshop:(s,e)=>window.p.replayOfflineWorkshopHttp(s,e,{keepalive:true}),workshopAcknowledged:p=>window.acks.push(p)};return true;}`;
  try{
   await cli(['open',url]);await cli(['eval',setup]);
+  // PL16:36/A-01: WLAN remains online while an actual local HTTP 503 marks
+  // the one server predicate unavailable. No financial click may create an original.
+  const offlineCommands=[{command:'invoice.cancel',input:cancel.input},{command:'credit.apply',input:apply.input},{command:'credit.payout',input:{customerId:source.customerId,amount:1,expectedCreditVersion:0,method:'bar',reference:null,note:null,clientEventId:randomUUID()}},{command:'invoice.issue',input:{orderId:target.orderId,expectedVersion:target.invoice.orderVersion,clientEventId:randomUUID()}}];
+  await cli(['eval',`async()=>{const stop=p.installServerReachability();try{await fetch('/TEST-unreachable');if(!navigator.onLine||p.readServerReachability())throw Error('TEST_SERVER_503_NOT_OFFLINE');for(const command of ${JSON.stringify(offlineCommands)}){const result=await p.queueFinancialCommand('${scope}',command,()=>'${scope}');if(result.code!=='UNAVAILABLE'||result.message!=='Geht nur mit Netz')throw Error('TEST_OFFLINE_FINANCIAL_CLICK_ACCEPTED');}if((await p.readPendingEntries('${scope}')).length||acks.length)throw Error('TEST_OFFLINE_FINANCIAL_ORIGINAL_CREATED');return true;}finally{stop();}}`]);
+  expect(calls).toBe(0);
+  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${offlineCommands.map(command=>command.input.clientEventId)}::uuid[])`).toEqual([{n:0}]);
   await cli(['eval',`async()=>{const original={...${JSON.stringify(cancel)},notBefore:new Date(Date.now()+600000).toISOString()};await p.retainPendingWorkshopOriginal('${scope}',original);const delayed=await p.syncPendingFiles('${scope}',ports);if(delayed.acknowledged!==0||delayed.secured!==0)throw Error('TEST_MONEY_DELAY_BYPASSED');if(!await p.withdrawPendingWorkshop('${scope}',original.id))throw Error('TEST_MONEY_UNDO_FAILED');await p.retainPendingWorkshopOriginal('${scope}',original);const sent=await p.syncPendingFiles('${scope}',ports,{flushDelayed:true});if(sent.acknowledged!==0||(await p.readPendingEntries('${scope}')).length!==1)throw Error('TEST_MONEY_RESPONSE_LOSS_ACKED');return true;}`]);
   expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:4000,version:1}});
   const [sourceState]=await sql`SELECT status,cancelled_at FROM public.invoices WHERE tenant_id=${tenant} AND id=${source.invoice.invoiceId}::uuid`;
