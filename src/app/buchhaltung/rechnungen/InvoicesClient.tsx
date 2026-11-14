@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState,useLayoutEffect } from "react";
+import { useRef, useState,useLayoutEffect,useEffect } from "react";
 import Link from "next/link";
 import { useHydrated } from "@/hooks/useHydrated";
 import {
@@ -12,6 +12,9 @@ import type { ImmutableInvoiceSummary } from "@/lib/server/invoiceRead";
 import { Button } from "@/ui/kr";
 import {usePermissions} from '@/lib/auth/PermissionsContext';
 import {queueFinancialCommand} from '@/lib/offline/queueFinancialCommand';
+import {releaseRejectedWorkshopRequest} from '@/lib/offline/workshopRejectionContract';
+import type {WorkshopAcknowledgement} from '@/lib/offline/syncPendingFiles';
+import {CUSTOMER_CREDIT_COPY,OFFLINE_RECONCILIATION_COPY} from '@/ui/situationCatalog';
 
 export type InvoicePageInitialState =
   | { state: "DATA" | "EMPTY"; data: ImmutableInvoiceSummary[]; canCancel: boolean }
@@ -60,6 +63,26 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
   const {offlineScope}=usePermissions();
   const currentScope=useRef(offlineScope);
   useLayoutEffect(()=>{currentScope.current=offlineScope;return()=>{currentScope.current=null;};},[offlineScope]);
+  useEffect(()=>{
+    let active=true;
+    const rejected=(event:Event)=>{
+      const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
+      if(!active||!offlineScope||currentScope.current!==offlineScope||!proof||proof.scope!==offlineScope||proof.entry?.command!=='invoice.cancel'||!('rejectionReceipt'in proof.result))return;
+      const entry=proof.entry,invoiceId=entry.input.invoiceId;
+      if(!releaseRejectedWorkshopRequest(offlineScope,entry,proof.result.rejectionReceipt,requestIds.current,invoiceId))return;
+      setRowMessages(current=>({...current,[invoiceId]:{kind:'error',text:OFFLINE_RECONCILIATION_COPY.reason}}));
+      void(async()=>{
+        try{
+          const fresh=await getInvoiceSummariesAction();
+          if(!active||currentScope.current!==offlineScope)return;
+          if(fresh.code==='OK'){setRows(fresh.data);setPageState(fresh.data.length?'DATA':'EMPTY');setPageMessage(null);}
+          else{setPageState(fresh.code==='UNAUTHENTICATED'||fresh.code==='FORBIDDEN'?'DENIAL':'ERROR');setPageMessage(fresh.message);}
+        }catch{if(active&&currentScope.current===offlineScope){setPageState('ERROR');setPageMessage(CUSTOMER_CREDIT_COPY.unavailable);}}
+      })();
+    };
+    window.addEventListener('kreile-workshop-rejected',rejected);
+    return()=>{active=false;window.removeEventListener('kreile-workshop-rejected',rejected);};
+  },[offlineScope]);
   const canCancel = initialState.canCancel;
   const interactive = useHydrated();
 
