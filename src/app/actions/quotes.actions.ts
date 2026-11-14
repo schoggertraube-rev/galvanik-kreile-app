@@ -23,7 +23,8 @@ import {
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
 import {quoteForUi,scaleQuotePositions} from "@/modules/quotes/public";
-import {readQuoteReceivedQuantities} from "@/lib/server/quoteGoodsContextPort";
+import {readQuoteReceivedQuantities,readQuoteGoodsContext} from "@/lib/server/quoteGoodsContextPort";
+import {QUOTE_CYCLE_COPY} from '@/ui/situationCatalog';
 import {intakePaymentContract} from "@/lib/domain/intakePaymentContract";
 import { readCustomerSummary,readCustomerListSignals } from "@/lib/server/customerSummaryRead";
 import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
@@ -34,7 +35,7 @@ import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
 import {readIntakeQuoteReplyReference,recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect,readIntakeMessages,readIntakeAssignment} from '@/modules/eingang/server-public';
 import {parseQuoteGoodsReceiptInput} from '@/modules/eingang/public';
-import {syncQuoteFollowupTask,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
+import {syncQuoteFollowupTask,readQuoteFollowupTasksForToday,synchronizeQuoteOrderRetryTask} from '@/modules/tasks/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
 import {readQuoteSettingsInTransaction} from '@/modules/fundament/server-public';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
@@ -331,6 +332,28 @@ async function convertQuoteToOrder(input:ConvertQuoteInput,newGoodsInput?:unknow
     const result=await changeQuoteLifecycleCommand(commandContext,{quoteId:input.quoteId,expectedVersion:input.expectedVersion,action:'accept',...telephoneAcceptance},(transaction,source)=>recordIntakeQuoteEffect(transaction,auth,source),quoteFollowupBinding(auth,!quoteCommandContext(auth).capabilities.canReadQuote),{transaction:tx});
     if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_TELEPHONE_ACCEPTANCE_FAILED');}
   };
+  // S07/A07-5: already accepted physical goods are the primary effect. Persist
+  // them through their existing writer before attempting the order transaction.
+  // A combined new telephone/mail acceptance retains its existing composition.
+  let retainedGoodsQuoteNumber:string|null=null;
+  const retryTaskEffects={effect:async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],actor:AuthorizationSnapshot,effect:Parameters<typeof recordIntakeTaskEffect>[2])=>{
+    if(effect.kind!=='aufgabe'||effect.reference.type!=='kv'||effect.reference.id!==input.quoteId||!input.goodsReceiptId)throw Error('QUOTE_ORDER_TASK_EFFECT_SCOPE_INVALID');
+    const payload={quoteId:input.quoteId,goodsReceiptId:input.goodsReceiptId,taskId:effect.taskId,action:effect.action};
+    await appendQuoteJournal(tx,actor,{id:effect.key,type:'QUOTE_ORDER_TASK_V1',clientEventId:effect.key,correlationId:input.clientEventId,version:null,description:effect.title,payload});
+    const proof=await readQuoteJournal<typeof payload>(tx,actor,effect.key);
+    if(proof.length!==1||proof[0].eventType!=='QUOTE_ORDER_TASK_V1'||canonicalJson(proof[0].payload)!==canonicalJson(payload))throw Error('QUOTE_ORDER_TASK_EFFECT_NOT_SAVED');
+  }};
+  if(input.goodsReceiptId&&!telephoneAcceptance&&!pendingMail){
+    try{await withPrivilegedTenantTransaction(authorization.data,async tx=>{
+      await saveGoods(tx,authorization.data);
+      const source=await readQuoteGoodsContext(tx,authorization.data,input.quoteId);
+      if(!source||!source.accepted)throw Error('QUOTE_RETAINED_GOODS_SOURCE_INVALID');
+      retainedGoodsQuoteNumber=source.number;
+    });}catch(error){
+      console.error('[QUOTE_RETAIN_GOODS_FAILED]',error instanceof Error?error.message:'UnknownError');
+      return boundFailure??{code:'UNAVAILABLE' as const,message:QUOTE_CYCLE_COPY.goodsUnavailable};
+    }
+  }
   const order = await createOrderIntake(prepared.orderInput,undefined,{
     quoteAuthorization:{quoteId:input.quoteId},
     before:async(tx,auth)=>{
@@ -356,7 +379,15 @@ async function convertQuoteToOrder(input:ConvertQuoteInput,newGoodsInput?:unknow
       }
     },
   });
-  if (order.code !== "OK") return boundFailure??order;
+  if (order.code !== "OK") {
+    if(boundFailure)return boundFailure;
+    if(retainedGoodsQuoteNumber&&order.code==='UNAVAILABLE'){
+      try{await withPrivilegedTenantTransaction(authorization.data,tx=>synchronizeQuoteOrderRetryTask(tx,authorization.data,input.goodsReceiptId!,retryTaskEffects));}
+      catch(error){console.error('[QUOTE_ORDER_RETRY_TASK_FAILED]',error instanceof Error?error.message:'UnknownError');}
+      return {code:'UNAVAILABLE' as const,message:QUOTE_CYCLE_COPY.orderRetry(retainedGoodsQuoteNumber)};
+    }
+    return order;
+  }
 
   const persisted = await readQuoteConversionReceiptCommand(commandContext, {
     quoteId: input.quoteId,
@@ -366,8 +397,11 @@ async function convertQuoteToOrder(input:ConvertQuoteInput,newGoodsInput?:unknow
     || persisted.receipt.orderId !== order.receipt.orderId
     || persisted.receipt.orderIntakeEventId !== order.receipt.eventId
     || persisted.quote.linkedOrderId !== order.receipt.orderId) {
-    return { code: "UNAVAILABLE" as const, message: "Auftrag wurde angelegt, der sichere KV-Readback ist noch nicht verfügbar." };
+    return { code: "UNAVAILABLE" as const, message: QUOTE_CYCLE_COPY.orderReadbackUnavailable };
   }
+
+  if(input.goodsReceiptId){try{await withPrivilegedTenantTransaction(authorization.data,tx=>synchronizeQuoteOrderRetryTask(tx,authorization.data,input.goodsReceiptId!,retryTaskEffects,'settle'));}
+  catch(error){console.error('[QUOTE_ORDER_RETRY_TASK_SETTLEMENT_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:QUOTE_CYCLE_COPY.orderReadbackUnavailable};}}
 
   revalidatePath("/orders");
   revalidatePath(`/orders/${order.receipt.orderId}`);

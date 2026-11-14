@@ -68,6 +68,14 @@ describe("order card intake snapshot contract", () => {
     }])).toThrow("ORDER_CARD_INTAKE_ITEM_INVALID");
   });
 
+  it("reads the content writer's own nullable VAT without widening the intake contract", () => {
+    const changed={...base,catalogServiceId:null,unit:'stueck',unitPriceCents:1500,vatRateBasisPoints:null};
+    expect(mapOrderCardIntakeItems([changed],'content')).toEqual([{...changed,unit:'Stück',finished:false,extraWork:[]}]);
+    expect(()=>mapOrderCardIntakeItems([changed])).toThrow('ORDER_CARD_INTAKE_ITEM_INVALID');
+    expect(()=>mapOrderCardIntakeItems([{...changed,unitPriceCents:-1}],'content')).toThrow('ORDER_CARD_INTAKE_ITEM_INVALID');
+    expect(()=>mapOrderCardIntakeItems([{...changed,vatRateBasisPoints:800}],'content')).toThrow('ORDER_CARD_INTAKE_ITEM_INVALID');
+  });
+
   it("rejects unversioned mixed shapes", () => {
     expect(() => mapOrderCardIntakeItems([{ ...base, unit: "Stück" }])).toThrow("ORDER_CARD_INTAKE_ITEM_SHAPE_INVALID");
   });

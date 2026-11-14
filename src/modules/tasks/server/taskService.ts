@@ -10,7 +10,9 @@ import {handedOverProofs} from '@/lib/server/dispatchCallPort';
 import {GOODS_OUT_FOLLOWUP_COPY} from '@/ui/situationCatalog';
 import {readOfflineNoteConflictSource} from '@/lib/server/offlineNoteConflictPort';
 import {readOfflineWorkshopConflictSource} from '@/lib/server/offlineWorkshopConflictPort';
-import {readQuoteFollowupFacts} from '@/lib/server/quoteGoodsContextPort';
+import {readQuoteFollowupFacts,readQuoteGoodsOrderRetrySource} from '@/lib/server/quoteGoodsContextPort';
+import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
+import {QUOTE_CYCLE_COPY} from '@/ui/situationCatalog';
 import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
 import {collectionTaskHasReplySource,collectionTaskReplyRemainder,collectionTaskAppointmentRemainder,readCollectionTaskCurrentOrder} from '@/lib/server/dispatchReplyPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
@@ -367,6 +369,33 @@ export async function createProductionPricingRetryTask(tx:PrivilegedTenantTransa
  if(prior.length){if(prior.length!==1||prior[0].erstellt_von!==source.actorId||prior[0].bezug_id!==source.orderId||prior[0].art!=='aufgabe'||prior[0].bezug_typ!=='auftrag')throw Error('PRODUCTION_PRICING_TASK_CHANGED');return prior[0].id;}
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  return (await persistTask(tx,auth,{clientKey:markerId,version:0,kind:'aufgabe',title:source.title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:source.orderId},note:source.description},deps,false)).task.id;
+}
+
+/** Narrow R2 composition for the already authorized KV operation, using the
+ * normal writer and its effect/readback. No general task permission is added. */
+export async function synchronizeQuoteOrderRetryTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receiptId:string,deps:Dependencies,mode:'ensure'|'settle'='ensure'){
+ const rights=quoteOperationContext(auth).capabilities;
+ if(!rights.canReadQuote||!rights.canConvertQuote||!taskUuid(receiptId))throw Error('QUOTE_ORDER_TASK_NOT_AUTHORIZED');
+ const key=eventKey(receiptId,0,'quote-order-retry');
+ // A successful ordinary/legacy conversion has no retry task to settle; it
+ // must not acquire a new provenance prerequisite just for an absent task.
+ if(mode==='settle'&&!(await tx.execute(sql`SELECT id FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid`)).length)return;
+ const source=await readQuoteGoodsOrderRetrySource(tx,auth,receiptId);
+ if(!source)throw Error('QUOTE_ORDER_TASK_SOURCE_MISSING');
+ const [lock]=await tx.execute<{locked:boolean}>(sql`SELECT pg_try_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${key},0)) AS locked`);
+ if(!lock?.locked)throw Error('QUOTE_ORDER_TASK_BUSY');
+ const tasks=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid FOR UPDATE NOWAIT`);
+ if(tasks.length>1||tasks.some(task=>task.art!=='aufgabe'||task.bezug_typ!=='kv'||task.bezug_id!==source.quoteId))throw Error('QUOTE_ORDER_TASK_REFERENCE_CHANGED');
+ if(source.completed){
+  const task=tasks[0];if(task?.status==='offen')await finishTask(tx,auth,{taskId:task.id,version:task.version,note:QUOTE_CYCLE_COPY.orderRetry(source.quoteNumber)},deps,undefined,{quoteId:source.quoteId,keys:[key]});
+  return;
+ }
+ if(!source.pending)throw Error('QUOTE_ORDER_TASK_NO_CURRENT_RETRY');
+ if(tasks.length)return;
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ const fullTitle=QUOTE_CYCLE_COPY.orderRetryTask(source.quoteNumber),budget=120-QUOTE_CYCLE_COPY.orderRetryTask('').length;
+ const title=QUOTE_CYCLE_COPY.orderRetryTask(source.quoteNumber.length>budget?source.quoteNumber.slice(0,budget-1)+'…':source.quoteNumber);
+ await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'kv',id:source.quoteId},note:fullTitle},deps,false);
 }
 export async function settleProductionPricingRetryTasks(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string,deps:Dependencies){
  const keys=await readProductionPricingRetryKeys(tx,auth,eventId);if(!keys.length)return;

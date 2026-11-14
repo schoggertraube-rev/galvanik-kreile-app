@@ -86,10 +86,9 @@ async function appendProductionCompletionWork(tx:PrivilegedTenantTransaction,ten
   // Gesamt-Freeze must not count a position already captured by Teil-fertig.
   if(item.active)continue;
   const priced=quote?.positions.find(position=>position.itemId===item.id);
-  if(quote&&!priced)throw Error('PRODUCTION_QUOTE_ITEM_MISSING');
-  const historical=occurrence.offline&&!rework?await historicalProductionEvidence(tx,tenantId,orderId,item.id,occurrence.at,item.quantity,Boolean(quote)):null;
+  const historical=occurrence.offline&&!rework?await historicalProductionEvidence(tx,tenantId,orderId,item.id,occurrence.at,item.quantity,Boolean(priced)):null;
   const net=occurrence.offline&&!rework&&!historical?sql`NULL::bigint`:rework?sql`0::bigint`:priced?sql`round(${priced.lineTotalCents}::numeric*${item.quantity}::numeric/${priced.quantity}::numeric)::bigint`:sql`round(${occurrence.offline?historical?.unitPriceCents??null:item.unit_cents}::numeric*${item.quantity}::numeric)::bigint`;
-  const source={...(historical?{historicalPriceEventId:historical.historicalPriceEventId,historicalQuantityEventId:historical.historicalQuantityEventId}:{}),...(occurrence.offline&&!rework&&!historical?{offlineUnvalued:true}:{}),...(rework?{kind:'rework',complaintId:origin.nacharbeit_zu}:quote?{kind:'quote',quoteId:quote.quoteId,edition:quote.edition,position:priced!.position}:{kind:'item',itemId:item.id})};
+  const source={...(historical?{historicalPriceEventId:historical.historicalPriceEventId,historicalQuantityEventId:historical.historicalQuantityEventId}:{}),...(occurrence.offline&&!rework&&!historical?{offlineUnvalued:true}:{}),...(rework?{kind:'rework',complaintId:origin.nacharbeit_zu}:priced&&quote?{kind:'quote',quoteId:quote.quoteId,edition:quote.edition,position:priced.position}:{kind:'item',itemId:item.id})};
   const saved=await tx.execute<{event_id:string;item_id:string}>(sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source)
    SELECT event.id,event.tenant_id,event.order_id,${item.id},private.order_production_time_v1(event),1,${item.quantity}::numeric,${item.unit},${net}::bigint,${rework},'captured',${JSON.stringify(source)}::jsonb FROM public.events event WHERE event.tenant_id=${tenantId} AND event.order_id=${orderId} AND event.id=${eventId} RETURNING event_id,item_id`);
   if(saved.length!==1||saved[0].event_id!==eventId||saved[0].item_id!==item.id)throw Error('PRODUCTION_COMPLETION_NOT_SAVED');
@@ -100,25 +99,24 @@ async function appendProductionCompletionWork(tx:PrivilegedTenantTransaction,ten
 /** PL12:01: supplement only from real recorded prices, in those actual
  * receipts' weeks; never manufacture a pricing event at reconciliation time. */
 async function appendHistoricalOfflinePricing(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string,baseEventId:string,itemId:string,quantity:string,unit:string|null,at:string,quote:OrderCommercialQuote|null){
+ const priced=quote?.positions.find(position=>position.itemId===itemId);
  const rows=await tx.execute<{id:string;cents:string|null;occurredAt:string}>(sql`WITH prices AS (
   SELECT event.id,event.created_at,item.value->>'unitPriceCents' AS cents FROM private.order_intake_receipts receipt JOIN public.events event ON event.id=receipt.event_id AND event.tenant_id=receipt.tenant_id AND event.order_id=receipt.order_id CROSS JOIN LATERAL jsonb_array_elements(receipt.items_snapshot) item(value)
-  WHERE NOT ${Boolean(quote)} AND receipt.tenant_id=${tenantId} AND receipt.order_id=${orderId} AND item.value->>'id'=${itemId} AND event.status='success' AND event.event_type='ORDER_INTAKE_CREATED_V1'
+  WHERE NOT ${Boolean(priced)} AND receipt.tenant_id=${tenantId} AND receipt.order_id=${orderId} AND item.value->>'id'=${itemId} AND event.status='success' AND event.event_type='ORDER_INTAKE_CREATED_V1'
   UNION ALL
   SELECT event.id,event.created_at,item.value->>'unitPriceCents' FROM public.events event CROSS JOIN LATERAL jsonb_array_elements(event.payload->'items') item(value)
-  WHERE NOT ${Boolean(quote)} AND event.tenant_id=${tenantId} AND event.order_id=${orderId} AND event.status='success' AND event.event_type='ORDER_CONTENT_CHANGED_V1' AND item.value->>'id'=${itemId}
+  WHERE NOT ${Boolean(priced)} AND event.tenant_id=${tenantId} AND event.order_id=${orderId} AND event.status='success' AND event.event_type='ORDER_CONTENT_CHANGED_V1' AND item.value->>'id'=${itemId}
   UNION ALL
   SELECT event.id,event.created_at,item.value->>'unitPriceCents' FROM public.events event CROSS JOIN LATERAL jsonb_array_elements(event.payload->'prices') item(value)
-  WHERE NOT ${Boolean(quote)} AND event.tenant_id=${tenantId} AND event.order_id=${orderId} AND event.status='success' AND event.event_type='ORDER_INVOICE_PRICES_SET_V1' AND item.value->>'itemId'=${itemId}
+  WHERE NOT ${Boolean(priced)} AND event.tenant_id=${tenantId} AND event.order_id=${orderId} AND event.status='success' AND event.event_type='ORDER_INVOICE_PRICES_SET_V1' AND item.value->>'itemId'=${itemId}
   UNION ALL
   SELECT event.id,event.created_at,NULL::text FROM private.quote_conversion_receipts receipt JOIN public.events event ON event.id=receipt.event_id AND event.tenant_id=receipt.tenant_id
-  WHERE ${Boolean(quote)} AND receipt.tenant_id=${tenantId} AND receipt.order_id=${orderId} AND event.status='success' AND event.event_type='QUOTE_AWARDED_V1'
+  WHERE ${Boolean(priced)} AND receipt.tenant_id=${tenantId} AND receipt.order_id=${orderId} AND event.status='success' AND event.event_type='QUOTE_AWARDED_V1'
  ) SELECT price.id,price.cents,to_char(price.created_at,'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "occurredAt" FROM prices price JOIN public.events booked ON booked.tenant_id=${tenantId} AND booked.order_id=${orderId} AND booked.id=${baseEventId}
  WHERE price.created_at>${at}::timestamptz AT TIME ZONE 'UTC' AND price.created_at<=booked.created_at
  AND NOT EXISTS(SELECT 1 FROM private.order_production_snapshots existing WHERE existing.tenant_id=${tenantId} AND existing.origin_event_id=${baseEventId} AND existing.item_id=${itemId} AND existing.event_id=price.id AND existing.component='pricing') ORDER BY price.created_at,price.id`);
- const priced=quote?.positions.find(position=>position.itemId===itemId);
  for(const row of rows){
   try{
-  if(quote&&!priced)throw Error('OFFLINE_SUPPLEMENT_QUOTE_ITEM_MISSING');
   if(!priced&&row.cents===null)throw Error('OFFLINE_SUPPLEMENT_PRICE_UNVALUED');
   const amount=priced?sql`round(${priced.lineTotalCents}::numeric*${quantity}::numeric/${priced.quantity}::numeric)::bigint`:sql`round(${row.cents}::numeric*${quantity}::numeric)::bigint`;
   const [change]=await tx.execute<{delta:string}>(sql`SELECT ((${amount})-coalesce((SELECT net_cents FROM private.order_production_snapshots WHERE tenant_id=${tenantId} AND event_id=${baseEventId} AND item_id=${itemId} AND component='base' AND direction=1),0)-coalesce((SELECT sum(net_cents) FROM private.order_production_snapshots WHERE tenant_id=${tenantId} AND origin_event_id=${baseEventId} AND item_id=${itemId} AND component='pricing' AND direction=1),0))::text AS delta`);
@@ -220,14 +218,13 @@ export async function appendProductionPricing(tx:PrivilegedTenantTransaction,ten
  AND NOT EXISTS(SELECT 1 FROM private.order_production_snapshots other WHERE other.tenant_id=base.tenant_id AND other.item_id=base.item_id AND other.reverses_event_id=base.event_id AND other.component='base') ORDER BY base.item_id`);
  for(const row of rows){
   const priced=quote?.positions.find(position=>position.itemId===row.item_id);
-  if(quote&&!priced)throw Error('PRODUCTION_PRICING_QUOTE_ITEM_MISSING');
   if(!priced&&row.net_cents===null)continue;
   const amount=priced?sql`round(${priced.lineTotalCents}::numeric*${row.quantity}::numeric/${priced.quantity}::numeric)::bigint`:sql`${row.net_cents}::bigint`;
   const [change]=await tx.execute<{delta:string}>(sql`SELECT ((${amount})-coalesce(${row.previous_net}::bigint,0))::text AS delta`);
   if(!change||!Number.isSafeInteger(Number(change.delta)))throw Error('PRODUCTION_PRICING_DELTA_INVALID');
   if(row.previous_net!==null&&Number(change.delta)===0)continue;
   const saved=await tx.execute<{event_id:string}>(sql`INSERT INTO private.order_production_snapshots(event_id,tenant_id,order_id,item_id,occurred_at,direction,quantity,unit,net_cents,rework,valuation,price_source,component,origin_event_id)
-   SELECT event.id,base.tenant_id,base.order_id,base.item_id,event.created_at,1,base.quantity,base.unit,${change.delta}::bigint,base.rework,'captured',${JSON.stringify(quote?{kind:'quote',quoteId:quote.quoteId,edition:quote.edition}:{kind:'item',pricingEventId:eventId})}::jsonb,'pricing',base.event_id
+   SELECT event.id,base.tenant_id,base.order_id,base.item_id,event.created_at,1,base.quantity,base.unit,${change.delta}::bigint,base.rework,'captured',${JSON.stringify(priced&&quote?{kind:'quote',quoteId:quote.quoteId,edition:quote.edition}:{kind:'item',pricingEventId:eventId})}::jsonb,'pricing',base.event_id
    FROM private.order_production_snapshots base JOIN public.events event ON event.tenant_id=base.tenant_id AND event.order_id=base.order_id AND event.id=${eventId}
    WHERE base.tenant_id=${tenantId} AND base.event_id=${row.event_id} AND base.item_id=${row.item_id} AND base.component='base' RETURNING event_id`);
   if(saved.length!==1||saved[0].event_id!==eventId)throw Error('PRODUCTION_PRICING_NOT_SAVED');

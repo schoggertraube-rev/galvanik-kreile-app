@@ -2,7 +2,7 @@ import "server-only";
 import {OFFLINE_DEVICE_READ_COPY} from '@/ui/situationCatalog';
 
 import { createHash,randomUUID } from "node:crypto";
-import {calculateQuote,type QuoteCalculation} from "../quoteCalculation";
+import {scaleQuoteCalculation,type QuoteCalculation} from "../quoteCalculation";
 import {appendQuoteJournal,quoteHasPreparedDocument,readQuoteComplaintSource} from "@/lib/server/quoteJournalPort";
 import {readQuoteReceivedQuantities,readQuoteGoodsSummaries,readQuoteGoodsSummariesForQuotes} from "@/lib/server/quoteGoodsContextPort";
 import { sql } from "drizzle-orm";
@@ -130,10 +130,10 @@ function validDate(value: unknown): value is string {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-function normalizeCalculation(raw:unknown,positions:CreateQuoteInput['positions']):QuoteCalculation|null{
+function normalizeCalculation(raw:unknown):QuoteCalculation|null{
  if(!plainObject(raw)||!exactKeys(raw,['hours','hourlyRateCents','setupCents','materialCents']))return null;
- const value=raw as QuoteCalculation,result=calculateQuote(value);
- if(result.code!=='OK'||positions.reduce((sum,row)=>sum+(row.lineTotalCents??row.quantity*row.unitPriceCents),0)!==result.totalNetCents)return null;
+ const value=raw as QuoteCalculation,result=scaleQuoteCalculation(value,1,1);
+ if(result.code!=='OK')return null;
  const [whole,fraction='']=value.hours.trim().replace(',','.').split('.'),digits=fraction.replace(/0+$/u,'');
  return {hours:BigInt(whole).toString()+(digits?'.'+digits:''),hourlyRateCents:value.hourlyRateCents,setupCents:value.setupCents,materialCents:value.materialCents};
 }
@@ -169,7 +169,7 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
     if(candidate.plannedMinutes!==undefined&&candidate.plannedMinutes!==null&&(!Number.isSafeInteger(candidate.plannedMinutes)||Number(candidate.plannedMinutes)<0||Number(candidate.plannedMinutes)>9999999))return null;
     positions.push({ name, quantity: candidate.quantity, material, surfaceRequested, unitPriceCents: candidate.unitPriceCents, ...(Object.hasOwn(candidate,"lineTotalCents")?{lineTotalCents:candidate.lineTotalCents as number}:{}),...(Object.hasOwn(candidate,'unit')?{unit:normaliseOrderPositionUnit(candidate.unit)}:{}),...(Object.hasOwn(candidate,'plannedMinutes')?{plannedMinutes:candidate.plannedMinutes as number|null}:{}) });
   }
-  const calculation=Object.hasOwn(value,'calculation')?normalizeCalculation(value.calculation,positions):undefined;
+  const calculation=Object.hasOwn(value,'calculation')?normalizeCalculation(value.calculation):undefined;
   if(calculation===null)return null;
   return {
     clientEventId: value.clientEventId, customerId, dueDate: value.dueDate, note, positions,
@@ -313,7 +313,7 @@ function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
     if ((row.gesendet_fassung===null)!==(row.gesendet_am===null)||(row.gesendet_fassung===null)!==(row.gesendet_kanal===null)||(row.zugesagt_fassung===null)!==(row.zugesagt_am===null)||(row.zugesagt_fassung===null)!==(row.zusage_nachweis===null)) return null;
     if (row.vorbehalt_fassung!==undefined&&row.vorbehalt_fassung!==null&&(!Number.isSafeInteger(row.vorbehalt_fassung)||row.vorbehalt_fassung<1||row.vorbehalt_fassung>row.fassung||!iso(row.vorbehalt_am??null)||!row.vorbehalt_grund?.trim()||row.zugesagt_fassung===row.vorbehalt_fassung)) return null;
     let calculation:QuoteCalculation|null=null;
-    if(row.kalk_stunden!==null&&row.kalk_stunden!==undefined){calculation={hours:String(row.kalk_stunden),hourlyRateCents:row.stundensatz_cents==null?null:Number(row.stundensatz_cents),setupCents:row.ruest_cents==null?null:Number(row.ruest_cents),materialCents:row.material_cents==null?null:Number(row.material_cents)};const amount=calculateQuote(calculation);if(amount.code!=='OK'||amount.totalNetCents!==Number(row.total_net_cents))return null;}
+    if(row.kalk_stunden!==null&&row.kalk_stunden!==undefined){calculation={hours:String(row.kalk_stunden),hourlyRateCents:row.stundensatz_cents==null?null:Number(row.stundensatz_cents),setupCents:row.ruest_cents==null?null:Number(row.ruest_cents),materialCents:row.material_cents==null?null:Number(row.material_cents)};if(scaleQuoteCalculation(calculation,1,1).code!=='OK')return null;}
     lifecycle={calculation,edition:row.fassung,stage:row.derived_status as NonNullable<QuoteReadback['lifecycle']>['stage'],sentEdition:row.gesendet_fassung!,sentAt:iso(row.gesendet_am!),sentChannel:row.gesendet_kanal as 'mail'|'druck'|null,acceptedEdition:row.zugesagt_fassung!,acceptedAt:iso(row.zugesagt_am!),acceptanceEvidence:row.zusage_nachweis!,conditional:row.vorbehalt_fassung?{edition:row.vorbehalt_fassung,recordedAt:iso(row.vorbehalt_am!)!,reason:row.vorbehalt_grund!}:null,declinedAt:iso(row.abgesagt_am!),declineReason:row.absage_grund!,followupAt:row.nachfass_am===null?null:row.nachfass_am instanceof Date?row.nachfass_am.toISOString().slice(0,10):String(row.nachfass_am).slice(0,10),sourceItemId:row.quelle_intake_item_id!,sourceMessageId:row.quelle_nachricht_id!,specialRequests:row.sonderwuensche!,deliveryWeeks:row.lieferzeit_wochen!};
   }
   const positions = parsePositions(row.positions);
@@ -633,19 +633,20 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       await tx.execute(sql`SELECT id FROM private.quotes WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid FOR UPDATE`);
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
-      if(normalized.confirmedOrderDueDate!==quote.dueDate)return {code:"VALIDATION_ERROR",message:"Auftragstermin muss dem aktuellen KV-Termin entsprechen."};
-      if(!normalized.goodsReceiptId)return {code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${quote.quoteNumber} annehmen`};
       const pendingAcceptance=Boolean(options.planOnly&&options.pendingAcceptance&&quote.lifecycle&&!quote.linkedOrderId
         &&quote.version===options.pendingAcceptance.beforeVersion&&normalized.expectedVersion===quote.version+1
         &&quote.lifecycle.edition===options.pendingAcceptance.edition&&quote.lifecycle.sentEdition===quote.lifecycle.edition
         &&quote.lifecycle.stage!=='abgelaufen'&&!quote.lifecycle.declinedAt&&quote.lifecycle.conditional?.edition!==quote.lifecycle.edition);
+      if(!quote.linkedOrderId&&quote.version+(pendingAcceptance?1:0)!==normalized.expectedVersion)return {code:'CONFLICT',message:'KV-Fassung wurde geaendert. Neu lesen und abgleichen.'};
+      if(normalized.confirmedOrderDueDate!==quote.dueDate)return {code:"VALIDATION_ERROR",message:"Auftragstermin muss dem aktuellen KV-Termin entsprechen."};
+      if(!normalized.goodsReceiptId)return {code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${quote.quoteNumber} annehmen`};
       if(!quote.lifecycle||!pendingAcceptance&&(quote.lifecycle.acceptedEdition!==quote.lifecycle.edition||!quote.lifecycle.acceptedAt||!quote.lifecycle.acceptanceEvidence?.trim())||quote.lifecycle.declinedAt)return {code:'VALIDATION_ERROR',message:'Aktuelle KV-Fassung ohne Vorbehalt zusagen; danach Ware zum Auftrag buchen.'};
       const goods=quote.lifecycle.goods?.find(row=>row.id===normalized.goodsReceiptId);
       if((!goods&&!(options.planOnly&&!quote.linkedOrderId&&options.pendingGoodsId===normalized.goodsReceiptId))||(goods&&(goods.blocked&&!pendingAcceptance||goods.orderId!==quote.linkedOrderId)))return {code:'VALIDATION_ERROR',message:'Passender angenommener Warenbeleg fehlt oder ist gesperrt.'};
       if(quote.linkedOrderId){
         const prior=await tx.execute<{order_id:string;intent_sha256:string}>(sql`SELECT order_id,intent_sha256 FROM private.quote_conversion_receipts WHERE tenant_id=${authorization.tenantId} AND quote_id=${normalized.quoteId}::uuid AND actor_id=${authorization.userId}::uuid AND client_event_id=${normalized.clientEventId}::uuid`);
         if(prior.length!==1||prior[0].order_id!==quote.linkedOrderId||prior[0].intent_sha256!==intentSha256)return {code:'CONFLICT',message:'KV wurde bereits mit einer anderen Buchung zum Auftrag.'};
-      }else if(quote.version+(pendingAcceptance?1:0)!==normalized.expectedVersion)return {code:'CONFLICT',message:'KV-Fassung wurde geaendert. Neu lesen und abgleichen.'};
+      }
       const sourceOrderInput: Omit<QuoteOrderInput, "handoverMode" | "paymentMode"> = {
         // The selected canonical goods record has passed the inspection.
         geprueft: true,

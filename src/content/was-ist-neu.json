@@ -1,6 +1,17 @@
 [
   {
     "datum": "2026-11-13",
+    "pr": 220,
+    "seite": "auftraege",
+    "punkte": [
+      "Bestätigst du Ware zu einem zugesagten KV, entsteht genau ein Auftrag mit Preis, Zeit, Einheit und Steuer aus der zugesagten Fassung.",
+      "Teil- und Mehrmengen übernehmen den vereinbarten Zeilenpreis anteilig. Zusätzliche Teile behalten ihren eigenen Preis.",
+      "Scheitert die Auftragsanlage, bleibt der Wareneingang erhalten. Eine Aufgabe führt dich zum erneuten Anlegen, ohne Ware oder Auftrag doppelt zu buchen."
+    ],
+    "ziel": "/orders"
+  },
+  {
+    "datum": "2026-11-13",
     "pr": 219,
     "seite": "kunden",
     "punkte": [

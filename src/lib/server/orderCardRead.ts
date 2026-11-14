@@ -3,7 +3,7 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import {readOrderCommercialQuote,type OrderCommercialQuote} from "./orderQuoteReadPort";
-import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice } from "@/lib/orderPositionContract";
+import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice, isOrderContentPrice } from "@/lib/orderPositionContract";
 import { orderPositionQuantityError, orderPositionUnitLabel, orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeExecutionRequested, OrderIntakeSource } from "@/lib/server/commands/orderIntakeCommand";
@@ -328,7 +328,7 @@ function toSafeInteger(value: unknown, error: string): number {
   return parsed;
 }
 
-export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
+export function mapOrderCardIntakeItems(value: unknown,source:'intake'|'content'='intake'): OrderCardItem[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > 20) {
     throw new Error("ORDER_CARD_INTAKE_ITEMS_INVALID");
   }
@@ -357,7 +357,7 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
         typeof entry.unit === "string"
         && isOrderIntakeFreeTextUnit(entry.unit)
       ))
-      && isOrderIntakeFreeTextPrice(entry.unitPriceCents, entry.vatRateBasisPoints);
+      && (source==='content'?isOrderContentPrice(entry.unitPriceCents, entry.vatRateBasisPoints):isOrderIntakeFreeTextPrice(entry.unitPriceCents, entry.vatRateBasisPoints));
     if (
       typeof entry.id !== "string"
       || !UUID_PATTERN.test(entry.id)
@@ -675,7 +675,7 @@ export async function readLiveOrderCard(
       `);
       const contentEvent = contentEvents[0] ?? null;
       const eventPayload = contentEvent?.payload as { note?: unknown; items?: unknown } | null;
-      const eventItems = contentEvent ? mapOrderCardIntakeItems(eventPayload?.items) : null;
+      const eventItems = contentEvent ? mapOrderCardIntakeItems(eventPayload?.items,'content') : null;
       if (contentEvent && (
         contentEvent.tenant_id !== authorization.tenantId
         || contentEvent.order_id !== queue.id
@@ -871,7 +871,14 @@ export async function readLiveOrderCard(
 
       const canReadMoney = authorization.permissions.includes("perm_view_prices");
       const cancellationRows=queue.status==='storniert'?await tx.execute<{reason:string;at:string;actor:string;quoteId:string|null;quoteNumber:string|null}>(sql`SELECT event.notes AS reason,event.created_at::text AS at,coalesce(actor.full_name,'Name fehlt') AS actor,event.payload->>'quoteId' AS "quoteId",quote.quote_number AS "quoteNumber" FROM public.events event LEFT JOIN public.app_users actor ON actor.tenant_id=event.tenant_id AND actor.id=event.user_id LEFT JOIN private.quotes quote ON quote.tenant_id=event.tenant_id AND quote.id::text=event.payload->>'quoteId' WHERE event.tenant_id=${authorization.tenantId} AND event.order_id=${input.orderId} AND event.event_type='ORDER_CANCELLED_V1' AND event.status='success' ORDER BY event.created_at DESC,event.id DESC LIMIT 1`):[];
-      const commercialQuote=canReadMoney&&origin.has_commercial_quote&&queue.status!=='storniert'?await readOrderCommercialQuote(tx,authorization.tenantId,input.orderId):undefined;
+      // The awarded edition also owns operational unit facts. Read it once on
+      // the server; monetary fields still leave this reader only with geld.
+      const awardedQuote=origin.has_commercial_quote&&queue.status!=='storniert'?await readOrderCommercialQuote(tx,authorization.tenantId,input.orderId):undefined;
+      const commercialQuote=canReadMoney?awardedQuote:undefined;
+      const cardItems=items.map(item=>{
+        const awarded=awardedQuote?.positions.find(position=>position.itemId===item.id);
+        return awarded?{...item,unit:awarded.unit==null?null:orderPositionUnitLabel(awarded.unit)}:item;
+      });
       const [handoverEvent]=await tx.execute<{payload:{receipt:{orderId:string;orderVersion:number;message:string;taskId:string|null;mailActor:{originalItemId:string}}}}>(sql`SELECT payload FROM public.events WHERE tenant_id=${authorization.tenantId} AND order_id=${input.orderId} AND event_type='ORDER_HANDOVER_MAIL_V1' AND event_schema_version=1 AND status='success' ORDER BY aggregate_version DESC,created_at DESC,id DESC LIMIT 1`);
       const handover=handoverEvent?.payload?.receipt;
       if(handover&&(handover.orderId!==queue.id||!Number.isSafeInteger(handover.orderVersion)||handover.orderVersion>queue.version||typeof handover.message!=='string'||!handover.message.trim()||!UUID_PATTERN.test(handover.mailActor?.originalItemId)||handover.taskId!==null&&!UUID_PATTERN.test(handover.taskId)))throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');
@@ -880,7 +887,7 @@ export async function readLiveOrderCard(
         ...(handover?{handoverNotice:{message:handover.message,taskId:handover.taskId,originalItemId:handover.mailActor.originalItemId}}:{}),
         ...(commercialQuote?{commercialQuote}:{}),
         ...(cancellationRows[0]?{cancellation:cancellationRows[0]}:{}),
-        operationalFacts:{rework:isReworkOrder,...(isReworkOrder?{reworkComplaintId:origin.nacharbeit_zu!}:{}),pricesMissing:!isReworkOrder&&items.some(item=>item.unitPriceCents===null),...(activeComplaint!==undefined?{complaint:activeComplaint!==null}:{})},
+        operationalFacts:{rework:isReworkOrder,...(isReworkOrder?{reworkComplaintId:origin.nacharbeit_zu!}:{}),pricesMissing:!isReworkOrder&&items.some(item=>item.unitPriceCents===null&&!awardedQuote?.positions.some(position=>position.itemId===item.id)),...(activeComplaint!==undefined?{complaint:activeComplaint!==null}:{})},
         id: queue.id,
         version: queue.version,
         orderNumber: queue.order_number,
@@ -900,7 +907,7 @@ export async function readLiveOrderCard(
         assignmentOptions,
         dueDateChanges,
         labelPrints,
-        items: canReadMoney ? items : items.map((item) => ({ ...item, unitPriceCents: null, vatRateBasisPoints: null,
+        items: canReadMoney ? cardItems : cardItems.map((item) => ({ ...item, unitPriceCents: null, vatRateBasisPoints: null,
           extraWork: item.extraWork.map((line) => ({ ...line, hourlyRateCents: null, amountCents: null })) })),
         freeze: canReadMoney || !mappedFreeze ? mappedFreeze : { ...mappedFreeze, hourlyRateCents: null, totalAmountCents: null },
         agreement,

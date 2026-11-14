@@ -1080,10 +1080,16 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       }
       const commercial=source.has_quote?await readOrderCommercialQuote(tx,tenantId,order.id):null;
       if(commercial){
-        source.base_lines=commercial.positions.map(row=>{
+        if(!Array.isArray(source.base_lines)||source.base_lines.some(line=>!plainObject(line)||typeof line.itemId!=='string'))throw Error('INVOICE_QUOTE_BASE_SOURCE_INVALID');
+        const awardedItems=new Set(commercial.positions.map(row=>row.itemId));
+        // A07-12/14: additional parts keep the ordinary invoice source. Only
+        // the actually awarded items are replaced by the canonical KV terms.
+        const additional=source.base_lines.filter(line=>!awardedItems.has(line.itemId));
+        const checkedAdditional=additional.some(line=>line.unitNetAmountCents===null||line.lineNetAmountCents===null)?null:parseBaseLines(additional.map(({vat_rate_basis_points:rate,...line})=>{void rate;return line;}));
+        source.base_lines=[...commercial.positions.map(row=>{
           const quantity=row.quantity;
           return {itemId:row.itemId,name:row.name,quantity,unitNetAmountCents:Number((BigInt(row.lineTotalCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity)),lineNetAmountCents:row.lineTotalCents,vat_rate_basis_points:row.vatRateBasisPoints??commercial.vatRateBasisPoints};
-        });
+        }),...additional];
         if(!Array.isArray(source.extra_work_lines))throw Error('INVOICE_QUOTE_EXTRA_WORK_SOURCE_INVALID');
         source.extra_work_lines=source.extra_work_lines.map(line=>{
           if(!plainObject(line)||typeof line.itemId!=='string')throw Error('INVOICE_QUOTE_EXTRA_WORK_SOURCE_INVALID');
@@ -1091,8 +1097,9 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
           return {...line,vat_rate_basis_points:positions.length===1?(positions[0].vatRateBasisPoints??commercial.vatRateBasisPoints??null):line.vat_rate_basis_points};
         });
         // The existing canonical awarded-quote port proves these prices; no price is copied into an intake intent.
-        source.base_line_count=commercial.positions.length;source.base_net_amount_cents=commercial.totalNetCents;
-        source.base_prices_complete=source.base_line_count>0&&commercial.positions.every(row=>Number.isSafeInteger(row.lineTotalCents)&&row.lineTotalCents>=0);
+        source.base_line_count=commercial.positions.length+additional.length;
+        if(checkedAdditional!==null)source.base_net_amount_cents=commercial.totalNetCents+checkedAdditional.reduce((sum,line)=>sum+line.lineNetAmountCents,0);
+        source.base_prices_complete=checkedAdditional!==null&&source.base_line_count>0&&commercial.positions.every(row=>Number.isSafeInteger(row.lineTotalCents)&&row.lineTotalCents>=0);
         // Recompose the existing structural guards with the canonical quote price proof.
         // The legacy SQL projection includes item prices in integrity_ok, which are
         // deliberately absent for a quote-backed intake. No structural guard is waived.
