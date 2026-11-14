@@ -73,15 +73,6 @@ vi.mock("@/lib/pdf/StorageLetterDocument", () => ({createStorageLetterPdfDocumen
 const sourceFile = (source: string, fileName: string) =>
   ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 
-function functionDeclaration(source: ts.SourceFile, name: string): ts.FunctionDeclaration {
-  const declaration = source.statements.find(
-    (statement): statement is ts.FunctionDeclaration =>
-      ts.isFunctionDeclaration(statement) && statement.name?.text === name,
-  );
-  expect(declaration, `${name} must be declared`).toBeDefined();
-  return declaration!;
-}
-
 function getSettingsMethod(source: ts.SourceFile): ts.MethodDeclaration {
   let method: ts.MethodDeclaration | undefined;
   const visit = (node: ts.Node) => {
