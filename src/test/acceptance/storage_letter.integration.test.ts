@@ -409,7 +409,7 @@ it('discard preserves the old original and creates a new generation; physical ha
  expect(await withSession(full,()=>getIntakeTaskAction({taskId:replacement.taskId}))).toMatchObject({code:'OK',postalLetter:{state:'VOIDED'}});
 });
 it('competing postal completion and discard preserve exactly one outcome, actor and original across fresh retries',async()=>{
- const {request,plan}=await prepareWithoutMail('Post-Abschluss-Rennen');
+ const {request,plan,clock}=await prepareWithoutMail('Post-Abschluss-Rennen');
  const prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('POSTAL_RACE_PREPARE');
  const read=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));if(read.code!=='OK'||!read.task)throw Error('POSTAL_RACE_TASK');
  const base={taskId:prepared.taskId,version:read.task.version,note:'TEST konkurrierender Abschluss'};
@@ -430,10 +430,10 @@ it('competing postal completion and discard preserve exactly one outcome, actor 
  expect(await withSession(other,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(winner))))).toMatchObject({code:'CONFLICT'});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN ('ORDER_COLLECTION_REMINDER_SENT_V1','ORDER_STORAGE_LETTER_VOIDED_V1') AND payload->>'documentId'=${prepared.document.id}`).toEqual([{n:1}]);
  const state=(await plan())!.finishedDispatch!.storage!.letter!;
- expect(state).toMatchObject(postedWon?{state:'SENT',postalDocumentId:prepared.document.id,finalStage:{state:'DUE'}}:{state:'DUE',sentAt:null,finalStage:{due:null}});
+ expect(state).toMatchObject(postedWon?{state:'SENT',postalDocumentId:prepared.document.id,finalStage:{state:prepared.document.snapshot.deadline!.due!>berlinCalendarDay(new Date(clock.databaseNow))?'WAIT':'DUE',due:prepared.document.snapshot.deadline!.due}}:{state:'DUE',sentAt:null,finalStage:{due:null}});
 });
 it.each(['task history','dispatch receipt'] as const)('a rejected postal %s rolls back the dispatch receipt and completion, then the same request can recover',async(rejected)=>{
- const {request,plan}=await prepareWithoutMail('Post-Historie-Rollback');
+ const {request,plan,clock}=await prepareWithoutMail('Post-Historie-Rollback');
  const prepared=await withSession(full,()=>prepareStoragePostalLetterAction(request));if(prepared.code!=='OK')throw Error('POSTAL_ROLLBACK_PREPARE');
  const read=await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}));if(read.code!=='OK'||!read.task)throw Error('POSTAL_ROLLBACK_TASK');
  const input={taskId:prepared.taskId,version:read.task.version,note:'TEST Versand mit Historie',postalResult:{kind:'posted' as const,postedOn:berlinCalendarDay(),documentSha256:prepared.document.sha256}};
@@ -454,7 +454,7 @@ it.each(['task history','dispatch receipt'] as const)('a rejected postal %s roll
   await sql.unsafe(`DROP FUNCTION private.${name}()`);
  }
  expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:false});
- expect((await plan())!.finishedDispatch!.storage!.letter).toMatchObject({state:'SENT',postalDocumentId:prepared.document.id,finalStage:{state:'DUE'}});
+ expect((await plan())!.finishedDispatch!.storage!.letter).toMatchObject({state:'SENT',postalDocumentId:prepared.document.id,finalStage:{state:prepared.document.snapshot.deadline!.due!>berlinCalendarDay(new Date(clock.databaseNow))?'WAIT':'DUE',due:prepared.document.snapshot.deadline!.due}});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'documentId'=${prepared.document.id}`).toEqual([{n:1}]);
  expect(await sql`SELECT count(*)::int AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND nachher->>'taskId'=${prepared.taskId} AND nachher->>'action'='aufgabe.erledigt'`).toEqual([{n:1}]);
 });
