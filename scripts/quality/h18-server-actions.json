@@ -377,6 +377,9 @@
     ],
     "src/app/actions/invoices.actions.ts#getInvoiceTruthAction": [
       "src/test/acceptance/s05k_invoice_line_vat.integration.test.ts"
+    ],
+    "src/app/actions/domainAttachments.actions.ts#setEvidenceVisibilityAction": [
+      "src/test/acceptance/evidence_visibility_change.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

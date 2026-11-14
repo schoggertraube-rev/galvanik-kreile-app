@@ -9,6 +9,7 @@ import {EVIDENCE_READ_COPY} from '@/ui/situationCatalog';
 import { analyzeDomainAttachment } from "@/lib/server/documentIntelligencePort";
 import { readAzureDocumentIntelligenceStatus } from "@/lib/server/azureDocumentIntelligence";
 import { readOrderIntakeOriginals } from "@/modules/eingang/server-public";
+import {changeEvidenceVisibility} from '@/lib/server/evidenceVisibilityCommand';
 
 async function authorization() {
   try {
@@ -28,6 +29,11 @@ export async function reserveDomainAttachmentAction(input: Parameters<typeof res
 export async function finalizeDomainAttachmentAction(input: Parameters<typeof finalizeDomainAttachment>[1]) {
   const auth = await authorization();
   return auth.ok ? finalizeDomainAttachment(auth.data, input) : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+}
+
+export async function setEvidenceVisibilityAction(input:Parameters<typeof changeEvidenceVisibility>[1]){
+  const auth=await authorization();
+  return auth.ok?changeEvidenceVisibility(auth.data,input):{code:auth.code,message:EVIDENCE_READ_COPY.unavailable};
 }
 
 export async function attachIntakeDraftAttachmentAction(input: Parameters<typeof attachIntakeDraftAttachment>[1]) {

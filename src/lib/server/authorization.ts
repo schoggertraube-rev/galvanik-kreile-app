@@ -336,3 +336,11 @@ export async function readActiveAreaHolders(tx:import('./privilegedDb').Privileg
 }
 
 export {canReadComplaintOrderChoices,canTransportInvoiceDocument} from '@/lib/auth/authorizationContract';
+
+/** S11 uses the existing editing area of the stored source, never money/viewer grants. */
+export function canChangeEvidenceVisibility(auth:AuthorizationSnapshot,sourceKind:string):boolean{
+ if(sourceKind==='INTAKE_FILE')return hasAuthorizationArea(auth,'eingang');
+ if(sourceKind==='ORDER_STATION_ATTACHMENT'||sourceKind==='ORDER_INTAKE_ATTACHMENT'||sourceKind==='LEGACY_SCAN_UPLOAD')
+  return hasAuthorizationArea(auth,'auftraege');
+ return false;
+}
