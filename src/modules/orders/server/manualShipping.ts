@@ -12,7 +12,7 @@ import {MANUAL_SHIPPING_COPY,MANUAL_SHIPPING_FIELDS,SHIPPING_FEE_COPY} from '@/u
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const id=(value:unknown):value is string=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 export type ManualShippingPorts={
- readAllocation:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,input:{orderId:string;shipmentId:string;otherOrderId:string;otherShipmentId:string|null;sendungId:string})=>Promise<{chargedInvoiceNumbers:string[]}>;
+ readAllocation:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,input:{orderId:string;shipmentId:string;otherOrderId:string;otherShipmentId:string|null;sendungId:string})=>Promise<{chargedOrderNumbers:string[]}>;
  readCustomer:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerStoredProfile|null>;
  readSettings:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<ShippingSettings|null>;
 };
@@ -127,7 +127,7 @@ export async function saveManualTracking(auth:AuthorizationSnapshot,input:unknow
    groupId=selected?.sendungId??randomUUID();
    groupTarget={orderId:targetOrder.id,shipmentId:selected?.id??randomUUID(),old:selected??null};
    const allocation=await ports.readAllocation(tx,auth.tenantId,order.customer_id,{orderId:order.id,shipmentId:value.shipmentId,otherOrderId:targetOrder.id,otherShipmentId:selected?.id??null,sendungId:groupId});
-   if(allocation.chargedInvoiceNumbers.length>1)return {code:'CONFLICT' as const,message:SHIPPING_FEE_COPY.groupAlreadyCharged(allocation.chargedInvoiceNumbers[0],allocation.chargedInvoiceNumbers[1])};
+   if(allocation.chargedOrderNumbers.length>1)return {code:'CONFLICT' as const,message:SHIPPING_FEE_COPY.groupAlreadyCharged(allocation.chargedOrderNumbers[0],allocation.chargedOrderNumbers[1])};
   }
   const duplicate=await tx.execute<{id:string;order_id:string}>(sql`SELECT id::text,order_id FROM public.shipments WHERE tenant_id=${auth.tenantId}
    AND lower(carrier)=lower(${settings.service}) AND upper(tracking_number)=upper(${value.trackingNumber}) AND id<>${value.shipmentId}::uuid

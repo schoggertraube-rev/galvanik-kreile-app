@@ -987,7 +987,7 @@ async function readShippingInvoiceAllocation(tx:PrivilegedTenantTransaction,tena
       WHERE invoice.tenant_id=${tenantId} AND invoice.order_id IN (${sql.join(orderIds.map(value=>sql`${value}`),sql`,`)})
         AND invoice.status='issued' AND invoice.contract_version=1
       ORDER BY invoice.invoice_number`);
-    const charged:Array<{invoiceNumber:string}>=[];
+    const charged:Array<{invoiceNumber:string;orderNumber:string}>=[];
     for(const original of originals){
       if(original.tenant_id!==tenantId||!orderIds.includes(original.order_id)||!INVOICE_NUMBER_PATTERN.test(original.invoice_number)||!original.pdf_content||!HEX64_PATTERN.test(original.pdf_sha256)
         ||createHash('sha256').update(original.pdf_content).digest('hex')!==original.pdf_sha256)throw Error('INVOICE_SHIPPING_ORIGINAL_INVALID');
@@ -999,7 +999,7 @@ async function readShippingInvoiceAllocation(tx:PrivilegedTenantTransaction,tena
         if(receipts.length!==1)throw Error('INVOICE_SHIPPING_ORIGINAL_RECEIPT_MISSING');
         const receipt=mapInvoiceIssueReceipt(receipts[0],tenantId,original.issued_by,readVat);
         if(receipt.invoiceId!==original.id||receipt.invoiceNumber!==original.invoice_number)throw Error('INVOICE_SHIPPING_ORIGINAL_RECEIPT_INVALID');
-        charged.push({invoiceNumber:receipt.invoiceNumber});
+        charged.push({invoiceNumber:receipt.invoiceNumber,orderNumber:snapshot.order.orderNumber});
       }
     }
 
@@ -1012,7 +1012,7 @@ export async function readShippingMergeAllocation(tx:PrivilegedTenantTransaction
   WHERE shipment.tenant_id=${tenantId} AND shipment.sendung_id=${input.sendungId}::uuid ORDER BY shipment.order_id,shipment.id`);
  const members=[...group,{order_id:input.orderId,customer_id:customerId,shipment_id:input.shipmentId},{order_id:input.otherOrderId,customer_id:customerId,shipment_id:input.otherShipmentId}];
  const result=await readShippingInvoiceAllocation(tx,tenantId,customerId,members,'sendung:'+input.sendungId,readVat);
- return {chargedInvoiceNumbers:result.charged.map(row=>row.invoiceNumber)};
+ return {chargedOrderNumbers:[...new Set(result.charged.map(row=>row.orderNumber))]};
 }
 
 /** Shared lock order for standalone issuance and issuance composed with goods-out. */

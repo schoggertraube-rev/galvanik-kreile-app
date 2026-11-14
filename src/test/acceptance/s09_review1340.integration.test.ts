@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
+import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder,readyOrderForInvoice,customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {saveManualTrackingAction,getLiveOrderCardAction,changeOrderPickupNoticeAction} from '@/app/actions/orders.actions';
 import {issueInvoiceAction,cancelInvoiceAction} from '@/app/actions/invoices.actions';
@@ -16,9 +16,13 @@ const group=(a:string,b:string)=>({orderId:a,shipmentId:randomUUID(),expectedUpd
 it('KORR1 rejects two already charged actual originals without writing a shipment, event or cancellation; retry remains no effect',async()=>{
  const a=await readyInvoiceOrder('TEST KORR1 fee A','shipping'),b=await readyInvoiceOrder('TEST KORR1 fee B','shipping',false,a.customerId);
  const request=group(a.orderId,b.orderId),before=await sql`SELECT id::text,pdf_sha256,status FROM public.invoices WHERE tenant_id=${tenant} AND customer_id=${a.customerId} ORDER BY id`;
- const expected={code:'CONFLICT',message:SHIPPING_FEE_COPY.groupAlreadyCharged(a.invoice.invoiceNumber,b.invoice.invoiceNumber)};
+ const numbers=await sql`SELECT id,order_number FROM public.orders WHERE tenant_id=${tenant} AND id IN (${a.orderId},${b.orderId})`;
+ const expected={code:'CONFLICT',message:SHIPPING_FEE_COPY.groupAlreadyCharged(numbers.find(row=>row.id===a.orderId)!.order_number,numbers.find(row=>row.id===b.orderId)!.order_number)};
  expect(await withSession(full,()=>saveManualTrackingAction(request))).toEqual(expected);
  expect(await withSession(full,()=>saveManualTrackingAction(JSON.parse(JSON.stringify(request))))).toEqual(expected);
+ const operator=await createFixture(['auftraege'],'werkstatt');
+ expect(await withSession(operator,()=>saveManualTrackingAction(JSON.parse(JSON.stringify(request))))).toEqual(expected);
+ expect(expected.message).not.toContain(a.invoice.invoiceNumber);expect(expected.message).not.toContain(b.invoice.invoiceNumber);
  expect(await sql`SELECT id FROM public.shipments WHERE tenant_id=${tenant} AND order_id IN (${a.orderId},${b.orderId})`).toHaveLength(0);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${request.clientEventId}::uuid`).toHaveLength(0);
  expect(await sql`SELECT id::text,pdf_sha256,status FROM public.invoices WHERE tenant_id=${tenant} AND customer_id=${a.customerId} ORDER BY id`).toEqual(before);
