@@ -621,7 +621,7 @@ type PreparedInvoiceContent = {
 function prepareInvoiceContent(
   source: SourceRow,
   order: LockedOrder,
-  shippingFee:{shipmentGroupId:string;amountCents:number}|null,
+  shippingFees:Array<{shipmentGroupId:string;amountCents:number;name:string}>,
 ): PreparedInvoiceContent {
   const customerCountry=masterDataText(source.customer_country,"INVOICE_CUSTOMER_COUNTRY_INVALID");
   const customerVatId=optionalText(source.customer_vat_id);
@@ -629,7 +629,7 @@ function prepareInvoiceContent(
   const vatSource={reverseCharge,companyRate:source.invoice_vat_rate_basis_points};
   const baseLines = parseBaseLines(source.base_lines,vatSource);
   const extraWorkLines = parseExtraWorkLines(source.extra_work_lines,vatSource);
-  const shippingLines:ImmutableInvoiceShippingLine[]=shippingFee===null?[]:[{type:'SHIPPING',shipmentGroupId:shippingFee.shipmentGroupId,name:SHIPPING_FEE_COPY.line,amountCents:shippingFee.amountCents,vat_rate_basis_points:invoiceLineVat(null,SHIPPING_FEE_COPY.line,reverseCharge,source.invoice_vat_rate_basis_points)}];
+  const shippingLines:ImmutableInvoiceShippingLine[]=shippingFees.map(fee=>({type:'SHIPPING',shipmentGroupId:fee.shipmentGroupId,name:fee.name,amountCents:fee.amountCents,vat_rate_basis_points:invoiceLineVat(null,fee.name,reverseCharge,source.invoice_vat_rate_basis_points)}));
   if (
     baseLines.length !== toSafeInteger(source.base_line_count, "INVOICE_BASE_LINE_COUNT_INVALID")
     || extraWorkLines.length !== toSafeInteger(source.extra_work_line_count, "INVOICE_EXTRA_WORK_LINE_COUNT_INVALID")
@@ -918,6 +918,58 @@ async function readInitialPaymentState(
 }
 
 /** Shared lock order for standalone issuance and issuance composed with goods-out. */
+/** Same customer lock as the shipment writer. Only issued, fully checked originals
+ * allocate a fee; proposals and retries never reserve a second money truth. */
+async function readShippingInvoiceLines(tx:PrivilegedTenantTransaction,tenantId:string,order:LockedOrder,amountCents:number|null,readVat:InvoiceVatReader){
+  const shipments=await tx.execute<{id:string;sendung_id:string|null}>(sql`
+    SELECT id::text,sendung_id::text FROM public.shipments
+    WHERE tenant_id=${tenantId} AND order_id=${order.id} ORDER BY created_at,id`);
+  const groups=new Map<string,{sendungId:string|null;shipmentId:string|null}>();
+  if(shipments.length===0)groups.set('order:'+order.id,{sendungId:null,shipmentId:null});
+  for(const shipment of shipments){
+    const key=shipment.sendung_id===null?'shipment:'+shipment.id:'sendung:'+shipment.sendung_id;
+    if(!groups.has(key))groups.set(key,{sendungId:shipment.sendung_id,shipmentId:shipment.id});
+  }
+  const lines:Array<{shipmentGroupId:string;amountCents:number;name:string}>=[];
+  for(const [groupKey,group] of groups){
+    const members=group.sendungId===null
+      ?[{order_id:order.id,customer_id:order.customer_id,shipment_id:group.shipmentId}]
+      :await tx.execute<{order_id:string;customer_id:string;shipment_id:string}>(sql`
+        SELECT shipment.order_id,orders.customer_id,shipment.id::text AS shipment_id
+        FROM public.shipments shipment JOIN public.orders orders
+          ON orders.tenant_id=shipment.tenant_id AND orders.id=shipment.order_id
+        WHERE shipment.tenant_id=${tenantId} AND shipment.sendung_id=${group.sendungId}::uuid
+        ORDER BY shipment.order_id,shipment.id`);
+    if(members.length===0||members.some(member=>member.customer_id!==order.customer_id)||!members.some(member=>member.order_id===order.id))throw Error('INVOICE_SHIPPING_GROUP_SOURCE_INVALID');
+    const orderIds=[...new Set(members.map(member=>member.order_id))];
+    const sourceKeys=new Set([groupKey,...members.flatMap(member=>['order:'+member.order_id,...(member.shipment_id===null?[]:['shipment:'+member.shipment_id])])]);
+    const originals=await tx.execute<LockedInvoice&{client_event_id:string;issued_by:string}>(sql`
+      SELECT invoice.* FROM public.invoices invoice
+      WHERE invoice.tenant_id=${tenantId} AND invoice.order_id IN (${sql.join(orderIds.map(value=>sql`${value}`),sql`,`)})
+        AND invoice.status='issued' AND invoice.contract_version=1
+      ORDER BY invoice.invoice_number FOR SHARE OF invoice`);
+    const charged:Array<{invoiceNumber:string}>=[];
+    for(const original of originals){
+      if(original.tenant_id!==tenantId||!orderIds.includes(original.order_id)||!INVOICE_NUMBER_PATTERN.test(original.invoice_number)||!original.pdf_content||!HEX64_PATTERN.test(original.pdf_sha256)
+        ||createHash('sha256').update(original.pdf_content).digest('hex')!==original.pdf_sha256)throw Error('INVOICE_SHIPPING_ORIGINAL_INVALID');
+      const snapshot=parseStoredSnapshot(original.snapshot,original,readVat);
+      const matching=snapshot.lines.filter(line=>line.type==='SHIPPING'&&sourceKeys.has(line.shipmentGroupId)&&(line.amountCents>0||line.name===SHIPPING_FEE_COPY.line));
+      if(matching.length>1)throw Error('INVOICE_SHIPPING_ALLOCATION_AMBIGUOUS');
+      if(matching.length===1){
+        const receipts=await readCreateInvoiceReceipts(tx,original.client_event_id);
+        if(receipts.length!==1)throw Error('INVOICE_SHIPPING_ORIGINAL_RECEIPT_MISSING');
+        const receipt=mapReceipt(receipts[0],tenantId,original.issued_by,readVat);
+        if(receipt.invoiceId!==original.id||receipt.invoiceNumber!==original.invoice_number)throw Error('INVOICE_SHIPPING_ORIGINAL_RECEIPT_INVALID');
+        charged.push({invoiceNumber:receipt.invoiceNumber});
+      }
+    }
+    if(charged.length>1)throw Error('INVOICE_SHIPPING_ALLOCATION_AMBIGUOUS');
+    if(charged.length===1)lines.push({shipmentGroupId:groupKey,amountCents:0,name:SHIPPING_FEE_COPY.inInvoice(charged[0].invoiceNumber)});
+    else if(amountCents!==null)lines.push({shipmentGroupId:groupKey,amountCents,name:SHIPPING_FEE_COPY.line});
+  }
+  return lines;
+}
+
 export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantId:string,input:{clientEventId:string;orderId:string}):Promise<void>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0))`);
   await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${tenantId},(SELECT customer_id FROM public.orders WHERE tenant_id=${tenantId} AND id=${input.orderId}))`);
@@ -1111,14 +1163,14 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       // an incomplete tenant, customer, order or position cannot consume one.
       let content: PreparedInvoiceContent;
       try {
-        let shippingFee:{shipmentGroupId:string;amountCents:number}|null=null;
+        let shippingFees:Array<{shipmentGroupId:string;amountCents:number;name:string}>=[];
         if(order.handover_mode==='shipping'){
           if(!readShippingSettings)throw Error('INVOICE_SHIPPING_SETTINGS_PORT_MISSING');
           const settings=await readShippingSettings(tx,tenantId);
           if(!settings||settings.shippingFeeCents===undefined)throw Error('INVOICE_SHIPPING_SETTINGS_SOURCE_MISSING');
-          if(settings.shippingFeeCents!==null)shippingFee={shipmentGroupId:'order:'+order.id,amountCents:settings.shippingFeeCents};
+          shippingFees=await readShippingInvoiceLines(tx,tenantId,order,settings.shippingFeeCents,requireVatReader(readVat));
         }
-        content = prepareInvoiceContent(source, order,shippingFee);
+        content = prepareInvoiceContent(source, order,shippingFees);
       } catch (error) {
         if (error instanceof InvoiceVatRateError) return {code:"VALIDATION_ERROR",message:error.missingCompany?INVOICE_VAT_COPY.missingCompanyRate(error.part):INVOICE_VAT_COPY.missingRate(error.part)};
         if (error instanceof InvoiceMasterDataError) {

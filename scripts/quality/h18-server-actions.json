@@ -42,7 +42,8 @@
       "src/test/h18_invoice_actions.integration.test.ts"
     ],
     "src/app/actions/invoices.actions.ts#issueInvoiceAction": [
-      "src/test/h18_invoice_actions.integration.test.ts"
+      "src/test/h18_invoice_actions.integration.test.ts",
+      "src/test/acceptance/s09_group_invoice_fee.integration.test.ts"
     ],
     "src/app/actions/invoices.actions.ts#setInvoiceItemPricesAction": [
       "src/test/h18_invoice_actions.integration.test.ts",

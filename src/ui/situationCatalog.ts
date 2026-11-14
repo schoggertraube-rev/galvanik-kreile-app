@@ -381,6 +381,7 @@ export const CUSTOMER_CREDIT_COPY={
 // S09: package text is fixed; additional failure copy stays in the same catalog (R8).
 export const SHIPPING_FEE_COPY={
  line:'Versand',
+ inInvoice:(number:string)=>`Versand in Rechnung ${number}`,
  missing:'Versandpauschale fehlt in den Einstellungen – trag sie dort ein',
  invalid:'Der Versandpreis muss ein Betrag ab 0,00 € sein. Leer heißt: kein Standard.',
  forbidden:'Den Standardversand ändern darf nur, wer Einstellungen ändern darf.',
