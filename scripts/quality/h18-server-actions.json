@@ -69,7 +69,8 @@
       "src/test/acceptance/storage_letter.integration.test.ts",
       "src/test/acceptance/s10_shipment_group.integration.test.ts",
       "src/test/acceptance/s10_shipment_queue.browser.integration.test.ts",
-      "src/test/acceptance/s10_release_credit.integration.test.ts"
+      "src/test/acceptance/s10_release_credit.integration.test.ts",
+      "src/test/acceptance/s10_partial_agreement.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#convertQuoteToOrderAction": [
       "src/test/h18_quote_actions.integration.test.ts"

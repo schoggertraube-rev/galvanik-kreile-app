@@ -665,7 +665,7 @@ class GoodsOutRejected extends Error{
 }
 
 type ShipmentSelection={ids:string[];groupEventId:string;trackingNumber:string;carrier:string;partial:boolean;deviceCapturedAt?:string};
-type PreparedGoodsOut={code:'PREPARED';complete:()=>Promise<GoodsOutReceipt|null>};
+type PreparedGoodsOut={code:'PREPARED';partialOverride?:{invoiceId:string;reason:string};complete:()=>Promise<GoodsOutReceipt|null>};
 type GoodsOutAuthorization=Extract<Awaited<ReturnType<typeof authorizeGoodsOutInput>>,{code:'AUTHORIZED'}>;
 /** One canonical gate/physical writer. The group composition prepares every
  * member in its outer transaction before invoking any physical completion. */
@@ -819,7 +819,8 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
           if(tracked.length>1||shared.length)return {code:'CONFLICT',message:SHIPMENT_GROUP_COPY.confirmGroup};
         }
       }
-      const preparation=await composition?.beforeWrite?.(tx,authorization.data);
+      // A partial parcel passes every gate but cannot create the final invoice.
+      const preparation=selection?.partial ? null : await composition?.beforeWrite?.(tx,authorization.data);
       if(preparation)return preparation;
       const invoices = await readActiveInvoice(tx, tenantId, order.id);
       const mainInvoices=invoices.filter(invoice=>invoice.belegart==='auftrag');
@@ -845,7 +846,7 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
         if (agreement.targetDays === null) {
           throw new Error("GOODS_OUT_COLLECTION_TERMS_INVALID");
         }
-      } else if (agreement !== null) {
+      } else if (agreement !== null && !(selection?.partial && invoiceNotIssued)) {
         if (
           invoiceNotIssued
           || !invoice
@@ -858,7 +859,7 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
           return { code: "VALIDATION_ERROR", message: "Rechnung fehlt." };
         }
       } else if (invoiceNotIssued) {
-        if (!isRework && order.payment_mode !== "rechnung") {
+        if (agreement === null && !isRework && order.payment_mode !== "rechnung") {
           return { code: "CONFLICT", message: "Warenausgang erfordert eine gültige Rechnung." };
         }
       } else {
@@ -919,7 +920,7 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
       }
 
       const customerId=order.customer_id;
-      return {code:'PREPARED',complete:async()=>{
+      return {code:'PREPARED',...(selection?.partial && input.overdueReleaseReason!==undefined ? {partialOverride:{invoiceId:overdueInvoices[0].id,reason:input.overdueReleaseReason}}:{}),complete:async()=>{
       if(selection?.partial){await handOverGroupParcels(tx,authorization.data,input,selection,null);return null;}
       if (agreement?.type === "sammelrechnung") {
         await attachOpenInvoiceCollection(tx, {
@@ -1171,6 +1172,22 @@ export async function recordShipmentGroupGoodsOut(candidate:unknown,compositionF
       AND shipment.shipped_at IS NOT NULL AND shipment.tracking_number=${receipt.trackingNumber} AND shipment.carrier=${receipt.carrier}`);
     if(facts.length!==1||facts[0].n!==1)throw Error('SHIPMENT_GROUP_PHYSICAL_PROOF_INVALID');
    }
+   // A partial release has no full goods-out receipt. Its immutable approval
+   // must instead name this actual group and exactly its selected parcels.
+   for(const member of members){
+    const selected=receipt.shipments.filter(parcel=>parcel.orderId===member.authorized.input.orderId);
+    if(selected.some(parcel=>parcel.goodsOutEventId!==null)||member.authorized.input.overdueReleaseReason===undefined)continue;
+    const audits=await tx.execute<{payload:{groupEventId:string;invoiceId:string;reason:string;shipmentIds:string[]};actor_id:string;version:number;notes:string;schema:number}>(sql`
+     SELECT audit.payload,audit.user_id::text AS actor_id,audit.aggregate_version AS version,audit.notes,audit.event_schema_version AS schema
+     FROM public.events audit JOIN public.orders own ON own.tenant_id=audit.tenant_id AND own.id=audit.order_id
+     JOIN public.invoices debt ON debt.tenant_id=audit.tenant_id AND debt.customer_id=own.customer_id AND debt.id::text=audit.payload->>'invoiceId'
+     WHERE audit.tenant_id=${auth.tenantId} AND audit.order_id=${member.authorized.input.orderId}
+       AND audit.event_type='ORDER_GOODS_OUT_DEBT_OVERRIDE_V1' AND audit.status='success'
+       AND audit.correlation_id=${groupEventId}::uuid`);
+    const audit=audits[0],reason=member.authorized.input.overdueReleaseReason;
+    if(audits.length!==1||audit.actor_id!==auth.userId||audit.schema!==2||Number(audit.version)!==member.authorized.input.expectedVersion||audit.notes!==reason
+      ||typeof audit.payload.invoiceId!=='string'||canonicalJson(audit.payload)!==canonicalJson({groupEventId,invoiceId:audit.payload.invoiceId,reason,shipmentIds:selected.map(parcel=>parcel.shipmentId).sort()}))throw Error('SHIPMENT_GROUP_OVERRIDE_PROOF_INVALID');
+   }
    return receipt;
   }
   const prior=await readOriginal();if(prior){
@@ -1240,6 +1257,13 @@ export async function recordShipmentGroupGoodsOut(candidate:unknown,compositionF
   const written=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,payload,status,client_event_id,event_schema_version,aggregate_version,created_at)
    VALUES(${groupEventId},${auth.tenantId},${input.orderId},'SHIPMENT_GROUP_HANDED_OVER_V1',${MANUAL_SHIPPING_HANDOVER_LABEL},${auth.userId}::uuid,${JSON.stringify({intent,receipt})}::jsonb,'success',${input.clientEventId}::uuid,1,1,${receipt.occurredAt}::timestamptz AT TIME ZONE 'UTC') RETURNING id`);
   if(written.length!==1||written[0].id!==groupEventId)throw Error('SHIPMENT_GROUP_ORIGINAL_MISSING');
+  for(const row of prepared){
+   const override=row.completion.partialOverride;if(!override)continue;
+   const written=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,payload,notes,status,client_event_id,correlation_id,event_schema_version,aggregate_version,station,from_station,created_at)
+    VALUES(gen_random_uuid()::text,${auth.tenantId},${row.member.authorized.input.orderId},'ORDER_GOODS_OUT_DEBT_OVERRIDE_V1',${GOODS_OUT_DEBT_COPY.overrideRecorded},${auth.userId}::uuid,
+      ${JSON.stringify({groupEventId,invoiceId:override.invoiceId,reason:override.reason,shipmentIds:[...row.ids].sort()})}::jsonb,${override.reason},'success',gen_random_uuid(),${groupEventId}::uuid,2,${row.member.authorized.input.expectedVersion},${SOURCE_STATION},${SOURCE_STATION},clock_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
+   if(written.length!==1)throw Error('SHIPMENT_GROUP_OVERRIDE_PROOF_MISSING');
+  }
   const proof=await readOriginal();if(!proof||canonicalJson(proof)!==canonicalJson(receipt))throw Error('SHIPMENT_GROUP_READBACK_MISMATCH');
   return {code:'OK',receipt,replayed:false};
  });}catch(error){if(error instanceof GoodsOutRejected)return error.result;logDatabaseFailure(error);return {code:'UNAVAILABLE',message:SHIPMENT_GROUP_COPY.unavailable};}
