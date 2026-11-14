@@ -12,6 +12,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {changeOrderPickupNoticeAction} from '@/app/actions/orders.actions';
 import {confirmPaymentAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
 import {getCustomerCreditAction,cancelInvoiceAction} from '@/app/actions/invoices.actions';
 import {COOKIE_NAME,signAppSession,getSecretKey} from '@/lib/server/appSession';
@@ -84,5 +85,22 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
   await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'credit.apply',input:${JSON.stringify(stale)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='CONFLICT'||result.currentCreditBalanceCents!==0||!result.message||pending.length!==1||pending[0].id!=='${stale.clientEventId}')throw Error('TEST_STALE_ORIGINAL_FALSE_ACK_OR_HIDDEN_REASON');return true;}`]);
   expect(calls).toBe(8);
   expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND customer_id=${source.customerId}`).toEqual([{n:4}]);
+  // S09 uses the same native store, producer, HTTP route and actual invoice writer.
+  // The previous unresolved credit original must remain while this other order succeeds.
+  const shipping=await readyInvoiceOrder('S09 native extra invoice','pickup',false,source.customerId,10000);
+  const [mainOriginal]=await sql`SELECT pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${shipping.invoice.invoiceId}::uuid`;
+  expect(await withSession(full,()=>changeOrderPickupNoticeAction({command:'handover_manual',orderId:shipping.orderId,expectedVersion:shipping.version,handoverMode:'shipping',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const [shippingOrder]=await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${shipping.orderId}`;
+  const issueKey=randomUUID(),issue={orderId:shipping.orderId,expectedVersion:shippingOrder.version,clientEventId:issueKey,shippingCosts:{invoiceId:shipping.invoice.invoiceId,expectedVersion:1,scope:'order:'+shipping.orderId,expectedFeeCents:1000}};
+  loseResponse=true;
+  await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'invoice.issue',input:${JSON.stringify(issue)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='UNAVAILABLE'||!pending.some(e=>e.id==='${issueKey}')||!pending.some(e=>e.id==='${stale.clientEventId}'))throw Error('TEST_ISSUE_RESPONSE_LOSS_FALSE_ACK');return true;}`]);
+  expect(await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${shipping.orderId}`).toEqual([{n:2}]);
+  actor=foreign;await cli(['goto',url]);await cli(['eval',setup]);
+  await cli(['eval',`async()=>{const before=JSON.stringify(await p.readPendingEntries('${scope}'));const result=await p.syncPendingFiles('${scope}',ports);if(result.acknowledged!==0||JSON.stringify(await p.readPendingEntries('${scope}'))!==before)throw Error('TEST_FOREIGN_ISSUE_ORIGINAL_CHANGED');return true;}`]);
+  actor=full;await cli(['goto',url]);await cli(['eval',setup]);
+  await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'invoice.issue',input:${JSON.stringify(issue)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='OK'||!result.replayed||result.financialCommand!=='invoice.issue'||pending.some(e=>e.id==='${issueKey}')||!pending.some(e=>e.id==='${stale.clientEventId}'))throw Error('TEST_ISSUE_RELOAD_RECEIPT_REQUIRED');return true;}`]);
+  expect(receipts.get(issueKey)).toHaveLength(2);expect(receipts.get(issueKey)![0]).toBe(receipts.get(issueKey)![1]);
+  expect(await sql`SELECT count(*)::int AS n,sum(net_amount_cents)::int AS total FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${shipping.orderId} AND belegart='versandkosten'`).toEqual([{n:1,total:1000}]);
+  expect(await sql`SELECT pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${shipping.invoice.invoiceId}::uuid`).toEqual([mainOriginal]);
  }finally{await execute(process.execPath,[process.env.KREILE_PLAYWRIGHT_CLI_JS!,`-s=${session}`,'close'],{timeout:30000}).catch(()=>{});await new Promise<void>(resolve=>server.close(()=>resolve()));}
 },120000);

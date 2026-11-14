@@ -5,11 +5,13 @@ import {readCacheScopeMarker} from './cacheScopeMarker';
 import type {IntakeOriginalTakeover} from '@/modules/eingang/public';
 import type {setOrderItemFinishedAction,changeOrderItemExtraWorkAction,OrderResponse} from '@/app/actions/orders.actions';
 import type {cancelInvoiceAction} from '@/app/actions/invoices.actions';
+import {isCreateInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 // Unacknowledged originals in one scoped queue. Server remains authoritative.
 export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
   | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number;takeover?:IntakeOriginalTakeover;takeoverSourceCanonical?:string};
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingFinancialCommand=
+ | {command:'invoice.issue';input:import('@/lib/domain/invoiceIntentContract').CreateInvoiceInput}
  | {command:'invoice.cancel';input:Parameters<typeof cancelInvoiceAction>[0]}
  | {command:'credit.apply';input:import('@/modules/accounting/public').CustomerCreditApplyInput}
  | {command:'credit.payout';input:import('@/modules/accounting/public').CustomerCreditPayoutInput};
@@ -28,6 +30,7 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  if(row.queueSequence!==undefined&&(typeof row.queueSequence!=='number'||!Number.isSafeInteger(row.queueSequence)||row.queueSequence<1))return false;
  const data=input as Record<string,unknown>,uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(v);
  if(row.command==='credit.payout')return Object.keys(data).sort().join(',')==='amount,clientEventId,customerId,expectedCreditVersion,method,note,reference'&&typeof data.customerId==='string'&&data.customerId.length>0&&data.customerId.length<=128&&row.itemId===data.customerId&&uuid(data.clientEventId)&&row.id===data.clientEventId&&Number.isSafeInteger(data.amount)&&Number(data.amount)>0&&Number.isSafeInteger(data.expectedCreditVersion)&&Number(data.expectedCreditVersion)>=0&&['bar','ueberweisung'].includes(String(data.method))&&(data.note===null||typeof data.note==='string')&&(data.reference===null||typeof data.reference==='object'&&!Array.isArray(data.reference));
+ if(row.command==='invoice.issue')return isCreateInvoiceInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderId;
  if(row.command==='invoice.cancel'||row.command==='credit.apply'){
   if(!uuid(data.invoiceId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.invoiceId||!Number.isSafeInteger(data.expectedVersion)||Number(data.expectedVersion)<0)return false;
   const keys=Object.keys(data).sort().join(',');
@@ -38,6 +41,9 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  const keys=Object.keys(data).sort().join(',');
  if(row.command==='item.finished')return keys==='clientEventId,expectedVersion,finished,itemId,orderId'&&Number.isSafeInteger(data.expectedVersion)&&typeof data.finished==='boolean';
  return row.command==='item.extraWork'&&keys==='active,catalogPositionId,clientEventId,expectedLineVersion,expectedOrderVersion,itemId,lineId,minutes,orderId'&&uuid(data.lineId)&&uuid(data.catalogPositionId)&&Number.isSafeInteger(data.expectedLineVersion)&&Number.isSafeInteger(data.expectedOrderVersion)&&typeof data.minutes==='number'&&Number.isFinite(data.minutes)&&typeof data.active==='boolean';
+}
+export function isPendingFinancialOriginal(entry:PendingWorkshopOriginal):entry is PendingWorkshopOriginal&PendingFinancialCommand{
+ return entry.command==='invoice.issue'||entry.command==='invoice.cancel'||entry.command==='credit.apply'||entry.command==='credit.payout';
 }
 const STORE = "originals";
 const SHELL_STORE = "shellMetadata";
@@ -459,8 +465,16 @@ export function isPendingWorkshopReceipt(scope:string,entry:PendingWorkshopOrigi
 export function isPendingWorkshopAcknowledgement(scope:string,entry:PendingWorkshopOriginal,value:unknown):boolean{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const result=value as Record<string,unknown>;
- if(entry.command==='invoice.cancel'||entry.command==='credit.apply'||entry.command==='credit.payout'){
+ if(isPendingFinancialOriginal(entry)){
   if(result.code!=='OK'||result.financialCommand!==entry.command)return false;
+  if(entry.command==='invoice.issue'){
+   const receipt=result.receipt,proof=result.offlineReceipt;
+   if(!receipt||typeof receipt!=='object'||Array.isArray(receipt)||!proof||typeof proof!=='object'||Array.isArray(proof))return false;
+   const invoice=receipt as Record<string,unknown>,ack=proof as Record<string,unknown>;
+   if(invoice.clientEventId!==entry.id||invoice.orderId!==entry.input.orderId||invoice.eventId!==ack.eventId||invoice.issuedBy!==ack.actorId
+     ||typeof invoice.invoiceId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(invoice.invoiceId)
+     ||typeof invoice.pdfSha256!=='string'||!/^[a-f0-9]{64}$/.test(invoice.pdfSha256))return false;
+  }
  }else if(result.code!=='OK'&&result.code!=='PRESERVED')return false;
  return isPendingWorkshopReceipt(scope,entry,result.offlineReceipt);
 }

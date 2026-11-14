@@ -1,3 +1,5 @@
+import {isCreateInvoiceInput as isValidInput,isInvoiceShippingCostsInput as validShippingCosts,type CreateInvoiceInput} from '@/lib/domain/invoiceIntentContract';
+export type {CreateInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
 import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
@@ -51,23 +53,6 @@ const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
 const HEX64_PATTERN = /^[a-f0-9]{64}$/;
 /** Canonical UTC instant, exactly as `to_char(... 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')` emits it. */
 const ISO_INSTANT_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
-
-export type CreateInvoiceInput = {
-  orderId: string;
-  expectedVersion: number;
-  clientEventId: string;
-  agreement?: {
-    id: string;
-    version: number;
-    type: "ausgabe_ohne_zahlung" | "zahlungsziel";
-  };
-  shippingCosts?: {
-    invoiceId: string;
-    expectedVersion: number;
-    scope: string;
-    expectedFeeCents: number;
-  };
-};
 
 type ImmutableInvoiceReceiptBase = {
   belegart?: 'versandkosten';
@@ -286,53 +271,6 @@ type LockedCancellationOrder = {
   id: string;
   tenant_id: string;
 };
-
-function isValidInput(input: unknown): input is CreateInvoiceInput {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
-  const value = input as Record<string, unknown>;
-  const expected = ["clientEventId", "expectedVersion", "orderId"];
-  const expectedWithAgreement = ["agreement", ...expected].sort();
-  const actual = Object.keys(value).sort();
-  const hasAgreement = actual.length === expectedWithAgreement.length
-    && actual.every((key, index) => key === expectedWithAgreement[index]);
-  const agreement = value.agreement;
-  const hasShipping = actual.join(',') === [...expected,'shippingCosts'].sort().join(',');
-  return (actual.length === expected.length
-      && actual.every((key, index) => key === expected[index])
-      || hasAgreement || hasShipping)
-    && typeof value.orderId === "string"
-    && value.orderId.trim() === value.orderId
-    && value.orderId.length > 0
-    && value.orderId.length <= 128
-    && typeof value.clientEventId === "string"
-    && UUID_PATTERN.test(value.clientEventId)
-    && typeof value.expectedVersion === "number"
-    && Number.isSafeInteger(value.expectedVersion)
-    && value.expectedVersion > 0
-    && (!hasShipping || validShippingCosts(value.shippingCosts,value.orderId as string))
-    && (!hasAgreement || (
-      agreement !== null
-      && typeof agreement === "object"
-      && !Array.isArray(agreement)
-      && Object.keys(agreement as Record<string, unknown>).sort().join(",") === "id,type,version"
-      && typeof (agreement as Record<string, unknown>).id === "string"
-      && UUID_PATTERN.test((agreement as Record<string, unknown>).id as string)
-      && typeof (agreement as Record<string, unknown>).version === "number"
-      && Number.isSafeInteger((agreement as Record<string, unknown>).version)
-      && ((agreement as Record<string, unknown>).version as number) > 0
-      && ((agreement as Record<string, unknown>).type === "ausgabe_ohne_zahlung"
-        || (agreement as Record<string, unknown>).type === "zahlungsziel")
-    ));
-}
-
-function validShippingCosts(value:unknown,orderId:string):value is NonNullable<CreateInvoiceInput['shippingCosts']>{
-  if(!plainObject(value)||Object.keys(value).sort().join(',')!=='expectedFeeCents,expectedVersion,invoiceId,scope')return false;
-  return typeof value.invoiceId==='string'&&UUID_PATTERN.test(value.invoiceId)
-    &&typeof value.expectedVersion==='number'&&Number.isSafeInteger(value.expectedVersion)&&value.expectedVersion>0
-    &&typeof value.expectedFeeCents==='number'&&Number.isSafeInteger(value.expectedFeeCents)&&value.expectedFeeCents>=0
-    &&typeof value.scope==='string'&&(value.scope==='order:'+orderId
-      ||value.scope.startsWith('sendung:')&&UUID_PATTERN.test(value.scope.slice(8))&&value.scope===value.scope.toLowerCase());
-}
 
 function isValidCancelInput(input: unknown): input is CancelInvoiceInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;

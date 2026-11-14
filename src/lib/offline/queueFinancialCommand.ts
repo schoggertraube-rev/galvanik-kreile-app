@@ -1,7 +1,8 @@
-import {retainPendingWorkshopOriginal,type PendingFinancialCommand,type PendingWorkshopOriginal} from './pendingStore';
+import {retainPendingWorkshopOriginal,isPendingWorkshopAcknowledgement,type PendingFinancialCommand,type PendingWorkshopOriginal} from './pendingStore';
 import {syncOriginals} from './syncOriginals';
 import type {WorkshopAcknowledgement} from './syncPendingFiles';
 import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 type FinancialAcknowledgement=Extract<WorkshopAcknowledgement['result'],{financialCommand:string}>;
 type FinancialFailure=Exclude<WorkshopAcknowledgement['result'],{code:'OK'|'PRESERVED'}>&{message:string};
@@ -9,13 +10,15 @@ type FinancialFailure=Exclude<WorkshopAcknowledgement['result'],{code:'OK'|'PRES
  * Queue absence or a cancellation PDF alone is never financial success. */
 export async function queueFinancialCommand(scope:string,command:PendingFinancialCommand,currentScope:()=>string|null){
  if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:CUSTOMER_CREDIT_COPY.unavailable};
- const original:PendingWorkshopOriginal={...command,id:command.input.clientEventId,itemId:command.command==='credit.payout'?command.input.customerId:command.input.invoiceId,kind:'workshop',deviceCapturedAt:new Date().toISOString()};
+ const original:PendingWorkshopOriginal={...command,id:command.input.clientEventId,itemId:command.command==='invoice.issue'?command.input.orderId:command.command==='credit.payout'?command.input.customerId:command.input.invoiceId,kind:'workshop',deviceCapturedAt:new Date().toISOString()};
  const acknowledgement:{value:FinancialAcknowledgement|null}={value:null};
  const failure:{value:FinancialFailure|null}={value:null};
  const accepted=(event:Event)=>{
   const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
   if(!proof||currentScope()!==scope||proof.scope!==scope||proof.entry.id!==original.id||proof.entry.command!==original.command)return;
-  if(proof.result.code==='OK'&&'financialCommand'in proof.result&&proof.result.financialCommand===original.command)acknowledgement.value=proof.result;
+  if(proof.result.code==='OK'&&'financialCommand'in proof.result&&proof.result.financialCommand===original.command
+    &&canonicalJson(proof.entry.input)===canonicalJson(original.input)
+    &&isPendingWorkshopAcknowledgement(scope,proof.entry,proof.result))acknowledgement.value=proof.result;
  };
  const rejected=(event:Event)=>{
   const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;

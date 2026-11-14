@@ -1,13 +1,13 @@
 'use server';
 import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {offlinePartition} from '@/lib/server/offlinePartition';
-import {isPendingWorkshopOriginal,type PendingWorkshopOriginal,type PendingPhysicalWorkshopOriginal} from '@/lib/offline/pendingStore';
+import {isPendingWorkshopOriginal,isPendingFinancialOriginal,type PendingWorkshopOriginal,type PendingPhysicalWorkshopOriginal} from '@/lib/offline/pendingStore';
 import {reconcileOfflineWorkshop} from '@/lib/server/offlineWorkshopConflictPort';
 import {setOrderItemFinishedAction,changeOrderItemExtraWorkAction} from './orders.actions';
 import {createOfflineWorkshopConflictTask} from '@/modules/tasks/server-public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
-import {cancelInvoiceAction,applyCustomerCreditAction,payoutCustomerCreditAction} from './invoices.actions';
+import {issueInvoiceAction,cancelInvoiceAction,applyCustomerCreditAction,payoutCustomerCreditAction} from './invoices.actions';
 
 /** Transport composition only. Business changes still use the existing writers,
  * their real session/rights and their original N5 key. No alternate actor exists.
@@ -22,8 +22,8 @@ async function replayCommand(scope:string,original:PendingWorkshopOriginal){
  if(!isPendingWorkshopOriginal(original)||!original.deviceCapturedAt||!Number.isFinite(Date.parse(original.deviceCapturedAt)))return {code:'VALIDATION_ERROR' as const};
  // Money originals share this transport/store/N5, but never the physical
  // conflict-preservation acknowledgement. Only a real financial OK is final.
- if(original.command==='invoice.cancel'||original.command==='credit.apply'||original.command==='credit.payout'){
-  const result=original.command==='invoice.cancel'?await cancelInvoiceAction(original.input):original.command==='credit.apply'?await applyCustomerCreditAction(original.input):await payoutCustomerCreditAction(original.input);
+ if(isPendingFinancialOriginal(original)){
+  const result=original.command==='invoice.issue'?await issueInvoiceAction(original.input):original.command==='invoice.cancel'?await cancelInvoiceAction(original.input):original.command==='credit.apply'?await applyCustomerCreditAction(original.input):await payoutCustomerCreditAction(original.input);
   if(result.code!=='OK')return result;
   return {...result,financialCommand:original.command,offlineReceipt:{scope,clientEventId:original.input.clientEventId,deviceCapturedAt:original.deviceCapturedAt,eventId:result.receipt.eventId,actorId:auth.data.userId}};
  }
