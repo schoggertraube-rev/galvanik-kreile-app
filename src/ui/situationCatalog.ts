@@ -303,11 +303,11 @@ export const MAIL_RESEND_COPY={
  canceled:(invoice:string)=>'Rechnung '+invoice+' ist storniert – Versand nicht mehr nötig'
 };
 export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich',rejected:'abgelehnt, ohne Wirkung',originalCommand:{
- 'item.finished':'TODO_PL offline.original.item_finished',
- 'item.extraWork':'TODO_PL offline.original.item_extra_work',
- 'invoice.cancel':'TODO_PL offline.original.invoice_cancel',
- 'credit.apply':'TODO_PL offline.original.credit_apply',
- 'credit.payout':'TODO_PL offline.original.credit_payout',
+ 'item.finished':'Teil fertig melden',
+ 'item.extraWork':'Mehrarbeit erfassen',
+ 'invoice.cancel':'Rechnung stornieren',
+ 'credit.apply':'Guthaben verrechnen',
+ 'credit.payout':'Guthaben auszahlen',
 }} as const;
 
 /** PL11.11.11:01: pending is not a successful server completion. */
