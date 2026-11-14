@@ -920,6 +920,7 @@ async function readInitialPaymentState(
 /** Shared lock order for standalone issuance and issuance composed with goods-out. */
 export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantId:string,input:{clientEventId:string;orderId:string}):Promise<void>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0))`);
+  await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${tenantId},(SELECT customer_id FROM public.orders WHERE tenant_id=${tenantId} AND id=${input.orderId}))`);
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:order:' || ${tenantId} || ':' || ${input.orderId}, 0))`);
 }
 

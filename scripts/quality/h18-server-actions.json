@@ -327,7 +327,9 @@
       "src/test/acceptance/manual_shipping.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#saveManualTrackingAction": [
-      "src/test/acceptance/manual_shipping.integration.test.ts"
+      "src/test/acceptance/manual_shipping.integration.test.ts",
+      "src/test/acceptance/s09_shipment_groups.integration.test.ts",
+      "src/test/acceptance/s09_shipping_group_preflight.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#markOrderInformedByPhoneAction": [
       "src/test/acceptance/order_notification.integration.test.ts"
