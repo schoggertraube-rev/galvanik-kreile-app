@@ -478,7 +478,7 @@ function parseStoredLine(value: unknown, schemaVersion: 1|2): ImmutableInvoiceLi
   throw new Error("INVOICE_SNAPSHOT_LINE_TYPE_INVALID");
 }
 
-function parseStoredSnapshot(value: unknown, invoice: LockedInvoice, readVat: InvoiceVatReader): ImmutableInvoiceSnapshot {
+function parseStoredSnapshot(value: unknown, invoice: {order_id:string}, readVat: InvoiceVatReader): ImmutableInvoiceSnapshot {
   if (!plainObject(value) || !exactKeys(value, [
     "customer", "issuedAt", "lines", "order", "paymentTermDays", "schemaVersion",
     "seller", "serviceDate", "totals",
@@ -823,24 +823,34 @@ function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInv
 
 export async function readCreateInvoiceReceipts(
   tx: PrivilegedTenantTransaction,
-  clientEventId: string,
+  clientEventId: string|{orderId:string},
 ): Promise<ReceiptRow[]> {
+  const byKey=typeof clientEventId==='string';
   return tx.execute<ReceiptRow>(sql`
     WITH receipt AS (SELECT *
     FROM private.v_invoice_receipt_v1
-    WHERE client_event_id = ${clientEventId}
+    WHERE ${byKey?sql`client_event_id = ${clientEventId}`:sql`order_id = ${clientEventId.orderId}`}
       AND event_type = ${EVENT_TYPE}
     UNION ALL
     SELECT *
     FROM private.v_invoice_created_receipt_v2
-    WHERE client_event_id = ${clientEventId}
+    WHERE ${byKey?sql`client_event_id = ${clientEventId}`:sql`order_id = ${clientEventId.orderId}`}
       AND event_type = ${EVENT_TYPE_V2}
     ) SELECT receipt.*,invoice.belegart,invoice.ursprung_rechnung_id::text,
       event.payload->'shippingCosts' AS shipping_costs_intent
     FROM receipt JOIN public.invoices invoice ON invoice.tenant_id=receipt.tenant_id AND invoice.id=receipt.invoice_id
     JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id
-    LIMIT 2
+    ${byKey?sql`LIMIT 2`:sql``}
   `);
+}
+
+async function readInvoiceIssueSource(tx:PrivilegedTenantTransaction,orderId:string){
+  return tx.execute<SourceRow>(sql`
+        SELECT source.*,EXISTS(SELECT 1 FROM private.quote_conversion_receipts receipt JOIN private.quotes quote ON quote.tenant_id=receipt.tenant_id AND quote.id=receipt.quote_id AND quote.linked_order_id=receipt.order_id WHERE receipt.tenant_id=source.tenant_id AND receipt.order_id=source.order_id) AS has_quote
+        FROM private.v_invoice_issue_source_v2 source
+        WHERE source.order_id = ${orderId}
+        LIMIT 2
+      `);
 }
 
 function cancellationReceiptMatchesIntent(
@@ -906,7 +916,7 @@ async function readInitialPaymentState(
 /** Shared lock order for standalone issuance and issuance composed with goods-out. */
 /** Same customer lock as the shipment writer. Only issued, fully checked originals
  * allocate a fee; proposals and retries never reserve a second money truth. */
-async function readShippingInvoiceLines(tx:PrivilegedTenantTransaction,tenantId:string,order:LockedOrder,amountCents:number|null,readVat:InvoiceVatReader){
+async function readShippingInvoiceLines(tx:PrivilegedTenantTransaction,tenantId:string,order:Pick<LockedOrder,'id'|'customer_id'>,amountCents:number|null,readVat:InvoiceVatReader){
   const shipments=await tx.execute<{id:string;sendung_id:string|null}>(sql`
     SELECT id::text,sendung_id::text FROM public.shipments
     WHERE tenant_id=${tenantId} AND order_id=${order.id} ORDER BY created_at,id`);
@@ -966,6 +976,49 @@ async function readShippingInvoiceLines(tx:PrivilegedTenantTransaction,tenantId:
   }
   return lines;
 }
+
+function shippingLinesForScope<T extends {shipmentGroupId:string}>(lines:T[],scope:string){
+ return lines.filter(line=>scope.startsWith('sendung:')?line.shipmentGroupId===scope:!line.shipmentGroupId.startsWith('sendung:'));
+}
+
+/** N2 read projection only: same fee allocator and qualified original receipts
+ * as issuance. No number, reservation, new click key or financial effect on read. */
+export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:{orderId:string;expectedVersion:number},readVat:InvoiceVatReader,readSettings:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>){
+ if(!hasAuthorizationArea(auth,'geld'))return undefined;
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${auth.tenantId},(SELECT customer_id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId}))`);
+  const rows=await tx.execute<Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'version'>>(sql`SELECT id,customer_id,handover_mode,version FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId} FOR SHARE`);
+  const order=rows[0];
+  if(rows.length!==1||!order||order.version!==input.expectedVersion||!['pickup','shipping'].includes(order.handover_mode??''))throw Error('SHIPPING_PROPOSAL_ORDER_SOURCE_INVALID');
+  const settings=await readSettings(tx,auth.tenantId);
+  if(!settings||settings.shippingFeeCents===undefined)throw Error('SHIPPING_PROPOSAL_SETTINGS_SOURCE_MISSING');
+  const lines=order.handover_mode==='shipping'?await readShippingInvoiceLines(tx,auth.tenantId,order,settings.shippingFeeCents,readVat):[];
+  const originals=await readCreateInvoiceReceipts(tx,{orderId:order.id});
+  const sourceRows=await readInvoiceIssueSource(tx,order.id),source=sourceRows[0];
+  if(sourceRows.length!==1||!source||source.tenant_id!==auth.tenantId||source.order_id!==order.id||source.customer_id!==order.customer_id||source.current_order_version!==order.version||typeof source.no_active_invoice!=='boolean')throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_INVALID');
+  // Validate historical originals as well; a broken receipt is never silently
+  // treated as absence of an issued invoice.
+  const active=originals.map(row=>({row,receipt:mapInvoiceIssueReceipt(row,auth.tenantId,row.actor_id,readVat)})).filter(value=>value.row.current_status==='issued');
+  const main=active.filter(value=>value.row.belegart==='auftrag');
+  if(main.length>1||active.length>0&&main.length!==1||source.no_active_invoice!==(main.length===0))throw Error('SHIPPING_PROPOSAL_ORIGINAL_AMBIGUOUS');
+  const additionalInvoices:Array<{originalInvoiceNumber:string;label:string;befehl:{datei:'src/app/actions/invoices.actions.ts';funktion:'issueInvoiceAction';argumente:Omit<CreateInvoiceInput,'clientEventId'>}}>=[];
+  if(main.length===1){
+   const scopes=[...new Set(lines.map(line=>line.shipmentGroupId.startsWith('sendung:')?line.shipmentGroupId:'order:'+order.id))];
+   for(const scope of scopes){
+    const selected=shippingLinesForScope(lines,scope);if(!selected.some(line=>line.name===SHIPPING_FEE_COPY.line))continue;
+    const amount=selected.reduce((sum,line)=>sum+line.amountCents,0),parent=main[0];
+    if(!Number.isSafeInteger(amount)||amount<0)throw Error('SHIPPING_PROPOSAL_AMOUNT_INVALID');
+    // Customer display is already part of the immutable qualified invoice, not
+    // a second lookup or a client-provided invoice/customer association.
+    const snapshot=parseStoredSnapshot(parent.row.snapshot,parent.row,readVat);
+    additionalInvoices.push({originalInvoiceNumber:parent.receipt.invoiceNumber,label:SHIPPING_FEE_COPY.additional(formatShippingFee(amount),snapshot.customer.name),
+     befehl:{datei:'src/app/actions/invoices.actions.ts',funktion:'issueInvoiceAction',argumente:{orderId:order.id,expectedVersion:order.version,shippingCosts:{invoiceId:parent.receipt.invoiceId,expectedVersion:parent.row.current_version,scope,expectedFeeCents:amount}}}});
+   }
+  }
+  return {code:'OK' as const,orderId:order.id,orderVersion:order.version,feeCents:settings.shippingFeeCents,lines,additionalInvoices,...(settings.shippingFeeCents===null?{hintKey:'versand.pauschale_fehlt' as const}: {})};
+ });}catch(error){console.error('[INVOICE_SHIPPING_PROPOSAL_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const,orderId:input.orderId,orderVersion:input.expectedVersion,datenluecken:['SHIPPING_INVOICE_SOURCE']};}
+}
+function formatShippingFee(cents:number){return new Intl.NumberFormat('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(cents/100)+' €';}
 
 export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantId:string,input:{clientEventId:string;orderId:string}):Promise<void>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0))`);
@@ -1078,12 +1131,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
 
       // service_date arrives Berlin-normalised from the read port. The command
       // never derives a calendar day from the database session time zone.
-      const sourceRows = await tx.execute<SourceRow>(sql`
-        SELECT source.*,EXISTS(SELECT 1 FROM private.quote_conversion_receipts receipt JOIN private.quotes quote ON quote.tenant_id=receipt.tenant_id AND quote.id=receipt.quote_id AND quote.linked_order_id=receipt.order_id WHERE receipt.tenant_id=source.tenant_id AND receipt.order_id=source.order_id) AS has_quote
-        FROM private.v_invoice_issue_source_v2 source
-        WHERE source.order_id = ${order.id}
-        LIMIT 2
-      `);
+      const sourceRows = await readInvoiceIssueSource(tx,order.id);
       const source = sourceRows[0];
       if (sourceRows.length !== 1 || !source) {
         return { code: "NOT_FOUND", message: "Rechnungsgrundlage nicht verfügbar." };
@@ -1192,7 +1240,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         }
         if(input.shippingCosts){
           const intent=input.shippingCosts;
-          shippingFees=shippingFees.filter(line=>intent.scope.startsWith('sendung:')?line.shipmentGroupId===intent.scope:!line.shipmentGroupId.startsWith('sendung:'));
+          shippingFees=shippingLinesForScope(shippingFees,intent.scope);
           if(shippingFees.length===0||!shippingFees.some(line=>line.name===SHIPPING_FEE_COPY.line)
             ||shippingFees.reduce((sum,line)=>sum+line.amountCents,0)!==intent.expectedFeeCents){
             return {code:'CONFLICT',message:SHIPPING_FEE_COPY.changed};
