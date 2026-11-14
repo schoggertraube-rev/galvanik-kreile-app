@@ -16,7 +16,7 @@ export type CompanySettingsInput = {
 export type CompanySettingsSnapshot = {
   [Key in keyof CompanySettingsInput]: CompanySettingsInput[Key] | null;
 };
-export type CompanyLetterSettings=Pick<CompanySettingsInput,'companyName'|'street'|'zip'|'city'|'country'>;
+export type CompanyLetterSettings=Pick<CompanySettingsInput,'companyName'|'street'|'zip'|'city'|'country'>&{phone?:string|null;taxId?:string|null;logoUrl?:string|null};
 export type ShippingSettings = {
   shippingFeeCents?:number|null;
   dispatchPolicy?:import('./dispatchPolicy').DispatchPolicy|null;

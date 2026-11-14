@@ -177,7 +177,7 @@ export async function generateDeliveryNote(input:string|string[]|import('@/lib/d
   import('@/lib/server/deliveryNotePort'),import('@/modules/fundament/server-public'),import('@/modules/customers/server-public'),import('@/modules/accounting/server-public'),import('@/lib/pdf/DeliveryNote')
  ]);
  const result=await generatePaidDeliveryNote(auth.data,input,{readVat:readInvoiceVat,readCustomer:readCustomerProfile,
-  readCompany:()=>readCompanyLetterSettings({tenantId:auth.data.tenantId,actorId:auth.data.userId,canRead:true}),
+  readCompany:()=>readCompanyLetterSettings({tenantId:auth.data.tenantId,actorId:auth.data.userId,canRead:true,includeDeliveryNoteIdentity:true}),
   render:async snapshot=>new Uint8Array(await renderToBuffer(createDeliveryNotePdfDocument(snapshot)))});
  if(!legacy)return result;
  if(result.code!=='OK')throw Error(result.message);

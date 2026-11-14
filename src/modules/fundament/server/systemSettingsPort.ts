@@ -41,15 +41,17 @@ export type SystemSettingsContext = {
   canManageSystem?: boolean;
   canManageFinancial?: boolean;
 };
-export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean };
+export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean;includeDeliveryNoteIdentity?:boolean };
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null };
 /** Letters need the real sender address, not invoice-only bank/tax configuration. */
 export async function readCompanyLetterSettings(context:CompanyDocumentContext){
  if(!context.canRead)return {code:'FORBIDDEN' as const};
  try{return await withPrivilegedTenantTransaction(context,async tx=>{
-  const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country FROM public.company_settings WHERE tenant_id=${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
-  if(rows.length!==1)return {code:'NOT_FOUND' as const};
-  if(Object.values(rows[0]).some(value=>typeof value!=='string'||!value.trim()))return {code:'VALIDATION_ERROR' as const};
+  const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country${context.includeDeliveryNoteIdentity?sql`,phone,tax_id AS "taxId",logo_url AS "logoUrl"`:sql``} FROM public.company_settings WHERE tenant_id=${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+  if(!rows.length)return {code:'NOT_FOUND' as const};
+  if(rows.length!==1)return {code:'UNAVAILABLE' as const};
+  const missingFields=(['companyName','street','zip','city','country'] as const).filter(key=>typeof rows[0][key]!=='string'||!rows[0][key].trim());
+  if(missingFields.length)return {code:'VALIDATION_ERROR' as const,missingFields};
   return {code:'OK' as const,company:rows[0]};
  });}catch(error){logSystemSettingsPortFailure('COMPANY_LETTER_SETTINGS_READ_FAILED',error);return {code:'UNAVAILABLE' as const};}
 }

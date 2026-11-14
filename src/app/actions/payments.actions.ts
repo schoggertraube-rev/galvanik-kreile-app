@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import {V45_RUNTIME} from "@/ui/v45.generated";
+import {DELIVERY_NOTE_COPY,SITUATION_COPY} from "@/ui/situationCatalog";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import type {
@@ -67,11 +69,12 @@ export async function setPaymentModeAction(
 }
 
 export type GetOrderPaymentStateActionResult =
-  | OrderPaymentStateReadResult
+  | (Extract<OrderPaymentStateReadResult,{code:"OK"}>&{deliveryNoteSource?:import("@/lib/domain/deliveryNoteContract").DeliveryNoteSourceRead})
+  | Exclude<OrderPaymentStateReadResult,{code:"OK"}>
   | { code: "UNAUTHENTICATED"; message: string };
 
 export async function getOrderPaymentStateAction(
-  input: { orderId: string },
+  input: { orderId: string; includeDeliveryNoteSource?:boolean },
 ): Promise<GetOrderPaymentStateActionResult> {
   try {
     const authorization = await resolveActionAuthorization();
@@ -81,7 +84,19 @@ export async function getOrderPaymentStateAction(
       const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
       return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
     }:undefined;
-    return getPaymentState(authorization.data, input.orderId,readCredit);
+    const state=await getPaymentState(authorization.data,input.orderId,readCredit);
+    if(state.code!=='OK'||!input.includeDeliveryNoteSource)return state;
+    try{
+    const [{readDeliveryNoteSource},{readCompanyLetterSettings},{readCustomerProfile},{readInvoiceVat}]=await Promise.all([
+      import('@/lib/server/deliveryNotePort'),import('@/modules/fundament/server-public'),import('@/modules/customers/server-public'),import('@/modules/accounting/server-public')
+    ]);
+    const deliveryNoteSource=await readDeliveryNoteSource(authorization.data,[input.orderId],{readVat:readInvoiceVat,readCustomer:readCustomerProfile,
+      readCompany:()=>readCompanyLetterSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true,includeDeliveryNoteIdentity:true})});
+    return {...state,deliveryNoteSource};
+    }catch(error){
+      console.error('[ORDER_DELIVERY_NOTE_SOURCE_ACTION_FAILED]',error instanceof Error?error.name:'UnknownError');
+      return {...state,deliveryNoteSource:{code:'UNAVAILABLE',message:V45_RUNTIME.texte['error.server'].text.replace('{gegenstand}',DELIVERY_NOTE_COPY.title).replace('{ausweg}',SITUATION_COPY.retry)}};
+    }
   } catch (error) {
     console.error("[ORDER_CARD_PAYMENT_ACTION_ERROR]", {
       orderId: input.orderId,
