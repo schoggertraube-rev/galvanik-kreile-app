@@ -196,15 +196,14 @@ it('E3 creates one real visible callback for the collective cohort; mandatory re
  expect(await withSession(denied,()=>completeIntakeTaskAction({...input,callResult:'reached'}))).toMatchObject({code:'FORBIDDEN'});
 });
 it('E5 creation racing both physical handovers leaves no open task for ware that has left',async()=>{
- const {first,second,request}=await prepare('E5-Ausgabe-Rennen');
- const call=await withSession(full,()=>createDispatchCallTaskAction(request));if(call.code!=='OK')throw Error('E5_RACE_CALL');
- const task=await withSession(full,()=>getIntakeTaskAction({taskId:call.taskId}));if(task.code!=='OK'||!task.task)throw Error('E5_RACE_TASK');
- expect(await withSession(full,()=>completeIntakeTaskAction({taskId:call.taskId,version:task.task!.version,note:'TEST nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
+ const {first,second,clock}=await prepare('E5-Ausgabe-Rennen');
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK'||!settings.settings.dispatchPolicy)throw Error('E5_RACE_SETTINGS');
  expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy,storageAfterDays:0,finalStageAfterLetterDays:0,finalStageRecipientId:full.actorId}}))).toMatchObject({code:'OK'});
+ const call=await clock.addUnreachedCall(first.customerId,[first.orderId,second.orderId],1),day=berlinCalendarDay(new Date(historicalDispatchDate(clock.databaseNow,0)));
+ await clock.addReminder(first.customerId,[first.orderId,second.orderId],'E4',0,{callTaskId:call.taskId,freezes:call.meta.freezes,deadline:{date:day,due:day}});
  const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('E5_RACE_QUEUE');
  const letter=queue.data.find(row=>row.id===first.orderId)?.finishedDispatch?.storage?.letter;if(!letter)throw Error('E5_RACE_LETTER');
- expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST Lagerfrist',body:'TEST Bitte melde Dich zur Übergabe.',collectionReminder:{stage:'E4',handover:'pickup',dueDate:letter.due,clientKey:letter.clientKey}}))).toMatchObject({code:'OK'});
+ expect(letter).toMatchObject({state:'SENT',finalStage:{state:'DUE',due:day}});
  const versions=queue.data.filter(row=>[first.orderId,second.orderId].includes(row.id));expect(versions).toHaveLength(2);
  const [created,...outputs]=await Promise.all([withSession(full,()=>createStorageFinalTaskAction({customerId:first.customerId,handover:'pickup',clientKey:letter.clientKey})),...versions.map(row=>withSession(full,()=>recordGoodsOutAction({orderId:row.id,mode:'abholung',expectedVersion:row.version,clientEventId:randomUUID()})))]);
  expect(['OK','CONFLICT','UNAVAILABLE']).toContain(created.code);for(const output of outputs)expect(output).toMatchObject({code:'OK'});
@@ -315,29 +314,31 @@ it('handing over the remaining goods completes the existing callback atomically 
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND payload->'receipt'->>'threadId'=${noticeThreadId} AND order_id IN (${first.orderId},${second.orderId})`).toEqual([{n:2}]);
 });
 it('PL07:00 keeps reached cohorts stopped and starts a distinct ladder for later ware, even on the same due day; original retries never open the new task',async()=>{
- const {first,second,request}=await prepare('E3-NeueLeiter');
+ const {first,second,request,clock}=await prepare('E3-NeueLeiter');
  const old=await withSession(full,()=>createDispatchCallTaskAction(request));if(old.code!=='OK')throw Error('NEW_LADDER_OLD');
  const oldRead=await withSession(full,()=>getIntakeTaskAction({taskId:old.taskId}));if(oldRead.code!=='OK'||!oldRead.task)throw Error('NEW_LADDER_TASK');
  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:old.taskId,version:oldRead.task!.version,note:'TEST alte Gruppe erreicht',callResult:'reached'}))).toMatchObject({code:'OK'});
  const later=await readyInvoiceOrder('E3-Neue-Ware','pickup',false,first.customerId);
  const notify=async(order:typeof later)=>withSession(full,()=>sendCustomerMailAction({targetType:'ORDER',targetId:order.orderId,clientRequestId:randomUUID(),subject:'TEST Neue Ware fertig',body:'TEST Neu fertig',expectedInvoiceIds:[order.invoice.invoiceId],attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId}}));
- expect(await notify(later)).toMatchObject({code:'OK'});
+ const laterNotice=await notify(later);expect(laterNotice).toMatchObject({code:'OK'});if(laterNotice.code!=='OK')throw Error('TEST_NEW_LADDER_NOTICE');
  for(const id of [first.orderId,second.orderId])expect(await proposal(id)).toMatchObject({state:'STOPPED',callTaskId:old.taskId});
- let planned=await proposal(later.orderId);expect(planned).toMatchObject({stage:'E1',state:'DUE',orderIds:[later.orderId]});
+ let planned=await proposal(later.orderId);expect(planned).toMatchObject({stage:'E1',...dispatchFollowupBoundary(laterNotice.data.recordedAt,0,clock.databaseNow),orderIds:[later.orderId]});
  expect(await withSession(full,()=>createDispatchCallTaskAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',taskId:old.taskId,replayed:true});
- if(!planned.due)throw Error('NEW_LADDER_E1');
- expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST Neue erste Erinnerung',body:'TEST Neue Ware abholen',collectionReminder:{stage:'E1',handover:'pickup',dueDate:planned.due!}}))).toMatchObject({code:'OK'});
+ // Separate historical E1/E2 starting facts; the following real call still
+ // proves that old reached cohorts and retries cannot enter the new group.
+ await clock.addNotice(later.orderId,6);
+ await clock.addReminder(first.customerId,[later.orderId],'E1',4);
  const fourth=await readyInvoiceOrder('E3-Noch-Ware','pickup',false,first.customerId);expect(await notify(fourth)).toMatchObject({code:'OK'});
+ await clock.addNotice(fourth.orderId,6);
  planned=await proposal(later.orderId);expect(planned).toMatchObject({stage:'E2',state:'DUE'});expect(planned.orderIds.slice().sort()).toEqual([later.orderId,fourth.orderId].sort());
- if(!planned.due)throw Error('NEW_LADDER_E2');
- expect(await withSession(full,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST Neue zweite Erinnerung',body:'TEST Beide neuen Aufträge',collectionReminder:{stage:'E2',handover:'pickup',dueDate:planned.due!}}))).toMatchObject({code:'OK'});
+ await clock.addReminder(first.customerId,[later.orderId,fourth.orderId],'E2',2);
  planned=await proposal(later.orderId);if(!planned.due||!planned.clientKey)throw Error('NEW_LADDER_E3');
  const nextRequest={customerId:first.customerId,handover:'pickup' as const,dueDate:planned.due,clientKey:planned.clientKey};expect(nextRequest.clientKey).not.toBe(request.clientKey);
  const next=await withSession(full,()=>createDispatchCallTaskAction(nextRequest));expect(next).toMatchObject({code:'OK'});if(next.code!=='OK')throw Error('NEW_LADDER_CREATE');expect(next.taskId).not.toBe(old.taskId);
  expect(await withSession(full,()=>createDispatchCallTaskAction(structuredClone(request)))).toMatchObject({code:'OK',taskId:old.taskId,replayed:true});
  const nextRead=await withSession(full,()=>getIntakeTaskAction({taskId:next.taskId}));if(nextRead.code!=='OK'||!nextRead.task)throw Error('NEW_LADDER_NEW_TASK');
  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:next.taskId,version:nextRead.task!.version,note:'TEST neue Gruppe erreicht',callResult:'reached'}))).toMatchObject({code:'OK'});
- const fifth=await readyInvoiceOrder('E3-Dritte-Generation','pickup',false,first.customerId);expect(await notify(fifth)).toMatchObject({code:'OK'});
- expect(await proposal(fifth.orderId)).toMatchObject({stage:'E1',state:'DUE',orderIds:[fifth.orderId]});
+ const fifth=await readyInvoiceOrder('E3-Dritte-Generation','pickup',false,first.customerId);const fifthNotice=await notify(fifth);expect(fifthNotice).toMatchObject({code:'OK'});if(fifthNotice.code!=='OK')throw Error('TEST_FIFTH_NOTICE');
+ expect(await proposal(fifth.orderId)).toMatchObject({stage:'E1',...dispatchFollowupBoundary(fifthNotice.data.recordedAt,0,clock.databaseNow),orderIds:[fifth.orderId]});
  for(const id of [first.orderId,second.orderId,later.orderId,fourth.orderId])expect(await proposal(id)).toMatchObject({state:'STOPPED'});
 });
