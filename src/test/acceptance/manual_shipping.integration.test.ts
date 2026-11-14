@@ -9,6 +9,26 @@ import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 const DATABASE_URL=process.env.DATABASE_URL,EXPECTED_DATABASE_URL=process.env.H18_EXPECTED_DATABASE_URL;
 if(!DATABASE_URL||DATABASE_URL!==EXPECTED_DATABASE_URL||new URL(DATABASE_URL).hostname!=='127.0.0.1')throw Error('MANUAL_SHIPPING_LOOPBACK_REPLAY_REQUIRED');
 
+it('A10-1/3 a label without a secured tracking receipt cannot release the actual goods',async()=>{
+ const order=await readyInvoiceOrder('TEST S10 Etikett ist keine Übergabe','shipping');
+ // Explicit synthetic provider-label boundary; no purchase or carrier handover.
+ const shipmentId=randomUUID();
+ await sql`INSERT INTO public.shipments(id,tenant_id,order_id,carrier,status,label_url) VALUES(${shipmentId}::uuid,${KREILE_TENANT_SLUG},${order.orderId},'TEST S10 Paket','created','https://example.invalid/TEST-label.pdf')`;
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const input={orderId:order.orderId,mode:'versand' as const,expectedVersion:order.version,clientEventId:randomUUID()};
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`;
+ expect(await withSession(full,()=>recordGoodsOutAction(input))).toMatchObject({code:'VALIDATION_ERROR',message:'Sendungsnummer fehlt – trag sie ein'});
+ expect(await withSession(full,()=>recordGoodsOutAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'VALIDATION_ERROR'});
+ // A number on a synthetic provider row alone still is not the secured
+ // original from the existing manual tracking writer.
+ await sql`UPDATE public.shipments SET tracking_number='TEST-unproven-label-number' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${shipmentId}::uuid`;
+ expect(await withSession(full,()=>recordGoodsOutAction({...input,clientEventId:randomUUID()}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'fertig',version:order.version}}});
+ expect(await sql`SELECT status,shipped_at FROM public.shipments WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${shipmentId}::uuid`).toEqual([{status:'created',shipped_at:null}]);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual(before);
+});
+
 it('A10-3b empty tracking format accepts a real nonempty number and retains the original across reload and actor-bound retry',async()=>{
  const order=await readyInvoiceOrder('TEST S10 freies Nummernformat','shipping');
  const {readShippingSettingsAction,saveShippingSettingsAction}=await import('@/app/actions/settings.actions');

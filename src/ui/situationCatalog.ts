@@ -183,6 +183,7 @@ export const MANUAL_SHIPPING_COPY={
  SHIPPING_FORBIDDEN:'Du hast für diesen Versand keine Freigabe.',ORDER_ID_INVALID:'Wähle den Auftrag erneut.',ORDER_NOT_FOUND:'Der Auftrag ist nicht verfügbar. Lade ihn erneut.',
  ORDER_NOT_SHIPPING:'Dieser Auftrag wird abgeholt. Öffne die Abholkarte.',SHIPPING_SETTINGS_MISSING:'Trag den Versanddienst in den Einstellungen ein.',
  MANUAL_SHIPPING_READ_FAILED:'Die Versanddaten konnten nicht geladen werden. Versuch es erneut.',TRACKING_INPUT_INVALID:'Prüf die Sendungsnummer und öffne das Paket erneut.',
+ TRACKING_NUMBER_MISSING:'Sendungsnummer fehlt – trag sie ein',
  TRACKING_KEY_CONFLICT:'Diese Buchungskennung gehört zu einer anderen Änderung. Lade das Paket erneut.',TRACKING_PATTERN_INVALID:'Korrigiere das Nummernmuster in den Versand-Einstellungen.',TRACKING_PATTERN_MISSING:'Trag das Nummernmuster in den Versand-Einstellungen ein. Die Nummer bleibt ungebucht.',
  TRACKING_FORMAT_CONFIRMATION_REQUIRED:'Die Nummer sieht nicht nach dem eingestellten Versanddienst aus. Du kannst sie ausdrücklich trotzdem übernehmen.',
  SHIPPING_RELEASE_BLOCKED:'Das Paket darf noch nicht raus. Öffne die Zahlung oder die Ausgabesperre am Auftrag.',TRACKING_ALREADY_ASSIGNED:'Die Nummer gehört schon zu einem anderen Paket. Öffne dieses Paket.',

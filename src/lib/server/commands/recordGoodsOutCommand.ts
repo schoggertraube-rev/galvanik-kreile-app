@@ -1,6 +1,6 @@
 import "server-only";
 import {readOpenOrderComplaint} from '@/lib/server/orderReleaseRead';
-import {COMPLAINT_ORDER_COPY,MANUAL_SHIPPING_HANDOVER_LABEL,SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
+import {COMPLAINT_ORDER_COPY,MANUAL_SHIPPING_COPY,MANUAL_SHIPPING_HANDOVER_LABEL,SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 
 import { randomUUID } from "node:crypto";
 import { GOODS_OUT_DEBT_COPY } from "@/ui/situationCatalog";
@@ -33,6 +33,19 @@ const SOURCE_STATION = ORDER_LIFECYCLE_STATUS.FERTIG;
 const TARGET_STATION = ORDER_LIFECYCLE_STATUS.ABGEHOLT;
 const GOODS_OUT_MODES = ["versand", "abholung"] as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/** One qualification for the pre-write gate and the actual shipment update.
+ * Labels and arbitrary parcel numbers are not a secured tracking receipt. */
+function manualTrackingParcelPredicate(){return sql`
+ shipment.status='created' AND shipment.shipped_at IS NULL
+ AND length(btrim(shipment.tracking_number))>0
+ AND EXISTS(SELECT 1 FROM public.events proof
+   WHERE proof.tenant_id=shipment.tenant_id AND proof.order_id=shipment.order_id
+     AND proof.event_type='SHIPMENT_MANUAL_TRACKING_SET_V1' AND proof.status='success'
+     AND proof.user_id IS NOT NULL AND proof.payload->'receipt'->>'shipmentId'=shipment.id::text
+     AND proof.payload->'receipt'->>'trackingNumber'=shipment.tracking_number
+     AND proof.payload->'receipt'->>'carrier'=shipment.carrier)
+`;}
 
 export type GoodsOutMode = (typeof GOODS_OUT_MODES)[number];
 
@@ -770,6 +783,13 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
         return { code: "CONFLICT", message: "Ausgabe ist noch nicht freigegeben. Zahlung oder Abschluss fehlt." };
       }
 
+      if(input.mode==='versand'){
+        const tracked=await tx.execute<{id:string}>(sql`SELECT shipment.id::text
+          FROM public.shipments shipment WHERE shipment.tenant_id=${tenantId}
+            AND shipment.order_id=${order.id} AND ${manualTrackingParcelPredicate()}
+          ORDER BY shipment.id FOR UPDATE OF shipment`);
+        if(!tracked.length)return {code:'VALIDATION_ERROR',message:MANUAL_SHIPPING_COPY.TRACKING_NUMBER_MISSING};
+      }
       const preparation=await composition?.beforeWrite?.(tx,authorization.data);
       if(preparation)return preparation;
       const invoices = await readActiveInvoice(tx, tenantId, order.id);
@@ -1031,13 +1051,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
           UPDATE public.shipments shipment SET status='shipped',shipped_at=${receipt.occurredAt}::timestamptz,
             updated_at=${receipt.occurredAt}::timestamptz
           WHERE shipment.tenant_id=${tenantId} AND shipment.order_id=${order.id}
-            AND shipment.status='created' AND shipment.shipped_at IS NULL
-            AND EXISTS(SELECT 1 FROM public.events proof
-              WHERE proof.tenant_id=shipment.tenant_id AND proof.order_id=shipment.order_id
-                AND proof.event_type='SHIPMENT_MANUAL_TRACKING_SET_V1' AND proof.status='success'
-                AND proof.user_id IS NOT NULL AND proof.payload->'receipt'->>'shipmentId'=shipment.id::text
-                AND proof.payload->'receipt'->>'trackingNumber'=shipment.tracking_number
-                AND proof.payload->'receipt'->>'carrier'=shipment.carrier)
+            AND ${manualTrackingParcelPredicate()}
           RETURNING shipment.id::text,shipment.tracking_number,shipment.carrier
         `);
         for(const parcel of parcels)await tx.execute(sql`

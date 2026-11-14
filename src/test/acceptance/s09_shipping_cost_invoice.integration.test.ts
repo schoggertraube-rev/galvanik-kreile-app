@@ -8,7 +8,7 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {readyInvoiceOrder,manualTrackingFixture} from '../../../e2e/ablauf/orderFixture';
 import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
 import {issueInvoiceAction,getInvoiceReceiptAction,cancelInvoiceAction} from '@/app/actions/invoices.actions';
 import {getOrderPaymentStateAction,confirmPaymentAction,setPaymentModeAction} from '@/app/actions/payments.actions';
@@ -68,6 +68,7 @@ it('A09-8 a missing real additional-cost event rolls everything back; two fresh 
 
 it('A09-6 each actual payment is visible and required: main paid alone blocks goods out, additional paid allows one physical output',async()=>{
  await fee(null);const main=await readyInvoiceOrder('TEST S09 actual two-invoice payment gate','shipping',false,undefined,10000);
+ await manualTrackingFixture(main.orderId);
  expect(await withSession(full,()=>setPaymentModeAction({orderId:main.orderId,paymentMode:'abholung',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  const before=await withSession(full,()=>getOrderPaymentStateAction({orderId:main.orderId}));if(before.code!=='OK')throw Error('TEST_COST_ACTUAL_ORDER_VERSION');await fee(1000);
  const request={orderId:main.orderId,expectedVersion:before.data.orderVersion,clientEventId:randomUUID(),shippingCosts:{invoiceId:main.invoice.invoiceId,expectedVersion:1,scope:'order:'+main.orderId,expectedFeeCents:1000}};
