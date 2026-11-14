@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {historicalDispatchDate} from '../../e2e/ablauf/historicalDispatchFixture';
+import {historicalDispatchDate,dispatchFollowupBoundary} from '../../e2e/ablauf/historicalDispatchFixture';
 import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
 
 // Synthetic calendar boundaries only; no simulated product-clock claim.
@@ -18,4 +18,9 @@ it('uses the same holiday calendar and rejects missing or invalid DB time',()=>{
  expect(plusWorkingDays(berlinCalendarDay(new Date(source)),1,holidays)).toBe('2026-11-16');
  expect(()=>historicalDispatchDate('',1)).toThrow('TEST_HISTORICAL_DATE_INVALID');
  expect(()=>historicalDispatchDate(base,-1)).toThrow('TEST_HISTORICAL_DATE_INVALID');
+});
+it('keeps Friday to Saturday due, Sunday to Monday waiting, and respects a real holiday',()=>{
+ expect(dispatchFollowupBoundary('2026-11-13T12:00:00Z',0,'2026-11-14T12:00:00Z')).toEqual({due:'2026-11-13',state:'DUE'});
+ expect(dispatchFollowupBoundary('2026-11-15T12:00:00Z',0,'2026-11-15T12:00:00Z')).toEqual({due:'2026-11-16',state:'WAIT'});
+ expect(dispatchFollowupBoundary('2026-11-13T12:00:00Z',1,'2026-11-16T12:00:00Z',['2026-11-16'])).toEqual({due:'2026-11-17',state:'WAIT'});
 });
