@@ -114,7 +114,6 @@
       "private.v_quote_conversion_receipts_v1"
     ],
     "src/lib/server/invoiceRead.ts": [
-      "private.v_invoice_receipt_v1",
       "private.v_invoice_summary_v1"
     ],
     "src/lib/server/orderCardRead.ts": [

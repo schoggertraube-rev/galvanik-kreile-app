@@ -376,7 +376,7 @@ describe("cancelInvoice", () => {
   ])("fails closed before PDF, event or invoice mutation for %s", async (_label, paymentDelta) => {
     execute.mockImplementation((query: { text: string }) => {
       if (query.text.includes("pg_advisory_xact_lock") || query.text.includes("private.lock_shipping_customer_v1")) return Promise.resolve([]);
-      if(query.text.includes('SELECT customer_id FROM public.invoices'))return Promise.resolve([{customer_id:'TEST-unit-customer'}]);
+      if(query.text.includes('SELECT customer_id,order_id FROM public.invoices'))return Promise.resolve([{customer_id:'TEST-unit-customer',order_id:ORDER}]);
       if(query.text.includes('private.lock_customer_credit_v1'))return Promise.resolve([]);
       if(query.text.includes('private.v_payment_summary_v1'))return Promise.resolve([{...validLockedInvoice,...paymentDelta,integrity_ok:false}]);
       if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([]);

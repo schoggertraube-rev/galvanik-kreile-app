@@ -25,3 +25,15 @@ it('only an actual invoice-shaped financial receipt can acknowledge an invoice; 
  expect(isPendingWorkshopAcknowledgement(scope,entry,{...valid,receipt:{...receipt,clientEventId:invoice}})).toBe(false);
  expect(isPendingWorkshopAcknowledgement(scope,entry,{...valid,receipt:{...receipt,pdfSha256:''}})).toBe(false);
 });
+it('a cancellation that requested reissue cannot acknowledge without the exact bound replacement and both actual actors',()=>{
+ const replacementKey='66666666-6666-4666-8666-666666666666',replacementId='77777777-7777-4777-8777-777777777777',repairActor='88888888-8888-4888-8888-888888888888';
+ const original={kind:'workshop',command:'invoice.cancel',id:key,itemId:invoice,deviceCapturedAt:at,input:{invoiceId:invoice,expectedVersion:1,reason:'TEST shipping removed',clientEventId:key,reissueWithoutShipping:{handoverEventId:event,replacementClientEventId:replacementKey}}};
+ if(!isPendingWorkshopOriginal(original))throw Error('TEST_REISSUE_ORIGINAL_REQUIRED');
+ const receipt={invoiceId:invoice,orderId:order,status:'cancelled',eventId:event,clientEventId:key,cancelledBy:actor,originalPdfSha256:'c'.repeat(64),reissueWithoutShipping:{...original.input.reissueWithoutShipping,confirmedBy:actor,originalPdfSha256:'c'.repeat(64),orderVersion:5}};
+ const result={code:'OK',financialCommand:'invoice.cancel',offlineReceipt:{scope,clientEventId:key,deviceCapturedAt:at,eventId:event,actorId:actor},receipt};
+ expect(isPendingWorkshopAcknowledgement(scope,original,result)).toBe(false);
+ const replacementReceipt={invoiceId:replacementId,orderId:order,status:'issued',orderVersion:5,eventId:replacementId,clientEventId:replacementKey,issuedBy:repairActor,pdfSha256:'d'.repeat(64),reissue:{cancellationEventId:event,confirmedBy:actor,repairActorId:repairActor}};
+ expect(isPendingWorkshopAcknowledgement(scope,original,{...result,replacementReceipt})).toBe(true);
+ expect(isPendingWorkshopAcknowledgement(scope,original,{...result,replacementReceipt:{...replacementReceipt,clientEventId:key}})).toBe(false);
+ expect(isPendingWorkshopAcknowledgement(scope,original,{...result,replacementReceipt:{...replacementReceipt,reissue:{...replacementReceipt.reissue,repairActorId:actor}}})).toBe(false);
+});

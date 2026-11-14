@@ -102,5 +102,20 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
   expect(receipts.get(issueKey)).toHaveLength(2);expect(receipts.get(issueKey)![0]).toBe(receipts.get(issueKey)![1]);
   expect(await sql`SELECT count(*)::int AS n,sum(net_amount_cents)::int AS total FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${shipping.orderId} AND belegart='versandkosten'`).toEqual([{n:1,total:1000}]);
   expect(await sql`SELECT pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${shipping.invoice.invoiceId}::uuid`).toEqual([mainOriginal]);
+  // The compound cancellation remains one original in this very same store.
+  // Its actual replacement, not cancellation alone, is required for final ACK.
+  const reissueOrder=await readyInvoiceOrder('S09 native no-shipping replacement','shipping',false,undefined,10000);
+  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:reissueOrder.invoice.invoiceId,expectedVersion:0,expectedOpenAmountCents:reissueOrder.invoice.grossAmountCents,amount:reissueOrder.invoice.grossAmountCents,method:'ueberweisung',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const reissueManual=await withSession(full,()=>changeOrderPickupNoticeAction({command:'handover_manual',orderId:reissueOrder.orderId,expectedVersion:reissueOrder.version,handoverMode:'pickup',clientEventId:randomUUID()}));
+  if(reissueManual.code!=='OK'||!reissueManual.receipt||typeof reissueManual.receipt!=='object'||!('eventId'in reissueManual.receipt)||typeof reissueManual.receipt.eventId!=='string')throw Error('TEST_NATIVE_REISSUE_SOURCE_REQUIRED');
+  const reissueKey=randomUUID(),replaceKey=randomUUID(),compound={invoiceId:reissueOrder.invoice.invoiceId,expectedVersion:1,reason:'Übergabeart Versand → Abholung',clientEventId:reissueKey,reissueWithoutShipping:{handoverEventId:reissueManual.receipt.eventId,replacementClientEventId:replaceKey}};
+  loseResponse=true;
+  await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'invoice.cancel',input:${JSON.stringify(compound)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='UNAVAILABLE'||!pending.some(e=>e.id==='${reissueKey}'))throw Error('TEST_COMPOUND_LOST_RESPONSE_FALSE_ACK');return true;}`]);
+  expect(await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${reissueOrder.orderId}`).toEqual([{n:2}]);
+  await cli(['goto',url]);await cli(['eval',setup]);
+  await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'invoice.cancel',input:${JSON.stringify(compound)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='OK'||!result.replayed||result.replacementReceipt?.clientEventId!=='${replaceKey}'||pending.some(e=>e.id==='${reissueKey}')||!pending.some(e=>e.id==='${stale.clientEventId}'))throw Error('TEST_COMPOUND_REPLACEMENT_ACK_REQUIRED');return true;}`]);
+  expect(receipts.get(reissueKey)).toHaveLength(2);expect(receipts.get(reissueKey)![0]).toBe(receipts.get(reissueKey)![1]);
+  expect(await sql`SELECT payment_open_amount_cents,payment_paid_amount_cents FROM public.invoices WHERE tenant_id=${tenant} AND client_event_id=${replaceKey}::uuid`).toEqual([{payment_open_amount_cents:11900,payment_paid_amount_cents:0}]);
+  expect(await sql`SELECT count(*)::int AS n,sum(amount_cents)::int AS amount FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${reissueOrder.invoice.invoiceId}::uuid`).toEqual([{n:1,amount:reissueOrder.invoice.grossAmountCents}]);
  }finally{await execute(process.execPath,[process.env.KREILE_PLAYWRIGHT_CLI_JS!,`-s=${session}`,'close'],{timeout:30000}).catch(()=>{});await new Promise<void>(resolve=>server.close(()=>resolve()));}
 },120000);

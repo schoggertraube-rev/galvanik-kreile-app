@@ -65,3 +65,36 @@ export function isInvoiceShippingCostsInput(value:unknown,orderId:string):value 
     &&typeof value.scope==='string'&&(value.scope==='order:'+orderId
       ||value.scope.startsWith('sendung:')&&UUID_PATTERN.test(value.scope.slice(8))&&value.scope===value.scope.toLowerCase());
 }
+
+export type CancelInvoiceInput = {
+  invoiceId: string;
+  expectedVersion: number;
+  reason: string;
+  clientEventId: string;
+  reissueWithoutShipping?:{handoverEventId:string;replacementClientEventId:string};
+};
+
+export function isCancelInvoiceInput(input: unknown): input is CancelInvoiceInput {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const value = input as Record<string, unknown>;
+  const expected = ["clientEventId", "expectedVersion", "invoiceId", "reason",...(value.reissueWithoutShipping!==undefined?["reissueWithoutShipping"]:[])].sort();
+  const actual = Object.keys(value).sort();
+  return actual.length === expected.length
+    && actual.every((key, index) => key === expected[index])
+    && typeof value.invoiceId === "string"
+    && UUID_PATTERN.test(value.invoiceId)
+    && typeof value.clientEventId === "string"
+    && UUID_PATTERN.test(value.clientEventId)
+    && typeof value.expectedVersion === "number"
+    && Number.isSafeInteger(value.expectedVersion)
+    && value.expectedVersion > 0
+    && typeof value.reason === "string"
+    && value.reason === value.reason.trim()
+    && value.reason.length >= 5
+    && value.reason.length <= 500
+    &&(value.reissueWithoutShipping===undefined||plainObject(value.reissueWithoutShipping)
+      &&Object.keys(value.reissueWithoutShipping).sort().join(",")==="handoverEventId,replacementClientEventId"
+      &&typeof value.reissueWithoutShipping.handoverEventId==="string"&&UUID_PATTERN.test(value.reissueWithoutShipping.handoverEventId)
+      &&typeof value.reissueWithoutShipping.replacementClientEventId==="string"&&UUID_PATTERN.test(value.reissueWithoutShipping.replacementClientEventId)
+      &&value.reissueWithoutShipping.replacementClientEventId!==value.clientEventId);
+}

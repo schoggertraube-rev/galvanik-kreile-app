@@ -388,6 +388,9 @@ export const CUSTOMER_CREDIT_COPY={
 } as const;
 // S09: package text is fixed; additional failure copy stays in the same catalog (R8).
 export const SHIPPING_FEE_COPY={
+ reissueForbidden:'error.permission',
+ reissuePending:'TODO_PL shipping.invoice.reissue_pending',
+ reissueTask:(number:string)=>`TODO_PL shipping.invoice.reissue_retry ${number}`,
  additional:(amount:string,customer:string)=>`Versandkosten ${amount} netto an ${customer} berechnen`,
  relatedInvoice:(number:string)=>`Versandkosten zu Rechnung ${number}`,
  changed:'TODO_PL shipping.invoice.changed',

@@ -5,7 +5,7 @@ import {readCacheScopeMarker} from './cacheScopeMarker';
 import type {IntakeOriginalTakeover} from '@/modules/eingang/public';
 import type {setOrderItemFinishedAction,changeOrderItemExtraWorkAction,OrderResponse} from '@/app/actions/orders.actions';
 import type {cancelInvoiceAction} from '@/app/actions/invoices.actions';
-import {isCreateInvoiceInput} from '@/lib/domain/invoiceIntentContract';
+import {isCreateInvoiceInput,isCancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 // Unacknowledged originals in one scoped queue. Server remains authoritative.
 export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
   | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number;takeover?:IntakeOriginalTakeover;takeoverSourceCanonical?:string};
@@ -31,10 +31,10 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  const data=input as Record<string,unknown>,uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(v);
  if(row.command==='credit.payout')return Object.keys(data).sort().join(',')==='amount,clientEventId,customerId,expectedCreditVersion,method,note,reference'&&typeof data.customerId==='string'&&data.customerId.length>0&&data.customerId.length<=128&&row.itemId===data.customerId&&uuid(data.clientEventId)&&row.id===data.clientEventId&&Number.isSafeInteger(data.amount)&&Number(data.amount)>0&&Number.isSafeInteger(data.expectedCreditVersion)&&Number(data.expectedCreditVersion)>=0&&['bar','ueberweisung'].includes(String(data.method))&&(data.note===null||typeof data.note==='string')&&(data.reference===null||typeof data.reference==='object'&&!Array.isArray(data.reference));
  if(row.command==='invoice.issue')return isCreateInvoiceInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderId;
- if(row.command==='invoice.cancel'||row.command==='credit.apply'){
+ if(row.command==='invoice.cancel')return isCancelInvoiceInput(input)&&row.id===input.clientEventId&&row.itemId===input.invoiceId;
+ if(row.command==='credit.apply'){
   if(!uuid(data.invoiceId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.invoiceId||!Number.isSafeInteger(data.expectedVersion)||Number(data.expectedVersion)<0)return false;
   const keys=Object.keys(data).sort().join(',');
-  if(row.command==='invoice.cancel')return keys==='clientEventId,expectedVersion,invoiceId,reason'&&typeof data.reason==='string'&&data.reason===data.reason.trim()&&data.reason.length>=5&&data.reason.length<=500;
   return keys==='amount,clientEventId,expectedCreditVersion,expectedOpenAmountCents,expectedVersion,invoiceId'&&Number.isSafeInteger(data.amount)&&Number(data.amount)>0&&Number.isSafeInteger(data.expectedCreditVersion)&&Number(data.expectedCreditVersion)>=0&&Number.isSafeInteger(data.expectedOpenAmountCents)&&Number(data.expectedOpenAmountCents)>=0;
  }
  if(!uuid(data.orderId)||!uuid(data.itemId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.orderId)return false;
@@ -474,6 +474,24 @@ export function isPendingWorkshopAcknowledgement(scope:string,entry:PendingWorks
    if(invoice.clientEventId!==entry.id||invoice.orderId!==entry.input.orderId||invoice.eventId!==ack.eventId||invoice.issuedBy!==ack.actorId
      ||typeof invoice.invoiceId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(invoice.invoiceId)
      ||typeof invoice.pdfSha256!=='string'||!/^[a-f0-9]{64}$/.test(invoice.pdfSha256))return false;
+  }
+  if(entry.command==='invoice.cancel'&&entry.input.reissueWithoutShipping){
+   const record=(value:unknown):value is Record<string,unknown>=>Boolean(value)&&typeof value==='object'&&!Array.isArray(value);
+   const uuid=(value:unknown)=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
+   const cancellation=result.receipt,replacement=result.replacementReceipt,ack=result.offlineReceipt,intent=entry.input.reissueWithoutShipping;
+   if(!record(cancellation)||!record(replacement)||!record(ack)||!record(cancellation.reissueWithoutShipping)||!record(replacement.reissue))return false;
+   const original=cancellation.reissueWithoutShipping,repaired=replacement.reissue;
+   if(cancellation.status!=='cancelled'||replacement.status!=='issued'||cancellation.invoiceId!==entry.input.invoiceId||cancellation.clientEventId!==entry.id
+    ||cancellation.eventId!==ack.eventId||cancellation.cancelledBy!==original.confirmedBy
+    ||!uuid(cancellation.cancelledBy)||!uuid(replacement.issuedBy)||!uuid(replacement.eventId)||!uuid(replacement.invoiceId)||replacement.invoiceId===cancellation.invoiceId
+    ||typeof cancellation.orderId!=='string'||!cancellation.orderId.trim()||cancellation.orderId.length>128
+    ||typeof original.orderVersion!=='number'||!Number.isSafeInteger(original.orderVersion)||original.orderVersion<1
+    ||original.handoverEventId!==intent.handoverEventId||original.replacementClientEventId!==intent.replacementClientEventId
+    ||typeof cancellation.originalPdfSha256!=='string'||!/^[a-f0-9]{64}$/.test(cancellation.originalPdfSha256)||original.originalPdfSha256!==cancellation.originalPdfSha256
+    ||replacement.clientEventId!==intent.replacementClientEventId||replacement.orderId!==cancellation.orderId
+    ||typeof replacement.orderVersion!=='number'||!Number.isSafeInteger(replacement.orderVersion)||replacement.orderVersion<original.orderVersion
+    ||repaired.cancellationEventId!==cancellation.eventId||repaired.confirmedBy!==cancellation.cancelledBy||repaired.repairActorId!==replacement.issuedBy
+    ||typeof replacement.pdfSha256!=='string'||!/^[a-f0-9]{64}$/.test(replacement.pdfSha256))return false;
   }
  }else if(result.code!=='OK'&&result.code!=='PRESERVED')return false;
  return isPendingWorkshopReceipt(scope,entry,result.offlineReceipt);
