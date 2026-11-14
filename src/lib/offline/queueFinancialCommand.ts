@@ -1,41 +1,52 @@
-import {retainPendingWorkshopOriginal,isPendingWorkshopAcknowledgement,type PendingFinancialCommand,type PendingWorkshopOriginal} from './pendingStore';
-import {canonicalJson} from '@/lib/domain/canonicalJson';
-import {isWorkshopRejectionReceipt,type WorkshopRejectionReceipt} from './workshopRejectionContract';
+import {retainPendingWorkshopOriginal,isPendingWorkshopAcknowledgement,type PendingFinancialCommand,type PendingHandoverCommand,type PendingConfirmedCommand,type PendingWorkshopOriginal} from './pendingStore';
 import {syncOriginals} from './syncOriginals';
 import type {WorkshopAcknowledgement} from './syncPendingFiles';
-import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
+import {CUSTOMER_CREDIT_COPY,ORDER_HANDOVER_COPY,OFFLINE_ITEM_FINISHED_COPY} from '@/ui/situationCatalog';
+import {readServerReachability} from './serverReachability';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
+import {isWorkshopRejectionReceipt,type WorkshopRejectionReceipt} from './workshopRejectionContract';
 
 type FinancialAcknowledgement=Extract<WorkshopAcknowledgement['result'],{financialCommand:string}>;
+type HandoverAcknowledgement=Extract<WorkshopAcknowledgement['result'],{handoverCommand:string}>;
 type FinancialFailure=Exclude<WorkshopAcknowledgement['result'],{code:'OK'|'PRESERVED'}>&{message:string;rejectionReceipt?:WorkshopRejectionReceipt};
 /** A08-11: retain first in the one scoped store, then use its one dispatcher.
  * Queue absence or a cancellation PDF alone is never financial success. */
-export async function queueFinancialCommand(scope:string,command:PendingFinancialCommand,currentScope:()=>string|null){
- if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:CUSTOMER_CREDIT_COPY.unavailable};
- const original:PendingWorkshopOriginal={...command,id:command.input.clientEventId,itemId:command.command==='credit.payout'?command.input.customerId:command.input.invoiceId,kind:'workshop',deviceCapturedAt:new Date().toISOString()};
- const acknowledgement:{value:FinancialAcknowledgement|null}={value:null};
+export function queueFinancialCommand(scope:string,command:PendingFinancialCommand,currentScope:()=>string|null){return queueConfirmedCommand(scope,command,currentScope);}
+export function queueHandoverCommand(scope:string,command:PendingHandoverCommand,currentScope:()=>string|null){return queueConfirmedCommand(scope,command,currentScope);}
+function queueConfirmedCommand(scope:string,command:PendingFinancialCommand,currentScope:()=>string|null):Promise<FinancialAcknowledgement|FinancialFailure>;
+function queueConfirmedCommand(scope:string,command:PendingHandoverCommand,currentScope:()=>string|null):Promise<HandoverAcknowledgement|FinancialFailure>;
+async function queueConfirmedCommand(scope:string,command:PendingConfirmedCommand,currentScope:()=>string|null){
+ const unavailable=command.command==='order.handover'?ORDER_HANDOVER_COPY.unavailable:CUSTOMER_CREDIT_COPY.unavailable;
+ if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:unavailable};
+ // A-01 / PL16:36: this queue transports confirmed online financial commands;
+ // it must not turn an offline click into a future money/numbering instruction.
+ if(command.command!=='order.handover'&&!readServerReachability())return {code:'UNAVAILABLE' as const,message:OFFLINE_ITEM_FINISHED_COPY.networkRequired};
+ const original:PendingWorkshopOriginal={...command,id:command.input.clientEventId,itemId:command.command==='invoice.issue'||command.command==='order.handover'?command.input.orderId:command.command==='credit.payout'?command.input.customerId:command.input.invoiceId,kind:'workshop',deviceCapturedAt:new Date().toISOString()};
+ const acknowledgement:{value:FinancialAcknowledgement|HandoverAcknowledgement|null}={value:null};
  const failure:{value:FinancialFailure|null}={value:null};
  const accepted=(event:Event)=>{
   const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
   if(!proof||currentScope()!==scope||proof.scope!==scope||proof.entry.id!==original.id||proof.entry.command!==original.command)return;
-  if(proof.result.code==='OK'&&'financialCommand'in proof.result&&proof.result.financialCommand===original.command
-   &&canonicalJson(proof.entry.input)===canonicalJson(original.input)&&isPendingWorkshopAcknowledgement(scope,proof.entry,proof.result))acknowledgement.value=proof.result;
+  if(proof.result.code==='OK'&&('financialCommand'in proof.result&&proof.result.financialCommand===original.command||'handoverCommand'in proof.result&&proof.result.handoverCommand===original.command)
+    &&canonicalJson(proof.entry.input)===canonicalJson(original.input)
+    &&isPendingWorkshopAcknowledgement(scope,proof.entry,proof.result))acknowledgement.value=proof.result;
  };
  const rejected=(event:Event)=>{
   const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
   if(!proof||currentScope()!==scope||proof.scope!==scope||proof.entry.id!==original.id||proof.entry.command!==original.command||canonicalJson(proof.entry.input)!==canonicalJson(original.input)||proof.result.code==='OK')return;
-  if('rejectionReceipt'in proof.result){
-   if(!isWorkshopRejectionReceipt(scope,proof.entry,proof.result.rejectionReceipt))return;
-   failure.value={...proof.result,code:proof.result.rejectionReceipt.rejection,message:'message'in proof.result&&typeof proof.result.message==='string'?proof.result.message:CUSTOMER_CREDIT_COPY.unavailable};return;
+  if('rejectionReceipt'in proof.result&&isWorkshopRejectionReceipt(scope,proof.entry,proof.result.rejectionReceipt)){
+   failure.value={...proof.result,code:proof.result.rejectionReceipt.rejection,message:'message'in proof.result&&typeof proof.result.message==='string'?proof.result.message:unavailable};return;
   }
-  failure.value={...proof.result,message:'message'in proof.result&&typeof proof.result.message==='string'?proof.result.message:CUSTOMER_CREDIT_COPY.unavailable};
+  if(proof.result.code==='PRESERVED')return;
+  failure.value={...proof.result,message:'message'in proof.result&&typeof proof.result.message==='string'?proof.result.message:unavailable};
  };
  window.addEventListener('kreile-workshop-acknowledged',accepted);
  window.addEventListener('kreile-workshop-rejected',rejected);
  try{
   await retainPendingWorkshopOriginal(scope,original);
-  if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:CUSTOMER_CREDIT_COPY.unavailable};
+  if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:unavailable};
   await syncOriginals(scope,currentScope,{followUp:true});
-  if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:CUSTOMER_CREDIT_COPY.unavailable};
-  return acknowledgement.value??failure.value??{code:'UNAVAILABLE' as const,message:command.command==='invoice.cancel'?CUSTOMER_CREDIT_COPY.pending:CUSTOMER_CREDIT_COPY.unavailable};
+  if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:unavailable};
+  return acknowledgement.value??failure.value??{code:'UNAVAILABLE' as const,message:command.command==='invoice.cancel'?CUSTOMER_CREDIT_COPY.pending:unavailable};
  }finally{window.removeEventListener('kreile-workshop-acknowledged',accepted);window.removeEventListener('kreile-workshop-rejected',rejected);}
 }

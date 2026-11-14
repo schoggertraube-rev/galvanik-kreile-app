@@ -17,9 +17,7 @@ export async function intakeOrderFixture(label:string,customerId:string,handover
 }
 
 /** Synthetic initial state for later boundaries, using the actual order writers. */
-export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'shipping'='pickup',options:boolean|number=false,existingCustomerId?:string,unitPriceCents=10000){
- const concurrentIssue=typeof options==='boolean'?options:false;
- const quantity=typeof options==='number'?options:1;
+export async function readyOrderForInvoice(label:string,handoverMode:'pickup'|'shipping'='pickup',existingCustomerId?:string,unitPriceCents=10000,quantity=1){
  const customerId=existingCustomerId??await customerFixture(label);
  const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,setExtraWorkHourlyRateAction,freezeOrderAction,getExtraWorkMasterDataAction}=await import('@/app/actions/orders.actions');
  const created=await intakeOrderFixture(label,customerId,handoverMode,quantity,unitPriceCents);
@@ -41,10 +39,18 @@ export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'ship
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,iban,bic,bank_name,tax_id,invoice_vat_rate_basis_points,invoice_payment_term_days)
  SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST Ablauf Galvanik','TEST Weg 1','70176','Stuttgart','Deutschland','DE02120300000000202051','BYLADEM1001','TEST Bank','DE123456789',1900,14
  WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ return {customerId,orderId,version:frozen.receipt.aggregateVersion,items:created.receipt.items};
+}
+
+export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'shipping'='pickup',options:boolean|number=false,existingCustomerId?:string,unitPriceCents=10000){
+ const concurrentIssue=typeof options==='boolean'?options:false;
+ const quantity=typeof options==='number'?options:1;
+ const prepared=await readyOrderForInvoice(label,handoverMode,existingCustomerId,unitPriceCents,quantity);
+ const {customerId,orderId}=prepared;
  const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
- const issueInput={orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()};
+ const issueInput={orderId,expectedVersion:prepared.version,clientEventId:randomUUID()};
  const issuanceResults=await Promise.all(Array.from({length:concurrentIssue?2:1},()=>withSession(full,()=>issueInvoiceAction(structuredClone(issueInput)))));
  const issued=issuanceResults[0];
  if(issued.code!=='OK')throw Error('FIXTURE_INVOICE:'+issued.code+':'+('message'in issued?issued.message:''));
- return {customerId,orderId,invoice:issued.receipt,version:issued.receipt.orderVersion,issueInput,items:created.receipt.items,issuanceResults};
+ return {customerId,orderId,invoice:issued.receipt,version:issued.receipt.orderVersion,issueInput,items:prepared.items,issuanceResults};
 }

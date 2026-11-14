@@ -64,6 +64,7 @@ const authorization = {
 };
 
 const validReceiptRow = {
+  belegart:'auftrag',ursprung_rechnung_id:null,shipping_costs_intent:null,
   event_id: EVENT,
   tenant_id: KREILE_TENANT_SLUG,
   order_id: ORDER,
@@ -186,7 +187,7 @@ describe("createInvoice", () => {
 
   it("replays an exact, contract-valid existing receipt without simulating the full issuance path", async () => {
     execute.mockImplementation((query: { text: string }) => {
-      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("pg_advisory_xact_lock") || query.text.includes("private.lock_shipping_customer_v1")) return Promise.resolve([]);
       if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([validReceiptRow]);
       throw new Error(`unexpected SQL in replay test: ${query.text}`);
     });
@@ -232,7 +233,7 @@ describe("createInvoice", () => {
       event_schema_version: 2,
     };
     execute.mockImplementation((query: { text: string }) => {
-      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("pg_advisory_xact_lock") || query.text.includes("private.lock_shipping_customer_v1")) return Promise.resolve([]);
       if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([v2ReceiptRow]);
       throw new Error(`unexpected SQL in V2 replay test: ${query.text}`);
     });
@@ -250,7 +251,7 @@ describe("createInvoice", () => {
 
   it("rejects a replayed row that fails the integrity/tenant/actor contract as CONFLICT, never OK", async () => {
     execute.mockImplementation((query: { text: string }) => {
-      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("pg_advisory_xact_lock") || query.text.includes("private.lock_shipping_customer_v1")) return Promise.resolve([]);
       if (query.text.includes("private.v_invoice_receipt_v1")) {
         return Promise.resolve([{ ...validReceiptRow, integrity_ok: false }]);
       }
@@ -263,7 +264,7 @@ describe("createInvoice", () => {
 
   it("rejects reuse of a client event id when expectedVersion differs from the immutable receipt intent", async () => {
     execute.mockImplementation((query: { text: string }) => {
-      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("pg_advisory_xact_lock") || query.text.includes("private.lock_shipping_customer_v1")) return Promise.resolve([]);
       if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([validReceiptRow]);
       throw new Error(`unexpected SQL in intent collision test: ${query.text}`);
     });
@@ -280,7 +281,7 @@ describe("createInvoice", () => {
 
   it("treats more than one client-event-id match as CONFLICT rather than picking one", async () => {
     execute.mockImplementation((query: { text: string }) => {
-      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("pg_advisory_xact_lock") || query.text.includes("private.lock_shipping_customer_v1")) return Promise.resolve([]);
       if (query.text.includes("private.v_invoice_receipt_v1")) {
         return Promise.resolve([validReceiptRow, { ...validReceiptRow, event_id: FREEZE }]);
       }
@@ -316,7 +317,7 @@ describe("cancelInvoice", () => {
 
   it("replays only the exact immutable cancellation intent without a second write", async () => {
     execute.mockImplementation((query: { text: string }) => {
-      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("pg_advisory_xact_lock") || query.text.includes("private.lock_shipping_customer_v1")) return Promise.resolve([]);
       if(query.text.includes('LEFT JOIN public.customer_credit_entries'))return Promise.resolve([{invoice_id:INVOICE,invoice_number:'R-2026-0007',order_id:ORDER,customer_id:'TEST-unit-customer',event_id:EVENT,actor_id:ACTOR,paid_cents:'0',entry_id:null}]);
       if (query.text.includes("private.v_invoice_receipt_v1")) {
         return Promise.resolve([validCancellationReceiptRow]);
@@ -354,7 +355,7 @@ describe("cancelInvoice", () => {
 
   it("rejects changed version or reason for the same cancellation client event id", async () => {
     execute.mockImplementation((query: { text: string }) => {
-      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("pg_advisory_xact_lock") || query.text.includes("private.lock_shipping_customer_v1")) return Promise.resolve([]);
       if (query.text.includes("private.v_invoice_receipt_v1")) {
         return Promise.resolve([validCancellationReceiptRow]);
       }
@@ -374,8 +375,8 @@ describe("cancelInvoice", () => {
     }],
   ])("fails closed before PDF, event or invoice mutation for %s", async (_label, paymentDelta) => {
     execute.mockImplementation((query: { text: string }) => {
-      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
-      if(query.text.includes('SELECT customer_id FROM public.invoices'))return Promise.resolve([{customer_id:'TEST-unit-customer'}]);
+      if (query.text.includes("pg_advisory_xact_lock") || query.text.includes("private.lock_shipping_customer_v1")) return Promise.resolve([]);
+      if(query.text.includes('SELECT customer_id,order_id FROM public.invoices'))return Promise.resolve([{customer_id:'TEST-unit-customer',order_id:ORDER}]);
       if(query.text.includes('private.lock_customer_credit_v1'))return Promise.resolve([]);
       if(query.text.includes('private.v_payment_summary_v1'))return Promise.resolve([{...validLockedInvoice,...paymentDelta,integrity_ok:false}]);
       if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([]);

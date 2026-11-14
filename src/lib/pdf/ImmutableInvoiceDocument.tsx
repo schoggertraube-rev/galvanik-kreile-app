@@ -1,6 +1,7 @@
 import {customerCountryLabel} from '@/modules/customers/public';
 import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
+import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import React, { type ReactElement } from "react";
 import { Document, Page, StyleSheet, Text, View, type DocumentProps } from "@react-pdf/renderer";
 
@@ -32,7 +33,8 @@ export type ImmutableInvoiceExtraWorkLine = {
   vat_rate_basis_points?:0|700|1900;
 };
 
-export type ImmutableInvoiceLine = ImmutableInvoiceBaseLine | ImmutableInvoiceExtraWorkLine;
+export type ImmutableInvoiceShippingLine={type:'SHIPPING';shippingKind?:'fee'|'reference';shipmentGroupId:string;name:string;amountCents:number;vat_rate_basis_points:0|700|1900};
+export type ImmutableInvoiceLine = ImmutableInvoiceBaseLine | ImmutableInvoiceExtraWorkLine | ImmutableInvoiceShippingLine;
 
 export type ImmutableInvoiceSnapshot = {
   schemaVersion: 1|2;
@@ -78,6 +80,7 @@ export type ImmutableInvoiceSnapshot = {
 };
 
 export type ImmutableInvoiceDocumentProps = {
+  originalInvoiceNumber?:string;
   vat:InvoiceVatRead;
   invoiceNumber: string;
   dueDate: string;
@@ -383,15 +386,15 @@ function formatVatRate(basisPoints: number): string {
 }
 
 function lineDescription(line: ImmutableInvoiceLine): string {
-  return line.type === "BASE" ? line.name : line.catalogPositionName;
+  return line.type === "EXTRA_WORK" ? line.catalogPositionName : line.name;
 }
 
 function lineQuantity(line: ImmutableInvoiceLine): string {
-  return line.type === "BASE" ? `${line.quantity} Stk.` : `${line.minutes} Min.`;
+  return line.type === 'SHIPPING'?'1':line.type === "BASE" ? `${line.quantity} Stk.` : `${line.minutes} Min.`;
 }
 
 function lineUnitAmount(line: ImmutableInvoiceLine): string {
-  return line.type === "BASE"
+  return line.type === 'SHIPPING'?formatCents(line.amountCents):line.type === "BASE"
     ? formatCents(line.unitNetAmountCents)
     : `${formatCents(line.hourlyRateCents)}/Std.`;
 }
@@ -400,7 +403,7 @@ function lineTotalAmount(line: ImmutableInvoiceLine): number {
   return line.type === "BASE" ? line.lineNetAmountCents : line.amountCents;
 }
 
-export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat }: ImmutableInvoiceDocumentProps) {
+export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat,originalInvoiceNumber }: ImmutableInvoiceDocumentProps) {
   const { seller, customer, order, lines } = snapshot;
   const totals=vat;
 
@@ -417,6 +420,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
           </View>
           <View style={styles.metaBlock}>
             <Text style={styles.documentTitle}>Rechnung</Text>
+            {originalInvoiceNumber&&<Text style={styles.metaLine}>{SHIPPING_FEE_COPY.relatedInvoice(originalInvoiceNumber)}</Text>}
             <Text style={styles.metaLine}>Rechnungsnummer: {invoiceNumber}</Text>
             <Text style={styles.metaLine}>Rechnungsdatum: {formatBerlinInstant(snapshot.issuedAt)}</Text>
             <Text style={styles.metaLine}>Leistungsdatum: {formatCalendarDate(snapshot.serviceDate)}</Text>
@@ -448,7 +452,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
             <View style={[styles.colTotal, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Gesamt netto</Text></View>
           </View>
           {lines.map((line, index) => (
-            <View style={styles.tableRow} key={`${line.type}-${line.itemId}-${index}`}>
+            <View style={styles.tableRow} key={`${line.type}-${line.type==='SHIPPING'?line.shipmentGroupId:line.itemId}-${index}`}>
               <View style={styles.colPos}><Text style={styles.cell}>{index + 1}</Text></View>
               <View style={styles.colDesc}><Text style={styles.cell}>{lineDescription(line)}</Text></View>
               <View style={styles.colQty}><Text style={styles.cell}>{lineQuantity(line)}</Text></View>
@@ -557,11 +561,11 @@ export function ImmutableInvoiceCancellationDocument({
             <View style={[styles.colTotal, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Storno netto</Text></View>
           </View>
           {lines.map((line, index) => (
-            <View style={styles.tableRow} key={`cancel-${line.type}-${line.itemId}-${index}`}>
+            <View style={styles.tableRow} key={`cancel-${line.type}-${line.type==='SHIPPING'?line.shipmentGroupId:line.itemId}-${index}`}>
               <View style={styles.colPos}><Text style={styles.cell}>{index + 1}</Text></View>
               <View style={styles.colDesc}><Text style={styles.cell}>{lineDescription(line)}</Text></View>
               <View style={styles.colQty}><Text style={styles.cell}>{lineQuantity(line)}</Text></View>
-              <View style={styles.colUnit}><Text style={styles.cell}>{formatCents(-Math.abs(line.type === "BASE" ? line.unitNetAmountCents : line.hourlyRateCents))}</Text></View>
+              <View style={styles.colUnit}><Text style={styles.cell}>{formatCents(-Math.abs(line.type==='SHIPPING'?line.amountCents:line.type === "BASE" ? line.unitNetAmountCents : line.hourlyRateCents))}</Text></View>
               <View style={styles.colTotal}><Text style={styles.cell}>{formatCents(-Math.abs(lineTotalAmount(line)))}</Text></View>
             </View>
           ))}

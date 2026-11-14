@@ -49,7 +49,8 @@ async function resolveActionAuthorization(): Promise<ActionAuthorizationResult> 
 
 export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<CreateInvoiceResult> {
   const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
-  const result = await createInvoice(input,undefined,readInvoiceVat);
+  const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
+  const result = await createInvoice(input,undefined,readInvoiceVat,readShippingSettingsInTransaction);
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
     revalidatePath("/warendurchlauf");

@@ -140,12 +140,20 @@ export const QUOTE_CYCLE_COPY={
 };
 
 export const ORDER_HANDOVER_COPY={
+ permission:LEGACY_ACTION_ACCESS_COPY.forbidden,invalid:'Diese Übergabeart passt nicht zum Auftrag. Wähle Abholen oder Versand.',missing:'Wähle Abholen oder Versand für diesen Auftrag.',
+ conflict:'Der Auftrag wurde inzwischen geändert. Lade den aktuellen Stand und wähle die Übergabe erneut.',unavailable:'Die Übergabeart ist noch nicht gespeichert. Versuch es gleich noch einmal – deine Auswahl bleibt stehen.',
+ manualChanged:(number:string,mode:'pickup'|'shipping')=>mode==='pickup'?`${number} wird jetzt abgeholt.`:`${number} geht jetzt in den Versand.`,
  chooseOrder:"Wähle den Auftrag zu dieser Mail",choose:(number:string)=>"Übergabe für "+number+" übernehmen",
  mode:(mode:'pickup'|'shipping')=>mode==='pickup'?'Abholen':'Versand',
  label:(mode:'pickup'|'shipping'|null|undefined,service:string|null|undefined,error?:string)=>mode==='pickup'?'Abholen':mode==='shipping'?'Versand · '+(service??error??'Versanddienst fehlt'):'Übergabeart fehlt',
  original:'Original-Mail ansehen',task:'Rückruf-Aufgabe öffnen',completed:'Rückruf erledigt',taskUnavailable:'Rückruf-Aufgabe ist für diesen Login nicht verfügbar.',targetUnavailable:'Der gespeicherte Bezug konnte nicht geöffnet werden.',
  changed:(number:string,mode:'pickup'|'shipping',sender:string,at:string)=>'Du übernimmst '+(mode==='pickup'?'Abholen':'Versand')+' für '+number+' · so hat es '+sender+' am '+new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(at))+' geschrieben.',
- call:(customer:string,phone:string|null)=>'Ruf '+customer.slice(0,55)+' an: '+(phone??'Telefon fehlt'),
+ call:(customer:string,phone:string|null)=>{
+  const phoneValue=phone===null?'Telefon fehlt':phone.length>80?phone.slice(0,79)+'…':phone;
+  const limit=Math.min(55,120-'Ruf '.length-' an: '.length-phoneValue.length);
+  const name=customer.length>limit?customer.slice(0,limit-1)+'…':customer;
+  return 'Ruf '+name+' an: '+phoneValue;
+ },
  late:(number:string,customer:string,phone:string|null,carrier:string|null,mode:'pickup'|'shipping',label:boolean,passed:boolean)=>number+' · '+(passed?'Ware ist bereits übergeben':label?'Versandetikett ist bereits erstellt':'Paket ist bereits beim '+(carrier??'Versanddienst · Name fehlt'))+' · '+customer+' wollte '+(mode==='pickup'?'abholen':'Versand')+'. Ruf '+customer+' an: '+(phone??'Telefon fehlt')+'.',
 };
 
@@ -305,6 +313,8 @@ export const MAIL_RESEND_COPY={
 export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich',rejected:'abgelehnt, ohne Wirkung',originalCommand:{
  'item.finished':'Teil fertig melden',
  'item.extraWork':'Mehrarbeit erfassen',
+ 'order.handover':'Übergabeart ändern',
+ 'invoice.issue':'Rechnung ausstellen',
  'invoice.cancel':'Rechnung stornieren',
  'credit.apply':'Guthaben verrechnen',
  'credit.payout':'Guthaben auszahlen',
@@ -384,4 +394,27 @@ export const CUSTOMER_CREDIT_COPY={
  pending:'Der Storno ist noch nicht übertragen. Er wird gesendet, sobald die Verbindung steht.',
  paymentUnknown:'Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Erfass zuerst Betrag und Datum der Zahlung, dann storniere die Rechnung erneut.',
  tooHigh:(amount:string)=>`Der Betrag ist höher als das Guthaben von ${amount}.`,
+} as const;
+// S09: package text is fixed; additional failure copy stays in the same catalog (R8).
+export const SHIPPING_FEE_COPY={
+ groupAlreadyCharged:(number:string,other:string)=>`${number} und ${other} sind schon einzeln mit Versand berechnet – verschick sie getrennt.`,
+ reissueReleaseBlocked:(number:string)=>`Stell zuerst die Rechnung zu ${number} ohne Versand neu aus – dann kann die Ware raus.`,
+ reissue:(number:string)=>`Rechnung ${number} stornieren und ohne Versand neu ausstellen`,
+ reissueReason:'Übergabeart Versand → Abholung',
+ reissueForbidden:LEGACY_ACTION_ACCESS_COPY.forbidden,
+ reissuePending:'Der Storno ist gespeichert, das Guthaben steht. Die neue Rechnung ohne Versand fehlt noch – dafür liegt eine Aufgabe am Auftrag.',
+ reissueTaskPending:'Der Storno ist gespeichert. Die Aufgabe für die neue Rechnung ohne Versand wird noch angelegt – versuch es gleich noch einmal.',
+ reissueTaskCompletionPending:'Die neue Rechnung ohne Versand ist ausgestellt. Die Aufgabe dazu wird gleich abgeschlossen.',
+ reissueUnpaidPending:'Der Storno ist gespeichert. Die Rechnung war unbezahlt, es entsteht kein Guthaben. Die neue Rechnung ohne Versand fehlt noch – dafür liegt eine Aufgabe am Auftrag.',
+ reissueTask:(number:string)=>`Rechnung zu ${number} ohne Versand neu ausstellen`,
+ additional:(amount:string,customer:string)=>`Versandkosten ${amount} netto an ${customer} berechnen`,
+ relatedInvoice:(number:string)=>`Versandkosten zu Rechnung ${number}`,
+ changed:'Versandkosten neu berechnet – die Rechnung zeigt den aktuellen Stand.',
+ line:'Versand',
+ inInvoice:(number:string)=>`Versand in Rechnung ${number}`,
+ included:'Versand enthalten',
+ includedChanged:'Versand im KV geändert. Ein schon gesendeter KV bekommt dafür eine neue Fassung.',
+ missing:'Versandpauschale fehlt in den Einstellungen – trag sie dort ein',
+ invalid:'Der Versandpreis muss ein Betrag ab 0,00 € sein. Leer heißt: kein Standard.',
+ forbidden:'Die Versandpauschale ändert nur, wer das Recht Geld hat.',
 } as const;

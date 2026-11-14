@@ -6,15 +6,20 @@ import {readCacheScopeMarker} from './cacheScopeMarker';
 import type {IntakeOriginalTakeover} from '@/modules/eingang/public';
 import type {setOrderItemFinishedAction,changeOrderItemExtraWorkAction,OrderResponse} from '@/app/actions/orders.actions';
 import type {cancelInvoiceAction} from '@/app/actions/invoices.actions';
+import {isCreateInvoiceInput,isCancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
+import {isManualHandoverInput,isManualHandoverCommandReceipt,type ManualHandoverInput} from '@/lib/domain/orderHandoverContract';
 // Unacknowledged originals in one scoped queue. Server remains authoritative.
 export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
   | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number;takeover?:IntakeOriginalTakeover;takeoverSourceCanonical?:string};
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingFinancialCommand=
+ | {command:'invoice.issue';input:import('@/lib/domain/invoiceIntentContract').CreateInvoiceInput}
  | {command:'invoice.cancel';input:Parameters<typeof cancelInvoiceAction>[0]}
  | {command:'credit.apply';input:import('@/modules/accounting/public').CustomerCreditApplyInput}
  | {command:'credit.payout';input:import('@/modules/accounting/public').CustomerCreditPayoutInput};
-export type PendingWorkshopCommand={command:'item.finished';input:Parameters<typeof setOrderItemFinishedAction>[0]}|{command:'item.extraWork';input:Parameters<typeof changeOrderItemExtraWorkAction>[0]}|PendingFinancialCommand;
+export type PendingHandoverCommand={command:'order.handover';input:ManualHandoverInput};
+export type PendingConfirmedCommand=PendingFinancialCommand|PendingHandoverCommand;
+export type PendingWorkshopCommand={command:'item.finished';input:Parameters<typeof setOrderItemFinishedAction>[0]}|{command:'item.extraWork';input:Parameters<typeof changeOrderItemExtraWorkAction>[0]}|PendingConfirmedCommand;
 export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:string;kind:'workshop';deviceCapturedAt?:string;queueSequence?:number;notBefore?:string;dispatchStartedAt?:string;rejection?:WorkshopRejectionReceipt};
 export type PendingPhysicalWorkshopOriginal=Extract<PendingWorkshopOriginal,{command:'item.finished'|'item.extraWork'}>;
 export type PendingWorkshopReceipt={scope:string;clientEventId:string;deviceCapturedAt:string;eventId:string;actorId:string};
@@ -29,17 +34,25 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  if(row.deviceCapturedAt!==undefined&&(typeof row.deviceCapturedAt!=='string'||!Number.isFinite(Date.parse(row.deviceCapturedAt))))return false;
  if(row.queueSequence!==undefined&&(typeof row.queueSequence!=='number'||!Number.isSafeInteger(row.queueSequence)||row.queueSequence<1))return false;
  const data=input as Record<string,unknown>,uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(v);
+ if(row.command==='order.handover')return isManualHandoverInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderId;
  if(row.command==='credit.payout')return Object.keys(data).sort().join(',')==='amount,clientEventId,customerId,expectedCreditVersion,method,note,reference'&&typeof data.customerId==='string'&&data.customerId.length>0&&data.customerId.length<=128&&row.itemId===data.customerId&&uuid(data.clientEventId)&&row.id===data.clientEventId&&Number.isSafeInteger(data.amount)&&Number(data.amount)>0&&Number.isSafeInteger(data.expectedCreditVersion)&&Number(data.expectedCreditVersion)>=0&&['bar','ueberweisung'].includes(String(data.method))&&(data.note===null||typeof data.note==='string')&&(data.reference===null||typeof data.reference==='object'&&!Array.isArray(data.reference));
- if(row.command==='invoice.cancel'||row.command==='credit.apply'){
+ if(row.command==='invoice.issue')return isCreateInvoiceInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderId;
+ if(row.command==='invoice.cancel')return isCancelInvoiceInput(input)&&row.id===input.clientEventId&&row.itemId===input.invoiceId;
+ if(row.command==='credit.apply'){
   if(!uuid(data.invoiceId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.invoiceId||!Number.isSafeInteger(data.expectedVersion)||Number(data.expectedVersion)<0)return false;
   const keys=Object.keys(data).sort().join(',');
-  if(row.command==='invoice.cancel')return keys==='clientEventId,expectedVersion,invoiceId,reason'&&typeof data.reason==='string'&&data.reason===data.reason.trim()&&data.reason.length>=5&&data.reason.length<=500;
   return keys==='amount,clientEventId,expectedCreditVersion,expectedOpenAmountCents,expectedVersion,invoiceId'&&Number.isSafeInteger(data.amount)&&Number(data.amount)>0&&Number.isSafeInteger(data.expectedCreditVersion)&&Number(data.expectedCreditVersion)>=0&&Number.isSafeInteger(data.expectedOpenAmountCents)&&Number(data.expectedOpenAmountCents)>=0;
  }
  if(!uuid(data.orderId)||!uuid(data.itemId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.orderId)return false;
  const keys=Object.keys(data).sort().join(',');
  if(row.command==='item.finished')return keys==='clientEventId,expectedVersion,finished,itemId,orderId'&&Number.isSafeInteger(data.expectedVersion)&&typeof data.finished==='boolean';
  return row.command==='item.extraWork'&&keys==='active,catalogPositionId,clientEventId,expectedLineVersion,expectedOrderVersion,itemId,lineId,minutes,orderId'&&uuid(data.lineId)&&uuid(data.catalogPositionId)&&Number.isSafeInteger(data.expectedLineVersion)&&Number.isSafeInteger(data.expectedOrderVersion)&&typeof data.minutes==='number'&&Number.isFinite(data.minutes)&&typeof data.active==='boolean';
+}
+export function isPendingFinancialOriginal(entry:PendingWorkshopOriginal):entry is PendingWorkshopOriginal&PendingFinancialCommand{
+ return entry.command==='invoice.issue'||entry.command==='invoice.cancel'||entry.command==='credit.apply'||entry.command==='credit.payout';
+}
+export function isPendingConfirmedOriginal(entry:PendingWorkshopOriginal):entry is PendingWorkshopOriginal&PendingConfirmedCommand{
+ return isPendingFinancialOriginal(entry)||entry.command==='order.handover';
 }
 const STORE = "originals";
 const SHELL_STORE = "shellMetadata";
@@ -464,8 +477,39 @@ export function isPendingWorkshopReceipt(scope:string,entry:PendingWorkshopOrigi
 export function isPendingWorkshopAcknowledgement(scope:string,entry:PendingWorkshopOriginal,value:unknown):boolean{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const result=value as Record<string,unknown>;
- if(entry.command==='invoice.cancel'||entry.command==='credit.apply'||entry.command==='credit.payout'){
+ if(entry.command==='order.handover'){
+  const ack=result.offlineReceipt;
+  if(result.code!=='OK'||result.handoverCommand!==entry.command||!ack||typeof ack!=='object'||Array.isArray(ack)
+   ||!isManualHandoverCommandReceipt(result.receipt,entry.input,(ack as Record<string,unknown>).actorId)
+   ||result.receipt.eventId!==(ack as Record<string,unknown>).eventId)return false;
+ }else if(isPendingFinancialOriginal(entry)){
   if(result.code!=='OK'||result.financialCommand!==entry.command)return false;
+  if(entry.command==='invoice.issue'){
+   const receipt=result.receipt,proof=result.offlineReceipt;
+   if(!receipt||typeof receipt!=='object'||Array.isArray(receipt)||!proof||typeof proof!=='object'||Array.isArray(proof))return false;
+   const invoice=receipt as Record<string,unknown>,ack=proof as Record<string,unknown>;
+   if(invoice.clientEventId!==entry.id||invoice.orderId!==entry.input.orderId||invoice.eventId!==ack.eventId||invoice.issuedBy!==ack.actorId
+     ||typeof invoice.invoiceId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(invoice.invoiceId)
+     ||typeof invoice.pdfSha256!=='string'||!/^[a-f0-9]{64}$/.test(invoice.pdfSha256))return false;
+  }
+  if(entry.command==='invoice.cancel'&&entry.input.reissueWithoutShipping){
+   const record=(value:unknown):value is Record<string,unknown>=>Boolean(value)&&typeof value==='object'&&!Array.isArray(value);
+   const uuid=(value:unknown)=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
+   const cancellation=result.receipt,replacement=result.replacementReceipt,ack=result.offlineReceipt,intent=entry.input.reissueWithoutShipping;
+   if(!record(cancellation)||!record(replacement)||!record(ack)||!record(cancellation.reissueWithoutShipping)||!record(replacement.reissue))return false;
+   const original=cancellation.reissueWithoutShipping,repaired=replacement.reissue;
+   if(cancellation.status!=='cancelled'||replacement.status!=='issued'||cancellation.invoiceId!==entry.input.invoiceId||cancellation.clientEventId!==entry.id
+    ||cancellation.eventId!==ack.eventId||cancellation.cancelledBy!==original.confirmedBy
+    ||!uuid(cancellation.cancelledBy)||!uuid(replacement.issuedBy)||!uuid(replacement.eventId)||!uuid(replacement.invoiceId)||replacement.invoiceId===cancellation.invoiceId
+    ||typeof cancellation.orderId!=='string'||!cancellation.orderId.trim()||cancellation.orderId.length>128
+    ||typeof original.orderVersion!=='number'||!Number.isSafeInteger(original.orderVersion)||original.orderVersion<1
+    ||original.handoverEventId!==intent.handoverEventId||original.replacementClientEventId!==intent.replacementClientEventId
+    ||typeof cancellation.originalPdfSha256!=='string'||!/^[a-f0-9]{64}$/.test(cancellation.originalPdfSha256)||original.originalPdfSha256!==cancellation.originalPdfSha256
+    ||replacement.clientEventId!==intent.replacementClientEventId||replacement.orderId!==cancellation.orderId
+    ||typeof replacement.orderVersion!=='number'||!Number.isSafeInteger(replacement.orderVersion)||replacement.orderVersion<original.orderVersion
+    ||repaired.cancellationEventId!==cancellation.eventId||repaired.confirmedBy!==cancellation.cancelledBy||repaired.repairActorId!==replacement.issuedBy
+    ||typeof replacement.pdfSha256!=='string'||!/^[a-f0-9]{64}$/.test(replacement.pdfSha256))return false;
+  }
  }else if(result.code!=='OK')return false;
  return isPendingWorkshopReceipt(scope,entry,result.offlineReceipt);
 }
@@ -475,13 +519,14 @@ export async function acknowledgePendingWorkshopOriginal(scope:string,entry:Pend
  const db=await database(scope);
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.get(entry.id);let removed=false;
-  read.onsuccess=()=>{const current=read.result;if(!isPendingWorkshopOriginal(current)||current.rejection||current.command!==entry.command||current.deviceCapturedAt!==entry.deviceCapturedAt||canonicalJson(current.input)!==canonicalJson(entry.input))return;store.delete(entry.id);removed=true;};
+    read.onsuccess=()=>{const current=read.result;if(!isPendingWorkshopOriginal(current)||current.rejection||current.command!==entry.command||current.deviceCapturedAt!==entry.deviceCapturedAt||canonicalJson(current.input)!==canonicalJson(entry.input))return;store.delete(entry.id);removed=true;};
   tx.oncomplete=()=>{db.close();if(removed)window.dispatchEvent(new Event('kreile-pending-changed'));resolve(removed);};
   tx.onabort=()=>{db.close();reject(Error('OFFLINE_WORKSHOP_ACK_ABORTED'));};
  });
 }
 
-/** PL14Nov10:20: same original, separately proved non-effect; never deleted. */
+/** PL14Nov10:20: retain the same original, mark a separately proved non-effect.
+ * This never calls the business acknowledgement/deletion path. */
 export async function retainRejectedWorkshopOriginal(scope:string,entry:PendingWorkshopOriginal,receipt:WorkshopRejectionReceipt):Promise<boolean>{
  if(!isWorkshopRejectionReceipt(scope,entry,receipt))throw Error('OFFLINE_WORKSHOP_REJECTION_PROOF_REQUIRED');
  const db=await database(scope);
@@ -494,7 +539,8 @@ export async function retainRejectedWorkshopOriginal(scope:string,entry:PendingW
   tx.onabort=()=>{db.close();reject(Error('OFFLINE_WORKSHOP_REJECTION_STORE_ABORTED'));};
  });
 }
-/** Read projection only; STORE keeps the original key and body. */
+
+/** Read projection only; the original stays under its original key in STORE. */
 export function rejectedWorkshopProjection(entry:PendingWorkshopOriginal):PendingQuarantine|null{
  return entry.rejection?{id:'rejected:'+entry.id,kind:'quarantine',capturedAt:entry.deviceCapturedAt!,payload:{reason:'WORKSHOP_REJECTED_WITHOUT_EFFECT',original:entry}}:null;
 }

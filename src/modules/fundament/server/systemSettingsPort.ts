@@ -2,7 +2,7 @@ import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
 import {isDeepStrictEqual} from 'node:util';
 import {dispatchPolicyValid} from '../dispatchPolicy';
-import {STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
+import {STORAGE_CHARGE_COPY,SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import "server-only";
 
 import bcrypt from "bcryptjs";
@@ -56,11 +56,12 @@ export async function readCompanyLetterSettings(context:CompanyDocumentContext){
 
 export async function readShippingSettingsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string):Promise<ShippingSettings|null>{
  const rows=await tx.execute<ShippingSettings>(sql`SELECT versand_dienst AS service,versand_nummer_format AS "numberPattern",versand_nummer_hinweis AS "numberHint",
-   versand_verfolgung_url AS "trackingUrl",versand_label_api AS "labelApi",ausgang_regeln AS "dispatchPolicy",to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
+   versand_verfolgung_url AS "trackingUrl",versand_label_api AS "labelApi",versand_pauschale_netto_cents AS "shippingFeeCents",ausgang_regeln AS "dispatchPolicy",to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
    FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 2`);
  if(!rows.length)return null;
  if(rows.length!==1||!rows[0]||typeof rows[0].service!=="string"||!rows[0].service.trim())throw Error('SHIPPING_SETTINGS_INVALID');
  if(rows[0].dispatchPolicy!==null&&!dispatchPolicyValid(rows[0].dispatchPolicy))throw Error("DISPATCH_POLICY_INVALID");
+ if(rows[0].shippingFeeCents!==null&&(!Number.isSafeInteger(rows[0].shippingFeeCents)||Number(rows[0].shippingFeeCents)<0))throw Error('SHIPPING_FEE_SOURCE_INVALID');
  return rows[0];
 }
 export async function readShippingSettings(context:CompanyDocumentContext){
@@ -73,11 +74,13 @@ export async function updateShippingSettings(context:SystemSettingsContext,input
  if(context.canManageCompany!==true)return {code:"FORBIDDEN" as const,message:"Versandangaben dürfen nicht geändert werden."};
  if(!input||typeof input!=="object"||Array.isArray(input))return {code:"VALIDATION_ERROR" as const,message:"Versandangaben fehlen."};
  const value=input as Record<string,unknown>;
- if(Object.keys(value).sort().join(',')!==['expectedUpdatedAt','numberHint','numberPattern','service','trackingUrl',...('dispatchPolicy' in value?['dispatchPolicy']:[])].sort().join(',')
+ if(Object.keys(value).sort().join(',')!==['expectedUpdatedAt','numberHint','numberPattern','service','trackingUrl',...('dispatchPolicy' in value?['dispatchPolicy']:[]),...('shippingFeeCents'in value?['shippingFeeCents']:[])].sort().join(',')
   ||typeof value.service!=="string"||value.service!==value.service.trim()||value.service.length<1||value.service.length>40
   ||typeof value.numberPattern!=="string"||value.numberPattern.length>160||typeof value.numberHint!=="string"||value.numberHint.length>160
   ||!(value.trackingUrl===null||typeof value.trackingUrl==="string"&&value.trackingUrl.length<=1000)
   ||typeof value.expectedUpdatedAt!=="string"||!Number.isFinite(Date.parse(value.expectedUpdatedAt)))return {code:"VALIDATION_ERROR" as const,message:"Versandangaben sind ungültig."};
+ if('shippingFeeCents'in value&&(value.shippingFeeCents!==null&&(!Number.isSafeInteger(value.shippingFeeCents)||Number(value.shippingFeeCents)<0||Number(value.shippingFeeCents)>2147483647)))return {code:'VALIDATION_ERROR' as const,message:SHIPPING_FEE_COPY.invalid};
+ if('shippingFeeCents'in value&&context.canManageFinancial!==true)return {code:'FORBIDDEN' as const,message:SHIPPING_FEE_COPY.forbidden};
  if('dispatchPolicy' in value&&value.dispatchPolicy!==null&&!dispatchPolicyValid(value.dispatchPolicy))return {code:'VALIDATION_ERROR' as const,message:'Fristen, Kalender oder Dienstschluss sind unvollständig oder ungültig · Eingaben bleiben erhalten.'};
  try{
   if(value.numberPattern)new RegExp(value.numberPattern);
@@ -91,7 +94,8 @@ export async function updateShippingSettings(context:SystemSettingsContext,input
    if(context.canManageFinancial!==true&&(submitted&&'storageWeeklyCents'in submitted||submitted===null&&current.dispatchPolicy?.storageWeeklyCents!=null))return {code:'FORBIDDEN' as const,message:STORAGE_CHARGE_COPY.forbidden};
    const policy=submitted&& !('storageWeeklyCents'in submitted)&&current.dispatchPolicy?.storageWeeklyCents!==undefined?{...submitted,storageWeeklyCents:current.dispatchPolicy.storageWeeklyCents}:submitted;
    const effectivePolicy='dispatchPolicy'in value?policy:current.dispatchPolicy;
-   const identical=current.service===value.service&&current.numberPattern===value.numberPattern&&current.numberHint===value.numberHint&&current.trackingUrl===value.trackingUrl&&isDeepStrictEqual(current.dispatchPolicy,effectivePolicy);
+   const effectiveFee='shippingFeeCents'in value?value.shippingFeeCents:current.shippingFeeCents;
+   const identical=current.service===value.service&&current.numberPattern===value.numberPattern&&current.numberHint===value.numberHint&&current.trackingUrl===value.trackingUrl&&isDeepStrictEqual(current.dispatchPolicy,effectivePolicy)&&current.shippingFeeCents===effectiveFee;
    if(identical)return {code:"OK" as const,settings:current,replayed:true};
    if(current.updatedAt!==value.expectedUpdatedAt)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte abgleichen.",current};
    if(policy?.finalStageRecipientId){
@@ -99,10 +103,10 @@ export async function updateShippingSettings(context:SystemSettingsContext,input
     if(recipient.length!==1)return {code:'VALIDATION_ERROR' as const,message:'Empfänger für die letzte Stufe ist kein aktiver Login · Eingaben bleiben erhalten.'};
    }
    const changed=await tx.execute(sql`UPDATE public.company_settings SET versand_dienst=${value.service},versand_nummer_format=${value.numberPattern},
-     versand_nummer_hinweis=${value.numberHint},versand_verfolgung_url=${value.trackingUrl},ausgang_regeln=${effectivePolicy===null?null:JSON.stringify(effectivePolicy)}::jsonb,updated_at=statement_timestamp()
+     versand_nummer_hinweis=${value.numberHint},versand_verfolgung_url=${value.trackingUrl},versand_pauschale_netto_cents=${effectiveFee},ausgang_regeln=${effectivePolicy===null?null:JSON.stringify(effectivePolicy)}::jsonb,updated_at=statement_timestamp()
      WHERE tenant_id=${context.tenantId} AND updated_at=${value.expectedUpdatedAt}::timestamptz RETURNING id`);
    if(changed.length!==1)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte erneut abgleichen.",current:await readShippingSettingsInTransaction(tx,context.tenantId)};
-   const audit=await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'shipping_settings_updated',${JSON.stringify({actorId:context.actorId,before:current,after:{service:value.service,numberPattern:value.numberPattern,numberHint:value.numberHint,trackingUrl:value.trackingUrl,dispatchPolicy:effectivePolicy}})}::jsonb) RETURNING id`);
+   const audit=await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'shipping_settings_updated',${JSON.stringify({actorId:context.actorId,before:current,after:{service:value.service,numberPattern:value.numberPattern,numberHint:value.numberHint,trackingUrl:value.trackingUrl,dispatchPolicy:effectivePolicy,shippingFeeCents:effectiveFee}})}::jsonb) RETURNING id`);
    if(audit.length!==1)throw Error('SHIPPING_SETTINGS_EVENT_NOT_SAVED');
    return {code:"OK" as const,settings:await readShippingSettingsInTransaction(tx,context.tenantId),replayed:false};
   });

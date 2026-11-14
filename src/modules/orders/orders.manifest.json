@@ -60,12 +60,14 @@
     "supabase/migrations/20261110010200_ablauf_historical_callback_receipt.sql",
     "supabase/migrations/20261110022114_ablauf_canonical_release_projection.sql",
     "supabase/migrations/20261110085921_order_print_jobs.sql",
-    "supabase/migrations/20261110093116_order_print_jobs_no_delete.sql"
+    "supabase/migrations/20261110093116_order_print_jobs_no_delete.sql",
+    "20261114042536_shipment_groups.sql"
   ],
   "viewsFunctions": [
     "private.guard_goods_out_debt_override_v1",
     "private.invoice_is_overdue_v1",
-    "private.order_release_allowed_v1"
+    "private.order_release_allowed_v1",
+    "private.lock_shipping_customer_v1"
   ],
   "ownsTables": [
     "public.orders",
@@ -76,8 +78,22 @@
   ],
   "storagePurposes": [],
   "events": {
-    "emits": ["SHIPMENT_MANUAL_TRACKING_SET_V1","SHIPMENT_HANDED_OVER_V1","ORDER_CUSTOMER_INFORMED_V1","ORDER_PICKUP_APPOINTMENT_SET_V1","ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1","ORDER_PRINT_JOBS_QUEUED_V1","ORDER_PRINT_JOBS_RETIRED_V1"],
-    "consumes": ["ORDER_COLLECTION_REMINDER_PREPARED_V1","ORDER_COLLECTION_REMINDER_SENT_V1","ORDER_COLLECTION_CALL_CREATED_V1","ORDER_COLLECTION_CALL_UPDATED_V1","ORDER_COLLECTION_CALL_RESULT_V1"]
+    "emits": [
+      "SHIPMENT_MANUAL_TRACKING_SET_V1",
+      "SHIPMENT_HANDED_OVER_V1",
+      "ORDER_CUSTOMER_INFORMED_V1",
+      "ORDER_PICKUP_APPOINTMENT_SET_V1",
+      "ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1",
+      "ORDER_PRINT_JOBS_QUEUED_V1",
+      "ORDER_PRINT_JOBS_RETIRED_V1"
+    ],
+    "consumes": [
+      "ORDER_COLLECTION_REMINDER_PREPARED_V1",
+      "ORDER_COLLECTION_REMINDER_SENT_V1",
+      "ORDER_COLLECTION_CALL_CREATED_V1",
+      "ORDER_COLLECTION_CALL_UPDATED_V1",
+      "ORDER_COLLECTION_CALL_RESULT_V1"
+    ]
   },
   "config": {},
   "dependencies": [

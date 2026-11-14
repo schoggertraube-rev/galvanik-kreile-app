@@ -7,6 +7,7 @@ import { orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
 import type { CustomerSummary } from "@/lib/server/customerSummaryRead";
 import type { CompanySettingsInput } from "@/modules/fundament/public";
 import type { QuoteReadback } from "@/modules/quotes/public";
+import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 
 const styles = StyleSheet.create({
   page: { padding: 42, fontFamily: "Helvetica", fontSize: 9, color: "#182033" },
@@ -74,6 +75,7 @@ export function createQuotePdfDocument(input: {
 
         <Text style={styles.title}>Kostenvoranschlag</Text>
         <Text>Gern bieten wir Ihnen folgende Leistungen an:</Text>
+        {quote.shippingIncluded===true?<Text>{SHIPPING_FEE_COPY.included}</Text>:null}
 
         <View style={styles.table}>
           <View style={[styles.row, styles.head]}>

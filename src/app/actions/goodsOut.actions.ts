@@ -36,7 +36,8 @@ export async function recordGoodsOutAction(
   const result = await recordGoodsOut(input,{
     beforeOrderLock:async(tx,auth)=>{if(invoiceInput&&invoicePort)await invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput);callTaskIds=await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);finalTasks=await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId);},
     ...(invoiceInput&&invoicePort?{beforeWrite:async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction)=>{
-      const invoice=await invoicePort.createInvoice(invoiceInput,tx,readInvoiceVat);
+      const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
+      const invoice=await invoicePort.createInvoice(invoiceInput,tx,readInvoiceVat,readShippingSettingsInTransaction);
       return invoice.code==='OK'?null:{code:invoice.code,message:invoice.message};
     }}:{}),
     afterWriteFailure:async(tx,auth,receipt)=>{await createGoodsOutClarificationTask(tx,auth,{orderId:receipt.orderId,eventId:receipt.eventId},{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});},

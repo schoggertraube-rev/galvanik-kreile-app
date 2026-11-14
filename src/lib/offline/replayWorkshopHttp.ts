@@ -1,5 +1,5 @@
 import type {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
-import {isPendingWorkshopAcknowledgement,type PendingWorkshopOriginal} from './pendingStore';
+import {isPendingWorkshopAcknowledgement,isPendingConfirmedOriginal,type PendingWorkshopOriginal} from './pendingStore';
 import {isWorkshopRejectionReceipt} from './workshopRejectionContract';
 type Result=Awaited<ReturnType<typeof replayOfflineWorkshopAction>>;
 
@@ -10,7 +10,7 @@ export async function replayOfflineWorkshopHttp(scope:string,original:PendingWor
   const response=await fetch('/api/offline/replay',{method:'POST',credentials:'same-origin',cache:'no-store',keepalive:options.keepalive===true,headers:{'content-type':'application/json'},body:JSON.stringify({scope,original})});
   const body:unknown=await response.json();
   if(response.ok&&body&&typeof body==='object'&&'code'in body&&body.code==='PRESERVED'&&'rejectionReceipt'in body&&isWorkshopRejectionReceipt(scope,original,body.rejectionReceipt))return body as Result;
-  if((original.command==='invoice.cancel'||original.command==='credit.apply'||original.command==='credit.payout')&&body&&typeof body==='object'&&'code'in body&&['CONFLICT','FORBIDDEN','VALIDATION_ERROR','NOT_FOUND','UNAUTHENTICATED','UNAVAILABLE'].includes(String(body.code)))return body as Result;
+  if(isPendingConfirmedOriginal(original)&&body&&typeof body==='object'&&'code'in body&&['CONFLICT','FORBIDDEN','VALIDATION_ERROR','NOT_FOUND','UNAUTHENTICATED','UNAVAILABLE'].includes(String(body.code)))return body as Result;
   if(!response.ok){
    if(response.status===401)return {code:'UNAUTHENTICATED'};
    if(response.status===403)return {code:'FORBIDDEN'};

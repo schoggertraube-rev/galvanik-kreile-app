@@ -1,9 +1,16 @@
+import {isCancelInvoiceInput as isValidCancelInput,type CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
+export type {CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
+import {isCreateInvoiceInput as isValidInput,isInvoiceShippingCostsInput as validShippingCosts,type CreateInvoiceInput} from '@/lib/domain/invoiceIntentContract';
+export type {CreateInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
 import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
-import {appendCancellationCredit} from './customerCreditCommand';
+import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
+import {appendCancellationCredit,readCancellationCreditSource} from './customerCreditCommand';
+import {readInvoiceHandoverSource} from '@/lib/server/orderHandoverSourcePort';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
 
 import { createHash, randomUUID } from "node:crypto";
@@ -29,6 +36,7 @@ import {
   createImmutableInvoicePdfDocument,
   type ImmutableInvoiceBaseLine,
   type ImmutableInvoiceExtraWorkLine,
+  type ImmutableInvoiceShippingLine,
   type ImmutableInvoiceLine,
   type ImmutableInvoiceSnapshot,
 } from "@/lib/pdf/ImmutableInvoiceDocument";
@@ -49,19 +57,27 @@ const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
 const HEX64_PATTERN = /^[a-f0-9]{64}$/;
 /** Canonical UTC instant, exactly as `to_char(... 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')` emits it. */
 const ISO_INSTANT_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
-
-export type CreateInvoiceInput = {
-  orderId: string;
-  expectedVersion: number;
-  clientEventId: string;
-  agreement?: {
-    id: string;
-    version: number;
-    type: "ausgabe_ohne_zahlung" | "zahlungsziel";
-  };
-};
+type InvoiceReissueIntent=NonNullable<CancelInvoiceInput['reissueWithoutShipping']>&{originalPdfSha256:string;orderVersion:number;confirmedBy:string};
+function readStoredReissueIntent(value:unknown,row:Pick<ReceiptRow,'original_pdf_sha256'|'actor_id'>):InvoiceReissueIntent{
+ if(!plainObject(value)||Object.keys(value).sort().join(',')!=='confirmedBy,handoverEventId,orderVersion,originalPdfSha256,replacementClientEventId'
+  ||typeof value.handoverEventId!=='string'||!UUID_PATTERN.test(value.handoverEventId)
+  ||typeof value.replacementClientEventId!=='string'||!UUID_PATTERN.test(value.replacementClientEventId)
+  ||value.originalPdfSha256!==row.original_pdf_sha256||value.confirmedBy!==row.actor_id
+  ||typeof value.orderVersion!=='number'||!Number.isSafeInteger(value.orderVersion)||value.orderVersion<1)throw Error('INVOICE_REISSUE_INTENT_INVALID');
+ return value as InvoiceReissueIntent;
+}
+function readIssuedReissueIntent(value:unknown,actorId:string):ImmutableInvoiceReceiptBase['reissue']{
+ if(value===undefined||value===null)return undefined;
+ if(!plainObject(value)||Object.keys(value).sort().join(',')!=='cancellationEventId,confirmedBy,repairActorId'
+  ||typeof value.cancellationEventId!=='string'||!UUID_PATTERN.test(value.cancellationEventId)
+  ||typeof value.confirmedBy!=='string'||!UUID_PATTERN.test(value.confirmedBy)||value.repairActorId!==actorId)throw Error('INVOICE_REISSUE_RECEIPT_INVALID');
+ return value as NonNullable<ImmutableInvoiceReceiptBase['reissue']>;
+}
 
 type ImmutableInvoiceReceiptBase = {
+  reissue?:{cancellationEventId:string;confirmedBy:string;repairActorId:string};
+  belegart?: 'versandkosten';
+  ursprungRechnungId?: string;
   invoiceId: string;
   invoiceNumber: string;
   orderId: string;
@@ -97,14 +113,10 @@ export type CreateInvoiceResult =
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
-export type CancelInvoiceInput = {
-  invoiceId: string;
-  expectedVersion: number;
-  reason: string;
-  clientEventId: string;
-};
+
 
 export type ImmutableInvoiceCancellationReceipt = {
+  reissueWithoutShipping?:InvoiceReissueIntent;
   invoiceId: string;
   invoiceNumber: string;
   orderId: string;
@@ -125,7 +137,7 @@ export type ImmutableInvoiceCancellationReceipt = {
 };
 
 export type CancelInvoiceResult =
-  | { code: "OK"; receipt: ImmutableInvoiceCancellationReceipt; replayed: boolean }
+  | { code: "OK"; receipt: ImmutableInvoiceCancellationReceipt; replayed: boolean;replacementReceipt?:ImmutableInvoiceReceipt }
   | { code: "UNAUTHENTICATED"; message: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "NOT_FOUND"; message: string }
@@ -142,6 +154,7 @@ type LockedOrder = {
   version: number;
   payment_mode: string;
   payment_mode_version: number;
+  handover_mode:string|null;
 };
 
 type InvoicePaymentInitializationRow = {
@@ -208,6 +221,10 @@ type SourceRow = {
 };
 
 type ReceiptRow = {
+  reissue_intent?:unknown;
+  belegart: 'auftrag'|'versandkosten';
+  ursprung_rechnung_id: string|null;
+  shipping_costs_intent: unknown;
   event_id: string;
   tenant_id: string;
   order_id: string;
@@ -273,61 +290,7 @@ type LockedCancellationOrder = {
   tenant_id: string;
 };
 
-function isValidInput(input: unknown): input is CreateInvoiceInput {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
-  const value = input as Record<string, unknown>;
-  const expected = ["clientEventId", "expectedVersion", "orderId"];
-  const expectedWithAgreement = ["agreement", ...expected].sort();
-  const actual = Object.keys(value).sort();
-  const hasAgreement = actual.length === expectedWithAgreement.length
-    && actual.every((key, index) => key === expectedWithAgreement[index]);
-  const agreement = value.agreement;
-  return (actual.length === expected.length
-      && actual.every((key, index) => key === expected[index])
-      || hasAgreement)
-    && typeof value.orderId === "string"
-    && value.orderId.trim() === value.orderId
-    && value.orderId.length > 0
-    && value.orderId.length <= 128
-    && typeof value.clientEventId === "string"
-    && UUID_PATTERN.test(value.clientEventId)
-    && typeof value.expectedVersion === "number"
-    && Number.isSafeInteger(value.expectedVersion)
-    && value.expectedVersion > 0
-    && (!hasAgreement || (
-      agreement !== null
-      && typeof agreement === "object"
-      && !Array.isArray(agreement)
-      && Object.keys(agreement as Record<string, unknown>).sort().join(",") === "id,type,version"
-      && typeof (agreement as Record<string, unknown>).id === "string"
-      && UUID_PATTERN.test((agreement as Record<string, unknown>).id as string)
-      && typeof (agreement as Record<string, unknown>).version === "number"
-      && Number.isSafeInteger((agreement as Record<string, unknown>).version)
-      && ((agreement as Record<string, unknown>).version as number) > 0
-      && ((agreement as Record<string, unknown>).type === "ausgabe_ohne_zahlung"
-        || (agreement as Record<string, unknown>).type === "zahlungsziel")
-    ));
-}
 
-function isValidCancelInput(input: unknown): input is CancelInvoiceInput {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
-  const value = input as Record<string, unknown>;
-  const expected = ["clientEventId", "expectedVersion", "invoiceId", "reason"];
-  const actual = Object.keys(value).sort();
-  return actual.length === expected.length
-    && actual.every((key, index) => key === expected[index])
-    && typeof value.invoiceId === "string"
-    && UUID_PATTERN.test(value.invoiceId)
-    && typeof value.clientEventId === "string"
-    && UUID_PATTERN.test(value.clientEventId)
-    && typeof value.expectedVersion === "number"
-    && Number.isSafeInteger(value.expectedVersion)
-    && value.expectedVersion > 0
-    && typeof value.reason === "string"
-    && value.reason === value.reason.trim()
-    && value.reason.length >= 5
-    && value.reason.length <= 500;
-}
 
 /**
  * F1.4 — a missing or unusable mandatory master-data value is a user-fixable
@@ -472,6 +435,13 @@ function parseStoredLine(value: unknown, schemaVersion: 1|2): ImmutableInvoiceLi
   if (!plainObject(value) || typeof value.type !== "string") {
     throw new Error("INVOICE_SNAPSHOT_LINE_INVALID");
   }
+  if(value.type==='SHIPPING'){
+    if(schemaVersion!==2||!exactKeys(value,['type','shipmentGroupId','name','amountCents','vat_rate_basis_points',...('shippingKind'in value?['shippingKind']:[])]))throw Error('INVOICE_SNAPSHOT_SHIPPING_SHAPE_INVALID');
+    const rate=value.vat_rate_basis_points;
+    if(rate!==0&&rate!==700&&rate!==1900)throw Error('INVOICE_SNAPSHOT_SHIPPING_RATE_INVALID');
+    if('shippingKind'in value&&(value.shippingKind!=='fee'&&value.shippingKind!=='reference'||value.shippingKind==='reference'&&value.amountCents!==0))throw Error('INVOICE_SNAPSHOT_SHIPPING_KIND_INVALID');
+    return {type:'SHIPPING',...('shippingKind'in value?{shippingKind:value.shippingKind as 'fee'|'reference'}:{}),shipmentGroupId:requiredText(value.shipmentGroupId,'INVOICE_SNAPSHOT_SHIPPING_SOURCE_INVALID'),name:requiredText(value.name,'INVOICE_SNAPSHOT_SHIPPING_NAME_INVALID'),amountCents:toSafeInteger(value.amountCents,'INVOICE_SNAPSHOT_SHIPPING_AMOUNT_INVALID'),vat_rate_basis_points:rate};
+  }
   if (value.type === "BASE") {
     if (!exactKeys(value, [
       "itemId", "lineNetAmountCents", "name", "quantity", "type", "unitNetAmountCents",
@@ -509,7 +479,7 @@ function parseStoredLine(value: unknown, schemaVersion: 1|2): ImmutableInvoiceLi
   throw new Error("INVOICE_SNAPSHOT_LINE_TYPE_INVALID");
 }
 
-function parseStoredSnapshot(value: unknown, invoice: LockedInvoice, readVat: InvoiceVatReader): ImmutableInvoiceSnapshot {
+function parseStoredSnapshot(value: unknown, invoice: {order_id:string}, readVat: InvoiceVatReader): ImmutableInvoiceSnapshot {
   if (!plainObject(value) || !exactKeys(value, [
     "customer", "issuedAt", "lines", "order", "paymentTermDays", "schemaVersion",
     "seller", "serviceDate", "totals",
@@ -609,34 +579,11 @@ type PreparedInvoiceContent = {
  * customer, order or position leaves invoice, lifecycle event and counter
  * completely untouched.
  */
-function prepareInvoiceContent(
-  source: SourceRow,
-  order: LockedOrder,
-): PreparedInvoiceContent {
-  const customerCountry=masterDataText(source.customer_country,"INVOICE_CUSTOMER_COUNTRY_INVALID");
-  const customerVatId=optionalText(source.customer_vat_id);
-  const reverseCharge=INVOICE_EU_OUTSIDE_DE.has(customerCountry)&&customerVatId!==null;
-  const vatSource={reverseCharge,companyRate:source.invoice_vat_rate_basis_points};
-  const baseLines = parseBaseLines(source.base_lines,vatSource);
-  const extraWorkLines = parseExtraWorkLines(source.extra_work_lines,vatSource);
-  if (
-    baseLines.length !== toSafeInteger(source.base_line_count, "INVOICE_BASE_LINE_COUNT_INVALID")
-    || extraWorkLines.length !== toSafeInteger(source.extra_work_line_count, "INVOICE_EXTRA_WORK_LINE_COUNT_INVALID")
-  ) throw new Error("INVOICE_LINE_COUNT_MISMATCH");
-  if (baseLines.length < 1) {
-    throw new InvoiceMasterDataError("INVOICE_BASE_LINES_MISSING");
-  }
-
-  const baseNetAmountCents = toSafeInteger(source.base_net_amount_cents, "INVOICE_BASE_AMOUNT_INVALID");
-  const extraWorkNetAmountCents = toSafeInteger(source.extra_work_net_amount_cents, "INVOICE_EXTRA_WORK_AMOUNT_TOTAL_INVALID");
-  if (
-    baseLines.reduce((sum, line) => sum + line.lineNetAmountCents, 0) !== baseNetAmountCents
-    || extraWorkLines.reduce((sum, line) => sum + line.amountCents, 0) !== extraWorkNetAmountCents
-  ) throw new Error("INVOICE_LINE_TOTAL_MISMATCH");
-
-  const netAmountCents = baseNetAmountCents + extraWorkNetAmountCents;
+/** The existing per-rate commercial rounding; no head-rate or second calculator. */
+function invoiceLineTotals(lines:readonly ImmutableInvoiceLine[]){
+  const netAmountCents=lines.reduce((sum,line)=>sum+(line.type==="BASE"?line.lineNetAmountCents:line.amountCents),0);
   const byRate=new Map<0|700|1900,number>();
-  for(const line of [...baseLines,...extraWorkLines]){
+  for(const line of lines){
     const rate=line.vat_rate_basis_points;
     if(rate===undefined)throw Error("INVOICE_LINE_RATE_REQUIRED");
     const amount=line.type==="BASE"?line.lineNetAmountCents:line.amountCents;
@@ -656,6 +603,41 @@ function prepareInvoiceContent(
     || !Number.isSafeInteger(grossAmountCents)
     || netAmountCents < 0
   ) throw new Error("INVOICE_AMOUNT_UNSAFE");
+
+  return {netAmountCents,vatAmountCents,grossAmountCents,vatBreakdown};
+}
+
+function prepareInvoiceContent(
+  source: SourceRow,
+  order: LockedOrder,
+  shippingFees:Array<{shipmentGroupId:string;amountCents:number;name:string;shippingKind:'fee'|'reference'}>,
+  shippingOnly=false,
+): PreparedInvoiceContent {
+  const customerCountry=masterDataText(source.customer_country,"INVOICE_CUSTOMER_COUNTRY_INVALID");
+  const customerVatId=optionalText(source.customer_vat_id);
+  const reverseCharge=INVOICE_EU_OUTSIDE_DE.has(customerCountry)&&customerVatId!==null;
+  const vatSource={reverseCharge,companyRate:source.invoice_vat_rate_basis_points};
+  // PL14Nov05:45: this document bills only the selected real shipping source.
+  // Zero goods is known from its explicit kind, never a missing-price fallback.
+  const baseLines = shippingOnly?[]:parseBaseLines(source.base_lines,vatSource);
+  const extraWorkLines = shippingOnly?[]:parseExtraWorkLines(source.extra_work_lines,vatSource);
+  const shippingLines:ImmutableInvoiceShippingLine[]=shippingFees.map(fee=>({type:'SHIPPING',shippingKind:fee.shippingKind,shipmentGroupId:fee.shipmentGroupId,name:fee.name,amountCents:fee.amountCents,vat_rate_basis_points:invoiceLineVat(null,fee.name,reverseCharge,source.invoice_vat_rate_basis_points)}));
+  if (
+    !shippingOnly && (baseLines.length !== toSafeInteger(source.base_line_count, "INVOICE_BASE_LINE_COUNT_INVALID")
+    || extraWorkLines.length !== toSafeInteger(source.extra_work_line_count, "INVOICE_EXTRA_WORK_LINE_COUNT_INVALID"))
+  ) throw new Error("INVOICE_LINE_COUNT_MISMATCH");
+  if ((!shippingOnly && baseLines.length < 1)||(shippingOnly&&shippingLines.length<1)) {
+    throw new InvoiceMasterDataError("INVOICE_BASE_LINES_MISSING");
+  }
+
+  const baseNetAmountCents = shippingOnly?0:toSafeInteger(source.base_net_amount_cents, "INVOICE_BASE_AMOUNT_INVALID");
+  const extraWorkNetAmountCents = shippingOnly?0:toSafeInteger(source.extra_work_net_amount_cents, "INVOICE_EXTRA_WORK_AMOUNT_TOTAL_INVALID");
+  if (
+    baseLines.reduce((sum, line) => sum + line.lineNetAmountCents, 0) !== baseNetAmountCents
+    || extraWorkLines.reduce((sum, line) => sum + line.amountCents, 0) !== extraWorkNetAmountCents
+  ) throw new Error("INVOICE_LINE_TOTAL_MISMATCH");
+
+  const {netAmountCents,vatAmountCents,grossAmountCents,vatBreakdown}=invoiceLineTotals([...baseLines,...extraWorkLines,...shippingLines]);
 
   return {
     seller: {
@@ -686,12 +668,22 @@ function prepareInvoiceContent(
       title: masterDataText(source.order_title, "INVOICE_ORDER_TITLE_INVALID"),
       freezeId: requiredText(source.freeze_id, "INVOICE_FREEZE_ID_INVALID"),
     },
-    lines: [...baseLines, ...extraWorkLines] as ImmutableInvoiceLine[],
+    lines: [...baseLines, ...extraWorkLines,...shippingLines] as ImmutableInvoiceLine[],
     totals: { netAmountCents, vatRateBasisPoints:null, vatBreakdown, vatAmountCents, grossAmountCents },
   };
 }
 
-function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string,readVat:InvoiceVatReader): ImmutableInvoiceReceipt {
+export function mapInvoiceIssueReceipt(row: ReceiptRow, tenantId: string, actorId: string,readVat:InvoiceVatReader): ImmutableInvoiceReceipt {
+  const reissue=readIssuedReissueIntent(row.reissue_intent,actorId);
+  const kindValid=row.belegart==='auftrag'
+    ?row.ursprung_rechnung_id===null&&row.shipping_costs_intent===null
+    :row.belegart==='versandkosten'&&typeof row.ursprung_rechnung_id==='string'&&UUID_PATTERN.test(row.ursprung_rechnung_id)
+      &&validShippingCosts(row.shipping_costs_intent,row.order_id)
+      &&row.shipping_costs_intent.invoiceId===row.ursprung_rechnung_id
+      &&plainObject(row.snapshot)&&Array.isArray(row.snapshot.lines)&&row.snapshot.lines.length>0
+      &&row.snapshot.lines.every(line=>plainObject(line)&&line.type==='SHIPPING')
+      &&row.shipping_costs_intent.expectedFeeCents===toSafeInteger(row.net_amount_cents,'INVOICE_SHIPPING_NET_INVALID');
+  if(!kindValid)throw Error('INVOICE_RECEIPT_KIND_INVALID');
   const orderVersion = toSafeInteger(row.order_version, "INVOICE_RECEIPT_ORDER_VERSION_INVALID");
   const intentExpectedVersion = toSafeInteger(
     row.intent_expected_version,
@@ -718,6 +710,7 @@ function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string,readVat:I
     row.integrity_ok !== true
     || row.tenant_id !== tenantId
     || row.actor_id !== actorId
+    || !UUID_PATTERN.test(row.actor_id)
     || (row.event_type !== EVENT_TYPE && row.event_type !== EVENT_TYPE_V2)
     || (row.event_type === EVENT_TYPE ? eventSchemaVersion !== EVENT_SCHEMA_VERSION : eventSchemaVersion !== 2)
     || aggregateVersion !== 1
@@ -738,6 +731,7 @@ function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string,readVat:I
   ) throw new Error("INVOICE_RECEIPT_INVALID");
 
   const receipt: ImmutableInvoiceReceiptBase = {
+    ...(reissue?{reissue}:{}),
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
     orderId: row.order_id,
@@ -757,13 +751,14 @@ function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string,readVat:I
     clientEventId: row.client_event_id,
     correlationId: row.correlation_id,
     aggregateVersion: 1,
+    ...(row.belegart==='versandkosten'?{belegart:'versandkosten' as const,ursprungRechnungId:requiredText(row.ursprung_rechnung_id,'INVOICE_SHIPPING_ORIGIN_MISSING')} : {}),
   };
   return row.event_type === EVENT_TYPE_V2
     ? { ...receipt, eventSchemaVersion: 2, invoiceSourceState: "after_goods_out" }
     : { ...receipt, eventSchemaVersion: 1 };
 }
 
-function mapCancellationReceipt(
+export function mapInvoiceCancellationReceipt(
   row: ReceiptRow,
   tenantId: string,
   actorId: string,
@@ -790,6 +785,7 @@ function mapCancellationReceipt(
     || row.current_version !== 2
     || row.current_status !== "cancelled"
     || orderVersion < 1
+    || reason !== row.cancel_reason
     || reason.length < 5
     || reason.length > 500
     || !UUID_PATTERN.test(row.event_id)
@@ -803,6 +799,7 @@ function mapCancellationReceipt(
   ) throw new Error("INVOICE_CANCEL_RECEIPT_INVALID");
 
   return {
+    ...(row.reissue_intent!==undefined&&row.reissue_intent!==null?{reissueWithoutShipping:readStoredReissueIntent(row.reissue_intent,row)}:{}),
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
     orderId: row.order_id,
@@ -823,27 +820,87 @@ function mapCancellationReceipt(
   };
 }
 
-function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInvoiceInput): boolean {
+function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInvoiceInput, row:ReceiptRow): boolean {
   return receipt.orderId === input.orderId
-    && receipt.orderVersion === input.expectedVersion;
+    && receipt.orderVersion === input.expectedVersion
+    && (input.shippingCosts===undefined
+      ?row.belegart==='auftrag'&&row.ursprung_rechnung_id===null&&row.shipping_costs_intent===null
+      :row.belegart==='versandkosten'&&row.ursprung_rechnung_id===input.shippingCosts.invoiceId
+        &&validShippingCosts(row.shipping_costs_intent,input.orderId)
+        &&row.shipping_costs_intent.invoiceId===input.shippingCosts.invoiceId
+        &&row.shipping_costs_intent.expectedVersion===input.shippingCosts.expectedVersion
+        &&row.shipping_costs_intent.scope===input.shippingCosts.scope
+        &&row.shipping_costs_intent.expectedFeeCents===input.shippingCosts.expectedFeeCents);
 }
 
-async function readCreateInvoiceReceipts(
+export async function readCreateInvoiceReceipts(
   tx: PrivilegedTenantTransaction,
-  clientEventId: string,
+  clientEventId: string|{orderId:string},
 ): Promise<ReceiptRow[]> {
+  const byKey=typeof clientEventId==='string';
   return tx.execute<ReceiptRow>(sql`
-    SELECT *
+    WITH receipt AS (SELECT *
     FROM private.v_invoice_receipt_v1
-    WHERE client_event_id = ${clientEventId}
+    WHERE ${byKey?sql`client_event_id = ${clientEventId}`:sql`order_id = ${clientEventId.orderId}`}
       AND event_type = ${EVENT_TYPE}
     UNION ALL
     SELECT *
     FROM private.v_invoice_created_receipt_v2
-    WHERE client_event_id = ${clientEventId}
+    WHERE ${byKey?sql`client_event_id = ${clientEventId}`:sql`order_id = ${clientEventId.orderId}`}
       AND event_type = ${EVENT_TYPE_V2}
-    LIMIT 2
+    ) SELECT receipt.*,invoice.belegart,invoice.ursprung_rechnung_id::text,
+      event.payload->'shippingCosts' AS shipping_costs_intent,event.payload->'reissue' AS reissue_intent
+    FROM receipt JOIN public.invoices invoice ON invoice.tenant_id=receipt.tenant_id AND invoice.id=receipt.invoice_id
+    JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id
+    ${byKey?sql`LIMIT 2`:sql``}
   `);
+}
+
+/** The same canonical cancellation query serves command, reader and repair. */
+export async function readCancellationInvoiceReceipts(tx:PrivilegedTenantTransaction,clientEventId:string,invoiceId?:string):Promise<ReceiptRow[]>{
+ return tx.execute<ReceiptRow>(sql`SELECT receipt.*,event.payload->'reissue' AS reissue_intent
+  FROM private.v_invoice_receipt_v1 receipt JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id
+  WHERE receipt.client_event_id=${clientEventId}::uuid AND receipt.event_type=${CANCEL_EVENT_TYPE}
+   ${invoiceId!==undefined?sql`AND receipt.invoice_id=${invoiceId}::uuid`:sql``} LIMIT 2`);
+}
+
+/** Narrow immutable R2 source. Current rights are checked at the command/task
+ * boundary; original confirmer and actual replacement issuer stay distinct. */
+export async function readInvoiceReissueSource(tx:PrivilegedTenantTransaction,tenantId:string,key:string,readVat:InvoiceVatReader=readInvoiceVat){
+ const rows=await readCancellationInvoiceReceipts(tx,key);
+ if(!rows.length)return null;
+ if(rows.length!==1)throw Error('INVOICE_REISSUE_CANCELLATION_AMBIGUOUS');
+ const receipt=mapInvoiceCancellationReceipt(rows[0],tenantId,rows[0].actor_id),intent=receipt.reissueWithoutShipping;
+ if(!intent)return null;
+ const originals=await tx.execute<LockedInvoice&{customer_id:string;freeze_id:string;belegart:string}>(sql`SELECT * FROM public.invoices WHERE tenant_id=${tenantId} AND id=${receipt.invoiceId}::uuid`);
+ const original=originals[0];
+ if(originals.length!==1||!original||original.belegart!=='auftrag'||original.status!=='cancelled'||original.order_id!==receipt.orderId
+  ||original.pdf_sha256!==intent.originalPdfSha256||!original.pdf_content||createHash('sha256').update(original.pdf_content).digest('hex')!==intent.originalPdfSha256)throw Error('INVOICE_REISSUE_ORIGINAL_INVALID');
+ const snapshot=parseStoredSnapshot(original.snapshot,original,readVat),goods=snapshot.lines.filter(line=>line.type!=='SHIPPING');
+ if(snapshot.schemaVersion!==2||!snapshot.lines.some(line=>line.type==='SHIPPING')||goods.length===0)throw Error('INVOICE_REISSUE_GOODS_SOURCE_INVALID');
+ const manual=await readInvoiceHandoverSource(tx,tenantId,intent.handoverEventId);
+ if(manual.order_id!==receipt.orderId||manual.order_version!==intent.orderVersion||manual.payload.receipt.outcome!=='changed'||manual.payload.receipt.handoverMode!=='pickup')throw Error('INVOICE_REISSUE_HANDOVER_SOURCE_INVALID');
+ const replacements=await readCreateInvoiceReceipts(tx,intent.replacementClientEventId);
+ if(replacements.length>1)throw Error('INVOICE_REISSUE_REPLACEMENT_AMBIGUOUS');
+ let replacement:ImmutableInvoiceReceipt|null=null;
+ if(replacements[0]){
+  const row=replacements[0];replacement=mapInvoiceIssueReceipt(row,tenantId,row.actor_id,readVat);
+  const issuedSnapshot=parseStoredSnapshot(row.snapshot,row,readVat);
+  if(replacement.reissue?.cancellationEventId!==receipt.eventId||replacement.reissue.confirmedBy!==receipt.cancelledBy
+   ||replacement.reissue.repairActorId!==replacement.issuedBy||replacement.orderId!==receipt.orderId||replacement.orderVersion<intent.orderVersion
+   ||canonicalJson(issuedSnapshot.lines)!==canonicalJson(goods)||canonicalJson(issuedSnapshot.seller)!==canonicalJson(snapshot.seller)
+   ||canonicalJson(issuedSnapshot.customer)!==canonicalJson(snapshot.customer)||issuedSnapshot.paymentTermDays!==snapshot.paymentTermDays||issuedSnapshot.serviceDate!==snapshot.serviceDate)throw Error('INVOICE_REISSUE_REPLACEMENT_SOURCE_INVALID');
+ }
+ return {receipt,intent,original,snapshot,goods,replacement,pending:replacement===null,current:manual.current_order_version>=intent.orderVersion&&manual.current_handover_mode==='pickup'};
+}
+
+async function readInvoiceIssueSource(tx:PrivilegedTenantTransaction,orderId:string){
+  return tx.execute<SourceRow>(sql`
+        SELECT source.*,EXISTS(SELECT 1 FROM private.quote_conversion_receipts receipt JOIN private.quotes quote ON quote.tenant_id=receipt.tenant_id AND quote.id=receipt.quote_id AND quote.linked_order_id=receipt.order_id WHERE receipt.tenant_id=source.tenant_id AND receipt.order_id=source.order_id) AS has_quote
+        FROM private.v_invoice_issue_source_v2 source
+        WHERE source.order_id = ${orderId}
+        LIMIT 2
+      `);
 }
 
 function cancellationReceiptMatchesIntent(
@@ -852,7 +909,10 @@ function cancellationReceiptMatchesIntent(
 ): boolean {
   return receipt.invoiceId === input.invoiceId
     && receipt.expectedVersion === input.expectedVersion
-    && receipt.reason === input.reason;
+    && receipt.reason === input.reason
+    &&(input.reissueWithoutShipping===undefined?receipt.reissueWithoutShipping===undefined:
+      receipt.reissueWithoutShipping?.handoverEventId===input.reissueWithoutShipping.handoverEventId
+      &&receipt.reissueWithoutShipping.replacementClientEventId===input.reissueWithoutShipping.replacementClientEventId);
 }
 
 async function readInitialPaymentState(
@@ -906,13 +966,165 @@ async function readInitialPaymentState(
   }
 }
 
-/** Shared lock order for standalone issuance and issuance composed with goods-out. */
-export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantId:string,input:{clientEventId:string;orderId:string}):Promise<void>{
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0))`);
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:order:' || ${tenantId} || ':' || ${input.orderId}, 0))`);
+type ShippingMember={order_id:string;customer_id:string;shipment_id:string|null};
+/** The one allocator, reused by invoice issuance, read proposals and locked group changes. */
+async function readShippingInvoiceAllocation(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,members:ShippingMember[],sourceKey:string,readVat:InvoiceVatReader){
+ const orderIds=[...new Set(members.map(member=>member.order_id))];
+ if(!members.length||members.some(member=>member.customer_id!==customerId))throw Error('INVOICE_SHIPPING_GROUP_SOURCE_INVALID');
+    const quoteOrders=await tx.execute<{order_id:string}>(sql`SELECT DISTINCT order_id FROM private.quote_conversion_receipts
+      WHERE tenant_id=${tenantId} AND order_id IN (${sql.join(orderIds.map(value=>sql`${value}`),sql`,`)}) ORDER BY order_id`);
+    let included=false;
+    for(const member of quoteOrders){
+      const commercial=await readOrderCommercialQuote(tx,tenantId,member.order_id);
+      if(typeof commercial.shippingIncluded!=='boolean')throw Error('INVOICE_SHIPPING_QUOTE_SOURCE_MISSING');
+      if(commercial.shippingIncluded)included=true;
+    }
+    // PL13Nov22:20: explicitly included in one awarded quote means the whole
+    // actual shipment is included. Unknown source throws above, never false.
+    const sourceKeys=new Set([sourceKey,...members.flatMap(member=>['order:'+member.order_id,...(member.shipment_id===null?[]:['shipment:'+member.shipment_id])])]);
+    const originals=await tx.execute<LockedInvoice&{client_event_id:string;issued_by:string}>(sql`
+      SELECT invoice.* FROM public.invoices invoice
+      WHERE invoice.tenant_id=${tenantId} AND invoice.order_id IN (${sql.join(orderIds.map(value=>sql`${value}`),sql`,`)})
+        AND invoice.status='issued' AND invoice.contract_version=1
+      ORDER BY invoice.invoice_number`);
+    const charged:Array<{invoiceNumber:string;orderNumber:string}>=[];
+    for(const original of originals){
+      if(original.tenant_id!==tenantId||!orderIds.includes(original.order_id)||!INVOICE_NUMBER_PATTERN.test(original.invoice_number)||!original.pdf_content||!HEX64_PATTERN.test(original.pdf_sha256)
+        ||createHash('sha256').update(original.pdf_content).digest('hex')!==original.pdf_sha256)throw Error('INVOICE_SHIPPING_ORIGINAL_INVALID');
+      const snapshot=parseStoredSnapshot(original.snapshot,original,readVat);
+      const matching=snapshot.lines.filter(line=>line.type==='SHIPPING'&&sourceKeys.has(line.shipmentGroupId)&&shippingLineKind(line)==='fee');
+      if(matching.length>1)throw Error('INVOICE_SHIPPING_ALLOCATION_AMBIGUOUS');
+      if(matching.length===1){
+        const receipts=await readCreateInvoiceReceipts(tx,original.client_event_id);
+        if(receipts.length!==1)throw Error('INVOICE_SHIPPING_ORIGINAL_RECEIPT_MISSING');
+        const receipt=mapInvoiceIssueReceipt(receipts[0],tenantId,original.issued_by,readVat);
+        if(receipt.invoiceId!==original.id||receipt.invoiceNumber!==original.invoice_number)throw Error('INVOICE_SHIPPING_ORIGINAL_RECEIPT_INVALID');
+        charged.push({invoiceNumber:receipt.invoiceNumber,orderNumber:snapshot.order.orderNumber});
+      }
+    }
+
+ return {included,charged};
 }
 
-export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader): Promise<CreateInvoiceResult> {
+export async function readShippingMergeAllocation(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,input:{orderId:string;shipmentId:string;otherOrderId:string;otherShipmentId:string|null;sendungId:string},readVat:InvoiceVatReader){
+ const group=await tx.execute<ShippingMember>(sql`SELECT shipment.order_id,orders.customer_id,shipment.id::text AS shipment_id
+  FROM public.shipments shipment JOIN public.orders orders ON orders.tenant_id=shipment.tenant_id AND orders.id=shipment.order_id
+  WHERE shipment.tenant_id=${tenantId} AND shipment.sendung_id=${input.sendungId}::uuid ORDER BY shipment.order_id,shipment.id`);
+ const members=[...group,{order_id:input.orderId,customer_id:customerId,shipment_id:input.shipmentId},{order_id:input.otherOrderId,customer_id:customerId,shipment_id:input.otherShipmentId}];
+ const result=await readShippingInvoiceAllocation(tx,tenantId,customerId,members,'sendung:'+input.sendungId,readVat);
+ return {chargedOrderNumbers:[...new Set(result.charged.map(row=>row.orderNumber))]};
+}
+
+/** Shared lock order for standalone issuance and issuance composed with goods-out. */
+/** Same customer lock as the shipment writer. Only issued, fully checked originals
+ * allocate a fee; proposals and retries never reserve a second money truth. */
+async function readShippingInvoiceLines(tx:PrivilegedTenantTransaction,tenantId:string,order:Pick<LockedOrder,'id'|'customer_id'>,amountCents:number|null,readVat:InvoiceVatReader){
+  const shipments=await tx.execute<{id:string;sendung_id:string|null}>(sql`
+    SELECT id::text,sendung_id::text FROM public.shipments
+    WHERE tenant_id=${tenantId} AND order_id=${order.id} ORDER BY created_at,id`);
+  const groups=new Map<string,{sendungId:string|null;shipmentId:string|null}>();
+  if(shipments.length===0)groups.set('order:'+order.id,{sendungId:null,shipmentId:null});
+  for(const shipment of shipments){
+    const key=shipment.sendung_id===null?'shipment:'+shipment.id:'sendung:'+shipment.sendung_id;
+    if(!groups.has(key))groups.set(key,{sendungId:shipment.sendung_id,shipmentId:shipment.id});
+  }
+  const lines:Array<{shipmentGroupId:string;amountCents:number;name:string;shippingKind:'fee'|'reference'}>=[];
+  for(const [groupKey,group] of groups){
+    const members=group.sendungId===null
+      ?[{order_id:order.id,customer_id:order.customer_id,shipment_id:group.shipmentId}]
+      :await tx.execute<{order_id:string;customer_id:string;shipment_id:string}>(sql`
+        SELECT shipment.order_id,orders.customer_id,shipment.id::text AS shipment_id
+        FROM public.shipments shipment JOIN public.orders orders
+          ON orders.tenant_id=shipment.tenant_id AND orders.id=shipment.order_id
+        WHERE shipment.tenant_id=${tenantId} AND shipment.sendung_id=${group.sendungId}::uuid
+        ORDER BY shipment.order_id,shipment.id`);
+    if(members.length===0||members.some(member=>member.customer_id!==order.customer_id)||!members.some(member=>member.order_id===order.id))throw Error('INVOICE_SHIPPING_GROUP_SOURCE_INVALID');
+    const {included,charged}=await readShippingInvoiceAllocation(tx,tenantId,order.customer_id,members,groupKey,readVat);
+    if(included)continue;
+    if(charged.length>1)throw Error('INVOICE_SHIPPING_ALLOCATION_AMBIGUOUS');
+    if(charged.length===1)lines.push({shipmentGroupId:groupKey,amountCents:0,name:SHIPPING_FEE_COPY.inInvoice(charged[0].invoiceNumber),shippingKind:'reference'});
+    else if(amountCents!==null)lines.push({shipmentGroupId:groupKey,amountCents,name:SHIPPING_FEE_COPY.line,shippingKind:'fee'});
+  }
+  return lines;
+}
+
+function shippingLineKind(line:ImmutableInvoiceShippingLine){
+ if(line.shippingKind)return line.shippingKind;
+ // Historic positive money is a charge. Zero without a semantic source is unknown.
+ if(line.amountCents>0)return 'fee';
+ throw Error('INVOICE_SHIPPING_KIND_SOURCE_MISSING');
+}
+
+function shippingLinesForScope<T extends {shipmentGroupId:string}>(lines:T[],scope:string){
+ return lines.filter(line=>scope.startsWith('sendung:')?line.shipmentGroupId===scope:!line.shipmentGroupId.startsWith('sendung:'));
+}
+
+/** One source predicate for both the proposal and the locked cancellation. */
+function manualHandoverAllowsReissue(manual:Awaited<ReturnType<typeof readInvoiceHandoverSource>>,orderId:string,snapshot:ImmutableInvoiceSnapshot){
+ return manual.order_id===orderId&&manual.current_order_version===manual.order_version&&manual.current_handover_mode==='pickup'
+  &&manual.payload.receipt.outcome==='changed'&&manual.payload.receipt.handoverMode==='pickup'
+  &&snapshot.schemaVersion===2&&snapshot.lines.some(line=>line.type==='SHIPPING')&&snapshot.lines.some(line=>line.type!=='SHIPPING');
+}
+type InvoiceReissueProposal={originalInvoiceNumber:string;label:string;befehl:{datei:'src/app/actions/invoices.actions.ts';funktion:'cancelInvoiceAction';
+ argumente:Omit<CancelInvoiceInput,'clientEventId'|'reissueWithoutShipping'>&{reissueWithoutShipping:{handoverEventId:string}}}};
+
+/** N2 read projection only: same fee allocator and qualified original receipts
+ * as issuance. No number, reservation, new click key or financial effect on read. */
+export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:{orderId:string;expectedVersion:number;manualHandoverEventId?:string},readVat:InvoiceVatReader,readSettings:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>){
+ if(!hasAuthorizationArea(auth,'geld'))return undefined;
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'version'>>(sql`SELECT id,customer_id,handover_mode,version FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId}`);
+  const order=rows[0];
+  if(rows.length!==1||!order||order.version!==input.expectedVersion||!['pickup','shipping'].includes(order.handover_mode??''))throw Error('SHIPPING_PROPOSAL_ORDER_SOURCE_INVALID');
+  const settings=await readSettings(tx,auth.tenantId);
+  if(!settings||settings.shippingFeeCents===undefined)throw Error('SHIPPING_PROPOSAL_SETTINGS_SOURCE_MISSING');
+  const lines=order.handover_mode==='shipping'?await readShippingInvoiceLines(tx,auth.tenantId,order,settings.shippingFeeCents,readVat):[];
+  const originals=await readCreateInvoiceReceipts(tx,{orderId:order.id});
+  const sourceRows=await readInvoiceIssueSource(tx,order.id),source=sourceRows[0];
+  if(sourceRows.length!==1||!source||source.tenant_id!==auth.tenantId||source.order_id!==order.id||source.customer_id!==order.customer_id||source.current_order_version!==order.version||typeof source.no_active_invoice!=='boolean')throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_INVALID');
+  // Validate historical originals as well; a broken receipt is never silently
+  // treated as absence of an issued invoice.
+  const active=originals.map(row=>({row,receipt:mapInvoiceIssueReceipt(row,auth.tenantId,row.actor_id,readVat)})).filter(value=>value.row.current_status==='issued');
+  const main=active.filter(value=>value.row.belegart==='auftrag');
+  if(main.length>1||active.length>0&&main.length!==1||source.no_active_invoice!==(main.length===0))throw Error('SHIPPING_PROPOSAL_ORIGINAL_AMBIGUOUS');
+  const additionalInvoices:Array<{originalInvoiceNumber:string;label:string;befehl:{datei:'src/app/actions/invoices.actions.ts';funktion:'issueInvoiceAction';argumente:Omit<CreateInvoiceInput,'clientEventId'>}}>=[];
+  let reissueWithoutShipping:InvoiceReissueProposal|null=null;
+  const datenluecken:string[]=[];
+  if(main.length===1){
+   const parent=main[0],snapshot=parseStoredSnapshot(parent.row.snapshot,parent.row,readVat);
+   if(order.handover_mode==='pickup'&&snapshot.schemaVersion===2&&snapshot.lines.some(line=>line.type==='SHIPPING')){
+    try{
+     if(!input.manualHandoverEventId)throw Error('SHIPPING_PROPOSAL_MANUAL_HANDOVER_MISSING');
+     const manual=await withTenantSavepoint(tx,nested=>readInvoiceHandoverSource(nested,auth.tenantId,input.manualHandoverEventId!));
+     if(!manualHandoverAllowsReissue(manual,order.id,snapshot)||manual.current_order_version!==order.version)throw Error('SHIPPING_PROPOSAL_MANUAL_HANDOVER_STALE');
+     reissueWithoutShipping={originalInvoiceNumber:parent.receipt.invoiceNumber,label:SHIPPING_FEE_COPY.reissue(parent.receipt.invoiceNumber),
+      befehl:{datei:'src/app/actions/invoices.actions.ts',funktion:'cancelInvoiceAction',argumente:{invoiceId:parent.receipt.invoiceId,expectedVersion:parent.row.current_version,reason:SHIPPING_FEE_COPY.reissueReason,reissueWithoutShipping:{handoverEventId:manual.event_id}}}};
+    }catch(error){console.error('[INVOICE_REISSUE_PROPOSAL_SOURCE_INCOMPLETE]',error instanceof Error?error.message:'UnknownError');datenluecken.push('MANUAL_HANDOVER_SOURCE');}
+   }
+   const scopes=[...new Set(lines.map(line=>line.shipmentGroupId.startsWith('sendung:')?line.shipmentGroupId:'order:'+order.id))];
+   for(const scope of scopes){
+    const selected=shippingLinesForScope(lines,scope);if(!selected.some(line=>line.shippingKind==='fee'))continue;
+    const amount=selected.reduce((sum,line)=>sum+line.amountCents,0);
+    if(!Number.isSafeInteger(amount)||amount<0)throw Error('SHIPPING_PROPOSAL_AMOUNT_INVALID');
+    // Customer display is already part of the immutable qualified invoice, not
+    // a second lookup or a client-provided invoice/customer association.
+    additionalInvoices.push({originalInvoiceNumber:parent.receipt.invoiceNumber,label:SHIPPING_FEE_COPY.additional(formatShippingFee(amount),snapshot.customer.name),
+     befehl:{datei:'src/app/actions/invoices.actions.ts',funktion:'issueInvoiceAction',argumente:{orderId:order.id,expectedVersion:order.version,shippingCosts:{invoiceId:parent.receipt.invoiceId,expectedVersion:parent.row.current_version,scope,expectedFeeCents:amount}}}});
+   }
+  }
+  return {code:'OK' as const,orderId:order.id,orderVersion:order.version,feeCents:settings.shippingFeeCents,lines,additionalInvoices,reissueWithoutShipping,...(datenluecken.length?{datenluecken}:{}),...(settings.shippingFeeCents===null?{hintKey:'versand.pauschale_fehlt' as const}: {})};
+ });}catch(error){console.error('[INVOICE_SHIPPING_PROPOSAL_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const,orderId:input.orderId,orderVersion:input.expectedVersion,datenluecken:['SHIPPING_INVOICE_SOURCE']};}
+}
+function formatShippingFee(cents:number){return new Intl.NumberFormat('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(cents/100)+' €';}
+
+export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantId:string,input:{clientEventId:string;orderId:string}):Promise<string|null>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0))`);
+  const selected=await tx.execute<{customer_id:string}>(sql`SELECT customer_id,private.lock_shipping_customer_v1(${tenantId},customer_id) FROM public.orders WHERE tenant_id=${tenantId} AND id=${input.orderId}`);
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:order:' || ${tenantId} || ':' || ${input.orderId}, 0))`);
+  return selected.length===1?selected[0].customer_id:null;
+}
+
+export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader,readShippingSettings?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Rechnungsanfrage." };
   }
@@ -939,7 +1151,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
 
   try {
     const write=async(tx:PrivilegedTenantTransaction):Promise<CreateInvoiceResult>=>{
-      await lockInvoiceCreation(tx,tenantId,input);
+      const lockedCustomerId=await lockInvoiceCreation(tx,tenantId,input);
 
       const replayRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
       if (replayRows.length > 0) {
@@ -949,8 +1161,8 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         // Validate the complete persisted original before comparing the caller.
         // A valid receipt owned by another actor is a key conflict, not an outage;
         // damaged receipts still fail the unchanged integrity validator.
-        const receipt = mapReceipt(replayRows[0], tenantId, replayRows[0].actor_id,requireVatReader(readVat));
-        return receipt.issuedBy === actorId && receiptMatchesIntent(receipt, input)
+        const receipt = mapInvoiceIssueReceipt(replayRows[0], tenantId, replayRows[0].actor_id,requireVatReader(readVat));
+        return receipt.issuedBy === actorId && receiptMatchesIntent(receipt, input,replayRows[0])
           ? { code: "OK", receipt, replayed: true }
           : { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
       }
@@ -969,7 +1181,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       const orderRows = await tx.execute<LockedOrder>(sql`
         SELECT
           id, tenant_id, customer_id, station, status, version,
-          payment_mode, payment_mode_version
+          payment_mode, payment_mode_version,handover_mode
         FROM public.orders
         WHERE id = ${input.orderId}
           AND tenant_id = ${tenantId}
@@ -979,6 +1191,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       if (orderRows.length !== 1 || !order) {
         return { code: "NOT_FOUND", message: "Auftrag nicht verfügbar." };
       }
+      if(order.customer_id!==lockedCustomerId)return {code:'CONFLICT',message:SHIPPING_FEE_COPY.changed};
       if (order.version !== input.expectedVersion) {
         return { code: "CONFLICT", message: "Auftrag wurde bereits geändert." };
       }
@@ -1017,12 +1230,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
 
       // service_date arrives Berlin-normalised from the read port. The command
       // never derives a calendar day from the database session time zone.
-      const sourceRows = await tx.execute<SourceRow>(sql`
-        SELECT source.*,EXISTS(SELECT 1 FROM private.quote_conversion_receipts receipt JOIN private.quotes quote ON quote.tenant_id=receipt.tenant_id AND quote.id=receipt.quote_id AND quote.linked_order_id=receipt.order_id WHERE receipt.tenant_id=source.tenant_id AND receipt.order_id=source.order_id) AS has_quote
-        FROM private.v_invoice_issue_source_v2 source
-        WHERE source.order_id = ${order.id}
-        LIMIT 2
-      `);
+      const sourceRows = await readInvoiceIssueSource(tx,order.id);
       const source = sourceRows[0];
       if (sourceRows.length !== 1 || !source) {
         return { code: "NOT_FOUND", message: "Rechnungsgrundlage nicht verfügbar." };
@@ -1034,10 +1242,30 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         || source.current_order_version !== order.version
       ) throw new Error("INVOICE_SOURCE_INTEGRITY_INVALID");
 
-      if (!source.no_active_invoice) {
+      if (!source.no_active_invoice && input.shippingCosts===undefined) {
         return { code: "CONFLICT", message: "Für diesen Auftrag besteht bereits eine aktive Rechnung." };
       }
-      const commercial=source.has_quote?await readOrderCommercialQuote(tx,tenantId,order.id):null;
+      // The additional document references a fully qualified released original;
+      // it never changes or rebinds that document's goods prices.
+      let originalInvoiceNumber:string|undefined;
+      if(input.shippingCosts){
+        const originals=await tx.execute<LockedInvoice&{client_event_id:string;issued_by:string;belegart:string}>(sql`
+          SELECT * FROM public.invoices WHERE tenant_id=${tenantId} AND id=${input.shippingCosts.invoiceId}::uuid
+            AND contract_version=1 FOR UPDATE`);
+        const original=originals[0];
+        if(originals.length!==1||!original||original.order_id!==order.id||original.belegart!=='auftrag'
+          ||original.status!=='issued'||original.aggregate_version!==input.shippingCosts.expectedVersion){
+          return {code:'CONFLICT',message:SHIPPING_FEE_COPY.changed};
+        }
+        if(!original.pdf_content||createHash('sha256').update(original.pdf_content).digest('hex')!==original.pdf_sha256)throw Error('INVOICE_SHIPPING_ORIGIN_PDF_INVALID');
+        parseStoredSnapshot(original.snapshot,original,requireVatReader(readVat));
+        const receipts=await readCreateInvoiceReceipts(tx,original.client_event_id);
+        if(receipts.length!==1)throw Error('INVOICE_SHIPPING_ORIGIN_RECEIPT_MISSING');
+        const originalReceipt=mapInvoiceIssueReceipt(receipts[0],tenantId,original.issued_by,requireVatReader(readVat));
+        if(originalReceipt.invoiceId!==original.id)throw Error('INVOICE_SHIPPING_ORIGIN_RECEIPT_INVALID');
+        originalInvoiceNumber=originalReceipt.invoiceNumber;
+      }
+      const commercial=source.has_quote&&input.shippingCosts===undefined?await readOrderCommercialQuote(tx,tenantId,order.id):null;
       if(commercial){
         if(!Array.isArray(source.base_lines)||source.base_lines.some(line=>!plainObject(line)||typeof line.itemId!=='string'))throw Error('INVOICE_QUOTE_BASE_SOURCE_INVALID');
         const awardedItems=new Set(commercial.positions.map(row=>row.itemId));
@@ -1059,6 +1287,8 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         source.base_line_count=commercial.positions.length+additional.length;
         if(checkedAdditional!==null)source.base_net_amount_cents=commercial.totalNetCents+checkedAdditional.reduce((sum,line)=>sum+line.lineNetAmountCents,0);
         source.base_prices_complete=checkedAdditional!==null&&source.base_line_count>0&&commercial.positions.every(row=>Number.isSafeInteger(row.lineTotalCents)&&row.lineTotalCents>=0);
+      }
+      if(commercial||input.shippingCosts){
         // Recompose the existing structural guards with the canonical quote price proof.
         // The legacy SQL projection includes item prices in integrity_ok, which are
         // deliberately absent for a quote-backed intake. No structural guard is waived.
@@ -1067,7 +1297,8 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
             (SELECT count(*)=1 AND bool_and(receipt.integrity_ok) FROM private.v_goods_out_receipt_v2 receipt WHERE receipt.tenant_id=${tenantId} AND receipt.order_id=${order.id} AND receipt.order_version=${order.version}) AS handed_over
           FROM private.v_order_freeze_state_v1 frozen_state WHERE frozen_state.tenant_id=${tenantId} AND frozen_state.order_id=${order.id}
         `);
-        const structural=proofs.length===1&&proofs[0].frozen===true&&source.seller_config_complete&&source.customer_config_complete&&source.base_prices_complete;
+        const structural=proofs.length===1&&proofs[0].frozen===true&&source.seller_config_complete&&source.customer_config_complete
+          &&(input.shippingCosts!==undefined||source.base_prices_complete);
         source.post_goods_out_invoice_eligible=structural&&proofs[0].handed_over===true&&order.payment_mode==='rechnung'&&order.station==='abgeholt'&&order.status==='abgeholt';
         source.effective_integrity_ok=structural&&(order.station==='fertig'||source.post_goods_out_invoice_eligible);
       }
@@ -1076,7 +1307,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         || (afterGoodsOut && !source.post_goods_out_invoice_eligible)
         || !source.seller_config_complete
         || !source.customer_config_complete
-        || !source.base_prices_complete
+        || (input.shippingCosts===undefined&&!source.base_prices_complete)
       ) {
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
@@ -1099,7 +1330,22 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       // an incomplete tenant, customer, order or position cannot consume one.
       let content: PreparedInvoiceContent;
       try {
-        content = prepareInvoiceContent(source, order);
+        let shippingFees:Array<{shipmentGroupId:string;amountCents:number;name:string;shippingKind:'fee'|'reference'}>=[];
+        if(order.handover_mode==='shipping'){
+          if(!readShippingSettings)throw Error('INVOICE_SHIPPING_SETTINGS_PORT_MISSING');
+          const settings=await readShippingSettings(tx,tenantId);
+          if(!settings||settings.shippingFeeCents===undefined)throw Error('INVOICE_SHIPPING_SETTINGS_SOURCE_MISSING');
+          shippingFees=await readShippingInvoiceLines(tx,tenantId,order,settings.shippingFeeCents,requireVatReader(readVat));
+        }
+        if(input.shippingCosts){
+          const intent=input.shippingCosts;
+          shippingFees=shippingLinesForScope(shippingFees,intent.scope);
+          if(shippingFees.length===0||!shippingFees.some(line=>line.shippingKind==='fee')
+            ||shippingFees.reduce((sum,line)=>sum+line.amountCents,0)!==intent.expectedFeeCents){
+            return {code:'CONFLICT',message:SHIPPING_FEE_COPY.changed};
+          }
+        }
+        content = prepareInvoiceContent(source, order,shippingFees,input.shippingCosts!==undefined);
       } catch (error) {
         if (error instanceof InvoiceVatRateError) return {code:"VALIDATION_ERROR",message:error.missingCompany?INVOICE_VAT_COPY.missingCompanyRate(error.part):INVOICE_VAT_COPY.missingRate(error.part)};
         if (error instanceof InvoiceMasterDataError) {
@@ -1107,10 +1353,9 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         }
         throw error;
       }
-      const { netAmountCents, vatRateBasisPoints, vatAmountCents, grossAmountCents } = content.totals;
       if(commercial){
         const bound=await bindOrderQuoteCommercialTerms(tx,authorization.data,order.id);
-        const unchanged=bound.quoteId===commercial.quoteId&&bound.edition===commercial.edition
+        const unchanged=bound.shippingIncluded===commercial.shippingIncluded&&bound.quoteId===commercial.quoteId&&bound.edition===commercial.edition
           &&bound.totalNetCents===commercial.totalNetCents&&bound.positions.length===commercial.positions.length
           &&new Set(bound.positions.map(position=>position.itemId)).size===bound.positions.length
           &&bound.positions.every(position=>{
@@ -1122,153 +1367,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         if(!unchanged)throw Error('QUOTE_COMMERCIAL_TERMS_CHANGED_DURING_INVOICE');
       }
 
-      // Exactly one issue instant per invoice. Berlin is the only legal
-      // calendar truth for the invoice year and the due date; the same instant
-      // is reused for invoice, lifecycle event, snapshot and receipt.
-      const timeRows = await tx.execute<{ issued_at_iso: string; invoice_year: number; due_date: Date | string }>(sql`
-        WITH issue_instant AS (SELECT clock_timestamp() AS ts)
-        SELECT
-          to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS issued_at_iso,
-          extract(year FROM (ts AT TIME ZONE 'Europe/Berlin'))::integer AS invoice_year,
-          ((ts AT TIME ZONE 'Europe/Berlin')::date + ${paymentTermDays}::integer) AS due_date
-        FROM issue_instant
-      `);
-      const timeRow = timeRows[0];
-      if (timeRows.length !== 1 || !timeRow) throw new Error("INVOICE_TIME_UNAVAILABLE");
-      const issuedAtIso = requireIsoInstant(timeRow.issued_at_iso, "INVOICE_TIME_INVALID");
-      const invoiceYear = toSafeInteger(timeRow.invoice_year, "INVOICE_YEAR_INVALID");
-      const dueDate = toDateOnly(timeRow.due_date);
-      const serviceDate = toDateOnly(source.service_date);
-
-      const numberRows = await tx.execute<{ invoice_number: string }>(sql`
-        SELECT private.allocate_invoice_number(${tenantId}, ${invoiceYear}) AS invoice_number
-      `);
-      const invoiceNumber = numberRows[0]?.invoice_number;
-      if (!invoiceNumber || !INVOICE_NUMBER_PATTERN.test(invoiceNumber)) {
-        throw new Error("INVOICE_NUMBER_ALLOCATION_FAILED");
-      }
-
-      const snapshot: ImmutableInvoiceSnapshot = {
-        schemaVersion: 2,
-        seller: content.seller,
-        customer: content.customer,
-        order: content.order,
-        lines: content.lines,
-        totals: content.totals,
-        serviceDate,
-        issuedAt: issuedAtIso,
-        paymentTermDays,
-      };
-
-      let pdfBuffer: Buffer;
-      try {
-        pdfBuffer = await renderToBuffer(
-          createImmutableInvoicePdfDocument({ invoiceNumber, dueDate, snapshot,vat:requireVatReader(readVat)(snapshot) }),
-        );
-      } catch {
-        throw new Error("INVOICE_PDF_RENDER_FAILED");
-      }
-      if (pdfBuffer.byteLength < 1 || pdfBuffer.byteLength > 20 * 1024 * 1024) {
-        throw new Error("INVOICE_PDF_SIZE_INVALID");
-      }
-      const pdfSha256 = createHash("sha256").update(pdfBuffer).digest("hex");
-
-      const invoiceId = randomUUID();
-      const correlationId = randomUUID();
-      const pdfRef = `invoice://${invoiceId}/original`;
-      const invoiceEventType = afterGoodsOut ? EVENT_TYPE_V2 : EVENT_TYPE;
-      const invoiceEventSchemaVersion = afterGoodsOut ? 2 : EVENT_SCHEMA_VERSION;
-      const invoiceEventStation = afterGoodsOut ? "abgeholt" : STATION;
-      const eventPayload = {
-        invoiceId,
-        freezeId: source.freeze_id,
-        invoiceNumber,
-        orderVersion: order.version,
-        netAmountCents,
-        vatRateBasisPoints,
-        vatAmountCents,
-        grossAmountCents,
-        pdfSha256,
-        invoiceVersion: 1,
-        ...(afterGoodsOut ? { invoiceSourceState: "after_goods_out" as const } : {}),
-      };
-
-      const eventRows = await tx.execute<{ event_id: string }>(sql`
-        INSERT INTO public.events (
-          id, tenant_id, order_id, item_id, event_type, description, user_id,
-          payload, status, station, client_event_id, event_schema_version,
-          correlation_id, aggregate_version, from_station, created_at
-        ) VALUES (
-          gen_random_uuid()::text, ${tenantId}, ${order.id}, NULL,
-          ${invoiceEventType}, 'Unveränderliche Rechnung erstellt', ${actorId}::uuid,
-          ${JSON.stringify(eventPayload)}::jsonb,
-          'success', ${invoiceEventStation}, ${input.clientEventId}::uuid, ${invoiceEventSchemaVersion},
-          ${correlationId}::uuid, 1, ${invoiceEventStation},
-          ${issuedAtIso}::timestamptz AT TIME ZONE 'UTC'
-        )
-        RETURNING id AS event_id
-      `);
-      const event = eventRows[0];
-      if (eventRows.length !== 1 || !event || !UUID_PATTERN.test(event.event_id)) {
-        throw new Error("INVOICE_EVENT_INSERT_FAILED");
-      }
-
-      const invoiceRows = await tx.execute<{ id: string }>(sql`
-        INSERT INTO public.invoices (
-          id, tenant_id, customer_id, order_id, invoice_number, amount_total, status, due_date,
-          contract_version, freeze_id, snapshot, net_amount_cents, vat_rate_basis_points,
-          vat_amount_cents, gross_amount_cents, service_date, payment_term_days,
-          order_version, aggregate_version, client_event_id, correlation_id, issue_event_id,
-          issued_at, issued_by, pdf_ref, pdf_sha256, pdf_content,
-          payment_contract_version, payment_mode, payment_status,
-          payment_open_amount_cents, payment_paid_amount_cents, payment_currency,
-          payment_method, payment_paid_at, payment_receipt_id, payment_event_id,
-          payment_correlation_id, payment_version
-        ) VALUES (
-          ${invoiceId}::uuid, ${tenantId}, ${order.customer_id}, ${order.id},
-          ${invoiceNumber}, (${grossAmountCents}::numeric / 100), 'issued', ${dueDate}::date,
-          1, ${source.freeze_id}::uuid, ${JSON.stringify(snapshot)}::jsonb,
-          ${netAmountCents}, ${vatRateBasisPoints}, ${vatAmountCents}, ${grossAmountCents},
-          ${serviceDate}::date, ${paymentTermDays}, ${order.version}, 1,
-          ${input.clientEventId}::uuid, ${correlationId}::uuid,
-          ${event.event_id}, ${issuedAtIso}::timestamptz, ${actorId}::uuid,
-          ${pdfRef}, ${pdfSha256}, ${pdfBuffer},
-          ${PAYMENT_CONTRACT_VERSION}, ${order.payment_mode}, 'offen',
-          ${grossAmountCents}, 0, 'EUR', NULL, NULL, NULL, NULL, NULL, 0
-        )
-        RETURNING id
-      `);
-      const insertedInvoice = invoiceRows[0];
-      if (invoiceRows.length !== 1 || !insertedInvoice || insertedInvoice.id !== invoiceId) {
-        throw new Error("INVOICE_INSERT_FAILED");
-      }
-
-      await readInitialPaymentState(tx, {
-        tenantId,
-        invoiceId,
-        orderId: order.id,
-        grossAmountCents,
-        paymentMode: order.payment_mode,
-      });
-
-      const receiptRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
-      if (receiptRows.length !== 1 || !receiptRows[0]) throw new Error("INVOICE_RECEIPT_MISSING");
-      const receipt = mapReceipt(receiptRows[0], tenantId, actorId,requireVatReader(readVat));
-      if (
-        !receiptMatchesIntent(receipt, input)
-        || receipt.invoiceId !== invoiceId
-        || receipt.invoiceNumber !== invoiceNumber
-        || receipt.netAmountCents !== netAmountCents
-        || receipt.vatAmountCents !== vatAmountCents
-        || receipt.grossAmountCents !== grossAmountCents
-        || receipt.serviceDate !== serviceDate
-        || receipt.dueDate !== dueDate
-        || receipt.pdfSha256 !== pdfSha256
-        // One instant on invoice, event, snapshot and receipt — proven, not assumed.
-        || receipt.issuedAt !== issuedAtIso
-      ) throw new Error("INVOICE_RECEIPT_MISMATCH");
-
-      return { code: "OK", receipt, replayed: false };
+      return persistPreparedInvoice(tx,authorization.data,input,order,content,{paymentTermDays,serviceDate:source.service_date,freezeId:source.freeze_id,afterGoodsOut,originalInvoiceNumber},requireVatReader(readVat));
     };
     return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
   } catch (error) {
@@ -1277,11 +1376,170 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       : undefined;
     console.error("INVOICE_CREATE_UNAVAILABLE", {
       errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage:error instanceof Error?error.message:'UNKNOWN_INVOICE_ERROR',
       databaseCode: typeof cause?.code === "string" ? cause.code : null,
       constraint: typeof cause?.constraint_name === "string" ? cause.constraint_name : null,
     });
     return { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher ausgestellt werden." };
   }
+}
+
+/** Single existing number/PDF/payment/event/receipt writer, shared by qualified preparations. */
+async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,content:PreparedInvoiceContent,terms:{paymentTermDays:number;serviceDate:Date|string;freezeId:string;afterGoodsOut:boolean;originalInvoiceNumber?:string;reissue?:NonNullable<ImmutableInvoiceReceiptBase['reissue']>},readVat:InvoiceVatReader):Promise<Extract<CreateInvoiceResult,{code:'OK'}>>{
+  if(!isPaymentMode(order.payment_mode))throw Error('INVOICE_PAYMENT_MODE_INVALID');
+  const {tenantId,userId:actorId}=auth;
+  const {paymentTermDays,afterGoodsOut,originalInvoiceNumber}=terms;
+  const {netAmountCents,vatRateBasisPoints,vatAmountCents,grossAmountCents}=content.totals;
+  // Exactly one issue instant per invoice. Berlin is the only legal
+  // calendar truth for the invoice year and the due date; the same instant
+  // is reused for invoice, lifecycle event, snapshot and receipt.
+  const timeRows = await tx.execute<{ issued_at_iso: string; invoice_year: number; due_date: Date | string }>(sql`
+    WITH issue_instant AS (SELECT clock_timestamp() AS ts)
+    SELECT
+      to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS issued_at_iso,
+      extract(year FROM (ts AT TIME ZONE 'Europe/Berlin'))::integer AS invoice_year,
+      ((ts AT TIME ZONE 'Europe/Berlin')::date + ${paymentTermDays}::integer) AS due_date
+    FROM issue_instant
+  `);
+  const timeRow = timeRows[0];
+  if (timeRows.length !== 1 || !timeRow) throw new Error("INVOICE_TIME_UNAVAILABLE");
+  const issuedAtIso = requireIsoInstant(timeRow.issued_at_iso, "INVOICE_TIME_INVALID");
+  const invoiceYear = toSafeInteger(timeRow.invoice_year, "INVOICE_YEAR_INVALID");
+  const dueDate = toDateOnly(timeRow.due_date);
+  const serviceDate = toDateOnly(terms.serviceDate);
+
+  const numberRows = await tx.execute<{ invoice_number: string }>(sql`
+    SELECT private.allocate_invoice_number(${tenantId}, ${invoiceYear}) AS invoice_number
+  `);
+  const invoiceNumber = numberRows[0]?.invoice_number;
+  if (!invoiceNumber || !INVOICE_NUMBER_PATTERN.test(invoiceNumber)) {
+    throw new Error("INVOICE_NUMBER_ALLOCATION_FAILED");
+  }
+
+  const snapshot: ImmutableInvoiceSnapshot = {
+    schemaVersion: 2,
+    seller: content.seller,
+    customer: content.customer,
+    order: content.order,
+    lines: content.lines,
+    totals: content.totals,
+    serviceDate,
+    issuedAt: issuedAtIso,
+    paymentTermDays,
+  };
+
+  let pdfBuffer: Buffer;
+  try {
+    pdfBuffer = await renderToBuffer(
+      createImmutableInvoicePdfDocument({ invoiceNumber, dueDate, snapshot,vat:requireVatReader(readVat)(snapshot),originalInvoiceNumber }),
+    );
+  } catch {
+    throw new Error("INVOICE_PDF_RENDER_FAILED");
+  }
+  if (pdfBuffer.byteLength < 1 || pdfBuffer.byteLength > 20 * 1024 * 1024) {
+    throw new Error("INVOICE_PDF_SIZE_INVALID");
+  }
+  const pdfSha256 = createHash("sha256").update(pdfBuffer).digest("hex");
+
+  const invoiceId = randomUUID();
+  const correlationId = randomUUID();
+  const pdfRef = `invoice://${invoiceId}/original`;
+  const invoiceEventType = afterGoodsOut ? EVENT_TYPE_V2 : EVENT_TYPE;
+  const invoiceEventSchemaVersion = afterGoodsOut ? 2 : EVENT_SCHEMA_VERSION;
+  const invoiceEventStation = afterGoodsOut ? "abgeholt" : STATION;
+  const eventPayload = {
+    invoiceId,
+    freezeId: terms.freezeId,
+    invoiceNumber,
+    orderVersion: order.version,
+    netAmountCents,
+    vatRateBasisPoints,
+    vatAmountCents,
+    grossAmountCents,
+    pdfSha256,
+    invoiceVersion: 1,
+    ...(input.shippingCosts?{shippingCosts:input.shippingCosts}:{}),
+    ...(terms.reissue?{reissue:terms.reissue}:{}),
+    ...(afterGoodsOut ? { invoiceSourceState: "after_goods_out" as const } : {}),
+  };
+
+  const eventRows = await tx.execute<{ event_id: string }>(sql`
+    INSERT INTO public.events (
+      id, tenant_id, order_id, item_id, event_type, description, user_id,
+      payload, status, station, client_event_id, event_schema_version,
+      correlation_id, aggregate_version, from_station, created_at
+    ) VALUES (
+      gen_random_uuid()::text, ${tenantId}, ${order.id}, NULL,
+      ${invoiceEventType}, 'Unveränderliche Rechnung erstellt', ${actorId}::uuid,
+      ${JSON.stringify(eventPayload)}::jsonb,
+      'success', ${invoiceEventStation}, ${input.clientEventId}::uuid, ${invoiceEventSchemaVersion},
+      ${correlationId}::uuid, 1, ${invoiceEventStation},
+      ${issuedAtIso}::timestamptz AT TIME ZONE 'UTC'
+    )
+    RETURNING id AS event_id
+  `);
+  const event = eventRows[0];
+  if (eventRows.length !== 1 || !event || !UUID_PATTERN.test(event.event_id)) {
+    throw new Error("INVOICE_EVENT_INSERT_FAILED");
+  }
+
+  const invoiceRows = await tx.execute<{ id: string }>(sql`
+    INSERT INTO public.invoices (
+      id, tenant_id, customer_id, order_id, invoice_number, amount_total, status, due_date,
+      contract_version, freeze_id, snapshot, net_amount_cents, vat_rate_basis_points,
+      vat_amount_cents, gross_amount_cents, service_date, payment_term_days,
+      order_version, aggregate_version, client_event_id, correlation_id, issue_event_id,
+      issued_at, issued_by, pdf_ref, pdf_sha256, pdf_content,
+      payment_contract_version, payment_mode, payment_status,
+      payment_open_amount_cents, payment_paid_amount_cents, payment_currency,
+      payment_method, payment_paid_at, payment_receipt_id, payment_event_id,
+      payment_correlation_id, payment_version,belegart,ursprung_rechnung_id
+    ) VALUES (
+      ${invoiceId}::uuid, ${tenantId}, ${order.customer_id}, ${order.id},
+      ${invoiceNumber}, (${grossAmountCents}::numeric / 100), 'issued', ${dueDate}::date,
+      1, ${terms.freezeId}::uuid, ${JSON.stringify(snapshot)}::jsonb,
+      ${netAmountCents}, ${vatRateBasisPoints}, ${vatAmountCents}, ${grossAmountCents},
+      ${serviceDate}::date, ${paymentTermDays}, ${order.version}, 1,
+      ${input.clientEventId}::uuid, ${correlationId}::uuid,
+      ${event.event_id}, ${issuedAtIso}::timestamptz, ${actorId}::uuid,
+      ${pdfRef}, ${pdfSha256}, ${pdfBuffer},
+      ${PAYMENT_CONTRACT_VERSION}, ${order.payment_mode}, 'offen',
+      ${grossAmountCents}, 0, 'EUR', NULL, NULL, NULL, NULL, NULL, 0,
+      ${input.shippingCosts?'versandkosten':'auftrag'},${input.shippingCosts?.invoiceId??null}::uuid
+    )
+    RETURNING id
+  `);
+  const insertedInvoice = invoiceRows[0];
+  if (invoiceRows.length !== 1 || !insertedInvoice || insertedInvoice.id !== invoiceId) {
+    throw new Error("INVOICE_INSERT_FAILED");
+  }
+
+  await readInitialPaymentState(tx, {
+    tenantId,
+    invoiceId,
+    orderId: order.id,
+    grossAmountCents,
+    paymentMode: order.payment_mode,
+  });
+
+  const receiptRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
+  if (receiptRows.length !== 1 || !receiptRows[0]) throw new Error("INVOICE_RECEIPT_MISSING");
+  const receipt = mapInvoiceIssueReceipt(receiptRows[0], tenantId, actorId,requireVatReader(readVat));
+  if (
+    !receiptMatchesIntent(receipt, input,receiptRows[0])
+    || receipt.invoiceId !== invoiceId
+    || receipt.invoiceNumber !== invoiceNumber
+    || receipt.netAmountCents !== netAmountCents
+    || receipt.vatAmountCents !== vatAmountCents
+    || receipt.grossAmountCents !== grossAmountCents
+    || receipt.serviceDate !== serviceDate
+    || receipt.dueDate !== dueDate
+    || receipt.pdfSha256 !== pdfSha256
+    // One instant on invoice, event, snapshot and receipt — proven, not assumed.
+    || receipt.issuedAt !== issuedAtIso
+  ) throw new Error("INVOICE_RECEIPT_MISMATCH");
+
+  return { code: "OK", receipt, replayed: false };
 }
 
 export type CancellationCreditComposition={failed:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>;settled:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>};
@@ -1323,21 +1581,15 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         )
       `);
 
-      const replayRows = await tx.execute<ReceiptRow>(sql`
-        SELECT *
-        FROM private.v_invoice_receipt_v1
-        WHERE client_event_id = ${input.clientEventId}
-          AND event_type = ${CANCEL_EVENT_TYPE}
-        LIMIT 2
-      `);
+      const replayRows = await readCancellationInvoiceReceipts(tx,input.clientEventId);
       if (replayRows.length > 0) {
         if (replayRows.length !== 1 || !replayRows[0]) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
-        const receipt = mapCancellationReceipt(replayRows[0], tenantId, replayRows[0].actor_id);
-        return receipt.cancelledBy === actorId && cancellationReceiptMatchesIntent(receipt, input)
-          ? await completeCancellationCredit(tx,authorization.data,receipt,true,creditComposition)
-          : { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
+        const receipt = mapInvoiceCancellationReceipt(replayRows[0], tenantId, replayRows[0].actor_id);
+        if((receipt.cancelledBy!==actorId&&receipt.reissueWithoutShipping===undefined)||!cancellationReceiptMatchesIntent(receipt,input))return {code:'CONFLICT',message:'Anfragekennung wurde bereits anders verwendet.'};
+        if(receipt.reissueWithoutShipping)await lockInvoiceCreation(tx,tenantId,{orderId:receipt.orderId,clientEventId:receipt.reissueWithoutShipping.replacementClientEventId});
+        return completeCancellationCredit(tx,authorization.data,receipt,true,creditComposition,requireVatReader(readVat));
       }
 
       const reusedEvents = await tx.execute<{ id: string }>(sql`
@@ -1354,12 +1606,13 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
       // Payment confirmation locks the order before the invoice. Cancellation
       // uses the same order to avoid an invoice->order / order->invoice
       // deadlock through the cancellation event's order foreign key.
-      const customerRows=await tx.execute<{customer_id:string|null}>(sql`
-        SELECT customer_id FROM public.invoices
+      const customerRows=await tx.execute<{customer_id:string|null;order_id:string}>(sql`
+        SELECT customer_id,order_id FROM public.invoices
         WHERE tenant_id=${tenantId} AND id=${input.invoiceId}::uuid LIMIT 2
       `);
       if(customerRows.length!==1||!customerRows[0]?.customer_id)return {code:'NOT_FOUND',message:CUSTOMER_CREDIT_COPY.notFound};
       // All credit commands acquire the same customer lock before order/invoice locks.
+      if(input.reissueWithoutShipping)await lockInvoiceCreation(tx,tenantId,{orderId:customerRows[0].order_id,clientEventId:input.reissueWithoutShipping.replacementClientEventId});
       await tx.execute(sql`SELECT private.lock_customer_credit_v1(${tenantId},${customerRows[0].customer_id})`);
       const orderRows = await tx.execute<LockedCancellationOrder>(sql`
         SELECT orders.id, orders.tenant_id
@@ -1433,6 +1686,12 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         throw new Error("INVOICE_CANCEL_ORIGINAL_PDF_INVALID");
       }
       const snapshot = parseStoredSnapshot(invoice.snapshot, invoice, requireVatReader(readVat));
+      let reissue:InvoiceReissueIntent|undefined;
+      if(input.reissueWithoutShipping){
+        const manual=await readInvoiceHandoverSource(tx,tenantId,input.reissueWithoutShipping.handoverEventId);
+        if(!manualHandoverAllowsReissue(manual,invoice.order_id,snapshot))return {code:'CONFLICT',message:SHIPPING_FEE_COPY.changed};
+        reissue={...input.reissueWithoutShipping,originalPdfSha256:invoice.pdf_sha256,orderVersion:manual.order_version,confirmedBy:actorId};
+      }
 
       // Exactly one cancellation instant, reused for invoice, lifecycle event,
       // cancellation document and receipt.
@@ -1484,6 +1743,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
             cancelReason: input.reason,
             cancellationPdfSha256,
             invoiceVersion: 2,
+            ...(reissue?{reissue}:{}),
           })}::jsonb,
           'success', ${STATION}, ${input.clientEventId}::uuid, ${EVENT_SCHEMA_VERSION},
           ${correlationId}::uuid, 2, ${STATION},
@@ -1529,17 +1789,11 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         throw new Error("INVOICE_CANCEL_UPDATE_FAILED");
       }
 
-      const receiptRows = await tx.execute<ReceiptRow>(sql`
-        SELECT *
-        FROM private.v_invoice_receipt_v1
-        WHERE client_event_id = ${input.clientEventId}
-          AND event_type = ${CANCEL_EVENT_TYPE}
-        LIMIT 2
-      `);
+      const receiptRows = await readCancellationInvoiceReceipts(tx,input.clientEventId);
       if (receiptRows.length !== 1 || !receiptRows[0]) {
         throw new Error("INVOICE_CANCEL_RECEIPT_MISSING");
       }
-      const receipt = mapCancellationReceipt(receiptRows[0], tenantId, actorId);
+      const receipt = mapInvoiceCancellationReceipt(receiptRows[0], tenantId, actorId);
       if (
         !cancellationReceiptMatchesIntent(receipt, input)
         || receipt.invoiceNumber !== invoice.invoice_number
@@ -1550,14 +1804,15 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         || receipt.cancelledAt !== cancelledAt
       ) throw new Error("INVOICE_CANCEL_RECEIPT_MISMATCH");
 
-      return completeCancellationCredit(tx,authorization.data,receipt,false,creditComposition);
+      return completeCancellationCredit(tx,authorization.data,receipt,false,creditComposition,requireVatReader(readVat));
     });
   } catch {
     return { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher storniert werden." };
   }
 }
 
-async function completeCancellationCredit(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:ImmutableInvoiceCancellationReceipt,replayed:boolean,composition?:CancellationCreditComposition):Promise<CancelInvoiceResult>{
+async function completeCancellationCredit(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:ImmutableInvoiceCancellationReceipt,replayed:boolean,composition?:CancellationCreditComposition,readVat:InvoiceVatReader=readInvoiceVat):Promise<CancelInvoiceResult>{
+  if(receipt.reissueWithoutShipping)return completeInvoiceReissueFollowups(tx,auth,receipt,replayed,readVat,composition);
   try{
     await withTenantSavepoint(tx,nested=>appendCancellationCredit(nested,auth.tenantId,receipt));
     if(composition)await withTenantSavepoint(tx,nested=>composition.settled(nested,auth,receipt.clientEventId));
@@ -1572,6 +1827,75 @@ async function completeCancellationCredit(tx:PrivilegedTenantTransaction,auth:Au
   }
 }
 
+
+/** Existing immutable cancellation/replacement source, shared with the physical output gate. */
+export async function readPendingInvoiceReissue(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){
+ const keys=await tx.execute<{client_event_id:string}>(sql`SELECT client_event_id::text FROM public.events
+  WHERE tenant_id=${tenantId} AND order_id=${orderId} AND event_type='INVOICE_CANCELLED_V1'
+   AND event_schema_version=1 AND status='success' AND payload ? 'reissue' ORDER BY created_at,id`);
+ for(const key of keys){const source=await readInvoiceReissueSource(tx,tenantId,key.client_event_id);if(!source)throw Error('INVOICE_REISSUE_SOURCE_MISSING');if(!source.replacement)return source.snapshot.order.orderNumber;}
+ return null;
+}
+
+async function issueInvoiceReplacement(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string,readVat:InvoiceVatReader){
+ if(!hasAuthorizationArea(auth,'geld'))throw Error('INVOICE_REISSUE_MONEY_REQUIRED');
+ let source=await readInvoiceReissueSource(tx,auth.tenantId,key,readVat);
+ if(!source)throw Error('INVOICE_REISSUE_SOURCE_MISSING');
+ const input={orderId:source.receipt.orderId,expectedVersion:source.intent.orderVersion,clientEventId:source.intent.replacementClientEventId};
+ await lockInvoiceCreation(tx,auth.tenantId,input);
+ await tx.execute(sql`SELECT private.lock_customer_credit_v1(${auth.tenantId},${source.original.customer_id})`);
+ const orders=await tx.execute<LockedOrder>(sql`SELECT * FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId} FOR UPDATE`);
+ const order=orders[0];
+ source=await readInvoiceReissueSource(tx,auth.tenantId,key,readVat);
+ if(!source||orders.length!==1||!order||order.customer_id!==source.original.customer_id)throw Error('INVOICE_REISSUE_ORDER_SOURCE_INVALID');
+ // The exact completed compound result remains readable by the original N5;
+ // no caller impersonates the actual issuer of the replacement.
+ if(source.replacement)return source.replacement;
+ if(!source.current||order.version<source.intent.orderVersion||order.handover_mode!=='pickup'||order.station!==STATION||order.status!==STATION)throw Error('INVOICE_REISSUE_ORDER_CHANGED');
+ const active=await readInvoiceIssueSource(tx,order.id);
+ if(active.length!==1||active[0].tenant_id!==auth.tenantId||active[0].customer_id!==order.customer_id||!active[0].no_active_invoice)throw Error('INVOICE_REISSUE_ACTIVE_ORIGINAL_CHANGED');
+ const sums=invoiceLineTotals(source.goods),snapshot=source.snapshot;
+ const content:PreparedInvoiceContent={seller:snapshot.seller,customer:snapshot.customer,order:{...snapshot.order,orderVersion:order.version},lines:source.goods,
+  totals:{netAmountCents:sums.netAmountCents,vatAmountCents:sums.vatAmountCents,grossAmountCents:sums.grossAmountCents,vatRateBasisPoints:null,vatBreakdown:sums.vatBreakdown}};
+ await persistPreparedInvoice(tx,auth,{...input,expectedVersion:order.version},order,content,{paymentTermDays:snapshot.paymentTermDays,serviceDate:snapshot.serviceDate,freezeId:source.original.freeze_id,afterGoodsOut:false,
+  reissue:{cancellationEventId:source.receipt.eventId,confirmedBy:source.receipt.cancelledBy,repairActorId:auth.userId}},readVat);
+ const proof=await readInvoiceReissueSource(tx,auth.tenantId,key,readVat);
+ if(!proof?.replacement)throw Error('INVOICE_REISSUE_RECEIPT_MISSING');
+ return proof.replacement;
+}
+
+async function completeInvoiceReissueFollowups(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:ImmutableInvoiceCancellationReceipt,replayed:boolean,readVat:InvoiceVatReader,composition?:CancellationCreditComposition):Promise<CancelInvoiceResult>{
+ let creditAmount:number|null=null,replacementReady=false,taskReady=false;
+ try{
+  await withTenantSavepoint(tx,nested=>appendCancellationCredit(nested,auth.tenantId,receipt));
+  const credit=await withTenantSavepoint(tx,nested=>readCancellationCreditSource(nested,auth.tenantId,receipt.clientEventId));
+  if(!credit||credit.pending)throw Error('INVOICE_REISSUE_CREDIT_NOT_PROVEN');
+  creditAmount=credit.paidAmountCents;
+  const replacementReceipt=await withTenantSavepoint(tx,nested=>issueInvoiceReplacement(nested,auth,receipt.clientEventId,readVat));
+  replacementReady=true;
+  if(composition)await withTenantSavepoint(tx,nested=>composition.settled(nested,auth,receipt.clientEventId));
+  return {code:'OK',receipt,replacementReceipt,replayed};
+ }catch(error){
+  const cause=error&&typeof error==='object'&&'cause'in error?error.cause:undefined;
+  console.error('[INVOICE_REISSUE_FOLLOWUP_FAILED]',cause instanceof Error?cause.message:error instanceof Error?error.message:'UnknownError');
+  try{if(!composition)throw Error('INVOICE_REISSUE_TASK_PORT_MISSING');await withTenantSavepoint(tx,nested=>composition.failed(nested,auth,receipt.clientEventId));taskReady=true;}
+  catch(taskError){console.error('[INVOICE_REISSUE_TASK_PENDING]',taskError instanceof Error?taskError.message:'UnknownError');}
+  return {code:'UNAVAILABLE',message:creditAmount===null?CUSTOMER_CREDIT_COPY.pending:replacementReady?SHIPPING_FEE_COPY.reissueTaskCompletionPending:!taskReady?SHIPPING_FEE_COPY.reissueTaskPending:creditAmount===0?SHIPPING_FEE_COPY.reissueUnpaidPending:SHIPPING_FEE_COPY.reissuePending};
+ }
+}
+
+/** Existing normal TaskWriter completion composes this exact financial repair. */
+export async function repairInvoiceReissueTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:{id:string;client_key:string;art:string;bezug_typ:string;bezug_id:string|null}){
+ const source=await readInvoiceReissueSource(tx,auth.tenantId,task.client_key);
+ if(!source)return false;
+ if(!hasAuthorizationArea(auth,'geld')||task.id!==source.receipt.eventId||task.art!=='aufgabe'||task.bezug_typ!=='auftrag'||task.bezug_id!==source.receipt.orderId)throw Error('INVOICE_REISSUE_TASK_NOT_AUTHORIZED');
+ await lockInvoiceCreation(tx,auth.tenantId,{orderId:source.receipt.orderId,clientEventId:source.intent.replacementClientEventId});
+ await appendCancellationCredit(tx,auth.tenantId,source.receipt);
+ await issueInvoiceReplacement(tx,auth,source.receipt.clientEventId,readInvoiceVat);
+ const proof=await readInvoiceReissueSource(tx,auth.tenantId,task.client_key);
+ if(!proof?.replacement)throw Error('INVOICE_REISSUE_TASK_NOT_REPAIRED');
+ return true;
+}
 
 function requireVatReader(reader:InvoiceVatReader|undefined):InvoiceVatReader{
  return reader??readInvoiceVat;

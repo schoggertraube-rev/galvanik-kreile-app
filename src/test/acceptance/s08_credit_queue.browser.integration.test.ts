@@ -3,6 +3,7 @@
 // Explicit lost HTTP responses; no Next layout, cold-start or 24h claim.
 import {it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
+import {writeFileSync} from 'node:fs';
 import {createServer} from 'node:http';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -12,6 +13,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {changeOrderPickupNoticeAction} from '@/app/actions/orders.actions';
 import {confirmPaymentAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
 import {getCustomerCreditAction,cancelInvoiceAction,getInvoiceSummariesAction} from '@/app/actions/invoices.actions';
 import {COOKIE_NAME,signAppSession,getSecretKey} from '@/lib/server/appSession';
@@ -29,10 +31,11 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
  const apply={kind:'workshop',command:'credit.apply',id:applicationKey,itemId:target.invoice.invoiceId,deviceCapturedAt,input:{invoiceId:target.invoice.invoiceId,amount:4000,expectedVersion:0,expectedOpenAmountCents:6000,expectedCreditVersion:1,clientEventId:applicationKey}};
  // Plain browser bridge externalizes unused Next Action references. Financial
  // execution still goes through the actual HTTP route and its real writers.
- const compiled=await build({stdin:{contents:"export * from './src/lib/offline/pendingStore';export {syncPendingFiles} from './src/lib/offline/syncPendingFiles';export {replayOfflineWorkshopHttp} from './src/lib/offline/replayWorkshopHttp';export {queueFinancialCommand} from './src/lib/offline/queueFinancialCommand';",resolveDir:process.cwd()},external:['@/app/actions/*','@/modules/eingang/public'],bundle:true,write:false,format:'esm',platform:'browser'});
+ const compiled=await build({stdin:{contents:"export * from './src/lib/offline/pendingStore';export {syncPendingFiles} from './src/lib/offline/syncPendingFiles';export {replayOfflineWorkshopHttp} from './src/lib/offline/replayWorkshopHttp';export {queueFinancialCommand,queueHandoverCommand} from './src/lib/offline/queueFinancialCommand';export {installServerReachability,readServerReachability} from './src/lib/offline/serverReachability';",resolveDir:process.cwd()},external:['@/app/actions/*','@/modules/eingang/public'],bundle:true,write:false,format:'esm',platform:'browser'});
  const foreign=await createFixture(['geld'],'buero');let actor=full,loseResponse=true,calls=0;
  const receipts=new Map<string,string[]>();
  const server=createServer(async(req,res)=>{
+  if(req.url==='/TEST-unreachable'){res.writeHead(503,{'cache-control':'no-store'});res.end('TEST actual unavailable server');return;}
   if(req.url==='/api/offline/replay'){
    try{
     calls++;const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));
@@ -53,6 +56,12 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
  const setup=`async()=>{window.p=await import('/queue.mjs');window.acks=[];window.addEventListener('kreile-workshop-acknowledged',e=>window.acks.push(e.detail));window.ports={currentScope:()=>'${scope}',workshop:(s,e)=>window.p.replayOfflineWorkshopHttp(s,e,{keepalive:true}),workshopAcknowledged:p=>window.acks.push(p)};return true;}`;
  try{
   await cli(['open',url]);await cli(['eval',setup]);
+  // PL16:36/A-01: WLAN remains online while an actual local HTTP 503 marks
+  // the one server predicate unavailable. No financial click may create an original.
+  const offlineCommands=[{command:'invoice.cancel',input:cancel.input},{command:'credit.apply',input:apply.input},{command:'credit.payout',input:{customerId:source.customerId,amount:1,expectedCreditVersion:0,method:'bar',reference:null,note:null,clientEventId:randomUUID()}},{command:'invoice.issue',input:{orderId:target.orderId,expectedVersion:target.invoice.orderVersion,clientEventId:randomUUID()}}];
+  await cli(['eval',`async()=>{const stop=p.installServerReachability();try{await fetch('/TEST-unreachable');if(!navigator.onLine||p.readServerReachability())throw Error('TEST_SERVER_503_NOT_OFFLINE');for(const command of ${JSON.stringify(offlineCommands)}){const result=await p.queueFinancialCommand('${scope}',command,()=>'${scope}');if(result.code!=='UNAVAILABLE'||result.message!=='Geht nur mit Netz')throw Error('TEST_OFFLINE_FINANCIAL_CLICK_ACCEPTED');}if((await p.readPendingEntries('${scope}')).length||acks.length)throw Error('TEST_OFFLINE_FINANCIAL_ORIGINAL_CREATED');return true;}finally{stop();}}`]);
+  expect(calls).toBe(0);
+  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${offlineCommands.map(command=>command.input.clientEventId)}::uuid[])`).toEqual([{n:0}]);
   await cli(['eval',`async()=>{const original={...${JSON.stringify(cancel)},notBefore:new Date(Date.now()+600000).toISOString()};await p.retainPendingWorkshopOriginal('${scope}',original);const delayed=await p.syncPendingFiles('${scope}',ports);if(delayed.acknowledged!==0||delayed.secured!==0)throw Error('TEST_MONEY_DELAY_BYPASSED');if(!await p.withdrawPendingWorkshop('${scope}',original.id))throw Error('TEST_MONEY_UNDO_FAILED');await p.retainPendingWorkshopOriginal('${scope}',original);const sent=await p.syncPendingFiles('${scope}',ports,{flushDelayed:true});if(sent.acknowledged!==0||(await p.readPendingEntries('${scope}')).length!==1)throw Error('TEST_MONEY_RESPONSE_LOSS_ACKED');return true;}`]);
   expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:4000,version:1}});
   const [sourceState]=await sql`SELECT status,cancelled_at FROM public.invoices WHERE tenant_id=${tenant} AND id=${source.invoice.invoiceId}::uuid`;
@@ -84,6 +93,61 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
   await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'credit.apply',input:${JSON.stringify(stale)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='CONFLICT'||result.currentCreditBalanceCents!==0||!result.message||pending.length!==1||pending[0].id!=='${stale.clientEventId}')throw Error('TEST_STALE_ORIGINAL_FALSE_ACK_OR_HIDDEN_REASON');return true;}`]);
   expect(calls).toBe(8);
   expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND customer_id=${source.customerId}`).toEqual([{n:4}]);
+  // S09 uses the same native store, producer, HTTP route and actual invoice writer.
+  // The previous unresolved credit original must remain while this other order succeeds.
+  const shipping=await readyInvoiceOrder('S09 native extra invoice','pickup',false,source.customerId,10000);
+  const [mainOriginal]=await sql`SELECT pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${shipping.invoice.invoiceId}::uuid`;
+  const handoverKey=randomUUID(),handover={command:'handover_manual',orderId:shipping.orderId,expectedVersion:shipping.version,handoverMode:'shipping',clientEventId:handoverKey};
+  loseResponse=true;
+  await cli(['eval',`async()=>{const result=await p.queueHandoverCommand('${scope}',{command:'order.handover',input:${JSON.stringify(handover)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='UNAVAILABLE'||!pending.some(e=>e.id==='${handoverKey}'))throw Error('TEST_HANDOVER_RESPONSE_LOSS_FALSE_ACK');return true;}`]);
+  await cli(['goto',url]);await cli(['eval',setup]);
+  await cli(['eval',`async()=>{const result=await p.queueHandoverCommand('${scope}',{command:'order.handover',input:${JSON.stringify(handover)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='OK'||!result.replayed||result.handoverCommand!=='order.handover'||result.receipt.handoverMode!=='shipping'||pending.some(e=>e.id==='${handoverKey}')||!pending.some(e=>e.id==='${stale.clientEventId}'))throw Error('TEST_HANDOVER_REAL_RECEIPT_REQUIRED');return true;}`]);
+  expect(receipts.get(handoverKey)).toHaveLength(2);expect(receipts.get(handoverKey)![0]).toBe(receipts.get(handoverKey)![1]);
+  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${tenant} AND order_id=${shipping.orderId} AND client_event_id=${handoverKey}::uuid AND event_type='ORDER_HANDOVER_CHANGED_V1'`).toEqual([{n:1}]);
+  const [shippingOrder]=await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${shipping.orderId}`;
+  const issueKey=randomUUID(),issue={orderId:shipping.orderId,expectedVersion:shippingOrder.version,clientEventId:issueKey,shippingCosts:{invoiceId:shipping.invoice.invoiceId,expectedVersion:1,scope:'order:'+shipping.orderId,expectedFeeCents:1000}};
+  loseResponse=true;
+  await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'invoice.issue',input:${JSON.stringify(issue)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='UNAVAILABLE'||!pending.some(e=>e.id==='${issueKey}')||!pending.some(e=>e.id==='${stale.clientEventId}'))throw Error('TEST_ISSUE_RESPONSE_LOSS_FALSE_ACK');return true;}`]);
+  expect(await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${shipping.orderId}`).toEqual([{n:2}]);
+  actor=foreign;await cli(['goto',url]);await cli(['eval',setup]);
+  await cli(['eval',`async()=>{const before=JSON.stringify(await p.readPendingEntries('${scope}'));const result=await p.syncPendingFiles('${scope}',ports);if(result.acknowledged!==0||JSON.stringify(await p.readPendingEntries('${scope}'))!==before)throw Error('TEST_FOREIGN_ISSUE_ORIGINAL_CHANGED');return true;}`]);
+  actor=full;await cli(['goto',url]);await cli(['eval',setup]);
+  await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'invoice.issue',input:${JSON.stringify(issue)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='OK'||!result.replayed||result.financialCommand!=='invoice.issue'||pending.some(e=>e.id==='${issueKey}')||!pending.some(e=>e.id==='${stale.clientEventId}'))throw Error('TEST_ISSUE_RELOAD_RECEIPT_REQUIRED');return true;}`]);
+  expect(receipts.get(issueKey)).toHaveLength(2);expect(receipts.get(issueKey)![0]).toBe(receipts.get(issueKey)![1]);
+  expect(await sql`SELECT count(*)::int AS n,sum(net_amount_cents)::int AS total FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${shipping.orderId} AND belegart='versandkosten'`).toEqual([{n:1,total:1000}]);
+  expect(await sql`SELECT pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${shipping.invoice.invoiceId}::uuid`).toEqual([mainOriginal]);
+  // The compound cancellation remains one original in this very same store.
+  // Its actual replacement, not cancellation alone, is required for final ACK.
+  const reissueOrder=await readyInvoiceOrder('S09 native no-shipping replacement','shipping',false,undefined,10000);
+  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:reissueOrder.invoice.invoiceId,expectedVersion:0,expectedOpenAmountCents:reissueOrder.invoice.grossAmountCents,amount:reissueOrder.invoice.grossAmountCents,method:'ueberweisung',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const reissueManual=await withSession(full,()=>changeOrderPickupNoticeAction({command:'handover_manual',orderId:reissueOrder.orderId,expectedVersion:reissueOrder.version,handoverMode:'pickup',clientEventId:randomUUID()}));
+  if(reissueManual.code!=='OK'||!reissueManual.receipt||typeof reissueManual.receipt!=='object'||!('eventId'in reissueManual.receipt)||typeof reissueManual.receipt.eventId!=='string')throw Error('TEST_NATIVE_REISSUE_SOURCE_REQUIRED');
+  const reissueKey=randomUUID(),replaceKey=randomUUID(),compound={invoiceId:reissueOrder.invoice.invoiceId,expectedVersion:1,reason:'Übergabeart Versand → Abholung',clientEventId:reissueKey,reissueWithoutShipping:{handoverEventId:reissueManual.receipt.eventId,replacementClientEventId:replaceKey}};
+  loseResponse=true;
+  await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'invoice.cancel',input:${JSON.stringify(compound)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='UNAVAILABLE'||!pending.some(e=>e.id==='${reissueKey}'))throw Error('TEST_COMPOUND_LOST_RESPONSE_FALSE_ACK');return true;}`]);
+  expect(await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${reissueOrder.orderId}`).toEqual([{n:2}]);
+  await cli(['goto',url]);await cli(['eval',setup]);
+  await cli(['eval',`async()=>{const result=await p.queueFinancialCommand('${scope}',{command:'invoice.cancel',input:${JSON.stringify(compound)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='OK'||!result.replayed||result.replacementReceipt?.clientEventId!=='${replaceKey}'||pending.some(e=>e.id==='${reissueKey}')||!pending.some(e=>e.id==='${stale.clientEventId}'))throw Error('TEST_COMPOUND_REPLACEMENT_ACK_REQUIRED');return true;}`]);
+  expect(receipts.get(reissueKey)).toHaveLength(2);expect(receipts.get(reissueKey)![0]).toBe(receipts.get(reissueKey)![1]);
+  expect(await sql`SELECT payment_open_amount_cents,payment_paid_amount_cents FROM public.invoices WHERE tenant_id=${tenant} AND client_event_id=${replaceKey}::uuid`).toEqual([{payment_open_amount_cents:11900,payment_paid_amount_cents:0}]);
+  expect(await sql`SELECT count(*)::int AS n,sum(amount_cents)::int AS amount FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${reissueOrder.invoice.invoiceId}::uuid`).toEqual([{n:1,amount:reissueOrder.invoice.grossAmountCents}]);
+  // R3: after a definitive stale-version rejection the explicitly refreshed
+  // command for this same order still needs an executable path.
+  const staleHandoverKey=randomUUID(),freshHandoverKey=randomUUID();
+  const staleHandover={...handover,clientEventId:staleHandoverKey,handoverMode:'pickup'};
+  await cli(['eval',`async()=>{const result=await p.queueHandoverCommand('${scope}',{command:'order.handover',input:${JSON.stringify(staleHandover)}},()=>'${scope}');if(result.code!=='CONFLICT')throw Error('TEST_ACTUAL_STALE_HANDOVER_REJECTION_REQUIRED');return true;}`]);
+  const [currentHandover]=await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${shipping.orderId}`;
+  const freshHandover={...staleHandover,clientEventId:freshHandoverKey,expectedVersion:currentHandover.version};
+  const freshOutcome=await cli(['eval',`async()=>{const result=await p.queueHandoverCommand('${scope}',{command:'order.handover',input:${JSON.stringify(freshHandover)}},()=>'${scope}');return 'TEST_HANDOVER_RETRY_OUTCOME '+result.code+' '+JSON.stringify({message:result.message,pending:(await p.readPendingEntries('${scope}')).map(e=>({id:e.id,itemId:e.itemId,kind:e.kind}))});}`]);
+  // Diagnostic control: the unchanged real writer accepts these exact freshly
+  // read inputs, so its source/permission is not the cause of queue blockage.
+  const responseSeen=receipts.has(freshHandoverKey),direct=await withSession(full,()=>changeOrderPickupNoticeAction(freshHandover));
+  expect(direct).toMatchObject({code:'OK'});
+  writeFileSync('.git/kreile-s09-stale-queue-browser-green-proof.json',JSON.stringify({at:new Date().toISOString(),browserStdout:freshOutcome.stdout,freshResponseSeenBeforeDirectControl:responseSeen,directCode:direct.code,directReplayed:direct.code==='OK'?direct.replayed:null},null,2));
+  expect(freshOutcome.stdout).toContain('TEST_HANDOVER_RETRY_OUTCOME OK');
+  expect(responseSeen).toBe(true);expect(direct).toMatchObject({code:'OK',replayed:true});
+  await cli(['eval',`async()=>{const rows=await p.readPendingEntries('${scope}'),old=rows.find(e=>e.id==='${staleHandoverKey}');if(!old?.rejection||old.rejection.rejection!=='CONFLICT'||old.input.expectedVersion!==${staleHandover.expectedVersion}||rows.some(e=>e.id==='${freshHandoverKey}'))throw Error('TEST_NO_EFFECT_ORIGINAL_OR_NEW_ACK');return true;}`]);
+  expect(await sql`SELECT count(*)::int AS n FROM public.events event JOIN public.tasks task ON task.tenant_id=event.tenant_id AND task.erstellt_von=event.user_id WHERE event.tenant_id=${tenant} AND event.event_type='OFFLINE_WORKSHOP_REJECTED_V1' AND event.payload#>>'{original,input,clientEventId}'=${staleHandoverKey} AND task.titel='Konflikt beim Abgleich' AND task.bezug_id=${shipping.orderId}`).toEqual([{n:1}]);
   // PL14Nov10:20: known rejected originals remain readable, and must not hold
   // the next explicitly confirmed command for the same invoice indefinitely.
   const current=await withSession(full,()=>getInvoiceSummariesAction());

@@ -1,6 +1,7 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
 export const PAYMENT_CONTRACT_VERSION = 1 as const;
 
@@ -64,6 +65,17 @@ export type PaymentSummaryRow = {
   integrity_ok: boolean;
 };
 
+/** Same per-invoice payment truth for the order reader and physical output.
+ * No order-wide amount or representative payment is manufactured. */
+export async function readOrderPaymentSummaries(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){
+  return tx.execute<PaymentSummaryRow&{belegart:'auftrag'|'versandkosten';ursprung_rechnung_id:string|null;ursprung_rechnung_nummer:string|null}>(sql`
+    SELECT payment.*,invoice.belegart,invoice.ursprung_rechnung_id::text,original.invoice_number AS ursprung_rechnung_nummer
+    FROM private.v_payment_summary_v1 payment JOIN public.invoices invoice
+      ON invoice.tenant_id=payment.tenant_id AND invoice.id=payment.invoice_id
+    LEFT JOIN public.invoices original ON original.tenant_id=invoice.tenant_id AND original.id=invoice.ursprung_rechnung_id AND original.belegart='auftrag'
+    WHERE payment.tenant_id=${tenantId} AND payment.order_id=${orderId} ORDER BY payment.invoice_id`);
+}
+
 export type GoodsOutReadback = {
   eventId: string;
   clientEventId: string;
@@ -76,6 +88,7 @@ export type GoodsOutReadback = {
 };
 
 export type OrderPaymentState = {
+  additionalPayments?:Array<PaymentSummary&{belegart:'versandkosten';ursprungRechnungId:string;ursprungRechnungNummer:string;label:string}>;
   orderId: string;
   orderNumber: string;
   orderVersion: number;
@@ -320,7 +333,7 @@ export function mapOrderPaymentStateRow(
     || !isOrderPaymentMode(mode)
     || paymentModeVersion < 0
     || (invoiceState !== "not_issued" && invoiceState !== "issued")
-    || activeInvoiceCount !== (invoiceState === "issued" ? 1 : 0)
+    || (invoiceState === "issued" ? activeInvoiceCount < 1 : activeInvoiceCount !== 0)
     || typeof row.goods_out_allowed !== "boolean"
     || goodsOutEventCount < 0
     || goodsOutEventCount > 1

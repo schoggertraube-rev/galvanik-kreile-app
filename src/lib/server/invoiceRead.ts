@@ -1,3 +1,4 @@
+import {mapInvoiceIssueReceipt,readCreateInvoiceReceipts,mapInvoiceCancellationReceipt,readCancellationInvoiceReceipts} from '@/lib/server/commands/immutableInvoiceCommand';
 import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
 import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
@@ -84,37 +85,6 @@ export type ReadInvoiceSummariesResult =
   | { code: "OK"; data: ImmutableInvoiceSummary[] }
   | { code: "FORBIDDEN"; message: string }
   | { code: "UNAVAILABLE"; message: string };
-
-type ReceiptRow = {
-  event_id: string;
-  tenant_id: string;
-  order_id: string;
-  event_type: string;
-  client_event_id: string;
-  correlation_id: string;
-  event_schema_version: number;
-  aggregate_version: number;
-  actor_id: string;
-  occurred_at: Date | string;
-  invoice_id: string;
-  invoice_number: string;
-  order_version: number | string;
-  intent_expected_version: number | string;
-  current_status: string;
-  current_version: number;
-  net_amount_cents: number | string;
-  vat_rate_basis_points: number|null;
-  snapshot: unknown;
-  vat_amount_cents: number | string;
-  gross_amount_cents: number | string;
-  service_date: Date | string;
-  due_date: Date | string;
-  pdf_ref: string;
-  pdf_sha256: string;
-  cancel_reason: string | null;
-  original_pdf_sha256: string;
-  integrity_ok: boolean;
-};
 
 type PdfRow = {
   id: string;
@@ -212,125 +182,6 @@ function toSafeInteger(value: unknown, error: string): number {
   return parsed;
 }
 
-function hasCommonReceiptIntegrity(row: ReceiptRow, authorization: AuthorizationSnapshot): boolean {
-  return row.integrity_ok === true
-    && row.tenant_id === authorization.tenantId
-    && row.event_schema_version === 1
-    && UUID_PATTERN.test(row.event_id)
-    && UUID_PATTERN.test(row.client_event_id)
-    && UUID_PATTERN.test(row.correlation_id)
-    && UUID_PATTERN.test(row.actor_id)
-    && UUID_PATTERN.test(row.invoice_id)
-    && INVOICE_NUMBER_PATTERN.test(row.invoice_number)
-    && toSafeInteger(row.order_version, "INVOICE_READ_ORDER_VERSION_INVALID") > 0
-    && HEX64_PATTERN.test(row.original_pdf_sha256);
-}
-
-function mapIssueReceipt(row: ReceiptRow, authorization: AuthorizationSnapshot,readVat:InvoiceVatReader): ImmutableInvoiceReceipt {
-  const orderVersion = toSafeInteger(row.order_version, "INVOICE_READ_ORDER_VERSION_INVALID");
-  const intentExpectedVersion = toSafeInteger(
-    row.intent_expected_version,
-    "INVOICE_READ_INTENT_VERSION_INVALID",
-  );
-  const {netAmountCents,vatAmountCents,grossAmountCents,headRate:vatRateBasisPoints}=readVat(row);
-  const aggregateVersion = toSafeInteger(row.aggregate_version, "INVOICE_READ_VERSION_INVALID");
-  const serviceDate = toDateOnly(row.service_date);
-  const dueDate = toDateOnly(row.due_date);
-  const currentLifecycleValid = (
-    row.current_status === "issued"
-    && row.current_version === 1
-    && row.cancel_reason === null
-  ) || (
-    row.current_status === "cancelled"
-    && row.current_version === 2
-    && typeof row.cancel_reason === "string"
-    && row.cancel_reason === row.cancel_reason.trim()
-    && row.cancel_reason.length >= 5
-    && row.cancel_reason.length <= 500
-  );
-  if (
-    !hasCommonReceiptIntegrity(row, authorization)
-    || row.event_type !== "INVOICE_CREATED_V1"
-    || aggregateVersion !== 1
-    || !currentLifecycleValid
-    || intentExpectedVersion !== orderVersion
-    || row.pdf_ref !== `invoice://${row.invoice_id}/original`
-    || row.pdf_sha256 !== row.original_pdf_sha256
-    || netAmountCents < 0
-    || vatAmountCents < 0
-    || grossAmountCents !== netAmountCents + vatAmountCents
-  ) throw new Error("INVOICE_READ_RECEIPT_INVALID");
-
-  return {
-    invoiceId: row.invoice_id,
-    invoiceNumber: row.invoice_number,
-    orderId: row.order_id,
-    orderVersion,
-    status: "issued",
-    netAmountCents,
-    vatRateBasisPoints,
-    vatAmountCents,
-    grossAmountCents,
-    serviceDate,
-    dueDate,
-    issuedAt: toIso(row.occurred_at),
-    issuedBy: row.actor_id,
-    pdfRef: row.pdf_ref,
-    pdfSha256: row.pdf_sha256,
-    eventId: row.event_id,
-    clientEventId: row.client_event_id,
-    correlationId: row.correlation_id,
-    aggregateVersion: 1,
-    eventSchemaVersion: 1,
-  };
-}
-
-function mapCancellationReceipt(
-  row: ReceiptRow,
-  authorization: AuthorizationSnapshot,
-): ImmutableInvoiceCancellationReceipt {
-  const orderVersion = toSafeInteger(row.order_version, "INVOICE_CANCEL_READ_ORDER_VERSION_INVALID");
-  const expectedVersion = toSafeInteger(
-    row.intent_expected_version,
-    "INVOICE_CANCEL_READ_EXPECTED_VERSION_INVALID",
-  );
-  const aggregateVersion = toSafeInteger(row.aggregate_version, "INVOICE_CANCEL_READ_VERSION_INVALID");
-  const reason = typeof row.cancel_reason === "string" ? row.cancel_reason : "";
-  if (
-    !hasCommonReceiptIntegrity(row, authorization)
-    || row.event_type !== "INVOICE_CANCELLED_V1"
-    || expectedVersion !== 1
-    || aggregateVersion !== 2
-    || row.current_version !== 2
-    || row.current_status !== "cancelled"
-    || reason !== reason.trim()
-    || reason.length < 5
-    || reason.length > 500
-    || row.pdf_ref !== `invoice://${row.invoice_id}/cancellation`
-    || !HEX64_PATTERN.test(row.pdf_sha256)
-  ) throw new Error("INVOICE_CANCEL_READ_RECEIPT_INVALID");
-
-  return {
-    invoiceId: row.invoice_id,
-    invoiceNumber: row.invoice_number,
-    orderId: row.order_id,
-    orderVersion,
-    status: "cancelled",
-    reason,
-    cancelledAt: toIso(row.occurred_at),
-    cancelledBy: row.actor_id,
-    originalPdfSha256: row.original_pdf_sha256,
-    cancellationPdfRef: row.pdf_ref,
-    cancellationPdfSha256: row.pdf_sha256,
-    eventId: row.event_id,
-    clientEventId: row.client_event_id,
-    correlationId: row.correlation_id,
-    expectedVersion: 1,
-    aggregateVersion: 2,
-    eventSchemaVersion: 1,
-  };
-}
-
 function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot,readVat:InvoiceVatReader): ImmutableInvoiceSummary {
   const aggregateVersion = toSafeInteger(row.aggregate_version, "INVOICE_SUMMARY_VERSION_INVALID");
   const orderVersion = toSafeInteger(row.order_version, "INVOICE_SUMMARY_ORDER_VERSION_INVALID");
@@ -413,16 +264,10 @@ export async function readInvoiceReceipt(
   }
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<ReceiptRow>(sql`
-        SELECT *
-        FROM private.v_invoice_receipt_v1
-        WHERE order_id = ${input.orderId}
-          AND client_event_id = ${input.clientEventId}
-          AND event_type = 'INVOICE_CREATED_V1'
-        LIMIT 2
-      `);
+      const rows = await readCreateInvoiceReceipts(tx,input.clientEventId);
       if (rows.length > 1) throw new Error("INVOICE_READ_AMBIGUOUS");
-      return rows[0] ? mapIssueReceipt(rows[0], authorization,requireVat(readVat)) : null;
+      if(rows[0]&&rows[0].order_id!==input.orderId)throw Error('INVOICE_READ_ORDER_MISMATCH');
+      return rows[0] ? mapInvoiceIssueReceipt(rows[0],authorization.tenantId,rows[0].actor_id,requireVat(readVat)) : null;
     });
     return { code: "OK", data };
   } catch {
@@ -442,16 +287,9 @@ export async function readInvoiceCancellationReceipt(
   }
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<ReceiptRow>(sql`
-        SELECT *
-        FROM private.v_invoice_receipt_v1
-        WHERE invoice_id = ${input.invoiceId}::uuid
-          AND client_event_id = ${input.clientEventId}
-          AND event_type = 'INVOICE_CANCELLED_V1'
-        LIMIT 2
-      `);
+      const rows=await readCancellationInvoiceReceipts(tx,input.clientEventId,input.invoiceId);
       if (rows.length > 1) throw new Error("INVOICE_CANCEL_READ_AMBIGUOUS");
-      return rows[0] ? mapCancellationReceipt(rows[0], authorization) : null;
+      return rows[0] ? mapInvoiceCancellationReceipt(rows[0],authorization.tenantId,rows[0].actor_id) : null;
     });
     return { code: "OK", data };
   } catch {

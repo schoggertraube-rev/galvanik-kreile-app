@@ -63,7 +63,8 @@
     "20261026190000_s1_p2_feature_switch.sql",
     "20261028163707_h11_align_access_rights.sql",
     "20261107193000_kv_v04_content_editions.sql",
-    "20261110034000_output_dispatch_policy.sql"
+    "20261110034000_output_dispatch_policy.sql",
+    "20261114034003_shipment_fee_setting.sql"
   ],
   "viewsFunctions": [],
   "ownsTables": [

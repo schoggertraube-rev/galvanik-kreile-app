@@ -46,6 +46,12 @@ const card: OrderCardModel = {
 };
 
 describe("Orders V1.1 one-surface truth", () => {
+  it('S09 a login-bound handover notice opens its real task without offering a fictitious original mail',()=>{
+    render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{kind:'data',card:{...card,station:'fertig',handoverMode:'pickup',handoverNotice:{message:'TEST Manueller Übergabebeleg',taskId:'TEST-task',taskState:'offen',originalItemId:null}}}}/>);
+    const panel=document.querySelector('[data-spec-id="auftrag.uebergabe"]')!;
+    expect(within(panel as HTMLElement).queryByRole('button',{name:/Original/i})).not.toBeInTheDocument();
+    expect(within(panel as HTMLElement).getByRole('button',{name:/Aufgabe/i})).toBeEnabled();
+  });
   it('AF19 shows the stored handover and real callback/original in the card and outgoing check',()=>{
     const dispatch=vi.fn((event:Event)=>event.preventDefault());
     window.addEventListener('kreile:oeffne',dispatch);

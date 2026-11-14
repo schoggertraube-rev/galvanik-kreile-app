@@ -3,6 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { withTransaction, execute } = vi.hoisted(() => ({ withTransaction: vi.fn(), execute: vi.fn() }));
 vi.mock("server-only", () => ({}));
+// These readers receive the authorization snapshot from their caller. Keep the
+// imported command module's live resolver outside this isolated reader fixture.
+vi.mock("@/lib/server/authorization", async () => {
+  const { hasAuthorizationArea } = await import("@/lib/auth/authorizationContract");
+  const unexpectedResolver = () => { throw new Error("INVOICE_READ_MUST_USE_SUPPLIED_AUTHORIZATION"); };
+  return { hasAuthorizationArea, resolveAuthorization: unexpectedResolver, getAuthorizationActionGrants: unexpectedResolver };
+});
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
 vi.mock("drizzle-orm", () => ({ sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }) }));
 
@@ -25,6 +32,7 @@ const buero = {
 const werkstatt = { ...buero, role: "werkstatt" as const, permissions: [] as const };
 
 const validReceiptRow = {
+  belegart:'auftrag',ursprung_rechnung_id:null,shipping_costs_intent:null,
   event_id: EVENT,
   tenant_id: KREILE_TENANT_SLUG,
   order_id: ORDER,

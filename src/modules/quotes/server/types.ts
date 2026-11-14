@@ -27,6 +27,7 @@ export type QuotePositionInput = {
 };
 
 export type CreateQuoteInput = {
+  shippingIncluded?:boolean;
   sourceComplaintId?:string;
   clientEventId: string;
   customerId: string;
@@ -55,6 +56,7 @@ export type ConvertQuoteInput = {
 };
 
 export type UpdateQuoteInput = {
+  shippingIncluded?:boolean;
   source?:CreateQuoteInput['source'];
   termStatus?:CreateQuoteInput['termStatus'];
   calculation?:QuoteCalculation;
@@ -74,6 +76,7 @@ export type QuotePosition = QuotePositionInput & {
 };
 
 export type QuoteReadback = {
+  shippingIncluded?:boolean;
   actorTrace?:CaseActorTrace;
   actorReadError?:string;
   sourceComplaintId?:string;
