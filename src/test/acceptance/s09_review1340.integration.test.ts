@@ -61,13 +61,14 @@ it.each(['invoice','handover'] as const)('KORR6 rechecks the selected customer a
  const order=await readyOrderForInvoice('TEST KORR6 customer race '+kind,'pickup');
  const other=await customerFixture('TEST KORR6 replacement customer');
  let release!:()=>void,locked!:()=>void;const hold=new Promise<void>(resolve=>{release=resolve;}),ready=new Promise<void>(resolve=>{locked=resolve;});
- const writer=sql.begin(async tx=>{await tx`SELECT private.lock_shipping_customer_v1(${tenant},${order.customerId})`;locked();await hold;});
+ let holderPid:number|null=null;
+ const writer=sql.begin(async tx=>{const [backend]=await tx`SELECT pg_backend_pid() AS pid`;holderPid=backend.pid;await tx`SELECT private.lock_shipping_customer_v1(${tenant},${order.customerId})`;locked();await hold;});
  await ready;const key=randomUUID();
  const action=kind==='invoice'?withSession(full,()=>issueInvoiceAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:key})):withSession(full,()=>changeOrderPickupNoticeAction({command:'handover_manual',orderId:order.orderId,expectedVersion:order.version,clientEventId:key,handoverMode:'shipping'}));
  try{
   let waiting=false;
   for(let attempt=0;attempt<100&&!waiting;attempt++){
-   const blocked=await sql`SELECT pid FROM pg_stat_activity WHERE wait_event='advisory' AND query LIKE '%SELECT customer_id,private.lock_shipping_customer_v1%'`;
+   const blocked=await sql`SELECT pid FROM pg_stat_activity WHERE wait_event='advisory' AND ${holderPid}::int=ANY(pg_blocking_pids(pid)) AND query LIKE '%SELECT customer_id,private.lock_shipping_customer_v1%'`;
    waiting=blocked.length>0;if(!waiting)await new Promise(resolve=>setTimeout(resolve,30));
   }
   expect(waiting,'the real writer must have selected its customer before waiting').toBe(true);
