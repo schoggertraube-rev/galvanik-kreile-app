@@ -9,6 +9,7 @@ import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {changeOrderPickupNoticeAction} from '@/app/actions/orders.actions';
 import {cancelInvoiceAction,getCustomerCreditAction,getInvoiceCancellationReceiptAction} from '@/app/actions/invoices.actions';
 import {confirmPaymentAction} from '@/app/actions/payments.actions';
+import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
 import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingang.actions';
 import {offlinePartition} from '@/lib/server/offlinePartition';
 import {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
@@ -53,6 +54,9 @@ it('A09-7 R2 real replacement SQL failure preserves cancellation and credit, the
   expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'UNAVAILABLE'});
   expect(await sql`SELECT status FROM public.invoices WHERE tenant_id=${tenant} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{status:'cancelled'}]);
   expect(await withSession(full,()=>getCustomerCreditAction(order.customerId))).toMatchObject({code:'OK',credit:{balanceCents:order.invoice.grossAmountCents}});
+  const [current]=await sql`SELECT version,order_number FROM public.orders WHERE tenant_id=${tenant} AND id=${order.orderId}`;
+  expect(await withSession(full,()=>recordGoodsOutAction({orderId:order.orderId,expectedVersion:current.version,clientEventId:randomUUID(),mode:'abholung'}))).toEqual({code:'CONFLICT',message:SHIPPING_FEE_COPY.reissueReleaseBlocked(current.order_number)});
+  expect(await sql`SELECT station FROM public.orders WHERE tenant_id=${tenant} AND id=${order.orderId}`).toEqual([{station:'fertig'}]);
  }finally{await sql.unsafe(`DROP TRIGGER ${fault} ON public.invoices`);await sql.unsafe(`DROP FUNCTION private.${fault}()`);}
  const tasks=await sql`SELECT id::text,status,version,fuer_bereich FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`;
  expect(tasks).toHaveLength(1);expect(tasks[0]).toMatchObject({status:'offen',fuer_bereich:'entscheiden'});

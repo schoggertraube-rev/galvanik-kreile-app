@@ -1,6 +1,6 @@
 import type {OrderActorSummary} from "@/modules/orders/public";
 import "server-only";
-import {readManualHandoverReceipt} from './orderHandoverSourcePort';
+import {readManualHandoverReceipt,readInvoiceHandoverSource} from './orderHandoverSourcePort';
 
 import { sql } from "drizzle-orm";
 import {readOrderCommercialQuote,type OrderCommercialQuote} from "./orderQuoteReadPort";
@@ -891,9 +891,10 @@ export async function readLiveOrderCard(
         if(source.orderId!==queue.id||source.orderVersion>queue.version)throw Error('ORDER_CARD_MANUAL_HANDOVER_INVALID');
         handoverNotice={message:source.message,taskId:source.taskId,originalItemId:null,manualEventId:source.eventId};
       }else if(handoverEvent){
+        await readInvoiceHandoverSource(tx,authorization.tenantId,handoverEvent.id);
         const handover=handoverEvent.payload?.receipt;
         if(handoverEvent.event_type!=='ORDER_HANDOVER_MAIL_V1'||!handover||handover.orderId!==queue.id||!Number.isSafeInteger(handover.orderVersion)||handover.orderVersion>queue.version||typeof handover.message!=='string'||!handover.message.trim()||!UUID_PATTERN.test(handover.mailActor?.originalItemId)||handover.taskId!==null&&!UUID_PATTERN.test(handover.taskId))throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');
-        handoverNotice={message:handover.message,taskId:handover.taskId,originalItemId:handover.mailActor.originalItemId};
+        handoverNotice={message:handover.message,taskId:handover.taskId,originalItemId:handover.mailActor.originalItemId,manualEventId:handoverEvent.id};
       }
       const activeComplaint=queue.station!=='fertig'?await (await import('./orderReleaseRead')).readOpenOrderComplaint(tx,authorization.tenantId,input.orderId):undefined;
       return {

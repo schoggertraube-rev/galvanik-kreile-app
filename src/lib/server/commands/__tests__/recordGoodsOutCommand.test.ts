@@ -187,6 +187,8 @@ function configureSuccess(options: {
     if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
     if (text.includes("UPDATE public.shipments")) return Promise.resolve([]);
     if (text.includes("FROM public.events audit")) return Promise.resolve([]);
+    // Synthetic SQL fixture: no pending invoice reissue in these output cases.
+    if (text.includes("payload ? 'reissue'")) return Promise.resolve([]);
     if (text.includes("FROM public.complaints")) return Promise.resolve([]);
     if (text.includes("FROM public.events")) {
       eventReads += 1;
@@ -398,6 +400,7 @@ describe("recordGoodsOut", () => {
     execute.mockImplementationOnce(() => Promise.resolve([]))
       .mockImplementationOnce(() => Promise.resolve([]))
       .mockImplementationOnce(() => Promise.resolve([finishedOrder]))
+      .mockImplementationOnce(() => Promise.resolve([])) // No pending cancellation/reissue.
       .mockImplementationOnce(() => Promise.resolve([])) // No overdue customer debt.
       .mockImplementationOnce(() => Promise.resolve([])) // No open complaint.
       .mockImplementationOnce(() => Promise.resolve([invoice]))
@@ -414,6 +417,8 @@ describe("recordGoodsOut", () => {
       const text = queryText(query);
       if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
       if (text.includes("FROM public.events audit")) return Promise.resolve([]);
+      // Synthetic SQL fixture: no pending invoice reissue in these output cases.
+      if (text.includes("payload ? 'reissue'")) return Promise.resolve([]);
       if (text.includes("FROM public.events")) return Promise.resolve([eventRow()]);
       if (text.includes("FROM public.orders")) return Promise.resolve([pickedUpOrder]);
       throw new Error(`Unexpected SQL: ${text}`);

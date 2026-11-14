@@ -1,6 +1,6 @@
 import "server-only";
 import {readOpenOrderComplaint} from '@/lib/server/orderReleaseRead';
-import {COMPLAINT_ORDER_COPY,MANUAL_SHIPPING_HANDOVER_LABEL} from '@/ui/situationCatalog';
+import {COMPLAINT_ORDER_COPY,MANUAL_SHIPPING_HANDOVER_LABEL,SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 
 import { randomUUID } from "node:crypto";
 import { GOODS_OUT_DEBT_COPY } from "@/ui/situationCatalog";
@@ -712,6 +712,10 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
       ) {
         return { code: "VALIDATION_ERROR", message: "Auftragsvertrag ist nicht verfügbar." };
       }
+
+      const {readPendingInvoiceReissue}=await import('./immutableInvoiceCommand');
+      const pendingReissue=await readPendingInvoiceReissue(tx,tenantId,order.id);
+      if(pendingReissue!==null)return {code:'CONFLICT',message:SHIPPING_FEE_COPY.reissueReleaseBlocked(pendingReissue)};
 
       // This decision uses invoice facts even when the actor cannot see money.
       // Do not use the visibility-filtered customer-hints projection as a gate.

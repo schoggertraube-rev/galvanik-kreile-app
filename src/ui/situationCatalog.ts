@@ -140,7 +140,7 @@ export const QUOTE_CYCLE_COPY={
 };
 
 export const ORDER_HANDOVER_COPY={
- permission:'error.permission',invalid:'Diese Übergabeart passt nicht zum Auftrag. Wähle Abholen oder Versand.',missing:'Wähle Abholen oder Versand für diesen Auftrag.',
+ permission:LEGACY_ACTION_ACCESS_COPY.forbidden,invalid:'Diese Übergabeart passt nicht zum Auftrag. Wähle Abholen oder Versand.',missing:'Wähle Abholen oder Versand für diesen Auftrag.',
  conflict:'Der Auftrag wurde inzwischen geändert. Lade den aktuellen Stand und wähle die Übergabe erneut.',unavailable:'Die Übergabeart ist noch nicht gespeichert. Versuch es gleich noch einmal – deine Auswahl bleibt stehen.',
  manualChanged:(number:string,mode:'pickup'|'shipping')=>mode==='pickup'?`${number} wird jetzt abgeholt.`:`${number} geht jetzt in den Versand.`,
  chooseOrder:"Wähle den Auftrag zu dieser Mail",choose:(number:string)=>"Übergabe für "+number+" übernehmen",
@@ -397,9 +397,11 @@ export const CUSTOMER_CREDIT_COPY={
 } as const;
 // S09: package text is fixed; additional failure copy stays in the same catalog (R8).
 export const SHIPPING_FEE_COPY={
+ groupAlreadyCharged:(number:string,other:string)=>`${number} und ${other} sind schon einzeln mit Versand berechnet – verschick sie getrennt.`,
+ reissueReleaseBlocked:(number:string)=>`Stell zuerst die Rechnung zu ${number} ohne Versand neu aus – dann kann die Ware raus.`,
  reissue:(number:string)=>`Rechnung ${number} stornieren und ohne Versand neu ausstellen`,
  reissueReason:'Übergabeart Versand → Abholung',
- reissueForbidden:'error.permission',
+ reissueForbidden:LEGACY_ACTION_ACCESS_COPY.forbidden,
  reissuePending:'Der Storno ist gespeichert, das Guthaben steht. Die neue Rechnung ohne Versand fehlt noch – dafür liegt eine Aufgabe am Auftrag.',
  reissueTaskPending:'Der Storno ist gespeichert. Die Aufgabe für die neue Rechnung ohne Versand wird noch angelegt – versuch es gleich noch einmal.',
  reissueTaskCompletionPending:'Die neue Rechnung ohne Versand ist ausgestellt. Die Aufgabe dazu wird gleich abgeschlossen.',
@@ -414,5 +416,5 @@ export const SHIPPING_FEE_COPY={
  includedChanged:'Versand im KV geändert. Ein schon gesendeter KV bekommt dafür eine neue Fassung.',
  missing:'Versandpauschale fehlt in den Einstellungen – trag sie dort ein',
  invalid:'Der Versandpreis muss ein Betrag ab 0,00 € sein. Leer heißt: kein Standard.',
- forbidden:'Den Standardversand ändern darf nur, wer Einstellungen ändern darf.',
+ forbidden:'Die Versandpauschale ändert nur, wer das Recht Geld hat.',
 } as const;

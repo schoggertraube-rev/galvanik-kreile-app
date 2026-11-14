@@ -33,7 +33,7 @@ export type ImmutableInvoiceExtraWorkLine = {
   vat_rate_basis_points?:0|700|1900;
 };
 
-export type ImmutableInvoiceShippingLine={type:'SHIPPING';shipmentGroupId:string;name:string;amountCents:number;vat_rate_basis_points:0|700|1900};
+export type ImmutableInvoiceShippingLine={type:'SHIPPING';shippingKind?:'fee'|'reference';shipmentGroupId:string;name:string;amountCents:number;vat_rate_basis_points:0|700|1900};
 export type ImmutableInvoiceLine = ImmutableInvoiceBaseLine | ImmutableInvoiceExtraWorkLine | ImmutableInvoiceShippingLine;
 
 export type ImmutableInvoiceSnapshot = {

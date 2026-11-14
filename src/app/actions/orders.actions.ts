@@ -281,7 +281,9 @@ export async function getLiveOrderCardAction(
 
 async function manualShippingPorts(){
  const [{readCustomerProfile},{readShippingSettingsInTransaction}]=await Promise.all([import('@/modules/customers/server-public'),import('@/modules/fundament/server-public')]);
- return {readCustomer:readCustomerProfile,readSettings:readShippingSettingsInTransaction};
+ const {readShippingMergeAllocation}=await import('@/lib/server/commands/immutableInvoiceCommand');
+ const {readInvoiceVat}=await import('@/modules/accounting/server-public');
+ return {readCustomer:readCustomerProfile,readSettings:readShippingSettingsInTransaction,readAllocation:(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string,input:Parameters<typeof readShippingMergeAllocation>[3])=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)};
 }
 export async function markOrderInformedByPhoneAction(input:{orderId:string;expectedVersion:number;clientEventId:string}){
  const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;

@@ -165,9 +165,10 @@ async function changeHandoverManually(raw:unknown,deps:MailHandoverDependencies)
    if(prior.length!==1||prior[0].event_type!=='ORDER_HANDOVER_CHANGED_V1'||prior[0].user_id!==auth.userId||prior[0].payload.requestHash!==requestHash)return {code:'CONFLICT' as const,message:ORDER_HANDOVER_COPY.conflict};
    return {code:'OK' as const,receipt:await readManualHandoverReceipt(tx,auth.tenantId,prior[0].id),replayed:true};
   }
-  await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${auth.tenantId},(SELECT customer_id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${value.orderId}))`);
+  const selected=await tx.execute<{customer_id:string}>(sql`SELECT customer_id,private.lock_shipping_customer_v1(${auth.tenantId},customer_id) FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${value.orderId}`);
   const orders=await tx.execute<MailHandoverOrder>(sql`SELECT id,order_number,customer_id,version,handover_mode,station,status FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${value.orderId} FOR UPDATE`);
   const order=orders[0];if(orders.length!==1||!order)return {code:'NOT_FOUND' as const,message:ORDER_HANDOVER_COPY.missing};
+  if(selected.length!==1||order.customer_id!==selected[0].customer_id)return {code:'CONFLICT' as const,message:ORDER_HANDOVER_COPY.conflict};
   if(order.version!==value.expectedVersion)return {code:'CONFLICT' as const,message:ORDER_HANDOVER_COPY.conflict};
   if(order.handover_mode!=='pickup'&&order.handover_mode!=='shipping')return {code:'VALIDATION_ERROR' as const,message:ORDER_HANDOVER_COPY.invalid};
   const customer=await deps.readCustomer(tx,auth.tenantId,order.customer_id);if(!customer)return {code:'NOT_FOUND' as const,message:ORDER_HANDOVER_COPY.missing};

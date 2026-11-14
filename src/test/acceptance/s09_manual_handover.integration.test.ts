@@ -1,6 +1,7 @@
 // @vitest-environment node
 // PL14Nov07:10: real existing handover/TaskWriter Actions/Auth/DB/Storage.
 import {randomUUID} from 'node:crypto';
+import {ORDER_HANDOVER_COPY} from '@/ui/situationCatalog';
 import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -124,7 +125,7 @@ it('PL07:10 the real TaskWriter refuses another order, actor, key, tenant, edit 
 it('A09-5 without auftraege leaves order, invoice and events unchanged; stale requests never apply a second mode',async()=>{
  const order=await readyOrderForInvoice('TEST S09 manual rights','pickup'),denied=await createFixture(['eingang'],'werkstatt');
  const request={command:'handover_manual',orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID(),handoverMode:'shipping'};
- expect(await withSession(denied,()=>changeOrderPickupNoticeAction(request))).toMatchObject({code:'FORBIDDEN',message:'error.permission'});
+ expect(await withSession(denied,()=>changeOrderPickupNoticeAction(request))).toMatchObject({code:'FORBIDDEN',message:ORDER_HANDOVER_COPY.permission});
  expect(await sql`SELECT version,handover_mode FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{version:order.version,handover_mode:'pickup'}]);
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientEventId}::uuid`).toEqual([{n:0}]);
  expect(await withSession(full,()=>changeOrderPickupNoticeAction({...request,expectedVersion:order.version-1}))).toMatchObject({code:'CONFLICT'});
