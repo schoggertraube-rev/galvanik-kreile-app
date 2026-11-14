@@ -1,16 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState,useLayoutEffect } from "react";
 import Link from "next/link";
 import { useHydrated } from "@/hooks/useHydrated";
 import {
-  cancelInvoiceAction,
   getInvoiceCancellationReceiptAction,
   getInvoiceSummariesAction,
 } from "@/app/actions/invoices.actions";
 import type { ImmutableInvoiceCancellationReceipt } from "@/lib/server/commands/immutableInvoiceCommand";
 import type { ImmutableInvoiceSummary } from "@/lib/server/invoiceRead";
 import { Button } from "@/ui/kr";
+import {usePermissions} from '@/lib/auth/PermissionsContext';
+import {queueFinancialCommand} from '@/lib/offline/queueFinancialCommand';
 
 export type InvoicePageInitialState =
   | { state: "DATA" | "EMPTY"; data: ImmutableInvoiceSummary[]; canCancel: boolean }
@@ -56,6 +57,9 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
   const [pendingInvoiceId, setPendingInvoiceId] = useState<string | null>(null);
   const [rowMessages, setRowMessages] = useState<Record<string, { kind: "success" | "error"; text: string }>>({});
   const requestIds = useRef<Record<string, string>>({});
+  const {offlineScope}=usePermissions();
+  const currentScope=useRef(offlineScope);
+  useLayoutEffect(()=>{currentScope.current=offlineScope;return()=>{currentScope.current=null;};},[offlineScope]);
   const canCancel = initialState.canCancel;
   const interactive = useHydrated();
 
@@ -83,12 +87,14 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
       return next;
     });
     try {
-      const command = await cancelInvoiceAction({
+      const input={
         invoiceId: row.invoiceId,
         expectedVersion: row.aggregateVersion,
         reason,
         clientEventId,
-      });
+      };
+      if(!offlineScope)throw Error('INVOICE_QUEUE_SCOPE_REQUIRED');
+      const command = await queueFinancialCommand(offlineScope,{command:'invoice.cancel',input},()=>currentScope.current);
       if (command.code !== "OK") {
         setRowMessages((current) => ({
           ...current,

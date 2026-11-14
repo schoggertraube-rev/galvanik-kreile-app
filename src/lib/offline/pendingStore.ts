@@ -4,12 +4,17 @@ import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {readCacheScopeMarker} from './cacheScopeMarker';
 import type {IntakeOriginalTakeover} from '@/modules/eingang/public';
 import type {setOrderItemFinishedAction,changeOrderItemExtraWorkAction,OrderResponse} from '@/app/actions/orders.actions';
+import type {cancelInvoiceAction} from '@/app/actions/invoices.actions';
 // Unacknowledged originals in one scoped queue. Server remains authoritative.
 export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
   | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number;takeover?:IntakeOriginalTakeover;takeoverSourceCanonical?:string};
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
-export type PendingWorkshopCommand={command:'item.finished';input:Parameters<typeof setOrderItemFinishedAction>[0]}|{command:'item.extraWork';input:Parameters<typeof changeOrderItemExtraWorkAction>[0]};
+export type PendingFinancialCommand=
+ | {command:'invoice.cancel';input:Parameters<typeof cancelInvoiceAction>[0]}
+ | {command:'credit.apply';input:import('@/modules/accounting/public').CustomerCreditApplyInput};
+export type PendingWorkshopCommand={command:'item.finished';input:Parameters<typeof setOrderItemFinishedAction>[0]}|{command:'item.extraWork';input:Parameters<typeof changeOrderItemExtraWorkAction>[0]}|PendingFinancialCommand;
 export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:string;kind:'workshop';deviceCapturedAt?:string;queueSequence?:number;notBefore?:string;dispatchStartedAt?:string};
+export type PendingPhysicalWorkshopOriginal=Extract<PendingWorkshopOriginal,{command:'item.finished'|'item.extraWork'}>;
 export type PendingWorkshopReceipt={scope:string;clientEventId:string;deviceCapturedAt:string;eventId:string;actorId:string};
 export type PendingEntry=PendingOriginal|PendingWorkshopOriginal|PendingQuarantine;
 export function isPendingWorkshopOriginal(value:unknown):value is PendingWorkshopOriginal{
@@ -21,6 +26,12 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  if(row.deviceCapturedAt!==undefined&&(typeof row.deviceCapturedAt!=='string'||!Number.isFinite(Date.parse(row.deviceCapturedAt))))return false;
  if(row.queueSequence!==undefined&&(typeof row.queueSequence!=='number'||!Number.isSafeInteger(row.queueSequence)||row.queueSequence<1))return false;
  const data=input as Record<string,unknown>,uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(v);
+ if(row.command==='invoice.cancel'||row.command==='credit.apply'){
+  if(!uuid(data.invoiceId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.invoiceId||!Number.isSafeInteger(data.expectedVersion)||Number(data.expectedVersion)<0)return false;
+  const keys=Object.keys(data).sort().join(',');
+  if(row.command==='invoice.cancel')return keys==='clientEventId,expectedVersion,invoiceId,reason'&&typeof data.reason==='string'&&data.reason===data.reason.trim()&&data.reason.length>=5&&data.reason.length<=500;
+  return keys==='amount,clientEventId,expectedCreditVersion,expectedOpenAmountCents,expectedVersion,invoiceId'&&Number.isSafeInteger(data.amount)&&Number(data.amount)>0&&Number.isSafeInteger(data.expectedCreditVersion)&&Number(data.expectedCreditVersion)>=0&&Number.isSafeInteger(data.expectedOpenAmountCents)&&Number(data.expectedOpenAmountCents)>=0;
+ }
  if(!uuid(data.orderId)||!uuid(data.itemId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.orderId)return false;
  const keys=Object.keys(data).sort().join(',');
  if(row.command==='item.finished')return keys==='clientEventId,expectedVersion,finished,itemId,orderId'&&Number.isSafeInteger(data.expectedVersion)&&typeof data.finished==='boolean';
@@ -441,6 +452,15 @@ export function isPendingWorkshopReceipt(scope:string,entry:PendingWorkshopOrigi
  if(!isPendingWorkshopOriginal(entry)||!value||typeof value!=='object'||Array.isArray(value))return false;
  const receipt=value as Record<string,unknown>;
  return receipt.scope===scope&&receipt.clientEventId===entry.id&&typeof receipt.deviceCapturedAt==='string'&&receipt.deviceCapturedAt===entry.deviceCapturedAt&&typeof receipt.eventId==='string'&&uuid.test(receipt.eventId)&&typeof receipt.actorId==='string'&&uuid.test(receipt.actorId);
+}
+/** Preserving a physical original is not proof of a completed money command. */
+export function isPendingWorkshopAcknowledgement(scope:string,entry:PendingWorkshopOriginal,value:unknown):boolean{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const result=value as Record<string,unknown>;
+ if(entry.command==='invoice.cancel'||entry.command==='credit.apply'){
+  if(result.code!=='OK'||result.financialCommand!==entry.command)return false;
+ }else if(result.code!=='OK'&&result.code!=='PRESERVED')return false;
+ return isPendingWorkshopReceipt(scope,entry,result.offlineReceipt);
 }
 /** A command cannot be erased by the legacy file/note acknowledgement. */
 export async function acknowledgePendingWorkshopOriginal(scope:string,entry:PendingWorkshopOriginal,receipt:PendingWorkshopReceipt):Promise<boolean>{

@@ -343,7 +343,8 @@
       "src/test/acceptance/storage_letter.integration.test.ts"
     ],
     "src/app/actions/offlineWorkshop.actions.ts#replayOfflineWorkshopAction": [
-      "src/test/acceptance/offline_workshop_replay.integration.test.ts"
+      "src/test/acceptance/offline_workshop_replay.integration.test.ts",
+      "src/test/acceptance/s08_credit_queue.browser.integration.test.ts"
     ],
     "src/app/actions/invoices.actions.ts#getInvoiceTruthAction": [
       "src/test/acceptance/s05k_invoice_line_vat.integration.test.ts"

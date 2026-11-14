@@ -1,10 +1,10 @@
-import {readPendingEntries,retainQuarantinedPending,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal,claimPendingWorkshop} from './pendingStore';
+import {readPendingEntries,retainQuarantinedPending,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal,claimPendingWorkshop,isPendingWorkshopAcknowledgement} from './pendingStore';
 import type {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
 import {recognizeNoteConcerns} from '@/lib/domain/noteConcerns';
 import type {PendingWorkshopOriginal} from './pendingStore';
 import type {uploadIntakeOriginal} from '@/modules/eingang/public';
 export type WorkshopAcknowledgement={scope:string;entry:PendingWorkshopOriginal;result:Awaited<ReturnType<typeof import('@/app/actions/offlineWorkshop.actions').replayOfflineWorkshopAction>>};
-type Ports={workshopAcknowledged?:(proof:WorkshopAcknowledgement)=>void;saveNote:typeof saveIntakeNoteAction;prepare:typeof prepareIntakeFileAction;finish:typeof finishIntakeFileAction;upload:typeof uploadIntakeOriginal;currentScope:()=>string|null;workshop?:typeof import('@/app/actions/offlineWorkshop.actions').replayOfflineWorkshopAction};
+type Ports={workshopAcknowledged?:(proof:WorkshopAcknowledgement)=>void;workshopRejected?:(proof:WorkshopAcknowledgement)=>void;saveNote:typeof saveIntakeNoteAction;prepare:typeof prepareIntakeFileAction;finish:typeof finishIntakeFileAction;upload:typeof uploadIntakeOriginal;currentScope:()=>string|null;workshop?:(scope:string,original:PendingWorkshopOriginal)=>Promise<WorkshopAcknowledgement['result']>};
 type Outcome={secured:number;acknowledged:number;blocked:number};
 const running=new Map<string,Promise<Outcome>>();
 /** Reuses the original registration, immutable-byte upload and secured-original receipt. */
@@ -41,7 +41,7 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
      if(!claimed){blockedItems.add(entry.itemId);continue;}
      if(ports.currentScope()!==scope)break;
      const result=await ports.workshop(scope,claimed);
-     if((result.code!=='OK'&&result.code!=='PRESERVED')||!('offlineReceipt' in result)){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
+     if(!isPendingWorkshopAcknowledgement(scope,entry,result)||!('offlineReceipt' in result)){outcome.blocked++;blockedItems.add(entry.itemId);if(ports.currentScope()===scope)ports.workshopRejected?.({scope,entry,result});continue;}
      outcome.secured++;
      if(ports.currentScope()!==scope)break;
      if(await acknowledgePendingWorkshopOriginal(scope,entry,result.offlineReceipt)){outcome.acknowledged++;if(ports.currentScope()===scope)ports.workshopAcknowledged?.({scope,entry,result});}

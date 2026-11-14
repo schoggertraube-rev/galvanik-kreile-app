@@ -2,7 +2,7 @@ import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
-import {isPendingWorkshopOriginal,type PendingWorkshopOriginal} from '@/lib/offline/pendingStore';
+import {isPendingWorkshopOriginal,type PendingPhysicalWorkshopOriginal as PendingWorkshopOriginal} from '@/lib/offline/pendingStore';
 import {OFFLINE_RECONCILIATION_COPY as copy} from '@/ui/situationCatalog';
 import type {AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';

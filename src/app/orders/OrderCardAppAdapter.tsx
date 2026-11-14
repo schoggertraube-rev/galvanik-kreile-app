@@ -820,11 +820,13 @@ export function OrderCardAppAdapter({
     let active=true;
     const acknowledged=(event:Event)=>{const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
       if(!proof||proof.scope!==offlineScope||proof.entry.command!=='item.finished'||!proof.entry.input.finished||proof.entry.input.orderId!==orderId)return;
+      const entry=proof.entry,result=proof.result;
+      if('financialCommand'in result)return;
       void (async()=>{const fresh=await load(true);if(!active||!fresh)return;
-        if(proof.result.code==='OK'&&fresh.card.version===proof.result.receipt.aggregateVersion&&fresh.card.items.some(item=>item.id===proof.entry.input.itemId&&item.finished)){
-          delete requests.current[`item:${proof.entry.input.itemId}:true`];
-          success('item-finished',{...proof.result.receipt,receiptId:`order-item://${proof.entry.input.itemId}/${proof.result.receipt.aggregateVersion}`},'Teil ist fertig.');
-        }else if(proof.result.code==='PRESERVED')setFeedback({kind:'conflict',message:OFFLINE_RECONCILIATION_COPY.reason});
+        if(result.code==='OK'&&fresh.card.version===result.receipt.aggregateVersion&&fresh.card.items.some(item=>item.id===entry.input.itemId&&item.finished)){
+          delete requests.current[`item:${entry.input.itemId}:true`];
+          success('item-finished',{...result.receipt,receiptId:`order-item://${entry.input.itemId}/${result.receipt.aggregateVersion}`},'Teil ist fertig.');
+        }else if(result.code==='PRESERVED')setFeedback({kind:'conflict',message:OFFLINE_RECONCILIATION_COPY.reason});
       })();
     };
     window.addEventListener('kreile-workshop-acknowledged',acknowledged);return()=>{active=false;window.removeEventListener('kreile-workshop-acknowledged',acknowledged);};
