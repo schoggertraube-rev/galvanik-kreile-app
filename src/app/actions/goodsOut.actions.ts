@@ -28,9 +28,11 @@ async function goodsOutComposition(input:RecordGoodsOutInput):Promise<GoodsOutCo
   const [{lockStorageFinalTasksForGoodsOut,finishStorageFinalTasksAfterGoodsOut},{completeStorageTaskAfterGoodsOut}]=await Promise.all([import('@/lib/server/storageFinalStagePort'),import('@/modules/tasks/server-public')]);
   const {recordStoragePostalResult}=await import('@/lib/server/storagePostalPort');
   const {retireOrderPrintJobsAfterGoodsOut}=await import('@/modules/orders/server-public');
+  const {readCustomerCreditInTransaction}=await import('@/modules/accounting/server-public');
   let callTaskIds:string[]|null=null;
   let finalTasks:Awaited<ReturnType<typeof lockStorageFinalTasksForGoodsOut>>|null=null;
   return {
+    readCredit:(tx,auth,customerId)=>readCustomerCreditInTransaction(tx,auth.tenantId,customerId,readCustomerProfile),
     beforeOrderLock:async(tx,auth)=>{if(invoiceInput&&invoicePort)await invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput);callTaskIds=await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);finalTasks=await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId);},
     ...(invoiceInput&&invoicePort?{beforeWrite:async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction)=>{
       const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');

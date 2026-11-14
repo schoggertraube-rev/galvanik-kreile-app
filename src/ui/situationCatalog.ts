@@ -425,9 +425,9 @@ export const SHIPPING_FEE_COPY={
 } as const;
 
 export const SHIPMENT_GROUP_COPY={
- // TODO_PL R8: confirm group-specific wording; original source/rights stay unchanged.
- invalid:'TODO_PL: Sendungsgruppe erneut wählen.',changed:'TODO_PL: Sendungsgruppe neu laden und erneut bestätigen.',
- confirmGroup:'TODO_PL: Öffne die Versanddaten und bestätige die aktuelle Sendungsgruppe.',
+ // PL14.11.19:13; the unavailable copy is the existing goods-out failure text.
+ invalid:'Wähle die Sendung erneut.',changed:'Die Sendung hat sich geändert. Lade sie neu und bestätige sie noch einmal.',
+ confirmGroup:'Diese Aufträge gehen zusammen raus. Öffne die Versanddaten und bestätige die Sendung.',
  blocked:(order:string,reason:string)=>`${order}: ${reason}`,
- unavailable:'TODO_PL: Übergabe mit derselben Buchungskennung erneut speichern.'
+ unavailable:'Warenausgang konnte nicht sicher gebucht werden.'
 };

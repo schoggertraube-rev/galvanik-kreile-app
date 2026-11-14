@@ -3,6 +3,8 @@ import {normalizeOfflineOriginal} from '@/lib/domain/offlineOriginal';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {isShipmentGroupInput,isShipmentGroupReceipt,type ShipmentGroupInput,type ShipmentGroupResult,type ShipmentGroupReceipt} from '@/lib/domain/shipmentGroupContract';
 import type {ManualShipmentGroupState} from '@/modules/orders/public';
+import type {CustomerCreditResult,CustomerCreditApplicationRead} from '@/modules/accounting/public';
+import {buildCustomerCreditApplication} from '@/lib/server/paymentSummaryRead';
 import {SHIPMENT_GROUP_COPY} from '@/ui/situationCatalog';
 import {readOpenOrderComplaint} from '@/lib/server/orderReleaseRead';
 import {COMPLAINT_ORDER_COPY,MANUAL_SHIPPING_COPY,MANUAL_SHIPPING_HANDOVER_LABEL,SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
@@ -117,7 +119,7 @@ export type RecordGoodsOutResult =
   | { code: "UNAUTHENTICATED"; message: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "NOT_FOUND"; message: string }
-  | { code: "CONFLICT"; message: string }
+  | { code: "CONFLICT"; message: string; creditApplication?:CustomerCreditApplicationRead }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
@@ -652,6 +654,7 @@ export async function authorizeGoodsOutInput(input: unknown): Promise<
 }
 
 export type GoodsOutComposition={
+  readCredit?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string)=>Promise<CustomerCreditResult>;
   beforeOrderLock?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
   beforeWrite?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<Exclude<RecordGoodsOutResult,{code:'OK'}>|null>;
   afterWrite?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
@@ -746,8 +749,20 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
         FOR SHARE
       `);
       if (overdueInvoices.length > 0 && input.overdueReleaseReason === undefined) {
+        let creditApplication:CustomerCreditApplicationRead|undefined;
+        if(hasAuthorizationArea(authorization.data,'geld')&&composition?.readCredit){
+          const customerId=order.customer_id;
+          try{creditApplication=await withTenantSavepoint(tx,async nested=>{
+            const source=await readOrderPaymentSummaries(nested,tenantId,{invoiceId:overdueInvoices[0].id});
+            if(source.length!==1)return {code:'SOURCE_INCOMPLETE' as const};
+            const payment=mapPaymentSummaryRow(source[0],authorization.data);
+            if(payment.invoiceId!==overdueInvoices[0].id)throw Error('GOODS_OUT_CREDIT_INVOICE_SOURCE_MISMATCH');
+            return buildCustomerCreditApplication(await composition.readCredit!(nested,authorization.data,customerId),payment);
+          });}catch{creditApplication={code:'SOURCE_INCOMPLETE'};}
+        }
         return {
           code: "CONFLICT",
+          ...(creditApplication?{creditApplication}:{}),
           message: GOODS_OUT_DEBT_COPY.blocked(
             hasAuthorizationArea(authorization.data, "geld")
               ? overdueInvoices[0].invoice_number
