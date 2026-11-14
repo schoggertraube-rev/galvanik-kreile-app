@@ -688,6 +688,14 @@ export const payments = pgTable("payments", {
 
 // AP-EIN: canonical intake tables. SQL constraints and RLS remain migration-owned.
 const intakePrivateSchema = pgSchema("private");
+// S11: visibility metadata only; original files and ownership stay in their source.
+export const evidenceVisibilityEvents = intakePrivateSchema.table('evidence_visibility_events', {
+ id:uuid('id').primaryKey().defaultRandom(),tenantId:text('tenant_id').notNull(),evidenceKey:text('evidence_key').notNull(),
+ version:integer('version').notNull(),customerVisible:boolean('customer_visible').notNull().default(false),
+ actorId:uuid('actor_id').references(()=>appUsers.id,{onDelete:'restrict'}),clientEventId:uuid('client_event_id'),previousVisible:boolean('previous_visible'),
+ occurredAt:timestamp('occurred_at',{withTimezone:true}).notNull().default(sql`statement_timestamp()`),
+ recordedAt:timestamp('recorded_at',{withTimezone:true}).notNull().default(sql`statement_timestamp()`),
+},table=>[unique('evidence_visibility_version').on(table.tenantId,table.evidenceKey,table.version),unique('evidence_visibility_request').on(table.tenantId,table.clientEventId)]);
 export const goodsReceipts=pgTable("goods_receipt",{
  id:uuid("id").primaryKey(),tenantId:text("tenant_id").notNull(),clientKey:uuid("client_key").notNull(),itemId:uuid("item_id"),orderId:text("auftrag_id").notNull(),
  mode:text("modus").notNull(),status:text("status").notNull(),card:integer("karte").notNull(),packagesReceived:integer("packstuecke_da"),packagesTotal:integer("packstuecke_gesamt"),condition:text("zustand"),

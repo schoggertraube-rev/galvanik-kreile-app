@@ -3,7 +3,9 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { attachIntakeDraftAttachment, finalizeDomainAttachment, getDomainAttachmentOriginal, reserveDomainAttachment } from "@/lib/server/domainAttachment";
-import { readEvidenceRecordsByTarget } from "@/lib/server/evidenceRead";
+import { readEvidenceRecordsByTarget,readEvidenceVisibilityByKeys } from "@/lib/server/evidenceRead";
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {EVIDENCE_READ_COPY} from '@/ui/situationCatalog';
 import { analyzeDomainAttachment } from "@/lib/server/documentIntelligencePort";
 import { readAzureDocumentIntelligenceStatus } from "@/lib/server/azureDocumentIntelligence";
 import { readOrderIntakeOriginals } from "@/modules/eingang/server-public";
@@ -41,15 +43,27 @@ export async function getDomainAttachmentsAction(input: { targetType: "CUSTOMER"
   if (result.code !== "OK") return result;
   const originals=input.targetType==='ORDER'?await readOrderIntakeOriginals(input.targetId):null;
   if(originals&&originals.code!=='OK')return originals;
+  let intakeVisibility:Awaited<ReturnType<typeof readEvidenceVisibilityByKeys>>|null=null;
+  try{
+    intakeVisibility=await withPrivilegedTenantTransaction(auth.data,tx=>readEvidenceVisibilityByKeys(tx,auth.data,
+      originals?.code==='OK'?originals.originals.map(original=>'intake-file:'+original.id):[]));
+  }catch{
+    // R11(g): the already-read original list survives a metadata read failure.
+    // Null is explicitly unknown, never an inferred customer release.
+    console.error('[EVIDENCE_VISIBILITY_READ_UNAVAILABLE]');
+  }
   return {
     code: "OK" as const,
+    dataGaps:intakeVisibility===null?['evidence.visibility']:[],
+    ...(intakeVisibility===null?{message:EVIDENCE_READ_COPY.unavailable}:{}),
     data: [...result.data.filter((record) => record.source === "LEGACY_SCAN_UPLOAD" && record.original.state === "LEGACY_RECORDED").map((record) => ({
       attachmentId: record.sourceId,
       mimeType: record.original.mimeType,
       fileBytes: record.original.sizeBytes,
       recordedAt: record.recordedAt,
+      visibility: record.visibility,
     })),...(originals?.code==='OK'?originals.originals.map(original=>({attachmentId:original.id,mimeType:original.mime,fileBytes:original.bytes,
-      recordedAt:original.at,intakeOriginal:true as const,intakeItemId:original.itemId,intakeName:original.name,intakePart:original.part,intakeTotal:original.total,intakeSecured:original.secured})):[])],
+      recordedAt:original.at,visibility:intakeVisibility?.get('intake-file:'+original.id)??null,intakeOriginal:true as const,intakeItemId:original.itemId,intakeName:original.name,intakePart:original.part,intakeTotal:original.total,intakeSecured:original.secured})):[])],
   };
 }
 
