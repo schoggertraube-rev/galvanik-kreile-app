@@ -3,6 +3,7 @@
 // Explicit lost HTTP responses; no Next layout, cold-start or 24h claim.
 import {it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
+import {writeFileSync} from 'node:fs';
 import {createServer} from 'node:http';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -30,7 +31,7 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
  const apply={kind:'workshop',command:'credit.apply',id:applicationKey,itemId:target.invoice.invoiceId,deviceCapturedAt,input:{invoiceId:target.invoice.invoiceId,amount:4000,expectedVersion:0,expectedOpenAmountCents:6000,expectedCreditVersion:1,clientEventId:applicationKey}};
  // Plain browser bridge externalizes unused Next Action references. Financial
  // execution still goes through the actual HTTP route and its real writers.
- const compiled=await build({stdin:{contents:"export * from './src/lib/offline/pendingStore';export {syncPendingFiles} from './src/lib/offline/syncPendingFiles';export {replayOfflineWorkshopHttp} from './src/lib/offline/replayWorkshopHttp';export {queueFinancialCommand} from './src/lib/offline/queueFinancialCommand';",resolveDir:process.cwd()},external:['@/app/actions/*','@/modules/eingang/public'],bundle:true,write:false,format:'esm',platform:'browser'});
+ const compiled=await build({stdin:{contents:"export * from './src/lib/offline/pendingStore';export {syncPendingFiles} from './src/lib/offline/syncPendingFiles';export {replayOfflineWorkshopHttp} from './src/lib/offline/replayWorkshopHttp';export {queueFinancialCommand,queueHandoverCommand} from './src/lib/offline/queueFinancialCommand';",resolveDir:process.cwd()},external:['@/app/actions/*','@/modules/eingang/public'],bundle:true,write:false,format:'esm',platform:'browser'});
  const foreign=await createFixture(['geld'],'buero');let actor=full,loseResponse=true,calls=0;
  const receipts=new Map<string,string[]>();
  const server=createServer(async(req,res)=>{
@@ -40,7 +41,7 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
     const headers=Object.fromEntries(Object.entries(req.headers).filter((row):row is [string,string|string[]]=>row[1]!==undefined).map(([name,value])=>[name,Array.isArray(value)?value.join(','):value]));
     const response=await withRequest(headers.cookie??'',()=>POST(new Request('http://'+req.headers.host+req.url,{method:'POST',headers,body:Buffer.concat(chunks)})),false,headers);
     const body=await response.text();
-    if(response.status===200){const saved=JSON.parse(body),key=saved.offlineReceipt.clientEventId;receipts.set(key,[...(receipts.get(key)??[]),saved.offlineReceipt.eventId]);if(loseResponse){loseResponse=false;res.writeHead(503,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify({code:'UNAVAILABLE'}));return;}}
+    if(response.status===200){const saved=JSON.parse(body);if(saved.code==='OK'){const key=saved.offlineReceipt.clientEventId;receipts.set(key,[...(receipts.get(key)??[]),saved.offlineReceipt.eventId]);}if(loseResponse){loseResponse=false;res.writeHead(503,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify({code:'UNAVAILABLE'}));return;}}
     res.writeHead(response.status,{'content-type':'application/json','cache-control':'no-store'});res.end(body);
    }catch(error){res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({code:'UNAVAILABLE'}));console.error('TEST_S08_HTTP',error instanceof Error?error.message:'UnknownError');}return;
   }
@@ -89,7 +90,13 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
   // The previous unresolved credit original must remain while this other order succeeds.
   const shipping=await readyInvoiceOrder('S09 native extra invoice','pickup',false,source.customerId,10000);
   const [mainOriginal]=await sql`SELECT pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${shipping.invoice.invoiceId}::uuid`;
-  expect(await withSession(full,()=>changeOrderPickupNoticeAction({command:'handover_manual',orderId:shipping.orderId,expectedVersion:shipping.version,handoverMode:'shipping',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const handoverKey=randomUUID(),handover={command:'handover_manual',orderId:shipping.orderId,expectedVersion:shipping.version,handoverMode:'shipping',clientEventId:handoverKey};
+  loseResponse=true;
+  await cli(['eval',`async()=>{const result=await p.queueHandoverCommand('${scope}',{command:'order.handover',input:${JSON.stringify(handover)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='UNAVAILABLE'||!pending.some(e=>e.id==='${handoverKey}'))throw Error('TEST_HANDOVER_RESPONSE_LOSS_FALSE_ACK');return true;}`]);
+  await cli(['goto',url]);await cli(['eval',setup]);
+  await cli(['eval',`async()=>{const result=await p.queueHandoverCommand('${scope}',{command:'order.handover',input:${JSON.stringify(handover)}},()=>'${scope}');const pending=await p.readPendingEntries('${scope}');if(result.code!=='OK'||!result.replayed||result.handoverCommand!=='order.handover'||result.receipt.handoverMode!=='shipping'||pending.some(e=>e.id==='${handoverKey}')||!pending.some(e=>e.id==='${stale.clientEventId}'))throw Error('TEST_HANDOVER_REAL_RECEIPT_REQUIRED');return true;}`]);
+  expect(receipts.get(handoverKey)).toHaveLength(2);expect(receipts.get(handoverKey)![0]).toBe(receipts.get(handoverKey)![1]);
+  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${tenant} AND order_id=${shipping.orderId} AND client_event_id=${handoverKey}::uuid AND event_type='ORDER_HANDOVER_CHANGED_V1'`).toEqual([{n:1}]);
   const [shippingOrder]=await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${shipping.orderId}`;
   const issueKey=randomUUID(),issue={orderId:shipping.orderId,expectedVersion:shippingOrder.version,clientEventId:issueKey,shippingCosts:{invoiceId:shipping.invoice.invoiceId,expectedVersion:1,scope:'order:'+shipping.orderId,expectedFeeCents:1000}};
   loseResponse=true;
@@ -117,5 +124,22 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
   expect(receipts.get(reissueKey)).toHaveLength(2);expect(receipts.get(reissueKey)![0]).toBe(receipts.get(reissueKey)![1]);
   expect(await sql`SELECT payment_open_amount_cents,payment_paid_amount_cents FROM public.invoices WHERE tenant_id=${tenant} AND client_event_id=${replaceKey}::uuid`).toEqual([{payment_open_amount_cents:11900,payment_paid_amount_cents:0}]);
   expect(await sql`SELECT count(*)::int AS n,sum(amount_cents)::int AS amount FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${reissueOrder.invoice.invoiceId}::uuid`).toEqual([{n:1,amount:reissueOrder.invoice.grossAmountCents}]);
+  // R3: after a definitive stale-version rejection the explicitly refreshed
+  // command for this same order still needs an executable path.
+  const staleHandoverKey=randomUUID(),freshHandoverKey=randomUUID();
+  const staleHandover={...handover,clientEventId:staleHandoverKey,handoverMode:'pickup'};
+  await cli(['eval',`async()=>{const result=await p.queueHandoverCommand('${scope}',{command:'order.handover',input:${JSON.stringify(staleHandover)}},()=>'${scope}');if(result.code!=='CONFLICT')throw Error('TEST_ACTUAL_STALE_HANDOVER_REJECTION_REQUIRED');return true;}`]);
+  const [currentHandover]=await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${shipping.orderId}`;
+  const freshHandover={...staleHandover,clientEventId:freshHandoverKey,expectedVersion:currentHandover.version};
+  const freshOutcome=await cli(['eval',`async()=>{const result=await p.queueHandoverCommand('${scope}',{command:'order.handover',input:${JSON.stringify(freshHandover)}},()=>'${scope}');return 'TEST_HANDOVER_RETRY_OUTCOME '+result.code+' '+JSON.stringify({message:result.message,pending:(await p.readPendingEntries('${scope}')).map(e=>({id:e.id,itemId:e.itemId,kind:e.kind}))});}`]);
+  // Diagnostic control: the unchanged real writer accepts these exact freshly
+  // read inputs, so its source/permission is not the cause of queue blockage.
+  const responseSeen=receipts.has(freshHandoverKey),direct=await withSession(full,()=>changeOrderPickupNoticeAction(freshHandover));
+  expect(direct).toMatchObject({code:'OK'});
+  writeFileSync('.git/kreile-s09-stale-queue-browser-green-proof.json',JSON.stringify({at:new Date().toISOString(),browserStdout:freshOutcome.stdout,freshResponseSeenBeforeDirectControl:responseSeen,directCode:direct.code,directReplayed:direct.code==='OK'?direct.replayed:null},null,2));
+  expect(freshOutcome.stdout).toContain('TEST_HANDOVER_RETRY_OUTCOME OK');
+  expect(responseSeen).toBe(true);expect(direct).toMatchObject({code:'OK',replayed:true});
+  await cli(['eval',`async()=>{const rows=await p.readPendingEntries('${scope}'),old=rows.find(e=>e.id==='${staleHandoverKey}');if(!old?.rejection||old.rejection.rejection!=='CONFLICT'||old.input.expectedVersion!==${staleHandover.expectedVersion}||rows.some(e=>e.id==='${freshHandoverKey}'))throw Error('TEST_NO_EFFECT_ORIGINAL_OR_NEW_ACK');return true;}`]);
+  expect(await sql`SELECT count(*)::int AS n FROM public.events event JOIN public.tasks task ON task.tenant_id=event.tenant_id AND task.erstellt_von=event.user_id WHERE event.tenant_id=${tenant} AND event.event_type='OFFLINE_WORKSHOP_REJECTED_V1' AND event.payload#>>'{original,input,clientEventId}'=${staleHandoverKey} AND task.titel='Konflikt beim Abgleich' AND task.bezug_id=${shipping.orderId}`).toEqual([{n:1}]);
  }finally{await execute(process.execPath,[process.env.KREILE_PLAYWRIGHT_CLI_JS!,`-s=${session}`,'close'],{timeout:30000}).catch(()=>{});await new Promise<void>(resolve=>server.close(()=>resolve()));}
 },120000);

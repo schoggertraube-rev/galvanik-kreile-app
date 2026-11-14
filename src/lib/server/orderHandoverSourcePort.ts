@@ -2,10 +2,9 @@ import 'server-only';
 import {sql} from 'drizzle-orm';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
 
-export type ManualHandoverReceipt={eventId:string;orderId:string;orderNumber:string|null;customerId:string;
- expectedVersion:number;orderVersion:number;handoverMode:'pickup'|'shipping';requestedHandoverMode:'pickup'|'shipping';
- outcome:'changed'|'call_customer';message:string;taskClientKey:string|null;passed:boolean;taskTitle:string|null;
- actor:{kind:'login';id:string;at:string}};
+import type {ManualHandoverReceipt} from '@/lib/domain/orderHandoverContract';
+export type {ManualHandoverReceipt} from '@/lib/domain/orderHandoverContract';
+
 export async function readManualHandoverSource(tx:PrivilegedTenantTransaction,tenantId:string,eventId:string){
  const rows=await tx.execute<{event_id:string;tenant_id:string;order_id:string;actor_id:string;client_event_id:string;
   order_version:number;current_order_version:number;current_handover_mode:'pickup'|'shipping';integrity_ok:boolean;

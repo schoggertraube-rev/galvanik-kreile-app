@@ -310,7 +310,15 @@ export const MAIL_RESEND_COPY={
  canceledTaskDescription:(invoice:string,customer:string,sentAt:string|null)=>'Kunde: '+customer+'\nRechnung: '+invoice+'\nSendezeit: '+(sentAt?new Intl.DateTimeFormat('de-DE',{dateStyle:'medium',timeStyle:'medium',timeZone:'Europe/Berlin'}).format(new Date(sentAt)):'nicht belegt'),
  canceled:(invoice:string)=>'Rechnung '+invoice+' ist storniert – Versand nicht mehr nötig'
 };
-export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich'} as const;
+export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich',rejected:'abgelehnt, ohne Wirkung',originalCommand:{
+ 'item.finished':'TODO_PL offline.original.item_finished',
+ 'item.extraWork':'TODO_PL offline.original.item_extra_work',
+ 'order.handover':'TODO_PL offline.original.order_handover',
+ 'invoice.issue':'TODO_PL offline.original.invoice_issue',
+ 'invoice.cancel':'TODO_PL offline.original.invoice_cancel',
+ 'credit.apply':'TODO_PL offline.original.credit_apply',
+ 'credit.payout':'TODO_PL offline.original.credit_payout',
+}} as const;
 
 /** PL11.11.11:01: pending is not a successful server completion. */
 export const OFFLINE_ITEM_FINISHED_COPY={pending:(part:string)=>`Teil ${part} fertig – wird übertragen, sobald Netz da ist`,networkRequired:'Geht nur mit Netz',notSaved:'Teilstatus ist noch nicht gesichert. Erneut speichern.'} as const;
@@ -392,9 +400,9 @@ export const SHIPPING_FEE_COPY={
  reissueReason:'Übergabeart Versand → Abholung',
  reissueForbidden:'error.permission',
  reissuePending:'Der Storno ist gespeichert, das Guthaben steht. Die neue Rechnung ohne Versand fehlt noch – dafür liegt eine Aufgabe am Auftrag.',
- reissueTaskPending:'TODO_PL shipping.invoice.reissue_task_pending',
- reissueTaskCompletionPending:'TODO_PL shipping.invoice.reissue_task_completion_pending',
- reissueUnpaidPending:'TODO_PL shipping.invoice.reissue_unpaid_pending',
+ reissueTaskPending:'Der Storno ist gespeichert. Die Aufgabe für die neue Rechnung ohne Versand wird noch angelegt – versuch es gleich noch einmal.',
+ reissueTaskCompletionPending:'Die neue Rechnung ohne Versand ist ausgestellt. Die Aufgabe dazu wird gleich abgeschlossen.',
+ reissueUnpaidPending:'Der Storno ist gespeichert. Die Rechnung war unbezahlt, es entsteht kein Guthaben. Die neue Rechnung ohne Versand fehlt noch – dafür liegt eine Aufgabe am Auftrag.',
  reissueTask:(number:string)=>`Rechnung zu ${number} ohne Versand neu ausstellen`,
  additional:(amount:string,customer:string)=>`Versandkosten ${amount} netto an ${customer} berechnen`,
  relatedInvoice:(number:string)=>`Versandkosten zu Rechnung ${number}`,

@@ -821,7 +821,7 @@ export function OrderCardAppAdapter({
     const acknowledged=(event:Event)=>{const proof=(event as CustomEvent<WorkshopAcknowledgement>).detail;
       if(!proof||proof.scope!==offlineScope||proof.entry.command!=='item.finished'||!proof.entry.input.finished||proof.entry.input.orderId!==orderId)return;
       const entry=proof.entry,result=proof.result;
-      if('financialCommand'in result)return;
+      if('financialCommand'in result||'handoverCommand'in result)return;
       void (async()=>{const fresh=await load(true);if(!active||!fresh)return;
         if(result.code==='OK'&&fresh.card.version===result.receipt.aggregateVersion&&fresh.card.items.some(item=>item.id===entry.input.itemId&&item.finished)){
           delete requests.current[`item:${entry.input.itemId}:true`];

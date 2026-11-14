@@ -1,3 +1,4 @@
+import {isOrderCommandBase as validBase,isManualHandoverInput} from '@/lib/domain/orderHandoverContract';
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
@@ -152,8 +153,8 @@ async function readHandoverBoundary(tx:PrivilegedTenantTransaction,auth:Authoriz
 }
 
 async function changeHandoverManually(raw:unknown,deps:MailHandoverDependencies){
- const value=raw as {command:'handover_manual';orderId:string;expectedVersion:number;clientEventId:string;handoverMode:'pickup'|'shipping'};
- if(Object.keys(value).sort().join(',')!=='clientEventId,command,expectedVersion,handoverMode,orderId'||!validBase(value)||!['pickup','shipping'].includes(value.handoverMode))return {code:'VALIDATION_ERROR' as const,message:ORDER_HANDOVER_COPY.invalid};
+ if(!isManualHandoverInput(raw))return {code:'VALIDATION_ERROR' as const,message:ORDER_HANDOVER_COPY.invalid};
+ const value=raw;
  const authorization=await resolveAuthorization();if(!authorization.ok)return {code:'UNAUTHENTICATED' as const,message:authorization.message};
  const auth=authorization.data;if(!canChangeOrderHandover(auth,'login'))return {code:'FORBIDDEN' as const,message:ORDER_HANDOVER_COPY.permission};
  const requestHash=hash({command:value.command,orderId:value.orderId,expectedVersion:value.expectedVersion,clientEventId:value.clientEventId,handoverMode:value.handoverMode});
@@ -236,11 +237,7 @@ function optionalText(value: unknown, max: number): string | null | undefined {
   return normalized ?? undefined;
 }
 
-function validBase(input: { orderId: unknown; expectedVersion: unknown; clientEventId: unknown }) {
-  return typeof input.orderId === "string" && input.orderId.trim() === input.orderId && input.orderId.length >= 1 && input.orderId.length <= 128
-    && typeof input.expectedVersion === "number" && Number.isSafeInteger(input.expectedVersion) && input.expectedVersion > 0
-    && typeof input.clientEventId === "string" && UUID.test(input.clientEventId);
-}
+
 
 function normalizeItems(value: unknown): OrderContentItemInput[] | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > 20) return null;

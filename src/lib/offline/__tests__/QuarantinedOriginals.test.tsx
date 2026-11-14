@@ -6,7 +6,7 @@ const ports=vi.hoisted(()=>({scope:vi.fn(),adopt:vi.fn(),open:vi.fn()}));
 vi.mock('../SyncContext',()=>({useSync:()=>({quarantinedOriginals:state.entries})}));
 vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({hasArea:()=>state.allowed,offlineScope:state.scope,status:'authenticated'})}));
 vi.mock('@/app/actions/eingang.actions',()=>({getIntakePendingScopeAction:ports.scope}));
-vi.mock('../pendingStore',()=>({adoptQuarantinedOriginal:ports.adopt}));
+vi.mock('../pendingStore',async importOriginal=>({...await importOriginal<typeof import('../pendingStore')>(),adoptQuarantinedOriginal:ports.adopt}));
 vi.mock('@/modules/eingang/public',()=>({getIntakeDeviceId:()=> 'TEST-device',requestGlobalCreate:ports.open}));
 afterEach(()=>{cleanup();vi.clearAllMocks();vi.restoreAllMocks();state.allowed=true;state.entries=[];state.scope='a'.repeat(64);});
 it('shows one and many actual projected originals, without a discard action',()=>{
