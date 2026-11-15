@@ -4,6 +4,22 @@ import type {AuthorizationSnapshot} from '../authorization';
 vi.mock('server-only',()=>({}));
 import {readV45Rule,readAuthorizedV45Rule,readAuthorizedV45Action} from '../v45RuleRead';
 import {V45_RULES,V45_SOURCE_HASHES,V45_ELEMENTS} from '@/ui/v45.generated';
+
+describe('KORR-S12-1 U-249 uses the writer command decision',()=>{
+ const auth:AuthorizationSnapshot={userId:'11111111-1111-4111-8111-111111111111',tenantId:'TEST-s12-rights',role:'werkstatt',displayName:'TEST U249',active:true,areas:[],permissions:[]};
+ it.each(['quote.accept','quote.extend','quote.convert','quote.return_goods'])('%s takes only the canonical operational grant',id=>{
+  expect(readAuthorizedV45Action(auth,id,{[id]:true})).toMatchObject({code:'OK',hauptaktion:id,gesperrt:[]});
+  expect(readAuthorizedV45Action(auth,id,{[id]:false})).toMatchObject({code:'OK',hauptaktion:null,gesperrt:[{elementId:id,grundKey:'error.permission'}]});
+  // Deliberately invalid synthetic input proves the defensive inactive guard;
+  // a real inactive session never obtains an AuthorizationSnapshot.
+  const inactive={...auth,active:false} as unknown as AuthorizationSnapshot;
+  expect(readAuthorizedV45Action(inactive,id,{[id]:true})).toMatchObject({code:'FORBIDDEN'});
+ });
+ it('does not turn the canonical quote exception into a mail or money grant',()=>{
+  expect(readAuthorizedV45Action(auth,'quote.send',{'quote.send':true})).toMatchObject({code:'OK',hauptaktion:null,gesperrt:[{elementId:'quote.send',grundKey:'error.permission'}]});
+  expect(readAuthorizedV45Action(auth,'quote.revise',{'quote.revise':true})).toMatchObject({code:'OK',hauptaktion:null,gesperrt:[{elementId:'quote.revise',grundKey:'error.permission'}]});
+ });
+});
 // Explicitly synthetic complete rule facts; these are not a domain-data adapter.
 function baseline(area:string):Record<string,unknown>{
  const facts=Object.fromEntries(V45_RULES.filter(rule=>rule.bereich===area).flatMap(rule=>Object.entries(rule.wenn).map(([key,value])=>[key,typeof value==='boolean'?false:typeof value==='number'?0:''])));
