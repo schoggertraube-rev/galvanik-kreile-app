@@ -66,7 +66,7 @@ it('N8 denies real missing rights/session and unpaid sources without writing a d
  // A real signed login for this tenant must never obtain that source.
  const foreignTenant='TEST-ablauf-'+randomUUID(),foreignCustomer=randomUUID(),foreignOrder=randomUUID();
  await sql`INSERT INTO public.customers(id,tenant_id,name,type) VALUES(${foreignCustomer},${foreignTenant},'TEST S10 fremder Kunde','privat')`;
- await sql`INSERT INTO public.orders(id,tenant_id,customer_id,order_number,title) VALUES(${foreignOrder},${foreignTenant},${foreignCustomer},${'TEST-S10-'+foreignOrder},'TEST S10 fremder Auftrag')`;
+ await sql`INSERT INTO public.orders(id,tenant_id,customer_id,order_number,title,station,current_station,current_station_id,status) VALUES(${foreignOrder},${foreignTenant},${foreignCustomer},${'TEST-S10-'+foreignOrder},'TEST S10 fremder Auftrag','angenommen','angenommen','angenommen','angenommen')`;
  expect(await sql`SELECT tenant_id FROM public.orders WHERE id=${foreignOrder}`).toEqual([{tenant_id:foreignTenant}]);
  expect(await withSession(full,()=>generateDeliveryNote({orderIds:[foreignOrder],expectedVersions:{[foreignOrder]:1},expectedSources:{[foreignOrder]:own.expectedSources[order.orderId]},clientEventId:randomUUID()}))).toMatchObject({code:'NOT_FOUND'});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE order_id=${foreignOrder} AND event_type IN ('DELIVERY_NOTE_ORIGINAL_V1','DELIVERY_NOTE_REQUESTED_V1')`).toEqual([{n:0}]);
