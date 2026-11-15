@@ -1461,7 +1461,7 @@ describe('S05 existing intake task calendar source',()=>{
  it('keeps an open real task after its source concern is closed, rereads a changed date and removes only completed work',async()=>{
   const actor=await goodsActorFixture(['auftraege','kunden','geld','eingang','mails']);
   const {saveIntakeNoteAction,saveIntakeTaskAction,getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
-  const {readTodayCalendar}=await import('@/lib/server/todayDashboardPolicy');
+  const {readTodayCalendar}=await import('@/lib/today/todayDashboardPolicy');
   const calendar=readTodayCalendar();
   const itemId=randomUUID();
   const captured=await withSession(actor,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'SYNTHETISCH bitte zur\u00fcckrufen',context:{customerId:actor.customerId},concerns:['rueckruf']}));
