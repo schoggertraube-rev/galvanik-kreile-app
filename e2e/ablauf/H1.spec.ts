@@ -37,6 +37,7 @@ it.each([{vat:1900,extra:false,outside:false,unpriced:false},{vat:700,extra:true
  expect(await sql`SELECT kunde_id,vorgang_art,vorgang_id,anliegen_offen,einsatz FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual([{kunde_id:customerId,vorgang_art:'kv',vorgang_id:created.quote.quoteId,anliegen_offen:[],einsatz:'erledigt'}]);
  expect(await sql`SELECT von::text,nachher->>'action' AS action FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND befehl_id=${input.clientEventId}::uuid`).toEqual([{von:full.actorId,action:'kv.angelegt'}]);
  expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:1}});
+ expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId,purpose:'operations'}))).toMatchObject({code:'OK',nextActionRule:{ruleId:'kv.entwurf',source:{id:created.quote.quoteId,version:1},hauptaktion:{elementId:'quote.send'}}});
  expect(await withSession(full,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{usage:'erledigt',openConcerns:[]}});
  expect(await withSession(full,()=>createQuoteAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true,quote:{quoteId:created.quote.quoteId}});
  expect(await withSession(full,()=>createQuoteAction({...input,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
@@ -61,6 +62,7 @@ it.each([{vat:1900,extra:false,outside:false,unpriced:false},{vat:700,extra:true
  expect(await sql`SELECT status,created_by FROM public.communication_threads WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${sent.data.threadId}::uuid`).toEqual([{status:'sent',created_by:full.actorId}]);
  expect(await sql`SELECT user_id::text,payload->'document'->>'id' AS quote_id,payload->'document'->>'edition' AS edition FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${dispatch.clientRequestId}::uuid`).toEqual([{user_id:full.actorId,quote_id:created.quote.quoteId,edition:'1'}]);
  expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:2,lifecycle:{sentEdition:1}}});
+ expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId,purpose:'operations'}))).toMatchObject({code:'OK',nextActionRule:{ruleId:'kv.versendet',source:{id:created.quote.quoteId,version:2},hauptaktion:{elementId:'quote.accept'}}});
  expect(await withSession(full,()=>sendCustomerMailAction(structuredClone(dispatch)))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId}});
  const sends=vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&init?.method==='POST');
  expect(sends).toHaveLength(1);
@@ -82,6 +84,7 @@ it.each([{vat:1900,extra:false,outside:false,unpriced:false},{vat:700,extra:true
  expect(accepted,JSON.stringify(accepted)).toMatchObject({code:'OK',quote:{version:3,lifecycle:{acceptedEdition:1}}});
  expect(await sql`SELECT zugesagt_fassung,linked_order_id FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.quote.quoteId}::uuid`).toEqual([{zugesagt_fassung:1,linked_order_id:null}]);
  expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:3,lifecycle:{acceptedEdition:1}}});
+ expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId,purpose:'operations'}))).toMatchObject({code:'OK',nextActionRule:{ruleId:'kv.zugesagt',source:{id:created.quote.quoteId,version:3},hauptaktion:{elementId:'quote.receive'}}});
  expect(await withSession(full,()=>changeQuoteLifecycleAction(structuredClone(acceptance)))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT user_id::text,payload->'replyProof'->>'sourceItemId' AS source_id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${acceptance.clientEventId}::uuid`).toEqual([{user_id:full.actorId,source_id:reply.id}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId}`).toEqual([{n:0}]);
