@@ -271,6 +271,21 @@ function fixtureUuid(seed: string) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// Only translates the historical generated test vocabulary. New fixture rows
+// must obey the same four-column station contract as the real writers.
+function canonicalFixtureStation(value: Record<string, unknown>) {
+  const state = value.status === "fertig" ? "fertig"
+    : value.status === "uebergeben" ? "abgeholt"
+      : value.station ?? "angenommen";
+  switch (state) {
+    case "wareneingang": case "angenommen": return "angenommen";
+    case "in_arbeit": case "galvanik": return "galvanik";
+    case "fertig": return "fertig";
+    case "abgeschlossen": case "abgeholt": return "abgeholt";
+    default: throw new Error("FLOW_ORDER_STATION_UNSUPPORTED:" + String(state));
+  }
+}
+
 async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
   const value = resolvedFixture(fixture);
   const declaredPositions = Array.isArray(value.positionen) ? value.positionen as Array<Record<string, unknown>> : [];
@@ -293,13 +308,7 @@ async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
   const customerId = String(value.kunde ?? "");
   if (!customerId) throw new Error("FLOW_ORDER_CUSTOMER_REQUIRED");
   // The model names business states; the database stores the canonical station.
-  const station = value.status === "fertig"
-    ? "fertig"
-    : value.status === "uebergeben"
-      ? "abgeholt"
-      : value.station === "in_arbeit"
-        ? "galvanik"
-        : String(value.station ?? "angenommen");
+  const station = canonicalFixtureStation(value);
   const frozen = station === "fertig" || station === "abgeholt";
   const freezeVersion = frozen ? 2 : 1;
   // A non-catalog price becomes valid only through the existing immutable
@@ -329,7 +338,7 @@ async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
     station,
     current_station: station,
     current_station_id: station,
-    status: value.status === "fertig" ? "fertig" : value.status === "uebergeben" ? "abgeholt" : station === "abgeschlossen" ? "completed" : "in_progress",
+    status: station,
     version: orderVersion,
     parts: positions,
     intake_date: value.angenommen_am ?? new Date().toISOString(),
@@ -900,10 +909,11 @@ async function materializeCanonicalOrderSource(page: Page) {
       AND event.event_type='ORDER_INTAKE_CREATED_V1' AND event.client_event_id=${clientEventId}::uuid`;
   if (response.status !== 200 || receipts.length !== 1) throw Error("FLOW_SOURCE_REAL_ACTION_FAILED:" + response.text.slice(-1500));
   const source = receipts[0]!;
-  // The given historical station remains the model's state; its intake record is real.
-  const station = value.station === "in_arbeit" ? "galvanik" : String(value.station);
+  // Preserve the historical given's meaning using the current station tuple;
+  // the intake record remains genuine and the later copy assertions unchanged.
+  const station = canonicalFixtureStation(value);
   await sql`UPDATE public.orders SET station=${station},current_station=${station},current_station_id=${station},
-    status=${station === "abgeschlossen" ? "completed" : "in_progress"},ware=${String(value.ware)}
+    status=${station},ware=${String(value.ware)}
     WHERE tenant_id=${TENANT} AND id=${source.order_id}`;
   await sql`UPDATE public.items SET current_station_id=${station} WHERE tenant_id=${TENANT} AND order_id=${source.order_id}`;
   if (value.fotos !== undefined) {
