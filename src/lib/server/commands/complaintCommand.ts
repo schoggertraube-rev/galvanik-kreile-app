@@ -1,5 +1,5 @@
 import 'server-only';
-import {COMPLAINT_ORDER_COPY} from '@/ui/situationCatalog';
+import {COMPLAINT_ORDER_COPY,COMPLAINT_OPEN_PART_CONFLICT_COPY} from '@/ui/situationCatalog';
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { canReadComplaintOrderChoices, hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from '@/lib/server/authorization';
@@ -36,6 +36,16 @@ export async function readComplaintOrderChoices(auth:AuthorizationSnapshot,custo
 }
 class Rejected extends Error { constructor(readonly result:Failure) { super(result.message); } }
 function reject(code:Failure['code'],message:string):never { throw new Rejected({code,message}); }
+function isOpenPartConflict(error:unknown):boolean {
+  let cause:unknown=error;
+  for(let depth=0;depth<8&&cause&&typeof cause==='object';depth++){
+    const diagnostic=cause as {code?:unknown;constraint_name?:unknown;constraint?:unknown;cause?:unknown};
+    const constraint=diagnostic.constraint_name??diagnostic.constraint;
+    if(diagnostic.code==='23505'&&(constraint==='s13k_complaints_open_parts_unique'||constraint==='s13k_complaints_open_legacy_item_unique'))return true;
+    cause=diagnostic.cause;
+  }
+  return false;
+}
 function canonical(value:unknown):string {
   if (Array.isArray(value)) return '['+value.map(canonical).join(',')+']';
   if (value && typeof value==='object') return '{'+Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,item])=>JSON.stringify(key)+':'+canonical(item)).join(',')+'}';
@@ -134,6 +144,7 @@ export async function executeComplaint(input:unknown,sourceEffect:ComplaintSourc
       return {code:'OK',receipt,replayed:false};
     });
   } catch(error) {
+    if(isOpenPartConflict(error))return {code:'CONFLICT',message:COMPLAINT_OPEN_PART_CONFLICT_COPY};
     console.error('[COMPLAINT_COMMAND_FAILED]',{code:error instanceof Rejected?error.result.code:'UNAVAILABLE',name:error instanceof Error?error.name:'UnknownError'});
     return error instanceof Rejected?error.result:{code:'UNAVAILABLE',message:'Nicht gespeichert · alle Eingaben sind noch da. Fehlercode: COMPLAINT_COMMAND_FAILED.'};
   }

@@ -1,0 +1,63 @@
+// @vitest-environment node
+import {it,expect,vi} from 'vitest';
+const scope=vi.hoisted(()=>({tenant:'TEST-ablauf-'+globalThis.crypto.randomUUID()}));
+vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:scope.tenant}));
+import {randomUUID} from 'node:crypto';
+import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {customerFixture} from '../../../e2e/ablauf/orderFixture';
+import {storeItemPhoto,storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
+
+it('K13K-7 real multi-part recording rejects overlapping parallel requests, preserves originals and allows independent parts',async()=>{
+ const customerId=await customerFixture('K13K unique complaint');
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const intake=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',note:'TEST K13K Mehrteile',items:['A','B','C'].map(name=>({catalogServiceId:null,name:'TEST '+name,quantity:1,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}))}));
+ expect(intake.code).toBe('OK');if(intake.code!=='OK')throw Error('TEST_COMPLAINT_INTAKE_REQUIRED');
+ const orderId=intake.receipt.orderId;
+ const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,freezeOrderAction,getExtraWorkMasterDataAction,setExtraWorkHourlyRateAction}=await import('@/app/actions/orders.actions');
+ const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));
+ expect(moved.code).toBe('OK');if(moved.code!=='OK')throw Error('TEST_COMPLAINT_HANDOFF_REQUIRED');
+ let version=moved.receipt.aggregateVersion;
+ for(const item of intake.receipt.items){
+  await storeItemPhoto(orderId,item.id);
+  const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId:item.id,expectedVersion:version,clientEventId:randomUUID(),finished:true}));
+  expect(finished.code).toBe('OK');if(finished.code!=='OK')throw Error('TEST_COMPLAINT_FINISH_REQUIRED');
+  version=finished.receipt.aggregateVersion;
+ }
+ const rates=await withSession(full,()=>getExtraWorkMasterDataAction());
+ expect(rates.code).toBe('OK');if(rates.code!=='OK')throw Error('TEST_COMPLAINT_RATE_SOURCE_REQUIRED');
+ if(!rates.data.currentRate)expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const photo=await storeOrderPhoto(orderId);
+ const {reklamationAusfuehrenAction:write,getByOrder}=await import('@/app/actions/complaints.actions');
+ const request=(indices:number[])=>({action:'aufnehmen' as const,clientKey:randomUUID(),orderId,intakeItemId:null,intakeVersion:null,parts:indices.map(index=>({position_id:intake.receipt.items[index].id,menge:1})),defect:'Abplatzung',description:'TEST K13K eindeutige Mehrteile',photoIds:[photo],goodsReturn:'offen' as const});
+ const a=request([0,1]),b=request([1]);
+ const [first,overlap]=await Promise.all([withSession(full,()=>write(a)),withSession(full,()=>write(b))]);
+ expect([first.code,overlap.code].sort()).toEqual(['CONFLICT','OK']);
+ const winner=first.code==='OK'?first:overlap;
+ const winningRequest=first.code==='OK'?a:b,losingRequest=first.code==='OK'?b:a;
+ if(winner.code!=='OK')throw Error('TEST_COMPLAINT_WINNER_REQUIRED');
+ expect(await withSession(full,()=>write(JSON.parse(JSON.stringify(winningRequest))))).toEqual({...winner,replayed:true});
+ const otherActor=await createFixture(['auftraege']);
+ expect(await withSession(otherActor,()=>write(JSON.parse(JSON.stringify(winningRequest))))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${scope.tenant} AND client_event_id=${losingRequest.clientKey}::uuid`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.complaints WHERE tenant_id=${scope.tenant} AND client_key=${losingRequest.clientKey}::uuid`).toHaveLength(0);
+ const independent=request([2]);
+ const separate=await withSession(full,()=>write(independent));
+ expect(separate.code).toBe('OK');if(separate.code!=='OK')throw Error('TEST_COMPLAINT_INDEPENDENT_REQUIRED');
+ const read=await withSession(full,()=>getByOrder(orderId));
+ expect(read).toMatchObject({code:'OK',complaints:expect.arrayContaining([expect.objectContaining({id:winner.receipt.complaintId,teile:winningRequest.parts}),expect.objectContaining({id:separate.receipt.complaintId,teile:independent.parts})])});
+ expect(read.code==='OK'&&read.complaints).toHaveLength(2);
+ const closed=await withSession(full,()=>write({action:'abschliessen',clientKey:randomUUID(),complaintId:winner.receipt.complaintId,version:1,kind:'zurueckgezogen',note:'TEST Kunde zieht Beanstandung zurueck',sentThreadId:null}));
+ expect(closed).toMatchObject({code:'OK'});
+ const replacementRequest=request([0,1]);
+ const replacement=await withSession(full,()=>write(replacementRequest));
+ expect(replacement).toMatchObject({code:'OK'});
+ if(replacement.code!=='OK')throw Error('TEST_COMPLAINT_MULTI_REPLACEMENT_REQUIRED');
+ expect(await withSession(full,()=>getByOrder(orderId))).toMatchObject({code:'OK',complaints:expect.arrayContaining([expect.objectContaining({id:replacement.receipt.complaintId,teile:replacementRequest.parts})])});
+ expect(await withSession(full,()=>write(JSON.parse(JSON.stringify(replacementRequest))))).toEqual({...replacement,replayed:true});
+ const reopen={action:'wieder_oeffnen' as const,clientKey:randomUUID(),complaintId:winner.receipt.complaintId,version:2,reason:'TEST ueberlappender Wiederbeginn'};
+ const decider=await createFixture(['entscheiden']);
+ expect(await withSession(decider,()=>write(reopen))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>getByOrder(orderId))).toMatchObject({code:'OK',complaints:expect.arrayContaining([expect.objectContaining({id:winner.receipt.complaintId,stand:'abgeschlossen',version:2})])});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${scope.tenant} AND client_event_id=${reopen.clientKey}::uuid`).toHaveLength(0);
+});
