@@ -83,8 +83,8 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
-  h16-schema:
-    name: h16-schema
+  h16-native:
+    name: h16-native
     needs: berlin-clock
     if: needs.berlin-clock.outputs.run == 'yes'
     runs-on: ubuntu-latest
@@ -102,32 +102,10 @@ jobs:
         run: npm ci
 
       - name: Replay every migration on an empty local database
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYXNlLWRlbW8iLCJyb2xlIjoiYW5vbiIsImV4cCI6MTk4MzgxMjk5Nn0.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
-          APP_SESSION_SECRET: generated-flow-tests-local-only
-          SUPABASE_SERVICE_ROLE_KEY: ""
         run: |
-          set -euo pipefail
           npm run quality:supabase-cli
-          test "$(node -p 'require("./package-lock.json").packages["node_modules/@playwright/test"].version')" = '1.60.0'
-          npm run build > "$RUNNER_TEMP/kreile-generated-build.log" 2>&1 &
-          task_build_pid=$!
-          docker pull mcr.microsoft.com/playwright:v1.60.0-jammy > "$RUNNER_TEMP/kreile-generated-image.log" 2>&1 &
-          task_image_pid=$!
-          trap 'kill "$task_build_pid" "$task_image_pid" 2>/dev/null || true' EXIT
           ./node_modules/.bin/supabase start
           ./node_modules/.bin/supabase db reset --local --no-seed
-          task_build_exit=0
-          wait "$task_build_pid" || task_build_exit=$?
-          cat "$RUNNER_TEMP/kreile-generated-build.log"
-          test "$task_build_exit" -eq 0
-          task_image_exit=0
-          wait "$task_image_pid" || task_image_exit=$?
-          cat "$RUNNER_TEMP/kreile-generated-image.log"
-          test "$task_image_exit" -eq 0
-          trap - EXIT
 
       - name: Run the named H12 F0/F2 SQL contracts
         env:
@@ -150,6 +128,34 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: node scripts/run-acceptance-tests.mjs
 
+      - name: Stop local database
+        if: always()
+        run: ./node_modules/.bin/supabase stop --no-backup
+
+  h16-generated:
+    name: h16-generated-flows
+    needs: berlin-clock
+    if: needs.berlin-clock.outputs.run == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Replay every migration on an empty local database
+        run: |
+          npm run quality:supabase-cli
+          ./node_modules/.bin/supabase start
+          ./node_modules/.bin/supabase db reset --local --no-seed
+
       - name: Generated BAUPLAN flows against replay DB
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
@@ -159,6 +165,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: |
           test "$(node -p 'require("./package-lock.json").packages["node_modules/@playwright/test"].version')" = '1.60.0'
+          npm run build
           node scripts/spec/generate-flow-tests.mjs --check
           docker run --rm --network host --user "$(id -u):$(id -g)" \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" \
@@ -171,3 +178,18 @@ jobs:
       - name: Stop local database
         if: always()
         run: ./node_modules/.bin/supabase stop --no-backup
+
+  h16-schema:
+    name: h16-schema
+    needs: [berlin-clock, h16-native, h16-generated]
+    if: always() && needs.berlin-clock.outputs.run == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require both complete replay suites
+        env:
+          NATIVE_RESULT: ${{ needs.h16-native.result }}
+          GENERATED_RESULT: ${{ needs.h16-generated.result }}
+        run: |
+          test "$NATIVE_RESULT" = success
+          test "$GENERATED_RESULT" = success
