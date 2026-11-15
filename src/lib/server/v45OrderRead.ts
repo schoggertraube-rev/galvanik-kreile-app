@@ -103,8 +103,8 @@ function readV45OrderRuleRaw(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,
  const source={kind:'order' as const,id:card.id,version:card.version};
  const missingPhotoItems=evidence?.orderId===card.id?card.items.filter(item=>!evidence.records.some(record=>record.source==='ORDER_STATION_ATTACHMENT'&&record.original.state==='VERIFIED'&&['image/jpeg','image/png','image/webp'].includes(record.original.mimeType??'')&&record.targets.some(target=>target.targetType==='ORDER'&&target.targetId===card.id)&&record.targets.some(target=>target.targetType==='ORDER_ITEM'&&target.targetId===item.id))):null;
  // KORR-S13-1 / PL15.11.15:07: no collection capture path until S38a.
- // R15 skips those absent facts; a supplied malformed fact still stops at R1.
- const rule=readAuthorizedV45Rule(auth,'auftrag',{...v45OrderFacts(card),...v45OrderReleaseFacts(card,release),...v45OrderSourceFacts(card,sources),...(missingPhotoItems!==null?{photosMissing:missingPhotoItems.length>0}:{})},undefined,['workProblem','deliveryRequest','termUpdatePending','workUpdatePending','extraPending','collectionPlanned','collectionPrepared','debtAction']);
+ // PL15.11.16:43: packPhoto has no capture path until S37. R15 skips absent facts; malformed supplied facts still stop at R1.
+ const rule=readAuthorizedV45Rule(auth,'auftrag',{...v45OrderFacts(card),...v45OrderReleaseFacts(card,release),...v45OrderSourceFacts(card,sources),...(missingPhotoItems!==null?{photosMissing:missingPhotoItems.length>0}:{})},undefined,['workProblem','deliveryRequest','termUpdatePending','workUpdatePending','extraPending','collectionPlanned','collectionPrepared','debtAction','packPhoto']);
  const first=readV45FirstLook('auftrag',{
   'auftrag.lage':{nummer:card.orderNumber,station:card.station},
   'auftrag.termin':{datum:card.dueAt},

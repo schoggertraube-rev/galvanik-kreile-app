@@ -11,6 +11,21 @@ const sourceCard={id:'TEST-order',version:3,handoverMode:'pickup' as const};
 const knownSources={shipping:{code:'OK',orderId:'TEST-order',orderVersion:3,shippingCostMissing:false},
  payment:{code:'OK',data:{orderId:'TEST-order',orderVersion:3,creditApplication:{code:'OK',proposal:null}}},
  shipment:{code:'OK',data:{orderId:'TEST-order',orderVersion:3,shipments:[{status:'created',labelUrl:'TEST-secured-label'}]}}} as unknown as Sources;
+it('PL16:43 keeps uncaptured packPhoto as a named R15 gap while binding the qualified shipping handover',async()=>{
+ const {getPermissionsForAreas}=await import('@/lib/auth/authorizationContract');
+ const areas=['auftraege','geld'] as const;
+ const auth={tenantId:'TEST-pack-source',userId:'11111111-1111-4111-8111-111111111111',displayName:'TEST',role:'werkstatt' as const,active:true as const,areas,permissions:getPermissionsForAreas(areas)};
+ type Release=NonNullable<Parameters<typeof readV45OrderRule>[2]>;
+ const release={orderId:sourceCard.id,value:{code:'OK',orderVersion:3,freezeId:'TEST-freeze',invoiceState:'issued',paymentReady:true,informed:{orderId:sourceCard.id,freezeId:'TEST-freeze'},complaintIds:[],overdueInvoiceIds:[]}} as unknown as Release;
+ const result=readV45OrderRule(auth,{...card,...sourceCard,items:[{id:'TEST-item',position:1,name:'TEST part',quantity:2,material:null,surfaceRequested:'TEST',catalogServiceId:null,unit:null,unitPriceCents:null,vatRateBasisPoints:null,finished:true,extraWork:[]}],customerName:'TEST customer',customerId:'TEST-customer',orderNumber:'TEST-1',title:'TEST shipment',dueAt:null,station:'fertig',handoverMode:'shipping',operationalFacts:{rework:false,pricesMissing:false,complaint:false}},release,undefined,knownSources);
+ expect(result.hauptaktion?.befehl,JSON.stringify(result)).toMatchObject({funktion:'recordGoodsOutAction',argumente:{orderId:sourceCard.id,expectedVersion:3,mode:'versand'}});
+ expect(result.datenluecken).toContain('packPhoto');
+});
+it('PL16:43 never skips a supplied malformed packPhoto fact under R15',()=>{
+ // Explicit synthetic rule boundary: no existing product capture is claimed.
+ const facts={returning:false,inTransit:false,closed:false,workProblem:false,complaint:false,deliveryRequest:false,termUpdatePending:false,workUpdatePending:false,reworkRemainder:false,extraPending:false,pricesMissing:false,station:'fertig',rework:false,collectionPlanned:false,shippingCostMissing:false,invoiceIssued:true,creditApplicable:false,noticeSent:true,overdue:false,paymentReady:true,shipping:true,labelReady:true};
+ expect(readV45Rule('auftrag',{...facts,packPhoto:null},['packPhoto'])).toMatchObject({code:'SOURCE_INCOMPLETE',ruleId:'auftrag.packfoto',missing:['packPhoto']});
+});
 it('KORR-S13-2 reads booleans from matching qualified port versions without projecting money',()=>{
  expect(v45OrderSourceFacts(sourceCard,knownSources)).toEqual({shippingCostMissing:false,creditApplicable:false,labelReady:true});
  expect(v45OrderSourceFacts(sourceCard,{...knownSources,shipping:{...knownSources.shipping,shippingCostMissing:true}} as Sources)).toMatchObject({shippingCostMissing:true});
