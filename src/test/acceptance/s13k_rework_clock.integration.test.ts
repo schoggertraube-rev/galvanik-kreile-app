@@ -58,12 +58,16 @@ it('K13K-6 real rework stores instants without a UTC cast in a Berlin database s
  const [beforeOut]=await sql`SELECT statement_timestamp() AS clock`;
  const out=await withSession(full,()=>recordGoodsOutAction(requestOut));
  expect(out.code).toBe('OK');if(out.code!=='OK')throw Error('TEST_REWORK_ACTUAL_GOODS_OUT');
+ const [afterOut]=await sql`SELECT statement_timestamp() AS clock`;
+ expect(Date.parse(out.receipt.occurredAt)).toBeGreaterThanOrEqual(new Date(beforeOut.clock).getTime());
+ expect(Date.parse(out.receipt.occurredAt)).toBeLessThanOrEqual(new Date(afterOut.clock).getTime());
  const closure=()=>sql`SELECT stand,abgeschlossen_am,abgeschlossen_von::text,
   abgeschlossen_am BETWEEN ${beforeOut.clock}::timestamptz AND statement_timestamp() AS clock_proof
   FROM public.complaints WHERE tenant_id=${scope.tenant} AND id=${complaint.receipt.complaintId}`;
  const closed=await closure();expect(closed).toMatchObject([{stand:'abgeschlossen',abgeschlossen_von:full.actorId,clock_proof:true}]);
  const retryOut=await withSession(full,()=>recordGoodsOutAction(JSON.parse(JSON.stringify(requestOut))));
  expect(retryOut).toMatchObject({code:'OK',replayed:true,receipt:{eventId:out.receipt.eventId}});
+ expect(retryOut).toMatchObject({code:'OK',receipt:out.receipt});
  expect(await closure()).toEqual(closed);
  expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[{id:complaint.receipt.complaintId,stand:'abgeschlossen'}]});
 });

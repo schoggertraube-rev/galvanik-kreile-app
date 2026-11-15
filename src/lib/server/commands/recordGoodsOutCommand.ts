@@ -277,7 +277,7 @@ async function readEventsByClientId(
       id AS event_id, tenant_id, order_id, client_event_id::text,
       correlation_id::text, event_schema_version, aggregate_version,
       user_id::text AS actor_id,
-      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
+      to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
       status, station, from_station, event_type, payload
     FROM public.events
     WHERE tenant_id = ${tenantId}
