@@ -66,6 +66,7 @@ export async function readManualShipmentGroup(tx:PrivilegedTenantTransaction,aut
  const ids=new Set(group.members.map(row=>row.shipmentId));
  return {group,remainingOrderIds:orderIds.filter(id=>all.some(row=>row.order_id===id&&!ids.has(row.id)&&row.status!=='cancelled'&&row.shippedAt===null))};
 }
+export type ManualShippingReadResult=Awaited<ReturnType<typeof readManualShipping>>;
 export async function readManualShipping(auth:AuthorizationSnapshot,orderId:unknown,ports:ManualShippingPorts){
  if(!authorized(auth))return error('FORBIDDEN','SHIPPING_FORBIDDEN');
  if(!id(orderId))return error('VALIDATION_ERROR','ORDER_ID_INVALID');

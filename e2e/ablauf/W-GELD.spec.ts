@@ -62,6 +62,13 @@ it('W-GELD G1/G5 H10/H11/H15/H16 follows the observed partial payment into cance
  expect(next.data.payment).toMatchObject({openAmountCents:11900,paidAmountCents:0});
  const proposal=next.data.creditApplication.proposal;
  expect(proposal).toMatchObject({command:'credit.apply',input:{invoiceId:target.invoice.invoiceId,amount:4000,expectedOpenAmountCents:11900,expectedCreditVersion:1}});
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const u2=await withSession(full,()=>getLiveOrderCardAction({orderId:target.orderId}));
+ if(u2.code!=='OK')throw Error('S13_G5_U2_SOURCE');
+ expect(u2.data.nextActionRule).toMatchObject({hauptaktion:{elementId:'order.apply_credit',befehl:{funktion:'applyCustomerCreditAction',argumente:proposal.input}}});
+ const restricted=await withSession(noMoney,()=>getLiveOrderCardAction({orderId:target.orderId}));
+ expect(restricted).toMatchObject({code:'OK',data:{nextActionRule:{hauptaktion:null,gesperrt:expect.arrayContaining([{elementId:'shipping.cost',grundKey:'error.permission'}])}}});
+ expect(JSON.stringify(restricted)).not.toContain('balanceCents');
  const input={...JSON.parse(JSON.stringify(proposal.input)),clientEventId:randomUUID()};
  expect(await withSession(noMoney,()=>applyCustomerCreditAction(input))).toMatchObject({code:'FORBIDDEN'});
  const applied=await withSession(full,()=>applyCustomerCreditAction(input));

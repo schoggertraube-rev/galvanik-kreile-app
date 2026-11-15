@@ -1029,6 +1029,7 @@ async function readShippingInvoiceLines(tx:PrivilegedTenantTransaction,tenantId:
     if(!groups.has(key))groups.set(key,{sendungId:shipment.sendung_id,shipmentId:shipment.id});
   }
   const lines:Array<{shipmentGroupId:string;amountCents:number;name:string;shippingKind:'fee'|'reference'}>=[];
+  let missingFee=false;
   for(const [groupKey,group] of groups){
     const members=group.sendungId===null
       ?[{order_id:order.id,customer_id:order.customer_id,shipment_id:group.shipmentId}]
@@ -1044,8 +1045,9 @@ async function readShippingInvoiceLines(tx:PrivilegedTenantTransaction,tenantId:
     if(charged.length>1)throw Error('INVOICE_SHIPPING_ALLOCATION_AMBIGUOUS');
     if(charged.length===1)lines.push({shipmentGroupId:groupKey,amountCents:0,name:SHIPPING_FEE_COPY.inInvoice(charged[0].invoiceNumber),shippingKind:'reference'});
     else if(amountCents!==null)lines.push({shipmentGroupId:groupKey,amountCents,name:SHIPPING_FEE_COPY.line,shippingKind:'fee'});
+    else missingFee=true; // Qualified, neither included nor already charged.
   }
-  return lines;
+  return {lines,missingFee};
 }
 
 function shippingLineKind(line:ImmutableInvoiceShippingLine){
@@ -1078,7 +1080,8 @@ export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot
   if(rows.length!==1||!order||order.version!==input.expectedVersion||!['pickup','shipping'].includes(order.handover_mode??''))throw Error('SHIPPING_PROPOSAL_ORDER_SOURCE_INVALID');
   const settings=await readSettings(tx,auth.tenantId);
   if(!settings||settings.shippingFeeCents===undefined)throw Error('SHIPPING_PROPOSAL_SETTINGS_SOURCE_MISSING');
-  const lines=order.handover_mode==='shipping'?await readShippingInvoiceLines(tx,auth.tenantId,order,settings.shippingFeeCents,readVat):[];
+  const allocation=order.handover_mode==='shipping'?await readShippingInvoiceLines(tx,auth.tenantId,order,settings.shippingFeeCents,readVat):{lines:[],missingFee:false};
+  const lines=allocation.lines;
   const originals=await readCreateInvoiceReceipts(tx,{orderId:order.id});
   const sourceRows=await readInvoiceIssueSource(tx,order.id),source=sourceRows[0];
   if(sourceRows.length!==1||!source||source.tenant_id!==auth.tenantId||source.order_id!==order.id||source.customer_id!==order.customer_id||source.current_order_version!==order.version||typeof source.no_active_invoice!=='boolean')throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_INVALID');
@@ -1112,7 +1115,7 @@ export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot
      befehl:{datei:'src/app/actions/invoices.actions.ts',funktion:'issueInvoiceAction',argumente:{orderId:order.id,expectedVersion:order.version,shippingCosts:{invoiceId:parent.receipt.invoiceId,expectedVersion:parent.row.current_version,scope,expectedFeeCents:amount}}}});
    }
   }
-  return {code:'OK' as const,orderId:order.id,orderVersion:order.version,feeCents:settings.shippingFeeCents,lines,additionalInvoices,reissueWithoutShipping,...(datenluecken.length?{datenluecken}:{}),...(settings.shippingFeeCents===null?{hintKey:'versand.pauschale_fehlt' as const}: {})};
+  return {code:'OK' as const,orderId:order.id,orderVersion:order.version,shippingCostMissing:allocation.missingFee,feeCents:settings.shippingFeeCents,lines,additionalInvoices,reissueWithoutShipping,...(datenluecken.length?{datenluecken}:{}),...(settings.shippingFeeCents===null?{hintKey:'versand.pauschale_fehlt' as const}: {})};
  });}catch(error){console.error('[INVOICE_SHIPPING_PROPOSAL_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const,orderId:input.orderId,orderVersion:input.expectedVersion,datenluecken:['SHIPPING_INVOICE_SOURCE']};}
 }
 function formatShippingFee(cents:number){return new Intl.NumberFormat('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(cents/100)+' €';}
@@ -1335,7 +1338,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
           if(!readShippingSettings)throw Error('INVOICE_SHIPPING_SETTINGS_PORT_MISSING');
           const settings=await readShippingSettings(tx,tenantId);
           if(!settings||settings.shippingFeeCents===undefined)throw Error('INVOICE_SHIPPING_SETTINGS_SOURCE_MISSING');
-          shippingFees=await readShippingInvoiceLines(tx,tenantId,order,settings.shippingFeeCents,requireVatReader(readVat));
+          shippingFees=(await readShippingInvoiceLines(tx,tenantId,order,settings.shippingFeeCents,requireVatReader(readVat))).lines;
         }
         if(input.shippingCosts){
           const intent=input.shippingCosts;
