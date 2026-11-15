@@ -9,13 +9,27 @@ const scope=vi.hoisted(()=>{
 });
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:scope.tenant}));
 import {sql,full,createFixture,withSession} from '../../../e2e/ablauf/replayHarness';
-import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {readyInvoiceOrder,customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
 import {storeOrderPhoto,storeIntakeGoodsPhoto,storeItemPhoto} from '../../../e2e/ablauf/photoFixture';
 import {randomUUID} from 'node:crypto';
 // The harness restores its provider environment first; restore the original
 // connection URL last, so this file cannot leak the connection-local timezone.
 vi.setConfig({sequence:{hooks:'list'}});
 afterAll(()=>{process.env.DATABASE_URL=scope.database;process.env.H18_EXPECTED_DATABASE_URL=scope.expected;});
+
+it('K13K-6 payment-mode receipt and fresh retry retain the actual instant in Berlin',async()=>{
+ const customerId=await customerFixture('K13K payment clock');
+ const order=await intakeOrderFixture('K13K payment clock',customerId);
+ const {setPaymentModeAction}=await import('@/app/actions/payments.actions');
+ const input={orderId:order.receipt.orderId,paymentMode:'abholung' as const,expectedVersion:0,clientEventId:randomUUID()};
+ const [before]=await sql`SELECT statement_timestamp() AS clock`;
+ const saved=await withSession(full,()=>setPaymentModeAction(input));
+ expect(saved.code).toBe('OK');if(saved.code!=='OK')throw Error('TEST_PAYMENT_MODE_CLOCK_REQUIRED');
+ const [after]=await sql`SELECT statement_timestamp() AS clock`;
+ expect(Date.parse(saved.receipt.changedAt)).toBeGreaterThanOrEqual(new Date(before.clock).getTime());
+ expect(Date.parse(saved.receipt.changedAt)).toBeLessThanOrEqual(new Date(after.clock).getTime());
+ expect(await withSession(full,()=>setPaymentModeAction(JSON.parse(JSON.stringify(input))))).toEqual({...saved,replayed:true});
+});
 
 it('K13K-6 real rework stores instants without a UTC cast in a Berlin database session',async()=>{
  const [clock]=await sql`SELECT current_setting('TimeZone') AS zone`;
