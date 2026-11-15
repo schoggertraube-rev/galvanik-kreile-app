@@ -1,3 +1,4 @@
+import {allocateOrderNumber} from '@/lib/server/orderNumberAllocation';
 import "server-only";
 
 import {isWorkingDay,berlinCalendarDay} from "@/lib/domain/workingDays";
@@ -193,28 +194,6 @@ function logDatabaseFailure(error: unknown): void {
   });
 }
 
-async function allocateOrderNumber(tx: PrivilegedTenantTransaction): Promise<string> {
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:order-number', 0))`);
-  const rows = await tx.execute<{ current_year: number | string; next_number: number | string }>(sql`
-    WITH current_clock AS (
-      SELECT extract(year FROM statement_timestamp() AT TIME ZONE 'Europe/Berlin')::int AS current_year
-    )
-    SELECT
-      clock.current_year,
-      coalesce(max(substring(orders.order_number FROM '[0-9]+$')::int), 0) + 1 AS next_number
-    FROM current_clock clock
-    LEFT JOIN public.orders orders
-      ON orders.order_number ~ ('^A-' || clock.current_year::text || '-[0-9]{4,}$')
-    GROUP BY clock.current_year
-  `);
-  const row = rows[0];
-  const year = toPositiveInteger(row?.current_year);
-  const next = toPositiveInteger(row?.next_number);
-  if (rows.length !== 1 || !year || !next || year < 2000 || year > 9999) {
-    throw new Error("REWORK_ORDER_NUMBER_INVALID");
-  }
-  return `A-${year}-${String(next).padStart(4, "0")}`;
-}
 
 async function readComplaintContext(
   tx: PrivilegedTenantTransaction,
@@ -369,7 +348,7 @@ export async function nacharbeitAnlegen(input: unknown): Promise<NacharbeitAnleg
       const eventId = randomUUID();
       const clientEventId = randomUUID();
       const correlationId = randomUUID();
-      const orderNumber = await allocateOrderNumber(tx);
+      const orderNumber = await allocateOrderNumber(tx, "REWORK_ORDER_NUMBER_INVALID");
       const hint = `Reklamation ${context.nummer}: ${context.mangel}`;
       const title = `Nacharbeit · ${context.source_order_number} · ${reworkItems[0]?.name ?? ""}`.slice(0, 240);
       const task = reworkItems.map((item) => `${item.reworkQuantity}× ${item.name}`).join("; ").slice(0, 2000);
