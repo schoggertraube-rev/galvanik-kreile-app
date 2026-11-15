@@ -1095,8 +1095,11 @@ describe('AP-EIN owner cases: goods and original Server Actions against the real
   await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,text)
    VALUES(${foreignSource}::uuid,${foreignTenant},${foreignSource},'notiz','intern','app',${actor.actorId}::uuid,'SYNTHETISCH fremder Mandant')`;
   const rejected=randomUUID();
+  // Isolate the tenant-FK boundary from the independent one-open-complaint
+  // constraint: the positive reader fixture already claims the first part.
+  const unclaimedOrder=await orderFixture(actor);
   await expect(sql`INSERT INTO public.complaints(id,tenant_id,order_id,customer_id,item_id,intake_item_id,reason,description,status)
-   VALUES(${rejected},${KREILE_TENANT_SLUG},${order.orderId},${actor.customerId},${order.items[0].id},${foreignSource}::uuid,'other','SYNTHETISCH abgewiesen','open')`).rejects.toMatchObject({code:'23503'});
+   VALUES(${rejected},${KREILE_TENANT_SLUG},${unclaimedOrder.orderId},${actor.customerId},${unclaimedOrder.items[0].id},${foreignSource}::uuid,'other','SYNTHETISCH abgewiesen','open')`).rejects.toMatchObject({code:'23503'});
   expect(await sql`SELECT id FROM public.complaints WHERE id=${rejected}`).toHaveLength(0);
   const foreignComplaint=randomUUID();
   await sql`INSERT INTO public.complaints(id,tenant_id,order_id,customer_id,reason,description,status)
