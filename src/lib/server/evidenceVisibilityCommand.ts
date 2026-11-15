@@ -4,10 +4,10 @@ import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {canChangeEvidenceVisibility,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {mapEvidenceVisibility,type EvidenceVisibilityRow,type EvidenceVisibility} from '@/lib/domain/evidenceVisibility';
+import {mapEvidenceVisibility,type EvidenceVisibilityRow,type EvidenceVisibility,type ChangeEvidenceVisibilityInput} from '@/lib/domain/evidenceVisibility';
 import {EVIDENCE_VISIBILITY_COPY as copy} from '@/ui/situationCatalog';
 
-export type ChangeEvidenceVisibilityInput={evidenceKey:string;customerVisible:boolean;expectedVersion:number;clientEventId:string};
+export type {ChangeEvidenceVisibilityInput} from '@/lib/domain/evidenceVisibility';
 type Result={code:'OK';data:EvidenceVisibility;replayed:boolean}
  |{code:'FORBIDDEN'|'VALIDATION_ERROR'|'NOT_FOUND'|'CONFLICT'|'UNAVAILABLE';message:string;current?:EvidenceVisibility};
 type Source=EvidenceVisibilityRow&{evidence_key:string;source_kind:string;integrity_ok:boolean;target_links:unknown};
@@ -48,7 +48,7 @@ export async function changeEvidenceVisibility(auth:AuthorizationSnapshot,input:
 }
 
 /** Shared by direct edits, upload savepoints and the existing task repair. */
-export async function changeEvidenceVisibilityInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:ChangeEvidenceVisibilityInput):Promise<Result>{
+export async function changeEvidenceVisibilityInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:ChangeEvidenceVisibilityInput,capturedAt?:string):Promise<Result>{
  if(!valid(input))return {code:'VALIDATION_ERROR',message:copy.invalid};
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'evidence-visibility-request:'+auth.tenantId+':'+input.clientEventId},0))`);
    const previous=await tx.execute<{evidence_key:string;version:number;customer_visible:boolean;actor_id:string;id:string;occurred_at:Date|string}>(sql`
@@ -79,14 +79,17 @@ export async function changeEvidenceVisibilityInTransaction(tx:PrivilegedTenantT
    const visibility=mapEvidenceVisibility(current);
    if(visibility.version!==input.expectedVersion)return {code:'CONFLICT',message:copy.conflict,current:visibility};
    if(visibility.customerVisible===input.customerVisible)return {code:'OK',data:visibility,replayed:false};
+   // Only the qualified upload-origin port supplies this time. Public inputs
+   // cannot supply or backdate it; recorded_at remains the server booking time.
+   if(capturedAt!==undefined&&(!Number.isFinite(Date.parse(capturedAt))||new Date(capturedAt).toISOString()!==capturedAt))throw Error('EVIDENCE_CAPTURE_TIME_INVALID');
    const id=randomUUID();
    const inserted=await tx.execute<{id:string}>(sql`INSERT INTO private.evidence_visibility_events
-    (id,tenant_id,evidence_key,version,customer_visible,actor_id,client_event_id,previous_visible)
-    VALUES (${id}::uuid,${auth.tenantId},${input.evidenceKey},${visibility.version+1},${input.customerVisible},${auth.userId}::uuid,${input.clientEventId}::uuid,${visibility.customerVisible}) RETURNING id::text`);
+    (id,tenant_id,evidence_key,version,customer_visible,actor_id,client_event_id,previous_visible,occurred_at)
+    VALUES (${id}::uuid,${auth.tenantId},${input.evidenceKey},${visibility.version+1},${input.customerVisible},${auth.userId}::uuid,${input.clientEventId}::uuid,${visibility.customerVisible},${capturedAt===undefined?sql`statement_timestamp()`:sql`${capturedAt}::timestamptz`}) RETURNING id::text`);
    if(inserted.length!==1||inserted[0].id!==id)throw Error('EVIDENCE_VISIBILITY_RECEIPT_MISSING');
    const readback=await source(tx,auth,input.evidenceKey);
    if(!readback)throw Error('EVIDENCE_VISIBILITY_READBACK_MISSING');
    const saved=mapEvidenceVisibility(readback);
-   if(saved.eventId!==id||saved.actorId!==auth.userId||saved.version!==visibility.version+1||saved.customerVisible!==input.customerVisible)throw Error('EVIDENCE_VISIBILITY_READBACK_INVALID');
+   if(saved.eventId!==id||saved.actorId!==auth.userId||saved.version!==visibility.version+1||saved.customerVisible!==input.customerVisible||capturedAt!==undefined&&saved.occurredAt!==capturedAt)throw Error('EVIDENCE_VISIBILITY_READBACK_INVALID');
    return {code:'OK',data:saved,replayed:false};
 }

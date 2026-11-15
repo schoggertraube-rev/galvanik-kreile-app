@@ -1,4 +1,5 @@
 /** S11: metadata of the same stored original, never a copy of its bytes. */
+export type ChangeEvidenceVisibilityInput={evidenceKey:string;customerVisible:boolean;expectedVersion:number;clientEventId:string};
 export type EvidenceVisibility = {
   customerVisible: boolean;
   version: number;

@@ -8,7 +8,7 @@ import {EVIDENCE_VISIBILITY_COPY as copy} from '@/ui/situationCatalog';
 import type {TaskReference} from '@/modules/tasks/public';
 import {mapEvidenceVisibility,type EvidenceVisibilityRow,type EvidenceVisibility} from '@/lib/domain/evidenceVisibility';
 
-type UploadSource={evidenceKey:string;sourceKind:string;actorId:string;requestId:string;name:string;reference:TaskReference;visibility:EvidenceVisibility};
+type UploadSource={evidenceKey:string;sourceKind:string;actorId:string;requestId:string;name:string;reference:TaskReference;visibility:EvidenceVisibility;capturedAt:string|null};
 function intentId(tenant:string,key:string){
  const bytes=createHash('sha256').update(JSON.stringify(['evidence-visibility-upload',tenant,key])).digest().subarray(0,16);
  bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
@@ -17,20 +17,23 @@ function intentId(tenant:string,key:string){
 
 /** Qualification reads the same secured original, never a replacement file. */
 async function readUploadSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string):Promise<UploadSource>{
- const rows=await tx.execute<EvidenceVisibilityRow&{evidence_key:string;source_kind:string;integrity_ok:boolean;target_links:unknown;actor:string|null;request:string|null;name:string|null;intake_item_id:string|null}>(sql`
+ const rows=await tx.execute<EvidenceVisibilityRow&{evidence_key:string;source_kind:string;integrity_ok:boolean;target_links:unknown;actor:string|null;request:string|null;name:string|null;intake_item_id:string|null;original_device_capture_state:string;original_device_captured_at:string|null}>(sql`
   SELECT evidence_key,source_kind,integrity_ok,target_links,
    customer_visible,visibility_version,visibility_event_id,visibility_actor_id,visibility_occurred_at,
-   original_actor_id AS actor,original_request_id AS request,original_file_name AS name,original_intake_item_id AS intake_item_id
+   original_actor_id AS actor,original_request_id AS request,original_file_name AS name,original_intake_item_id AS intake_item_id,original_device_capture_state,original_device_captured_at
   FROM private.v_evidence_records_v3 WHERE tenant_id=${auth.tenantId} AND evidence_key=${key}`);
  const row=rows[0];
  if(rows.length!==1||!row||row.integrity_ok!==true||!row.actor||!row.request||!row.name||!Array.isArray(row.target_links))throw Error('EVIDENCE_UPLOAD_SOURCE_INVALID');
+ if(!['NOT_RECORDED','RECORDED'].includes(row.original_device_capture_state)
+  ||(row.original_device_capture_state==='NOT_RECORDED'?row.original_device_captured_at!==null:
+    !row.original_device_captured_at||!Number.isFinite(Date.parse(row.original_device_captured_at))||new Date(row.original_device_captured_at).toISOString()!==row.original_device_captured_at))throw Error('EVIDENCE_UPLOAD_CAPTURE_SOURCE_INVALID');
  const links=row.target_links as Array<{targetType:string;targetId:string}>;
  if(links.some(link=>!link||typeof link.targetType!=='string'||typeof link.targetId!=='string'))throw Error('EVIDENCE_UPLOAD_LINK_INVALID');
  const orders=links.filter(link=>link.targetType==='ORDER'),customers=links.filter(link=>link.targetType==='CUSTOMER');
  if(orders.length>1||customers.length>1)throw Error('EVIDENCE_UPLOAD_LINK_AMBIGUOUS');
  const reference:TaskReference=orders[0]?{type:'auftrag',id:orders[0].targetId}:customers[0]?{type:'kunde',id:customers[0].targetId}:
   row.intake_item_id?{type:'eingang',id:row.intake_item_id}:{type:'allgemein',id:null};
- return {evidenceKey:key,sourceKind:row.source_kind,actorId:row.actor,requestId:row.request,name:row.name,reference,visibility:mapEvidenceVisibility(row)};
+ return {evidenceKey:key,sourceKind:row.source_kind,actorId:row.actor,requestId:row.request,name:row.name,reference,visibility:mapEvidenceVisibility(row),capturedAt:row.original_device_captured_at};
 }
 
 export function readEvidenceUploadIntent(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string){
@@ -73,7 +76,7 @@ export async function repairEvidenceVisibilityTask(tx:PrivilegedTenantTransactio
  const source=await readEvidenceVisibilityRetrySource(tx,auth,task.client_key);if(!source)return;
  if(task.erstellt_von!==source.actorId||task.bezug_typ!==source.reference.type||task.bezug_id!==source.reference.id)throw Error('EVIDENCE_VISIBILITY_TASK_SOURCE_CHANGED');
  if(source.pending){
-  const result=await changeEvidenceVisibilityInTransaction(tx,auth,{evidenceKey:source.evidenceKey,customerVisible:source.requested,expectedVersion:0,clientEventId:source.markerId});
+  const result=await changeEvidenceVisibilityInTransaction(tx,auth,{evidenceKey:source.evidenceKey,customerVisible:source.requested,expectedVersion:0,clientEventId:source.markerId},source.capturedAt??undefined);
   if(result.code!=='OK')throw Error('EVIDENCE_VISIBILITY_TASK_REPAIR_'+result.code);
  }
  const proof=await readEvidenceVisibilityRetrySource(tx,auth,task.client_key);

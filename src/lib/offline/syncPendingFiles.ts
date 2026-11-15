@@ -87,7 +87,7 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
     if(grant.code!=='OK'){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
     if(grant.upload)await ports.upload(grant.upload,entry.file);
     if(ports.currentScope()!==scope)break;
-    const finished=await ports.finish(entry.id,scope);
+    const finished=entry.customerVisible===undefined?await ports.finish(entry.id,scope):await ports.finish(entry.id,scope,entry.customerVisible);
     if(finished.code!=='OK'||!finished.capture.files.some(file=>file.id===entry.id&&file.secured===true)){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
     outcome.secured++;
     // Goods photos need their real receipt association, not merely a stored blob.

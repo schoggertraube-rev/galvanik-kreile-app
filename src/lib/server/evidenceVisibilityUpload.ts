@@ -32,7 +32,7 @@ export async function applyEvidenceUploadVisibility(auth:AuthorizationSnapshot,k
    if(pending){
     try{
      await withTenantSavepoint(tx,async nested=>{
-      const changed=await changeEvidenceVisibilityInTransaction(nested,auth,{evidenceKey:key,customerVisible:intent.requested,expectedVersion:0,clientEventId:intent.markerId});
+      const changed=await changeEvidenceVisibilityInTransaction(nested,auth,{evidenceKey:key,customerVisible:intent.requested,expectedVersion:0,clientEventId:intent.markerId},intent.capturedAt??undefined);
       if(changed.code!=='OK')throw Error('EVIDENCE_UPLOAD_FLAG_'+changed.code);
      });
      pending=false;

@@ -43,12 +43,15 @@ it('F11-11 current intake original survives a real flag SQL fault with a source-
  await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON private.evidence_visibility_events FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
  let active=true;
  try{
-  const intake=await storeIntakeGoodsPhoto(undefined,full,true);
+  const capturedAt=new Date(Date.now()-3600000).toISOString(); // Explicit device-time boundary, stored by the actual capture action.
+  const intake=await storeIntakeGoodsPhoto(undefined,full,true,capturedAt);
   expect(await withSession(full,()=>finishIntakeFileAction(intake.fileId,undefined,true))).toMatchObject({code:'OK',visibilityPending:true,visibility:{customerVisible:false,version:0}});
-  const [task]=await sql`SELECT id::text,status,erstellt_von::text,bezug_typ,bezug_id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='eingang' AND bezug_id=${intake.itemId}`;
+  const [task]=await sql`SELECT id::text,status,version,erstellt_von::text,bezug_typ,bezug_id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='eingang' AND bezug_id=${intake.itemId}`;
   expect(task).toMatchObject({status:'offen',erstellt_von:full.actorId,bezug_typ:'eingang',bezug_id:intake.itemId});
   await sql.unsafe(`DROP TRIGGER ${fault} ON private.evidence_visibility_events`);await sql.unsafe(`DROP FUNCTION private.${fault}()`);active=false;
-  expect(await withSession(full,()=>finishIntakeFileAction(intake.fileId,undefined,true))).toMatchObject({code:'OK',visibilityPending:false,visibility:{customerVisible:true,version:1}});
+  const {completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:task.id,version:task.version,note:null}))).toMatchObject({code:'OK',task:{status:'erledigt'}});
+  expect(await withSession(full,()=>finishIntakeFileAction(intake.fileId,undefined,true))).toMatchObject({code:'OK',visibilityPending:false,visibility:{customerVisible:true,version:1,occurredAt:capturedAt}});
   expect(await sql`SELECT id::text,status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='eingang' AND bezug_id=${intake.itemId}`).toEqual([{id:task.id,status:'erledigt'}]);
  }finally{if(active){await sql.unsafe(`DROP TRIGGER IF EXISTS ${fault} ON private.evidence_visibility_events`);await sql.unsafe(`DROP FUNCTION IF EXISTS private.${fault}()`);}}
 });
