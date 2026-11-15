@@ -10,15 +10,17 @@ import { analyzeDomainAttachment } from "@/lib/server/documentIntelligencePort";
 import { readAzureDocumentIntelligenceStatus } from "@/lib/server/azureDocumentIntelligence";
 import { readOrderIntakeOriginals } from "@/modules/eingang/server-public";
 import {changeEvidenceVisibility} from '@/lib/server/evidenceVisibilityCommand';
-import {splitUploadVisibility,applyEvidenceUploadVisibility} from '@/lib/server/evidenceVisibilityUpload';
+import {splitUploadVisibility,applyEvidenceUploadVisibility,type UploadVisibilityResult} from '@/lib/server/evidenceVisibilityUpload';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {EVIDENCE_VISIBILITY_COPY} from '@/ui/situationCatalog';
 
 async function finishUploadedEvidenceVisibility(auth:AuthorizationSnapshot,key:string,requested:boolean|undefined){
-  const [{synchronizeEvidenceVisibilityRetryTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([
-    import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
-  return applyEvidenceUploadVisibility(auth,key,requested,{synchronizeTask:(tx,actor,id)=>synchronizeEvidenceVisibilityRetryTask(tx,actor,id,
-    {effect:(writeTx,writer,effect)=>recordIntakeTaskEffect(writeTx,writer,effect,readCustomerProfile)})});
+  return applyEvidenceUploadVisibility(auth,key,requested,{synchronizeTask:async(tx,actor,id)=>{
+    const [{synchronizeEvidenceVisibilityRetryTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([
+      import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+    return synchronizeEvidenceVisibilityRetryTask(tx,actor,id,
+      {effect:(writeTx,writer,effect)=>recordIntakeTaskEffect(writeTx,writer,effect,readCustomerProfile)});
+  }});
 }
 
 async function authorization() {
@@ -47,9 +49,20 @@ export async function finalizeDomainAttachmentAction(input: Parameters<typeof fi
   return flag.code==='OK'?{...result,data:{...result.data,visibilityPending:flag.visibilityPending,...(flag.visibility?{visibility:flag.visibility}:{})}}:flag;
 }
 
-export async function setEvidenceVisibilityAction(input:Parameters<typeof changeEvidenceVisibility>[1]){
+type UploadVisibilityInput={mode:'upload';evidenceKey:string;customerVisible?:boolean};
+type VisibilityActionFailure={code:'UNAUTHENTICATED'|'UNAVAILABLE'|'VALIDATION_ERROR';message:string};
+export async function setEvidenceVisibilityAction(input:UploadVisibilityInput):Promise<UploadVisibilityResult|VisibilityActionFailure>;
+export async function setEvidenceVisibilityAction(input:Parameters<typeof changeEvidenceVisibility>[1]):Promise<Awaited<ReturnType<typeof changeEvidenceVisibility>>|VisibilityActionFailure>;
+export async function setEvidenceVisibilityAction(input:unknown):Promise<UploadVisibilityResult|Awaited<ReturnType<typeof changeEvidenceVisibility>>|VisibilityActionFailure>{
   const auth=await authorization();
-  return auth.ok?changeEvidenceVisibility(auth.data,input):{code:auth.code,message:EVIDENCE_READ_COPY.unavailable};
+  if(!auth.ok)return {code:auth.code,message:EVIDENCE_READ_COPY.unavailable};
+  if(input&&typeof input==='object'&&!Array.isArray(input)&&'mode'in input&&input.mode==='upload'){
+    const value=input as UploadVisibilityInput,keys=Object.keys(value).sort().join(',');
+    if(!['evidenceKey,mode','customerVisible,evidenceKey,mode'].includes(keys)||typeof value.evidenceKey!=='string'||!value.evidenceKey.trim()||value.evidenceKey.length>256
+      ||Object.hasOwn(value,'customerVisible')&&typeof value.customerVisible!=='boolean')return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
+    return finishUploadedEvidenceVisibility(auth.data,value.evidenceKey,value.customerVisible);
+  }
+  return changeEvidenceVisibility(auth.data,input);
 }
 
 export async function attachIntakeDraftAttachmentAction(input: Parameters<typeof attachIntakeDraftAttachment>[1]) {

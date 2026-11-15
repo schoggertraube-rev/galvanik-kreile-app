@@ -184,7 +184,8 @@
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#finishIntakeFileAction": [
-      "src/test/h18_customer_actions.integration.test.ts"
+      "src/test/h18_customer_actions.integration.test.ts",
+      "src/test/acceptance/evidence_visibility_sources.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#discardIntakeCaptureAction": [
       "src/test/h18_customer_actions.integration.test.ts"
@@ -383,6 +384,9 @@
     ],
     "src/app/actions/domainAttachments.actions.ts#finalizeDomainAttachmentAction": [
       "src/test/acceptance/evidence_visibility_upload.integration.test.ts"
+    ],
+    "src/app/warendurchlauf/actions.ts#finalizeGalvanikHandoffAttachmentAction": [
+      "src/test/acceptance/evidence_visibility_sources.integration.test.ts"
     ]
   },
   "writeActionOverrides": {
@@ -439,7 +443,6 @@
     "src/app/marketing/segmente/actions.ts#createSegment": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/marketing/segmente/actions.ts#deleteSegment": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/marketing/segmente/actions.ts#updateSegment": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/warendurchlauf/actions.ts#finalizeGalvanikHandoffAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/warendurchlauf/actions.ts#finalizeOrderIntakeAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/warendurchlauf/actions.ts#reserveGalvanikHandoffAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/warendurchlauf/actions.ts#reserveOrderIntakeAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",

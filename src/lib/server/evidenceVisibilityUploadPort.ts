@@ -18,21 +18,10 @@ function intentId(tenant:string,key:string){
 /** Qualification reads the same secured original, never a replacement file. */
 async function readUploadSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string):Promise<UploadSource>{
  const rows=await tx.execute<EvidenceVisibilityRow&{evidence_key:string;source_kind:string;integrity_ok:boolean;target_links:unknown;actor:string|null;request:string|null;name:string|null;intake_item_id:string|null}>(sql`
-  SELECT original.evidence_key,original.source_kind,original.integrity_ok,original.target_links,
-   original.customer_visible,original.visibility_version,original.visibility_event_id,original.visibility_actor_id,original.visibility_occurred_at,
-   CASE WHEN original.source_kind='LEGACY_SCAN_UPLOAD' THEN scan.uploaded_by::text
-    WHEN original.source_kind='INTAKE_FILE' THEN file.aufgenommen_von::text ELSE evidence.actor_id::text END AS actor,
-   CASE WHEN original.source_kind='LEGACY_SCAN_UPLOAD' THEN scan.client_idempotency_key::text
-    WHEN original.source_kind='INTAKE_FILE' THEN file.id::text ELSE reservation.client_request_id::text END AS request,
-   CASE WHEN original.source_kind='LEGACY_SCAN_UPLOAD' THEN scan.original_storage_path
-    WHEN original.source_kind='INTAKE_FILE' THEN file.dateiname ELSE reservation.object_path END AS name,
-   file.item_id::text AS intake_item_id
-  FROM private.v_evidence_records_v3 original
-  LEFT JOIN public.scan_uploads scan ON original.source_kind='LEGACY_SCAN_UPLOAD' AND scan.tenant_id=original.tenant_id AND scan.id::text=original.source_id
-  LEFT JOIN private.order_station_evidence evidence ON original.source_kind IN ('ORDER_STATION_ATTACHMENT','ORDER_INTAKE_ATTACHMENT') AND evidence.tenant_id=original.tenant_id AND evidence.id::text=original.source_id
-  LEFT JOIN private.order_station_evidence_reservations reservation ON reservation.tenant_id=evidence.tenant_id AND reservation.id=evidence.reservation_id
-  LEFT JOIN public.intake_file file ON original.source_kind='INTAKE_FILE' AND file.tenant_id=original.tenant_id AND file.id::text=original.source_id
-  WHERE original.tenant_id=${auth.tenantId} AND original.evidence_key=${key}`);
+  SELECT evidence_key,source_kind,integrity_ok,target_links,
+   customer_visible,visibility_version,visibility_event_id,visibility_actor_id,visibility_occurred_at,
+   original_actor_id AS actor,original_request_id AS request,original_file_name AS name,original_intake_item_id AS intake_item_id
+  FROM private.v_evidence_records_v3 WHERE tenant_id=${auth.tenantId} AND evidence_key=${key}`);
  const row=rows[0];
  if(rows.length!==1||!row||row.integrity_ok!==true||!row.actor||!row.request||!row.name||!Array.isArray(row.target_links))throw Error('EVIDENCE_UPLOAD_SOURCE_INVALID');
  const links=row.target_links as Array<{targetType:string;targetId:string}>;

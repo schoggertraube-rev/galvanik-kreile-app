@@ -21,6 +21,10 @@ const ports = vi.hoisted(() => ({
 }));
 
 vi.mock("next/cache", () => ({ unstable_noStore: ports.noStore }));
+vi.mock('@/app/actions/domainAttachments.actions',()=>({
+  // Isolated action-forwarding test; S11 real SQL/Storage suites test this port.
+  setEvidenceVisibilityAction:vi.fn(async()=>({code:'OK',visibilityPending:false})),
+}));
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
 }));
@@ -80,8 +84,8 @@ beforeEach(() => {
   ports.readEvidenceByTarget.mockResolvedValue({ code: "OK", data: [] });
   ports.reserve.mockResolvedValue({ code: "OK", data: { receipt: {}, upload: {}, replayed: false } });
   ports.reserveIntake.mockResolvedValue({ code: "OK", data: { receipt: {}, upload: {}, replayed: false } });
-  ports.finalize.mockResolvedValue({ code: "OK", data: { receipt: {}, replayed: false } });
-  ports.finalizeIntake.mockResolvedValue({ code: "OK", data: { receipt: {}, replayed: false } });
+  ports.finalize.mockResolvedValue({ code: "OK", data: { receipt: {receiptId:'55555555-5555-4555-8555-555555555555'}, replayed: false } });
+  ports.finalizeIntake.mockResolvedValue({ code: "OK", data: { receipt: {receiptId:'66666666-6666-4666-8666-666666666666'}, replayed: false } });
   ports.original.mockResolvedValue({ code: "OK", data: { downloadUrl: "https://local.invalid", expiresInSeconds: 60 } });
   ports.originalIntake.mockResolvedValue({ code: "OK", data: { downloadUrl: "https://local.invalid", expiresInSeconds: 60 } });
 });

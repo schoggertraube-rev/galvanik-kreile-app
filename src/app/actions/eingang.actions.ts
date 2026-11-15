@@ -3,6 +3,8 @@ import {repairInvoiceReissueTask} from '@/lib/server/commands/immutableInvoiceCo
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {repairEvidenceVisibilityTask} from '@/lib/server/evidenceVisibilityUploadPort';
+import {applyEvidenceUploadVisibility} from '@/lib/server/evidenceVisibilityUpload';
+import {EVIDENCE_VISIBILITY_COPY} from '@/ui/situationCatalog';
 import {repairProductionPricingTask} from '@/lib/server/productionSnapshotPort';
 import {repairCancellationCreditTask} from '@/lib/server/commands/customerCreditCommand';
 import {offlinePartition} from "@/lib/server/offlinePartition";
@@ -267,9 +269,16 @@ export async function prepareIntakeFileAction(input: unknown,pendingScope?:strin
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
  return prepareIntakeFile(input);
 }
-export async function finishIntakeFileAction(fileId: string,pendingScope?:string) {
+export async function finishIntakeFileAction(fileId: string,pendingScope?:string,customerVisible?:boolean) {
+ if(customerVisible!==undefined&&typeof customerVisible!=='boolean')return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
- return finishIntakeFile(fileId);
+ const result=await finishIntakeFile(fileId);if(result.code!=='OK')return result;
+ const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:EVIDENCE_VISIBILITY_COPY.save};
+ const {synchronizeEvidenceVisibilityRetryTask}=await import('@/modules/tasks/server-public');
+ const flag=await applyEvidenceUploadVisibility(auth.data,'intake-file:'+fileId,customerVisible,
+  {synchronizeTask:(tx,actor,id)=>synchronizeEvidenceVisibilityRetryTask(tx,actor,id,
+   {effect:(writeTx,writer,effect)=>recordIntakeTaskEffect(writeTx,writer,effect,readCustomerProfile)})});
+ return flag.code==='OK'?{...result,visibilityPending:flag.visibilityPending,...(flag.visibility?{visibility:flag.visibility}:{})}:flag;
 }
 export async function getIntakePendingScopeAction() { return readIntakePendingScope(); }
 export async function getIntakeFileChangesAction(since: string, after: string | null) { return readIntakeFileChanges(since, after); }

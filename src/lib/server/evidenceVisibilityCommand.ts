@@ -51,6 +51,17 @@ export async function changeEvidenceVisibility(auth:AuthorizationSnapshot,input:
 export async function changeEvidenceVisibilityInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:ChangeEvidenceVisibilityInput):Promise<Result>{
  if(!valid(input))return {code:'VALIDATION_ERROR',message:copy.invalid};
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'evidence-visibility-request:'+auth.tenantId+':'+input.clientEventId},0))`);
+   const previous=await tx.execute<{evidence_key:string;version:number;customer_visible:boolean;actor_id:string;id:string;occurred_at:Date|string}>(sql`
+    SELECT evidence_key,version,customer_visible,actor_id::text,id::text,occurred_at
+    FROM private.evidence_visibility_events WHERE tenant_id=${auth.tenantId} AND client_event_id=${input.clientEventId}::uuid AND record_kind='change'`);
+   if(previous.length>1)throw Error('EVIDENCE_VISIBILITY_REQUEST_AMBIGUOUS');
+   if(previous[0]){
+    const event=previous[0];
+    if(event.evidence_key!==input.evidenceKey||event.actor_id!==auth.userId||event.customer_visible!==input.customerVisible||event.version!==input.expectedVersion+1)
+     return {code:'CONFLICT',message:copy.conflict};
+    return {code:'OK',data:mapEvidenceVisibility({customer_visible:event.customer_visible,visibility_version:event.version,
+     visibility_event_id:event.id,visibility_actor_id:event.actor_id,visibility_occurred_at:event.occurred_at}),replayed:true};
+   }
    const initial=await source(tx,auth,input.evidenceKey);
    if(!initial)return {code:'NOT_FOUND',message:copy.missing};
    if(!canChangeEvidenceVisibility(auth,initial.source_kind))return {code:'FORBIDDEN',message:copy.forbidden};
@@ -60,23 +71,12 @@ export async function changeEvidenceVisibilityInTransaction(tx:PrivilegedTenantT
     const orders=await tx.execute<{status:string;order_number:string|null}>(sql`SELECT status,order_number FROM public.orders
      WHERE tenant_id=${auth.tenantId} AND id=${id} FOR UPDATE`);
     if(orders.length!==1)throw Error('EVIDENCE_VISIBILITY_ORDER_MISSING');
-    if(orders[0].status==='storniert')return {code:'CONFLICT',message:copy.cancelled(orders[0].order_number??id)};
+    if(input.customerVisible&&orders[0].status==='storniert')return {code:'CONFLICT',message:copy.cancelled(orders[0].order_number??id)};
    }
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'evidence-visibility:'+auth.tenantId+':'+input.evidenceKey},0))`);
    const current=await source(tx,auth,input.evidenceKey);
    if(!current||current.integrity_ok!==true||JSON.stringify(orderIds(current))!==JSON.stringify(ids))throw Error('EVIDENCE_VISIBILITY_SOURCE_CHANGED');
    const visibility=mapEvidenceVisibility(current);
-   const previous=await tx.execute<{evidence_key:string;version:number;customer_visible:boolean;actor_id:string;id:string;occurred_at:Date|string}>(sql`
-    SELECT evidence_key,version,customer_visible,actor_id::text,id::text,occurred_at
-    FROM private.evidence_visibility_events WHERE tenant_id=${auth.tenantId} AND client_event_id=${input.clientEventId}::uuid AND record_kind='change'`);
-   if(previous.length>1)throw Error('EVIDENCE_VISIBILITY_REQUEST_AMBIGUOUS');
-   if(previous[0]){
-    const event=previous[0];
-    if(event.evidence_key!==input.evidenceKey||event.actor_id!==auth.userId||event.customer_visible!==input.customerVisible||event.version!==input.expectedVersion+1)
-     return {code:'CONFLICT',message:copy.conflict,current:visibility};
-    return {code:'OK',data:mapEvidenceVisibility({customer_visible:event.customer_visible,visibility_version:event.version,
-     visibility_event_id:event.id,visibility_actor_id:event.actor_id,visibility_occurred_at:event.occurred_at}),replayed:true};
-   }
    if(visibility.version!==input.expectedVersion)return {code:'CONFLICT',message:copy.conflict,current:visibility};
    if(visibility.customerVisible===input.customerVisible)return {code:'OK',data:visibility,replayed:false};
    const id=randomUUID();

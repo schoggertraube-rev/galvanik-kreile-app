@@ -46,7 +46,7 @@
       "private.v_order_item_extra_work_receipts_v1"
     ],
     "src/lib/server/commands/orderFreezeCommand.ts": [
-      "private.v_evidence_records_v2",
+      "private.v_evidence_records_v3",
       "private.v_order_freeze_state_v1",
       "private.v_order_frozen_receipts_v1"
     ],
@@ -103,6 +103,12 @@
       "private.v_customer_effective_agreement_v1"
     ],
     "src/lib/server/evidenceRead.ts": [
+      "private.v_evidence_records_v3"
+    ],
+    "src/lib/server/evidenceVisibilityCommand.ts": [
+      "private.v_evidence_records_v3"
+    ],
+    "src/lib/server/evidenceVisibilityUploadPort.ts": [
       "private.v_evidence_records_v3"
     ],
     "src/lib/server/extraWorkReceiptRead.ts": [
