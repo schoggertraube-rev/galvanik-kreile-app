@@ -407,6 +407,7 @@
       "exported_functions": [
         "reserveDomainAttachmentAction",
         "finalizeDomainAttachmentAction",
+        "setEvidenceVisibilityAction",
         "attachIntakeDraftAttachmentAction",
         "getDomainAttachmentsAction",
         "getDomainAttachmentOriginalAction",

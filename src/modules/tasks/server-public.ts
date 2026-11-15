@@ -25,3 +25,4 @@ export {synchronizeQuoteOrderRetryTask} from './server/taskService';
 export {createMailboxFetchRetryTask} from './server/taskService';
 
 export {createIntakeMailFailureTask} from './server/taskService';
+export {synchronizeEvidenceVisibilityRetryTask} from './server/taskService';

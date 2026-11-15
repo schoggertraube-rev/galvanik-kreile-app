@@ -3,8 +3,9 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import {hasAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import {mapEvidenceVisibility,type EvidenceVisibility,type EvidenceVisibilityRow} from '@/lib/domain/evidenceVisibility';
 
-export type DocumentSearchRecord = { id: string; customerId: string; orderId: string | null; customerName: string; orderNumber: string | null; mimeType: string; status: string; content: string; recordedAt: string };
+export type DocumentSearchRecord = { id: string; customerId: string; orderId: string | null; customerName: string; orderNumber: string | null; mimeType: string; status: string; content: string; recordedAt: string; visibility: EvidenceVisibility };
 export type MailSearchRecord = { id: string; customerId: string; orderId: string | null; customerName: string; orderNumber: string | null; subject: string; status: string; body: string; direction: string; recordedAt: string };
 export type AppointmentSearchRecord = { id: string; customerId: string | null; orderId: string | null; customerName: string | null; orderNumber: string | null; title: string; eventType: string; status: string; startsAt: string };
 export type AuxiliarySearchRecords = { documents: DocumentSearchRecord[]; mails: MailSearchRecord[]; appointments: AppointmentSearchRecord[]; exhaustive: boolean };
@@ -19,14 +20,15 @@ export async function readAuxiliarySearchRecords(auth: AuthorizationSnapshot): P
   if (!auth.permissions.includes("perm_view_leitstand")) throw new Error("AUXILIARY_SEARCH_FORBIDDEN");
   return withPrivilegedTenantTransaction(auth, async (tx) => {
     const [documents, mails, appointments] = await Promise.all([
-      tx.execute<{ id:string; customer_id:string; order_id:string|null; customer_name:string; order_number:string|null; file_type:string|null; status:string; extracted_data:unknown; recorded_at:Date|string }>(sql`
+      tx.execute<EvidenceVisibilityRow & { id:string; customer_id:string; order_id:string|null; customer_name:string; order_number:string|null; file_type:string|null; status:string; extracted_data:unknown; recorded_at:Date|string }>(sql`
         SELECT evidence.source_id AS id, links.customer_id, links.order_id,
           customer.name AS customer_name, orders.order_number,
           evidence.original_mime_type AS file_type,
           CASE WHEN evidence.extraction_state = 'LEGACY_RECORDED' THEN 'ocr_review' ELSE 'secured' END AS status,
-          evidence.extracted_data,
+          evidence.extracted_data,evidence.customer_visible,evidence.visibility_version,
+          evidence.visibility_event_id,evidence.visibility_actor_id,evidence.visibility_occurred_at,
           coalesce(evidence.original_secured_at, evidence.recorded_at) AS recorded_at
-        FROM private.v_evidence_records_v2 evidence
+        FROM private.v_evidence_records_v3 evidence
         CROSS JOIN LATERAL (
           SELECT
             max(target ->> 'targetId') FILTER (WHERE target ->> 'targetType' = 'CUSTOMER') AS customer_id,
@@ -66,7 +68,7 @@ export async function readAuxiliarySearchRecords(auth: AuthorizationSnapshot): P
       `),
     ]);
     return {
-      documents: documents.map((row) => ({ id:row.id, customerId:row.customer_id, orderId:row.order_id, customerName:row.customer_name, orderNumber:row.order_number, mimeType:row.file_type ?? "Dokument", status:row.status, content:row.extracted_data ? JSON.stringify(row.extracted_data).slice(0, 20_000) : "", recordedAt:timestamp(row.recorded_at) })),
+      documents: documents.map((row) => ({ id:row.id, customerId:row.customer_id, orderId:row.order_id, customerName:row.customer_name, orderNumber:row.order_number, mimeType:row.file_type ?? "Dokument", status:row.status, content:row.extracted_data ? JSON.stringify(row.extracted_data).slice(0, 20_000) : "", recordedAt:timestamp(row.recorded_at),visibility:mapEvidenceVisibility(row) })),
       mails: mails.map((row) => ({ id:row.id, customerId:row.customer_id, orderId:row.order_id, customerName:row.customer_name, orderNumber:row.order_number, subject:row.subject?.trim() || "Ohne Betreff", status:row.status?.trim() || "gespeichert", body:row.body?.slice(0, 20_000) ?? "", direction:row.direction?.trim() || "email", recordedAt:timestamp(row.recorded_at) })),
       appointments: appointments.map((row) => ({ id:row.id, customerId:row.customer_id, orderId:row.order_id, customerName:row.customer_name, orderNumber:row.order_number, title:row.title, eventType:row.event_type, status:row.status, startsAt:timestamp(row.starts_at) })),
       exhaustive: documents.length < 250 && mails.length < 250 && appointments.length < 250,

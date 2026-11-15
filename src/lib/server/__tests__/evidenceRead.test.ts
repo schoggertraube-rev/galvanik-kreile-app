@@ -57,6 +57,7 @@ const currentRow = {
   ],
   recorded_at: "2026-08-12T00:02:00.000Z",
   integrity_ok: true,
+  customer_visible:false,visibility_version:0,visibility_event_id:null,visibility_actor_id:null,visibility_occurred_at:null,
 };
 
 const legacyRow = {
@@ -84,6 +85,7 @@ const legacyRow = {
   ],
   recorded_at: "2026-08-12T00:02:00.000Z",
   integrity_ok: true,
+  customer_visible:false,visibility_version:0,visibility_event_id:null,visibility_actor_id:null,visibility_occurred_at:null,
 };
 
 beforeEach(() => {
@@ -128,7 +130,7 @@ describe("W4 canonical Evidence read port", () => {
     });
     expect(ports.withTransaction).toHaveBeenCalledWith(authorization, expect.any(Function));
     const query = ports.execute.mock.calls[0]?.[0] as { text: string; values: unknown[] };
-    expect(query.text).toContain("FROM private.v_evidence_records_v2");
+    expect(query.text).toContain("FROM private.v_evidence_records_v3");
     expect(query.text).not.toContain("public.scan_uploads");
     expect(query.values).toEqual([ORDER, ITEM]);
   });
@@ -149,7 +151,7 @@ describe("W4 canonical Evidence read port", () => {
       data: [expect.objectContaining({ source: "LEGACY_SCAN_UPLOAD", targets: row.target_links })],
     });
     const query = ports.execute.mock.calls.at(-1)?.[0] as { text: string; values: unknown[] };
-    expect(query.text).toContain("FROM private.v_evidence_records_v2");
+    expect(query.text).toContain("FROM private.v_evidence_records_v3");
     expect(query.values).toEqual([targetType, targetId]);
   });
 
@@ -183,7 +185,7 @@ describe("W4 canonical Evidence read port", () => {
   it("source-locks cross-module reads to the versioned view and never exposes legacy object URLs", async () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
     const source = await readFile(path.join(root, "src/lib/server/evidenceRead.ts"), "utf8");
-    expect(source).toContain("private.v_evidence_records_v2");
+    expect(source).toContain("private.v_evidence_records_v3");
     expect(source).not.toContain("public.scan_uploads");
     expect(source).not.toContain("file_url");
     expect(source).not.toContain("createAdminClient");

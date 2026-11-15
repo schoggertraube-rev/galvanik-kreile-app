@@ -2,6 +2,9 @@
 import {repairInvoiceReissueTask} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
+import {repairEvidenceVisibilityTask} from '@/lib/server/evidenceVisibilityUploadPort';
+import {applyEvidenceUploadVisibility} from '@/lib/server/evidenceVisibilityUpload';
+import {EVIDENCE_VISIBILITY_COPY} from '@/ui/situationCatalog';
 import {repairProductionPricingTask} from '@/lib/server/productionSnapshotPort';
 import {repairCancellationCreditTask} from '@/lib/server/commands/customerCreditCommand';
 import {offlinePartition} from "@/lib/server/offlinePartition";
@@ -56,7 +59,7 @@ import type {TaskOpenRequest} from '@/modules/tasks/public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
-const taskEffects={beforeComplete:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:import('@/modules/tasks/public').TaskRecord,input:import('@/modules/tasks/public').TaskCompleteInput)=>{if(!await repairInvoiceReissueTask(tx,auth,task)){const creditBlocked=await repairCancellationCreditTask(tx,auth,task);if(creditBlocked)return creditBlocked;}await repairProductionPricingTask(tx,auth,task);const blocked=await recordDispatchCallResult(tx,auth,task,input);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,input);},effect:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>{
+const taskEffects={beforeComplete:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:import('@/modules/tasks/public').TaskRecord,input:import('@/modules/tasks/public').TaskCompleteInput)=>{if(!await repairInvoiceReissueTask(tx,auth,task)){const creditBlocked=await repairCancellationCreditTask(tx,auth,task);if(creditBlocked)return creditBlocked;}await repairProductionPricingTask(tx,auth,task);await repairEvidenceVisibilityTask(tx,auth,task);const blocked=await recordDispatchCallResult(tx,auth,task,input);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,input);},effect:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>{
  const blocked=await protectDispatchCallTask(tx,auth,input);if(blocked)return blocked;
  const storageBlocked=await protectStorageFinalTask(tx,auth,input);if(storageBlocked)return storageBlocked;
  await protectStoragePostalTask(tx,auth,input);
@@ -95,7 +98,7 @@ export async function completeIntakeTaskAction(input:unknown){
   if(!orders.ok)return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
   const taskId='taskId' in input?input.taskId:null;
   const answered=orders.data.filter(order=>['STOPPED','PAUSED','APPOINTMENT_EXPIRED'].includes(order.finishedDispatch?.reminder?.state??'')||['CALL_NOT_REACHED'].includes(order.finishedDispatch?.reminder?.state??'')&&!!order.finishedDispatch?.reminder?.callTaskId&&order.finishedDispatch.reminder.callTaskId!==taskId).map(order=>({id:order.id,version:order.version}));
-  return completeTask(input,{...taskEffects,beforeComplete:async(tx,auth,task,value)=>{if(!await repairInvoiceReissueTask(tx,auth,task)){const creditBlocked=await repairCancellationCreditTask(tx,auth,task);if(creditBlocked)return creditBlocked;}await repairProductionPricingTask(tx,auth,task);const blocked=await recordDispatchCallResult(tx,auth,task,value,answered);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,value);}});
+  return completeTask(input,{...taskEffects,beforeComplete:async(tx,auth,task,value)=>{if(!await repairInvoiceReissueTask(tx,auth,task)){const creditBlocked=await repairCancellationCreditTask(tx,auth,task);if(creditBlocked)return creditBlocked;}await repairProductionPricingTask(tx,auth,task);await repairEvidenceVisibilityTask(tx,auth,task);const blocked=await recordDispatchCallResult(tx,auth,task,value,answered);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,value);}});
  }
  return completeTask(input,taskEffects);
 }
@@ -266,9 +269,19 @@ export async function prepareIntakeFileAction(input: unknown,pendingScope?:strin
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
  return prepareIntakeFile(input);
 }
-export async function finishIntakeFileAction(fileId: string,pendingScope?:string) {
+export async function finishIntakeFileAction(fileId: string,pendingScope?:string,customerVisible?:boolean) {
+ if(customerVisible!==undefined&&typeof customerVisible!=='boolean')return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
- return finishIntakeFile(fileId);
+ const result=await finishIntakeFile(fileId);if(result.code!=='OK')return result;
+ const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:EVIDENCE_VISIBILITY_COPY.save};
+ const {synchronizeEvidenceVisibilityRetryTask}=await import('@/modules/tasks/server-public');
+ const flag=await applyEvidenceUploadVisibility(auth.data,'intake-file:'+fileId,customerVisible,
+  {synchronizeTask:(tx,actor,id)=>synchronizeEvidenceVisibilityRetryTask(tx,actor,id,
+   {effect:(writeTx,writer,effect)=>recordIntakeTaskEffect(writeTx,writer,effect,readCustomerProfile)})});
+ // No visibility intent means the unchanged native capture receipt. Its fresh
+ // read and historical retries must retain the same default response shape.
+ if(flag.code==='OK'&&!flag.visibility&&!flag.visibilityPending)return result;
+ return flag.code==='OK'?{...result,visibilityPending:flag.visibilityPending,...(flag.visibility?{visibility:flag.visibility}:{})}:flag;
 }
 export async function getIntakePendingScopeAction() { return readIntakePendingScope(); }
 export async function getIntakeFileChangesAction(since: string, after: string | null) { return readIntakeFileChanges(since, after); }

@@ -366,7 +366,7 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
       }
       const pendingItemCount = itemRows.filter((item) => item.current_station_id === SOURCE_STATION).length;
       const missingPhotos=await tx.execute<{id:string}>(sql`SELECT item.id FROM public.items item WHERE item.tenant_id=${authorization.data.tenantId} AND item.order_id=${order.id}
-        AND NOT EXISTS(SELECT 1 FROM private.v_evidence_records_v2 photo WHERE photo.tenant_id=item.tenant_id
+        AND NOT EXISTS(SELECT 1 FROM private.v_evidence_records_v3 photo WHERE photo.tenant_id=item.tenant_id
           AND photo.source_kind='ORDER_STATION_ATTACHMENT' AND photo.integrity_ok=true AND photo.original_state='VERIFIED'
           AND photo.original_mime_type IN ('image/jpeg','image/png','image/webp')
           AND photo.target_links @> jsonb_build_array(jsonb_build_object('targetType','ORDER','targetId',item.order_id),jsonb_build_object('targetType','ORDER_ITEM','targetId',item.id)))`);

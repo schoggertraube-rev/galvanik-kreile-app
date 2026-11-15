@@ -1,4 +1,16 @@
 /** PL13.11.00:14 immutable invoice VAT display. */
+/** Existing evidence-read wording, shared by the original and visibility read. */
+export const EVIDENCE_READ_COPY={unavailable:'Nachweise konnten nicht sicher geladen werden.'} as const;
+export const EVIDENCE_VISIBILITY_COPY={
+ invalid:'Wähle das Foto erneut.',missing:'Das Foto ist nicht mehr da. Lade den Auftrag neu.',
+ forbidden:'Die Sichtbarkeit von Fotos darfst du nicht ändern.',conflict:'Das Foto wurde gerade geändert. Lade es neu und wähle die Sichtbarkeit noch einmal.',
+ save:'Die Sichtbarkeit ist nicht gespeichert. Versuch es erneut.',
+ cancelled:(order:string)=>`Auftrag ${order} ist storniert – die Foto-Freigabe entfällt.`,
+ toCustomer:'Für Kunden sichtbar machen',toInternal:'Nur intern zeigen',
+ customerHistory:(name:string)=>`Foto ${name} für Kunden freigegeben`,
+ internalHistory:(name:string)=>`Foto ${name} auf intern gesetzt`,
+ retryTask:(name:string)=>`Sichtbarkeit von Foto ${name} erneut speichern`,
+} as const;
 export const INVOICE_VAT_COPY={missingCompanyRate:(part:string)=>`Für ${part} fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.`,missingRate:(part:string)=>`Für ${part} fehlt der Steuersatz (19 % oder 7 %).`,groupNet:(rate:string)=>"Netto ("+rate+")",groupVat:(rate:string)=>"zzgl. USt ("+rate+")",cancelNet:(rate:string)=>"Storno netto ("+rate+")",cancelVat:(rate:string)=>"Storno USt ("+rate+")",reverseCharge:"Steuerschuldnerschaft des Leistungsempfängers",vatId:"USt-IdNr.:"} as const;
 /** PL13.11.00:14 deferred sales-stage sources. */
 export const DEFERRED_LEGACY_COPY={unavailable:"Kommt nach dem Start dazu - bis dahin ausgeschaltet."} as const;

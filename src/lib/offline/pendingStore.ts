@@ -11,7 +11,7 @@ import {isManualHandoverInput,isManualHandoverCommandReceipt,type ManualHandover
 import {isShipmentGroupInput,isShipmentGroupReceipt,type ShipmentGroupInput} from '@/lib/domain/shipmentGroupContract';
 import {isDeliveryNoteInput,isDeliveryNoteReceipt,type DeliveryNoteInput} from '@/lib/domain/deliveryNoteContract';
 // Unacknowledged originals in one scoped queue. Server remains authoritative.
-export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
+export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; customerVisible?:boolean; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
   | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number;takeover?:IntakeOriginalTakeover;takeoverSourceCanonical?:string};
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingFinancialCommand=
@@ -339,6 +339,7 @@ async function changeDelayedWorkshop(scope:string,id:string,mode:'claim'|'withdr
 }
 type RequiredDeviceStand={loginScope:string;cacheGeneration:number;serverReadAt:string};
 async function retainOriginal(scope:string,original:PendingOriginal|PendingWorkshopOriginal,requiredStand?:RequiredDeviceStand):Promise<void>{
+ if(original.kind==='file'&&original.customerVisible!==undefined&&typeof original.customerVisible!=='boolean')throw Error('EVIDENCE_CAPTURE_VISIBILITY_INVALID');
  const connection=await database(scope);
  return new Promise((resolve,reject)=>{
   const tx=connection.transaction(requiredStand?[STORE,SHELL_STORE,DEVICE_STORE]:STORE,"readwrite"),store=tx.objectStore(STORE);
@@ -362,6 +363,7 @@ async function retainOriginal(scope:string,original:PendingOriginal|PendingWorks
    // provenance while it still awaits the server receipt.
    if(original.kind==='file'&&previous?.kind==='file'){store.put(previous);return;}
    const value={...original};delete value.deviceCapturedAt;
+   if(value.kind==='file'&&value.customerVisible===undefined)delete value.customerVisible;
    if(value.kind==='note'&&previous?.kind==='note'&&previous.takeover){value.takeover=previous.takeover;value.takeoverSourceCanonical=previous.takeoverSourceCanonical;}
    if(value.kind==='note'){delete value.expectedVersion;if(expectedVersion!==undefined)value.expectedVersion=expectedVersion;}
    if(deviceCapturedAt)value.deviceCapturedAt=deviceCapturedAt;
@@ -406,12 +408,13 @@ export async function adoptQuarantinedOriginal(scope:string,sourceId:string,devi
  let source=wrapper.original&&typeof wrapper.original==='object'&&!Array.isArray(wrapper.original)?wrapper.original as Record<string,unknown>:wrapper;
  if(source.text===undefined&&source.file===undefined&&source.payload&&typeof source.payload==='object'&&!Array.isArray(source.payload))source=source.payload as Record<string,unknown>;
  const file=typeof File!=='undefined'&&source.file instanceof File?source.file:null;
+ if(file&&Object.hasOwn(source,'customerVisible')&&typeof source.customerVisible!=='boolean')return {code:'SOURCE_INCOMPLETE' as const};
  const text=typeof source.text==='string'&&source.text.trim()?source.text:!file&&!containsBinary(source)?quarantineCanonical(source):null;
  if(!file&&(!text||text.length>20000))return {code:'SOURCE_INCOMPLETE' as const};
  const serialized=quarantineCanonical(raw);if(serialized.length>250000)return {code:'SOURCE_INCOMPLETE' as const};
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(serialized))),byte=>byte.toString(16).padStart(2,'0')).join('');
  const id=crypto.randomUUID(),metadata={takeover:{sourceId,deviceId,sha256:hash,originalRecord:serialized},takeoverSourceCanonical:serialized,deviceCapturedAt:new Date().toISOString()};
- const original:PendingOriginal=file?{...metadata,kind:'file',id,itemId:crypto.randomUUID(),file,deviceId,captureOrigin:'dokument'}:{...metadata,kind:'note',id,itemId:id,text:text!,textstand:crypto.randomUUID(),dismissed:[],expectedVersion:0};
+ const original:PendingOriginal=file?{...metadata,kind:'file',id,itemId:crypto.randomUUID(),file,deviceId,captureOrigin:'dokument',...(typeof source.customerVisible==='boolean'?{customerVisible:source.customerVisible}:{})}:{...metadata,kind:'note',id,itemId:id,text:text!,textstand:crypto.randomUUID(),dismissed:[],expectedVersion:0};
  const db=await database(scope);
  return new Promise<{code:'OK';original:PendingOriginal}|{code:'SOURCE_INCOMPLETE'}>((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.getAll();let saved:PendingOriginal|undefined;
@@ -437,7 +440,8 @@ export async function readPendingEntries(scope:string):Promise<PendingEntry[]> {
   const original=row as unknown as PendingOriginal;
   const projectedId="quarantine:"+quarantineKey(row.id);
   const isOriginal=typeof row.id==='string'&&typeof row.itemId==="string"&&(row.kind==="note"&&typeof row.text==="string"&&typeof row.textstand==="string"&&Array.isArray(row.dismissed)&&row.dismissed.every(item=>typeof item==="string")||row.kind==="file"&&typeof row.file==="object"&&row.file!==null&&typeof (row.file as File).arrayBuffer==="function"&&typeof (row.file as File).name==="string");
-  if(isOriginal)return original;
+  const visibilityKnown=row.kind!=='file'||!Object.hasOwn(row,'customerVisible')||typeof row.customerVisible==='boolean';
+  if(isOriginal&&visibilityKnown)return original;
   if(isPendingWorkshopOriginal(row)){
    if(!row.rejection||isWorkshopRejectionReceipt(scope,row,row.rejection))return row;
    return {id:projectedId,kind:'quarantine',capturedAt:'',payload:row};

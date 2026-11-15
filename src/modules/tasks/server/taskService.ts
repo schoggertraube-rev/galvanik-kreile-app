@@ -1,4 +1,6 @@
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
+import {readEvidenceVisibilityRetrySource} from '@/lib/server/evidenceVisibilityUploadPort';
+import {EVIDENCE_VISIBILITY_COPY} from '@/ui/situationCatalog';
 import {canChangeOrderHandover} from '@/lib/auth/authorizationContract';
 import {readManualHandoverSource} from '@/lib/server/orderHandoverSourcePort';
 import {ORDER_HANDOVER_COPY} from '@/ui/situationCatalog';
@@ -473,6 +475,25 @@ export async function settleProductionPricingRetryTasks(tx:PrivilegedTenantTrans
  const keys=await readProductionPricingRetryKeys(tx,auth,eventId);if(!keys.length)return;
  const tasks=await tx.execute<{id:string;version:number;client_key:string}>(sql`SELECT id::text,version,client_key::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=ANY(ARRAY[${sql.join(keys.map(key=>sql`${key}::uuid`),sql`, `)}]) AND status='offen' FOR UPDATE NOWAIT`);
  for(const task of tasks){const source=await readProductionPricingRetrySource(tx,auth,task.client_key);if(!source||source.pending)continue;if(source.actorId!==auth.userId)throw Error('PRODUCTION_PRICING_SETTLEMENT_ACTOR');await finishTask(tx,auth,{taskId:task.id,version:task.version,note:null},deps);}
+}
+
+/** S11/R2: the same task writer, bound to the immutable original upload intent. */
+export async function synchronizeEvidenceVisibilityRetryTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string,deps:Dependencies){
+ const source=await readEvidenceVisibilityRetrySource(tx,auth,markerId);
+ if(!source||source.actorId!==auth.userId)throw Error('EVIDENCE_VISIBILITY_TASK_ORIGINAL_ACTOR');
+ const prior=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${markerId}::uuid FOR UPDATE NOWAIT`);
+ const task=prior[0];
+ if(prior.length>1||task&&(task.art!=='aufgabe'||task.erstellt_von!==source.actorId||task.bezug_typ!==source.reference.type||task.bezug_id!==source.reference.id))throw Error('EVIDENCE_VISIBILITY_TASK_CHANGED');
+ if(!source.pending){
+  if(task?.status==='offen')await finishTask(tx,auth,{taskId:task.id,version:task.version,note:null},deps);
+  return task?.id??null;
+ }
+ if(task){if(task.status!=='offen')throw Error('EVIDENCE_VISIBILITY_PENDING_TASK_CLOSED');return task.id;}
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ const budget=120-EVIDENCE_VISIBILITY_COPY.retryTask('').length;
+ const name=source.name.length>budget?source.name.slice(0,budget-1)+'…':source.name;
+ return (await persistTask(tx,auth,{clientKey:markerId,version:0,kind:'aufgabe',title:EVIDENCE_VISIBILITY_COPY.retryTask(name),
+  dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:source.reference,note:source.description},deps,false)).task.id;
 }
 
 /** R2 mailbox reservation is qualified by the owning port before this callback.

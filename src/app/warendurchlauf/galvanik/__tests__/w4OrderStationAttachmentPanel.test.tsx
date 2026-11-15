@@ -198,6 +198,7 @@ function evidenceRecord(
     evidenceKey: `order-station-attachment:${RECEIPT}`,
     source: "ORDER_STATION_ATTACHMENT" as const,
     sourceId: RECEIPT,
+    visibility:{customerVisible:false,version:0,eventId:null,actorId:null,occurredAt:null},
     original: {
       state: "VERIFIED" as const,
       hash: ZERO_SHA,

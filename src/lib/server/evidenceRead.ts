@@ -2,7 +2,9 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { mapEvidenceVisibility, type EvidenceVisibility, type EvidenceVisibilityRow } from "@/lib/domain/evidenceVisibility";
+import {EVIDENCE_READ_COPY} from '@/ui/situationCatalog';
 
 const MAX_ID_LENGTH = 128;
 const MAX_STATION_ORIGINAL_BYTES = 12 * 1024 * 1024;
@@ -19,6 +21,7 @@ export type EvidenceReadRecord = {
   evidenceKey: string;
   source: "ORDER_STATION_ATTACHMENT" | "ORDER_INTAKE_ATTACHMENT" | "LEGACY_SCAN_UPLOAD";
   sourceId: string;
+  visibility: EvidenceVisibility;
   original: {
     state: "VERIFIED" | "LEGACY_RECORDED" | "LEGACY_PARTIAL" | "NOT_RECORDED";
     hash: string | null;
@@ -48,7 +51,22 @@ export type EvidenceReadResult<T> =
 export type ReadOrderEvidenceInput = { orderId: string; itemId: string };
 export type ReadEvidenceTargetInput = { targetType: EvidenceTargetType; targetId: string };
 
-type EvidenceViewRow = {
+/** Metadata join for callers that already read their canonical original links.
+ * The caller's transaction keeps original and visibility reads together. */
+export async function readEvidenceVisibilityByKeys(tx:PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,keys:readonly string[]):Promise<Map<string,EvidenceVisibility>> {
+  if(!authorization.permissions.includes('perm_view_leitstand'))throw Error('EVIDENCE_VISIBILITY_READ_FORBIDDEN');
+  const expected=[...new Set(keys)];
+  if(expected.length===0)return new Map();
+  const rows=await tx.execute<EvidenceVisibilityRow & {evidence_key:string}>(sql`
+    SELECT evidence_key,customer_visible,visibility_version,visibility_event_id,visibility_actor_id,visibility_occurred_at
+    FROM private.v_evidence_records_v3 WHERE tenant_id=${authorization.tenantId}
+      AND evidence_key IN (${sql.join(expected.map(key=>sql`${key}`),sql`, `)})`);
+  if(rows.length!==expected.length||new Set(rows.map(row=>row.evidence_key)).size!==expected.length
+    ||rows.some(row=>!expected.includes(row.evidence_key)))throw Error('EVIDENCE_VISIBILITY_SOURCE_INCOMPLETE');
+  return new Map(rows.map(row=>[row.evidence_key,mapEvidenceVisibility(row)]));
+}
+
+type EvidenceViewRow = EvidenceVisibilityRow & {
   evidence_key: string;
   source_kind: string;
   source_id: string;
@@ -225,6 +243,7 @@ function mapRecord(
     evidenceKey: row.evidence_key,
     source: row.source_kind as EvidenceReadRecord["source"],
     sourceId: row.source_id,
+    visibility: mapEvidenceVisibility(row),
     original: {
       state: row.original_state as EvidenceReadRecord["original"]["state"],
       hash: row.original_hash,
@@ -264,8 +283,9 @@ export async function readEvidenceRecordsByTarget(
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<EvidenceViewRow>(sql`
         SELECT *
-        FROM private.v_evidence_records_v2
-        WHERE target_links @> jsonb_build_array(
+        FROM private.v_evidence_records_v3
+        WHERE source_kind <> 'INTAKE_FILE'
+          AND target_links @> jsonb_build_array(
           jsonb_build_object(
             'targetType', ${input.targetType}::text,
             'targetId', ${input.targetId}::text
@@ -277,7 +297,7 @@ export async function readEvidenceRecordsByTarget(
     });
     return { code: "OK", data };
   } catch {
-    return { code: "UNAVAILABLE", message: "Nachweise konnten nicht sicher geladen werden." };
+    return { code: "UNAVAILABLE", message: EVIDENCE_READ_COPY.unavailable };
   }
 }
 
@@ -295,8 +315,9 @@ export async function readOrderEvidenceRecords(
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<EvidenceViewRow>(sql`
         SELECT *
-        FROM private.v_evidence_records_v2
-        WHERE target_links @> jsonb_build_array(
+        FROM private.v_evidence_records_v3
+        WHERE source_kind <> 'INTAKE_FILE'
+          AND target_links @> jsonb_build_array(
           jsonb_build_object('targetType', 'ORDER', 'targetId', ${input.orderId}::text)
         )
           AND (
@@ -318,6 +339,6 @@ export async function readOrderEvidenceRecords(
     });
     return { code: "OK", data };
   } catch {
-    return { code: "UNAVAILABLE", message: "Nachweise konnten nicht sicher geladen werden." };
+    return { code: "UNAVAILABLE", message: EVIDENCE_READ_COPY.unavailable };
   }
 }
