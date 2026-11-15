@@ -1,0 +1,75 @@
+import {randomUUID} from 'node:crypto';
+import {expect,it} from 'vitest';
+import {KREILE_TENANT_SLUG} from '@/lib/tenant';
+import {sql,full,withSession,createFixture} from './replayHarness';
+import {readyInvoiceOrder} from './orderFixture';
+
+it.each([0,1,3])('W-GELD G1/G2 H10/H15 observes %i real payment parts, rejects the old remainder and settles only the reread balance',async count=>{
+ const order=await readyInvoiceOrder('S13 payment count '+count);
+ const {confirmPaymentAction,getOrderPaymentStateAction,setPaymentModeAction}=await import('@/app/actions/payments.actions');
+ expect(await withSession(full,()=>setPaymentModeAction({orderId:order.orderId,paymentMode:'vorkasse',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const initial=await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}));
+ expect(initial).toMatchObject({code:'OK',data:{goodsOutAllowed:false,payment:{openAmountCents:11900,paidAmountCents:0,paymentVersion:0}}});
+ const keys:string[]=[];
+ for(let index=0;index<count;index++){
+  const read=await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}));
+  if(read.code!=='OK'||!read.data.payment)throw Error('S13_G_PART_SOURCE');
+  const payment=read.data.payment,key=randomUUID();keys.push(key);
+  const input={invoiceId:order.invoice.invoiceId,amount:1000,method:index%2?'bar' as const:'ueberweisung' as const,expectedVersion:payment.paymentVersion,expectedOpenAmountCents:payment.openAmountCents,clientEventId:key};
+  const booked=await withSession(full,()=>confirmPaymentAction(input));
+  expect(booked).toMatchObject({code:'OK',receipt:{openAmountCents:11900-(index+1)*1000}});
+  if(booked.code!=='OK')throw Error('S13_G_PART_WRITE:'+booked.code);
+  expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:booked.receipt.eventId}});
+  expect(await withSession(full,()=>confirmPaymentAction({...input,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT',currentOpenAmountCents:11900-(index+1)*1000});
+ }
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='PAYMENT_CONFIRMED_V1'`).toEqual([{n:count}]);
+ const current=await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}));
+ expect(current).toMatchObject({code:'OK',data:{goodsOutAllowed:false,payment:{openAmountCents:11900-count*1000,paidAmountCents:count*1000,paymentVersion:count}}});
+ if(current.code!=='OK'||!current.data.payment)throw Error('S13_G_REMAINDER');
+ const final={invoiceId:order.invoice.invoiceId,amount:current.data.payment.openAmountCents,method:'ueberweisung' as const,expectedVersion:current.data.payment.paymentVersion,expectedOpenAmountCents:current.data.payment.openAmountCents,clientEventId:randomUUID()};
+ const settled=await withSession(full,()=>confirmPaymentAction(final));
+ expect(settled).toMatchObject({code:'OK',receipt:{paidAmountCents:11900,openAmountCents:0}});
+ if(settled.code!=='OK')throw Error('S13_G_SETTLEMENT:'+settled.code);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{goodsOutAllowed:true,payment:{paidAmountCents:11900,openAmountCents:0}}});
+ expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(final))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:settled.receipt.eventId}});
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='PAYMENT_CONFIRMED_V1'`).toEqual([{n:count+1}]);
+ expect(new Set(keys).size).toBe(count);
+});
+
+it('W-GELD G1/G5 H10/H11/H15/H16 follows the observed partial payment into cancellation and an explicitly confirmed credit allocation',async()=>{
+ const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const {cancelInvoiceAction,getCustomerCreditAction,applyCustomerCreditAction}=await import('@/app/actions/invoices.actions');
+ const source=await readyInvoiceOrder('S13 G1 observed bank payment');
+ const payment={invoiceId:source.invoice.invoiceId,amount:4000,method:'ueberweisung' as const,expectedVersion:0,expectedOpenAmountCents:11900,clientEventId:randomUUID()};
+ const noMoney=await createFixture(['kunden','auftraege']);
+ expect(await withSession(noMoney,()=>confirmPaymentAction(payment))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:source.orderId}))).toMatchObject({code:'OK',data:{payment:{openAmountCents:11900,paymentVersion:0}}});
+ const paid=await withSession(full,()=>confirmPaymentAction(payment));
+ expect(paid).toMatchObject({code:'OK',receipt:{source:'manual',amountCents:4000,openAmountCents:7900}});
+ if(paid.code!=='OK')throw Error('S13_G1_PAYMENT:'+paid.code);
+ expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(payment))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:paid.receipt.eventId}});
+ const staleKey=randomUUID();
+ expect(await withSession(full,()=>confirmPaymentAction({...payment,clientEventId:staleKey}))).toMatchObject({code:'CONFLICT',currentOpenAmountCents:7900});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${staleKey}::uuid`).toHaveLength(0);
+ const cancel={invoiceId:source.invoice.invoiceId,expectedVersion:1,reason:'TEST S13 bezahlten Anteil erhalten',clientEventId:randomUUID()};
+ expect(await withSession(full,()=>cancelInvoiceAction(cancel))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(cancel))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:4000,version:1}});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:source.orderId}))).toMatchObject({code:'OK',data:{invoiceState:'not_issued',payment:null}});
+ const target=await readyInvoiceOrder('S13 G5 explicit credit target','pickup',false,source.customerId);
+ const next=await withSession(full,()=>getOrderPaymentStateAction({orderId:target.orderId}));
+ if(next.code!=='OK'||next.data.creditApplication?.code!=='OK'||!next.data.creditApplication.proposal)throw Error('S13_G5_REAL_PROPOSAL');
+ expect(next.data.payment).toMatchObject({openAmountCents:11900,paidAmountCents:0});
+ const proposal=next.data.creditApplication.proposal;
+ expect(proposal).toMatchObject({command:'credit.apply',input:{invoiceId:target.invoice.invoiceId,amount:4000,expectedOpenAmountCents:11900,expectedCreditVersion:1}});
+ const input={...JSON.parse(JSON.stringify(proposal.input)),clientEventId:randomUUID()};
+ expect(await withSession(noMoney,()=>applyCustomerCreditAction(input))).toMatchObject({code:'FORBIDDEN'});
+ const applied=await withSession(full,()=>applyCustomerCreditAction(input));
+ expect(applied).toMatchObject({code:'OK',receipt:{method:'guthaben',openAmountCents:7900}});
+ if(applied.code!=='OK')throw Error('S13_G5_APPLY:'+applied.code);
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:target.orderId}))).toMatchObject({code:'OK',data:{payment:{openAmountCents:7900,paidAmountCents:4000},creditApplication:{code:'OK',proposal:null}}});
+ expect(await withSession(full,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:0,version:2}});
+ expect(await withSession(full,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:applied.receipt.eventId}});
+ expect(await sql`SELECT kind,amount_cents::text,actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${source.customerId} ORDER BY created_at,id`).toEqual([{kind:'storno_gutschrift',amount_cents:'4000',actor_user_id:full.actorId},{kind:'verrechnung',amount_cents:'-4000',actor_user_id:full.actorId}]);
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='PAYMENT_CONFIRMED_V1' AND client_event_id=${payment.clientEventId}::uuid`).toEqual([{n:1}]);
+});
