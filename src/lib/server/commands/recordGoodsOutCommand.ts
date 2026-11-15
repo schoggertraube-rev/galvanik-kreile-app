@@ -1050,7 +1050,7 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
           SET stand = 'abgeschlossen',
               abschluss_art = 'nacharbeit_raus',
               abschluss_notiz = NULL,
-              abgeschlossen_am = statement_timestamp() AT TIME ZONE 'UTC',
+              abgeschlossen_am = statement_timestamp(),
               abgeschlossen_von = ${actorId}::uuid,
               version = version + 1
           WHERE complaint_id = ${reworkComplaint.complaint_id}
