@@ -278,6 +278,9 @@ export async function finishIntakeFileAction(fileId: string,pendingScope?:string
  const flag=await applyEvidenceUploadVisibility(auth.data,'intake-file:'+fileId,customerVisible,
   {synchronizeTask:(tx,actor,id)=>synchronizeEvidenceVisibilityRetryTask(tx,actor,id,
    {effect:(writeTx,writer,effect)=>recordIntakeTaskEffect(writeTx,writer,effect,readCustomerProfile)})});
+ // No visibility intent means the unchanged native capture receipt. Its fresh
+ // read and historical retries must retain the same default response shape.
+ if(flag.code==='OK'&&!flag.visibility&&!flag.visibilityPending)return result;
  return flag.code==='OK'?{...result,visibilityPending:flag.visibilityPending,...(flag.visibility?{visibility:flag.visibility}:{})}:flag;
 }
 export async function getIntakePendingScopeAction() { return readIntakePendingScope(); }

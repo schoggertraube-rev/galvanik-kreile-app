@@ -10,7 +10,8 @@ import { analyzeDomainAttachment } from "@/lib/server/documentIntelligencePort";
 import { readAzureDocumentIntelligenceStatus } from "@/lib/server/azureDocumentIntelligence";
 import { readOrderIntakeOriginals } from "@/modules/eingang/server-public";
 import {changeEvidenceVisibility} from '@/lib/server/evidenceVisibilityCommand';
-import {splitUploadVisibility,applyEvidenceUploadVisibility,type UploadVisibilityResult} from '@/lib/server/evidenceVisibilityUpload';
+import {splitUploadVisibility} from '@/lib/domain/evidenceVisibility';
+import {applyEvidenceUploadVisibility,type UploadVisibilityResult} from '@/lib/server/evidenceVisibilityUpload';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {EVIDENCE_VISIBILITY_COPY} from '@/ui/situationCatalog';
 

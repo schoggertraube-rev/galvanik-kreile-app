@@ -1,5 +1,14 @@
 /** S11: metadata of the same stored original, never a copy of its bytes. */
 export type ChangeEvidenceVisibilityInput={evidenceKey:string;customerVisible:boolean;expectedVersion:number;clientEventId:string};
+
+/** Pure transport validation; importing a reader must not initialize a DB. */
+export function splitUploadVisibility(input:unknown){
+ if(!input||typeof input!=='object'||Array.isArray(input))return {valid:true,base:input,requested:undefined};
+ const base={...input} as Record<string,unknown>;
+ const present=Object.hasOwn(base,'customerVisible'),requested=base.customerVisible;
+ delete base.customerVisible;
+ return {valid:!present||typeof requested==='boolean',base,requested:typeof requested==='boolean'?requested:undefined};
+}
 export type EvidenceVisibility = {
   customerVisible: boolean;
   version: number;

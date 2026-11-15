@@ -1,7 +1,7 @@
 "use server";
 
 import { unstable_noStore as noStore } from "next/cache";
-import {splitUploadVisibility} from '@/lib/server/evidenceVisibilityUpload';
+import {splitUploadVisibility} from '@/lib/domain/evidenceVisibility';
 import {EVIDENCE_VISIBILITY_COPY} from '@/ui/situationCatalog';
 import { sql } from "drizzle-orm";
 import { resolveAuthorization, hasAuthorizationArea, getAuthorizationActionGrants, type AuthorizationSnapshot } from "@/lib/server/authorization";

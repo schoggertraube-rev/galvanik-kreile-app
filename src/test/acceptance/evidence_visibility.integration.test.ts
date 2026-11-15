@@ -45,4 +45,8 @@ it('F11-12 actual current intake original shares the single visibility projectio
  const original=await sql`SELECT sha256,bytes FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${photo.fileId}::uuid`;
  expect(rows[0].original_hash).toBe(original[0].sha256);expect(Number(rows[0].original_size_bytes)).toBe(Number(original[0].bytes));
  expect(await sql`SELECT count(*)::integer AS n FROM private.evidence_visibility_events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{n:0}]);
+ const {finishIntakeFileAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+ const retry=await withSession(full,()=>finishIntakeFileAction(photo.fileId));
+ expect(retry).not.toHaveProperty('visibilityPending');
+ expect(await withSession(full,()=>getIntakeCaptureAction(photo.itemId))).toEqual(retry);
 });

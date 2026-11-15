@@ -9,14 +9,6 @@ import type {EvidenceVisibility} from '@/lib/domain/evidenceVisibility';
 type Dependencies={synchronizeTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string)=>Promise<string|null>};
 export type UploadVisibilityResult={code:'OK';visibility?:EvidenceVisibility;visibilityPending:boolean}|{code:'UNAVAILABLE';message:string};
 
-export function splitUploadVisibility(input:unknown){
- if(!input||typeof input!=='object'||Array.isArray(input))return {valid:true,base:input,requested:undefined};
- const base={...input} as Record<string,unknown>;
- const present=Object.hasOwn(base,'customerVisible'),requested=base.customerVisible;
- delete base.customerVisible;
- return {valid:!present||typeof requested==='boolean',base,requested:typeof requested==='boolean'?requested:undefined};
-}
-
 /** Invoked only AFTER the existing original writer has durably succeeded.
  * Intent survives a task failure; without the task receipt there is no ACK. */
 export async function applyEvidenceUploadVisibility(auth:AuthorizationSnapshot,key:string,requested:boolean|undefined,deps:Dependencies):Promise<UploadVisibilityResult>{
