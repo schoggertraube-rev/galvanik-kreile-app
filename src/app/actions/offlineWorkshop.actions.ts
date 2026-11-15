@@ -11,6 +11,10 @@ import {createOfflineWorkshopConflictTask} from '@/modules/tasks/server-public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
 import {issueInvoiceAction,cancelInvoiceAction,applyCustomerCreditAction,payoutCustomerCreditAction} from './invoices.actions';
+import {recordGoodsOutAction} from './goodsOut.actions';
+import {isShipmentGroupReceipt} from '@/lib/domain/shipmentGroupContract';
+import {generateDeliveryNote} from './pdf.actions';
+import {isDeliveryNoteReceipt} from '@/lib/domain/deliveryNoteContract';
 
 /** Transport composition only. Business changes still use the existing writers,
  * their real session/rights and their original N5 key. No alternate actor exists.
@@ -32,6 +36,16 @@ async function replayCommand(scope:string,original:PendingWorkshopOriginal){
  }catch(error){console.error('[OFFLINE_WORKSHOP_RECONCILIATION_FAILED]',{name:error instanceof Error?error.name:'UnknownError',code:error instanceof Error&&/^[A-Z0-9_]+$/.test(error.message)?error.message:'UNAVAILABLE'});return {code:'UNAVAILABLE' as const};}
 }
 async function applyKnownCommand(auth:AuthorizationSnapshot,scope:string,original:PendingWorkshopOriginal){
+ if(original.command==='shipment.handover'){
+  const result=await recordGoodsOutAction({...original.input,offlineOriginal:{actorId:auth.userId,clientEventId:original.input.clientEventId,deviceCapturedAt:original.deviceCapturedAt!}});if(result.code!=='OK')return result;
+  if(!isShipmentGroupReceipt(result.receipt,original.input,auth.userId))return {code:'UNAVAILABLE' as const};
+  return {...result,shipmentCommand:original.command,offlineReceipt:{scope,clientEventId:original.input.clientEventId,deviceCapturedAt:original.deviceCapturedAt!,eventId:result.receipt.eventId,actorId:auth.userId}};
+ }
+ if(original.command==='document.deliveryNote'){
+  const result=await generateDeliveryNote(original.input);if(result.code!=='OK')return result;
+  if(!isDeliveryNoteReceipt(result.receipt,original.input,auth.userId))return {code:'UNAVAILABLE' as const};
+  return {...result,documentCommand:original.command,offlineReceipt:{scope,clientEventId:original.input.clientEventId,deviceCapturedAt:original.deviceCapturedAt!,eventId:result.receipt.eventId,actorId:auth.userId}};
+ }
  if(original.command==='order.handover'){
   const result=await changeOrderPickupNoticeAction(original.input);
   if(result.code!=='OK')return result;

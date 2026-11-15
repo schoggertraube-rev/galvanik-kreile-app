@@ -20,6 +20,10 @@ function identity(auth:AuthorizationSnapshot,entry:PendingWorkshopOriginal){
 }
 type Saved={id:string;user_id:string;payload:{intent:string;rejection:Rejection;message?:string;subject?:WorkshopRejectionSubject;financialContext?:{currentCreditBalanceCents:number}};task_id:string|null;proof_ok:boolean};
 async function originalReference(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,original:Original){
+ if(original.command==='document.deliveryNote'){
+  const rows=await tx.execute<{id:string}>(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${original.input.orderIds[0]}`);
+  return {orderId:rows[0]?.id??null,customerId:null,invoice:null};
+ }
  if(original.command==='credit.payout')return {orderId:null,customerId:original.input.customerId,invoice:null};
  if(original.command==='invoice.cancel'||original.command==='credit.apply'){
   const rows=await tx.execute<{order_id:string;invoice_number:string;gross_amount_cents:number}>(sql`SELECT order_id,invoice_number,gross_amount_cents FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${original.input.invoiceId}::uuid`);
@@ -88,7 +92,7 @@ export async function readOfflineWorkshopConflictSource(tx:PrivilegedTenantTrans
  const rows=await tx.execute<{id:string;user_id:string;order_id:string|null;payload:{quelle:string;reason:string;rejection:string;original:Original;intent:string}}>(sql`SELECT id::text,user_id::text,order_id,payload FROM public.events
   WHERE tenant_id=${auth.tenantId} AND id=${eventId} AND event_type='OFFLINE_WORKSHOP_REJECTED_V1' AND status='success' AND event_schema_version=1`);
  const row=rows[0];if(rows.length!==1||row.user_id!==auth.userId||row.payload.quelle!=='offline_abgleich'||row.payload.reason!==copy.reason||!['CONFLICT','FORBIDDEN','NOT_FOUND','VALIDATION_ERROR'].includes(row.payload.rejection))throw Error('OFFLINE_WORKSHOP_SOURCE_INVALID');
- const original=row.payload.original,itemId='orderId'in original.input?original.input.orderId:'invoiceId'in original.input?original.input.invoiceId:original.input.customerId;
+ const original=row.payload.original,itemId=original.command==='document.deliveryNote'?original.input.orderIds[0]:'orderId'in original.input?original.input.orderId:'invoiceId'in original.input?original.input.invoiceId:original.input.customerId;
  const entry={...original,kind:'workshop' as const,id:original.input.clientEventId,itemId} as PendingWorkshopOriginal;
  const expected=identity(auth,entry),reference=await originalReference(tx,auth,original);
  if(expected.id!==row.id||expected.intent!==row.payload.intent||row.order_id!==reference.orderId)throw Error('OFFLINE_WORKSHOP_SOURCE_CHANGED');

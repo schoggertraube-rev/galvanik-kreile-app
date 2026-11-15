@@ -150,6 +150,14 @@ async function deliveredComplaintSource(fixture:Fixture,mode:'abholung'|'versand
   expect(await withSession(fixture,()=>setOrderItemFinishedAction({orderId:order.orderId,itemId:order.items[0].id,expectedVersion:2,clientEventId:randomUUID(),finished:true}))).toMatchObject({code:'OK'});
   await seedSyntheticItemPhotos(sql,{tenantId:KREILE_TENANT_SLUG,actorId:fixture.actorId,orderId:order.orderId});
   expect(await withSession(fixture,()=>freezeOrderAction({orderId:order.orderId,freezeId:randomUUID(),expectedVersion:3,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  if(mode==='versand'){
+    // Explicit synthetic carrier configuration for this isolated TEST tenant;
+    // the tracking number and source receipt come from the real writer.
+    await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) SELECT ${randomUUID()}::uuid,${KREILE_TENANT_SLUG},'TEST Reklamation Versand' WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+    await sql`UPDATE public.company_settings SET versand_dienst='TEST Reklamation Paket',versand_nummer_format='',versand_nummer_hinweis='' WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+    const {saveManualTrackingAction}=await import('@/app/actions/orders.actions');
+    expect(await withSession(fixture,()=>saveManualTrackingAction({orderId:order.orderId,shipmentId:randomUUID(),expectedUpdatedAt:null,trackingNumber:'TEST-'+randomUUID(),allowFormatMismatch:false,reason:null,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  }
   expect(await withSession(fixture,()=>recordGoodsOutAction({orderId:order.orderId,mode,expectedVersion:4,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   return order;
 }

@@ -2,6 +2,19 @@ import {randomUUID} from 'node:crypto';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession} from './replayHarness';
 
+/** Explicit synthetic carrier configuration; parcel and receipt use the real
+ * existing tracking action. Call only where the scenario actually ships. */
+export async function manualTrackingFixture(orderId:string){
+ if(!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('FIXTURE_SYNTHETIC_TENANT_REQUIRED');
+ const configured=await sql`UPDATE public.company_settings SET versand_dienst='TEST Fixture Parcel',versand_nummer_format='',versand_nummer_hinweis='' WHERE tenant_id=${KREILE_TENANT_SLUG} RETURNING id`;
+ if(configured.length!==1)throw Error('FIXTURE_TRACKING_SETTINGS_REQUIRED');
+ const {saveManualTrackingAction}=await import('@/app/actions/orders.actions');
+ const input={orderId,shipmentId:randomUUID(),expectedUpdatedAt:null,trackingNumber:'TEST-'+randomUUID(),allowFormatMismatch:false,reason:null,clientEventId:randomUUID()};
+ const saved=await withSession(full,()=>saveManualTrackingAction(input));
+ if(saved.code!=='OK')throw Error('FIXTURE_TRACKING:'+saved.code+':'+saved.message);
+ return saved.receipt;
+}
+
 export async function customerFixture(label:string){
  const customerId=randomUUID();
  await sql`INSERT INTO public.customers(id,tenant_id,customer_number,name,company_name,type,contact_person,email,phone,street,house_number,zip_code,city,country,payment_preference,ziel_freigeschaltet,ziel_tage,source,first_name,last_name,salutation)
@@ -53,4 +66,17 @@ export async function readyInvoiceOrder(label:string,handoverMode:'pickup'|'ship
  const issued=issuanceResults[0];
  if(issued.code!=='OK')throw Error('FIXTURE_INVOICE:'+issued.code+':'+('message'in issued?issued.message:''));
  return {customerId,orderId,invoice:issued.receipt,version:issued.receipt.orderVersion,issueInput,items:prepared.items,issuanceResults};
+}
+
+/** Read the real source projection for a confirmed TEST document command. */
+export async function deliveryNoteInputFixture(orderIds:string[],clientEventId=randomUUID()):Promise<import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput>{
+ const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const input:import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput={orderIds,clientEventId,expectedVersions:{},expectedSources:{}};
+ for(const orderId of orderIds){
+  const read=await withSession(full,()=>getOrderPaymentStateAction({orderId,includeDeliveryNoteSource:true}));
+  if(read.code!=='OK'||read.deliveryNoteSource?.code!=='OK')throw Error('FIXTURE_DELIVERY_NOTE_SOURCE:'+read.code);
+  Object.assign(input.expectedVersions,read.deliveryNoteSource.source.expectedVersions);
+  Object.assign(input.expectedSources,read.deliveryNoteSource.source.expectedSources);
+ }
+ return input;
 }

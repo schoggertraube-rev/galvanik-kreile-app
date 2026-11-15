@@ -1,6 +1,17 @@
 [
   {
     "datum": "2026-11-14",
+    "pr": 224,
+    "seite": "auftraege",
+    "punkte": [
+      "Eine Sendungsnummer allein gibt Deine Ware noch nicht frei. Erst die bestätigte Übergabe an den Versanddienst setzt die Sendung auf versendet.",
+      "Du erhältst für eine bezahlte Rechnung einen Lieferschein mit den vorhandenen Zahlungsdaten und Unterschriftsfeldern. Wiederholungen verwenden dasselbe Original und buchen nichts erneut.",
+      "Bei mehreren Paketen bleibt Dein Auftrag bis zum letzten Paket offen; die vereinbarte Rechnung entsteht erst dann. Eine Freigabe trotz Liefersperre bleibt mit Person und Grund belegt."
+    ],
+    "ziel": "/orders"
+  },
+  {
+    "datum": "2026-11-14",
     "pr": 223,
     "seite": "rechnungen",
     "punkte": [

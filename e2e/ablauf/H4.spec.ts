@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
-import {readyInvoiceOrder,customerFixture,intakeOrderFixture} from './orderFixture';
+import {readyInvoiceOrder,customerFixture,intakeOrderFixture,manualTrackingFixture} from './orderFixture';
 
 it('H4 overdue invoice of the same customer blocks a new release without recording goods out',async()=>{
  const order=await readyInvoiceOrder('H4');
@@ -121,6 +121,7 @@ it('W23 only Entscheiden plus a nonempty reason overrides customer debt; actor a
 for(const mode of ['abholung','versand'] as const){
  it(`H4 ${mode} checks debt before composing an agreement invoice and releases atomically after payment`,async()=>{
   const order=await readyInvoiceOrder('H4-Absprache-'+mode,mode==='versand'?'shipping':'pickup');
+  if(mode==='versand')await manualTrackingFixture(order.orderId);
   const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
   expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST Beginn ohne aktive Rechnung',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   const oldOrder=await intakeOrderFixture('H4-Altschuld-'+mode,order.customerId);

@@ -1,5 +1,7 @@
 import type { CustomerAgreementRecord } from "@/modules/customers/public";
 
+export type ManualShipmentGroupState={group:{id:string;version:string;members:{shipmentId:string;orderId:string;orderNumber:string;orderVersion:number;sendungId:string|null;updatedAt:string;status:string;carrier:string|null;trackingNumber:string|null}[]};remainingOrderIds:string[]}|null;
+
 export type OrderCardGoodsOutMode = "versand" | "abholung";
 export type OrderCardGoodsOutAgreement = Pick<
   CustomerAgreementRecord,

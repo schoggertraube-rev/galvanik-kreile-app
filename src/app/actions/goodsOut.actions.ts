@@ -1,4 +1,6 @@
 "use server";
+import {isShipmentGroupInput,type ShipmentGroupInput,type ShipmentGroupResult} from '@/lib/domain/shipmentGroupContract';
+import {readManualShipmentGroup} from '@/modules/orders/server-public';
 import {readInvoiceVat} from "@/modules/accounting/server-public";
 
 import { createHash } from "node:crypto";
@@ -6,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import type {
   RecordGoodsOutInput,
   RecordGoodsOutResult,
+  GoodsOutComposition,
 } from "@/lib/server/commands/recordGoodsOutCommand";
 
 function invoiceClientEventId(goodsOutClientEventId: string): string {
@@ -15,13 +18,7 @@ function invoiceClientEventId(goodsOutClientEventId: string): string {
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
 
-export async function recordGoodsOutAction(
-  input: RecordGoodsOutInput,
-): Promise<RecordGoodsOutResult> {
-  const { authorizeGoodsOutInput, recordGoodsOut } = await import("@/lib/server/commands/recordGoodsOutCommand");
-  // Validate and authorize before the composed invoice writer can change data.
-  const authorized = await authorizeGoodsOutInput(input);
-  if (authorized.code !== "AUTHORIZED") return authorized;
+async function goodsOutComposition(input:RecordGoodsOutInput):Promise<GoodsOutComposition>{
   const invoiceInput=input.agreement&&input.agreement.type!=='sammelrechnung'?{
     orderId:input.orderId,expectedVersion:input.expectedVersion,
     clientEventId:invoiceClientEventId(input.clientEventId),agreement:input.agreement,
@@ -31,9 +28,11 @@ export async function recordGoodsOutAction(
   const [{lockStorageFinalTasksForGoodsOut,finishStorageFinalTasksAfterGoodsOut},{completeStorageTaskAfterGoodsOut}]=await Promise.all([import('@/lib/server/storageFinalStagePort'),import('@/modules/tasks/server-public')]);
   const {recordStoragePostalResult}=await import('@/lib/server/storagePostalPort');
   const {retireOrderPrintJobsAfterGoodsOut}=await import('@/modules/orders/server-public');
+  const {readCustomerCreditInTransaction}=await import('@/modules/accounting/server-public');
   let callTaskIds:string[]|null=null;
   let finalTasks:Awaited<ReturnType<typeof lockStorageFinalTasksForGoodsOut>>|null=null;
-  const result = await recordGoodsOut(input,{
+  return {
+    readCredit:(tx,auth,customerId)=>readCustomerCreditInTransaction(tx,auth.tenantId,customerId,readCustomerProfile),
     beforeOrderLock:async(tx,auth)=>{if(invoiceInput&&invoicePort)await invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput);callTaskIds=await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);finalTasks=await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId);},
     ...(invoiceInput&&invoicePort?{beforeWrite:async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction)=>{
       const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
@@ -47,11 +46,18 @@ export async function recordGoodsOutAction(
      await finishStorageFinalTasksAfterGoodsOut(tx,auth,finalTasks??await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId),request=>completeStorageTaskAfterGoodsOut(tx,auth,request,{beforeComplete:recordStoragePostalResult,effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
      await retireOrderPrintJobsAfterGoodsOut(tx,auth,{orderId:input.orderId,clientEventId:input.clientEventId});
     }
-  });
-  if (result.code === "OK") {
-    revalidatePath("/");
-    revalidatePath("/warendurchlauf");
-    revalidatePath("/buchhaltung/rechnungen");
-  }
-  return result;
+  };
+}
+export async function recordGoodsOutAction(input:RecordGoodsOutInput):Promise<RecordGoodsOutResult>;
+export async function recordGoodsOutAction(input:ShipmentGroupInput):Promise<ShipmentGroupResult>;
+export async function recordGoodsOutAction(input:RecordGoodsOutInput|ShipmentGroupInput):Promise<RecordGoodsOutResult|ShipmentGroupResult>{
+ const {authorizeGoodsOutInput,recordGoodsOut,recordShipmentGroupGoodsOut}=await import('@/lib/server/commands/recordGoodsOutCommand');
+ let result:RecordGoodsOutResult|ShipmentGroupResult;
+ if(isShipmentGroupInput(input))result=await recordShipmentGroupGoodsOut(input,goodsOutComposition,readManualShipmentGroup);
+ else{
+  const authorized=await authorizeGoodsOutInput(input);if(authorized.code!=='AUTHORIZED')return authorized;
+  result=await recordGoodsOut(authorized.input,await goodsOutComposition(authorized.input));
+ }
+ if(result.code==='OK'){revalidatePath('/');revalidatePath('/warendurchlauf');revalidatePath('/buchhaltung/rechnungen');}
+ return result;
 }

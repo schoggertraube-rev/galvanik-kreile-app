@@ -67,13 +67,13 @@ export type PaymentSummaryRow = {
 
 /** Same per-invoice payment truth for the order reader and physical output.
  * No order-wide amount or representative payment is manufactured. */
-export async function readOrderPaymentSummaries(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){
+export async function readOrderPaymentSummaries(tx:PrivilegedTenantTransaction,tenantId:string,source:string|{invoiceId:string}){
   return tx.execute<PaymentSummaryRow&{belegart:'auftrag'|'versandkosten';ursprung_rechnung_id:string|null;ursprung_rechnung_nummer:string|null}>(sql`
     SELECT payment.*,invoice.belegart,invoice.ursprung_rechnung_id::text,original.invoice_number AS ursprung_rechnung_nummer
     FROM private.v_payment_summary_v1 payment JOIN public.invoices invoice
       ON invoice.tenant_id=payment.tenant_id AND invoice.id=payment.invoice_id
     LEFT JOIN public.invoices original ON original.tenant_id=invoice.tenant_id AND original.id=invoice.ursprung_rechnung_id AND original.belegart='auftrag'
-    WHERE payment.tenant_id=${tenantId} AND payment.order_id=${orderId} ORDER BY payment.invoice_id`);
+    WHERE payment.tenant_id=${tenantId} AND ${typeof source==='string'?sql`payment.order_id=${source}`:sql`payment.invoice_id=${source.invoiceId}::uuid`} ORDER BY payment.invoice_id`);
 }
 
 export type GoodsOutReadback = {

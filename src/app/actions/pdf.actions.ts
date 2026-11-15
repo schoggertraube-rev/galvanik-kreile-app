@@ -161,7 +161,25 @@ export async function generateOrderLabel(orderIds: string | string[]): Promise<s
   }
 }
 
-export async function generateDeliveryNote(orderIds: string | string[]): Promise<string> {
-  void orderIds;
-  throw new Error("NOT_AVAILABLE: Firmendaten-Anzeige benötigt einen tenant- und capability-geprüften W3-Read-Vertrag.");
+export async function generateDeliveryNote(orderIds:string|string[]):Promise<string>;
+export async function generateDeliveryNote(input:import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput):Promise<import('@/lib/domain/deliveryNoteContract').DeliveryNoteResult>;
+export async function generateDeliveryNote(input:string|string[]|import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput):Promise<string|import('@/lib/domain/deliveryNoteContract').DeliveryNoteResult>{
+ const legacy=typeof input==='string'||Array.isArray(input);
+ const {resolveAuthorization,hasAuthorizationArea}=await import('@/lib/server/authorization');
+ const {LEGACY_ACTION_ACCESS_COPY}=await import('@/ui/situationCatalog');
+ const auth=await resolveAuthorization();
+ if(!auth.ok){if(legacy)throw Error(auth.message);return {code:auth.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED',message:auth.message};}
+ if(!hasAuthorizationArea(auth.data,'auftraege')||!hasAuthorizationArea(auth.data,'geld')){
+  if(legacy)throw Error(LEGACY_ACTION_ACCESS_COPY.forbidden);
+  return {code:'FORBIDDEN',message:LEGACY_ACTION_ACCESS_COPY.forbidden};
+ }
+ const [{generatePaidDeliveryNote},{readCompanyLetterSettings},{readCustomerProfile},{readInvoiceVat},{createDeliveryNotePdfDocument}]=await Promise.all([
+  import('@/lib/server/deliveryNotePort'),import('@/modules/fundament/server-public'),import('@/modules/customers/server-public'),import('@/modules/accounting/server-public'),import('@/lib/pdf/DeliveryNote')
+ ]);
+ const result=await generatePaidDeliveryNote(auth.data,input,{readVat:readInvoiceVat,readCustomer:readCustomerProfile,
+  readCompany:()=>readCompanyLetterSettings({tenantId:auth.data.tenantId,actorId:auth.data.userId,canRead:true,includeDeliveryNoteIdentity:true}),
+  render:async snapshot=>new Uint8Array(await renderToBuffer(await createDeliveryNotePdfDocument(snapshot)))});
+ if(!legacy)return result;
+ if(result.code!=='OK')throw Error(result.message);
+ return result.pdfBase64;
 }

@@ -1,8 +1,15 @@
 import "server-only";
+import {normalizeOfflineOriginal} from '@/lib/domain/offlineOriginal';
+import {canonicalJson} from '@/lib/domain/canonicalJson';
+import {isShipmentGroupInput,isShipmentGroupReceipt,type ShipmentGroupInput,type ShipmentGroupResult,type ShipmentGroupReceipt} from '@/lib/domain/shipmentGroupContract';
+import type {ManualShipmentGroupState} from '@/modules/orders/public';
+import type {CustomerCreditResult,CustomerCreditApplicationRead} from '@/modules/accounting/public';
+import {buildCustomerCreditApplication} from '@/lib/server/paymentSummaryRead';
+import {SHIPMENT_GROUP_COPY} from '@/ui/situationCatalog';
 import {readOpenOrderComplaint} from '@/lib/server/orderReleaseRead';
-import {COMPLAINT_ORDER_COPY,MANUAL_SHIPPING_HANDOVER_LABEL,SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
+import {COMPLAINT_ORDER_COPY,MANUAL_SHIPPING_COPY,MANUAL_SHIPPING_HANDOVER_LABEL,SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { GOODS_OUT_DEBT_COPY } from "@/ui/situationCatalog";
 import { sql } from "drizzle-orm";
 import { readEffectiveCustomerAgreement } from "@/lib/server/effectiveCustomerAgreementRead";
@@ -33,6 +40,19 @@ const SOURCE_STATION = ORDER_LIFECYCLE_STATUS.FERTIG;
 const TARGET_STATION = ORDER_LIFECYCLE_STATUS.ABGEHOLT;
 const GOODS_OUT_MODES = ["versand", "abholung"] as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/** One qualification for the pre-write gate and the actual shipment update.
+ * Labels and arbitrary parcel numbers are not a secured tracking receipt. */
+function manualTrackingParcelPredicate(){return sql`
+ shipment.status='created' AND shipment.shipped_at IS NULL
+ AND length(btrim(shipment.tracking_number))>0
+ AND EXISTS(SELECT 1 FROM public.events proof
+   WHERE proof.tenant_id=shipment.tenant_id AND proof.order_id=shipment.order_id
+     AND proof.event_type='SHIPMENT_MANUAL_TRACKING_SET_V1' AND proof.status='success'
+     AND proof.user_id IS NOT NULL AND proof.payload->'receipt'->>'shipmentId'=shipment.id::text
+     AND proof.payload->'receipt'->>'trackingNumber'=shipment.tracking_number
+     AND proof.payload->'receipt'->>'carrier'=shipment.carrier)
+`;}
 
 export type GoodsOutMode = (typeof GOODS_OUT_MODES)[number];
 
@@ -99,7 +119,7 @@ export type RecordGoodsOutResult =
   | { code: "UNAUTHENTICATED"; message: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "NOT_FOUND"; message: string }
-  | { code: "CONFLICT"; message: string }
+  | { code: "CONFLICT"; message: string; creditApplication?:CustomerCreditApplicationRead }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
@@ -633,7 +653,8 @@ export async function authorizeGoodsOutInput(input: unknown): Promise<
   return {code: 'AUTHORIZED', input, authorization};
 }
 
-type GoodsOutComposition={
+export type GoodsOutComposition={
+  readCredit?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string)=>Promise<CustomerCreditResult>;
   beforeOrderLock?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
   beforeWrite?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<Exclude<RecordGoodsOutResult,{code:'OK'}>|null>;
   afterWrite?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
@@ -643,15 +664,13 @@ class GoodsOutRejected extends Error{
   constructor(readonly result:Exclude<RecordGoodsOutResult,{code:'OK'}>){super('GOODS_OUT_REJECTED');}
 }
 
-export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutComposition): Promise<RecordGoodsOutResult> {
-  const authorized = await authorizeGoodsOutInput(candidate);
-  if (authorized.code !== 'AUTHORIZED') return authorized;
-  const {input, authorization} = authorized;
-  const tenantId = authorization.data.tenantId;
-  const actorId = authorization.data.userId;
-
-  try {
-    const write=async(tx:PrivilegedTenantTransaction):Promise<RecordGoodsOutResult>=>{
+type ShipmentSelection={ids:string[];groupEventId:string;trackingNumber:string;carrier:string;partial:boolean;deviceCapturedAt?:string};
+type PreparedGoodsOut={code:'PREPARED';partialOverride?:{invoiceId:string;reason:string};complete:()=>Promise<GoodsOutReceipt|null>};
+type GoodsOutAuthorization=Extract<Awaited<ReturnType<typeof authorizeGoodsOutInput>>,{code:'AUTHORIZED'}>;
+/** One canonical gate/physical writer. The group composition prepares every
+ * member in its outer transaction before invoking any physical completion. */
+async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOutAuthorization,composition?:GoodsOutComposition,selection?:ShipmentSelection):Promise<RecordGoodsOutResult|PreparedGoodsOut>{
+ const {input,authorization}=authorized,tenantId=authorization.data.tenantId,actorId=authorization.data.userId;
       await tx.execute(sql`
         SELECT pg_advisory_xact_lock(
           hashtextextended('f1:goods-out:client-event:' || ${tenantId} || ':' || ${input.clientEventId}, 0)
@@ -685,7 +704,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
 
       // Invoice advisory locks must precede the shared order-row lock to avoid
       // deadlock with a simultaneous standalone invoice action.
-      await composition?.beforeOrderLock?.(tx,authorization.data);
+      if(!selection)await composition?.beforeOrderLock?.(tx,authorization.data);
       const orders = await readOrder(tx, tenantId, input.orderId, true);
       const order = orders[0];
       if (orders.length !== 1 || !order || order.tenant_id !== tenantId) {
@@ -730,8 +749,20 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
         FOR SHARE
       `);
       if (overdueInvoices.length > 0 && input.overdueReleaseReason === undefined) {
+        let creditApplication:CustomerCreditApplicationRead|undefined;
+        if(hasAuthorizationArea(authorization.data,'geld')&&composition?.readCredit){
+          const customerId=order.customer_id;
+          try{creditApplication=await withTenantSavepoint(tx,async nested=>{
+            const source=await readOrderPaymentSummaries(nested,tenantId,{invoiceId:overdueInvoices[0].id});
+            if(source.length!==1)return {code:'SOURCE_INCOMPLETE' as const};
+            const payment=mapPaymentSummaryRow(source[0],authorization.data);
+            if(payment.invoiceId!==overdueInvoices[0].id)throw Error('GOODS_OUT_CREDIT_INVOICE_SOURCE_MISMATCH');
+            return buildCustomerCreditApplication(await composition.readCredit!(nested,authorization.data,customerId),payment);
+          });}catch{creditApplication={code:'SOURCE_INCOMPLETE'};}
+        }
         return {
           code: "CONFLICT",
+          ...(creditApplication?{creditApplication}:{}),
           message: GOODS_OUT_DEBT_COPY.blocked(
             hasAuthorizationArea(authorization.data, "geld")
               ? overdueInvoices[0].invoice_number
@@ -770,7 +801,26 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
         return { code: "CONFLICT", message: "Ausgabe ist noch nicht freigegeben. Zahlung oder Abschluss fehlt." };
       }
 
-      const preparation=await composition?.beforeWrite?.(tx,authorization.data);
+      if(input.mode==='versand'){
+        if(!selection){
+          const tracked=await tx.execute<{id:string}>(sql`SELECT shipment.id::text
+            FROM public.shipments shipment WHERE shipment.tenant_id=${tenantId}
+              AND shipment.order_id=${order.id} AND ${manualTrackingParcelPredicate()}
+            ORDER BY shipment.id FOR UPDATE OF shipment`);
+          if(!tracked.length)return {code:'VALIDATION_ERROR',message:MANUAL_SHIPPING_COPY.TRACKING_NUMBER_MISSING};
+          // Legacy whole-order release must never hide an unproven second parcel.
+          const outstanding=await tx.execute<{id:string}>(sql`SELECT shipment.id::text FROM public.shipments shipment
+            WHERE shipment.tenant_id=${tenantId} AND shipment.order_id=${order.id} AND shipment.status<>'cancelled'
+              AND shipment.shipped_at IS NULL AND NOT (${manualTrackingParcelPredicate()}) LIMIT 1`);
+          if(outstanding.length)return {code:'VALIDATION_ERROR',message:MANUAL_SHIPPING_COPY.TRACKING_NUMBER_MISSING};
+          const shared=await tx.execute<{id:string}>(sql`SELECT other.id::text FROM public.shipments own JOIN public.shipments other
+            ON other.tenant_id=own.tenant_id AND other.sendung_id=own.sendung_id AND other.order_id<>own.order_id
+            WHERE own.tenant_id=${tenantId} AND own.order_id=${order.id} AND own.status<>'cancelled' AND other.status<>'cancelled' LIMIT 1`);
+          if(tracked.length>1||shared.length)return {code:'CONFLICT',message:SHIPMENT_GROUP_COPY.confirmGroup};
+        }
+      }
+      // A partial parcel passes every gate but cannot create the final invoice.
+      const preparation=selection?.partial ? null : await composition?.beforeWrite?.(tx,authorization.data);
       if(preparation)return preparation;
       const invoices = await readActiveInvoice(tx, tenantId, order.id);
       const mainInvoices=invoices.filter(invoice=>invoice.belegart==='auftrag');
@@ -796,7 +846,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
         if (agreement.targetDays === null) {
           throw new Error("GOODS_OUT_COLLECTION_TERMS_INVALID");
         }
-      } else if (agreement !== null) {
+      } else if (agreement !== null && !(selection?.partial && invoiceNotIssued)) {
         if (
           invoiceNotIssued
           || !invoice
@@ -809,7 +859,7 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
           return { code: "VALIDATION_ERROR", message: "Rechnung fehlt." };
         }
       } else if (invoiceNotIssued) {
-        if (!isRework && order.payment_mode !== "rechnung") {
+        if (agreement === null && !isRework && order.payment_mode !== "rechnung") {
           return { code: "CONFLICT", message: "Warenausgang erfordert eine gültige Rechnung." };
         }
       } else {
@@ -869,10 +919,13 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
         return { code: "VALIDATION_ERROR", message: "Auftragsteile sind nicht ausgabefähig." };
       }
 
+      const customerId=order.customer_id;
+      return {code:'PREPARED',...(selection?.partial && input.overdueReleaseReason!==undefined ? {partialOverride:{invoiceId:overdueInvoices[0].id,reason:input.overdueReleaseReason}}:{}),complete:async()=>{
+      if(selection?.partial){await handOverGroupParcels(tx,authorization.data,input,selection,null);return null;}
       if (agreement?.type === "sammelrechnung") {
         await attachOpenInvoiceCollection(tx, {
           tenantId,
-          customerId: order.customer_id,
+          customerId,
           orderId: order.id,
           actorId,
           targetDays: agreement.targetDays!,
@@ -1024,20 +1077,15 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
         || !await orderMatchesReceipt(tx,persistedOrders[0], receipt, tenantId)
       ) throw new Error("GOODS_OUT_READBACK_INVALID");
 
-      if(input.mode==='versand'){
+      if(selection)await handOverGroupParcels(tx,authorization.data,input,selection,receipt);
+      else if(input.mode==='versand'){
         // A typed manual-tracking receipt proves which parcels this real
         // physical release hands over. A label alone never reaches this code.
         const parcels=await tx.execute<{id:string;tracking_number:string;carrier:string}>(sql`
           UPDATE public.shipments shipment SET status='shipped',shipped_at=${receipt.occurredAt}::timestamptz,
             updated_at=${receipt.occurredAt}::timestamptz
           WHERE shipment.tenant_id=${tenantId} AND shipment.order_id=${order.id}
-            AND shipment.status='created' AND shipment.shipped_at IS NULL
-            AND EXISTS(SELECT 1 FROM public.events proof
-              WHERE proof.tenant_id=shipment.tenant_id AND proof.order_id=shipment.order_id
-                AND proof.event_type='SHIPMENT_MANUAL_TRACKING_SET_V1' AND proof.status='success'
-                AND proof.user_id IS NOT NULL AND proof.payload->'receipt'->>'shipmentId'=shipment.id::text
-                AND proof.payload->'receipt'->>'trackingNumber'=shipment.tracking_number
-                AND proof.payload->'receipt'->>'carrier'=shipment.carrier)
+            AND ${manualTrackingParcelPredicate()}
           RETURNING shipment.id::text,shipment.tracking_number,shipment.carrier
         `);
         for(const parcel of parcels)await tx.execute(sql`
@@ -1048,24 +1096,175 @@ export async function recordGoodsOut(candidate: unknown,composition?:GoodsOutCom
             'success',${randomUUID()}::uuid,1,${receipt.correlationId}::uuid,${receipt.orderVersion},'abgeholt',${receipt.occurredAt}::timestamptz AT TIME ZONE 'UTC')
         `);
       }
-      return { code: "OK", receipt, replayed: false };
-    };
-    return await withPrivilegedTenantTransaction(authorization.data,async tx=>{
-      const result=await write(tx);
-      if(result.code!=='OK')throw new GoodsOutRejected(result);
-      if(composition?.afterWrite){
-       try{await withTenantSavepoint(tx,nested=>composition.afterWrite!(nested,authorization.data));}
-       catch(error){
-        console.error('[GOODS_OUT_FOLLOWUP_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});
-        if(!composition.afterWriteFailure)throw error;
-        await composition.afterWriteFailure(tx,authorization.data,result.receipt);
-       }
-      }
-      return result;
-    });
-  } catch (error: unknown) {
-    if(error instanceof GoodsOutRejected)return error.result;
-    logDatabaseFailure(error);
-    return { code: "UNAVAILABLE", message: "Warenausgang konnte nicht sicher gebucht werden." };
+      return receipt;
+      }};
+}
+async function finishGoodsOutFollowups(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,composition:GoodsOutComposition|undefined,receipt:GoodsOutReceipt){
+ if(composition?.afterWrite){
+  try{await withTenantSavepoint(tx,nested=>composition.afterWrite!(nested,auth));}
+  catch(error){console.error('[GOODS_OUT_FOLLOWUP_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});if(!composition.afterWriteFailure)throw error;await composition.afterWriteFailure(tx,auth,receipt);}
+ }
+}
+export async function recordGoodsOut(candidate:unknown,composition?:GoodsOutComposition):Promise<RecordGoodsOutResult>{
+ const authorized=await authorizeGoodsOutInput(candidate);if(authorized.code!=='AUTHORIZED')return authorized;
+ try{return await withPrivilegedTenantTransaction(authorized.authorization.data,async tx=>{
+  const prepared=await prepareGoodsOut(tx,authorized,composition);
+  if(prepared.code!=='PREPARED'){
+   if(prepared.code!=='OK')throw new GoodsOutRejected(prepared);
+   await finishGoodsOutFollowups(tx,authorized.authorization.data,composition,prepared.receipt);return prepared;
   }
+  const receipt=await prepared.complete();if(!receipt)throw Error('GOODS_OUT_PHYSICAL_RECEIPT_MISSING');
+  await finishGoodsOutFollowups(tx,authorized.authorization.data,composition,receipt);
+  return {code:'OK',receipt,replayed:false};
+ });}catch(error){if(error instanceof GoodsOutRejected)return error.result;logDatabaseFailure(error);return {code:'UNAVAILABLE',message:'Warenausgang konnte nicht sicher gebucht werden.'};}
+}
+async function handOverGroupParcels(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:RecordGoodsOutInput,selection:ShipmentSelection,physical:GoodsOutReceipt|null){
+ const handed=await tx.execute<{id:string;at:string}>(sql`UPDATE public.shipments shipment SET status='shipped',shipped_at=COALESCE(${selection.deviceCapturedAt??null}::timestamptz,clock_timestamp()),updated_at=clock_timestamp(),
+  carrier=${selection.carrier},tracking_number=${selection.trackingNumber}
+  WHERE shipment.tenant_id=${auth.tenantId} AND shipment.order_id=${input.orderId} AND shipment.id IN (${sql.join(selection.ids.map(id=>sql`${id}::uuid`),sql`,`)})
+    AND shipment.status IN ('pending','created') AND shipment.shipped_at IS NULL
+  RETURNING id::text,to_char(shipped_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at`);
+ if(handed.length!==selection.ids.length||handed.some(row=>!selection.ids.includes(row.id)))throw Error('SHIPMENT_GROUP_PHYSICAL_WRITE_MISSING');
+ for(const parcel of handed){
+  const id=randomUUID();
+  const written=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,payload,status,client_event_id,event_schema_version,correlation_id,aggregate_version,station,created_at)
+   VALUES(${id},${auth.tenantId},${input.orderId},'SHIPMENT_HANDED_OVER_V1',${MANUAL_SHIPPING_HANDOVER_LABEL},${auth.userId}::uuid,
+    ${JSON.stringify({shipmentId:parcel.id,trackingNumber:selection.trackingNumber,carrier:selection.carrier,goodsOutEventId:physical?.eventId??null,groupEventId:selection.groupEventId,source:'manual_tracking'})}::jsonb,
+    'success',${randomUUID()}::uuid,1,${selection.groupEventId}::uuid,${physical?.orderVersion??input.expectedVersion},${physical?'abgeholt':'fertig'},${parcel.at}::timestamptz AT TIME ZONE 'UTC') RETURNING id`);
+  if(written.length!==1||written[0].id!==id)throw Error('SHIPMENT_GROUP_PHYSICAL_RECEIPT_MISSING');
+ }
+}
+
+function groupMemberKey(groupKey:string,orderId:string){const h=createHash('sha256').update('shipment-group:'+groupKey+':'+orderId).digest('hex');return h.slice(0,8)+'-'+h.slice(8,12)+'-5'+h.slice(13,16)+'-8'+h.slice(17,20)+'-'+h.slice(20,32);}
+/** Same existing writer/transaction: validate every current group member before
+ * any physical completion, then preserve partial-order state until the last
+ * active parcel is actually handed over. No parallel dispatch truth exists. */
+export async function recordShipmentGroupGoodsOut(candidate:unknown,compositionFor:(input:RecordGoodsOutInput)=>Promise<GoodsOutComposition>,readGroup:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,groupId:string,lock?:boolean)=>Promise<ManualShipmentGroupState>):Promise<ShipmentGroupResult>{
+ if(!isShipmentGroupInput(candidate))return {code:'VALIDATION_ERROR',message:SHIPMENT_GROUP_COPY.invalid};
+ const input:ShipmentGroupInput={...candidate,...(candidate.offlineOriginal?{offlineOriginal:normalizeOfflineOriginal(candidate.offlineOriginal)}:{})},intent=canonicalJson(input);
+ const members: {authorized:GoodsOutAuthorization;composition:GoodsOutComposition}[]=[];
+ for(const member of [...input.members].sort((a,b)=>a.orderId.localeCompare(b.orderId))){
+  const child={...member,mode:'versand' as const,clientEventId:groupMemberKey(input.clientEventId,member.orderId)};
+  const authorized=await authorizeGoodsOutInput(child);if(authorized.code!=='AUTHORIZED')return authorized;
+  members.push({authorized,composition:await compositionFor(child)});
+ }
+ const auth=members[0].authorized.authorization.data,groupEventId=groupMemberKey(members[0].authorized.authorization.data.tenantId+':'+input.clientEventId,'original');
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('shipment-group-key:'||${auth.tenantId}||':'||${input.clientEventId},0))`);
+  if(input.offlineOriginal){
+   const qualified=await tx.execute<{ok:boolean}>(sql`SELECT private.valid_offline_original_event_v1(${JSON.stringify(input.offlineOriginal)}::jsonb,${auth.userId}::uuid,${input.clientEventId}::uuid) AS ok`);
+   if(qualified.length!==1||qualified[0].ok!==true)throw new GoodsOutRejected({code:'CONFLICT',message:SHIPMENT_GROUP_COPY.changed});
+  }
+  async function readOriginal():Promise<ShipmentGroupReceipt|null>{
+   const rows=await tx.execute<{id:string;user_id:string;event_type:string;status:string;payload:{intent:string;receipt:ShipmentGroupReceipt}}>(sql`SELECT id,user_id::text,event_type,status,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${input.clientEventId}::uuid`);
+   if(!rows.length)return null;
+   const row=rows[0];
+   if(rows.length!==1||row.id!==groupEventId||row.user_id!==auth.userId||row.event_type!=='SHIPMENT_GROUP_HANDED_OVER_V1'||row.status!=='success'||row.payload.intent!==intent)throw new GoodsOutRejected({code:'CONFLICT',message:SHIPMENT_GROUP_COPY.changed});
+   const receipt=row.payload.receipt;
+   if(!isShipmentGroupReceipt(receipt,input,auth.userId)||canonicalJson(receipt.offlineOriginal??null)!==canonicalJson(input.offlineOriginal??null)||receipt.eventId!==row.id||receipt.actorId!==auth.userId||receipt.clientEventId!==input.clientEventId||receipt.groupId!==input.groupId||receipt.groupVersion!==input.expectedGroupVersion||!Array.isArray(receipt.shipments)||!receipt.shipments.length)throw Error('SHIPMENT_GROUP_ORIGINAL_INVALID');
+   for(const parcel of receipt.shipments){
+    const facts=await tx.execute<{n:number}>(sql`SELECT count(*)::int AS n FROM public.shipments shipment JOIN public.events proof ON proof.tenant_id=shipment.tenant_id AND proof.order_id=shipment.order_id
+      AND proof.event_type='SHIPMENT_HANDED_OVER_V1' AND proof.status='success' AND proof.user_id=${auth.userId}::uuid
+      AND proof.payload->>'shipmentId'=shipment.id::text AND proof.payload->>'groupEventId'=${groupEventId}
+      AND proof.payload->>'trackingNumber'=${receipt.trackingNumber} AND proof.payload->>'carrier'=${receipt.carrier}
+      AND proof.payload->>'goodsOutEventId' IS NOT DISTINCT FROM ${parcel.goodsOutEventId}
+     WHERE shipment.tenant_id=${auth.tenantId} AND shipment.id=${parcel.shipmentId}::uuid AND shipment.order_id=${parcel.orderId}
+      AND shipment.shipped_at IS NOT NULL AND shipment.tracking_number=${receipt.trackingNumber} AND shipment.carrier=${receipt.carrier}`);
+    if(facts.length!==1||facts[0].n!==1)throw Error('SHIPMENT_GROUP_PHYSICAL_PROOF_INVALID');
+   }
+   // A partial release has no full goods-out receipt. Its immutable approval
+   // must instead name this actual group and exactly its selected parcels.
+   for(const member of members){
+    const selected=receipt.shipments.filter(parcel=>parcel.orderId===member.authorized.input.orderId);
+    if(selected.some(parcel=>parcel.goodsOutEventId!==null)||member.authorized.input.overdueReleaseReason===undefined)continue;
+    const audits=await tx.execute<{payload:{groupEventId:string;invoiceId:string;reason:string;shipmentIds:string[]};actor_id:string;version:number;notes:string;schema:number}>(sql`
+     SELECT audit.payload,audit.user_id::text AS actor_id,audit.aggregate_version AS version,audit.notes,audit.event_schema_version AS schema
+     FROM public.events audit JOIN public.orders own ON own.tenant_id=audit.tenant_id AND own.id=audit.order_id
+     JOIN public.invoices debt ON debt.tenant_id=audit.tenant_id AND debt.customer_id=own.customer_id AND debt.id::text=audit.payload->>'invoiceId'
+     WHERE audit.tenant_id=${auth.tenantId} AND audit.order_id=${member.authorized.input.orderId}
+       AND audit.event_type='ORDER_GOODS_OUT_DEBT_OVERRIDE_V1' AND audit.status='success'
+       AND audit.correlation_id=${groupEventId}::uuid`);
+    const audit=audits[0],reason=member.authorized.input.overdueReleaseReason;
+    if(audits.length!==1||audit.actor_id!==auth.userId||audit.schema!==2||Number(audit.version)!==member.authorized.input.expectedVersion||audit.notes!==reason
+      ||typeof audit.payload.invoiceId!=='string'||canonicalJson(audit.payload)!==canonicalJson({groupEventId,invoiceId:audit.payload.invoiceId,reason,shipmentIds:selected.map(parcel=>parcel.shipmentId).sort()}))throw Error('SHIPMENT_GROUP_OVERRIDE_PROOF_INVALID');
+   }
+   return receipt;
+  }
+  const prior=await readOriginal();if(prior){
+   // A secured group must also retain the existing physical writer's R2 retry
+   // path. Only actual final goods-out receipts may close their follow-up tasks.
+   for(const member of members){
+    const physicalIds=new Set(prior.shipments.filter(row=>row.orderId===member.authorized.input.orderId).map(row=>row.goodsOutEventId).filter((id):id is string=>id!==null));
+    if(physicalIds.size>1)throw Error('SHIPMENT_GROUP_PHYSICAL_SOURCE_AMBIGUOUS');
+    if(physicalIds.size){
+     const physical=await prepareGoodsOut(tx,member.authorized,member.composition);
+     if(physical.code!=='OK'||!physicalIds.has(physical.receipt.eventId))throw Error('SHIPMENT_GROUP_PHYSICAL_RETRY_INVALID');
+     await finishGoodsOutFollowups(tx,auth,member.composition,physical.receipt);
+    }
+   }
+   return {code:'OK',receipt:prior,replayed:true};
+  }
+  const first=await readGroup(tx,auth,input.orderId,input.groupId);
+  if(!first)return {code:'NOT_FOUND',message:SHIPMENT_GROUP_COPY.changed};
+  const expectedOrders=[...new Set(first.group.members.map(row=>row.orderId))].sort();
+  if(canonicalJson(expectedOrders)!==canonicalJson(members.map(row=>row.authorized.input.orderId)))return {code:'CONFLICT',message:SHIPMENT_GROUP_COPY.changed};
+  const customers=await tx.execute<{customer_id:string}>(sql`SELECT DISTINCT customer_id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id IN (${sql.join(expectedOrders.map(id=>sql`${id}`),sql`,`)})`);
+  if(customers.length!==1)throw new GoodsOutRejected({code:'CONFLICT',message:SHIPMENT_GROUP_COPY.changed});
+  // Same customer/advisory lock as the existing manual group writer. Invoice
+  // and task locks still precede order rows, preserving the existing lock order.
+  await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${auth.tenantId},${customers[0].customer_id})`);
+  for(const member of members)await member.composition.beforeOrderLock?.(tx,auth);
+  await tx.execute(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id IN (${sql.join(expectedOrders.map(id=>sql`${id}`),sql`,`)}) ORDER BY id FOR UPDATE`);
+  const current=await readGroup(tx,auth,input.orderId,input.groupId,true);
+  if(!current||current.group.version!==input.expectedGroupVersion||current.group.members.some(row=>!['pending','created'].includes(row.status)))throw new GoodsOutRejected({code:'CONFLICT',message:SHIPMENT_GROUP_COPY.changed});
+  // A pending second member is qualified only by the exact group link in a
+  // real manual-tracking original whose primary parcel still matches it.
+  const proofs=await tx.execute<{shipmentId:string;groupTarget:string|null;trackingNumber:string;carrier:string}>(sql`SELECT primary_shipment.id::text AS "shipmentId",proof.payload->'group'->>'targetShipmentId' AS "groupTarget",
+    primary_shipment.tracking_number AS "trackingNumber",primary_shipment.carrier
+   FROM public.events proof JOIN public.shipments primary_shipment ON primary_shipment.tenant_id=proof.tenant_id AND primary_shipment.order_id=proof.order_id
+    AND primary_shipment.id::text=proof.payload->'receipt'->>'shipmentId'
+    AND primary_shipment.tracking_number=proof.payload->'receipt'->>'trackingNumber' AND primary_shipment.carrier=proof.payload->'receipt'->>'carrier'
+   WHERE proof.tenant_id=${auth.tenantId} AND proof.event_type='SHIPMENT_MANUAL_TRACKING_SET_V1' AND proof.status='success' AND proof.user_id IS NOT NULL
+    AND proof.payload->'receipt'->>'actorId'=proof.user_id::text AND length(btrim(primary_shipment.tracking_number))>0
+    AND (primary_shipment.sendung_id=${input.groupId}::uuid OR primary_shipment.sendung_id IS NULL AND primary_shipment.id=${input.groupId}::uuid)
+    AND (proof.payload->'group'->>'id' IS NULL OR proof.payload->'group'->>'id'=${input.groupId})`);
+  const numbers=[...new Map(proofs.map(row=>[canonicalJson([row.carrier,row.trackingNumber]),row])).values()];
+  if(numbers.length!==1)throw new GoodsOutRejected({code:'VALIDATION_ERROR',message:MANUAL_SHIPPING_COPY.TRACKING_NUMBER_MISSING});
+  const tracking=numbers[0];
+  if(current.group.members.some(row=>row.trackingNumber!==null&&row.trackingNumber!==tracking.trackingNumber||row.carrier!==null&&row.carrier!==tracking.carrier
+    ||!proofs.some(proof=>proof.shipmentId===row.shipmentId||proof.groupTarget===row.shipmentId)))throw new GoodsOutRejected({code:'VALIDATION_ERROR',message:MANUAL_SHIPPING_COPY.TRACKING_NUMBER_MISSING});
+  const prepared:{member:typeof members[number];completion:PreparedGoodsOut;ids:string[]}[]=[];
+  for(const member of members){
+   const orderId=member.authorized.input.orderId,ids=current.group.members.filter(row=>row.orderId===orderId).map(row=>row.shipmentId);
+   const result=await prepareGoodsOut(tx,member.authorized,member.composition,{ids,groupEventId,trackingNumber:tracking.trackingNumber,carrier:tracking.carrier,...(input.offlineOriginal?{deviceCapturedAt:input.offlineOriginal.deviceCapturedAt}:{}),partial:current.remainingOrderIds.includes(orderId)});
+   if(result.code!=='PREPARED'){
+    if(result.code==='OK')throw Error('SHIPMENT_GROUP_CHILD_WITHOUT_ORIGINAL');
+    const number=current.group.members.find(row=>row.orderId===orderId)!.orderNumber;
+    const blocked={...result,blockedOrderId:orderId,blockedOrderNumber:number,message:SHIPMENT_GROUP_COPY.blocked(number,result.message)};
+    throw new GoodsOutRejected(blocked);
+   }
+   prepared.push({member,completion:result,ids});
+  }
+  const shipments:ShipmentGroupReceipt['shipments']=[];
+  for(const row of prepared){
+   const physical=await row.completion.complete();
+   if(physical)await finishGoodsOutFollowups(tx,auth,row.member.composition,physical);
+   for(const shipmentId of row.ids)shipments.push({shipmentId,orderId:row.member.authorized.input.orderId,goodsOutEventId:physical?.eventId??null});
+  }
+  const clocks=await tx.execute<{at:string}>(sql`SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at`);
+  if(clocks.length!==1)throw Error('SHIPMENT_GROUP_CLOCK_MISSING');
+  const receipt:ShipmentGroupReceipt={eventId:groupEventId,clientEventId:input.clientEventId,groupId:input.groupId,groupVersion:input.expectedGroupVersion,actorId:auth.userId,occurredAt:clocks[0].at,trackingNumber:tracking.trackingNumber,carrier:tracking.carrier,shipments,...(input.offlineOriginal?{offlineOriginal:input.offlineOriginal}:{})};
+  const written=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,payload,status,client_event_id,event_schema_version,aggregate_version,created_at)
+   VALUES(${groupEventId},${auth.tenantId},${input.orderId},'SHIPMENT_GROUP_HANDED_OVER_V1',${MANUAL_SHIPPING_HANDOVER_LABEL},${auth.userId}::uuid,${JSON.stringify({intent,receipt})}::jsonb,'success',${input.clientEventId}::uuid,1,1,${receipt.occurredAt}::timestamptz AT TIME ZONE 'UTC') RETURNING id`);
+  if(written.length!==1||written[0].id!==groupEventId)throw Error('SHIPMENT_GROUP_ORIGINAL_MISSING');
+  for(const row of prepared){
+   const override=row.completion.partialOverride;if(!override)continue;
+   const written=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,payload,notes,status,client_event_id,correlation_id,event_schema_version,aggregate_version,station,from_station,created_at)
+    VALUES(gen_random_uuid()::text,${auth.tenantId},${row.member.authorized.input.orderId},'ORDER_GOODS_OUT_DEBT_OVERRIDE_V1',${GOODS_OUT_DEBT_COPY.overrideRecorded},${auth.userId}::uuid,
+      ${JSON.stringify({groupEventId,invoiceId:override.invoiceId,reason:override.reason,shipmentIds:[...row.ids].sort()})}::jsonb,${override.reason},'success',gen_random_uuid(),${groupEventId}::uuid,2,${row.member.authorized.input.expectedVersion},${SOURCE_STATION},${SOURCE_STATION},clock_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
+   if(written.length!==1)throw Error('SHIPMENT_GROUP_OVERRIDE_PROOF_MISSING');
+  }
+  const proof=await readOriginal();if(!proof||canonicalJson(proof)!==canonicalJson(receipt))throw Error('SHIPMENT_GROUP_READBACK_MISMATCH');
+  return {code:'OK',receipt,replayed:false};
+ });}catch(error){if(error instanceof GoodsOutRejected)return error.result;logDatabaseFailure(error);return {code:'UNAVAILABLE',message:SHIPMENT_GROUP_COPY.unavailable};}
 }

@@ -34,6 +34,14 @@ export type OrderPaymentStateReadResult =
 
 const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
+/** The same canonical credit proposal for a payment view and a blocked output.
+ * Both sources have already been tenant- and money-authorized by their reader. */
+export function buildCustomerCreditApplication(source:CustomerCreditResult,payment:PaymentSummary|null):CustomerCreditApplicationRead{
+ if(source.code!=='OK')return {code:'SOURCE_INCOMPLETE'};
+ const amount=payment?Math.min(source.credit.balanceCents,payment.openAmountCents):0;
+ return {code:'OK',credit:source.credit,proposal:payment&&amount>0?{label:CUSTOMER_CREDIT_COPY.applyLabel(formatEuro(amount),payment.invoiceNumber),command:'credit.apply',input:{invoiceId:payment.invoiceId,amount,expectedVersion:payment.paymentVersion,expectedOpenAmountCents:payment.openAmountCents,expectedCreditVersion:source.credit.version}}:null};
+}
+
 function readDiagnostic(error: unknown, key: "message" | "details" | "hint"): string | null {
   if (!error || typeof error !== "object") return null;
   const value = (error as Record<string, unknown>)[key];
@@ -130,9 +138,7 @@ export async function getPaymentState(
       if(readCredit){
         try{creditApplication=await withTenantSavepoint(tx,async nested=>{
           const source=await readCredit(nested,authorization.tenantId,rows[0].credit_customer_id);
-          if(source.code!=='OK')return {code:'SOURCE_INCOMPLETE' as const};
-          const payment=mapped.payment,amount=payment?Math.min(source.credit.balanceCents,payment.openAmountCents):0;
-          return {code:'OK' as const,credit:source.credit,proposal:payment&&amount>0?{label:CUSTOMER_CREDIT_COPY.applyLabel(formatEuro(amount),payment.invoiceNumber),command:'credit.apply' as const,input:{invoiceId:payment.invoiceId,amount,expectedVersion:payment.paymentVersion,expectedOpenAmountCents:payment.openAmountCents,expectedCreditVersion:source.credit.version}}:null};
+          return buildCustomerCreditApplication(source,mapped.payment);
         });}catch{creditApplication={code:'SOURCE_INCOMPLETE'};}
       }
       return { ...mapped,...(additionalPayments.length?{additionalPayments}:{}),...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].payment_mode!=="keiner"&&rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };

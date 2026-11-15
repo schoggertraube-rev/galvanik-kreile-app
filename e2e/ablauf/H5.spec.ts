@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
-import {readyInvoiceOrder} from './orderFixture';
+import {readyInvoiceOrder,manualTrackingFixture} from './orderFixture';
 import {installMailProvider} from './mailProvider';
 
 it('DA01 pickup contact save has one actor receipt, enforces areas and remains unchanged after physical handover',async()=>{
@@ -58,6 +58,7 @@ async function selectedPickupMail(customerId:string){
 
 it.each([true,false])('H5 historical callback version advances are readable only with their complete task lineage: %s',async(validLineage)=>{
  const order=await readyInvoiceOrder('H5-Altbeleg','shipping'),mail=await selectedPickupMail(order.customerId);
+ await manualTrackingFixture(order.orderId);
  const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
  const release={orderId:order.orderId,mode:'versand' as const,expectedVersion:order.version,clientEventId:randomUUID()};
  const released=await withSession(full,()=>recordGoodsOutAction(release));if(released.code!=='OK')throw Error('H5_HISTORY_RELEASE:'+released.code);
@@ -89,6 +90,7 @@ it.each([true,false])('H5 historical callback version advances are readable only
 
 it('H5 a late pickup request preserves the physical release and creates one readable callback with its original',async()=>{
  const order=await readyInvoiceOrder('H5-ausgegeben','shipping'),mail=await selectedPickupMail(order.customerId);
+ await manualTrackingFixture(order.orderId);
  const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
  const release={orderId:order.orderId,mode:'versand' as const,expectedVersion:order.version,clientEventId:randomUUID()};
  const released=await withSession(full,()=>recordGoodsOutAction(release));

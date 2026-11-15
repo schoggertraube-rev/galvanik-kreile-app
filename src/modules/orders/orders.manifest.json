@@ -48,7 +48,9 @@
     "@/modules/orders/server-public#readFinishedDispatchQueue",
     "@/modules/orders/server-public#createInitialOrderPrintJobs",
     "@/modules/orders/server-public#retireOrderPrintJobsAfterGoodsOut",
-    "@/modules/orders/server-public#readOrderPrintQueue"
+    "@/modules/orders/server-public#readOrderPrintQueue",
+    "@/modules/orders/server-public#readManualShipmentGroup",
+    "@/modules/orders/public#ManualShipmentGroupState"
   ],
   "capabilities": [],
   "migrations": [
@@ -61,7 +63,8 @@
     "supabase/migrations/20261110022114_ablauf_canonical_release_projection.sql",
     "supabase/migrations/20261110085921_order_print_jobs.sql",
     "supabase/migrations/20261110093116_order_print_jobs_no_delete.sql",
-    "20261114042536_shipment_groups.sql"
+    "20261114042536_shipment_groups.sql",
+    "20261114171451_s10_original_and_handover_immutable.sql"
   ],
   "viewsFunctions": [
     "private.guard_goods_out_debt_override_v1",
@@ -85,7 +88,10 @@
       "ORDER_PICKUP_APPOINTMENT_SET_V1",
       "ORDER_COLLECTION_TASK_ENDED_FOR_APPOINTMENT_V1",
       "ORDER_PRINT_JOBS_QUEUED_V1",
-      "ORDER_PRINT_JOBS_RETIRED_V1"
+      "ORDER_PRINT_JOBS_RETIRED_V1",
+      "SHIPMENT_GROUP_HANDED_OVER_V1",
+      "DELIVERY_NOTE_ORIGINAL_V1",
+      "DELIVERY_NOTE_REQUESTED_V1"
     ],
     "consumes": [
       "ORDER_COLLECTION_REMINDER_PREPARED_V1",

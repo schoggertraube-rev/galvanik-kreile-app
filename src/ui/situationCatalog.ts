@@ -2,6 +2,9 @@
 export const INVOICE_VAT_COPY={missingCompanyRate:(part:string)=>`Für ${part} fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.`,missingRate:(part:string)=>`Für ${part} fehlt der Steuersatz (19 % oder 7 %).`,groupNet:(rate:string)=>"Netto ("+rate+")",groupVat:(rate:string)=>"zzgl. USt ("+rate+")",cancelNet:(rate:string)=>"Storno netto ("+rate+")",cancelVat:(rate:string)=>"Storno USt ("+rate+")",reverseCharge:"Steuerschuldnerschaft des Leistungsempfängers",vatId:"USt-IdNr.:"} as const;
 /** PL13.11.00:14 deferred sales-stage sources. */
 export const DEFERRED_LEGACY_COPY={unavailable:"Kommt nach dem Start dazu - bis dahin ausgeschaltet."} as const;
+// PL14Nov18:09: one payment line per real existing invoice payment.
+export const DELIVERY_NOTE_COPY={title:'Lieferschein',date:'Datum:',order:'Auftrag',description:'Beschreibung',quantity:'Anzahl Teile',payment:(date:string,amount:string)=>`Bezahlt am ${date}: ${amount}`,invalid:'Wähle den Auftrag erneut.',sourceMissing:'Für diesen Auftrag ist noch keine Rechnung bezahlt. Öffne die Zahlung am Auftrag.',changed:'Die Zahlung hat sich geändert. Lade den Auftrag neu und erzeuge den Lieferschein erneut.',unavailable:'Geht nur mit Netz'} as const;
+export const DELIVERY_NOTE_SOURCE_COPY={companyMissing:'Firmendaten fehlen. Trag sie in den Einstellungen ein.',addressMissing:(field:string)=>`${field} fehlt beim Kunden. Trag es in den Kundendaten ein.`,mixedCustomers:'Ein Lieferschein gilt für einen Kunden. Wähle nur dessen Aufträge.',orderChanged:'Der Auftrag hat sich geändert. Lade ihn neu und erzeuge den Lieferschein erneut.',handoverSignature:'Übergabe (Firma)',takeoverSignature:'Übernahme (Kunde)',phone:'Tel:'} as const;
 /** Existing compatibility denial text, now shared by canonical area gates. */
 export const LEGACY_ACTION_ACCESS_COPY={forbidden:"Keine Berechtigung für diese Aktion."} as const;
 export const MAIL_IMPORT_COPY={timeUnknown:'Eingangszeit fehlt',failed:'Import fehlgeschlagen',detail:(failure:{reason:string|null;graphMessageId:string|null})=>['Import fehlgeschlagen',failure.reason??MAILBOX_SYNC_COPY.unavailable,failure.graphMessageId??MAILBOX_SYNC_COPY.unavailable].join(' · '),task:(id:string)=>`Mail ${id} importieren – Import fehlgeschlagen`} as const;
@@ -183,6 +186,7 @@ export const MANUAL_SHIPPING_COPY={
  SHIPPING_FORBIDDEN:'Du hast für diesen Versand keine Freigabe.',ORDER_ID_INVALID:'Wähle den Auftrag erneut.',ORDER_NOT_FOUND:'Der Auftrag ist nicht verfügbar. Lade ihn erneut.',
  ORDER_NOT_SHIPPING:'Dieser Auftrag wird abgeholt. Öffne die Abholkarte.',SHIPPING_SETTINGS_MISSING:'Trag den Versanddienst in den Einstellungen ein.',
  MANUAL_SHIPPING_READ_FAILED:'Die Versanddaten konnten nicht geladen werden. Versuch es erneut.',TRACKING_INPUT_INVALID:'Prüf die Sendungsnummer und öffne das Paket erneut.',
+ TRACKING_NUMBER_MISSING:'Sendungsnummer fehlt – trag sie ein',
  TRACKING_KEY_CONFLICT:'Diese Buchungskennung gehört zu einer anderen Änderung. Lade das Paket erneut.',TRACKING_PATTERN_INVALID:'Korrigiere das Nummernmuster in den Versand-Einstellungen.',TRACKING_PATTERN_MISSING:'Trag das Nummernmuster in den Versand-Einstellungen ein. Die Nummer bleibt ungebucht.',
  TRACKING_FORMAT_CONFIRMATION_REQUIRED:'Die Nummer sieht nicht nach dem eingestellten Versanddienst aus. Du kannst sie ausdrücklich trotzdem übernehmen.',
  SHIPPING_RELEASE_BLOCKED:'Das Paket darf noch nicht raus. Öffne die Zahlung oder die Ausgabesperre am Auftrag.',TRACKING_ALREADY_ASSIGNED:'Die Nummer gehört schon zu einem anderen Paket. Öffne dieses Paket.',
@@ -312,6 +316,8 @@ export const MAIL_RESEND_COPY={
 };
 export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich',rejected:'abgelehnt, ohne Wirkung',originalCommand:{
  'item.finished':'Teil fertig melden',
+ 'document.deliveryNote':DELIVERY_NOTE_COPY.title,
+ 'shipment.handover':MANUAL_SHIPPING_HANDOVER_LABEL,
  'item.extraWork':'Mehrarbeit erfassen',
  'order.handover':'Übergabeart ändern',
  'invoice.issue':'Rechnung ausstellen',
@@ -418,3 +424,11 @@ export const SHIPPING_FEE_COPY={
  invalid:'Der Versandpreis muss ein Betrag ab 0,00 € sein. Leer heißt: kein Standard.',
  forbidden:'Die Versandpauschale ändert nur, wer das Recht Geld hat.',
 } as const;
+
+export const SHIPMENT_GROUP_COPY={
+ // PL14.11.19:13; the unavailable copy is the existing goods-out failure text.
+ invalid:'Wähle die Sendung erneut.',changed:'Die Sendung hat sich geändert. Lade sie neu und bestätige sie noch einmal.',
+ confirmGroup:'Diese Aufträge gehen zusammen raus. Öffne die Versanddaten und bestätige die Sendung.',
+ blocked:(order:string,reason:string)=>`${order}: ${reason}`,
+ unavailable:'Warenausgang konnte nicht sicher gebucht werden.'
+};

@@ -146,6 +146,7 @@ async function withRealSession<T>(
   });
   const workStore = {
     isStaticGeneration: false,
+    incrementalCache: {},
     page: "/test",
     route: "/test",
     afterContext: {},
@@ -213,7 +214,7 @@ async function seedCommandPrerequisites() {
         iban, bic, bank_name, tax_id, invoice_vat_rate_basis_points,
         invoice_payment_term_days
       ) VALUES (
-        'f14-command-settings', ${COMMAND_TENANT}, 'F1.5 Contract GmbH',
+        ${`TEST-f15-settings-${suffix}`}, ${COMMAND_TENANT}, 'F1.5 Contract GmbH',
         'Testweg 1', '70173', 'Stuttgart', 'Deutschland',
         'DE02120300000000202051', 'BYLADEM1001', 'Testbank',
         'DE-SYNTHETIC-TAX', 1900, 14
@@ -272,13 +273,14 @@ async function createCommandReadyOrder(
   label: string,
   paymentMode: PaymentMode,
   issueInvoice: boolean,
+  handoverMode: "pickup" | "shipping" = "pickup",
 ): Promise<CommandReadyOrder> {
   const { createOrderIntake } = await import("@/lib/server/commands/orderIntakeCommand");
   const intake = await withRealSession("admin", () => createOrderIntake({ geprueft: true,
     clientEventId: randomUUID(),
     customer: { mode: "EXISTING", customerId: COMMAND_CUSTOMER },
     dueDate: "2026-09-30",
-    handoverMode: "pickup",
+    handoverMode,
     paymentMode: "vorkasse",
     note: `F1.5 contract ${label}`,
     items: [{
@@ -335,8 +337,7 @@ async function createCommandReadyOrder(
   if (!issueInvoice) {
     return { orderId: intake.receipt.orderId, version: frozen.receipt.aggregateVersion, invoiceId: null, grossAmountCents: null };
   }
-  const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
-  const issued = await withRealSession("admin", () => createInvoice({
+  const issued = await withRealSession("admin", () => createCommandInvoice({
     orderId: intake.receipt.orderId,
     expectedVersion: frozen.receipt.aggregateVersion,
     clientEventId: randomUUID(),
@@ -349,6 +350,26 @@ async function createCommandReadyOrder(
     invoiceId: issued.receipt.invoiceId,
     grossAmountCents: issued.receipt.grossAmountCents,
   };
+}
+
+async function createCommandInvoice(input: Parameters<typeof import("@/lib/server/commands/immutableInvoiceCommand").createInvoice>[0]) {
+  const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
+  const { readInvoiceVat } = await import("@/modules/accounting/server-public");
+  const { readShippingSettingsInTransaction } = await import("@/modules/fundament/server-public");
+  return createInvoice(input, undefined, readInvoiceVat, readShippingSettingsInTransaction);
+}
+
+/** Synthetic carrier configuration only; tracking and its original use the real writer. */
+async function prepareCommandTracking(orderId: string) {
+  await sql`UPDATE public.company_settings SET versand_dienst='TEST F1.5 Parcel',
+    versand_nummer_format='',versand_nummer_hinweis='' WHERE tenant_id=${COMMAND_TENANT}`;
+  const { saveManualTrackingAction } = await import("@/app/actions/orders.actions");
+  const saved = await withRealSession("admin", () => saveManualTrackingAction({
+    orderId, shipmentId: randomUUID(), expectedUpdatedAt: null,
+    trackingNumber: `TEST-F15-${randomUUID()}`, allowFormatMismatch: false,
+    reason: null, clientEventId: randomUUID(),
+  }));
+  expect(saved.code, JSON.stringify(saved)).toBe("OK");
 }
 
 async function readCommandSnapshot(orderId: string) {
@@ -752,11 +773,10 @@ describe("F1.5 payment and goods-out contract", () => {
   it("runs the real command path through the Vorkasse gate, paid Abholung and invoice-less Rechnung V2", async () => {
     await seedCommandPrerequisites();
     const { recordGoodsOut } = await import("@/lib/server/commands/recordGoodsOutCommand");
-    const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
-    const { resolveAuthorization } = await import("@/lib/server/authorization");
+      const { resolveAuthorization } = await import("@/lib/server/authorization");
     const { getPaymentState } = await import("@/lib/server/paymentSummaryRead");
 
-    const prepaid = await createCommandReadyOrder(`vorkasse-${suffix}`, "vorkasse", true);
+    const prepaid = await createCommandReadyOrder(`vorkasse-${suffix}`, "vorkasse", true, "shipping");
     if (!prepaid.invoiceId || prepaid.grossAmountCents === null) throw new Error("ISSUED_INVOICE_MISSING");
     const prepaidInput = {
       orderId: prepaid.orderId,
@@ -765,12 +785,13 @@ describe("F1.5 payment and goods-out contract", () => {
       clientEventId: randomUUID(),
     };
     const prepaidBefore = await readCommandSnapshot(prepaid.orderId);
-    await expect(withRealSession("werkstatt", () => recordGoodsOut(prepaidInput)))
+    await expect(withRealSession("werkstatt", () => recordGoodsOut({ ...prepaidInput, mode: "abholung" })))
       .resolves.toMatchObject({ code: "CONFLICT" });
     expect(await readCommandSnapshot(prepaid.orderId)).toEqual(prepaidBefore);
 
     const prepaidPayment = await confirmCommandPayment(prepaid.invoiceId, prepaid.grossAmountCents);
     expect(prepaidPayment).toMatchObject({ code: "OK", receipt: { paymentStatus: "bezahlt", openAmountCents: 0 } });
+    await prepareCommandTracking(prepaid.orderId);
     const prepaidGoodsOut = await withRealSession("werkstatt", () => recordGoodsOut(prepaidInput));
     expect(prepaidGoodsOut).toMatchObject({
       code: "OK",
@@ -832,7 +853,8 @@ describe("F1.5 payment and goods-out contract", () => {
       },
     });
 
-    const issuedRechnung = await createCommandReadyOrder(`rechnung-issued-${suffix}`, "rechnung", true);
+    const issuedRechnung = await createCommandReadyOrder(`rechnung-issued-${suffix}`, "rechnung", true, "shipping");
+    await prepareCommandTracking(issuedRechnung.orderId);
     const issuedRechnungGoodsOut = await withRealSession("werkstatt", () => recordGoodsOut({
       orderId: issuedRechnung.orderId,
       mode: "versand",
@@ -909,7 +931,8 @@ describe("F1.5 payment and goods-out contract", () => {
       message: expect.stringContaining("F15_INVOICE_CREATED_V2_SOURCE_INVALID"),
     });
 
-    const rechnung = await createCommandReadyOrder(`rechnung-${suffix}`, "rechnung", false);
+    const rechnung = await createCommandReadyOrder(`rechnung-${suffix}`, "rechnung", false, "shipping");
+    await prepareCommandTracking(rechnung.orderId);
     const rechnungInput = {
       orderId: rechnung.orderId,
       mode: "versand" as const,
@@ -946,7 +969,7 @@ describe("F1.5 payment and goods-out contract", () => {
       clientEventId: randomUUID(),
     }))).resolves.toMatchObject({ code: "CONFLICT" });
 
-    const issued = await withRealSession("admin", () => createInvoice({
+    const issued = await withRealSession("admin", () => createCommandInvoice({
       orderId: rechnung.orderId,
       expectedVersion: goodsOut.receipt.orderVersion,
       clientEventId: randomUUID(),

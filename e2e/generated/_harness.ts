@@ -845,6 +845,9 @@ async function materializeDeliveredComplaintSource(page: Page) {
   const [invoice]=await sql<{id:string;amount:number;version:number}[]>`SELECT id::text,gross_amount_cents::float8 AS amount,payment_version AS version FROM public.invoices WHERE tenant_id=${TENANT} AND order_id=${orderId} AND status='issued'`;
   if(!invoice)throw Error('FLOW_DELIVERY_INVOICE_MISSING');
   await invoke('src/app/actions/payments.actions.ts','confirmPaymentAction',{invoiceId:invoice.id,amount:invoice.amount,expectedVersion:invoice.version,method:'ueberweisung',clientEventId:randomUUID()});
+  // Synthetic carrier settings; the parcel number and source proof use the real action.
+  await sql`UPDATE public.company_settings SET versand_dienst='TEST Generated Parcel',versand_nummer_format='',versand_nummer_hinweis='' WHERE tenant_id=${TENANT}`;
+  await invoke('src/app/actions/orders.actions.ts','saveManualTrackingAction',{orderId,shipmentId:randomUUID(),expectedUpdatedAt:null,trackingNumber:'TEST-FLOW-'+randomUUID(),allowFormatMismatch:false,reason:null,clientEventId:randomUUID()});
   const outKey=randomUUID();
   await invoke('src/app/actions/goodsOut.actions.ts','recordGoodsOutAction',{orderId,expectedVersion:await version(),mode:'versand',clientEventId:outKey});
   const proof=await sql`SELECT orders.id FROM public.orders orders JOIN public.events event ON event.tenant_id=orders.tenant_id AND event.order_id=orders.id AND event.client_event_id=${outKey}::uuid AND event.event_type LIKE 'ORDER_PICKED_UP_%' WHERE orders.tenant_id=${TENANT} AND orders.id=${orderId} AND orders.station='abgeholt'`;

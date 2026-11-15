@@ -137,7 +137,7 @@ export function SettingsAdminClient({
   }, [reloadAfterRightsSave, rightsToast]);
 
   const field = (key: keyof CompanySettingsInput, label: string, type = "text") => (
-    <label>{label}<input type={type} value={String(company[key])} onChange={(event) => setCompany((current) => ({ ...current, [key]: type === "number" ? Number(event.target.value) : event.target.value }))} /></label>
+    <label>{label}<input id={`company-${key}`} type={type} value={String(company[key])} onChange={(event) => setCompany((current) => ({ ...current, [key]: type === "number" ? Number(event.target.value) : event.target.value }))} /></label>
   );
 
   function report(
