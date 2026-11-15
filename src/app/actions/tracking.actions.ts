@@ -1,4 +1,5 @@
 "use server";
+import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import { db } from "@/db";
@@ -80,7 +81,7 @@ export async function getRealAnalyticsStats() {
       eventCounts[key] = (eventCounts[key] || 0) + 1;
       
       // Activity by date (last 7 days approx, just grouping by date string)
-      const dateStr = evt.createdAt.toISOString().split("T")[0];
+      const dateStr = berlinCalendarDay(evt.createdAt);
       activityCounts[dateStr] = (activityCounts[dateStr] || 0) + 1;
     });
     
