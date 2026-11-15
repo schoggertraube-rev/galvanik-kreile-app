@@ -1,7 +1,6 @@
 import 'server-only';
-import {hasAuthorizationArea,isAccessArea} from '@/lib/auth/authorizationContract';
+import {hasAuthorizationArea,isAccessArea,QUOTE_OPERATION_ACTION_IDS} from '@/lib/auth/authorizationContract';
 import type {AuthorizationSnapshot} from './authorization';
-import {QUOTE_OPERATION_ACTION_IDS} from './quoteAuthorization';
 import {V45_RULES,V45_SOURCE_HASHES,V45_PREVIEW_SHA,V45_ELEMENTS} from '@/ui/v45.generated';
 
 /** Pure reading projection. Facts must come from the existing domain read ports.
