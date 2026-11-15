@@ -6,6 +6,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, describe, expect, it, vi } from "vitest";
+// Each run owns a fixed TEST tenant: earlier Sabrina fixtures must not consume the three canonical suggestion slots.
+const tenant = vi.hoisted(() => "TEST-ablauf-" + globalThis.crypto.randomUUID());
+vi.mock("@/lib/tenant", () => ({ KREILE_TENANT_SLUG: tenant }));
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import type { AppSession } from "@/lib/server/appSession";
 import { findRecognizedCustomers } from "@/modules/eingang/public";

@@ -1,5 +1,5 @@
 import 'server-only';
-import {hasAuthorizationArea,isAccessArea} from '@/lib/auth/authorizationContract';
+import {hasAuthorizationArea,isAccessArea,QUOTE_OPERATION_ACTION_IDS} from '@/lib/auth/authorizationContract';
 import type {AuthorizationSnapshot} from './authorization';
 import {V45_RULES,V45_SOURCE_HASHES,V45_PREVIEW_SHA,V45_ELEMENTS} from '@/ui/v45.generated';
 
@@ -48,7 +48,10 @@ export function readAuthorizedV45Action(auth:AuthorizationSnapshot,elementId:str
  const action=metadata[0],right=action.recht;
  // V45 status names the existing perm_op_status capability; no role inference.
  if(right!==null&&right!=='status'&&!isAccessArea(right))return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_RIGHT']};
- const permitted=auth.active&&(right===null||right==='status'?right===null||auth.permissions.includes('perm_op_status'):hasAuthorizationArea(auth,right!));
+ // PL15.11.11:58 / U-249: these operational quote decisions use the
+ // writer's canonical commandRights. V45's status tag adds no second gate.
+ const canonicalQuoteDecision=commandRights!==undefined&&QUOTE_OPERATION_ACTION_IDS.includes(elementId);
+ const permitted=canonicalQuoteDecision||(right===null||right==='status'?right===null||auth.permissions.includes('perm_op_status'):hasAuthorizationArea(auth,right!));
  const commandPermitted=commandRights===undefined||Object.hasOwn(commandRights,action.id)&&commandRights[action.id]===true;
  if(!permitted||!commandPermitted)return {code:'OK' as const,hauptaktion:null,gesperrt:[{elementId:action.id,grundKey:'error.permission'}]};
  return {code:'OK' as const,hauptaktion:elementId,textKey:action.text,recht:right,gesperrt:[]};

@@ -35,6 +35,9 @@ export const AUTHORIZATION_ACTIONS = [
 export type AuthorizationAction = typeof AUTHORIZATION_ACTIONS[number];
 export type AuthorizationActionGrants = Record<AuthorizationAction, boolean>;
 
+/** U-249 operational IDs: one pure rights contract, without loading a live DB resolver. */
+export const QUOTE_OPERATION_ACTION_IDS:readonly string[]=['quote.accept','quote.extend','quote.convert','quote.return_goods'];
+
 export const ACCESS_AREAS = [
   "auftraege",
   "eingang",

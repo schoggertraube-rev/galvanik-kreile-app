@@ -489,6 +489,12 @@ it('KV-06/07b/08 records reply decisions and exactly their concern in one transa
   expect((await sql`SELECT e.event_type,e.payload->'source'->>'itemId' AS source,i.nachher->>'action' AS action FROM public.events e JOIN public.intake_event i ON i.tenant_id=e.tenant_id AND i.befehl_id=e.client_event_id AND i.art='anliegen' WHERE e.tenant_id=${KREILE_TENANT_SLUG} AND e.client_event_id=${input.clientEventId}::uuid`)[0]).toMatchObject({event_type:'QUOTE_LIFECYCLE_V04',source:itemId,action:action==='accept'?'kv.zugesagt':action==='reject'?'kv.abgesagt':'kv.anpassen'});
   expect(await withSession(fixture,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{usage:'offen',concerns:expect.arrayContaining(concerns),openConcerns:concerns}});
   expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:3}});
+  const u2=await withSession(fixture,()=>readQuoteAction({quoteId,purpose:'operations'}));
+  expect(u2).toMatchObject({code:'OK',nextActionRule:{source:{id:quoteId,version:3}}});
+  if(u2.code!=='OK')throw Error('S12_E3_U2:'+u2.code);
+  if(action==='conditional')expect(u2.nextActionRule).toMatchObject({hauptaktion:{elementId:'quote.revise'}});
+  else if(action==='accept')expect(u2.nextActionRule).toMatchObject({hauptaktion:{elementId:'quote.receive'}});
+  else expect(u2.nextActionRule.hauptaktion?.elementId).not.toBe('quote.accept');
   expect(await withSession(fixture,()=>changeQuoteLifecycleAction(input))).toMatchObject({code:'OK',replayed:true});
   expect((await sql`SELECT count(*)::int n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND art='anliegen' AND befehl_id=${input.clientEventId}::uuid`)[0].n).toBe(1);
  }
