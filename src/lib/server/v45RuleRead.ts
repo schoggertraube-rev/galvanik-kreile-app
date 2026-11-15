@@ -1,6 +1,7 @@
 import 'server-only';
 import {hasAuthorizationArea,isAccessArea} from '@/lib/auth/authorizationContract';
 import type {AuthorizationSnapshot} from './authorization';
+import {QUOTE_OPERATION_ACTION_IDS} from './quoteAuthorization';
 import {V45_RULES,V45_SOURCE_HASHES,V45_PREVIEW_SHA,V45_ELEMENTS} from '@/ui/v45.generated';
 
 /** Pure reading projection. Facts must come from the existing domain read ports.
@@ -50,7 +51,7 @@ export function readAuthorizedV45Action(auth:AuthorizationSnapshot,elementId:str
  if(right!==null&&right!=='status'&&!isAccessArea(right))return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_RIGHT']};
  // PL15.11.11:58 / U-249: these operational quote decisions use the
  // writer's canonical commandRights. V45's status tag adds no second gate.
- const canonicalQuoteDecision=commandRights!==undefined&&['quote.accept','quote.extend','quote.convert','quote.return_goods'].includes(elementId);
+ const canonicalQuoteDecision=commandRights!==undefined&&QUOTE_OPERATION_ACTION_IDS.includes(elementId);
  const permitted=canonicalQuoteDecision||(right===null||right==='status'?right===null||auth.permissions.includes('perm_op_status'):hasAuthorizationArea(auth,right!));
  const commandPermitted=commandRights===undefined||Object.hasOwn(commandRights,action.id)&&commandRights[action.id]===true;
  if(!permitted||!commandPermitted)return {code:'OK' as const,hauptaktion:null,gesperrt:[{elementId:action.id,grundKey:'error.permission'}]};
