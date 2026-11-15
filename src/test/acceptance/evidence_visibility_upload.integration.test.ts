@@ -44,6 +44,21 @@ it('F11-2 actual upload sets the customer flag once with original actor and secu
   {record_kind:'upload_intent',version:0,customer_visible:false,requested_visible:true,actor_id:full.actorId},
  ]);
  expect(await sql`SELECT original_hash,status FROM public.scan_uploads WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${photo.attachmentId}`).toEqual([{original_hash:photo.input.contentSha256,status:'secured'}]);
+ // K13K-3: the existing server reader still opens the secured original through
+ // its signed URL; repeat reading never regenerates or replaces its bytes.
+ const originalInput={attachmentId:photo.attachmentId};
+ for(let attempt=0;attempt<2;attempt++){
+  const original=await withSession(full,()=>photo.actions.getDomainAttachmentOriginalAction(JSON.parse(JSON.stringify(originalInput))));
+  expect(original).toMatchObject({code:'OK',data:{mimeType:'image/png',expiresInSeconds:60}});
+  if(original.code!=='OK')throw Error('TEST_S13K_ORIGINAL_READ');
+  expect(new URL(original.data.downloadUrl).hostname).toBe('127.0.0.1');
+  const response=await fetch(original.data.downloadUrl);expect(response.ok).toBe(true);
+  const bytes=new Uint8Array(await response.arrayBuffer());
+  expect(bytes).toEqual(new Uint8Array(TEST_PHOTO_BYTES));
+  expect(createHash('sha256').update(bytes).digest('hex')).toBe(photo.input.contentSha256);
+ }
+ const denied=await createFixture([]);
+ expect(await withSession(denied,()=>photo.actions.getDomainAttachmentOriginalAction(originalInput))).toMatchObject({code:'FORBIDDEN'});
  expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${photo.orderId}`).toHaveLength(0);
 });
 
