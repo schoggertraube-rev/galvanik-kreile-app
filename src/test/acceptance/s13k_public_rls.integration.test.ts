@@ -26,3 +26,14 @@ it('K13K-1 protects every public table and refuses direct client reads while ret
   })).resolves.toEqual([]);
  }finally{await sql.end({timeout:5});}
 });
+
+it('K13K-3 keeps only the existing server policy for scans without changing stored objects',async()=>{
+ const sql=postgres(connection,{max:1,prepare:false});
+ try{
+  const policies=await sql`SELECT policyname,roles,cmd,qual,with_check FROM pg_policies
+   WHERE schemaname='storage' AND tablename='objects' ORDER BY policyname`;
+  expect(policies).toEqual([{policyname:'scan_objects_service_role_all',roles:['service_role'],cmd:'ALL',qual:"(bucket_id = 'scans'::text)",with_check:"(bucket_id = 'scans'::text)"}]);
+  const [state]=await sql`SELECT relrowsecurity FROM pg_class WHERE oid='storage.objects'::regclass`;
+  expect(state.relrowsecurity).toBe(true);
+ }finally{await sql.end({timeout:5});}
+});
