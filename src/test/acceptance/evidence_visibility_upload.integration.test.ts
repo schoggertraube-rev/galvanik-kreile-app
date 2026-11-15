@@ -47,6 +47,19 @@ it('F11-2 actual upload sets the customer flag once with original actor and secu
  expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${photo.orderId}`).toHaveLength(0);
 });
 
+it('F11-10 closing an unfinalized reservation creates neither evidence nor visibility; the same real reservation can be finalized once after resuming',async()=>{
+ const photo=await prepare();
+ expect(await sql`SELECT status FROM public.scan_uploads WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${photo.attachmentId}`).toEqual([{status:'upload_reserved'}]);
+ expect(await sql`SELECT id FROM private.evidence_visibility_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND evidence_key=${photo.evidenceKey}`).toHaveLength(0);
+ const before=await withSession(full,()=>photo.actions.getDomainAttachmentsAction({targetType:'ORDER',targetId:photo.orderId}));
+ expect(before).toMatchObject({code:'OK',data:[]});
+ const result=await withSession(full,()=>finalizeDomainAttachmentAction(JSON.parse(JSON.stringify(photo.input))));
+ expect(result).toMatchObject({code:'OK',data:{receipt:{attachmentId:photo.attachmentId},visibility:{customerVisible:true,version:1}}});
+ const after=await withSession(full,()=>photo.actions.getDomainAttachmentsAction({targetType:'ORDER',targetId:photo.orderId}));
+ expect(after).toMatchObject({code:'OK',data:[{attachmentId:photo.attachmentId,visibility:{customerVisible:true,version:1}}]});
+ expect(await withSession(full,()=>finalizeDomainAttachmentAction(JSON.parse(JSON.stringify(photo.input))))).toMatchObject({code:'OK',data:{replayed:true,visibility:{version:1}}});
+});
+
 it('F11-11 real flag and task SQL failures retain the photo and immutable marker without ACK; same original repairs one normal task and one flag event',async()=>{
  const photo=await prepare(),dropFlag=await faultFor(photo),dropHistory=await faultFor(photo,true);
  let historyActive=true,flagActive=true;
