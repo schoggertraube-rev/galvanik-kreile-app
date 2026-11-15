@@ -3,8 +3,33 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture,intakeOrderFixture,readyInvoiceOrder} from './orderFixture';
-import {storeItemPhoto} from './photoFixture';
+import {storeItemPhoto,storeIntakeGoodsPhoto} from './photoFixture';
 
+it('W-WARE W1 retains the real label original once and blocks goods/order booking until the secured content photo exists',async()=>{
+ const customerId=await customerFixture('S12 W1 label');
+ const {createQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const {getIntakeCaptureAction,saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
+ const created=await withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',note:'TEST S12 label before contents',positions:[{name:'TEST S12 label part',quantity:2,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:400,lineTotalCents:800}]}));
+ expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('S12_W1_QUOTE:'+created.code);
+ const quoteId=created.quote.quoteId,overview=await storeIntakeGoodsPhoto();
+ const readCapture=()=>withSession(full,()=>getIntakeCaptureAction(overview.itemId));
+ const captured=await readCapture();if(captured.code!=='OK')throw Error('S12_W1_CAPTURE:'+captured.code);
+ const input={id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId:overview.itemId,quoteId,expectedQuoteVersion:created.quote.version,sourceVersion:captured.capture.version,expectedVersion:0,mode:'erfassung' as const,command:'accept' as const,card:1,packagesReceived:1,packagesTotal:1,condition:'unauffaellig' as const,deviations:[],foundUnattended:false,foundAt:null,procedure:'stimmt' as const,procedureNote:null,photos:[{fileId:overview.fileId,kind:'uebersicht' as const}],quantities:created.quote.positions.map(row=>({itemId:row.id,expected:row.quantity,received:null,confirmed:true,note:null})),location:'TEST S12 label shelf'};
+ expect(await withSession(full,()=>saveGoodsReceiptAction(input))).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Inhaltsfoto')});
+ expect(await sql`SELECT count(*)::int AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId}`).toEqual([{n:0}]);
+ expect(await sql`SELECT count(*)::int AS n FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid`).toEqual([{n:0}]);
+ expect(await readCapture()).toMatchObject({code:'OK',capture:{files:[expect.objectContaining({id:overview.fileId,secured:true})]}});
+ const parts=await storeIntakeGoodsPhoto(overview.itemId),updated=await readCapture();if(updated.code!=='OK')throw Error('S12_W1_CONTENTS:'+updated.code);
+ const complete={...input,sourceVersion:updated.capture.version,photos:[...input.photos,{fileId:parts.fileId,kind:'teile' as const}]};
+ expect(await withSession(full,()=>saveGoodsReceiptAction(complete))).toMatchObject({code:'OK',receipt:{id:input.id,auftrag_id:null,kv_id:quoteId}});
+ expect(await withSession(full,()=>saveGoodsReceiptAction(JSON.parse(JSON.stringify(complete))))).toMatchObject({code:'OK',replayed:true});
+ const reread=await withSession(full,()=>readQuoteAction({quoteId}));expect(reread.code).toBe('OK');if(reread.code!=='OK')throw Error('S12_W1_READ:'+reread.code);
+ expect(reread.quote.linkedOrderId).toBeNull();
+ expect(reread.quote.lifecycle?.goods).toEqual([expect.objectContaining({id:input.id,orderId:null})]);
+ expect(reread.nextActionRule.source).toMatchObject({kind:'quote',id:quoteId,version:reread.quote.version});
+ expect(await sql`SELECT count(*)::int AS n FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid`).toEqual([{n:1}]);
+ expect(await sql`SELECT count(*)::int AS n FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${overview.itemId}::uuid`).toEqual([{n:2}]);
+});
 it.each([0,1,3])('W-WARE W4 accepts %i unpriced parts only when real parts exist and exposes the price step without inventing zero',async count=>{
  const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
  const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');

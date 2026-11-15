@@ -1,10 +1,75 @@
 import {randomUUID} from 'node:crypto';
-import {expect,it} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,withRequest,createFixture} from './replayHarness';
 import {customerFixture,readyInvoiceOrder} from './orderFixture';
 import {storeIntakeGoodsPhoto} from './photoFixture';
 import {requestMailStep} from './requestMailStep';
+import {installMailProvider} from './mailProvider';
+
+it('W-EINGANG E5 rereads the canonical overdue task, sends one real original PDF and advances the same followup on retry',async()=>{
+ await requestMailStep('S12E5');
+ const customerId=await customerFixture('S12 E5');
+ // Explicit synthetic company master data; PDF rendering, original storage and mail action are real.
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST S12 E5' WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ await sql`UPDATE public.company_settings SET company_name='TEST S12 E5',street='TEST Weg 1',zip='70176',city='Stuttgart',country='Deutschland',iban='DE02120300000000202051',bic='BYLADEM1001',bank_name='TEST Bank',tax_id='DE123456789',invoice_vat_rate_basis_points=1900,invoice_payment_term_days=14 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,readQuoteDefaultsAction,getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
+ const {getIntakeTaskAction,saveIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ const {saveQuoteSettingsAction}=await import('@/app/actions/settings.actions');
+ const {berlinCalendarDay}=await import('@/lib/domain/workingDays');
+ const settings=await withSession(full,()=>readQuoteDefaultsAction());if(settings.code!=='OK')throw Error('S12_E5_SETTINGS:'+settings.code);
+ expect(await withSession(full,()=>saveQuoteSettingsAction({clientEventId:randomUUID(),expectedUpdatedAt:settings.settings.updatedAt,setupCents:settings.settings.setupCents,materialCents:settings.settings.materialCents,followupDays:5,validityDays:settings.settings.validityDays}))).toMatchObject({code:'OK'});
+ const made=await withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',note:'TEST S12 E5',positions:[{name:'TEST E5 Halter',quantity:2,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:400,lineTotalCents:800}]}));
+ if(made.code!=='OK')throw Error('S12_E5_QUOTE:'+made.code);const quoteId=made.quote.quoteId;
+ expect(await withSession(full,()=>changeQuoteLifecycleAction({quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,action:'sent',channel:'druck',evidence:'TEST E5 handed over paper'}))).toMatchObject({code:'OK'});
+ const [task]=await sql`SELECT id::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quoteId}`;
+ const taskRead=await withSession(full,()=>getIntakeTaskAction({taskId:task.id}));if(taskRead.code!=='OK'||!taskRead.task)throw Error('S12_E5_TASK');const value=taskRead.task;
+ const yesterday=new Date(berlinCalendarDay()+'T12:00:00Z');yesterday.setUTCDate(yesterday.getUTCDate()-1);const past=yesterday.toISOString().slice(0,10);
+ expect(await withSession(full,()=>saveIntakeTaskAction({clientKey:value.client_key,taskId:value.id,version:value.version,kind:value.art,title:value.titel,dueDate:past,time:value.uhrzeit,forLogin:value.fuer_login,forArea:value.fuer_bereich,reference:{type:value.bezug_typ,id:value.bezug_id},note:value.notiz}))).toMatchObject({code:'OK'});
+ const due=await withSession(full,()=>getQuoteFollowupsForTodayAction());expect(due.code).toBe('OK');if(due.code!=='OK')throw Error('S12_E5_DUE:'+due.code);expect(due.tasks).toContainEqual(expect.objectContaining({id:task.id,quoteId,dueDate:past}));
+ const input={targetType:'CUSTOMER' as const,targetId:customerId,clientRequestId:randomUUID(),subject:'TEST Nachfrage zum KV',body:'TEST Bitte geben Sie uns zum KV Bescheid.',attachment:{kind:'QUOTE' as const,documentId:quoteId}};
+ const deliveries=()=>vi.mocked(fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&init?.method==='POST'&&String(url).endsWith('/sendMail'));
+ const before=deliveries().length;
+ expect(await withSession(full,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK'});
+ const reread=await withSession(full,()=>readQuoteAction({quoteId}));if(reread.code!=='OK')throw Error('S12_E5_READ:'+reread.code);
+ const nextDate=reread.quote.lifecycle?.followupAt;expect(typeof nextDate).toBe('string');if(typeof nextDate!=='string')throw Error('S12_E5_NEXT_DATE_MISSING');
+ expect(nextDate>berlinCalendarDay()).toBe(true);
+ expect(reread.nextActionRule.source).toMatchObject({id:quoteId,version:reread.quote.version});
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK'});
+ expect(deliveries().length-before).toBe(1);
+ const payload=JSON.parse(String(deliveries().at(-1)?.[1]?.body));expect(payload.message.attachments).toHaveLength(1);expect(Buffer.from(payload.message.attachments[0].contentBytes,'base64').subarray(0,5).toString()).toBe('%PDF-');
+ expect(await sql`SELECT count(*)::int AS n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quoteId}`).toEqual([{n:1}]);
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:task.id}))).toMatchObject({code:'OK',task:{faellig_am:reread.quote.lifecycle?.followupAt,status:'offen'}});
+});
+it('W-EINGANG E1 explicit search keeps two Müller customers unassigned until a real choice and preserves the original on retry',async()=>{
+ const ids=[await customerFixture('S12 Müller Ulm'),await customerFixture('S12 Müller Ehingen')],sender='TEST-mueller-'+randomUUID()+'@example.invalid';
+ // Explicit synthetic ambiguous master data: shared family/business mailbox.
+ for(const [index,id] of ids.entries())await sql`UPDATE public.customers SET name='TEST Müller',company_name='TEST Müller',email=${sender},city=${index===0?'Ulm':'Ehingen'},zip_code=${index===0?'89073':'89584'} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${id}`;
+ const graphId='TEST-S12-Mueller-'+randomUUID();
+ installMailProvider(graphId,'TEST Guten Tag, bitte melden Sie sich.',sender,'TEST gemeinsame Müller-Adresse');
+ const {importOutlookMailAction}=await import('@/app/actions/communications.actions');
+ const {getIntakeCaptureAction,getIntakeAssignmentAction,assignIntakeCustomerAction}=await import('@/app/actions/eingang.actions');
+ const imported=await withSession(full,()=>importOutlookMailAction(graphId));
+ expect(imported.code).toBe('OK');if(imported.code!=='OK')throw Error('S12_E1B_IMPORT:'+imported.code);
+ expect(await withSession(full,()=>getIntakeCaptureAction(imported.itemId))).toMatchObject({code:'OK',capture:{customerId:null,assignment:'offen'}});
+ const choices=await withSession(full,()=>getIntakeAssignmentAction({itemId:imported.itemId,mode:'normal'}));
+ expect(choices.code).toBe('OK');if(choices.code!=='OK')throw Error('S12_E1B_CHOICES:'+choices.code);
+ // PL15.11 12:29: automatic sender candidates/Rueckfrage belong to S25.
+ // S12 exercises the same explicit search used by IntakeAssignmentDialog.
+ const {searchOrderIntakeCustomersAction}=await import('@/app/warendurchlauf/actions');
+ const found=await withSession(full,()=>searchOrderIntakeCustomersAction({query:sender}));
+ expect(found.ok).toBe(true);if(!found.ok)throw Error('S12_E1_SEARCH:'+found.error);
+ expect(found.data.customers.map(row=>row.id).sort()).toEqual([...ids].sort());
+ expect(found.data.customers.map(row=>row.city).sort()).toEqual(['Ehingen','Ulm']);
+ const input={itemId:imported.itemId,version:choices.view.version,customerId:ids[1],clientEventId:randomUUID(),mode:'manual' as const};
+ expect(await withSession(full,()=>assignIntakeCustomerAction({...input,mode:'confirm'}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>assignIntakeCustomerAction(input))).toMatchObject({code:'OK',customer:{id:ids[1]}});
+ expect(await withSession(full,()=>getIntakeCaptureAction(imported.itemId))).toMatchObject({code:'OK',capture:{customerId:ids[1]}});
+ expect(await withSession(full,()=>assignIntakeCustomerAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>importOutlookMailAction(graphId))).toMatchObject({code:'OK',itemId:imported.itemId,replayed:true});
+ expect(await sql`SELECT count(*)::int AS n FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND mime='message/rfc822'`).toEqual([{n:1}]);
+});
 
 it.each([0,1,2])('W-EINGANG E8 offers %i real delivered orders and never creates a complaint merely by reading the choices',async count=>{
  const {getComplaintOrderChoicesAction,getComplaintDialogAction}=await import('@/app/actions/complaints.actions');
