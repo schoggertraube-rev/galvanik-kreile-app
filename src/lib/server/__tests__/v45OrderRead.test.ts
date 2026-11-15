@@ -1,9 +1,16 @@
 import {it,expect,vi} from 'vitest';
 vi.mock('server-only',()=>({}));
-import {v45OrderFacts} from '../v45OrderRead';
+import {v45OrderFacts,readV45OrderRule} from '../v45OrderRead';
 import {readV45Rule} from '../v45RuleRead';
 // Explicit synthetic boundaries of the real versioned card read contract.
 const card={station:'galvanik',handoverMode:'pickup' as const,items:[]};
+it('KORR-S13-1 retains absent collection names even when the next captured subsource is unknown',()=>{
+ const auth={tenantId:'TEST-collection',userId:'11111111-1111-4111-8111-111111111111',displayName:'TEST',role:'werkstatt' as const,active:true as const,areas:[] as const,permissions:[]};
+ const result=readV45OrderRule(auth,{...card,id:'TEST-order',version:3,customerId:'TEST-customer',orderNumber:'TEST-1',title:'TEST object',dueAt:null,station:'fertig',operationalFacts:{rework:false,pricesMissing:false,complaint:false}});
+ expect(result.hauptaktion).toBeNull();
+ expect(result.datenluecken).toEqual(expect.arrayContaining(['collectionPlanned','collectionPrepared','shippingCostMissing']));
+ expect(result.erstblick.some(field=>field.key==='auftrag.lage')).toBe(true);
+});
 it('does not equate dispatched with delivered or invent a return receipt',()=>{
  const facts=v45OrderFacts({...card,station:'versendet',handoverMode:'shipping'});
  expect(facts).not.toHaveProperty('closed');expect(facts).not.toHaveProperty('inTransit');expect(facts).not.toHaveProperty('returning');

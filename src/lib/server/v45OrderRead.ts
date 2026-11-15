@@ -70,7 +70,9 @@ export function v45OrderReleaseFacts(card:{id:string;version:number},source?:Rel
 function readV45OrderRuleRaw(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'customerId'|'title'|'dueAt'|'station'|'handoverMode'|'items'|'operationalFacts'>,release?:ReleaseSource,evidence?:{orderId:string;records:readonly EvidenceReadRecord[]}){
  const source={kind:'order' as const,id:card.id,version:card.version};
  const missingPhotoItems=evidence?.orderId===card.id?card.items.filter(item=>!evidence.records.some(record=>record.source==='ORDER_STATION_ATTACHMENT'&&record.original.state==='VERIFIED'&&['image/jpeg','image/png','image/webp'].includes(record.original.mimeType??'')&&record.targets.some(target=>target.targetType==='ORDER'&&target.targetId===card.id)&&record.targets.some(target=>target.targetType==='ORDER_ITEM'&&target.targetId===item.id))):null;
- const rule=readAuthorizedV45Rule(auth,'auftrag',{...v45OrderFacts(card),...v45OrderReleaseFacts(card,release),...(missingPhotoItems!==null?{photosMissing:missingPhotoItems.length>0}:{})},undefined,['workProblem','deliveryRequest','termUpdatePending','workUpdatePending','extraPending']);
+ // KORR-S13-1 / PL15.11.15:07: no collection capture path until S38a.
+ // R15 skips those absent facts; a supplied malformed fact still stops at R1.
+ const rule=readAuthorizedV45Rule(auth,'auftrag',{...v45OrderFacts(card),...v45OrderReleaseFacts(card,release),...(missingPhotoItems!==null?{photosMissing:missingPhotoItems.length>0}:{})},undefined,['workProblem','deliveryRequest','termUpdatePending','workUpdatePending','extraPending','collectionPlanned','collectionPrepared']);
  const first=readV45FirstLook('auftrag',{
   'auftrag.lage':{nummer:card.orderNumber,station:card.station},
   'auftrag.termin':{datum:card.dueAt},
@@ -80,7 +82,7 @@ function readV45OrderRuleRaw(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,
  },rule.code==='OK'&&(rule.zustand==='work'||rule.zustand==='finish')?['auftrag.blocker']:[],rule.code==='OK'&&(rule.zustand==='work'||rule.zustand==='finish')?undefined:rule.code==='OK'?rule.zustand:undefined,true);
  // A state requiring an as-yet unbound blocker stays incomplete, never calm.
  if(first.code!=='OK')return {...first,source};
- if(rule.code!=='OK')return {...rule,source,erstblick:first.erstblick,datenluecken:first.datenluecken};
+ if(rule.code!=='OK')return {...rule,source,erstblick:first.erstblick,datenluecken:[...first.datenluecken,...('datenluecken'in rule&&Array.isArray(rule.datenluecken)?rule.datenluecken:[])]};
  const actions=readV45ObjectActionAbsence('auftrag',rule.zustand);
  const part=rule.hauptaktion==='order.photo'?missingPhotoItems?.[0]:undefined;
  const binding=rule.hauptaktion&&Object.hasOwn(ORDER_U2_BINDINGS.commands,rule.hauptaktion)?ORDER_U2_BINDINGS.commands[rule.hauptaktion as keyof typeof ORDER_U2_BINDINGS.commands]:null;

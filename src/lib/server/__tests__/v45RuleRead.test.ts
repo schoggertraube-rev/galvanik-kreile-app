@@ -82,6 +82,14 @@ describe('S04 canonical authorization across every imported rule',()=>{
 });
 
 // R15 absent capture paths are distinct from a broken existing read source.
+it('KORR-S13-1 skips absent collection capture but keeps malformed supplied collection facts unknown',()=>{
+ const facts=baseline('auftrag');
+ delete facts.collectionPlanned;delete facts.collectionPrepared;
+ const missing=['collectionPlanned','collectionPrepared'];
+ expect(readV45Rule('auftrag',{...facts,station:'fertig',paymentReady:false},missing)).toMatchObject({code:'OK',hauptaktion:'order.payment',datenluecken:missing});
+ expect(readV45Rule('auftrag',{...facts,station:'fertig',collectionPlanned:null,collectionPrepared:false},missing)).toMatchObject({code:'SOURCE_INCOMPLETE',ruleId:'auftrag.sammelrechnung',missing:['collectionPlanned']});
+ expect(readV45Rule('auftrag',{...facts,station:'fertig',collectionPlanned:true,collectionPrepared:'false'},missing)).toMatchObject({code:'SOURCE_INCOMPLETE',ruleId:'auftrag.sammelrechnung',missing:['collectionPrepared']});
+});
 it('R15 continues only past explicitly unrecorded facts and retains named gaps',()=>{
  const facts={returning:false,inTransit:false,closed:false,complaint:true};
  expect(readV45Rule('auftrag',facts,['workProblem','deliveryRequest','termUpdatePending'])).toMatchObject({code:'OK',ruleId:'auftrag.rekla',datenluecken:['workProblem','deliveryRequest','termUpdatePending']});
