@@ -89,6 +89,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
     for (const c of INITIAL_CUSTOMERS) {
       await db.insert(customers).values({
         id: c.id,
+        tenantId: "galvanik-kreile",
         name: c.name,
         type: c.type,
         city: c.city,
