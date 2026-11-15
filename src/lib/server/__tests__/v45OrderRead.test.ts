@@ -1,9 +1,48 @@
 import {it,expect,vi} from 'vitest';
 vi.mock('server-only',()=>({}));
-import {v45OrderFacts,readV45OrderRule} from '../v45OrderRead';
+import {v45OrderFacts,v45OrderSourceFacts,v45OrderReleaseFacts,readV45OrderRule} from '../v45OrderRead';
 import {readV45Rule} from '../v45RuleRead';
 // Explicit synthetic boundaries of the real versioned card read contract.
 const card={station:'galvanik',handoverMode:'pickup' as const,items:[]};
+
+// Deliberately synthetic port-result boundaries; actual source/writer proof is A5.
+type Sources=NonNullable<Parameters<typeof v45OrderSourceFacts>[1]>;
+const sourceCard={id:'TEST-order',version:3,handoverMode:'pickup' as const};
+const knownSources={shipping:{code:'OK',orderId:'TEST-order',orderVersion:3,shippingCostMissing:false},
+ payment:{code:'OK',data:{orderId:'TEST-order',orderVersion:3,creditApplication:{code:'OK',proposal:null}}},
+ shipment:{code:'OK',data:{orderId:'TEST-order',orderVersion:3,shipments:[{status:'created',labelUrl:'TEST-secured-label'}]}}} as unknown as Sources;
+it('KORR-S13-2 reads booleans from matching qualified port versions without projecting money',()=>{
+ expect(v45OrderSourceFacts(sourceCard,knownSources)).toEqual({shippingCostMissing:false,creditApplicable:false,labelReady:true});
+ expect(v45OrderSourceFacts(sourceCard,{...knownSources,shipping:{...knownSources.shipping,shippingCostMissing:true}} as Sources)).toMatchObject({shippingCostMissing:true});
+});
+it.each([
+ {key:'shipping',fact:'shippingCostMissing'},
+ {key:'payment',fact:'creditApplicable'},
+ {key:'shipment',fact:'labelReady'},
+] as const)('KORR-S13-2 unreadable or stale $key is unknown, never false',({key,fact})=>{
+ const failed={...knownSources,[key]:{code:'SOURCE_INCOMPLETE'}} as unknown as Sources;
+ expect(v45OrderSourceFacts(sourceCard,failed)).not.toHaveProperty(fact);
+ expect(v45OrderSourceFacts({...sourceCard,version:4},knownSources)).not.toHaveProperty(fact);
+});
+it('KORR-S13-2 never turns a malformed captured credit proposal into applicable credit',()=>{
+ const malformed={...knownSources,payment:{code:'OK',data:{orderId:'TEST-order',orderVersion:3,creditApplication:{code:'OK'}}}} as unknown as Sources;
+ expect(v45OrderSourceFacts(sourceCard,malformed)).not.toHaveProperty('creditApplicable');
+});
+it('KORR-S13-2 overdue uses the versioned release source; absent or stale debt evidence is unknown',()=>{
+ type Release=NonNullable<Parameters<typeof v45OrderReleaseFacts>[1]>;
+ const source={orderId:sourceCard.id,value:{code:'OK',orderVersion:3,informed:null,overdueInvoiceIds:['TEST-invoice']}} as unknown as Release;
+ expect(v45OrderReleaseFacts(sourceCard,source)).toMatchObject({overdue:true});
+ expect(v45OrderReleaseFacts({...sourceCard,version:4},source)).not.toHaveProperty('overdue');
+ expect(v45OrderReleaseFacts(sourceCard,{...source,value:{code:'UNAVAILABLE'}})).not.toHaveProperty('overdue');
+});
+it('KORR-S13-2 no money right exposes the canonical blocked action and preserves the first look',async()=>{
+ const {getPermissionsForAreas}=await import('@/lib/auth/authorizationContract');
+ const areas=['auftraege'] as const;
+ const auth={tenantId:'TEST-source-right',userId:'11111111-1111-4111-8111-111111111111',displayName:'TEST',role:'werkstatt' as const,active:true as const,areas,permissions:getPermissionsForAreas(areas)};
+ const result=readV45OrderRule(auth,{...card,...sourceCard,customerId:'TEST-customer',orderNumber:'TEST-1',title:'TEST object',dueAt:null,station:'fertig',operationalFacts:{rework:false,pricesMissing:false,complaint:false}});
+ expect(result.hauptaktion).toBeNull();expect(result.gesperrt).toContainEqual({elementId:'shipping.cost',grundKey:'error.permission'});
+ expect(result.datenluecken).toContain('shippingCostMissing');expect(result.erstblick.some(field=>field.key==='auftrag.lage')).toBe(true);
+});
 it('KORR-S13-1 retains absent collection names even when the next captured subsource is unknown',()=>{
  const auth={tenantId:'TEST-collection',userId:'11111111-1111-4111-8111-111111111111',displayName:'TEST',role:'werkstatt' as const,active:true as const,areas:[] as const,permissions:[]};
  const result=readV45OrderRule(auth,{...card,id:'TEST-order',version:3,customerId:'TEST-customer',orderNumber:'TEST-1',title:'TEST object',dueAt:null,station:'fertig',operationalFacts:{rework:false,pricesMissing:false,complaint:false}});
