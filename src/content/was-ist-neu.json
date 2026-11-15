@@ -1,6 +1,15 @@
 [
   {
     "datum": "2026-11-15",
+    "pr": 226,
+    "seite": "kv",
+    "punkte": [
+      "Die nächste Aktion am KV berücksichtigt Deine bereits erlaubten Telefon-Zusagen. Geldbeträge bleiben ohne Geldrecht verborgen."
+    ],
+    "ziel": "/orders"
+  },
+  {
+    "datum": "2026-11-15",
     "pr": 225,
     "seite": "auftraege",
     "punkte": [
