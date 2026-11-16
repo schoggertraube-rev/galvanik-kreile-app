@@ -1788,6 +1788,19 @@ function assertServer(expectation: { fehler?: string } | undefined, state: FlowR
 export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
   try { await runGeneratedFlowCaseBody(page,canonicalFixtureCase(flowCase)); }
   catch(error){
+    if(flowCase.id==='C09'&&flowCase.paket==='AP-C'){
+      // Keep the write assertion strict and report the real UI's reason
+      // when no copied order was booked; no synthetic success or retry.
+      try {
+        const state=await page.locator('[data-spec-id="eingang"]').evaluateAll(forms=>forms.map(form=>({
+          checks:Array.from(form.querySelectorAll('[data-spec-id^="eingang.pruefliste."]')).map(element=>({
+            id:element.getAttribute('data-spec-id'),state:element.getAttribute('data-state'),text:element.textContent,
+          })),
+          messages:Array.from(form.querySelectorAll('[role="alert"],[role="status"]')).map(element=>element.textContent),
+        })));
+        console.error('[FLOW_COPY_BOOKING_FAILURE_STATE]',JSON.stringify(state));
+      } catch(diagnosticError){console.error('[FLOW_COPY_FAILURE_STATE_UNAVAILABLE]',diagnosticError);}
+    }
     if(process.env.FLOW_DIAGNOSTICS==="1")try{
       writeFileSync(path.resolve(".git",`flow-${flowCase.id}.txt`),await page.locator("body").innerText({timeout:1_000}),"utf8");
       await page.screenshot({path:path.resolve(".git",`flow-${flowCase.id}.png`),timeout:3_000});
