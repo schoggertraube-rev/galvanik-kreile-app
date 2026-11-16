@@ -50,7 +50,8 @@
     "@/modules/orders/server-public#retireOrderPrintJobsAfterGoodsOut",
     "@/modules/orders/server-public#readOrderPrintQueue",
     "@/modules/orders/server-public#readManualShipmentGroup",
-    "@/modules/orders/public#ManualShipmentGroupState"
+    "@/modules/orders/public#ManualShipmentGroupState",
+    "@/modules/orders/public#ManualShippingReadResult"
   ],
   "capabilities": [],
   "migrations": [

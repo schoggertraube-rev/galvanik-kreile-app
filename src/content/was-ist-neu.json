@@ -1,6 +1,15 @@
 [
   {
     "datum": "2026-11-15",
+    "pr": 227,
+    "seite": "auftraege",
+    "punkte": [
+      "Deine nächste Auftragsaktion berücksichtigt die gespeicherten Zahlungs-, Guthaben- und Versandbelege. Fehlende Quellen bleiben ausdrücklich erkennbar."
+    ],
+    "ziel": "/orders"
+  },
+  {
+    "datum": "2026-11-15",
     "pr": 226,
     "seite": "kv",
     "punkte": [

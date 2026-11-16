@@ -47,3 +47,4 @@ export type {InitialDispatchReminderPlan,PickupAppointmentProjection} from './do
 export type {StorageEligibility} from './domain/storageEligibility';
 
 export type {ManualShipmentGroupState} from './server/types';
+export type {ManualShippingReadResult} from './server/manualShipping';

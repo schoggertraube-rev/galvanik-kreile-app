@@ -1,4 +1,5 @@
 "use server";
+import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 
 export async function getProductionWeekAction(input?:{onDate?:string}){
@@ -269,7 +270,13 @@ export async function getLiveOrderCardAction(
     const {readOrderPickupAppointment}=await import('@/lib/server/pickupAppointmentPort');
     const pickupAppointment=await readOrderPickupAppointment(authorization.data,input.orderId);
     const {readV45OrderRule}=await import('@/lib/server/v45OrderRead');
-    return { code: "OK", data: { ...(handoverConsequences?{handoverConsequences}:{}),serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope(),nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data}),card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
+    const {getPaymentState}=await import('@/lib/server/paymentSummaryRead');
+    const readCredit=hasAuthorizationArea(authorization.data,'geld')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
+      const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
+      return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
+    }:undefined;
+    const payment=card.data.station==='fertig'?await getPaymentState(authorization.data,input.orderId,readCredit):undefined;
+    return { code: "OK", data: { ...(handoverConsequences?{handoverConsequences}:{}),serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope(),nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data},{shipping:handoverConsequences,payment,shipment:manualShipping}),card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,
