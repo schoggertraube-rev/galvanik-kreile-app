@@ -1,3 +1,4 @@
+import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {mailImportFailureProjection} from './intakeMailFailureRead';
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
 import type {MailImportFailure} from '../mailSelectionContract';
@@ -88,7 +89,7 @@ export async function readIntakeCapture(itemId: string, ctx?: IntakeContext): Pr
   const auth = await authorizedIntakeContext(ctx);
   if ("code" in auth) return auth;
   try { return await intakeCaptureSnapshot(auth, itemId, ctx); }
-  catch (error) { console.error("[INTAKE_CAPTURE_READ_FAILED]", error); return failure("UNAVAILABLE", "Eingang konnte nicht geladen werden. Fehlercode: INTAKE_CAPTURE_READ_FAILED."); }
+  catch{ recordObservedFailure('INTAKE_CAPTURE_READ_FAILED'); return failure("UNAVAILABLE", "Eingang konnte nicht geladen werden. Fehlercode: INTAKE_CAPTURE_READ_FAILED."); }
 }
 /** U-241: one explicit routing decision on the saved intake; the original never changes. */
 export async function chooseIntakeCaptureKind(input: unknown): Promise<IntakeCaptureResult> {
@@ -130,7 +131,7 @@ export async function chooseIntakeCaptureKind(input: unknown): Promise<IntakeCap
       return null;
     });
     return rejected ?? await intakeCaptureSnapshot(auth, value.itemId);
-  } catch (error) { console.error("[INTAKE_KIND_WRITE_FAILED]", error); return failure("UNAVAILABLE", "Die gewählte Art wurde nicht bestätigt. Original bleibt erhalten · Code: INTAKE_KIND_WRITE_FAILED."); }
+  } catch{ recordObservedFailure('INTAKE_KIND_WRITE_FAILED'); return failure("UNAVAILABLE", "Die gewählte Art wurde nicht bestätigt. Original bleibt erhalten · Code: INTAKE_KIND_WRITE_FAILED."); }
 }
 export async function discardIntakeCapture(input:unknown):Promise<IntakeCaptureResult>{
   if(!record(input)||Object.keys(input).sort().join(",")!=="clientEventId,itemId,version"
@@ -156,7 +157,7 @@ export async function discardIntakeCapture(input:unknown):Promise<IntakeCaptureR
       return null;
     });
     return result??await intakeCaptureSnapshot(auth,input.itemId);
-  }catch(error){console.error("[INTAKE_CAPTURE_DISCARD_FAILED]",error);return failure("UNAVAILABLE","Aufnahme konnte nicht gekennzeichnet werden · Original bleibt erhalten. Code: INTAKE_CAPTURE_DISCARD_FAILED.");}
+  }catch{recordObservedFailure('INTAKE_CAPTURE_DISCARD_FAILED');return failure("UNAVAILABLE","Aufnahme konnte nicht gekennzeichnet werden · Original bleibt erhalten. Code: INTAKE_CAPTURE_DISCARD_FAILED.");}
 }
 export async function readIntakePendingScope() {
   const auth = await authorizedIntakeContext();
@@ -183,8 +184,8 @@ export async function saveIntakeNote(input: unknown, readCustomer: (tx: Privileg
     const orderCustomerId = order?.code === "OK" ? order.data.customerId : null;
     const saved = await withPrivilegedTenantTransaction(auth, tx => writeIntakeNoteInTransaction(tx,auth,note,readCustomer,orderCustomerId,onConflict));
     return saved ?? await intakeCaptureSnapshot(auth, note.itemId);
-  } catch (error) {
-    console.error("[INTAKE_NOTE_WRITE_FAILED]", error);
+  } catch{
+    recordObservedFailure('INTAKE_NOTE_WRITE_FAILED');
     return failure("UNAVAILABLE", "Speichern fehlgeschlagen · alle Eingaben sind noch da. Fehlercode: INTAKE_NOTE_WRITE_FAILED.");
   }
 }

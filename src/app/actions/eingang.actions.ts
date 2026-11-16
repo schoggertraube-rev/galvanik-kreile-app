@@ -1,4 +1,5 @@
 "use server";
+import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
 import {readObservedAuthorization} from '@/lib/server/actionObservation';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
@@ -34,7 +35,7 @@ async function withPackageExpectation(result:IntakeCaptureResult):Promise<Intake
    if(!result.capture.customerId)for(const row of await readPackageOrderCustomers(tx,auth.data,result.capture.recognition?.text??result.capture.text??'')){const customer=await readCustomerProfile(tx,auth.data.tenantId,row.customerId);if(customer)orderHistory.push({...row,customerName:customer.name,source:'order'});}
    return readPackageExpectation(tx,auth.data,result.capture,quotes,history,orderHistory);
   });
- }catch(error){console.error('[PACKAGE_EXPECTATION_READ_FAILED]',error);result.capture.packageContext={status:'UNAVAILABLE',message:PACKAGE_ASSIGN_COPY.unavailable};}
+ }catch{recordObservedFailure('PACKAGE_EXPECTATION_READ_FAILED');result.capture.packageContext={status:'UNAVAILABLE',message:PACKAGE_ASSIGN_COPY.unavailable};}
  return result;
 }
 
@@ -90,6 +91,7 @@ export async function changeIncomingInvoiceStatusAction(input:unknown){return ch
 export async function clarifyIncomingInvoiceAction(input:unknown){return changeIncomingInvoice(input,invoiceEffects,true);}
 /** Supplier selection uses the same canonical customer search and stored profiles. */
 export async function searchInvoiceSuppliersAction(query:string){
+ return observeAction('searchInvoiceSuppliersAction',subjectForAction('searchInvoiceSuppliersAction',query),async()=>{
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung nicht verfügbar.'};
  if(!hasAuthorizationArea(auth.data,'geld'))return {code:'FORBIDDEN' as const,message:'Recht Geld fehlt.'};
  if(typeof query!=='string'||query.length>200)return {code:'VALIDATION_ERROR' as const,message:'Suchtext ist ungültig.'};
@@ -98,7 +100,9 @@ export async function searchInvoiceSuppliersAction(query:string){
   const suppliers=await withPrivilegedTenantTransaction(auth.data,async tx=>{
    const values=[];for(const candidate of candidates){if(candidate.customerType!=='lieferant')continue;const value=await readCustomerProfile(tx,auth.data.tenantId,candidate.id);if(value)values.push({id:value.id,name:value.name,iban:value.iban,paymentTermDays:value.paymentTermDays});}return values;
   });return {code:'OK' as const,suppliers};
- }catch(error){console.error('[INVOICE_SUPPLIER_SEARCH_FAILED]',{code:error instanceof Error?error.name:'INVOICE_SUPPLIER_SEARCH_FAILED'});return {code:'UNAVAILABLE' as const,message:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'};}
+ }catch{recordObservedFailure('INVOICE_SUPPLIER_SEARCH_FAILED');return {code:'UNAVAILABLE' as const,message:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'};}
+
+ },readLoggingSettings);
 }
 const goodsEffects={createMissingTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;missing:string[];clientKey:string})=>createMissingGoodsTask(tx,auth,input,taskEffects)};
 export async function saveIntakeTaskAction(input:unknown){return saveTask(input,taskEffects);}
@@ -152,19 +156,25 @@ export async function createStorageFinalTaskAction(input:{customerId:string;hand
 export async function getIntakeTaskAction(input:{calendar:true}):Promise<import('@/modules/tasks/public').TaskCalendarRead>;
 export async function getIntakeTaskAction(input:TaskOpenRequest):Promise<Awaited<ReturnType<typeof readSingleIntakeTask>>>;
 export async function getIntakeTaskAction(input:TaskOpenRequest|{calendar:true}){
+ return observeAction('getIntakeTaskAction',subjectForAction('getIntakeTaskAction',input),async()=>{
  if(input&&typeof input==='object'&&'calendar'in input)return readTask(input);
  return readSingleIntakeTask(input);
+
+ },readLoggingSettings);
 }
 async function readSingleIntakeTask(input:TaskOpenRequest){
  const result=await readTask(input);if(result.code!=='OK'||!result.task)return result;
  const auth=await resolveAuthorization();if(!auth.ok)return result;
  try{const call=await readDispatchCallRequirement(auth.data,result.task.id),postal=await readStoragePostalTask(auth.data,result.task.id);return {...result,...(call?{dispatchCall:call}:{}),...(postal?{postalLetter:postal}:{})};}
- catch(error){console.error('[DISPATCH_CALL_REQUIREMENT_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};}
+ catch{recordObservedFailure('DISPATCH_CALL_REQUIREMENT_FAILED');return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};}
 }
 import {readOpenIntakeMails} from '@/modules/eingang/server-public';
 import {saveIntakeProspect} from '@/modules/eingang/server-public';
 export async function saveIntakeProspectAction(input:unknown){return saveIntakeProspect(input,createCustomerInTransaction,readCustomerProfile);}
-export async function getOpenIntakeMailsAction(){const notice=await syncIntakeMailbox();const result=await readOpenIntakeMails();return result.code==='OK'?{...result,...(notice?{notice}:{})}:result;}
+export async function getOpenIntakeMailsAction(){
+ return observeAction('getOpenIntakeMailsAction',subjectForAction('getOpenIntakeMailsAction',undefined),async()=>{const notice=await syncIntakeMailbox();const result=await readOpenIntakeMails();return result.code==='OK'?{...result,...(notice?{notice}:{})}:result;
+ },readLoggingSettings);
+}
 import {listMicrosoftGraphInbox,readMicrosoftGraphMailbox} from '@/lib/server/microsoftGraph';
 import {parkIntakeMailImportFailure,readFailedIntakeMailImports,observeIntakeMailboxImport,readIntakeMailboxWatermark} from '@/modules/eingang/server-public';
 import {readMailboxFetchState,writeMailboxFetchState} from '@/modules/fundament/server-public';
@@ -229,10 +239,13 @@ async function syncIntakeMailbox():Promise<string|null>{
   if(completed.code!=='OK')return MAILBOX_SYNC_COPY.unavailable;
   const pendingNotice=inbox.cursorUrl===null?null:inbox.remaining===null?MAILBOX_SYNC_COPY.unavailable:MAILBOX_SYNC_COPY.pending(inbox.remaining);
   return failureNotice&&pendingNotice?failureNotice+'\n'+pendingNotice:failureNotice??pendingNotice;
- }catch(error){console.error('[INTAKE_MAIL_SYNC_FAILED]',error);return MAILBOX_SYNC_COPY.unavailable;}
+ }catch{recordObservedFailure('INTAKE_MAIL_SYNC_FAILED');return MAILBOX_SYNC_COPY.unavailable;}
 }
 import { processIntakeDeviceRequest, discardIntakeCapture, chooseIntakeCaptureKind } from "@/modules/eingang/server-public";
-export async function chooseIntakeCaptureKindAction(input: unknown) { return chooseIntakeCaptureKind(input); }
+export async function chooseIntakeCaptureKindAction(input: unknown) {
+ return observeAction('chooseIntakeCaptureKindAction',subjectForAction('chooseIntakeCaptureKindAction',input),async()=>{ return chooseIntakeCaptureKind(input);
+ },readLoggingSettings);
+}
 import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation } from "@/modules/eingang/server-public";
 import {saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,type GoodsReceiptResult} from "@/modules/eingang/server-public";
 import {parseGoodsReceiptInput} from "@/modules/eingang/public";
@@ -295,12 +308,15 @@ export async function saveIntakeNoteAction(input: unknown,pendingScope?:string) 
    try{await preserveOfflineNoteConflict(tx,auth,note,currentVersion,async eventId=>{
     const failure=await writeIntakeNoteInTransaction(tx,auth,{...note,itemId:eventId,textstand:eventId,expectedVersion:0,concerns:[]},readCustomerProfile,orderCustomerId);if(failure)throw Error('OFFLINE_CONFLICT_ORIGINAL_'+failure.code);
     return createOfflineNoteConflictTask(tx,auth,eventId,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});
-   });}catch(error){console.error('[OFFLINE_NOTE_CONFLICT_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});throw Error('OFFLINE_NOTE_CONFLICT_FAILED');}
+   });}catch{recordObservedFailure('OFFLINE_NOTE_CONFLICT_FAILED');throw Error('OFFLINE_NOTE_CONFLICT_FAILED');}
   }),sourceKey);
 
  },readLoggingSettings);
 }
-export async function discardIntakeCaptureAction(input:unknown){return discardIntakeCapture(input);}
+export async function discardIntakeCaptureAction(input:unknown){
+ return observeAction('discardIntakeCaptureAction',subjectForAction('discardIntakeCaptureAction',input),async()=>{return discardIntakeCapture(input);
+ },readLoggingSettings);
+}
 async function matchesPendingActor(scope:string|undefined){
  if(scope===undefined)return true;
  const auth=await resolveAuthorization();return auth.ok&&offlinePartition(auth.data)===scope;
@@ -337,8 +353,11 @@ export async function saveIntakeDeviceRequestAction(input: unknown) {
   return processIntakeDeviceRequest(input, fingerprint);
 }
 export async function getIntakeCaptureAction(itemId: string, context?: IntakeContext, options?:{packageExpectation?:boolean}) {
+ return observeAction('getIntakeCaptureAction',subjectForAction('getIntakeCaptureAction',{itemId}),async()=>{
   const read=await readIntakeCapture(itemId, context);
   return options?.packageExpectation===true?withPackageExpectation(read):read;
+
+ },readLoggingSettings);
 }
 export async function recognizeIntakeNoteAction(text: string) {
  return observeAction('recognizeIntakeNoteAction',subjectForAction('recognizeIntakeNoteAction',text),async()=>{

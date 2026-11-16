@@ -105,7 +105,10 @@ export async function observeAction<T>(name:string,subject:LogSubject,work:()=>P
  try{result=await work();}
  catch(error){
   if(!readAuthorization().attempted){try{await resolveAuthorization();}catch{lose();}}
-  await logTechnical(readAuthorization().authorization,{type:'server_error',command:options.errorIdentifier??name,subject:source,reason:'SERVER_ERROR'});throw error;
+  const observation=readAuthorization();
+  if(observation.failures.size){for(const identifier of observation.failures)await logTechnical(observation.authorization,{type:'server_error',command:identifier,subject:source,reason:'UNKNOWN'});}
+  else await logTechnical(observation.authorization,{type:'server_error',command:options.errorIdentifier??name,subject:source,reason:'SERVER_ERROR'});
+  throw error;
  }
  const durationMs=Math.round(performance.now()-start);
  const objectResult=result!==null&&typeof result==='object'?result as Record<string,unknown>:null;
@@ -118,9 +121,11 @@ export async function observeAction<T>(name:string,subject:LogSubject,work:()=>P
  // that missing identity, never repeat a lookup or replace a rejected session.
  if(failure&&!readAuthorization().attempted){try{await resolveAuthorization();}catch{lose();}}
  const auth=readAuthorization().authorization;
+ const reported=readAuthorization().failures;
+ for(const identifier of reported)await logTechnical(auth,{type:'server_error',command:identifier,subject:source,reason:'UNKNOWN'});
  let slowMs:number|null=null;
  if(auth){try{const settings=await readSettings(auth);if(settings)slowMs=settings.slowMs;else lose();}catch{lose();}}
- if(failure&&code!==null){
+ if(failure&&code!==null&&reported.size===0){
   const reason=code==='VALIDATION_ERROR'?'VALIDATION':reasons.includes(code as LogReason)?code as LogReason:'UNKNOWN';
   await logTechnical(auth,{type:code==='UNAVAILABLE'?'server_error':'rejected',command:code==='UNAVAILABLE'?options.errorIdentifier??name:name,subject:source,reason});
  }
