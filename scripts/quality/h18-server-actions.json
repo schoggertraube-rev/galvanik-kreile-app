@@ -6,6 +6,7 @@
       "src/test/acceptance/s20_technical_protocol.integration.test.ts"
     ],
     "src/app/actions/logging.actions.ts#recordProtocolClicksAction": [
+      "src/test/acceptance/s20_click_capture.browser.integration.test.ts",
       "src/test/acceptance/s20_click_protocol.integration.test.ts"
     ],
     "src/app/actions/invoices.actions.ts#payoutCustomerCreditAction": [
