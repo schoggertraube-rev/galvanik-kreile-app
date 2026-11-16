@@ -1,4 +1,6 @@
 'use server';
+import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {offlinePartition} from '@/lib/server/offlinePartition';
 import {isPendingWorkshopOriginal,isPendingFinancialOriginal,type PendingWorkshopOriginal,type PendingPhysicalWorkshopOriginal} from '@/lib/offline/pendingStore';
@@ -23,7 +25,9 @@ type ScopeFailure={code:'UNAUTHENTICATED'}|{code:'FORBIDDEN'}|{code:'VALIDATION_
 type RejectedOriginal={code:'PRESERVED';eventId:string;taskId:string;replayed:boolean;message:string;rejectionReceipt:WorkshopRejectionReceipt};
 export async function replayOfflineWorkshopAction(scope:string,original:PendingPhysicalWorkshopOriginal):Promise<Awaited<ReturnType<typeof replayPhysical>>|RejectedOriginal|ScopeFailure>;
 export async function replayOfflineWorkshopAction(scope:string,original:PendingWorkshopOriginal):ReturnType<typeof replayCommand>;
-export async function replayOfflineWorkshopAction(scope:string,original:PendingWorkshopOriginal):Promise<Awaited<ReturnType<typeof replayCommand>>|ScopeFailure>{return replayCommand(scope,original);}
+export async function replayOfflineWorkshopAction(scope:string,original:PendingWorkshopOriginal):Promise<Awaited<ReturnType<typeof replayCommand>>|ScopeFailure>{
+ return observeAction('replayOfflineWorkshopAction',subjectForAction('replayOfflineWorkshopAction',original?.input),()=>replayCommand(scope,original),readLoggingSettings,{errorIdentifier:'OFFLINE_WORKSHOP_RECONCILIATION_FAILED'});
+}
 async function replayCommand(scope:string,original:PendingWorkshopOriginal){
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const};
  if(offlinePartition(auth.data)!==scope)return {code:'FORBIDDEN' as const};
@@ -31,9 +35,14 @@ async function replayCommand(scope:string,original:PendingWorkshopOriginal){
  try{
   const result=await reconcileOfflineWorkshop(auth.data,original,()=>applyKnownCommand(auth.data,scope,original),
    (tx,eventId)=>createOfflineWorkshopConflictTask(tx,auth.data,eventId,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}),readCustomerProfile);
-  if(result.code==='PRESERVED'&&'rejectionReceipt'in result)return {...result,rejectionReceipt:{...result.rejectionReceipt,scope}};
+  if(result.code==='PRESERVED'&&'rejectionReceipt'in result){
+   // reconcileOfflineWorkshop has committed and qualified this immutable original
+   // and its task. The device time comes from that receipt, never from a failed input.
+   await logTechnical(auth.data,{type:'offline_conflict',command:'replayOfflineWorkshopAction',subject:{type:'event',id:result.eventId},occurredAt:result.rejectionReceipt.deviceCapturedAt});
+   return {...result,rejectionReceipt:{...result.rejectionReceipt,scope}};
+  }
   return result;
- }catch(error){console.error('[OFFLINE_WORKSHOP_RECONCILIATION_FAILED]',{name:error instanceof Error?error.name:'UnknownError',code:error instanceof Error&&/^[A-Z0-9_]+$/.test(error.message)?error.message:'UNAVAILABLE'});return {code:'UNAVAILABLE' as const};}
+ }catch{return {code:'UNAVAILABLE' as const};}
 }
 async function applyKnownCommand(auth:AuthorizationSnapshot,scope:string,original:PendingWorkshopOriginal){
  if(original.command==='shipment.handover'){

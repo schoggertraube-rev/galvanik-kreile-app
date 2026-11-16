@@ -94,7 +94,7 @@ export async function readLog(auth:AuthorizationSnapshot,filter:LogFilter,readSe
 }
 
 /** One observer for Action compositions. It never changes the command's result or transaction. */
-export async function observeAction<T>(name:string,subject:LogSubject,work:()=>Promise<T>,readSettings:LoggingSettingsReader):Promise<T>{
+export async function observeAction<T>(name:string,subject:LogSubject,work:()=>Promise<T>,readSettings:LoggingSettingsReader,options:{errorIdentifier?:string}={}):Promise<T>{
  if(actionObservationActive())return work();
  return withActionObservation(async readAuthorization=>{
  // A rejected input is not a verified object reference (and may contain secrets).
@@ -105,7 +105,7 @@ export async function observeAction<T>(name:string,subject:LogSubject,work:()=>P
  try{result=await work();}
  catch(error){
   if(!readAuthorization().attempted){try{await resolveAuthorization();}catch{lose();}}
-  await logTechnical(readAuthorization().authorization,{type:'server_error',command:name,subject:source,reason:'SERVER_ERROR'});throw error;
+  await logTechnical(readAuthorization().authorization,{type:'server_error',command:options.errorIdentifier??name,subject:source,reason:'SERVER_ERROR'});throw error;
  }
  const durationMs=Math.round(performance.now()-start);
  const objectResult=result!==null&&typeof result==='object'?result as Record<string,unknown>:null;
@@ -122,7 +122,7 @@ export async function observeAction<T>(name:string,subject:LogSubject,work:()=>P
  if(auth){try{const settings=await readSettings(auth);if(settings)slowMs=settings.slowMs;else lose();}catch{lose();}}
  if(failure&&code!==null){
   const reason=code==='VALIDATION_ERROR'?'VALIDATION':reasons.includes(code as LogReason)?code as LogReason:'UNKNOWN';
-  await logTechnical(auth,{type:code==='UNAVAILABLE'?'server_error':'rejected',command:name,subject:source,reason});
+  await logTechnical(auth,{type:code==='UNAVAILABLE'?'server_error':'rejected',command:code==='UNAVAILABLE'?options.errorIdentifier??name:name,subject:source,reason});
  }
  if(auth&&slowMs!==null&&durationMs>slowMs)await logTechnical(auth,{type:'slow',command:name,subject:source,durationMs});
  return result;
