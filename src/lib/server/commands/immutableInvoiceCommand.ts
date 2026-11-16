@@ -678,7 +678,7 @@ export function mapInvoiceIssueReceipt(row: ReceiptRow, tenantId: string, actorI
   const kindValid=row.belegart==='auftrag'
     ?row.ursprung_rechnung_id===null&&row.shipping_costs_intent===null
     :row.belegart==='versandkosten'&&typeof row.ursprung_rechnung_id==='string'&&UUID_PATTERN.test(row.ursprung_rechnung_id)
-      &&validShippingCosts(row.shipping_costs_intent,row.order_id)
+      &&validShippingCosts(row.shipping_costs_intent,row.order_id,true)
       &&row.shipping_costs_intent.invoiceId===row.ursprung_rechnung_id
       &&plainObject(row.snapshot)&&Array.isArray(row.snapshot.lines)&&row.snapshot.lines.length>0
       &&row.snapshot.lines.every(line=>plainObject(line)&&line.type==='SHIPPING')
@@ -826,7 +826,7 @@ function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInv
     && (input.shippingCosts===undefined
       ?row.belegart==='auftrag'&&row.ursprung_rechnung_id===null&&row.shipping_costs_intent===null
       :row.belegart==='versandkosten'&&row.ursprung_rechnung_id===input.shippingCosts.invoiceId
-        &&validShippingCosts(row.shipping_costs_intent,input.orderId)
+        &&validShippingCosts(row.shipping_costs_intent,input.orderId,true)
         &&row.shipping_costs_intent.invoiceId===input.shippingCosts.invoiceId
         &&row.shipping_costs_intent.expectedVersion===input.shippingCosts.expectedVersion
         &&row.shipping_costs_intent.scope===input.shippingCosts.scope
@@ -1109,6 +1109,7 @@ export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot
     const selected=shippingLinesForScope(lines,scope);if(!selected.some(line=>line.shippingKind==='fee'))continue;
     const amount=selected.reduce((sum,line)=>sum+line.amountCents,0);
     if(!Number.isSafeInteger(amount)||amount<0)throw Error('SHIPPING_PROPOSAL_AMOUNT_INVALID');
+    if(amount===0)continue;
     // Customer display is already part of the immutable qualified invoice, not
     // a second lookup or a client-provided invoice/customer association.
     additionalInvoices.push({originalInvoiceNumber:parent.receipt.invoiceNumber,label:SHIPPING_FEE_COPY.additional(formatShippingFee(amount),snapshot.customer.name),
@@ -1129,7 +1130,8 @@ export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantI
 
 export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader,readShippingSettings?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
-    return { code: "VALIDATION_ERROR", message: "Ungültige Rechnungsanfrage." };
+    const zeroShippingFee=plainObject(input)&&plainObject(input.shippingCosts)&&input.shippingCosts.expectedFeeCents===0;
+    return { code: "VALIDATION_ERROR", message: zeroShippingFee?SHIPPING_FEE_COPY.noAdditionalInvoiceNeeded:"Ungültige Rechnungsanfrage." };
   }
 
   let authorization;

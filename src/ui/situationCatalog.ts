@@ -417,6 +417,7 @@ export const CUSTOMER_CREDIT_COPY={
 } as const;
 // S09: package text is fixed; additional failure copy stays in the same catalog (R8).
 export const SHIPPING_FEE_COPY={
+ noAdditionalInvoiceNeeded:'Versandkosten sind 0 € – keine Zusatzrechnung nötig',
  groupAlreadyCharged:(number:string,other:string)=>`${number} und ${other} sind schon einzeln mit Versand berechnet – verschick sie getrennt.`,
  reissueReleaseBlocked:(number:string)=>`Stell zuerst die Rechnung zu ${number} ohne Versand neu aus – dann kann die Ware raus.`,
  reissue:(number:string)=>`Rechnung ${number} stornieren und ohne Versand neu ausstellen`,

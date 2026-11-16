@@ -19,7 +19,7 @@ export type CreateInvoiceInput = {
   };
 };
 
-export function isCreateInvoiceInput(input: unknown): input is CreateInvoiceInput {
+export function isCreateInvoiceInput(input: unknown,storedOriginal=false): input is CreateInvoiceInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const value = input as Record<string, unknown>;
   const expected = ["clientEventId", "expectedVersion", "orderId"];
@@ -41,7 +41,7 @@ export function isCreateInvoiceInput(input: unknown): input is CreateInvoiceInpu
     && typeof value.expectedVersion === "number"
     && Number.isSafeInteger(value.expectedVersion)
     && value.expectedVersion > 0
-    && (!hasShipping || isInvoiceShippingCostsInput(value.shippingCosts,value.orderId as string))
+    && (!hasShipping || isInvoiceShippingCostsInput(value.shippingCosts,value.orderId as string,storedOriginal))
     && (!hasAgreement || (
       agreement !== null
       && typeof agreement === "object"
@@ -57,11 +57,11 @@ export function isCreateInvoiceInput(input: unknown): input is CreateInvoiceInpu
     ));
 }
 
-export function isInvoiceShippingCostsInput(value:unknown,orderId:string):value is NonNullable<CreateInvoiceInput['shippingCosts']>{
+export function isInvoiceShippingCostsInput(value:unknown,orderId:string,storedOriginal=false):value is NonNullable<CreateInvoiceInput['shippingCosts']>{
   if(!plainObject(value)||Object.keys(value).sort().join(',')!=='expectedFeeCents,expectedVersion,invoiceId,scope')return false;
   return typeof value.invoiceId==='string'&&UUID_PATTERN.test(value.invoiceId)
     &&typeof value.expectedVersion==='number'&&Number.isSafeInteger(value.expectedVersion)&&value.expectedVersion>0
-    &&typeof value.expectedFeeCents==='number'&&Number.isSafeInteger(value.expectedFeeCents)&&value.expectedFeeCents>=0
+    &&typeof value.expectedFeeCents==='number'&&Number.isSafeInteger(value.expectedFeeCents)&&(value.expectedFeeCents>0||storedOriginal===true&&value.expectedFeeCents===0)
     &&typeof value.scope==='string'&&(value.scope==='order:'+orderId
       ||value.scope.startsWith('sendung:')&&UUID_PATTERN.test(value.scope.slice(8))&&value.scope===value.scope.toLowerCase());
 }

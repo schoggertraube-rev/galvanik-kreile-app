@@ -44,7 +44,9 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  if(row.command==='shipment.handover')return isShipmentGroupInput(input)&&!Object.hasOwn(input,'offlineOriginal')&&row.id===input.clientEventId&&row.itemId===input.orderId;
  if(row.command==='document.deliveryNote')return isDeliveryNoteInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderIds[0];
  if(row.command==='credit.payout')return Object.keys(data).sort().join(',')==='amount,clientEventId,customerId,expectedCreditVersion,method,note,reference'&&typeof data.customerId==='string'&&data.customerId.length>0&&data.customerId.length<=128&&row.itemId===data.customerId&&uuid(data.clientEventId)&&row.id===data.clientEventId&&Number.isSafeInteger(data.amount)&&Number(data.amount)>0&&Number.isSafeInteger(data.expectedCreditVersion)&&Number(data.expectedCreditVersion)>=0&&['bar','ueberweisung'].includes(String(data.method))&&(data.note===null||typeof data.note==='string')&&(data.reference===null||typeof data.reference==='object'&&!Array.isArray(data.reference));
- if(row.command==='invoice.issue')return isCreateInvoiceInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderId;
+ // Historical zero-fee originals stay readable; only the real writer decides
+ // acceptance and now rejects zero without creating another invoice.
+ if(row.command==='invoice.issue')return isCreateInvoiceInput(input,true)&&row.id===input.clientEventId&&row.itemId===input.orderId;
  if(row.command==='invoice.cancel')return isCancelInvoiceInput(input)&&row.id===input.clientEventId&&row.itemId===input.invoiceId;
  if(row.command==='credit.apply'){
   if(!uuid(data.invoiceId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.invoiceId||!Number.isSafeInteger(data.expectedVersion)||Number(data.expectedVersion)<0)return false;
