@@ -601,7 +601,7 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/lib/server/intakeSuggestions.ts",
   "src/lib/server/intakeTextRecognition.ts",
   "src/lib/server/microsoftGraph.ts",
-  "src/lib/server/todayDashboardPolicy.ts",
+  "src/lib/today/todayDashboardPolicy.ts",
   "src/lib/server/effectiveCustomerAgreementRead.ts",
   "src/lib/intakeSuggestionsContract.ts",
   "src/lib/buchhaltung/erechnung/ERechnungParser.ts",
