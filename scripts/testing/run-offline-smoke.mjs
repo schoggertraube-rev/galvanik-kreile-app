@@ -7,7 +7,9 @@ import path from 'node:path';
 
 if(process.env.KREILE_OFFLINE_SMOKE!=='1')throw Error('EXPLICIT_OFFLINE_SMOKE_REQUIRED');
 const controlId=randomUUID();
-const env={...process.env,KREILE_SMOKE_CONTROL_PIPE:process.platform==='win32'?`\\\\.\\pipe\\kreile-smoke-${controlId}`:path.resolve(`.git/kreile-smoke-${controlId}.sock`)};
+// Linux AF_UNIX paths include the checkout prefix and must fit in 107 bytes.
+// Keep the same 128-bit run identity in the same repo-owned .git directory.
+const env={...process.env,KREILE_SMOKE_CONTROL_PIPE:process.platform==='win32'?`\\\\.\\pipe\\kreile-smoke-${controlId}`:path.resolve(`.git/s-${controlId.replaceAll('-','')}`)};
 const server=path.resolve('scripts/testing/offline-smoke-next.mjs');
 // The real 27-view S14a run reached V8's default 4 GiB heap while compiling
 // the final area (record-cwd log). Allocate 5 GiB only to this TEST compiler;
