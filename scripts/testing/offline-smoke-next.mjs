@@ -9,8 +9,10 @@ import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import path from 'node:path';
 import {createServer as createControlServer} from 'node:net';
+import {spawn} from 'node:child_process';
 
 const root=process.cwd(),tenant=process.env.KREILE_SMOKE_TENANT,actor=process.env.KREILE_SMOKE_ACTOR;
+const domSuite=process.env.KREILE_S14A_DOM==='1';
 globalThis.AsyncLocalStorage=AsyncLocalStorage;
 const database=process.env.DATABASE_URL,secret=process.env.APP_SESSION_SECRET;
 if(process.env.KREILE_OFFLINE_SMOKE!=='1'||!tenant?.startsWith('TEST-ablauf-')||!actor||! /^[a-f0-9-]{36}$/i.test(actor)||!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database).hostname!=='127.0.0.1'||new URL(database).pathname!=='/postgres'||!secret)throw Error('OFFLINE_SMOKE_OWN_TEST_ONLY');
@@ -49,11 +51,18 @@ if(!before)throw Error('OFFLINE_SMOKE_EXISTING_FLAG_REQUIRED');
 if(before.enabled!==false)throw Error('OFFLINE_SMOKE_FLAG_MUST_START_OFF');
 const proof={tenant,actor,flag:before};
 await writeFile(path.join(root,'.git/kreile-s06-smoke-flag-before.json'),JSON.stringify(proof));
-let app,server,control,closing=false,ready=false,outage=false,dropped=new Set();
-async function close(){if(closing)return;closing=true;try{if(control)await new Promise(resolve=>control.close(resolve));if(server?.listening)await new Promise(resolve=>server.close(resolve));if(app)await app.close();}finally{await restore(proof);await sql.end({timeout:5});}}
+let app,server,control,compilerBuild,closing=false,ready=false,outage=false,dropped=new Set();
+async function close(){if(closing)return;closing=true;try{if(compilerBuild&&compilerBuild.exitCode===null)compilerBuild.kill();if(control)await new Promise(resolve=>control.close(resolve));if(server?.listening)await new Promise(resolve=>server.close(resolve));if(app)await app.close();}finally{await restore(proof);await sql.end({timeout:5});}}
 process.once('SIGINT',()=>{void close().finally(()=>process.exit());});process.once('SIGTERM',()=>{void close().finally(()=>process.exit());});
 try{
- await sql.begin(async tx=>{
+ let displayName='TEST Offline Smoke';
+ if(domSuite){
+  // S14a uses the existing replayHarness actor factory. Do not create another
+  // actor/rights writer or turn on offline behavior for a DOM-only comparison.
+  const [existing]=await sql`SELECT full_name,role FROM public.app_users WHERE id=${actor}::uuid AND tenant_id=${tenant} AND active=true`;
+  if(!existing||existing.role!=='meister')throw Error('S14A_CANONICAL_FIXTURE_ACTOR_REQUIRED');
+  displayName=existing.full_name;
+ }else await sql.begin(async tx=>{
   await tx`INSERT INTO public.app_users(id,tenant_id,email,full_name,role,active,created_at,updated_at) VALUES(${actor}::uuid,${tenant},${'TEST-offline-'+actor+'@local.invalid'},'TEST Offline Smoke','meister',true,now()-interval '10 seconds',now()-interval '10 seconds')`;
   await tx`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) SELECT ${tenant},${actor}::uuid,area,${actor}::uuid FROM unnest(ARRAY['auftraege','kunden']::text[]) area`;
   await tx`UPDATE public.feature_flags SET enabled=true,roles_allowed=ARRAY['meister']::text[] WHERE id='offline_24h'`;
@@ -69,19 +78,30 @@ try{
  proof.configHash=hash(generated);proof.canonicalConfigHash=hash(canonical);
  await writeFile(path.join(root,'.git/kreile-s06-smoke-flag-before.json'),JSON.stringify(proof));
  await writeFile(path.join(root,'next.config.mjs'),generated,{flag:'wx'});
+ if(domSuite){
+  // PL16.11.13:04: build the real app once inside the existing 360s
+  // preparation budget, then serve all 27 views from that same build.
+  console.error('TEST_OFFLINE_STAGE_PRODUCTION_BUILD');
+  await new Promise((resolve,reject)=>{
+   compilerBuild=spawn(process.execPath,[...process.execArgv,path.join(root,'node_modules/next/dist/bin/next'),'build','--webpack'],{cwd:root,env:process.env,stdio:'inherit'});
+   compilerBuild.once('error',reject);
+   compilerBuild.once('exit',code=>code===0?resolve():reject(Error(`S14A_PRODUCTION_BUILD_EXIT=${code}`)));
+  });
+  console.error('TEST_OFFLINE_STAGE_PRODUCTION_BUILT');
+ }
  const {default:next}=await import('next');
- app=next({dev:true,dir:root,hostname:'127.0.0.1',port:3001,webpack:true});
+ app=next({dev:!domSuite,dir:root,hostname:'127.0.0.1',port:3001,webpack:true});
  console.error('TEST_OFFLINE_STAGE_PREPARE');await app.prepare();console.error('TEST_OFFLINE_STAGE_PREPARED');const handle=app.getRequestHandler();
  server=createServer((req,res)=>{if(outage){dropped.add(req.method+' '+req.url);req.socket.destroy();return;}if(req.url==='/__TEST/ready'){res.writeHead(ready?200:503,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify({ready}));return;}if(req.url==='/__TEST/offline-probe.mjs'){res.writeHead(200,{'content-type':'text/javascript','cache-control':'no-store'});res.end(probe.outputFiles[0].text);return;}void handle(req,res);});
  await new Promise(resolve=>server.listen(3001,'127.0.0.1',resolve));
  console.error('TEST_OFFLINE_STAGE_LISTEN');
- const token=signAppSession({userId:actor,tenantId:tenant,role:'meister',displayName:'TEST Offline Smoke',issuedAt:Date.now(),expiresAt:Date.now()+30*60_000},secret);
+ const token=signAppSession({userId:actor,tenantId:tenant,role:'meister',displayName,issuedAt:Date.now(),expiresAt:Date.now()+30*60_000},secret);
  // Warm the actual authenticated page, never fixture HTML. No token is saved.
  console.error('TEST_OFFLINE_STAGE_WARM');
  // Control-plane request must not use the global fetch patched by Next while
  // rendering this same app. Native HTTP stays strictly on the literal loopback.
  const warm=await new Promise((resolve,reject)=>{const request=get('http://localhost:3001/customers',{headers:{cookie:`${COOKIE_NAME}=${token}`}},response=>{const chunks=[];response.on('data',chunk=>chunks.push(Buffer.from(chunk)));response.on('end',()=>resolve({status:response.statusCode,html:Buffer.concat(chunks).toString('utf8')}));response.on('error',reject);});request.on('error',reject);});
- if(warm.status!==200||!warm.html.includes('TEST Offline Smoke'))throw Error('OFFLINE_SMOKE_REAL_PAGE_WARM_FAILED');
+ if(warm.status!==200||!warm.html.includes(displayName))throw Error('OFFLINE_SMOKE_REAL_PAGE_WARM_FAILED');
  // Compile the actual required API routes inside the same 6-minute budget.
  // Invalid input is deliberate: this warm-up must never execute a command.
  const replayWarm=await new Promise((resolve,reject)=>{const request=httpRequest('http://localhost:3001/api/offline/replay',{method:'POST',headers:{cookie:`${COOKIE_NAME}=${token}`,origin:'http://localhost:3001','sec-fetch-site':'same-origin','content-type':'application/json'}},response=>{response.resume();response.on('end',()=>resolve(response.statusCode));response.on('error',reject);});request.on('error',reject);request.end('{}');});

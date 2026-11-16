@@ -23,6 +23,7 @@
     "test:e2e": "playwright test",
     "verify:precommit": "npx tsc --noEmit && npm run lint:staged && node scripts/test-staged-related.mjs",
     "quality:no-fake-production": "node scripts/quality/check-no-fake-production.mjs",
+    "quality:expected-red-shrink": "node scripts/quality/check-expected-red-shrink.mjs",
     "quality:authority-gate": "node scripts/quality/check-authoritative-sources.mjs --check",
     "quality:authority-gate:selftest": "node scripts/quality/check-authoritative-sources.mjs --selftest",
     "quality:delivery-contracts": "node scripts/quality/check-delivery-contracts.mjs",
