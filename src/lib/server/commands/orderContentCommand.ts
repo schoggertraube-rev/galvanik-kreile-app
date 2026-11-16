@@ -356,7 +356,7 @@ export async function changeOrderContent(input: ChangeOrderContentInput): Promis
 type ProductionPricingComposition={failed:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string)=>Promise<void>;settled:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string)=>Promise<void>};
 export async function setOrderItemFinished(input: SetOrderItemFinishedInput,composition?:ProductionPricingComposition): Promise<OrderContentResult> {
   if (!validBase(input) || !UUID.test(input.itemId) || typeof input.finished !== "boolean") return { code: "VALIDATION_ERROR", message: "Teilstatus ist ungültig." };
-  const {isOfflineOriginal,normalizeOfflineOriginal}=await import('@/lib/domain/offlineOriginal');
+  const {isOfflineOriginal,normalizeOfflineOriginal,offlineOccurrenceTime}=await import('@/lib/domain/offlineOriginal');
   if(input.offlineOriginal!==undefined&&!isOfflineOriginal(input.offlineOriginal))return {code:'VALIDATION_ERROR',message:'Teilstatus ist ungültig.'};
   const auth = await authorization("status");
   if (!auth.ok) return auth.result;
@@ -400,7 +400,7 @@ export async function setOrderItemFinished(input: SetOrderItemFinishedInput,comp
       if (changed.length !== 1) return { code: "NOT_FOUND" as const, message: "Teil nicht verfügbar." };
       const updated = await tx.execute<{ version: number }>(sql`UPDATE public.orders SET version=version+1 WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} AND version=${input.expectedVersion} RETURNING version`);
       if (updated.length !== 1 || updated[0]?.version !== input.expectedVersion + 1) throw new Error("ORDER_ITEM_FINISHED_VERSION_INVALID");
-      const eventId = randomUUID(); const payload = JSON.stringify({ requestHash, itemId: input.itemId, finished: input.finished,...(input.offlineOriginal?{offlineOriginal:input.offlineOriginal}:{}) });
+      const eventId = randomUUID(); const payload = JSON.stringify({ requestHash, itemId: input.itemId, finished: input.finished,...(input.offlineOriginal?{offlineOriginal:input.offlineOriginal,...(offlineOccurrenceTime(input.offlineOriginal.deviceCapturedAt).geraetezeit_abweichend?{geraetezeit_abweichend:true}:{})}:{}) });
       const events = await tx.execute<EventRow>(sql`INSERT INTO public.events (id, tenant_id, order_id, item_id, event_type, description, payload, status, user_id, station, client_event_id, event_schema_version, aggregate_version) VALUES (${eventId}, ${auth.data.tenantId}, ${input.orderId}, ${input.itemId}, 'ORDER_ITEM_FINISHED_CHANGED_V1', ${input.finished ? "Teil fertig gemeldet" : "Teil wieder geöffnet"}, ${payload}::jsonb, 'success', ${auth.data.userId}::uuid, ${order.station}, ${input.clientEventId}::uuid, 1, ${updated[0]!.version}) RETURNING id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id`);
       if (events.length !== 1 || !events[0]) throw new Error("ORDER_ITEM_FINISHED_EVENT_MISSING");
       if(input.finished)await pricing(tx,events[0].id,()=>appendProductionCompletion(tx,auth.data.tenantId,input.orderId,events[0].id,[input.itemId]));

@@ -1,4 +1,5 @@
 import {recordObservedFailure} from '@/lib/server/actionObservation';
+import {offlineOccurrenceTime} from '@/lib/domain/offlineOriginal';
 import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -61,7 +62,7 @@ export async function prepareIntakeFile(input: unknown, ensureOriginal=false): P
       if (files.length !== 1 || row.item_id !== input.itemId || row.dateiname !== input.name || row.mime !== input.mime || Number(row.bytes) !== input.bytes || row.sha256 !== input.sha256 || row.aufgenommen_auf !== (input.deviceId ?? null) || row.aufnahme_herkunft !== (input.captureOrigin ?? "dokument")) throw new Error("INTAKE_FILE_CLIENT_KEY_CONFLICT");
       if(input.deviceCapturedAt!==undefined){
         if(row.aufgenommen_von!==auth.userId)return {code:"FORBIDDEN" as const,message:"Anfragekennung wurde bereits anders verwendet."};
-        const origin={action:"offline_original_captured",fileId:input.fileId,sha256:input.sha256,deviceCapturedAt:input.deviceCapturedAt,deviceId:input.deviceId??null,...(input.takeover?{takeover:input.takeover,takeoverLogin:auth.displayName}:{})};
+        const origin={action:"offline_original_captured",fileId:input.fileId,sha256:input.sha256,deviceCapturedAt:input.deviceCapturedAt,deviceId:input.deviceId??null,...(offlineOccurrenceTime(input.deviceCapturedAt).geraetezeit_abweichend?{geraetezeit_abweichend:true}:{}),...(input.takeover?{takeover:input.takeover,takeoverLogin:auth.displayName}:{})};
         const prior=await tx.execute<{nachher:typeof origin}>(sql`SELECT nachher FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${input.itemId}::uuid AND art='einsatz' AND befehl_id=${input.fileId}::uuid`);
         if(prior.length){const previous=prior[0].nachher.takeover;if(prior.length!==1||prior[0].nachher.action!==origin.action||prior[0].nachher.fileId!==origin.fileId||prior[0].nachher.sha256!==origin.sha256||prior[0].nachher.deviceCapturedAt!==origin.deviceCapturedAt||prior[0].nachher.deviceId!==origin.deviceId||input.takeover&&(!isIntakeOriginalTakeover(previous)||previous.sourceId!==input.takeover.sourceId||previous.deviceId!==input.takeover.deviceId||previous.sha256!==input.takeover.sha256))return {code:"CONFLICT" as const,message:"Anfragekennung wurde bereits anders verwendet."};}
         else{const saved=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${auth.tenantId},${input.itemId}::uuid,'einsatz',${input.fileId}::uuid,${auth.userId},${JSON.stringify(origin)}::jsonb) RETURNING id`);if(saved.length!==1)throw Error("INTAKE_DEVICE_ORIGIN_NOT_SAVED");}

@@ -1,5 +1,6 @@
 
 import {reportProtocolClientError} from '@/modules/logging/public';
+import {OFFLINE_CLOCK_TOLERANCE_MS} from '@/lib/domain/offlineOriginal';
 import type {CustomerListResponse} from '@/app/actions/customers.actions';
 import type {ActionResult} from '@/lib/server/authHelper';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
@@ -353,7 +354,7 @@ async function retainOriginal(scope:string,original:PendingOriginal|PendingWorks
   read.onsuccess=()=>{const previous=read.result as PendingOriginal|PendingWorkshopOriginal|undefined;
    if(requiredStand){
     const age=new Date().getTime()-Date.parse(requiredStand.serverReadAt);
-    if(readCacheScopeMarker()!==requiredStand.loginScope||!shellMetadata(shell?.result,requiredStand.loginScope)||shell?.result.scope!==requiredStand.loginScope||shell.result.cacheGeneration!==requiredStand.cacheGeneration||!completeDeviceStand(stand?.result,requiredStand.loginScope)||stand?.result.serverReadAt!==requiredStand.serverReadAt||!Number.isFinite(age)||age<0||age>=24*60*60*1000){staleStand=true;tx.abort();return;}
+    if(readCacheScopeMarker()!==requiredStand.loginScope||!shellMetadata(shell?.result,requiredStand.loginScope)||shell?.result.scope!==requiredStand.loginScope||shell.result.cacheGeneration!==requiredStand.cacheGeneration||!completeDeviceStand(stand?.result,requiredStand.loginScope)||stand?.result.serverReadAt!==requiredStand.serverReadAt||!Number.isFinite(age)||age< -OFFLINE_CLOCK_TOLERANCE_MS||age>=24*60*60*1000){staleStand=true;tx.abort();return;}
    }
    if(original.kind==='workshop'&&previous){
     if(!isPendingWorkshopOriginal(previous)||previous.command!==original.command||canonicalJson(previous.input)!==canonicalJson(original.input)){tx.abort();return;}
@@ -590,7 +591,7 @@ export async function capturePendingItemFinished(scope:string,enabled:boolean,in
  const now=new Date();
  if(state.code!=='OK')return {code:'NETWORK_REQUIRED' as const};
  const age=now.getTime()-Date.parse(state.serverReadAt);
- if(!Number.isFinite(age)||age<0||age>=24*60*60*1000||readCacheScopeMarker()!==login)return {code:'NETWORK_REQUIRED' as const};
+ if(!Number.isFinite(age)||age< -OFFLINE_CLOCK_TOLERANCE_MS||age>=24*60*60*1000||readCacheScopeMarker()!==login)return {code:'NETWORK_REQUIRED' as const};
  const original:PendingWorkshopOriginal={kind:'workshop',command:'item.finished',id:input.clientEventId,itemId:input.orderId,input,deviceCapturedAt:now.toISOString()};
  if(!isPendingWorkshopOriginal(original))throw Error('OFFLINE_WORKSHOP_ORIGINAL_INVALID');
  try{await retainOriginal(scope,original,{loginScope:login,cacheGeneration:state.cacheGeneration,serverReadAt:state.serverReadAt});}
