@@ -16,7 +16,9 @@ concurrency:
 jobs:
   bestandsschutz:
     name: Bestandsschutz
-    runs-on: ubuntu-latest
+    # Playwright 1.60.0 rejects Chromium installation on Ubuntu 26.04.
+    # Keep the supported host also used by the existing Quality browser job.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
