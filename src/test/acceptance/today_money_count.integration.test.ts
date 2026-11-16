@@ -58,7 +58,12 @@ it('W-TAG keeps the next real daily query readable after a failed source savepoi
   const retained=await readTodaySource(tx,nested=>nested.execute<{id:string}>(query`SELECT id FROM public.orders WHERE tenant_id=${tenant} AND id=${order.receipt.orderId}`));
   expect(retained).toMatchObject({code:'OK',data:[{id:order.receipt.orderId}]});return retained;
  });
- expect(await read()).toEqual(await read());
+ const report=vi.spyOn(console,'error').mockImplementation(()=>{});
+ try{
+  expect(await read()).toEqual(await read());
+  expect(report).toHaveBeenCalledTimes(2);
+  for(const call of report.mock.calls)expect(call).toEqual(['[TODAY_SOURCE_FAILED]',{quelle:'query',name:expect.any(String)}]);
+ }finally{report.mockRestore();}
 });
 
 it('W-TAG T05-6 combines a real overdue order and an explicit historical invoice fixture in one source-bound challenge',async()=>{
