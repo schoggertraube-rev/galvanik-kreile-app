@@ -595,7 +595,7 @@ const apEinInventoryPaths = [
   "src/lib/server/microsoftGraph.ts",
   "src/lib/server/orderCardRead.ts",
   "src/lib/server/paymentContract.ts",
-  "src/lib/today/todayDashboardPolicy.ts",
+  "src/lib/server/todayDashboardPolicy.ts",
   "src/lib/types/customer.ts",
   "src/modules/communications/public.ts",
   "src/modules/complaints/public.ts",
