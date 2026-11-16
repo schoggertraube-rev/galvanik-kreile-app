@@ -8,6 +8,7 @@ import { berlinCalendarDay, isWorkingDay, plusWorkingDays, previousWorkingDay } 
 import { generatedFlowRuntime } from "./_model";
 import { localReplayStorageEnvironment } from "../../src/test/localReplayStorage";
 import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets } from "./_fixtureReset";
+import {protocolDiagnosticActionIds,isApplicationDataLoad} from './_readFault';
 
 export type FlowExpectation = {
   id?: string;
@@ -1147,14 +1148,14 @@ async function interruptNextServerAction(page: Page, state: FlowRunState, contro
 }
 
 async function interruptNextLoad(page: Page) {
+  const diagnostics=protocolDiagnosticActionIds(JSON.parse(readFileSync(path.join(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8')));
   const matcher = "**/*";
   let handled = false;
   const handler = async (route: import("@playwright/test").Route) => {
     const request = route.request();
     // App Router also transports read Server Actions with POST + Next-Action.
     // Keep App Router navigation/asset requests online; fail the actual data read.
-    const isLoad = request.method() === "POST" && Boolean(request.headers()["next-action"])
-      || ["fetch", "xhr"].includes(request.resourceType()) && request.method() === "GET" && !request.headers().rsc;
+    const isLoad = isApplicationDataLoad({method:request.method(),nextAction:request.headers()['next-action'],resourceType:request.resourceType(),rsc:request.headers().rsc},diagnostics);
     if (!handled && isLoad) {
       handled = true;
       await route.abort("failed");
