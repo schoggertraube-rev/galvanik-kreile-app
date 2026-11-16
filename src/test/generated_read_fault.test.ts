@@ -1,6 +1,6 @@
 // Explicit isolated transport/manifest fixtures, not a real N09 app acceptance.
 import {expect,it} from 'vitest';
-import {protocolDiagnosticActionIds,isApplicationDataLoad} from '../../e2e/generated/_readFault';
+import {protocolDiagnosticActionIds,isApplicationDataLoad,isApplicationServerAction} from '../../e2e/generated/_readFault';
 const file='src/app/actions/logging.actions.ts';
 const metadata='a'.repeat(40),write='b'.repeat(40),list='c'.repeat(40);
 const fixture=()=>({node:{
@@ -32,4 +32,13 @@ it('preserves load failure coverage for ordinary RPCs, fetch/XHR reads and exclu
  expect(isApplicationDataLoad({method:'GET',resourceType:'xhr'},diagnostics)).toBe(true);
  expect(isApplicationDataLoad({method:'GET',resourceType:'fetch',rsc:'1'},diagnostics)).toBe(false);
  expect(isApplicationDataLoad({method:'GET',resourceType:'script'},diagnostics)).toBe(false);
+});
+it('write interruption and its observed failure ignore diagnostics but retain the exact business target',()=>{
+ const diagnostics=protocolDiagnosticActionIds(fixture());
+ const request=(nextAction:string)=>({method:'POST',nextAction});
+ expect([metadata,write,list].filter(id=>isApplicationServerAction(request(id),diagnostics))).toEqual([list]);
+ expect(isApplicationServerAction(request('other-business-action'),diagnostics,list)).toBe(false);
+ expect(isApplicationServerAction(request(list),diagnostics,list)).toBe(true);
+ expect(isApplicationServerAction(request(metadata),diagnostics,metadata)).toBe(false);
+ expect(isApplicationServerAction({method:'GET',nextAction:list},diagnostics)).toBe(false);
 });
