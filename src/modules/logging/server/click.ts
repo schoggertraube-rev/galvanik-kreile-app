@@ -25,7 +25,7 @@ export async function logClick(auth:AuthorizationSnapshot,input:unknown,readSett
     // An authenticated role change does not rewrite or invalidate this user's original.
     const receipt=await tx.execute<{same:boolean}>(sql`SELECT (actor_pseudonym=${pseudonym}
      AND session_id=${entry.sessionId}::uuid AND event_type='action' AND route=${entry.route} AND target=${entry.target}
-     AND device_class=${entry.deviceClass} AND outcome=${entry.outcome} AND duration_ms=${entry.durationMs}
+     AND device_class=${entry.deviceClass} AND outcome IS NOT DISTINCT FROM ${entry.outcome} AND duration_ms IS NOT DISTINCT FROM ${entry.durationMs}
      AND click_count=${entry.clickCount} AND occurred_at=${entry.occurredAt}::timestamptz) AS same
      FROM public.app_usage_events WHERE tenant_id=${auth.tenantId} AND client_event_id=${entry.id}::uuid`);
     if(receipt.length!==1||receipt[0].same!==true)throw Error('CLICK_RETRY_CONFLICT');

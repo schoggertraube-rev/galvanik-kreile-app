@@ -8,6 +8,7 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {recordProtocolClicksAction,getProtocolLogAction} from '@/app/actions/logging.actions';
 import type {ClickInput} from '@/modules/logging/public';
+import {offlinePartition} from '@/lib/server/offlinePartition';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1'||!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('S20_DEDICATED_TEST_REPLAY_REQUIRED');
 beforeAll(async()=>{await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST S20 clicks')`;});
 const click=(patch:Partial<ClickInput>={}):ClickInput=>({id:randomUUID(),sessionId:randomUUID(),route:'/orders/'+randomUUID()+'?secret=DO_NOT_LOG',target:'auftrag.fertig',deviceClass:'tablet',outcome:'success',durationMs:80,clickCount:1,occurredAt:new Date().toISOString(),...patch});
@@ -37,4 +38,17 @@ it('click conflict rolls the entire new batch back; a different actor cannot ack
  const other=await createFixture(['auftraege']);
  expect(await withSession(other,()=>recordProtocolClicksAction([original]))).toEqual({code:'CONFLICT'});
  expect(await withSession(full,()=>recordProtocolClicksAction([click({target:'Bearer x'})]))).toEqual({code:'VALIDATION_ERROR'});
+});
+
+it('capture metadata reveals no restricted protocol; scoped unknown facts preserve NULL and cannot be transported by a different login',async()=>{
+ const capture=await withSession(full,()=>getProtocolLogAction({capture:true})),partition=offlinePartition({tenantId:KREILE_TENANT_SLUG,userId:full.actorId});
+ expect(capture).toEqual({code:'OK',enabled:true,scope:partition});
+ const fact={...click(),outcome:null,durationMs:null};
+ expect(await withSession(full,()=>recordProtocolClicksAction([fact],partition))).toMatchObject({code:'OK',accepted:[fact.id]});
+ expect(await withSession(full,()=>recordProtocolClicksAction(JSON.parse(JSON.stringify([fact])),partition))).toMatchObject({code:'OK',accepted:[fact.id]});
+ expect(await sql`SELECT outcome,duration_ms FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${fact.id}::uuid`).toEqual([{outcome:null,duration_ms:null}]);
+ const other=await createFixture(['auftraege']),fresh=click();
+ expect(await withSession(other,()=>recordProtocolClicksAction([fresh],partition))).toEqual({code:'FORBIDDEN'});
+ expect(await sql`SELECT id FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${fresh.id}::uuid`).toHaveLength(0);
+ expect(await withSession(other,()=>getProtocolLogAction())).toEqual({code:'FORBIDDEN'});
 });

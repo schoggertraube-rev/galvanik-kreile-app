@@ -34,6 +34,7 @@ import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
 import {OfflineLogoutNotice} from '@/components/OfflineLogoutNotice';
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ClientActionErrorBanner } from "@/components/layout/ClientActionErrorBanner";
+import {ProtocolClickCapture} from '@/components/ProtocolClickCapture';
 
 import { getAuthBootstrapState } from "@/lib/server/authBootstrap";
 import { GlobalCreateAppAdapter } from "./GlobalCreateAppAdapter";
@@ -65,6 +66,7 @@ export default async function RootLayout({
         <Suspense fallback={null}>
           <PermissionsProvider initialAuthState={authState}>
             <SyncProvider>
+              <ProtocolClickCapture />
               <DiagnosticsProvider>
                 <FeatureFlagProvider offline24hEnabled={authState.status === 'authenticated' && authState.user.offline24h === true}>
                   <KreileAppShell loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>

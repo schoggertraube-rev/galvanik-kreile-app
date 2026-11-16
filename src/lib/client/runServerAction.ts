@@ -1,3 +1,4 @@
+import {observeProtocolCommand} from '@/modules/logging/public';
 export const CLIENT_ACTION_ERROR_CODE = "ACTION_REQUEST_FAILED" as const;
 
 type ClientActionResult<T> =
@@ -9,7 +10,7 @@ export async function runServerAction<T>(
   operation = "Die Aktion",
 ): Promise<ClientActionResult<T>> {
   try {
-    return { ok: true, value: await task() };
+    return { ok: true, value: await observeProtocolCommand(task) };
   } catch (error) {
     console.error(`[${CLIENT_ACTION_ERROR_CODE}]`, error);
     return {
