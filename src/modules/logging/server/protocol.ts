@@ -2,6 +2,7 @@ import 'server-only';
 import {sql} from 'drizzle-orm';
 import {createHash} from 'node:crypto';
 import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
+import {actionObservationActive,withActionObservation} from '@/lib/server/actionObservation';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {TechnicalEvent,TechnicalLogRow,ClickLogRow,LogFilter,LogSubject,LogReason,LoggingSettingsReader} from '../public';
@@ -81,22 +82,30 @@ export async function readLog(auth:AuthorizationSnapshot,filter:LogFilter,readSe
 
 /** One observer for Action compositions. It never changes the command's result or transaction. */
 export async function observeAction<T extends {code:string}>(name:string,subject:LogSubject,work:()=>Promise<T>,readSettings:LoggingSettingsReader):Promise<T>{
+ if(actionObservationActive())return work();
+ return withActionObservation(async readAuthorization=>{
  // A rejected input is not a verified object reference (and may contain secrets).
  // The command itself remains the known subject when a supplied ID is malformed.
  const source=subject&&uuid.test(subject.id)?subject:{type:'action',id:name};
- let auth:AuthorizationSnapshot|null=null;
- try{const resolved=await resolveAuthorization();if(resolved.ok)auth=resolved.data;}catch{lose();/* No substitute identity (PL14:51). */}
- let slowMs:number|null=null;
- if(auth){try{const settings=await readSettings(auth);if(settings)slowMs=settings.slowMs;else lose();}catch{lose();}}
  const start=performance.now();
  let result:T;
  try{result=await work();}
- catch(error){await logTechnical(auth,{type:'server_error',command:name,subject:source,reason:'SERVER_ERROR'});throw error;}
+ catch(error){
+  if(!readAuthorization().attempted){try{await resolveAuthorization();}catch{lose();}}
+  await logTechnical(readAuthorization().authorization,{type:'server_error',command:name,subject:source,reason:'SERVER_ERROR'});throw error;
+ }
  const durationMs=Math.round(performance.now()-start);
- if(result.code!=='OK'){
+ // Validation may return before the command's first auth lookup. Resolve only
+ // that missing identity, never repeat a lookup or replace a rejected session.
+ if(!readAuthorization().attempted){try{await resolveAuthorization();}catch{lose();}}
+ const auth=readAuthorization().authorization;
+ let slowMs:number|null=null;
+ if(auth){try{const settings=await readSettings(auth);if(settings)slowMs=settings.slowMs;else lose();}catch{lose();}}
+ if(['FORBIDDEN','VALIDATION_ERROR','CONFLICT','NOT_FOUND','UNAUTHENTICATED','UNAVAILABLE','SOURCE_INCOMPLETE','NOT_AVAILABLE'].includes(result.code)){
   const reason=result.code==='VALIDATION_ERROR'?'VALIDATION':reasons.includes(result.code as LogReason)?result.code as LogReason:'UNKNOWN';
   await logTechnical(auth,{type:result.code==='UNAVAILABLE'?'server_error':'rejected',command:name,subject:source,reason});
  }
  if(auth&&slowMs!==null&&durationMs>slowMs)await logTechnical(auth,{type:'slow',command:name,subject:source,durationMs});
  return result;
+ });
 }

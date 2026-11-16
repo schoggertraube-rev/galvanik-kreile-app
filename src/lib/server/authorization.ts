@@ -1,4 +1,5 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import {observeResolvedAuthorization,observeAuthorizationAttempt} from './actionObservation';
 import { readAppSession } from "@/lib/server/appSession";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
@@ -95,6 +96,7 @@ export type LoginIdentityResult =
  * Kanonischer serverseitiger Resolver zur Abfrage und Validierung der Rollen und Berechtigungen aus der DB.
  */
 export async function resolveAuthorization(): Promise<AuthorizationResult> {
+  observeAuthorizationAttempt();
   let sessionResult;
   try {
     sessionResult = await readAppSession();
@@ -242,9 +244,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
   // 6. Berechtigungen ableiten
   const permissions = getPermissionsForAreas(areas);
 
-  return {
-    ok: true,
-    data: {
+  const snapshot:AuthorizationSnapshot = {
       userId: dbUser.id,
       tenantId: dbUser.tenantId,
       displayName: dbUser.fullName,
@@ -253,8 +253,9 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
       permissions,
       active: true,
       offline24h: dbUser.offline24h === true,
-    },
   };
+  observeResolvedAuthorization(snapshot);
+  return {ok:true,data:snapshot};
 }
 
 /**

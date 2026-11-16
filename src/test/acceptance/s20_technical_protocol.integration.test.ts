@@ -10,6 +10,7 @@ import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixtu
 import {confirmPaymentAction,setPaymentModeAction} from '@/app/actions/payments.actions';
 import {getProtocolLogAction} from '@/app/actions/logging.actions';
 import {resolveAuthorization} from '@/lib/server/authorization';
+import * as authorizationModule from '@/lib/server/authorization';
 import {logTechnical,observeAction} from '@/modules/logging/server-public';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
 import type {TechnicalEvent} from '@/modules/logging/public';
@@ -25,13 +26,28 @@ it('L1 actual denied payment creates one safe actor/source entry; no session cre
  const operator=await createFixture(['auftraege']);
  const input={invoiceId:randomUUID(),amount:100,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()};
  const before=await sql`SELECT id,payment_mode,payment_mode_version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.receipt.orderId}`;
+ const realResolver=vi.spyOn(authorizationModule,'resolveAuthorization');
  expect(await withSession(operator,()=>confirmPaymentAction(input))).toMatchObject({code:'FORBIDDEN'});
+ expect(realResolver).toHaveBeenCalledTimes(1);realResolver.mockRestore();
  const rows=await sql`SELECT event_type,user_id::text,subject_id,reason FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND subject_id=${input.invoiceId}`;
  expect(rows).toEqual([{event_type:'rejected',user_id:operator.actorId,subject_id:input.invoiceId,reason:'FORBIDDEN'}]);
  expect(await sql`SELECT id,payment_mode,payment_mode_version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.receipt.orderId}`).toEqual(before);
  const absent={...input,invoiceId:randomUUID(),clientEventId:randomUUID()};
  expect(await withRequest('',()=>confirmPaymentAction(absent))).toMatchObject({code:'UNAUTHENTICATED'});
  expect(await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND subject_id=${absent.invoiceId}`).toHaveLength(0);
+});
+
+it('one observation per command keeps concurrent real logins separate and never persists a malformed input as an object reference',async()=>{
+ const left=await createFixture(['auftraege']),right=await createFixture(['auftraege']);
+ const inputs=[left,right].map(()=>({invoiceId:randomUUID(),amount:100,method:'bar' as const,expectedVersion:0,clientEventId:randomUUID()}));
+ expect(await Promise.all([withSession(left,()=>confirmPaymentAction(inputs[0])),withSession(right,()=>confirmPaymentAction(inputs[1]))])).toMatchObject([{code:'FORBIDDEN'},{code:'FORBIDDEN'}]);
+ const rows=await sql`SELECT user_id::text,subject_id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND subject_id IN (${inputs[0].invoiceId},${inputs[1].invoiceId}) ORDER BY subject_id`;
+ expect(rows).toHaveLength(2);
+ expect(rows.find(row=>row.subject_id===inputs[0].invoiceId)?.user_id).toBe(left.actorId);
+ expect(rows.find(row=>row.subject_id===inputs[1].invoiceId)?.user_id).toBe(right.actorId);
+ expect(await withSession(left,()=>confirmPaymentAction({...inputs[0],invoiceId:'Bearer PRIVATE_INPUT_1234'}))).toMatchObject({code:'VALIDATION_ERROR'});
+ const invalid=await sql`SELECT subject_type,subject_id,reason FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${left.actorId}::uuid AND reason='VALIDATION'`;
+ expect(invalid).toEqual([{subject_type:'action',subject_id:'confirmPayment',reason:'VALIDATION'}]);
 });
 
 it('L6 allowlisted technical source persists references/hash only; L9 actual protocol right is required',async()=>{
@@ -71,6 +87,7 @@ it('L7 a suppressed logging receipt never rolls back an actual payment-mode chan
 it('L2 observer preserves an actual SQL failure and records a sanitized error, with the retained input available for retry',async()=>{
  const reference=randomUUID(),authorization=await auth();
  await expect(withSession(full,()=>observeAction('testS20Sql',{type:'order',id:reference},async()=>{
+  await resolveAuthorization();
   await sql`SELECT 1/0`;return {code:'OK' as const};
  },readLoggingSettings))).rejects.toMatchObject({code:'22012'});
  const rows=await sql`SELECT event_type,reason FROM public.technical_protocol WHERE tenant_id=${authorization.tenantId} AND subject_id=${reference}`;
@@ -81,6 +98,7 @@ it('L3/L4 real SQL response duration obeys the current configured threshold, wit
  const slow=randomUUID(),fast=randomUUID(),changed=randomUUID();
  for(const [reference,seconds] of [[slow,1.2],[fast,0.8]] as const){
   expect(await withSession(full,()=>observeAction('testS20Duration',{type:'order',id:reference},async()=>{
+   await resolveAuthorization();
    await sql`SELECT pg_sleep(${seconds})`;return {code:'OK' as const};
   },readLoggingSettings))).toEqual({code:'OK'});
  }
@@ -89,6 +107,7 @@ it('L3/L4 real SQL response duration obeys the current configured threshold, wit
  await sql`UPDATE public.company_settings SET protokoll_langsam_ms=2000 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  try{
   expect(await withSession(full,()=>observeAction('testS20Duration',{type:'order',id:changed},async()=>{
+   await resolveAuthorization();
    await sql`SELECT pg_sleep(1.2)`;return {code:'OK' as const};
   },readLoggingSettings))).toEqual({code:'OK'});
   expect(await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND subject_id=${changed}`).toHaveLength(0);
