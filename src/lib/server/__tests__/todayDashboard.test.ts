@@ -1,8 +1,8 @@
 import type {U2Read} from '@/lib/domain/u2ReadContract';
-import {projectIntakeTaskSchedule,projectQuoteSchedule,projectTodayInvoiceMoney,projectOrderSchedule,readTodayCalendar,projectTodayChallenges} from '../todayDashboardPolicy';
-import {sortTodayByResponsibility} from '../todayDashboardPolicy';
+import {projectIntakeTaskSchedule,projectQuoteSchedule,projectTodayInvoiceMoney,projectOrderSchedule,readTodayCalendar,projectTodayChallenges} from '@/lib/today/todayDashboardPolicy';
+import {sortTodayByResponsibility} from '@/lib/today/todayDashboardPolicy';
 import { describe, expect, it } from "vitest";
-import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/server/todayDashboardPolicy";
+import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/today/todayDashboardPolicy";
 
 const TODAY = "2026-10-28";
 

@@ -1,20 +1,18 @@
+import { berlinCalendarDay } from '@/lib/domain/workingDays';
+
 export type Urgency = "kritisch" | "gefaehrdet" | "im_plan" | "unknown";
 
 export function getUrgency(dueDate: Date | string | null | undefined, now = new Date()): Urgency {
   if (dueDate === null || dueDate === undefined || (typeof dueDate === "string" && !dueDate.trim())) return "unknown";
 
   const due = new Date(dueDate);
-  if (isNaN(due.getTime())) return "unknown";
+  if (isNaN(due.getTime()) || isNaN(now.getTime())) return "unknown";
 
-  // Normalize 'now' to start of day for comparison
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const dueDay = new Date(due);
-  dueDay.setHours(0, 0, 0, 0);
+  // Compare Berlin calendar labels. UTC is only the ordinal representation
+  // of those labels, never the day of either original timestamp (DST-safe).
+  const today = Date.parse(berlinCalendarDay(now) + 'T00:00:00Z');
+  const tomorrow = today + 86_400_000;
+  const dueDay = Date.parse(berlinCalendarDay(due) + 'T00:00:00Z');
 
   if (dueDay < today) {
     return "kritisch";

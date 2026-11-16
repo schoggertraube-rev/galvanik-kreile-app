@@ -555,7 +555,10 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
       if (!receiptMatchesIntent(receipt, input)) throw new Error("ORDER_FROZEN_RECEIPT_MISMATCH");
       return { code: "OK", receipt, replayed: false };
     });
-  } catch {
+  } catch (error) {
+    let cause:unknown=error;
+    for(let depth=0;depth<8&&cause&&typeof cause==='object'&&'cause'in cause&&cause.cause;depth++)cause=cause.cause;
+    console.error('[ORDER_FREEZE_FAILED]',cause instanceof Error?cause.message:'UNKNOWN');
     return { code: "UNAVAILABLE", message: "Auftrag konnte nicht sicher abgeschlossen werden." };
   }
 }

@@ -49,7 +49,7 @@ async function historicalProductionEvidence(tx:PrivilegedTenantTransaction,tenan
  ), q AS (SELECT * FROM quantities WHERE created_at<=${at}::timestamptz AT TIME ZONE 'UTC' ORDER BY created_at DESC,id DESC LIMIT 1),
  p AS (SELECT * FROM prices WHERE created_at<=${at}::timestamptz AT TIME ZONE 'UTC' ORDER BY created_at DESC,id DESC LIMIT 1),
  award AS (SELECT event.id FROM private.quote_conversion_receipts receipt JOIN public.events event ON event.id=receipt.event_id AND event.tenant_id=receipt.tenant_id
-  WHERE receipt.tenant_id=${tenantId} AND receipt.order_id=${orderId} AND event.status='success' AND event.created_at<=${at}::timestamptz AT TIME ZONE 'UTC' AND receipt.created_at<=${at}::timestamptz AT TIME ZONE 'UTC')
+  WHERE receipt.tenant_id=${tenantId} AND receipt.order_id=${orderId} AND event.status='success' AND event.created_at<=${at}::timestamptz AT TIME ZONE 'UTC' AND receipt.created_at<=${at}::timestamptz)
  SELECT (SELECT id FROM q) AS quantity_id,CASE WHEN ${quoted} THEN (SELECT id FROM award) ELSE (SELECT id FROM p) END AS price_id,
  coalesce((SELECT quantity::numeric=${quantity}::numeric FROM q),false) AS quantity_matches,
  (SELECT cents FROM p) AS price_cents`);

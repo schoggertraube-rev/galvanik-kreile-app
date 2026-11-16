@@ -1,4 +1,5 @@
 'use server';
+import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {rejectDeferredLegacy} from "@/lib/server/authHelper";
 
 
@@ -154,7 +155,7 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
 export async function getOffenePostenAnalysisAction(von: string, bis: string) {
   await rejectDeferredLegacy("geld");
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = berlinCalendarDay();
   const raw = (await invoiceRows()).filter((invoice) => invoice.status === 'issued');
   const offene = raw.filter((invoice) => invoice.openAmountCents > 0);
   const ueberfaellig = offene.filter((invoice) => invoice.dueDate < today);

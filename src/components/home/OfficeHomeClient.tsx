@@ -9,7 +9,7 @@ import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } from "@/lib/server/todayDashboard";
-import { deriveTodayReminder, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
+import { deriveTodayReminder, type TodayReminderMode } from "@/lib/today/todayDashboardPolicy";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import { IntakeDraftList } from "@/modules/eingang/public";
 import { getIntakeDraftsAction, discardIntakeDraftAction } from "@/app/actions/eingang.actions";

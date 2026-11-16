@@ -11,11 +11,11 @@ import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
-import { projectIntakeTaskSchedule,projectQuoteSchedule,projectTodayInvoiceMoney,isOverdueInvoiceForToday,type TodayOrderScheduleRow,projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
+import { projectIntakeTaskSchedule,projectQuoteSchedule,projectTodayInvoiceMoney,isOverdueInvoiceForToday,type TodayOrderScheduleRow,projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/today/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
-export type { TodayLayoutItem } from "@/lib/server/todayDashboardPolicy";
+export type { TodayLayoutItem } from "@/lib/today/todayDashboardPolicy";
 export type TodayItem = {
   key: string;
   field: TodayField;

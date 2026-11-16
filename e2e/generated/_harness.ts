@@ -271,6 +271,40 @@ function fixtureUuid(seed: string) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// Only translates the historical generated test vocabulary. New fixture rows
+// must obey the same four-column station contract as the real writers.
+function canonicalFixtureStation(value: Record<string, unknown>) {
+  const state = value.status === "fertig" ? "fertig"
+    : value.status === "uebergeben" ? "abgeholt"
+      : value.station ?? "angenommen";
+  switch (state) {
+    case "wareneingang": case "angenommen": return "angenommen";
+    case "in_arbeit": case "galvanik": return "galvanik";
+    case "fertig": return "fertig";
+    case "abgeschlossen": case "abgeholt": return "abgeholt";
+    default: throw new Error("FLOW_ORDER_STATION_UNSUPPORTED:" + String(state));
+  }
+}
+
+/** V6: translate the historical declaration's database enum at its boundary,
+ * with the SAME mapping as its givens. UI expectations and strict matchers stay
+ * unchanged; an incorrect physical station must still fail exact equality. */
+function canonicalFixtureCase(source: FlowCase): FlowCase {
+  const value = structuredClone(source);
+  const steps = [...(Array.isArray(value.gegeben.aufruf.weg) ? value.gegeben.aufruf.weg : []), ...(value.wenn ?? [])];
+  const declarations = [...(value.dann?.db ?? []), ...steps.flatMap(step => step.db ?? [])];
+  for (const declaration of declarations) {
+    if (declaration.tabelle !== "orders" || !declaration.werte) continue;
+    for (const field of ["station", "current_station", "current_station_id"]) {
+      const state = declaration.werte[field];
+      if (state === "wareneingang" || state === "in_arbeit" || state === "abgeschlossen") {
+        declaration.werte[field] = canonicalFixtureStation({ station: state });
+      }
+    }
+  }
+  return value;
+}
+
 async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
   const value = resolvedFixture(fixture);
   const declaredPositions = Array.isArray(value.positionen) ? value.positionen as Array<Record<string, unknown>> : [];
@@ -293,13 +327,7 @@ async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
   const customerId = String(value.kunde ?? "");
   if (!customerId) throw new Error("FLOW_ORDER_CUSTOMER_REQUIRED");
   // The model names business states; the database stores the canonical station.
-  const station = value.status === "fertig"
-    ? "fertig"
-    : value.status === "uebergeben"
-      ? "abgeholt"
-      : value.station === "in_arbeit"
-        ? "galvanik"
-        : String(value.station ?? "angenommen");
+  const station = canonicalFixtureStation(value);
   const frozen = station === "fertig" || station === "abgeholt";
   const freezeVersion = frozen ? 2 : 1;
   // A non-catalog price becomes valid only through the existing immutable
@@ -329,7 +357,7 @@ async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
     station,
     current_station: station,
     current_station_id: station,
-    status: value.status === "fertig" ? "fertig" : value.status === "uebergeben" ? "abgeholt" : station === "abgeschlossen" ? "completed" : "in_progress",
+    status: station,
     version: orderVersion,
     parts: positions,
     intake_date: value.angenommen_am ?? new Date().toISOString(),
@@ -807,13 +835,8 @@ async function login(page: Page, loginName: keyof typeof generatedFlowRuntime.lo
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 }
 
-/** These three model cases need actual delivery, never a forged delivered status. */
-async function materializeDeliveredComplaintSource(page: Page) {
-  const fixture=generatedFixtures.auftrag_quelle!,value=resolvedFixture(fixture);
-  const positions=value.positionen as Array<Record<string,unknown>>;
-  await login(page,'login_meister');
-  await page.goto('/orders');
-  const invoke=async(filename:string,exportedName:string,input:Record<string,unknown>)=>{
+/** Existing native HTTP Action transport shared by both source fixtures. */
+async function invokeFixtureAction(page:Page,filename:string,exportedName:string,input:Record<string,unknown>){
     const production=path.join(process.cwd(),'.next/server/server-reference-manifest.json');
     const manifest=JSON.parse(readFileSync(existsSync(production)?production:path.join(process.cwd(),'.next/dev/server/server-reference-manifest.json'),'utf8')) as {node:Record<string,{workers:Record<string,{filename?:string;exportedName?:string}>}>};
     const actions=Object.entries(manifest.node).filter(([,action])=>Object.values(action.workers).some(worker=>worker.filename===filename&&worker.exportedName===exportedName));
@@ -821,7 +844,15 @@ async function materializeDeliveredComplaintSource(page: Page) {
     const response=await page.evaluate(async({actionId,input})=>{const reply=await fetch('/',{method:'POST',headers:{'Next-Action':actionId,'Content-Type':'text/plain;charset=UTF-8',Accept:'text/x-component'},body:JSON.stringify([input])});return {status:reply.status,text:await reply.text()};},{actionId:actions[0]![0],input});
     const result=readFlightActionResult(response.text);
     if(response.status!==200||result.code!=='OK')throw Error('FLOW_DELIVERY_ACTION_FAILED:'+exportedName+':'+result.code+':'+result.message);
-  };
+}
+
+/** These three model cases need actual delivery, never a forged delivered status. */
+async function materializeDeliveredComplaintSource(page: Page) {
+  const fixture=generatedFixtures.auftrag_quelle!,value=resolvedFixture(fixture);
+  const positions=value.positionen as Array<Record<string,unknown>>;
+  await login(page,'login_meister');
+  await page.goto('/orders');
+  const invoke=(filename:string,exportedName:string,input:Record<string,unknown>)=>invokeFixtureAction(page,filename,exportedName,input);
   const clientEventId=randomUUID();
   await invoke('src/app/actions/eingang.actions.ts','createOrderIntakeAction',{
     clientEventId,geprueft:true,customer:{mode:'EXISTING',customerId:value.kunde},dueDate:value.liefertermin,termStatus:value.terminstatus,
@@ -880,32 +911,18 @@ async function materializeCanonicalOrderSource(page: Page) {
       vatRateBasisPoints: position.einzelpreis === null ? null : 1900,
     })),
   };
-  const manifest = JSON.parse(readFileSync(path.join(process.cwd(), ".next/server/server-reference-manifest.json"), "utf8")) as {
-    node: Record<string, { workers: Record<string, { exportedName?: string; filename?: string }> }>;
-  };
-  const actions = Object.entries(manifest.node).filter(([, action]) => Object.values(action.workers).some(
-    worker => worker.exportedName === "createOrderIntakeAction" && worker.filename === "src/app/actions/eingang.actions.ts",
-  ));
-  if (actions.length !== 1) throw Error("FLOW_SOURCE_CREATE_ACTION_AMBIGUOUS");
-  const response = await page.evaluate(async ({ actionId, input }) => {
-    const reply = await fetch("/", { method: "POST", headers: {
-      "Next-Action": actionId, "Content-Type": "text/plain;charset=UTF-8", Accept: "text/x-component",
-    }, body: JSON.stringify([input]) });
-    return { status: reply.status, text: await reply.text() };
-  }, { actionId: actions[0]![0], input });
+  const invoke=(filename:string,exportedName:string,input:Record<string,unknown>)=>invokeFixtureAction(page,filename,exportedName,input);
+  await invoke("src/app/actions/eingang.actions.ts","createOrderIntakeAction",input);
   const receipts = await sql<{ order_id: string; order_number: string }[]>`
     SELECT receipt.order_id,receipt.order_number FROM private.order_intake_receipts receipt
     JOIN public.events event ON event.id=receipt.event_id AND event.tenant_id=receipt.tenant_id
     WHERE receipt.tenant_id=${TENANT} AND receipt.client_event_id=${clientEventId}::uuid
       AND event.event_type='ORDER_INTAKE_CREATED_V1' AND event.client_event_id=${clientEventId}::uuid`;
-  if (response.status !== 200 || receipts.length !== 1) throw Error("FLOW_SOURCE_REAL_ACTION_FAILED:" + response.text.slice(-1500));
+  if (receipts.length !== 1) throw Error("FLOW_SOURCE_REAL_INTAKE_RECEIPT_MISSING");
   const source = receipts[0]!;
-  // The given historical station remains the model's state; its intake record is real.
-  const station = value.station === "in_arbeit" ? "galvanik" : String(value.station);
-  await sql`UPDATE public.orders SET station=${station},current_station=${station},current_station_id=${station},
-    status=${station === "abgeschlossen" ? "completed" : "in_progress"},ware=${String(value.ware)}
-    WHERE tenant_id=${TENANT} AND id=${source.order_id}`;
-  await sql`UPDATE public.items SET current_station_id=${station} WHERE tenant_id=${TENANT} AND order_id=${source.order_id}`;
+  // Preserve the historical given's meaning using the current station tuple;
+  // the intake record remains genuine and the later copy assertions unchanged.
+  const station = canonicalFixtureStation(value);
   if (value.fotos !== undefined) {
     if (!Number.isSafeInteger(value.fotos) || Number(value.fotos) < 0 || Number(value.fotos) > 20) throw Error("FLOW_SOURCE_PHOTO_COUNT_INVALID");
     if (Number(value.fotos) > 0) {
@@ -927,6 +944,23 @@ async function materializeCanonicalOrderSource(page: Page) {
       await sql`UPDATE public.items SET photo_ids=${sql.json(photoIds)} WHERE tenant_id=${TENANT} AND id=${sourceItems[0]!.id}`;
     }
   }
+  if(station==='fertig'||station==='abgeholt'){
+    // A terminal copy given still needs the reader's genuine completion freeze.
+    // Preserve every original price, including NULL. No invoice or handover is
+    // claimed: the historical terminal station below remains synthetic givens.
+    const orderId=source.order_id,actorId=generatedFlowRuntime.logins.login_meister.id;
+    const version=async()=>{const [row]=await sql<{version:number}[]>`SELECT version FROM public.orders WHERE tenant_id=${TENANT} AND id=${orderId}`;if(!row)throw Error('FLOW_COPY_ORDER_MISSING');return row.version;};
+    await sql`INSERT INTO private.extra_work_hourly_rates(id,tenant_id,hourly_rate_cents,version,created_by,effective_at) SELECT ${randomUUID()}::uuid,${TENANT},12000,coalesce(max(version),0)+1,${actorId}::uuid,now() FROM private.extra_work_hourly_rates WHERE tenant_id=${TENANT}`;
+    await invoke('src/app/actions/orders.actions.ts','transitionWareneingangToGalvanikAction',{orderId,expectedVersion:await version(),clientEventId:randomUUID()});
+    const items=await sql<{id:string}[]>`SELECT id FROM public.items WHERE tenant_id=${TENANT} AND order_id=${orderId} ORDER BY id`;
+    for(const item of items)await invoke('src/app/actions/orders.actions.ts','setOrderItemFinishedAction',{orderId,itemId:item.id,finished:true,expectedVersion:await version(),clientEventId:randomUUID()});
+    await seedSyntheticItemPhotos(sql,{tenantId:TENANT,actorId,orderId});
+    await invoke('src/app/actions/orders.actions.ts','freezeOrderAction',{orderId,freezeId:randomUUID(),expectedVersion:await version(),clientEventId:randomUUID()});
+  }
+  await sql`UPDATE public.orders SET station=${station},current_station=${station},current_station_id=${station},
+    status=${station},ware=${String(value.ware)}
+    WHERE tenant_id=${TENANT} AND id=${source.order_id}`;
+  await sql`UPDATE public.items SET current_station_id=${station} WHERE tenant_id=${TENANT} AND order_id=${source.order_id}`;
   const integrity = await sql.begin(async tx => {
     await tx`SELECT set_config('app.tenant_id',${TENANT},true)`;
     return tx<{ integrity_ok: boolean }[]>`SELECT integrity_ok FROM private.v_order_intake_receipts_v1 WHERE tenant_id=${TENANT} AND order_id=${source.order_id}`;
@@ -1752,7 +1786,7 @@ function assertServer(expectation: { fehler?: string } | undefined, state: FlowR
 }
 
 export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
-  try { await runGeneratedFlowCaseBody(page,flowCase); }
+  try { await runGeneratedFlowCaseBody(page,canonicalFixtureCase(flowCase)); }
   catch(error){
     if(flowCase.id==='C09'&&flowCase.paket==='AP-C'){
       // Keep the write assertion strict and report the real UI's reason

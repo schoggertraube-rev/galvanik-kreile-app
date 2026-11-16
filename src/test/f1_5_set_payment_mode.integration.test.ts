@@ -165,7 +165,7 @@ async function seedPrerequisites() {
         current_station, current_station_id, version, status, created_at
       ) VALUES (
         ${FOREIGN_ORDER}, ${FOREIGN_TENANT}, 'A-F15-B2-F', ${FOREIGN_CUSTOMER},
-        'F1.5 B2 Foreign Order', 'wareneingang', 'wareneingang', 'wareneingang',
+        'F1.5 B2 Foreign Order', 'angenommen', 'angenommen', 'angenommen',
         1, 'angenommen', now()
       )
     `;
