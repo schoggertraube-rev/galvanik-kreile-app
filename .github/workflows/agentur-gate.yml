@@ -87,7 +87,7 @@ jobs:
     name: h16-native
     needs: berlin-clock
     if: needs.berlin-clock.outputs.run == 'yes'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - name: Checkout
