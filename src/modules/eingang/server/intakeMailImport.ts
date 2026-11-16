@@ -1,6 +1,5 @@
-import {mailImportFailureProjection} from './intakeMailFailureRead';
+import {mailImportFailureProjection,mailImportFailureFlag,MAIL_IMPORT_FAILED_FLAG,LEGACY_MAIL_IMPORT_FAILED_TEXT_V1} from './intakeMailFailureRead';
 import type {MailImportFailure} from '../mailSelectionContract';
-import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import 'server-only';
 import {createHash} from 'node:crypto';
@@ -182,7 +181,7 @@ export async function parkIntakeMailImportFailure(auth:AuthorizationSnapshot,inp
   const added=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
    SELECT ${auth.tenantId},${source.itemId}::uuid,'einsatz',${key}::uuid,${auth.userId},${JSON.stringify({action:'mail_import_failed',mailbox:input.mailbox.toLowerCase(),graphMessageId:input.mail.id,reason:input.reason})}::jsonb
    WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND befehl_id=${key}::uuid) RETURNING id`);
-  if(added.length)await tx.execute(sql`UPDATE public.intake_item SET kennzeichen=CASE WHEN ${MAIL_IMPORT_COPY.failed}=ANY(kennzeichen) THEN kennzeichen ELSE array_append(kennzeichen,${MAIL_IMPORT_COPY.failed}) END,version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${source.itemId}::uuid`);
+  if(added.length)await tx.execute(sql`UPDATE public.intake_item SET kennzeichen=CASE WHEN ${MAIL_IMPORT_FAILED_FLAG}=ANY(kennzeichen) THEN kennzeichen ELSE array_append(kennzeichen,${MAIL_IMPORT_FAILED_FLAG}) END,version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${source.itemId}::uuid`);
   const failures=await tx.execute<{von:string}>(sql`SELECT von FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${source.itemId}::uuid AND art='einsatz' AND nachher->>'action'='mail_import_failed' ORDER BY zeit,id`);
   if(!failures.length)throw Error('INTAKE_MAIL_FAILURE_RECEIPT_REQUIRED');
   let taskMissing=false;
@@ -202,7 +201,7 @@ export async function readFailedIntakeMailImports(auth:AuthorizationSnapshot,mai
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   const rows=await tx.execute<{id:string;failure:MailImportFailure}>(sql`WITH projected AS MATERIALIZED (
    SELECT source.graph_message_id AS id,source.empfangen_am AS at,source.id AS item_id,${mailImportFailureProjection()} AS failure FROM public.intake_item source
-   WHERE source.tenant_id=${auth.tenantId} AND source.kanal='mail' AND ${MAIL_IMPORT_COPY.failed}=ANY(source.kennzeichen))
+   WHERE source.tenant_id=${auth.tenantId} AND source.kanal='mail' AND ${mailImportFailureFlag()})
    SELECT id,failure FROM projected WHERE failure->>'mailbox'=${mailbox.toLowerCase()} OR failure->>'state'='SOURCE_INCOMPLETE' ORDER BY at NULLS LAST,item_id LIMIT 500`);
   if(rows.some(row=>!row.id||!row.failure||row.failure.state!=='FAILED'||row.failure.graphMessageId!==row.id||!row.failure.reason||row.failure.attempts===null||row.failure.attempts<1))throw Error('INTAKE_MAIL_FAILURE_SOURCE_INCOMPLETE');
   return {code:'OK' as const,data:rows.map(row=>({id:row.id}))};
@@ -210,5 +209,5 @@ export async function readFailedIntakeMailImports(auth:AuthorizationSnapshot,mai
 }
 
 async function clearMailFailureFlag(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string){
- await tx.execute(sql`UPDATE public.intake_item SET kennzeichen=array_remove(kennzeichen,${MAIL_IMPORT_COPY.failed}),version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${itemId}::uuid AND ${MAIL_IMPORT_COPY.failed}=ANY(kennzeichen)`);
+ await tx.execute(sql`UPDATE public.intake_item SET kennzeichen=array_remove(array_remove(kennzeichen,${MAIL_IMPORT_FAILED_FLAG}),${LEGACY_MAIL_IMPORT_FAILED_TEXT_V1}),version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${itemId}::uuid AND ${mailImportFailureFlag(sql`kennzeichen`)}`);
 }
