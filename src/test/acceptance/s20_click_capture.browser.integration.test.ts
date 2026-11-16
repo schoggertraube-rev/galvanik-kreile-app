@@ -25,7 +25,8 @@ it('L8 native command hang/repeat/abort and offline diagnostics reach the actual
  const compiled=await build({stdin:{contents:"export {installProtocolClickCapture} from './src/modules/logging/public';export {runServerAction} from './src/lib/client/runServerAction';",resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,format:'esm',platform:'browser'});
  const bootstrap=`import * as client from '/capture.mjs';
  const state=await(await fetch('/TEST/state')).json();if(state.code!=='OK'||!state.enabled)throw Error('TEST_REAL_CAPTURE_STATE_REQUIRED');
- client.installProtocolClickCapture(state.scope,async(entries,scope)=>{const result=await fetch('/TEST/clicks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({entries,scope})});return result.ok?result.json():{code:'UNAVAILABLE'};});
+ window.TESToverflowAck=0;
+ client.installProtocolClickCapture(state.scope,async(entries,scope)=>{const result=await fetch('/TEST/clicks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({entries,scope})});const receipt=result.ok?await result.json():{code:'UNAVAILABLE'};window.TESToverflowAck+=entries.filter(entry=>entry.target?.startsWith('test.overflow.')&&receipt.accepted?.includes(entry.id)).length;return receipt;});
  window.TESTpending=[];
  document.querySelector('#command').addEventListener('click',()=>{window.TESTpending.push(client.runServerAction(async()=>{const result=await fetch('/TEST/command',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});return result.json();}));});
  document.querySelector('#abort').addEventListener('click',()=>{window.TESTpending.push(client.runServerAction(async()=>{const controller=new AbortController();controller.abort(new DOMException('TEST PRIVATE_BROWSER_FAULT Bearer x','AbortError'));return fetch('/TEST/command',{method:'POST',body:'{}',signal:controller.signal});}));});
@@ -79,6 +80,19 @@ it('L8 native command hang/repeat/abort and offline diagnostics reach the actual
   await expect.poll(()=>attempts.filter(batch=>batch.some(entry=>'target'in entry&&entry.target==='test.local')).length).toBe(2);
   expect(attempts.filter(batch=>batch.some(entry=>'target'in entry&&entry.target==='test.local'))[1]).toEqual(first);
   expect(await sql`SELECT outcome,duration_ms FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND target='test.local'`).toEqual([{outcome:null,duration_ms:null}]);
+  // PL19:41 K1: actual browser buffer, same authenticated transport and DB.
+  await context.setOffline(true);
+  await page.evaluate(async()=>{
+   const button=document.querySelector<HTMLButtonElement>('#local')!;
+   for(let i=0;i<600;i++){button.setAttribute('data-spec-id','test.overflow.'+String(i).padStart(4,'0'));button.click();}
+   await new Promise<void>(resolve=>setTimeout(resolve,0));
+  });
+  expect(await sql`SELECT id FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND target LIKE 'test.overflow.%'`).toHaveLength(0);
+  await context.setOffline(false);
+  await page.waitForFunction(()=>(window as unknown as {TESToverflowAck:number}).TESToverflowAck===500);
+  const overflow=await sql`SELECT target FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND target LIKE 'test.overflow.%' ORDER BY target`;
+  expect(overflow[0].target).toBe('test.overflow.0100');expect(overflow[499].target).toBe('test.overflow.0599');
+  expect(await sql`SELECT verpasst FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND command='PROTOCOL_CLIENT_ENTRIES_MISSED'`).toEqual([{verpasst:100}]);
   const read=await withSession(full,()=>getProtocolLogAction({capture:true}));expect(read.code).toBe('OK');
  }finally{await context?.close();await browser?.close();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });

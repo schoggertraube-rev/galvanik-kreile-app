@@ -16,6 +16,8 @@ const reasons:readonly LogReason[]=['FORBIDDEN','VALIDATION','CONFLICT','NOT_FOU
 const services=['microsoft365','belegerkennung','versand','druck'];
 const outcomes=['ok','fehler','zeitueberschreitung','unklar'];
 function lose(count=1){missed=Math.min(2147483647,missed+count);}
+/** Internal shared instance counter; never a second persistent source. */
+export function countMissedEntries(count=1){if(Number.isSafeInteger(count)&&count>0)lose(count);}
 
 /** Diagnostics take only a named UUID reference, never a request body or free text.
  * Groups use their request key rather than an arbitrary first object. */
@@ -31,9 +33,17 @@ export function subjectForAction(name:string,input:unknown):LogSubject{
 }
 
 /** Only named scalar fields cross the sink. Error objects, inputs and extra properties never do. */
-export async function logTechnical(auth:AuthorizationSnapshot|null,event:TechnicalEvent,receiptId?:string):Promise<boolean>{
- if(!auth||auth.active!==true||!auth.tenantId||!uuid.test(auth.userId)){lose();return false;}
+export async function logTechnical(auth:AuthorizationSnapshot|null,event:TechnicalEvent,receiptId?:string,clientMissed=0):Promise<boolean>{
+ const result=await logTechnicalReceipt(auth,event,receiptId,clientMissed);
+ if(result.code==='VALIDATION_ERROR'||result.code==='CONFLICT')lose();
+ return result.code==='OK';
+}
+/** Same writer, with a terminal/transient receipt for the diagnostic transport. */
+export async function logTechnicalReceipt(auth:AuthorizationSnapshot|null,event:TechnicalEvent,receiptId?:string,clientMissed=0):Promise<{code:'OK'|'VALIDATION_ERROR'|'CONFLICT'|'UNAVAILABLE'}>{
+ if(!Number.isSafeInteger(clientMissed)||clientMissed<0||clientMissed>2147483647)return {code:'VALIDATION_ERROR'};
+ if(!auth||auth.active!==true||!auth.tenantId||!uuid.test(auth.userId)){lose(clientMissed||1);return {code:'UNAVAILABLE'};}
  const lost=missed;missed=0;
+ let validating=true;
  try{
   if(receiptId!==undefined&&!uuid.test(receiptId))throw Error('LOG_RECEIPT_ID_INVALID');
   if(!command.test(event.command)||!event.subject||!/^[a-z][a-z0-9_]{0,39}$/.test(event.subject.type)||!id.test(event.subject.id))throw Error('LOG_REFERENCE_INVALID');
@@ -49,10 +59,12 @@ export async function logTechnical(auth:AuthorizationSnapshot|null,event:Technic
   if(type==='external'&&(!services.includes(event.dienst)||!outcomes.includes(event.ergebnis)))throw Error('LOG_EXTERNAL_INVALID');
   const original=type==='external'?event.original:undefined;
   if(original&&(!id.test(original.ref)||!/^[a-f0-9]{64}$/.test(original.sha256)))throw Error('LOG_ORIGINAL_INVALID');
+  validating=false;
   const recorded=await withPrivilegedTenantTransaction(auth,async tx=>{
+   await tx.execute(sql`SET LOCAL statement_timeout='2000ms'`);
    const written=await tx.execute<{id:string}>(sql`
     INSERT INTO public.technical_protocol(id,tenant_id,user_id,occurred_at,event_type,command,subject_type,subject_id,duration_ms,reason,dienst,ergebnis,original_ref,original_sha256,verpasst)
-    VALUES(coalesce(${receiptId??null}::uuid,gen_random_uuid()),${auth.tenantId},${auth.userId}::uuid,${occurredAt}::timestamptz,${type},${event.command},${event.subject.type},${event.subject.id},${duration},${reason},${dienst},${ergebnis},${original?original.ref:null},${original?original.sha256:null},${lost}) ON CONFLICT(id) DO NOTHING RETURNING id`);
+    VALUES(coalesce(${receiptId??null}::uuid,gen_random_uuid()),${auth.tenantId},${auth.userId}::uuid,${occurredAt}::timestamptz,${type},${event.command},${event.subject.type},${event.subject.id},${duration},${reason},${dienst},${ergebnis},${original?original.ref:null},${original?original.sha256:null},${Math.min(2147483647,lost+clientMissed)}) ON CONFLICT(id) DO NOTHING RETURNING id`);
    if(written.length===1)return 'inserted' as const;
    if(receiptId!==undefined){
     const prior=await tx.execute<{same:boolean}>(sql`SELECT (user_id=${auth.userId}::uuid AND occurred_at=${occurredAt}::timestamptz AND event_type=${type} AND command=${event.command}
@@ -60,13 +72,20 @@ export async function logTechnical(auth:AuthorizationSnapshot|null,event:Technic
      AND dienst IS NOT DISTINCT FROM ${dienst} AND ergebnis IS NOT DISTINCT FROM ${ergebnis} AND original_ref IS NOT DISTINCT FROM ${original?.ref??null} AND original_sha256 IS NOT DISTINCT FROM ${original?.sha256??null}) AS same
      FROM public.technical_protocol WHERE tenant_id=${auth.tenantId} AND id=${receiptId}::uuid`);
     if(prior.length===1&&prior[0].same)return 'replayed' as const;
+    if(prior.length)throw Error('LOG_RECEIPT_CONFLICT');
    }
    throw Error('LOG_WRITE_RECEIPT_MISSING');
   });
   // A replay cannot consume new loss counts: the original row is immutable.
   if(recorded==='replayed')lose(lost);
-  return true;
- }catch{lose(lost+1);return false;}
+  return {code:'OK'};
+ }catch(error){
+  if(validating){lose(lost);return {code:'VALIDATION_ERROR'};}
+  if(error instanceof Error&&error.message==='LOG_RECEIPT_CONFLICT'){lose(lost);return {code:'CONFLICT'};}
+  // The client retains its immutable loss report until an actual ACK. Do not
+  // count that same client loss again on every unavailable transport attempt.
+  lose(lost+1);return {code:'UNAVAILABLE'};
+ }
 }
 
 /** Same hash is used by the click writer and the authorized user filter. */
@@ -85,8 +104,9 @@ export async function readLog(auth:AuthorizationSnapshot,filter:LogFilter,readSe
   if(!settings.enabled)return {code:'DISABLED' as const};
   return await withPrivilegedTenantTransaction(auth,async tx=>{
    if(settings.retentionDays!==null){
+    await tx.execute(sql`SET LOCAL app.protocol_retention='on'`);
     await tx.execute(sql`DELETE FROM public.technical_protocol WHERE tenant_id=${auth.tenantId} AND recorded_at<statement_timestamp()-(${settings.retentionDays}*interval '1 day')`);
-    await tx.execute(sql`DELETE FROM public.app_usage_events WHERE tenant_id=${auth.tenantId} AND received_at<statement_timestamp()-(${settings.retentionDays}*interval '1 day')`);
+    await tx.execute(sql`DELETE FROM public.app_usage_events WHERE tenant_id=${auth.tenantId} AND event_type='action' AND received_at<statement_timestamp()-(${settings.retentionDays}*interval '1 day')`);
    }
    const technical=await tx.execute<TechnicalLogRow>(sql`SELECT id,user_id::text AS "userId",occurred_at::text AS "occurredAt",recorded_at::text AS "recordedAt",event_type AS type,command,subject_type AS "subjectType",subject_id AS "subjectId",duration_ms AS "durationMs",reason,dienst,ergebnis,original_ref AS "originalRef",original_sha256 AS "originalSha256",verpasst
     FROM public.technical_protocol WHERE tenant_id=${auth.tenantId}
@@ -95,7 +115,7 @@ export async function readLog(auth:AuthorizationSnapshot,filter:LogFilter,readSe
     ${filter.from?sql`AND occurred_at>=${filter.from}::timestamptz`:sql``}
     ${filter.until?sql`AND occurred_at<=${filter.until}::timestamptz`:sql``}
     ORDER BY occurred_at DESC,id DESC LIMIT ${filter.limit===undefined?100:filter.limit}`);
-   const clicks=filter.subjectId!==undefined?null:await tx.execute<ClickLogRow>(sql`SELECT client_event_id::text AS id,target,route,occurred_at::text AS "occurredAt",duration_ms AS "durationMs",outcome,click_count AS "clickCount",(duration_ms>=${settings.hangMs}) AS hang
+   const clicks=filter.subjectId!==undefined?null:await tx.execute<ClickLogRow>(sql`SELECT client_event_id::text AS id,target,route,occurred_at::text AS "occurredAt",duration_ms AS "durationMs",outcome,click_count AS "clickCount",(duration_ms>${settings.hangMs}) AS hang
     FROM public.app_usage_events WHERE tenant_id=${auth.tenantId} AND event_type='action'
     ${filter.userId?sql`AND actor_pseudonym=${actorPseudonym(filter.userId)}`:sql``}
     ${filter.from?sql`AND occurred_at>=${filter.from}::timestamptz`:sql``}

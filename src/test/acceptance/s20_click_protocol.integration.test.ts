@@ -15,8 +15,8 @@ const click=(patch:Partial<ClickInput>={}):ClickInput=>({id:randomUUID(),session
 
 it('L8 actual existing click source: one normal/hang/cancel/repeat row, server pseudonym and normalized route, byte-equivalent retry',async()=>{
  const entries=[click(),click({durationMs:3500}),click({outcome:'cancelled'}),click({clickCount:2})];
- expect(await withSession(full,()=>recordProtocolClicksAction(entries))).toEqual({code:'OK',accepted:entries.map(row=>row.id)});
- expect(await withSession(full,()=>recordProtocolClicksAction(JSON.parse(JSON.stringify(entries))))).toEqual({code:'OK',accepted:entries.map(row=>row.id)});
+ expect(await withSession(full,()=>recordProtocolClicksAction(entries))).toEqual({code:'OK',accepted:entries.map(row=>row.id),rejected:[]});
+ expect(await withSession(full,()=>recordProtocolClicksAction(JSON.parse(JSON.stringify(entries))))).toEqual({code:'OK',accepted:entries.map(row=>row.id),rejected:[]});
  const rows=await sql`SELECT client_event_id::text,actor_pseudonym,route,event_type,outcome,duration_ms,click_count FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  expect(rows).toHaveLength(4);
  for(const row of rows){expect(row.actor_pseudonym).toBe(createHash('sha256').update(full.actorId).digest('hex'));expect(row.route).toBe('/orders/:id');expect(row.event_type).toBe('action');}
@@ -30,14 +30,14 @@ it('L8 actual existing click source: one normal/hang/cancel/repeat row, server p
  expect(filtered).toMatchObject({code:'OK',clicks:[]});
 });
 
-it('click conflict rolls the entire new batch back; a different actor cannot acknowledge an old click, invalid target is rejected',async()=>{
+it('a rejected click preserves independent fresh receipts; foreign actors and invalid targets receive terminal per-entry rejections',async()=>{
  const original=click();expect(await withSession(full,()=>recordProtocolClicksAction([original]))).toMatchObject({code:'OK'});
  const fresh=click();
- expect(await withSession(full,()=>recordProtocolClicksAction([fresh,{...original,durationMs:original.durationMs+1}]))).toEqual({code:'CONFLICT'});
- expect(await sql`SELECT id FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${fresh.id}::uuid`).toHaveLength(0);
+ expect(await withSession(full,()=>recordProtocolClicksAction([fresh,{...original,durationMs:original.durationMs+1}]))).toEqual({code:'OK',accepted:[fresh.id],rejected:[{id:original.id,code:'CONFLICT'}]});
+ expect(await sql`SELECT id FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${fresh.id}::uuid`).toHaveLength(1);
  const other=await createFixture(['auftraege']);
- expect(await withSession(other,()=>recordProtocolClicksAction([original]))).toEqual({code:'CONFLICT'});
- expect(await withSession(full,()=>recordProtocolClicksAction([click({target:'Bearer x'})]))).toEqual({code:'VALIDATION_ERROR'});
+ expect(await withSession(other,()=>recordProtocolClicksAction([original]))).toEqual({code:'CONFLICT',accepted:[],rejected:[{id:original.id,code:'CONFLICT'}]});
+ const invalid=click({target:'Bearer x'});expect(await withSession(full,()=>recordProtocolClicksAction([invalid]))).toEqual({code:'VALIDATION_ERROR',accepted:[],rejected:[{id:invalid.id,code:'VALIDATION_ERROR'}]});
 });
 
 it('capture metadata reveals no restricted protocol; scoped unknown facts preserve NULL and cannot be transported by a different login',async()=>{

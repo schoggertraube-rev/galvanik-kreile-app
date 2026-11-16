@@ -1,5 +1,5 @@
 import {PROTOCOL_EVENT_ID} from './clickContract';
-import type {ClientDiagnosticFact} from './public';
+import type {ClientDiagnosticFact,ClientMissedFact} from './public';
 /** Existing S06 diagnostic identifiers only; no error objects or user text. */
 export const PROTOCOL_CLIENT_ERRORS=[
  "ACTION_REQUEST_FAILED",
@@ -42,4 +42,10 @@ export function parseClientDiagnostic(value:unknown):ClientDiagnosticFact|null{
  const row=value as Record<string,unknown>;
  if(Object.keys(row).sort().join(',')!=='command,id,kind,occurredAt'||row.kind!=='error'||typeof row.id!=='string'||!PROTOCOL_EVENT_ID.test(row.id)||!isProtocolClientErrorCode(row.command)||typeof row.occurredAt!=='string'||!Number.isFinite(Date.parse(row.occurredAt)))return null;
  return {kind:'error',id:row.id,command:row.command,occurredAt:new Date(row.occurredAt).toISOString()};
+}
+export function parseClientMissed(value:unknown):ClientMissedFact|null{
+ if(!value||typeof value!=='object'||Array.isArray(value))return null;
+ const row=value as Record<string,unknown>;
+ if(Object.keys(row).sort().join(',')!=='count,id,kind,occurredAt'||row.kind!=='missed'||typeof row.id!=='string'||!PROTOCOL_EVENT_ID.test(row.id)||!Number.isSafeInteger(row.count)||Number(row.count)<1||Number(row.count)>2147483647||typeof row.occurredAt!=='string'||!Number.isFinite(Date.parse(row.occurredAt)))return null;
+ return {kind:'missed',id:row.id,count:Number(row.count),occurredAt:new Date(row.occurredAt).toISOString()};
 }

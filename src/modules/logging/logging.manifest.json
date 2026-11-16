@@ -23,14 +23,18 @@
     "@/modules/logging/public#ClientDiagnosticFact",
     "@/modules/logging/public#DiagnosticFact",
     "@/modules/logging/public#reportProtocolClientError",
-    "@/modules/logging/server-public#logClientDiagnostics"
+    "@/modules/logging/server-public#logClientDiagnostics",
+    "@/modules/logging/public#ClientMissedFact",
+    "@/modules/logging/public#ProtocolRejection",
+    "@/modules/logging/public#ProtocolReply"
   ],
   "capabilities": [
     "protokoll"
   ],
   "migrations": [
     "20261116134932_s20_logging_foundation.sql",
-    "20261116141223_s20_technical_protocol.sql"
+    "20261116141223_s20_technical_protocol.sql",
+    "20261116184728_s20_protocol_retention_guard.sql"
   ],
   "ownsTables": [
     "public.app_usage_events",
@@ -43,7 +47,7 @@
     "consumes": []
   },
   "config": {
-    "logging": "Only click capture and protocol view; never errors or business events"
+    "logging": "Authenticated technical errors, slow/provider/offline outcomes and opt-in click capture; errors remain active when click capture is disabled. Protocol reads require protokoll."
   },
   "dependencies": [
     "fundament"

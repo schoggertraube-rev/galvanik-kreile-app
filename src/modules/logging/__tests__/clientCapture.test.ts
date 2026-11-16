@@ -89,3 +89,36 @@ it('unattributed errors override stale HTML identity and remain count-only durin
  const later=vi.fn(async(entries:DiagnosticFact[])=>({code:'OK',accepted:entries.map(row=>row.id)}));cleanups.push(installProtocolClickCapture(scope(),later,false));release();await vi.advanceTimersByTimeAsync(0);
  expect(sent[0].scope).toBeNull();expect(sent[0].entries).toHaveLength(1);expect(later).not.toHaveBeenCalled();
 });
+
+it('600 actual DOM clicks offline keep only the newest 500 facts and report the 100 missed entries once',async()=>{
+ const batches:DiagnosticFact[][]=[];
+ cleanups.push(installProtocolClickCapture(scope(),async entries=>{batches.push(structuredClone(entries));return {code:'OK',accepted:entries.map(row=>row.id),rejected:[]};}));
+ for(let i=0;i<600;i++){document.querySelector('button')!.setAttribute('data-spec-id','click.'+String(i).padStart(4,'0'));press();}
+ await vi.advanceTimersByTimeAsync(0);expect(batches).toHaveLength(0);await reconnect();
+ const facts=batches.flat(),clicks=facts.filter(row=>!('kind'in row)),losses=facts.filter(row=>'kind'in row&&row.kind==='missed');
+ expect(clicks).toHaveLength(500);expect(clicks[0]).toMatchObject({target:'click.0100'});expect(clicks[499]).toMatchObject({target:'click.0599'});
+ expect(losses).toHaveLength(1);expect(losses[0]).toMatchObject({kind:'missed',count:100});
+ const sent=batches.length;await reconnect();expect(batches).toHaveLength(sent);
+});
+
+it('a final rejected original is removed, counted and cannot block later batches; only unavailable entries retain their identity',async()=>{
+ const batches:DiagnosticFact[][]=[],partition=scope();let rejectedId='';
+ const stop=installProtocolClickCapture(partition,async entries=>{
+  batches.push(structuredClone(entries));
+  if(!rejectedId){rejectedId=entries[0].id;return {code:'OK',accepted:entries.slice(1).map(row=>row.id),rejected:[{id:rejectedId,code:'VALIDATION_ERROR'}]};}
+  return {code:'OK',accepted:entries.map(row=>row.id),rejected:[]};
+ });cleanups.push(stop);
+ for(let i=0;i<75;i++)press();await vi.advanceTimersByTimeAsync(0);await reconnect();
+ expect(batches[0]).toHaveLength(50);expect(batches.flat().filter(row=>!('kind'in row))).toHaveLength(75);
+ expect(batches.flat().filter(row=>'kind'in row&&row.kind==='missed')).toMatchObject([{count:1}]);
+ stop();const retry=vi.fn(async(entries:DiagnosticFact[])=>({code:'OK',accepted:entries.map(row=>row.id)}));
+ cleanups.push(installProtocolClickCapture(partition,retry));await vi.advanceTimersByTimeAsync(0);expect(retry).not.toHaveBeenCalled();
+});
+
+it('transport exceptions retain originals and warn with a fixed identifier without private contents',async()=>{
+ const partition=scope(),warn=vi.spyOn(console,'warn').mockImplementation(()=>{}),attempts:DiagnosticFact[][]=[];
+ const stop=installProtocolClickCapture(partition,async entries=>{attempts.push(structuredClone(entries));throw Error('PRIVATE_TRANSPORT_BODY');});cleanups.push(stop);
+ press();await vi.advanceTimersByTimeAsync(0);await reconnect();stop();
+ expect(warn).toHaveBeenCalledWith('[PROTOCOL_TRANSPORT_FAILED]');expect(JSON.stringify(warn.mock.calls)).not.toContain('PRIVATE_TRANSPORT_BODY');
+ cleanups.push(installProtocolClickCapture(partition,async entries=>{attempts.push(structuredClone(entries));return {code:'OK',accepted:entries.map(row=>row.id)};}));await vi.advanceTimersByTimeAsync(0);expect(attempts[1]).toEqual(attempts[0]);
+});

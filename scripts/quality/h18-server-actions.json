@@ -6,12 +6,14 @@
       "src/test/acceptance/s20_recognition_protocol.integration.test.ts"
     ],
     "src/app/actions/logging.actions.ts#getProtocolLogAction": [
-      "src/test/acceptance/s20_technical_protocol.integration.test.ts"
+      "src/test/acceptance/s20_technical_protocol.integration.test.ts",
+      "src/test/acceptance/s20_review_corrections.integration.test.ts"
     ],
     "src/app/actions/logging.actions.ts#recordProtocolClicksAction": [
       "src/test/acceptance/s20_client_diagnostics.integration.test.ts",
       "src/test/acceptance/s20_click_capture.browser.integration.test.ts",
-      "src/test/acceptance/s20_click_protocol.integration.test.ts"
+      "src/test/acceptance/s20_click_protocol.integration.test.ts",
+      "src/test/acceptance/s20_review_corrections.integration.test.ts"
     ],
     "src/app/actions/invoices.actions.ts#payoutCustomerCreditAction": [
       "src/test/acceptance/s08b_customer_credit_payout.integration.test.ts"

@@ -12,7 +12,7 @@ export function ProtocolClickCapture(){
   let stopped=false,cleanup=installProtocolClickCapture(scope,recordProtocolClicksAction,false);
   if(scope)void getProtocolLogAction({capture:true}).then(state=>{
    if(!stopped&&state.code==='OK'&&state.enabled&&state.scope===scope){cleanup();cleanup=installProtocolClickCapture(state.scope,recordProtocolClicksAction);}
-  }).catch(()=>{/* unknown capture settings never enable logging */});
+  }).catch(()=>{console.warn('[PROTOCOL_CAPTURE_SETTINGS_FAILED]');});
   return()=>{stopped=true;cleanup();};
  },[status,offlineScope]);
  return null;

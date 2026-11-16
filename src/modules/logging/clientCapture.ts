@@ -1,21 +1,27 @@
 import {readServerReachability,subscribeServerReachability} from '@/lib/offline/serverReachability';
 import {CLICK_TARGET,normalizeClickRoute} from './clickContract';
 import {isProtocolClientErrorCode,type ProtocolClientErrorCode} from './clientErrorCodes';
-import type {ClickFact,DiagnosticFact} from './public';
+import type {ClickFact,ClientMissedFact,DiagnosticFact,ProtocolReply} from './public';
 
-type Sender=(entries:DiagnosticFact[],scope:string|null)=>Promise<{code:string;accepted?:string[]}>;
+type Sender=(entries:DiagnosticFact[],scope:string|null)=>Promise<ProtocolReply>;
 type Ticket={event:MouseEvent;fact:ClickFact;start:number;claimed:boolean};
 type Capture={scope:string|null;ticket:Ticket|null;flush:()=>Promise<void>};
 // This diagnostic buffer is deliberately separate from the durable business queue.
 // It survives disconnect/reconnect and registrar remounts in this page instance;
 // it does not claim persistence across a browser/process restart.
-const buffers=new Map<string|null,Map<string,DiagnosticFact>>();
+type BufferState={entries:Map<string,DiagnosticFact>;missed:number;report:ClientMissedFact|null};
+const buffers=new Map<string|null,BufferState>();
 const flushing=new Set<string|null>();
 const dirty=new Set<string|null>();
 const sessions=new Map<string,string>();
 let active:Capture|null=null;
 
-function bufferFor(scope:string|null){let buffer=buffers.get(scope);if(!buffer){buffer=new Map();buffers.set(scope,buffer);}return buffer;}
+function bufferFor(scope:string|null){let buffer=buffers.get(scope);if(!buffer){buffer={entries:new Map(),missed:0,report:null};buffers.set(scope,buffer);}return buffer;}
+function missed(buffer:BufferState,count=1){buffer.missed=Math.min(2147483647,buffer.missed+count);}
+function put(buffer:BufferState,fact:DiagnosticFact){
+ buffer.entries.set(fact.id,fact);
+ while(buffer.entries.size>500){const first=buffer.entries.keys().next();if(first.done)break;buffer.entries.delete(first.value);missed(buffer);}
+}
 /** Known S06 code only. Never accepts an Error object, input, PIN or message. */
 export function reportProtocolClientError(identifier:ProtocolClientErrorCode):void{
  if(typeof window==='undefined'||!isProtocolClientErrorCode(identifier))return;
@@ -23,7 +29,7 @@ export function reportProtocolClientError(identifier:ProtocolClientErrorCode):vo
   const marker=document.documentElement.dataset;
   const scope=active?active.scope:marker.authStatus==='authenticated'&&typeof marker.offlineScope==='string'&&/^[a-f0-9]{64}$/.test(marker.offlineScope)?marker.offlineScope:null;
   const fact={kind:'error' as const,id:crypto.randomUUID(),command:identifier,occurredAt:new Date().toISOString()};
-  bufferFor(scope).set(fact.id,fact);dirty.add(scope);void active?.flush();
+  put(bufferFor(scope),fact);dirty.add(scope);void active?.flush();
  }catch{console.warn('[PROTOCOL_CLIENT_CAPTURE_FAILED]');}
 }
 
@@ -37,7 +43,7 @@ function outcome(value:unknown):ClickFact['outcome']{
 function retain(capture:Capture,ticket:Ticket,result:ClickFact['outcome'],duration:number|null){
  const buffer=buffers.get(capture.scope);if(!buffer)return;
  const fact={...ticket.fact,outcome:result,durationMs:duration};
- buffer.set(fact.id,fact);
+ put(buffer,fact);
  dirty.add(capture.scope);
  void capture.flush();
 }
@@ -63,21 +69,35 @@ export function installProtocolClickCapture(scope:string|null,send:Sender,captur
   if(stopped||active!==capture||!readServerReachability())return;
   // Unknown-origin diagnostics remain unknown even after a later login.
   for(const partition of scope===null?[null]:[null,scope]){
-   const buffer=buffers.get(partition);if(!buffer?.size||flushing.has(partition))continue;
+   const buffer=buffers.get(partition);if(!buffer||(!buffer.entries.size&&!buffer.missed&&!buffer.report)||flushing.has(partition))continue;
    flushing.add(partition);dirty.delete(partition);
    try{
-    while(!stopped&&active===capture&&buffer.size&&readServerReachability()){
-     const entries=Array.from(buffer.values()),errors=entries.filter(entry=>'kind'in entry&&entry.kind==='error');
+    const attempted=new Set<string>();let reportCreated=false;
+    while(!stopped&&active===capture&&readServerReachability()){
+     if(!buffer.report&&buffer.missed&&!reportCreated){buffer.report={kind:'missed',id:crypto.randomUUID(),count:buffer.missed,occurredAt:new Date().toISOString()};buffer.missed=0;reportCreated=true;}
+     const entries=Array.from(buffer.entries.values()).filter(entry=>!attempted.has(entry.id)),errors=entries.filter(entry=>'kind'in entry&&entry.kind==='error');
      // A disabled click flag must never hold an error behind old clicks.
-     const batch=(errors.length?errors:entries).slice(0,50);dirty.delete(partition);
+     const report=buffer.report&&!attempted.has(buffer.report.id)?[buffer.report]:[];
+     const batch=[...report,...(errors.length?errors:entries)].slice(0,50);if(!batch.length)break;dirty.delete(partition);
      let response:Awaited<ReturnType<Sender>>;
-     try{response=await send(batch,partition);}catch{return;}
-     const accepted=response.accepted;
-     if(!['OK','COUNTED','UNAVAILABLE','DISABLED','SOURCE_INCOMPLETE','CONFLICT','VALIDATION_ERROR'].includes(response.code)||!Array.isArray(accepted)||!accepted.length||accepted.length>batch.length||new Set(accepted).size!==accepted.length||accepted.some(id=>!batch.some(entry=>entry.id===id)))return;
+     try{response=await send(batch,partition);}catch{console.warn('[PROTOCOL_TRANSPORT_FAILED]');return;}
+     const accepted=response.accepted??[],rejected=response.rejected??[];
+     const terminal=['DISABLED','SOURCE_INCOMPLETE','CONFLICT','VALIDATION_ERROR','FORBIDDEN','UNAUTHENTICATED'];
+     if(!Array.isArray(accepted)||!Array.isArray(rejected)||!['OK','COUNTED','UNAVAILABLE',...terminal].includes(response.code))return;
+     const ids=[...accepted,...rejected.map(row=>row.id)];
+     if(new Set(ids).size!==ids.length||ids.some(id=>!batch.some(entry=>entry.id===id))||rejected.some(row=>!terminal.includes(row.code)))return;
+     // Root-level authority/validation failures apply to the entire remaining
+     // batch. Storage/network failures alone keep an original for retry.
+     const finalIds=new Set(rejected.map(row=>row.id));
+     if(terminal.includes(response.code))for(const entry of batch)if(!accepted.includes(entry.id))finalIds.add(entry.id);
      // ACKs are either qualified stored facts, or explicit instance-only
      // COUNTED receipts for an unattributed error; never business receipts.
-     for(const entry of batch)if(accepted.includes(entry.id)&&buffer.get(entry.id)===entry)buffer.delete(entry.id);
-     if(accepted.length<batch.length)return;
+     for(const entry of batch){
+      attempted.add(entry.id);
+      if(!accepted.includes(entry.id)&&!finalIds.has(entry.id))continue;
+      if(buffer.report===entry){buffer.report=null;if(finalIds.has(entry.id)&&'kind'in entry&&entry.kind==='missed')missed(buffer,entry.count);}
+      else if(buffer.entries.get(entry.id)===entry){buffer.entries.delete(entry.id);if(finalIds.has(entry.id))missed(buffer);}
+     }
     }
    }finally{
     flushing.delete(partition);const again=dirty.delete(partition);

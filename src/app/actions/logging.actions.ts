@@ -29,6 +29,6 @@ export async function recordProtocolClicksAction(input:unknown,scope?:string|nul
  const auth=await resolveAuthorization();
  if(!auth.ok){await logTechnical(null,{type:'server_error',command:'recordProtocolClicksAction',subject:{type:'action',id:'recordProtocolClicksAction'},reason:'UNAUTHENTICATED'});return {code:'UNAUTHENTICATED' as const};}
  if(scope!==undefined&&scope!==offlinePartition(auth.data))return {code:'FORBIDDEN' as const};
- if(typeof scope!=='string'&&Array.isArray(input)&&input.some(row=>row&&typeof row==='object'&&row.kind==='error'))return {code:'FORBIDDEN' as const};
+ if(typeof scope!=='string'&&Array.isArray(input)&&input.some(row=>row&&typeof row==='object'&&(row.kind==='error'||row.kind==='missed')))return {code:'FORBIDDEN' as const};
  return logClientDiagnostics(auth.data,input,readLoggingSettings);
 }
