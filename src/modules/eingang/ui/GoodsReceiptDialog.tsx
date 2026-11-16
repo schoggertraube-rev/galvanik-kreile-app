@@ -81,7 +81,7 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
     const partition=scope.current;if(!partition)throw Error('GOODS_PENDING_SCOPE_UNAVAILABLE');
     if(persistedPhotos.current.has(task.fileId)){await acknowledgePendingOriginal(partition,task.fileId);uploaded.current.delete(key);setRemainingUploads(uploaded.current.size);continue;}
     const draft=current.current;if(!draft)throw Error('GOODS_PHOTO_CONTEXT_LOST');
-    await retainPendingOriginal(partition,{id:task.fileId,itemId:task.itemId,kind:'file',file:task.file,captureOrigin:'warenfoto',context:{orderId,receiptId:draft.id,clientKey:draft.clientKey,photoKind:task.kind}});
+    await retainPendingOriginal(partition,{id:task.fileId,itemId:task.itemId,kind:'file',file:task.file,deviceId:getIntakeDeviceId(),captureOrigin:'warenfoto',context:{orderId,receiptId:draft.id,clientKey:draft.clientKey,photoKind:task.kind}});
     const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await task.file.arrayBuffer())),byte=>byte.toString(16).padStart(2,'0')).join('');
     const grant=await ports.prepareFile({itemId:task.itemId,fileId:task.fileId,name:task.file.name,mime:task.file.type,bytes:task.file.size,sha256:hash,deviceId:getIntakeDeviceId(),captureOrigin:'warenfoto'});
     if(grant.code!=='OK')throw Error(grant.message);

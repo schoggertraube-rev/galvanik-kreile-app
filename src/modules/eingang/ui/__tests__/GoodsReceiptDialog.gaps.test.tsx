@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, expect, it, vi } from "vitest";
 import { GoodsReceiptDialog, type GoodsReceiptPorts } from "../GoodsReceiptDialog";
 import type { GoodsReceiptReadResult } from "../../goodsReceiptContract";
+import {webcrypto} from 'node:crypto';
+import {readPendingOriginals,retainPendingOriginal,acknowledgePendingOriginal} from '../../pendingOriginals';
 
 vi.mock("../../pendingOriginals", () => ({
   readPendingOriginals: vi.fn(async () => []),
@@ -9,7 +11,7 @@ vi.mock("../../pendingOriginals", () => ({
   acknowledgePendingOriginal: vi.fn(async () => undefined),
 }));
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it("U242 names and focuses the first unchecked position, not the first row", async () => {
   vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
@@ -29,4 +31,27 @@ it("U242 names and focuses the first unchecked position, not the first row", asy
   if(!second)throw Error("SECOND_POSITION_MISSING");
   await waitFor(()=>expect(within(second).getByRole("button",{name:"stimmt"})).toHaveFocus());
   expect(save.mock.calls.every(([value])=>value.command!=="galvanik")).toBe(true);
+});
+
+it('K2 retains the same real device identifier before preparing a resumed goods photo and keeps it after upload failure',async()=>{
+ vi.stubGlobal('crypto',webcrypto);
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.spyOn(console,'error').mockImplementation(()=>{});
+ const deviceId=crypto.randomUUID();localStorage.setItem('kreile-browser-device-v1',deviceId);
+ const file=new File(['SYNTHETIC photo bytes'],'TEST-K2.png',{type:'image/png'});
+ Object.defineProperty(file,'arrayBuffer',{value:async()=>new Uint8Array([1,2,3]).buffer});
+ const context={orderId:'synthetic-k2-order',receiptId:crypto.randomUUID(),clientKey:crypto.randomUUID(),photoKind:'uebersicht' as const};
+ const fileId=crypto.randomUUID(),itemId=crypto.randomUUID();
+ vi.mocked(readPendingOriginals).mockResolvedValueOnce([{id:fileId,itemId,kind:'file',file,captureOrigin:'warenfoto',context}]);
+ vi.mocked(retainPendingOriginal).mockClear();vi.mocked(acknowledgePendingOriginal).mockClear();
+ const read:GoodsReceiptReadResult={code:'OK',order:{id:context.orderId,number:'SYNTHETISCH-K2',customerId:'synthetic-customer',customerName:'SYNTHETISCH',title:null,note:null,version:1,station:'eingang',status:'offen',ware:'erwartet',fromQuote:false,items:[{id:'synthetic-part',name:'SYNTHETISCH Teil',quantity:1,unit:'stueck',surface:'verzinken',note:null}]},receipts:[],canStartGalvanik:true};
+ const prepareFile=vi.fn(async()=>({code:'UNAVAILABLE' as const,message:'SYNTHETIC Netzfehler'}));
+ const ports={read:vi.fn(async()=>read),scope:vi.fn(async()=>({code:'OK' as const,scope:'synthetic-k2-scope'})),save:vi.fn(),prepareFile,finishFile:vi.fn()};
+ render(<GoodsReceiptDialog orderId={context.orderId} ports={ports} onClose={vi.fn()} onOriginal={vi.fn()} onMessage={vi.fn()}/>);
+ await waitFor(()=>expect(prepareFile).toHaveBeenCalledTimes(1));
+ expect(retainPendingOriginal).toHaveBeenCalledWith('synthetic-k2-scope',expect.objectContaining({id:fileId,itemId,file,deviceId,captureOrigin:'warenfoto',context}));
+ expect(prepareFile).toHaveBeenCalledWith(expect.objectContaining({itemId,fileId,deviceId,captureOrigin:'warenfoto'}));
+ expect(await screen.findByRole('alert')).toHaveTextContent('SYNTHETIC Netzfehler');
+ expect(screen.getByRole('button',{name:'Erneut übertragen'})).toBeVisible();
+ expect(acknowledgePendingOriginal).not.toHaveBeenCalled();expect(ports.save).not.toHaveBeenCalled();
 });
