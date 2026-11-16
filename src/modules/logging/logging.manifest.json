@@ -1,0 +1,16 @@
+{
+ "moduleId":"logging","version":"1.0.0","owner":"S20 A-09 / I-046",
+ "publicExports":[
+  "@/modules/logging/public#LogSubject","@/modules/logging/public#LogSettings",
+  "@/modules/logging/public#LogReason","@/modules/logging/public#TechnicalEvent",
+  "@/modules/logging/public#LoggingSettingsReader","@/modules/logging/public#LogFilter",
+  "@/modules/logging/public#TechnicalLogRow",
+  "@/modules/logging/server-public#logTechnical","@/modules/logging/server-public#readLog",
+  "@/modules/logging/server-public#observeAction"
+ ],
+ "capabilities":["protokoll"],
+ "migrations":["20261116134932_s20_logging_foundation.sql","20261116141223_s20_technical_protocol.sql"],
+ "ownsTables":["public.app_usage_events","public.technical_protocol"],
+ "viewsFunctions":[],"storagePurposes":[],"events":{"emits":[],"consumes":[]},
+ "config":{"logging":"Only click capture and protocol view; never errors or business events"},"dependencies":["fundament"]
+}

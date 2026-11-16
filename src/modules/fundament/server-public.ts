@@ -1,4 +1,5 @@
 import "server-only";
+export {readLoggingSettings} from './server/loggingSettingsPort';
 export {readQuoteSettings,readQuoteSettingsInTransaction,saveQuoteSettings} from './server/quoteSettingsPort';
 export type {QuoteCalculationSettings} from './server/quoteSettingsPort';
 export { readShippingSettings,readShippingSettingsInTransaction,updateShippingSettings,readCompanyLetterSettings } from "./server/systemSettingsPort";
