@@ -33,6 +33,7 @@ it('K13K-7 real multi-part recording rejects overlapping parallel requests, pres
  const a=request([0,1]),b=request([1]);
  const [first,overlap]=await Promise.all([withSession(full,()=>write(a)),withSession(full,()=>write(b))]);
  expect([first.code,overlap.code].sort()).toEqual(['CONFLICT','OK']);
+ expect(first.code==='CONFLICT'?first:overlap).toMatchObject({code:'CONFLICT',message:'Für dieses Teil ist schon eine Reklamation offen. Ergänze sie dort, statt eine zweite anzulegen.'});
  const winner=first.code==='OK'?first:overlap;
  const winningRequest=first.code==='OK'?a:b,losingRequest=first.code==='OK'?b:a;
  if(winner.code!=='OK')throw Error('TEST_COMPLAINT_WINNER_REQUIRED');

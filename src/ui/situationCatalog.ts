@@ -36,7 +36,7 @@ export const OFFLINE_TAKEOVER_COPY={title:'Zurückgehaltene Eingaben',adopt:'Als
 export const ORDER_TERMINAL_COPY={dateLocked:'Der Auftrag wurde bereits herausgegeben. Du kannst den Liefertermin nicht mehr ändern.'} as const;
 export const MAIL_REQUEST_CONFLICT_COPY='Diese Anfragekennung gehört zu einer anderen Nachricht. Öffne den gespeicherten Versand.';
 /** R8: PL wording pending for the approved K13K-7 duplicate boundary. */
-export const COMPLAINT_OPEN_PART_CONFLICT_COPY='TODO_PL: complaint.open_part_conflict';
+export const COMPLAINT_OPEN_PART_CONFLICT_COPY='Für dieses Teil ist schon eine Reklamation offen. Ergänze sie dort, statt eine zweite anzulegen.';
 export const INTAKE_PENDING_WORKFLOW_COPY={quoteRequest:'Lege zuerst den KV zur Anfrage an'} as const;
 export const SEARCH_NAME_MATCH_COPY={phonetic:'Klingt gleich',spelling:'Ähnliche Schreibweise'} as const;
 export const COMPLAINT_ORDER_COPY={reworkRunning:(number:string)=>`Die Nacharbeit läuft schon in Auftrag ${number}. Schließ sie zuerst ab.`,notReady:'Du kannst eine Reklamation aufnehmen, sobald die Ware fertig ist oder bereits herausgegeben wurde.',releaseBlocked:(number:string|null)=>`Du kannst die Ware noch nicht herausgeben: ${number?'Reklamation '+number:'Eine Reklamation'} ist offen. Kläre zuerst die Reklamation.`} as const;
