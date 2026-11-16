@@ -1,14 +1,19 @@
 "use server";
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 
 export async function getProductionWeekAction(input?:{onDate?:string}){
+ return observeAction('getProductionWeekAction',subjectForAction('getProductionWeekAction',input),async()=>{
  noStore();
  const authorization=await resolveAuthorization();
  if(!authorization.ok)return {code:authorization.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE' as const:'UNAUTHENTICATED' as const};
  if(input!==undefined&&(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>key!=='onDate')||input.onDate!==undefined&&typeof input.onDate!=='string'))return {code:'VALIDATION_ERROR' as const};
  const {readProductionWeek}=await import('@/lib/server/productionSnapshotPort');
  return readProductionWeek(authorization.data,input?.onDate);
+
+ },readLoggingSettings);
 }
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
@@ -72,10 +77,13 @@ import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 export type OrderResponse = OperationalOrder & { cardReadErrorCode?: string | null };
 export async function getOrderPickupNoticeAction(input:unknown){const {readOrderPickupNotice}=await import("@/lib/server/commands/orderContentCommand");return readOrderPickupNotice(input);}
 export async function changeOrderPickupNoticeAction(input:unknown){
+ return observeAction('changeOrderPickupNoticeAction',subjectForAction('changeOrderPickupNoticeAction',input),async()=>{
  const [{changeOrderPickupNotice},{readIntakeHandoverMail,recordIntakeHandoverEffect,recordIntakeTaskEffect},{readCustomerProfile,updateCustomerInTransaction},{createOrderHandoverTask}]=await Promise.all([import('@/lib/server/commands/orderContentCommand'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public'),import('@/modules/tasks/server-public')]);
  const result=await changeOrderPickupNotice(input,{readMail:readIntakeHandoverMail,recordEffect:recordIntakeHandoverEffect,readCustomer:readCustomerProfile,updateDefault:(tx,auth,request)=>updateCustomerInTransaction(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:false,canEditCustomer:auth.permissions.includes('perm_data_customers'),canManageMoney:auth.areas?.includes('geld')===true}},{customerId:request.customerId,clientEventId:request.clientEventId,handoverPreference:request.mode}),createTask:(tx,auth,request,effect)=>createOrderHandoverTask(tx,auth,request,{effect:async(writeTx,actor,task)=>{if(request.manualEventId)return recordIntakeTaskEffect(writeTx,actor,task,readCustomerProfile);if(!effect)throw Error('HANDOVER_TASK_EFFECT_MISSING');return effect(task.taskId);}},undefined,request.manualEventId)});
  if(result.code==='OK'){revalidatePath('/');revalidatePath('/orders/[orderId]','page');revalidatePath('/nachrichten');}
  return result;
+
+ },readLoggingSettings);
 }
 
 export type OrderRegisterFilter = "ALL" | "ORDER" | "QUOTE";
@@ -95,14 +103,20 @@ export type OrderRegisterEntry = {
 export async function transitionWareneingangToGalvanikAction(
   input: OrderStationCommandInput,
 ): Promise<OrderStationCommandResult> {
+ return observeAction('transitionWareneingangToGalvanikAction',subjectForAction('transitionWareneingangToGalvanikAction',input),async()=>{
   return transitionWareneingangToGalvanik(input);
+
+ },readLoggingSettings);
 }
 
 /** D-F12-004: reversal (galvanik -> wareneingang/angenommen) with a mandatory reason. */
 export async function correctGalvanikToWareneingangAction(
   input: OrderStationCorrectionCommandInput,
 ): Promise<OrderStationCorrectionCommandResult> {
+ return observeAction('correctGalvanikToWareneingangAction',subjectForAction('correctGalvanikToWareneingangAction',input),async()=>{
   return correctGalvanikToWareneingang(input);
+
+ },readLoggingSettings);
 }
 
 /** Records the existing order timeline event after the browser print dialog closed. */
@@ -115,15 +129,21 @@ export async function recordOrderLabelPrintAction(
 export async function changeOrderItemExtraWorkAction(
   input: ChangeOrderItemExtraWorkInput,
 ): Promise<ChangeOrderItemExtraWorkResult> {
+ return observeAction('changeOrderItemExtraWorkAction',subjectForAction('changeOrderItemExtraWorkAction',input),async()=>{
   const { changeOrderItemExtraWork } = await import(
     "@/lib/server/commands/orderExtraWorkCommand"
   );
   return changeOrderItemExtraWork(input);
+
+ },readLoggingSettings);
 }
 
 export async function freezeOrderAction(input: FreezeOrderInput): Promise<FreezeOrderResult> {
+ return observeAction('freezeOrderAction',subjectForAction('freezeOrderAction',input),async()=>{
   const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
   return freezeOrder(input);
+
+ },readLoggingSettings);
 }
 
 export async function reopenFrozenOrderAction(
@@ -172,10 +192,13 @@ export async function changeOrderContentAction(
 export async function setOrderItemFinishedAction(
   input: SetOrderItemFinishedInput,
 ): Promise<OrderContentResult> {
+ return observeAction('setOrderItemFinishedAction',subjectForAction('setOrderItemFinishedAction',input),async()=>{
   const { setOrderItemFinished } = await import("@/lib/server/commands/orderContentCommand");
   const [{createProductionPricingRetryTask,settleProductionPricingRetryTasks},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
   const effect:import('@/modules/tasks/server-public').TaskEffects=(tx,auth,value)=>recordIntakeTaskEffect(tx,auth,value,readCustomerProfile);
   return setOrderItemFinished(input,{failed:async(tx,auth,id)=>{await createProductionPricingRetryTask(tx,auth,id,{effect});},settled:async(tx,auth,eventId)=>{await settleProductionPricingRetryTasks(tx,auth,eventId,{effect});}});
+
+ },readLoggingSettings);
 }
 
 export async function configureExtraWorkCatalogPositionAction(
@@ -293,13 +316,17 @@ async function manualShippingPorts(){
  return {readCustomer:readCustomerProfile,readSettings:readShippingSettingsInTransaction,readAllocation:(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string,input:Parameters<typeof readShippingMergeAllocation>[3])=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)};
 }
 export async function markOrderInformedByPhoneAction(input:{orderId:string;expectedVersion:number;clientEventId:string}){
+ return observeAction('markOrderInformedByPhoneAction',subjectForAction('markOrderInformedByPhoneAction',input),async()=>{
  const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
  const {markOrderInformedByPhone}=await import('@/lib/server/orderReleaseRead');
  const result=await markOrderInformedByPhone(auth.data,input);
  if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
  return result;
+
+ },readLoggingSettings);
 }
 export async function setOrderPickupAppointmentAction(input:unknown){
+ return observeAction('setOrderPickupAppointmentAction',subjectForAction('setOrderPickupAppointmentAction',input),async()=>{
  const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
  const {setOrderPickupAppointment,readAppointmentPostalContext}=await import('@/lib/server/pickupAppointmentPort');
  const [{finishDispatchCallsForAppointment},{completeOrderCallbackTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/lib/server/dispatchCallPort'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
@@ -322,6 +349,8 @@ export async function setOrderPickupAppointmentAction(input:unknown){
  });
  if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
  return result;
+
+ },readLoggingSettings);
 }
 async function readManualShippingForOrder(auth:AuthorizationSnapshot,orderId:unknown){
  const {readManualShipping}=await import('@/modules/orders/server-public');
@@ -332,11 +361,14 @@ export async function getManualShippingAction(input:{orderId:string}){
  return readManualShippingForOrder(auth.data,input?.orderId);
 }
 export async function saveManualTrackingAction(input:unknown){
+ return observeAction('saveManualTrackingAction',subjectForAction('saveManualTrackingAction',input),async()=>{
  const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
  const {saveManualTracking}=await import('@/modules/orders/server-public');
  const result=await saveManualTracking(auth.data,input,await manualShippingPorts());
  if(result.code==='OK'){revalidatePath('/warendurchlauf');revalidatePath('/orders');}
  return result;
+
+ },readLoggingSettings);
 }
 
 export async function getExtraWorkMasterDataAction(): Promise<OrderCardActionResult<ExtraWorkMasterData>> {
@@ -469,6 +501,7 @@ async function resolveOperationalReadAuthorization(): Promise<ActionResult<Autho
 }
 
 export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {serverReadAt?:string;cacheLoginScope?:string}> {
+ return observeAction('getOrdersDb',subjectForAction('getOrdersDb',undefined),async()=>{
   noStore();
   const authorization = await resolveOperationalReadAuthorization();
   if (!authorization.ok) return authorization.error==='FORBIDDEN'||authorization.error==='UNAUTHORIZED'?{...authorization,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:authorization;
@@ -509,6 +542,8 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {se
       message: "Auftragsdaten konnten nicht sicher geladen werden.",
     };
   }
+
+ },readLoggingSettings);
 }
 
 /**

@@ -6,7 +6,7 @@
   "@/modules/logging/public#LoggingSettingsReader","@/modules/logging/public#LogFilter",
   "@/modules/logging/public#TechnicalLogRow","@/modules/logging/public#ClickInput","@/modules/logging/public#ClickLogRow",
   "@/modules/logging/server-public#logTechnical","@/modules/logging/server-public#readLog",
-  "@/modules/logging/server-public#observeAction","@/modules/logging/server-public#logClick"
+  "@/modules/logging/server-public#observeAction","@/modules/logging/server-public#subjectForAction","@/modules/logging/server-public#logClick"
  ],
  "capabilities":["protokoll"],
  "migrations":["20261116134932_s20_logging_foundation.sql","20261116141223_s20_technical_protocol.sql"],

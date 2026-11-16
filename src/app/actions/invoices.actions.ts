@@ -1,4 +1,6 @@
 "use server";
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {readInvoiceVat} from "@/modules/accounting/server-public";
 import {readCustomerCredit,readCustomerCreditInTransaction} from "@/modules/accounting/server-public";
 import type {CustomerCreditResult,CustomerCreditApplyInput} from "@/modules/accounting/public";
@@ -48,6 +50,7 @@ async function resolveActionAuthorization(): Promise<ActionAuthorizationResult> 
 }
 
 export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<CreateInvoiceResult> {
+ return observeAction('issueInvoiceAction',subjectForAction('issueInvoiceAction',input),async()=>{
   const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
   const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
   const result = await createInvoice(input,undefined,readInvoiceVat,readShippingSettingsInTransaction);
@@ -56,11 +59,14 @@ export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<Cre
     revalidatePath("/warendurchlauf");
   }
   return result;
+
+ },readLoggingSettings);
 }
 
 export async function setInvoiceItemPricesAction(
   input: SetInvoiceItemPricesInput,
 ): Promise<SetInvoiceItemPricesResult> {
+ return observeAction('setInvoiceItemPricesAction',subjectForAction('setInvoiceItemPricesAction',input),async()=>{
   const { setInvoiceItemPrices } = await import("@/lib/server/commands/invoiceItemPriceCommand");
   const result = await setInvoiceItemPrices(input);
   if (result.code === "OK") {
@@ -68,9 +74,12 @@ export async function setInvoiceItemPricesAction(
     revalidatePath("/warendurchlauf");
   }
   return result;
+
+ },readLoggingSettings);
 }
 
 export async function cancelInvoiceAction(input: CancelInvoiceInput): Promise<CancelInvoiceResult> {
+ return observeAction('cancelInvoiceAction',subjectForAction('cancelInvoiceAction',input),async()=>{
   const { cancelInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
   const result = await cancelInvoice(input,readInvoiceVat,{
     failed:async(tx,auth,key)=>synchronizeCancellationCreditRetryTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},'ensure'),
@@ -81,6 +90,8 @@ export async function cancelInvoiceAction(input: CancelInvoiceInput): Promise<Ca
     revalidatePath("/warendurchlauf");
   }
   return result;
+
+ },readLoggingSettings);
 }
 
 export async function getCustomerCreditAction(customerId:string):Promise<CustomerCreditResult>{

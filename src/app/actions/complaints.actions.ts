@@ -1,4 +1,6 @@
 "use server";
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {recordComplaintMailRetry,readComplaintMailClosure} from '@/lib/server/communicationComplaintPort';
 import {unstable_noStore as noStore} from "next/cache";
 import {readComplaints,executeComplaint,readComplaintOrderSource,readComplaintOrderChoices} from "@/modules/complaints/server-public";
@@ -19,10 +21,16 @@ export async function getComplaintOrderChoicesAction(customerId:string){
  return readComplaintOrderChoices(auth.data,customerId);
 }
 export async function nacharbeitAnlegenAction(input: Parameters<typeof nacharbeitAnlegen>[0]) {
+ return observeAction('nacharbeitAnlegenAction',subjectForAction('nacharbeitAnlegenAction',input),async()=>{
  return nacharbeitAnlegen(input);
+
+ },readLoggingSettings);
 }
 export async function reklamationAusfuehrenAction(input:unknown) {
+ return observeAction('reklamationAusfuehrenAction',subjectForAction('reklamationAusfuehrenAction',input),async()=>{
  return executeComplaint(input,recordIntakeComplaintEffect);
+
+ },readLoggingSettings);
 }
 export async function sendeReklamationErgebnisAction(input:{complaintId:string;version:number;clientKey:string;subject:string;body:string;confirmedResend?:true}):Promise<ComplaintWriteResult & {resend?:{requestId:string;label:string}}> {
  if(!input||typeof input!=='object'||input.confirmedResend!==undefined&&input.confirmedResend!==true||typeof input.complaintId!=='string'||!input.complaintId||input.complaintId.length>128||!Number.isSafeInteger(input.version)||input.version<1||typeof input.clientKey!=='string'||!/^[0-9a-f-]{36}$/i.test(input.clientKey)||typeof input.subject!=='string'||!input.subject.trim()||input.subject.length>500||typeof input.body!=='string'||!input.body.trim()||input.body.length>20000)return {code:'VALIDATION_ERROR',message:'Mail oder Reklamationsstand ist ungültig.'};

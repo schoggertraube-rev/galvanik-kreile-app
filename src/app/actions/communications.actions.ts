@@ -1,5 +1,7 @@
 "use server";
 
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {storeQuoteMailOriginal,readQuoteMailOriginal} from '@/lib/server/communicationOriginalPort';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {readQuoteCommand} from '@/modules/quotes/server-public';
@@ -59,6 +61,7 @@ export async function listOutlookInboxAction(input?: TargetInput) {
 }
 
 export async function attachOutlookMailAction(input: TargetInput & { graphMessageId: string }) {
+ return observeAction('attachOutlookMailAction',subjectForAction('attachOutlookMailAction',input),async()=>{
   const authorizationResult = await authorization();
   if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
   const imported=await importOutlookMailAction(input?.graphMessageId,{deferDispatchReply:true});
@@ -68,6 +71,8 @@ export async function attachOutlookMailAction(input: TargetInput & { graphMessag
   const correspondence=await attachInboxMessage(authorizationResult.data,input,imported.message);
   if(correspondence.code==='OK')await withDispatchReply(authorizationResult.data,imported);
   return correspondence.code==='OK'?{...correspondence,data:{...correspondence.data,attachmentsImported:imported.originalCount,attachmentsSkipped:imported.filteredAttachments}}:correspondence;
+
+ },readLoggingSettings);
 }
 
 async function confirmQuoteDelivery(input:{clientRequestId:string},document:Extract<CommunicationDocument,{kind:'QUOTE'}>,data:Awaited<ReturnType<typeof sendCommunicationMail>> & {code:'OK'}){
@@ -80,7 +85,8 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Extr
 
 export async function sendCustomerMailAction(input: TargetInput & {
  clientRequestId:string;subject:string;body:string;confirmedResend?:true;expectedInvoiceIds?:string[];attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string};
-}){
+}):Promise<Awaited<ReturnType<typeof sendCommunicationMail>>|Awaited<ReturnType<typeof confirmQuoteDelivery>>|{code:'UNAUTHENTICATED';message:string}>{
+ return observeAction('sendCustomerMailAction',subjectForAction('sendCustomerMailAction',input),async()=>{
  try{
  const authorizationResult=await authorization();
  if(!authorizationResult.ok)return {code:'UNAUTHENTICATED' as const,message:authorizationResult.message};
@@ -235,6 +241,8 @@ export async function sendCustomerMailAction(input: TargetInput & {
   console.error('[CUSTOMER_MAIL_ACTION_FAILED]',{errorName:error instanceof Error?error.name:'UnknownError',reason:error instanceof Error&&/^[A-Z][A-Z0-9_:-]{1,150}$/.test(error.message)?error.message:'DATABASE_OR_INTERNAL_FAILURE'});
   return {code:'UNAVAILABLE' as const,message:'Der Versand konnte nicht sicher bestätigt werden. Behalte Deine Eingaben und sende nicht erneut, bevor der Ausgang geklärt ist.'};
  }
+
+ },readLoggingSettings);
 }
 
 import {importIntakeGraphMail} from '@/modules/eingang/server-public';
@@ -285,6 +293,7 @@ async function importIntakeMessage(auth:Parameters<typeof importIntakeGraphMail>
  return saved.code==='OK'?{...saved,replayed:result.replayed}:saved;
 }
 export async function importOutlookMailAction(graphMessageId:string,options?:{deferDispatchReply?:boolean}){
+ return observeAction('importOutlookMailAction',subjectForAction('importOutlookMailAction',graphMessageId),async()=>{
  const authorization=await resolveAuthorization();
  if(!authorization.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung nicht verfügbar.'};
  if(!hasAuthorizationArea(authorization.data,'eingang')||!hasAuthorizationArea(authorization.data,'mails'))return {code:'FORBIDDEN' as const,message:'Mail-Import benötigt Eingang und Mails.'};
@@ -294,4 +303,6 @@ export async function importOutlookMailAction(graphMessageId:string,options?:{de
  const mail=await readMicrosoftGraphMessage(graphMessageId);
  if(mail.code!=='OK')return mail;
  return withDeliveryFailure(authorization.data,await importIntakeMessage(authorization.data,mail.data),options?.deferDispatchReply===true);
+
+ },readLoggingSettings);
 }

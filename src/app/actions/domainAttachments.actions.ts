@@ -1,5 +1,7 @@
 "use server";
 
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { attachIntakeDraftAttachment, finalizeDomainAttachment, getDomainAttachmentOriginal, reserveDomainAttachment } from "@/lib/server/domainAttachment";
@@ -35,11 +37,15 @@ async function authorization() {
 }
 
 export async function reserveDomainAttachmentAction(input: Parameters<typeof reserveDomainAttachment>[1]) {
+ return observeAction('reserveDomainAttachmentAction',subjectForAction('reserveDomainAttachmentAction',input),async()=>{
   const auth = await authorization();
   return auth.ok ? reserveDomainAttachment(auth.data, input) : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+
+ },readLoggingSettings);
 }
 
 export async function finalizeDomainAttachmentAction(input: Parameters<typeof finalizeDomainAttachment>[1]) {
+ return observeAction('finalizeDomainAttachmentAction',subjectForAction('finalizeDomainAttachmentAction',input),async()=>{
   const option=splitUploadVisibility(input);
   if(!option.valid)return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
   const auth = await authorization();
@@ -48,6 +54,8 @@ export async function finalizeDomainAttachmentAction(input: Parameters<typeof fi
   if(result.code!=='OK')return result;
   const flag=await finishUploadedEvidenceVisibility(auth.data,'legacy-scan-upload:'+result.data.receipt.attachmentId,option.requested);
   return flag.code==='OK'?{...result,data:{...result.data,visibilityPending:flag.visibilityPending,...(flag.visibility?{visibility:flag.visibility}:{})}}:flag;
+
+ },readLoggingSettings);
 }
 
 type UploadVisibilityInput={mode:'upload';evidenceKey:string;customerVisible?:boolean};

@@ -1,4 +1,6 @@
 "use server";
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {openIntakePredicate} from '@/modules/eingang/server-public';
 
@@ -92,6 +94,7 @@ function authorizationFailure(result: Awaited<ReturnType<typeof resolveAuthoriza
 }
 
 export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,options?:{actualMail?:boolean;onsiteGoodsReceiptId?:string}) {
+ return observeAction('changeQuoteLifecycleAction',subjectForAction('changeQuoteLifecycleAction',input),async()=>{
   try {
     const auth=await resolveAuthorization();
     const failure=authorizationFailure(auth);
@@ -133,6 +136,8 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
     console.error('[QUOTE_LIFECYCLE_ACTION_FAILED]',error instanceof Error?error.name:'UnknownError');
     return {code:'UNAVAILABLE' as const,message:'KV-Entscheidung konnte nicht sicher bestätigt werden.'};
   }
+
+ },readLoggingSettings);
 }
 
 export async function readQuoteDefaultsAction() {
@@ -224,6 +229,7 @@ export async function listOpenQuotesAction(input?:{purpose:'today'|'device'}) {
 }
 
 export async function updateQuoteAction(input: UpdateQuoteInput) {
+ return observeAction('updateQuoteAction',subjectForAction('updateQuoteAction',input),async()=>{
   let authorization;
   try {
     authorization = await resolveAuthorization();
@@ -238,6 +244,8 @@ export async function updateQuoteAction(input: UpdateQuoteInput) {
     revalidatePath(`/customers/${result.quote.customerId}`);
   }
   return result;
+
+ },readLoggingSettings);
 }
 
 /** Read-only recovery for an interrupted KV create; it never starts a command. */
@@ -294,7 +302,10 @@ export async function readQuoteConversionReceiptAction(input: { quoteId: string;
   }
 }
 
-export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown,telephoneAcceptance?:{clientEventId:string;edition:number;evidence:string}) {return convertQuoteToOrder(input,newGoodsInput,telephoneAcceptance);}
+export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown,telephoneAcceptance?:{clientEventId:string;edition:number;evidence:string}) {
+ return observeAction('convertQuoteToOrderAction',subjectForAction('convertQuoteToOrderAction',input),async()=>{return convertQuoteToOrder(input,newGoodsInput,telephoneAcceptance);
+ },readLoggingSettings);
+}
 
 async function convertQuoteToOrder(input:ConvertQuoteInput,newGoodsInput?:unknown,telephoneAcceptance?:{clientEventId:string;edition:number;evidence:string},pendingMail?:PendingMailAcceptance) {
   if(!input||typeof input!=='object')return {code:'VALIDATION_ERROR' as const,message:'KV und Buchungsdaten fehlen.'};
@@ -455,16 +466,20 @@ export async function readQuotePdfAction(input: { quoteId: string }) {
 
 
 export async function getQuoteFollowupsForTodayAction(){
+ return observeAction('getQuoteFollowupsForTodayAction',subjectForAction('getQuoteFollowupsForTodayAction',undefined),async()=>{
  noStore();
  try{const auth=await resolveAuthorization();const denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
   if(!canReadQuoteFollowups(auth.data))return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
   const tasks=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data));
   return {code:'OK' as const,tasks};
  }catch(error){console.error('[QUOTE_FOLLOWUP_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Nachfassaufgaben konnten nicht geladen werden.'};}
+
+ },readLoggingSettings);
 }
 
 /** Preparation reads the existing original and search ports; it never creates or assigns a customer. */
 export async function prepareQuoteFromIntakeAction(input:{sourceItemId:string;customerId?:string}){
+ return observeAction('prepareQuoteFromIntakeAction',subjectForAction('prepareQuoteFromIntakeAction',input),async()=>{
  noStore();
  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>!['sourceItemId','customerId'].includes(key))||typeof input.sourceItemId!=='string'||!input.sourceItemId||input.customerId!==undefined&&(typeof input.customerId!=='string'||!input.customerId||input.customerId.length>128))return {code:'VALIDATION_ERROR' as const,message:'Original oder gewählter Kunde fehlt.'};
  try{
@@ -489,6 +504,8 @@ export async function prepareQuoteFromIntakeAction(input:{sourceItemId:string;cu
   const specialRequests=[...hints,...(recognition.instructions??[]).map(value=>value.text)];
   return {code:'OK' as const,preparation:{source:{itemId:source.itemId,version:source.version,message:source.channel==='mail'},text,files:source.files,customer:customer?{id:customer.id,name:customer.name}:null,customerQuery:matches.query,proposals:matches.customers.map(value=>({id:value.id,name:value.name,reason:'Treffer im Original: '+matches.query})),recognition,confirmedCustomerHints:hints,specialRequests:specialRequests.length?[...new Set(specialRequests)].join('\n'):null}};
  }catch(error){console.error('[QUOTE_INTAKE_PREPARATION_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Vorbereitung konnte nicht sicher gelesen werden. Original bleibt erhalten.'};}
+
+ },readLoggingSettings);
 }
 
 /** Read-only copy preparation. Saving still uses createQuoteAction and its receipt. */

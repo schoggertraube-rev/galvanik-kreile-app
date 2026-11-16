@@ -17,6 +17,19 @@ const services=['microsoft365','belegerkennung','versand','druck'];
 const outcomes=['ok','fehler','zeitueberschreitung','unklar'];
 function lose(count=1){missed=Math.min(2147483647,missed+count);}
 
+/** Diagnostics take only a named UUID reference, never a request body or free text.
+ * Groups use their request key rather than an arbitrary first object. */
+export function subjectForAction(name:string,input:unknown):LogSubject{
+ if(input&&typeof input==='object'&&!Array.isArray(input)){
+  const fields=[['invoiceId','invoice'],['quoteId','quote'],['orderId','order'],['customerId','customer'],['sourceItemId','intake'],['itemId','item'],['taskId','task'],['fileId','file'],['targetId','target'],['clientEventId','request'],['clientRequestId','request'],['clientKey','request']] as const;
+  for(const [field,type] of fields){
+   const descriptor=Object.getOwnPropertyDescriptor(input,field),value:unknown=descriptor?.value;
+   if(typeof value==='string'&&uuid.test(value))return {type,id:value};
+  }
+ }
+ return {type:'action',id:name};
+}
+
 /** Only named scalar fields cross the sink. Error objects, inputs and extra properties never do. */
 export async function logTechnical(auth:AuthorizationSnapshot|null,event:TechnicalEvent):Promise<boolean>{
  if(!auth||auth.active!==true||!auth.tenantId||!uuid.test(auth.userId)){lose();return false;}
@@ -81,7 +94,7 @@ export async function readLog(auth:AuthorizationSnapshot,filter:LogFilter,readSe
 }
 
 /** One observer for Action compositions. It never changes the command's result or transaction. */
-export async function observeAction<T extends {code:string}>(name:string,subject:LogSubject,work:()=>Promise<T>,readSettings:LoggingSettingsReader):Promise<T>{
+export async function observeAction<T>(name:string,subject:LogSubject,work:()=>Promise<T>,readSettings:LoggingSettingsReader):Promise<T>{
  if(actionObservationActive())return work();
  return withActionObservation(async readAuthorization=>{
  // A rejected input is not a verified object reference (and may contain secrets).
@@ -95,15 +108,21 @@ export async function observeAction<T extends {code:string}>(name:string,subject
   await logTechnical(readAuthorization().authorization,{type:'server_error',command:name,subject:source,reason:'SERVER_ERROR'});throw error;
  }
  const durationMs=Math.round(performance.now()-start);
+ const objectResult=result!==null&&typeof result==='object'?result as Record<string,unknown>:null;
+ const rawCode=objectResult&&typeof objectResult.code==='string'?objectResult.code:null;
+ const legacyFailure=objectResult!==null&&objectResult.ok===false;
+ const legacyCode=legacyFailure&&typeof objectResult.error==='string'?objectResult.error:null;
+ const code=rawCode??(legacyFailure?(legacyCode==='DB_ERROR'?'UNAVAILABLE':legacyCode==='UNAUTHORIZED'||legacyCode==='AUTH_ERROR'?'UNAUTHENTICATED':legacyCode??'UNKNOWN_FAILURE'):null);
+ const failure=code!==null&&['FORBIDDEN','VALIDATION_ERROR','CONFLICT','NOT_FOUND','UNAUTHENTICATED','UNAVAILABLE','SOURCE_INCOMPLETE','NOT_AVAILABLE','UNKNOWN_FAILURE'].includes(code);
  // Validation may return before the command's first auth lookup. Resolve only
  // that missing identity, never repeat a lookup or replace a rejected session.
- if(!readAuthorization().attempted){try{await resolveAuthorization();}catch{lose();}}
+ if(failure&&!readAuthorization().attempted){try{await resolveAuthorization();}catch{lose();}}
  const auth=readAuthorization().authorization;
  let slowMs:number|null=null;
  if(auth){try{const settings=await readSettings(auth);if(settings)slowMs=settings.slowMs;else lose();}catch{lose();}}
- if(['FORBIDDEN','VALIDATION_ERROR','CONFLICT','NOT_FOUND','UNAUTHENTICATED','UNAVAILABLE','SOURCE_INCOMPLETE','NOT_AVAILABLE'].includes(result.code)){
-  const reason=result.code==='VALIDATION_ERROR'?'VALIDATION':reasons.includes(result.code as LogReason)?result.code as LogReason:'UNKNOWN';
-  await logTechnical(auth,{type:result.code==='UNAVAILABLE'?'server_error':'rejected',command:name,subject:source,reason});
+ if(failure&&code!==null){
+  const reason=code==='VALIDATION_ERROR'?'VALIDATION':reasons.includes(code as LogReason)?code as LogReason:'UNKNOWN';
+  await logTechnical(auth,{type:code==='UNAVAILABLE'?'server_error':'rejected',command:name,subject:source,reason});
  }
  if(auth&&slowMs!==null&&durationMs>slowMs)await logTechnical(auth,{type:'slow',command:name,subject:source,durationMs});
  return result;

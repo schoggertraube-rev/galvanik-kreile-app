@@ -1,5 +1,7 @@
 "use server";
 
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import "server-only";
 
 import { renderToBuffer } from "@react-pdf/renderer";
@@ -30,6 +32,7 @@ export async function previewStorageLetterAction(input:unknown){
  }catch(error){console.error('[STORAGE_LETTER_PREVIEW_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
 }
 export async function prepareStoragePostalLetterAction(input:unknown){
+ return observeAction('prepareStoragePostalLetterAction',subjectForAction('prepareStoragePostalLetterAction',input),async()=>{
  const {resolveAuthorization,hasAuthorizationArea}=await import('@/lib/server/authorization');
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:auth.message};
  if(!hasAuthorizationArea(auth.data,'auftraege')||!hasAuthorizationArea(auth.data,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
@@ -46,6 +49,8 @@ export async function prepareStoragePostalLetterAction(input:unknown){
    return !!customer&&!customer.email?.trim()&&customer.name===r.name&&[customer.street,customer.houseNumber].filter(Boolean).join(' ')===r.street&&customer.zipCode===r.zip&&customer.city===r.city&&customerCountryLabel(customer.country)===r.country;
   },createTask:(tx,value)=>createOrderHandoverTask(tx,auth.data,value,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)})});
  }catch(error){console.error('[STORAGE_POSTAL_LETTER_PREPARE_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
+
+ },readLoggingSettings);
 }
 
 type OrderLabelRow = {
@@ -164,6 +169,7 @@ export async function generateOrderLabel(orderIds: string | string[]): Promise<s
 export async function generateDeliveryNote(orderIds:string|string[]):Promise<string>;
 export async function generateDeliveryNote(input:import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput):Promise<import('@/lib/domain/deliveryNoteContract').DeliveryNoteResult>;
 export async function generateDeliveryNote(input:string|string[]|import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput):Promise<string|import('@/lib/domain/deliveryNoteContract').DeliveryNoteResult>{
+ return observeAction('generateDeliveryNote',subjectForAction('generateDeliveryNote',input),async()=>{
  const legacy=typeof input==='string'||Array.isArray(input);
  const {resolveAuthorization,hasAuthorizationArea}=await import('@/lib/server/authorization');
  const {LEGACY_ACTION_ACCESS_COPY}=await import('@/ui/situationCatalog');
@@ -182,4 +188,6 @@ export async function generateDeliveryNote(input:string|string[]|import('@/lib/d
  if(!legacy)return result;
  if(result.code!=='OK')throw Error(result.message);
  return result.pdfBase64;
+
+ },readLoggingSettings);
 }

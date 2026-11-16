@@ -1,4 +1,6 @@
 "use server";
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {repairInvoiceReissueTask} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
@@ -43,11 +45,17 @@ import {readIntakeMessages} from '@/modules/eingang/server-public';
 export async function getIntakeMessagesAction(filter:unknown='offen'){const device=!!filter&&typeof filter==='object'&&!Array.isArray(filter)&&Object.keys(filter).length===1&&'purpose' in filter&&filter.purpose==='device';const result=await readIntakeMessages(device?'alle':filter,undefined,device?new Date(Date.now()-24*60*60*1000).toISOString():undefined);return result.code==='OK'||device&&result.code==='FORBIDDEN'?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;}
 import {readIntakeAssignment,assignIntakeCustomer,setIntakeNoBusiness,createCustomerForIntake} from '@/modules/eingang/server-public';
 export async function getIntakeAssignmentAction(input:unknown){return readIntakeAssignment(input,readCustomerProfile);}
-export async function assignIntakeCustomerAction(input:unknown){return assignIntakeCustomer(input,readCustomerProfile);}
+export async function assignIntakeCustomerAction(input:unknown){
+ return observeAction('assignIntakeCustomerAction',subjectForAction('assignIntakeCustomerAction',input),async()=>{return assignIntakeCustomer(input,readCustomerProfile);
+ },readLoggingSettings);
+}
 export async function setIntakeNoBusinessAction(input:unknown){return setIntakeNoBusiness(input);}
 export async function createCustomerForIntakeAction(input:unknown){return createCustomerForIntake(input,createCustomerInTransaction,readCustomerProfile);}
 import {selectIntakeConcern,finishIntakeUse,reopenIntake} from '@/modules/eingang/server-public';
-export async function selectIntakeConcernAction(input:unknown){return selectIntakeConcern(input);}
+export async function selectIntakeConcernAction(input:unknown){
+ return observeAction('selectIntakeConcernAction',subjectForAction('selectIntakeConcernAction',input),async()=>{return selectIntakeConcern(input);
+ },readLoggingSettings);
+}
 export async function finishIntakeUseAction(input:unknown){return finishIntakeUse(input);}
 export async function reopenIntakeAction(input:unknown){return reopenIntake(input);}
 import {createIntakeMailFailureTask,createMailboxFetchRetryTask,saveTask,completeTask,readTask,createMissingGoodsTask,createOrderHandoverTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
@@ -73,7 +81,10 @@ const invoiceEffects={readCustomer:readCustomerProfile,updateCustomer:updateCust
  createTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;clientKey:string;reason:string})=>createInvoiceClarificationTask(tx,auth,input,invoiceTaskEffects),
  resolveTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;taskId:string;note:string})=>resolveInvoiceClarificationTask(tx,auth,input,invoiceTaskEffects)};
 export async function getIncomingInvoiceAction(input:unknown){return readIncomingInvoice(input,invoiceEffects);}
-export async function saveIncomingInvoiceAction(input:unknown){return saveIncomingInvoice(input,invoiceEffects);}
+export async function saveIncomingInvoiceAction(input:unknown){
+ return observeAction('saveIncomingInvoiceAction',subjectForAction('saveIncomingInvoiceAction',input),async()=>{return saveIncomingInvoice(input,invoiceEffects);
+ },readLoggingSettings);
+}
 export async function changeIncomingInvoiceStatusAction(input:unknown){return changeIncomingInvoice(input,invoiceEffects);}
 export async function clarifyIncomingInvoiceAction(input:unknown){return changeIncomingInvoice(input,invoiceEffects,true);}
 /** Supplier selection uses the same canonical customer search and stored profiles. */
@@ -91,6 +102,7 @@ export async function searchInvoiceSuppliersAction(query:string){
 const goodsEffects={createMissingTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;missing:string[];clientKey:string})=>createMissingGoodsTask(tx,auth,input,taskEffects)};
 export async function saveIntakeTaskAction(input:unknown){return saveTask(input,taskEffects);}
 export async function completeIntakeTaskAction(input:unknown){
+ return observeAction('completeIntakeTaskAction',subjectForAction('completeIntakeTaskAction',input),async()=>{
  if(input&&typeof input==='object'&&'callResult'in input){
   const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:DISPATCH_CALL_COPY.session};
   if(!hasAuthorizationArea(auth.data,'auftraege'))return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
@@ -101,8 +113,11 @@ export async function completeIntakeTaskAction(input:unknown){
   return completeTask(input,{...taskEffects,beforeComplete:async(tx,auth,task,value)=>{if(!await repairInvoiceReissueTask(tx,auth,task)){const creditBlocked=await repairCancellationCreditTask(tx,auth,task);if(creditBlocked)return creditBlocked;}await repairProductionPricingTask(tx,auth,task);await repairEvidenceVisibilityTask(tx,auth,task);const blocked=await recordDispatchCallResult(tx,auth,task,value,answered);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,value);}});
  }
  return completeTask(input,taskEffects);
+
+ },readLoggingSettings);
 }
 export async function createDispatchCallTaskAction(input:{customerId:string;handover:'pickup'|'shipping';dueDate:string;clientKey:string}){
+ return observeAction('createDispatchCallTaskAction',subjectForAction('createDispatchCallTaskAction',input),async()=>{
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:DISPATCH_CALL_COPY.session};
  if(!hasAuthorizationArea(auth.data,'mails')||!hasAuthorizationArea(auth.data,'auftraege'))return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).sort().join(',')!=='clientKey,customerId,dueDate,handover'||typeof input.customerId!=='string'||!input.customerId.trim()||input.customerId.length>128||!['pickup','shipping'].includes(input.handover)||typeof input.dueDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)||typeof input.clientKey!=='string'||!/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(input.clientKey))return {code:'VALIDATION_ERROR' as const,message:DISPATCH_CALL_COPY.invalid};
@@ -113,8 +128,11 @@ export async function createDispatchCallTaskAction(input:{customerId:string;hand
  if(!plan)return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
  const members=candidates.filter(order=>plan.orderIds.includes(order.id));
  return createDispatchCall(auth.data,input,plan,members,(tx,request)=>createOrderHandoverTask(tx,auth.data,request,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
+
+ },readLoggingSettings);
 }
 export async function createStorageFinalTaskAction(input:{customerId:string;handover:'pickup'|'shipping';clientKey:string}){
+ return observeAction('createStorageFinalTaskAction',subjectForAction('createStorageFinalTaskAction',input),async()=>{
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:DISPATCH_CALL_COPY.session};
  if(!hasAuthorizationArea(auth.data,'mails')||!hasAuthorizationArea(auth.data,'auftraege'))return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).sort().join(',')!=='clientKey,customerId,handover'||typeof input.customerId!=='string'||!input.customerId.trim()||input.customerId.length>128||!['pickup','shipping'].includes(input.handover)||typeof input.clientKey!=='string'||!/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(input.clientKey))return {code:'VALIDATION_ERROR' as const,message:DISPATCH_CALL_COPY.invalid};
@@ -127,6 +145,8 @@ export async function createStorageFinalTaskAction(input:{customerId:string;hand
  if(!letter||candidates.some(order=>letter.orderIds.includes(order.id)&&(order.finishedDispatch?.reminder?.requiresResponseCheck!==false||order.finishedDispatch?.pickupAppointment!==undefined&&letter.appointmentEventId!==order.finishedDispatch.pickupAppointment.eventId)))return {code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
  const members=candidates.filter(order=>letter.orderIds.includes(order.id));
  return createStorageFinalTask(auth.data,input,letter,members.map(order=>({id:order.id,number:order.orderNumber,version:order.version})),settings.settings.updatedAt,(tx,request)=>createOrderHandoverTask(tx,auth.data,request,taskEffects));
+
+ },readLoggingSettings);
 }
 export async function getIntakeTaskAction(input:{calendar:true}):Promise<import('@/modules/tasks/public').TaskCalendarRead>;
 export async function getIntakeTaskAction(input:TaskOpenRequest):Promise<Awaited<ReturnType<typeof readSingleIntakeTask>>>;
@@ -222,6 +242,7 @@ export async function confirmIntakeOriginalAction(input:unknown){return confirmI
 
 export async function getGoodsReceiptsAction(orderId:string){return readGoodsReceipts(orderId);}
 export async function saveGoodsReceiptAction(input:unknown):Promise<GoodsReceiptResult>{
+ return observeAction('saveGoodsReceiptAction',subjectForAction('saveGoodsReceiptAction',input),async()=>{
  if(input&&typeof input==='object'&&'quoteId'in input)return saveGoodsReceipt(input,goodsEffects);
  const parsed=parseGoodsReceiptInput(input);if(!parsed)return {code:"VALIDATION_ERROR",message:"Warenprüfung ist unvollständig oder ungültig."};
  if(parsed.command!=="galvanik")return saveGoodsReceipt(parsed,goodsEffects);
@@ -229,6 +250,8 @@ export async function saveGoodsReceiptAction(input:unknown):Promise<GoodsReceipt
  const moved=await transitionWareneingangToGalvanik({orderId:parsed.orderId,expectedVersion:parsed.expectedOrderVersion,clientEventId:parsed.clientEventId},binding);
  if(moved.code!=="OK"){const bound=binding.result();return bound&&bound.code!=="OK"?bound:moved;}
  return binding.result()??{code:"UNAVAILABLE",message:"Warenbeleg wurde nicht sicher gelesen. Fehlercode: GOODS_RECEIPT_BINDING_MISSING."};
+
+ },readLoggingSettings);
 }
 
 export async function getIntakeDraftsAction() { return readIntakeDrafts(); }
@@ -250,6 +273,7 @@ import { saveIntakeNote, readIntakeCapture, readIntakeNoteText, readIntakePendin
 import type { IntakeContext } from "@/modules/eingang/public";
 
 export async function saveIntakeNoteAction(input: unknown,pendingScope?:string) {
+ return observeAction('saveIntakeNoteAction',subjectForAction('saveIntakeNoteAction',input),async()=>{
   if(!await matchesPendingActor(pendingScope))return {code:"FORBIDDEN" as const,message:"Die Aufnahme wartet auf die ursprüngliche Anmeldung."};
   if(pendingScope===undefined)return saveIntakeNote(input,readCustomerProfile);
   const [{preserveOfflineNoteConflict},{writeIntakeNoteInTransaction},{createOfflineNoteConflictTask},{recordIntakeTaskEffect}]=await Promise.all([import('@/lib/server/offlineNoteConflictPort'),import('@/modules/eingang/server-public'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public')]);
@@ -259,6 +283,8 @@ export async function saveIntakeNoteAction(input: unknown,pendingScope?:string) 
     return createOfflineNoteConflictTask(tx,auth,eventId,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});
    });}catch(error){console.error('[OFFLINE_NOTE_CONFLICT_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});throw Error('OFFLINE_NOTE_CONFLICT_FAILED');}
   });
+
+ },readLoggingSettings);
 }
 export async function discardIntakeCaptureAction(input:unknown){return discardIntakeCapture(input);}
 async function matchesPendingActor(scope:string|undefined){
@@ -266,10 +292,14 @@ async function matchesPendingActor(scope:string|undefined){
  const auth=await resolveAuthorization();return auth.ok&&offlinePartition(auth.data)===scope;
 }
 export async function prepareIntakeFileAction(input: unknown,pendingScope?:string) {
+ return observeAction('prepareIntakeFileAction',subjectForAction('prepareIntakeFileAction',input),async()=>{
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
  return prepareIntakeFile(input);
+
+ },readLoggingSettings);
 }
 export async function finishIntakeFileAction(fileId: string,pendingScope?:string,customerVisible?:boolean) {
+ return observeAction('finishIntakeFileAction',subjectForAction('finishIntakeFileAction',{fileId}),async()=>{
  if(customerVisible!==undefined&&typeof customerVisible!=='boolean')return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
  const result=await finishIntakeFile(fileId);if(result.code!=='OK')return result;
@@ -282,6 +312,8 @@ export async function finishIntakeFileAction(fileId: string,pendingScope?:string
  // read and historical retries must retain the same default response shape.
  if(flag.code==='OK'&&!flag.visibility&&!flag.visibilityPending)return result;
  return flag.code==='OK'?{...result,visibilityPending:flag.visibilityPending,...(flag.visibility?{visibility:flag.visibility}:{})}:flag;
+
+ },readLoggingSettings);
 }
 export async function getIntakePendingScopeAction() { return readIntakePendingScope(); }
 export async function getIntakeFileChangesAction(since: string, after: string | null) { return readIntakeFileChanges(since, after); }
@@ -295,10 +327,13 @@ export async function getIntakeCaptureAction(itemId: string, context?: IntakeCon
   return options?.packageExpectation===true?withPackageExpectation(read):read;
 }
 export async function recognizeIntakeNoteAction(text: string) {
+ return observeAction('recognizeIntakeNoteAction',subjectForAction('recognizeIntakeNoteAction',text),async()=>{
   const authorization = await resolveAuthorization();
   if (!authorization.ok || !hasAuthorizationArea(authorization.data, "eingang")) return { code: "FORBIDDEN" as const, message: "Eingang ist nicht freigegeben." };
   if (typeof text !== "string" || text.length > 20_000) return { code: "VALIDATION_ERROR" as const, message: "Notiz darf höchstens 20.000 Zeichen enthalten." };
   return { code: "OK" as const, data: readIntakeNoteText(text) };
+
+ },readLoggingSettings);
 }
 
 function existingCustomerId(input: unknown): string | null {
@@ -312,6 +347,7 @@ function existingCustomerId(input: unknown): string | null {
 }
 
 export async function erfasseAuftragAusEingangAction(input: unknown): Promise<ErfasseAuftragResult> {
+ return observeAction('erfasseAuftragAusEingangAction',subjectForAction('erfasseAuftragAusEingangAction',input),async()=>{
   const customerId = existingCustomerId(input);
   const authorization = await resolveAuthorization();
   if (!customerId || !authorization.ok || !hasAuthorizationArea(authorization.data, "eingang") || (input as {customer?:{changes?:unknown}})?.customer?.changes) {
@@ -335,15 +371,23 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
     };
   }
   return erfasseAuftragAusEingangCommand(input, { customerId, readiness },undefined,undefined,after,queueOrderPrints);
+
+ },readLoggingSettings);
 }
 
 export async function createOrderIntakeAction(input:unknown){
+ return observeAction('createOrderIntakeAction',subjectForAction('createOrderIntakeAction',input),async()=>{
   const authorization=await resolveAuthorization();
   if(!authorization.ok)return {code:"UNAUTHENTICATED" as const,message:authorization.message};
   const result=await createOrderIntake(input,createCustomerInTransaction,{before:async()=>undefined,after:queueOrderPrints});
   return result.code==="OK"?{...result,receipt:presentOrderIntakeReceipt(result.receipt,hasAuthorizationArea(authorization.data,"geld"))}:result;
+
+ },readLoggingSettings);
 }
 
 import {returnQuoteGoodsReceipt,readQuoteGoodsReturns} from "@/modules/eingang/server-public";
-export async function recordQuoteGoodsReturnAction(input:unknown){const result=await returnQuoteGoodsReceipt(input);if(result.code==='OK'){for(const path of ['/','/warendurchlauf','/nachrichten'])revalidatePath(path);}return result;}
+export async function recordQuoteGoodsReturnAction(input:unknown){
+ return observeAction('recordQuoteGoodsReturnAction',subjectForAction('recordQuoteGoodsReturnAction',input),async()=>{const result=await returnQuoteGoodsReceipt(input);if(result.code==='OK'){for(const path of ['/','/warendurchlauf','/nachrichten'])revalidatePath(path);}return result;
+ },readLoggingSettings);
+}
 export async function getQuoteGoodsReturnsAction(quoteId:unknown){return readQuoteGoodsReturns(quoteId);}

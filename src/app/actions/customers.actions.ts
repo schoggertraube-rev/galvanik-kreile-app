@@ -1,4 +1,6 @@
 "use server";
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {openIntakePredicate} from '@/modules/eingang/server-public';
 
@@ -35,6 +37,7 @@ import {
 } from "@/modules/customers/server-public";
 
 export async function getCustomerSummaryAction(input: { customerId: string }) {
+ return observeAction('getCustomerSummaryAction',subjectForAction('getCustomerSummaryAction',input),async()=>{
   noStore();
   let authorization;
   try {
@@ -50,6 +53,8 @@ export async function getCustomerSummaryAction(input: { customerId: string }) {
   }
   const result=await readCustomerSummary(authorization.data, input,openIntakePredicate());
   return result.code==="OK"?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;
+
+ },readLoggingSettings);
 }
 
 async function customerAuthorization() {
@@ -100,12 +105,15 @@ export async function readCustomerCreateReceiptAction(input: CreateCustomerInput
   return readCustomerCreateReceiptCommand(customerContext(authorization.data),input);
 }
 export async function updateCustomerAction(input: UpdateCustomerInput) {
+ return observeAction('updateCustomerAction',subjectForAction('updateCustomerAction',input),async()=>{
   const authorization=await customerAuthorization();
   if(!authorization?.ok)return {code:"UNAVAILABLE" as const,message:"Kunde konnte nicht sicher gespeichert werden. Code: CUSTOMER_AUTHORIZATION_UNAVAILABLE."};
   const result=await updateCustomerCommand(customerContext(authorization.data),input);
   if(result.code!=="OK")return result;
   revalidatePath("/customers"); revalidatePath(`/customers/${input.customerId}`);
   return result;
+
+ },readLoggingSettings);
 }
 export async function saveCustomerAgreementAction(input: SaveCustomerAgreementInput) {
   const authorization=await customerAuthorization();

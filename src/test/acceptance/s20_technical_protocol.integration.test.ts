@@ -8,6 +8,8 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
 import {confirmPaymentAction,setPaymentModeAction} from '@/app/actions/payments.actions';
+import {issueInvoiceAction} from '@/app/actions/invoices.actions';
+import {getCustomerSummaryAction} from '@/app/actions/customers.actions';
 import {getProtocolLogAction} from '@/app/actions/logging.actions';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import * as authorizationModule from '@/lib/server/authorization';
@@ -48,6 +50,19 @@ it('one observation per command keeps concurrent real logins separate and never 
  expect(await withSession(left,()=>confirmPaymentAction({...inputs[0],invoiceId:'Bearer PRIVATE_INPUT_1234'}))).toMatchObject({code:'VALIDATION_ERROR'});
  const invalid=await sql`SELECT subject_type,subject_id,reason FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${left.actorId}::uuid AND reason='VALIDATION'`;
  expect(invalid).toEqual([{subject_type:'action',subject_id:'confirmPayment',reason:'VALIDATION'}]);
+});
+
+it('shared P0 composition keeps invoice and customer denials unchanged and binds their real object references once',async()=>{
+ const customer=await customerFixture('S20 P0'),created=await intakeOrderFixture('S20 P0',customer),operator=await createFixture(['auftraege']);
+ const input={orderId:created.receipt.orderId,expectedVersion:1,clientEventId:randomUUID()};
+ expect(await withSession(operator,()=>issueInvoiceAction(input))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(operator,()=>getCustomerSummaryAction({customerId:customer}))).toMatchObject({code:'FORBIDDEN'});
+ const rows=await sql`SELECT command,user_id::text,subject_type,subject_id,reason FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${operator.actorId}::uuid ORDER BY command`;
+ expect(rows).toEqual([
+  {command:'getCustomerSummaryAction',user_id:operator.actorId,subject_type:'customer',subject_id:customer,reason:'FORBIDDEN'},
+  {command:'issueInvoiceAction',user_id:operator.actorId,subject_type:'order',subject_id:input.orderId,reason:'FORBIDDEN'}
+ ]);
+ expect(await sql`SELECT id FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${input.orderId}`).toHaveLength(0);
 });
 
 it('L6 allowlisted technical source persists references/hash only; L9 actual protocol right is required',async()=>{
