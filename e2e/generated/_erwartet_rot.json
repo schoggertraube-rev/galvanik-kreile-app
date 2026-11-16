@@ -268,6 +268,5 @@
   "U241-03": {
     "paket": "AP-EIN",
     "grund": "Folge-PR Teil 2b rein"
-  },
-  "S14A-PROBE-B4": {"paket":"S14a V6 freigegebene Probe","grund":"Nur B4-Rotprobe; vor Abnahme normal zuruecknehmen"}
+  }
 }

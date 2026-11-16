@@ -204,7 +204,7 @@ it.each([{vat:1900,extra:false,outside:false,unpriced:false},{vat:700,extra:true
  if(beforePay.code!=='OK'||!beforePay.data.payment)throw Error('H1_PAYMENT_READ');
  const payment={invoiceId:issued.receipt.invoiceId,amount:beforePay.data.payment.openAmountCents,method:'ueberweisung' as const,expectedVersion:beforePay.data.payment.paymentVersion,clientEventId:randomUUID()};
  const paid=await withSession(full,()=>confirmPaymentAction(payment));
- expect(paid,JSON.stringify(paid)).toMatchObject({code:'OK',receipt:{confirmedBy:full.actorId,openAmountCents:1}});
+ expect(paid,JSON.stringify(paid)).toMatchObject({code:'OK',receipt:{confirmedBy:full.actorId,openAmountCents:0}});
  expect(await withSession(full,()=>getOrderPaymentStateAction({orderId}))).toMatchObject({code:'OK',data:{goodsOutAllowed:true,payment:{status:'bezahlt',openAmountCents:0}}});
  expect(await withSession(full,()=>confirmPaymentAction(structuredClone(payment)))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${payment.clientEventId}::uuid AND event_type='PAYMENT_CONFIRMED_V1'`).toEqual([{user_id:full.actorId}]);
