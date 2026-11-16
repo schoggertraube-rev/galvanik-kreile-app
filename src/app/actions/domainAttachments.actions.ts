@@ -63,6 +63,7 @@ type VisibilityActionFailure={code:'UNAUTHENTICATED'|'UNAVAILABLE'|'VALIDATION_E
 export async function setEvidenceVisibilityAction(input:UploadVisibilityInput):Promise<UploadVisibilityResult|VisibilityActionFailure>;
 export async function setEvidenceVisibilityAction(input:Parameters<typeof changeEvidenceVisibility>[1]):Promise<Awaited<ReturnType<typeof changeEvidenceVisibility>>|VisibilityActionFailure>;
 export async function setEvidenceVisibilityAction(input:unknown):Promise<UploadVisibilityResult|Awaited<ReturnType<typeof changeEvidenceVisibility>>|VisibilityActionFailure>{
+ return observeAction('setEvidenceVisibilityAction',subjectForAction('setEvidenceVisibilityAction',input),async()=>{
   const auth=await authorization();
   if(!auth.ok)return {code:auth.code,message:EVIDENCE_READ_COPY.unavailable};
   if(input&&typeof input==='object'&&!Array.isArray(input)&&'mode'in input&&input.mode==='upload'){
@@ -72,6 +73,8 @@ export async function setEvidenceVisibilityAction(input:unknown):Promise<UploadV
     return finishUploadedEvidenceVisibility(auth.data,value.evidenceKey,value.customerVisible);
   }
   return changeEvidenceVisibility(auth.data,input);
+
+ },readLoggingSettings);
 }
 
 export async function attachIntakeDraftAttachmentAction(input: Parameters<typeof attachIntakeDraftAttachment>[1]) {
@@ -127,6 +130,8 @@ export async function getDocumentIntelligenceStatusAction() {
 }
 
 export async function analyzeDomainAttachmentAction(input: Parameters<typeof analyzeDomainAttachment>[1]) {
+ return observeAction('analyzeDomainAttachmentAction',subjectForAction('analyzeDomainAttachmentAction',input),async()=>{
   const auth = await authorization();
   return auth.ok ? analyzeDomainAttachment(auth.data, input) : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+ },readLoggingSettings);
 }

@@ -1,3 +1,5 @@
+
+import {reportProtocolClientError} from '@/modules/logging/public';
 import type {PendingDeviceRead} from './pendingStore';
 import {captureDeviceReadFence,retainDeviceStandResponse,type CollectedDeviceReads,type DeviceReadFence} from './devicePortRead';
 import {collectDeviceOrders,collectDeviceCustomers,type DeviceOrderReadPorts,type DeviceCustomerReadPorts} from './collectDeviceLists';
@@ -28,7 +30,7 @@ export async function collectDeviceStand(fence:DeviceReadFence,ports:DeviceStand
  for(const [source,read]of readers){
   if(ports.currentScope()!==fence.scope)return stale();
   let result:CollectedDeviceReads;
-  try{result=await read();}catch(error){console.error('[OFFLINE_DEVICE_SOURCE_FAILED]',source,error instanceof Error?error.name:'UnknownError');result={code:'SOURCE_INCOMPLETE'};}
+  try{result=await read();}catch{reportProtocolClientError('OFFLINE_DEVICE_SOURCE_FAILED');result={code:'SOURCE_INCOMPLETE'};}
   sources.push({source,result});
   if(ports.currentScope()!==fence.scope||result.code==='STALE')return stale();
   if(result.code==='COLLECTED')values.push(...result.values);
@@ -56,5 +58,5 @@ export async function refreshDeviceStand(scope:string,enabled:boolean,ports:Devi
    return retainDeviceStandResponse(scope,true,collected,fence);
   })();
   refreshing.set(key,work);try{return await work;}finally{if(refreshing.get(key)===work)refreshing.delete(key);}
- }catch(error){console.error('[OFFLINE_DEVICE_STAND_REFRESH_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE'};}
+ }catch{reportProtocolClientError('OFFLINE_DEVICE_STAND_REFRESH_FAILED');return {code:'SOURCE_INCOMPLETE'};}
 }

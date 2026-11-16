@@ -1,3 +1,5 @@
+
+import {reportProtocolClientError} from '@/modules/logging/public';
 import type {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
 import {isPendingWorkshopAcknowledgement,isPendingConfirmedOriginal,type PendingWorkshopOriginal} from './pendingStore';
 import {isWorkshopRejectionReceipt} from './workshopRejectionContract';
@@ -19,5 +21,5 @@ export async function replayOfflineWorkshopHttp(scope:string,original:PendingWor
   }
   if(!isPendingWorkshopAcknowledgement(scope,original,body))return {code:'UNAVAILABLE'};
   return body as Result;
- }catch(error){console.error('[OFFLINE_REPLAY_HTTP_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE'};}
+ }catch{reportProtocolClientError('OFFLINE_REPLAY_HTTP_UNAVAILABLE');return {code:'UNAVAILABLE'};}
 }

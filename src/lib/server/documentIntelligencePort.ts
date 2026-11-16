@@ -32,7 +32,7 @@ export async function analyzeDomainAttachment(auth: AuthorizationSnapshot, input
     }
     const storage = await import("@/lib/server/domainAttachmentStorage");
     const stable = await storage.readStableDomainAttachment(row.original_storage_path, { fileBytes, mimeType: row.file_type });
-    const analyzed = await analyzeWithAzureDocumentIntelligence(stable.bytes, row.file_type);
+    const analyzed = await analyzeWithAzureDocumentIntelligence(stable.bytes, row.file_type,undefined,undefined,undefined,{subject:{type:'attachment',id:row.id},originalRef:row.id});
     if (analyzed.code !== "OK") return analyzed;
     const confidence = Object.fromEntries(analyzed.data.suggestions.map((item, index) => [`${index}:${item.field}`, item.confidence]));
     const payload = { version: 1, provider: "azure_document_intelligence", suggestions: analyzed.data.suggestions };

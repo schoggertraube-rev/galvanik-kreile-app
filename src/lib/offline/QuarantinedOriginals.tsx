@@ -1,4 +1,6 @@
 'use client';
+import {reportProtocolClientError} from '@/modules/logging/public';
+
 import {useLayoutEffect,useRef,useState} from 'react';
 import {Dialog} from '@/ui/kr';
 import {usePermissions} from '@/lib/auth/PermissionsContext';
@@ -57,7 +59,7 @@ export function QuarantinedOriginals({onClose}:{onClose:()=>void}){
    if(saved.code!=='OK')throw Error('OFFLINE_TAKEOVER_SOURCE_INCOMPLETE');
    if(currentScope.current!==offlineScope)return;
    requestGlobalCreate({intent:'DIRECT_INTAKE',pendingOriginalId:saved.original.itemId});onClose();
-  }catch(cause){console.error('[OFFLINE_TAKEOVER_UNAVAILABLE]',cause instanceof Error?cause.name:'UnknownError');setError(OFFLINE_TAKEOVER_COPY.unavailable);}
+  }catch{reportProtocolClientError('OFFLINE_TAKEOVER_UNAVAILABLE');setError(OFFLINE_TAKEOVER_COPY.unavailable);}
   finally{busyRef.current=false;setBusy(null);}
  }
  return <Dialog titel={OFFLINE_TAKEOVER_COPY.title} onSchliessen={onClose}>

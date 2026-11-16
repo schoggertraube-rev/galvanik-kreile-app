@@ -14,7 +14,7 @@ import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixtu
 import {getProtocolLogAction,recordProtocolClicksAction} from '@/app/actions/logging.actions';
 import {setPaymentModeAction} from '@/app/actions/payments.actions';
 import {COOKIE_NAME,signAppSession,getSecretKey} from '@/lib/server/appSession';
-import type {ClickFact} from '@/modules/logging/public';
+import type {DiagnosticFact} from '@/modules/logging/public';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1'||!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('S20_DEDICATED_TEST_REPLAY_REQUIRED');
 
 it('L8 native command hang/repeat/abort and offline diagnostics reach the actual writer; a lost exact acknowledgement repeats no stored click',async()=>{
@@ -28,9 +28,9 @@ it('L8 native command hang/repeat/abort and offline diagnostics reach the actual
  client.installProtocolClickCapture(state.scope,async(entries,scope)=>{const result=await fetch('/TEST/clicks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({entries,scope})});return result.ok?result.json():{code:'UNAVAILABLE'};});
  window.TESTpending=[];
  document.querySelector('#command').addEventListener('click',()=>{window.TESTpending.push(client.runServerAction(async()=>{const result=await fetch('/TEST/command',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});return result.json();}));});
- document.querySelector('#abort').addEventListener('click',()=>{window.TESTpending.push(client.runServerAction(async()=>{const controller=new AbortController();controller.abort();return fetch('/TEST/command',{method:'POST',body:'{}',signal:controller.signal});}));});
+ document.querySelector('#abort').addEventListener('click',()=>{window.TESTpending.push(client.runServerAction(async()=>{const controller=new AbortController();controller.abort(new DOMException('TEST PRIVATE_BROWSER_FAULT Bearer x','AbortError'));return fetch('/TEST/command',{method:'POST',body:'{}',signal:controller.signal});}));});
  window.TESTready=true;`;
- let loseAck=false,commandCalls=0;const attempts:ClickFact[][]=[];
+ let loseAck=false,commandCalls=0;const attempts:DiagnosticFact[][]=[];
  const server=createServer(async(req,res)=>{
   if(req.url==='/capture.mjs'){res.writeHead(200,{'content-type':'text/javascript'});res.end(compiled.outputFiles[0].text);return;}
   if(req.url==='/bootstrap.mjs'){res.writeHead(200,{'content-type':'text/javascript'});res.end(bootstrap);return;}
@@ -65,16 +65,19 @@ it('L8 native command hang/repeat/abort and offline diagnostics reach the actual
   await expect.poll(async()=>Number((await sql`SELECT count(*)::int AS n FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND target IN('test.command','test.abort')`)[0].n)).toBe(3);
   const native=await sql`SELECT target,duration_ms,click_count,outcome FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
   expect(native.filter(row=>row.target==='test.command')).toHaveLength(2);expect(native.filter(row=>row.target==='test.command').every(row=>row.outcome==='success')).toBe(true);expect(native.some(row=>row.click_count===2&&row.duration_ms>=3500)).toBe(true);expect(native.find(row=>row.target==='test.abort')?.outcome).toBe('cancelled');
+  await expect.poll(async()=>Number((await sql`SELECT count(*)::int AS n FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND command='ACTION_REQUEST_FAILED'`)[0].n)).toBe(1);
+  const errors=await sql`SELECT * FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND command='ACTION_REQUEST_FAILED'`;
+  expect(errors[0].user_id).toBe(full.actorId);expect(JSON.stringify(errors)).not.toContain('PRIVATE_BROWSER_FAULT');expect(JSON.stringify(errors)).not.toContain('Bearer x');
   expect(commandCalls).toBe(2);expect(await sql`SELECT payment_mode FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${command.orderId}`).toEqual([{payment_mode:'abholung'}]);
   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${command.orderId} AND event_type='PAYMENT_MODE_SET_V1' AND client_event_id=${command.clientEventId}::uuid`).toHaveLength(1);
   await context.setOffline(true);await page.locator('#local').click();await page.evaluate(()=>new Promise<void>(resolve=>setTimeout(resolve,0)));
   expect(await sql`SELECT id FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND target='test.local'`).toHaveLength(0);
   loseAck=true;await context.setOffline(false);
   await expect.poll(async()=>Number((await sql`SELECT count(*)::int AS n FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND target='test.local'`)[0].n)).toBe(1);
-  const first=attempts.find(batch=>batch.some(entry=>entry.target==='test.local'));expect(first).toBeDefined();
+  const first=attempts.find(batch=>batch.some(entry=>'target'in entry&&entry.target==='test.local'));expect(first).toBeDefined();
   await context.setOffline(true);await context.setOffline(false);
-  await expect.poll(()=>attempts.filter(batch=>batch.some(entry=>entry.target==='test.local')).length).toBe(2);
-  expect(attempts.filter(batch=>batch.some(entry=>entry.target==='test.local'))[1]).toEqual(first);
+  await expect.poll(()=>attempts.filter(batch=>batch.some(entry=>'target'in entry&&entry.target==='test.local')).length).toBe(2);
+  expect(attempts.filter(batch=>batch.some(entry=>'target'in entry&&entry.target==='test.local'))[1]).toEqual(first);
   expect(await sql`SELECT outcome,duration_ms FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND target='test.local'`).toEqual([{outcome:null,duration_ms:null}]);
   const read=await withSession(full,()=>getProtocolLogAction({capture:true}));expect(read.code).toBe('OK');
  }finally{await context?.close();await browser?.close();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}

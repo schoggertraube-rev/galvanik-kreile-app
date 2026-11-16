@@ -1,3 +1,5 @@
+
+import {reportProtocolClientError} from '@/modules/logging/public';
 import {revokePendingShells,readPendingEntries} from './pendingStore';
 
 /** Private reading caches only. Public build assets and every queued original survive. */
@@ -21,7 +23,7 @@ export async function clearLoggedOutReadState(scope:string|null):Promise<LogoutR
   revokePendingShells(scope),deletePrivateReadCaches(scope),readPendingEntries(scope),
  ]);
  const cacheCleared=results[0].status==='fulfilled'&&results[1].status==='fulfilled';
- if(!cacheCleared)console.error('[OFFLINE_LOGOUT_CACHE_DELETE_FAILED]');
- if(results[2].status==='rejected')console.error('[OFFLINE_LOGOUT_PENDING_READ_FAILED]');
+ if(!cacheCleared)reportProtocolClientError('OFFLINE_LOGOUT_CACHE_DELETE_FAILED');
+ if(results[2].status==='rejected')reportProtocolClientError('OFFLINE_LOGOUT_PENDING_READ_FAILED');
  return {cacheCleared,pendingCount:results[2].status==='fulfilled'?results[2].value.length:null};
 }

@@ -17,6 +17,7 @@ import {readStoragePostalReceipt,prepareStoragePostalLetter} from '@/lib/server/
 import {customerCountryLabel} from '@/modules/customers/public';
 
 export async function previewStorageLetterAction(input:unknown){
+ return observeAction('previewStorageLetterAction',subjectForAction('previewStorageLetterAction',input),async()=>{
  const {resolveAuthorization,hasAuthorizationArea}=await import('@/lib/server/authorization');
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:auth.message};
  if(!hasAuthorizationArea(auth.data,'auftraege')||!hasAuthorizationArea(auth.data,'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
@@ -30,6 +31,8 @@ export async function previewStorageLetterAction(input:unknown){
   if(!pdf.length)throw Error('STORAGE_LETTER_PDF_EMPTY');
   return {code:'OK' as const,data:{...preview.data,pdfBase64:pdf.toString('base64'),pdfSha256:createHash('sha256').update(pdf).digest('hex'),filename:'Lagerfrist-'+input.clientKey+'.pdf',sent:false as const}};
  }catch(error){console.error('[STORAGE_LETTER_PREVIEW_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
+
+ },readLoggingSettings);
 }
 export async function prepareStoragePostalLetterAction(input:unknown){
  return observeAction('prepareStoragePostalLetterAction',subjectForAction('prepareStoragePostalLetterAction',input),async()=>{

@@ -1,4 +1,7 @@
 "use server";
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
+
 import {applyPinChangeRateLimit} from "@/lib/server/pinRateLimit";
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
@@ -41,15 +44,21 @@ async function settingsContext() {
 }
 
 export async function readEmailTemplatesAction(){
+ return observeAction('readEmailTemplatesAction',subjectForAction('readEmailTemplatesAction',undefined),async()=>{
  noStore();const resolved=await settingsContext();
  if(!resolved)return {code:'UNAUTHENTICATED' as const,message:'Sitzung fehlt.'};
  const {readStoredEmailTemplates}=await import('@/lib/server/commands/emailTemplateCommand');
  return readStoredEmailTemplates(resolved.authorization);
+
+ },readLoggingSettings);
 }
 export async function saveEmailTemplateAction(input:unknown){
+ return observeAction('saveEmailTemplateAction',subjectForAction('saveEmailTemplateAction',input),async()=>{
  const resolved=await settingsContext();if(!resolved)return {code:'UNAUTHENTICATED' as const,message:'Sitzung fehlt.'};
  const {saveStoredEmailTemplate}=await import('@/lib/server/commands/emailTemplateCommand');
  return saveStoredEmailTemplate(resolved.authorization,input);
+
+ },readLoggingSettings);
 }
 
 async function refreshSettingsSession(authorization: {
@@ -91,17 +100,23 @@ export async function readShippingSettingsAction(){
  return presentShippingSettings(result,hasAuthorizationArea(resolved.authorization,'geld'));
 }
 export async function saveQuoteSettingsAction(input:unknown) {
+ return observeAction('saveQuoteSettingsAction',subjectForAction('saveQuoteSettingsAction',input),async()=>{
   const resolved=await settingsContext();
   if (!resolved) return {code:'UNAUTHENTICATED' as const,message:'Sitzung fehlt.'};
   const {saveQuoteSettings}=await import('@/modules/fundament/server-public');
   const result=await saveQuoteSettings(resolved.context,input);
   if (result.code==='OK') revalidatePath('/settings');
   return result;
+
+ },readLoggingSettings);
 }
 export async function saveShippingSettingsAction(input:unknown){
+ return observeAction('saveShippingSettingsAction',subjectForAction('saveShippingSettingsAction',input),async()=>{
  const resolved=await settingsContext();if(!resolved)return {code:"UNAUTHENTICATED" as const,message:"Sitzung fehlt."};
  const {updateShippingSettings}=await import("@/modules/fundament/server-public");const result=await updateShippingSettings(resolved.context,input);
  return presentShippingSettings(result,hasAuthorizationArea(resolved.authorization,'geld'));
+
+ },readLoggingSettings);
 }
 
 export async function readSettingsAction() {
@@ -154,14 +169,18 @@ export async function saveSalesStageFeatureAction(input: { featureId: SalesStage
 }
 
 export async function saveCompanySettingsAction(input: CompanySettingsInput&{protocol?:ProtocolSettings}) {
+ return observeAction('saveCompanySettingsAction',subjectForAction('saveCompanySettingsAction',input),async()=>{
   const resolved = await settingsContext();
   if (!resolved?.authorization.areas?.includes("einstellungen")) return { code: "FORBIDDEN" as const, message: "Firmendaten dürfen nicht geändert werden." };
   const result = await updateCompanySettings(resolved.context, input);
   if (result.code === "OK") revalidatePath("/settings");
   return result;
+
+ },readLoggingSettings);
 }
 
 export async function saveManagedUserAction(input: UpdateManagedUserInput) {
+ return observeAction('saveManagedUserAction',subjectForAction('saveManagedUserAction',input),async()=>{
   try {
     const resolved = await settingsContext();
     if (!resolved?.authorization.areas?.includes("logins")) return { code: "FORBIDDEN" as const, message: "Logins dürfen nicht geändert werden." };
@@ -178,9 +197,12 @@ export async function saveManagedUserAction(input: UpdateManagedUserInput) {
     console.error("[SETTINGS_USER_ACTION_FAILED]", error);
     return { code: "UNAVAILABLE" as const, message: "Login konnte nicht gespeichert werden. Fehlercode: SETTINGS_USER_ACTION_FAILED." };
   }
+
+ },readLoggingSettings);
 }
 
 export async function createManagedUserAction(input: CreateManagedUserInput) {
+ return observeAction('createManagedUserAction',subjectForAction('createManagedUserAction',input),async()=>{
   const resolved = await settingsContext();
   if (!resolved?.authorization.areas?.includes("logins")) return { code: "FORBIDDEN" as const, message: "Logins dürfen nicht angelegt werden." };
   const result = await createManagedUser(resolved.context, input);
@@ -189,17 +211,23 @@ export async function createManagedUserAction(input: CreateManagedUserInput) {
     revalidatePath("/start");
   }
   return result;
+
+ },readLoggingSettings);
 }
 
 export async function setManagedUserAreaAction(input: SetUserAreaInput) {
+ return observeAction('setManagedUserAreaAction',subjectForAction('setManagedUserAreaAction',input),async()=>{
   const resolved = await settingsContext();
   if (!resolved?.authorization.areas?.includes("logins")) return { code: "FORBIDDEN" as const, message: "Rechte dürfen nicht geändert werden." };
   const result = await setManagedUserArea(resolved.context, input);
   if (result.code === "OK") revalidatePath("/", "layout");
   return result;
+
+ },readLoggingSettings);
 }
 
 export async function changeOwnPinAction(input: { pin: string }) {
+ return observeAction('changeOwnPinAction',subjectForAction('changeOwnPinAction',input),async()=>{
   try {
     const resolved = await settingsContext();
     if (!resolved) return { code: "FORBIDDEN" as const, message: "Der eigene Code kann momentan nicht geändert werden." };
@@ -212,12 +240,17 @@ export async function changeOwnPinAction(input: { pin: string }) {
     console.error("[SETTINGS_OWN_PIN_ACTION_FAILED]", error);
     return { code: "UNAVAILABLE" as const, message: "Code konnte nicht gespeichert werden. Fehlercode: SETTINGS_OWN_PIN_ACTION_FAILED." };
   }
+
+ },readLoggingSettings);
 }
 
 export async function saveCatalogServiceAction(input: SaveCatalogServiceInput) {
+ return observeAction('saveCatalogServiceAction',subjectForAction('saveCatalogServiceAction',input),async()=>{
   const resolved = await settingsContext();
   if (!resolved?.authorization.areas?.includes("einstellungen")) return { code: "FORBIDDEN" as const, message: "Leistungen dürfen nicht geändert werden." };
   const result = await saveCatalogService({ tenantId: resolved.context.tenantId, actorId: resolved.context.actorId, canRead: true, canManage: true }, input);
   if (result.code === "OK") revalidatePath("/settings");
   return result;
+
+ },readLoggingSettings);
 }

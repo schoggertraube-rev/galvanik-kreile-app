@@ -51,15 +51,27 @@ export async function assignIntakeCustomerAction(input:unknown){
  return observeAction('assignIntakeCustomerAction',subjectForAction('assignIntakeCustomerAction',input),async()=>{return assignIntakeCustomer(input,readCustomerProfile);
  },readLoggingSettings);
 }
-export async function setIntakeNoBusinessAction(input:unknown){return setIntakeNoBusiness(input);}
-export async function createCustomerForIntakeAction(input:unknown){return createCustomerForIntake(input,createCustomerInTransaction,readCustomerProfile);}
+export async function setIntakeNoBusinessAction(input:unknown){
+ return observeAction('setIntakeNoBusinessAction',subjectForAction('setIntakeNoBusinessAction',input),async()=>{return setIntakeNoBusiness(input);
+ },readLoggingSettings);
+}
+export async function createCustomerForIntakeAction(input:unknown){
+ return observeAction('createCustomerForIntakeAction',subjectForAction('createCustomerForIntakeAction',input),async()=>{return createCustomerForIntake(input,createCustomerInTransaction,readCustomerProfile);
+ },readLoggingSettings);
+}
 import {selectIntakeConcern,finishIntakeUse,reopenIntake} from '@/modules/eingang/server-public';
 export async function selectIntakeConcernAction(input:unknown){
  return observeAction('selectIntakeConcernAction',subjectForAction('selectIntakeConcernAction',input),async()=>{return selectIntakeConcern(input);
  },readLoggingSettings);
 }
-export async function finishIntakeUseAction(input:unknown){return finishIntakeUse(input);}
-export async function reopenIntakeAction(input:unknown){return reopenIntake(input);}
+export async function finishIntakeUseAction(input:unknown){
+ return observeAction('finishIntakeUseAction',subjectForAction('finishIntakeUseAction',input),async()=>{return finishIntakeUse(input);
+ },readLoggingSettings);
+}
+export async function reopenIntakeAction(input:unknown){
+ return observeAction('reopenIntakeAction',subjectForAction('reopenIntakeAction',input),async()=>{return reopenIntake(input);
+ },readLoggingSettings);
+}
 import {createIntakeMailFailureTask,createMailboxFetchRetryTask,saveTask,completeTask,readTask,createMissingGoodsTask,createOrderHandoverTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
 import {createDispatchCall,recordDispatchCallResult,readDispatchCallRequirement,protectDispatchCallTask,readCompletedDispatchCallReceipt} from '@/lib/server/dispatchCallPort';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
@@ -87,8 +99,14 @@ export async function saveIncomingInvoiceAction(input:unknown){
  return observeAction('saveIncomingInvoiceAction',subjectForAction('saveIncomingInvoiceAction',input),async()=>{return saveIncomingInvoice(input,invoiceEffects);
  },readLoggingSettings);
 }
-export async function changeIncomingInvoiceStatusAction(input:unknown){return changeIncomingInvoice(input,invoiceEffects);}
-export async function clarifyIncomingInvoiceAction(input:unknown){return changeIncomingInvoice(input,invoiceEffects,true);}
+export async function changeIncomingInvoiceStatusAction(input:unknown){
+ return observeAction('changeIncomingInvoiceStatusAction',subjectForAction('changeIncomingInvoiceStatusAction',input),async()=>{return changeIncomingInvoice(input,invoiceEffects);
+ },readLoggingSettings);
+}
+export async function clarifyIncomingInvoiceAction(input:unknown){
+ return observeAction('clarifyIncomingInvoiceAction',subjectForAction('clarifyIncomingInvoiceAction',input),async()=>{return changeIncomingInvoice(input,invoiceEffects,true);
+ },readLoggingSettings);
+}
 /** Supplier selection uses the same canonical customer search and stored profiles. */
 export async function searchInvoiceSuppliersAction(query:string){
  return observeAction('searchInvoiceSuppliersAction',subjectForAction('searchInvoiceSuppliersAction',query),async()=>{
@@ -105,7 +123,10 @@ export async function searchInvoiceSuppliersAction(query:string){
  },readLoggingSettings);
 }
 const goodsEffects={createMissingTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;missing:string[];clientKey:string})=>createMissingGoodsTask(tx,auth,input,taskEffects)};
-export async function saveIntakeTaskAction(input:unknown){return saveTask(input,taskEffects);}
+export async function saveIntakeTaskAction(input:unknown){
+ return observeAction('saveIntakeTaskAction',subjectForAction('saveIntakeTaskAction',input),async()=>{return saveTask(input,taskEffects);
+ },readLoggingSettings);
+}
 export async function completeIntakeTaskAction(input:unknown){
  return observeAction('completeIntakeTaskAction',subjectForAction('completeIntakeTaskAction',input),async()=>{
  if(input&&typeof input==='object'&&'callResult'in input){
@@ -170,7 +191,10 @@ async function readSingleIntakeTask(input:TaskOpenRequest){
 }
 import {readOpenIntakeMails} from '@/modules/eingang/server-public';
 import {saveIntakeProspect} from '@/modules/eingang/server-public';
-export async function saveIntakeProspectAction(input:unknown){return saveIntakeProspect(input,createCustomerInTransaction,readCustomerProfile);}
+export async function saveIntakeProspectAction(input:unknown){
+ return observeAction('saveIntakeProspectAction',subjectForAction('saveIntakeProspectAction',input),async()=>{return saveIntakeProspect(input,createCustomerInTransaction,readCustomerProfile);
+ },readLoggingSettings);
+}
 export async function getOpenIntakeMailsAction(){
  return observeAction('getOpenIntakeMailsAction',subjectForAction('getOpenIntakeMailsAction',undefined),async()=>{const notice=await syncIntakeMailbox();const result=await readOpenIntakeMails();return result.code==='OK'?{...result,...(notice?{notice}:{})}:result;
  },readLoggingSettings);
@@ -251,8 +275,14 @@ import {saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,type
 import {parseGoodsReceiptInput} from "@/modules/eingang/public";
 import {transitionWareneingangToGalvanik} from "@/lib/server/commands/orderStationCommand";
 import {openIntakeOriginal,confirmIntakeOriginal} from "@/modules/eingang/server-public";
-export async function openIntakeOriginalAction(input:unknown){return openIntakeOriginal(input);}
-export async function confirmIntakeOriginalAction(input:unknown){return confirmIntakeOriginal(input);}
+export async function openIntakeOriginalAction(input:unknown){
+ return observeAction('openIntakeOriginalAction',subjectForAction('openIntakeOriginalAction',input),async()=>{return openIntakeOriginal(input);
+ },readLoggingSettings);
+}
+export async function confirmIntakeOriginalAction(input:unknown){
+ return observeAction('confirmIntakeOriginalAction',subjectForAction('confirmIntakeOriginalAction',input),async()=>{return confirmIntakeOriginal(input);
+ },readLoggingSettings);
+}
 
 export async function getGoodsReceiptsAction(orderId:string){return readGoodsReceipts(orderId);}
 export async function saveGoodsReceiptAction(input:unknown):Promise<GoodsReceiptResult>{
@@ -269,10 +299,22 @@ export async function saveGoodsReceiptAction(input:unknown):Promise<GoodsReceipt
 }
 
 export async function getIntakeDraftsAction() { return readIntakeDrafts(); }
-export async function saveIntakeDraftAction(input:unknown) { return writeIntakeDraft(input); }
-export async function createIntakeContinuationAction(input:unknown) { return createIntakeContinuation(input); }
-export async function discardIntakeDraftAction(input:unknown) { return discardIntakeDraft(input); }
-export async function retryIntakeRecognitionAction(input:unknown) { return retryIntakeRecognition(input); }
+export async function saveIntakeDraftAction(input:unknown) {
+ return observeAction('saveIntakeDraftAction',subjectForAction('saveIntakeDraftAction',input),async()=>{ return writeIntakeDraft(input);
+ },readLoggingSettings);
+}
+export async function createIntakeContinuationAction(input:unknown) {
+ return observeAction('createIntakeContinuationAction',subjectForAction('createIntakeContinuationAction',input),async()=>{ return createIntakeContinuation(input);
+ },readLoggingSettings);
+}
+export async function discardIntakeDraftAction(input:unknown) {
+ return observeAction('discardIntakeDraftAction',subjectForAction('discardIntakeDraftAction',input),async()=>{ return discardIntakeDraft(input);
+ },readLoggingSettings);
+}
+export async function retryIntakeRecognitionAction(input:unknown) {
+ return observeAction('retryIntakeRecognitionAction',subjectForAction('retryIntakeRecognitionAction',input),async()=>{ return retryIntakeRecognition(input);
+ },readLoggingSettings);
+}
 
 import {
   erfasseAuftragAusEingangCommand,
@@ -348,9 +390,12 @@ export async function finishIntakeFileAction(fileId: string,pendingScope?:string
 export async function getIntakePendingScopeAction() { return readIntakePendingScope(); }
 export async function getIntakeFileChangesAction(since: string, after: string | null) { return readIntakeFileChanges(since, after); }
 export async function saveIntakeDeviceRequestAction(input: unknown) {
+ return observeAction('saveIntakeDeviceRequestAction',subjectForAction('saveIntakeDeviceRequestAction',input),async()=>{
   const session = await getAppSession();
   const fingerprint = session ? createHash("sha256").update(JSON.stringify(["intake-device", session.tenantId, session.userId, session.issuedAt])).digest("hex") : null;
   return processIntakeDeviceRequest(input, fingerprint);
+
+ },readLoggingSettings);
 }
 export async function getIntakeCaptureAction(itemId: string, context?: IntakeContext, options?:{packageExpectation?:boolean}) {
  return observeAction('getIntakeCaptureAction',subjectForAction('getIntakeCaptureAction',{itemId}),async()=>{
@@ -423,4 +468,7 @@ export async function recordQuoteGoodsReturnAction(input:unknown){
  return observeAction('recordQuoteGoodsReturnAction',subjectForAction('recordQuoteGoodsReturnAction',input),async()=>{const result=await returnQuoteGoodsReceipt(input);if(result.code==='OK'){for(const path of ['/','/warendurchlauf','/nachrichten'])revalidatePath(path);}return result;
  },readLoggingSettings);
 }
-export async function getQuoteGoodsReturnsAction(quoteId:unknown){return readQuoteGoodsReturns(quoteId);}
+export async function getQuoteGoodsReturnsAction(quoteId:unknown){
+ return observeAction('getQuoteGoodsReturnsAction',subjectForAction('getQuoteGoodsReturnsAction',{quoteId}),async()=>{return readQuoteGoodsReturns(quoteId);
+ },readLoggingSettings);
+}

@@ -95,26 +95,35 @@ export async function cancelInvoiceAction(input: CancelInvoiceInput): Promise<Ca
 }
 
 export async function getCustomerCreditAction(customerId:string):Promise<CustomerCreditResult>{
+ return observeAction('getCustomerCreditAction',subjectForAction('getCustomerCreditAction',{customerId}),async()=>{
   const authorization=await resolveActionAuthorization();
   if(!authorization.ok)return authorization.result;
   const {readCustomerCreditPayoutHistory}=await import('@/lib/server/commands/customerCreditCommand');
   return readCustomerCredit(authorization.data,customerId,readCustomerProfile,readCustomerCreditPayoutHistory);
+
+ },readLoggingSettings);
 }
 
 export async function applyCustomerCreditAction(input:CustomerCreditApplyInput){
+ return observeAction('applyCustomerCreditAction',subjectForAction('applyCustomerCreditAction',input),async()=>{
  const {applyCustomerCredit}=await import('@/lib/server/commands/customerCreditCommand');
  const result=await applyCustomerCredit(input,(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile));
  if(result.code==='OK'){
   revalidatePath('/buchhaltung/rechnungen');revalidatePath('/warendurchlauf');revalidatePath('/customers');
  }
  return result;
+
+ },readLoggingSettings);
 }
 
 export async function payoutCustomerCreditAction(input:import('@/modules/accounting/public').CustomerCreditPayoutInput){
+ return observeAction('payoutCustomerCreditAction',subjectForAction('payoutCustomerCreditAction',input),async()=>{
  const {payoutCustomerCredit}=await import('@/lib/server/commands/customerCreditCommand');
  const result=await payoutCustomerCredit(input,(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile),readCustomerProfile);
  if(result.code==='OK'){revalidatePath('/buchhaltung/rechnungen');revalidatePath('/customers');}
  return result;
+
+ },readLoggingSettings);
 }
 
 export type GetInvoiceReceiptActionResult =
@@ -156,8 +165,11 @@ export async function getInvoiceSummariesAction(): Promise<GetInvoiceSummariesAc
 
 /** Existing truth port composed at the same root as issue/read/cancellation. */
 export async function getInvoiceTruthAction(filter:{from?:string;to?:string;customerId?:string}={}){
+ return observeAction('getInvoiceTruthAction',subjectForAction('getInvoiceTruthAction',filter),async()=>{
  const authorization=await resolveActionAuthorization();
  if(!authorization.ok)return authorization.result;
  const {readInvoiceTruth}=await import('@/lib/server/invoiceTruthRead');
  return readInvoiceTruth(authorization.data,filter,readInvoiceVat);
+
+ },readLoggingSettings);
 }

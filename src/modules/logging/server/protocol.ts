@@ -31,10 +31,11 @@ export function subjectForAction(name:string,input:unknown):LogSubject{
 }
 
 /** Only named scalar fields cross the sink. Error objects, inputs and extra properties never do. */
-export async function logTechnical(auth:AuthorizationSnapshot|null,event:TechnicalEvent):Promise<boolean>{
+export async function logTechnical(auth:AuthorizationSnapshot|null,event:TechnicalEvent,receiptId?:string):Promise<boolean>{
  if(!auth||auth.active!==true||!auth.tenantId||!uuid.test(auth.userId)){lose();return false;}
  const lost=missed;missed=0;
  try{
+  if(receiptId!==undefined&&!uuid.test(receiptId))throw Error('LOG_RECEIPT_ID_INVALID');
   if(!command.test(event.command)||!event.subject||!/^[a-z][a-z0-9_]{0,39}$/.test(event.subject.type)||!id.test(event.subject.id))throw Error('LOG_REFERENCE_INVALID');
   const type=event.type;
   if(!['rejected','server_error','slow','external','offline_sync','offline_conflict','offline_quarantine'].includes(type))throw Error('LOG_TYPE_INVALID');
@@ -48,10 +49,22 @@ export async function logTechnical(auth:AuthorizationSnapshot|null,event:Technic
   if(type==='external'&&(!services.includes(event.dienst)||!outcomes.includes(event.ergebnis)))throw Error('LOG_EXTERNAL_INVALID');
   const original=type==='external'?event.original:undefined;
   if(original&&(!id.test(original.ref)||!/^[a-f0-9]{64}$/.test(original.sha256)))throw Error('LOG_ORIGINAL_INVALID');
-  const written=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string}>(sql`
-   INSERT INTO public.technical_protocol(tenant_id,user_id,occurred_at,event_type,command,subject_type,subject_id,duration_ms,reason,dienst,ergebnis,original_ref,original_sha256,verpasst)
-   VALUES(${auth.tenantId},${auth.userId}::uuid,${occurredAt}::timestamptz,${type},${event.command},${event.subject.type},${event.subject.id},${duration},${reason},${dienst},${ergebnis},${original?original.ref:null},${original?original.sha256:null},${lost}) RETURNING id`));
-  if(written.length!==1)throw Error('LOG_WRITE_RECEIPT_MISSING');
+  const recorded=await withPrivilegedTenantTransaction(auth,async tx=>{
+   const written=await tx.execute<{id:string}>(sql`
+    INSERT INTO public.technical_protocol(id,tenant_id,user_id,occurred_at,event_type,command,subject_type,subject_id,duration_ms,reason,dienst,ergebnis,original_ref,original_sha256,verpasst)
+    VALUES(coalesce(${receiptId??null}::uuid,gen_random_uuid()),${auth.tenantId},${auth.userId}::uuid,${occurredAt}::timestamptz,${type},${event.command},${event.subject.type},${event.subject.id},${duration},${reason},${dienst},${ergebnis},${original?original.ref:null},${original?original.sha256:null},${lost}) ON CONFLICT(id) DO NOTHING RETURNING id`);
+   if(written.length===1)return 'inserted' as const;
+   if(receiptId!==undefined){
+    const prior=await tx.execute<{same:boolean}>(sql`SELECT (user_id=${auth.userId}::uuid AND occurred_at=${occurredAt}::timestamptz AND event_type=${type} AND command=${event.command}
+     AND subject_type=${event.subject.type} AND subject_id=${event.subject.id} AND duration_ms IS NOT DISTINCT FROM ${duration} AND reason IS NOT DISTINCT FROM ${reason}
+     AND dienst IS NOT DISTINCT FROM ${dienst} AND ergebnis IS NOT DISTINCT FROM ${ergebnis} AND original_ref IS NOT DISTINCT FROM ${original?.ref??null} AND original_sha256 IS NOT DISTINCT FROM ${original?.sha256??null}) AS same
+     FROM public.technical_protocol WHERE tenant_id=${auth.tenantId} AND id=${receiptId}::uuid`);
+    if(prior.length===1&&prior[0].same)return 'replayed' as const;
+   }
+   throw Error('LOG_WRITE_RECEIPT_MISSING');
+  });
+  // A replay cannot consume new loss counts: the original row is immutable.
+  if(recorded==='replayed')lose(lost);
   return true;
  }catch{lose(lost+1);return false;}
 }

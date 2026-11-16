@@ -1,4 +1,6 @@
 "use client";
+import {reportProtocolClientError} from '@/modules/logging/public';
+
 import {refreshDeviceStand} from './collectDeviceStand';
 import {readDeviceStandResponse} from './devicePortRead';
 import {readCacheScopeMarker} from './cacheScopeMarker';
@@ -89,9 +91,9 @@ async function refreshOutboxSnapshot(scope:string|null): Promise<void> {
     quarantineSnapshot=entries.flatMap(entry=>{if(entry.kind==='quarantine')return [entry];const rejected=entry.kind==='workshop'?rejectedWorkshopProjection(entry):null;return rejected?[rejected]:[];});
     snapshotScope=scope;
     pendingStorageFailureScope=null;publishSnapshots();
-  } catch (error) {
+  } catch{
     // Retain the last confirmed snapshot; unavailable storage is not an empty queue.
-    console.error("[OFFLINE_PENDING_READ_FAILED]",error instanceof Error?error.name:'UnknownError');
+    reportProtocolClientError('OFFLINE_PENDING_READ_FAILED');
     if(activeScope===scope&&generation===snapshotGeneration){pendingStorageFailureScope=scope;publishSnapshots();}
   }
 }
@@ -123,7 +125,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     let timerGeneration=0;
     const run=(flushDelayed=false,keepalive=false)=>{
       if(!scope||!readServerReachability()||activeScope!==scope)return;
-      void syncOriginals(scope,()=>activeScope,{flushDelayed,keepalive,workshopOnly:keepalive,offline24h}).then(()=>keepalive?undefined:refreshFullDeviceStand(scope,offline24h)).catch(error=>console.error('[OFFLINE_SYNC_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError'));
+      void syncOriginals(scope,()=>activeScope,{flushDelayed,keepalive,workshopOnly:keepalive,offline24h}).then(()=>keepalive?undefined:refreshFullDeviceStand(scope,offline24h)).catch(()=>reportProtocolClientError('OFFLINE_SYNC_UNAVAILABLE'));
     };
     const schedule=async()=>{
       const generation=++timerGeneration;if(timer)clearTimeout(timer);
@@ -133,7 +135,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         if(disposed||generation!==timerGeneration||activeScope!==scope)return;
         const due=entries.filter(entry=>entry.kind==='workshop'&&entry.notBefore!==undefined&&entry.dispatchStartedAt===undefined).map(entry=>Date.parse((entry as {notBefore:string}).notBefore));
         if(due.length)timer=setTimeout(()=>run(),Math.max(0,Math.min(...due)-Date.now()));
-      }catch(error){console.error('[OFFLINE_DELAYED_READ_FAILED]',error instanceof Error?error.name:'UnknownError');}
+      }catch{reportProtocolClientError('OFFLINE_DELAYED_READ_FAILED');}
     };
     const changed=()=>{refresh();void schedule();};
     const leave=()=>run(true,true);

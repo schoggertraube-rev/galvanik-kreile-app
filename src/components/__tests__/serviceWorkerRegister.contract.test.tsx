@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import * as protocol from '@/modules/logging/public';
 
 const workspacePath = (...parts: string[]) => resolve(process.cwd(), ...parts);
 const originalServiceWorker = Object.getOwnPropertyDescriptor(navigator, "serviceWorker");
@@ -46,10 +47,13 @@ describe("ServiceWorkerRegister contract", () => {
 
   it("allows a later mount to recover a rejected registration", async () => {
     const register=vi.fn().mockRejectedValueOnce(new Error("TEST offline install")).mockResolvedValue({scope:"/"});
-    vi.spyOn(console,"error").mockImplementation(()=>{});
+    const consoleError=vi.spyOn(console,"error").mockImplementation(()=>{});
+    const diagnostic=vi.spyOn(protocol,'reportProtocolClientError').mockImplementation(()=>{});
     Object.defineProperty(navigator,"serviceWorker",{configurable:true,value:{register}});
     const first=render(<ServiceWorkerRegister />);
-    await waitFor(()=>expect(console.error).toHaveBeenCalled());first.unmount();
+    await waitFor(()=>expect(diagnostic).toHaveBeenCalledWith('ACTION_REQUEST_FAILED'));
+    expect(diagnostic.mock.calls.filter(([code])=>code==='ACTION_REQUEST_FAILED')).toEqual([['ACTION_REQUEST_FAILED']]);
+    expect(consoleError.mock.calls.flat().some(value=>value instanceof Error)).toBe(false);first.unmount();
     render(<ServiceWorkerRegister />);
     await waitFor(()=>expect(register).toHaveBeenCalledTimes(2));
   });

@@ -1,4 +1,6 @@
 "use client";
+import {reportProtocolClientError} from '@/modules/logging/public';
+
 
 import { useEffect } from "react";
 import {usePathname} from 'next/navigation';
@@ -19,7 +21,7 @@ export function ServiceWorkerRegister() {
     void pending.finally(()=>{if(warmings.get(key)===pending)warmings.delete(key);});
   },[pathname]);
   useEffect(() => {
-    void clearUnmarkedPrivateCaches().catch(()=>console.error('[OFFLINE_START_CACHE_DELETE_FAILED]'));
+    void clearUnmarkedPrivateCaches().catch(()=>reportProtocolClientError('OFFLINE_START_CACHE_DELETE_FAILED'));
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       const container = navigator.serviceWorker;
       if (registrations.has(container)) return;
@@ -28,9 +30,9 @@ export function ServiceWorkerRegister() {
       attempt.then((registration) => {
           console.log("Service Worker registered with scope:", registration.scope);
         })
-        .catch((error) => {
+        .catch(()=> {
           registrations.delete(container);
-          console.error("Service Worker registration failed:", error);
+          reportProtocolClientError('ACTION_REQUEST_FAILED');
         });
     }
   }, []);

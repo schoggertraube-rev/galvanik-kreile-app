@@ -41,6 +41,11 @@ async function replayCommand(scope:string,original:PendingWorkshopOriginal){
    await logTechnical(auth.data,{type:'offline_conflict',command:'replayOfflineWorkshopAction',subject:{type:'event',id:result.eventId},occurredAt:result.rejectionReceipt.deviceCapturedAt});
    return {...result,rejectionReceipt:{...result.rejectionReceipt,scope}};
   }
+  if(result.code==='OK'&&'offlineReceipt'in result){
+   // applyKnownCommand has qualified the existing writer receipt; reconcile has
+   // now committed. Never report an attempted/denied input as reconciled.
+   await logTechnical(auth.data,{type:'offline_sync',command:'replayOfflineWorkshopAction',subject:{type:'event',id:result.offlineReceipt.eventId},occurredAt:result.offlineReceipt.deviceCapturedAt});
+  }
   return result;
  }catch{return {code:'UNAVAILABLE' as const};}
 }

@@ -1,5 +1,6 @@
 import type {ClickInput,ClickFact} from './public';
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const PROTOCOL_EVENT_ID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuid=PROTOCOL_EVENT_ID;
 export const CLICK_TARGET=/^(?:[a-z][a-z0-9._:-]{0,79}|\/(?:[a-z][a-z-]{0,39})(?:\/[a-z][a-z-]{0,39})?)$/;
 const route=/^\/(?:[a-z][a-z-]{0,39}|:id)?(?:\/(?:[a-z][a-z-]{0,39}|:id)){0,4}$/;
 /** Current dynamic Next routes are orders/[id] and customers/[id]. Never send those IDs. */

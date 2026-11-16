@@ -123,7 +123,10 @@ export async function correctGalvanikToWareneingangAction(
 export async function recordOrderLabelPrintAction(
   input: OrderLabelPrintCommandInput,
 ): Promise<OrderLabelPrintCommandResult> {
+ return observeAction('recordOrderLabelPrintAction',subjectForAction('recordOrderLabelPrintAction',input),async()=>{
   return recordOrderLabelPrint(input);
+
+ },readLoggingSettings);
 }
 
 export async function changeOrderItemExtraWorkAction(
@@ -149,44 +152,59 @@ export async function freezeOrderAction(input: FreezeOrderInput): Promise<Freeze
 export async function reopenFrozenOrderAction(
   input: ReopenFrozenOrderInput,
 ): Promise<ReopenFrozenOrderResult> {
+ return observeAction('reopenFrozenOrderAction',subjectForAction('reopenFrozenOrderAction',input),async()=>{
   const { reopenFrozenOrder } = await import(
     "@/lib/server/commands/orderFreezeCorrectionCommand"
   );
   return reopenFrozenOrder(input);
+
+ },readLoggingSettings);
 }
 
 export async function assignOrderTaskAction(
   input: AssignOrderTaskInput,
 ): Promise<OrderTaskAssignmentResult> {
+ return observeAction('assignOrderTaskAction',subjectForAction('assignOrderTaskAction',input),async()=>{
   const { assignOrderTask } = await import(
     "@/lib/server/commands/orderTaskAssignmentCommand"
   );
   return assignOrderTask(input);
+
+ },readLoggingSettings);
 }
 
 export async function handBackOrderTaskAction(
   input: HandBackOrderTaskInput,
 ): Promise<OrderTaskAssignmentResult> {
+ return observeAction('handBackOrderTaskAction',subjectForAction('handBackOrderTaskAction',input),async()=>{
   const { handBackOrderTask } = await import(
     "@/lib/server/commands/orderTaskAssignmentCommand"
   );
   return handBackOrderTask(input);
+
+ },readLoggingSettings);
 }
 
 export async function changeOrderPromisedDueDateAction(
   input: ChangeOrderPromisedDueDateInput,
 ): Promise<ChangeOrderPromisedDueDateResult> {
+ return observeAction('changeOrderPromisedDueDateAction',subjectForAction('changeOrderPromisedDueDateAction',input),async()=>{
   const { changeOrderPromisedDueDate } = await import(
     "@/lib/server/commands/orderPromiseCommand"
   );
   return changeOrderPromisedDueDate(input);
+
+ },readLoggingSettings);
 }
 
 export async function changeOrderContentAction(
   input: ChangeOrderContentInput,
 ): Promise<OrderContentResult> {
+ return observeAction('changeOrderContentAction',subjectForAction('changeOrderContentAction',input),async()=>{
   const { changeOrderContent } = await import("@/lib/server/commands/orderContentCommand");
   return changeOrderContent(input);
+
+ },readLoggingSettings);
 }
 
 export async function setOrderItemFinishedAction(
@@ -204,19 +222,25 @@ export async function setOrderItemFinishedAction(
 export async function configureExtraWorkCatalogPositionAction(
   input: ConfigureExtraWorkCatalogInput,
 ): Promise<ConfigureExtraWorkCatalogResult> {
+ return observeAction('configureExtraWorkCatalogPositionAction',subjectForAction('configureExtraWorkCatalogPositionAction',input),async()=>{
   const { configureExtraWorkCatalogPosition } = await import(
     "@/lib/server/commands/extraWorkAdminCommand"
   );
   return configureExtraWorkCatalogPosition(input);
+
+ },readLoggingSettings);
 }
 
 export async function setExtraWorkHourlyRateAction(
   input: SetExtraWorkHourlyRateInput,
 ): Promise<SetExtraWorkHourlyRateResult> {
+ return observeAction('setExtraWorkHourlyRateAction',subjectForAction('setExtraWorkHourlyRateAction',input),async()=>{
   const { setExtraWorkHourlyRate } = await import(
     "@/lib/server/commands/extraWorkAdminCommand"
   );
   return setExtraWorkHourlyRate(input);
+
+ },readLoggingSettings);
 }
 
 type OrderCardActionResult<T> = OrderCardReadResult<T> | {
@@ -357,8 +381,11 @@ async function readManualShippingForOrder(auth:AuthorizationSnapshot,orderId:unk
  return readManualShipping(auth,orderId,await manualShippingPorts());
 }
 export async function getManualShippingAction(input:{orderId:string}){
+ return observeAction('getManualShippingAction',subjectForAction('getManualShippingAction',input),async()=>{
  const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;
  return readManualShippingForOrder(auth.data,input?.orderId);
+
+ },readLoggingSettings);
 }
 export async function saveManualTrackingAction(input:unknown){
  return observeAction('saveManualTrackingAction',subjectForAction('saveManualTrackingAction',input),async()=>{

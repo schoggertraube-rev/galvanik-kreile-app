@@ -19,7 +19,11 @@
     "@/modules/logging/server-public#logClick",
     "@/modules/logging/public#ClickFact",
     "@/modules/logging/public#installProtocolClickCapture",
-    "@/modules/logging/public#observeProtocolCommand"
+    "@/modules/logging/public#observeProtocolCommand",
+    "@/modules/logging/public#ClientDiagnosticFact",
+    "@/modules/logging/public#DiagnosticFact",
+    "@/modules/logging/public#reportProtocolClientError",
+    "@/modules/logging/server-public#logClientDiagnostics"
   ],
   "capabilities": [
     "protokoll"
