@@ -126,5 +126,5 @@ export async function observeAction<T>(name:string,subject:LogSubject,work:()=>P
  }
  if(auth&&slowMs!==null&&durationMs>slowMs)await logTechnical(auth,{type:'slow',command:name,subject:source,durationMs});
  return result;
- });
+ },logTechnical);
 }
