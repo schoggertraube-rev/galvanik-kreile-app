@@ -1,0 +1,54 @@
+name: Bestandsschutz
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bestandsschutz-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  bestandsschutz:
+    name: Bestandsschutz
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm ci
+      - name: Both expected-red lists may only shrink
+        run: npm run quality:expected-red-shrink
+      - name: Replay every migration on an empty local database
+        run: |
+          npm run quality:supabase-cli
+          ./node_modules/.bin/supabase start
+          ./node_modules/.bin/supabase db reset --local --no-seed
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build TEST app once and compare nine areas in three canonical roles
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          H18_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: node scripts/testing/run-bestandsschutz.mjs
+      - name: Stop local database
+        if: always()
+        run: ./node_modules/.bin/supabase stop --no-backup
+      - name: Retain failing DOM evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bestandsschutz-dom-evidence
+          path: test-results/**

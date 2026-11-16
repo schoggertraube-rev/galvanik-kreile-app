@@ -9,7 +9,11 @@ if(process.env.KREILE_OFFLINE_SMOKE!=='1')throw Error('EXPLICIT_OFFLINE_SMOKE_RE
 const controlId=randomUUID();
 const env={...process.env,KREILE_SMOKE_CONTROL_PIPE:process.platform==='win32'?`\\\\.\\pipe\\kreile-smoke-${controlId}`:path.resolve(`.git/kreile-smoke-${controlId}.sock`)};
 const server=path.resolve('scripts/testing/offline-smoke-next.mjs');
-const child=spawn(process.execPath,[server,'--prepare-worker'],{env,stdio:['ignore','inherit','inherit','ipc']});
+// The real 27-view S14a run reached V8's default 4 GiB heap while compiling
+// the final area (record-cwd log). Allocate 5 GiB only to this TEST compiler;
+// preparation, case budgets, workers and all product expectations stay intact.
+const compilerArgs=process.env.KREILE_S14A_DOM==='1'?['--max-old-space-size=5120']:[];
+const child=spawn(process.execPath,[...compilerArgs,server,'--prepare-worker'],{env,stdio:['ignore','inherit','inherit','ipc']});
 const exited=new Promise(resolve=>child.once('exit',resolve));
 const started=Date.now();
 try{
@@ -26,7 +30,10 @@ try{
   await writeFile('.git/kreile-s06-smoke-preparation-duration.json',JSON.stringify({startedAt:new Date(started).toISOString(),durationMs}));
  }
  await new Promise((resolve,reject)=>{
-  const tests=spawn(process.execPath,[path.resolve('node_modules/@playwright/test/cli.js'),'test','e2e/offline-device-smoke.real.spec.ts',...process.argv.slice(2)],{env,stdio:'inherit'});
+  const selection=process.env.KREILE_S14A_DOM==='1'
+   ? ['--config=e2e/ablauf/playwright.config.ts']
+   : ['e2e/offline-device-smoke.real.spec.ts'];
+  const tests=spawn(process.execPath,[path.resolve('node_modules/@playwright/test/cli.js'),'test',...selection,...process.argv.slice(2)],{env,stdio:'inherit'});
   tests.once('error',reject);tests.once('exit',code=>code===0?resolve():reject(Error(`OFFLINE_SMOKE_CASE_EXIT=${code}`)));
  });
 }finally{
