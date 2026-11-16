@@ -28,8 +28,9 @@ it.each([false,true])('S05K A5 withdraws only unstarted rework atomically, with 
  const result=await withSession(decision,()=>reklamationAusfuehrenAction(input));
  if(started){expect(result).toEqual({code:'VALIDATION_ERROR',message:'Die Nacharbeit läuft schon in Auftrag '+work.receipt.orderNumber+'. Schließ sie zuerst ab.'});}
  else {expect(result).toMatchObject({code:'OK'});expect(await withSession(decision,()=>reklamationAusfuehrenAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});}
- const [order]=await sql`SELECT station,status,ware FROM public.orders WHERE tenant_id=${tenant} AND id=${work.receipt.orderId}`;
+ const [order]=await sql`SELECT station,current_station,current_station_id,status,ware FROM public.orders WHERE tenant_id=${tenant} AND id=${work.receipt.orderId}`;
  expect(order).toMatchObject(started?{station:'galvanik'}:{status:'storniert',ware:'storniert'});
+ expect(order).toMatchObject(started?{station:'galvanik',current_station:'galvanik',current_station_id:'galvanik',status:'galvanik'}:{station:'angenommen',current_station:'angenommen',current_station_id:'angenommen',status:'storniert'});
  const read=await withSession(full,()=>getByOrder(source.orderId));if(read.code!=='OK')throw Error('TEST_A5_READ');
  expect(read.complaints.find(row=>row.id===complaint.receipt.complaintId)).toMatchObject(started?{stand:'massnahme_nacharbeit',nacharbeitAuftragId:work.receipt.orderId}:{stand:'abgeschlossen',nacharbeitAuftragId:null});
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:work.receipt.orderId}))).toMatchObject({code:'OK'});

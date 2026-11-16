@@ -1,4 +1,5 @@
 'use server'
+import {berlinCalendarDay} from '@/lib/domain/workingDays';
 
 import { createClient } from '@/lib/supabase/server'
 import type { Beleg, BelegDetail, BelegFilter, Ausgangsrechnung, RechnungFilter, AusgangsrechnungPosition , Kostenposten, KostenpostenFilter } from '@/lib/buchhaltung/types'
@@ -141,7 +142,7 @@ export async function exportBelegeAction(format: "DATEV" | "Lexware" | "CSV"): P
 
 export async function listRechnungenAction(filter?: RechnungFilter): Promise<Ausgangsrechnung[]> {
   const rows = await canonicalInvoices(filter?.zeitraum?.von, filter?.zeitraum?.bis, filter?.kundeId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = berlinCalendarDay();
   return rows
     .filter((invoice) => {
       if (filter?.status === 'storniert') return invoice.status === 'cancelled';
@@ -170,7 +171,7 @@ async function canonicalInvoices(from?: string, to?: string, customerId?: string
 }
 
 function mapInvoiceTruthToClient(invoice: InvoiceTruthRow): Ausgangsrechnung {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = berlinCalendarDay();
   const status: Ausgangsrechnung['status'] = invoice.status === 'cancelled'
     ? 'storniert'
     : invoice.paymentStatus === 'bezahlt'

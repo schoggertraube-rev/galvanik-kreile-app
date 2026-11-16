@@ -1,3 +1,4 @@
+import {allocateOrderNumber} from '@/lib/server/orderNumberAllocation';
 import {hasReservedQuoteOrderIntent} from '@/lib/server/quoteGoodsContextPort';
 import "server-only";
 
@@ -143,7 +144,6 @@ type CustomerRow = {
   zip_code: string | null; city: string | null; country: string | null; payment_preference: string | null; ziel_freigeschaltet:boolean;ziel_tage:number|null;
 };
 
-type CountRow = { next_number: number | string; current_year: number | string };
 
 function plainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -469,28 +469,6 @@ async function resolveCustomer(tx: PrivilegedTenantTransaction,tenantId: string,
   return row;
 }
 
-async function allocateOrderNumber(tx: PrivilegedTenantTransaction): Promise<string> {
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:order-number', 0))`);
-  const rows = await tx.execute<CountRow>(sql`
-    WITH current_clock AS (
-      SELECT extract(year FROM statement_timestamp() AT TIME ZONE 'Europe/Berlin')::int AS current_year
-    )
-    SELECT
-      clock.current_year,
-      coalesce(max(substring(orders.order_number FROM '[0-9]+$')::int), 0) + 1 AS next_number
-    FROM current_clock clock
-    LEFT JOIN public.orders orders
-      ON orders.order_number ~ ('^A-' || clock.current_year::text || '-[0-9]{4,}$')
-    GROUP BY clock.current_year
-  `);
-  const row = rows[0];
-  const year = Number(row?.current_year);
-  const next = Number(row?.next_number);
-  if (rows.length !== 1 || !Number.isSafeInteger(year) || year < 2000 || year > 9999 || !Number.isSafeInteger(next) || next < 1) {
-    throw new Error("ORDER_INTAKE_NUMBER_INVALID");
-  }
-  return `A-${year}-${String(next).padStart(4, "0")}`;
-}
 
 class QuoteOrderRejected extends Error{constructor(readonly result:Exclude<OrderIntakeCommandResult,{code:'OK'}>){super('ORDER_INTAKE_QUOTE_REJECTED:'+result.code);}}
 
@@ -634,7 +612,7 @@ export async function createOrderIntake(input: unknown,createCustomer?:CustomerW
       const orderId = randomUUID();
       const eventId = randomUUID();
       const correlationId = randomUUID();
-      const orderNumber = await allocateOrderNumber(tx);
+      const orderNumber = await allocateOrderNumber(tx, "ORDER_INTAKE_NUMBER_INVALID");
       const customerDisplayName = normalizedText(customer.company_name, 2, 160)
         ?? normalizedText(customer.name, 2, 160);
       if (!customerDisplayName) {

@@ -193,7 +193,7 @@ async function readEventsByClientId(
       event_schema_version,
       aggregate_version,
       user_id::text AS actor_id,
-      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
+      to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
       status,
       station,
       from_station,

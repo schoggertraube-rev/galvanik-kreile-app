@@ -1,6 +1,16 @@
 [
   {
     "datum": "2026-11-15",
+    "pr": 228,
+    "seite": "auftraege",
+    "punkte": [
+      "Für dieselben Teile entsteht auch bei gleichzeitigen Klicks nur eine offene Reklamation. Du kannst weiterhin andere Teile reklamieren.",
+      "Deine Tagesanzeigen und Zeitbelege berücksichtigen den Berliner Kalendertag auch rund um Mitternacht."
+    ],
+    "ziel": "/orders"
+  },
+  {
+    "datum": "2026-11-15",
     "pr": 227,
     "seite": "auftraege",
     "punkte": [

@@ -277,7 +277,7 @@ async function readEventsByClientId(
       id AS event_id, tenant_id, order_id, client_event_id::text,
       correlation_id::text, event_schema_version, aggregate_version,
       user_id::text AS actor_id,
-      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
+      to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
       status, station, from_station, event_type, payload
     FROM public.events
     WHERE tenant_id = ${tenantId}
@@ -1050,7 +1050,7 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
           SET stand = 'abgeschlossen',
               abschluss_art = 'nacharbeit_raus',
               abschluss_notiz = NULL,
-              abgeschlossen_am = statement_timestamp() AT TIME ZONE 'UTC',
+              abgeschlossen_am = statement_timestamp(),
               abgeschlossen_von = ${actorId}::uuid,
               version = version + 1
           WHERE complaint_id = ${reworkComplaint.complaint_id}
