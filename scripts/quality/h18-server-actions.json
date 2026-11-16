@@ -184,6 +184,7 @@
       "src/test/h18_settings_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#saveIntakeNoteAction": [
+      "src/test/acceptance/s20_quarantine_protocol.integration.test.ts",
       "src/test/h18_customer_actions.integration.test.ts",
       "src/test/acceptance/offline_note_conflict.integration.test.ts"
     ],
@@ -192,6 +193,7 @@
       "src/test/acceptance/evidence_visibility_capture.browser.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#finishIntakeFileAction": [
+      "src/test/acceptance/s20_quarantine_protocol.integration.test.ts",
       "src/test/h18_customer_actions.integration.test.ts",
       "src/test/acceptance/evidence_visibility_sources.integration.test.ts",
       "src/test/acceptance/evidence_visibility_capture.browser.integration.test.ts"

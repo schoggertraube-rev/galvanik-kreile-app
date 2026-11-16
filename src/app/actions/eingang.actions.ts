@@ -1,5 +1,6 @@
 "use server";
-import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
+import {readObservedAuthorization} from '@/lib/server/actionObservation';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {repairInvoiceReissueTask} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
@@ -272,17 +273,30 @@ import { readCustomerOrderReadinessCommand } from "@/modules/customers/server-pu
 import { saveIntakeNote, readIntakeCapture, readIntakeNoteText, readIntakePendingScope, prepareIntakeFile, finishIntakeFile, readIntakeFileChanges } from "@/modules/eingang/server-public";
 import type { IntakeContext } from "@/modules/eingang/public";
 
+/** Only the committed, source-qualified capture exposes an adopted original. */
+async function logCapturedTakeovers<T extends {code:string;capture?:import('@/modules/eingang/public').IntakeCapture}>(result:T,sourceCommandId:unknown):Promise<T>{
+ if(result.code!=='OK'||!result.capture?.takeovers?.length||typeof sourceCommandId!=='string')return result;
+ const auth=readObservedAuthorization();
+ for(const source of result.capture.takeovers){
+  if(source.sourceCommandId!==sourceCommandId)continue;
+  // Missing historical time is an explicit diagnostic loss, never today's time.
+  await logTechnical(auth,{type:'offline_quarantine',command:'intakeOriginalTakeover',subject:{type:'intake',id:result.capture.id},occurredAt:source.deviceCapturedAt??''});
+ }
+ return result;
+}
+
 export async function saveIntakeNoteAction(input: unknown,pendingScope?:string) {
  return observeAction('saveIntakeNoteAction',subjectForAction('saveIntakeNoteAction',input),async()=>{
   if(!await matchesPendingActor(pendingScope))return {code:"FORBIDDEN" as const,message:"Die Aufnahme wartet auf die ursprüngliche Anmeldung."};
-  if(pendingScope===undefined)return saveIntakeNote(input,readCustomerProfile);
+  const sourceKey=input&&typeof input==='object'?Object.getOwnPropertyDescriptor(input,'textstand')?.value:undefined;
+  if(pendingScope===undefined)return logCapturedTakeovers(await saveIntakeNote(input,readCustomerProfile),sourceKey);
   const [{preserveOfflineNoteConflict},{writeIntakeNoteInTransaction},{createOfflineNoteConflictTask},{recordIntakeTaskEffect}]=await Promise.all([import('@/lib/server/offlineNoteConflictPort'),import('@/modules/eingang/server-public'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public')]);
-  return saveIntakeNote(input,readCustomerProfile,async(tx,auth,note,currentVersion,orderCustomerId)=>{
+  return logCapturedTakeovers(await saveIntakeNote(input,readCustomerProfile,async(tx,auth,note,currentVersion,orderCustomerId)=>{
    try{await preserveOfflineNoteConflict(tx,auth,note,currentVersion,async eventId=>{
     const failure=await writeIntakeNoteInTransaction(tx,auth,{...note,itemId:eventId,textstand:eventId,expectedVersion:0,concerns:[]},readCustomerProfile,orderCustomerId);if(failure)throw Error('OFFLINE_CONFLICT_ORIGINAL_'+failure.code);
     return createOfflineNoteConflictTask(tx,auth,eventId,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});
    });}catch(error){console.error('[OFFLINE_NOTE_CONFLICT_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});throw Error('OFFLINE_NOTE_CONFLICT_FAILED');}
-  });
+  }),sourceKey);
 
  },readLoggingSettings);
 }
@@ -302,7 +316,7 @@ export async function finishIntakeFileAction(fileId: string,pendingScope?:string
  return observeAction('finishIntakeFileAction',subjectForAction('finishIntakeFileAction',{fileId}),async()=>{
  if(customerVisible!==undefined&&typeof customerVisible!=='boolean')return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
- const result=await finishIntakeFile(fileId);if(result.code!=='OK')return result;
+ const result=await logCapturedTakeovers(await finishIntakeFile(fileId),fileId);if(result.code!=='OK')return result;
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:EVIDENCE_VISIBILITY_COPY.save};
  const {synchronizeEvidenceVisibilityRetryTask}=await import('@/modules/tasks/server-public');
  const flag=await applyEvidenceUploadVisibility(auth.data,'intake-file:'+fileId,customerVisible,

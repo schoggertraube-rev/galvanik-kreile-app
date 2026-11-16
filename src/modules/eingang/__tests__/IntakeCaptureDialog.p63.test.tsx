@@ -17,7 +17,7 @@ it('resumes the selected offline original and binds its actual capture command t
  vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
  const id=crypto.randomUUID(),scope='a'.repeat(64),textstand=crypto.randomUUID(),deviceCapturedAt='2026-11-13T10:00:00.000Z',takeover={sourceId:'quarantine:TEST-held',deviceId:crypto.randomUUID(),sha256:'b'.repeat(64),originalRecord:'TEST synthetic source descriptor'};
  vi.mocked(readPendingOriginals).mockResolvedValue([{kind:'note',id,itemId:id,text:'TEST held original',textstand,dismissed:[],expectedVersion:0,deviceCapturedAt,takeover}]);
- const capture:IntakeCapture={id,version:1,text:'TEST held original',customerId:null,orderId:null,assignment:'offen',usage:'info',concerns:[],files:[],takeovers:[{...takeover,actorId:crypto.randomUUID(),actorName:'TEST original actor'}]};
+ const capture:IntakeCapture={id,version:1,text:'TEST held original',customerId:null,orderId:null,assignment:'offen',usage:'info',concerns:[],files:[],takeovers:[{...takeover,actorId:crypto.randomUUID(),actorName:'TEST original actor',deviceCapturedAt,sourceCommandId:textstand}]};
  const save=vi.fn(async()=>({code:'OK',capture})),getScope=vi.fn();
  const ports={offlineScope:scope,getCaptureScope:getScope,saveCaptureNote:save} as unknown as GlobalCreatePorts;
  render(<IntakeCaptureDialog resumePendingId={id} ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);

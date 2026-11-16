@@ -6,6 +6,8 @@ import type {AuthorizationSnapshot} from './authorization';
 // The real resolver publishes the exact snapshot that the business command already received.
 const scope=new AsyncLocalStorage<{authorization:AuthorizationSnapshot|null;attempted:boolean}>();
 export function actionObservationActive(){return scope.getStore()!==undefined;}
+/** Only the snapshot already returned by the real resolver in this Action. */
+export function readObservedAuthorization(){return scope.getStore()?.authorization??null;}
 export function observeAuthorizationAttempt(){const current=scope.getStore();if(current)current.attempted=true;}
 export function observeResolvedAuthorization(authorization:AuthorizationSnapshot){
  const current=scope.getStore();if(current)current.authorization=authorization;
