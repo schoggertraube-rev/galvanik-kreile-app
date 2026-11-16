@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
-import {readyInvoiceOrder} from './orderFixture';
+import {customerFixture,readyInvoiceOrder} from './orderFixture';
 
 it.each([0,1,3])('W-GELD G1/G2 H10/H15 observes %i real payment parts, rejects the old remainder and settles only the reread balance',async count=>{
  const order=await readyInvoiceOrder('S13 payment count '+count);
@@ -79,4 +79,39 @@ it('W-GELD G1/G5 H10/H11/H15/H16 follows the observed partial payment into cance
  expect(await withSession(full,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:applied.receipt.eventId}});
  expect(await sql`SELECT kind,amount_cents::text,actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${source.customerId} ORDER BY created_at,id`).toEqual([{kind:'storno_gutschrift',amount_cents:'4000',actor_user_id:full.actorId},{kind:'verrechnung',amount_cents:'-4000',actor_user_id:full.actorId}]);
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='PAYMENT_CONFIRMED_V1' AND client_event_id=${payment.clientEventId}::uuid`).toEqual([{n:1}]);
+});
+
+it('W-GELD G4 permits actual unpaid output before the agreed due date after enabling and rereading customer terms',async()=>{
+ const customerId=await customerFixture('S13 G4 agreed future terms');
+ // Explicit synthetic initial customer setting. The agreement itself is written
+ // by the existing authenticated command, never by this SQL given.
+ await sql`UPDATE public.customers SET ziel_freigeschaltet=false,ziel_tage=NULL,skonto_prozent=NULL,skonto_tage=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`;
+ expect(await sql`SELECT ziel_freigeschaltet,ziel_tage,skonto_prozent,skonto_tage FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{ziel_freigeschaltet:false,ziel_tage:null,skonto_prozent:null,skonto_tage:null}]);
+ const {resolveAuthorization,getAuthorizationActionGrants,hasAuthorizationArea}=await import('@/lib/server/authorization');
+ const {enableCustomerInvoiceTermsCommand}=await import('@/modules/customers/server-public');
+ const input={customerId,targetDays:14,cashDiscountPercent:0,cashDiscountDays:0,clientEventId:randomUUID()};
+ const agree=(value:typeof input)=>withSession(full,async()=>{
+  const auth=await resolveAuthorization();if(!auth.ok)throw Error('S13_G4_AUTH');
+  return enableCustomerInvoiceTermsCommand({tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canCreateCustomer:getAuthorizationActionGrants(auth.data).createCustomer,canEditCustomer:hasAuthorizationArea(auth.data,'kunden'),canManageMoney:hasAuthorizationArea(auth.data,'geld'),canDecide:hasAuthorizationArea(auth.data,'entscheiden')}},value);
+ });
+ expect(await agree(input)).toMatchObject({code:'OK',replayed:false});
+ expect(await agree(JSON.parse(JSON.stringify(input)))).toMatchObject({code:'OK',replayed:true});
+ expect(await sql`SELECT ziel_freigeschaltet,ziel_tage FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{ziel_freigeschaltet:true,ziel_tage:14}]);
+ const order=await readyInvoiceOrder('S13 G4 unpaid agreed output','pickup',false,customerId);
+ expect(await sql`SELECT due_date>(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date AS before_due FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`).toEqual([{before_due:true}]);
+ const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
+ const {markOrderInformedByPhoneAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{goodsOutAllowed:true,customerDeliveryBlock:{blocked:false},payment:{paidAmountCents:0,openAmountCents:11900}}});
+ expect(await withSession(full,()=>markOrderInformedByPhoneAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));
+ if(card.code!=='OK')throw Error('S13_G4_CARD');
+ const output={orderId:order.orderId,mode:'abholung' as const,expectedVersion:card.data.card.version,clientEventId:randomUUID()};
+ const out=await withSession(full,()=>recordGoodsOutAction(output));
+ expect(out).toMatchObject({code:'OK'});if(out.code!=='OK')throw Error('S13_G4_OUTPUT:'+out.code);
+ expect(await withSession(full,()=>recordGoodsOutAction(JSON.parse(JSON.stringify(output))))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt'}}});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{payment:{paidAmountCents:0,openAmountCents:11900}}});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type='PAYMENT_CONFIRMED_V1'`).toHaveLength(0);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${output.clientEventId}::uuid`).toHaveLength(1);
 });
