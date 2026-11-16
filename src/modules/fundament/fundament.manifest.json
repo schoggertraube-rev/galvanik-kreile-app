@@ -10,6 +10,7 @@
     "@/modules/fundament/public#SystemAdminView",
     "@/modules/fundament/public#SystemAdminViewProps",
     "@/modules/fundament/public#CompanySettingsInput",
+    "@/modules/fundament/public#ProtocolSettings",
     "@/modules/fundament/public#CompanySettingsSnapshot",
     "@/modules/fundament/public#ManagedUser",
     "@/modules/fundament/public#UpdateManagedUserInput",

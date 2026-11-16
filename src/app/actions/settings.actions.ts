@@ -14,7 +14,7 @@ import {
   updateManagedUser,
 } from "@/modules/fundament/server-public";
 import { listCatalogServices, saveCatalogService } from "@/modules/katalog/server-public";
-import type { CompanySettingsInput, CreateManagedUserInput, SetUserAreaInput, UpdateManagedUserInput } from "@/modules/fundament/public";
+import type { CompanySettingsInput, ProtocolSettings, CreateManagedUserInput, SetUserAreaInput, UpdateManagedUserInput } from "@/modules/fundament/public";
 import type { SalesStageFeatureId } from "@/modules/fundament/public";
 import type { SaveCatalogServiceInput } from "@/modules/katalog/public";
 import { setAppSession, SESSION_TTL_MS } from "@/lib/server/appSession";
@@ -153,7 +153,7 @@ export async function saveSalesStageFeatureAction(input: { featureId: SalesStage
   return result;
 }
 
-export async function saveCompanySettingsAction(input: CompanySettingsInput) {
+export async function saveCompanySettingsAction(input: CompanySettingsInput&{protocol?:ProtocolSettings}) {
   const resolved = await settingsContext();
   if (!resolved?.authorization.areas?.includes("einstellungen")) return { code: "FORBIDDEN" as const, message: "Firmendaten dürfen nicht geändert werden." };
   const result = await updateCompanySettings(resolved.context, input);

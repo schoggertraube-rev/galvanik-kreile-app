@@ -1,6 +1,6 @@
 /** Browser-safe logging contracts; writes go through authenticated Server Actions. */
 export type LogSubject={type:string;id:string};
-export type LogSettings={retentionDays:number|null;slowMs:number;hangMs:number;enabled:boolean};
+export type LogSettings=import('@/modules/fundament/public').ProtocolSettings&{enabled:boolean};
 export type LogReason='FORBIDDEN'|'VALIDATION'|'CONFLICT'|'NOT_FOUND'|'UNAVAILABLE'|'UNAUTHENTICATED'|'SERVER_ERROR'|'UNKNOWN';
 export type TechnicalEvent={command:string;subject:LogSubject;occurredAt?:string}&(
  |{type:'rejected'|'server_error';reason:LogReason}

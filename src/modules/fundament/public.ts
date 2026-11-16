@@ -13,9 +13,10 @@ export type CompanySettingsInput = {
   companyName: string; street: string; zip: string; city: string; country: string;
   taxId: string; iban: string; bic: string; bankName: string; paymentTermDays: number; logoUrl: string;
 };
+export type ProtocolSettings={retentionDays:number|null;slowMs:number;hangMs:number};
 export type CompanySettingsSnapshot = {
   [Key in keyof CompanySettingsInput]: CompanySettingsInput[Key] | null;
-};
+}&{protocol?:ProtocolSettings|null};
 export type CompanyLetterSettings=Pick<CompanySettingsInput,'companyName'|'street'|'zip'|'city'|'country'>&{phone?:string|null;taxId?:string|null;logoUrl?:string|null};
 export type ShippingSettings = {
   shippingFeeCents?:number|null;
