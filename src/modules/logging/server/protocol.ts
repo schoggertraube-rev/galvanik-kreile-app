@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import type {TechnicalEvent,TechnicalLogRow,LogFilter,LogSubject,LogReason,LoggingSettingsReader} from '../public';
+import type {TechnicalEvent,TechnicalLogRow,ClickLogRow,LogFilter,LogSubject,LogReason,LoggingSettingsReader} from '../public';
 
 // PL16.11: instance-local loss is explicitly accepted at cold start. Not a second log source.
 let missed=0;
@@ -68,7 +68,13 @@ export async function readLog(auth:AuthorizationSnapshot,filter:LogFilter,readSe
     ${filter.from?sql`AND occurred_at>=${filter.from}::timestamptz`:sql``}
     ${filter.until?sql`AND occurred_at<=${filter.until}::timestamptz`:sql``}
     ORDER BY occurred_at DESC,id DESC LIMIT ${filter.limit===undefined?100:filter.limit}`);
-   return {code:'OK' as const,technical};
+   const clicks=filter.subjectId!==undefined?null:await tx.execute<ClickLogRow>(sql`SELECT client_event_id::text AS id,target,route,occurred_at::text AS "occurredAt",duration_ms AS "durationMs",outcome,click_count AS "clickCount",(duration_ms>=${settings.hangMs}) AS hang
+    FROM public.app_usage_events WHERE tenant_id=${auth.tenantId} AND event_type='action'
+    ${filter.userId?sql`AND actor_pseudonym=${actorPseudonym(filter.userId)}`:sql``}
+    ${filter.from?sql`AND occurred_at>=${filter.from}::timestamptz`:sql``}
+    ${filter.until?sql`AND occurred_at<=${filter.until}::timestamptz`:sql``}
+    ORDER BY occurred_at DESC,client_event_id DESC LIMIT ${filter.limit===undefined?100:filter.limit}`);
+   return {code:'OK' as const,technical,clicks,datenluecken:clicks===null?['CLICK_SUBJECT_NOT_RECORDED']:[]};
   });
  }catch{return {code:'UNAVAILABLE' as const};}
 }
