@@ -76,6 +76,7 @@ it('retains the pending original when the real task history fails, then repairs 
  await sql.unsafe(`CREATE TRIGGER ${history} BEFORE INSERT ON public.intake_event FOR EACH ROW EXECUTE FUNCTION private.${history}()`);
  try{
   expect(await replay()).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT command FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND command='ORDER_CONTENT_SIDE_EFFECT_FAILED' AND subject_id=${orderId}`).toHaveLength(1);
   expect(await sql`SELECT current_station_id FROM public.items WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}`).toEqual([{current_station_id:'fertig'}]);
   expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${orderId}`).toHaveLength(0);
   const [marker]=await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND event_type='ORDER_PRODUCTION_PRICING_RETRY_REQUIRED_V1'`;

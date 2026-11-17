@@ -1,7 +1,7 @@
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {offlineOccurrenceTime} from '@/lib/domain/offlineOriginal';
 import {mailImportFailureProjection} from './intakeMailFailureRead';
-import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
+import {MAIL_IMPORT_COPY,OFFLINE_RECONCILIATION_COPY} from '@/ui/situationCatalog';
 import type {MailImportFailure} from '../mailSelectionContract';
 import {offlinePartition} from "@/lib/server/offlinePartition";
 import {readIntakeActorTraces} from './actorRead';
@@ -230,7 +230,7 @@ export async function writeIntakeNoteInTransaction(
     return repeated.length === 1 && repeated[0].text === note.text && ((note.expectedVersion===undefined&&note.deviceCapturedAt===undefined&&note.takeover===undefined)||repeated[0].actor===auth.userId) && (note.deviceCapturedAt===undefined||repeated[0].device_captured_at===note.deviceCapturedAt) && (note.expectedVersion===undefined||repeated[0].expected_version===note.expectedVersion) && (note.takeover===undefined||isIntakeOriginalTakeover(repeated[0].takeover)&&repeated[0].takeover.sourceId===note.takeover.sourceId&&repeated[0].takeover.deviceId===note.takeover.deviceId&&repeated[0].takeover.sha256===note.takeover.sha256) && JSON.stringify(existing[0]?.anliegen) === JSON.stringify(selected)
       ? null : failure("CONFLICT", "Textstand wurde bereits anders verwendet. Eingaben bleiben erhalten.");
   }
-  if(note.expectedVersion!==undefined&&(existing[0]?.version??0)!==note.expectedVersion){if(existing[0]&&note.deviceCapturedAt&&onConflict)await onConflict(tx,auth,note,existing[0].version,orderCustomerId);return failure("CONFLICT","Textstand wurde bereits anders verwendet. Eingaben bleiben erhalten.");}
+  if(note.expectedVersion!==undefined&&(existing[0]?.version??0)!==note.expectedVersion){if(existing[0]&&note.deviceCapturedAt&&onConflict)await onConflict(tx,auth,note,existing[0].version,orderCustomerId);return failure("CONFLICT",OFFLINE_RECONCILIATION_COPY.noteChanged);}
   const usage = customerId ? selected.length ? "offen" : "info" : note.concerns?.length === 0 ? "info" : "offen";
   if (!existing.length) {
     await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,text,kunde_id,vorgang_art,vorgang_id,zuordnung,einsatz,anliegen,anliegen_offen,anliegen_abgewaehlt)

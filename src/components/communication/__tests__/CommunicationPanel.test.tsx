@@ -140,3 +140,11 @@ it('A2 linked failed-mail metadata keeps its label and unknown time instead of a
  expect(await screen.findByText('Import fehlgeschlagen · TEST parked')).toBeInTheDocument();
  expect(screen.getByText(/Eingangszeit fehlt/)).toBeInTheDocument();expect(screen.queryByText(/1970/)).toBeNull();
 });
+
+// Explicit synthetic reader DTO; real rendering keeps the existing wording.
+it('S47a displays the catalog wording for an absent address without turning it into source data',async()=>{
+ actions.getStatus.mockResolvedValue({code:'OK'});actions.listQuotes.mockResolvedValue({code:'OK',quotes:[]});
+ actions.listGlobal.mockResolvedValue({code:'OK',data:[{id:'TEST-null-address',subject:'TEST missing address',senderName:'TEST sender',senderAddress:null,receivedAt:null,preview:'TEST',body:'TEST body',hasAttachments:false}]});
+ render(<CommunicationPanel targetType="ORDER" targetId="TEST-customer" />);
+ expect(await screen.findByText(/TEST sender · Adresse fehlt/)).toBeInTheDocument();
+});

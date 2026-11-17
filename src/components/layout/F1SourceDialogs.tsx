@@ -145,8 +145,8 @@ export function F1SourceDialogs(props: Props) {
       }
       setInbox(visibleInbox);
       setCustomerByMail(Object.fromEntries(visibleInbox.map((mail) => {
-        const senderAddress = mail.senderAddress.trim().toLowerCase();
-        const exactMatches = nextCustomers.filter((customer) => customer.email?.trim().toLowerCase() === senderAddress);
+        const senderAddress = mail.senderAddress?.trim().toLowerCase();
+        const exactMatches = nextCustomers.filter((customer) => !!senderAddress && customer.email?.trim().toLowerCase() === senderAddress);
         const exact = exactMatches.length === 1 ? exactMatches[0] : undefined;
         return [mail.id, props.customerId ?? exact?.id ?? ""];
       })));

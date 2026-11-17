@@ -1,5 +1,5 @@
 "use client";
-import {MAIL_IMPORT_COPY} from "@/ui/situationCatalog";
+import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 import type {MailImportFailure} from "@/modules/eingang/public";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,7 +23,7 @@ type InboxMessage = {
   id: string;
   subject: string;
   senderName: string;
-  senderAddress: string;
+  senderAddress: string|null;
   receivedAt: string|null;
   preview: string;
   body: string;
@@ -100,7 +100,7 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
     try{
       const result=await importOutlookMailAction(mail.id);
       if(result.code!=='OK'){setFeedback(result.message);return;}
-      requestGlobalCreate({intent,prefill:{sourceItemId:result.itemId,...(intent==='CUSTOMER'?{name:mail.senderName,email:mail.senderAddress}:{customerQuery:mail.senderAddress,note:mail.body})}});
+      requestGlobalCreate({intent,prefill:{sourceItemId:result.itemId,...(intent==='CUSTOMER'?{name:mail.senderName,email:mail.senderAddress??undefined}:{customerQuery:mail.senderAddress??undefined,note:mail.body})}});
     }catch(error){console.error('[COMMUNICATION_CAPTURE_FAILED]',error instanceof Error?error.name:'UnknownError');setFeedback('Mail-Original noch nicht sicher übernommen · bitte erneut versuchen.');}
     finally{setBusyId(null);}
   };
@@ -151,7 +151,7 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
       {targetType === "ORDER" ? inbox.length === 0 ? <p className={styles.empty}>Diesem Auftrag sind keine Mails zugeordnet.</p> : (
         <ol className={styles.inbox}>
           {inbox.map((mail) => <li key={mail.id}>
-            <div><strong>{mail.importFailure?mail.importFailure.label+" · ":""}{mail.subject}</strong><small>{mail.senderName} · {mail.senderAddress} · {mail.receivedAt===null?MAIL_IMPORT_COPY.timeUnknown:new Date(mail.receivedAt).toLocaleString("de-DE")}</small><p>{mail.body}</p></div>
+            <div><strong>{mail.importFailure?mail.importFailure.label+" · ":""}{mail.subject}</strong><small>{mail.senderName} · {mail.senderAddress??INTAKE_MAIL_ADDRESS_MISSING_COPY} · {mail.receivedAt===null?MAIL_IMPORT_COPY.timeUnknown:new Date(mail.receivedAt).toLocaleString("de-DE")}</small><p>{mail.body}</p></div>
           </li>)}
         </ol>
       ) : inbox.length === 0 ? <p className={styles.empty}>Der Posteingang enthält keine lesbaren Mails.</p> : (

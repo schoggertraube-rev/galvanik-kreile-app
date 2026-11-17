@@ -1,4 +1,5 @@
 import 'server-only';
+import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from '@/lib/server/authorization';
@@ -37,5 +38,5 @@ export async function readCustomerCredit(authorization:AuthorizationSnapshot,cus
    return {...source,payoutHistory:{code:'OK' as const,entries}};
   }catch{return {...source,payoutHistory:{code:'SOURCE_INCOMPLETE' as const}};}
  });}
- catch{return {code:'UNAVAILABLE',message:CUSTOMER_CREDIT_COPY.unavailable};}
+ catch{recordObservedFailure('CUSTOMER_CREDIT_READ_FAILED');return {code:'UNAVAILABLE',message:CUSTOMER_CREDIT_COPY.unavailable};}
 }

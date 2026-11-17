@@ -328,7 +328,8 @@ export const MAIL_RESEND_COPY={
  canceledTaskDescription:(invoice:string,customer:string,sentAt:string|null)=>'Kunde: '+customer+'\nRechnung: '+invoice+'\nSendezeit: '+(sentAt?new Intl.DateTimeFormat('de-DE',{dateStyle:'medium',timeStyle:'medium',timeZone:'Europe/Berlin'}).format(new Date(sentAt)):'nicht belegt'),
  canceled:(invoice:string)=>'Rechnung '+invoice+' ist storniert – Versand nicht mehr nötig'
 };
-export const OFFLINE_RECONCILIATION_COPY={reason:'Konflikt beim Abgleich',rejected:'abgelehnt, ohne Wirkung',originalCommand:{
+export const INTAKE_MAIL_ADDRESS_MISSING_COPY='Adresse fehlt';
+export const OFFLINE_RECONCILIATION_COPY={noteChanged:'Deine Notiz wurde inzwischen geändert · neuen Stand laden und erneut speichern',reason:'Konflikt beim Abgleich',rejected:'abgelehnt, ohne Wirkung',originalCommand:{
  'item.finished':'Teil fertig melden',
  'document.deliveryNote':DELIVERY_NOTE_COPY.title,
  'shipment.handover':MANUAL_SHIPPING_HANDOVER_LABEL,
