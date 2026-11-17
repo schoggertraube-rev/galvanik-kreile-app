@@ -63,3 +63,6 @@ export type SystemSettingsSnapshot = {
   numberRanges: Array<{ label: string; pattern: string }>;
   features: import("./featureCatalog").SalesStageFeature[];
 };
+
+export {PACKAGE_SWITCHES,mapPackageSwitchRows} from "./featureCatalog";
+export type {PackageSwitchId,PackageSwitchValues} from "./featureCatalog";

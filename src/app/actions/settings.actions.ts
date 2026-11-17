@@ -12,6 +12,8 @@ import {
   createManagedUser,
   readSystemSettings,
   readTenantFeatures,
+  readPackageSwitches,
+  setPackageSwitch,
   setManagedUserArea,
   setTenantFeature,
   updateCompanySettings,
@@ -43,6 +45,22 @@ async function settingsContext() {
       canManageStorageCharges: hasAuthorizationArea(result.data,'zahlungen'),
     },
   };
+}
+
+/** S21 config uses the same current rights snapshot as the existing settings. */
+export async function readPackageSwitchesAction(){
+ const auth=await settingsContext();
+ if(!auth)return {code:'UNAUTHENTICATED' as const};
+ return readPackageSwitches({tenantId:auth.authorization.tenantId,actorId:auth.authorization.userId,
+  canManage:auth.context.canManageCompany});
+}
+export async function setPackageSwitchAction(input:unknown){
+ return observeAction('setPackageSwitchAction',subjectForAction('setPackageSwitchAction',input),async()=>{
+  const auth=await settingsContext();
+  if(!auth)return {code:'UNAUTHENTICATED' as const};
+  return setPackageSwitch({tenantId:auth.authorization.tenantId,actorId:auth.authorization.userId,
+   canManage:auth.context.canManageCompany},input);
+ },readLoggingSettings);
 }
 
 export async function readEmailTemplatesAction(){

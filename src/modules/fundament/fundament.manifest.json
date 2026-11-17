@@ -53,7 +53,14 @@
     "@/modules/fundament/public#DispatchPolicy",
     "@/modules/fundament/public#emptyDispatchPolicy",
     "@/modules/fundament/public#dispatchPolicyValid",
-    "@/modules/fundament/public#DISPATCH_DAY_FIELDS"
+    "@/modules/fundament/public#DISPATCH_DAY_FIELDS",
+    "@/modules/fundament/server-public#readPackageSwitches",
+    "@/modules/fundament/server-public#setPackageSwitch",
+    "@/modules/fundament/server-public#PackageSwitchContext",
+    "@/modules/fundament/public#PACKAGE_SWITCHES",
+    "@/modules/fundament/public#PackageSwitchId",
+    "@/modules/fundament/public#PackageSwitchValues",
+    "@/modules/fundament/public#mapPackageSwitchRows"
   ],
   "capabilities": [
     "product-actors:fail-closed-status",
@@ -66,7 +73,8 @@
     "20261028163707_h11_align_access_rights.sql",
     "20261107193000_kv_v04_content_editions.sql",
     "20261110034000_output_dispatch_policy.sql",
-    "20261114034003_shipment_fee_setting.sql"
+    "20261114034003_shipment_fee_setting.sql",
+    "20261117154638_package_feature_switch_defaults.sql"
   ],
   "viewsFunctions": [],
   "ownsTables": [

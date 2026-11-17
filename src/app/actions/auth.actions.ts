@@ -1,4 +1,8 @@
 "use server";
+import type {PackageSwitchValues} from "@/modules/fundament/public";
+import {logTechnical} from '@/modules/logging/server-public';
+import {actionObservationActive,withActionObservation} from '@/lib/server/actionObservation';
+import {getAuthBootstrapState,type AuthBootstrapState} from '@/lib/server/authBootstrap';
 
 import bcrypt from "bcryptjs";
 import {PIN_LOGIN_COPY} from "@/ui/situationCatalog";
@@ -38,6 +42,7 @@ export type ClientAuthorizationResult =
         displayName: string;
         offlineScope?: string;
         offline24h?:boolean;
+        packageSwitches?:Readonly<PackageSwitchValues>;
         role: AppRole;
         areas: readonly AccessArea[];
         permissions: readonly PermissionKey[];
@@ -53,7 +58,14 @@ export type ClientAuthorizationResult =
       supportReference?: string;
     };
 
+/** Same bootstrap source and S20 sink for the actual first server render. */
+export async function getAuthBootstrapAction():Promise<AuthBootstrapState>{
+ return actionObservationActive()?getAuthBootstrapState():withActionObservation(getAuthBootstrapState,logTechnical);
+}
 export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizationResult> {
+ return actionObservationActive()?readClientAuthorizationSnapshot():withActionObservation(readClientAuthorizationSnapshot,logTechnical);
+}
+async function readClientAuthorizationSnapshot():Promise<ClientAuthorizationResult>{
   const result = await resolveAuthorization();
   if (!result.ok) {
     if (result.reason === "NO_SESSION") {
@@ -74,6 +86,7 @@ export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizat
       // Local partition only, never a credential; preserves existing intake originals.
       offlineScope: offlinePartition(result.data),
       offline24h: result.data.offline24h===true,
+      ...(result.data.packageSwitches?{packageSwitches:{...result.data.packageSwitches}}:{}),
       role: result.data.role,
       areas: result.data.areas ?? [],
       permissions: result.data.permissions,
