@@ -1,6 +1,17 @@
 [
   {
     "datum": "2026-11-17",
+    "pr": 232,
+    "seite": "einstellungen",
+    "punkte": [
+      "Du kannst Preise & Rechnungen, Zahlungen & Mahnungen und Buchhaltung & Zahlen je Login getrennt freigeben. Vorhandene Geldrechte bleiben als drei Freigaben erhalten.",
+      "Du erstellst Lieferscheine und ordnest Lieferanten mit den zuständigen Arbeitsrechten zu. Eine offene Rechnung sperrt die Ausgabe weiterhin; ohne passende Freigabe bleibt ihr Betrag verborgen.",
+      "Versandpauschale und Stundensatz folgen dem Preisrecht. Lagergeld folgt dem Zahlungsrecht; andere Firmendaten bleiben unabhängig davon bedienbar."
+    ],
+    "ziel": "/settings"
+  },
+  {
+    "datum": "2026-11-17",
     "pr": 231,
     "seite": "auftraege",
     "punkte": [
