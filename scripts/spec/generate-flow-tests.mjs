@@ -307,8 +307,20 @@ function projectLegacyInvoiceTaskRecipients(value) {
   return projected;
 }
 
+// RECHTE_BEREICHE + KORR-RECHTE A2/B: only the two proven legacy invoice toasts.
+// Raw BAUPLAN, protected red list, selectors and every remaining assertion stay intact.
+function projectLegacyInvoiceCopy(value) {
+  if (Array.isArray(value)) return value.map(projectLegacyInvoiceCopy);
+  if (!value || typeof value !== "object") return value;
+  const row = Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, projectLegacyInvoiceCopy(entry)]));
+  if (row.toast === "Recht Geld fehlt") row.toast = "Recht Buchhaltung & Zahlen fehlt.";
+  if (row.toast === "Eingangsrechnung unklar · Aufgabe für Recht Geld") row.toast = "Eingangsrechnung unklar · Aufgabe für Recht Buchhaltung & Zahlen";
+  return row;
+}
+
 function buildOutputs(raw, document) {
   document = projectLegacyInvoiceTaskRecipients(document);
+  if (document.testmodell?.seiten?.rechnungein) document.testmodell.seiten.rechnungein = projectLegacyInvoiceCopy(document.testmodell.seiten.rechnungein);
   if (!document.testmodell?.seiten) throw new Error("FLOW_GENERATOR_TESTMODELL_MISSING");
   const sha = createHash("sha256").update(raw).digest("hex").toUpperCase();
   const seed = renderSeed(document.testmodell, document.screens);

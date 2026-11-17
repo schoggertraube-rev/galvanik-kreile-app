@@ -326,7 +326,7 @@ const cases = [
     "dann": {
       "anzeige": [
         {
-          "toast": "Eingangsrechnung unklar · Aufgabe für Recht Geld"
+          "toast": "Eingangsrechnung unklar · Aufgabe für Recht Buchhaltung & Zahlen"
         },
         {
           "id": "rechnungein",
@@ -967,7 +967,7 @@ const cases = [
     "dann": {
       "anzeige": [
         {
-          "toast": "Recht Geld fehlt"
+          "toast": "Recht Buchhaltung & Zahlen fehlt."
         },
         {
           "id": "rechnungein",
