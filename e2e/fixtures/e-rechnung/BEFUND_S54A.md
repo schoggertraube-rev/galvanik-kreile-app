@@ -1,6 +1,6 @@
 # S54a · Ist-Probe E-Rechnung
 
-Probe: 2026-11-17T20:57:30.675Z; ausschließlich eigene Loopback-DB 127.0.0.1:54342, isolierter Mandant `TEST-ablauf-9bf86d17-1b77-4d3f-a968-8422ba55be3f`. Produktbasis main `2d8007c9`; nur Fixtures, Probelauf und dieser Befund. Eigene DB192, Basis-Repo191: kein Dev-/Fresh-Gleichstand behauptet. Ausführungsfreigabe PL17.11.20:55.
+Probe: 2026-11-17T20:57:30.675Z; ausschließlich eigene Loopback-DB 127.0.0.1:54342, isolierter Mandant `TEST-ablauf-9bf86d17-1b77-4d3f-a968-8422ba55be3f`. Ursprüngliche Produktbasis main `2d8007c9`; nur Fixtures, Probelauf und dieser Befund. Eigene DB192, Basis-Repo191: kein Dev-/Fresh-Gleichstand behauptet. Ausführungsfreigabe PL17.11.20:55.
 
 ## Weg und Grenzen
 
@@ -62,7 +62,7 @@ Tatsächlich ausgestellt mit issueInvoiceAction: `R-2026-0001`, Rechnung-ID `67e
 | Steuernummer oder USt-IdNr. | vorhanden: DE123456789 (ausdrücklich TEST) |
 | Ausstellungsdatum | vorhanden:17.11.2026 |
 | Rechnungsnummer | vorhanden: R-2026-0001 |
-| Menge und Art der Leistung | vorhanden:1Stk. TEST TEST S54a Pflichtangaben Teil |
+| Menge und Art der Leistung | vorhanden:1 Stk. TEST TEST S54a Pflichtangaben Teil |
 | Leistungszeitpunkt | vorhanden:2026-11-17 |
 | Entgelt nach Steuersätzen | vorhanden: Netto100,00EUR bei19% |
 | Steuersatz und Steuerbetrag | vorhanden:19% /19,00EUR; brutto119,00EUR |
@@ -73,13 +73,15 @@ Dies ist die technische Ist-Aufnahme nach der PL-Pflichtangabenliste. Gesetzesst
 ## Arbeitsliste für S54 (keine Behebung in S54a)
 
 1. Absender-/Lieferantenfelder aus den offiziellen XML-Originalen in der bestehenden Eingangserkennung berücksichtigen; aktuell bleibt der erkannte Absender bei allen acht Dateien leer.
-2. USt je Satz statt nur Gesamt-USt ausgeben; die EN16931-/XRECHNUNG-Beispiele liefern hier nur Gesamt56,87EUR.
+2. USt je Satz statt nur Gesamt-USt ausgeben; die EN16931-/XRECHNUNG-Beispiele liefern hier nur Gesamt 56,87 EUR.
 3. Die Verarbeitung eines ZUGFeRD-/Factur-X-PDF-Containers ist durch die direkte XML-Probe nicht belegt. Eine eigenständige Ist-Probe dieses heutigen PDF-Eingangswegs ist mit echtem Zugang nachzuholen.
 4. E2 mit echtem lokal freigegebenem Azure-Zugang ausführen; bis dahin beide Zeilen ausdrücklich offen.
 5. Der geprüfte Ausgangsweg erzeugt derzeit ein PDF ohne strukturierten Datenteil; XRechnung/ZUGFeRD-Ausgabe ist in dieser Probe nicht vorhanden.
 
 ## E5 · Bestandsschutz und Liefergrenze
 
-Produktdateien unverändert; keine Migration und keine Änderung an Auth, Gates oder CI. Normaler Fixture-Checkpoint70367b69: Typen/Lint grün, keine zugehörigen JS-Tests. Der neue selbsttragende Probelauf ist10/10grün. Normaler Hook für Runner/Befund sowie voller erforderlicher Unitlauf und exakte PR-CI stehen noch aus. Kein S54a-fertig/PL-PASS/Dev-/Production-Nachweis.
+Gegenüber dem jeweiligen main-Stand ändert S54a keine Produktdateien, Migrationen, Auth, Gates oder CI. Normale Hooks der Fixtures und des Runners/Befunds: Typen und Lint grün; keine zugehörigen Unitfälle. Selbsttragender tatsächlicher Probelauf: 10/10 grün in 19.49s. Vollständiger lokaler Unitlauf am83e6effb genau einmal: 210 Dateien /2072 Tests grün in613.08s. Anschließend Owner-S21 main17d4ba14 per normalem Zwei-Eltern-Merge6d904995 übernommen: 5299 Steuerdateien bytegleich, Produktcode exakt main; normaler Merge-Hook129 Dateien /1122 Tests grün. Danach genau fünf betroffene echte Integrationsfälle grün in18.70s (3 Anmeldung/Schalter, beschädigtes XML und Rechnungsausgabe; elf nicht ausgewählte Fälle ausdrücklich nicht erneut ausgeführt). Modul-, Scope- und NoFake-Gates grün. Exakte eigene PR-CI/PL-Prüfung stehen noch aus; kein S54a-fertig/Dev-/Production-Nachweis.
 
 Reproduktion: bestehende Vitest-Konfiguration mit include exakt auf istProbe.integration.test.ts setzen, übrige Einstellungen und vorhandenen replayHarness unverändert nutzen; DATABASE_URL und H18_EXPECTED_DATABASE_URL nur als Prozessvariablen für die freigegebene Loopback-DB. Keine Schlüssel in Dateien. Der Runner prüft die Quellenhashes, extrahiert nur zur Testvorbereitung die PDF-Anhänge und schreibt Rohbeobachtungen ausschließlich nach .git/kreile-s54a-actual-results.json.
+
+Nach der Main-Integration umfasst der Lieferzweig192 Repo-Migrationen, passend zu den192 Versions-IDs der eigenen Replay-DB; das ist keine Dev-/Fresh-Abnahme. Die vollständige Formatbeobachtung und die dazugehörige Ausgangsrechnung wurden vor dem Main-Sync gesichert. Die fünf anschließenden Integrationsfälle sind zusätzliche eng ausgewählte Nachweise, keine behauptete Wiederholung aller Formate am neuen Kopf.
