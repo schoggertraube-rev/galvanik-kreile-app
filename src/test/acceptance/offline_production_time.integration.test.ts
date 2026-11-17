@@ -87,7 +87,7 @@ it('retains the pending original when the real task history fails, then repairs 
   expect(await replay()).toMatchObject({code:'OK',replayed:true});
   const [task]=await sql`SELECT id::text,status,fuer_bereich,titel,notiz FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${orderId}`;
   expect(task.titel.length).toBeLessThanOrEqual(120);expect(task.titel).toContain('…');expect(task.notiz).toContain('Ä'.repeat(80)+' 🔧'.repeat(6));
-  expect(task).toMatchObject({status:'offen',fuer_bereich:'geld'}); // No active entscheiden login in this tenant yet.
+  expect(task).toMatchObject({status:'offen',fuer_bereich:'preise'}); // No active entscheiden login in this tenant yet.
   await sql.unsafe(`DROP TRIGGER ${fault} ON private.order_production_snapshots`);
   expect(await replay()).toMatchObject({code:'OK',replayed:true});
   expect(await sql`SELECT status FROM public.tasks WHERE id=${task.id}::uuid AND tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{status:'erledigt'}]);

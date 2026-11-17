@@ -1,6 +1,6 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { sql } from "drizzle-orm";
-import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import {getAuthorizationActionGrants,hasAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
 export const PAYMENT_CONTRACT_VERSION = 1 as const;
@@ -149,10 +149,13 @@ export type OrderPaymentStateRow = {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
 
-export function canReadPaymentSummary(authorization: AuthorizationSnapshot): boolean {
+export type PickupPaymentReadContext={orderId:string;mode:string|null;station:string};
+
+export function canReadPaymentSummary(authorization: AuthorizationSnapshot,context?:PickupPaymentReadContext): boolean {
   return authorization.active === true
     && authorization.tenantId === KREILE_TENANT_SLUG
-    && authorization.permissions.includes("perm_view_prices");
+    && (authorization.permissions.includes("perm_view_prices")||hasAuthorizationArea(authorization,"zahlungen")
+      ||context!==undefined&&context.orderId.length>0&&context.mode==="abholung"&&context.station==="fertig"&&getAuthorizationActionGrants(authorization).confirmPayment);
 }
 
 function isCanonicalTextId(value: unknown): value is string {
@@ -195,10 +198,15 @@ export function isPaymentMethod(value: unknown): value is PaymentMethod {
   return value === "bar" || value === "ueberweisung" || value === "karte" || value === "guthaben";
 }
 
-export function mapPaymentSummaryRow(
-  row: PaymentSummaryRow,
-  authorization: AuthorizationSnapshot,
-): PaymentSummary {
+/** Visibility gate for financial consumers; a pickup context never grants another order. */
+export function mapPaymentSummaryRow(row:PaymentSummaryRow,authorization:AuthorizationSnapshot,context?:PickupPaymentReadContext):PaymentSummary{
+ if(!canReadPaymentSummary(authorization,context)||context!==undefined&&context.orderId!==row.order_id)throw Error('PAYMENT_SUMMARY_INTEGRITY_INVALID');
+ return mapPaymentSummaryEvidenceRow(row,authorization.tenantId);
+}
+
+/** Existing payment evidence validation also serves the orders-only delivery note.
+ * Server-internal source/hash validation grants no financial projection to a login. */
+export function mapPaymentSummaryEvidenceRow(row:PaymentSummaryRow,tenantId:string):PaymentSummary {
   const contractVersion = toSafeInteger(row.payment_contract_version, "PAYMENT_SUMMARY_CONTRACT_INVALID");
   const totalAmountCents = toSafeInteger(row.total_amount_cents, "PAYMENT_SUMMARY_TOTAL_INVALID");
   const paidAmountCents = toSafeInteger(row.payment_paid_amount_cents, "PAYMENT_SUMMARY_PAID_INVALID");
@@ -211,9 +219,8 @@ export function mapPaymentSummaryRow(
   const method = row.payment_method;
 
   if (
-    !canReadPaymentSummary(authorization)
-    || row.integrity_ok !== true
-    || row.tenant_id !== authorization.tenantId
+    row.integrity_ok !== true
+    || row.tenant_id !== tenantId
     || !UUID_PATTERN.test(row.invoice_id)
     || !isCanonicalTextId(row.order_id)
     || !isCanonicalTextId(row.order_number)
@@ -321,7 +328,7 @@ export function mapOrderPaymentStateRow(
   const acceptedIntegrity = row.integrity_ok === true || canonicalIntakeAxes;
 
   if (
-    !canReadPaymentSummary(authorization)
+    !canReadPaymentSummary(authorization,{orderId:row.order_id,mode:row.payment_mode,station:row.station})
     || !acceptedIntegrity
     || row.tenant_id !== authorization.tenantId
     || !isCanonicalTextId(row.order_id)
@@ -379,7 +386,7 @@ export function mapOrderPaymentStateRow(
       payment_version: row.payment_version,
       goods_out_allowed: row.payment_goods_out_allowed,
       integrity_ok: row.payment_integrity_ok,
-    }, authorization);
+    }, authorization,{orderId:row.order_id,mode:row.payment_mode,station:row.station});
   } else {
     const invoiceFields = [
       row.invoice_id,

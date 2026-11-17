@@ -89,7 +89,7 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
   const ampel:'rot'|'gelb'|'gruen'|null=current.station==='fertig'?(!informed||complaint||!current.allowed&&current.debt_ids.length?'rot':current.allowed?'gruen':'gelb'):null;
   return {code:'OK' as const,informed,firstInformed,mailThreadIds:[...new Set(rows.flatMap(row=>row.payload.receipt.channel==='mail'&&row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]))],ampel,
    orderVersion:current.version,invoiceMailOriginals,handover:current.handover_mode,releaseAllowed:current.allowed,frozenAt:current.frozen_at,freezeId:current.freeze_id,invoiceState:current.invoice_state,paymentReady:typeof current.payment_allowed==='boolean'?current.payment_allowed:undefined,responseSince:rows[0]?.payload.receipt.recordedAt??null,failedDelivery:failedDelivery?{threadId:failedDelivery.threadId,recordedAt:failedDelivery.recordedAt}:null,
-   blockReason,complaintIds:complaint?.complaintIds??[],overdueInvoiceIds:hasAuthorizationArea(auth,'geld')?current.debt_ids:undefined};
+   blockReason,complaintIds:complaint?.complaintIds??[],overdueInvoiceIds:hasAuthorizationArea(auth,'zahlungen')?current.debt_ids:undefined};
  });}catch(error){console.error('[ORDER_NOTIFICATION_READ_FAILED]',error);return {code:'UNAVAILABLE' as const};}
 }
 

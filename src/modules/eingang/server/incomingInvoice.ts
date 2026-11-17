@@ -1,3 +1,4 @@
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {readIntakeActorTraces} from './actorRead';
 import 'server-only';
 import {randomUUID} from 'node:crypto';
@@ -33,7 +34,7 @@ function failure(error:unknown):InvoiceFailure|Extract<InvoiceResult,{code:'DUPL
 }
 async function authorization(){
  const result=await resolveAuthorization();if(!result.ok)reject(result.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED','Sitzung nicht verfügbar.');
- if(!hasAuthorizationArea(result.data,'geld'))reject('FORBIDDEN','Recht Geld fehlt.');return result.data;
+ if(!hasAuthorizationArea(result.data,'buchhaltung'))reject('FORBIDDEN',FINANCIAL_ACCESS_COPY.bookkeepingMissing);return result.data;
 }
 async function findInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,byItem=false,lock=false){
  const rows=await tx.execute<IncomingInvoice>(sql`SELECT ${columns} FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId}
@@ -42,7 +43,7 @@ async function findInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnap
 }
 /** Task service reads invoice facts through this injected port, never through a second table owner. */
 export async function readInvoiceTaskContext(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,readCustomer:InvoiceDependencies['readCustomer']){
- if(!hasAuthorizationArea(auth,'geld'))return null;
+ if(!hasAuthorizationArea(auth,'buchhaltung'))return null;
  const invoice=await findInvoice(tx,auth,id,false,true);if(!invoice)return null;
  const selected=invoice.lieferant_id?await readCustomer(tx,auth.tenantId,invoice.lieferant_id):null;
  return {name:selected?.name??null,status:invoice.zahlstatus,taskId:invoice.aufgabe_id};

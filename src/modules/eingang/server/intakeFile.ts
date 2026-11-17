@@ -17,7 +17,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const BUCKET = "scans";
 type Failure = Exclude<IntakeCaptureResult, { code: "OK" }>;
 type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument"; aufgenommen_von:string };
-async function fileAuthorization(takeover=false){const result=await resolveAuthorization();if(!result.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung ist nicht verfügbar.'};if(!hasAuthorizationArea(result.data,'eingang')&&(takeover||!hasAuthorizationArea(result.data,'geld')))return {code:'FORBIDDEN' as const,message:'Originale benötigen Eingang oder einen Rechnungsbezug mit Geld.'};return result.data;}
+async function fileAuthorization(takeover=false){const result=await resolveAuthorization();if(!result.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung ist nicht verfügbar.'};if(!hasAuthorizationArea(result.data,'eingang')&&(takeover||!hasAuthorizationArea(result.data,'buchhaltung')))return {code:'FORBIDDEN' as const,message:'Originale benötigen Eingang oder einen Rechnungsbezug mit Geld.'};return result.data;}
 function recognitionClaimKey(attempt:string){const bytes=createHash('sha1').update('intake-recognition-start-v1:'+attempt).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const hex=bytes.subarray(0,16).toString('hex');return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;}
 function inputFile(value: unknown): value is IntakeFileInput {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -42,7 +42,7 @@ export async function prepareIntakeFile(input: unknown, ensureOriginal=false): P
     const pending = await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${input.itemId},0))`);
       const items = await tx.execute<{ id: string;kanal:string;invoice_context:boolean }>(sql`SELECT id::text,kanal,(anliegen @> ARRAY['rechnung']::text[] OR vorgang_art='rechnung') AS invoice_context FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid FOR UPDATE`);
-      const invoiceAccess=hasAuthorizationArea(auth,'geld')&&items[0]?.invoice_context===true&&input.mime!=='message/rfc822'&&!input.name.toLowerCase().endsWith('.eml');
+      const invoiceAccess=hasAuthorizationArea(auth,'buchhaltung')&&items[0]?.invoice_context===true&&input.mime!=='message/rfc822'&&!input.name.toLowerCase().endsWith('.eml');
       if(!hasAuthorizationArea(auth,'eingang')&&!invoiceAccess)return {code:'FORBIDDEN' as const,message:'Geld erlaubt Dateien ausschließlich am vorhandenen Rechnungseingang.'};
       if(items[0]?.kanal==='mail'&&!hasAuthorizationArea(auth,'mails')&&!invoiceAccess)return {code:'FORBIDDEN' as const,message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
       if (!items.length) {
@@ -90,7 +90,7 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
     const files = await withPrivilegedTenantTransaction(auth, tx => tx.execute<FileRow&{kanal:string;invoice_context:boolean}>(sql`SELECT file.id::text,file.item_id::text,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.erkennung_status,file.aufgenommen_auf,file.aufnahme_herkunft,file.aufgenommen_von::text,source.kanal,(source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid`));
     if (files.length !== 1) return { code: "NOT_FOUND", message: "Datei wurde nicht gefunden." };
     const file = files[0];
-    const mailOriginal=file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml'),invoiceAccess=hasAuthorizationArea(auth,'geld')&&file.invoice_context===true&&!mailOriginal;
+    const mailOriginal=file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml'),invoiceAccess=hasAuthorizationArea(auth,'buchhaltung')&&file.invoice_context===true&&!mailOriginal;
     if(!hasAuthorizationArea(auth,'eingang')&&!invoiceAccess)return {code:'FORBIDDEN',message:'Geld erlaubt Dateien ausschließlich am vorhandenen Rechnungseingang.'};
     if((file.kanal==='mail'&&!invoiceAccess||mailOriginal)&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
     const snapshot=()=>intakeCaptureSnapshot(auth,file.item_id,undefined,invoiceAccess&&(!hasAuthorizationArea(auth,'eingang')||file.kanal==='mail'&&!hasAuthorizationArea(auth,'mails')),originalOnly);

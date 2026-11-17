@@ -95,7 +95,7 @@ export function ComplaintDialog({request,ports,onClose,onMessage}:{request:Compl
   };
   if(!data||!draft)return <Dialog titel="Reklamation" icon="alert" groesse="breit" onSchliessen={onClose}><Zustand art={error?'fehler':'laedt'} text={error??'Reklamation wird geladen …'} aktion={error?{text:'Erneut',onClick:()=>void load()}:undefined}/></Dialog>;
   const ResultMail=ports.ResultMail;
-  const complaint=data.complaint,stand=complaint?.stand??null,recording=!complaint,deciding=stand==='aufgenommen'&&can('entscheiden'),money=can('geld');
+  const complaint=data.complaint,stand=complaint?.stand??null,recording=!complaint,deciding=stand==='aufgenommen'&&can('entscheiden'),money=can('zahlungen');
   const current=stand==='aufgenommen'?1:stand==='massnahme_nacharbeit'||stand==='massnahme_gutschrift'?2:stand==='kunde_informieren'?3:stand==='abgeschlossen'?4:0;
   const withdrawalBlocked=stand==='massnahme_nacharbeit'&&data.rework&&data.rework.station!=='angenommen';
   const actionText=recording?'Reklamation aufnehmen':mode==='zurueckziehen'?'Zurückgezogen · abschließen':mode==='abschliessen'?'Abschließen':mode==='wieder'?'Wieder öffnen':mode==='gutschrift'?'Gutschrift vermerken':mode==='reminder'?'Begleitschein senden':mode==='mail'?'Senden':'Ergebnis speichern';

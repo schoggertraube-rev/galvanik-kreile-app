@@ -91,7 +91,7 @@ async function withSession<T>(fixture: Fixture, work: () => Promise<T>,beforeClo
   return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work,beforeClose);
 }
 
-async function createFixture(role: "meister"|"werkstatt"="meister", areas: string[]=["auftraege","kunden","geld","eingang"]): Promise<Fixture> {
+async function createFixture(role: "meister"|"werkstatt"="meister", areas: string[]=["auftraege","kunden",'preise','zahlungen','buchhaltung',"eingang"]): Promise<Fixture> {
   const actorId = randomUUID();
   const updatedAt = new Date(Date.now() - 5_000).toISOString();
   await sql.begin(async (transaction) => {
@@ -550,7 +550,7 @@ describe("P55 E40: phone and photograph provenance",()=>{
    .toEqual([{art:'erkannt',count:1},{art:'original_gespeichert',count:1}]);
  }));
  it("stores a phone note only for telephone intake and rereads it without duplication",async()=>{
-  const actor=await createFixture('meister',['auftraege','kunden','geld','eingang','mails']);
+  const actor=await createFixture('meister',['auftraege','kunden','preise','zahlungen','buchhaltung','eingang','mails']);
   const {createCustomerAction}=await import('@/app/actions/customers.actions');
   const created=await withSession(actor,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'SYNTHETISCH Telefon '+randomUUID(),
    salutation:'ohne',firstName:'Ada',lastName:'Prüfung',phone:'+49 711 5550190',email:'phone@example.invalid',street:'Kundenweg',houseNumber:'8',zipCode:'70176',city:'Stuttgart',country:'DE',paymentPreference:'vorkasse'}));
@@ -623,7 +623,7 @@ describe("P56 C02: last customer handover",()=>{
 
 describe("P44 Aus Mail: the actual read action keeps the canonical intake unchanged",()=>{
  it("requires Mails, reads the stored source and preserves assignment, version and event count",async()=>{
-  const actor=await createFixture("meister",["eingang","auftraege","kunden","geld","mails"]),denied=await createFixture();
+  const actor=await createFixture("meister",["eingang","auftraege","kunden",'preise','zahlungen','buchhaltung',"mails"]),denied=await createFixture();
   const {saveIntakeNoteAction,getOpenIntakeMailsAction,getIntakeCaptureAction}=await import("@/app/actions/eingang.actions");
   const itemId=randomUUID(),text="SYNTHETISCH Mail-Auswahl";
   const saved=await withSession(actor,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text,concerns:[]}));
@@ -707,7 +707,7 @@ describe("AP-EIN F09: capture cancellation through the real action",()=>{
 // Owner E07 / AP-01 idempotency, with adopted 3.0 originals: one order, no second intake.
 describe("AP-EIN E18 / PositionZeile.rechte: catalog without money",()=>{
  it("books the canonical catalog price server-side and rereads without exposing monetary fields",async()=>{
-  const owner=await createFixture("meister",["eingang","auftraege","kunden","geld","einstellungen"]);
+  const owner=await createFixture("meister",["eingang","auftraege","kunden",'preise','zahlungen','buchhaltung',"einstellungen"]);
   const worker=await createFixture("werkstatt",["eingang","auftraege","kunden"]);
   const {createCustomerAction}=await import("@/app/actions/customers.actions");
   const customer=await withSession(owner,()=>createCustomerAction({clientEventId:randomUUID(),customerType:"business",companyName:"SYNTHETISCH Katalog ohne Geld "+randomUUID().slice(0,8),
@@ -871,7 +871,7 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
  });
 
  it("P101 verknüpft gesicherte Originaldateien ohne Kopie und friert den Quellstand ein",async()=>withLocalReplayStorage(async()=>{
-  const actor=await createFixture("meister",["auftraege","kunden","geld","eingang","mails"]);
+  const actor=await createFixture("meister",["auftraege","kunden",'preise','zahlungen','buchhaltung',"eingang","mails"]);
   const {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction,createIntakeContinuationAction,getIntakeCaptureAction,getIntakeMessagesAction,openIntakeOriginalAction}=await import("@/app/actions/eingang.actions");
   const {uploadIntakeOriginal}=await import("@/modules/eingang/public");
   const bytes=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aLp8AAAAASUVORK5CYII=","base64");
@@ -1115,7 +1115,7 @@ describe('AP-EIN owner cases: goods and original Server Actions against the real
   })).rejects.toMatchObject({code:'42501'});
  });
  it('W04: Nur annehmen creates one linked task for missing inspection, preserves the station, records history and rereads; repeated UI command is inert',async()=>{
-  const actor=await goodsActorFixture(['eingang','kunden','geld']),order=await orderFixture(actor);
+  const actor=await goodsActorFixture(['eingang','kunden','preise','zahlungen','buchhaltung']),order=await orderFixture(actor);
   const {saveGoodsReceiptAction,getGoodsReceiptsAction,getIntakeTaskAction}=await import('@/app/actions/eingang.actions');
   const [before]=await sql`SELECT station FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
   const [clock]=await sql<{today:string}[]>`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`;
@@ -1275,7 +1275,7 @@ describe('AP-EIN M6/Nachrichten: canonical concern and use commands against real
 
 describe('AP-EIN 3.4: assignment and source customer against the real replay DB',()=>{
  it('M02/M03/M10: confirms the actual proposal, propagates only compatible group members and rereads the same rows/events',async()=>{
-  const actor=await goodsActorFixture(['eingang','kunden','geld','mails']),denied=await createFixture('meister',['eingang']),ids=[randomUUID(),randomUUID(),randomUUID()],group='synthetic-'+randomUUID()+'@fixture.invalid';
+  const actor=await goodsActorFixture(['eingang','kunden','preise','zahlungen','buchhaltung','mails']),denied=await createFixture('meister',['eingang']),ids=[randomUUID(),randomUUID(),randomUUID()],group='synthetic-'+randomUUID()+'@fixture.invalid';
   const {saveIntakeNoteAction,assignIntakeCustomerAction,getIntakeAssignmentAction}=await import('@/app/actions/eingang.actions');
   for(const id of ids){expect(await withSession(actor,()=>saveIntakeNoteAction({itemId:id,textstand:randomUUID(),text:'SYNTHETISCH bitte zurückrufen'}))).toMatchObject({code:'OK'});await sql`UPDATE public.intake_item SET kanal='mail',richtung='rein',gruppe_adresse=${group},absender_adresse=${group},text='SYNTHETISCH VERTRAULICHER MAILINHALT',betreff='SYNTHETISCH Mail' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${id}::uuid`;}
   for(const[id,index]of ids.map((id,index)=>[id,index] as const))await sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,feld,wert,sicherheit,regel,grund,status) VALUES(${KREILE_TENANT_SLUG},${id}::uuid,'kunde',${sql.json(index===2?randomUUID():actor.customerId)},'vorschlag','R6','SYNTHETISCH Firmenadresse','offen')`;
@@ -1290,7 +1290,7 @@ describe('AP-EIN 3.4: assignment and source customer against the real replay DB'
   const workshop=await createFixture('werkstatt',['eingang','kunden','auftraege']),restricted=await withSession(workshop,()=>getIntakeAssignmentAction({itemId:ids[0],mode:'normal'}));expect(restricted).toMatchObject({code:'OK',view:{restricted:true,text:null,subject:null,files:[]}});expect(JSON.stringify(restricted)).not.toContain('VERTRAULICHER MAILINHALT');
  });
  it('M05/M12: a reason closes only the intake use, preserves the original, writes once and remains readable in Erledigt',async()=>withLocalReplayStorage(async()=>{
-  const actor=await goodsActorFixture(['eingang','kunden','geld','mails']),file=await originalFixture(actor),{setIntakeNoBusinessAction,getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');
+  const actor=await goodsActorFixture(['eingang','kunden','preise','zahlungen','buchhaltung','mails']),file=await originalFixture(actor),{setIntakeNoBusinessAction,getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');
   await sql`UPDATE public.intake_item SET kunde_id=${actor.customerId},zuordnung='automatisch',anliegen=ARRAY['lesen'],anliegen_offen=ARRAY['lesen'] WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${file.itemId}::uuid`;
   const before=await sql`SELECT row_to_json(file)::jsonb AS file FROM public.intake_file file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${file.itemId}::uuid`;
   const [initial]=await sql`SELECT version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${file.itemId}::uuid`;
@@ -1302,7 +1302,7 @@ describe('AP-EIN 3.4: assignment and source customer against the real replay DB'
   const read=await withSession(actor,()=>getIntakeMessagesAction('erledigt'));if(read.code!=='OK')throw Error(JSON.stringify(read));expect(read.messages.find(row=>row.id===file.itemId)).toMatchObject({usage:'erledigt',assignment:'hand',fileIds:[file.fileId]});
  }));
  it('Neukunde aus Absender: one existing customer writer plus the same assignment in one transaction, rollback on conflict and idempotent reread',async()=>{
-  const actor=await createFixture('meister',['eingang','kunden','geld']),itemId=randomUUID(),{saveIntakeNoteAction,createCustomerForIntakeAction,getIntakeAssignmentAction}=await import('@/app/actions/eingang.actions');
+  const actor=await createFixture('meister',['eingang','kunden','preise','zahlungen','buchhaltung']),itemId=randomUUID(),{saveIntakeNoteAction,createCustomerForIntakeAction,getIntakeAssignmentAction}=await import('@/app/actions/eingang.actions');
   expect(await withSession(actor,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'SYNTHETISCH Kunde aus Absender'}))).toMatchObject({code:'OK'});
   const input={itemId,version:1,customer:{clientEventId:randomUUID(),customerType:'business',companyName:'SYNTHETISCH Absender '+randomUUID().slice(0,8),salutation:'ohne',firstName:'Ada',lastName:'Testperson',email:randomUUID()+'@fixture.invalid',phone:'+49 711 5550190',street:'Kundenweg',houseNumber:'18',zipCode:'70176',city:'Stuttgart',country:'DE',paymentPreference:'vorkasse',vatId:null,notes:null}};
   const [before]=await sql`SELECT count(*)::int AS count FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG}`;
@@ -1322,7 +1322,7 @@ describe("AP-ABS agreement actions: real Action, database event and reread", () 
     // The fixture creates its own customer through the canonical customer action;
     // that action is intentionally granted by Eingang, while the agreement itself
     // remains guarded by Geld below.
-    const moneyActor = await createFixture("meister", ["kunden", "geld", "eingang"]);
+    const moneyActor = await createFixture("meister", ["kunden", 'preise','zahlungen','buchhaltung', "eingang"]);
     const noMoneyActor = await createFixture("meister", ["kunden"]);
     const { createCustomerAction, saveCustomerAgreementAction, revokeCustomerAgreementAction } = await import("@/app/actions/customers.actions");
     const customer = await withSession(moneyActor, () => createCustomerAction({
@@ -1441,7 +1441,7 @@ describe("AP-ABS agreement actions: real Action, database event and reread", () 
 
 describe('AP-KREISLAUF AF-1',()=>{
  it('retains each pending business concern and rolls back an entire mixed batch through the real actions',async()=>{
-  const actor=await createFixture('meister',['eingang','mails','geld','auftraege','kunden']);
+  const actor=await createFixture('meister',['eingang','mails','preise','zahlungen','buchhaltung','auftraege','kunden']);
   const {saveIntakeNoteAction,selectIntakeConcernAction,finishIntakeUseAction,setIntakeNoBusinessAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
   for(const concern of ['kv_annahme','kv_ablehnung','preis_einwand','reklamation','termin']){
    const ids=[randomUUID(),randomUUID()].sort(),key=randomUUID();
@@ -1462,7 +1462,7 @@ const [s05Day,s05Complaints,s05Quotes]=await Promise.all([import('@/lib/server/t
 
 describe('S05 existing intake task calendar source',()=>{
  it('keeps an open real task after its source concern is closed, rereads a changed date and removes only completed work',async()=>{
-  const actor=await goodsActorFixture(['auftraege','kunden','geld','eingang','mails']);
+  const actor=await goodsActorFixture(['auftraege','kunden','preise','zahlungen','buchhaltung','eingang','mails']);
   const {saveIntakeNoteAction,saveIntakeTaskAction,getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
   const {readTodayCalendar}=await import('@/lib/today/todayDashboardPolicy');
   const calendar=readTodayCalendar();

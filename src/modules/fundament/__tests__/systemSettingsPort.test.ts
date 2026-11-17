@@ -46,8 +46,8 @@ describe("system settings port", () => {
     execute
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
-        { id: "11111111-1111-4111-8111-111111111111", email: "gregor@example.invalid", full_name: "Gregor", kuerzel: "G", bezeichnung: "Entwickler", role: "developer", active: true, areas: ["auftraege", "geld", "einstellungen", "logins", "wartung"] },
-        { id: "22222222-2222-4222-8222-222222222222", email: null, full_name: "Christian Dieter", kuerzel: "CD", bezeichnung: null, role: "meister", active: false, areas: ["auftraege", "geld", "logins"] },
+        { id: "11111111-1111-4111-8111-111111111111", email: "gregor@example.invalid", full_name: "Gregor", kuerzel: "G", bezeichnung: "Entwickler", role: "developer", active: true, areas: ["auftraege", 'preise','zahlungen','buchhaltung', "einstellungen", "logins", "wartung"] },
+        { id: "22222222-2222-4222-8222-222222222222", email: null, full_name: "Christian Dieter", kuerzel: "CD", bezeichnung: null, role: "meister", active: false, areas: ["auftraege", 'preise','zahlungen','buchhaltung', "logins"] },
       ])
       .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
     const { readSystemSettings } = await import("../server/systemSettingsPort");
@@ -194,7 +194,7 @@ describe("system settings port", () => {
     execute.mockResolvedValueOnce([{ role: "developer", active: true }]);
     await expect(setManagedUserArea(context, {
       userId: "22222222-2222-4222-8222-222222222222",
-      area: "geld",
+      area: 'zahlungen',
       granted: true,
     })).resolves.toEqual({ code: "CONFLICT", message: "Entwickler dürfen keine Geschäftsvorgänge ausführen." });
 

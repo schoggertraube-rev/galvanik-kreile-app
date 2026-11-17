@@ -52,7 +52,7 @@ it('A10-4/5 paid invoice produces one real immutable-byte delivery original, nev
 it('N8 denies real missing rights/session and unpaid sources without writing a document',async()=>{
  const order=await readyInvoiceOrder('TEST S10 Lieferschein Rechte');
  const input={orderIds:[order.orderId],clientEventId:randomUUID(),expectedVersions:{[order.orderId]:order.version}} as unknown as import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput;
- const moneyOnly=await createFixture(['geld']),goodsOnly=await createFixture(['auftraege']);
+ const moneyOnly=await createFixture(['preise','zahlungen','buchhaltung']),goodsOnly=await createFixture(['auftraege']);
  expect(await withSession(moneyOnly,()=>generateDeliveryNote(input))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(goodsOnly,()=>generateDeliveryNote(input))).toMatchObject({code:'FORBIDDEN'});
  expect(await withRequest('',()=>generateDeliveryNote(input))).toMatchObject({code:'UNAUTHENTICATED'});

@@ -245,7 +245,7 @@ export async function sendCommunicationMail(
   const bundle=input.document?.kind==='INVOICE'?input.document.bundle??[]:[];
   if(bundle.length!==(input.additionalAttachments?.length??0)||bundle.some((doc,index)=>doc.sha256!==createHash('sha256').update(input.additionalAttachments![index].bytes).digest('hex')))return {code:'VALIDATION_ERROR',message:'Sammel-Belege passen nicht zu den Original-PDFs.'};
   if(input.document?.kind==='INVOICE')input={...input,document:{...input.document,bundle:input.document.bundle??[]}};
-  if(input.document?.kind==='INVOICE'&&!canTransportInvoiceDocument(auth)||input.collectionReminder&&input.collectionReminder.moneyRequired!==false&&!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN',message:COLLECTION_REMINDER_COPY.forbidden};
+  if(input.document?.kind==='INVOICE'&&!canTransportInvoiceDocument(auth)||input.collectionReminder&&input.collectionReminder.moneyRequired!==false&&!hasAuthorizationArea(auth,'zahlungen'))return {code:'FORBIDDEN',message:COLLECTION_REMINDER_COPY.forbidden};
   if(input.document)input={...input,body:communicationDocumentBody(input.body,input.document)};
   let intakeRecipient:string|undefined;
   let intakeSourceActorId=auth.userId;
@@ -277,12 +277,19 @@ export async function sendCommunicationMail(
   } else if (!canWrite(auth)) {
     // PL05:15: Geld authorizes reconciliation of an existing invoice original,
     // never composition of an arbitrary new mail or access to the PDF viewer.
-    if(!hasAuthorizationArea(auth,'geld')||input.document?.kind!=='INVOICE'&&!input.collectionReminder?.moneyRequired)return {code:'FORBIDDEN',message:'E-Mails dürfen für diese Rolle nicht versendet werden.'};
+    const invoiceTransport=input.document?.kind==='INVOICE'&&canTransportInvoiceDocument(auth);
+    const reminderTransport=input.collectionReminder?.moneyRequired===true&&hasAuthorizationArea(auth,'zahlungen');
+    if(!invoiceTransport&&!reminderTransport)return {code:'FORBIDDEN',message:'E-Mails dürfen für diese Rolle nicht versendet werden.'};
+    // KORR-RECHTE E3: prices authorizes the first invoice send as well. The root
+    // supplies the actual immutable invoice; the existing writer still persists
+    // its PREPARE and validates the original under lock before Graph.
+    if(!invoiceTransport){
     const prepared=await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`SELECT prepared.id FROM public.events prepared
       JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId' AND thread.created_by=prepared.user_id
       WHERE prepared.tenant_id=${auth.tenantId} AND prepared.correlation_id=${input.clientRequestId}::uuid AND ${input.document?sql`prepared.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1'
        AND prepared.payload->'document'=${JSON.stringify(input.document)}::jsonb AND prepared.payload->>'targetType'=${input.targetType} AND prepared.payload->>'targetId'=${input.targetId}`:sql`prepared.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND prepared.payload->'meta'=${JSON.stringify(input.collectionReminder)}::jsonb AND thread.customer_id=${input.targetId} AND thread.order_id IS NULL`}`));
     if(prepared.length!==1)return {code:'FORBIDDEN',message:'E-Mails dürfen für diese Rolle nicht versendet werden.'};
+    }
   }
   if(!input.complaintResult&&readMicrosoftGraphConfigurationStatus().code!=='READY')return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
   const target = await resolveTarget(auth, input.targetType, input.targetId).catch((error) => {
@@ -420,7 +427,7 @@ export async function sendCommunicationMail(
             if(current?.status==='cancelled')return {available:false,canceled:invoice.number};
           }
         }
-        if(input.document?.kind==='INVOICE'&&!hasAuthorizationArea(auth,'geld'))return {available:false};
+        if(input.document?.kind==='INVOICE'&&!canTransportInvoiceDocument(auth))return {available:false};
         if((input.document||input.collectionReminder)&&(!input.beforePrepare||!await input.beforePrepare(tx,target.email)))return {available:false};
         if(!input.confirmedResend)return {available:true};
         const rows=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)

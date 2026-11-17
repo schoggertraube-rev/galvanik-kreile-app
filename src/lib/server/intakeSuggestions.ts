@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { isWorkingDay, berlinCalendarDay, plusWorkingDays, previousWorkingDay, workingDaysBetween } from "@/lib/domain/workingDays";
 import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionQuantityError } from "@/lib/orderPositionContract";
@@ -260,7 +260,7 @@ export async function readIntakeSuggestions(
   input: IntakeSuggestionsInput,
 ): Promise<IntakeSuggestions> {
   if (!validInput(input)) throw new Error("INTAKE_SUGGESTION_INPUT_INVALID");
-  const canReadMoney = authorization.areas?.includes("geld") === true;
+  const canReadMoney = hasAuthorizationArea(authorization,"preise");
 
   return withPrivilegedTenantTransaction(authorization, async (tx) => {
     const [settings, catalogRows, historyRows, capacityRows,customerRows] = await Promise.all([

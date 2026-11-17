@@ -38,7 +38,7 @@ async function settingsContext() {
       canManageCompany: areas.includes("einstellungen"),
       canManageLogins: areas.includes("logins"),
       canManageSystem: areas.includes("wartung"),
-      canManageFinancial: hasAuthorizationArea(result.data,'geld'),
+      canManageFinancial: hasAuthorizationArea(result.data,'preise'),
     },
   };
 }
@@ -97,7 +97,7 @@ export async function readShippingSettingsAction(){
  const resolved=await settingsContext();if(!resolved)return {code:"UNAUTHENTICATED" as const,message:"Sitzung fehlt."};
  const {readShippingSettings}=await import("@/modules/fundament/server-public");
  const result=await readShippingSettings({...resolved.context,canRead:resolved.context.canManageCompany===true||resolved.authorization.areas?.includes("auftraege")===true});
- return presentShippingSettings(result,hasAuthorizationArea(resolved.authorization,'geld'));
+ return presentShippingSettings(result,hasAuthorizationArea(resolved.authorization,'preise'));
 }
 export async function saveQuoteSettingsAction(input:unknown) {
  return observeAction('saveQuoteSettingsAction',subjectForAction('saveQuoteSettingsAction',input),async()=>{
@@ -114,7 +114,7 @@ export async function saveShippingSettingsAction(input:unknown){
  return observeAction('saveShippingSettingsAction',subjectForAction('saveShippingSettingsAction',input),async()=>{
  const resolved=await settingsContext();if(!resolved)return {code:"UNAUTHENTICATED" as const,message:"Sitzung fehlt."};
  const {updateShippingSettings}=await import("@/modules/fundament/server-public");const result=await updateShippingSettings(resolved.context,input);
- return presentShippingSettings(result,hasAuthorizationArea(resolved.authorization,'geld'));
+ return presentShippingSettings(result,hasAuthorizationArea(resolved.authorization,'preise'));
 
  },readLoggingSettings);
 }

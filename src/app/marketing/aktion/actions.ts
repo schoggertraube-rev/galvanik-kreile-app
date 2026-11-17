@@ -8,7 +8,7 @@ import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export async function getAktionen() {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   const data = await db
     .select({
@@ -28,14 +28,14 @@ export async function getAktionen() {
 }
 
 export async function getAktionById(id: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   const result = await db.select().from(aktion).where(eq(aktion.id, id)).limit(1);
   return result[0] || null;
 }
 
 export async function createAktion(formData: FormData) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
 
@@ -61,7 +61,7 @@ export async function createAktion(formData: FormData) {
 }
 
 export async function changeAktionStatus(id: string, newStatus: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
 

@@ -3,7 +3,7 @@
 import { db } from "@/db";
 import { events, orders, customers } from "@/db/schema";
 import { readComplaints } from "@/modules/complaints/server-public";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import type {ActionResult} from "@/lib/server/authHelper";
 import {resolveAuthorization,hasAuthorizationArea} from "@/lib/server/authorization";
 import {LEGACY_ACTION_ACCESS_COPY} from "@/ui/situationCatalog";
@@ -99,7 +99,7 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
       id: customers.id,
       name: customers.name,
       createdAt: customers.createdAt
-    }).from(customers).where(and(eq(customers.tenantId,auth.data.tenantId),sql`(${customers.type} IS DISTINCT FROM 'lieferant' OR ${hasAuthorizationArea(auth.data,"geld")})`)).orderBy(desc(customers.createdAt)).limit(10):[];
+      }).from(customers).where(eq(customers.tenantId,auth.data.tenantId)).orderBy(desc(customers.createdAt)).limit(10):[];
     
     dbCustomers.forEach(c => {
       entries.push({

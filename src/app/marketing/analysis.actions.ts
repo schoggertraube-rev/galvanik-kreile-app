@@ -23,7 +23,7 @@ function generateInsight() {
 }
 
 export async function getMarketingAnfragenAnalysisAction(von: string, bis: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   const anfragen = await db.select().from(touchpoint)
     .where(and(gte(touchpoint.ausgefuehrtAm, new Date(von)), lte(touchpoint.ausgefuehrtAm, new Date(bis))));
@@ -53,7 +53,7 @@ export async function getMarketingAnfragenAnalysisAction(von: string, bis: strin
 }
 
 export async function getMarketingUmsatzAnalysisAction(von: string, bis: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   const result = await db.select({ umsatz: sql`sum(${attribution.umsatz})` }).from(attribution)
     .leftJoin(touchpoint, eq(attribution.touchpointId, touchpoint.id))
@@ -76,7 +76,7 @@ export async function getMarketingUmsatzAnalysisAction(von: string, bis: string)
 }
 
 export async function getMarketingRoiAnalysisAction(von: string, bis: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   // Für echten ROI: (Umsatz - Kosten) / Kosten
   const umsatzRes = await db.select({ val: sql`sum(${attribution.umsatz})` }).from(attribution)

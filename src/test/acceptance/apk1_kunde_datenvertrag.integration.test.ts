@@ -119,7 +119,7 @@ beforeAll(async () => {
     .map((file) => file.slice(0, file.indexOf("_")))
     .sort();
   expect(migrations.map((row) => row.version)).toEqual(repositoryMigrations);
-  geldLogin = await createFixture(["kunden", "geld", "eingang", "auftraege", "entscheiden"]);
+  geldLogin = await createFixture(["kunden", 'preise','zahlungen','buchhaltung', "eingang", "auftraege", "entscheiden"]);
   ohneGeld = await createFixture(["kunden", "eingang", "auftraege"]);
 });
 

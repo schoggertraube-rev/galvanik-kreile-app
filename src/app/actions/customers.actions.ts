@@ -70,7 +70,7 @@ function customerContext(authorization: Extract<Awaited<ReturnType<typeof resolv
     capabilities: {
       canCreateCustomer: getAuthorizationActionGrants(authorization).createCustomer,
       canEditCustomer: hasAuthorizationArea(authorization,"kunden"),
-      canManageMoney: hasAuthorizationArea(authorization,"geld"),
+      canManageMoney: hasAuthorizationArea(authorization,"zahlungen"),
       canDecide: hasAuthorizationArea(authorization,"entscheiden"),
     },
   };
@@ -205,10 +205,10 @@ export async function getCustomersDb(): Promise<ActionResult<CustomerListRespons
     const signals=await readCustomerListSignals(authRes.data,dbCustomers.map(customer=>customer.id),openIntakePredicate());
     const data = dbCustomers.map((record) => {
       const customer=mapDbCustomer(record),signal=signals.get(record.id);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');
-      const readiness=kundeVollstaendigkeit({...customer,customerType:customer.type as CustomerStoredProfile['customerType']},{geld:hasAuthorizationArea(authRes.data,'geld')});
+      const readiness=kundeVollstaendigkeit({...customer,customerType:customer.type as CustomerStoredProfile['customerType']},{geld:hasAuthorizationArea(authRes.data,'zahlungen')});
       const hints=[...signal.hints,...(!readiness.vollstaendig?[{kind:'incomplete' as const,text:readiness.text.replace('Unvollständig – für Auftrag fehlt:','Für Auftrag fehlt:').replace('Unvollständig – ',''),urgent:false}]:[])];
       return {...customer,...signal,hints,complete:readiness.vollstaendig};
-    }).filter(customer=>customer.type!=="lieferant"||hasAuthorizationArea(authRes.data,"geld")).sort((a,b)=>Number(b.hints.length>0)-Number(a.hints.length>0)||customerSortKey({...a,customerType:a.type}).localeCompare(customerSortKey({...b,customerType:b.type}),"de")||a.id.localeCompare(b.id));
+    }).sort((a,b)=>Number(b.hints.length>0)-Number(a.hints.length>0)||customerSortKey({...a,customerType:a.type}).localeCompare(customerSortKey({...b,customerType:b.type}),"de")||a.id.localeCompare(b.id));
     return { ok: true, data,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope() };
   } catch (error) {
     console.error("Failed to get customers from DB:", error);
@@ -231,7 +231,6 @@ export async function getCustomerByIdDb(id: string): Promise<ActionResult<Custom
       and(
         eq(customers.id, id),
         eq(customers.tenantId, tenantId),
-        sql`(${customers.type} IS DISTINCT FROM 'lieferant' OR ${hasAuthorizationArea(authRes.data, "geld")})`,
         sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`
       )
     ).limit(1);
@@ -274,7 +273,6 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
     const dbCustomers = await db.select().from(customers).where(
       and(
         eq(customers.tenantId, tenantId),
-        sql`(${customers.type} IS DISTINCT FROM 'lieferant' OR ${hasAuthorizationArea(authRes.data, "geld")})`,
         or(
           ilike(customers.name, searchPattern),
           ilike(customers.phone, searchPattern),

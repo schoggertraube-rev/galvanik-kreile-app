@@ -24,13 +24,13 @@ const boundary = vi.hoisted(() => ({
     role: "buero",
     status: "authenticated",
     error: null,
-    areas: ["auftraege", "geld", "einstellungen"],
+    areas: ["auftraege", 'preise','zahlungen','buchhaltung', "einstellungen"],
     permissions: ["perm_view_leitstand", "perm_view_customers"],
     name: "Rolf",
     initials: "R",
     hasPermission: vi.fn((permission: string) =>
       ["perm_view_leitstand", "perm_view_customers"].includes(permission)),
-    hasArea: vi.fn((area: string) => ["auftraege", "geld", "einstellungen"].includes(area)),
+    hasArea: vi.fn((area: string) => ["auftraege", 'preise','zahlungen','buchhaltung', "einstellungen"].includes(area)),
     refreshPermissions: vi.fn(async () => {}),
   } as ShellPermissionSnapshot,
   parkedCallProvider: vi.fn(),
@@ -42,7 +42,7 @@ const boundary = vi.hoisted(() => ({
 function setPermissionSnapshot(role: string, permissions: string[]) {
   const areas = role === "werkstatt"
     ? ["auftraege"]
-    : ["auftraege", "geld", "einstellungen"];
+    : ["auftraege", 'preise','zahlungen','buchhaltung', "einstellungen"];
   const identity = role === "werkstatt"
     ? { name: "Phillip", initials: "P" }
     : role === "admin" || role === "developer"

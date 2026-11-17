@@ -32,7 +32,7 @@ it('A09-6/-8 the existing invoice writer issues one shipping-only document with 
  const denied=await createFixture(['auftraege'],'werkstatt');expect(await withSession(denied,()=>issueInvoiceAction(request))).toMatchObject({code:'FORBIDDEN'});
  const issued=await withSession(full,()=>issueInvoiceAction(request));expect(issued).toMatchObject({code:'OK',replayed:false,receipt:{netAmountCents:1000,vatAmountCents:190,grossAmountCents:1190,belegart:'versandkosten',ursprungRechnungId:main.invoice.invoiceId}});if(issued.code!=='OK')throw Error('TEST_REAL_EXTRA_INVOICE_REQUIRED');
  expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(request))))).toEqual({...issued,replayed:true});
- const other=await createFixture(['geld'],'buero');expect(await withSession(other,()=>issueInvoiceAction(request))).toMatchObject({code:'CONFLICT'});
+ const other=await createFixture(['preise','zahlungen','buchhaltung'],'buero');expect(await withSession(other,()=>issueInvoiceAction(request))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(full,()=>issueInvoiceAction({...request,shippingCosts:{...request.shippingCosts,expectedFeeCents:999}}))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(full,()=>issueInvoiceAction({...request,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
  const [stored]=await sql`SELECT belegart,ursprung_rechnung_id::text,snapshot,pdf_content,pdf_sha256 FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${issued.receipt.invoiceId}::uuid`;

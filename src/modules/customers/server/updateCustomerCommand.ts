@@ -1,3 +1,4 @@
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -14,10 +15,10 @@ export async function updateCustomerInTransaction(tx:PrivilegedTenantTransaction
   const agreements = hasAgreements ? parseCustomerFreeTextAgreements(raw.agreements) : undefined;
   if (hasAgreements && !agreements) return { code: "VALIDATION_ERROR" as const, message: "Absprachen sind ungültig." };
   if (!context.capabilities.canManageMoney && ["paymentPreference", "iban", "paymentTermDays"].some(key => raw[key] != null)) {
-    return { code: "FORBIDDEN" as const, message: "Zahlungsangaben benötigen den Bereich Geld." };
+    return { code: "FORBIDDEN" as const, message: FINANCIAL_ACCESS_COPY.paymentsMissing };
   }
   if (!context.capabilities.canManageMoney && agreements?.some((agreement) => agreement.geld)) {
-    return { code: "FORBIDDEN" as const, message: "Geld-Absprachen benötigen den Bereich Geld." };
+    return { code: "FORBIDDEN" as const, message: FINANCIAL_ACCESS_COPY.paymentsMissing };
   }
   const writable = { ...raw };
   delete writable.agreements;
@@ -27,9 +28,6 @@ export async function updateCustomerInTransaction(tx:PrivilegedTenantTransaction
       const current = await readCustomerProfile(tx, context.tenantId, customerId, true);
       if (!current) return { code: "NOT_FOUND" as const, message: "Kunde ist nicht verfügbar." };
       if (typeof raw.vorrang === "boolean" && raw.vorrang !== current.vorrang && !context.capabilities.canDecide) return { code: "FORBIDDEN" as const, message: "Vorrang benötigt das Recht Entscheiden." };
-      if (!context.capabilities.canManageMoney && (current.customerType === "lieferant" || raw.customerType === "lieferant")) {
-        return { code: "FORBIDDEN" as const, message: "Lieferanten benötigen den Bereich Geld." };
-      }
       const normalized = await normaliseCustomerWrite(tx, writable, current);
       const error = Object.values(normalized.errors)[0];
       if (error) return { code: "VALIDATION_ERROR" as const, message: error, fields: normalized.errors };

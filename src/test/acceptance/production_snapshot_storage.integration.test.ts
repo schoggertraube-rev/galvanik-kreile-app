@@ -102,7 +102,7 @@ it('pricing through the existing invoice route after full freeze updates the wee
  const input={orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID(),prices:[{itemId,unitPriceCents:5000}]};
  const priced=await withSession(full,()=>setInvoiceItemPricesAction(input));if(priced.code!=='OK')throw Error('INVOICE_WEEK_PRICE');
  expect(await withSession(full,()=>setInvoiceItemPricesAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
- const other=await createFixture(['geld']);
+ const other=await createFixture(['preise','zahlungen','buchhaltung']);
  expect(await withSession(other,()=>setInvoiceItemPricesAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{items:[expect.objectContaining({id:itemId,unitPriceCents:5000,finished:true})]}}});
  const after=await withSession(full,()=>getProductionWeekAction());if(after.code!=='OK')throw Error('INVOICE_WEEK_AFTER');

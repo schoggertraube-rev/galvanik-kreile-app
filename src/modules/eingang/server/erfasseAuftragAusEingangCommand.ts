@@ -1,3 +1,4 @@
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import "server-only";
 
 import {
@@ -184,13 +185,13 @@ export async function erfasseAuftragAusEingangCommand(
     intakeSource: normalized.intakeSource ?? null,
     items: normalized.items,
     note: normalized.text,
-    ...(hasAuthorizationArea(createAuthorization.data, "geld") && normalized.paymentMode
+    ...(hasAuthorizationArea(createAuthorization.data, "zahlungen") && normalized.paymentMode
       ? { paymentMode: normalized.paymentMode }
       : {}),
   },customerWriter,binding,customerUpdater);
   if (order.code !== "OK") {
-    if(order.code==='FORBIDDEN'&&!hasAuthorizationArea(createAuthorization.data,'geld')&&normalized.items.some(item=>item.unitPriceCents!==null||item.vatRateBasisPoints!==null)){
-      return {code:'VALIDATION_ERROR',message:'Preisangaben benötigen das Recht Geld. Es wurde nichts gespeichert.'};
+    if(order.code==='FORBIDDEN'&&!hasAuthorizationArea(createAuthorization.data,'preise')&&normalized.items.some(item=>item.unitPriceCents!==null||item.vatRateBasisPoints!==null)){
+      return {code:'VALIDATION_ERROR',message:FINANCIAL_ACCESS_COPY.priceInputForbidden};
     }
     if (order.code === "UNAVAILABLE") {
       console.error("[EINGANG_AP01_ORDER_WRITE_FAILED]", { message: order.message });

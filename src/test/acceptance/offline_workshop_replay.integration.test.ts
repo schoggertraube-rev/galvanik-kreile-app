@@ -29,7 +29,7 @@ it('preserves a real rejected workshop command and one normal task atomically, t
  expect(saved).toMatchObject({code:'PRESERVED',replayed:false});if(saved.code!=='PRESERVED')throw Error('TEST_NOT_PRESERVED');
  const rows=await sql`SELECT event.user_id::text,event.payload,task.id::text AS task_id,task.erstellt_von::text,task.fuer_bereich FROM public.events event JOIN public.tasks task ON task.tenant_id=event.tenant_id AND task.id=${saved.taskId}::uuid WHERE event.tenant_id=${KREILE_TENANT_SLUG} AND event.id=${saved.eventId}`;
  expect(rows).toMatchObject([{user_id:full.actorId,erstellt_von:full.actorId,payload:{quelle:'offline_abgleich',original:{command:'item.finished',input:original.input,deviceCapturedAt:original.deviceCapturedAt},rejection:'CONFLICT'}}]);
- expect(rows[0].fuer_bereich).toBe('geld');
+ expect(rows[0].fuer_bereich).toBe('zahlungen');
  expect(await withSession(full,()=>replayOfflineWorkshopAction(scope,JSON.parse(JSON.stringify(original))))).toEqual({...saved,replayed:true});
  expect(await withSession(full,()=>replayOfflineWorkshopAction(scope,{...original,input:{...original.input,finished:false}}))).toMatchObject({code:'UNAVAILABLE'});
  const foreign=await createFixture(['auftraege'],'werkstatt');expect(await withSession(foreign,()=>replayOfflineWorkshopAction(scope,original))).toEqual({code:'FORBIDDEN'});
@@ -52,7 +52,7 @@ it('keeps the original actor after rights are revoked and selects active entsche
  await sql`UPDATE public.app_users SET active=false WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${decider.actorId}::uuid`;
  const secondKey=randomUUID(),second=await withSession(operator,()=>replayOfflineWorkshopAction(scope,{...original,id:secondKey,input:{...original.input,clientEventId:secondKey}}));
  expect(second).toMatchObject({code:'PRESERVED'});if(second.code!=='PRESERVED')throw Error('TEST_FALLBACK_NOT_PRESERVED');
- expect(await sql`SELECT erstellt_von::text,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second.taskId}::uuid`).toEqual([{erstellt_von:operator.actorId,fuer_bereich:'geld'}]);
+ expect(await sql`SELECT erstellt_von::text,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second.taskId}::uuid`).toEqual([{erstellt_von:operator.actorId,fuer_bereich:'zahlungen'}]);
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{version:1,items:[expect.objectContaining({id:itemId,finished:false})]}}});
 });
 

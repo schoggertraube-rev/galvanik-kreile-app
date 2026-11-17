@@ -38,5 +38,5 @@ it('preserves an actual stale device note and one ordinary clarification task un
  await sql`UPDATE public.app_users SET active=false WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${decider.actorId}::uuid`;
  const fallback={...original,textstand:randomUUID(),text:'TEST another actual device note'};
  expect(await withSession(full,()=>saveIntakeNoteAction(fallback,scope))).toMatchObject({code:'CONFLICT'});
- expect(await sql`SELECT fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND titel='Konflikt beim Abgleich' ORDER BY erstellt_am,id`).toEqual([{fuer_bereich:'entscheiden'},{fuer_bereich:'geld'}]);
+ expect(await sql`SELECT fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND titel='Konflikt beim Abgleich' ORDER BY erstellt_am,id`).toEqual([{fuer_bereich:'entscheiden'},{fuer_bereich:'zahlungen'}]);
 });

@@ -239,14 +239,14 @@ describe("W2C company settings read containment", () => {
     expect(mockRenderToBuffer).toHaveBeenCalledTimes(1);
   });
 
-  it("denies the delivery note before any read without its real session and both required areas", async () => {
+  it("denies the delivery note before any read without its real session and required orders area", async () => {
     const { companySettingsRepository } = await import("@/lib/repositories/companySettingsRepository");
     const companySettingsGetSettings = vi.spyOn(companySettingsRepository, "getSettings");
     const { generateDeliveryNote } = await import("@/app/actions/pdf.actions");
 
     mockResolveAuthorization.mockResolvedValueOnce({ok:false,reason:'UNAUTHENTICATED',message:'TEST Anmeldung fehlt'});
     await expect(generateDeliveryNote("order-3")).rejects.toThrow('TEST Anmeldung fehlt');
-    for(const missing of ['auftraege','geld']){
+    for(const missing of ['auftraege']){
       mockHasAuthorizationArea.mockImplementation((_auth,area)=>area!==missing);
       await expect(generateDeliveryNote("order-3")).rejects.toThrow('Keine Berechtigung für diese Aktion.');
     }
@@ -293,7 +293,7 @@ describe("W2C company settings read containment", () => {
     // The real no-session/no-area/unpaid-source actions are tested separately.
     expect(pdfSource).toContain('generatePaidDeliveryNote');
     expect(pdfSource).toContain("hasAuthorizationArea(auth.data,'auftraege')");
-    expect(pdfSource).toContain("hasAuthorizationArea(auth.data,'geld')");
+    expect(pdfSource).not.toContain("hasAuthorizationArea(auth.data,'geld')");
     expectNoRuntimePortImports(repository, ["@/lib/offline/OfflineManager", "@/lib/supabase/client"]);
     expectNoPortNodes(getSettings, ["OfflineManager", "createClient", "from", "select", "eq", "single"]);
     expect(pdfSource).toContain("resolveAuthorization");

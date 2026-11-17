@@ -211,7 +211,7 @@ export async function getAnalyseOverview(
 ): Promise<AnalyseActionResult<AnalyseTileSummary[]>> {
   void filters;
   try {
-    const authorization = await readAuthorizedArea('geld');
+    const authorization = await readAuthorizedArea('buchhaltung');
     if (!authorization.ok) return {data:[],error:authorization.message};
     const supabase = await createClient();
 
@@ -309,7 +309,7 @@ export async function getAnalyseTileDetail(
   filters?: unknown,
 ): Promise<AnalyseActionResult<AnalyseTileDetail | null>> {
   try {
-    const authorization = await readAuthorizedArea('geld');
+    const authorization = await readAuthorizedArea('buchhaltung');
     if (!authorization.ok) return {data:null,error:authorization.message};
     
     // We get the summary for this tile
@@ -513,7 +513,7 @@ export async function getAnalyseLinkedEntities(
 ): Promise<AnalyseActionResult<AnalyseEntityLink[]>> {
   void filters;
   try {
-    const authorization = await readAuthorizedArea('geld');
+    const authorization = await readAuthorizedArea('buchhaltung');
     if (!authorization.ok) return {data:[],error:authorization.message};
     
     if (tileKey === "werkstatt_puls") {

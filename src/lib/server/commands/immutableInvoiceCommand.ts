@@ -1,3 +1,4 @@
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {isCancelInvoiceInput as isValidCancelInput,type CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 export type {CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 import {isCreateInvoiceInput as isValidInput,isInvoiceShippingCostsInput as validShippingCosts,type CreateInvoiceInput} from '@/lib/domain/invoiceIntentContract';
@@ -1073,7 +1074,7 @@ type InvoiceReissueProposal={originalInvoiceNumber:string;label:string;befehl:{d
 /** N2 read projection only: same fee allocator and qualified original receipts
  * as issuance. No number, reservation, new click key or financial effect on read. */
 export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:{orderId:string;expectedVersion:number;manualHandoverEventId?:string},readVat:InvoiceVatReader,readSettings:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>){
- if(!hasAuthorizationArea(auth,'geld'))return undefined;
+ if(!hasAuthorizationArea(auth,'preise'))return undefined;
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   const rows=await tx.execute<Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'version'>>(sql`SELECT id,customer_id,handover_mode,version FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId}`);
   const order=rows[0];
@@ -1147,8 +1148,8 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
   }
   const agreementDelegation = input.agreement !== undefined
     && hasAuthorizationArea(authorization.data, "auftraege");
-  if (!hasAuthorizationArea(authorization.data, "geld") && !agreementDelegation) {
-    return { code: "FORBIDDEN", message: "Geld, Preise & Buchhaltung ist nicht freigegeben." };
+  if (!hasAuthorizationArea(authorization.data, "preise") && !agreementDelegation) {
+    return { code: "FORBIDDEN", message: FINANCIAL_ACCESS_COPY.pricesMissing };
   }
 
   const tenantId = authorization.data.tenantId;
@@ -1565,9 +1566,9 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
   if (
-    !hasAuthorizationArea(authorization.data, "geld")
+    !hasAuthorizationArea(authorization.data, "zahlungen")
   ) {
-    return { code: "FORBIDDEN", message: "Geld, Preise & Buchhaltung ist nicht freigegeben." };
+    return { code: "FORBIDDEN", message: FINANCIAL_ACCESS_COPY.paymentsMissing };
   }
 
   const tenantId = authorization.data.tenantId;
@@ -1843,7 +1844,7 @@ export async function readPendingInvoiceReissue(tx:PrivilegedTenantTransaction,t
 }
 
 async function issueInvoiceReplacement(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string,readVat:InvoiceVatReader){
- if(!hasAuthorizationArea(auth,'geld'))throw Error('INVOICE_REISSUE_MONEY_REQUIRED');
+ if(!hasAuthorizationArea(auth,'zahlungen'))throw Error('INVOICE_REISSUE_MONEY_REQUIRED');
  let source=await readInvoiceReissueSource(tx,auth.tenantId,key,readVat);
  if(!source)throw Error('INVOICE_REISSUE_SOURCE_MISSING');
  const input={orderId:source.receipt.orderId,expectedVersion:source.intent.orderVersion,clientEventId:source.intent.replacementClientEventId};
@@ -1893,7 +1894,7 @@ async function completeInvoiceReissueFollowups(tx:PrivilegedTenantTransaction,au
 export async function repairInvoiceReissueTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:{id:string;client_key:string;art:string;bezug_typ:string;bezug_id:string|null}){
  const source=await readInvoiceReissueSource(tx,auth.tenantId,task.client_key);
  if(!source)return false;
- if(!hasAuthorizationArea(auth,'geld')||task.id!==source.receipt.eventId||task.art!=='aufgabe'||task.bezug_typ!=='auftrag'||task.bezug_id!==source.receipt.orderId)throw Error('INVOICE_REISSUE_TASK_NOT_AUTHORIZED');
+ if(!hasAuthorizationArea(auth,'zahlungen')||task.id!==source.receipt.eventId||task.art!=='aufgabe'||task.bezug_typ!=='auftrag'||task.bezug_id!==source.receipt.orderId)throw Error('INVOICE_REISSUE_TASK_NOT_AUTHORIZED');
  await lockInvoiceCreation(tx,auth.tenantId,{orderId:source.receipt.orderId,clientEventId:source.intent.replacementClientEventId});
  await appendCancellationCredit(tx,auth.tenantId,source.receipt);
  await issueInvoiceReplacement(tx,auth,source.receipt.clientEventId,readInvoiceVat);

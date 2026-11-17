@@ -17,7 +17,7 @@ async function invoiceRows(from?: string, to?: string): Promise<InvoiceTruthRow[
 }
 
 export async function getUstvaAnalysisAction(von: string, bis: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   // Aktueller Monat
   const rechnungen = (await invoiceRows(von, bis)).filter((invoice) => invoice.status === 'issued');
@@ -83,7 +83,7 @@ export async function getUstvaAnalysisAction(von: string, bis: string) {
 }
 
 export async function getKraftstoffAnalysisAction(von: string, bis: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   // Wir holen alle Belege, die mit Kraftstoff verknüpft sind (einfacher Join)
   const { kraftstoffDetail } = await import('@/db/schema_buchhaltung');
@@ -153,7 +153,7 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
 }
 
 export async function getOffenePostenAnalysisAction(von: string, bis: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   const today = berlinCalendarDay();
   const raw = (await invoiceRows()).filter((invoice) => invoice.status === 'issued');
@@ -202,7 +202,7 @@ export async function getOffenePostenAnalysisAction(von: string, bis: string) {
 }
 
 export async function getBwaAnalysisAction(von: string, bis: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   const rechnungen = (await invoiceRows(von, bis)).filter((invoice) => invoice.status === 'issued');
   
@@ -252,7 +252,7 @@ export async function getBwaAnalysisAction(von: string, bis: string) {
 }
 
 export async function getAusgabenAnalysisAction(von: string, bis: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   const { kostenposten } = await import('@/db/schema_buchhaltung');
   const { and, gte, lte, ne } = await import('drizzle-orm');
@@ -319,7 +319,7 @@ export async function getAusgabenAnalysisAction(von: string, bis: string) {
 }
 
 export async function getSparzaehlerAnalysisAction(von: string, bis: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   void von;
   void bis;
@@ -389,7 +389,7 @@ export async function getSparzaehlerAnalysisAction(von: string, bis: string) {
 }
 
 export async function getAusgabenKategorien() {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   const { sql, eq } = await import('drizzle-orm');
   const { beleg, kategorie } = await import('@/db/schema_buchhaltung');

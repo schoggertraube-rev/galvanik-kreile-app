@@ -24,7 +24,7 @@ export async function readCustomerCreditInTransaction(tx:PrivilegedTenantTransac
 }
 
 export async function readCustomerCredit(authorization:AuthorizationSnapshot,customerId:unknown,readCustomer:CustomerSource,readPayouts?:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerCreditPayoutReceipt[]>):Promise<CustomerCreditResult>{
- if(!hasAuthorizationArea(authorization,'geld'))return {code:'FORBIDDEN',message:CUSTOMER_CREDIT_COPY.forbidden};
+ if(!hasAuthorizationArea(authorization,'zahlungen'))return {code:'FORBIDDEN',message:CUSTOMER_CREDIT_COPY.forbidden};
  if(typeof customerId!=='string'||customerId.length<1||customerId.length>128||customerId.trim()!==customerId)return {code:'VALIDATION_ERROR',message:CUSTOMER_CREDIT_COPY.invalid};
  try{return await withPrivilegedTenantTransaction(authorization,async tx=>{
   const source=await readCustomerCreditInTransaction(tx,authorization.tenantId,customerId,readCustomer);

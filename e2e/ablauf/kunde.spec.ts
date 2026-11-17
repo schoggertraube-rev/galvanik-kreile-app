@@ -108,7 +108,7 @@ it('customer metrics read actual paid invoices once, isolate customers and hide 
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(events);
  expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(payment))))).toMatchObject({code:'OK',replayed:true});
  expect(await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{averagePaymentDays:{value:0,invoiceCount:1}}}});
- const financeOnly=await createFixture(['geld']);
+ const financeOnly=await createFixture(['preise','zahlungen','buchhaltung']);
  expect(await withSession(financeOnly,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'FORBIDDEN'});
 });
 

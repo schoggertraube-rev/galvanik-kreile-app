@@ -159,7 +159,7 @@ export async function getInventoryItemsAction(): Promise<ActionResult<InventoryI
       .where(eq(inventoryItems.tenantId, auth.data.tenantId))
       .orderBy(inventoryItems.name);
 
-    return { ok: true, data: rows.map(row=>toInventoryItem(row,hasAuthorizationArea(auth.data,"geld"))) };
+    return { ok: true, data: rows.map(row=>toInventoryItem(row,hasAuthorizationArea(auth.data,"buchhaltung"))) };
   } catch (error) {
     return databaseFailure("getInventoryItemsAction failed:", error);
   }
@@ -217,7 +217,7 @@ export async function getInventoryItemAction(
       )
       .limit(1);
 
-    return { ok: true, data: row ? toInventoryItem(row,hasAuthorizationArea(auth.data,"geld")) : null };
+    return { ok: true, data: row ? toInventoryItem(row,hasAuthorizationArea(auth.data,"buchhaltung")) : null };
   } catch (error) {
     return databaseFailure("getInventoryItemAction failed:", error);
   }

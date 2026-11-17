@@ -22,7 +22,7 @@ beforeAll(async()=>{foreignCustomer=await customerFixture('TEST K6 foreign');for
 beforeAll(async()=>{for(let i=10;i<20;i++)await prepayment('TEST K6 foreign '+i,foreignCustomer);await sql`UPDATE public.customers SET country='AT' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${foreignCustomer}`;});
 it('K6 twenty excluded foreign prepayments cannot hide the next real domestic prepayment before or after reread',async()=>{
  const target=await prepayment('TEST K6 domestic last');
- const actor=await createFixture(['geld'],'buero');
+ const actor=await createFixture(['preise','zahlungen','buchhaltung'],'buero');
  const read=()=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_K6_AUTH_REQUIRED');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
  const result=await read(),again=await read();
  expect(result.moneySources?.prepayments).toEqual({code:'OK',count:21});

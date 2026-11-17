@@ -69,8 +69,8 @@ export function KundeFormular({
   const types = useMemo(() => supplierMode && mode === "create" ? [{ wert: "lieferant" as const, text: "Lieferant" }] : [
     { wert: "business" as const, text: "Firma" },
     { wert: "privat" as const, text: "Privat" },
-    ...(canManageMoney && mode === "edit" ? [{ wert: "lieferant" as const, text: "Lieferant" }] : []),
-  ], [canManageMoney, mode, supplierMode]);
+    ...(mode === "edit" ? [{ wert: "lieferant" as const, text: "Lieferant" }] : []),
+  ], [mode, supplierMode]);
 
   const set = <K extends CustomerField>(key: K, next: CustomerFormValue[K]) => onChange({ ...value, [key]: next });
   const blur = (field: CustomerField) => setTouched((current) => new Set(current).add(field));

@@ -8,7 +8,7 @@ import { eq, ilike } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export async function getSegments(query?: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   if (query) {
     return await db.select().from(segment).where(ilike(segment.name, `%${query}%`)).orderBy(segment.name);
@@ -17,14 +17,14 @@ export async function getSegments(query?: string) {
 }
 
 export async function getSegmentById(id: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   const result = await db.select().from(segment).where(eq(segment.id, id)).limit(1);
   return result[0] || null;
 }
 
 export async function createSegment(formData: FormData) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
 
@@ -50,7 +50,7 @@ export async function createSegment(formData: FormData) {
 }
 
 export async function updateSegment(id: string, formData: FormData) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
 
@@ -76,7 +76,7 @@ export async function updateSegment(id: string, formData: FormData) {
 }
 
 export async function deleteSegment(id: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
 

@@ -280,7 +280,7 @@ export async function setPaymentMode(input: unknown): Promise<SetPaymentModeResu
   }
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG ||
-    !hasAuthorizationArea(authorization.data, "geld")
+    !hasAuthorizationArea(authorization.data, "zahlungen")
   ) {
     return { code: "FORBIDDEN", message: "Zahlungsmodus darf mit dieser Rolle nicht geändert werden." };
   }

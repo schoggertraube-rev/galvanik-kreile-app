@@ -23,11 +23,11 @@ export async function readCollectionMoneyAccess(auth:AuthorizationSnapshot,order
   if(rows.length!==new Set(orderIds).size||!rows.length)throw Error('COLLECTION_MONEY_SOURCE_MISSING');
   const payment=rows.every(row=>row.invoice_id&&row.payment_open_amount_cents!==null)&&rows.some(row=>Number(row.payment_open_amount_cents)>0);
   const required=payment||stage==='E4'&&settings.dispatchPolicy?.storageWeeklyCents!=null;
-  const sendAllowed=!required||hasAuthorizationArea(auth,'geld');
+  const sendAllowed=!required||hasAuthorizationArea(auth,'zahlungen');
   let roles:string[]=[];
   if(required){
    const users=await tx.execute<{role:string;areas:AccessArea[]}>(sql`SELECT users.role,ARRAY(SELECT rights.bereich FROM public.app_user_rights rights WHERE rights.tenant_id=users.tenant_id AND rights.user_id=users.id) AS areas FROM public.app_users users WHERE users.tenant_id=${auth.tenantId} AND users.active=true`);
-   roles=[...new Set(users.filter(user=>isAppRole(user.role)&&normalizeAccessAreasForRole(user.role,user.areas).includes('geld')).map(user=>ROLE_LABELS[user.role as keyof typeof ROLE_LABELS]))].sort();
+   roles=[...new Set(users.filter(user=>isAppRole(user.role)&&normalizeAccessAreasForRole(user.role,user.areas).includes('zahlungen')).map(user=>ROLE_LABELS[user.role as keyof typeof ROLE_LABELS]))].sort();
   }
   return {required,sendAllowed,roles};
  });
@@ -73,10 +73,10 @@ export async function readCollectionCustomerFacts(auth:AuthorizationSnapshot,mem
   const sent=(stage:'E1'|'E2')=>history.filter(row=>row.stage===stage&&row.orderIds.includes(order.id)&&row.sentAt&&informed.frozenAt&&Date.parse(row.sentAt)>=Date.parse(informed.firstInformed?.recordedAt??informed.frozenAt)&&!row.deliveryFailedAt&&!row.voidId).sort((a,b)=>a.sentAt!.localeCompare(b.sentAt!)).at(-1)?.sentAt;
   const call=calls.find(row=>row.orderIds.includes(order.id)&&row.freezes.some(proof=>proof.orderId===order.id&&proof.freezeId===informed.freezeId)&&row.result==='notReached'&&row.recordedAt);
   facts.members.push({number:order.orderNumber,quantity:order.parts.length?order.parts.reduce((sum,part)=>sum+part.quantity,0):null,finishedDate:informed.frozenAt?berlinCalendarDay(new Date(informed.frozenAt)):null,e1Date:sent('E1')?berlinCalendarDay(new Date(sent('E1')!)):null,e2Date:sent('E2')?berlinCalendarDay(new Date(sent('E2')!)):null,callDate:call?.recordedAt?berlinCalendarDay(new Date(call.recordedAt)):null});
-  if(hasAuthorizationArea(auth,'geld')){const payment=await getPaymentState(auth,order.id);if(payment.code!=='OK'||!payment.data.payment)allPayments=false;else open+=payment.data.payment.openAmountCents;}else allPayments=false;
+  if(hasAuthorizationArea(auth,'zahlungen')){const payment=await getPaymentState(auth,order.id);if(payment.code!=='OK'||!payment.data.payment)allPayments=false;else open+=payment.data.payment.openAmountCents;}else allPayments=false;
  }
  const money=(cents:number)=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(cents/100);
  if(allPayments&&open>0)facts.openAmount=money(open);
- if(hasAuthorizationArea(auth,'geld')&&settings.dispatchPolicy?.storageWeeklyCents!=null){facts.storageAmount=money(settings.dispatchPolicy.storageWeeklyCents);facts.storageUnit='Woche';}
+ if(hasAuthorizationArea(auth,'zahlungen')&&settings.dispatchPolicy?.storageWeeklyCents!=null){facts.storageAmount=money(settings.dispatchPolicy.storageWeeklyCents);facts.storageUnit='Woche';}
  return facts;
 }

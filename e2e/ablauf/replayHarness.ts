@@ -25,10 +25,11 @@ beforeAll(async()=>{
  storageApi=local.API_URL;
  if(new URL(storageApi).hostname!=='127.0.0.1'||!local.SERVICE_ROLE_KEY)throw Error('EIN34_LOOPBACK_STORAGE_REQUIRED');
  process.env.NEXT_PUBLIC_SUPABASE_URL=storageApi;
+ process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY=local.ANON_KEY;
  process.env.SUPABASE_SERVICE_ROLE_KEY=local.SERVICE_ROLE_KEY;
  process.env.APP_SESSION_SECRET='TEST-ein34-local-only';
  process.env.MS_GRAPH_TENANT_ID='TEST-tenant';process.env.MS_GRAPH_CLIENT_ID='TEST-client';process.env.MS_GRAPH_CLIENT_SECRET='TEST-provider-fixture';process.env.MS_GRAPH_MAILBOX='TEST-mailbox@example.invalid';
- full=await createFixture(['eingang','mails','kunden','auftraege','geld','einstellungen']);
+ full=await createFixture(['eingang','mails','kunden','auftraege','preise','zahlungen','buchhaltung','einstellungen']);
 });
 afterAll(async()=>{vi.restoreAllMocks();for(const key of Object.keys(process.env))if(!(key in originalEnv))delete process.env[key];Object.assign(process.env,originalEnv);await sql.end({timeout:5});});
 async function withRequest<T>(cookie: string, work: () => Promise<T>,flushAfter=false,requestHeaders:Record<string,string>={}): Promise<T> {

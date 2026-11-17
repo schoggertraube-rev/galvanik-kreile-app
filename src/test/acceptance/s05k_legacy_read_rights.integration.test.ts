@@ -12,7 +12,7 @@ import {getCustomerByIdDb,searchCustomersDb} from '@/app/actions/customers.actio
 it('S05K A10 existing legacy readers use canonical areas and resolved tenant',async()=>{
  const customerId=await customerFixture('A10 read'),order=await intakeOrderFixture('A10 read',customerId);
  const orderId=order.receipt.orderId,itemId=order.receipt.items[0].id;
- const operator=await createFixture(['auftraege']),money=await createFixture(['geld']),customer=await createFixture(['kunden']);
+ const operator=await createFixture(['auftraege']),money=await createFixture(['preise','zahlungen','buchhaltung']),customer=await createFixture(['kunden']);
  expect(await withSession(money,()=>getItemsByOrderDb(orderId))).toMatchObject({ok:false,error:'FORBIDDEN'});
  const items=await withSession(operator,()=>getItemsByOrderDb(orderId));expect(items).toMatchObject({ok:true});if(!items.ok)throw Error('A10_ITEMS');expect(items.data.map(row=>row.id)).toEqual([itemId]);
  expect(await withSession(operator,()=>getItemsDb())).toMatchObject({ok:true,data:expect.arrayContaining([expect.objectContaining({id:itemId})])});
@@ -40,7 +40,7 @@ it('S05K A10 maintenance statistics reject business-only rights and count only r
 
 it('S05K A10 inventory hides money and filters tenant with the existing rights resolver',async()=>{
  const {getInventoryItemsAction,getInventoryItemAction}=await import('@/app/actions/inventory.actions');
- const operator=await createFixture(['auftraege']),moneyOnly=await createFixture(['geld']);
+ const operator=await createFixture(['auftraege']),moneyOnly=await createFixture(['preise','zahlungen','buchhaltung']);
  const own='TEST-'+randomUUID(),foreign='TEST-'+randomUUID();
  // Explicit synthetic inventory master data; no inventory write-command claim.
  await sql`INSERT INTO public.inventory_items(id,tenant_id,name,category,current_stock,min_stock,unit,einkaufspreis_eur) VALUES(${own},${tenant},'TEST A10 stock','chemical',10,1,'kg',2.5),(${foreign},${tenant+'-foreign'},'TEST A10 foreign','chemical',20,1,'kg',999)`;
@@ -54,7 +54,7 @@ it('S05K A10 inventory hides money and filters tenant with the existing rights r
 it('S05K A10 timeline readers keep tenant boundaries and customer rights',async()=>{
  const {getTimelineForOrderDb,getTimelineForCustomerDb,getGlobalTimelineDb}=await import('@/app/actions/timeline.actions');
  const customerId=await customerFixture('A10 timeline'),created=await intakeOrderFixture('A10 timeline',customerId),orderId=created.receipt.orderId;
- const operator=await createFixture(['auftraege']),money=await createFixture(['geld']);
+ const operator=await createFixture(['auftraege']),money=await createFixture(['preise','zahlungen','buchhaltung']);
  const own=randomUUID(),foreign=randomUUID(),foreignTenant='TEST-foreign-'+randomUUID();
  // Explicit synthetic legacy event rows isolate tenant filtering; intake events above are actual.
  await sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,payload) VALUES(${own},${tenant},${orderId},'TEST_A10_TIMELINE','{}'::jsonb),(${foreign},${foreignTenant},NULL,'TEST_A10_TIMELINE_FOREIGN','{}'::jsonb)`;
@@ -82,7 +82,7 @@ it('S05K A10 PL0014 deferred tenantless sources deny after canonical rights with
  const {getUstvaAnalysisAction}=await import('@/app/buchhaltung/analysis.actions');
  const {searchBelegeByOcrTextAction}=await import('@/app/buchhaltung/search-actions');
  const {createAktion}=await import('@/app/marketing/aktion/actions');
- const operator=await createFixture(['auftraege']),money=await createFixture(['geld']);
+ const operator=await createFixture(['auftraege']),money=await createFixture(['preise','zahlungen','buchhaltung']);
  const text='Kommt nach dem Start dazu - bis dahin ausgeschaltet.';
  expect(await withSession(operator,()=>getBathsDb())).toMatchObject({ok:false,error:'CONFLICT',message:text});
  expect(await withSession(money,()=>getBathsDb())).toMatchObject({ok:false,error:'FORBIDDEN'});
@@ -97,11 +97,11 @@ it('S05K A10 PL0014 deferred tenantless sources deny after canonical rights with
 
 it('S05K A10 generic data context requires its actual canonical area and keeps original identity',async()=>{
  const {createAuthorizedDataContext}=await import('@/lib/supabase/server');
- const operator=await createFixture(['auftraege']),money=await createFixture(['geld']);
- await expect(withSession(operator,()=>createAuthorizedDataContext('geld'))).rejects.toThrow('Keine Berechtigung');
+ const operator=await createFixture(['auftraege']),money=await createFixture(['preise','zahlungen','buchhaltung']);
+ await expect(withSession(operator,()=>createAuthorizedDataContext('buchhaltung'))).rejects.toThrow('Keine Berechtigung');
  const context=await withSession(operator,()=>createAuthorizedDataContext('auftraege'));
  expect(context.authorization).toMatchObject({tenantId:tenant,userId:operator.actorId});
- const moneyContext=await withSession(money,()=>createAuthorizedDataContext('geld'));
+ const moneyContext=await withSession(money,()=>createAuthorizedDataContext('buchhaltung'));
  expect(moneyContext.authorization).toMatchObject({tenantId:tenant,userId:money.actorId});
  expect((await withSession(operator,()=>createAuthorizedDataContext('auftraege'))).authorization.userId).toBe(operator.actorId);
 });

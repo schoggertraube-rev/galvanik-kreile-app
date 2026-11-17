@@ -124,7 +124,7 @@ beforeAll(async () => {
 
   eingangActor = await createFixture(["eingang", "auftraege", "kunden"]);
   ohneEingangActor = await createFixture(["auftraege", "kunden"]);
-  const seedActor = await createFixture(["eingang", "auftraege", "kunden", "geld"]);
+  const seedActor = await createFixture(["eingang", "auftraege", "kunden", 'preise','zahlungen','buchhaltung']);
 
   // Bestandskunde ueber den kanonischen, H18-belegten Weg (keine zweite Kundenanlage im Test).
   const { createCustomerAction } = await import("@/app/actions/customers.actions");

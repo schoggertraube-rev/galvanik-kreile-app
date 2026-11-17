@@ -5,13 +5,14 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {createFixture,withSession,sql} from '../../../e2e/ablauf/replayHarness';
 import {resolveAuthorization,hasAuthorizationArea} from '@/lib/server/authorization';
 
-it('K13K-2 existing finance SQL permission follows actual geld rights, not the login role',async()=>{
+it('K13K-2 existing finance SQL permission follows actual bookkeeping rights, not the login role',async()=>{
  const denied=await createFixture([],'developer');
- const allowed=await createFixture(['geld'],'werkstatt');
- for(const fixture of [denied,allowed]){
+ const allowed=await createFixture(['buchhaltung'],'werkstatt');
+ const prices=await createFixture(['preise']),payments=await createFixture(['zahlungen']);
+ for(const fixture of [denied,prices,payments,allowed]){
   const authorization=await withSession(fixture,()=>resolveAuthorization());
   expect(authorization.ok).toBe(true);if(!authorization.ok)throw Error('TEST_AUTHORIZATION_REQUIRED');
-  const expected=hasAuthorizationArea(authorization.data,'geld');
+  const expected=hasAuthorizationArea(authorization.data,'buchhaltung');
   const rows=await sql.begin(async tx=>{
    await tx`SELECT set_config('request.jwt.claim.sub',${fixture.actorId},true)`;
    await tx.unsafe('SET LOCAL ROLE authenticated');

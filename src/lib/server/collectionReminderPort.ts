@@ -15,7 +15,7 @@ export function collectionReminderIntent(input:CollectionReminderRequest){return
 const hash=(body:string)=>createHash('sha256').update(body.trim()).digest('hex');
 
 export async function readCollectionReminderReceipt(auth:AuthorizationSnapshot,input:CollectionReminderRequest){
- if(!hasAuthorizationArea(auth,'mails')&&!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
+ if(!hasAuthorizationArea(auth,'mails')&&!hasAuthorizationArea(auth,'zahlungen'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   const rows=await tx.execute<{payload:{meta:CollectionReminderMeta;threadId:string;bodySha256:string};user_id:string;status:string;message_id:string|null;sent_body:string|null;sent_subject:string;recorded_at:string;sent_intent:string|null;proof_ok:boolean;request_id:string}>(sql`SELECT prepared.correlation_id::text AS request_id,prepared.payload,prepared.user_id::text,thread.status,message.id::text AS message_id,message.body AS sent_body,thread.subject AS sent_subject,thread.created_at::text AS recorded_at,sent.payload->>'intent' AS sent_intent,
    (thread.created_by=prepared.user_id AND sent.user_id=prepared.user_id AND sent.correlation_id=prepared.correlation_id AND sent.payload->>'messageId'=message.id::text AND sent.payload->'meta'=prepared.payload->'meta') AS proof_ok
@@ -25,7 +25,7 @@ export async function readCollectionReminderReceipt(auth:AuthorizationSnapshot,i
    WHERE prepared.tenant_id=${auth.tenantId} AND prepared.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND (prepared.correlation_id=${input.clientRequestId}::uuid OR thread.status IN('pending','failed') AND prepared.payload->'meta'->>'intent'=${collectionReminderIntent(input)}) LIMIT 2`);
   if(!rows.length)return {code:'NOT_FOUND' as const};
   const row=rows[0];if(rows.length!==1||row.payload.meta.intent!==collectionReminderIntent(input))return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.keyConflict};
-  if(!hasAuthorizationArea(auth,row.payload.meta.moneyRequired!==false?'geld':'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
+  if(!hasAuthorizationArea(auth,row.payload.meta.moneyRequired!==false?'zahlungen':'mails'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
   const original=row.payload.meta.customerMessage;
   if(row.status!=='sent'){
    if(!original||hash(original.body)!==row.payload.bodySha256||original.subject!==row.sent_subject)throw Error('COLLECTION_REMINDER_ORIGINAL_INVALID');

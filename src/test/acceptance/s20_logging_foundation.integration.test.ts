@@ -17,7 +17,7 @@ it('S20 canonical protocol area is independent of money; developer fixed area an
  expect(before).toMatchObject({ok:true,data:{areas:['protokoll'],actions:{confirmPayment:false}}});
  if(!before.ok)throw Error('TEST_REAL_AUTH_REQUIRED');
  expect(hasAuthorizationArea(before.data,'protokoll')).toBe(true);
- expect(hasAuthorizationArea(before.data,'geld')).toBe(false);
+ expect(hasAuthorizationArea(before.data,'zahlungen')).toBe(false);
  expect(getAuthorizationActionGrants(before.data).confirmPayment).toBe(false);
  const next=await withSession(reader,()=>getAuthorizationSnapshotAction());
  expect(next).toMatchObject({ok:true,data:{areas:['protokoll'],actions:{confirmPayment:false}}});

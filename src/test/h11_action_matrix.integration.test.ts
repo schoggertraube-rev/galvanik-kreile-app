@@ -102,7 +102,7 @@ function customerContext(authorization: Awaited<ReturnType<typeof authorizationF
     userId: authorization.userId,
     capabilities: {
       canCreateCustomer: getAuthorizationActionGrants(authorization).createCustomer,
-      canManageMoney: hasAuthorizationArea(authorization, "geld"),
+      canManageMoney: hasAuthorizationArea(authorization, "zahlungen"),
     },
   };
 }
@@ -114,7 +114,7 @@ function quoteContext(authorization: Awaited<ReturnType<typeof authorizationFor>
     userId: authorization.userId,
     capabilities: {
       canCreateQuote: grants.createQuote,
-      canReadQuote: hasAuthorizationArea(authorization, "geld") && hasAuthorizationArea(authorization, "auftraege"),
+      canReadQuote: hasAuthorizationArea(authorization, "preise") && hasAuthorizationArea(authorization, "auftraege"),
       canUpdateQuote: grants.createQuote,
       canConvertQuote: grants.createQuote,
     },

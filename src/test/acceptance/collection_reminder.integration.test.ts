@@ -45,7 +45,7 @@ it('E1 actual approval uses the single sender, group proof and original retries 
  await clock.addNotice(first.orderId);await clock.addNotice(second.orderId);
  expect(await configure()).toMatchObject({code:'OK'});
  const planned=await proposal(first.orderId);expect(planned).toMatchObject({stage:'E1',state:'DUE',requiresResponseCheck:false});if(!planned.due)throw Error('COLLECTION_DUE');
- const operator=await createFixture(['mails','auftraege','geld'],'buero');
+ const operator=await createFixture(['mails','auftraege','preise','zahlungen','buchhaltung'],'buero');
  const input={targetType:'CUSTOMER' as const,targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST Erinnerung',body:'TEST Bitte hole Deine fertige Ware ab.',collectionReminder:{stage:'E1' as const,handover:'pickup' as const,dueDate:planned.due}};
  const sent=await withSession(operator,()=>sendCustomerMailAction(input));expect(sent).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('COLLECTION_E1:'+sent.code);
  expect(bodies).toHaveLength(2);
@@ -69,7 +69,7 @@ it.each([1,2])('E2 from an explicitly synthetic historical E1 sends %i actual or
  await clock.addReminder(first.customerId,orderIds,'E1',2);
  expect(await configure()).toMatchObject({code:'OK'});
  const next=await proposal(first.orderId);expect(next).toMatchObject({stage:'E2',state:'DUE'});if(!next.due)throw Error('COLLECTION_SECOND_DUE');
- const operator=await createFixture(['mails','auftraege','geld'],'buero');
+ const operator=await createFixture(['mails','auftraege','preise','zahlungen','buchhaltung'],'buero');
  const secondInput={targetType:'CUSTOMER' as const,targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST E2',body:'TEST zweite Erinnerung',collectionReminder:{stage:'E2' as const,handover:'pickup' as const,dueDate:next.due}};
  const contenders=[secondInput,{...secondInput,clientRequestId:randomUUID()}];
  const concurrent=await Promise.all(contenders.map(request=>withSession(operator,()=>sendCustomerMailAction(request))));
@@ -161,7 +161,7 @@ it.each([false,true])('S02 reminder reconciles its original from Sent Items with
 it('S02 a financial reminder retains its original money requirement after payment',async()=>{
  const deadlineClock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId);
  const order=await readyInvoiceOrder('N5 Geldbrief');
- const sender=await createFixture(['auftraege','mails','geld'],'buero');
+ const sender=await createFixture(['auftraege','mails','preise','zahlungen','buchhaltung'],'buero');
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
  let sends=0,lose=false,found=false,requestId='';
  vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
@@ -185,10 +185,10 @@ it('S02 a financial reminder retains its original money requirement after paymen
  const {getOrderPaymentStateAction,confirmPaymentAction}=await import('@/app/actions/payments.actions');
  const payment=await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}));if(payment.code!=='OK'||!payment.data.payment)throw Error('N5_MONEY_PAYMENT');const due=payment.data.payment;
  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:due.invoiceId,amount:due.openAmountCents,expectedOpenAmountCents:due.openAmountCents,expectedVersion:due.paymentVersion,method:'bar',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
- await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='geld'`;
+ await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich IN ('preise','zahlungen','buchhaltung')`;
  const checked=await withSession(sender,()=>sendCustomerMailAction(structuredClone(input)));expect(checked).toMatchObject({code:'FORBIDDEN'});expect(checked).not.toHaveProperty('resend');
  expect(await withSession(sender,()=>sendCustomerMailAction({...structuredClone(input),confirmedResend:true}))).toMatchObject({code:'FORBIDDEN'});expect(sends).toBe(2);
- const delegated=await createFixture(['geld'],'buero');
+ const delegated=await createFixture(['preise','zahlungen','buchhaltung'],'buero');
  expect(await withSession(delegated,()=>sendCustomerMailAction(structuredClone(input)))).toMatchObject({code:'CONFLICT',resend:{requestId}});
  lose=false;expect(await withSession(delegated,()=>sendCustomerMailAction({...structuredClone(input),confirmedResend:true}))).toMatchObject({code:'OK'});expect(sends).toBe(3);
  found=true;

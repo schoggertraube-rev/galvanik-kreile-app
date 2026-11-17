@@ -128,7 +128,7 @@ function renderSeed(model, screens) {
     login_buero_ohne_geld: ["6666", "$2b$12$REJw.ffLob7XTc35.mq5BuGF5QfanyzWTey1N0rMh3hy8DUuQtay2"],
     login_einstellungen: ["7777", "$2b$12$cgAV2CpgQkfW9zMsrQSFUOIobbZIEwVppDcRJA2G378JOw9jpSlyy"],
   };
-  const allowedRights = new Set(["auftraege", "eingang", "kunden", "geld", "kassieren", "mails", "einstellungen", "logins", "wartung", "entscheiden"]);
+  const allowedRights = new Set(["auftraege", "eingang", "kunden", "preise", "zahlungen", "buchhaltung", "kassieren", "mails", "einstellungen", "logins", "wartung", "entscheiden"]);
   const users = Object.entries(model.logins).map(([name, login], index) => ({
     name,
     id: loginIds[name],
@@ -137,7 +137,8 @@ function renderSeed(model, screens) {
     role: login.vorlage === "werkstatt" ? "werkstatt" : "meister",
     fullName: `Flow ${name.replace("login_", "")}`,
     shortCode: `F${String(index + 1).padStart(2, "0")}`,
-    rights: login.rechte.filter((right) => allowedRights.has(right)),
+    // Historical TEST profiles keep exactly the lossless financial grant expansion from KORR-RECHTE D2.
+    rights: login.rechte.flatMap((right) => right === "geld" ? ["preise", "zahlungen", "buchhaltung"] : [right]).filter((right) => allowedRights.has(right)),
   }));
   const customers = customerSeedRows(model.datenlagen);
   const fixtureSql = {};

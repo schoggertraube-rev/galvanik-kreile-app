@@ -61,7 +61,7 @@ it('H7/W9 rejection is explicit, actor-bound and cannot become free rework or a 
  expect(recorded.code).toBe('OK');if(recorded.code!=='OK')throw Error('H7_REJECT_RECORD:'+recorded.code);
  const decision={action:'entscheiden' as const,clientKey:randomUUID(),complaintId:recorded.receipt.complaintId,version:1,assessment:'abgelehnt' as const,measure:'ablehnen' as const,reason:'TEST dokumentierter Fremdschaden',creditCents:null};
  expect(await withSession(full,()=>reklamationAusfuehrenAction(structuredClone(decision)))).toMatchObject({code:'FORBIDDEN'});
- const decider=await createFixture(['auftraege','entscheiden','geld']);
+ const decider=await createFixture(['auftraege','entscheiden','preise','zahlungen','buchhaltung']);
  const rejected=await withSession(decider,()=>reklamationAusfuehrenAction(decision));
  expect(rejected,JSON.stringify(rejected)).toMatchObject({code:'OK',receipt:{state:'kunde_informieren',version:2}});
  expect(await withSession(full,()=>getByOrder(order.orderId))).toMatchObject({code:'OK',complaints:[expect.objectContaining({id:recorded.receipt.complaintId,stand:'kunde_informieren',bewertung:'abgelehnt',massnahme:'ablehnen',nacharbeitAuftragId:null})]});

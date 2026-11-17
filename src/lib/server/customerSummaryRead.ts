@@ -27,7 +27,7 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
   if(!hasAuthorizationArea(auth,'kunden'))throw Error('CUSTOMER_SIGNALS_FORBIDDEN');
   if(!customerIds.length)return new Map();
   if(customerIds.some(id=>typeof id!=='string'||!id||id.length>128))throw Error('CUSTOMER_SIGNALS_IDS_INVALID');
-  const money=hasAuthorizationArea(auth,'geld'),mails=hasAuthorizationArea(auth,'mails'),intake=hasAuthorizationArea(auth,'eingang');
+  const money=hasAuthorizationArea(auth,'zahlungen'),mails=hasAuthorizationArea(auth,'mails'),intake=hasAuthorizationArea(auth,'eingang');
   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;as_of:string;active_orders:number;active_quotes:number;overdue:number;unassigned:number;open_messages:number;agreements:Array<{text:string}>;complaints:Array<{text:string}>;tasks:Array<{text:string}>;deadlines:Array<{number:string|null;dueDate:string|null;risk:string|null;status:string|null}>}>(sql`
     SELECT customer.id,statement_timestamp()::text AS as_of,
       (SELECT count(*)::integer FROM private.v_operational_station_queue_v1 queue JOIN public.orders order_source ON order_source.tenant_id=queue.tenant_id AND order_source.id=queue.id WHERE queue.tenant_id=customer.tenant_id AND queue.customer_id=customer.id
@@ -125,7 +125,7 @@ export type CustomerKennzahlen={
 
 /** The customer picture's single metrics port. No search-answer or persisted rollup. */
 async function readCustomerKennzahlen(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string):Promise<CustomerKennzahlen>{
- const money=hasAuthorizationArea(auth,'geld');
+ const money=hasAuthorizationArea(auth,'zahlungen');
  const rows=await tx.execute<{from_date:string;to_date:string;as_of:Date|string;paid_count:number;payment_days:string|number|null;overdue_count:number;overdue_open:string|number;net_revenue:string|number;open_total:string|number;released_count:number;complaint_count:number;release_integrity:boolean}>(sql`
   WITH calendar AS (
    SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-interval '12 months')::date AS from_date,
@@ -419,7 +419,7 @@ function mapSummary(
   kennzahlen: CustomerKennzahlen,
 ): CustomerSummary {
   const orders = mapOrders(row.orders);
-  const money=hasAuthorizationArea(authorization,'geld');
+  const money=hasAuthorizationArea(authorization,'zahlungen');
   if(money&&(!kennzahlen.revenue||!kennzahlen.openInvoices))throw Error('CUSTOMER_METRICS_MONEY_MISSING');
   if (
     row.integrity_ok !== true
@@ -491,7 +491,6 @@ export async function readCustomerSummary(
           ON customer.tenant_id = summary.tenant_id
          AND customer.id = summary.id
         WHERE summary.id = ${input.customerId}
-          AND (customer.type IS DISTINCT FROM 'lieferant' OR ${hasAuthorizationArea(authorization,'geld')})
         LIMIT 2
       `);
       if (rows.length > 1) throw new Error("CUSTOMER_SUMMARY_AMBIGUOUS");
@@ -502,12 +501,12 @@ export async function readCustomerSummary(
          tx,
          authorization.tenantId,
          input.customerId,
-         hasAuthorizationArea(authorization, "geld"),
+         hasAuthorizationArea(authorization, "zahlungen"),
        );
        const agreementSlotsAvailable = await readCustomerAgreementSlots(tx, authorization.tenantId, input.customerId);
        const kennzahlen=await readCustomerKennzahlen(tx,authorization,input.customerId);
        const summary=mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable,kennzahlen);
-       if(hasAuthorizationArea(authorization,'geld')){
+       if(hasAuthorizationArea(authorization,'preise')){
         const [pending]=await tx.execute<{count:number;originals:Array<{id:string;number:string;version:number;orderId:string}>}>(sql`SELECT count(*)::integer AS count,coalesce(jsonb_agg(jsonb_build_object('id',invoice.id::text,'number',invoice.invoice_number,'version',invoice.aggregate_version,'orderId',invoice.order_id) ORDER BY invoice.issued_at,invoice.id),'[]'::jsonb) AS originals FROM public.invoices invoice
          WHERE invoice.tenant_id=${authorization.tenantId} AND invoice.customer_id=${input.customerId}
           AND invoice.status='issued' AND invoice.contract_version=1

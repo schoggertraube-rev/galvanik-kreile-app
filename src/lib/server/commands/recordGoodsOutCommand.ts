@@ -750,7 +750,7 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
       `);
       if (overdueInvoices.length > 0 && input.overdueReleaseReason === undefined) {
         let creditApplication:CustomerCreditApplicationRead|undefined;
-        if(hasAuthorizationArea(authorization.data,'geld')&&composition?.readCredit){
+        if(hasAuthorizationArea(authorization.data,'zahlungen')&&composition?.readCredit){
           const customerId=order.customer_id;
           try{creditApplication=await withTenantSavepoint(tx,async nested=>{
             const source=await readOrderPaymentSummaries(nested,tenantId,{invoiceId:overdueInvoices[0].id});
@@ -764,7 +764,7 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
           code: "CONFLICT",
           ...(creditApplication?{creditApplication}:{}),
           message: GOODS_OUT_DEBT_COPY.blocked(
-            hasAuthorizationArea(authorization.data, "geld")
+            hasAuthorizationArea(authorization.data, "zahlungen")
               ? overdueInvoices[0].invoice_number
               : undefined,
           ),

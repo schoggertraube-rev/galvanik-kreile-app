@@ -29,7 +29,7 @@ it('reads actual hints in one tenant projection and withholds money and mail fac
  expect(restricted?.hints).toContainEqual({kind:'agreement',text:'TEST Sichtbar: TEST Verpackung',urgent:false});
  expect(JSON.stringify(restricted)).not.toContain('TEST nur mit Geld');
  expect(restricted?.hints.some(hint=>hint.kind==='message'||hint.kind==='payment')).toBe(false);
- const allowed=(await readCustomerListSignals({...auth,areas:['kunden','geld','mails']},[customer],(await import('@/modules/eingang/server-public')).openIntakePredicate())).get(customer);
+ const allowed=(await readCustomerListSignals({...auth,areas:['kunden','preise','zahlungen','buchhaltung','mails']},[customer],(await import('@/modules/eingang/server-public')).openIntakePredicate())).get(customer);
  expect(allowed?.hints).toContainEqual({kind:'agreement',text:'TEST Geld-Grund: TEST nur mit Geld',urgent:false});
  expect(allowed?.hints).toContainEqual({kind:'message',text:'1 Nachricht offen',urgent:false});
  expect((await readCustomerListSignals({...auth,tenantId:'TEST-r53-other-tenant'},[customer],(await import('@/modules/eingang/server-public')).openIntakePredicate())).size).toBe(0);
@@ -40,7 +40,7 @@ it('reads actual hints in one tenant projection and withholds money and mail fac
  if(card.code!=='OK')throw Error('TEST_CUSTOMER_CARD_READ:'+card.code);
  expect(card.data).not.toHaveProperty('invoiceRevenueCents');
  expect(card.data).not.toHaveProperty('invoiceOpenCents');
- expect(await readCustomerSummary({...auth,areas:['kunden','geld']},{customerId:customer},(await import('@/modules/eingang/server-public')).openIntakePredicate()))
+ expect(await readCustomerSummary({...auth,areas:['kunden','preise','zahlungen','buchhaltung']},{customerId:customer},(await import('@/modules/eingang/server-public')).openIntakePredicate()))
   .toMatchObject({code:'OK',data:{invoiceRevenueCents:0,invoiceOpenCents:0}});
  expect(await readCustomerSummary({...auth,areas:[]},{customerId:customer},(await import('@/modules/eingang/server-public')).openIntakePredicate())).toMatchObject({code:'FORBIDDEN'});
 });

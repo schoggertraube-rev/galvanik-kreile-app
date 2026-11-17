@@ -46,7 +46,7 @@ it('A09-7/-8 preserves the immutable original, cancels once and reissues the ori
 it('A09-7 R2 real replacement SQL failure preserves cancellation and credit, then a second money-only login repairs one invoice through the same normal task',async()=>{
  const {order,input}=await source('TEST S09 reissue SQL failure');
  await createFixture(['entscheiden'],'buero');
- const repair=await createFixture(['geld'],'buero'),noMoney=await createFixture(['auftraege'],'werkstatt');
+ const repair=await createFixture(['preise','zahlungen','buchhaltung'],'buero'),noMoney=await createFixture(['auftraege'],'werkstatt');
  const fault='test_s09_reissue_'+randomUUID().replaceAll('-','');
  await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.client_event_id='${input.reissueWithoutShipping.replacementClientEventId}'::uuid THEN PERFORM 1/0; END IF; RETURN NEW; END $$`);
  await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON public.invoices FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
@@ -117,7 +117,7 @@ it('A09-7 a real credit SQL failure never claims credit already exists; another 
   expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{n:0}]);
   expect(await sql`SELECT count(*)::int AS n FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`).toEqual([{n:1}]);
  }finally{await sql.unsafe(`DROP TRIGGER ${fault} ON public.customer_credit_entries`);await sql.unsafe(`DROP FUNCTION private.${fault}()`);}
- const repair=await createFixture(['geld'],'buero');
+ const repair=await createFixture(['preise','zahlungen','buchhaltung'],'buero');
  expect(await withSession(repair,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,replacementReceipt:{issuedBy:repair.actorId}});
  expect(await withSession(full,()=>getCustomerCreditAction(order.customerId))).toMatchObject({code:'OK',credit:{balanceCents:order.invoice.grossAmountCents}});
  expect(await sql`SELECT actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{actor_user_id:full.actorId}]);
@@ -163,7 +163,7 @@ it('A09-7 R2 an intervening real pickup-person note does not strand the immutabl
  const [before]=await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${order.orderId}`;
  expect(await withSession(full,()=>changeOrderPickupNoticeAction({orderId:order.orderId,expectedVersion:before.version,clientEventId:randomUUID(),name:'TEST bestaetigte Abholperson',note:null,source:'persoenlich'}))).toMatchObject({code:'OK'});
  const [current]=await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${order.orderId}`;expect(current.version).toBe(before.version+1);
- const repair=await createFixture(['geld'],'buero');
+ const repair=await createFixture(['preise','zahlungen','buchhaltung'],'buero');
  expect(await withSession(repair,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,replacementReceipt:{orderVersion:current.version,issuedBy:repair.actorId,netAmountCents:10000}});
  const [replacement]=await sql`SELECT snapshot,order_version FROM public.invoices WHERE tenant_id=${tenant} AND client_event_id=${input.reissueWithoutShipping.replacementClientEventId}::uuid`;
  expect(replacement.order_version).toBe(current.version);expect(replacement.snapshot.lines).toEqual(original.snapshot.lines.filter((line:{type:string})=>line.type!=='SHIPPING'));

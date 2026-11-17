@@ -52,7 +52,7 @@ it.each(['date','content','unaccepted','conditional'] as const)('S07 edition $0 
 
 it('S07 two sessions reject a stale proposal and unauthorized goods writes, then recover from a fresh quote',async()=>{
  const customerId=await customerFixture('S07 stale proposal');
- const other=await createFixture(['eingang','mails','kunden','auftraege','geld']);
+ const other=await createFixture(['eingang','mails','kunden','auftraege','preise','zahlungen','buchhaltung']);
  const noIntake=await createFixture(['kunden'],'werkstatt');
  const {createQuoteAction,updateQuoteAction,changeQuoteLifecycleAction,readQuoteAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
  const position={name:'TEST S07 parallel part',quantity:2,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:1000,lineTotalCents:2000,unit:'stueck'};

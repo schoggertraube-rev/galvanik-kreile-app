@@ -1,7 +1,7 @@
 "use server";
 
 import { unstable_noStore as noStore } from "next/cache";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import { listCatalogServices } from "@/modules/katalog/server-public";
 
 export async function getActiveCatalogAction() {
@@ -9,7 +9,7 @@ export async function getActiveCatalogAction() {
   try {
     const authorization = await resolveAuthorization();
     if (!authorization.ok) return { code: "UNAVAILABLE" as const, message: "Leistungskatalog ist derzeit nicht verfügbar." };
-    if (!authorization.data.areas?.includes("geld")) return { code: "FORBIDDEN" as const, message: "Preise sind für dieses Profil nicht freigegeben." };
+    if (!hasAuthorizationArea(authorization.data,"preise")) return { code: "FORBIDDEN" as const, message: "Preise sind für dieses Profil nicht freigegeben." };
     return await listCatalogServices({ tenantId: authorization.data.tenantId, actorId: authorization.data.userId, canRead: authorization.data.permissions.includes("perm_data_orders"), canManage: false });
   } catch (error) {
     console.error("[ORDER_CARD_CATALOG_ACTION_ERROR]", {
@@ -25,9 +25,9 @@ export async function getIntakeCatalogAction() {
   try {
     const authorization = await resolveAuthorization();
     if (!authorization.ok) return { code: "UNAVAILABLE" as const, message: "Leistungskatalog ist derzeit nicht verfügbar." };
-    if (!authorization.data.areas?.includes("eingang")) return { code: "FORBIDDEN" as const, message: "Auftragseingang ist für dieses Profil nicht freigegeben." };
+    if (!hasAuthorizationArea(authorization.data,"eingang")) return { code: "FORBIDDEN" as const, message: "Auftragseingang ist für dieses Profil nicht freigegeben." };
     const context = { tenantId: authorization.data.tenantId, actorId: authorization.data.userId, canRead: true, canManage: false };
-    return authorization.data.areas.includes("geld")
+    return hasAuthorizationArea(authorization.data,"preise")
       ? await listCatalogServices(context)
       : await listCatalogServices(context, false, "metadata");
   } catch (error) {

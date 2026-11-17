@@ -2,7 +2,7 @@ import {describe,it,expect,vi} from 'vitest';
 import {ROLE_ACCESS_AREA_TEMPLATES,getPermissionsForAreas,hasAuthorizationArea,type AppRole} from '@/lib/auth/authorizationContract';
 import type {AuthorizationSnapshot} from '../authorization';
 vi.mock('server-only',()=>({}));
-import {readV45Rule,readAuthorizedV45Rule,readAuthorizedV45Action} from '../v45RuleRead';
+import {readV45Rule,readAuthorizedV45Rule,readAuthorizedV45Action,LEGACY_V45_GELD_RECHT} from '../v45RuleRead';
 import {V45_RULES,V45_SOURCE_HASHES,V45_ELEMENTS} from '@/ui/v45.generated';
 
 describe('KORR-S12-1 U-249 uses the writer command decision',()=>{
@@ -57,7 +57,8 @@ describe('S04 canonical authorization across every imported rule',()=>{
   expect(result.code).toBe('OK');
   if(result.code!=='OK')throw Error('TEST_RULE_READ_REQUIRED');
   const action=V45_ELEMENTS.find(row=>row.id===rule.dann.hauptaktion);
-  const permitted=!action||action.recht===null||action.recht==='status'&&auth.permissions.includes('perm_op_status')||action.recht!=='status'&&hasAuthorizationArea(auth,action.recht as Parameters<typeof hasAuthorizationArea>[1]);
+  const right=action?.recht==='geld'?LEGACY_V45_GELD_RECHT[action.id]:action?.recht;
+  const permitted=!action||right===null||right==='status'&&auth.permissions.includes('perm_op_status')||right!=='status'&&hasAuthorizationArea(auth,right as Parameters<typeof hasAuthorizationArea>[1]);
   expect(result.zustand).toBe(rule.dann.zustand);expect(result.hauptaktion).toBe(permitted?rule.dann.hauptaktion:null);
   expect(result.gesperrt).toEqual(permitted?[]:[{elementId:rule.dann.hauptaktion,grundKey:'error.permission'}]);
   expect(JSON.stringify(result)).not.toContain('987654321');
@@ -96,4 +97,27 @@ it('R15 continues only past explicitly unrecorded facts and retains named gaps',
  expect(readV45Rule('auftrag',facts)).toMatchObject({code:'SOURCE_INCOMPLETE',missing:['workProblem']});
  expect(readV45Rule('auftrag',{...facts,workProblem:null},['workProblem'])).toMatchObject({code:'SOURCE_INCOMPLETE',missing:['workProblem']});
  expect(readV45Rule('auftrag',{...facts,workProblem:true},['workProblem'])).toMatchObject({code:'OK',ruleId:'auftrag.bearbeitungsstopp'});
+});
+
+// PL17.11 13:34: transitional only; delete these bridge checks with the bridge in S14b.
+it('KORR-RECHTE maps every old bound financial element and keeps the approved price/payment/bookkeeping scopes independent',()=>{
+ const old=V45_ELEMENTS.filter(row=>row.recht==='geld');
+ expect(old.length).toBeGreaterThan(0);expect(old.every(row=>Object.hasOwn(LEGACY_V45_GELD_RECHT,row.id))).toBe(true);
+ expect(LEGACY_V45_GELD_RECHT).toMatchObject({'customer.invoice':'preise','invoice.issue':'preise','invoice.send':'preise','order.payment':'zahlungen','invoice.cancel':'zahlungen','customer.dunning':'zahlungen','document.inquiry':'buchhaltung','document.save':'eingang','complaint.rejected_return':'entscheiden'});
+ const profile=(areas:NonNullable<AuthorizationSnapshot['areas']>):AuthorizationSnapshot=>({userId:'11111111-1111-4111-8111-111111111111',tenantId:'TEST-financial-v45',displayName:'SYNTHETISCH Rechte',role:'werkstatt',active:true,areas,permissions:getPermissionsForAreas(areas)});
+ expect(readAuthorizedV45Action(profile(['preise']),'invoice.send')).toMatchObject({code:'OK',hauptaktion:'invoice.send',recht:'preise'});
+ expect(readAuthorizedV45Action(profile(['zahlungen']),'invoice.send')).toMatchObject({code:'OK',hauptaktion:null});
+ expect(readAuthorizedV45Action(profile(['zahlungen']),'invoice.cancel')).toMatchObject({code:'OK',hauptaktion:'invoice.cancel',recht:'zahlungen'});
+ expect(readAuthorizedV45Action(profile(['preise']),'invoice.cancel')).toMatchObject({code:'OK',hauptaktion:null});
+ expect(readAuthorizedV45Action(profile(['auftraege','kassieren']),'payment.cash')).toMatchObject({code:'OK',hauptaktion:'payment.cash'});
+ expect(readAuthorizedV45Action(profile(['auftraege']),'payment.cash')).toMatchObject({code:'OK',hauptaktion:null});
+ expect(readAuthorizedV45Action(profile(['preise']),'payment.cash')).toMatchObject({code:'OK',hauptaktion:null});
+});
+it('KORR-RECHTE an unmapped synthetic legacy element is blocked with the fixed diagnostic, never granted',()=>{
+ const metadata=V45_ELEMENTS as unknown as Array<{id:string;recht:string;text:string}>;
+ const entry={id:'TEST-unmapped-financial-element',recht:'geld',text:'error.permission'};metadata.push(entry);
+ try{
+  const auth:AuthorizationSnapshot={userId:'11111111-1111-4111-8111-111111111111',tenantId:'TEST-financial-v45',displayName:'SYNTHETISCH Negativgrenze',role:'meister',active:true,areas:ROLE_ACCESS_AREA_TEMPLATES.meister,permissions:getPermissionsForAreas(ROLE_ACCESS_AREA_TEMPLATES.meister)};
+  expect(readAuthorizedV45Action(auth,entry.id)).toMatchObject({code:'OK',hauptaktion:null,gesperrt:[{elementId:entry.id,grundKey:'error.permission'}],diagnosticCode:'V45_LEGACY_RIGHT_UNMAPPED'});
+ }finally{metadata.splice(metadata.indexOf(entry),1);}
 });

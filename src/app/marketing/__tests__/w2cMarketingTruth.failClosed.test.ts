@@ -15,7 +15,7 @@ const root = process.cwd();
 // PL13.11.00:14 now requires canonical authorization before the existing denial.
 vi.mock("@/lib/server/authorization", async()=>{
  const contract=await import("@/lib/auth/authorizationContract");
- return {hasAuthorizationArea:contract.hasAuthorizationArea,resolveAuthorization:vi.fn(async()=>({ok:true,data:{userId:"TEST-authorized",tenantId:"TEST-marketing-unit",role:"buero",areas:["geld"],permissions:[],active:true}}))};
+ return {hasAuthorizationArea:contract.hasAuthorizationArea,resolveAuthorization:vi.fn(async()=>({ok:true,data:{userId:"TEST-authorized",tenantId:"TEST-marketing-unit",role:"buero",areas:['preise','zahlungen','buchhaltung'],permissions:[],active:true}}))};
 });
 vi.mock("@/db", () => ({ db }));
 vi.mock("@/db/schema_marketing", () => ({ aktion: {}, kanal: {}, segment: {}, touchpoint: {} }));

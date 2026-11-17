@@ -83,11 +83,11 @@ export function buildSearchProviders(authorization: AuthorizationSnapshot, reads
         const result = await reads.readQuotes();
         if (result.code !== "OK") throw new Error("SEARCH_QUOTES_UNAVAILABLE");
         const lowered = normalized(query);
-        return { hits: result.quotes.map((quote) => quoteHit(quote, lowered,hasAuthorizationArea(authorization,'geld'))).filter((hit): hit is SearchHit => hit !== null), exhaustive: result.quotes.length < 100 };
+        return { hits: result.quotes.map((quote) => quoteHit(quote, lowered,hasAuthorizationArea(authorization,'preise'))).filter((hit): hit is SearchHit => hit !== null), exhaustive: result.quotes.length < 100 };
       },
     });
   }
-  if (hasAuthorizationArea(authorization,'geld')) {
+  if (hasAuthorizationArea(authorization,'preise')) {
     providers.push({
       id: "invoices",
       label: "Rechnungen",

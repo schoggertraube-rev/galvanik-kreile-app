@@ -286,8 +286,7 @@ export async function searchOrderIntakeCustomers(
     const alternativeSearch=alternative&&initialPattern?sql`(${nameText} ~ ${initialPattern} OR public.word_similarity(${alternative},${nameText})>=0.2)`:sql`false`;
     const rows=await tx.execute<CustomerRow>(sql`
       SELECT customer.* FROM private.v_order_intake_customers_v1 customer
-      WHERE (customer.customer_type <> 'lieferant' OR ${authorization.areas?.includes("geld")===true})
-        AND (${textSearch} OR ${alternativeSearch} OR (${national.length>=2} AND regexp_replace(coalesce(customer.phone,''),'[^0-9]','','g') LIKE ${'%'+national+'%'}))
+      WHERE (${textSearch} OR ${alternativeSearch} OR (${national.length>=2} AND regexp_replace(coalesce(customer.phone,''),'[^0-9]','','g') LIKE ${'%'+national+'%'}))
     `);
     const mapped=rows.map(row=>{const value=mapCustomer(row,authorization.tenantId);if(!value)throw new Error("ORDER_INTAKE_CUSTOMER_READMODEL_INVALID");return value;});
     const query=foldSearchText(input.query);

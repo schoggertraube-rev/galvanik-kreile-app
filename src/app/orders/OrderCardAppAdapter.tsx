@@ -914,7 +914,7 @@ export function OrderCardAppAdapter({
     const editContent = canAction("editOrderContent");
     const canConfirmPayment = canAction("confirmPayment");
     const canPhoto = hasPermission("perm_op_photos");
-    const canManageAgreement = hasArea("geld");
+    const canManageAgreement = hasArea("zahlungen");
     const orderAgreement = card?.agreement && card.agreement.orderId === card.id
       ? card.agreement
       : null;

@@ -1,3 +1,4 @@
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
@@ -58,7 +59,7 @@ export async function saveIntakeProspect(input:unknown,createCustomer:CustomerWr
   if(!valid(input))return {code:'VALIDATION_ERROR',message:'Interessentendaten sind unvollständig oder ungültig.'};
   const auth=await authorizedIntakeContext();if('code' in auth)return auth;
   if(!auth.permissions.includes('perm_data_customers'))return {code:'FORBIDDEN',message:'Kundenanlage ist nicht freigegeben.'};
-  if(!hasAuthorizationArea(auth,'geld')&&Array.isArray(input.draft.items)&&input.draft.items.some(item=>object(item)&&item.unitPriceCents!=null))return {code:'VALIDATION_ERROR',message:'Preisangaben benötigen das Recht Geld.'};
+  if(!hasAuthorizationArea(auth,'preise')&&Array.isArray(input.draft.items)&&input.draft.items.some(item=>object(item)&&item.unitPriceCents!=null))return {code:'VALIDATION_ERROR',message:FINANCIAL_ACCESS_COPY.priceInputForbidden};
   const intent=createHash('sha256').update(JSON.stringify(input)).digest('hex');
   try{
     return await withPrivilegedTenantTransaction(auth,async tx=>{
@@ -72,7 +73,7 @@ export async function saveIntakeProspect(input:unknown,createCustomer:CustomerWr
         return {code:'OK' as const,customerId:prior.customerId,customerNumber:customer.customerNumber,intakeItemId:prior.itemId,draftId:prior.draftId,replayed:true};
       }
       if(await hasOwnOrderIntakeReceipt(tx,auth,input.clientKey))throw new Rejected({code:'CONFLICT',message:'Diese Erfassung wurde bereits als Auftrag gebucht.'});
-      const created=await createCustomer(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:true,canManageMoney:hasAuthorizationArea(auth,'geld'),canDecide:hasAuthorizationArea(auth,'entscheiden')}},{...input.customer,clientEventId:randomUUID()});
+      const created=await createCustomer(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:true,canManageMoney:hasAuthorizationArea(auth,'zahlungen'),canDecide:hasAuthorizationArea(auth,'entscheiden')}},{...input.customer,clientEventId:randomUUID()});
       if(created.code!=='OK')throw new Rejected(created);
       const itemId=randomUUID(),text=originalText(input,created.receipt.name);
       if(text.length>20_000)throw new Rejected({code:'VALIDATION_ERROR',message:'Die Angaben für den Verlauf sind zu lang.'});

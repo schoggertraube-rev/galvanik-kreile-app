@@ -56,6 +56,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
     canCreateOrder: true,
     canCreateQuote: true,
     canManageMoney: true,
+    canManagePrices: true,
     roleLabel: "Rolf",
     resumeQuoteId: null,
     resumeQuoteConversionId: null,
@@ -1267,7 +1268,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
   });
 
   it("hides payment and quote price controls without the geld area", async () => {
-    render(<GlobalCreateFlow ports={ports({ canManageMoney: false })} />);
+    render(<GlobalCreateFlow ports={ports({ canManageMoney: false, canManagePrices: false })} />);
 
     openFlow();
     await screen.findByRole("heading", { name: "Auftrag oder KV erfassen" });
@@ -1680,7 +1681,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
   });
 
   it.each([true, false])("C06/C08 copies canonical order fields without dates, files or a checked goods receipt (geld=%s)", async (canManageMoney) => {
-    const api=ports({ canManageMoney, readIntakeOrderSource:vi.fn().mockResolvedValue({code:"OK",source:{
+    const api=ports({ canManageMoney, canManagePrices:canManageMoney, readIntakeOrderSource:vi.fn().mockResolvedValue({code:"OK",source:{
       customerId:CUSTOMER_ID,customerQuery:"SYNTHETISCH",orderNumber:"SYNTHETISCH-A-42",intakeSource:"versand",items:[
         {catalogServiceId:null,name:"SYNTHETISCH Kopie A",quantity:3,material:"Messing",surfaceRequested:"Verchromen",executionRequested:"hochglanz",unit:"Stück",unitPriceCents:canManageMoney?3740:null,vatRateBasisPoints:canManageMoney?1900:null},
         {catalogServiceId:null,name:"SYNTHETISCH Kopie B",quantity:2,material:"Stahl",surfaceRequested:"Verzinken",executionRequested:"gelb_passiviert",unit:"kg",unitPriceCents:null,vatRateBasisPoints:null},

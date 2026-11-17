@@ -40,10 +40,10 @@ it.each([false,true])('S02 A2 cancellation preserves mail and one money task (lo
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN('COMMUNICATION_DOCUMENT_SENT_V1','ORDER_CUSTOMER_INFORMED_V1') AND order_id=${a.orderId}`).toHaveLength(0);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toHaveLength(1);
  const tasks=await sql`SELECT task.id::text,task.titel,task.fuer_bereich,task.notiz FROM public.tasks task JOIN public.events source ON source.tenant_id=task.tenant_id AND source.payload->>'taskId'=task.id::text AND source.event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' WHERE task.tenant_id=${KREILE_TENANT_SLUG} AND source.payload->>'invoiceId'=${a.invoice.invoiceId}`;
- expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'geld',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
+ expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'zahlungen',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
  expect(Array.from(tasks[0].titel).length).toBeLessThanOrEqual(120);expect(tasks[0].titel).toContain(a.invoice.invoiceNumber);expect(tasks[0].notiz).not.toContain('nicht belegt');
  const {getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
- const money=await createFixture(['geld'],'buero'),noMoney=await createFixture(['auftraege'],'werkstatt');
+ const money=await createFixture(['preise','zahlungen','buchhaltung'],'buero'),noMoney=await createFixture(['auftraege'],'werkstatt');
  const opened=await withSession(money,()=>getIntakeTaskAction({taskId:tasks[0].id}));
  expect(opened).toMatchObject({code:'OK',canEdit:false,canComplete:true,completeLabel:'Storno an '+customer.name+' gesendet'});
  if(opened.code!=='OK'||!opened.task)throw Error('TEST_TASK_MISSING');
@@ -86,7 +86,7 @@ it('S02 A2 missing task source receipt keeps the physical mail and repairs the t
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN('COMMUNICATION_DOCUMENT_SENT_V1','ORDER_CUSTOMER_INFORMED_V1') AND order_id=${a.orderId}`).toHaveLength(0);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toHaveLength(1);
  const tasks=await sql`SELECT task.id::text,task.titel,task.fuer_bereich,task.notiz FROM public.tasks task JOIN public.events source ON source.tenant_id=task.tenant_id AND source.payload->>'taskId'=task.id::text AND source.event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' WHERE task.tenant_id=${KREILE_TENANT_SLUG} AND source.payload->>'invoiceId'=${a.invoice.invoiceId}`;
- expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'geld',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
+ expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'zahlungen',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
  expect(Array.from(tasks[0].titel).length).toBeLessThanOrEqual(120);expect(tasks[0].titel).toContain(a.invoice.invoiceNumber);expect(tasks[0].notiz).not.toContain('nicht belegt');
  const {getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
  const read=await withSession(full,()=>getIntakeTaskAction({taskId:tasks[0].id}));
@@ -121,7 +121,7 @@ it('S02 A2 mixed original bundle records only the still valid invoice effects',a
  expect(await sql`SELECT payload->'document'->>'id' AS id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{id:b.invoice.invoiceId}]);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toHaveLength(1);
  const tasks=await sql`SELECT task.id::text,task.titel,task.fuer_bereich,task.notiz FROM public.tasks task JOIN public.events source ON source.tenant_id=task.tenant_id AND source.payload->>'taskId'=task.id::text AND source.event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' WHERE task.tenant_id=${KREILE_TENANT_SLUG} AND source.payload->>'invoiceId'=${a.invoice.invoiceId}`;
- expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'geld',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
+ expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'zahlungen',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
  expect(Array.from(tasks[0].titel).length).toBeLessThanOrEqual(120);expect(tasks[0].titel).toContain(a.invoice.invoiceNumber);expect(tasks[0].notiz).not.toContain('nicht belegt');
 },120000);
 
@@ -156,7 +156,7 @@ it('S02 A4 no Sent Items fund after ten minutes and cancellation offers no resen
 it('S02 A5 invoice resend requires current money permission and stays singular',async()=>{
  const a=await readyInvoiceOrder('N5 A2 storniert');
  const [customer]=await sql`SELECT name,email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${a.customerId}`;
- const sender=await createFixture(['auftraege','mails','geld'],'buero');
+ const sender=await createFixture(['auftraege','mails','preise','zahlungen','buchhaltung'],'buero');
  const input={targetType:'ORDER' as const,targetId:a.orderId,subject:'TEST N5 A2',body:'TEST echtes Original',clientRequestId:randomUUID(),attachment:{kind:'INVOICE' as const,documentId:a.invoice.invoiceId},expectedInvoiceIds:[a.invoice.invoiceId]};
  let sends=0;let releaseResend:()=>void=()=>{},markResendStarted:()=>void=()=>{};
  const resendHeld=new Promise<void>(resolve=>{releaseResend=resolve;}),resendStarted=new Promise<void>(resolve=>{markResendStarted=resolve;});
@@ -172,11 +172,11 @@ it('S02 A5 invoice resend requires current money permission and stays singular',
  await sql.unsafe(`CREATE TRIGGER ${clock} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${clock}()`);
  try{expect(await withSession(sender,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});}
  finally{await sql.unsafe(`DROP TRIGGER ${clock} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${clock}()`);}
- await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='geld'`;
+ await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='zahlungen'`;
  const denied=await withSession(sender,()=>sendCustomerMailAction(fresh(input)));
  expect(denied).toMatchObject({code:'FORBIDDEN'});expect(denied).not.toHaveProperty('resend');
  expect(await withSession(sender,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'FORBIDDEN'});expect(sends).toBe(1);
- const delegate=await createFixture(['geld'],'buero');
+ const delegate=await createFixture(['preise','zahlungen','buchhaltung'],'buero');
  expect(await withSession(delegate,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'CONFLICT',resend:{requestId:input.clientRequestId,label:'Mail an '+customer.name+' erneut senden – nicht im Postausgang gefunden'}});
  const first=withSession(delegate,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}));
  await resendStarted;let second:Awaited<typeof first>;try{second=await withSession(delegate,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}));}finally{releaseResend();}
@@ -319,7 +319,7 @@ it.each([false,true])('S02 A1/A3 recovers an original bundle with PREPARE author
  const a=await readyInvoiceOrder('N5 A1 Original A'),b=await readyInvoiceOrder('N5 A1 Original B','pickup',false,a.customerId);
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${a.customerId}`;
  const input={targetType:'ORDER' as const,targetId:a.orderId,subject:'TEST N5 A1',body:'TEST gleiche Originalgruppe',clientRequestId:randomUUID(),attachment:{kind:'INVOICE' as const,documentId:a.invoice.invoiceId},expectedInvoiceIds:[a.invoice.invoiceId,b.invoice.invoiceId]};
- const sender=await createFixture(['auftraege','mails','geld'],'buero');
+ const sender=await createFixture(['auftraege','mails','preise','zahlungen','buchhaltung'],'buero');
  let sends=0;
  vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
   const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
@@ -330,13 +330,13 @@ it.each([false,true])('S02 A1/A3 recovers an original bundle with PREPARE author
  });
  expect(await withSession(sender,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});
  if(geldRemoved){
-  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='geld'`;
+  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='zahlungen'`;
   const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
   expect(await withSession(sender,()=>getOrderPaymentStateAction({orderId:a.orderId}))).toMatchObject({code:'FORBIDDEN'});
  }
  const retry={...fresh(input),clientRequestId:randomUUID()};
  if(geldRemoved)expect(await withSession(sender,()=>sendCustomerMailAction(retry))).toMatchObject({code:'FORBIDDEN'});
- const reconciler=geldRemoved?await createFixture(['geld'],'buero'):sender;
+ const reconciler=geldRemoved?await createFixture(['preise','zahlungen','buchhaltung'],'buero'):sender;
  expect(await withSession(reconciler,()=>sendCustomerMailAction(retry))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
  expect(await withSession(reconciler,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});expect(sends).toBe(1);
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{n:1}]);
@@ -349,7 +349,7 @@ it('S02 an address correction cannot replace the recipient of the original recon
  const a=await readyInvoiceOrder('N5 A1 Original A'),b=await readyInvoiceOrder('N5 A1 Original B','pickup',false,a.customerId);
  const [customer]=await sql`SELECT email FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${a.customerId}`;
  const input={targetType:'ORDER' as const,targetId:a.orderId,subject:'TEST N5 A1',body:'TEST gleiche Originalgruppe',clientRequestId:randomUUID(),attachment:{kind:'INVOICE' as const,documentId:a.invoice.invoiceId},expectedInvoiceIds:[a.invoice.invoiceId,b.invoice.invoiceId]};
- const sender=await createFixture(['auftraege','mails','geld'],'buero');
+ const sender=await createFixture(['auftraege','mails','preise','zahlungen','buchhaltung'],'buero');
  let sends=0;
  vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
   const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
@@ -710,7 +710,7 @@ it.each(['sql','missing'])('S02 result mail survives a failed complaint closure 
  const {storeOrderPhoto}=await import('../../../e2e/ablauf/photoFixture');const photoId=await storeOrderPhoto(order.orderId);
  const {reklamationAusfuehrenAction,sendeReklamationErgebnisAction}=await import('@/app/actions/complaints.actions');
  const created=await withSession(full,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Blasen',description:'TEST echte Reklamation',photoIds:[photoId],goodsReturn:'offen'}));if(created.code!=='OK')throw Error('N5_COMPLAINT_CREATE:'+created.code);
- const decider=await createFixture(['auftraege','kunden','geld','entscheiden'],'meister');
+ const decider=await createFixture(['auftraege','kunden','preise','zahlungen','buchhaltung','entscheiden'],'meister');
  const decided=await withSession(decider,()=>reklamationAusfuehrenAction({action:'entscheiden',clientKey:randomUUID(),complaintId:created.receipt.complaintId,version:created.receipt.version,assessment:'abgelehnt',measure:'ablehnen',reason:'TEST geprueft',creditCents:null}));if(decided.code!=='OK')throw Error('N5_COMPLAINT_DECIDE:'+decided.code);
  let sends=0;
  vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{

@@ -38,7 +38,7 @@ it('S0 release readers and the actual writer use live payment facts instead of a
 
 it('AF-A9 two actual logins releasing the same version produce one release and one version conflict',async()=>{
  const order=await readyInvoiceOrder('AF-A9');
- const other=await createFixture(['auftraege','geld']);
+ const other=await createFixture(['auftraege','preise','zahlungen','buchhaltung']);
  const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
  const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
  const inputs=[randomUUID(),randomUUID()].map(clientEventId=>({orderId:order.orderId,mode:'abholung' as const,expectedVersion:order.version,clientEventId}));

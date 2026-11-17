@@ -48,15 +48,14 @@ export function getAuthorizationActionGrants(
   authorization: Pick<AuthorizationSnapshot, "areas" | "role">,
 ): AuthorizationActionGrants {
   const canManageOrders = hasAuthorizationArea(authorization, "eingang");
-  const canManageMoney = hasAuthorizationArea(authorization, "geld");
   return {
-    confirmPayment: canManageMoney || (
+    confirmPayment: hasAuthorizationArea(authorization, "zahlungen") || (
       hasAuthorizationArea(authorization, "kassieren")
       && hasAuthorizationArea(authorization, "auftraege")
     ),
     editOrderContent: canManageOrders,
     createCustomer: hasAuthorizationArea(authorization, "eingang"),
-    createQuote: canManageOrders && canManageMoney,
+    createQuote: canManageOrders && hasAuthorizationArea(authorization, "preise"),
   };
 }
 
@@ -319,10 +318,10 @@ export async function resolveLoginIdentityByEmail(
 }
 
 /** Existing effective rights choose one shared clarification inbox, never a new actor. */
-export async function readClarificationArea(tx:import('./privilegedDb').PrivilegedTenantTransaction,tenantId:string):Promise<'entscheiden'|'geld'>{
+export async function readClarificationArea(tx:import('./privilegedDb').PrivilegedTenantTransaction,tenantId:string):Promise<'entscheiden'|'zahlungen'>{
  const rows=await tx.execute<{role:string;areas:string[]}>(sql`SELECT users.role,ARRAY(SELECT rights.bereich FROM public.app_user_rights rights WHERE rights.tenant_id=users.tenant_id AND rights.user_id=users.id) AS areas
   FROM public.app_users users WHERE users.tenant_id=${tenantId} AND users.active=true`);
- return rows.some(row=>isAppRole(row.role)&&hasAuthorizationArea({role:row.role,areas:row.areas.filter(isAccessArea)},'entscheiden'))?'entscheiden':'geld';
+ return rows.some(row=>isAppRole(row.role)&&hasAuthorizationArea({role:row.role,areas:row.areas.filter(isAccessArea)},'entscheiden'))?'entscheiden':'zahlungen';
 }
 /** Display projection of the same effective area contract, not another grant source. */
 export async function readActiveAreaHolders(tx:import('./privilegedDb').PrivilegedTenantTransaction,tenantId:string,area:AccessArea){

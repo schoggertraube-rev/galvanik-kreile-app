@@ -66,7 +66,7 @@ export async function appendCommunicationDocument(tx:PrivilegedTenantTransaction
 
 /** A replay reads the immutable outgoing proof, never a newly rendered document. */
 export async function readCommunicationDocumentReceipt(auth:AuthorizationSnapshot,input:Intent,documentId:string){
- if(!hasAuthorizationArea(auth,'mails')&&!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN' as const,message:'E-Mails sind nicht freigegeben.'};
+ if(!hasAuthorizationArea(auth,'mails')&&!hasAuthorizationArea(auth,'preise'))return {code:'FORBIDDEN' as const,message:'E-Mails sind nicht freigegeben.'};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   const rows=await tx.execute<{id:string;status:string;customer_id:string;order_id:string|null;created_at:string;created_by:string;prepared_by:string;subject:string;request_id:string;payload:{document:CommunicationDocument;intent:string};message_id:string|null;body:string|null;sent_intent:string|null;mail_only:boolean}>(sql`
    SELECT thread.id::text,thread.status,thread.customer_id,thread.order_id,thread.created_at::text,thread.created_by::text,prepared.user_id::text AS prepared_by,thread.subject,prepared.correlation_id::text AS request_id,prepared.payload,
@@ -85,7 +85,7 @@ export async function readCommunicationDocumentReceipt(auth:AuthorizationSnapsho
   const row=rows[0],document=row.payload?.document;
   const legacy=!!document&&document.kind==='INVOICE'&&!!document.bundle?.length&&row.payload.intent===communicationDocumentIntent(input,document,true);
   if(rows.length!==1||row.created_by!==row.prepared_by||!document||document.id!==documentId||row.order_id!==(input.targetType==='ORDER'?input.targetId:null)||input.targetType==='CUSTOMER'&&row.customer_id!==input.targetId||row.payload.intent!==communicationDocumentIntent(input,document,legacy))return {code:'CONFLICT' as const,message:'Die Versandkennung ist bereits anders belegt. Kein zweiter Versand.'};
-  if(!hasAuthorizationArea(auth,document.kind==='INVOICE'?'geld':'mails'))return {code:'FORBIDDEN' as const,message:'Versand ist nicht freigegeben.'};
+  if(!hasAuthorizationArea(auth,document.kind==='INVOICE'?'preise':'mails'))return {code:'FORBIDDEN' as const,message:'Versand ist nicht freigegeben.'};
   if(row.status!=='sent'&&!/^[0-9a-f-]{36}$/i.test(row.request_id))return {code:'CONFLICT' as const,message:'Die Versandkennung ist bereits anders belegt. Kein zweiter Versand.'};
   if(row.status!=='sent')return {code:'PENDING' as const,document,originalRequestId:row.request_id};
   if(!row.message_id||row.body!==communicationDocumentBody(input.body,document,legacy)||row.subject!==input.subject.trim())throw Error('COMMUNICATION_DOCUMENT_PROOF_INVALID');
@@ -98,7 +98,7 @@ export async function readCommunicationDocumentReceipt(auth:AuthorizationSnapsho
 /** PL00:40: transport reconciliation uses the original PREPARE authority.
  * Bytes stay server-side; this does not grant access to the invoice PDF viewer. */
 export async function readPreparedInvoiceTransportOriginal(auth:AuthorizationSnapshot,input:Intent,document:Extract<CommunicationDocument,{kind:'INVOICE'}>,invoice:InvoiceMailDocument){
- if(!hasAuthorizationArea(auth,'geld'))return null;
+ if(!hasAuthorizationArea(auth,'preise'))return null;
  return withPrivilegedTenantTransaction(auth,async tx=>{
   const rows=await tx.execute<{pdf_content:Buffer|Uint8Array;integrity_ok:boolean}>(sql`SELECT invoice.pdf_content,encode(sha256(invoice.pdf_content),'hex')=invoice.pdf_sha256 AS integrity_ok
    FROM public.invoices invoice WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${invoice.id}::uuid AND invoice.order_id=${invoice.orderId} AND invoice.pdf_sha256=${invoice.sha256}
@@ -201,7 +201,7 @@ export async function obsoleteInvoiceMailMembers(tx:PrivilegedTenantTransaction,
 
 /** The existing task writer accepts only this real, actor-bound mail source. */
 export async function readCanceledInvoiceMailTaskSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{threadId:string;invoiceId:string}){
- if(!hasAuthorizationArea(auth,'geld'))return null;
+ if(!hasAuthorizationArea(auth,'preise'))return null;
  const rows=await tx.execute<{mail_event_id:string;invoice_id:string;invoice_number:string;order_id:string;customer_name:string;sent_at:string|null}>(sql`SELECT mail.payload->'sentItemsEvidence'->>'sentAt' AS sent_at,mail.id AS mail_event_id,invoice.id::text AS invoice_id,invoice.invoice_number,invoice.order_id,customer.name AS customer_name
   FROM public.events mail JOIN public.communication_threads thread ON thread.tenant_id=mail.tenant_id AND thread.id::text=mail.payload->>'threadId' AND thread.status='sent'
   JOIN public.communication_messages message ON message.tenant_id=mail.tenant_id AND message.thread_id=thread.id AND message.id::text=mail.payload->>'messageId' AND message.direction='outgoing'
@@ -220,7 +220,7 @@ export async function readCanceledInvoiceMailTaskSource(tx:PrivilegedTenantTrans
 
 /** Follow-up failure may not undo the already qualified outgoing mail. */
 export async function applyRecoveredInvoiceMailEffects(auth:AuthorizationSnapshot,threadId:string,createTask:(tx:PrivilegedTenantTransaction,input:{threadId:string;invoiceId:string})=>Promise<string>,existingTx?:PrivilegedTenantTransaction){
- if(!hasAuthorizationArea(auth,'geld'))throw Error('COMMUNICATION_RECONCILIATION_FORBIDDEN');
+ if(!hasAuthorizationArea(auth,'preise'))throw Error('COMMUNICATION_RECONCILIATION_FORBIDDEN');
  const work=async(tx:PrivilegedTenantTransaction)=>{
   const rows=await tx.execute<{id:string;prepare_actor_id:string;request_id:string;subject:string;body:string;original:Extract<CommunicationDocument,{kind:'INVOICE'}>;obsolete:string[];target_type:'CUSTOMER'|'ORDER';target_id:string}>(sql`SELECT mail.id,mail.user_id::text AS prepare_actor_id,mail.correlation_id::text AS request_id,thread.subject,message.body,
    mail.payload->'documentReconciliation'->'originalDocument' AS original,ARRAY[]::text[] AS obsolete,
@@ -265,7 +265,7 @@ export async function isCanceledInvoiceMailTask(tx:PrivilegedTenantTransaction,a
  const rows=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' AND payload->>'taskId'=${id} LIMIT 1`);return rows.length>0;
 }
 export async function readCanceledInvoiceTaskCompletion(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string){
- if(!hasAuthorizationArea(auth,'geld'))return null;
+ if(!hasAuthorizationArea(auth,'preise'))return null;
  const rows=await tx.execute<{customer_name:string}>(sql`SELECT customer.name AS customer_name FROM public.events source
   JOIN public.invoices invoice ON invoice.tenant_id=source.tenant_id AND invoice.id::text=source.payload->>'invoiceId' AND invoice.status='cancelled'
   JOIN public.customers customer ON customer.tenant_id=invoice.tenant_id AND customer.id=invoice.customer_id

@@ -3,7 +3,7 @@ import "server-only";
 import {readOpenOrderComplaint} from './orderReleaseRead';
 
 import { sql } from "drizzle-orm";
-import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import {getAuthorizationActionGrants,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {
   canReadPaymentSummary,
   mapOrderPaymentStateRow,
@@ -92,7 +92,7 @@ export async function getPaymentState(
   ) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Zahlungsabfrage." };
   }
-  if (!canReadPaymentSummary(authorization)) {
+  if (!canReadPaymentSummary(authorization)&&!getAuthorizationActionGrants(authorization).confirmPayment) {
     return { code: "FORBIDDEN", message: "Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt." };
   }
 
@@ -117,12 +117,14 @@ export async function getPaymentState(
       if (rows.length === 0) return null;
       if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
       if (!Array.isArray(rows[0].customer_overdue_invoice_ids) || rows[0].customer_overdue_invoice_ids.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id))) throw new Error("ORDER_CUSTOMER_DEBT_STATE_INVALID");
+      const paymentContext={orderId:rows[0].order_id,mode:rows[0].payment_mode,station:rows[0].station};
+      if(!canReadPaymentSummary(authorization,paymentContext))return {code:"FORBIDDEN" as const};
       const mapped = mapOrderPaymentStateRow(rows[0], authorization);
       const additionalPayments:NonNullable<OrderPaymentState['additionalPayments']>=[];
       if(Number(rows[0].active_invoice_count)>1){
         const payments=await readOrderPaymentSummaries(tx,authorization.tenantId,mapped.orderId);
         if(payments.length!==Number(rows[0].active_invoice_count)||!mapped.payment)throw Error('ORDER_ADDITIONAL_PAYMENTS_SOURCE_MISSING');
-        const checked=payments.map(row=>mapPaymentSummaryRow(row,authorization));
+        const checked=payments.map(row=>mapPaymentSummaryRow(row,authorization,paymentContext));
         if(checked.filter(payment=>payment.invoiceId===mapped.payment!.invoiceId).length!==1)throw Error('ORDER_MAIN_PAYMENT_SOURCE_MISSING');
         for(const payment of checked){
           if(payment.invoiceId===mapped.payment.invoiceId)continue; // known main, projected above
@@ -143,6 +145,7 @@ export async function getPaymentState(
       }
       return { ...mapped,...(additionalPayments.length?{additionalPayments}:{}),...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].payment_mode!=="keiner"&&rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
     });
+    if(data&&"code" in data)return {code:"FORBIDDEN",message:"Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt."};
     return data
       ? { code: "OK", data }
       : { code: "NOT_FOUND", message: "Zahlungs- und Warenausgangsdaten sind nicht verfügbar." };

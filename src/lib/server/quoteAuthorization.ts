@@ -2,7 +2,7 @@ import {getAuthorizationActionGrants,hasAuthorizationArea,type AuthorizationSnap
 
 export function quoteCommandContext(authorization: AuthorizationSnapshot) {
   const actionGrants = getAuthorizationActionGrants(authorization);
-  const canReadQuote = hasAuthorizationArea(authorization, "geld")
+  const canReadQuote = hasAuthorizationArea(authorization, "preise")
     && hasAuthorizationArea(authorization, "auftraege");
   return {
     tenantId: authorization.tenantId,

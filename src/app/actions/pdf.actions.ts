@@ -178,7 +178,7 @@ export async function generateDeliveryNote(input:string|string[]|import('@/lib/d
  const {LEGACY_ACTION_ACCESS_COPY}=await import('@/ui/situationCatalog');
  const auth=await resolveAuthorization();
  if(!auth.ok){if(legacy)throw Error(auth.message);return {code:auth.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED',message:auth.message};}
- if(!hasAuthorizationArea(auth.data,'auftraege')||!hasAuthorizationArea(auth.data,'geld')){
+ if(!hasAuthorizationArea(auth.data,'auftraege')){
   if(legacy)throw Error(LEGACY_ACTION_ACCESS_COPY.forbidden);
   return {code:'FORBIDDEN',message:LEGACY_ACTION_ACCESS_COPY.forbidden};
  }

@@ -7,9 +7,9 @@ describe('4.8 next actions from one stored complaint projection',()=>{
  it('gives each open state its bound next action only to the responsible area and removes closed cases',()=>{
   expect(complaintAttention([row],['entscheiden'],'2026-11-06')).toMatchObject([{key:'reklamation_entscheiden:TEST-complaint',actionLabel:'Ergebnis festlegen',target:{screen:'reklamation',arg:row.id}}]);
   expect(complaintAttention([row],['kunden'],'2026-11-06')).toEqual([]);
-  expect(complaintAttention([{...row,stand:'massnahme_gutschrift',gutschriftBetrag:'50.00'}],['geld'],'2026-11-06')).toMatchObject([{actionLabel:'Gutschrift erteilen'}]);
+  expect(complaintAttention([{...row,stand:'massnahme_gutschrift',gutschriftBetrag:'50.00'}],['preise','zahlungen','buchhaltung'],'2026-11-06')).toMatchObject([{actionLabel:'Gutschrift erteilen'}]);
   expect(complaintAttention([{...row,stand:'kunde_informieren'}],['kunden'],'2026-11-06')).toMatchObject([{actionLabel:'Kunde informieren'}]);
-  expect(complaintAttention([{...row,stand:'abgeschlossen'}],['geld','kunden','entscheiden'],'2026-11-06')).toEqual([]);
+  expect(complaintAttention([{...row,stand:'abgeschlossen'}],['preise','zahlungen','buchhaltung','kunden','entscheiden'],'2026-11-06')).toEqual([]);
  });
  it('escalates running rework and derives the missing-goods reminder from its real warehouse date',()=>{
   const running:Complaint={...row,stand:'massnahme_nacharbeit',nacharbeitAuftragId:'TEST-rework',reworkGoods:'erwartet',reworkGoodsSince:'2026-10-12T08:00:00Z',reworkNumber:'A-TEST-N',reworkStation:'angenommen'};

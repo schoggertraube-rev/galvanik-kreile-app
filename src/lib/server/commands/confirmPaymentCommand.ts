@@ -505,7 +505,7 @@ export async function confirmPayment(input: unknown,credit?:PaymentCreditComposi
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
   const actionGrants = getAuthorizationActionGrants(authorization.data);
-  const canManageFinance = hasAuthorizationArea(authorization.data, "geld");
+  const canManageFinance = hasAuthorizationArea(authorization.data, "zahlungen");
   if(input.method==='guthaben'&&(!canManageFinance||!credit))return {code:'FORBIDDEN',message:CUSTOMER_CREDIT_COPY.forbidden};
   if(credit&&(input.method!=='guthaben'||!Number.isSafeInteger(credit.expectedVersion)||credit.expectedVersion<0||credit.expectedVersion>MAX_INT4))return {code:'VALIDATION_ERROR',message:CUSTOMER_CREDIT_COPY.invalid};
   if (

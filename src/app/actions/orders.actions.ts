@@ -79,7 +79,7 @@ export async function getOrderPickupNoticeAction(input:unknown){const {readOrder
 export async function changeOrderPickupNoticeAction(input:unknown){
  return observeAction('changeOrderPickupNoticeAction',subjectForAction('changeOrderPickupNoticeAction',input),async()=>{
  const [{changeOrderPickupNotice},{readIntakeHandoverMail,recordIntakeHandoverEffect,recordIntakeTaskEffect},{readCustomerProfile,updateCustomerInTransaction},{createOrderHandoverTask}]=await Promise.all([import('@/lib/server/commands/orderContentCommand'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public'),import('@/modules/tasks/server-public')]);
- const result=await changeOrderPickupNotice(input,{readMail:readIntakeHandoverMail,recordEffect:recordIntakeHandoverEffect,readCustomer:readCustomerProfile,updateDefault:(tx,auth,request)=>updateCustomerInTransaction(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:false,canEditCustomer:auth.permissions.includes('perm_data_customers'),canManageMoney:auth.areas?.includes('geld')===true}},{customerId:request.customerId,clientEventId:request.clientEventId,handoverPreference:request.mode}),createTask:(tx,auth,request,effect)=>createOrderHandoverTask(tx,auth,request,{effect:async(writeTx,actor,task)=>{if(request.manualEventId)return recordIntakeTaskEffect(writeTx,actor,task,readCustomerProfile);if(!effect)throw Error('HANDOVER_TASK_EFFECT_MISSING');return effect(task.taskId);}},undefined,request.manualEventId)});
+ const result=await changeOrderPickupNotice(input,{readMail:readIntakeHandoverMail,recordEffect:recordIntakeHandoverEffect,readCustomer:readCustomerProfile,updateDefault:(tx,auth,request)=>updateCustomerInTransaction(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:false,canEditCustomer:auth.permissions.includes('perm_data_customers'),canManageMoney:auth.areas?.includes('zahlungen')===true}},{customerId:request.customerId,clientEventId:request.clientEventId,handoverPreference:request.mode}),createTask:(tx,auth,request,effect)=>createOrderHandoverTask(tx,auth,request,{effect:async(writeTx,actor,task)=>{if(request.manualEventId)return recordIntakeTaskEffect(writeTx,actor,task,readCustomerProfile);if(!effect)throw Error('HANDOVER_TASK_EFFECT_MISSING');return effect(task.taskId);}},undefined,request.manualEventId)});
  if(result.code==='OK'){revalidatePath('/');revalidatePath('/orders/[orderId]','page');revalidatePath('/nachrichten');}
  return result;
 
@@ -318,7 +318,7 @@ export async function getLiveOrderCardAction(
     const pickupAppointment=await readOrderPickupAppointment(authorization.data,input.orderId);
     const {readV45OrderRule}=await import('@/lib/server/v45OrderRead');
     const {getPaymentState}=await import('@/lib/server/paymentSummaryRead');
-    const readCredit=hasAuthorizationArea(authorization.data,'geld')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
+    const readCredit=hasAuthorizationArea(authorization.data,'zahlungen')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
       const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
       return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
     }:undefined;

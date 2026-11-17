@@ -6,7 +6,7 @@ import {readyInvoiceOrder,customerFixture,intakeOrderFixture} from './orderFixtu
 
 it('invoice issue retries from another actual finance actor are a key conflict and leave the original immutable',async()=>{
  const order=await readyInvoiceOrder('Rechnung-Akteur');
- const other=await createFixture(['auftraege','geld']);
+ const other=await createFixture(['auftraege','preise','zahlungen','buchhaltung']);
  const {issueInvoiceAction,getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');
  const original=await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:order.issueInput.clientEventId}));
  const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
@@ -25,7 +25,7 @@ it('invoice cancellation retries reject another finance actor without replacing 
  if(cancelled.code!=='OK')throw Error('CANCEL_ACTOR_INITIAL:'+cancelled.code);
  const original=await withSession(full,()=>getInvoiceCancellationReceiptAction({invoiceId:order.invoice.invoiceId,clientEventId:input.clientEventId}));
  expect(original.code).toBe('OK');
- const other=await createFixture(['auftraege','geld']);
+ const other=await createFixture(['auftraege','preise','zahlungen','buchhaltung']);
  const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  expect(await withSession(other,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(full,()=>getInvoiceCancellationReceiptAction({invoiceId:order.invoice.invoiceId,clientEventId:input.clientEventId}))).toEqual(original);
@@ -115,7 +115,7 @@ it('a payment retry key cannot pay another invoice, change the booked method or 
  expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:first.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'bezahlt',openAmountCents:0}}});
  expect(await withSession(full,()=>confirmPaymentAction({...structuredClone(payment),invoiceId:second.invoice.invoiceId}))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(full,()=>confirmPaymentAction({...structuredClone(payment),method:'karte'}))).toMatchObject({code:'CONFLICT'});
- const other=await createFixture(['geld','auftraege']);
+ const other=await createFixture(['preise','zahlungen','buchhaltung','auftraege']);
  expect(await withSession(other,()=>confirmPaymentAction(structuredClone(payment)))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(payment))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:booked.receipt.eventId,confirmedBy:full.actorId}});
  expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:second.orderId}))).toMatchObject({code:'OK',data:{payment:{status:'offen',paidAmountCents:0,openAmountCents:second.invoice.grossAmountCents,paymentVersion:0}}});
@@ -320,7 +320,7 @@ it('AF-A4 cash payment remains booked when goods-out conflicts; reread then rele
 
 it('H8 concurrent partial payments on one version book once; real reread pays the remaining balance once',async()=>{
  const order=await readyInvoiceOrder('Zahlung-parallel');
- const other=await createFixture(['auftraege','geld']);
+ const other=await createFixture(['auftraege','preise','zahlungen','buchhaltung']);
  const {confirmPaymentAction,getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
  const half=Math.floor(order.invoice.grossAmountCents/2);
  const inputs=[randomUUID(),randomUUID()].map(clientEventId=>({invoiceId:order.invoice.invoiceId,amount:half,method:'ueberweisung' as const,expectedVersion:0,clientEventId}));

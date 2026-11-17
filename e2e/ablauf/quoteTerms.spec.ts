@@ -15,7 +15,7 @@ it('H8 quote creation retry cannot switch customer, price or actor and rereads t
  expect(snapshot).toMatchObject({code:'OK',quote:{customerId:first,totalNetCents:2500}});
  expect(await withSession(full,()=>createQuoteAction({...structuredClone(input),customerId:second}))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(full,()=>createQuoteAction({...structuredClone(input),positions:[{...input.positions[0],unitPriceCents:3500,lineTotalCents:3500}]}))).toMatchObject({code:'CONFLICT'});
- const other=await createFixture(['eingang','mails','kunden','auftraege','geld','einstellungen']);
+ const other=await createFixture(['eingang','mails','kunden','auftraege','preise','zahlungen','buchhaltung','einstellungen']);
  expect(await withSession(other,()=>createQuoteAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(full,()=>createQuoteAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,quote:{quoteId:created.quote.quoteId,customerId:first,totalNetCents:2500}});
  expect(await withSession(full,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toEqual({...snapshot,serverReadAt:expect.any(String),cacheLoginScope:expect.stringMatching(/^[a-f0-9]{64}$/)});

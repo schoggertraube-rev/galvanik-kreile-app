@@ -1,3 +1,4 @@
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
 import {readEvidenceVisibilityRetrySource} from '@/lib/server/evidenceVisibilityUploadPort';
 import {EVIDENCE_VISIBILITY_COPY} from '@/ui/situationCatalog';
@@ -11,7 +12,7 @@ import {readProductionPricingRetrySource,readProductionPricingRetryKeys} from '@
 import {readCancellationCreditSource} from '@/lib/server/commands/customerCreditCommand';
 import {readInvoiceReissueSource} from '@/lib/server/commands/immutableInvoiceCommand';
 import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
-import {CUSTOMER_CREDIT_COPY,SITUATION_COPY} from '@/ui/situationCatalog';
+import {CUSTOMER_CREDIT_COPY,SITUATION_COPY,LEGACY_ACTION_ACCESS_COPY} from '@/ui/situationCatalog';
 import {PRODUCTION_PRICING_RETRY_COPY} from '@/ui/situationCatalog';
 import {readCanceledInvoiceMailTaskSource,isCanceledInvoiceMailTask,bindCanceledInvoiceMailTask,readCanceledInvoiceTaskCompletion} from '@/lib/server/communicationDocumentPort';
 import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
@@ -31,7 +32,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization,readClarificationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import type {AccessArea} from '@/lib/auth/authorizationContract';
+import {canReadTaskArea,type AccessArea} from '@/lib/auth/authorizationContract';
 import {TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference,type TaskRecord,type TaskReferenceRead,type TaskSaveInput,type TaskFailure,type TaskResult,type TaskReadResult,type TaskCompleteInput,type TaskOpenRequest,type TaskCalendarRead} from '../contract';
 
 export type TaskEffectRequest={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:TaskReferenceRead;itemId?:string;itemVersion?:number};
@@ -40,7 +41,7 @@ type Dependencies={effect:TaskEffects;beforeComplete?:(tx:PrivilegedTenantTransa
 class Rejected extends Error{constructor(readonly result:TaskFailure){super(result.code);}}
 function reject(code:TaskFailure['code'],message:string):never{throw new Rejected({code,message});}
 const columns=sql`id::text,client_key::text,art,titel,faellig_am::text,to_char(uhrzeit,'HH24:MI') AS uhrzeit,vorlauf_tage,fuer_login::text,fuer_bereich,bezug_typ,bezug_id,item_id::text,notiz,status,erledigt_von::text,erledigt_am::text,erledigt_notiz,erstellt_von::text,erstellt_am::text,version`;
-const refAreas:Partial<Record<TaskReference['type'],AccessArea>>={kunde:'kunden',auftrag:'auftraege',kv:'auftraege',eingang:'eingang',eingangsrechnung:'geld',reklamation:'auftraege'};
+const refAreas:Partial<Record<TaskReference['type'],AccessArea>>={kunde:'kunden',auftrag:'auftraege',kv:'auftraege',eingang:'eingang',eingangsrechnung:'buchhaltung',reklamation:'auftraege'};
 const allowed=(auth:AuthorizationSnapshot,task:TaskRecord)=>task.erstellt_von===auth.userId||task.fuer_login===auth.userId||task.fuer_bereich!==null&&hasAuthorizationArea(auth,task.fuer_bereich);
 async function reissueTaskSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:TaskRecord){
  const source=await readInvoiceReissueSource(tx,auth.tenantId,task.client_key);
@@ -61,7 +62,7 @@ async function context(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot
  if(rows.length!==1){if(required)reject('NOT_FOUND','Bezug nicht verfügbar · Fehlercode: TASK_REFERENCE_NOT_FOUND.');return hiddenReference(reference);}
  const requiredArea=reference.type==='eingang'&&rows[0].channel==='mail'?'mails':area;
  const visible=reference.type==='eingang'&&hasAuthorizationArea(auth,'mails')||requiredArea!==undefined&&hasAuthorizationArea(auth,requiredArea);
- if(enforceVisibility&&(!visible||rows[0].customerType==='lieferant'&&!hasAuthorizationArea(auth,'geld'))){if(required)reject('FORBIDDEN','Der Bezug ist für diesen Login nicht freigegeben.');return hiddenReference(reference);}
+ if(enforceVisibility&&(!visible)){if(required)reject('FORBIDDEN','Der Bezug ist für diesen Login nicht freigegeben.');return hiddenReference(reference);}
  return {...rows[0],type:reference.type};
 }
 async function recipient(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskSaveInput){
@@ -168,13 +169,13 @@ export async function readOrderHandoverTaskState(tx:PrivilegedTenantTransaction,
 }
 /** Only the invoice command can create this task; all persistence stays in persistTask. */
 export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;clientKey:string;reason:string},deps:Dependencies):Promise<string>{
- if(!hasAuthorizationArea(auth,'geld'))reject('FORBIDDEN','Rechnung klären benötigt Geld.');
+ if(!hasAuthorizationArea(auth,'buchhaltung'))reject('FORBIDDEN',FINANCIAL_ACCESS_COPY.clarifyBookkeeping);
  if(!taskUuid(input.invoiceId)||!taskUuid(input.clientKey))reject('VALIDATION_ERROR','Rechnungskennung ist ungültig.');
  const invoice=await deps.readInvoice?.(tx,auth,input.invoiceId);
  if(!invoice||invoice.status!=='unklar')reject('CONFLICT','Rechnung ist nicht unklar.');
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  const value:TaskSaveInput={clientKey:eventKey(input.clientKey,0,'invoice-unclear'),version:0,kind:'rechnung',title:input.reason==='Lieferant fehlt'?'Lieferant ergänzen':'Rechnung klären · '+(invoice.name??'Lieferant fehlt'),
-  dueDate:clock.today,time:null,forLogin:null,forArea:'geld',reference:{type:'eingangsrechnung',id:input.invoiceId},note:input.reason};
+  dueDate:clock.today,time:null,forLogin:null,forArea:'buchhaltung',reference:{type:'eingangsrechnung',id:input.invoiceId},note:input.reason};
  const fields=taskValidation(value);if(Object.keys(fields).length)reject('VALIDATION_ERROR','Aufgabe zur Rechnung ist ungültig.');
  return (await persistTask(tx,auth,value,deps,true,true)).task.id;
 }
@@ -182,13 +183,13 @@ export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransact
 async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string},replyEventId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
   const before=await find(tx,auth,value.taskId,true);if(!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
   const reissue=await reissueTaskSource(tx,auth,before);
-  if(reissue&&!hasAuthorizationArea(auth,'geld'))reject('FORBIDDEN',SHIPPING_FEE_COPY.reissueForbidden);
+  if(reissue&&!hasAuthorizationArea(auth,'zahlungen'))reject('FORBIDDEN',SHIPPING_FEE_COPY.reissueForbidden);
   if(await isCanceledInvoiceMailTask(tx,auth,before.id)&&!await readCanceledInvoiceTaskCompletion(tx,auth,before.id))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
   const operationalQuote=quoteOperation&&before.art==='aufgabe'&&before.bezug_typ==='kv'&&before.bezug_id===quoteOperation.quoteId&&quoteOperation.keys.includes(before.client_key);
   const operationalStorage=storageOperation&&hasAuthorizationArea(auth,'auftraege')&&before.art==='aufgabe'&&before.bezug_typ==='auftrag'&&before.bezug_id===storageOperation.orderId&&before.client_key===storageOperation.clientKey;
   const operationalReply=replyEventId&&hasAuthorizationArea(auth,'auftraege')&&['aufgabe','rueckruf'].includes(before.art)&&before.bezug_typ==='auftrag'&&await collectionTaskHasReplySource(tx,auth,before.id,replyEventId);
   if(!allowed(auth,before)&&!operationalQuote&&!operationalStorage&&!operationalReply&&!reissue)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
-  if(before.art==='rechnung'&&(!invoiceId||before.bezug_typ!=='eingangsrechnung'||before.bezug_id!==invoiceId||!hasAuthorizationArea(auth,'geld')))reject('FORBIDDEN','Rechnung klären wird ausschließlich in der Eingangsrechnung erledigt.');
+  if(before.art==='rechnung'&&(!invoiceId||before.bezug_typ!=='eingangsrechnung'||before.bezug_id!==invoiceId||!hasAuthorizationArea(auth,'buchhaltung')))reject('FORBIDDEN','Rechnung klären wird ausschließlich in der Eingangsrechnung erledigt.');
   const note=value.note?.trim()||null;
   const completion=await deps.beforeComplete?.(tx,auth,before,value);if(completion)throw new Rejected(completion);
   if(reissue){const repaired=await reissueTaskSource(tx,auth,before),credit=await readCancellationCreditSource(tx,auth.tenantId,before.client_key);if(!repaired||repaired.pending||!credit||credit.pending)reject('CONFLICT',SHIPPING_FEE_COPY.reissuePending);}
@@ -204,7 +205,7 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   return {code:'OK',task:after,replayed:false};
 }
 export async function resolveInvoiceClarificationTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;taskId:string;note:string},deps:Dependencies):Promise<void>{
- if(!hasAuthorizationArea(auth,'geld'))reject('FORBIDDEN','Rechnung klären benötigt Geld.');
+ if(!hasAuthorizationArea(auth,'buchhaltung'))reject('FORBIDDEN',FINANCIAL_ACCESS_COPY.clarifyBookkeeping);
  const invoice=await deps.readInvoice?.(tx,auth,input.invoiceId);
  if(!invoice||invoice.taskId!==input.taskId||invoice.status==='unklar')reject('CONFLICT','Rechnung wurde noch nicht geklärt.');
  const task=await find(tx,auth,input.taskId,true);if(!task||task.art!=='rechnung')reject('NOT_FOUND','Rechnungsaufgabe nicht verfügbar.');
@@ -299,9 +300,10 @@ export async function readTask(request:TaskOpenRequest|{calendar:true}):Promise<
 async function readTaskInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,request:TaskOpenRequest):Promise<TaskReadResult>{
   const task='taskId'in request?await find(tx,auth,request.taskId):null;
   if('taskId'in request&&!task)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
+  if(task&&!canReadTaskArea(auth,task.fuer_bereich))reject('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
   const currentOrder=task?.bezug_typ==='auftrag'?await readCollectionTaskCurrentOrder(tx,auth,task.id):null;
   const reference=await context(tx,auth,task?{type:task.bezug_typ,id:currentOrder??task.bezug_id}:(request as Exclude<TaskOpenRequest,{taskId:string}>).reference,!task);
-  // Aufgaben sind je Mandant für jeden Login lesbar; Bezug und Schreibknöpfe prüfen ihre eigenen Rechte.
+  // Nonfinancial tasks remain tenant-readable; financial recipients use the canonical area gate.
   const canEdit=task?task.status==='offen'&&allowed(auth,task)&&!await isCanceledInvoiceMailTask(tx,auth,task.id):true;
   const canceledCustomer=task?await readCanceledInvoiceTaskCompletion(tx,auth,task.id):null;
   let pricing:Awaited<ReturnType<typeof readProductionPricingRetrySource>>=null;
@@ -312,7 +314,7 @@ async function readTaskInTransaction(tx:PrivilegedTenantTransaction,auth:Authori
   if(task){try{credit=await withTenantSavepoint(tx,nested=>readCancellationCreditSource(nested,auth.tenantId,task.client_key));}catch{creditSource='SOURCE_INCOMPLETE';}}
   let reissue:Awaited<ReturnType<typeof reissueTaskSource>>=null,reissueSource:'KNOWN'|'SOURCE_INCOMPLETE'='KNOWN';
   if(task){try{reissue=await withTenantSavepoint(tx,nested=>reissueTaskSource(nested,auth,task));}catch{reissueSource='SOURCE_INCOMPLETE';}}
-  return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,creditSource,...(reissue||reissueSource==="SOURCE_INCOMPLETE"?{reissueSource}:{}),canEdit:canEdit&&reissueSource==='KNOWN'&&!reissue,canComplete:!!task&&task.status==='offen'&&reissueSource==='KNOWN'&&(reissue?hasAuthorizationArea(auth,'geld'):(canEdit||canceledCustomer!==null))&&task.art!=='rechnung'&&(!credit?.pending||hasAuthorizationArea(auth,'geld')),...(reissue||credit?{completeLabel:SITUATION_COPY.retry}:pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
+  return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,creditSource,...(reissue||reissueSource==="SOURCE_INCOMPLETE"?{reissueSource}:{}),canEdit:canEdit&&reissueSource==='KNOWN'&&!reissue,canComplete:!!task&&task.status==='offen'&&reissueSource==='KNOWN'&&(reissue?hasAuthorizationArea(auth,'zahlungen'):(canEdit||canceledCustomer!==null))&&task.art!=='rechnung'&&(!credit?.pending||hasAuthorizationArea(auth,'zahlungen')),...(reissue||credit?{completeLabel:SITUATION_COPY.retry}:pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
 }
 
 
@@ -321,7 +323,7 @@ export type QuoteFollowupRequest={quoteId:string;quoteNumber:string;customerName
 /** Current and previous sent edition keys identify only this automatic task, never a user's other task. */
 export async function syncQuoteFollowupTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:QuoteFollowupRequest,deps:Dependencies,options:{operationalCancel?:boolean}={}):Promise<string|null>{
  const operational=options.operationalCancel===true&&input.action==='cancel'&&input.reason==='KV zugesagt';
- if((!operational&&(!hasAuthorizationArea(auth,'geld')||!hasAuthorizationArea(auth,'auftraege')))||!taskUuid(input.quoteId)||!Number.isSafeInteger(input.edition)||input.edition<1)reject('FORBIDDEN','KV-Nachfassen ist nicht freigegeben.');
+ if((!operational&&(!hasAuthorizationArea(auth,'preise')||!hasAuthorizationArea(auth,'auftraege')))||!taskUuid(input.quoteId)||!Number.isSafeInteger(input.edition)||input.edition<1)reject('FORBIDDEN','KV-Nachfassen ist nicht freigegeben.');
  if(operational){const [quote]=await readQuoteFollowupFacts(tx,auth.tenantId,[input.quoteId]);if(!quote?.integrity||quote.stage!=='zugesagt'||quote.edition!==input.edition)reject('CONFLICT','Die bestätigte KV-Zusage fehlt für das Erledigen der Nachfassaufgabe.');}
  const currentKey=eventKey(input.quoteId,input.edition,'quote-followup');
  const keys=[...new Set([currentKey,...(input.sentEdition?[eventKey(input.quoteId,input.sentEdition,'quote-followup')]:[])])];
@@ -332,7 +334,7 @@ export async function syncQuoteFollowupTask(tx:PrivilegedTenantTransaction,auth:
  const current=rows.find(row=>row.client_key===currentKey);
  if(current?.status==='erledigt')return null;
  if(input.dueDate===null)return current?.faellig_am??null;
- const value:TaskSaveInput={clientKey:currentKey,version:current?.version??0,...(current?{taskId:current.id}:{}),kind:'aufgabe',title:quoteFollowupTitle(input.customerName,input.quoteNumber),dueDate:input.dueDate,time:null,forLogin:null,forArea:'geld',reference:{type:'kv',id:input.quoteId},note:'Nachfassen zur versendeten KV-Fassung '+input.edition};
+ const value:TaskSaveInput={clientKey:currentKey,version:current?.version??0,...(current?{taskId:current.id}:{}),kind:'aufgabe',title:quoteFollowupTitle(input.customerName,input.quoteNumber),dueDate:input.dueDate,time:null,forLogin:null,forArea:'preise',reference:{type:'kv',id:input.quoteId},note:'Nachfassen zur versendeten KV-Fassung '+input.edition};
  if(Object.keys(taskValidation(value)).length)reject('VALIDATION_ERROR','KV-Nachfassdatum oder Bezug ist unvollständig.');
  return (await persistTask(tx,auth,value,deps)).task.faellig_am;
 }
@@ -344,7 +346,7 @@ export async function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransact
  // are verified below. Generic task read/edit authority is unchanged.
  const candidates=tasks.filter(task=>taskUuid(task.bezug_id));
  const facts=await readQuoteFollowupFacts(tx,auth.tenantId,[...new Set(candidates.map(task=>task.bezug_id!))]);
- return candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');if(quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];return [{id:task.id,title:hasAuthorizationArea(auth,'geld')?task.titel:quoteFollowupTitle(quote.customerName,quote.number),dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,isMine:task.fuer_login===auth.userId}];}).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
+ return candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');if(quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];return [{id:task.id,title:hasAuthorizationArea(auth,'preise')?task.titel:quoteFollowupTitle(quote.customerName,quote.number),dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,isMine:task.fuer_login===auth.userId}];}).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
 }
 
 /** Only the persisted physical command can create this normal shared clarification task. */
@@ -370,12 +372,12 @@ export async function createCanceledInvoiceMailTask(tx:PrivilegedTenantTransacti
  const key=eventKey(source.invoice_id,0,'cancelled-invoice-arrived');
  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${key},0))`);
  const prior=await tx.execute<{id:string;bezug_id:string;fuer_bereich:string}>(sql`SELECT id::text,bezug_id,fuer_bereich FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid FOR UPDATE`);
- if(prior.length){if(prior.length!==1||prior[0].bezug_id!==source.order_id||prior[0].fuer_bereich!=='geld'||!await isCanceledInvoiceMailTask(tx,auth,prior[0].id))reject('CONFLICT','Aufgabenkennung gehört zu einem anderen Vorgang.');return prior[0].id;}
+ if(prior.length){if(prior.length!==1||prior[0].bezug_id!==source.order_id||prior[0].fuer_bereich!=='zahlungen'||!await isCanceledInvoiceMailTask(tx,auth,prior[0].id))reject('CONFLICT','Aufgabenkennung gehört zu einem anderen Vorgang.');return prior[0].id;}
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  const title=MAIL_RESEND_COPY.canceledTask(source.invoice_number,source.customer_name);
  // PL02:01: only the customer may be shortened; full source facts stay in the note.
  // PL05:15: the normal completion records the operator's actual cancellation delivery.
- const saved=await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'geld',reference:{type:'auftrag',id:source.order_id},note:MAIL_RESEND_COPY.canceledTaskDescription(source.invoice_number,source.customer_name,source.sent_at)},deps,false);
+ const saved=await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'zahlungen',reference:{type:'auftrag',id:source.order_id},note:MAIL_RESEND_COPY.canceledTaskDescription(source.invoice_number,source.customer_name,source.sent_at)},deps,false);
  await bindCanceledInvoiceMailTask(tx,auth,{...input,taskId:saved.task.id,clientEventId:eventKey(source.invoice_id,0,'cancelled-invoice-task-source')});
  return saved.task.id;
 }
@@ -406,7 +408,7 @@ export async function createProductionPricingRetryTask(tx:PrivilegedTenantTransa
  const prior=await tx.execute<{id:string;erstellt_von:string;bezug_id:string;art:string;bezug_typ:string}>(sql`SELECT id::text,erstellt_von::text,bezug_id,art,bezug_typ FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${markerId}::uuid FOR UPDATE`);
  if(prior.length){if(prior.length!==1||prior[0].erstellt_von!==source.actorId||prior[0].bezug_id!==source.orderId||prior[0].art!=='aufgabe'||prior[0].bezug_typ!=='auftrag')throw Error('PRODUCTION_PRICING_TASK_CHANGED');return prior[0].id;}
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
- return (await persistTask(tx,auth,{clientKey:markerId,version:0,kind:'aufgabe',title:source.title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:source.orderId},note:source.description},deps,false)).task.id;
+ return (await persistTask(tx,auth,{clientKey:markerId,version:0,kind:'aufgabe',title:source.title,dueDate:clock.today,time:null,forLogin:null,forArea:'preise',reference:{type:'auftrag',id:source.orderId},note:source.description},deps,false)).task.id;
 }
 
 /** Same task writer, keyed to the immutable cancellation; no new task truth. */
@@ -416,7 +418,7 @@ export async function synchronizeCancellationCreditRetryTask(tx:PrivilegedTenant
  const source=await readCancellationCreditSource(tx,auth.tenantId,key);
  const reissue=await readInvoiceReissueSource(tx,auth.tenantId,key);
  if(reissue){
-  if(!hasAuthorizationArea(auth,'geld')||!source||source.eventId!==reissue.receipt.eventId||prior.length>1)throw Error('INVOICE_REISSUE_TASK_SOURCE_INVALID');
+  if(!hasAuthorizationArea(auth,'zahlungen')||!source||source.eventId!==reissue.receipt.eventId||prior.length>1)throw Error('INVOICE_REISSUE_TASK_SOURCE_INVALID');
   for(const task of prior)await reissueTaskSource(tx,auth,task);
   if(mode==='settle'){
    if(source.pending||reissue.pending)throw Error('INVOICE_REISSUE_TASK_NOT_REPAIRED');
@@ -441,7 +443,7 @@ export async function synchronizeCancellationCreditRetryTask(tx:PrivilegedTenant
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  const fullTitle=CUSTOMER_CREDIT_COPY.retryTask(source.invoiceNumber),budget=120-CUSTOMER_CREDIT_COPY.retryTask('').length;
  const title=CUSTOMER_CREDIT_COPY.retryTask(source.invoiceNumber.length>budget?source.invoiceNumber.slice(0,budget-1)+'…':source.invoiceNumber);
- const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'geld',reference:{type:'auftrag',id:source.orderId},note:fullTitle};
+ const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'zahlungen',reference:{type:'auftrag',id:source.orderId},note:fullTitle};
  await persistTask(tx,auth,value,deps,false);
 }
 

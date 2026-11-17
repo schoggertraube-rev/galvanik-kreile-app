@@ -149,7 +149,7 @@ it.each([4000,0])('A08-2/-6 cancellation retains actual paid %i, removes the act
 });
 
 it('A08 R2 real credit SQL failure preserves cancellation and one normal task, repaired by its authorized different actor',async()=>{
- const resolver=await createFixture(['geld'],'buero'),originalActor=await createFixture(['entscheiden','geld'],'buero');
+ const resolver=await createFixture(['preise','zahlungen','buchhaltung'],'buero'),originalActor=await createFixture(['entscheiden','preise','zahlungen','buchhaltung'],'buero');
  const order=await readyInvoiceOrder('S08 credit SQL follow-up','pickup',false,undefined,8403);
  const paid=await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:10000,method:'bar',expectedVersion:0,expectedOpenAmountCents:10000,clientEventId:randomUUID()}));
  expect(paid).toMatchObject({code:'OK'});
@@ -165,7 +165,7 @@ it('A08 R2 real credit SQL failure preserves cancellation and one normal task, r
   expect(await sql`SELECT count(*)::int AS n FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${input.invoiceId}::uuid`).toEqual([{n:0}]);
   const tasks=await sql`SELECT id::text,version,client_key::text,status,bezug_id,erstellt_von::text,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${input.clientEventId}::uuid`;
   expect(tasks).toHaveLength(1);taskId=tasks[0].id;taskVersion=tasks[0].version;
-  expect(tasks[0]).toMatchObject({status:'offen',bezug_id:order.orderId,erstellt_von:originalActor.actorId,fuer_bereich:'geld'});
+  expect(tasks[0]).toMatchObject({status:'offen',bezug_id:order.orderId,erstellt_von:originalActor.actorId,fuer_bereich:'zahlungen'});
   expect(await withSession(full,()=>getIntakeTaskAction({taskId}))).toMatchObject({code:'OK',task:{id:taskId,status:'offen'},creditSource:'KNOWN',canComplete:true});
   expect(await withSession(originalActor,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
   expect(await sql`SELECT count(*)::int AS n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${input.clientEventId}::uuid`).toEqual([{n:1}]);
@@ -174,7 +174,7 @@ it('A08 R2 real credit SQL failure preserves cancellation and one normal task, r
   await sql.unsafe(`DROP FUNCTION private.${fault}()`);
  }
   const complete={taskId:taskId!,version:taskVersion!,note:null};
- await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${originalActor.actorId}::uuid AND bereich='geld'`;
+ await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${originalActor.actorId}::uuid AND bereich='zahlungen'`;
  expect(await withSession(originalActor,()=>getIntakeTaskAction({taskId:taskId!}))).toMatchObject({code:'OK',canComplete:false});
  expect(await withSession(originalActor,()=>completeIntakeTaskAction(complete))).toMatchObject({code:'FORBIDDEN'});
  expect(await sql`SELECT id FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${input.invoiceId}::uuid`).toEqual([]);
