@@ -1,6 +1,7 @@
 process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import {PACKAGE_SWITCHES} from '@/modules/fundament/public';
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   getAuthorizationActionGrants,
@@ -64,6 +65,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-1",
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Max Kreile",
         role: "admin",
         active: true,
@@ -76,7 +78,10 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       expect(result.data.userId).toBe("user-1");
       expect(result.data.role).toBe("admin");
       expect(result.data.permissions).not.toContain("perm_sys_diag");
+      expect(Object.keys(result.data.packageSwitches!)).toHaveLength(17);
     }
+    vi.mocked(db.select().from(appUsers).where).mockResolvedValueOnce([{id:'user-1',fullName:'Max Kreile',role:'admin',active:true,packageFlags:null}] as unknown as Array<typeof appUsers.$inferSelect>);
+    expect(await resolveAuthorization()).toMatchObject({ok:true,data:{offline24h:false,packageSwitches:Object.fromEntries(PACKAGE_SWITCHES.map(({id})=>[id,false]))}});
   });
 
   it("2. keine Session", async () => {
@@ -146,6 +151,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-1",
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Max Kreile",
         role: "admin",
         active: false,
@@ -176,6 +182,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-1",
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Max Kreile",
         role: "admin",
         active: true,
@@ -206,6 +213,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-1",
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Max Kreile",
         role: "invalid-role",
         active: true,
@@ -259,6 +267,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-1",
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Max Kreile",
         role: "werkstatt",
         active: true,
@@ -316,6 +325,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-1",
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Max Kreile",
         role: "admin",
         active: true,
@@ -352,6 +362,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     });
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([{
       id: "synthetic-gregor-id",
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
       tenantId: KREILE_TENANT_SLUG,
       fullName: "Gregor",
       role: "developer",
@@ -437,6 +448,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-1",
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         tenantId: KREILE_TENANT_SLUG,
         email: "max@example.test",
         fullName: "Max Kreile",

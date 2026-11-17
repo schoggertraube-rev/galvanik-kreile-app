@@ -449,3 +449,5 @@ export const SHIPMENT_GROUP_COPY={
 };
 
 export {FINANCIAL_ACCESS_COPY} from './financialAccessCopy';
+
+export {PACKAGE_SWITCH_COPY} from './packageSwitchCopy';

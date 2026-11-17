@@ -7,6 +7,7 @@ import {
   type ClientAuthorizationResult,
 } from "@/app/actions/auth.actions";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
+import type {PackageSwitchValues} from '@/modules/fundament/public';
 import {
   PermissionsProvider,
   deriveInitials,
@@ -52,6 +53,7 @@ function TestComponent() {
   const {
     status,
     offline24h,
+    packageSwitches,
     initials,
     name,
     role,
@@ -67,6 +69,7 @@ function TestComponent() {
   return (
     <div>
       <span data-testid="offline24h">{String(offline24h)}</span>
+      <span data-testid="package-entry">{packageSwitches===null?'unknown':String(packageSwitches.p2_eingang)}</span>
       <span data-testid="status">{status}</span>
       <span data-testid="initials">{initials}</span>
       <span data-testid="name">{name}</span>
@@ -522,4 +525,14 @@ it('projects only the server offline flag and clears it with unauthenticated boo
  expect(screen.getByTestId('offline24h')).toHaveTextContent('true');first.unmount();
  render(<PermissionsProvider initialAuthState={{status:'unauthenticated'}}><TestComponent/></PermissionsProvider>);
  expect(screen.getByTestId('offline24h')).toHaveTextContent('false');
+});
+
+it('keeps the supplied Boolean package projection and clears it on logout',()=>{
+ if(initialRolf.status!=='authenticated')throw Error('TEST_BOOTSTRAP');
+ // Controlled projection-only fixture; the native test checks all 17 real flags.
+ const flags={p2_eingang:true} as PackageSwitchValues;
+ const first=render(<PermissionsProvider initialAuthState={{...initialRolf,user:{...initialRolf.user,packageSwitches:flags}}}><TestComponent/></PermissionsProvider>);
+ expect(screen.getByTestId('package-entry')).toHaveTextContent('true');first.unmount();
+ render(<PermissionsProvider initialAuthState={{status:'unauthenticated'}}><TestComponent/></PermissionsProvider>);
+ expect(screen.getByTestId('package-entry')).toHaveTextContent('unknown');
 });

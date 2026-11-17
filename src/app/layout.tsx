@@ -36,7 +36,7 @@ import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ClientActionErrorBanner } from "@/components/layout/ClientActionErrorBanner";
 import {ProtocolClickCapture} from '@/components/ProtocolClickCapture';
 
-import { getAuthBootstrapState } from "@/lib/server/authBootstrap";
+import { getAuthBootstrapAction } from "@/app/actions/auth.actions";
 import { GlobalCreateAppAdapter } from "./GlobalCreateAppAdapter";
 
 export default async function RootLayout({
@@ -44,7 +44,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const authState = await getAuthBootstrapState();
+  const authState = await getAuthBootstrapAction();
   const isAdmin =
     authState.status === "authenticated" &&
     authState.user.permissions.includes("perm_sys_diag");

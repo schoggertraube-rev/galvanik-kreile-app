@@ -1,3 +1,4 @@
+import type {PackageSwitchValues} from "@/modules/fundament/public";
 import "server-only";
 import {offlinePartition} from "./offlinePartition";
 import {createPinLoginHandle} from './pinLoginHandle';
@@ -23,6 +24,7 @@ export type AuthBootstrapUser = {
   offlineLoginScope?: string;
   /** Read-only feature setting; grants no server permission. Default is off. */
   offline24h?: boolean;
+  packageSwitches?: Readonly<PackageSwitchValues>;
   role: AppRole;
   displayName: string;
   areas: readonly AccessArea[];
@@ -60,6 +62,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
         loginHandle:createPinLoginHandle(result.data.userId),
         offlineScope:offlinePartition(result.data),
         offline24h:result.data.offline24h===true,
+        ...(result.data.packageSwitches?{packageSwitches:{...result.data.packageSwitches}}:{}),
         ...(offlineLoginScope?{offlineLoginScope}:{}),
         role: result.data.role,
         displayName: result.data.displayName,
