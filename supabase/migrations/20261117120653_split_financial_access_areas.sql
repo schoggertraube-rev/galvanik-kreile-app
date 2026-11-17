@@ -84,6 +84,7 @@ DECLARE
   v_customer_number text;
   v_name text;
   v_money boolean;
+  v_bank boolean;
 BEGIN
   IF p_tenant_id IS NULL OR p_tenant_id IS DISTINCT FROM nullif(btrim(current_setting('app.tenant_id', true)), '')
     OR p_actor_id IS NULL OR p_client_event_id IS NULL OR p_intent_sha256 IS NULL OR p_intent_sha256 !~ '^[0-9a-f]{64}$'
@@ -98,7 +99,10 @@ BEGIN
   THEN RETURN QUERY SELECT 'FORBIDDEN'::text, NULL::uuid, false; RETURN; END IF;
   v_money := EXISTS (SELECT 1 FROM public.app_user_rights WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND bereich='zahlungen');
   v_customer := jsonb_populate_record(NULL::public.customers, p_fields);
-  IF NOT v_money AND ((v_customer.payment_preference IS NOT NULL AND v_customer.payment_preference <> 'vorkasse') OR v_customer.iban IS NOT NULL OR v_customer.zahlungsziel_tage IS NOT NULL)
+  -- PL17.11 17:07: supplier bank fields also belong to bookkeeping; customer terms do not.
+  v_bank := v_money OR (v_customer.type='lieferant' AND EXISTS (SELECT 1 FROM public.app_user_rights WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND bereich='buchhaltung'));
+  IF (NOT v_money AND ((v_customer.payment_preference IS NOT NULL AND v_customer.payment_preference <> 'vorkasse') OR v_customer.zahlungsziel_tage IS NOT NULL))
+    OR (NOT v_bank AND v_customer.iban IS NOT NULL)
   THEN RETURN QUERY SELECT 'FORBIDDEN'::text, NULL::uuid, false; RETURN; END IF;
   IF coalesce(v_customer.vorrang,false) AND NOT EXISTS
     (SELECT 1 FROM public.app_user_rights WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND bereich='entscheiden')
@@ -153,6 +157,9 @@ DECLARE
   v_before public.customers%ROWTYPE;
   v_after public.customers%ROWTYPE;
   v_money boolean;
+  v_bank boolean;
+  v_bookkeeping boolean;
+  v_can_edit boolean;
   v_name text;
   v_version integer;
   v_customer_fields jsonb;
@@ -182,9 +189,15 @@ BEGIN
     OR (v_agreements_present AND (jsonb_typeof(v_agreements) IS DISTINCT FROM 'array' OR jsonb_array_length(v_agreements) > 20))
     OR NOT EXISTS (SELECT 1 FROM public.app_users actor WHERE actor.tenant_id=p_tenant_id AND actor.id=p_actor_id AND actor.active)
   THEN RETURN QUERY SELECT 'VALIDATION_ERROR'::text,false; RETURN; END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.app_user_rights WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND bereich='kunden')
-  THEN RETURN QUERY SELECT 'FORBIDDEN'::text,false; RETURN; END IF;
+  v_can_edit := EXISTS (SELECT 1 FROM public.app_user_rights WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND bereich='kunden');
   v_money := EXISTS (SELECT 1 FROM public.app_user_rights WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND bereich='zahlungen');
+  v_bookkeeping := EXISTS (SELECT 1 FROM public.app_user_rights WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND bereich='buchhaltung');
+  -- A bank-only supplier update may originate from the existing invoice writer.
+  -- Its normalized full record must match every supplied non-bank field.
+  IF NOT v_can_edit AND NOT ((v_money OR v_bookkeeping) AND NOT v_agreements_present AND v_customer_fields ? 'iban'
+    AND EXISTS (SELECT 1 FROM public.customers bank_customer WHERE bank_customer.tenant_id=p_tenant_id AND bank_customer.id=p_customer_id
+      AND bank_customer.type='lieferant' AND (v_customer_fields - 'iban') <@ to_jsonb(bank_customer)))
+  THEN RETURN QUERY SELECT 'FORBIDDEN'::text,false; RETURN; END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended('s1:customer-update:'||p_tenant_id||':'||p_actor_id||':'||p_client_event_id,0));
   SELECT * INTO v_prior FROM public.events WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND client_event_id=p_client_event_id AND event_type='CUSTOMER_UPDATED_V1';
   IF FOUND THEN
@@ -193,8 +206,12 @@ BEGIN
   SELECT * INTO v_before FROM public.customers WHERE tenant_id=p_tenant_id AND id=p_customer_id FOR UPDATE;
   IF NOT FOUND THEN RETURN QUERY SELECT 'NOT_FOUND'::text,false; RETURN; END IF;
   v_after := jsonb_populate_record(v_before,v_customer_fields);
-  IF NOT v_money AND (v_before.payment_preference IS DISTINCT FROM v_after.payment_preference
-    OR v_before.iban IS DISTINCT FROM v_after.iban OR v_before.zahlungsziel_tage IS DISTINCT FROM v_after.zahlungsziel_tage)
+  IF NOT v_can_edit AND NOT (v_before.type='lieferant' AND NOT v_agreements_present AND v_customer_fields ? 'iban'
+    AND (v_customer_fields - 'iban') <@ to_jsonb(v_before))
+  THEN RETURN QUERY SELECT 'FORBIDDEN'::text,false; RETURN; END IF;
+  v_bank := v_money OR (v_bookkeeping AND v_before.type='lieferant' AND v_after.type='lieferant');
+  IF (NOT v_money AND (v_before.payment_preference IS DISTINCT FROM v_after.payment_preference OR v_before.zahlungsziel_tage IS DISTINCT FROM v_after.zahlungsziel_tage))
+    OR (NOT v_bank AND v_before.iban IS DISTINCT FROM v_after.iban)
   THEN RETURN QUERY SELECT 'FORBIDDEN'::text,false; RETURN; END IF;
   IF v_before.vorrang IS DISTINCT FROM v_after.vorrang AND NOT EXISTS
     (SELECT 1 FROM public.app_user_rights WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND bereich='entscheiden')

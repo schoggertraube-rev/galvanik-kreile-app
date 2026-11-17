@@ -425,7 +425,7 @@ async function readReceipt(
 }
 
 export type CustomerUpdater=(tx:PrivilegedTenantTransaction,context:Parameters<CustomerWriter>[1]&{capabilities:{canEditCustomer:boolean}},input:unknown)=>Promise<CustomerUpdateCommandResult>;
-export type CustomerWriter=(tx:PrivilegedTenantTransaction,context:{tenantId:string;userId:string;capabilities:{canCreateCustomer:boolean;canManageMoney:boolean;canDecide?:boolean}},input:unknown)=>Promise<CustomerCreateCommandResult>;
+export type CustomerWriter=(tx:PrivilegedTenantTransaction,context:{tenantId:string;userId:string;capabilities:{canCreateCustomer:boolean;canManageMoney:boolean;canManageSupplierBank?:boolean;canDecide?:boolean}},input:unknown)=>Promise<CustomerCreateCommandResult>;
 class CustomerWriteRejected extends Error {
   constructor(readonly result:Exclude<OrderIntakeCommandResult,{code:"OK"}>){super("ORDER_INTAKE_CUSTOMER_WRITE_REJECTED:"+result.code);}
 }

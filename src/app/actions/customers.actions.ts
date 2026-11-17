@@ -71,6 +71,7 @@ function customerContext(authorization: Extract<Awaited<ReturnType<typeof resolv
       canCreateCustomer: getAuthorizationActionGrants(authorization).createCustomer,
       canEditCustomer: hasAuthorizationArea(authorization,"kunden"),
       canManageMoney: hasAuthorizationArea(authorization,"zahlungen"),
+      canManageSupplierBank: hasAuthorizationArea(authorization,"buchhaltung"),
       canDecide: hasAuthorizationArea(authorization,"entscheiden"),
     },
   };

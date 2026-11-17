@@ -41,6 +41,8 @@ export type CreateCustomerInput = {
 export type CustomerCommandCapabilities = {
   canCreateCustomer: boolean;
   canManageMoney: boolean;
+  /** PL17Nov17:07: only bank fields of an actual supplier, never customer terms. */
+  canManageSupplierBank?: boolean;
   canDecide?: boolean;
   canEditCustomer?: boolean;
 };

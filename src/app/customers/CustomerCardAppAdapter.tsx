@@ -60,7 +60,7 @@ export function CustomerCardAppAdapter({customerId,takeover,onOpenOrder,onClose,
   const close=onClose??(fallbackHref?()=>router.replace(fallbackHref):storeClose);
   return <CustomerCardView key={customerId} state={state} onOpenOrder={onOpenOrder??storeOrder} onClose={close}
     complaintsPanel={state.kind==='data'?<ComplaintPanel filter={{customerId:resolvedId}} read={getComplaints} mayRecord={hasArea('auftraege')}/>:null}
-    onSaveCustomer={hasArea("kunden")?save:undefined} canManageMoney={hasArea("zahlungen")} canDecide={hasArea("entscheiden")}
+    onSaveCustomer={hasArea("kunden")?save:undefined} canManageMoney={hasArea("zahlungen")} canManageSupplierBank={hasArea("buchhaltung")} canDecide={hasArea("entscheiden")}
     takeover={takeover} initialEdit={mode==="fehlend"||mode==="uebernahme"||mode==="bearbeiten"} missingFirst={mode==="fehlend"} checkAddress={readCustomerAddressAction}
     onSaveAgreement={hasArea("zahlungen")?saveCustomerAgreementAction:undefined}
     onRevokeAgreement={hasArea("zahlungen")?revokeCustomerAgreementAction:undefined}

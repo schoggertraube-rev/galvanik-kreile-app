@@ -102,7 +102,8 @@ async function prepare(tx: PrivilegedTenantTransaction, context: CustomerCommand
   const raw = customerWriteObject(input);
   if (!raw) return { code: "VALIDATION_ERROR" as const, message: "Kundendaten sind ungültig." };
   if (raw.vorrang === true && !context.capabilities.canDecide) return { code: "FORBIDDEN" as const, message: "Vorrang benötigt das Recht Entscheiden." };
-  if (!context.capabilities.canManageMoney && ["paymentPreference", "iban", "paymentTermDays"].some(key => raw[key] != null)) {
+  const supplierBank=context.capabilities.canManageSupplierBank===true&&raw.customerType==="lieferant";
+  if (!context.capabilities.canManageMoney && (["paymentPreference", "paymentTermDays"].some(key => raw[key] != null) || raw.iban != null&&!supplierBank)) {
     return { code: "FORBIDDEN" as const, message: MONEY_REQUIRED_MESSAGE };
   }
   const normalized = await normaliseCustomerWrite(tx, raw);

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CustomerCardView, type CustomerCardModel } from "../public";
+import { CustomerCardView,KundeFormular,EMPTY_CUSTOMER_FORM,type CustomerCardModel } from "../public";
 
 const card: CustomerCardModel = {
   id: "customer-1", customerNumber: "K-1042", name: "Erika Muster", companyName: "Muster GmbH", type: "business",
@@ -12,6 +12,26 @@ const card: CustomerCardModel = {
 };
 
 describe("Customer card V2", () => {
+  it.each([false,true])('supplier IBAN follows the real bank capability (%s), without customer payment controls',bank=>{
+    const {container}=render(<KundeFormular prefix="kundeneu" mode="create" value={{...EMPTY_CUSTOMER_FORM,customerType:'lieferant'}} onChange={vi.fn()} canManageMoney={false} canManageSupplierBank={bank}/>);
+    expect(Boolean(container.querySelector('[data-spec-id="kundeneu.iban"]'))).toBe(bank);
+    expect(container.querySelector('[data-spec-id="kundeneu.zahlungsbedingung"]')).toBeNull();
+  });
+
+  it('does not discard an allowed supplier IBAN while payment terms remain omitted',async()=>{
+    const save=vi.fn().mockResolvedValue({ok:true});
+    const {container}=render(<CustomerCardView state={{kind:'data',card:{...card,type:'lieferant',iban:null}}} onClose={vi.fn()} onOpenOrder={vi.fn()} onSaveCustomer={save} initialEdit canManageMoney={false} canManageSupplierBank/>);
+    const input=container.querySelector('[data-spec-id="kundebearbeiten.iban"]');
+    expect(input).not.toBeNull();
+    fireEvent.change(input!,{target:{value:'DE02120300000000202051'}});
+    fireEvent.click(container.querySelector('[data-spec-id="kundebearbeiten.speichern"]')!);
+    const partial=screen.queryByRole('button',{name:'Trotzdem speichern'});if(partial)fireEvent.click(partial);
+    await waitFor(()=>expect(save).toHaveBeenCalledOnce());
+    expect(save.mock.calls[0][0]).toMatchObject({iban:'DE02120300000000202051',customerType:'lieferant'});
+    expect(save.mock.calls[0][0]).not.toHaveProperty('paymentPreference');
+    expect(save.mock.calls[0][0]).not.toHaveProperty('paymentTermDays');
+  });
+
   it("renders V2 contact context and opens its real active order", () => {
     const openOrder = vi.fn();
     render(<CustomerCardView state={{ kind: "data", card }} onClose={vi.fn()} onOpenOrder={openOrder} canManageMoney={true} />);

@@ -229,6 +229,7 @@ export type GlobalCreatePorts = {
   canCreateOrder: boolean;
   canCreateQuote: boolean;
   canManageMoney: boolean;
+  canManageSupplierBank?: boolean;
   canManagePrices: boolean;
   canDecide?:boolean;
   showPrimaryTrigger?: boolean;
@@ -1578,7 +1579,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const createInputForStatus = (): CreateCustomerInput => {
     const {customerType:kind,salutation,handoverPreference,paymentTermDays,...fields}=customerDraft;
     const input:CreateCustomerInput={...fields,customerType:kind as Exclude<CustomerDraft["customerType"],"">,clientEventId:requestId("customer"),salutation:salutation||null,handoverPreference:handoverPreference||null,paymentTermDays:paymentTermDays?Number(paymentTermDays):null};
-    if(!ports.canManageMoney){delete input.paymentPreference;delete input.iban;delete input.paymentTermDays;}
+    if(!ports.canManageMoney){delete input.paymentPreference;delete input.paymentTermDays;if(!(ports.canManageSupplierBank&&input.customerType==="lieferant"))delete input.iban;}
     return input;
   };
 
@@ -2397,7 +2398,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     </div><div className="ev-erk-chips">{Object.entries(customerOrigins).map(([key,origin])=><span className="ev-erk-chip" key={key}>{origin}<b>{String(customerDraft[key as keyof CustomerFormValue])}</b></span>)}</div>
                   </div> : null}
                 </section>
-                <KundeFormular autofocusField="customerType" prefix="kundeneu" mode="create" value={customerDraft} supplierMode={supplierCustomerMode} onChange={setCustomerDraft} origins={customerOrigins} canManageMoney={ports.canManageMoney} addressSuggestions={customerAddress?.suggestions} addressMessage={customerAddress?{tone:customerAddress.kind==="found"?"ok":customerAddress.kind==="not-checked"?"neutral":"warn",text:customerAddress.message}:null}/>
+                <KundeFormular autofocusField="customerType" prefix="kundeneu" mode="create" value={customerDraft} supplierMode={supplierCustomerMode} onChange={setCustomerDraft} origins={customerOrigins} canManageMoney={ports.canManageMoney} canManageSupplierBank={ports.canManageSupplierBank} addressSuggestions={customerAddress?.suggestions} addressMessage={customerAddress?{tone:customerAddress.kind==="found"?"ok":customerAddress.kind==="not-checked"?"neutral":"warn",text:customerAddress.message}:null}/>
                 {customerCoreComplete && customerOrderMissingFields.length > 0 ? <Hinweis><div className="kr-stapel" data-spec-id="kundeneu.zustand.teilweise">
                   <strong>Speicherbar als Interessent · für Auftrag fehlt: {customerOrderMissingFields.join(", ")}</strong>
                   <div className="kr-stapel">

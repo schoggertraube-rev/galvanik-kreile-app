@@ -95,7 +95,7 @@ export async function createCustomerForIntake(input:unknown,writeCustomer:Custom
    const row=await source(tx,auth,input.itemId as string);
    const missingInvoiceSupplier=isSupplier&&row.vorgang_art==='rechnung'&&row.vorgang_id!==null&&row.kunde_id===null&&(await tx.execute(sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId} AND id=${row.vorgang_id}::uuid AND item_id=${row.id}::uuid AND lieferant_id IS NULL AND zahlstatus='unklar' AND unklar_grund='Lieferant fehlt'`)).length===1;
    if(missingInvoiceSupplier){const locked=await source(tx,auth,row.id,true);if(locked.version!==input.version)reject('CONFLICT','Eingang wurde inzwischen geändert.');}
-   const saved=await writeCustomer(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:true,canManageMoney:hasAuthorizationArea(auth,'zahlungen'),canDecide:hasAuthorizationArea(auth,'entscheiden')}},input.customer);
+   const saved=await writeCustomer(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:true,canManageMoney:hasAuthorizationArea(auth,'zahlungen'),canManageSupplierBank:hasAuthorizationArea(auth,'buchhaltung'),canDecide:hasAuthorizationArea(auth,'entscheiden')}},input.customer);
    if(saved.code!=='OK')throw new Rejected(saved);
    if(missingInvoiceSupplier)return saved;
    const assigned=await assignInTransaction(tx,auth,{itemId:input.itemId as string,version:input.version as number,clientEventId:(input.customer as Record<string,unknown>).clientEventId as string,customerId:saved.customer.id,mode:'manual'},readCustomer);

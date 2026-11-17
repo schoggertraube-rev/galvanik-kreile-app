@@ -14,7 +14,7 @@ export async function updateCustomerInTransaction(tx:PrivilegedTenantTransaction
   const hasAgreements = Object.hasOwn(raw, "agreements");
   const agreements = hasAgreements ? parseCustomerFreeTextAgreements(raw.agreements) : undefined;
   if (hasAgreements && !agreements) return { code: "VALIDATION_ERROR" as const, message: "Absprachen sind ungültig." };
-  if (!context.capabilities.canManageMoney && ["paymentPreference", "iban", "paymentTermDays"].some(key => raw[key] != null)) {
+  if (!context.capabilities.canManageMoney && ["paymentPreference", "paymentTermDays"].some(key => raw[key] != null)) {
     return { code: "FORBIDDEN" as const, message: FINANCIAL_ACCESS_COPY.paymentsMissing };
   }
   if (!context.capabilities.canManageMoney && agreements?.some((agreement) => agreement.geld)) {
@@ -22,11 +22,14 @@ export async function updateCustomerInTransaction(tx:PrivilegedTenantTransaction
   }
   const writable = { ...raw };
   delete writable.agreements;
-  if (!context.capabilities.canManageMoney) for (const field of ["paymentPreference", "iban", "paymentTermDays"]) delete writable[field];
+  if (!context.capabilities.canManageMoney) for (const field of ["paymentPreference", "paymentTermDays"]) delete writable[field];
 
       const customerId = String(raw.customerId);
       const current = await readCustomerProfile(tx, context.tenantId, customerId, true);
       if (!current) return { code: "NOT_FOUND" as const, message: "Kunde ist nicht verfügbar." };
+      const supplierBank=context.capabilities.canManageSupplierBank===true&&current.customerType==="lieferant"&&(raw.customerType==null||raw.customerType==="lieferant");
+      if(!context.capabilities.canManageMoney&&Object.hasOwn(raw,"iban")&&!supplierBank)return {code:"FORBIDDEN" as const,message:FINANCIAL_ACCESS_COPY.paymentsMissing};
+      if(!context.capabilities.canManageMoney&&!supplierBank)delete writable.iban;
       if (typeof raw.vorrang === "boolean" && raw.vorrang !== current.vorrang && !context.capabilities.canDecide) return { code: "FORBIDDEN" as const, message: "Vorrang benötigt das Recht Entscheiden." };
       const normalized = await normaliseCustomerWrite(tx, writable, current);
       const error = Object.values(normalized.errors)[0];

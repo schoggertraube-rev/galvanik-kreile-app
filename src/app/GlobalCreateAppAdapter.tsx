@@ -183,6 +183,7 @@ export function GlobalCreateAppAdapter() {
         canCreateOrder: hasArea("eingang"),
         canCreateQuote,
         canManageMoney: hasArea("zahlungen"),
+        canManageSupplierBank: hasArea("buchhaltung"),
         canManagePrices: hasArea("preise"),
         canDecide:hasArea("entscheiden"),
         showPrimaryTrigger: false,

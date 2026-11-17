@@ -20,6 +20,7 @@ export function KundeFormular({
   onChange,
   prefix,
   canManageMoney,
+  canManageSupplierBank = false,
   invoiceTermsEnabled = false,
   invoiceTermDays = null,
   mode,
@@ -40,6 +41,7 @@ export function KundeFormular({
   onChange: (value: CustomerFormValue) => void;
   prefix: "kundeneu" | "kundebearbeiten" | "eingang";
   canManageMoney: boolean;
+  canManageSupplierBank?: boolean;
   invoiceTermsEnabled?: boolean;
   invoiceTermDays?: number | null;
   mode: "create" | "edit" | "inline";
@@ -178,7 +180,7 @@ export function KundeFormular({
     {!isSupplier ? <Feld label="Übergabe bevorzugt"><div data-spec-id={`${prefix}.uebergabe`}><Segment label="Übergabe bevorzugt" wert={value.handoverPreference} optionen={[
       { wert: "pickup", text: "Abholung" }, { wert: "shipping", text: "Versand" },
     ]} onWert={(next) => set("handoverPreference", next)} /></div>{metadata("handoverPreference")}</Feld> : null}
-    {isSupplier ? field("iban", "IBAN", { maxLength: 34 }) : null}
+    {isSupplier && (canManageMoney || canManageSupplierBank) ? field("iban", "IBAN", { maxLength: 34 }) : null}
     {isSupplier ? field("paymentTermDays", "Zahlungsziel (Tage)", { type: "number" }) : null}
   </> : null;
   const more = value.customerType ? <>
