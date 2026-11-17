@@ -129,7 +129,7 @@ export async function readSettingsAction() {
   const canManageCompany = resolved.authorization.areas?.includes("einstellungen") ?? false;
   const canManageLogins = resolved.authorization.areas?.includes("logins") ?? false;
   const canManageFinancial = resolved.context.canManageFinancial;
-  if(!canManageFinancial)return {code:"FORBIDDEN" as const,message:FINANCIAL_ACCESS_COPY.pricesMissing};
+
   const [settings, catalog, hourlyRate] = await Promise.all([
     readSystemSettings(context),
     canManageCompany && canManageFinancial
@@ -144,6 +144,7 @@ export async function readSettingsAction() {
   if (hourlyRate.code !== "OK") return hourlyRate;
   return {
     code: "OK" as const,
+    catalogLocked: canManageCompany && !canManageFinancial ? FINANCIAL_ACCESS_COPY.pricesMissing : null,
     snapshot: {
       ...settings.snapshot,
       company: canManageCompany ? settings.snapshot.company : { companyName: "", street: "", zip: "", city: "", country: "", taxId: "", iban: "", bic: "", bankName: "", paymentTermDays: 0, logoUrl: "" },

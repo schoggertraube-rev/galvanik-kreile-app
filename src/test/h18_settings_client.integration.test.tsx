@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import type { AppSession } from "@/lib/server/appSession";
 import type { ManagedUser, SystemSettingsSnapshot } from "@/modules/fundament/public";
+import { FINANCIAL_ACCESS_COPY } from "@/ui/situationCatalog";
 
 (globalThis as typeof globalThis & { AsyncLocalStorage: typeof AsyncLocalStorage }).AsyncLocalStorage = AsyncLocalStorage;
 
@@ -175,7 +176,7 @@ function snapshot(fixture: Fixture): SystemSettingsSnapshot {
 
 async function renderSettings(fixture: Fixture, returnTo = "/orders") {
   const { SettingsAdminClient } = await import("@/app/settings/SettingsAdminClient");
-  render(<SettingsAdminClient initialSnapshot={snapshot(fixture)} initialServices={[]} returnTo={returnTo} />);
+  render(<SettingsAdminClient initialSnapshot={snapshot(fixture)} initialServices={[]} catalogLocked={FINANCIAL_ACCESS_COPY.pricesMissing} returnTo={returnTo} />);
   fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
 }
 

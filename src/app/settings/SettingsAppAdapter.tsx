@@ -18,5 +18,5 @@ export async function SettingsAppAdapter({ returnTo = null }: { returnTo?: strin
   const settings = await readSettingsAction();
   if (settings.code !== "OK") return <ProductActorAccessUnavailable />;
   const snapshot: SystemSettingsSnapshot = settings.snapshot;
-  return <SettingsAdminClient initialSnapshot={snapshot} initialServices={settings.services} returnTo={returnTo} />;
+  return <SettingsAdminClient initialSnapshot={snapshot} initialServices={settings.services} catalogLocked={settings.catalogLocked} returnTo={returnTo} />;
 }

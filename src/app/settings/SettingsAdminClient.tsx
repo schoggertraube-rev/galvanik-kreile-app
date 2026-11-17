@@ -67,10 +67,12 @@ function suggestedShortCode(fullName: string): string {
 export function SettingsAdminClient({
   initialSnapshot,
   initialServices,
+  catalogLocked,
   returnTo = null,
 }: {
   initialSnapshot: SystemSettingsSnapshot;
   initialServices: CatalogService[];
+  catalogLocked: string | null;
   returnTo?: string | null;
 }) {
   const { canManageCompany, canManageLogins } = initialSnapshot.capabilities ?? {
@@ -120,7 +122,7 @@ export function SettingsAdminClient({
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
   const companyReady = Object.entries(company).every(([key, value]) => key === "paymentTermDays" ? Number(value) > 0 : String(value).trim().length > 0);
-  const catalogReady = services.length > 0;
+  const catalogReady = catalogLocked === null && services.length > 0;
   const rateReady = hourlyRate.hourlyRateCents !== null;
   const currentUser = users.find((user) => user.isCurrent) ?? null;
   const visibleUsers = canManageLogins ? users : currentUser ? [currentUser] : [];
