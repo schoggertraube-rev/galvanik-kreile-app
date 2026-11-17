@@ -7,7 +7,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readPackageSwitchesAction,setPackageSwitchAction} from '@/app/actions/settings.actions';
-import {getAuthorizationSnapshotAction} from '@/app/actions/auth.actions';
+import {getAuthorizationSnapshotAction,getAuthBootstrapAction} from '@/app/actions/auth.actions';
 import {saveIntakeNoteAction} from '@/app/actions/eingang.actions';
 
 const replayUrl=process.env.DATABASE_URL;
@@ -31,15 +31,15 @@ it('KORR-233 K1: missing visibility source keeps the real login and records one 
  try{
   // Explicit isolated TEST fault from the PL case; no permission or guard changed.
   await sql`DELETE FROM public.feature_flags WHERE id='p2_kv'`;
-  const login=await withSession(full,()=>getAuthorizationSnapshotAction());
-  expect(login).toMatchObject({ok:true,data:{offline24h:false}});
-  if(!login.ok||!login.data.packageSwitches)throw Error('TEST_KORR233_LOGIN_FAILED');
-  expect(Object.keys(login.data.packageSwitches)).toHaveLength(17);
-  expect(Object.values(login.data.packageSwitches)).toEqual(Array(17).fill(false));
+  const login=await withSession(full,()=>getAuthBootstrapAction());
+  expect(login).toMatchObject({status:'authenticated',user:{offline24h:false}});
+  if(login.status!=='authenticated'||!login.user.packageSwitches)throw Error('TEST_KORR233_LOGIN_FAILED');
+  expect(Object.keys(login.user.packageSwitches)).toHaveLength(17);
+  expect(Object.values(login.user.packageSwitches)).toEqual(Array(17).fill(false));
   const records=await sql`SELECT id,event_type,command,subject_type,subject_id,reason,original_ref,original_sha256 FROM public.technical_protocol
    WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${full.actorId}::uuid AND command='PACKAGE_SWITCH_VISIBILITY_FAILED' ORDER BY recorded_at,id`;
   expect(records).toHaveLength(before.length+1);
-  expect(records.at(-1)).toMatchObject({event_type:'server_error',command:'PACKAGE_SWITCH_VISIBILITY_FAILED',subject_type:'action',subject_id:'getAuthorizationSnapshotAction',reason:'UNKNOWN',original_ref:null,original_sha256:null});
+  expect(records.at(-1)).toMatchObject({event_type:'server_error',command:'PACKAGE_SWITCH_VISIBILITY_FAILED',subject_type:'action',subject_id:'resolveAuthorization',reason:'UNAVAILABLE',original_ref:null,original_sha256:null});
  }finally{await restoreFlag(original);}
 });
 
@@ -56,9 +56,13 @@ it('KORR-233 K2: nullable logging role metadata keeps the actual login and flag 
 
 it('KORR-233 K2: enabled offline pilot with null roles never enables offline for the real login',async()=>{
  const original=await originalFlag('offline_24h');
+ const before=await withSession(full,()=>getAuthorizationSnapshotAction());
+ if(!before.ok||!before.data.packageSwitches)throw Error('TEST_KORR233_OFFLINE_BEFORE_LOGIN');
+ const diagnostics=await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${full.actorId}::uuid AND command='PACKAGE_SWITCH_VISIBILITY_FAILED'`;
  try{
   await sql`UPDATE public.feature_flags SET enabled=true,roles_allowed=NULL WHERE id='offline_24h'`;
-  expect(await withSession(full,()=>getAuthorizationSnapshotAction())).toMatchObject({ok:true,data:{offline24h:false,packageSwitches:{offline_24h:false}}});
+  expect(await withSession(full,()=>getAuthorizationSnapshotAction())).toMatchObject({ok:true,data:{offline24h:false,packageSwitches:{...before.data.packageSwitches,offline_24h:false}}});
+  expect(await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${full.actorId}::uuid AND command='PACKAGE_SWITCH_VISIBILITY_FAILED'`).toHaveLength(diagnostics.length);
  }finally{await restoreFlag(original);}
 });
 

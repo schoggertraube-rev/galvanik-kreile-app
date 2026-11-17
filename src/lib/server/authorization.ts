@@ -1,7 +1,7 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {PACKAGE_SWITCHES,mapPackageSwitchRows} from '@/modules/fundament/public';
 import type {PackageSwitchValues} from '@/modules/fundament/public';
-import {observeResolvedAuthorization,observeAuthorizationAttempt,recordObservedFailure} from './actionObservation';
+import {observeResolvedAuthorization,observeAuthorizationAttempt,reportObservedTechnical} from './actionObservation';
 import { readAppSession } from "@/lib/server/appSession";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
@@ -231,10 +231,11 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
   // 6. Berechtigungen ableiten
   const permissions = getPermissionsForAreas(areas);
   let visibility:PackageSwitchValues;
+  let visibilityFailed=false;
   try{visibility=mapPackageSwitchRows(dbUser.packageFlags);}
   catch{
     visibility=Object.fromEntries(PACKAGE_SWITCHES.map(({id})=>[id,false])) as PackageSwitchValues;
-    recordObservedFailure('PACKAGE_SWITCH_VISIBILITY_FAILED');
+    visibilityFailed=true;
   }
 
   const snapshot:AuthorizationSnapshot = {
@@ -249,6 +250,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
       packageSwitches: visibility,
   };
   observeResolvedAuthorization(snapshot);
+  if(visibilityFailed)await reportObservedTechnical({type:'server_error',command:'PACKAGE_SWITCH_VISIBILITY_FAILED',subject:{type:'action',id:'resolveAuthorization'},reason:'UNAVAILABLE'});
   return {ok:true,data:snapshot};
 }
 

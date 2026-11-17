@@ -239,6 +239,7 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/auth.actions.ts",
       "exported_functions": [
+        "getAuthBootstrapAction",
         "getAuthorizationSnapshotAction",
         "getRoleAction",
         "getMyPermissionsAction",

@@ -1,7 +1,8 @@
 "use server";
 import type {PackageSwitchValues} from "@/modules/fundament/public";
-import {observeAction} from '@/modules/logging/server-public';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {logTechnical} from '@/modules/logging/server-public';
+import {actionObservationActive,withActionObservation} from '@/lib/server/actionObservation';
+import {getAuthBootstrapState,type AuthBootstrapState} from '@/lib/server/authBootstrap';
 
 import bcrypt from "bcryptjs";
 import {PIN_LOGIN_COPY} from "@/ui/situationCatalog";
@@ -57,8 +58,14 @@ export type ClientAuthorizationResult =
       supportReference?: string;
     };
 
+/** Same bootstrap source and S20 sink for the actual first server render. */
+export async function getAuthBootstrapAction():Promise<AuthBootstrapState>{
+ return actionObservationActive()?getAuthBootstrapState():withActionObservation(getAuthBootstrapState,logTechnical);
+}
 export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizationResult> {
- return observeAction<ClientAuthorizationResult>('getAuthorizationSnapshotAction',{type:'action',id:'getAuthorizationSnapshotAction'},async()=>{
+ return actionObservationActive()?readClientAuthorizationSnapshot():withActionObservation(readClientAuthorizationSnapshot,logTechnical);
+}
+async function readClientAuthorizationSnapshot():Promise<ClientAuthorizationResult>{
   const result = await resolveAuthorization();
   if (!result.ok) {
     if (result.reason === "NO_SESSION") {
@@ -87,7 +94,6 @@ export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizat
       active: true,
     },
   };
- },readLoggingSettings);
 }
 
 export async function getRoleAction(): Promise<AppRole | null> {
