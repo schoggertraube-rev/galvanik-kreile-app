@@ -9,12 +9,15 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture,nativeFetch} from '../../../e2e/ablauf/replayHarness';
 import {readyOrderForInvoice,readyInvoiceOrder,deliveryNoteInputFixture} from '../../../e2e/ablauf/orderFixture';
+import {cancelInvoiceAction,getInvoiceCancellationReceiptAction} from '@/app/actions/invoices.actions';
 import {issueInvoiceAction} from '@/app/actions/invoices.actions';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 import {confirmPaymentAction,setPaymentModeAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {generateDeliveryNote} from '@/app/actions/pdf.actions';
 import {prepareIntakeFileAction,finishIntakeFileAction,assignIntakeCustomerAction,getIntakeAssignmentAction,getIntakeCaptureAction,getIncomingInvoiceAction,saveIntakeTaskAction,getIntakeTaskAction} from '@/app/actions/eingang.actions';
+import {readInvoicePdf} from '@/lib/server/invoiceRead';
+import {resolveAuthorization} from '@/lib/server/authorization';
 import {getAnalyseOverview} from '@/features/analyse/analyse.actions';
 import {createCustomerAction} from '@/app/actions/customers.actions';
 
@@ -116,4 +119,23 @@ it('KORR-RECHTE intake and customers secure a real supplier delivery PDF and ass
  // The existing analysis tiles may report missing sources; that is not fabricated financial data.
  const analysis=await withSession(bookkeeping,()=>getAnalyseOverview('monat'));
  expect(analysis.error).toBeUndefined();expect(analysis.data.length).toBeGreaterThan(0);
+});
+
+
+it('KORR-RECHTE payments cancel and reread the immutable cancellation proof without gaining price/document access',async()=>{
+ const prepared=await readyOrderForInvoice('TEST Storno getrennte Rechte'),prices=await createFixture(['preise']),payments=await createFixture(['zahlungen']);
+ const issued=await withSession(prices,()=>issueInvoiceAction({orderId:prepared.orderId,expectedVersion:prepared.version,clientEventId:randomUUID()}));if(issued.code!=='OK')throw Error('TEST_REAL_CANCELLATION_INVOICE');
+ const {InvoicesAppAdapter}=await import('@/app/buchhaltung/rechnungen/InvoicesAppAdapter');
+ expect(await withSession(prices,()=>InvoicesAppAdapter())).toMatchObject({props:{initialState:{state:'DATA',canCancel:false}}});
+ const combined=await createFixture(['preise','zahlungen']);
+ expect(await withSession(combined,()=>InvoicesAppAdapter())).toMatchObject({props:{initialState:{state:'DATA',canCancel:true}}});
+ const input={invoiceId:issued.receipt.invoiceId,expectedVersion:1 as const,reason:'TEST Storno mit Zahlungsrecht',clientEventId:randomUUID()};
+ expect(await withSession(prices,()=>cancelInvoiceAction(input))).toMatchObject({code:'FORBIDDEN'});
+ const cancelled=await withSession(payments,()=>cancelInvoiceAction(input));expect(cancelled).toMatchObject({code:'OK'});if(cancelled.code!=='OK')throw Error('TEST_REAL_PAYMENT_CANCELLATION');
+ expect(await withSession(payments,()=>cancelInvoiceAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:cancelled.receipt.eventId}});
+ const read=await withSession(payments,()=>getInvoiceCancellationReceiptAction({invoiceId:input.invoiceId,clientEventId:input.clientEventId}));
+ expect(read).toMatchObject({code:'OK',data:{eventId:cancelled.receipt.eventId,invoiceId:input.invoiceId,status:'cancelled',cancelledBy:payments.actorId}});
+ expect(await withSession(payments,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_REAL_CANCEL_DOCUMENT_AUTH');return readInvoicePdf(auth.data,input.invoiceId,'cancellation');})).toMatchObject({code:'FORBIDDEN'});
+ if(read.code!=='OK'||!read.data)throw Error('TEST_CANCELLATION_PROOF_READ');expect(read.data).not.toHaveProperty('snapshot');expect(read.data).not.toHaveProperty('positions');
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId}::uuid AND event_type='INVOICE_CANCELLED_V1'`).toEqual([{n:1}]);
 });

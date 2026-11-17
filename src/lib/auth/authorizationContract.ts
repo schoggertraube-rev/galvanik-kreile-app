@@ -242,3 +242,6 @@ export function getAuthorizationActionGrants(
     createQuote: canManageOrders && hasAuthorizationArea(authorization, "preise"),
   };
 }
+
+/** Cancellation acknowledgements contain no positions; payments can finish their existing command. */
+export function canReadInvoiceCancellationProof(auth:Parameters<typeof hasAuthorizationArea>[0]&{permissions:readonly string[]}){return auth.permissions.includes('perm_view_prices')||hasAuthorizationArea(auth,'zahlungen');}

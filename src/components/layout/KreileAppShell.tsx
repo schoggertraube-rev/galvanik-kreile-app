@@ -86,7 +86,8 @@ export function KreileAppShell({ children, globalCreate,loginHandle }: { childre
   if (!permissions.hasArea("mails")) hidden.push("nachrichten");
   if (!permissions.hasPermission("perm_view_leitstand")) hidden.push("werkstatt", "auftraege");
   if (!permissions.hasPermission("perm_view_customers")) hidden.push("kunden");
-  if (!financial) hidden.push("geld");
+  // This existing destination is the price-protected outgoing invoice list.
+  if (!permissions.hasPermission("perm_view_prices")) hidden.push("geld");
   if (!permissions.hasPermission("perm_sys_toggles") && !permissions.hasPermission("perm_sys_users") && !permissions.hasPermission("perm_sys_diag")) hidden.push("einstellungen");
 
   const go = (target: Bereich | "mehr") => {

@@ -1,3 +1,4 @@
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { readInvoiceSummaries } from "@/lib/server/invoiceRead";
 import { canViewAccounting } from "@/modules/accounting/public";
@@ -30,7 +31,7 @@ export async function InvoicesAppAdapter() {
       initialState = {
         state: result.data.length === 0 ? "EMPTY" : "DATA",
         data: result.data,
-        canCancel: canViewAccounting(authorization.data),
+        canCancel: hasAuthorizationArea(authorization.data,'zahlungen'),
       };
     } else {
       initialState = {
