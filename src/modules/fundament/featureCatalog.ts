@@ -126,12 +126,12 @@ export const PACKAGE_SWITCHES = [
 export type PackageSwitchId = typeof PACKAGE_SWITCHES[number]["id"];
 export type PackageSwitchValues = Record<PackageSwitchId, boolean>;
 
-export type PackageSwitchRow={id:string;enabled:boolean;roles:string[]};
+export type PackageSwitchRow={id:string;enabled:boolean;roles:string[]|null};
 const packageSwitchIds=new Set<string>(PACKAGE_SWITCHES.map(({id})=>id));
 export function validatePackageSwitchRow(value:unknown):asserts value is PackageSwitchRow{
  if(!value||typeof value!=='object'||Array.isArray(value))throw Error('PACKAGE_SWITCH_SOURCE_INVALID');
  const row=value as Record<string,unknown>;
- if(typeof row.id!=='string'||!packageSwitchIds.has(row.id)||typeof row.enabled!=='boolean'||!Array.isArray(row.roles)||row.roles.some(role=>typeof role!=='string')||row.id!=='offline_24h'&&row.roles.length!==0)throw Error('PACKAGE_SWITCH_SOURCE_INVALID');
+ if(typeof row.id!=='string'||!packageSwitchIds.has(row.id)||typeof row.enabled!=='boolean'||row.roles!==null&&(!Array.isArray(row.roles)||row.roles.some(role=>typeof role!=='string')||row.id!=='offline_24h'&&row.roles.length!==0))throw Error('PACKAGE_SWITCH_SOURCE_INVALID');
 }
 /** One pure projector for the existing rights SQL and settings flag source. */
 export function mapPackageSwitchRows(source:unknown):PackageSwitchValues{

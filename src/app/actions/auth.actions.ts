@@ -1,5 +1,7 @@
 "use server";
 import type {PackageSwitchValues} from "@/modules/fundament/public";
+import {observeAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 
 import bcrypt from "bcryptjs";
 import {PIN_LOGIN_COPY} from "@/ui/situationCatalog";
@@ -56,6 +58,7 @@ export type ClientAuthorizationResult =
     };
 
 export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizationResult> {
+ return observeAction<ClientAuthorizationResult>('getAuthorizationSnapshotAction',{type:'action',id:'getAuthorizationSnapshotAction'},async()=>{
   const result = await resolveAuthorization();
   if (!result.ok) {
     if (result.reason === "NO_SESSION") {
@@ -84,6 +87,7 @@ export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizat
       active: true,
     },
   };
+ },readLoggingSettings);
 }
 
 export async function getRoleAction(): Promise<AppRole | null> {

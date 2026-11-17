@@ -81,7 +81,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       expect(Object.keys(result.data.packageSwitches!)).toHaveLength(17);
     }
     vi.mocked(db.select().from(appUsers).where).mockResolvedValueOnce([{id:'user-1',fullName:'Max Kreile',role:'admin',active:true,packageFlags:null}] as unknown as Array<typeof appUsers.$inferSelect>);
-    expect(await resolveAuthorization()).toMatchObject({ok:false,reason:'AUTHORIZATION_UNAVAILABLE'});
+    expect(await resolveAuthorization()).toMatchObject({ok:true,data:{offline24h:false,packageSwitches:Object.fromEntries(PACKAGE_SWITCHES.map(({id})=>[id,false]))}});
   });
 
   it("2. keine Session", async () => {

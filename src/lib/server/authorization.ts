@@ -1,7 +1,7 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {PACKAGE_SWITCHES,mapPackageSwitchRows} from '@/modules/fundament/public';
 import type {PackageSwitchValues} from '@/modules/fundament/public';
-import {observeResolvedAuthorization,observeAuthorizationAttempt} from './actionObservation';
+import {observeResolvedAuthorization,observeAuthorizationAttempt,recordObservedFailure} from './actionObservation';
 import { readAppSession } from "@/lib/server/appSession";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
@@ -148,7 +148,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
         // Same rights query and pure package catalogue; no server-action facade.
         packageFlags: sql<unknown>`(SELECT jsonb_agg(jsonb_build_object('id',flag.id,'enabled',
           CASE WHEN flag.id='offline_24h' THEN flag.enabled AND
-            (cardinality(flag.roles_allowed)=0 OR ${appUsers.role}=ANY(flag.roles_allowed))
+            coalesce(cardinality(flag.roles_allowed)=0 OR ${appUsers.role}=ANY(flag.roles_allowed),false)
           ELSE flag.enabled END,'roles',flag.roles_allowed))
           FROM public.feature_flags flag WHERE flag.id IN (${sql.join(PACKAGE_SWITCHES.map(({id})=>sql`${id}`),sql`,`)}))`,
         updatedAt: appUsers.updatedAt,
@@ -232,7 +232,10 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
   const permissions = getPermissionsForAreas(areas);
   let visibility:PackageSwitchValues;
   try{visibility=mapPackageSwitchRows(dbUser.packageFlags);}
-  catch(error){console.error('[PACKAGE_SWITCH_VISIBILITY_FAILED]',error);return {ok:false,reason:'AUTHORIZATION_UNAVAILABLE',message:'AUTH_DB_ERROR: Berechtigungen nicht verfügbar'};}
+  catch{
+    visibility=Object.fromEntries(PACKAGE_SWITCHES.map(({id})=>[id,false])) as PackageSwitchValues;
+    recordObservedFailure('PACKAGE_SWITCH_VISIBILITY_FAILED');
+  }
 
   const snapshot:AuthorizationSnapshot = {
       userId: dbUser.id,

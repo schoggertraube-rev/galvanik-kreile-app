@@ -13,6 +13,55 @@ import {saveIntakeNoteAction} from '@/app/actions/eingang.actions';
 const replayUrl=process.env.DATABASE_URL;
 if(!replayUrl||replayUrl!==process.env.H18_EXPECTED_DATABASE_URL||new URL(replayUrl).hostname!=='127.0.0.1')throw Error('TEST_S21_FINANCIAL_DEDICATED_LOOPBACK_REQUIRED');
 
+type OriginalFlag={id:string;name:string;description:string|null;enabled:boolean;roles_allowed:string[]|null;created_at:string;updated_at:string};
+async function originalFlag(id:string):Promise<OriginalFlag>{
+ const rows=await sql<{original:OriginalFlag}[]>`SELECT to_jsonb(flag) AS original FROM public.feature_flags flag WHERE id=${id}`;
+ if(rows.length!==1)throw Error('TEST_KORR233_FLAG_SOURCE_MISSING');
+ return rows[0].original;
+}
+async function restoreFlag(original:OriginalFlag){
+ await sql`INSERT INTO public.feature_flags SELECT * FROM jsonb_populate_record(NULL::public.feature_flags,${sql.json(original)}::jsonb)
+  ON CONFLICT(id) DO UPDATE SET enabled=EXCLUDED.enabled,roles_allowed=EXCLUDED.roles_allowed,updated_at=EXCLUDED.updated_at`;
+ expect(await originalFlag(String(original.id))).toEqual(original);
+}
+
+it('KORR-233 K1: missing visibility source keeps the real login and records one content-free diagnostic',async()=>{
+ const original=await originalFlag('p2_kv');
+ const before=await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${full.actorId}::uuid AND command='PACKAGE_SWITCH_VISIBILITY_FAILED'`;
+ try{
+  // Explicit isolated TEST fault from the PL case; no permission or guard changed.
+  await sql`DELETE FROM public.feature_flags WHERE id='p2_kv'`;
+  const login=await withSession(full,()=>getAuthorizationSnapshotAction());
+  expect(login).toMatchObject({ok:true,data:{offline24h:false}});
+  if(!login.ok||!login.data.packageSwitches)throw Error('TEST_KORR233_LOGIN_FAILED');
+  expect(Object.keys(login.data.packageSwitches)).toHaveLength(17);
+  expect(Object.values(login.data.packageSwitches)).toEqual(Array(17).fill(false));
+  const records=await sql`SELECT id,event_type,command,subject_type,subject_id,reason,original_ref,original_sha256 FROM public.technical_protocol
+   WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${full.actorId}::uuid AND command='PACKAGE_SWITCH_VISIBILITY_FAILED' ORDER BY recorded_at,id`;
+  expect(records).toHaveLength(before.length+1);
+  expect(records.at(-1)).toMatchObject({event_type:'server_error',command:'PACKAGE_SWITCH_VISIBILITY_FAILED',subject_type:'action',subject_id:'getAuthorizationSnapshotAction',reason:'UNKNOWN',original_ref:null,original_sha256:null});
+ }finally{await restoreFlag(original);}
+});
+
+it('KORR-233 K2: nullable logging role metadata keeps the actual login and flag values',async()=>{
+ const original=await originalFlag('logging');
+ const before=await withSession(full,()=>getAuthorizationSnapshotAction());
+ if(!before.ok)throw Error('TEST_KORR233_BEFORE_LOGIN');
+ try{
+  await sql`UPDATE public.feature_flags SET roles_allowed=NULL WHERE id='logging'`;
+  expect(await withSession(full,()=>getAuthorizationSnapshotAction())).toMatchObject({ok:true,data:{packageSwitches:before.data.packageSwitches,offline24h:before.data.offline24h}});
+  expect(await withSession(full,()=>readPackageSwitchesAction())).toMatchObject({code:'OK',switches:{logging:original.enabled}});
+ }finally{await restoreFlag(original);}
+});
+
+it('KORR-233 K2: enabled offline pilot with null roles never enables offline for the real login',async()=>{
+ const original=await originalFlag('offline_24h');
+ try{
+  await sql`UPDATE public.feature_flags SET enabled=true,roles_allowed=NULL WHERE id='offline_24h'`;
+  expect(await withSession(full,()=>getAuthorizationSnapshotAction())).toMatchObject({ok:true,data:{offline24h:false,packageSwitches:{offline_24h:false}}});
+ }finally{await restoreFlag(original);}
+});
+
 it('S21 F1/F3/F5-F8: existing rights, one N5 audit, fresh reread and real domain write while off',async()=>{
  const initial=await withSession(full,()=>readPackageSwitchesAction());
  expect(initial.code).toBe('OK');if(initial.code!=='OK')throw Error('TEST_S21_INITIAL');
