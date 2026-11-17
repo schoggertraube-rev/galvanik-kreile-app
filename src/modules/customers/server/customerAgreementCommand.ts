@@ -1,4 +1,5 @@
 import "server-only";
+import {FINANCIAL_ACCESS_COPY} from "@/ui/financialAccessCopy";
 
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -193,7 +194,7 @@ async function finishMutation(
 }
 
 export async function saveCustomerAgreementCommand(context: CustomerCommandContext, input: unknown): Promise<CustomerAgreementCommandResult> {
-  if (!context.capabilities.canManageMoney) return { code: "FORBIDDEN", message: "Zahlungsabsprachen benötigen den Bereich Geld." };
+  if (!context.capabilities.canManageMoney) return { code: "FORBIDDEN", message: FINANCIAL_ACCESS_COPY.paymentsMissing };
   const value = parseSaveEnvelope(input);
   if (!value) return { code: "VALIDATION_ERROR", message: "Absprache ist ungültig." };
   try {
@@ -215,7 +216,7 @@ export async function saveCustomerAgreementCommand(context: CustomerCommandConte
 }
 
 export async function revokeCustomerAgreementCommand(context: CustomerCommandContext, input: unknown): Promise<CustomerAgreementCommandResult> {
-  if (!context.capabilities.canManageMoney) return { code: "FORBIDDEN", message: "Zahlungsabsprachen benötigen den Bereich Geld." };
+  if (!context.capabilities.canManageMoney) return { code: "FORBIDDEN", message: FINANCIAL_ACCESS_COPY.paymentsMissing };
   const value = parseRevokeEnvelope(input);
   if (!value) return { code: "VALIDATION_ERROR", message: "Widerruf ist ungültig." };
   try {
