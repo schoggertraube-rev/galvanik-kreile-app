@@ -1,0 +1,7 @@
+# Preserve upstream sample bytes and their recorded checksums on every platform.
+*.xml -text
+*.pdf -text
+*.png -text
+*-LICENSE.txt -text
+*-NOTICE.txt -text
+SOURCES.json text eol=lf

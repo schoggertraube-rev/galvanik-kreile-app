@@ -1,0 +1,334 @@
+{
+  "schemaVersion": 1,
+  "purpose": "S54a official public TEST documents; no customer originals, recognition result or format compliance claim",
+  "sources": [
+    {
+      "file": "TEST_xrechnung_ubl.xml",
+      "format": "XRechnung",
+      "declaredProfile": "UBL",
+      "sourceUrl": "https://raw.githubusercontent.com/itplr-kosit/xrechnung-testsuite/1ce1dafffd035e5ce59a7ab0d3bf44ac14af16c9/src/test/business-cases/standard/01.01a-INVOICE_ubl.xml",
+      "sourceRepository": "itplr-kosit/xrechnung-testsuite",
+      "sourceCommit": "1ce1dafffd035e5ce59a7ab0d3bf44ac14af16c9",
+      "sourcePath": "src/test/business-cases/standard/01.01a-INVOICE_ubl.xml",
+      "sourceGitBlob": "b0dd3fde1224947d6b224bf41c1feb7680c4ad83",
+      "bytes": 6742,
+      "sha256": "74fb09c609d5fba15a8c543060998d3b92858f56a81fb5b0ed244d6794e498d1",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "KOSIT-LICENSE.txt"
+      ],
+      "testOnly": true,
+      "modified": false
+    },
+    {
+      "file": "TEST_xrechnung_cii.xml",
+      "format": "XRechnung",
+      "declaredProfile": "CII",
+      "sourceUrl": "https://raw.githubusercontent.com/itplr-kosit/xrechnung-testsuite/1ce1dafffd035e5ce59a7ab0d3bf44ac14af16c9/src/test/business-cases/standard/01.01a-INVOICE_uncefact.xml",
+      "sourceRepository": "itplr-kosit/xrechnung-testsuite",
+      "sourceCommit": "1ce1dafffd035e5ce59a7ab0d3bf44ac14af16c9",
+      "sourcePath": "src/test/business-cases/standard/01.01a-INVOICE_uncefact.xml",
+      "sourceGitBlob": "4ddca14baf40a3e5adcdc7589616a13890fd4820",
+      "bytes": 9590,
+      "sha256": "ae8062ecc2aaec56515e8e361e2885515df785f3d1cb9effa825bd41e37faf9a",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "KOSIT-LICENSE.txt"
+      ],
+      "testOnly": true,
+      "modified": true,
+      "sourceBytes": 9622,
+      "sourceSha256": "727b51982a84c9b406599a7384783570910440ed405c9bb6d918b22442636886",
+      "normalization": "Upstream trailing horizontal whitespace removed for unchanged git diff check; license terminal blank lines reduced to one newline. No XML element/attribute/value or license words changed. Original source URL/Git blob/source SHA retained."
+    },
+    {
+      "file": "TEST_zugferd_minimum.pdf",
+      "format": "ZUGFeRD/Factur-X",
+      "declaredProfile": "MINIMUM",
+      "sourceUrl": "https://raw.githubusercontent.com/ZUGFeRD/mustangproject/0abe7bba61f0d248d0c96cedf03f975837a7e252/library/src/test/resources/ZF252_Beispiele/0.%20MINIMUM/MINIMUM_Rechnung/MINIMUM_Rechnung_fx.pdf",
+      "sourceRepository": "ZUGFeRD/mustangproject",
+      "sourceCommit": "0abe7bba61f0d248d0c96cedf03f975837a7e252",
+      "sourcePath": "library/src/test/resources/ZF252_Beispiele/0. MINIMUM/MINIMUM_Rechnung/MINIMUM_Rechnung_fx.pdf",
+      "sourceGitBlob": "340653c98497be172d64cc1ba7de7f891897bb1c",
+      "bytes": 43789,
+      "sha256": "4d331416500719b338d8f969c8a414c396adce37e21273efdbf59c6a41920712",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "MUSTANG-LICENSE.txt",
+        "MUSTANG-NOTICE.txt"
+      ],
+      "testOnly": true,
+      "modified": false,
+      "inspected": {
+        "pages": 1,
+        "embeddedXml": [
+          {
+            "filename": "factur-x.xml",
+            "guidelines": [
+              "urn:factur-x.eu:1p0:minimum"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": "TEST_zugferd_basic_wl.pdf",
+      "format": "ZUGFeRD/Factur-X",
+      "declaredProfile": "BASIC WL",
+      "sourceUrl": "https://raw.githubusercontent.com/ZUGFeRD/mustangproject/0abe7bba61f0d248d0c96cedf03f975837a7e252/library/src/test/resources/ZF252_Beispiele/1.%20BASIC%20WL/BASIC-WL_Einfach/BASIC-WL_Einfach_fx.pdf",
+      "sourceRepository": "ZUGFeRD/mustangproject",
+      "sourceCommit": "0abe7bba61f0d248d0c96cedf03f975837a7e252",
+      "sourcePath": "library/src/test/resources/ZF252_Beispiele/1. BASIC WL/BASIC-WL_Einfach/BASIC-WL_Einfach_fx.pdf",
+      "sourceGitBlob": "e8828c31755a1964892ace8820293194f68f29b4",
+      "bytes": 47493,
+      "sha256": "cce9182d7b380508793f5d290ddaa2446c4b925741571feb616903be688a4940",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "MUSTANG-LICENSE.txt",
+        "MUSTANG-NOTICE.txt"
+      ],
+      "testOnly": true,
+      "modified": false,
+      "inspected": {
+        "pages": 2,
+        "embeddedXml": [
+          {
+            "filename": "factur-x.xml",
+            "guidelines": [
+              "urn:factur-x.eu:1p0:basicwl"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": "TEST_zugferd_basic.pdf",
+      "format": "ZUGFeRD/Factur-X",
+      "declaredProfile": "BASIC",
+      "sourceUrl": "https://raw.githubusercontent.com/ZUGFeRD/mustangproject/0abe7bba61f0d248d0c96cedf03f975837a7e252/library/src/test/resources/ZF252_Beispiele/2.%20BASIC/B01_Einfach/B01_01_Einfach_fx.pdf",
+      "sourceRepository": "ZUGFeRD/mustangproject",
+      "sourceCommit": "0abe7bba61f0d248d0c96cedf03f975837a7e252",
+      "sourcePath": "library/src/test/resources/ZF252_Beispiele/2. BASIC/B01_Einfach/B01_01_Einfach_fx.pdf",
+      "sourceGitBlob": "955789e8cdedf04cbabb9b995a89e90d65154caf",
+      "bytes": 41772,
+      "sha256": "3272dd58f4f55f8b5970fe6661c5afcc93398971ee3032559086aa91feb474e7",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "MUSTANG-LICENSE.txt",
+        "MUSTANG-NOTICE.txt"
+      ],
+      "testOnly": true,
+      "modified": false,
+      "inspected": {
+        "pages": 2,
+        "embeddedXml": [
+          {
+            "filename": "factur-x.xml",
+            "guidelines": [
+              "urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:basic"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": "TEST_zugferd_en16931.pdf",
+      "format": "ZUGFeRD/Factur-X",
+      "declaredProfile": "EN16931",
+      "sourceUrl": "https://raw.githubusercontent.com/ZUGFeRD/mustangproject/0abe7bba61f0d248d0c96cedf03f975837a7e252/library/src/test/resources/ZF252_Beispiele/3.%20EN16931/E05_Einfach/E05_01_Einfach_fx.pdf",
+      "sourceRepository": "ZUGFeRD/mustangproject",
+      "sourceCommit": "0abe7bba61f0d248d0c96cedf03f975837a7e252",
+      "sourcePath": "library/src/test/resources/ZF252_Beispiele/3. EN16931/E05_Einfach/E05_01_Einfach_fx.pdf",
+      "sourceGitBlob": "32d98b1af10d6c19309965ec768ba3859d1549b4",
+      "bytes": 42830,
+      "sha256": "a0978983423b7261cea82ed4bea1e7b3062c87521692be83ad52ed27caeb6612",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "MUSTANG-LICENSE.txt",
+        "MUSTANG-NOTICE.txt"
+      ],
+      "testOnly": true,
+      "modified": false,
+      "inspected": {
+        "pages": 2,
+        "embeddedXml": [
+          {
+            "filename": "factur-x.xml",
+            "guidelines": [
+              "urn:cen.eu:en16931:2017"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": "TEST_zugferd_extended.pdf",
+      "format": "ZUGFeRD/Factur-X",
+      "declaredProfile": "EXTENDED",
+      "sourceUrl": "https://raw.githubusercontent.com/ZUGFeRD/mustangproject/0abe7bba61f0d248d0c96cedf03f975837a7e252/library/src/test/resources/ZF252_Beispiele/4.%20EXTENDED/X02_SubInvoiceLines_Buero_Material_Bsp3/X02_01_SubInvoiceLines_Buero_Material_Bsp3___fx.pdf",
+      "sourceRepository": "ZUGFeRD/mustangproject",
+      "sourceCommit": "0abe7bba61f0d248d0c96cedf03f975837a7e252",
+      "sourcePath": "library/src/test/resources/ZF252_Beispiele/4. EXTENDED/X02_SubInvoiceLines_Buero_Material_Bsp3/X02_01_SubInvoiceLines_Buero_Material_Bsp3___fx.pdf",
+      "sourceGitBlob": "733cf03700e22b693edd342258c01a788b55709c",
+      "bytes": 55248,
+      "sha256": "48a4c5eef2b91a90e06fa3bd54095c70c4ec517ba4beb7c636e109d88cf63629",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "MUSTANG-LICENSE.txt",
+        "MUSTANG-NOTICE.txt"
+      ],
+      "testOnly": true,
+      "modified": false,
+      "inspected": {
+        "pages": 4,
+        "embeddedXml": [
+          {
+            "filename": "factur-x.xml",
+            "guidelines": [
+              "urn:cen.eu:en16931:2017#conformant#urn:factur-x.eu:1p0:extended"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": "TEST_zugferd_xrechnung.pdf",
+      "format": "ZUGFeRD/Factur-X",
+      "declaredProfile": "XRECHNUNG",
+      "sourceUrl": "https://raw.githubusercontent.com/ZUGFeRD/mustangproject/0abe7bba61f0d248d0c96cedf03f975837a7e252/library/src/test/resources/ZF252_Beispiele/5.%20XRECHNUNG/XRECHNUNG_Einfach/XRECHNUNG_Einfach_fx.pdf",
+      "sourceRepository": "ZUGFeRD/mustangproject",
+      "sourceCommit": "0abe7bba61f0d248d0c96cedf03f975837a7e252",
+      "sourcePath": "library/src/test/resources/ZF252_Beispiele/5. XRECHNUNG/XRECHNUNG_Einfach/XRECHNUNG_Einfach_fx.pdf",
+      "sourceGitBlob": "f68cb08f1dcefd97841343637267d9c328f28193",
+      "bytes": 52396,
+      "sha256": "daeb678623b9fd099e177f52a9231028780fb68f4469a8784f8f31f674bf079e",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "MUSTANG-LICENSE.txt",
+        "MUSTANG-NOTICE.txt"
+      ],
+      "testOnly": true,
+      "modified": false,
+      "inspected": {
+        "pages": 2,
+        "embeddedXml": [
+          {
+            "filename": "xrechnung.xml",
+            "guidelines": [
+              "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": "TEST_invoice_plain.pdf",
+      "format": "PDF comparison",
+      "declaredProfile": "not verified",
+      "sourceUrl": "https://raw.githubusercontent.com/ZUGFeRD/mustangproject/0abe7bba61f0d248d0c96cedf03f975837a7e252/library/src/test/resources/MustangGnuaccountingBeispielRE-20201121_508blanko.pdf",
+      "sourceRepository": "ZUGFeRD/mustangproject",
+      "sourceCommit": "0abe7bba61f0d248d0c96cedf03f975837a7e252",
+      "sourcePath": "library/src/test/resources/MustangGnuaccountingBeispielRE-20201121_508blanko.pdf",
+      "sourceGitBlob": "8dbcbb964615bc1b457b2225de92ee8d8ffdf554",
+      "bytes": 90271,
+      "sha256": "6fd91b9e3b47193c4a7d6ea4bc30b80d1fd3f9e2cf74f3300f66f16303157dc1",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "MUSTANG-LICENSE.txt",
+        "MUSTANG-NOTICE.txt"
+      ],
+      "testOnly": true,
+      "modified": false,
+      "inspected": {
+        "pages": 1,
+        "embeddedXml": []
+      }
+    },
+    {
+      "file": "KOSIT-LICENSE.txt",
+      "format": "license",
+      "declaredProfile": null,
+      "sourceUrl": "https://raw.githubusercontent.com/itplr-kosit/xrechnung-testsuite/1ce1dafffd035e5ce59a7ab0d3bf44ac14af16c9/LICENSE",
+      "sourceRepository": "itplr-kosit/xrechnung-testsuite",
+      "sourceCommit": "1ce1dafffd035e5ce59a7ab0d3bf44ac14af16c9",
+      "sourcePath": "LICENSE",
+      "sourceGitBlob": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "KOSIT-LICENSE.txt"
+      ],
+      "testOnly": true,
+      "modified": false
+    },
+    {
+      "file": "MUSTANG-LICENSE.txt",
+      "format": "license",
+      "declaredProfile": null,
+      "sourceUrl": "https://raw.githubusercontent.com/ZUGFeRD/mustangproject/0abe7bba61f0d248d0c96cedf03f975837a7e252/LICENSE",
+      "sourceRepository": "ZUGFeRD/mustangproject",
+      "sourceCommit": "0abe7bba61f0d248d0c96cedf03f975837a7e252",
+      "sourcePath": "LICENSE",
+      "sourceGitBlob": "d4ecc70313429fa2e1d19f25e6869adf5e1c2e0f",
+      "bytes": 18086,
+      "sha256": "6a62e2c23df8eac6d6f6d90b402d92add5115d7790a9b68a1935aa05980e711d",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "MUSTANG-LICENSE.txt",
+        "MUSTANG-NOTICE.txt"
+      ],
+      "testOnly": true,
+      "modified": true,
+      "sourceBytes": 18096,
+      "sourceSha256": "ba98dd76bda1e82034791438bb931145f85e5db3975852a015344ad5990fa21b",
+      "normalization": "Upstream trailing horizontal whitespace removed for unchanged git diff check; license terminal blank lines reduced to one newline. No XML element/attribute/value or license words changed. Original source URL/Git blob/source SHA retained."
+    },
+    {
+      "file": "MUSTANG-NOTICE.txt",
+      "format": "notice",
+      "declaredProfile": null,
+      "sourceUrl": "https://raw.githubusercontent.com/ZUGFeRD/mustangproject/0abe7bba61f0d248d0c96cedf03f975837a7e252/NOTICE",
+      "sourceRepository": "ZUGFeRD/mustangproject",
+      "sourceCommit": "0abe7bba61f0d248d0c96cedf03f975837a7e252",
+      "sourcePath": "NOTICE",
+      "sourceGitBlob": "35bbd9807562f7460d56f8c1edc8926afe4dba52",
+      "bytes": 1990,
+      "sha256": "9225d07c21aa4a404ac53372f04c9945b8e1e0d47f466036d27a09527373c6cf",
+      "license": "Apache-2.0 with preserved upstream LICENSE/NOTICE",
+      "licenseFiles": [
+        "MUSTANG-LICENSE.txt",
+        "MUSTANG-NOTICE.txt"
+      ],
+      "testOnly": true,
+      "modified": false
+    }
+  ],
+  "derivedTestFixtures": [
+    {
+      "file": "TEST_invoice_scan.png",
+      "sourceFile": "TEST_invoice_plain.pdf",
+      "derivation": "Explicit TEST scan: first page of official plain PDF rasterized at scale1.5 with existing pdfjs-dist/canvas; no camera or application recognition claim.",
+      "bytes": 142435,
+      "sha256": "102a3cbeed7f5164dcfa9c73e32d90111816ef89ba819ad02e15887b7ac16b8e",
+      "testOnly": true,
+      "modified": true,
+      "licenseFiles": [
+        "MUSTANG-LICENSE.txt",
+        "MUSTANG-NOTICE.txt"
+      ]
+    },
+    {
+      "file": "TEST_xrechnung_broken.xml",
+      "sourceFile": "TEST_xrechnung_ubl.xml",
+      "derivation": "Explicit isolated negative E3 fixture: final64bytes removed from official UBL, original unchanged.",
+      "bytes": 6678,
+      "sha256": "96018ed636a1f7b33a92fe1ce0078be98d5c5e264ba183f1a4ba939146dbc0b4",
+      "testOnly": true,
+      "modified": true,
+      "licenseFiles": [
+        "KOSIT-LICENSE.txt"
+      ]
+    }
+  ]
+}
