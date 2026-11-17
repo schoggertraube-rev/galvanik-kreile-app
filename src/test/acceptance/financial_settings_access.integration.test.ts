@@ -35,13 +35,13 @@ it('financial settings separate price rates and shipping fees from payment stora
  expect(await withSession(payments,()=>saveShippingSettingsAction(structuredClone(payInput)))).toMatchObject({code:'OK',replayed:true});
  const stale=await withSession(prices,()=>saveShippingSettingsAction({...priceInput,shippingFeeCents:9000}));expect(stale).toMatchObject({code:'CONFLICT'});
  if(stale.code!=='CONFLICT'||!stale.current)throw Error('TEST_CONFLICT_SOURCE');expect(stale.current.dispatchPolicy).not.toHaveProperty('storageWeeklyCents');
- const hidden=await withSession(operator,()=>readSettingsAction());expect(hidden).toMatchObject({code:'OK',snapshot:{capabilities:{canManageFinancial:false}},services:[]});
+ const hidden=await withSession(operator,()=>readSettingsAction());expect(hidden).toMatchObject({code:'FORBIDDEN',message:'Recht Preise & Rechnungen fehlt.'});
  const rateInput={rateId:randomUUID(),expectedVersion:0,hourlyRateCents:12345,clientEventId:randomUUID()};
  expect(await withSession(operator,()=>setExtraWorkHourlyRateAction(rateInput))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(payments,()=>setExtraWorkHourlyRateAction(rateInput))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(prices,()=>setExtraWorkHourlyRateAction(rateInput))).toMatchObject({code:'OK'});
  expect(await withSession(prices,()=>setExtraWorkHourlyRateAction(structuredClone(rateInput)))).toMatchObject({code:'OK',replayed:true});
- const hiddenAfter=await withSession(operator,()=>readSettingsAction());expect(hiddenAfter).toMatchObject({code:'OK',snapshot:{extraWorkHourlyRate:{hourlyRateCents:null}}});
+ const hiddenAfter=await withSession(operator,()=>readSettingsAction());expect(hiddenAfter).toMatchObject({code:'FORBIDDEN',message:'Recht Preise & Rechnungen fehlt.'});
  const priceAfter=await withSession(prices,()=>readSettingsAction());expect(priceAfter).toMatchObject({code:'OK',snapshot:{capabilities:{canManageFinancial:true},extraWorkHourlyRate:{hourlyRateCents:12345}}});
  const master=await withSession(operator,()=>getExtraWorkMasterDataAction());expect(master).toMatchObject({code:'OK',data:{currentRate:{id:rateInput.rateId,hourlyRateCents:null,version:1}}});
  expect(await withSession(prices,()=>getExtraWorkMasterDataAction())).toMatchObject({code:'OK',data:{currentRate:{id:rateInput.rateId,hourlyRateCents:12345}}});

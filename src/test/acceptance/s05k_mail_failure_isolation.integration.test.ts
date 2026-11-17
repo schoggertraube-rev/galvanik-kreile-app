@@ -110,8 +110,9 @@ it('S05K A2 keeps the third real failure when the normal task receipt fails, the
   const other=await createFixture(['eingang','mails']);
   const retry=await withSession(other,()=>getOpenIntakeMailsAction());expect(retry.code).toBe('OK');
   const saved=await tasks();expect(saved).toHaveLength(1);expect(saved[0]).toMatchObject({actor:other.actorId,area:'eingang'});
-  expect(await withSession(other,()=>getIntakeTaskAction({taskId:saved[0].id}))).toMatchObject({code:'OK',canComplete:true,canOpenReference:false,reference:{customerId:null}});
-  expect(await withSession(other,()=>saveIntakeTaskAction({clientKey:randomUUID(),version:0,kind:'aufgabe',title:'TEST arbitrary supplier task',dueDate:'2027-01-01',time:null,forLogin:null,forArea:'eingang',reference:{type:'eingang',id:source.id},note:'TEST'}))).toMatchObject({code:'FORBIDDEN'});
+  expect(await withSession(other,()=>getIntakeTaskAction({taskId:saved[0].id}))).toMatchObject({code:'OK',canComplete:true,canOpenReference:false,reference:{customerId:supplierId}});
+  const noReferenceRight=await createFixture([]);
+  expect(await withSession(noReferenceRight,()=>saveIntakeTaskAction({clientKey:randomUUID(),version:0,kind:'aufgabe',title:'TEST arbitrary supplier task',dueDate:'2027-01-01',time:null,forLogin:null,forArea:'eingang',reference:{type:'eingang',id:source.id},note:'TEST'}))).toMatchObject({code:'FORBIDDEN'});
   if(retry.code!=='OK')throw Error('TEST_A2_RETRY');expect(retry.mails.some(row=>row.id===source.id)).toBe(false);
   const linkedRetry=await withSession(full,()=>listOutlookInboxAction({targetType:'CUSTOMER',targetId:supplierId}));
   if(linkedRetry.code!=='OK')throw Error('TEST_A2_LINKED_RETRY');expect(linkedRetry.data.find(row=>row.id===id)).toMatchObject({importFailure:{attempts:4,taskId:saved[0].id}});

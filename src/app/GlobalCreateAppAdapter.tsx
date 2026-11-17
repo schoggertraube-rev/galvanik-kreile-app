@@ -36,7 +36,7 @@ import {
 } from "@/modules/eingang/public";
 
 import { usePermissions } from "@/lib/auth/PermissionsContext";
-import { isAppRole } from "@/lib/auth/authorizationContract";
+import { canCompleteTaskArea, isAppRole } from "@/lib/auth/authorizationContract";
 import { useOverlayStore } from "@/lib/overlayStore";
 import {ComplaintDialogs,type ComplaintPorts} from '@/modules/eingang/public';
 import {getComplaintDialogAction,reklamationAusfuehrenAction,nacharbeitAnlegenAction,sendeReklamationErgebnisAction,sendeNacharbeitBegleitscheinAction} from '@/app/actions/complaints.actions';
@@ -83,13 +83,13 @@ export function GlobalCreateAppAdapter() {
       window.open(url,'_blank','noopener,noreferrer');
     },
   }),[areas,openOrder,canAction]);
-  const taskCanManageMoney=hasArea('zahlungen');
+
   const invoicePorts=useMemo<InvoicePorts>(()=>({read:getIncomingInvoiceAction,save:saveIncomingInvoiceAction,status:changeIncomingInvoiceStatusAction,clarify:clarifyIncomingInvoiceAction,searchSuppliers:searchInvoiceSuppliersAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,
     openOriginal:(itemId,fileId)=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'original',arg:itemId+'#'+fileId}})),
     openTask:taskId=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'aufgabe',arg:taskId}})),
     createSupplier:async itemId=>{const source=await getIncomingInvoiceAction({id:itemId});if(source.code!=='OK')return source;requestGlobalCreate({intent:'CUSTOMER',prefill:{sourceItemId:itemId,sourceVersion:source.view.item.version,customerMode:'lieferant',name:source.view.item.sender??undefined}});return {code:'OK'};},
   }),[]);
-  const taskPorts=useMemo<TaskPorts>(()=>({read:getIntakeTaskAction,save:saveIntakeTaskAction,complete:completeIntakeTaskAction,canManageMoney:taskCanManageMoney,referenceTargets:['kunde','auftrag'],openInvoice:id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'rechnungein',arg:id+'#klaeren'}})),openReference:reference=>{if(reference.type==='kunde'&&reference.id)openCustomer(reference.id);if(reference.type==='auftrag'&&reference.id)openOrder(reference.id);}}),[openCustomer,openOrder,taskCanManageMoney]);
+  const taskPorts=useMemo<TaskPorts>(()=>({read:getIntakeTaskAction,save:saveIntakeTaskAction,complete:completeIntakeTaskAction,canCompleteTaskArea:area=>isAppRole(role)&&canCompleteTaskArea({role,areas},area),referenceTargets:['kunde','auftrag'],openInvoice:id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'rechnungein',arg:id+'#klaeren'}})),openReference:reference=>{if(reference.type==='kunde'&&reference.id)openCustomer(reference.id);if(reference.type==='auftrag'&&reference.id)openOrder(reference.id);}}),[openCustomer,openOrder,areas,role]);
   const assignmentPorts=useMemo<AssignmentPorts>(()=>({read:getIntakeAssignmentAction,assign:assignIntakeCustomerAction,noBusiness:setIntakeNoBusinessAction,
     search:async query=>{const result=await searchOrderIntakeCustomersAction({query});return result.ok?{code:'OK',customers:result.data.customers.map(customer=>({id:customer.id,name:customer.name}))}:{code:'UNAVAILABLE',message:result.message};},
     openCustomer,openConversation:id=>router.push('/nachrichten?gruppe='+encodeURIComponent(id)),

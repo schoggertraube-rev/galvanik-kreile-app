@@ -147,6 +147,7 @@ export async function readSettingsAction() {
   const canManageCompany = resolved.authorization.areas?.includes("einstellungen") ?? false;
   const canManageLogins = resolved.authorization.areas?.includes("logins") ?? false;
   const canManageFinancial = resolved.context.canManageFinancial;
+  if(!canManageFinancial)return {code:"FORBIDDEN" as const,message:FINANCIAL_ACCESS_COPY.pricesMissing};
   const [settings, catalog, hourlyRate] = await Promise.all([
     readSystemSettings(context),
     canManageCompany && canManageFinancial

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CustomerCardView,KundeFormular,EMPTY_CUSTOMER_FORM,type CustomerCardModel } from "../public";
+import { CustomerCardView,CustomerAgreementDialog,KundeFormular,EMPTY_CUSTOMER_FORM,type CustomerCardModel } from "../public";
 
 const card: CustomerCardModel = {
   id: "customer-1", customerNumber: "K-1042", name: "Erika Muster", companyName: "Muster GmbH", type: "business",
@@ -12,10 +12,36 @@ const card: CustomerCardModel = {
 };
 
 describe("Customer card V2", () => {
+  it('K1 keeps a forbidden agreement draft and names the payment area',async()=>{
+    // JSDOM has no scrolling engine; only this browser API is doubled.
+    const originalScroll=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'scrollIntoView');
+    Object.defineProperty(HTMLElement.prototype,'scrollIntoView',{value:vi.fn(),configurable:true});
+    try{
+    const save=vi.fn().mockResolvedValue({code:'FORBIDDEN',message:'TEST denied payment command'}),close=vi.fn();
+    const {container}=render(<CustomerAgreementDialog target={{customerId:card.id,customerNumber:card.customerNumber??null,customerName:card.name}} onSave={save} onRevoke={vi.fn()} onClose={close}/>);
+    fireEvent.change(container.querySelector('[data-spec-id="absprache.typ"]')!,{target:{value:'zahlungsziel'}});
+    fireEvent.change(container.querySelector('[data-spec-id="absprache.tage"]')!,{target:{value:'14'}});
+    fireEvent.change(container.querySelector('[data-spec-id="absprache.grund"]')!,{target:{value:'TEST Zahlungsabsprache'}});
+    fireEvent.click(container.querySelector('[data-spec-id="absprache.speichern"]')!);
+    await waitFor(()=>expect(save).toHaveBeenCalledOnce());
+    expect(await screen.findByText('Recht Zahlungen & Mahnungen fehlt.')).toBeInTheDocument();
+    expect(screen.queryByText('Recht Preise & Rechnungen fehlt.')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-spec-id="absprache.tage"]')).toHaveValue(14);
+    expect(close).not.toHaveBeenCalled();
+    }finally{if(originalScroll)Object.defineProperty(HTMLElement.prototype,'scrollIntoView',originalScroll);else delete (HTMLElement.prototype as {scrollIntoView?:unknown}).scrollIntoView;}
+  });
+  it.each([false,true])('K2 supplier payment term field follows only payments (%s)',allowed=>{
+    const change=vi.fn();
+    const {container}=render(<KundeFormular prefix="kundeneu" mode="create" value={{...EMPTY_CUSTOMER_FORM,customerType:'lieferant'}} onChange={change} canManageMoney={allowed} canManageSupplierBank/>);
+    const field=container.querySelector('[data-spec-id="kundeneu.zahlungsziel_tage"]');
+    expect(Boolean(field)).toBe(allowed);
+    if(field){fireEvent.change(field,{target:{value:'14'}});expect(change).toHaveBeenCalledWith(expect.objectContaining({paymentTermDays:'14'}));}
+  });
   it.each([false,true])('supplier IBAN follows the real bank capability (%s), without customer payment controls',bank=>{
     const {container}=render(<KundeFormular prefix="kundeneu" mode="create" value={{...EMPTY_CUSTOMER_FORM,customerType:'lieferant'}} onChange={vi.fn()} canManageMoney={false} canManageSupplierBank={bank}/>);
     expect(Boolean(container.querySelector('[data-spec-id="kundeneu.iban"]'))).toBe(bank);
     expect(container.querySelector('[data-spec-id="kundeneu.zahlungsbedingung"]')).toBeNull();
+    expect(container.querySelector('[data-spec-id="kundeneu.zahlungsziel_tage"]')).toBeNull();
   });
 
   it('does not discard an allowed supplier IBAN while payment terms remain omitted',async()=>{

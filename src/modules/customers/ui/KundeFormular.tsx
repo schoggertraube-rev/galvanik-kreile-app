@@ -181,7 +181,7 @@ export function KundeFormular({
       { wert: "pickup", text: "Abholung" }, { wert: "shipping", text: "Versand" },
     ]} onWert={(next) => set("handoverPreference", next)} /></div>{metadata("handoverPreference")}</Feld> : null}
     {isSupplier && (canManageMoney || canManageSupplierBank) ? field("iban", "IBAN", { maxLength: 34 }) : null}
-    {isSupplier ? field("paymentTermDays", "Zahlungsziel (Tage)", { type: "number" }) : null}
+    {isSupplier && canManageMoney ? field("paymentTermDays", "Zahlungsziel (Tage)", { type: "number" }) : null}
   </> : null;
   const more = value.customerType ? <>
     {isBusiness ? field("vatId", "USt-ID", { maxLength: 20 }) : null}

@@ -9,7 +9,7 @@ import {expect,it} from 'vitest';
 it('KORR-RECHTE migration expands old grants losslessly, preserves nonfinancial grants, converts open/completed task recipients and restores every original guard',async()=>{
  const database=process.env.DATABASE_URL;
  if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database).hostname!=='127.0.0.1'||new URL(database).pathname!=='/postgres')throw Error('TEST_FINANCIAL_MIGRATION_LOOPBACK_REQUIRED');
- const sql=postgres(database,{max:1,prepare:false}),tenant='TEST-rechte-migration-'+randomUUID(),actor=randomUUID(),plain=randomUUID(),openId=randomUUID(),closedId=randomUUID(),rollback=new Error('TEST_MIGRATION_INTENTIONAL_ROLLBACK');
+ const sql=postgres(database,{max:1,prepare:false}),tenant='TEST-rechte-'+randomUUID(),actor=randomUUID(),plain=randomUUID(),openId=randomUUID(),closedId=randomUUID(),invoiceTaskId=randomUUID(),priceTaskId=randomUUID(),customerId=randomUUID(),orderId=randomUUID(),rollback=new Error('TEST_MIGRATION_INTENTIONAL_ROLLBACK');
  const migration=readFileSync('supabase/migrations/20261117120653_split_financial_access_areas.sql','utf8');
  if(migration.includes('TODO_PL'))throw Error('TEST_MIGRATION_EXECUTION_CONTRACT_OPEN');
  try{
@@ -30,13 +30,23 @@ it('KORR-RECHTE migration expands old grants losslessly, preserves nonfinancial 
    await tx`INSERT INTO public.tasks(id,tenant_id,client_key,art,titel,faellig_am,vorlauf_tage,fuer_bereich,bezug_typ,status,erstellt_von,version,erledigt_von,erledigt_am,erledigt_notiz) VALUES
     (${openId}::uuid,${tenant},${openId}::uuid,'aufgabe','TEST offenes Original','2026-11-17',0,'geld','allgemein','offen',${plain}::uuid,7,NULL,NULL,NULL),
     (${closedId}::uuid,${tenant},${closedId}::uuid,'aufgabe','TEST abgeschlossenes Original','2026-11-16',0,'geld','allgemein','erledigt',${plain}::uuid,8,${plain}::uuid,'2026-11-16T12:00:00Z','TEST unveraenderter Abschluss')`;
+   // Explicit historical SQL fixtures only; no product-writer claim. The
+   // immutable event uses the same source type/link as the real canceled-mail task.
+   await tx`INSERT INTO public.customers(id,tenant_id,name,type) VALUES(${customerId},${tenant},'TEST K4 migration customer','business')`;
+   await tx`INSERT INTO public.orders(id,tenant_id,order_number,customer_id,title,current_station_id,status) VALUES(${orderId},${tenant},${'TEST-K4-'+orderId},${customerId},'TEST K4 original order','angenommen','angenommen')`;
+   await tx`INSERT INTO public.tasks(id,tenant_id,client_key,art,titel,faellig_am,vorlauf_tage,fuer_bereich,bezug_typ,bezug_id,status,erstellt_von) VALUES
+    (${invoiceTaskId}::uuid,${tenant},${invoiceTaskId}::uuid,'rechnung','TEST alte Eingangsrechnung','2026-11-17',0,'geld','eingangsrechnung',${randomUUID()},'offen',${plain}::uuid),
+    (${priceTaskId}::uuid,${tenant},${priceTaskId}::uuid,'aufgabe','TEST alte Stornomail','2026-11-17',0,'geld','auftrag',${orderId},'offen',${plain}::uuid)`;
+   await tx`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version)
+    VALUES(${randomUUID()},${tenant},${orderId},'COMMUNICATION_INVOICE_TASK_CREATED_V1','TEST historical price source',${tx.json({taskId:priceTaskId,invoiceId:randomUUID()})}::jsonb,'success',${actor}::uuid,${randomUUID()}::uuid,1)`;
    const tasksBefore=await tx`SELECT row_to_json(task)::jsonb AS original FROM public.tasks task WHERE tenant_id=${tenant} ORDER BY id`;
    const plainBefore=await tx`SELECT bereich,granted_by::text FROM public.app_user_rights WHERE tenant_id=${tenant} AND user_id=${plain}::uuid ORDER BY bereich`;
    await tx.unsafe(migration);
    expect(await tx`SELECT bereich,granted_by::text FROM public.app_user_rights WHERE tenant_id=${tenant} AND user_id=${actor}::uuid ORDER BY bereich`).toEqual([{bereich:'auftraege',granted_by:actor},{bereich:'buchhaltung',granted_by:plain},{bereich:'preise',granted_by:plain},{bereich:'zahlungen',granted_by:plain}]);
    expect(await tx`SELECT bereich,granted_by::text FROM public.app_user_rights WHERE tenant_id=${tenant} AND user_id=${plain}::uuid ORDER BY bereich`).toEqual(plainBefore);
    const tasksAfter=await tx`SELECT row_to_json(task)::jsonb AS original FROM public.tasks task WHERE tenant_id=${tenant} ORDER BY id`;
-   expect(tasksAfter).toEqual(tasksBefore.map(row=>({original:{...row.original,fuer_bereich:'zahlungen'}})));
+   const recipients=new Map([[openId,'zahlungen'],[closedId,'zahlungen'],[invoiceTaskId,'buchhaltung'],[priceTaskId,'preise']]);
+   expect(tasksAfter).toEqual(tasksBefore.map(row=>{const area=recipients.get(row.original.id);if(!area)throw Error('TEST_K4_EXPECTED_RECIPIENT_MISSING');return {original:{...row.original,fuer_bereich:area}};}));
    expect(await tx`SELECT count(*)::int AS n FROM public.app_user_rights WHERE bereich='geld'`).toEqual([{n:0}]);
    expect(await tx`SELECT count(*)::int AS n FROM public.tasks WHERE fuer_bereich='geld'`).toEqual([{n:0}]);
    const [after]=await tx`SELECT pg_get_functiondef('private.protect_task_identity()'::regprocedure) AS task_guard,pg_get_functiondef('private.current_user_can_view_finance(text)'::regprocedure) AS finance_guard,(SELECT tgenabled::text FROM pg_trigger WHERE tgrelid='public.tasks'::regclass AND tgname='task_identity') AS enabled,has_function_privilege('anon','private.current_user_can_view_finance(text)','EXECUTE') AS anon,has_function_privilege('authenticated','private.current_user_can_view_finance(text)','EXECUTE') AS authenticated`;

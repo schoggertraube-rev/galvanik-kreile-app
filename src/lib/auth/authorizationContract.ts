@@ -209,6 +209,10 @@ export function canAssignIntakeCustomer(auth:Parameters<typeof hasAuthorizationA
 export function canReadTaskArea(auth:Parameters<typeof hasAuthorizationArea>[0],area:AccessArea|null){
  return area!=='preise'&&area!=='zahlungen'&&area!=='buchhaltung'||hasAuthorizationArea(auth,area);
 }
+/** KORR-232 K3: the same target-area gate for task commands and their buttons. */
+export function canCompleteTaskArea(auth:Parameters<typeof hasAuthorizationArea>[0],area:AccessArea){
+ return hasAuthorizationArea(auth,area);
+}
 
 /** S05 VORAB 4: following up a quote is a mail operation, not money access. */
 export function canReadQuoteFollowups(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'mails');}

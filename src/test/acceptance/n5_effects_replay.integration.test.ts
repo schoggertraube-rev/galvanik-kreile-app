@@ -40,14 +40,17 @@ it.each([false,true])('S02 A2 cancellation preserves mail and one money task (lo
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN('COMMUNICATION_DOCUMENT_SENT_V1','ORDER_CUSTOMER_INFORMED_V1') AND order_id=${a.orderId}`).toHaveLength(0);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toHaveLength(1);
  const tasks=await sql`SELECT task.id::text,task.titel,task.fuer_bereich,task.notiz FROM public.tasks task JOIN public.events source ON source.tenant_id=task.tenant_id AND source.payload->>'taskId'=task.id::text AND source.event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' WHERE task.tenant_id=${KREILE_TENANT_SLUG} AND source.payload->>'invoiceId'=${a.invoice.invoiceId}`;
- expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'zahlungen',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
+ expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'preise',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
  expect(Array.from(tasks[0].titel).length).toBeLessThanOrEqual(120);expect(tasks[0].titel).toContain(a.invoice.invoiceNumber);expect(tasks[0].notiz).not.toContain('nicht belegt');
  const {getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
- const money=await createFixture(['preise','zahlungen','buchhaltung'],'buero'),noMoney=await createFixture(['auftraege'],'werkstatt');
+ const money=await createFixture(['preise'],'buero'),noMoney=await createFixture(['auftraege'],'werkstatt');
  const opened=await withSession(money,()=>getIntakeTaskAction({taskId:tasks[0].id}));
  expect(opened).toMatchObject({code:'OK',canEdit:false,canComplete:true,completeLabel:'Storno an '+customer.name+' gesendet'});
  if(opened.code!=='OK'||!opened.task)throw Error('TEST_TASK_MISSING');
  const completion={taskId:opened.task.id,version:opened.task.version,note:'TEST Storno tatsächlich gesendet'};
+ const paymentsOnly=await createFixture(['zahlungen']);
+ expect(await withSession(paymentsOnly,()=>getIntakeTaskAction({taskId:tasks[0].id}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(paymentsOnly,()=>completeIntakeTaskAction(fresh(completion)))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(noMoney,()=>completeIntakeTaskAction(fresh(completion)))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(money,()=>completeIntakeTaskAction(fresh(completion)))).toMatchObject({code:'OK',task:{status:'erledigt'}});
  expect(await withSession(money,()=>completeIntakeTaskAction(fresh(completion)))).toMatchObject({code:'OK',replayed:true});
@@ -86,7 +89,7 @@ it('S02 A2 missing task source receipt keeps the physical mail and repairs the t
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN('COMMUNICATION_DOCUMENT_SENT_V1','ORDER_CUSTOMER_INFORMED_V1') AND order_id=${a.orderId}`).toHaveLength(0);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toHaveLength(1);
  const tasks=await sql`SELECT task.id::text,task.titel,task.fuer_bereich,task.notiz FROM public.tasks task JOIN public.events source ON source.tenant_id=task.tenant_id AND source.payload->>'taskId'=task.id::text AND source.event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' WHERE task.tenant_id=${KREILE_TENANT_SLUG} AND source.payload->>'invoiceId'=${a.invoice.invoiceId}`;
- expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'zahlungen',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
+ expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'preise',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
  expect(Array.from(tasks[0].titel).length).toBeLessThanOrEqual(120);expect(tasks[0].titel).toContain(a.invoice.invoiceNumber);expect(tasks[0].notiz).not.toContain('nicht belegt');
  const {getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
  const read=await withSession(full,()=>getIntakeTaskAction({taskId:tasks[0].id}));
@@ -121,7 +124,7 @@ it('S02 A2 mixed original bundle records only the still valid invoice effects',a
  expect(await sql`SELECT payload->'document'->>'id' AS id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toEqual([{id:b.invoice.invoiceId}]);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='COMMUNICATION_MAIL_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`).toHaveLength(1);
  const tasks=await sql`SELECT task.id::text,task.titel,task.fuer_bereich,task.notiz FROM public.tasks task JOIN public.events source ON source.tenant_id=task.tenant_id AND source.payload->>'taskId'=task.id::text AND source.event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' WHERE task.tenant_id=${KREILE_TENANT_SLUG} AND source.payload->>'invoiceId'=${a.invoice.invoiceId}`;
- expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'zahlungen',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
+ expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'preise',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
  expect(Array.from(tasks[0].titel).length).toBeLessThanOrEqual(120);expect(tasks[0].titel).toContain(a.invoice.invoiceNumber);expect(tasks[0].notiz).not.toContain('nicht belegt');
 },120000);
 
@@ -172,7 +175,7 @@ it('S02 A5 invoice resend requires current money permission and stays singular',
  await sql.unsafe(`CREATE TRIGGER ${clock} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${clock}()`);
  try{expect(await withSession(sender,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});}
  finally{await sql.unsafe(`DROP TRIGGER ${clock} ON public.events`);await sql.unsafe(`DROP FUNCTION private.${clock}()`);}
- await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='zahlungen'`;
+ await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='preise'`;
  const denied=await withSession(sender,()=>sendCustomerMailAction(fresh(input)));
  expect(denied).toMatchObject({code:'FORBIDDEN'});expect(denied).not.toHaveProperty('resend');
  expect(await withSession(sender,()=>sendCustomerMailAction({...fresh(input),confirmedResend:true}))).toMatchObject({code:'FORBIDDEN'});expect(sends).toBe(1);
@@ -330,7 +333,7 @@ it.each([false,true])('S02 A1/A3 recovers an original bundle with PREPARE author
  });
  expect(await withSession(sender,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});
  if(geldRemoved){
-  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich='zahlungen'`;
+  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${sender.actorId}::uuid AND bereich IN ('preise','zahlungen','buchhaltung')`;
   const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
   expect(await withSession(sender,()=>getOrderPaymentStateAction({orderId:a.orderId}))).toMatchObject({code:'FORBIDDEN'});
  }

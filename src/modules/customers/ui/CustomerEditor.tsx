@@ -151,11 +151,13 @@ export function CustomerEditor({card,takeover,canManageMoney,canManageSupplierBa
     if(address?.blocked){setFailure(address.message);return;}
     if(readiness.fehlt.length&&!forcePartial){setPartialPrompt(true);return;}
     saving.current=true;setBusy(true);setFailure("");setPartialPrompt(false);setClosePrompt(false);
-    const {customerType,salutation,handoverPreference,paymentTermDays,...fields}=value;
+    const {customerType,salutation,handoverPreference,paymentTermDays,paymentPreference,iban,...fields}=value;
     const input:UpdateCustomerInput={...fields,clientEventId,customerId:card.id,customerType:customerType as Exclude<CustomerFormValue["customerType"],"">,
-      salutation:salutation||null,handoverPreference:handoverPreference||null,paymentTermDays:paymentTermDays?Number(paymentTermDays):null,
+      salutation:salutation||null,handoverPreference:handoverPreference||null,
+      ...(canManageMoney?{paymentPreference,paymentTermDays:paymentTermDays?Number(paymentTermDays):null}:{}),
+      ...(canManageMoney||canManageSupplierBank&&card.type==="lieferant"&&customerType==="lieferant"?{iban}:{}),
       agreements};
-    if(!canManageMoney){delete input.paymentPreference;delete input.paymentTermDays;if(!(canManageSupplierBank&&card.type==="lieferant"&&customerType==="lieferant"))delete input.iban;}
+
     try {
       const result=await onSave(input);
       if(!result.ok){setFailure(`Nicht gespeichert · Eingaben sind noch da · ${result.message}`);return;}

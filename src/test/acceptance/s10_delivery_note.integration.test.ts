@@ -51,12 +51,15 @@ it('A10-4/5 paid invoice produces one real immutable-byte delivery original, nev
 
 it('N8 denies real missing rights/session and unpaid sources without writing a document',async()=>{
  const order=await readyInvoiceOrder('TEST S10 Lieferschein Rechte');
+ // Explicit malformed envelope tests validation separately from the real unpaid source.
  const input={orderIds:[order.orderId],clientEventId:randomUUID(),expectedVersions:{[order.orderId]:order.version}} as unknown as import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput;
  const moneyOnly=await createFixture(['preise','zahlungen','buchhaltung']),goodsOnly=await createFixture(['auftraege']);
  expect(await withSession(moneyOnly,()=>generateDeliveryNote(input))).toMatchObject({code:'FORBIDDEN'});
- expect(await withSession(goodsOnly,()=>generateDeliveryNote(input))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(goodsOnly,()=>generateDeliveryNote(input))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await withRequest('',()=>generateDeliveryNote(input))).toMatchObject({code:'UNAUTHENTICATED'});
  expect(await withSession(full,()=>generateDeliveryNote(input))).toMatchObject({code:'VALIDATION_ERROR'});
+ // Existing string adapter captures the real canonical unpaid source, with no fake hashes.
+ await expect(withSession(goodsOnly,()=>generateDeliveryNote(order.orderId))).rejects.toThrow('Für diesen Auftrag ist noch keine Rechnung bezahlt.');
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type IN ('DELIVERY_NOTE_ORIGINAL_V1','DELIVERY_NOTE_REQUESTED_V1')`).toEqual([{n:0}]);
  const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
  expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId,includeDeliveryNoteSource:true}))).toMatchObject({code:'OK',deliveryNoteSource:{code:'VALIDATION_ERROR'}});
