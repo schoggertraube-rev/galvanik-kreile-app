@@ -493,6 +493,8 @@
       "entry_point": "src/app/actions/settings.actions.ts",
       "exported_functions": [
         "readSettingsAction",
+        "readPackageSwitchesAction",
+        "setPackageSwitchAction",
         "readSalesStageFeaturesAction",
         "saveSalesStageFeatureAction",
         "saveCompanySettingsAction",
