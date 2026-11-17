@@ -5,7 +5,8 @@
     "seite": "eingang",
     "ziel": "rein",
     "punkte": [
-      "Wenn deine Notiz inzwischen geändert wurde, zeigt dir der Hinweis den nächsten Schritt: neuen Stand laden und erneut speichern."
+      "Wenn deine Notiz inzwischen geändert wurde, zeigt dir der Hinweis den nächsten Schritt: neuen Stand laden und erneut speichern.",
+      "Deine Terminprüfung verwendet den Berliner Kalendertag auch dann, wenn dein Gerät eine andere Zeitzone nutzt."
     ]
   },
   {

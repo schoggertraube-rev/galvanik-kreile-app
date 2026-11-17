@@ -1,5 +1,6 @@
 "use client";
 import {canonicalJson} from '@/lib/domain/canonicalJson';
+import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {QuotePositionsEditor,type PositionDraft} from "./ui/QuotePositionsEditor";
 import {QUOTE_PREPARATION_COPY,QUOTE_CYCLE_COPY} from "@/ui/situationCatalog";
 
@@ -397,9 +398,7 @@ function isValidDateInput(value: string): boolean {
 
 function isPastDateInput(value: string): boolean {
   if (!isValidDateInput(value)) return false;
-  const today = new Date();
-  const todayInput = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  return value < todayInput;
+  return value < berlinCalendarDay();
 }
 
 type IntakeComparison = {text:string;customerId:string;query:string;items:IntakePositionDraft[];kind:string;date:string;confirmed:string;term:string;handover:string;payment:string;source:string;note:string;documents:string[];geprueft?:boolean;customerFields?:CustomerFormValue;processingWeeks?:number|null;dismissedConcerns?:string[]};

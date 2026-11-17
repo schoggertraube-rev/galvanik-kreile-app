@@ -300,6 +300,24 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
+it('S47a E41 uses the canonical Berlin day when the UTC device is still on the previous day',async()=>{
+  // Explicit synthetic clock/device timezone; the actual component and date input are rendered.
+  vi.useFakeTimers({toFake:['Date']});
+  vi.setSystemTime(new Date('2026-11-17T23:30:00.000Z'));
+  vi.spyOn(Date.prototype,'getFullYear').mockImplementation(function(this:Date){return this.getUTCFullYear();});
+  vi.spyOn(Date.prototype,'getMonth').mockImplementation(function(this:Date){return this.getUTCMonth();});
+  vi.spyOn(Date.prototype,'getDate').mockImplementation(function(this:Date){return this.getUTCDate();});
+  try{
+    expect(new Date().getDate()).toBe(17);
+    render(<GlobalCreateFlow ports={ports()} />);openFlow();
+    const input=await waitFor(()=>{const element=document.querySelector<HTMLInputElement>('[data-spec-id="eingang.liefertermin"]');expect(element).not.toBeNull();return element!;});
+    fireEvent.change(input,{target:{value:'2026-11-17'}});fireEvent.blur(input);
+    expect(await screen.findByText('Liefertermin liegt in der Vergangenheit')).toBeVisible();
+    fireEvent.change(input,{target:{value:'2026-11-18'}});fireEvent.blur(input);
+    expect(document.querySelector('[data-spec-id="eingang.liefertermin.fehler"]')).not.toBeInTheDocument();
+  }finally{cleanup();vi.restoreAllMocks();vi.useRealTimers();}
+});
+
 describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
   it("E01 exposes missing checklist states with concrete actions and updates the selected customer", async () => {
     render(<GlobalCreateFlow ports={ports()} />);
