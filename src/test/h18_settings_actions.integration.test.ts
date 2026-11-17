@@ -122,7 +122,7 @@ async function createFixture(label: string): Promise<Fixture> {
   await sql`
     INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
     SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
-    FROM unnest(ARRAY['logins', 'eingang', 'auftraege', 'kunden', 'geld']::text[]) area
+    FROM unnest(ARRAY['logins', 'eingang', 'auftraege', 'kunden', 'preise','zahlungen','buchhaltung']::text[]) area
   `;
   const [clock] = await sql<{ updated_at_ms: string }[]>`
     SELECT floor(extract(epoch FROM updated_at) * 1000)::bigint::text AS updated_at_ms

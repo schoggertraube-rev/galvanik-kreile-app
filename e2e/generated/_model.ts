@@ -854,7 +854,7 @@ export const generatedFlowRuntime = {
       "titel": "Rechnung klären · Prueflieferant Omega GmbH",
       "faellig_am": "{heute:+0}",
       "vorlauf_tage": 0,
-      "fuer_bereich": "geld",
+      "fuer_bereich": "buchhaltung",
       "bezug_typ": "eingangsrechnung",
       "bezug_id": "{rechnung_unklar}",
       "status": "offen"

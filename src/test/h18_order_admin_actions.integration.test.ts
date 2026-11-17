@@ -92,7 +92,7 @@ async function createFixture(): Promise<Fixture> {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
-      FROM unnest(ARRAY['eingang', 'auftraege', 'kunden', 'geld', 'einstellungen']::text[]) area
+      FROM unnest(ARRAY['eingang', 'auftraege', 'kunden', 'preise','zahlungen','buchhaltung', 'einstellungen']::text[]) area
     `;
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)

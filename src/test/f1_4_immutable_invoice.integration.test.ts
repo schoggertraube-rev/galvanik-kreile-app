@@ -191,7 +191,7 @@ async function insertPrerequisites() {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       SELECT ${TENANT_ID}, ${USER_ID}::uuid, area, ${USER_ID}::uuid
-      FROM unnest(ARRAY['auftraege', 'geld']::text[]) area
+      FROM unnest(ARRAY['auftraege', 'preise','zahlungen','buchhaltung']::text[]) area
     `;
     await transaction`
       INSERT INTO public.company_settings (

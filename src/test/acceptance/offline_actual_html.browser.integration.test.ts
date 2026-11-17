@@ -17,7 +17,7 @@ it.skipIf(process.env.KREILE_REAL_NEXT_CACHE_PROOF!=='1'||!process.env.KREILE_PL
  if(!flag)throw Error('TEST_EXISTING_FLAG_REQUIRED');
  const issued=Date.now();
  await sql`INSERT INTO public.app_users(id,tenant_id,email,full_name,role,active,created_at,updated_at) VALUES(${actor}::uuid,${KREILE_TENANT_SLUG},${'TEST-cache-'+actor+'@example.invalid'},'TEST actual cache proof','meister',true,${new Date(issued-5000).toISOString()}::timestamptz,${new Date(issued-5000).toISOString()}::timestamptz)`;
- await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) SELECT ${KREILE_TENANT_SLUG},${actor}::uuid,area,${actor}::uuid FROM unnest(ARRAY['kunden','auftraege','eingang','mails','geld','einstellungen']) area`;
+ await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) SELECT ${KREILE_TENANT_SLUG},${actor}::uuid,area,${actor}::uuid FROM unnest(ARRAY['kunden','auftraege','eingang','mails','preise','zahlungen','buchhaltung','einstellungen']) area`;
  await sql`UPDATE public.feature_flags SET enabled=true,roles_allowed=ARRAY['meister']::text[] WHERE id='offline_24h'`;
  const token=signAppSession({userId:actor,tenantId:KREILE_TENANT_SLUG,role:'meister',displayName:'TEST actual cache proof',issuedAt:issued,expiresAt:issued+600000},secret),login=cacheScopeFromCredential(token);
  const local=JSON.parse(execFileSync(process.execPath,['node_modules/supabase/dist/supabase.js','status','-o','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']}));

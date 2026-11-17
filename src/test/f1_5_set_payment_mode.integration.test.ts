@@ -123,10 +123,16 @@ async function seedPrerequisites() {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       VALUES
-        (${TENANT}, ${USERS.buero}::uuid, 'geld', ${USERS.admin}::uuid),
-        (${TENANT}, ${USERS.meister}::uuid, 'geld', ${USERS.admin}::uuid),
+        (${TENANT}, ${USERS.buero}::uuid, 'preise', ${USERS.admin}::uuid),
+      (${TENANT}, ${USERS.buero}::uuid, 'zahlungen', ${USERS.admin}::uuid),
+      (${TENANT}, ${USERS.buero}::uuid, 'buchhaltung', ${USERS.admin}::uuid),
+        (${TENANT}, ${USERS.meister}::uuid, 'preise', ${USERS.admin}::uuid),
+      (${TENANT}, ${USERS.meister}::uuid, 'zahlungen', ${USERS.admin}::uuid),
+      (${TENANT}, ${USERS.meister}::uuid, 'buchhaltung', ${USERS.admin}::uuid),
         (${TENANT}, ${USERS.admin}::uuid, 'eingang', ${USERS.admin}::uuid),
-        (${TENANT}, ${USERS.admin}::uuid, 'geld', ${USERS.admin}::uuid),
+        (${TENANT}, ${USERS.admin}::uuid, 'preise', ${USERS.admin}::uuid),
+      (${TENANT}, ${USERS.admin}::uuid, 'zahlungen', ${USERS.admin}::uuid),
+      (${TENANT}, ${USERS.admin}::uuid, 'buchhaltung', ${USERS.admin}::uuid),
         (${TENANT}, ${USERS.admin}::uuid, 'auftraege', ${USERS.admin}::uuid),
         (${TENANT}, ${USERS.werkstatt}::uuid, 'auftraege', ${USERS.admin}::uuid)
       ON CONFLICT (tenant_id, user_id, bereich) DO UPDATE SET
@@ -239,7 +245,22 @@ async function readInvoiceAndSummary(invoiceId: string) {
   });
 }
 
+// Module initialization is fixture setup; the actual command path keeps its original 5s budget.
+async function prepareCommands() {
+  const modules = await Promise.all([
+    import("@/lib/server/commands/orderIntakeCommand"),
+    import("@/lib/server/commands/setPaymentModeCommand"),
+    import("@/lib/server/commands/orderStationCommand"),
+    import("@/lib/server/commands/orderFreezeCommand"),
+    import("@/lib/server/commands/immutableInvoiceCommand"),
+    import("@/lib/server/commands/confirmPaymentCommand"),
+  ]);
+  return Object.assign({}, ...modules);
+}
+let preparedCommands: Awaited<ReturnType<typeof prepareCommands>>;
+
 beforeAll(async () => {
+  preparedCommands = await prepareCommands();
   const [{ server_version_num: version }] = await sql<{ server_version_num: string }[]>`
     SELECT current_setting('server_version_num') AS server_version_num
   `;
@@ -258,7 +279,7 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
     await seedPrerequisites();
 
     setSession(USERS.admin, "admin");
-    const { createOrderIntake } = await import("@/lib/server/commands/orderIntakeCommand");
+    const { createOrderIntake } = preparedCommands;
     const intake = await createOrderIntake({ geprueft: true,
       clientEventId: INTAKE_EVENT,
       customer: { mode: "EXISTING", customerId: CUSTOMER },
@@ -305,7 +326,7 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
       event_count: 0,
     });
 
-    const { setPaymentMode } = await import("@/lib/server/commands/setPaymentModeCommand");
+    const { setPaymentMode } = preparedCommands;
     const bueroInput = {
       orderId,
       paymentMode: "abholung" as const,
@@ -395,7 +416,7 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
     expect(foreignAfter).toEqual(foreignBefore);
 
     setSession(USERS.admin, "admin");
-    const { transitionWareneingangToGalvanik } = await import("@/lib/server/commands/orderStationCommand");
+    const { transitionWareneingangToGalvanik } = preparedCommands;
     const station = await transitionWareneingangToGalvanik({
       orderId,
       expectedVersion: intake.receipt.orderVersion,
@@ -410,7 +431,7 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
     `;
 
     setSession(USERS.admin, "admin");
-    const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
+    const { freezeOrder } = preparedCommands;
     await seedSyntheticItemPhotos(sql,{tenantId:TENANT,actorId:USERS.admin,orderId:orderId});
     const frozen = await freezeOrder({
       orderId,
@@ -422,13 +443,13 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
     if (frozen.code !== "OK") throw new Error(`F1_5_B2_FREEZE_FAILED:${frozen.code}`);
 
     setSession(USERS.admin, "admin");
-    const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
+    const { createInvoice } = preparedCommands;
     const issued = await createInvoice({
       orderId,
       expectedVersion: frozen.receipt.aggregateVersion,
       clientEventId: INVOICE_EVENT,
     });
-    expect(issued.code).toBe("OK");
+    expect(issued.code, JSON.stringify(issued)).toBe("OK");
     if (issued.code !== "OK") throw new Error(`F1_5_B2_INVOICE_FAILED:${issued.code}`);
     const invoiceId = issued.receipt.invoiceId;
     expect(await readInvoiceAndSummary(invoiceId)).toMatchObject({
@@ -476,7 +497,7 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
       clientEventId: PAYMENT_EVENT,
     };
     setSession(USERS.buero, "buero");
-    const { confirmPayment } = await import("@/lib/server/commands/confirmPaymentCommand");
+    const { confirmPayment } = preparedCommands;
     const partial = await confirmPayment(paymentInput);
     expect(partial).toMatchObject({
       code: "OK",

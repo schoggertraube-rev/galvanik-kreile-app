@@ -348,7 +348,7 @@ const cases = [
           "neu": 1,
           "werte": {
             "art": "rechnung",
-            "fuer_bereich": "geld",
+            "fuer_bereich": "buchhaltung",
             "faellig_am": "{heute:+0}",
             "bezug_typ": "eingangsrechnung",
             "bezug_id": "{neu:supplier_invoice}",

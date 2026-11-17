@@ -73,8 +73,9 @@ async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise
   return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work);
 }
 
-async function createFixture(): Promise<Fixture> {
+async function createFixture(withPrices = false): Promise<Fixture> {
   const actorId = randomUUID();
+  const areas = withPrices ? ["einstellungen", "auftraege", "preise"] : ["einstellungen", "auftraege"];
   const updatedAt = new Date(Date.now() - 5_000).toISOString();
   await sql.begin(async (transaction) => {
     await transaction`
@@ -88,7 +89,7 @@ async function createFixture(): Promise<Fixture> {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
-      FROM unnest(ARRAY['einstellungen', 'auftraege']::text[]) area
+      FROM unnest(${areas}::text[]) area
     `;
   });
   const [clock] = await sql<{ updated_at_ms: string }[]>`
@@ -170,7 +171,7 @@ describe("H18 master-data Server Actions against the real replay database", () =
   });
 
   it("saves a service-catalog entry with DB, event and settings-view readback", async () => {
-    const fixture = await createFixture();
+    const fixture = await createFixture(true);
     const { readSettingsAction, saveCatalogServiceAction } = await import("@/app/actions/settings.actions");
     const input = {
       id: null,
@@ -213,21 +214,24 @@ describe("H18 master-data Server Actions against the real replay database", () =
     if (view.code !== "OK") throw new Error(`H18_CATALOG_VIEW_FAILED:${view.code}`);
     expect(view.services).toContainEqual(result.service);
 
+    const operational = await createFixture();
     // AP-EIN / PositionZeile.rechte: the same catalog is usable without geld,
     // while monetary fields must not be delivered to that login at all.
     const { getIntakeCatalogAction } = await import("@/app/actions/catalog.actions");
-    expect(await withSession(fixture, getIntakeCatalogAction)).toMatchObject({code:"FORBIDDEN"});
+    expect(await withSession(operational, getIntakeCatalogAction)).toMatchObject({code:"FORBIDDEN"});
     await sql`INSERT INTO public.app_user_rights (tenant_id,user_id,bereich,granted_by)
-      VALUES (${KREILE_TENANT_SLUG},${fixture.actorId}::uuid,'eingang',${fixture.actorId}::uuid)`;
-    const intakeView = await withSession(fixture, getIntakeCatalogAction);
+      VALUES (${KREILE_TENANT_SLUG},${operational.actorId}::uuid,'eingang',${operational.actorId}::uuid)`;
+    const intakeView = await withSession(operational, getIntakeCatalogAction);
     expect(intakeView.code).toBe("OK");
     if (intakeView.code !== "OK") throw new Error(`H18_INTAKE_CATALOG_FAILED:${intakeView.code}`);
     const choice = intakeView.services.find(service=>service.id===result.service.id);
     expect(choice).toEqual({id:result.service.id,name:input.name,surface:"verchromen",unit:"stueck",standardLeadTimeWorkingDays:6,active:true});
     expect(JSON.stringify(intakeView.services)).not.toMatch(/netPriceCents|vatRateBasisPoints|net_price_cents|vat_rate_basis_points/);
     await sql`INSERT INTO public.app_user_rights (tenant_id,user_id,bereich,granted_by)
-      VALUES (${KREILE_TENANT_SLUG},${fixture.actorId}::uuid,'geld',${fixture.actorId}::uuid)`;
-    const pricedView = await withSession(fixture, getIntakeCatalogAction);
+      VALUES (${KREILE_TENANT_SLUG},${operational.actorId}::uuid,'preise',${operational.actorId}::uuid),
+      (${KREILE_TENANT_SLUG},${operational.actorId}::uuid,'zahlungen',${operational.actorId}::uuid),
+      (${KREILE_TENANT_SLUG},${operational.actorId}::uuid,'buchhaltung',${operational.actorId}::uuid)`;
+    const pricedView = await withSession(operational, getIntakeCatalogAction);
     expect(pricedView.code).toBe("OK");
     if (pricedView.code !== "OK") throw new Error(`H18_PRICED_CATALOG_FAILED:${pricedView.code}`);
     expect(pricedView.services.find(service=>service.id===result.service.id)).toEqual(result.service);
@@ -237,7 +241,7 @@ describe("H18 master-data Server Actions against the real replay database", () =
   });
 
   it("sets the hourly rate with DB, event and master-data-view readback", async () => {
-    const fixture = await createFixture();
+    const fixture = await createFixture(true);
     const { getExtraWorkMasterDataAction, setExtraWorkHourlyRateAction } = await import("@/app/actions/orders.actions");
     const before = await withSession(fixture, () => getExtraWorkMasterDataAction());
     expect(before.code).toBe("OK");

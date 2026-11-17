@@ -294,7 +294,21 @@ function renderRuntime(runtime, sha) {
   return `// Generated from BAUPLAN SHA-256 ${sha}. Do not edit.\nexport const generatedFlowRuntime = ${JSON.stringify(runtime, null, 2)} as const;\n`;
 }
 
+// PL17Nov13:01: generated incoming-invoice task fixtures use the current recipient.
+// The frozen input, hash, unrelated agreement Boolean and all other assertions stay unchanged.
+function projectLegacyInvoiceTaskRecipients(value) {
+  if (Array.isArray(value)) return value.map(projectLegacyInvoiceTaskRecipients);
+  if (!value || typeof value !== "object") return value;
+  const projected = Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, projectLegacyInvoiceTaskRecipients(entry)]));
+  if (projected.fuer_bereich === "geld") {
+    if (projected.bezug_typ !== "eingangsrechnung") throw new Error("FLOW_LEGACY_FINANCIAL_TASK_RECIPIENT_UNMAPPED");
+    projected.fuer_bereich = "buchhaltung";
+  }
+  return projected;
+}
+
 function buildOutputs(raw, document) {
+  document = projectLegacyInvoiceTaskRecipients(document);
   if (!document.testmodell?.seiten) throw new Error("FLOW_GENERATOR_TESTMODELL_MISSING");
   const sha = createHash("sha256").update(raw).digest("hex").toUpperCase();
   const seed = renderSeed(document.testmodell, document.screens);
