@@ -2,7 +2,7 @@ import 'server-only';
 import {createHash} from 'node:crypto';
 import {readStableDomainAttachment,storeDomainAttachmentBytes} from './domainAttachmentStorage';
 import type {AuthorizationSnapshot} from './authorization';
-import {hasAuthorizationArea} from './authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {quoteCommandContext} from './quoteAuthorization';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 import {readIntakeConfirmationMailSource} from './intakeDraftEvents';

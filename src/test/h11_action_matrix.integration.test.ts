@@ -3,7 +3,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
-import { getAuthorizationActionGrants, hasAuthorizationArea } from "@/lib/server/authorization";
+import {getAuthorizationActionGrants,hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const EXPECTED_DATABASE_URL = process.env.H11_EXPECTED_DATABASE_URL;

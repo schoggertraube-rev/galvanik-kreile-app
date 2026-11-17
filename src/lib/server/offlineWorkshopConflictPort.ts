@@ -5,7 +5,8 @@ import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {isPendingWorkshopOriginal,type PendingWorkshopOriginal} from '@/lib/offline/pendingStore';
 import {isWorkshopRejectionCode,type WorkshopRejectionCode,type WorkshopRejectionReceipt,type WorkshopRejectionSubject} from '@/lib/offline/workshopRejectionContract';
 import {OFFLINE_RECONCILIATION_COPY as copy} from '@/ui/situationCatalog';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 
 type Rejection=WorkshopRejectionCode;

@@ -4,7 +4,7 @@ import {
  canAssignIntakeCustomer,canTransportInvoiceDocument,getPermissionsForAreas,
  hasAuthorizationArea,normalizeAccessAreasForRole,type AccessArea,
 } from '../authorizationContract';
-import {getAuthorizationActionGrants} from '@/lib/server/authorization';
+import {getAuthorizationActionGrants} from "@/lib/auth/authorizationContract";
 
 // Explicitly synthetic effective-right snapshots exercise the one pure contract.
 // Real persisted-right/Action/DB cases are covered separately by the step matrix.

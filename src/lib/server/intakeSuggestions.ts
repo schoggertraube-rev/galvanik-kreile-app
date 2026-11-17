@@ -1,7 +1,8 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { isWorkingDay, berlinCalendarDay, plusWorkingDays, previousWorkingDay, workingDaysBetween } from "@/lib/domain/workingDays";
 import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionQuantityError } from "@/lib/orderPositionContract";

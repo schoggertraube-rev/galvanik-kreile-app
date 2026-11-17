@@ -1,7 +1,8 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {packagePartWords} from '@/lib/domain/packagePartWords';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from '@/lib/server/authorization';
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
 export async function readPackageOrderCustomers(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,text:string):Promise<Array<{customerId:string;lastAt:string}>>{

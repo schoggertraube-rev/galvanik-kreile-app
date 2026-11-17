@@ -1,7 +1,8 @@
 export {packagePartWords} from '@/lib/domain/packagePartWords';
 import 'server-only';
 import {sql} from 'drizzle-orm';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from './authorization';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
 
 /** Read-only operational history. No inference is ever saved as a customer assignment. */

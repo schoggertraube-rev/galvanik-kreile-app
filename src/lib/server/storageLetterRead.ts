@@ -1,5 +1,6 @@
 import 'server-only';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from './authorization';
 import {customerCountryLabel,customerFieldError,EMPTY_CUSTOMER_FORM} from '@/modules/customers/public';
 import type {ShippingSettings,CompanyLetterSettings} from '@/modules/fundament/public';
 import type {OperationalOrder} from '@/lib/types/operationalOrder';

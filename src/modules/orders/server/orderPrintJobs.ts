@@ -3,7 +3,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {hasAuthorizationArea} from '@/lib/server/authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 function automaticKey(orderId:string,version:number){

@@ -1,6 +1,6 @@
 import 'server-only';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
-import {hasAuthorizationArea} from '@/lib/server/authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {readOrderInformed} from '@/lib/server/orderReleaseRead';
 import type {OperationalOrder} from '@/lib/types/operationalOrder';
 import {berlinCalendarDay,workingDaysBetween,plusWorkingDays} from '@/lib/domain/workingDays';

@@ -6,7 +6,8 @@ import {isDeliveryNoteInput,type DeliveryNoteInput,type DeliveryNoteReceipt,type
 import type {PaidDeliveryNoteSnapshot} from '@/lib/pdf/DeliveryNote';
 import {DELIVERY_NOTE_COPY as copy,DELIVERY_NOTE_SOURCE_COPY as sourceCopy,LEGACY_ACTION_ACCESS_COPY,MANUAL_SHIPPING_FIELDS,SITUATION_COPY} from '@/ui/situationCatalog';
 import {V45_RUNTIME} from '@/ui/v45.generated';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 import {readOrderPaymentSummaries,mapPaymentSummaryEvidenceRow} from './paymentContract';
 import {readCreateInvoiceReceipts,mapInvoiceIssueReceipt} from './commands/immutableInvoiceCommand';

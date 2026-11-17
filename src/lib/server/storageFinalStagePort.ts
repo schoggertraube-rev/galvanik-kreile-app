@@ -5,7 +5,8 @@ import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,qualifyReplyRestr
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from './authorization';
 import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
 import {handedOverProofs} from './dispatchCallPort';
 import {verifyPostalDispatch,finishPostalTaskAfterGoodsOut} from './storagePostalPort';

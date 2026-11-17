@@ -5,7 +5,8 @@ import "server-only";
 import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentRead";
 
 import { sql } from "drizzle-orm";
-import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";

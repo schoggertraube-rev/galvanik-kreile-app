@@ -1,6 +1,7 @@
 import 'server-only';
 import {hasAuthorizationArea,isAccessArea,QUOTE_OPERATION_ACTION_IDS,type AccessArea} from '@/lib/auth/authorizationContract';
-import {getAuthorizationActionGrants,type AuthorizationSnapshot} from './authorization';
+import {getAuthorizationActionGrants} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from './authorization';
 import {V45_RULES,V45_SOURCE_HASHES,V45_PREVIEW_SHA,V45_ELEMENTS} from '@/ui/v45.generated';
 
 // PL17.11 13:34, KORR-RECHTE C: one temporary rights seam for the frozen projection.

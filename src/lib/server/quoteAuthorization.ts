@@ -1,4 +1,5 @@
-import {getAuthorizationActionGrants,hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {getAuthorizationActionGrants,hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from './authorization';
 
 export function quoteCommandContext(authorization: AuthorizationSnapshot) {
   const actionGrants = getAuthorizationActionGrants(authorization);

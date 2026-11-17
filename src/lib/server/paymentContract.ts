@@ -1,6 +1,7 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { sql } from "drizzle-orm";
-import {getAuthorizationActionGrants,hasAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
+import {getAuthorizationActionGrants,hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
 export const PAYMENT_CONTRACT_VERSION = 1 as const;

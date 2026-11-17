@@ -1,7 +1,8 @@
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 import type {CommunicationReceipt} from './communicationPort';
 import type {ComplaintWriteResult} from '@/modules/complaints/public';

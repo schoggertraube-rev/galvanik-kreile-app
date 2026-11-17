@@ -13,7 +13,6 @@ import {
   ROLE_ACCESS_AREA_TEMPLATES,
   type AccessArea,
   type AppRole,
-  type AuthorizationActionGrants,
   type PermissionKey,
 } from "@/lib/auth/authorizationContract";
 
@@ -39,25 +38,8 @@ export function hasAnyAuthorizationArea(
     ? ROLE_ACCESS_AREA_TEMPLATES[authorization.role].length > 0
     : normalizeAccessAreasForRole(authorization.role, authorization.areas).length > 0;
 }
+export {getAuthorizationActionGrants} from "@/lib/auth/authorizationContract";
 
-/**
- * The single server-side projection from effective areas to concrete product
- * actions. Commands and browser reads consume the same projection.
- */
-export function getAuthorizationActionGrants(
-  authorization: Pick<AuthorizationSnapshot, "areas" | "role">,
-): AuthorizationActionGrants {
-  const canManageOrders = hasAuthorizationArea(authorization, "eingang");
-  return {
-    confirmPayment: hasAuthorizationArea(authorization, "zahlungen") || (
-      hasAuthorizationArea(authorization, "kassieren")
-      && hasAuthorizationArea(authorization, "auftraege")
-    ),
-    editOrderContent: canManageOrders,
-    createCustomer: hasAuthorizationArea(authorization, "eingang"),
-    createQuote: canManageOrders && hasAuthorizationArea(authorization, "preise"),
-  };
-}
 
 export type AuthorizationFailureReason =
   | "NO_SESSION"

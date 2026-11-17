@@ -3,7 +3,8 @@ import "server-only";
 import {readOpenOrderComplaint} from './orderReleaseRead';
 
 import { sql } from "drizzle-orm";
-import {getAuthorizationActionGrants,type AuthorizationSnapshot} from "@/lib/server/authorization";
+import {getAuthorizationActionGrants} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {
   canReadPaymentSummary,
   mapOrderPaymentStateRow,

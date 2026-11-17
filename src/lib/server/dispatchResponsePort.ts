@@ -1,6 +1,7 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 import {readMicrosoftGraphSentMailReference} from './microsoftGraph';
 

@@ -221,3 +221,24 @@ export function canSearchTenant(auth:{permissions:readonly string[]}){return aut
 export function canChangeOrderHandover(auth:Parameters<typeof hasAuthorizationArea>[0],source:'login'|'mail'){
  return hasAuthorizationArea(auth,'auftraege')&&(source==='login'||hasAuthorizationArea(auth,'mails'));
 }
+
+
+
+/**
+ * The single server-side projection from effective areas to concrete product
+ * actions. Commands and browser reads consume the same projection.
+ */
+export function getAuthorizationActionGrants(
+  authorization: Parameters<typeof hasAuthorizationArea>[0],
+): AuthorizationActionGrants {
+  const canManageOrders = hasAuthorizationArea(authorization, "eingang");
+  return {
+    confirmPayment: hasAuthorizationArea(authorization, "zahlungen") || (
+      hasAuthorizationArea(authorization, "kassieren")
+      && hasAuthorizationArea(authorization, "auftraege")
+    ),
+    editOrderContent: canManageOrders,
+    createCustomer: hasAuthorizationArea(authorization, "eingang"),
+    createQuote: canManageOrders && hasAuthorizationArea(authorization, "preise"),
+  };
+}

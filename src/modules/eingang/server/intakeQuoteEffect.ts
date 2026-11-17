@@ -1,6 +1,7 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
 /** Called only inside the existing quote writer's transaction; no separate capture. */
