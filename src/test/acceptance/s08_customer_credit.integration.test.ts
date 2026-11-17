@@ -175,7 +175,7 @@ it('A08 R2 real credit SQL failure preserves cancellation and one normal task, r
  }
   const complete={taskId:taskId!,version:taskVersion!,note:null};
  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${originalActor.actorId}::uuid AND bereich='zahlungen'`;
- expect(await withSession(originalActor,()=>getIntakeTaskAction({taskId:taskId!}))).toMatchObject({code:'OK',canComplete:false});
+ expect(await withSession(originalActor,()=>getIntakeTaskAction({taskId:taskId!}))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(originalActor,()=>completeIntakeTaskAction(complete))).toMatchObject({code:'FORBIDDEN'});
  expect(await sql`SELECT id FROM public.customer_credit_entries WHERE tenant_id=${KREILE_TENANT_SLUG} AND invoice_id=${input.invoiceId}::uuid`).toEqual([]);
  expect(await withSession(resolver,()=>completeIntakeTaskAction(complete))).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:resolver.actorId}});

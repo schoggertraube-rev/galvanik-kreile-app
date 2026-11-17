@@ -100,7 +100,7 @@ it('retains the pending original when the real task history fails, then repairs 
 });
 
 it('keeps a real physical completion when its later pricing supplement hits an SQL error',async()=>{
- const decider=await createFixture(['entscheiden']); // Real recipient, without money or order permission.
+ const decider=await createFixture(['preise']); // Real price recipient, without decision or order permission.
  const {created,orderId,itemId,version}=await setup('Offline Nachtrag SQL-Fehler'),at=new Date(Date.now()-8*86400000).toISOString();
  const [source]=await sql`SELECT item.name,to_char(event.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin','DD.MM.YYYY') AS day FROM public.items item JOIN public.events event ON event.id=${created.receipt.eventId} WHERE item.tenant_id=${KREILE_TENANT_SLUG} AND item.id=${itemId}`;
  const title=`Wochenwert für ${source.name} nachtragen – Preisbuchung vom ${source.day} ist gescheitert`;
@@ -114,7 +114,7 @@ it('keeps a real physical completion when its later pricing supplement hits an S
   expect(await sql`SELECT net_cents FROM private.order_production_snapshots WHERE event_id=${saved.receipt.eventId} AND item_id=${itemId} AND component='base'`).toEqual([{net_cents:null}]);
   const tasks=await sql`SELECT id::text,version,titel,status,erstellt_von::text,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${orderId} AND titel=${title}`;
   expect(tasks).toHaveLength(1);if(tasks.length!==1)throw Error('TEST_REAL_PRICING_TASK_MISSING');
-  expect(tasks[0]).toMatchObject({titel:title,status:'offen',erstellt_von:full.actorId,fuer_bereich:'entscheiden'});taskId=tasks[0].id;if(typeof taskId!=='string')throw Error('TEST_TASK_ID_MISSING');
+  expect(tasks[0]).toMatchObject({titel:title,status:'offen',erstellt_von:full.actorId,fuer_bereich:'preise'});taskId=tasks[0].id;if(typeof taskId!=='string')throw Error('TEST_TASK_ID_MISSING');
   // The existing task command must retry the actual posting, never just close it.
   expect(await withSession(decider,()=>completeIntakeTaskAction({taskId,version:tasks[0].version,note:null}))).toMatchObject({code:'UNAVAILABLE'});
   expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${taskId}::uuid`).toEqual([{status:'offen'}]);
@@ -164,7 +164,7 @@ it('retains an unvalued physical completion and a real clarification task for a 
 });
 
 it('keeps the real physical edge and a strict basis-phase task when base pricing fails before its snapshot',async()=>{
- const decider=await createFixture(['entscheiden']);
+ const decider=await createFixture(['preise']);
  const {orderId,itemId,version}=await setup('CB17 Basis-Savepoint');
  const fault='test_base_price_'+randomUUID().replaceAll('-','');
  await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.order_id='${orderId}' AND NEW.component='base' THEN RAISE EXCEPTION 'TEST_BASE_PRICE_FAILURE'; END IF; RETURN NEW; END $$`);
@@ -178,7 +178,7 @@ it('keeps the real physical edge and a strict basis-phase task when base pricing
   expect(markers).toHaveLength(1);expect(markers[0]).toMatchObject({user_id:full.actorId,payload:{phase:'basis',productionEventId:original.receipt.eventId,itemId}});
   expect(markers[0].payload).not.toHaveProperty('pricingEventId');
   const forged=randomUUID();await expect(sql`INSERT INTO public.events(id,tenant_id,order_id,item_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version) VALUES(${forged},${KREILE_TENANT_SLUG},${orderId},${itemId},'ORDER_PRODUCTION_PRICING_RETRY_REQUIRED_V1','TEST synthetic invalid actor proof',${JSON.stringify(markers[0].payload)}::jsonb,'success',${decider.actorId}::uuid,${forged}::uuid,1)`).rejects.toMatchObject({code:'P0001'});
-  const [task]=await sql`SELECT id::text,version,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${markers[0].id}::uuid`;expect(task.fuer_bereich).toBe('entscheiden');taskId=task.id;
+  const [task]=await sql`SELECT id::text,version,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${markers[0].id}::uuid`;expect(task.fuer_bereich).toBe('preise');taskId=task.id;
   expect(await withSession(decider,()=>getIntakeTaskAction({taskId:task.id}))).toMatchObject({code:'OK',pricingSource:'KNOWN',canComplete:true});
   expect(await withSession(decider,()=>completeIntakeTaskAction({taskId:task.id,version:task.version,note:null}))).toMatchObject({code:'UNAVAILABLE'});
   expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${task.id}::uuid`).toEqual([{status:'offen'}]);

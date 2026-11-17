@@ -1577,9 +1577,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   };
 
   const createInputForStatus = (): CreateCustomerInput => {
-    const {customerType:kind,salutation,handoverPreference,paymentTermDays,...fields}=customerDraft;
-    const input:CreateCustomerInput={...fields,customerType:kind as Exclude<CustomerDraft["customerType"],"">,clientEventId:requestId("customer"),salutation:salutation||null,handoverPreference:handoverPreference||null,paymentTermDays:paymentTermDays?Number(paymentTermDays):null};
-    if(!ports.canManageMoney){delete input.paymentPreference;delete input.paymentTermDays;if(!(ports.canManageSupplierBank&&input.customerType==="lieferant"))delete input.iban;}
+    const {customerType:kind,salutation,handoverPreference,paymentTermDays,paymentPreference,iban,...fields}=customerDraft;
+    const input:CreateCustomerInput={...fields,customerType:kind as Exclude<CustomerDraft["customerType"],"">,clientEventId:requestId("customer"),salutation:salutation||null,handoverPreference:handoverPreference||null,
+      ...(ports.canManageMoney?{paymentPreference,paymentTermDays:paymentTermDays?Number(paymentTermDays):null}:{}),
+      ...(ports.canManageMoney||ports.canManageSupplierBank&&kind==="lieferant"?{iban}:{})};
+
     return input;
   };
 

@@ -27,10 +27,18 @@ ALTER TABLE public.app_user_rights ADD CONSTRAINT app_user_rights_bereich_chk CH
 
 -- PL17.11 13:34: exactly one transactional recipient conversion, no persistent guard exception.
 CREATE TEMP TABLE kreile_financial_task_recipient_before ON COMMIT DROP AS
- SELECT id,to_jsonb(task)-'fuer_bereich' AS original FROM public.tasks task WHERE fuer_bereich='geld';
+ SELECT task.id,to_jsonb(task)-'fuer_bereich' AS original,
+  CASE WHEN task.art='rechnung' OR task.bezug_typ='eingangsrechnung' THEN 'buchhaltung'
+   WHEN EXISTS(SELECT 1 FROM public.events source WHERE source.tenant_id=task.tenant_id
+    AND source.status='success' AND source.event_schema_version=1 AND source.order_id=task.bezug_id
+    AND ((source.event_type='ORDER_PRODUCTION_PRICING_RETRY_REQUIRED_V1' AND source.id=task.client_key::text)
+     OR (source.event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' AND source.payload->>'taskId'=task.id::text))) THEN 'preise'
+   ELSE 'zahlungen' END AS expected_area
+ FROM public.tasks task WHERE task.fuer_bereich='geld';
 ALTER TABLE public.tasks DROP CONSTRAINT tasks_fuer_bereich_check;
 ALTER TABLE public.tasks DISABLE TRIGGER task_identity;
-UPDATE public.tasks SET fuer_bereich='zahlungen' WHERE fuer_bereich='geld';
+UPDATE public.tasks task SET fuer_bereich=old.expected_area
+ FROM kreile_financial_task_recipient_before old WHERE old.id=task.id AND task.fuer_bereich='geld';
 ALTER TABLE public.tasks ENABLE TRIGGER task_identity;
 ALTER TABLE public.tasks ADD CONSTRAINT tasks_fuer_bereich_check CHECK (
  fuer_bereich IN ('auftraege','eingang','kunden','preise','zahlungen','buchhaltung','kassieren','mails',
@@ -40,7 +48,7 @@ DECLARE before_count bigint; converted_count bigint;
 BEGIN
  SELECT count(*) INTO before_count FROM kreile_financial_task_recipient_before;
  SELECT count(*) INTO converted_count FROM public.tasks task JOIN kreile_financial_task_recipient_before old ON old.id=task.id
-  WHERE task.fuer_bereich='zahlungen' AND to_jsonb(task)-'fuer_bereich'=old.original;
+  WHERE task.fuer_bereich=old.expected_area AND to_jsonb(task)-'fuer_bereich'=old.original;
  IF before_count<>converted_count OR EXISTS(SELECT 1 FROM public.tasks WHERE fuer_bereich='geld')
   THEN RAISE EXCEPTION 'FINANCIAL_TASK_RECIPIENT_CONVERSION_NOT_LOSSLESS'; END IF;
  IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.tasks'::regclass AND tgname='task_identity' AND tgenabled='O')

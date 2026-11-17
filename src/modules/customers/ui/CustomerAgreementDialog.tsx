@@ -104,7 +104,7 @@ function requiresDays(type: CustomerAgreementType | "") {
 }
 
 function visibleFailure(result: Exclude<CustomerAgreementCommandResult, { code: "OK" }>) {
-  if (result.code === "FORBIDDEN") return FINANCIAL_ACCESS_COPY.pricesMissing;
+  if (result.code === "FORBIDDEN") return FINANCIAL_ACCESS_COPY.paymentsMissing;
   if (result.code === "CONFLICT") return "Absprache wurde inzwischen geändert · neu laden";
   return `Nicht gespeichert · Eingaben sind noch da · ${result.message}`;
 }
