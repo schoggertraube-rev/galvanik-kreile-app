@@ -202,7 +202,9 @@ async function seedCommandPrerequisites() {
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       VALUES
         (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'eingang', ${COMMAND_USERS.admin}::uuid),
-        (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'geld', ${COMMAND_USERS.admin}::uuid),
+        (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'preise', ${COMMAND_USERS.admin}::uuid),
+      (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'zahlungen', ${COMMAND_USERS.admin}::uuid),
+      (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'buchhaltung', ${COMMAND_USERS.admin}::uuid),
         (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'auftraege', ${COMMAND_USERS.admin}::uuid),
         (${COMMAND_TENANT}, ${COMMAND_USERS.werkstatt}::uuid, 'auftraege', ${COMMAND_USERS.admin}::uuid)
       ON CONFLICT (tenant_id, user_id, bereich) DO UPDATE SET

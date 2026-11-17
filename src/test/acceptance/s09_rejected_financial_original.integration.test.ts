@@ -34,11 +34,11 @@ it('a stale money original has a distinct immutable non-effect receipt and norma
 });
 
 it('rights revoked after a real committed effect never produce a false no-effect receipt or conflict task',async()=>{
- const order=await readyInvoiceOrder('TEST S09 effect before rights loss','pickup'),actor=await createFixture(['geld'],'buero'),key=randomUUID();
+ const order=await readyInvoiceOrder('TEST S09 effect before rights loss','pickup'),actor=await createFixture(['preise','zahlungen','buchhaltung'],'buero'),key=randomUUID();
  const input={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST real cancellation before response loss',clientEventId:key};
  const original:PendingWorkshopOriginal={kind:'workshop',command:'invoice.cancel',id:key,itemId:input.invoiceId,deviceCapturedAt:new Date().toISOString(),input};
  expect(await withSession(actor,()=>cancelInvoiceAction(input))).toMatchObject({code:'OK'});
- await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${tenant} AND user_id=${actor.actorId}::uuid AND bereich='geld'`;
+ await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${tenant} AND user_id=${actor.actorId}::uuid AND bereich IN ('preise','zahlungen','buchhaltung')`;
  const result=await withSession(actor,()=>replayOfflineWorkshopAction(offlinePartition({tenantId:tenant,userId:actor.actorId}),original));
  expect(result).toMatchObject({code:'UNAVAILABLE'});expect(result).not.toHaveProperty('rejectionReceipt');
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND event_type='OFFLINE_WORKSHOP_REJECTED_V1' AND payload#>>'{original,input,clientEventId}'=${key}`).toEqual([]);

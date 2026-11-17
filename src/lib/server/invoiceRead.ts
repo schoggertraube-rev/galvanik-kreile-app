@@ -2,6 +2,7 @@ import {mapInvoiceIssueReceipt,readCreateInvoiceReceipts,mapInvoiceCancellationR
 import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
 import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
+import {canReadInvoiceCancellationProof} from "@/lib/auth/authorizationContract";
 
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -282,7 +283,7 @@ export async function readInvoiceCancellationReceipt(
   if (!isCancellationReceiptInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Stornobelegabfrage." };
   }
-  if (!canReadInvoices(authorization)) {
+  if (!canReadInvoiceCancellationProof(authorization)) {
     return { code: "FORBIDDEN", message: "Stornobeleg ist mit dieser Rolle nicht erlaubt." };
   }
   try {

@@ -36,7 +36,7 @@ import {
 } from "@/modules/eingang/public";
 
 import { usePermissions } from "@/lib/auth/PermissionsContext";
-import { isAppRole } from "@/lib/auth/authorizationContract";
+import { canCompleteTaskArea, isAppRole } from "@/lib/auth/authorizationContract";
 import { useOverlayStore } from "@/lib/overlayStore";
 import {ComplaintDialogs,type ComplaintPorts} from '@/modules/eingang/public';
 import {getComplaintDialogAction,reklamationAusfuehrenAction,nacharbeitAnlegenAction,sendeReklamationErgebnisAction,sendeNacharbeitBegleitscheinAction} from '@/app/actions/complaints.actions';
@@ -83,17 +83,17 @@ export function GlobalCreateAppAdapter() {
       window.open(url,'_blank','noopener,noreferrer');
     },
   }),[areas,openOrder,canAction]);
-  const taskCanManageMoney=hasArea('geld');
+
   const invoicePorts=useMemo<InvoicePorts>(()=>({read:getIncomingInvoiceAction,save:saveIncomingInvoiceAction,status:changeIncomingInvoiceStatusAction,clarify:clarifyIncomingInvoiceAction,searchSuppliers:searchInvoiceSuppliersAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,
     openOriginal:(itemId,fileId)=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'original',arg:itemId+'#'+fileId}})),
     openTask:taskId=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'aufgabe',arg:taskId}})),
     createSupplier:async itemId=>{const source=await getIncomingInvoiceAction({id:itemId});if(source.code!=='OK')return source;requestGlobalCreate({intent:'CUSTOMER',prefill:{sourceItemId:itemId,sourceVersion:source.view.item.version,customerMode:'lieferant',name:source.view.item.sender??undefined}});return {code:'OK'};},
   }),[]);
-  const taskPorts=useMemo<TaskPorts>(()=>({read:getIntakeTaskAction,save:saveIntakeTaskAction,complete:completeIntakeTaskAction,canManageMoney:taskCanManageMoney,referenceTargets:['kunde','auftrag'],openInvoice:id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'rechnungein',arg:id+'#klaeren'}})),openReference:reference=>{if(reference.type==='kunde'&&reference.id)openCustomer(reference.id);if(reference.type==='auftrag'&&reference.id)openOrder(reference.id);}}),[openCustomer,openOrder,taskCanManageMoney]);
+  const taskPorts=useMemo<TaskPorts>(()=>({read:getIntakeTaskAction,save:saveIntakeTaskAction,complete:completeIntakeTaskAction,canCompleteTaskArea:area=>isAppRole(role)&&canCompleteTaskArea({role,areas},area),referenceTargets:['kunde','auftrag'],openInvoice:id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'rechnungein',arg:id+'#klaeren'}})),openReference:reference=>{if(reference.type==='kunde'&&reference.id)openCustomer(reference.id);if(reference.type==='auftrag'&&reference.id)openOrder(reference.id);}}),[openCustomer,openOrder,areas,role]);
   const assignmentPorts=useMemo<AssignmentPorts>(()=>({read:getIntakeAssignmentAction,assign:assignIntakeCustomerAction,noBusiness:setIntakeNoBusinessAction,
     search:async query=>{const result=await searchOrderIntakeCustomersAction({query});return result.ok?{code:'OK',customers:result.data.customers.map(customer=>({id:customer.id,name:customer.name}))}:{code:'UNAVAILABLE',message:result.message};},
     openCustomer,openConversation:id=>router.push('/nachrichten?gruppe='+encodeURIComponent(id)),
-    openCapture:view=>requestGlobalCreate({intent:'DIRECT_INTAKE',prefill:{sourceItemId:view.itemId,intakeKind:hasArea('geld')?'kv':'auftrag',customerId:view.customer?.id??(view.proposals.length===1?view.proposals[0].id:undefined)}}),
+    openCapture:view=>requestGlobalCreate({intent:'DIRECT_INTAKE',prefill:{sourceItemId:view.itemId,intakeKind:hasArea('preise')?'kv':'auftrag',customerId:view.customer?.id??(view.proposals.length===1?view.proposals[0].id:undefined)}}),
     openNewCustomer:(view,supplier)=>requestGlobalCreate({intent:'CUSTOMER',prefill:{sourceItemId:view.itemId,sourceVersion:view.version,name:view.senderName??undefined,email:view.senderAddress??undefined,...(supplier?{customerMode:'lieferant'}:{})}}),
   }),[openCustomer,router,hasArea]);
   const [resumeQuoteId, setResumeQuoteId] = useState<string | null>(null);
@@ -134,7 +134,7 @@ export function GlobalCreateAppAdapter() {
       if((ziel==='kv'||ziel==='quote')&&typeof arg==='string'){event.preventDefault();openQuote(arg);return;}
       if(ziel==='kv-vorbereiten'&&typeof sourceItemId==='string'){event.preventDefault();requestGlobalCreate({intent:'QUOTE',prefill:{sourceItemId}});return;}
       if(ziel==='nachrichten'){event.preventDefault();router.push('/nachrichten'+(typeof arg==='string'&&arg?'?gruppe='+encodeURIComponent(arg):''));return;}
-      if(ziel==='eingang'&&typeof sourceItemId==='string'){event.preventDefault();requestGlobalCreate({intent:'DIRECT_INTAKE',prefill:{sourceItemId,intakeKind:hasArea('geld')?'kv':'auftrag'}});return;}
+      if(ziel==='eingang'&&typeof sourceItemId==='string'){event.preventDefault();requestGlobalCreate({intent:'DIRECT_INTAKE',prefill:{sourceItemId,intakeKind:hasArea('preise')?'kv':'auftrag'}});return;}
       if(ziel==="kundeneu"){requestGlobalCreate({intent:"CUSTOMER",prefill:typeof arg==="string"&&arg.endsWith("#lieferant")?{customerMode:"lieferant"}:undefined});return;}
       if (ziel === "eingang" && typeof arg === "string" && arg.endsWith("#kopie")) {
         requestGlobalCreate({ intent: "DIRECT_INTAKE", prefill: { orderCopyId: arg.slice(0, -6) } }); return;
@@ -153,7 +153,7 @@ export function GlobalCreateAppAdapter() {
   if (!role || !isAppRole(role)) return null;
 
   return (
-    <><ComplaintDialogs ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs ports={invoicePorts} allowed={hasArea('geld')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs ports={objectPorts} onOpenCustomer={openCustomer} onOpenOrder={openOrder} onOpenQuote={openQuote} customerOverlayId={activeCustomerOverlayId} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('geld')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
+    <><ComplaintDialogs ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs ports={invoicePorts} allowed={hasArea('buchhaltung')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs ports={objectPorts} onOpenCustomer={openCustomer} onOpenOrder={openOrder} onOpenQuote={openQuote} customerOverlayId={activeCustomerOverlayId} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('buchhaltung')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
       key={offlineScope??'no-offline-actor'} ports={{
         offlineScope,
         readIntakeOrderSource: async (orderId) => {
@@ -182,7 +182,9 @@ export function GlobalCreateAppAdapter() {
         openCaptureObject: (ziel, arg) => !window.dispatchEvent(new CustomEvent("kreile:oeffne", { detail: { ziel, arg }, cancelable: true })),
         canCreateOrder: hasArea("eingang"),
         canCreateQuote,
-        canManageMoney: hasArea("geld"),
+        canManageMoney: hasArea("zahlungen"),
+        canManageSupplierBank: hasArea("buchhaltung"),
+        canManagePrices: hasArea("preise"),
         canDecide:hasArea("entscheiden"),
         showPrimaryTrigger: false,
         roleLabel,

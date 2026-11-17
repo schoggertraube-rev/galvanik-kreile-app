@@ -190,7 +190,7 @@ export const GOODS_OUT_DEBT_COPY = {
   noLongerBlocked: 'Die Kundensperre ist aufgehoben. Lies den Auftrag neu und gib die Ware ohne Ausnahme heraus.',
   blocked: (invoiceNumber?: string) => invoiceNumber
     ? `Du kannst die Ware noch nicht herausgeben: Rechnung ${invoiceNumber} ist überfällig. Buche zuerst die Zahlung.`
-    : 'Du kannst die Ware noch nicht herausgeben: Eine Rechnung des Kunden ist überfällig. Lass die Zahlung im Büro buchen.',
+    : 'Ausgabe gesperrt – Rechnung offen',
 } as const;
 export const ORDER_ITEM_PHOTO_COPY={required:'Nimm für jedes Teil ein Foto auf, bevor Du den Auftrag fertig meldest.'} as const;
 export const CUSTOMER_METRICS_COPY={classificationMissing:'Grenzen für die Einstufung eintragen'} as const;
@@ -225,7 +225,7 @@ export const PICKUP_APPOINTMENT_COPY={
  unavailable:'Der Abholtermin konnte nicht sicher gespeichert werden. Deine Eingaben bleiben erhalten; versuche es erneut.',
  recorded:(date:string)=>'Abholtermin vereinbart '+date,
 };
-export const STORAGE_CHARGE_COPY={name:'Lagergeld',unit:'Woche',forbidden:'Für den Lagergeldbetrag brauchst Du die Freigabe für Geld. Die übrigen Angaben bleiben erhalten.'};
+export const STORAGE_CHARGE_COPY={name:'Lagergeld',unit:'Woche',forbidden:'Für den Lagergeldbetrag brauchst Du das Recht Zahlungen & Mahnungen. Die übrigen Angaben bleiben erhalten.'};
 export const DISPATCH_CALL_COPY={
  title:'Ruf den Kunden wegen seiner fertigen Ware an',note:'Sprich mit dem Kunden über diese fertigen Aufträge: ',
  created:'Gemeinsamer Anruf zu fertiger Ware vorbereitet',resultRecorded:'Ergebnis des gemeinsamen Anrufs festgehalten',
@@ -374,7 +374,7 @@ export const CUSTOMER_INVOICE_ACTION_COPY={numbers:(numbers:readonly string[])=>
 /** S05K A11: existing invoice-terms messages, corrected UTF-8 in one text source. */
 export const CUSTOMER_INVOICE_TERMS_COPY={
  invalid:"Zahlungsziel oder Skonto ist ungültig.",
- forbidden:"Rechnung auf Ziel darf nur mit dem Bereich Geld freigeschaltet werden.",
+ forbidden:"Rechnung auf Ziel darf nur mit dem Recht Zahlungen & Mahnungen freigeschaltet werden.",
  notFound:"Kunde ist nicht verfügbar.",
  conflict:ORDER_REQUEST_COPY.intentConflict,
  incomplete:"Rechnung auf Ziel braucht vollständige Kundendaten.",
@@ -401,14 +401,14 @@ export const CUSTOMER_CREDIT_COPY={
  payoutMethodMissing:'Wie wurde ausgezahlt? Wähle bar oder Überweisung',
  payoutReferenceMissing:'Referenz der Überweisung fehlt – trag Datum und Verwendungszweck ein',
  payoutInvalid:'Betrag oder Nachweis fehlt. Trag beides ein, dann speichere ich die Erstattung.',
- payoutForbidden:'Erstattungen speichern darf nur, wer das Recht Geld hat.',
+ payoutForbidden:'Erstattungen speichern darf nur, wer das Recht Zahlungen & Mahnungen hat.',
  payoutChanged:'Der Erstattungsbetrag oder sein Zahlungsbeleg hat sich geändert. Lade den aktuellen Stand; dein Nachweis bleibt erhalten.',
  methodLabel:'Guthaben',
  applyLabel:(amount:string,number:string)=>`Guthaben ${amount} mit Rechnung ${number} verrechnen`,
  changed:'Das Guthaben oder der Rechnungsrest hat sich geändert. Lade die aktuelle Verrechnung; deine Angaben bleiben erhalten.',
  retryTask:(number:string)=>`Guthaben aus Storno ${number} bilden · die Zahlung ist da, das Guthaben fehlt noch`,
  invalid:'Betrag oder Rechnung fehlt. Trag beides ein, dann verrechne ich das Guthaben.',
- forbidden:'Guthaben verrechnen darf nur, wer das Recht Geld hat.',
+ forbidden:'Guthaben verrechnen darf nur, wer das Recht Zahlungen & Mahnungen hat.',
  unavailable:'Das Guthaben ist gerade nicht erreichbar. Deine Angaben bleiben erhalten – versuch es gleich noch einmal.',
  notFound:'Für diesen Kunden gibt es dieses Guthaben nicht mehr. Lade den aktuellen Stand.',
  pending:'Der Storno ist noch nicht übertragen. Er wird gesendet, sobald die Verbindung steht.',
@@ -437,7 +437,7 @@ export const SHIPPING_FEE_COPY={
  includedChanged:'Versand im KV geändert. Ein schon gesendeter KV bekommt dafür eine neue Fassung.',
  missing:'Versandpauschale fehlt in den Einstellungen – trag sie dort ein',
  invalid:'Der Versandpreis muss ein Betrag ab 0,00 € sein. Leer heißt: kein Standard.',
- forbidden:'Die Versandpauschale ändert nur, wer das Recht Geld hat.',
+ forbidden:'Die Versandpauschale ändert nur, wer das Recht Preise & Rechnungen hat.',
 } as const;
 
 export const SHIPMENT_GROUP_COPY={
@@ -447,3 +447,5 @@ export const SHIPMENT_GROUP_COPY={
  blocked:(order:string,reason:string)=>`${order}: ${reason}`,
  unavailable:'Warenausgang konnte nicht sicher gebucht werden.'
 };
+
+export {FINANCIAL_ACCESS_COPY} from './financialAccessCopy';

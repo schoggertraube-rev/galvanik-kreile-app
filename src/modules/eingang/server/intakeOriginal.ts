@@ -1,3 +1,4 @@
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import "server-only";
 import {createHash} from "node:crypto";
 import {sql} from "drizzle-orm";
@@ -43,7 +44,7 @@ export async function openIntakeOriginal(input:unknown){
  const value=input as Record<string,unknown>;
  if(!['clientEventId,fileId','clientEventId,fileId,orderId'].includes(Object.keys(value).sort().join(','))||typeof value.fileId!=="string"||!UUID.test(value.fileId)||typeof value.clientEventId!=="string"||!UUID.test(value.clientEventId)||value.orderId!==undefined&&(typeof value.orderId!=='string'||!UUID.test(value.orderId)))return {code:"VALIDATION_ERROR" as const,message:"Dateikennung ist ungültig."};
  const auth=await resolveAuthorization();if(!auth.ok)return {code:"UNAUTHENTICATED" as const,message:auth.message};
-  if(!hasAuthorizationArea(auth.data,'eingang')&&!hasAuthorizationArea(auth.data,'geld')&&!(value.orderId&&auth.data.permissions.includes('perm_view_leitstand')))return {code:"FORBIDDEN" as const,message:"Originale erfordern Eingang, einen sichtbaren Auftrag oder im Rechnungskontext Geld."};
+  if(!hasAuthorizationArea(auth.data,'eingang')&&!hasAuthorizationArea(auth.data,'buchhaltung')&&!(value.orderId&&auth.data.permissions.includes('perm_view_leitstand')))return {code:"FORBIDDEN" as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
  if(typeof value.orderId==='string'){
   const order=await readLiveOrderCard(auth.data,{orderId:value.orderId});if(order.code!=='OK')return {code:order.code,message:order.message};
  }
@@ -62,7 +63,7 @@ export async function openIntakeOriginal(input:unknown){
   }):false;
   if(value.orderId&&!orderAccess)return {code:'FORBIDDEN' as const,message:'Original gehört nicht zu diesem sichtbaren Auftrag.'};
   const mailOriginal=file.art==='mime'||file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml');
-  const invoiceAccess=hasAuthorizationArea(auth.data,'geld')&&file.invoice_context===true&&!mailOriginal;
+  const invoiceAccess=hasAuthorizationArea(auth.data,'buchhaltung')&&file.invoice_context===true&&!mailOriginal;
   if(!hasAuthorizationArea(auth.data,'eingang')&&!invoiceAccess&&!orderAccess)return {code:'FORBIDDEN' as const,message:'Dieses Original benötigt Eingang oder einen sichtbaren Auftrag.'};
   const invoiceOnly=!orderAccess&&invoiceAccess&&(!hasAuthorizationArea(auth.data,'eingang')||file.kanal==='mail'&&!hasAuthorizationArea(auth.data,'mails'));
   const restricted=!orderAccess&&(file.kanal==='mail'&&!invoiceAccess||mailOriginal)&&!hasAuthorizationArea(auth.data,'mails');
@@ -101,14 +102,14 @@ export async function confirmIntakeOriginal(input:unknown){
  const value=input as Record<string,unknown>;
  if(Object.keys(value).sort().join(',')!=='clientEventId,fileId'||typeof value.fileId!=='string'||!UUID.test(value.fileId)||typeof value.clientEventId!=='string'||!UUID.test(value.clientEventId))return {code:'VALIDATION_ERROR' as const,message:'Originalkennung ist ungültig.'};
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:auth.message};
- if(!hasAuthorizationArea(auth.data,'eingang')&&!hasAuthorizationArea(auth.data,'geld'))return {code:'FORBIDDEN' as const,message:'Originalprüfung erfordert Eingang oder im Rechnungskontext Geld.'};
+ if(!hasAuthorizationArea(auth.data,'eingang')&&!hasAuthorizationArea(auth.data,'buchhaltung'))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
  try{return await withPrivilegedTenantTransaction(auth.data,async tx=>{
   const files=await tx.execute<{item_id:string;geoeffnet:boolean;kanal:string;mime:string;dateiname:string;art:string;invoice_context:boolean}>(sql`SELECT file.item_id::text,file.geoeffnet,source.kanal,file.mime,file.dateiname,file.art,(source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context FROM public.intake_file file
     JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.data.tenantId} AND file.id=${value.fileId}::uuid FOR UPDATE OF file`);
   if(files.length!==1)return {code:'NOT_FOUND' as const,message:'Original nicht verfügbar.'};
   const file=files[0];
   const mailOriginal=file.art==='mime'||file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml');
-  const invoiceAccess=hasAuthorizationArea(auth.data,'geld')&&file.invoice_context===true&&!mailOriginal;
+  const invoiceAccess=hasAuthorizationArea(auth.data,'buchhaltung')&&file.invoice_context===true&&!mailOriginal;
   if(!hasAuthorizationArea(auth.data,'eingang')&&!invoiceAccess)return {code:'FORBIDDEN' as const,message:'Dieses Original benötigt Eingang.'};
   if((file.kanal==='mail'&&!invoiceAccess||mailOriginal)&&!hasAuthorizationArea(auth.data,'mails'))return {code:'FORBIDDEN' as const,message:'Mail · Inhalt nur fürs Büro'};
   if(!file.geoeffnet)return {code:'CONFLICT' as const,message:'Original zuerst öffnen und prüfen.'};

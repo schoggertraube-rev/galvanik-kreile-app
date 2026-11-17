@@ -1,7 +1,8 @@
 import 'server-only';
 import {randomUUID,createHash} from 'node:crypto';
 import {sql} from 'drizzle-orm';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {COMPLAINT_RESULT_TEMPLATE,COMPLAINT_GOODS_TEMPLATE,renderComplaintGoodsTemplate,renderComplaintResultTemplate,type StoredEmailTemplate} from '@/lib/email/templateContract';
 

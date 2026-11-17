@@ -79,7 +79,7 @@ it('A08b-7 denies a real login without money and another authorized actor cannot
  expect(await withSession(noMoney,()=>payoutCustomerCreditAction(input))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(full,()=>getCustomerCreditAction(input.customerId))).toMatchObject({code:'OK',credit:{balanceCents:4000,version:1}});
  expect(await withSession(full,()=>payoutCustomerCreditAction(input))).toMatchObject({code:'OK'});
- const other=await createFixture(['geld'],'buero');
+ const other=await createFixture(['preise','zahlungen','buchhaltung'],'buero');
  expect(await withSession(other,()=>payoutCustomerCreditAction(input))).toMatchObject({code:'CONFLICT'});
 });
 

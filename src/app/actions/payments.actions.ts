@@ -82,7 +82,7 @@ export async function getOrderPaymentStateAction(
     const authorization = await resolveActionAuthorization();
     if (!authorization.ok) return authorization.result;
     const { getPaymentState } = await import("@/lib/server/paymentSummaryRead");
-    const readCredit=hasAuthorizationArea(authorization.data,'geld')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
+    const readCredit=hasAuthorizationArea(authorization.data,'zahlungen')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
       const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
       return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
     }:undefined;

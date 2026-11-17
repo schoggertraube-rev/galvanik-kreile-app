@@ -25,7 +25,7 @@ async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
  if(rows.length!==1)reject('NOT_FOUND','Eingang nicht verfügbar.');return rows[0];
 }
 async function customer(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,read:CustomerReader):Promise<AssignmentCustomer>{
- const row=await read(tx,auth.tenantId,id);if(!row)reject('NOT_FOUND','Kunde nicht verfügbar.');if(row.customerType==='lieferant'&&!hasAuthorizationArea(auth,'geld'))reject('FORBIDDEN','Lieferanten benötigen das Recht Geld.');return {id:row.id,name:row.name,type:row.customerType,reason:null};
+ const row=await read(tx,auth.tenantId,id);if(!row)reject('NOT_FOUND','Kunde nicht verfügbar.');return {id:row.id,name:row.name,type:row.customerType,reason:null};
 }
 async function suggestions(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string){return tx.execute<{id:string;wert:unknown;grund:string|null}>(sql`SELECT id::text,wert,grund FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${id}::uuid AND feld='kunde' AND status='offen' ORDER BY id`);}
 export async function readIntakeAssignment(input:unknown,readCustomer:CustomerReader):Promise<AssignmentReadResult>{
@@ -33,13 +33,12 @@ export async function readIntakeAssignment(input:unknown,readCustomer:CustomerRe
  try{const auth=await session();if(!hasAuthorizationArea(auth,'eingang')&&!(input.mode==='kein'&&hasAuthorizationArea(auth,'mails')))reject('FORBIDDEN','Zuordnung benötigt Eingang.');
   return await withPrivilegedTenantTransaction(auth,async tx=>{
    const row=await source(tx,auth,input.itemId as string),restricted=row.kanal==='mail'&&!hasAuthorizationArea(auth,'mails'),proposals:AssignmentCustomer[]=[];
-   if(hasAuthorizationArea(auth,'kunden')||hasAuthorizationArea(auth,'geld'))for(const proposal of await suggestions(tx,auth,row.id)){
+   if(hasAuthorizationArea(auth,'kunden'))for(const proposal of await suggestions(tx,auth,row.id)){
     if(typeof proposal.wert!=='string'||!proposal.wert.trim()||proposals.some(value=>value.id===proposal.wert))continue;
     const profile=await readCustomer(tx,auth.tenantId,proposal.wert);if(!profile)continue;
-    if(profile.customerType==='lieferant'?!hasAuthorizationArea(auth,'geld'):!hasAuthorizationArea(auth,'kunden'))continue;
     proposals.push({id:profile.id,name:profile.name,type:profile.customerType,reason:proposal.grund});
    }
-   let current:AssignmentCustomer|null=null;if(row.kunde_id){const profile=await readCustomer(tx,auth.tenantId,row.kunde_id);if(profile&&(profile.customerType!=='lieferant'||hasAuthorizationArea(auth,'geld')))current={id:profile.id,name:profile.name,type:profile.customerType,reason:null};}
+   let current:AssignmentCustomer|null=null;if(row.kunde_id){const profile=await readCustomer(tx,auth.tenantId,row.kunde_id);if(profile)current={id:profile.id,name:profile.name,type:profile.customerType,reason:null};}
    const files=restricted?[]:await tx.execute<{id:string;name:string}>(sql`SELECT id::text,dateiname AS name FROM public.intake_file WHERE tenant_id=${auth.tenantId} AND item_id=${row.id}::uuid AND art<>'mime' ORDER BY reihenfolge,id`);
    const duplicates=hasAuthorizationArea(auth,'mails')?await tx.execute<{id:string;title:string|null;at:string}>(sql`SELECT id::text,coalesce(betreff,left(text,100)) AS title,coalesce(empfangen_am,erstellt_am)::text AS at FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id<>${row.id}::uuid
     AND erstellt_am>=statement_timestamp()-interval '30 days' AND einsatz_aktion IS DISTINCT FROM 'kein_gv' AND (${row.kunde_id}::text IS NOT NULL AND kunde_id=${row.kunde_id} OR ${row.gruppe_adresse}::text IS NOT NULL AND gruppe_adresse=${row.gruppe_adresse}) ORDER BY erstellt_am DESC,id DESC`):[];
@@ -91,17 +90,15 @@ export async function assignInTransaction(tx:PrivilegedTenantTransaction,auth:Au
 export async function createCustomerForIntake(input:unknown,writeCustomer:CustomerWriter,readCustomer:CustomerReader):Promise<CustomerCreateCommandResult|AssignmentFailure>{
  if(!object(input)||Object.keys(input).sort().join(',')!=='customer,itemId,version'||!uuid(input.itemId)||!Number.isSafeInteger(input.version)||(input.version as number)<1||!object(input.customer)||!uuid(input.customer.clientEventId))return {code:'VALIDATION_ERROR',message:'Kunde oder Eingangsstand ist ungültig.'};
  try{const auth=await session(),isSupplier=(input.customer as Record<string,unknown>).customerType==='lieferant';
-  if(!hasAuthorizationArea(auth,isSupplier?'geld':'kunden')||!hasAuthorizationArea(auth,'eingang')&&!isSupplier)reject('FORBIDDEN','Neukunde aus Absender benötigt Eingang sowie das Recht des Ziels.');
+  if(!canAssignIntakeCustomer(auth))reject('FORBIDDEN','Neukunde aus Absender benötigt Eingang sowie das Recht des Ziels.');
   return await withPrivilegedTenantTransaction(auth,async tx=>{
-   const invoiceOnly=!hasAuthorizationArea(auth,'eingang');
    const row=await source(tx,auth,input.itemId as string);
    const missingInvoiceSupplier=isSupplier&&row.vorgang_art==='rechnung'&&row.vorgang_id!==null&&row.kunde_id===null&&(await tx.execute(sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId} AND id=${row.vorgang_id}::uuid AND item_id=${row.id}::uuid AND lieferant_id IS NULL AND zahlstatus='unklar' AND unklar_grund='Lieferant fehlt'`)).length===1;
    if(missingInvoiceSupplier){const locked=await source(tx,auth,row.id,true);if(locked.version!==input.version)reject('CONFLICT','Eingang wurde inzwischen geändert.');}
-   if(invoiceOnly&&!missingInvoiceSupplier&&(row.einsatz!=='offen'||!row.anliegen.includes('rechnung')||row.vorgang_id!==null))reject('FORBIDDEN','Geld erlaubt Lieferantenanlage nur aus einer offenen Eingangsrechnung.');
-   const saved=await writeCustomer(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:true,canManageMoney:hasAuthorizationArea(auth,'geld'),canDecide:hasAuthorizationArea(auth,'entscheiden')}},input.customer);
+   const saved=await writeCustomer(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:true,canManageMoney:hasAuthorizationArea(auth,'zahlungen'),canManageSupplierBank:hasAuthorizationArea(auth,'buchhaltung'),canDecide:hasAuthorizationArea(auth,'entscheiden')}},input.customer);
    if(saved.code!=='OK')throw new Rejected(saved);
    if(missingInvoiceSupplier)return saved;
-   const assigned=await assignInTransaction(tx,auth,{itemId:input.itemId as string,version:input.version as number,clientEventId:(input.customer as Record<string,unknown>).clientEventId as string,customerId:saved.customer.id,mode:'manual'},readCustomer,!invoiceOnly);
+   const assigned=await assignInTransaction(tx,auth,{itemId:input.itemId as string,version:input.version as number,clientEventId:(input.customer as Record<string,unknown>).clientEventId as string,customerId:saved.customer.id,mode:'manual'},readCustomer);
    if(assigned.code!=='OK')reject('CONFLICT','Eingang wurde inzwischen einem anderen Kunden zugeordnet · kein neuer Kunde gespeichert.');
    return saved;
   });

@@ -8,13 +8,13 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export async function getKanaele() {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   return await db.select().from(kanal).orderBy(kanal.typ);
 }
 
 export async function updateKanalConfig(id: string, verbunden: boolean, config: Record<string, unknown>) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
 

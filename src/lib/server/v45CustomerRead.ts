@@ -15,10 +15,10 @@ const knownCount=(value:unknown):value is number=>typeof value==='number'&&Numbe
 function missing(value:unknown){return value===null?true:typeof value==='string'?value.trim().length===0:undefined;}
 /** Only already qualified customer/financial read facts. PL12:01 leaves the
  * reminder/dunning facts unknown until S08b; pickup/quote work is not guessed. */
-export function v45CustomerFacts(customer:ContactFacts,money:boolean,overdueCount?:number):Readonly<Record<string,unknown>>{
+export function v45CustomerFacts(customer:ContactFacts,visibility:{prices:boolean;payments:boolean},overdueCount?:number):Readonly<Record<string,unknown>>{
  const facts:Record<string,unknown>={};
- const unsent=money&&knownCount(customer.invoiceUnsentCount)?customer.invoiceUnsentCount>0:undefined;
- const overdue=money&&knownCount(overdueCount)?overdueCount>0:undefined;
+ const unsent=visibility.prices&&knownCount(customer.invoiceUnsentCount)?customer.invoiceUnsentCount>0:undefined;
+ const overdue=visibility.payments&&knownCount(overdueCount)?overdueCount>0:undefined;
  if(unsent!==undefined)facts.unsentInvoice=unsent;
  if(overdue!==undefined)facts.overdue=overdue;
  if(unsent===true||overdue===true)facts.hasAction=true;
@@ -34,11 +34,11 @@ export function v45CustomerFacts(customer:ContactFacts,money:boolean,overdueCoun
 /** The customer's rule seam uses the same summary/metrics snapshot, not a
  * second customer or revenue query. This is not the full U2 presentation. */
 function readV45CustomerRuleRaw(auth:AuthorizationSnapshot,customer:Pick<CustomerSummary,'id'|'updatedAt'|'email'|'billingEmail'|'invoiceUnsentCount'|'invoiceUnsentOriginals'|'kennzahlen'|'name'|'invoiceOpenCents'>,signals?:CustomerListSignals){
- const facts=v45CustomerFacts(customer,hasAuthorizationArea(auth,'geld'),customer.kennzahlen?.overdue?.invoiceCount);
+ const facts=v45CustomerFacts(customer,{prices:hasAuthorizationArea(auth,'preise'),payments:hasAuthorizationArea(auth,'zahlungen')},customer.kennzahlen?.overdue?.invoiceCount);
  const source={kind:'customer' as const,id:customer.id,updatedAt:customer.updatedAt,...(signals?.asOf?{signalsAt:signals.asOf}:{})};
  const rule=readAuthorizedV45Rule(auth,'kunde',facts);
 
- const money=hasAuthorizationArea(auth,'geld'),mails=hasAuthorizationArea(auth,'mails');
+ const money=hasAuthorizationArea(auth,'zahlungen'),mails=hasAuthorizationArea(auth,'mails');
  const values:Record<string,Readonly<Record<string,unknown>>>={'kunde.hauptaktion':{elementId:rule.code==='OK'?rule.hauptaktion:null}};
  if(customer.kennzahlen?.classification)values['kunde.einstufung']={einstufung:customer.kennzahlen.classification};
  if(signals&&knownCount(signals.activeOrderCount)&&knownCount(signals.activeQuoteCount))values['kunde.kachel.orders']={offeneAuftraege:signals.activeOrderCount,offeneKv:signals.activeQuoteCount};

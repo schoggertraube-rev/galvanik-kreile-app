@@ -34,6 +34,7 @@ it('H4 overdue invoice of the same customer blocks a new release without recordi
  const limitedKey=randomUUID();
  const hidden=await withSession(limited,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:order.version,clientEventId:limitedKey}));
  expect(hidden.code).toBe('CONFLICT');
+ expect(hidden).toMatchObject({message:'Ausgabe gesperrt – Rechnung offen'});
  expect('message'in hidden?hidden.message:'').not.toContain(oldNumber);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${limitedKey}::uuid`).toEqual([{n:0}]);
  const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');

@@ -100,7 +100,7 @@ async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise
   return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work);
 }
 
-async function createFixture(settings=true,areas=['eingang','auftraege','kunden','geld'],role:AppSession['role']='meister'): Promise<Fixture> {
+async function createFixture(settings=true,areas=['eingang','auftraege','kunden','preise','zahlungen','buchhaltung'],role:AppSession['role']='meister'): Promise<Fixture> {
   const actorId = randomUUID();
   const customerId = randomUUID();
   const updatedAt = new Date(Date.now() - 5_000).toISOString();
@@ -503,7 +503,7 @@ it('KV-06/07b/08 records reply decisions and exactly their concern in one transa
 
 
 it('KV-09 uses one canonical follow-up task and a protected quote projection, with Today readback and completion evidence',async()=>{
- const fixture=await createFixture(true,['eingang','auftraege','kunden','geld','mails']);
+ const fixture=await createFixture(true,['eingang','auftraege','kunden','preise','zahlungen','buchhaltung','mails']);
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,kv_nachfass_tage,updated_at) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST KV followup',5,statement_timestamp() WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
  const {getIntakeTaskAction,saveIntakeTaskAction}=await import('@/app/actions/eingang.actions');
@@ -892,7 +892,7 @@ it('U246 price follow-up text uses the same proportional line total as actual go
 
 });
 it.each([false,true])('U246 onsite request existing/new customer %s uses the real writers, retries and rejects changed intent',async(newCustomer)=>{
- const fixture=await createFixture(true,['eingang','auftraege','kunden','geld','mails']);
+ const fixture=await createFixture(true,['eingang','auftraege','kunden','preise','zahlungen','buchhaltung','mails']);
  const {saveIntakeNoteAction}=await import('@/app/actions/eingang.actions');
  const {receiveOnsiteQuoteAction,getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
  const itemId=randomUUID(),photoIds=[randomUUID(),randomUUID()];
@@ -957,7 +957,7 @@ it.each([false,true])('U246 onsite request existing/new customer %s uses the rea
 
 it('U246 multi-position price uses the same text and goods proposal without invented hours',async()=>{
  const newCustomer=true;
- const fixture=await createFixture(true,['eingang','auftraege','kunden','geld','mails']);
+ const fixture=await createFixture(true,['eingang','auftraege','kunden','preise','zahlungen','buchhaltung','mails']);
  const {saveIntakeNoteAction}=await import('@/app/actions/eingang.actions');
  const {receiveOnsiteQuoteAction,getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
  const itemId=randomUUID(),photoIds=[randomUUID(),randomUUID()];
@@ -1149,7 +1149,7 @@ it.each([false,true,'operational'] as const)('AF-8/17 telephone acceptance and g
   expect(await withSession(operator,()=>readQuoteAction({quoteId}))).toMatchObject({code:'FORBIDDEN'});
   const {createOrderIntake}=await import('@/lib/server/commands/orderIntakeCommand');
   const {resolveAuthorization}=await import('@/lib/server/authorization');
-  const auth=await withSession(operator,()=>resolveAuthorization());expect(auth.ok).toBe(true);if(auth.ok){expect(auth.data.areas).not.toContain('geld');expect(auth.data.areas).not.toContain('eingang');}
+  const auth=await withSession(operator,()=>resolveAuthorization());expect(auth.ok).toBe(true);if(auth.ok){expect(auth.data.areas).not.toContain('zahlungen');expect(auth.data.areas).not.toContain('eingang');}
   expect(await withSession(operator,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:fixture.customerId},dueDate:'2027-04-20',handoverMode:'pickup',items:[{catalogServiceId:null,name:'TEST Direktversuch',quantity:1,material:null,surfaceRequested:'verchromen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:null}))).toMatchObject({code:'FORBIDDEN'});
   const {undoQuoteConversionAction,readQuoteConversionReceiptAction}=await import('@/app/actions/quotes.actions');
   await sql`UPDATE public.print_jobs SET attempts=1 WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${result.orderReceipt.orderId}`;
@@ -1299,7 +1299,7 @@ it('AK invoice: the real invoice creator is distinct from the original importer 
 });
 
 it('AK-02: quote followups prioritize their actual recipient rather than the quote creator and retain all tasks',async()=>{
- const a=await createFixture(true,['eingang','auftraege','kunden','geld','mails']),b=await createFixture(true,['eingang','auftraege','kunden','geld','mails']);
+ const a=await createFixture(true,['eingang','auftraege','kunden','preise','zahlungen','buchhaltung','mails']),b=await createFixture(true,['eingang','auftraege','kunden','preise','zahlungen','buchhaltung','mails']);
  const {createQuoteAction,changeQuoteLifecycleAction,readQuoteDefaultsAction}=await import('@/app/actions/quotes.actions');
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,updated_at) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST AK settings',statement_timestamp() WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
  const defaults=await withSession(a,()=>readQuoteDefaultsAction());if(defaults.code!=='OK')throw Error('TEST AK quote defaults');const {saveQuoteSettingsAction}=await import('@/app/actions/settings.actions');

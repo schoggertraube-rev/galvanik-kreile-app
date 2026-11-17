@@ -7,7 +7,7 @@ import { beleg } from "@/db/schema_buchhaltung";
 import { ilike, or } from "drizzle-orm";
 
 export async function searchBelegeByOcrTextAction(term: string) {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   if (!term || term.length < 2) return [];
 

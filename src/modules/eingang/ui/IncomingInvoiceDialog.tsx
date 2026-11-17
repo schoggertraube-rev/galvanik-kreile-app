@@ -1,4 +1,5 @@
 'use client';
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {ACTOR_COPY} from '@/ui/situationCatalog';
 import {useEffect,useRef,useState} from 'react';
 import {Button,Checkbox,Dialog,Eingabe,Feld,Hinweis,Kachel,Rueckfrage,Segment,Textfeld,Zustandskette} from '@/ui/kr';
@@ -82,7 +83,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
      paidDate:status==='bezahlt'?paidDate:null,proofFileId:status==='bezahlt'?proofFileId:null,duplicateId:status==='doppelt'?duplicate?.id??null:null,duplicateReason:duplicateReason.trim()||null,unclearReason:status==='unklar'?reason.trim():null});
    if(result.code==='DUPLICATE'){setDuplicate(result.duplicate);return;}
    if(result.code!=='OK'){setErrors(result.fields??{});setMessage('Nicht gespeichert · alle Eingaben sind noch da · '+result.message);setRetry(true);return;}
-   const text=result.invoice.unklar_grund==='Lieferant fehlt'?'Lieferant fehlt · Aufgabe angelegt':mode==='klaeren'?'Rechnung geklärt · '+status:mode==='bezahlt_markieren'?'Als bezahlt markiert':status==='doppelt'?'Als doppelt abgelegt · Eingang erledigt':status==='unklar'?'Eingangsrechnung unklar · Aufgabe für Recht Geld':status==='bezahlt'?'Eingangsrechnung erfasst · bezahlt':'Eingangsrechnung erfasst · fällig '+dateLabel(result.invoice.faellig_am??'');
+   const text=result.invoice.unklar_grund==='Lieferant fehlt'?'Lieferant fehlt · Aufgabe angelegt':mode==='klaeren'?'Rechnung geklärt · '+status:mode==='bezahlt_markieren'?'Als bezahlt markiert':status==='doppelt'?'Als doppelt abgelegt · Eingang erledigt':status==='unklar'?FINANCIAL_ACCESS_COPY.invoiceUnclear:status==='bezahlt'?'Eingangsrechnung erfasst · bezahlt':'Eingangsrechnung erfasst · fällig '+dateLabel(result.invoice.faellig_am??'');
    onMessage(text,result.invoice.aufgabe_id??undefined);onClose();window.dispatchEvent(new Event(INTAKE_CHANGED_EVENT));
   }catch(error){console.error('[INCOMING_INVOICE_SAVE_CLIENT_FAILED]',error);setMessage('Nicht gespeichert · alle Eingaben sind noch da · Fehlercode: INCOMING_INVOICE_SAVE_CLIENT_FAILED.');setRetry(true);}
   finally{working.current=false;setBusy(false);}
@@ -107,7 +108,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
    {key:'geprueft',label:'Geprüft',icon:'check',status:view.invoice?'erledigt':'aktiv'},
    {key:'faellig',label:due?'Fällig '+due:'Fälligkeit fehlt',icon:'calendar',status:'warten',sub:'Der Tag 3 Arbeitstage vorher'},
    {key:'bezahlt',label:'Bezahlt',icon:'check',status:view.invoice?.zahlstatus==='bezahlt'?'erledigt':'warten'},
-  ]}/><p className="ev-rweg-wer">Wer zahlt: alle mit Recht Geld · erscheint auf Der Tag 3 Arbeitstage vor Fälligkeit</p>
+  ]}/><p className="ev-rweg-wer">{FINANCIAL_ACCESS_COPY.invoicePayers}</p>
    <div className="kr-form"><Hinweis ton="warn">Pflichtangaben § 14 UStG · am Original prüfen · noch nicht vollständig nachgewiesen</Hinweis><Hinweis ton={warnings.length?'warn':undefined}>{warnings.length?warnings.join(' · '):'Rechnerische Prüfung am Original'}</Hinweis></div>
    <Button art="leise" text="Positionen ins Lager übernehmen · Stufe 3" disabled/>
   </div>

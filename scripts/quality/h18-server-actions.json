@@ -35,7 +35,8 @@
       "src/test/acceptance/pickup_appointment.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
-      "src/test/h18_invoice_actions.integration.test.ts"
+      "src/test/h18_invoice_actions.integration.test.ts",
+      "src/test/acceptance/supplier_bank_access.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#changeIncomingInvoiceStatusAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -70,7 +71,8 @@
     ],
     "src/app/actions/customers.actions.ts#createCustomerAction": [
       "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",
-      "src/test/h18_customer_actions.integration.test.ts"
+      "src/test/h18_customer_actions.integration.test.ts",
+      "src/test/acceptance/supplier_bank_access.integration.test.ts"
     ],
     "src/app/actions/complaints.actions.ts#nacharbeitAnlegenAction": [
       "src/test/h18_workshop_actions.integration.test.ts"
@@ -179,7 +181,8 @@
     ],
     "src/app/actions/customers.actions.ts#updateCustomerAction": [
       "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",
-      "src/test/h18_customer_actions.integration.test.ts"
+      "src/test/h18_customer_actions.integration.test.ts",
+      "src/test/acceptance/supplier_bank_access.integration.test.ts"
     ],
     "src/app/actions/customers.actions.ts#saveCustomerAgreementAction": [
       "src/test/h18_customer_actions.integration.test.ts"

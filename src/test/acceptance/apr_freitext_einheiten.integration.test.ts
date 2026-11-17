@@ -119,7 +119,7 @@ beforeAll(async () => {
     .map((file) => file.slice(0, file.indexOf("_")))
     .sort();
   expect(migrations.map((row) => row.version)).toEqual(repositoryMigrations);
-  actor = await createFixture(["eingang", "auftraege", "kunden", "geld"]);
+  actor = await createFixture(["eingang", "auftraege", "kunden", 'preise','zahlungen','buchhaltung']);
   const { createCustomerAction } = await import("@/app/actions/customers.actions");
   const created = await withSession(actor, () => createCustomerAction({
     city: "Stuttgart",

@@ -60,11 +60,11 @@ export function CustomerCardAppAdapter({customerId,takeover,onOpenOrder,onClose,
   const close=onClose??(fallbackHref?()=>router.replace(fallbackHref):storeClose);
   return <CustomerCardView key={customerId} state={state} onOpenOrder={onOpenOrder??storeOrder} onClose={close}
     complaintsPanel={state.kind==='data'?<ComplaintPanel filter={{customerId:resolvedId}} read={getComplaints} mayRecord={hasArea('auftraege')}/>:null}
-    onSaveCustomer={hasArea("kunden")?save:undefined} canManageMoney={hasArea("geld")} canDecide={hasArea("entscheiden")}
+    onSaveCustomer={hasArea("kunden")?save:undefined} canManageMoney={hasArea("zahlungen")} canManageSupplierBank={hasArea("buchhaltung")} canDecide={hasArea("entscheiden")}
     takeover={takeover} initialEdit={mode==="fehlend"||mode==="uebernahme"||mode==="bearbeiten"} missingFirst={mode==="fehlend"} checkAddress={readCustomerAddressAction}
-    onSaveAgreement={hasArea("geld")?saveCustomerAgreementAction:undefined}
-    onRevokeAgreement={hasArea("geld")?revokeCustomerAgreementAction:undefined}
-    onReload={hasArea("geld")?reloadAgreement:undefined}
+    onSaveAgreement={hasArea("zahlungen")?saveCustomerAgreementAction:undefined}
+    onRevokeAgreement={hasArea("zahlungen")?revokeCustomerAgreementAction:undefined}
+    onReload={hasArea("zahlungen")?reloadAgreement:undefined}
     onNewOrder={hasArea("eingang")?()=>{close();requestGlobalCreate({intent:"DIRECT_INTAKE",prefill:{customerId:resolvedId}})}:undefined}
     documentsPanel={state.kind==="data"?<><DomainAttachmentPanel targetType="CUSTOMER" targetId={state.card.id}/><CommunicationPanel targetType="CUSTOMER" targetId={state.card.id}/></>:null}/>;
 }

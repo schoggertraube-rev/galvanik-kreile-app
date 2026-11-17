@@ -108,7 +108,7 @@ it('customer metrics read actual paid invoices once, isolate customers and hide 
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(events);
  expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(payment))))).toMatchObject({code:'OK',replayed:true});
  expect(await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'OK',data:{kennzahlen:{averagePaymentDays:{value:0,invoiceCount:1}}}});
- const financeOnly=await createFixture(['geld']);
+ const financeOnly=await createFixture(['preise','zahlungen','buchhaltung']);
  expect(await withSession(financeOnly,()=>getCustomerSummaryAction({customerId:first.customerId}))).toMatchObject({code:'FORBIDDEN'});
 });
 
@@ -162,7 +162,7 @@ it('rejected free-text agreement edits roll back every prior list change and pre
  expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toEqual([{user_id:full.actorId}]);
 });
 
-it('a former customer creation receipt cannot expose a contact later converted to supplier without Geld',async()=>{
+it('customer creation retry remains singular after supplier conversion under operational customer rights',async()=>{
  const {createCustomerAction,readCustomerCreateReceiptAction,updateCustomerAction}=await import('@/app/actions/customers.actions');
  const operational=await createFixture(['kunden','eingang'],'werkstatt');
  const input={clientEventId:randomUUID(),customerType:'business' as const,companyName:'TEST späterer Lieferant '+randomUUID(),phone:'+49 711 5550190'};
@@ -175,8 +175,8 @@ it('a former customer creation receipt cannot expose a contact later converted t
  expect(converted,JSON.stringify(converted)).toMatchObject({code:'OK',customer:{customerType:'lieferant'}});
  const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const customerCountBefore=await sql`SELECT count(*)::integer AS n FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG}`;
- expect(await withSession(operational,()=>createCustomerAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'FORBIDDEN'});
- expect(await withSession(operational,()=>readCustomerCreateReceiptAction(structuredClone(input)))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(operational,()=>createCustomerAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',customer:{customerType:'lieferant'}});
+ expect(await withSession(operational,()=>readCustomerCreateReceiptAction(structuredClone(input)))).toMatchObject({code:'OK',customer:{customerType:'lieferant'}});
  expect(await sql`SELECT type FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{type:'lieferant'}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`).toEqual([{n:1}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(customerCountBefore);
@@ -197,7 +197,7 @@ it('malformed legacy customer lookups return validation instead of a thrown rend
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
 });
 
-it('supplier visibility uses the same Geld boundary in list, search and direct customer readers',async()=>{
+it('supplier operational visibility uses the same customer boundary in list, search and direct readers',async()=>{
  const {createCustomerAction,getCustomersDb,searchCustomersDb,getCustomerByIdDb,getCustomerSummaryAction}=await import('@/app/actions/customers.actions');
  const name='TEST Lieferant Grenze '+randomUUID();
  const created=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'lieferant',companyName:name}));
@@ -206,12 +206,12 @@ it('supplier visibility uses the same Geld boundary in list, search and direct c
  expect(await withSession(full,()=>searchCustomersDb(name))).toMatchObject({ok:true,data:expect.arrayContaining([expect.objectContaining({id:customerId,type:'lieferant'})])});
  expect(await withSession(full,()=>getCustomerByIdDb(customerId))).toMatchObject({ok:true,data:{id:customerId,type:'lieferant'}});
  const operational=await createFixture(['kunden'],'werkstatt');
- expect(await withSession(operational,()=>searchCustomersDb(name))).toMatchObject({ok:true,data:[]});
- expect(await withSession(operational,()=>getCustomerByIdDb(customerId))).toMatchObject({ok:true,data:null});
- expect(await withSession(operational,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'NOT_FOUND'});
+ expect(await withSession(operational,()=>searchCustomersDb(name))).toMatchObject({ok:true,data:expect.arrayContaining([expect.objectContaining({id:customerId,type:'lieferant'})])});
+ expect(await withSession(operational,()=>getCustomerByIdDb(customerId))).toMatchObject({ok:true,data:{id:customerId,type:'lieferant'}});
+ expect(await withSession(operational,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK'});
  const list=await withSession(operational,()=>getCustomersDb());
  expect(list.ok).toBe(true);if(!list.ok)throw Error('SUPPLIER_LIST:'+list.error);
- expect(list.data.some(customer=>customer.id===customerId)).toBe(false);
+ expect(list.data.some(customer=>customer.id===customerId)).toBe(true);
  const noCustomers=await createFixture(['auftraege']);
  expect(await withSession(noCustomers,()=>searchCustomersDb(name))).toMatchObject({ok:false,error:'FORBIDDEN'});
  expect(await withSession(noCustomers,()=>getCustomerByIdDb(customerId))).toMatchObject({ok:false,error:'FORBIDDEN'});

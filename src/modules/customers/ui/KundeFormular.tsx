@@ -20,6 +20,7 @@ export function KundeFormular({
   onChange,
   prefix,
   canManageMoney,
+  canManageSupplierBank = false,
   invoiceTermsEnabled = false,
   invoiceTermDays = null,
   mode,
@@ -40,6 +41,7 @@ export function KundeFormular({
   onChange: (value: CustomerFormValue) => void;
   prefix: "kundeneu" | "kundebearbeiten" | "eingang";
   canManageMoney: boolean;
+  canManageSupplierBank?: boolean;
   invoiceTermsEnabled?: boolean;
   invoiceTermDays?: number | null;
   mode: "create" | "edit" | "inline";
@@ -69,8 +71,8 @@ export function KundeFormular({
   const types = useMemo(() => supplierMode && mode === "create" ? [{ wert: "lieferant" as const, text: "Lieferant" }] : [
     { wert: "business" as const, text: "Firma" },
     { wert: "privat" as const, text: "Privat" },
-    ...(canManageMoney && mode === "edit" ? [{ wert: "lieferant" as const, text: "Lieferant" }] : []),
-  ], [canManageMoney, mode, supplierMode]);
+    ...(mode === "edit" ? [{ wert: "lieferant" as const, text: "Lieferant" }] : []),
+  ], [mode, supplierMode]);
 
   const set = <K extends CustomerField>(key: K, next: CustomerFormValue[K]) => onChange({ ...value, [key]: next });
   const blur = (field: CustomerField) => setTouched((current) => new Set(current).add(field));
@@ -178,8 +180,8 @@ export function KundeFormular({
     {!isSupplier ? <Feld label="Übergabe bevorzugt"><div data-spec-id={`${prefix}.uebergabe`}><Segment label="Übergabe bevorzugt" wert={value.handoverPreference} optionen={[
       { wert: "pickup", text: "Abholung" }, { wert: "shipping", text: "Versand" },
     ]} onWert={(next) => set("handoverPreference", next)} /></div>{metadata("handoverPreference")}</Feld> : null}
-    {isSupplier ? field("iban", "IBAN", { maxLength: 34 }) : null}
-    {isSupplier ? field("paymentTermDays", "Zahlungsziel (Tage)", { type: "number" }) : null}
+    {isSupplier && (canManageMoney || canManageSupplierBank) ? field("iban", "IBAN", { maxLength: 34 }) : null}
+    {isSupplier && canManageMoney ? field("paymentTermDays", "Zahlungsziel (Tage)", { type: "number" }) : null}
   </> : null;
   const more = value.customerType ? <>
     {isBusiness ? field("vatId", "USt-ID", { maxLength: 20 }) : null}

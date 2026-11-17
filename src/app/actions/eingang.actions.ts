@@ -1,4 +1,5 @@
 "use server";
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
 import {readObservedAuthorization} from '@/lib/server/actionObservation';
@@ -111,7 +112,7 @@ export async function clarifyIncomingInvoiceAction(input:unknown){
 export async function searchInvoiceSuppliersAction(query:string){
  return observeAction('searchInvoiceSuppliersAction',subjectForAction('searchInvoiceSuppliersAction',query),async()=>{
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung nicht verfügbar.'};
- if(!hasAuthorizationArea(auth.data,'geld'))return {code:'FORBIDDEN' as const,message:'Recht Geld fehlt.'};
+ if(!hasAuthorizationArea(auth.data,'buchhaltung'))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
  if(typeof query!=='string'||query.length>200)return {code:'VALIDATION_ERROR' as const,message:'Suchtext ist ungültig.'};
  try{
   const candidates=await searchOrderIntakeCustomers(auth.data,{query});
@@ -433,7 +434,7 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
   }
   const customer = await readCustomerOrderReadinessCommand(authorization.data, {
     customerId,
-    requirePaymentPreference: hasAuthorizationArea(authorization.data, "geld"),
+    requirePaymentPreference: hasAuthorizationArea(authorization.data, "zahlungen"),
   });
   if (customer.code !== "OK") {
     return customer.code === "NOT_FOUND"
@@ -458,7 +459,7 @@ export async function createOrderIntakeAction(input:unknown){
   const authorization=await resolveAuthorization();
   if(!authorization.ok)return {code:"UNAUTHENTICATED" as const,message:authorization.message};
   const result=await createOrderIntake(input,createCustomerInTransaction,{before:async()=>undefined,after:queueOrderPrints});
-  return result.code==="OK"?{...result,receipt:presentOrderIntakeReceipt(result.receipt,hasAuthorizationArea(authorization.data,"geld"))}:result;
+  return result.code==="OK"?{...result,receipt:presentOrderIntakeReceipt(result.receipt,hasAuthorizationArea(authorization.data,"preise"))}:result;
 
  },readLoggingSettings);
 }

@@ -67,10 +67,12 @@ function suggestedShortCode(fullName: string): string {
 export function SettingsAdminClient({
   initialSnapshot,
   initialServices,
+  catalogLocked,
   returnTo = null,
 }: {
   initialSnapshot: SystemSettingsSnapshot;
   initialServices: CatalogService[];
+  catalogLocked: string | null;
   returnTo?: string | null;
 }) {
   const { canManageCompany, canManageLogins } = initialSnapshot.capabilities ?? {
@@ -78,6 +80,7 @@ export function SettingsAdminClient({
     canManageLogins: true,
     canManageSystem: true,
   };
+  const canManageFinancial = initialSnapshot.capabilities?.canManageFinancial === true;
   const [tab, setTab] = useState<Tab>(
     canManageCompany ? "company" : canManageLogins || initialSnapshot.users.some((user) => user.isCurrent) ? "users" : "company",
   );
@@ -119,7 +122,7 @@ export function SettingsAdminClient({
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
   const companyReady = Object.entries(company).every(([key, value]) => key === "paymentTermDays" ? Number(value) > 0 : String(value).trim().length > 0);
-  const catalogReady = services.length > 0;
+  const catalogReady = catalogLocked === null && services.length > 0;
   const rateReady = hourlyRate.hourlyRateCents !== null;
   const currentUser = users.find((user) => user.isCurrent) ?? null;
   const visibleUsers = canManageLogins ? users : currentUser ? [currentUser] : [];
@@ -351,7 +354,7 @@ export function SettingsAdminClient({
 
     {(canManageCompany || canManageLogins || currentUser) ? <nav aria-label="Einstellungsbereiche">
       {canManageCompany ? <button aria-pressed={tab === "company"} onClick={() => setTab("company")}>Firmendaten</button> : null}
-      {canManageCompany ? <button aria-pressed={tab === "catalog"} onClick={() => setTab("catalog")}>Leistungskatalog</button> : null}
+      {canManageCompany && canManageFinancial ? <button aria-pressed={tab === "catalog"} onClick={() => setTab("catalog")}>Leistungskatalog</button> : null}
       {(canManageLogins || currentUser) ? <button aria-pressed={tab === "users"} onClick={() => setTab("users")}>Logins & Rechte</button> : null}
     </nav> : null}
     {message ? <p role="status" className={styles.message}>{message}</p> : null}
@@ -360,19 +363,19 @@ export function SettingsAdminClient({
       <h2>Rechnungsabsender</h2>
       <div className={styles.setup} aria-label="Ersteinrichtung">
         <div><strong>Firmendaten</strong>{companyReady ? <span>vollständig</span> : <Link href="#company-data">fehlt – in Firmendaten eintragen</Link>}</div>
-        <div><strong>Leistung mit Preis</strong><span>{catalogReady ? "vorhanden" : "noch offen"}</span></div>
-        <div><strong>Stundensatz</strong><span>{rateReady ? "gespeichert" : "noch offen"}</span></div>
-        {companyReady && catalogReady && rateReady && returnTo ? <Link href={returnTo}>Zurück zum vorherigen Vorgang</Link> : null}
+        {canManageFinancial ? <div><strong>Leistung mit Preis</strong><span>{catalogReady ? "vorhanden" : "noch offen"}</span></div> : null}
+        {canManageFinancial ? <div><strong>Stundensatz</strong><span>{rateReady ? "gespeichert" : "noch offen"}</span></div> : null}
+        {companyReady && (!canManageFinancial || catalogReady && rateReady) && returnTo ? <Link href={returnTo}>Zurück zum vorherigen Vorgang</Link> : null}
       </div>
       <div id="company-data" className={styles.grid}>{field("companyName", "Firmenname")}{field("street", "Straße")}{field("zip", "PLZ")}{field("city", "Ort")}{field("country", "Land")}{field("taxId", "USt-ID / Steuernummer")}{field("iban", "IBAN")}{field("bic", "BIC")}{field("bankName", "Bank")}{field("paymentTermDays", "Zahlungsziel in Tagen", "number")}{field("logoUrl", "Logo-Pfad")}</div>
       <button disabled={pending} onClick={saveCompany}>Firmendaten speichern</button>
       <ShippingSettingsEditor />
-      <div id="extra-work-rate"><h3>Mehrarbeit</h3><div className={styles.grid}><label>Stundensatz Mehrarbeit (€/h)<input inputMode="decimal" value={hourlyRateEuro} onChange={(event) => setHourlyRateEuro(event.target.value)} placeholder="z. B. 85,00" /></label></div><button disabled={pending} onClick={saveHourlyRate}>Stundensatz speichern</button></div>
+      {canManageFinancial ? <div id="extra-work-rate"><h3>Mehrarbeit</h3><div className={styles.grid}><label>Stundensatz Mehrarbeit (€/h)<input inputMode="decimal" value={hourlyRateEuro} onChange={(event) => setHourlyRateEuro(event.target.value)} placeholder="z. B. 85,00" /></label></div><button disabled={pending} onClick={saveHourlyRate}>Stundensatz speichern</button></div> : null}
       <h3>Nummernkreise (systemverwaltet)</h3><dl className={styles.ranges}>{initialSnapshot.numberRanges.map((range) => <div key={range.label}><dt>{range.label}</dt><dd>{range.pattern}</dd></div>)}</dl>
     </section> : null}
 
     {canManageCompany?<div hidden={tab!=="company"}><EmailTemplatesEditor /></div>:null}
-    {canManageCompany && tab === "catalog" ? <section><h2>Leistungskatalog</h2><div className={styles.grid}>
+    {canManageCompany && canManageFinancial && tab === "catalog" ? <section><h2>Leistungskatalog</h2><div className={styles.grid}>
       <label>Bezeichnung<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
       <label>Oberfläche<input value={draft.surface} onChange={(event) => setDraft({ ...draft, surface: event.target.value })} /></label>
       <label>Einheit<input value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value })} /></label>

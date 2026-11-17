@@ -57,8 +57,8 @@ function transferState(card:CustomerCardModel,input:unknown) {
   return {baseline,value,proposals,origins};
 }
 
-export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,missingFirst=false,onClose,onSaved,onSave,checkAddress}: {
-  card:CustomerCardModel;canManageMoney:boolean;canDecide?:boolean;missingFirst?:boolean;
+export function CustomerEditor({card,takeover,canManageMoney,canManageSupplierBank=false,canDecide=false,missingFirst=false,onClose,onSaved,onSave,checkAddress}: {
+  card:CustomerCardModel;canManageMoney:boolean;canManageSupplierBank?:boolean;canDecide?:boolean;missingFirst?:boolean;
   takeover?:unknown;
   onClose:()=>void;onSaved:(message:string)=>void;
   onSave:(input:UpdateCustomerInput)=>Promise<{ok:true}|{ok:false;message:string}>;
@@ -151,11 +151,13 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
     if(address?.blocked){setFailure(address.message);return;}
     if(readiness.fehlt.length&&!forcePartial){setPartialPrompt(true);return;}
     saving.current=true;setBusy(true);setFailure("");setPartialPrompt(false);setClosePrompt(false);
-    const {customerType,salutation,handoverPreference,paymentTermDays,...fields}=value;
+    const {customerType,salutation,handoverPreference,paymentTermDays,paymentPreference,iban,...fields}=value;
     const input:UpdateCustomerInput={...fields,clientEventId,customerId:card.id,customerType:customerType as Exclude<CustomerFormValue["customerType"],"">,
-      salutation:salutation||null,handoverPreference:handoverPreference||null,paymentTermDays:paymentTermDays?Number(paymentTermDays):null,
+      salutation:salutation||null,handoverPreference:handoverPreference||null,
+      ...(canManageMoney?{paymentPreference,paymentTermDays:paymentTermDays?Number(paymentTermDays):null}:{}),
+      ...(canManageMoney||canManageSupplierBank&&card.type==="lieferant"&&customerType==="lieferant"?{iban}:{}),
       agreements};
-    if(!canManageMoney){delete input.paymentPreference;delete input.iban;delete input.paymentTermDays;}
+
     try {
       const result=await onSave(input);
       if(!result.ok){setFailure(`Nicht gespeichert · Eingaben sind noch da · ${result.message}`);return;}
@@ -172,7 +174,7 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
         <div className="kr-stapel"><div className="ev-kf-diff"><strong>{card.customerNumber ?? "Kundennummer fehlt"}</strong> · {card.companyName || card.name}</div>
         <p className="ev-kf-adrz">Kundennummer <strong>{card.customerNumber ?? "fehlt"} · fest</strong></p>
         {missingFirst && readiness.fehlt.length?<div data-spec-id="kundebearbeiten.hinweis"><Hinweis ton="warn">Für Aufträge fehlt: {readiness.fehlt.join(", ")}</Hinweis></div>:null}
-        <KundeFormular prefix="kundebearbeiten" mode="edit" value={value} previous={baseline} priorityFields={priorityFields} errors={errors} onChange={changeValue} canManageMoney={canManageMoney} canDecide={canDecide}
+        <KundeFormular prefix="kundebearbeiten" mode="edit" value={value} previous={baseline} priorityFields={priorityFields} errors={errors} onChange={changeValue} canManageMoney={canManageMoney} canManageSupplierBank={canManageSupplierBank&&card.type==="lieferant"} canDecide={canDecide}
           origins={initial.origins} proposals={proposals} onAcceptProposal={(field,next)=>{setValue(current=>({...current,[field]:next}));setProposals(current=>{const nextProposals={...current};delete nextProposals[field];return nextProposals})}}
           invoiceTermsEnabled={card.invoiceTermsEnabled} invoiceTermDays={card.invoiceTermDays} addressSuggestions={address?.suggestions} addressMessage={address?{tone:address.kind==="found"?"ok":address.kind==="not-checked"?"neutral":"warn",text:address.message}:null}/>
         <section className="kr-stapel" data-spec-id="kundebearbeiten.absprache" aria-label="Absprachen & Eigenheiten">

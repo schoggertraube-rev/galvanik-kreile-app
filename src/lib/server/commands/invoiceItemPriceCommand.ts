@@ -1,3 +1,4 @@
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
@@ -116,7 +117,7 @@ export async function setInvoiceItemPrices(inputValue: unknown): Promise<SetInvo
   }
   if (
     !authorization.data.permissions.includes("perm_view_prices")
-  ) return { code: "FORBIDDEN", message: "Geld, Preise & Buchhaltung ist nicht freigegeben." };
+  ) return { code: "FORBIDDEN", message: FINANCIAL_ACCESS_COPY.pricesMissing };
 
   const hash = requestHash(input);
   try {

@@ -7,7 +7,9 @@ DELETE FROM public.app_user_rights WHERE tenant_id = 'galvanik-kreile' AND user_
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'auftraege') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'eingang') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'kunden') ON CONFLICT DO NOTHING;
-INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'geld') ON CONFLICT DO NOTHING;
+INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'preise') ON CONFLICT DO NOTHING;
+INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'zahlungen') ON CONFLICT DO NOTHING;
+INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'buchhaltung') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'mails') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'einstellungen') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'kassieren') ON CONFLICT DO NOTHING;

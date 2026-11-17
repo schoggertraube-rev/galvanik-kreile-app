@@ -3,7 +3,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
-import { getAuthorizationActionGrants, hasAuthorizationArea } from "@/lib/server/authorization";
+import {getAuthorizationActionGrants,hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const EXPECTED_DATABASE_URL = process.env.H11_EXPECTED_DATABASE_URL;
@@ -102,7 +102,7 @@ function customerContext(authorization: Awaited<ReturnType<typeof authorizationF
     userId: authorization.userId,
     capabilities: {
       canCreateCustomer: getAuthorizationActionGrants(authorization).createCustomer,
-      canManageMoney: hasAuthorizationArea(authorization, "geld"),
+      canManageMoney: hasAuthorizationArea(authorization, "zahlungen"),
     },
   };
 }
@@ -114,7 +114,7 @@ function quoteContext(authorization: Awaited<ReturnType<typeof authorizationFor>
     userId: authorization.userId,
     capabilities: {
       canCreateQuote: grants.createQuote,
-      canReadQuote: hasAuthorizationArea(authorization, "geld") && hasAuthorizationArea(authorization, "auftraege"),
+      canReadQuote: hasAuthorizationArea(authorization, "preise") && hasAuthorizationArea(authorization, "auftraege"),
       canUpdateQuote: grants.createQuote,
       canConvertQuote: grants.createQuote,
     },
@@ -142,13 +142,17 @@ beforeAll(async () => {
       (${TENANT}, ${USERS.meister}::uuid, 'auftraege'),
       (${TENANT}, ${USERS.meister}::uuid, 'eingang'),
       (${TENANT}, ${USERS.meister}::uuid, 'kunden'),
-      (${TENANT}, ${USERS.meister}::uuid, 'geld'),
+      (${TENANT}, ${USERS.meister}::uuid, 'preise'),
+      (${TENANT}, ${USERS.meister}::uuid, 'zahlungen'),
+      (${TENANT}, ${USERS.meister}::uuid, 'buchhaltung'),
       (${TENANT}, ${USERS.werkstatt}::uuid, 'auftraege'),
       (${TENANT}, ${USERS.werkstatt}::uuid, 'kassieren'),
       (${TENANT}, ${USERS.developer}::uuid, 'auftraege'),
       (${TENANT}, ${USERS.developer}::uuid, 'eingang'),
       (${TENANT}, ${USERS.developer}::uuid, 'kunden'),
-      (${TENANT}, ${USERS.developer}::uuid, 'geld'),
+      (${TENANT}, ${USERS.developer}::uuid, 'preise'),
+      (${TENANT}, ${USERS.developer}::uuid, 'zahlungen'),
+      (${TENANT}, ${USERS.developer}::uuid, 'buchhaltung'),
       (${TENANT}, ${USERS.developer}::uuid, 'einstellungen'),
       (${TENANT}, ${USERS.developer}::uuid, 'logins'),
       (${TENANT}, ${USERS.developer}::uuid, 'wartung')

@@ -16,7 +16,7 @@ vi.mock("node:crypto", async (importOriginal) => {
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization,
   hasAuthorizationArea: (authorization: { role: string; permissions: readonly string[] }, area: string) => authorization.role !== "developer"
-    && area === "geld"
+    && area === "zahlungen"
     && authorization.permissions.includes("perm_view_prices"),
 }));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));

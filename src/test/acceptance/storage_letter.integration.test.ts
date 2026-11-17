@@ -402,7 +402,7 @@ it('discard preserves the old original and creates a new generation; physical ha
  const replacement=await withSession(full,()=>prepareStoragePostalLetterAction({...request,clientKey:next.clientKey}));if(replacement.code!=='OK')throw Error('POSTAL_REPLACEMENT:'+replacement.code);
  expect(replacement.document.snapshot.recipient.street).toBe('TEST Neuer Weg 7');expect(replacement.document.sha256).not.toBe(first.document.sha256);
  expect(await withSession(full,()=>getIntakeTaskAction({taskId:first.taskId}))).toMatchObject({code:'OK',postalLetter:{state:'VOIDED',document:{sha256:first.document.sha256}}});
- const operator=await createFixture(['auftraege','geld'],'buero'),current=await plan();
+ const operator=await createFixture(['auftraege','preise','zahlungen','buchhaltung'],'buero'),current=await plan();
  expect(await withSession(operator,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:current!.version,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  expect(await sql`SELECT status,erledigt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${replacement.taskId}::uuid`).toEqual([{status:'erledigt',erledigt_von:operator.actorId}]);
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'documentId'=${replacement.document.id}`).toEqual([{n:0}]);

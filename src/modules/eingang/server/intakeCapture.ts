@@ -43,7 +43,7 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
       FROM public.intake_item source WHERE tenant_id=${auth.tenantId} AND id=${itemId}::uuid`);
     if (rows.length !== 1) return failure("NOT_FOUND", "Eingang wurde nicht gefunden.");
     const row = rows[0];
-    if(invoiceOnly&&(!hasAuthorizationArea(auth,'geld')||!row.anliegen.includes('rechnung')&&row.vorgang_art!=='rechnung'))return failure('FORBIDDEN','Rechnungsbezug für den Beleg fehlt.');
+    if(invoiceOnly&&(!hasAuthorizationArea(auth,'buchhaltung')||!row.anliegen.includes('rechnung')&&row.vorgang_art!=='rechnung'))return failure('FORBIDDEN','Rechnungsbezug für den Beleg fehlt.');
     if(!invoiceOnly&&!mayAccessCaptureContent(auth,row.kanal))return failure('FORBIDDEN','Mail-Inhalte benötigen das Recht Mails.');
     if(row.fortsetzung_von&&!await mayUseContinuationSources(tx,auth,itemId))return failure("FORBIDDEN","Original der Fortsetzung ist für diesen Login nicht freigegeben.");
     if (ctx?.customerId && row.kunde_id !== ctx.customerId || ctx?.orderId && row.vorgang_id !== ctx.orderId) return failure("FORBIDDEN", "Eingang gehört nicht zu diesem Kontext.");
@@ -211,7 +211,6 @@ export async function writeIntakeNoteInTransaction(
   if (customerId) {
     const customer = await readCustomer(tx, auth.tenantId, customerId);
     if (!customer) return failure("NOT_FOUND", "Kunde wurde nicht gefunden.");
-    if (customer.customerType === "lieferant" && !hasAuthorizationArea(auth, "geld")) return failure("FORBIDDEN", "Lieferant erfordert Recht geld.");
   }
   const recognized = recognizeNoteConcerns(note.text);
   const existing = await tx.execute<Row>(sql`SELECT id::text,kanal,version,text,kunde_id,vorgang_id,zuordnung,einsatz,anliegen,anliegen_abgewaehlt FROM public.intake_item

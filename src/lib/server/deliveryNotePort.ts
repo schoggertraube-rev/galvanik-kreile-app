@@ -6,9 +6,10 @@ import {isDeliveryNoteInput,type DeliveryNoteInput,type DeliveryNoteReceipt,type
 import type {PaidDeliveryNoteSnapshot} from '@/lib/pdf/DeliveryNote';
 import {DELIVERY_NOTE_COPY as copy,DELIVERY_NOTE_SOURCE_COPY as sourceCopy,LEGACY_ACTION_ACCESS_COPY,MANUAL_SHIPPING_FIELDS,SITUATION_COPY} from '@/ui/situationCatalog';
 import {V45_RUNTIME} from '@/ui/v45.generated';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
-import {readOrderPaymentSummaries,mapPaymentSummaryRow} from './paymentContract';
+import {readOrderPaymentSummaries,mapPaymentSummaryEvidenceRow} from './paymentContract';
 import {readCreateInvoiceReceipts,mapInvoiceIssueReceipt} from './commands/immutableInvoiceCommand';
 import {readExistingDomainAttachment,readStableDomainAttachment,storeDomainAttachmentBytes,DomainAttachmentStorageError} from './domainAttachmentStorage';
 import type {InvoiceVatReader} from '@/modules/accounting/public';
@@ -65,7 +66,7 @@ async function readSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   const paymentSourceHash=sha(canonicalJson(rows.map(row=>({invoiceId:row.invoice_id,invoiceNumber:row.invoice_number,total:row.total_amount_cents,mode:row.payment_mode,paymentStatus:row.payment_status,paymentVersion:row.payment_version,eventId:row.payment_event_id,receiptId:row.payment_receipt_id,paidAt:row.payment_paid_at instanceof Date?row.payment_paid_at.toISOString():row.payment_paid_at,paidAmount:row.payment_paid_amount_cents,openAmount:row.payment_open_amount_cents})).sort((a,b)=>a.invoiceId.localeCompare(b.invoiceId))));
   if(expected&&expected[order.id].paymentHash!==paymentSourceHash)throw new DeliveryNoteSourceRejected({code:'CONFLICT',message:copy.changed});
   if(!rows.length||rows.filter(row=>row.belegart==='auftrag').length!==1)return null;
-  const payments=rows.map(row=>mapPaymentSummaryRow(row,auth));
+  const payments=rows.map(row=>mapPaymentSummaryEvidenceRow(row,auth.tenantId));
   if(payments.some(row=>row.status!=='bezahlt'||row.openAmountCents!==0||!row.eventId||!row.receiptId||!row.paidAt))return null;
   const originals=await readCreateInvoiceReceipts(tx,{orderId:order.id});
   const sources=payments.map(payment=>{
@@ -88,7 +89,7 @@ async function readSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
 
 /** Read-only projection of the very same collector used under the document lock. */
 export async function readDeliveryNoteSource(auth:AuthorizationSnapshot,orderIds:string[],ports:SourcePorts):Promise<DeliveryNoteSourceRead>{
- if(!auth.active||!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN',message:LEGACY_ACTION_ACCESS_COPY.forbidden};
+ if(!auth.active||!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN',message:LEGACY_ACTION_ACCESS_COPY.forbidden};
  if(!orderIds.length||orderIds.some(id=>typeof id!=='string'||!id.trim()||id!==id.trim()||id.length>128)||new Set(orderIds).size!==orderIds.length)return {code:'VALIDATION_ERROR',message:copy.invalid};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{const source=await readSource(tx,auth,[...orderIds].sort(),ports);if(!source)return {code:'VALIDATION_ERROR' as const,message:copy.sourceMissing};return {code:'OK' as const,source:{orderIds:source.orders.map(order=>order.id),expectedVersions:Object.fromEntries(source.orders.map(order=>[order.id,order.version])),expectedSources:references(source)}};});}
  catch(error){if(error instanceof DeliveryNoteSourceRejected)return error.result;console.error('[DELIVERY_NOTE_SOURCE_READ_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE',message:serverMessage};}
@@ -98,7 +99,7 @@ export async function readDeliveryNoteSource(auth:AuthorizationSnapshot,orderIds
  * store. The JSON envelope is one object containing the actual PDF bytes, so a
  * failed DB commit cannot force a retry to regenerate or replace an original. */
 export async function generatePaidDeliveryNote(auth:AuthorizationSnapshot,input:DeliveryNoteInput|string|string[],ports:Ports):Promise<DeliveryNoteResult>{
- if(!auth.active||!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'geld'))return fail('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
+ if(!auth.active||!hasAuthorizationArea(auth,'auftraege'))return fail('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
  // The old string adapter captures the current canonical source server-side,
  // then delegates to exactly the same source-checked object command.
  if(typeof input==='string'||Array.isArray(input)){

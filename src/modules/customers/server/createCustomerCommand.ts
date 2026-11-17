@@ -1,3 +1,4 @@
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -6,7 +7,7 @@ import { customerDatabaseFields, customerWriteDiagnostic, customerWriteObject, n
 import { readCustomerAddress } from "./customerAddressRead";
 import type { CustomerCommandContext, CreateCustomerInput, CustomerCreateCommandResult, CustomerCreateReceipt, ReadCustomerCreateReceiptResult } from "./types";
 
-const MONEY_REQUIRED_MESSAGE='Zahlungsangaben und Lieferanten benötigen den Bereich Geld.';
+const MONEY_REQUIRED_MESSAGE=FINANCIAL_ACCESS_COPY.paymentsMissing;
 
 type ReceiptRow = {
   receipt_id: string;
@@ -101,7 +102,8 @@ async function prepare(tx: PrivilegedTenantTransaction, context: CustomerCommand
   const raw = customerWriteObject(input);
   if (!raw) return { code: "VALIDATION_ERROR" as const, message: "Kundendaten sind ungültig." };
   if (raw.vorrang === true && !context.capabilities.canDecide) return { code: "FORBIDDEN" as const, message: "Vorrang benötigt das Recht Entscheiden." };
-  if (!context.capabilities.canManageMoney && (raw.customerType === "lieferant" || ["paymentPreference", "iban", "paymentTermDays"].some(key => raw[key] != null))) {
+  const supplierBank=context.capabilities.canManageSupplierBank===true&&raw.customerType==="lieferant";
+  if (!context.capabilities.canManageMoney && (["paymentPreference", "paymentTermDays"].some(key => raw[key] != null) || raw.iban != null&&!supplierBank)) {
     return { code: "FORBIDDEN" as const, message: MONEY_REQUIRED_MESSAGE };
   }
   const normalized = await normaliseCustomerWrite(tx, raw);
@@ -141,7 +143,6 @@ export async function createCustomerInTransaction(
   if (!receipt || receipt.receiptId !== outcome.result_receipt_id) throw new Error("CUSTOMER_CREATE_READBACK_INVALID");
   const customer = await readCustomerProfile(tx, context.tenantId, receipt.customerId);
   if (!customer || customer.customerNumber !== receipt.customerNumber) throw new Error("CUSTOMER_CREATE_PROFILE_INVALID");
-  if (customer.customerType === 'lieferant' && !context.capabilities.canManageMoney) return {code:'FORBIDDEN',message:MONEY_REQUIRED_MESSAGE};
   return { code: "OK", receipt, customer, replayed: outcome.replayed };
 }
 
@@ -166,7 +167,6 @@ export async function readCustomerCreateReceiptCommand(context: CustomerCommandC
       if (!receipt) return { code: "NOT_FOUND", message: "Kein sicherer Kundenbeleg gefunden." };
       const customer = await readCustomerProfile(tx, context.tenantId, receipt.customerId);
       if (!customer || customer.customerNumber !== receipt.customerNumber) throw new Error("CUSTOMER_CREATE_PROFILE_INVALID");
-      if (customer.customerType === 'lieferant' && !context.capabilities.canManageMoney) return {code:'FORBIDDEN',message:MONEY_REQUIRED_MESSAGE};
       return { code: "OK", receipt, customer };
     });
   } catch (error) {

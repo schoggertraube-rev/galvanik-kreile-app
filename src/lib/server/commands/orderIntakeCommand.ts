@@ -1,10 +1,11 @@
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {allocateOrderNumber} from '@/lib/server/orderNumberAllocation';
 import {hasReservedQuoteOrderIntent} from '@/lib/server/quoteGoodsContextPort';
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { intakePaymentContract, type PaymentMode } from "@/lib/domain/intakePaymentContract";
 import { kundeVollstaendigkeit } from "@/modules/customers/public";
@@ -424,7 +425,7 @@ async function readReceipt(
 }
 
 export type CustomerUpdater=(tx:PrivilegedTenantTransaction,context:Parameters<CustomerWriter>[1]&{capabilities:{canEditCustomer:boolean}},input:unknown)=>Promise<CustomerUpdateCommandResult>;
-export type CustomerWriter=(tx:PrivilegedTenantTransaction,context:{tenantId:string;userId:string;capabilities:{canCreateCustomer:boolean;canManageMoney:boolean;canDecide?:boolean}},input:unknown)=>Promise<CustomerCreateCommandResult>;
+export type CustomerWriter=(tx:PrivilegedTenantTransaction,context:{tenantId:string;userId:string;capabilities:{canCreateCustomer:boolean;canManageMoney:boolean;canManageSupplierBank?:boolean;canDecide?:boolean}},input:unknown)=>Promise<CustomerCreateCommandResult>;
 class CustomerWriteRejected extends Error {
   constructor(readonly result:Exclude<OrderIntakeCommandResult,{code:"OK"}>){super("ORDER_INTAKE_CUSTOMER_WRITE_REJECTED:"+result.code);}
 }
@@ -498,15 +499,16 @@ export async function createOrderIntake(input: unknown,createCustomer?:CustomerW
     return { code: "FORBIDDEN", message: "Kunden dürfen mit dieser Rolle nicht angelegt werden." };
   }
   if(normalized.termOrigin==="ueber_auslastung"&&!authorization.data.areas?.includes("entscheiden"))return {code:"FORBIDDEN",message:"Wunsch trotzdem zusagen benötigt das Recht Entscheiden."};
-  const canManageMoney = authorization.data.areas?.includes("geld") === true;
+  const canManageMoney = hasAuthorizationArea(authorization.data,"zahlungen");
+  const canManagePrices = hasAuthorizationArea(authorization.data,"preise");
   if (canManageMoney && normalized.paymentMode === null) {
     return { code: "VALIDATION_ERROR", message: "Zahlungsmodus ist erforderlich." };
   }
   if (!canManageMoney && normalized.paymentMode !== null&&!binding?.quoteAuthorization) {
-    return { code: "FORBIDDEN", message: "Zahlungsmodus darf ohne Geld-Recht nicht vorgegeben werden." };
+    return { code: "FORBIDDEN", message: FINANCIAL_ACCESS_COPY.paymentModeForbidden };
   }
-  if (!canManageMoney && normalized.items.some((item) => item.unitPriceCents !== null || item.vatRateBasisPoints !== null)) {
-    return { code: "FORBIDDEN", message: "Preise dürfen ohne Geld-Recht nicht vorgegeben werden." };
+  if (!canManagePrices && normalized.items.some((item) => item.unitPriceCents !== null || item.vatRateBasisPoints !== null)) {
+    return { code: "FORBIDDEN", message: FINANCIAL_ACCESS_COPY.orderPriceForbidden };
   }
   const expected = {
     tenantId: authorization.data.tenantId,
@@ -564,19 +566,19 @@ export async function createOrderIntake(input: unknown,createCustomer?:CustomerW
         `);
         const service = services.length === 1 ? services[0] : null;
         if (!service || service.name !== item.name || service.surface !== item.surfaceRequested
-          || service.unit !== item.unit || canManageMoney && item.vatRateBasisPoints!==null && service.vat_rate_basis_points !== item.vatRateBasisPoints) {
+          || service.unit !== item.unit || canManagePrices && item.vatRateBasisPoints!==null && service.vat_rate_basis_points !== item.vatRateBasisPoints) {
           return { code: "VALIDATION_ERROR", message: "Leistung oder Preis ist nicht mehr aktuell." };
         }
         // No price was accepted from this login. Resolve the selected entry inside
         // the same transaction; the already-computed intent still binds its input.
-        if (!canManageMoney) {
+        if (!canManagePrices) {
           if(orderPositionPriceError(service.net_price_cents,true))return {code:'VALIDATION_ERROR',message:'Der Katalogpreis ist ungültig. Bitte den Katalog prüfen lassen oder die Leistung als Freitext erfassen.'};
           item.unitPriceCents=service.net_price_cents;
           item.vatRateBasisPoints=service.vat_rate_basis_points as 0|700|1900;
         }
         // The employee may consciously edit/clear the order's price (PositionZeile).
         // The selected catalog entry still owns its tax rate, never the client.
-        if(canManageMoney)item.vatRateBasisPoints=service.vat_rate_basis_points as 0|700|1900;
+        if(canManagePrices)item.vatRateBasisPoints=service.vat_rate_basis_points as 0|700|1900;
       }
 
       const recoveredProspectId=normalized.customer.mode==='NEW'?binding?.recoverProspectCustomer?.():null;

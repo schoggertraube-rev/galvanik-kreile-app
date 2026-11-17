@@ -43,7 +43,7 @@ describe("authorized Supabase server data client", () => {
     });
     const { createAuthorizedDataClient } = await import("@/lib/supabase/server");
 
-    await expect(createAuthorizedDataClient("geld")).rejects.toThrow(
+    await expect(createAuthorizedDataClient('buchhaltung')).rejects.toThrow(
       "AUTH_ERROR: Nicht angemeldet",
     );
     expect(mockCreateSupabaseClient).not.toHaveBeenCalled();
@@ -63,10 +63,10 @@ describe("authorized Supabase server data client", () => {
     });
     const { createAuthorizedDataClient } = await import("@/lib/supabase/server");
 
-    await expect(createAuthorizedDataClient("geld")).resolves.toEqual({
+    await expect(createAuthorizedDataClient('buchhaltung')).resolves.toEqual({
       kind: "data-client",
     });
-    expect(mockReadAuthorizedArea).toHaveBeenCalledWith("geld");
+    expect(mockReadAuthorizedArea).toHaveBeenCalledWith('buchhaltung');
     expect(mockCreateSupabaseClient).toHaveBeenCalledWith(
       "https://example.supabase.co",
       "service-role-test-key",
@@ -94,7 +94,7 @@ describe("authorized Supabase server data client", () => {
     });
     const { createAuthorizedDataContext } = await import("@/lib/supabase/server");
 
-    await expect(createAuthorizedDataContext("geld")).resolves.toEqual({
+    await expect(createAuthorizedDataContext('buchhaltung')).resolves.toEqual({
       client: { kind: "data-client" },
       authorization,
     });
@@ -115,11 +115,11 @@ describe("authorized Supabase server data client", () => {
     });
     const { createAuthorizedSessionContext } = await import("@/lib/supabase/server");
 
-    await expect(createAuthorizedSessionContext("geld")).resolves.toEqual({
+    await expect(createAuthorizedSessionContext('buchhaltung')).resolves.toEqual({
       client: { kind: "session-client" },
       authorization,
     });
-    expect(mockReadAuthorizedArea).toHaveBeenCalledWith("geld");
+    expect(mockReadAuthorizedArea).toHaveBeenCalledWith('buchhaltung');
     expect(mockCreateServerClient).toHaveBeenCalledOnce();
   });
 
@@ -138,7 +138,7 @@ describe("authorized Supabase server data client", () => {
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
     const { createAuthorizedDataClient } = await import("@/lib/supabase/server");
 
-    await expect(createAuthorizedDataClient("geld")).rejects.toThrow(
+    await expect(createAuthorizedDataClient('buchhaltung')).rejects.toThrow(
       "Serverseitiger Supabase-Datenzugriff ist nicht konfiguriert.",
     );
     expect(mockCreateSupabaseClient).not.toHaveBeenCalled();

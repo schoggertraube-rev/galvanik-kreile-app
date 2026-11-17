@@ -1,6 +1,7 @@
 import 'server-only';
 import { sql } from 'drizzle-orm';
-import { hasAuthorizationArea, type AuthorizationSnapshot } from '@/lib/server/authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from '@/lib/server/authorization';
 import type { PrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 
 /** The complaint command calls this existing-module effect in its own transaction. */

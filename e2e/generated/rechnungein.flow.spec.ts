@@ -326,7 +326,7 @@ const cases = [
     "dann": {
       "anzeige": [
         {
-          "toast": "Eingangsrechnung unklar · Aufgabe für Recht Geld"
+          "toast": "Eingangsrechnung unklar · Aufgabe für Recht Buchhaltung & Zahlen"
         },
         {
           "id": "rechnungein",
@@ -348,7 +348,7 @@ const cases = [
           "neu": 1,
           "werte": {
             "art": "rechnung",
-            "fuer_bereich": "geld",
+            "fuer_bereich": "buchhaltung",
             "faellig_am": "{heute:+0}",
             "bezug_typ": "eingangsrechnung",
             "bezug_id": "{neu:supplier_invoice}",
@@ -967,7 +967,7 @@ const cases = [
     "dann": {
       "anzeige": [
         {
-          "toast": "Recht Geld fehlt"
+          "toast": "Recht Buchhaltung & Zahlen fehlt."
         },
         {
           "id": "rechnungein",

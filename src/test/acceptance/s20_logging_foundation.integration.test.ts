@@ -8,7 +8,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {getAuthorizationSnapshotAction} from '@/app/actions/auth.actions';
-import {hasAuthorizationArea,getAuthorizationActionGrants} from '@/lib/server/authorization';
+import {hasAuthorizationArea,getAuthorizationActionGrants} from "@/lib/auth/authorizationContract";
 import {ROLE_ACCESS_AREA_TEMPLATES} from '@/lib/auth/authorizationContract';
 
 it('S20 canonical protocol area is independent of money; developer fixed area and admin template retain the same boundary on reread',async()=>{
@@ -17,7 +17,7 @@ it('S20 canonical protocol area is independent of money; developer fixed area an
  expect(before).toMatchObject({ok:true,data:{areas:['protokoll'],actions:{confirmPayment:false}}});
  if(!before.ok)throw Error('TEST_REAL_AUTH_REQUIRED');
  expect(hasAuthorizationArea(before.data,'protokoll')).toBe(true);
- expect(hasAuthorizationArea(before.data,'geld')).toBe(false);
+ expect(hasAuthorizationArea(before.data,'zahlungen')).toBe(false);
  expect(getAuthorizationActionGrants(before.data).confirmPayment).toBe(false);
  const next=await withSession(reader,()=>getAuthorizationSnapshotAction());
  expect(next).toMatchObject({ok:true,data:{areas:['protokoll'],actions:{confirmPayment:false}}});

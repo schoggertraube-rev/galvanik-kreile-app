@@ -1,6 +1,6 @@
 import 'server-only';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
-import {hasAuthorizationArea} from '@/lib/server/authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {readOrderInformed} from '@/lib/server/orderReleaseRead';
 import type {OperationalOrder} from '@/lib/types/operationalOrder';
 import {berlinCalendarDay,workingDaysBetween,plusWorkingDays} from '@/lib/domain/workingDays';
@@ -166,7 +166,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   }
   if(row.storage){row.storage.state='WAIT';if(row.storage.letter){const original=row.storage.letter.finalStage;row.storage.letter.finalStage={...original,state:original.taskId?original.state:'WAIT',due:original.taskId?original.due:appointment.resumeOn,pausedUntil:appointment.resumeOn};if('positionProposal'in row.storage.letter.finalStage)row.storage.letter.finalStage.positionProposal=null;}}
  }
- for(const row of result){const stage=row.storage?.letter?.finalStage;if(stage&&hasAuthorizationArea(auth,'geld')&&['DUE','TASK_PENDING'].includes(stage.state))stage.positionProposal=policy?.storageWeeklyCents==null?null:{name:STORAGE_CHARGE_COPY.name,unit:STORAGE_CHARGE_COPY.unit,unitPriceCents:policy.storageWeeklyCents,quantity:null,automatic:false};}
+ for(const row of result){const stage=row.storage?.letter?.finalStage;if(stage&&hasAuthorizationArea(auth,'zahlungen')&&['DUE','TASK_PENDING'].includes(stage.state))stage.positionProposal=policy?.storageWeeklyCents==null?null:{name:STORAGE_CHARGE_COPY.name,unit:STORAGE_CHARGE_COPY.unit,unitPriceCents:policy.storageWeeklyCents,quantity:null,automatic:false};}
  for(const row of result){
   const letter=row.storage?.letter,reminder=row.reminder;
   const stage=letter?.state==='DUE'?'E4':reminder?.state==='DUE'&&(reminder.stage==='E1'||reminder.stage==='E2')?reminder.stage:null;

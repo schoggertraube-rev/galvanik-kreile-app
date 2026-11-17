@@ -128,6 +128,7 @@ export function CustomerCardView({
   documentsPanel,
   complaintsPanel,
   canManageMoney=false,
+  canManageSupplierBank=false,
   canDecide=false,
   initialEdit=false,
   missingFirst=false,
@@ -145,7 +146,7 @@ export function CustomerCardView({
   documentsPanel?: ReactNode;
   complaintsPanel?: ReactNode;
   takeover?:unknown;
-  canManageMoney?:boolean;canDecide?:boolean;initialEdit?:boolean;missingFirst?:boolean;
+  canManageMoney?:boolean;canManageSupplierBank?:boolean;canDecide?:boolean;initialEdit?:boolean;missingFirst?:boolean;
   checkAddress?:(input:CustomerAddressInput)=>Promise<{code:"OK";data:CustomerAddressResult}|{code:string;message:string}>;
   onSaveAgreement?: (input: SaveCustomerAgreementInput) => Promise<CustomerAgreementCommandResult>;
   onRevokeAgreement?: (input: RevokeCustomerAgreementInput) => Promise<CustomerAgreementCommandResult>;
@@ -314,7 +315,7 @@ export function CustomerCardView({
     <Seitenblatt dataSpecId="kunde" titel={`Kundenkarte ${card.customerNumber ?? card.name}`} onSchliessen={onClose}>
       <Karte kopf={head} haupt={main} rail={rail} fuss={footer} />
     </Seitenblatt>
-    {editOpen && onSaveCustomer ? <CustomerEditor takeover={takeover} card={card} canManageMoney={canManageMoney} canDecide={canDecide} missingFirst={missingFirst} checkAddress={checkAddress} onSave={onSaveCustomer} onClose={()=>setEditOpen(false)} onSaved={message=>{setEditOpen(false);setSaveMessage(message)}}/>:null}
+    {editOpen && onSaveCustomer ? <CustomerEditor takeover={takeover} card={card} canManageMoney={canManageMoney} canManageSupplierBank={canManageSupplierBank} canDecide={canDecide} missingFirst={missingFirst} checkAddress={checkAddress} onSave={onSaveCustomer} onClose={()=>setEditOpen(false)} onSaved={message=>{setEditOpen(false);setSaveMessage(message)}}/>:null}
     {agreementDialog && onSaveAgreement && onRevokeAgreement ? <CustomerAgreementDialog
       target={{customerId:card.id,customerNumber:card.customerNumber,customerName:card.companyName ?? card.name}}
       mode={agreementDialog.mode}

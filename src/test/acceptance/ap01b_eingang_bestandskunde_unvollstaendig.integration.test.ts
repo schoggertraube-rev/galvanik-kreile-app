@@ -136,7 +136,7 @@ beforeAll(async () => {
     .sort();
   expect(migrations.map((row) => row.version)).toEqual(repositoryMigrations);
 
-  actor = await createFixture(["eingang", "auftraege", "kunden", "geld"]);
+  actor = await createFixture(["eingang", "auftraege", "kunden", 'preise','zahlungen','buchhaltung']);
   const { createCustomerAction } = await import("@/app/actions/customers.actions");
   const created = await withSession(actor, () => createCustomerAction({ ...SEED, clientEventId: randomUUID() }));
   if (created.code !== "OK") throw new Error(`AP01B_CUSTOMER_SEED_FAILED:${created.code}:${created.message}`);

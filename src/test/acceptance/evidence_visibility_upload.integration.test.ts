@@ -88,7 +88,7 @@ it('F11-11 real flag and task SQL failures retain the photo and immutable marker
   await dropHistory();historyActive=false;
   expect(await withSession(full,()=>finalizeDomainAttachmentAction(JSON.parse(JSON.stringify(photo.input))))).toMatchObject({code:'OK',data:{replayed:true,visibilityPending:true,visibility:{customerVisible:false,version:0}}});
   const [task]=await sql`SELECT id::text,status,version,erstellt_von::text,fuer_bereich FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${marker.id}::uuid`;
-  expect(task).toMatchObject({status:'offen',erstellt_von:full.actorId,fuer_bereich:'geld'});
+  expect(task).toMatchObject({status:'offen',erstellt_von:full.actorId,fuer_bereich:'zahlungen'});
   const {getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
   expect(await withSession(full,()=>getIntakeTaskAction({taskId:task.id}))).toMatchObject({code:'OK',task:{id:task.id,status:'offen'}});
   expect(await withSession(full,()=>completeIntakeTaskAction({taskId:task.id,version:task.version,note:null}))).toMatchObject({code:'UNAVAILABLE'});

@@ -92,7 +92,7 @@ it('W-GELD G4 permits actual unpaid output before the agreed due date after enab
  const input={customerId,targetDays:14,cashDiscountPercent:0,cashDiscountDays:0,clientEventId:randomUUID()};
  const agree=(value:typeof input)=>withSession(full,async()=>{
   const auth=await resolveAuthorization();if(!auth.ok)throw Error('S13_G4_AUTH');
-  return enableCustomerInvoiceTermsCommand({tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canCreateCustomer:getAuthorizationActionGrants(auth.data).createCustomer,canEditCustomer:hasAuthorizationArea(auth.data,'kunden'),canManageMoney:hasAuthorizationArea(auth.data,'geld'),canDecide:hasAuthorizationArea(auth.data,'entscheiden')}},value);
+  return enableCustomerInvoiceTermsCommand({tenantId:auth.data.tenantId,userId:auth.data.userId,capabilities:{canCreateCustomer:getAuthorizationActionGrants(auth.data).createCustomer,canEditCustomer:hasAuthorizationArea(auth.data,'kunden'),canManageMoney:hasAuthorizationArea(auth.data,'zahlungen'),canDecide:hasAuthorizationArea(auth.data,'entscheiden')}},value);
  });
  expect(await agree(input)).toMatchObject({code:'OK',replayed:false});
  expect(await agree(JSON.parse(JSON.stringify(input)))).toMatchObject({code:'OK',replayed:true});

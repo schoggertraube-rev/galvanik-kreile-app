@@ -31,7 +31,7 @@ it('reads current unsent invoice originals from the customer port and never disc
  expect(actionRead.data.nextActionRule.erstblick.map(row=>row.key)).not.toContain('kunde.kachel.messages');
  expect(actionRead.data.nextActionRule.weitereInformationen).toMatchObject([{key:'kunde.kachel.messages',werte:{offeneNachrichten:0}}]);
  expect(actionRead.data.nextActionRule.erstblick.find(row=>row.key==='kunde.kachel.orders')).toMatchObject({werte:{offeneAuftraege:1,offeneKv:0}});
- const moneyOnly=await createFixture(['kunden','geld']);
+ const moneyOnly=await createFixture(['kunden','preise','zahlungen','buchhaltung']);
  const noMail=await withSession(moneyOnly,()=>getCustomerSummaryAction({customerId}));
  expect(noMail).toMatchObject({code:'OK',data:{nextActionRule:{code:'OK',weitereInformationen:[]}}});
  if(noMail.code!=='OK'||noMail.data.nextActionRule?.code!=='OK'||!noMail.data.nextActionRule.hauptaktion)throw Error('TEST_MONEY_ONLY_FIRST_LOOK');

@@ -1,4 +1,5 @@
 "use client";
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { Button, Dialog, Eingabe, Feld, FormRaster, Hinweis, Rueckfrage, Segment, Textfeld } from "@/ui/kr";
@@ -103,7 +104,7 @@ function requiresDays(type: CustomerAgreementType | "") {
 }
 
 function visibleFailure(result: Exclude<CustomerAgreementCommandResult, { code: "OK" }>) {
-  if (result.code === "FORBIDDEN") return "Nur mit Recht „Geld, Preise & Buchhaltung“";
+  if (result.code === "FORBIDDEN") return FINANCIAL_ACCESS_COPY.paymentsMissing;
   if (result.code === "CONFLICT") return "Absprache wurde inzwischen geändert · neu laden";
   return `Nicht gespeichert · Eingaben sind noch da · ${result.message}`;
 }

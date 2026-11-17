@@ -229,6 +229,8 @@ export type GlobalCreatePorts = {
   canCreateOrder: boolean;
   canCreateQuote: boolean;
   canManageMoney: boolean;
+  canManageSupplierBank?: boolean;
+  canManagePrices: boolean;
   canDecide?:boolean;
   showPrimaryTrigger?: boolean;
   roleLabel: string;
@@ -1047,14 +1049,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setCatalogServices(normaliseIntakeCatalog(catalog.services));
       setCustomerChoices(result.customers);
       setCustomerLoad(result.customers.length ? "ready" : "empty");
-      const captureInitial=loadedSourceCapture?{text:captureRecognitionText(loadedSourceCapture),documents:[loadedSourceCapture.id],...(sourceEntry?{kind:sourceEntry.kind==='kv'&&ports.canManageMoney?'kv' as const:'auftrag' as const}:{})}:{};
-      if(loadedSourceCapture){setIntakeSourceCaptures([loadedSourceCapture]);setIntakeRecognitionText(captureRecognitionText(loadedSourceCapture));setRecognitionConfirmed(false);if(sourceEntry)setIntakeKind(sourceEntry.kind==='kv'&&ports.canManageMoney?'kv':'auftrag');}
+      const captureInitial=loadedSourceCapture?{text:captureRecognitionText(loadedSourceCapture),documents:[loadedSourceCapture.id],...(sourceEntry?{kind:sourceEntry.kind==='kv'&&ports.canManagePrices?'kv' as const:'auftrag' as const}:{})}:{};
+      if(loadedSourceCapture){setIntakeSourceCaptures([loadedSourceCapture]);setIntakeRecognitionText(captureRecognitionText(loadedSourceCapture));setRecognitionConfirmed(false);if(sourceEntry)setIntakeKind(sourceEntry.kind==='kv'&&ports.canManagePrices?'kv':'auftrag');}
       const copiedItems = source?.items.map((item) => ({ ...newIntakePosition(),
         catalogServiceId: item.catalogServiceId ?? FREE_TEXT_SERVICE, name: item.name, quantity: String(item.quantity),
         material: item.material ?? "", surfaceRequested: normaliseOrderPositionSurface(item.surfaceRequested)!, surfaceTouched: true,
         executionRequested: item.executionRequested!, unit: item.unit === null ? null : normaliseOrderPositionUnit(item.unit),
-        unitPriceCents: ports.canManageMoney ? item.unitPriceCents : null,
-        vatRateBasisPoints: ports.canManageMoney ? item.vatRateBasisPoints : null,
+        unitPriceCents: ports.canManagePrices ? item.unitPriceCents : null,
+        vatRateBasisPoints: ports.canManagePrices ? item.vatRateBasisPoints : null,
       }));
       if (source && copiedItems) {
         setDirectItems(copiedItems);
@@ -1343,7 +1345,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     if(typeof request!=="string"&&request.draftId){void restoreIntakeDraft(request.draftId);return;}
     if (intent === "CUSTOMER") {
       if(prefill?.sourceItemId&&Number.isSafeInteger(prefill.sourceVersion)&&(prefill.sourceVersion??0)>0)setCustomerSource({itemId:prefill.sourceItemId,version:prefill.sourceVersion!});
-      if(prefill?.customerMode==="lieferant"&&!ports.canManageMoney){deny("customer");return;}
+      if(prefill?.customerMode==="lieferant"&&!ports.canCreateCustomer){deny("customer");return;}
       setSupplierCustomerMode(prefill?.customerMode==="lieferant");
       const initialCustomer = prefill?.customerMode==="lieferant"
         ? {...EMPTY_CUSTOMER,customerType:"lieferant" as const,paymentPreference:"",companyName:prefill.name?.trim()??'',email:prefill.email?.trim().toLowerCase()??''}
@@ -1354,7 +1356,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setCustomerDuplicateAcceptedFor("");
       setCustomerDraft(initialCustomer);
       setCustomerBaseline({ customerType: initialCustomer.customerType, customerDraft: initialCustomer, customerNote: "" });
-      if (ports.canCreateCustomer||prefill?.customerMode==='lieferant'&&prefill.sourceItemId&&Number.isSafeInteger(prefill.sourceVersion)&&ports.canManageMoney) navigate("customer");
+      if (ports.canCreateCustomer) navigate("customer");
       else deny("customer");
       return;
     }
@@ -1508,7 +1510,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const submitCustomer = async (event: FormEvent) => {
     event.preventDefault();
-    if (!ports.canCreateCustomer&&!(supplierCustomerMode&&customerSource&&ports.canManageMoney)) {
+    if (!ports.canCreateCustomer) {
       deny("customer");
       return;
     }
@@ -1575,9 +1577,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   };
 
   const createInputForStatus = (): CreateCustomerInput => {
-    const {customerType:kind,salutation,handoverPreference,paymentTermDays,...fields}=customerDraft;
-    const input:CreateCustomerInput={...fields,customerType:kind as Exclude<CustomerDraft["customerType"],"">,clientEventId:requestId("customer"),salutation:salutation||null,handoverPreference:handoverPreference||null,paymentTermDays:paymentTermDays?Number(paymentTermDays):null};
-    if(!ports.canManageMoney){delete input.paymentPreference;delete input.iban;delete input.paymentTermDays;}
+    const {customerType:kind,salutation,handoverPreference,paymentTermDays,paymentPreference,iban,...fields}=customerDraft;
+    const input:CreateCustomerInput={...fields,customerType:kind as Exclude<CustomerDraft["customerType"],"">,clientEventId:requestId("customer"),salutation:salutation||null,handoverPreference:handoverPreference||null,
+      ...(ports.canManageMoney?{paymentPreference,paymentTermDays:paymentTermDays?Number(paymentTermDays):null}:{}),
+      ...(ports.canManageMoney||ports.canManageSupplierBank&&kind==="lieferant"?{iban}:{})};
+
     return input;
   };
 
@@ -1762,8 +1766,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         name: service.name,
         surfaceRequested,
         unit: service.unit,
-        unitPriceCents: item.priceText!==undefined?item.unitPriceCents:catalogMatchesSurface && ports.canManageMoney ? service.netPriceCents ?? null : null,
-        vatRateBasisPoints: item.priceText!==undefined?(catalogMatchesSurface?service.vatRateBasisPoints??null:item.unitPriceCents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS):catalogMatchesSurface && ports.canManageMoney ? service.vatRateBasisPoints ?? null : null,
+        unitPriceCents: item.priceText!==undefined?item.unitPriceCents:catalogMatchesSurface && ports.canManagePrices ? service.netPriceCents ?? null : null,
+        vatRateBasisPoints: item.priceText!==undefined?(catalogMatchesSurface?service.vatRateBasisPoints??null:item.unitPriceCents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS):catalogMatchesSurface && ports.canManagePrices ? service.vatRateBasisPoints ?? null : null,
       };
     }));
   };
@@ -1955,7 +1959,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const firstMissingQuantity = directItems.findIndex((item) => intakeQuantityError(item) !== null);
   const firstMissingUnit = directItems.findIndex((item) => !item.unit);
   const firstMissingSurface = directItems.findIndex((item) => item.surfaceRequested.trim().length < 2);
-  const firstInvalidPrice = ports.canManageMoney?directItems.findIndex(item=>intakePriceError(item,intakeKind==='kv')!==null):-1;
+  const firstInvalidPrice = ports.canManagePrices?directItems.findIndex(item=>intakePriceError(item,intakeKind==='kv')!==null):-1;
   const pendingPositionField = (field: string) => !recognitionConfirmed && recognitionMarkers.some(marker => !marker.confirmed && marker.key.startsWith("position-") && marker.key.endsWith("-" + field));
   const pendingPositionIndex = (field: string) => Number(recognitionMarkers.find(marker=>!marker.confirmed&&marker.key.startsWith("position-")&&marker.key.endsWith("-"+field))?.key.match(/^position-(\d+)-/)?.[1] ?? 0);
   const hasPendingRecognizedDueDate = !recognitionConfirmed && recognitionMarkers.some((marker) => !marker.confirmed && marker.key === "dueDate");
@@ -1967,8 +1971,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     { id: "menge", label: "Menge", detail: firstMissingQuantity >= 0 ? `Menge eintragen · Position ${firstMissingQuantity + 1}` : pendingPositionField("quantity") ? `Menge ${recognitionMarkers.find(marker=>marker.key.endsWith("-quantity"))?.value ?? ""} · erkannt, bestätigen` : "vollständig", complete: firstMissingQuantity < 0 && !pendingPositionField("quantity"), pending: firstMissingQuantity < 0 && pendingPositionField("quantity"), step: 2, target: "eingang.menge", targetIndex: firstMissingQuantity >= 0 ? firstMissingQuantity : pendingPositionIndex("quantity") },
     { id: "einheit", label: "Einheit", detail: firstMissingUnit >= 0 ? `Einheit wählen · Position ${firstMissingUnit + 1}` : pendingPositionField("unit") ? `Einheit ${recognitionMarkers.find(marker=>marker.key.endsWith("-unit"))?.value ?? ""} · erkannt, bestätigen` : "vollständig", complete: firstMissingUnit < 0 && !pendingPositionField("unit"), pending: firstMissingUnit < 0 && pendingPositionField("unit"), step: 2, target: "eingang.einheit", targetIndex: firstMissingUnit >= 0 ? firstMissingUnit : pendingPositionIndex("unit") },
     { id: "oberflaeche", label: "Oberfläche", detail: firstMissingSurface >= 0 ? `Oberfläche wählen · Position ${firstMissingSurface + 1}` : pendingPositionField("surface") ? `Oberfläche ${recognitionMarkers.find(marker=>marker.key.endsWith("-surface"))?.value ?? ""} · erkannt, bestätigen` : "vollständig", complete: firstMissingSurface < 0 && !pendingPositionField("surface"), pending: firstMissingSurface < 0 && pendingPositionField("surface"), step: 2, target: "eingang.oberflaeche", targetIndex: firstMissingSurface >= 0 ? firstMissingSurface : pendingPositionIndex("surface") },
-    ...(ports.canManageMoney&&(intakeKind==='kv'||firstInvalidPrice>=0)?[{id:'preis',label:'Preis',detail:firstInvalidPrice>=0?intakePriceError(directItems[firstInvalidPrice],intakeKind==='kv')!:'vollständig',complete:firstInvalidPrice<0,step:2 as const,target:'eingang.preis',targetIndex:Math.max(firstInvalidPrice,0)}]:[]),
-    ...(ports.canManageMoney ? [{ id: "art", label: "Art", detail: intakeKind === "auftrag" ? "Auftrag" : "Art wählen", complete: intakeKind === "auftrag", step: 3 as const, target: "eingang.art" }] : []),
+    ...(ports.canManagePrices&&(intakeKind==='kv'||firstInvalidPrice>=0)?[{id:'preis',label:'Preis',detail:firstInvalidPrice>=0?intakePriceError(directItems[firstInvalidPrice],intakeKind==='kv')!:'vollständig',complete:firstInvalidPrice<0,step:2 as const,target:'eingang.preis',targetIndex:Math.max(firstInvalidPrice,0)}]:[]),
+    ...(ports.canManagePrices ? [{ id: "art", label: "Art", detail: intakeKind === "auftrag" ? "Auftrag" : "Art wählen", complete: intakeKind === "auftrag", step: 3 as const, target: "eingang.art" }] : []),
     { id: "liefertermin", decision:termNeedsDecision,label: "Liefertermin", detail: termNeedsDecision?intakeTermExpired?"Termin nicht mehr leistbar · Termin wählen":"Termin wählen · Wunsch zu knapp":directWishDate ? hasPendingRecognizedDueDate ? `Liefertermin ${directWishDate} · erkannt, bestätigen` : directWishDate : "Termin wählen", complete: isValidDateInput(directWishDate) && !isPastDateInput(directWishDate) && !hasPendingRecognizedDueDate&&!termNeedsDecision, pending: Boolean(directWishDate) && hasPendingRecognizedDueDate, step: 3, target: "eingang.liefertermin" },
     { id: "terminstatus", label: "Terminstatus", detail: intakeTermStatus === "wish" ? hasPendingRecognizedDueDate ? "Terminstatus Wunsch · erkannt, bestätigen" : "Wunsch" : intakeTermStatus === "confirmed" ? "bestätigt" : intakeTermStatus === "counter"?"Gegenvorschlag":"Terminstatus wählen", complete: Boolean(intakeTermStatus) && !hasPendingRecognizedDueDate, pending: Boolean(intakeTermStatus) && hasPendingRecognizedDueDate, step: 3, target: "eingang.terminstatus" },
     { id: "eingangsart", label: "Eingangsart", detail: intakeSource === "persoenlich" ? "persönlich angeliefert" : intakeSource === "versand" ? "Versand eingegangen" : intakeSource === "abholung_firma" ? "Abholung durch Firma" : intakeSource === "anfrage_mail" ? "Anfrage per Mail" : intakeSource === "anfrage_telefon" ? "Anfrage per Telefon" : "Eingangsart wählen", complete: Boolean(intakeSource), step: 3, target: "eingang.eingangsart" },
@@ -2200,8 +2204,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       surfaceRequested: item.surfaceRequested.trim(),
       executionRequested: item.executionRequested,
       unit: item.unit,
-      unitPriceCents: ports.canManageMoney ? item.unitPriceCents : null,
-      vatRateBasisPoints: ports.canManageMoney && item.unitPriceCents!==null ? item.vatRateBasisPoints : null,
+      unitPriceCents: ports.canManagePrices ? item.unitPriceCents : null,
+      vatRateBasisPoints: ports.canManagePrices && item.unitPriceCents!==null ? item.vatRateBasisPoints : null,
     }));
     const validCustomer = (directCustomerMode === "NEW" || directCustomerMode === "EXISTING" && customerKey.length > 0)
       && (directCustomerReadiness.issues.length === 0);
@@ -2396,7 +2400,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     </div><div className="ev-erk-chips">{Object.entries(customerOrigins).map(([key,origin])=><span className="ev-erk-chip" key={key}>{origin}<b>{String(customerDraft[key as keyof CustomerFormValue])}</b></span>)}</div>
                   </div> : null}
                 </section>
-                <KundeFormular autofocusField="customerType" prefix="kundeneu" mode="create" value={customerDraft} supplierMode={supplierCustomerMode} onChange={setCustomerDraft} origins={customerOrigins} canManageMoney={ports.canManageMoney} addressSuggestions={customerAddress?.suggestions} addressMessage={customerAddress?{tone:customerAddress.kind==="found"?"ok":customerAddress.kind==="not-checked"?"neutral":"warn",text:customerAddress.message}:null}/>
+                <KundeFormular autofocusField="customerType" prefix="kundeneu" mode="create" value={customerDraft} supplierMode={supplierCustomerMode} onChange={setCustomerDraft} origins={customerOrigins} canManageMoney={ports.canManageMoney} canManageSupplierBank={ports.canManageSupplierBank} addressSuggestions={customerAddress?.suggestions} addressMessage={customerAddress?{tone:customerAddress.kind==="found"?"ok":customerAddress.kind==="not-checked"?"neutral":"warn",text:customerAddress.message}:null}/>
                 {customerCoreComplete && customerOrderMissingFields.length > 0 ? <Hinweis><div className="kr-stapel" data-spec-id="kundeneu.zustand.teilweise">
                   <strong>Speicherbar als Interessent · für Auftrag fehlt: {customerOrderMissingFields.join(", ")}</strong>
                   <div className="kr-stapel">
@@ -2567,7 +2571,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Auswahl data-spec-id="eingang.oberflaeche" required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...ORDER_POSITION_SURFACES.map((surface) => ({ wert: surface.key, text: surface.label }))]} /></Feld>
                     <Feld label="Ausführung"><Auswahl data-spec-id="eingang.ausfuehrung" value={item.executionRequested} onChange={(event) => updateDirectItem(item.key, "executionRequested", event.target.value)} optionen={EXECUTION_OPTIONS} /></Feld>
                     <Feld label="Material"><Eingabe data-spec-id="eingang.material" maxLength={120} value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></Feld>
-                    {ports.canManageMoney?<Feld label="Preis netto je Einheit"><>
+                    {ports.canManagePrices?<Feld label="Preis netto je Einheit"><>
                       <Eingabe aria-label="Preis netto je Einheit" data-spec-id="eingang.preis" inputMode="decimal" aria-invalid={intakePriceError(item,intakeKind==='kv')!==null} value={item.priceText??(item.unitPriceCents===null?'':(item.unitPriceCents/100).toFixed(2).replace('.',','))} onChange={event=>{
                         const text=event.target.value.trim(),cents=/^\d+(?:[.,]\d{1,2})?$/.test(text)?Math.round(Number(text.replace(',','.'))*100):null;
                         setDirectItems(current=>current.map(line=>line.key===item.key?{...markPositionEdited(line),priceText:event.target.value,unitPriceCents:cents,vatRateBasisPoints:line.catalogServiceId===FREE_TEXT_SERVICE?cents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS:line.vatRateBasisPoints}:line));
@@ -2582,7 +2586,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
                   <Abschnitt nr={2} label="Termin & Übergabe"><h3 className="ev-abs-kopf"><span className="ev-nrkreis">3</span>Termin & Übergabe</h3>
 <FormRaster>
-                  {ports.canManageMoney ? <Feld label="Art" voll><div data-spec-id="eingang.art"><Segment<"" | "auftrag" | "kv"> label="Art" wert={intakeKind} optionen={[{ wert: "auftrag", text: "Auftrag" }]} onWert={(value) => { setIntakeKind(value); }} /></div>{intakeOrigin ? <span data-spec-id="eingang.art.herkunft"><Chip text="aus Aufruf" ton="info" /></span> : null}</Feld> : null}
+                  {ports.canManagePrices ? <Feld label="Art" voll><div data-spec-id="eingang.art"><Segment<"" | "auftrag" | "kv"> label="Art" wert={intakeKind} optionen={[{ wert: "auftrag", text: "Auftrag" }]} onWert={(value) => { setIntakeKind(value); }} /></div>{intakeOrigin ? <span data-spec-id="eingang.art.herkunft"><Chip text="aus Aufruf" ton="info" /></span> : null}</Feld> : null}
 </FormRaster>
 <IntakeTermBlock handover={intakeHandover} handoverOrigin={intakeHandoverOrigin} onHandover={changeIntakeHandover} weeks={intakeProcessingWeeks} onWeeks={setIntakeProcessingWeeks} term={intakeSuggestionState.kind==="data"?intakeSuggestionState.data.term:null} loading={intakeSuggestionState.kind==="loading"||intakeSuggestionState.kind==="data"&&intakeSuggestionState.loading} failed={intakeSuggestionState.kind==="error"} date={directWishDate} onDate={date=>{setRecognitionMarkers(current=>current.filter(marker=>marker.key!=="dueDate"));setDirectWishDate(date);setDirectConfirmedDate(date);setIntakeTermChoice(null);setIntakeTermOrigin(null);setIntakeTermExpired(false);setIntakeTermStatus(date?"wish":"");setIntakeWishDateOrigin(date?"manual":"empty");intakeTermManuallySet.current=false;}} choice={intakeTermChoice} onProposal={chooseIntakeProposal} onOffer={adoptIntakeTermSuggestion} onKeep={keepIntakeWish} onChange={changeIntakeTermChoice} canDecide={ports.canDecide===true} quote={intakeKind==="kv"} expired={intakeTermExpired} surfacePending={directItems.some(item=>{const surface=normaliseOrderPositionSurface(item.surfaceRequested);return surface===null||surface==="offen";})}/>
                 {isPastDateInput(directWishDate)?<span className="kr-feld-fehler" data-spec-id="eingang.liefertermin.fehler">Liefertermin liegt in der Vergangenheit</span>:null}

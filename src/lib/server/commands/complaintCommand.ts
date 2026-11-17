@@ -15,7 +15,7 @@ export type ComplaintSourceEffect = (tx:PrivilegedTenantTransaction, auth:Author
 
 /** Limited source projection for 4.8; no invoice, price or other money fields. */
 export async function readComplaintOrderSource(auth:AuthorizationSnapshot,orderId:string) {
-  if(!['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden')))return null;
+  if(!['auftraege','entscheiden','zahlungen','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'zahlungen'|'kunden')))return null;
   return withPrivilegedTenantTransaction(auth,async tx=>{
     const [order]=await tx.execute<{id:string;number:string;customerId:string;customerName:string;handoverMode:'pickup'|'shipping'|null}>(sql`SELECT orders.id,orders.order_number AS number,orders.customer_id AS "customerId",customer.name AS "customerName",orders.handover_mode AS "handoverMode" FROM public.orders orders JOIN public.customers customer ON customer.tenant_id=orders.tenant_id AND customer.id=orders.customer_id WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${orderId}`);
     if(!order)return null;
@@ -60,8 +60,8 @@ async function context(tx:PrivilegedTenantTransaction,tenant:string,id:string):P
 function mayWrite(auth:AuthorizationSnapshot,input:ComplaintCommand) {
   if(input.action==='aufnehmen')return hasAuthorizationArea(auth,'auftraege');
   if(input.action==='wieder_oeffnen')return hasAuthorizationArea(auth,'entscheiden');
-  if(input.action==='gutschrift')return hasAuthorizationArea(auth,'geld');
-  if(input.action==='entscheiden')return hasAuthorizationArea(auth,'entscheiden')&&(input.measure!=='gutschrift'||hasAuthorizationArea(auth,'geld'));
+  if(input.action==='gutschrift')return hasAuthorizationArea(auth,'zahlungen');
+  if(input.action==='entscheiden')return hasAuthorizationArea(auth,'entscheiden')&&(input.measure!=='gutschrift'||hasAuthorizationArea(auth,'zahlungen'));
   return hasAuthorizationArea(auth,input.kind==='mail'?'kunden':'auftraege');
 }
 

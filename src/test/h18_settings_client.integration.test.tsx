@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import type { AppSession } from "@/lib/server/appSession";
 import type { ManagedUser, SystemSettingsSnapshot } from "@/modules/fundament/public";
+import { FINANCIAL_ACCESS_COPY } from "@/ui/situationCatalog";
 
 (globalThis as typeof globalThis & { AsyncLocalStorage: typeof AsyncLocalStorage }).AsyncLocalStorage = AsyncLocalStorage;
 
@@ -175,7 +176,7 @@ function snapshot(fixture: Fixture): SystemSettingsSnapshot {
 
 async function renderSettings(fixture: Fixture, returnTo = "/orders") {
   const { SettingsAdminClient } = await import("@/app/settings/SettingsAdminClient");
-  render(<SettingsAdminClient initialSnapshot={snapshot(fixture)} initialServices={[]} returnTo={returnTo} />);
+  render(<SettingsAdminClient initialSnapshot={snapshot(fixture)} initialServices={[]} catalogLocked={FINANCIAL_ACCESS_COPY.pricesMissing} returnTo={returnTo} />);
   fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
 }
 
@@ -195,6 +196,32 @@ afterAll(async () => {
 });
 
 describe("H18 settings client surfaces with real Server Action responses", () => {
+  it("KORR-RECHTE shows and persists three independent financial checkboxes through the existing rights action", async () => {
+    const fixture = await createFixture("financial-rights");
+    const rights = [
+      { area: "preise", text: "Preise & Rechnungen", sub: "Preise in KV, Auftrag und Rechnung; Rechnung ausstellen und senden" },
+      { area: "zahlungen", text: "Zahlungen & Mahnungen", sub: "Zahlungen buchen, offene Posten, Mahnung, Storno, Guthaben" },
+      { area: "buchhaltung", text: "Buchhaltung & Zahlen", sub: "Eingangsrechnungen, Buchhaltung, Kontostand, Auswertungen, Export" },
+    ];
+    await withSession(fixture, async () => {
+      await renderSettings(fixture);
+      expect(screen.queryByRole("checkbox", { name: `Geld für ${fixture.target.fullName}` })).not.toBeInTheDocument();
+      for (const right of rights) {
+        const checkbox = screen.getByRole("checkbox", { name: `${right.text} für ${fixture.target.fullName}` });
+        expect(checkbox).not.toBeChecked();
+        expect(screen.getByText(right.sub)).toBeInTheDocument();
+        fireEvent.click(checkbox);
+      }
+      fireEvent.click(screen.getByRole("button", { name: "Rechte speichern" }));
+      await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("3 Rechte gespeichert."), { timeout: 20_000 });
+    });
+    const saved = await sql<{ bereich: string; granted_by: string }[]>`
+      SELECT bereich, granted_by::text FROM public.app_user_rights
+      WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${fixture.targetId}::uuid ORDER BY bereich
+    `;
+    expect(saved).toEqual([...rights].sort((a,b) => a.area.localeCompare(b.area)).map(right => ({ bereich: right.area, granted_by: fixture.actorId })));
+  }, 30_000);
+
   it("H18.1 shows the own-code success after the real action and closes only on success", async () => {
     const fixture = await createFixture("own-pin");
     await withSession(fixture, async () => {

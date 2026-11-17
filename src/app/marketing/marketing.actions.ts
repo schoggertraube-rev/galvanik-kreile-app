@@ -79,7 +79,7 @@ async function ensureMarketingData() {
 }
 
 export async function getBesteAktionAction(): Promise<AktionVorschlag | null> {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   await ensureMarketingData();
   const res = await db.select().from(aktion).where(eq(aktion.status, "vorschlag")).orderBy(desc(aktion.score)).limit(1);
@@ -107,7 +107,7 @@ export async function getBesteAktionAction(): Promise<AktionVorschlag | null> {
 }
 
 export async function listVorschlaegeAction(sort: SortMode = "output"): Promise<AktionVorschlag[]> {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   void sort;
   // Empty state for Ideen as requested
@@ -115,7 +115,7 @@ export async function listVorschlaegeAction(sort: SortMode = "output"): Promise<
 }
 
 export async function getKampagnenAction(): Promise<MKampagne[]> {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   await ensureMarketingData();
   const res = await db.select().from(kampagne).orderBy(desc(kampagne.erstelltAm));
@@ -132,7 +132,7 @@ export async function getKampagnenAction(): Promise<MKampagne[]> {
 }
 
 export async function getSegmenteAction(): Promise<MSegment[]> {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   await ensureMarketingData();
   const res = await db.select().from(segment);
@@ -146,7 +146,7 @@ export async function getSegmenteAction(): Promise<MSegment[]> {
 }
 
 export async function getLernInsightsAction(): Promise<LernInsight[]> {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   await ensureMarketingData();
   const res = await db.select().from(lernMetrik);
@@ -158,7 +158,7 @@ export async function getLernInsightsAction(): Promise<LernInsight[]> {
 }
 
 export async function getWirkungMiniAction(): Promise<WirkungMini[]> {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   return [
     { label: "Anfragen aus Marketing", wert: 23, suffix: "", sparkValues: [30, 45, 40, 62, 55, 85, 100] },
@@ -168,7 +168,7 @@ export async function getWirkungMiniAction(): Promise<WirkungMini[]> {
 }
 
 export async function getFunnelAction(): Promise<FunnelDaten> {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   return {
     stufen: [
@@ -184,7 +184,7 @@ export async function getFunnelAction(): Promise<FunnelDaten> {
 }
 
 export async function getStoryIdeenAction(): Promise<StoryIdee[]> {
-  await rejectDeferredLegacy("geld");
+  await rejectDeferredLegacy("buchhaltung");
 
   const v = await listVorschlaegeAction();
   return [

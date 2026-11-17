@@ -38,7 +38,7 @@ function readV45QuoteRuleRaw(auth:AuthorizationSnapshot,quote:QuoteReadback,capa
  const source={kind:'quote' as const,id:quote.quoteId,version:quote.version,edition:quote.lifecycle?.edition??null};
  const rule=readAuthorizedV45Rule(auth,'kv',v45QuoteFacts(quote),capabilities.commandRights);
 
- const financial=hasAuthorizationArea(auth,'geld');
+ const financial=hasAuthorizationArea(auth,'preise');
  const values:Record<string,Readonly<Record<string,unknown>>>={
   'kv.lage':{nummer:quote.quoteNumber,fassung:quote.lifecycle?.edition??null,zustand:rule.code==='OK'?rule.zustand:null},
   'kv.teile':{teile:quote.positions.map(part=>({id:part.id,name:part.name,menge:part.quantity,material:part.material,oberflaeche:part.surfaceRequested,...(part.unit!==undefined?{einheit:part.unit}:{})}))},

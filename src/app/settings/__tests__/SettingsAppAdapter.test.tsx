@@ -67,7 +67,16 @@ describe("Gregor system administration composition", () => {
       code: "OK",
       user: { id: "33333333-3333-4333-8333-333333333333", email: null, fullName: "Nina Neu", shortCode: "NN", designation: "", role: "werkstatt", active: true, areas: ["auftraege", "eingang", "kunden"], fixedAreas: [], isCurrent: false },
     });
-    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], capabilities:{canManageCompany:true,canManageLogins:true,canManageSystem:true}, numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
+    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], capabilities:{canManageCompany:true,canManageLogins:true,canManageSystem:true,canManageFinancial:true}, numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
+  });
+
+  it("keeps legal company settings and return navigation available without exposing price editors", async () => {
+    const source = await ports.readSettings();
+    ports.readSettings.mockResolvedValue({...source,snapshot:{...source.snapshot,capabilities:{...source.snapshot.capabilities,canManageFinancial:false}}});
+    render(await SettingsAppAdapter());
+    expect(screen.getByRole("button",{name:"Firmendaten speichern"})).toBeInTheDocument();
+    expect(screen.queryByRole("button",{name:"Leistungskatalog"})).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Stundensatz Mehrarbeit (€/h)")).not.toBeInTheDocument();
   });
 
   it("renders settings for an admin role", async () => {
@@ -99,10 +108,10 @@ describe("Gregor system administration composition", () => {
         company: { companyName: "Galvanik Kreile", street: "", zip: "", city: "", country: "Deutschland", taxId: "", iban: "", bic: "", bankName: "", paymentTermDays: 14, logoUrl: "/logo.png" },
         extraWorkHourlyRate: { rateId: null, hourlyRateCents: null, version: 0 },
         users: [
-          { id: "11111111-1111-4111-8111-111111111111", email: "gregor@example.invalid", fullName: "Gregor", shortCode: "G", designation: "Entwickler", role: "developer", active: true, areas: ["auftraege", "geld", "einstellungen", "logins", "wartung"], fixedAreas: ["einstellungen", "logins", "wartung"], isCurrent: true },
+          { id: "11111111-1111-4111-8111-111111111111", email: "gregor@example.invalid", fullName: "Gregor", shortCode: "G", designation: "Entwickler", role: "developer", active: true, areas: ["auftraege", 'preise','zahlungen','buchhaltung', "einstellungen", "logins", "wartung"], fixedAreas: ["einstellungen", "logins", "wartung"], isCurrent: true },
           { id: "22222222-2222-4222-8222-222222222222", email: null, fullName: "Rolf", shortCode: "R", designation: "Meister", role: "meister", active: true, areas: ["auftraege", "logins"], fixedAreas: [], isCurrent: false },
           { id: "33333333-3333-4333-8333-333333333333", email: null, fullName: "Phillip", shortCode: "P", designation: "Werkstatt", role: "werkstatt", active: true, areas: ["auftraege"], fixedAreas: [], isCurrent: false },
-          { id: "44444444-4444-4444-8444-444444444444", email: null, fullName: "Christian Dieter", shortCode: "CD", designation: "Altzugang", role: "meister", active: false, areas: ["auftraege", "geld", "logins"], fixedAreas: [], isCurrent: false },
+          { id: "44444444-4444-4444-8444-444444444444", email: null, fullName: "Christian Dieter", shortCode: "CD", designation: "Altzugang", role: "meister", active: false, areas: ["auftraege", 'preise','zahlungen','buchhaltung', "logins"], fixedAreas: [], isCurrent: false },
         ],
         capabilities: { canManageCompany: true, canManageLogins: true, canManageSystem: true },
         numberRanges: [],
@@ -124,7 +133,10 @@ describe("Gregor system administration composition", () => {
     const gregorOrders = screen.getByLabelText("Aufträge & Werkstatt für Gregor");
     expect(gregorOrders).not.toBeChecked();
     expect(gregorOrders).toBeDisabled();
-    expect(screen.getAllByText("Entwickler, keine Geschäftsvorgänge")).toHaveLength(7);
+    expect(screen.getAllByText("Entwickler, keine Geschäftsvorgänge")).toHaveLength(9);
+    for(const area of ['Preise & Rechnungen','Zahlungen & Mahnungen','Buchhaltung & Zahlen']){
+      const right=screen.getByLabelText(`${area} für Gregor`);expect(right).not.toBeChecked();expect(right).toBeDisabled();
+    }
     expect(screen.queryByText("Statistik aller Personen",{exact:true})).not.toBeInTheDocument();
     expect(screen.getByLabelText("Firmen-Einstellungen für Gregor")).toBeChecked();
     expect(screen.getByLabelText("Logins & Rechte verwalten für Rolf")).toBeChecked();

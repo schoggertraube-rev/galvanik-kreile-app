@@ -1,5 +1,6 @@
 import 'server-only';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from '@/lib/server/authorization';
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {PackageCustomerHistory} from '@/lib/server/packageIntakeContextPort';
 import {packagePartWords} from '@/lib/domain/packagePartWords';

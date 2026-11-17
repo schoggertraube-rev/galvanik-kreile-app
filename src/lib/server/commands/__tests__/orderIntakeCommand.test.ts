@@ -9,7 +9,10 @@ const { resolveAuthorization, withTransaction, execute } = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization }));
+vi.mock("@/lib/server/authorization", async () => {
+  const {hasAuthorizationArea}=await vi.importActual<typeof import('@/lib/auth/authorizationContract')>('@/lib/auth/authorizationContract');
+  return {resolveAuthorization,hasAuthorizationArea};
+});
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
 vi.mock("drizzle-orm", () => ({
   sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }),
@@ -82,7 +85,7 @@ const authorization = {
     displayName: "Büro",
     role: "buero" as const,
     permissions: ["perm_data_customers", "perm_data_orders", "perm_view_customers", "perm_view_leitstand"] as const,
-    areas: ["eingang", "geld"] as const,
+    areas: ["eingang", 'preise','zahlungen','buchhaltung'] as const,
     active: true as const,
   },
 };
@@ -127,7 +130,7 @@ describe("createOrderIntake", () => {
     resolveAuthorization.mockResolvedValueOnce(withoutMoney);
     await expect(createOrderIntake(input)).resolves.toEqual({
       code: "FORBIDDEN",
-      message: "Zahlungsmodus darf ohne Geld-Recht nicht vorgegeben werden.",
+      message: "Zahlungsmodus darf ohne Recht Zahlungen & Mahnungen nicht vorgegeben werden.",
     });
     expect(withTransaction).not.toHaveBeenCalled();
 
@@ -136,7 +139,7 @@ describe("createOrderIntake", () => {
     resolveAuthorization.mockResolvedValueOnce(withoutMoney);
     await expect(createOrderIntake(withoutMode)).resolves.toEqual({
       code: "FORBIDDEN",
-      message: "Preise dürfen ohne Geld-Recht nicht vorgegeben werden.",
+      message: "Preise dürfen ohne Recht Preise & Rechnungen nicht vorgegeben werden.",
     });
 
     const freeTextWithoutMoney = {

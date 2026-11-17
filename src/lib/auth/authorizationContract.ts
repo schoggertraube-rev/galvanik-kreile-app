@@ -42,7 +42,9 @@ export const ACCESS_AREAS = [
   "auftraege",
   "eingang",
   "kunden",
-  "geld",
+  "preise",
+  "zahlungen",
+  "buchhaltung",
   "kassieren",
   "mails",
   "entscheiden",
@@ -59,7 +61,9 @@ export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string
   auftraege: { text: "Aufträge & Werkstatt", sub: "sehen, Fertig melden, Mehrarbeit, Fotos" },
   eingang: { text: "Neu erfassen & Kunde anlegen" },
   kunden: { text: "Kunden & Kontakt" },
-  geld: { text: "Geld, Preise & Buchhaltung", sub: "Beträge, Rechnungen, Zahlungen, Preise, Zahlungsbedingungen" },
+  preise: { text: "Preise & Rechnungen", sub: "Preise in KV, Auftrag und Rechnung; Rechnung ausstellen und senden" },
+  zahlungen: { text: "Zahlungen & Mahnungen", sub: "Zahlungen buchen, offene Posten, Mahnung, Storno, Guthaben" },
+  buchhaltung: { text: "Buchhaltung & Zahlen", sub: "Eingangsrechnungen, Buchhaltung, Kontostand, Auswertungen, Export" },
   kassieren: { text: "Kassieren bei Abholung", sub: "Betrag sehen und bezahlt (bar / Karte) bestätigen – ohne Buchhaltung" },
   mails: { text: "Mails lesen & zuordnen" },
   entscheiden: { text: "Abweichungen & Reklamationen entscheiden", sub: "Ware unbearbeitet zurückgeben, Abweichungen freigeben, Reklamation bewerten" },
@@ -73,8 +77,8 @@ export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string
 export const ROLE_ACCESS_AREA_TEMPLATES: Record<AppRole, readonly AccessArea[]> = {
   developer: ["einstellungen", "logins", "wartung", "protokoll"],
   admin: ACCESS_AREAS.filter((area) => area !== "wartung" && area !== "entscheiden"),
-  meister: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen", "kassieren", "logins", "entscheiden"],
-  buero: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen"],
+  meister: ["auftraege", "eingang", "kunden", "preise", "zahlungen", "buchhaltung", "mails", "einstellungen", "kassieren", "logins", "entscheiden"],
+  buero: ["auftraege", "eingang", "kunden", "preise", "zahlungen", "mails", "einstellungen"],
   werkstatt: ["auftraege", "eingang", "kunden"],
   readonly: [],
 };
@@ -83,7 +87,9 @@ const DEVELOPER_BUSINESS_AREAS = [
   "auftraege",
   "eingang",
   "kunden",
-  "geld",
+  "preise",
+  "zahlungen",
+  "buchhaltung",
   "kassieren",
   "mails",
   "entscheiden",
@@ -135,7 +141,9 @@ const ACCESS_AREA_PERMISSIONS: Record<AccessArea, readonly PermissionKey[]> = {
   auftraege: ["perm_op_status", "perm_op_risk", "perm_op_photos", "perm_op_qa", "perm_view_leitstand"],
   eingang: ["perm_data_orders"],
   kunden: ["perm_data_customers", "perm_view_customers"],
-  geld: ["perm_data_csv", "perm_view_prices"],
+  preise: ["perm_view_prices"],
+  zahlungen: [],
+  buchhaltung: ["perm_data_csv"],
   kassieren: ["perm_cash_pickup"],
   mails: [],
   entscheiden: [],
@@ -194,8 +202,17 @@ export function hasAuthorizationArea(
 
 /** Canonical pure gates shared by writers and read projections. */
 export function canReadComplaintOrderChoices(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'auftraege');}
-export function canTransportInvoiceDocument(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'geld');}
-export function canAssignIntakeCustomer(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'eingang')&&(hasAuthorizationArea(auth,'kunden')||hasAuthorizationArea(auth,'geld'));}
+export function canTransportInvoiceDocument(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'preise');}
+export function canAssignIntakeCustomer(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'eingang')&&hasAuthorizationArea(auth,'kunden');}
+
+/** PL17.11 13:01: financial task recipients do not grant their contents to another area. */
+export function canReadTaskArea(auth:Parameters<typeof hasAuthorizationArea>[0],area:AccessArea|null){
+ return area!=='preise'&&area!=='zahlungen'&&area!=='buchhaltung'||hasAuthorizationArea(auth,area);
+}
+/** KORR-232 K3: the same target-area gate for task commands and their buttons. */
+export function canCompleteTaskArea(auth:Parameters<typeof hasAuthorizationArea>[0],area:AccessArea){
+ return hasAuthorizationArea(auth,area);
+}
 
 /** S05 VORAB 4: following up a quote is a mail operation, not money access. */
 export function canReadQuoteFollowups(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'mails');}
@@ -208,3 +225,27 @@ export function canSearchTenant(auth:{permissions:readonly string[]}){return aut
 export function canChangeOrderHandover(auth:Parameters<typeof hasAuthorizationArea>[0],source:'login'|'mail'){
  return hasAuthorizationArea(auth,'auftraege')&&(source==='login'||hasAuthorizationArea(auth,'mails'));
 }
+
+
+
+/**
+ * The single server-side projection from effective areas to concrete product
+ * actions. Commands and browser reads consume the same projection.
+ */
+export function getAuthorizationActionGrants(
+  authorization: Parameters<typeof hasAuthorizationArea>[0],
+): AuthorizationActionGrants {
+  const canManageOrders = hasAuthorizationArea(authorization, "eingang");
+  return {
+    confirmPayment: hasAuthorizationArea(authorization, "zahlungen") || (
+      hasAuthorizationArea(authorization, "kassieren")
+      && hasAuthorizationArea(authorization, "auftraege")
+    ),
+    editOrderContent: canManageOrders,
+    createCustomer: hasAuthorizationArea(authorization, "eingang"),
+    createQuote: canManageOrders && hasAuthorizationArea(authorization, "preise"),
+  };
+}
+
+/** Cancellation acknowledgements contain no positions; payments can finish their existing command. */
+export function canReadInvoiceCancellationProof(auth:Parameters<typeof hasAuthorizationArea>[0]&{permissions:readonly string[]}){return auth.permissions.includes('perm_view_prices')||hasAuthorizationArea(auth,'zahlungen');}

@@ -72,7 +72,7 @@ export async function repairCancellationCreditTask(tx:PrivilegedTenantTransactio
  const source=await readCancellationCreditSource(tx,auth.tenantId,task.client_key);if(!source)return;
  if(task.bezug_typ!=='auftrag'||task.bezug_id!==source.orderId||task.erstellt_von!==source.cancelledBy)throw Error('CUSTOMER_CREDIT_TASK_SOURCE_CHANGED');
  if(source.pending){
-  if(!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN' as const,message:LEGACY_ACTION_ACCESS_COPY.forbidden};
+  if(!hasAuthorizationArea(auth,'zahlungen'))return {code:'FORBIDDEN' as const,message:LEGACY_ACTION_ACCESS_COPY.forbidden};
   await appendCancellationCredit(tx,auth.tenantId,source);
  }
  const proof=await readCancellationCreditSource(tx,auth.tenantId,task.client_key);
@@ -102,7 +102,7 @@ export async function payoutCustomerCredit(input:unknown,readCredit:CreditReader
   const authorization=await resolveAuthorization();
   if(!authorization.ok)return {code:authorization.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED',message:CUSTOMER_CREDIT_COPY.unavailable};
   const auth=authorization.data;
-  if(!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN',message:CUSTOMER_CREDIT_COPY.payoutForbidden};
+  if(!hasAuthorizationArea(auth,'zahlungen'))return {code:'FORBIDDEN',message:CUSTOMER_CREDIT_COPY.payoutForbidden};
   if(!input||typeof input!=='object'||!('method'in input)||!['bar','ueberweisung'].includes(String(input.method)))return {code:'VALIDATION_ERROR',message:CUSTOMER_CREDIT_COPY.payoutMethodMissing};
   if(input.method==='ueberweisung'&&(!('reference'in input)||!input.reference))return {code:'VALIDATION_ERROR',message:CUSTOMER_CREDIT_COPY.payoutReferenceMissing};
   if(!isPayoutInput(input))return {code:'VALIDATION_ERROR',message:CUSTOMER_CREDIT_COPY.payoutInvalid};

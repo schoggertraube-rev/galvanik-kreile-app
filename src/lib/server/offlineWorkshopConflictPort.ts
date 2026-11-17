@@ -5,7 +5,8 @@ import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {isPendingWorkshopOriginal,type PendingWorkshopOriginal} from '@/lib/offline/pendingStore';
 import {isWorkshopRejectionCode,type WorkshopRejectionCode,type WorkshopRejectionReceipt,type WorkshopRejectionSubject} from '@/lib/offline/workshopRejectionContract';
 import {OFFLINE_RECONCILIATION_COPY as copy} from '@/ui/situationCatalog';
-import {hasAuthorizationArea,type AuthorizationSnapshot} from './authorization';
+import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 
 type Rejection=WorkshopRejectionCode;
@@ -51,13 +52,13 @@ async function previous(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapsho
  */
 export async function reconcileOfflineWorkshop<T extends {code:string}>(auth:AuthorizationSnapshot,entry:PendingWorkshopOriginal,apply:()=>Promise<T>,createTask:(tx:PrivilegedTenantTransaction,eventId:string)=>Promise<string>,readCustomer?:(tx:PrivilegedTenantTransaction,tenantId:string,id:string)=>Promise<{name:string}|null>){
  const source=identity(auth,entry);
- const buildReceipt=(taskId:string,rejection:Rejection,subject?:WorkshopRejectionSubject):Omit<WorkshopRejectionReceipt,'scope'>=>({eventId:source.id,taskId,actorId:auth.userId,clientEventId:entry.id,deviceCapturedAt:entry.deviceCapturedAt!,originalCanonical:source.intent,rejection,...(subject&&hasAuthorizationArea(auth,'geld')?{subject}:{})});
+ const buildReceipt=(taskId:string,rejection:Rejection,subject?:WorkshopRejectionSubject):Omit<WorkshopRejectionReceipt,'scope'>=>({eventId:source.id,taskId,actorId:auth.userId,clientEventId:entry.id,deviceCapturedAt:entry.deviceCapturedAt!,originalCanonical:source.intent,rejection,...(subject&&hasAuthorizationArea(auth,'zahlungen')?{subject}:{})});
  return withPrivilegedTenantTransaction(auth,async tx=>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':offline-workshop:'+entry.id},0))`);
   const prior=await previous(tx,auth,source.id);
   if(prior.length){
    if(prior.length!==1||prior[0].id!==source.id||prior[0].user_id!==auth.userId||prior[0].payload.intent!==source.intent||prior[0].proof_ok!==true||!prior[0].task_id||!isWorkshopRejectionCode(prior[0].payload.rejection))throw Error('OFFLINE_WORKSHOP_ORIGINAL_CHANGED');
-   return {...(hasAuthorizationArea(auth,'geld')?prior[0].payload.financialContext:{}),code:'PRESERVED' as const,eventId:source.id,taskId:prior[0].task_id,replayed:true,message:prior[0].payload.message??copy.reason,rejectionReceipt:buildReceipt(prior[0].task_id,prior[0].payload.rejection,prior[0].payload.subject)};
+   return {...(hasAuthorizationArea(auth,'zahlungen')?prior[0].payload.financialContext:{}),code:'PRESERVED' as const,eventId:source.id,taskId:prior[0].task_id,replayed:true,message:prior[0].payload.message??copy.reason,rejectionReceipt:buildReceipt(prior[0].task_id,prior[0].payload.rejection,prior[0].payload.subject)};
   }
   const result=await apply();
   if(!isWorkshopRejectionCode(result.code))return result;

@@ -81,7 +81,9 @@ beforeAll(async () => {
     INSERT INTO public.app_user_rights (tenant_id, user_id, bereich)
     VALUES
       (${KREILE_TENANT_SLUG}, ${users.buero}::uuid, 'kunden'),
-      (${KREILE_TENANT_SLUG}, ${users.buero}::uuid, 'geld'),
+      (${KREILE_TENANT_SLUG}, ${users.buero}::uuid, 'preise'),
+      (${KREILE_TENANT_SLUG}, ${users.buero}::uuid, 'zahlungen'),
+      (${KREILE_TENANT_SLUG}, ${users.buero}::uuid, 'buchhaltung'),
       (${KREILE_TENANT_SLUG}, ${users.buero}::uuid, 'auftraege')
   `;
 });

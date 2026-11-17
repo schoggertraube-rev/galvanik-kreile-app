@@ -94,7 +94,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
  if(!input||typeof input!=='object')return sendCommunicationMail(auth,input);
  if(input.collectionReminder){
   const request=input.collectionReminder;
-  if(input.targetType!=='CUSTOMER'||input.attachment||!hasAuthorizationArea(auth,'mails')&&!hasAuthorizationArea(auth,'geld'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
+  if(input.targetType!=='CUSTOMER'||input.attachment||!hasAuthorizationArea(auth,'mails')&&!hasAuthorizationArea(auth,'zahlungen'))return {code:'FORBIDDEN' as const,message:COLLECTION_REMINDER_COPY.forbidden};
   if(!request||Object.keys(request).sort().join(',')!==(request.stage==='E4'?'clientKey,dueDate,handover,stage':'dueDate,handover,stage')||!['E1','E2','E4'].includes(request.stage)||!['pickup','shipping'].includes(request.handover)||!/^\d{4}-\d{2}-\d{2}$/.test(request.dueDate)||!Number.isFinite(Date.parse(request.dueDate))||typeof input.subject!=='string'||typeof input.body!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientRequestId)||(request.stage==='E4'&&(typeof request.clientKey!=='string'||!/^[0-9a-f-]{36}$/.test(request.clientKey))))return {code:'VALIDATION_ERROR' as const,message:COLLECTION_REMINDER_COPY.invalid};
   const prior=await readCollectionReminderReceipt(auth,{...input,collectionReminder:request});
   if(prior.code==='FOLLOWUP_PENDING'){
@@ -104,7 +104,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
   if(prior.code==='PENDING'){
    if(input.confirmedResend&&input.clientRequestId!==prior.originalRequestId)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
    return sendCommunicationMail(auth,{targetType:'CUSTOMER',targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:prior.original.subject,body:prior.original.body,confirmedResend:input.confirmedResend,collectionReminder:prior.meta,beforePrepare:async tx=>{
-    if(!hasAuthorizationArea(auth,prior.meta.moneyRequired!==false?'geld':'mails'))return false;
+    if(!hasAuthorizationArea(auth,prior.meta.moneyRequired!==false?'zahlungen':'mails'))return false;
     await assertCollectionReminderCurrent(tx,auth,prior.meta);
     return true;
    }});

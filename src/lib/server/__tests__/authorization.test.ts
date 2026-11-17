@@ -477,7 +477,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
 
     const staleDeveloperRows = { role: "developer" as const, areas: ACCESS_AREAS };
     expect(hasAuthorizationArea(staleDeveloperRows, "auftraege")).toBe(false);
-    expect(hasAuthorizationArea(staleDeveloperRows, "geld")).toBe(false);
+    expect(hasAuthorizationArea(staleDeveloperRows, 'zahlungen')).toBe(false);
     expect(hasAuthorizationArea(staleDeveloperRows, "einstellungen")).toBe(true);
     expect(hasAuthorizationArea(staleDeveloperRows, "logins")).toBe(true);
     expect(hasAuthorizationArea({ role: "meister", areas: ["wartung"] }, "wartung")).toBe(false);
@@ -489,7 +489,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
   it("H11d projects concrete action grants only from effective areas", () => {
     expect(getAuthorizationActionGrants({
       role: "buero",
-      areas: ["auftraege", "eingang", "kunden", "geld"],
+      areas: ["auftraege", "eingang", "kunden", 'preise','zahlungen','buchhaltung'],
     })).toEqual({
       confirmPayment: true,
       editOrderContent: true,

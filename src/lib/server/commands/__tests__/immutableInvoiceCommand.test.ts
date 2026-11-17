@@ -13,7 +13,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization,
   hasAuthorizationArea: (authorization: { role: string; permissions: readonly string[] }, area: string) => authorization.role !== "developer"
-    && area === "geld"
+    && ["preise","zahlungen"].includes(area)
     && authorization.permissions.includes("perm_view_prices"),
 }));
 // Unit SQL fixture only; native savepoint/rollback is proven by the S08 real DB cases.

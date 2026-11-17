@@ -126,8 +126,8 @@ const foreignAuthorization: AuthorizationSnapshot = {
   tenantId: FOREIGN_TENANT_ID,
   displayName: "F1.4 Synthetic Foreign",
   role: "meister",
-  areas: ["auftraege", "geld"],
-  permissions: getPermissionsForAreas(["auftraege", "geld"]),
+  areas: ["auftraege", 'preise','zahlungen','buchhaltung'],
+  permissions: getPermissionsForAreas(["auftraege", 'preise','zahlungen','buchhaltung']),
   active: true,
 };
 
@@ -191,7 +191,7 @@ async function insertPrerequisites() {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       SELECT ${TENANT_ID}, ${USER_ID}::uuid, area, ${USER_ID}::uuid
-      FROM unnest(ARRAY['auftraege', 'geld']::text[]) area
+      FROM unnest(ARRAY['auftraege', 'preise','zahlungen','buchhaltung']::text[]) area
     `;
     await transaction`
       INSERT INTO public.company_settings (
@@ -378,7 +378,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       readInvoiceReceipt,
       readInvoiceSummaries,
     } = await import("@/lib/server/invoiceRead");
-    const authorizationAreas = ["auftraege", "geld"] as const;
+    const authorizationAreas = ["auftraege", 'preise','zahlungen','buchhaltung'] as const;
     const authorization: AuthorizationSnapshot = {
       userId: USER_ID,
       tenantId: TENANT_ID,

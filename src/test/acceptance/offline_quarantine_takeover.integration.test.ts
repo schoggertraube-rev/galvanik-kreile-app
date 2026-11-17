@@ -34,7 +34,7 @@ it('file takeover requires Eingang and is projected only after the actual immuta
  const file=new File(['TEST immutable takeover bytes'],'TEST-original.txt',{type:'text/plain'}),sha256=createHash('sha256').update(Buffer.from(await file.arrayBuffer())).digest('hex'),deviceId=randomUUID();
  const originalRecord=JSON.stringify({name:file.name,mime:file.type,bytes:file.size});
  const input={itemId:randomUUID(),fileId:randomUUID(),name:file.name,mime:file.type,bytes:file.size,sha256,deviceId,deviceCapturedAt:new Date().toISOString(),takeover:{sourceId:'quarantine:TEST-file-'+randomUUID(),deviceId,originalRecord,sha256:createHash('sha256').update(originalRecord).digest('hex')}};
- const money=await createFixture(['geld'],'buero');
+ const money=await createFixture(['preise','zahlungen','buchhaltung'],'buero');
  expect(await withSession(money,()=>prepareIntakeFileAction(input))).toMatchObject({code:'FORBIDDEN'});
  const prepared=await withSession(full,()=>prepareIntakeFileAction(input));if(prepared.code!=='OK'||!prepared.upload)throw Error('TEST_REAL_FILE_GRANT');
  const before=await withSession(full,()=>getIntakeCaptureAction(input.itemId));expect(before).toMatchObject({code:'OK'});if(before.code==='OK')expect(before.capture.takeovers).toBeUndefined();

@@ -71,7 +71,7 @@ describe("order intake read ports", () => {
     }]);
     expect(execute.mock.calls[0]?.[0].text).toContain("private.v_order_intake_customers_v1");
     expect(execute.mock.calls[0]?.[0].text).toContain("private.v_order_intake_customers_v1");
-    expect(execute.mock.calls[0]?.[0].text).toContain("customer.customer_type");
+    expect(execute.mock.calls[0]?.[0].text).not.toContain("customer.customer_type <> 'lieferant'");
 
     execute.mockResolvedValueOnce(Array.from({length:11},(_,index)=>({...customerRow,id:"customer-"+String(index).padStart(2,"0"),name:"Musterkunde "+String(index).padStart(2,"0")})));
     const capped=await searchOrderIntakeCustomers(authorization,{query:"muster"});

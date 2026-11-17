@@ -256,7 +256,7 @@ export async function getOrderIntakeReceiptAction(
   try {
     const domain = await import("@/lib/server/orderIntakeRead");
     const receipt=await domain.readOrderIntakeReceipt(authorization.data, input);
-    return { ok: true, data: receipt?domain.presentOrderIntakeReceipt(receipt,hasAuthorizationArea(authorization.data,"geld")):null };
+    return { ok: true, data: receipt?domain.presentOrderIntakeReceipt(receipt,hasAuthorizationArea(authorization.data,"preise")):null };
   } catch (error) {
     console.error("[ORDER_INTAKE_RECEIPT_READ_FAILED]",error);
     return { ok: false, error: "QUERY_ERROR", message: "Wareneingangsbeleg konnte nicht sicher geladen werden." };

@@ -12,7 +12,7 @@ import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {getGoodsReceiptsAction,saveGoodsReceiptAction} from '@/app/actions/eingang.actions';
 
 it.each([false,true])('S05K A5 withdraws only unstarted rework atomically, with fresh retry (started=%s)',async(started)=>{
- const decision=await createFixture(['eingang','auftraege','kunden','geld','entscheiden']);
+ const decision=await createFixture(['eingang','auftraege','kunden','preise','zahlungen','buchhaltung','entscheiden']);
  const source=await readyInvoiceOrder('S05K A5 '+started),photoId=await storeOrderPhoto(source.orderId);
  const complaint=await withSession(decision,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey:randomUUID(),orderId:source.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:source.items[0].id,menge:1}],defect:'Blasen',description:'TEST S05K Ruecknahme',photoIds:[photoId],goodsReturn:'ja'}));
  if(complaint.code!=='OK')throw Error('TEST_A5_COMPLAINT:'+complaint.code);

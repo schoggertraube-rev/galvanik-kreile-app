@@ -1,4 +1,5 @@
 'use client';
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Button,Dialog,Hinweis,KrApp,Toast,useKrGeraet} from '@/ui/kr';
@@ -9,10 +10,10 @@ export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoiceP
  const [entry,setEntry]=useState<{key:string;view:InvoiceView}|null>(null),[loading,setLoading]=useState(false),[failure,setFailure]=useState<string|null>(null);
  const [message,setMessage]=useState<{text:string;taskId?:string}|null>(null),device=useKrGeraet(),generation=useRef(0);
  const open=useCallback(async(arg:string)=>{
-  if(!allowed){setMessage({text:'Recht Geld fehlt'});return;}
+  if(!allowed){setMessage({text:FINANCIAL_ACCESS_COPY.bookkeepingMissing});return;}
   const id=arg.split('#',2)[0];if(!id)return;const current=++generation.current;setLoading(true);setFailure(null);
   try{const result=await ports.read({id});if(current!==generation.current)return;
-   if(result.code!=='OK'){if(result.code==='FORBIDDEN'){setMessage({text:'Recht Geld fehlt'});return;}setFailure(result.message);return;}
+   if(result.code!=='OK'){if(result.code==='FORBIDDEN'){setMessage({text:FINANCIAL_ACCESS_COPY.bookkeepingMissing});return;}setFailure(result.message);return;}
    setEntry({key:crypto.randomUUID(),view:result.view});
   }catch(error){console.error('[INVOICE_DIALOG_OPEN_FAILED]',error);if(current===generation.current)setFailure('Rechnung konnte nicht gelesen werden · Fehlercode: INVOICE_DIALOG_OPEN_FAILED.');}
   finally{if(current===generation.current)setLoading(false);}

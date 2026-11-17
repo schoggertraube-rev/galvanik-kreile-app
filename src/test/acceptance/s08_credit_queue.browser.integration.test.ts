@@ -32,7 +32,7 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('A08-11 uses one native queue f
  // Plain browser bridge externalizes unused Next Action references. Financial
  // execution still goes through the actual HTTP route and its real writers.
  const compiled=await build({stdin:{contents:"export * from './src/lib/offline/pendingStore';export {syncPendingFiles} from './src/lib/offline/syncPendingFiles';export {replayOfflineWorkshopHttp} from './src/lib/offline/replayWorkshopHttp';export {queueFinancialCommand,queueHandoverCommand,queueDeliveryNoteCommand} from './src/lib/offline/queueFinancialCommand';export {installServerReachability,readServerReachability} from './src/lib/offline/serverReachability';",resolveDir:process.cwd()},external:['@/app/actions/*','@/modules/eingang/public'],bundle:true,write:false,format:'esm',platform:'browser'});
- const foreign=await createFixture(['geld'],'buero');let actor=full,loseResponse=true,calls=0;
+ const foreign=await createFixture(['preise','zahlungen','buchhaltung'],'buero');let actor=full,loseResponse=true,calls=0;
  const receipts=new Map<string,string[]>();
  const server=createServer(async(req,res)=>{
   if(req.url==='/TEST-unreachable'){res.writeHead(503,{'cache-control':'no-store'});res.end('TEST actual unavailable server');return;}

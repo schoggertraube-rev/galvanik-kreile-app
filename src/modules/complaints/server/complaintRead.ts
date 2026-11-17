@@ -16,10 +16,10 @@ export async function readComplaintsForAuthorization(auth:AuthorizationSnapshot,
  if(!filter||typeof filter!=='object'||Array.isArray(filter)||Object.keys(filter).some(key=>!['customerId','orderId','complaintId'].includes(key))
   ||Object.values(filter).some(value=>typeof value!=='string'||value.trim()!==value||!value||value.length>128))return {code:'VALIDATION_ERROR',message:'Reklamationsfilter ist ungültig.'};
  try{
-  if(!(['auftraege','entscheiden','geld','kunden'] as const).some(area=>hasAuthorizationArea(auth,area)))return {code:'FORBIDDEN',message:'Reklamationen sind für diesen Login nicht freigegeben.'};
+  if(!(['auftraege','entscheiden','zahlungen','kunden'] as const).some(area=>hasAuthorizationArea(auth,area)))return {code:'FORBIDDEN',message:'Reklamationen sind für diesen Login nicht freigegeben.'};
   const value=filter as ComplaintFilter;
   return await withPrivilegedTenantTransaction(auth,async tx=>{
-   const money=hasAuthorizationArea(auth,'geld');
+   const money=hasAuthorizationArea(auth,'zahlungen');
    const complaints=await tx.execute<Complaint>(sql`SELECT complaint.id,complaint.customer_id AS "customerId",complaint.order_id AS "orderId",complaint.intake_item_id::text AS "itemId",complaint.item_id AS "legacyPositionId",complaint.reason,
     complaint.station_id AS "stationId",complaint.description,complaint.photo_ids AS "photoIds",complaint.created_at::text AS "createdAt",complaint.resolved_at::text AS "resolvedAt",complaint.resolution,complaint.status,
     complaint.nummer,complaint.stand,complaint.bewertung,complaint.massnahme,complaint.nacharbeit_auftrag_id AS "nacharbeitAuftragId",complaint.version,complaint.teile,complaint.mangel,complaint.ware_zurueck AS "wareZurueck",complaint.begruendung,

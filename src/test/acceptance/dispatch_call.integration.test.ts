@@ -67,7 +67,7 @@ it('E5 after a synthetic expired E4 creates one real assigned task and closes on
  expect(attempts[1]).toMatchObject({taskId:created.taskId});expect(await withSession(full,()=>createStorageFinalTaskAction(JSON.parse(JSON.stringify(request))))).toMatchObject({code:'OK',taskId:created.taskId,replayed:true});
  const task=await withSession(recipient,()=>getIntakeTaskAction({taskId:created.taskId}));expect(task).toMatchObject({code:'OK',canComplete:true,task:{status:'offen',fuer_login:recipient.actorId}});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${created.taskId}`).toEqual([{n:1}]);
- const operator=await createFixture(['auftraege','geld'],'buero');
+ const operator=await createFixture(['auftraege','preise','zahlungen','buchhaltung'],'buero');
  const firstOut={orderId:first.orderId,expectedVersion:first.version,mode:'abholung' as const,clientEventId:randomUUID()};
  expect(await withSession(operator,()=>recordGoodsOutAction(firstOut))).toMatchObject({code:'OK'});
  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.taskId}::uuid`).toEqual([{status:'offen'}]);
@@ -148,7 +148,7 @@ it('E5 expired original preserves task ownership, fresh retries and later-ware p
  expect(secondLetter).toMatchObject({state:'SENT',threadId:secondOriginal.threadId});
  const secondFinalRequest={...finalRequest,clientKey:secondLetter.clientKey};
  const secondFinal=await withSession(full,()=>createStorageFinalTaskAction(secondFinalRequest));if(secondFinal.code!=='OK')throw Error('E5_SECOND_FINAL');
- const operator=await createFixture(['auftraege','geld'],'buero');
+ const operator=await createFixture(['auftraege','preise','zahlungen','buchhaltung'],'buero');
  const goodsOut={orderId:later.orderId,mode:'abholung' as const,expectedVersion:secondOrder.version,clientEventId:randomUUID()};
  await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${secondFinal.taskId}`;
  expect(await withSession(operator,()=>recordGoodsOutAction(goodsOut))).toMatchObject({code:'OK'});
@@ -289,7 +289,7 @@ it('handing over the remaining goods completes the existing callback atomically 
  expect(await sql`SELECT station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second.orderId}`).toEqual([{station:'abgeholt',version:second.version+1}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${release.clientEventId}::uuid`).toEqual([{n:1}]);
  const warnings=await sql`SELECT id::text,fuer_bereich,erstellt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${second.orderId} AND titel LIKE 'Erinnerungsbeleg zu %'`;
- expect(warnings).toEqual([{id:expect.any(String),fuer_bereich:'geld',erstellt_von:full.actorId}]);
+ expect(warnings).toEqual([{id:expect.any(String),fuer_bereich:'zahlungen',erstellt_von:full.actorId}]);
  await sql`UPDATE public.events SET status='success' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${created.taskId}`;
  // Live area policy changes do not duplicate or silently reassign the original warning.
  await createFixture(['entscheiden'],'meister');

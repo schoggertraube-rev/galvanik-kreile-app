@@ -99,7 +99,7 @@ async function createFixture(): Promise<Fixture> {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
-      FROM unnest(ARRAY['eingang', 'auftraege', 'kunden', 'geld']::text[]) area
+      FROM unnest(ARRAY['eingang', 'auftraege', 'kunden', 'preise', 'zahlungen', 'buchhaltung']::text[]) area
     `;
     await transaction`
       INSERT INTO public.company_settings (
@@ -173,9 +173,9 @@ async function incomingFixture(){
  return {actor,input};
 }
 describe('AP-EIN incoming invoice real UI actions -> rows/events -> same read model',()=>{
- it('3.8 Geld alone: original access stays limited to invoice attachments; new supplier uses the same customer/assignment writer',async()=>{
+ it('3.8 Bookkeeping alone: invoice originals stay scoped; supplier creation requires the existing intake/customer rights',async()=>{
   const {actor,input}=await incomingFixture();
-  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${actor.actorId}::uuid AND bereich<>'geld'`;
+  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${actor.actorId}::uuid AND bereich<>'buchhaltung'`;
   await sql`UPDATE public.intake_item SET kanal='mail',text='SYNTHETISCH Mailinhalt bleibt geschützt',kunde_id=NULL,zuordnung='offen' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.itemId}::uuid`;
   const {getIncomingInvoiceAction,openIntakeOriginalAction,confirmIntakeOriginalAction,createCustomerForIntakeAction,getIntakeCaptureAction,prepareIntakeFileAction,finishIntakeFileAction,saveIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
   expect(await withSession(actor,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:'FORBIDDEN'});
@@ -186,10 +186,13 @@ describe('AP-EIN incoming invoice real UI actions -> rows/events -> same read mo
   expect(await withSession(actor,()=>confirmIntakeOriginalAction({fileId:input.fileId,clientEventId:randomUUID()}))).toMatchObject({code:'OK',count:1});
   expect(await sql`SELECT geprueft_von::text AS actor FROM public.intake_suggestion WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${suggestionId}::uuid`).toEqual([{actor:actor.actorId}]);
   const create={itemId:input.itemId,version:1,customer:{clientEventId:randomUUID(),customerType:'lieferant',companyName:'SYNTHETISCH Neuer Lieferant '+input.itemId,country:'DE'}};
+  expect(await withSession(actor,()=>createCustomerForIntakeAction(create))).toMatchObject({code:'FORBIDDEN'});
+  await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) SELECT ${KREILE_TENANT_SLUG},${actor.actorId}::uuid,area,${actor.actorId}::uuid FROM unnest(ARRAY['eingang','kunden']::text[]) area`;
   const saved=await withSession(actor,()=>createCustomerForIntakeAction(create));if(saved.code!=='OK')throw Error('INCOMING_SUPPLIER:'+JSON.stringify(saved));
   expect(await sql`SELECT type FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.customer.id}`).toEqual([{type:'lieferant'}]);
   expect(await sql`SELECT kunde_id,version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.itemId}::uuid`).toEqual([{kunde_id:saved.customer.id,version:2}]);
   expect(await withSession(actor,()=>getIncomingInvoiceAction({id:input.itemId}))).toMatchObject({code:'OK',view:{supplier:{id:saved.customer.id},item:{version:2},uncertain:0}});
+  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${actor.actorId}::uuid AND bereich IN ('eingang','kunden')`;
   const [original]=await sql`SELECT sha256,bytes::int AS bytes FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`,proofId=randomUUID();
   const finished=await withLocalReplayStorage(async()=>{
    expect(await withSession(actor,()=>prepareIntakeFileAction({itemId:randomUUID(),fileId:randomUUID(),name:'SYNTHETISCH-Nachweis.jpg',mime:'image/jpeg',bytes:original.bytes,sha256:original.sha256}))).toMatchObject({code:'FORBIDDEN'});
@@ -198,7 +201,7 @@ describe('AP-EIN incoming invoice real UI actions -> rows/events -> same read mo
   });expect(finished).toMatchObject({code:'OK',capture:{text:null,orderId:null,files:expect.arrayContaining([expect.objectContaining({id:proofId})])}});
   expect(await sql`SELECT nachher->>'fileId' AS file FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid AND art='original_gespeichert' AND befehl_id=${proofId}::uuid`).toEqual([{file:proofId}]);
   const booked=await withSession(actor,()=>saveIncomingInvoiceAction({...input,version:2,fields:{...input.fields,lieferantId:saved.customer.id},status:'bezahlt',paidDate:'2026-11-01',proofFileId:proofId}));
-  if(booked.code!=='OK')throw Error('INCOMING_GELD_ONLY_PROOF:'+JSON.stringify(booked));
+  if(booked.code!=='OK')throw Error('INCOMING_BOOKKEEPING_ONLY_PROOF:'+JSON.stringify(booked));
   expect(await sql`SELECT nachweis_file_id::text,zahlstatus FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${booked.invoice.id}::uuid`).toEqual([{nachweis_file_id:proofId,zahlstatus:'bezahlt'}]);
   expect(await withSession(actor,()=>getIncomingInvoiceAction({id:booked.invoice.id}))).toMatchObject({code:'OK',view:{invoice:{nachweis_file_id:proofId,zahlstatus:'bezahlt'}}});
  },60000);
@@ -220,13 +223,13 @@ describe('AP-EIN incoming invoice real UI actions -> rows/events -> same read mo
   expect(await withSession(actor,()=>getIncomingInvoiceAction({id:saved.invoice.id}))).toMatchObject({code:'OK',view:{invoice:{id:saved.invoice.id,zahlstatus:'bezahlt',version:2}}});
   expect((await sql`SELECT text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND kunde_id=${actor.customerId} AND verweis_item=${input.itemId}::uuid`).map(row=>row.text)).toEqual(expect.arrayContaining([expect.stringContaining('offen'),expect.stringContaining('bezahlt')]));
  },60000);
- it('R04/R07 unclear invoice and one Geld task are atomic; clarification completes that same task and records before/after',async()=>{
+ it('R04/R07 unclear invoice and one bookkeeping task are atomic; clarification completes that same task and records before/after',async()=>{
   const {actor,input}=await incomingFixture();
   const {saveIncomingInvoiceAction,clarifyIncomingInvoiceAction,getIncomingInvoiceAction,getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
   const saved=await withSession(actor,()=>saveIncomingInvoiceAction({...input,status:'unklar',unclearReason:'SYNTHETISCH Betrag am Original prüfen'}));if(saved.code!=='OK')throw Error('INCOMING_R04:'+JSON.stringify(saved));
   expect(saved.invoice).toMatchObject({zahlstatus:'unklar',unklar_grund:'SYNTHETISCH Betrag am Original prüfen',aufgabe_id:expect.any(String)});
   const taskId=saved.invoice.aufgabe_id!;
-  expect(await sql`SELECT art,fuer_bereich,status,bezug_typ,bezug_id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${taskId}::uuid`).toEqual([{art:'rechnung',fuer_bereich:'geld',status:'offen',bezug_typ:'eingangsrechnung',bezug_id:saved.invoice.id}]);
+  expect(await sql`SELECT art,fuer_bereich,status,bezug_typ,bezug_id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${taskId}::uuid`).toEqual([{art:'rechnung',fuer_bereich:'buchhaltung',status:'offen',bezug_typ:'eingangsrechnung',bezug_id:saved.invoice.id}]);
   expect(await withSession(actor,()=>getIntakeTaskAction({taskId}))).toMatchObject({code:'OK',canComplete:false,reference:{type:'eingangsrechnung',id:saved.invoice.id},task:{status:'offen'}});
   expect(await withSession(actor,()=>completeIntakeTaskAction({taskId,version:1,note:null}))).toMatchObject({code:'FORBIDDEN'});
   const change:InvoiceChangeInput={invoiceId:saved.invoice.id,version:1,clientKey:randomUUID(),result:'ungueltig',paidDate:null,proofFileId:null,duplicateId:null,reason:'SYNTHETISCH keine gültige Rechnung',fields:null};
@@ -237,11 +240,11 @@ describe('AP-EIN incoming invoice real UI actions -> rows/events -> same read mo
   expect(await withSession(actor,()=>clarifyIncomingInvoiceAction(change))).toEqual({...result,replayed:true});
   expect(await withSession(actor,()=>getIncomingInvoiceAction({id:saved.invoice.id}))).toMatchObject({code:'OK',view:{invoice:{zahlstatus:'ungueltig',version:2}}});
  },60000);
- it('R03/R10 rejects missing fields and Geld-less calls before a row, source mutation, or event; stale data also remains intact',async()=>{
+ it('R03/R10 rejects missing fields and calls without bookkeeping before a row, source mutation, or event; stale data also remains intact',async()=>{
   const {actor,input}=await incomingFixture();const {saveIncomingInvoiceAction,getIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
   expect(await withSession(actor,()=>saveIncomingInvoiceAction({...input,fields:{...input.fields,nummer:''}}))).toMatchObject({code:'VALIDATION_ERROR',fields:{nummer:expect.any(String)}});
   expect(await withSession(actor,()=>saveIncomingInvoiceAction({...input,version:2}))).toMatchObject({code:'CONFLICT'});
-  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${actor.actorId}::uuid AND bereich='geld'`;
+  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${actor.actorId}::uuid AND bereich='buchhaltung'`;
   expect(await withSession(actor,()=>saveIncomingInvoiceAction(input))).toMatchObject({code:'FORBIDDEN'});
   expect(await withSession(actor,()=>getIncomingInvoiceAction({id:input.itemId}))).toMatchObject({code:'FORBIDDEN'});
   expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid`).toHaveLength(0);
