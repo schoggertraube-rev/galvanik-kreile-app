@@ -2,6 +2,7 @@
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
 
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {applyPinChangeRateLimit} from "@/lib/server/pinRateLimit";
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
@@ -39,6 +40,7 @@ async function settingsContext() {
       canManageLogins: areas.includes("logins"),
       canManageSystem: areas.includes("wartung"),
       canManageFinancial: hasAuthorizationArea(result.data,'preise'),
+      canManageStorageCharges: hasAuthorizationArea(result.data,'zahlungen'),
     },
   };
 }
@@ -78,15 +80,15 @@ async function refreshSettingsSession(authorization: {
   });
 }
 
-function presentShippingSettings<T extends object>(result:T,canReadMoney:boolean):T{
- if(canReadMoney)return result;
+function presentShippingSettings<T extends object>(result:T,canReadPrices:boolean,canReadPayments:boolean):T{
+ if(canReadPrices&&canReadPayments)return result;
  const presented={...result} as Record<string,unknown>;
  for(const key of ['settings','current']){
   const settings=presented[key];if(!settings||typeof settings!=='object'||Array.isArray(settings))continue;
   const value=settings as Record<string,unknown>,policy=value.dispatchPolicy;
-  const operationalSettings={...value};delete operationalSettings.shippingFeeCents;
+  const operationalSettings={...value};if(!canReadPrices)delete operationalSettings.shippingFeeCents;
   presented[key]=operationalSettings;
-  if(policy&&typeof policy==='object'&&!Array.isArray(policy)){
+  if(!canReadPayments&&policy&&typeof policy==='object'&&!Array.isArray(policy)){
    const operational={...policy} as Record<string,unknown>;delete operational.storageWeeklyCents;
    presented[key]={...operationalSettings,dispatchPolicy:operational};
   }
@@ -97,7 +99,7 @@ export async function readShippingSettingsAction(){
  const resolved=await settingsContext();if(!resolved)return {code:"UNAUTHENTICATED" as const,message:"Sitzung fehlt."};
  const {readShippingSettings}=await import("@/modules/fundament/server-public");
  const result=await readShippingSettings({...resolved.context,canRead:resolved.context.canManageCompany===true||resolved.authorization.areas?.includes("auftraege")===true});
- return presentShippingSettings(result,hasAuthorizationArea(resolved.authorization,'preise'));
+ return presentShippingSettings(result,resolved.context.canManageFinancial,resolved.context.canManageStorageCharges);
 }
 export async function saveQuoteSettingsAction(input:unknown) {
  return observeAction('saveQuoteSettingsAction',subjectForAction('saveQuoteSettingsAction',input),async()=>{
@@ -114,7 +116,7 @@ export async function saveShippingSettingsAction(input:unknown){
  return observeAction('saveShippingSettingsAction',subjectForAction('saveShippingSettingsAction',input),async()=>{
  const resolved=await settingsContext();if(!resolved)return {code:"UNAUTHENTICATED" as const,message:"Sitzung fehlt."};
  const {updateShippingSettings}=await import("@/modules/fundament/server-public");const result=await updateShippingSettings(resolved.context,input);
- return presentShippingSettings(result,hasAuthorizationArea(resolved.authorization,'preise'));
+ return presentShippingSettings(result,resolved.context.canManageFinancial,resolved.context.canManageStorageCharges);
 
  },readLoggingSettings);
 }
@@ -126,12 +128,13 @@ export async function readSettingsAction() {
   const { context } = resolved;
   const canManageCompany = resolved.authorization.areas?.includes("einstellungen") ?? false;
   const canManageLogins = resolved.authorization.areas?.includes("logins") ?? false;
+  const canManageFinancial = resolved.context.canManageFinancial;
   const [settings, catalog, hourlyRate] = await Promise.all([
     readSystemSettings(context),
-    canManageCompany
+    canManageCompany && canManageFinancial
       ? listCatalogServices({ tenantId: context.tenantId, actorId: context.actorId, canRead: true, canManage: true }, true)
       : Promise.resolve({ code: "OK" as const, services: [] }),
-    canManageCompany
+    canManageCompany && canManageFinancial
       ? import("@/lib/server/commands/extraWorkAdminCommand").then(({ readExtraWorkHourlyRate }) => readExtraWorkHourlyRate())
       : Promise.resolve({ code: "OK" as const, rate: { rateId: null, hourlyRateCents: null, version: 0 } }),
   ]);
@@ -248,6 +251,7 @@ export async function saveCatalogServiceAction(input: SaveCatalogServiceInput) {
  return observeAction('saveCatalogServiceAction',subjectForAction('saveCatalogServiceAction',input),async()=>{
   const resolved = await settingsContext();
   if (!resolved?.authorization.areas?.includes("einstellungen")) return { code: "FORBIDDEN" as const, message: "Leistungen dürfen nicht geändert werden." };
+  if (!resolved.context.canManageFinancial) return { code: "FORBIDDEN" as const, message: FINANCIAL_ACCESS_COPY.pricesMissing };
   const result = await saveCatalogService({ tenantId: resolved.context.tenantId, actorId: resolved.context.actorId, canRead: true, canManage: true }, input);
   if (result.code === "OK") revalidatePath("/settings");
   return result;

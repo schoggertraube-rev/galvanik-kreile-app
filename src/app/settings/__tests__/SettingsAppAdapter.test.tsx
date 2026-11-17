@@ -67,7 +67,16 @@ describe("Gregor system administration composition", () => {
       code: "OK",
       user: { id: "33333333-3333-4333-8333-333333333333", email: null, fullName: "Nina Neu", shortCode: "NN", designation: "", role: "werkstatt", active: true, areas: ["auftraege", "eingang", "kunden"], fixedAreas: [], isCurrent: false },
     });
-    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], capabilities:{canManageCompany:true,canManageLogins:true,canManageSystem:true}, numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
+    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], capabilities:{canManageCompany:true,canManageLogins:true,canManageSystem:true,canManageFinancial:true}, numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
+  });
+
+  it("keeps legal company settings and return navigation available without exposing price editors", async () => {
+    const source = await ports.readSettings();
+    ports.readSettings.mockResolvedValue({...source,snapshot:{...source.snapshot,capabilities:{...source.snapshot.capabilities,canManageFinancial:false}}});
+    render(await SettingsAppAdapter());
+    expect(screen.getByRole("button",{name:"Firmendaten speichern"})).toBeInTheDocument();
+    expect(screen.queryByRole("button",{name:"Leistungskatalog"})).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Stundensatz Mehrarbeit (€/h)")).not.toBeInTheDocument();
   });
 
   it("renders settings for an admin role", async () => {

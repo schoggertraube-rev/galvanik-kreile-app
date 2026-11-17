@@ -1,6 +1,8 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import { hasAuthorizationArea as hasArea } from "@/lib/auth/authorizationContract";
+import { FINANCIAL_ACCESS_COPY } from "@/ui/financialAccessCopy";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
@@ -241,7 +243,7 @@ function mapRateReceipt(
   };
 }
 
-async function resolveAdminAuthorization(): Promise<
+async function resolveAdminAuthorization(financial = false): Promise<
   | { ok: true; data: Awaited<ReturnType<typeof resolveAuthorization>> & { ok: true } }
   | { ok: false; result: CommandDenial }
 > {
@@ -262,6 +264,7 @@ async function resolveAdminAuthorization(): Promise<
   if (!authorization.data.areas?.includes("einstellungen")) {
     return { ok: false, result: { code: "FORBIDDEN", message: "Firmen-Einstellungen sind nicht freigegeben." } };
   }
+  if (financial && !hasArea(authorization.data, "preise")) return { ok: false, result: { code: "FORBIDDEN", message: FINANCIAL_ACCESS_COPY.pricesMissing } };
   return { ok: true, data: authorization as Awaited<ReturnType<typeof resolveAuthorization>> & { ok: true } };
 }
 
@@ -412,7 +415,7 @@ export async function setExtraWorkHourlyRate(
   if (!isValidRateInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültiger Stundensatz." };
   }
-  const authorization = await resolveAdminAuthorization();
+  const authorization = await resolveAdminAuthorization(true);
   if (!authorization.ok) return authorization.result;
   const snapshot = authorization.data.data;
 
@@ -519,7 +522,7 @@ export async function readExtraWorkHourlyRate(): Promise<
   | { code: "OK"; rate: ExtraWorkHourlyRateSnapshot }
   | CommandDenial
 > {
-  const authorization = await resolveAdminAuthorization();
+  const authorization = await resolveAdminAuthorization(true);
   if (!authorization.ok) return authorization.result;
   const snapshot = authorization.data.data;
   try {

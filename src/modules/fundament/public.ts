@@ -59,7 +59,7 @@ export type SystemSettingsSnapshot = {
   company: CompanySettingsSnapshot;
   extraWorkHourlyRate: { rateId: string | null; hourlyRateCents: number | null; version: number };
   users: ManagedUser[];
-  capabilities: { canManageCompany: boolean; canManageLogins: boolean; canManageSystem: boolean };
+  capabilities: { canManageCompany: boolean; canManageLogins: boolean; canManageSystem: boolean; canManageFinancial?: boolean };
   numberRanges: Array<{ label: string; pattern: string }>;
   features: import("./featureCatalog").SalesStageFeature[];
 };

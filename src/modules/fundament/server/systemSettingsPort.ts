@@ -44,6 +44,7 @@ export type SystemSettingsContext = {
   canManageLogins?: boolean;
   canManageSystem?: boolean;
   canManageFinancial?: boolean;
+  canManageStorageCharges?: boolean;
 };
 export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean;includeDeliveryNoteIdentity?:boolean };
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number };
@@ -97,7 +98,7 @@ export async function updateShippingSettings(context:SystemSettingsContext,input
    const current=await readShippingSettingsInTransaction(tx,context.tenantId);
    if(!current)return {code:"NOT_FOUND" as const,message:"Firmendaten müssen zuerst gespeichert werden."};
    const submitted=value.dispatchPolicy as import('../dispatchPolicy').DispatchPolicy|null|undefined;
-   if(context.canManageFinancial!==true&&(submitted&&'storageWeeklyCents'in submitted||submitted===null&&current.dispatchPolicy?.storageWeeklyCents!=null))return {code:'FORBIDDEN' as const,message:STORAGE_CHARGE_COPY.forbidden};
+   if(context.canManageStorageCharges!==true&&(submitted&&'storageWeeklyCents'in submitted||submitted===null&&current.dispatchPolicy?.storageWeeklyCents!=null))return {code:'FORBIDDEN' as const,message:STORAGE_CHARGE_COPY.forbidden};
    const policy=submitted&& !('storageWeeklyCents'in submitted)&&current.dispatchPolicy?.storageWeeklyCents!==undefined?{...submitted,storageWeeklyCents:current.dispatchPolicy.storageWeeklyCents}:submitted;
    const effectivePolicy='dispatchPolicy'in value?policy:current.dispatchPolicy;
    const effectiveFee='shippingFeeCents'in value?value.shippingFeeCents:current.shippingFeeCents;
@@ -203,6 +204,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
           canManageCompany: context.canManageCompany ?? context.canManage,
           canManageLogins: context.canManageLogins ?? context.canManage,
           canManageSystem: context.canManageSystem ?? context.canManage,
+          canManageFinancial: context.canManageFinancial === true,
         },
         numberRanges: [
           { label: "Kunden", pattern: "K-JJJJ-fortlaufend" },

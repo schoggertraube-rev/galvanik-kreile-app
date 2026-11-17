@@ -109,7 +109,7 @@ export type LiveOrderCard = {
 export type ExtraWorkMasterData = {
   currentRate: null | {
     id: string;
-    hourlyRateCents: number;
+    hourlyRateCents: number | null;
     version: number;
     effectiveAt: string;
   };
@@ -974,7 +974,7 @@ export async function readExtraWorkMasterData(
         ) throw new Error("EXTRA_WORK_CURRENT_RATE_INVALID");
         return {
           id: rate.id,
-          hourlyRateCents: rate.hourly_rate_cents,
+          hourlyRateCents: authorization.permissions.includes("perm_view_prices") ? rate.hourly_rate_cents : null,
           version: rate.version,
           effectiveAt: toIso(rate.effective_at),
         };
