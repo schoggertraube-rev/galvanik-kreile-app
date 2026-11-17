@@ -8,6 +8,7 @@ import {sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablau
 import {listOutlookInboxAction} from '@/app/actions/communications.actions';
 import {customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {getOpenIntakeMailsAction,getIntakeMessagesAction,getIntakeCaptureAction,getIntakeTaskAction,assignIntakeCustomerAction,saveIntakeTaskAction} from '@/app/actions/eingang.actions';
+import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
 
 it('S05K A2 parks one failed Graph mail while securing the other two originals',async()=>{
  const run=randomUUID(),text='TEST Bitte senden Sie einen Kostenvoranschlag.';
@@ -42,7 +43,7 @@ it('S05K A2 parks one failed Graph mail while securing the other two originals',
  const [secured]=await sql`SELECT count(*)::integer AS n FROM public.intake_item source WHERE source.tenant_id=${tenant} AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=source.tenant_id AND receipt.item_id=source.id AND receipt.nachher->>'action'='mail_import_complete')`;
  expect(secured.n).toBe(2);
  const parked=await sql`SELECT graph_message_id,kennzeichen FROM public.intake_item WHERE tenant_id=${tenant} AND graph_message_id=${messages[0].id}`;
- expect(parked).toHaveLength(1);expect(parked[0].kennzeichen).toContain('Import fehlgeschlagen');
+ expect(parked).toHaveLength(1);expect(parked[0].kennzeichen).toContain('mail_import_fehlgeschlagen');expect(parked[0].kennzeichen).not.toContain('Import fehlgeschlagen');
  // The failed source is older than watermark minus5min. Retry must therefore
  // read its persisted Graph identity, not rely on the next inbox listing.
  const countTasks=async()=>{const [row]=await sql`SELECT count(*)::integer AS n FROM public.tasks WHERE tenant_id=${tenant} AND fuer_bereich='eingang'`;return row.n;};
@@ -56,12 +57,22 @@ it('S05K A2 parks one failed Graph mail while securing the other two originals',
  const chosenCustomer=await customerFixture('S05K A2 chosen customer');
  const [beforeRecovery]=await sql`SELECT version FROM public.intake_item WHERE tenant_id=${tenant} AND id=${failedRow!.id}::uuid`;
  expect(await withSession(full,()=>assignIntakeCustomerAction({itemId:failedRow!.id,version:beforeRecovery.version,customerId:chosenCustomer,clientEventId:randomUUID(),mode:'manual'}))).toMatchObject({code:'OK'});
- broken=false;
- expect(await withSession(full,()=>getOpenIntakeMailsAction())).toMatchObject({code:'OK'});
+ // Explicit isolated historical-format fixture. Old flag bytes and unrelated
+ // flags survive a catalog wording change; recovery removes both failure forms.
+ await sql`UPDATE public.intake_item SET kennzeichen=array_append(array_replace(kennzeichen,'mail_import_fehlgeschlagen','Import fehlgeschlagen'),'TEST-K5-preserve') WHERE tenant_id=${tenant} AND id=${failedRow!.id}::uuid`;
+ const oldLabel=MAIL_IMPORT_COPY.failed;
+ try{
+  Object.defineProperty(MAIL_IMPORT_COPY,'failed',{value:'SYNTHETISCH geaenderter Katalogtext',configurable:true,writable:true});
+  const legacy=await withSession(full,()=>getIntakeMessagesAction('alle'));if(legacy.code!=='OK')throw Error('TEST_K5_LEGACY_READ');
+  expect(legacy.messages.find(row=>row.id===failedRow!.id)?.importFailure).toMatchObject({state:'FAILED',label:'SYNTHETISCH geaenderter Katalogtext',graphMessageId:messages[0].id});
+  await sql`UPDATE public.intake_item SET kennzeichen=array_append(kennzeichen,'mail_import_fehlgeschlagen') WHERE tenant_id=${tenant} AND id=${failedRow!.id}::uuid`;
+  broken=false;
+  expect(await withSession(full,()=>getOpenIntakeMailsAction())).toMatchObject({code:'OK'});
+ }finally{Object.defineProperty(MAIL_IMPORT_COPY,'failed',{value:oldLabel,configurable:true,writable:true});}
  const [recovered]=await sql`SELECT count(*)::integer AS n FROM public.intake_item source WHERE source.tenant_id=${tenant} AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=source.tenant_id AND receipt.item_id=source.id AND receipt.nachher->>'action'='mail_import_complete')`;
  expect(recovered.n).toBe(3);
  const [source]=await sql`SELECT kennzeichen,kunde_id,vorgang_id,version FROM public.intake_item WHERE tenant_id=${tenant} AND graph_message_id=${messages[0].id}`;
- expect(source.kennzeichen).not.toContain('Import fehlgeschlagen');expect(source.kunde_id).toBe(chosenCustomer);expect(source.vorgang_id).toBeNull();expect(source.version).toBeGreaterThan(beforeRecovery.version+1);
+ expect(source.kennzeichen).not.toContain('Import fehlgeschlagen');expect(source.kennzeichen).not.toContain('mail_import_fehlgeschlagen');expect(source.kennzeichen).toContain('TEST-K5-preserve');expect(source.kunde_id).toBe(chosenCustomer);expect(source.vorgang_id).toBeNull();expect(source.version).toBeGreaterThan(beforeRecovery.version+1);
  expect(await countTasks()).toBe(1);
 });
 

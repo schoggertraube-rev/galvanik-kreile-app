@@ -42,7 +42,7 @@ export async function readHistoricalDispatchClock(sql:typeof replaySql,tenantId:
   return id;
  };
  return {databaseNow,async readSentFollowup(key:string,days:number,holidays:readonly string[]=[]){
-  const rows=await sql`SELECT created_at::text AS sent_at FROM public.events WHERE tenant_id=${tenantId} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${key}::uuid`;
+  const rows=await sql`SELECT to_char(created_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS sent_at FROM public.events WHERE tenant_id=${tenantId} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND correlation_id=${key}::uuid`;
   if(rows.length!==1)throw Error('TEST_ACTUAL_REMINDER_RECEIPT_REQUIRED');
   return dispatchFollowupBoundary(rows[0].sent_at,days,databaseNow,holidays);
  },async addReminder(customerId:string,orderIds:string[],stage:'E1'|'E2'|'E4',days:number,storage?:{callTaskId?:string;appointmentEventId?:string;replyEventId?:string;freezes:Array<{orderId:string;freezeId:string}>;deadline:{date:string;due:string}}){

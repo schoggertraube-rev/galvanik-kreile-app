@@ -5,7 +5,7 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {isOfflineOriginal,normalizeOfflineOriginal,type OfflineOriginal} from '@/lib/domain/offlineOriginal';
+import {isOfflineOriginal,normalizeOfflineOriginal,offlineOccurrenceTime,type OfflineOriginal} from '@/lib/domain/offlineOriginal';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 const EVENT_TYPE = "ORDER_ITEM_EXTRA_WORK_CHANGED_V1";
@@ -425,7 +425,7 @@ export async function changeOrderItemExtraWork(
             minutes: input.minutes,
             active: input.active,
             lineVersion: nextLineVersion,
-            ...(input.offlineOriginal?{offlineOriginal:input.offlineOriginal}:{}),
+            ...(input.offlineOriginal?{offlineOriginal:input.offlineOriginal,...(offlineOccurrenceTime(input.offlineOriginal.deviceCapturedAt).geraetezeit_abweichend?{geraetezeit_abweichend:true}:{})}:{}),
           })}::jsonb,
           'success', ${authorization.data.userId}::uuid,
           ${ORDER_LIFECYCLE_STATUS.GALVANIK},

@@ -1,9 +1,15 @@
 import 'server-only';
-import {sql} from 'drizzle-orm';
+import {sql,type SQL} from 'drizzle-orm';
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
+export const MAIL_IMPORT_FAILED_FLAG='mail_import_fehlgeschlagen';
+export const LEGACY_MAIL_IMPORT_FAILED_TEXT_V1='Import fehlgeschlagen';
+/** The immutable legacy spelling is a data format, never today's display copy. */
+export function mailImportFailureFlag(column:SQL=sql`source.kennzeichen`){
+ return sql`(${MAIL_IMPORT_FAILED_FLAG}=ANY(${column}) OR ${LEGACY_MAIL_IMPORT_FAILED_TEXT_V1}=ANY(${column}))`;
+}
 /** One projection of the existing failure events and intake flag for every reader. */
 export function mailImportFailureProjection(){
- return sql`CASE WHEN ${MAIL_IMPORT_COPY.failed}=ANY(source.kennzeichen) THEN (
+ return sql`CASE WHEN ${mailImportFailureFlag()} THEN (
   SELECT jsonb_build_object('label',${MAIL_IMPORT_COPY.failed}::text,'graphMessageId',source.graph_message_id,
    'reason',(array_agg(failed.nachher->>'reason' ORDER BY failed.zeit DESC,failed.id DESC))[1],
    'mailbox',(array_agg(failed.nachher->>'mailbox' ORDER BY failed.zeit DESC,failed.id DESC))[1],

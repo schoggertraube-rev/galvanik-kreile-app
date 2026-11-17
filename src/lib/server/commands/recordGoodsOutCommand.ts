@@ -1,5 +1,5 @@
 import "server-only";
-import {normalizeOfflineOriginal} from '@/lib/domain/offlineOriginal';
+import {normalizeOfflineOriginal,offlineOccurrenceTime} from '@/lib/domain/offlineOriginal';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {isShipmentGroupInput,isShipmentGroupReceipt,type ShipmentGroupInput,type ShipmentGroupResult,type ShipmentGroupReceipt} from '@/lib/domain/shipmentGroupContract';
 import type {ManualShipmentGroupState} from '@/modules/orders/public';
@@ -1149,6 +1149,7 @@ export async function recordShipmentGroupGoodsOut(candidate:unknown,compositionF
   members.push({authorized,composition:await compositionFor(child)});
  }
  const auth=members[0].authorized.authorization.data,groupEventId=groupMemberKey(members[0].authorized.authorization.data.tenantId+':'+input.clientEventId,'original');
+ const occurrence=input.offlineOriginal?offlineOccurrenceTime(input.offlineOriginal.deviceCapturedAt):null;
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('shipment-group-key:'||${auth.tenantId}||':'||${input.clientEventId},0))`);
   if(input.offlineOriginal){
@@ -1236,7 +1237,7 @@ export async function recordShipmentGroupGoodsOut(candidate:unknown,compositionF
   const prepared:{member:typeof members[number];completion:PreparedGoodsOut;ids:string[]}[]=[];
   for(const member of members){
    const orderId=member.authorized.input.orderId,ids=current.group.members.filter(row=>row.orderId===orderId).map(row=>row.shipmentId);
-   const result=await prepareGoodsOut(tx,member.authorized,member.composition,{ids,groupEventId,trackingNumber:tracking.trackingNumber,carrier:tracking.carrier,...(input.offlineOriginal?{deviceCapturedAt:input.offlineOriginal.deviceCapturedAt}:{}),partial:current.remainingOrderIds.includes(orderId)});
+   const result=await prepareGoodsOut(tx,member.authorized,member.composition,{ids,groupEventId,trackingNumber:tracking.trackingNumber,carrier:tracking.carrier,...(occurrence?{deviceCapturedAt:occurrence.occurredAt}:{}),partial:current.remainingOrderIds.includes(orderId)});
    if(result.code!=='PREPARED'){
     if(result.code==='OK')throw Error('SHIPMENT_GROUP_CHILD_WITHOUT_ORIGINAL');
     const number=current.group.members.find(row=>row.orderId===orderId)!.orderNumber;
@@ -1255,7 +1256,7 @@ export async function recordShipmentGroupGoodsOut(candidate:unknown,compositionF
   if(clocks.length!==1)throw Error('SHIPMENT_GROUP_CLOCK_MISSING');
   const receipt:ShipmentGroupReceipt={eventId:groupEventId,clientEventId:input.clientEventId,groupId:input.groupId,groupVersion:input.expectedGroupVersion,actorId:auth.userId,occurredAt:clocks[0].at,trackingNumber:tracking.trackingNumber,carrier:tracking.carrier,shipments,...(input.offlineOriginal?{offlineOriginal:input.offlineOriginal}:{})};
   const written=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,payload,status,client_event_id,event_schema_version,aggregate_version,created_at)
-   VALUES(${groupEventId},${auth.tenantId},${input.orderId},'SHIPMENT_GROUP_HANDED_OVER_V1',${MANUAL_SHIPPING_HANDOVER_LABEL},${auth.userId}::uuid,${JSON.stringify({intent,receipt})}::jsonb,'success',${input.clientEventId}::uuid,1,1,${receipt.occurredAt}::timestamptz AT TIME ZONE 'UTC') RETURNING id`);
+   VALUES(${groupEventId},${auth.tenantId},${input.orderId},'SHIPMENT_GROUP_HANDED_OVER_V1',${MANUAL_SHIPPING_HANDOVER_LABEL},${auth.userId}::uuid,${JSON.stringify({intent,receipt,...(occurrence?.geraetezeit_abweichend?{geraetezeit_abweichend:true}:{})})}::jsonb,'success',${input.clientEventId}::uuid,1,1,${receipt.occurredAt}::timestamptz AT TIME ZONE 'UTC') RETURNING id`);
   if(written.length!==1||written[0].id!==groupEventId)throw Error('SHIPMENT_GROUP_ORIGINAL_MISSING');
   for(const row of prepared){
    const override=row.completion.partialOverride;if(!override)continue;

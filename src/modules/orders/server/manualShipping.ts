@@ -30,7 +30,7 @@ function trackingLink(settings:ShippingSettings,tracking:string|null){
 }
 async function readOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,lock=false){
  const rows=await tx.execute<Order>(sql`SELECT id,customer_id,order_number,handover_mode,station,version,
-  private.order_release_allowed_v1(tenant_id,id) AS allowed FROM public.orders
+  private.order_release_allowed_v1(tenant_id,id,true,true) AS allowed FROM public.orders
   WHERE tenant_id=${auth.tenantId} AND id=${orderId} ${lock?sql`FOR UPDATE`:sql``}`);
  if(rows.length>1)throw Error('SHIPPING_ORDER_AMBIGUOUS');return rows[0]??null;
 }

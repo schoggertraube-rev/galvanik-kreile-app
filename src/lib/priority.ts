@@ -1,4 +1,5 @@
 import { RiskLevel, getRiskConfig, RiskConfig } from "@/constants/status";
+import {berlinCalendarDay} from '@/lib/domain/workingDays';
 
 export interface PriorityEvaluation {
   risk: RiskLevel;
@@ -31,9 +32,8 @@ export function evaluateOrderPriority(order: {
     return { risk: "unknown", config, statusText: "TERMIN NICHT ERFASST", dueLabel: "Termin", dueValue: "Nicht erfasst" };
   }
 
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const due = new Date(order.dueDate);
+  const now = new Date(berlinCalendarDay());
+  const due = new Date(berlinCalendarDay(new Date(order.dueDate)));
   
   const diffTime = due.getTime() - now.getTime();
   const diffHours = diffTime / (1000 * 60 * 60);

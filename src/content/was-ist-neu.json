@@ -1,5 +1,16 @@
 [
   {
+    "datum": "2026-11-17",
+    "pr": 231,
+    "seite": "auftraege",
+    "punkte": [
+      "Du kannst eine Sendungsnummer auch bei offener Zahlungsfreigabe speichern. Die Warenübergabe bleibt gesperrt, bis sie tatsächlich freigegeben ist.",
+      "Deine offline erfassten Wareneingangsfotos behalten Gerätekennung, Warenbezug und ursprüngliche Erfassungszeit. Stark vorgestellte Geräteuhren verschieben Produktionszeiten nicht in die Zukunft.",
+      "Versandkosten von 0 € erzeugen keine Zusatzrechnung. Tagesanzeigen filtern vor der Begrenzung und rechnen Dringlichkeiten nach Berliner Kalendertagen."
+    ],
+    "ziel": "/orders"
+  },
+  {
     "datum": "2026-11-15",
     "pr": 228,
     "seite": "auftraege",

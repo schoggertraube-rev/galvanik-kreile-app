@@ -1,4 +1,5 @@
 import {recordObservedFailure} from '@/lib/server/actionObservation';
+import {offlineOccurrenceTime} from '@/lib/domain/offlineOriginal';
 import {mailImportFailureProjection} from './intakeMailFailureRead';
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
 import type {MailImportFailure} from '../mailSelectionContract';
@@ -250,7 +251,7 @@ export async function writeIntakeNoteInTransaction(
       VALUES(${auth.tenantId},${note.itemId}::uuid,'anliegen',${JSON.stringify(concern.id)}::jsonb,'vorschlag','notiz','Signal im Originaltext','offen')`);
   }
   const originalEvent=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES
-    (${auth.tenantId},${note.itemId}::uuid,'original_gespeichert',${note.textstand}::uuid,${auth.userId},${JSON.stringify(existing[0] ?? null)}::jsonb,${JSON.stringify({ text: note.text, anliegen: selected, einsatz: usage, ...(note.expectedVersion!==undefined?{expectedVersion:note.expectedVersion}:{}), ...(note.deviceCapturedAt?{deviceCapturedAt:note.deviceCapturedAt}:{}),...(note.takeover?{takeover:note.takeover,takeoverLogin:auth.displayName,action:'original_adopted'}:{}) })}::jsonb) RETURNING id`);
+    (${auth.tenantId},${note.itemId}::uuid,'original_gespeichert',${note.textstand}::uuid,${auth.userId},${JSON.stringify(existing[0] ?? null)}::jsonb,${JSON.stringify({ text: note.text, anliegen: selected, einsatz: usage, ...(note.expectedVersion!==undefined?{expectedVersion:note.expectedVersion}:{}), ...(note.deviceCapturedAt?{deviceCapturedAt:note.deviceCapturedAt,...(offlineOccurrenceTime(note.deviceCapturedAt).geraetezeit_abweichend?{geraetezeit_abweichend:true}:{})}:{}),...(note.takeover?{takeover:note.takeover,takeoverLogin:auth.displayName,action:'original_adopted'}:{}) })}::jsonb) RETURNING id`);
   if(note.takeover&&originalEvent.length!==1)throw Error('INTAKE_TAKEOVER_ORIGINAL_NOT_SAVED');
   return null;
 }

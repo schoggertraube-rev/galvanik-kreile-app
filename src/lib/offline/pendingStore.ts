@@ -1,5 +1,6 @@
 
 import {reportProtocolClientError} from '@/modules/logging/public';
+import {OFFLINE_CLOCK_TOLERANCE_MS} from '@/lib/domain/offlineOriginal';
 import type {CustomerListResponse} from '@/app/actions/customers.actions';
 import type {ActionResult} from '@/lib/server/authHelper';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
@@ -44,7 +45,9 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  if(row.command==='shipment.handover')return isShipmentGroupInput(input)&&!Object.hasOwn(input,'offlineOriginal')&&row.id===input.clientEventId&&row.itemId===input.orderId;
  if(row.command==='document.deliveryNote')return isDeliveryNoteInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderIds[0];
  if(row.command==='credit.payout')return Object.keys(data).sort().join(',')==='amount,clientEventId,customerId,expectedCreditVersion,method,note,reference'&&typeof data.customerId==='string'&&data.customerId.length>0&&data.customerId.length<=128&&row.itemId===data.customerId&&uuid(data.clientEventId)&&row.id===data.clientEventId&&Number.isSafeInteger(data.amount)&&Number(data.amount)>0&&Number.isSafeInteger(data.expectedCreditVersion)&&Number(data.expectedCreditVersion)>=0&&['bar','ueberweisung'].includes(String(data.method))&&(data.note===null||typeof data.note==='string')&&(data.reference===null||typeof data.reference==='object'&&!Array.isArray(data.reference));
- if(row.command==='invoice.issue')return isCreateInvoiceInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderId;
+ // Historical zero-fee originals stay readable; only the real writer decides
+ // acceptance and now rejects zero without creating another invoice.
+ if(row.command==='invoice.issue')return isCreateInvoiceInput(input,true)&&row.id===input.clientEventId&&row.itemId===input.orderId;
  if(row.command==='invoice.cancel')return isCancelInvoiceInput(input)&&row.id===input.clientEventId&&row.itemId===input.invoiceId;
  if(row.command==='credit.apply'){
   if(!uuid(data.invoiceId)||!uuid(data.clientEventId)||row.id!==data.clientEventId||row.itemId!==data.invoiceId||!Number.isSafeInteger(data.expectedVersion)||Number(data.expectedVersion)<0)return false;
@@ -351,7 +354,7 @@ async function retainOriginal(scope:string,original:PendingOriginal|PendingWorks
   read.onsuccess=()=>{const previous=read.result as PendingOriginal|PendingWorkshopOriginal|undefined;
    if(requiredStand){
     const age=new Date().getTime()-Date.parse(requiredStand.serverReadAt);
-    if(readCacheScopeMarker()!==requiredStand.loginScope||!shellMetadata(shell?.result,requiredStand.loginScope)||shell?.result.scope!==requiredStand.loginScope||shell.result.cacheGeneration!==requiredStand.cacheGeneration||!completeDeviceStand(stand?.result,requiredStand.loginScope)||stand?.result.serverReadAt!==requiredStand.serverReadAt||!Number.isFinite(age)||age<0||age>=24*60*60*1000){staleStand=true;tx.abort();return;}
+    if(readCacheScopeMarker()!==requiredStand.loginScope||!shellMetadata(shell?.result,requiredStand.loginScope)||shell?.result.scope!==requiredStand.loginScope||shell.result.cacheGeneration!==requiredStand.cacheGeneration||!completeDeviceStand(stand?.result,requiredStand.loginScope)||stand?.result.serverReadAt!==requiredStand.serverReadAt||!Number.isFinite(age)||age< -OFFLINE_CLOCK_TOLERANCE_MS||age>=24*60*60*1000){staleStand=true;tx.abort();return;}
    }
    if(original.kind==='workshop'&&previous){
     if(!isPendingWorkshopOriginal(previous)||previous.command!==original.command||canonicalJson(previous.input)!==canonicalJson(original.input)){tx.abort();return;}
@@ -401,6 +404,14 @@ function containsBinary(value:unknown,seen=new WeakSet<object>()):boolean{
  if(value instanceof Blob||value instanceof ArrayBuffer||ArrayBuffer.isView(value))return true;
  return Object.values(value).some(entry=>containsBinary(entry,seen));
 }
+function goodsPhotoContext(value:unknown):value is NonNullable<Extract<PendingOriginal,{kind:'file'}>['context']>{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const row=value as Record<string,unknown>,uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+ return Object.keys(row).sort().join(',')==='clientKey,orderId,photoKind,receiptId'
+  &&typeof row.orderId==='string'&&row.orderId.trim().length>0&&row.orderId.length<=128
+  &&typeof row.receiptId==='string'&&uuid.test(row.receiptId)&&typeof row.clientKey==='string'&&uuid.test(row.clientKey)
+  &&typeof row.photoKind==='string'&&['uebersicht','teile','abweichung'].includes(row.photoKind);
+}
 export async function adoptQuarantinedOriginal(scope:string,sourceId:string,deviceId:string,currentScope:()=>string|null=()=>scope){
  const login=readCacheScopeMarker();if(currentScope()!==scope)return {code:'SOURCE_INCOMPLETE' as const};
  const rows=await transaction<unknown[]>(scope,'readonly',store=>store.getAll());
@@ -415,8 +426,9 @@ export async function adoptQuarantinedOriginal(scope:string,sourceId:string,devi
  if(!file&&(!text||text.length>20000))return {code:'SOURCE_INCOMPLETE' as const};
  const serialized=quarantineCanonical(raw);if(serialized.length>250000)return {code:'SOURCE_INCOMPLETE' as const};
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(serialized))),byte=>byte.toString(16).padStart(2,'0')).join('');
- const id=crypto.randomUUID(),metadata={takeover:{sourceId,deviceId,sha256:hash,originalRecord:serialized},takeoverSourceCanonical:serialized,deviceCapturedAt:new Date().toISOString()};
- const original:PendingOriginal=file?{...metadata,kind:'file',id,itemId:crypto.randomUUID(),file,deviceId,captureOrigin:'dokument',...(typeof source.customerVisible==='boolean'?{customerVisible:source.customerVisible}:{})}:{...metadata,kind:'note',id,itemId:id,text:text!,textstand:crypto.randomUUID(),dismissed:[],expectedVersion:0};
+ const capturedAt=typeof source.deviceCapturedAt==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(source.deviceCapturedAt)&&Number.isFinite(Date.parse(source.deviceCapturedAt))&&new Date(source.deviceCapturedAt).toISOString()===source.deviceCapturedAt?source.deviceCapturedAt:new Date().toISOString();
+ const id=crypto.randomUUID(),metadata={takeover:{sourceId,deviceId,sha256:hash,originalRecord:serialized},takeoverSourceCanonical:serialized,deviceCapturedAt:capturedAt};
+ const original:PendingOriginal=file?{...metadata,kind:'file',id,itemId:crypto.randomUUID(),file,deviceId,captureOrigin:source.captureOrigin==='warenfoto'?'warenfoto':'dokument',...(goodsPhotoContext(source.context)?{context:source.context}:{}),...(typeof source.customerVisible==='boolean'?{customerVisible:source.customerVisible}:{})}:{...metadata,kind:'note',id,itemId:id,text:text!,textstand:crypto.randomUUID(),dismissed:[],expectedVersion:0};
  const db=await database(scope);
  return new Promise<{code:'OK';original:PendingOriginal}|{code:'SOURCE_INCOMPLETE'}>((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.getAll();let saved:PendingOriginal|undefined;
@@ -579,7 +591,7 @@ export async function capturePendingItemFinished(scope:string,enabled:boolean,in
  const now=new Date();
  if(state.code!=='OK')return {code:'NETWORK_REQUIRED' as const};
  const age=now.getTime()-Date.parse(state.serverReadAt);
- if(!Number.isFinite(age)||age<0||age>=24*60*60*1000||readCacheScopeMarker()!==login)return {code:'NETWORK_REQUIRED' as const};
+ if(!Number.isFinite(age)||age< -OFFLINE_CLOCK_TOLERANCE_MS||age>=24*60*60*1000||readCacheScopeMarker()!==login)return {code:'NETWORK_REQUIRED' as const};
  const original:PendingWorkshopOriginal={kind:'workshop',command:'item.finished',id:input.clientEventId,itemId:input.orderId,input,deviceCapturedAt:now.toISOString()};
  if(!isPendingWorkshopOriginal(original))throw Error('OFFLINE_WORKSHOP_ORIGINAL_INVALID');
  try{await retainOriginal(scope,original,{loginScope:login,cacheGeneration:state.cacheGeneration,serverReadAt:state.serverReadAt});}

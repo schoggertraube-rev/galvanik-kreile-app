@@ -124,7 +124,7 @@ function countTodaySource(source:{code:'OK';data:{length:number}}|{code:'SOURCE_
 /** A failed SQL read must not poison the other daily sources in this transaction. */
 export async function readTodaySource<T>(tx:PrivilegedTenantTransaction,read:(nested:PrivilegedTenantTransaction)=>Promise<T>):Promise<{code:'OK';data:T}|{code:'SOURCE_INCOMPLETE'}>{
   try{return {code:'OK',data:await withTenantSavepoint(tx,read)};}
-  catch{return {code:'SOURCE_INCOMPLETE'};}
+  catch(error){console.error('[TODAY_SOURCE_FAILED]',{quelle:'query',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE'};}
 }
 
 export type TodayQuoteFollowup={isMine?:boolean;id:string;title:string;dueDate:string;quoteId:string;quoteNumber:string;customerName:string};
@@ -134,7 +134,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const graphAllowed = hasAuthorizationArea(auth, "mails");
   const moneyAllowed = hasAuthorizationArea(auth, "geld");
   const [orderSource, graph, support, complaints,quoteFollowups] = await Promise.all([
-    ordersAllowed ? getOperationalOrders(auth).then(data=>({code:'OK' as const,data})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})) : Promise.resolve({code:'OK' as const,data:[]}),
+    ordersAllowed ? getOperationalOrders(auth).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]}),
     graphAllowed ? getIntakeMessagesAction('offen') : Promise.resolve({ code: "FORBIDDEN" as const, message: "" }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
       const invoiceSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<InvoiceRow>(sql`
@@ -211,8 +211,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
       const supportMissing=[...(preferencesSource.code!=='OK'?['TODAY_PREFERENCES_SOURCE']:[]),...(remindersSource.code!=='OK'?['TODAY_REMINDERS_SOURCE']:[]),...(delegationSource.code!=='OK'?['TODAY_DELEGATION_SOURCE']:[])];
       return { supportMissing,preferences:preferencesSource.code==='OK'?preferencesSource.data:[],reminders:remindersSource.code==='OK'?remindersSource.data:[],invoiceSource,invoices:invoiceSource.code==='OK'?invoiceSource.data:[], prepaymentSource,prepayments:prepaymentSource.code==='OK'?prepaymentSource.data:[],collectionSource,collections:collectionSource.code==='OK'?collectionSource.data:[],delegationTargets:delegationSource.code==='OK'?delegationSource.data:[],assignmentSourceIncomplete:assignmentSource.code!=='OK'||assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
     }),
-    ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints().catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'})):Promise.resolve({code:'OK' as const,complaints:[]}),
-    graphAllowed?readQuoteFollowups().catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'})):Promise.resolve({code:'OK' as const,tasks:[]}),
+    ['auftraege','entscheiden','geld','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'geld'|'kunden'))?readComplaints().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'complaints',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'};}):Promise.resolve({code:'OK' as const,complaints:[]}),
+    graphAllowed?readQuoteFollowups().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'quote-followups',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'};}):Promise.resolve({code:'OK' as const,tasks:[]}),
   ]);
 
   const orders=orderSource.code==='OK'?orderSource.data:[];
@@ -234,7 +234,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
         }
         return row;
       }
-    }catch{return {orderId:order.id,version:order.version,read:null};}
+    }catch(error){console.error('[TODAY_SOURCE_FAILED]',{quelle:'order-card',name:error instanceof Error?error.name:'UnknownError'});return {orderId:order.id,version:order.version,read:null};}
     return {orderId:order.id,version:order.version,read:null};
   })):[];
   const orderActions={code:orderSource.code==='OK'&&orderActionReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
@@ -253,7 +253,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
           facts:v45QuoteFacts(card.quote,new Date(calendar.readStartedAt)),validUntil:card.quote.validUntil,followupAt:card.quote.lifecycle.followupAt};
         return row;
       }
-    }catch{return {quoteId:quote.quoteId,read:null};}
+    }catch(error){console.error('[TODAY_SOURCE_FAILED]',{quelle:'quote-card',name:error instanceof Error?error.name:'UnknownError'});return {quoteId:quote.quoteId,read:null};}
     return {quoteId:quote.quoteId,read:null};
   })):[];
   const quoteActions={code:quoteList.code==='OK'&&quoteReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
@@ -315,9 +315,9 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     add({ key: `invoice:${invoice.id}`, field: "money", kind: "invoice", title: `${invoice.invoice_number} · ${invoice.customer_name}`, meta: `${euro(invoice.open_amount_cents)} · fällig ${dueDate}`, urgency: "conflict", invoiceId: invoice.id, orderId: invoice.order_id, dueDate, primaryActionLabel: "Erinnern" });
   }
 
-  for (const prepayment of support.prepayments.slice(0,20)) {
+  const eligiblePrepayments=support.prepayments.filter(prepayment=>classifyMoneyForToday({customerCountry:prepayment.customer_country,dueDate:prepayment.due_date?dateOnly(prepayment.due_date):null,goodsOutRecorded:Number(prepayment.goods_out_event_count)>0,paymentMode:'vorkasse',paymentStatus:prepayment.payment_status,station:prepayment.station},today)==='open_prepayment');
+  for (const prepayment of eligiblePrepayments.slice(0,20)) {
     const dueDate = prepayment.due_date ? dateOnly(prepayment.due_date) : null;
-    if (classifyMoneyForToday({ customerCountry: prepayment.customer_country, dueDate, goodsOutRecorded: Number(prepayment.goods_out_event_count) > 0, paymentMode: "vorkasse", paymentStatus: prepayment.payment_status, station: prepayment.station }, today) !== "open_prepayment") continue;
     const amount = prepayment.open_amount_cents === null ? "Betrag nach Rechnung" : euro(prepayment.open_amount_cents);
     add({ key: `prepayment:${prepayment.order_id}`, field: "money", kind: "order", title: `${prepayment.order_number} · Vorkasse offen`, meta: `${prepayment.customer_name} · ${amount} · Versand gesperrt`, urgency: "warning", orderId: prepayment.order_id, invoiceId: prepayment.invoice_id ?? undefined, dueDate: dueDate ?? undefined, primaryActionLabel: "Zahlung bestätigen" });
   }

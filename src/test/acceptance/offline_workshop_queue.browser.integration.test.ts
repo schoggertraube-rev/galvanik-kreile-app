@@ -61,10 +61,17 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('retains actual native-IDB work
    try{window.Date=class extends SavedDate{constructor(...args){super(...(args.length?args:[SavedDate.now()+23*60*60*1000+1000]));}static now(){return SavedDate.now()+23*60*60*1000+1000;}};
     if((await p.capturePendingItemFinished(producerScope,true,{...original.input,clientEventId:ids.invalid})).code!=='NETWORK_REQUIRED')throw Error('TEST_FRESH_SHELL_CANNOT_EXTEND_SERVER_AGE');
    }finally{window.Date=SavedDate;}
-   try{window.Date=class extends SavedDate{constructor(...args){super(...(args.length?args:[Date.parse(serverReadAt)-1000]));}static now(){return Date.parse(serverReadAt)-1000;}};
-    if((await p.capturePendingItemFinished(producerScope,true,{...original.input,clientEventId:ids.invalid})).code!=='NETWORK_REQUIRED')throw Error('TEST_BACKWARDS_CLOCK_CAPTURED');
+   // KORR_REVIEW K3 explicitly permits a device stand up to five minutes ahead
+   // of the local clock; the old blanket backwards-clock rejection is replaced.
+   try{window.Date=class extends SavedDate{constructor(...args){super(...(args.length?args:[Date.parse(serverReadAt)-4*60*1000]));}static now(){return Date.parse(serverReadAt)-4*60*1000;}};
+    if((await p.capturePendingItemFinished(producerScope,true,{...original.input,clientEventId:ids.invalid})).code!=='QUEUED')throw Error('TEST_FOUR_MINUTE_CLOCK_TOLERANCE');
+    const behind=(await p.readPendingEntries(producerScope)).find(row=>row.id===ids.invalid);
+    if(behind?.deviceCapturedAt!==new Date().toISOString())throw Error('TEST_CLOCK_ORIGINAL_TIME_LOST');
    }finally{window.Date=SavedDate;}
-   if(JSON.stringify((await p.readPendingEntries(producerScope))[0])!==JSON.stringify(captured))throw Error('TEST_EXPIRED_ORIGINAL_CHANGED');
+   try{window.Date=class extends SavedDate{constructor(...args){super(...(args.length?args:[Date.parse(serverReadAt)-6*60*1000]));}static now(){return Date.parse(serverReadAt)-6*60*1000;}};
+    if((await p.capturePendingItemFinished(producerScope,true,{...original.input,clientEventId:ids.aborted})).code!=='NETWORK_REQUIRED')throw Error('TEST_CLOCK_TOLERANCE_EXCEEDED');
+   }finally{window.Date=SavedDate;}
+   if(JSON.stringify((await p.readPendingEntries(producerScope)).find(row=>row.id===captured.id))!==JSON.stringify(captured))throw Error('TEST_EXPIRED_ORIGINAL_CHANGED');
    return {oneNativeQueue:true,immutableIntent:true,receiptRequired:true,quarantinePreserved:true,abortPreserved:true};
   }`]);
   expect(result.stdout).not.toContain('### Error');for(const key of ['oneNativeQueue','immutableIntent','receiptRequired','quarantinePreserved','abortPreserved'])expect(result.stdout).toContain('"'+key+'": true');
