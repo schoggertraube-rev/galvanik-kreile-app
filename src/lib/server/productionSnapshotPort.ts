@@ -1,4 +1,5 @@
 import 'server-only';
+import {recordObservedFailure} from './actionObservation';
 import {sql} from 'drizzle-orm';
 import {createHash} from 'node:crypto';
 import {PRODUCTION_PRICING_RETRY_COPY} from '@/ui/situationCatalog';
@@ -11,7 +12,7 @@ import {withPrivilegedTenantTransaction,withTenantSavepoint} from './privilegedD
  * task evidence keeps the device original pending after the physical commit. */
 type PricingFailureSource={phase:'basis';orderId:string;productionEventId:string;itemId:string}|{phase?:'nachtrag';orderId:string;productionEventId:string;itemId:string;pricingEventId:string;pricingOccurredAt:string};
 export class ProductionPricingRetryNeeded extends Error {
- constructor(readonly source:PricingFailureSource,cause:unknown){super('PRODUCTION_PRICING_RETRY_REQUIRED',{cause});this.name='ProductionPricingRetryNeeded';}
+ constructor(readonly source:PricingFailureSource,cause:unknown){super('PRODUCTION_PRICING_RETRY_REQUIRED',{cause});this.name='ProductionPricingRetryNeeded';recordObservedFailure('PRODUCTION_PRICING_RETRY_REQUIRED');}
 }
 /** U264: all real logins may read the single aggregate, never position prices. */
 export async function readProductionWeek(auth:AuthorizationSnapshot,onDate?:string){

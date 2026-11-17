@@ -1,3 +1,5 @@
+
+import {reportProtocolClientError} from '@/modules/logging/public';
 import type {DeviceStandCollection} from './collectDeviceStand';
 import {readCacheScopeMarker} from './cacheScopeMarker';
 import {readPendingShellMetadata,retainPendingDeviceRead,readPendingDeviceRead,readPendingDeviceStand,type PendingDeviceRead} from './pendingStore';
@@ -11,7 +13,7 @@ export async function captureDeviceReadFence(scope:string,enabled:boolean):Promi
  try{
   const shell=await readPendingShellMetadata(scope,login);
   return shell.code==='OK'&&shell.metadata.scope===login?{scope,loginScope:login,generation:shell.metadata.cacheGeneration}:null;
- }catch(error){console.error('[OFFLINE_DEVICE_FENCE_FAILED]',error instanceof Error?error.name:'UnknownError');return null;}
+ }catch{reportProtocolClientError('OFFLINE_DEVICE_FENCE_FAILED');return null;}
 }
 
 /** ABNAHMEFAELLE S06: metadata only. Keep the online port unchanged and make
@@ -39,14 +41,14 @@ export async function retainDevicePortResponse(scope:string,enabled:boolean,valu
  if(fence!==undefined){
   if(!fence||fence.scope!==scope||fence.loginScope!==login)return {code:'STALE'};
   try{return await retainPendingDeviceRead(scope,login,fence.generation,Array.isArray(value)?value.map(metadataForDevice):metadataForDevice(value),replaceSnapshotAt===undefined?undefined:{port:replacePort,serverReadAt:replaceSnapshotAt});}
-  catch(error){console.error('[OFFLINE_DEVICE_PORT_WRITE_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE'};}
+  catch{reportProtocolClientError('OFFLINE_DEVICE_PORT_WRITE_FAILED');return {code:'SOURCE_INCOMPLETE'};}
  }
  if(Array.isArray(value)||replaceSnapshotAt!==undefined)return {code:'STALE'};
  try{
   const shell=await readPendingShellMetadata(scope,login);
   if(shell.code!=='OK'||shell.metadata.scope!==login)return {code:'STALE'};
   return await retainPendingDeviceRead(scope,login,shell.metadata.cacheGeneration,metadataForDevice(value));
- }catch(error){console.error('[OFFLINE_DEVICE_PORT_WRITE_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE'};}
+ }catch{reportProtocolClientError('OFFLINE_DEVICE_PORT_WRITE_FAILED');return {code:'SOURCE_INCOMPLETE'};}
 }
 
 /** The same response stays readable after 24 h; age limits writing, not reading. */
@@ -57,7 +59,7 @@ export async function readDevicePortResponse(scope:string,enabled:boolean,target
   const shell=await readPendingShellMetadata(scope,login);
   if(shell.code!=='OK'||shell.metadata.scope!==login)return {code:'STALE' as const};
   return await readPendingDeviceRead(scope,login,shell.metadata.cacheGeneration,target);
- }catch(error){console.error('[OFFLINE_DEVICE_PORT_READ_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const};}
+ }catch{reportProtocolClientError('OFFLINE_DEVICE_PORT_READ_FAILED');return {code:'SOURCE_INCOMPLETE' as const};}
 }
 
 export type CollectedDeviceReads={code:'COLLECTED';values:PendingDeviceRead[];serverReadAt:string;denial?:{code:'FORBIDDEN';message:string}}|{code:'STALE'|'SOURCE_INCOMPLETE'};
@@ -80,7 +82,7 @@ export async function refreshDevicePortCohort(scope:string,enabled:boolean,port:
     ?await retainDevicePortResponse(scope,true,collected.values[0],fence)
     :await retainDevicePortResponse(scope,true,collected.values,fence,collected.serverReadAt,port);
    return stored.code==='STORED'?{code:'STORED',readCount:collected.values.length}:stored.code==='STALE'?{code:'STALE'}:{code:'SOURCE_INCOMPLETE'};
-  }catch(error){console.error('[OFFLINE_DEVICE_REFRESH_FAILED]',port,error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE'};}
+  }catch{reportProtocolClientError('OFFLINE_DEVICE_REFRESH_FAILED');return {code:'SOURCE_INCOMPLETE'};}
  })();
  refreshingCohorts.set(key,work);try{return await work;}finally{if(refreshingCohorts.get(key)===work)refreshingCohorts.delete(key);}
 }
@@ -100,10 +102,10 @@ export async function retainDeviceStandResponse(scope:string,enabled:boolean,col
   if(readCacheScopeMarker()!==fence.loginScope)return {code:'STALE' as const};
   if(stored.code==='STORED')window.dispatchEvent(new Event('kreile-device-stand-changed'));
   return stored;
- }catch(error){console.error('[OFFLINE_DEVICE_STAND_WRITE_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const};}
+ }catch{reportProtocolClientError('OFFLINE_DEVICE_STAND_WRITE_FAILED');return {code:'SOURCE_INCOMPLETE' as const};}
 }
 export async function readDeviceStandResponse(scope:string,enabled:boolean){
  if(!enabled)return {code:'DISABLED' as const};
  const login=readCacheScopeMarker();if(!login)return {code:'STALE' as const};
- try{return await readPendingDeviceStand(scope,login);}catch(error){console.error('[OFFLINE_DEVICE_STAND_READ_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const,reason:'STORAGE_UNAVAILABLE' as const};}
+ try{return await readPendingDeviceStand(scope,login);}catch{reportProtocolClientError('OFFLINE_DEVICE_STAND_READ_FAILED');return {code:'SOURCE_INCOMPLETE' as const,reason:'STORAGE_UNAVAILABLE' as const};}
 }

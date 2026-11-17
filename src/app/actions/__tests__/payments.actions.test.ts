@@ -7,6 +7,9 @@ const ports = vi.hoisted(() => ({
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: ports.revalidatePath }));
+// Isolated controller composition only, like invoices.actions.test.ts. Real
+// payment/auth/logging persistence is covered by S20 replay acceptance tests.
+vi.mock("@/db", () => ({ db: { transaction: () => { throw new Error("UNIT_DATABASE_ACCESS_UNEXPECTED"); } } }));
 vi.mock("@/lib/server/commands/confirmPaymentCommand", () => ({
   confirmPayment: ports.confirmPayment,
 }));

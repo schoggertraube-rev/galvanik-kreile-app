@@ -8,6 +8,7 @@ import { berlinCalendarDay, isWorkingDay, plusWorkingDays, previousWorkingDay } 
 import { generatedFlowRuntime } from "./_model";
 import { localReplayStorageEnvironment } from "../../src/test/localReplayStorage";
 import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets } from "./_fixtureReset";
+import {protocolDiagnosticActionIds,isApplicationDataLoad,isApplicationServerAction} from './_readFault';
 
 export type FlowExpectation = {
   id?: string;
@@ -1128,14 +1129,16 @@ function interruptedActionId(controlId: string | undefined): string | undefined 
 
 async function interruptNextServerAction(page: Page, state: FlowRunState, controlId?: string) {
   const targetAction = interruptedActionId(controlId);
+  const diagnostics=protocolDiagnosticActionIds(JSON.parse(readFileSync(path.join(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8')));
+  const isTarget=(request:import('@playwright/test').Request)=>isApplicationServerAction({method:request.method(),nextAction:request.headers()['next-action']},diagnostics,targetAction);
   state.interruptionObserved=page.waitForEvent("requestfailed",{
-    predicate:request=>request.method()==="POST"&&Boolean(request.headers()["next-action"])&&(!targetAction||request.headers()["next-action"]===targetAction),timeout:5_000,
+    predicate:isTarget,timeout:5_000,
   }).then(()=>true,()=>false);
   const matcher="**/*";
   let interrupted=false;
   const handler=async(route:import("@playwright/test").Route)=>{
     const request=route.request();
-    if(!interrupted&&request.method()==="POST"&&request.headers()["next-action"]&&(!targetAction||request.headers()["next-action"]===targetAction)){
+    if(!interrupted&&isTarget(request)){
       interrupted=true;
       await route.abort("failed");
       await page.unroute(matcher,handler);
@@ -1147,14 +1150,14 @@ async function interruptNextServerAction(page: Page, state: FlowRunState, contro
 }
 
 async function interruptNextLoad(page: Page) {
+  const diagnostics=protocolDiagnosticActionIds(JSON.parse(readFileSync(path.join(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8')));
   const matcher = "**/*";
   let handled = false;
   const handler = async (route: import("@playwright/test").Route) => {
     const request = route.request();
     // App Router also transports read Server Actions with POST + Next-Action.
     // Keep App Router navigation/asset requests online; fail the actual data read.
-    const isLoad = request.method() === "POST" && Boolean(request.headers()["next-action"])
-      || ["fetch", "xhr"].includes(request.resourceType()) && request.method() === "GET" && !request.headers().rsc;
+    const isLoad = isApplicationDataLoad({method:request.method(),nextAction:request.headers()['next-action'],resourceType:request.resourceType(),rsc:request.headers().rsc},diagnostics);
     if (!handled && isLoad) {
       handled = true;
       await route.abort("failed");

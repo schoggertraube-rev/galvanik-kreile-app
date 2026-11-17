@@ -1,5 +1,9 @@
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
+import {SITUATION_COPY} from '@/ui/situationCatalog';
+import {V45_RUNTIME} from '@/ui/v45.generated';
+import {ACCESS_AREA_LABELS} from '@/lib/auth/authorizationContract';
+import {parseProtocolSettings} from '../protocolSettings';
 import {isDeepStrictEqual} from 'node:util';
 import {dispatchPolicyValid} from '../dispatchPolicy';
 import {STORAGE_CHARGE_COPY,SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
@@ -42,7 +46,7 @@ export type SystemSettingsContext = {
   canManageFinancial?: boolean;
 };
 export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean;includeDeliveryNoteIdentity?:boolean };
-type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null };
+type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number };
 /** Letters need the real sender address, not invoice-only bank/tax configuration. */
 export async function readCompanyLetterSettings(context:CompanyDocumentContext){
  if(!context.canRead)return {code:'FORBIDDEN' as const};
@@ -147,7 +151,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nicht erlaubt." };
   try {
     const snapshot = await withPrivilegedTenantTransaction(context, async (tx): Promise<Omit<SystemSettingsSnapshot, "extraWorkHourlyRate">> => {
-      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
       if (companies.length > 1) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
       const users = await tx.execute<UserRow>(sql`
         SELECT users.id::text AS id,
@@ -174,6 +178,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
           city: company.city, country: company.country, taxId: company.tax_id,
           iban: company.iban, bic: company.bic, bankName: company.bank_name,
           paymentTermDays: company.invoice_payment_term_days, logoUrl: company.logo_url,
+          protocol:parseProtocolSettings({retentionDays:company.protokoll_aufbewahrung_tage,slowMs:company.protokoll_langsam_ms,hangMs:company.protokoll_haenger_ms}),
         } : EMPTY_COMPANY,
         users: users.map((user): ManagedUser => {
           const rawAreas = user.areas ?? (process.env.NODE_ENV === "test" && isAppRole(user.role) ? [...ROLE_ACCESS_AREA_TEMPLATES[user.role]] : []);
@@ -250,7 +255,11 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Firmendaten dürfen nicht geändert werden." };
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind ungültig." };
   const value = input as Record<string, unknown>;
-  if (Object.keys(value).sort().join(",") !== "bankName,bic,city,companyName,country,iban,logoUrl,paymentTermDays,street,taxId,zip") return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind unvollständig." };
+  const protocolRequested=Object.hasOwn(value,'protocol');
+  const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(protocolRequested?['protocol']:[])].sort().join(',');
+  if (Object.keys(value).sort().join(",") !== expectedKeys) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind unvollständig." };
+  const protocol=protocolRequested?parseProtocolSettings(value.protocol):null;
+  if(protocolRequested&&!protocol)return {code:'VALIDATION_ERROR' as const,message:V45_RUNTIME.texte['error.save'].text.replace('{gegenstand}',ACCESS_AREA_LABELS.protokoll.text).replace('{ausweg}',SITUATION_COPY.retry)};
   const normalized: CompanySettingsInput = {
     companyName: text(value.companyName, 2, 160) ?? "", street: text(value.street, 2, 160) ?? "",
     zip: text(value.zip, 2, 20) ?? "", city: text(value.city, 1, 120) ?? "", country: text(value.country, 2, 120) ?? "",
@@ -288,14 +297,22 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
         SELECT id FROM inserted
       `);
       if (rows.length !== 1) throw new Error("COMPANY_SETTINGS_WRITE_AMBIGUOUS");
-      await tx.execute(sql`
+      if(protocol){
+        const saved=await tx.execute<{retentionDays:number|null;slowMs:number;hangMs:number}>(sql`UPDATE public.company_settings SET protokoll_aufbewahrung_tage=${protocol.retentionDays},protokoll_langsam_ms=${protocol.slowMs},protokoll_haenger_ms=${protocol.hangMs}
+          WHERE tenant_id=${context.tenantId} AND id=${rows[0].id} RETURNING protokoll_aufbewahrung_tage AS "retentionDays",protokoll_langsam_ms AS "slowMs",protokoll_haenger_ms AS "hangMs"`);
+        if(saved.length!==1||!isDeepStrictEqual(parseProtocolSettings(saved[0]),protocol))throw Error('PROTOCOL_SETTINGS_READBACK_MISSING');
+      }
+      const audit=await tx.execute(sql`
         INSERT INTO public.ui_events (tenant_id, event_type, payload)
         VALUES (
           ${context.tenantId},
           'company_settings_updated',
           jsonb_build_object('actorId', ${context.actorId}::text, 'settingsId', ${rows[0]!.id}::text)
+          ${protocol?sql`||jsonb_build_object('protocol',${JSON.stringify(protocol)}::jsonb)`:sql``}
         )
+        RETURNING id
       `);
+      if(protocol&&audit.length!==1)throw Error('PROTOCOL_SETTINGS_AUDIT_MISSING');
     });
     return { code: "OK" as const };
   } catch (error) {

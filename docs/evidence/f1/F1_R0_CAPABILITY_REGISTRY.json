@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 15,
     "api_routes": 5,
-    "server_action_groups": 46,
+    "server_action_groups": 47,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 92
+    "total": 93
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -203,6 +203,19 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "Tenant-bound quote PDF download. Owner verification remains pending."
+    },
+    {
+      "stable_id": "server-actions.logging",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/logging.actions.ts",
+      "exported_functions": [
+        "getProtocolLogAction",
+        "recordProtocolClicksAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "S20 authenticated diagnostics and protected protocol read. Local real Action/Auth/DB and native browser evidence exists; independent correction and exact CI delivery approval remain pending.",
+      "visible": false,
+      "reachable": true
     },
     {
       "stable_id": "server-actions.auth",
@@ -585,9 +598,9 @@
         "getInvoiceCancellationReceiptAction",
         "getInvoiceSummariesAction",
         "getInvoiceTruthAction",
-      "getCustomerCreditAction",
-      "applyCustomerCreditAction",
-      "payoutCustomerCreditAction"
+        "getCustomerCreditAction",
+        "applyCustomerCreditAction",
+        "payoutCustomerCreditAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "F1.4 immutable invoice issue, cancellation and receipt/readback candidate. Real local E2E and independent exact-SHA acceptance are pending.",

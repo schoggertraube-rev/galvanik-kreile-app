@@ -1,3 +1,5 @@
+
+import {reportProtocolClientError} from '@/modules/logging/public';
 /** PL13.11.16:05: one transport fact, not an authorization or session lease. */
 const listeners=new Set<()=>void>();
 let reachable=true;
@@ -52,7 +54,7 @@ export function installServerReachability(){
     // It must permit the existing PIN path, never grant authorization itself.
     if(!disposed&&navigator.onLine&&(response.ok||[400,401,403,409,422].includes(response.status))){const changed=!reachable;reachable=true;if(timer){clearTimeout(timer);timer=undefined;}if(changed)publish();}
     else offline();
-   }catch(error){offline();console.error('[OFFLINE_HEARTBEAT_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');}
+   }catch{offline();reportProtocolClientError('OFFLINE_HEARTBEAT_UNAVAILABLE');}
    finally{clearTimeout(deadline);pinging=false;schedule();}
   }
   const wrapped:typeof fetch=(input,init)=>{

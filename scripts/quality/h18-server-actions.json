@@ -2,6 +2,19 @@
   "version": 1,
   "inventorySha256": "4f53fa32a202e826c6ba47c196a41d1e4535fb02a8b28bf161f008067b02a9cf",
   "testedWriteActions": {
+    "src/app/actions/domainAttachments.actions.ts#analyzeDomainAttachmentAction": [
+      "src/test/acceptance/s20_recognition_protocol.integration.test.ts"
+    ],
+    "src/app/actions/logging.actions.ts#getProtocolLogAction": [
+      "src/test/acceptance/s20_technical_protocol.integration.test.ts",
+      "src/test/acceptance/s20_review_corrections.integration.test.ts"
+    ],
+    "src/app/actions/logging.actions.ts#recordProtocolClicksAction": [
+      "src/test/acceptance/s20_client_diagnostics.integration.test.ts",
+      "src/test/acceptance/s20_click_capture.browser.integration.test.ts",
+      "src/test/acceptance/s20_click_protocol.integration.test.ts",
+      "src/test/acceptance/s20_review_corrections.integration.test.ts"
+    ],
     "src/app/actions/invoices.actions.ts#payoutCustomerCreditAction": [
       "src/test/acceptance/s08b_customer_credit_payout.integration.test.ts"
     ],
@@ -137,6 +150,7 @@
       "src/test/h18_masterdata_actions.integration.test.ts"
     ],
     "src/app/actions/settings.actions.ts#saveCompanySettingsAction": [
+      "src/test/acceptance/s20_protocol_settings.integration.test.ts",
       "src/test/h18_masterdata_actions.integration.test.ts"
     ],
     "src/app/actions/settings.actions.ts#changeOwnPinAction": [
@@ -177,6 +191,8 @@
       "src/test/h18_settings_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#saveIntakeNoteAction": [
+      "src/test/acceptance/s20_deferred_capture_errors.integration.test.ts",
+      "src/test/acceptance/s20_quarantine_protocol.integration.test.ts",
       "src/test/h18_customer_actions.integration.test.ts",
       "src/test/acceptance/offline_note_conflict.integration.test.ts"
     ],
@@ -185,6 +201,7 @@
       "src/test/acceptance/evidence_visibility_capture.browser.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#finishIntakeFileAction": [
+      "src/test/acceptance/s20_quarantine_protocol.integration.test.ts",
       "src/test/h18_customer_actions.integration.test.ts",
       "src/test/acceptance/evidence_visibility_sources.integration.test.ts",
       "src/test/acceptance/evidence_visibility_capture.browser.integration.test.ts"
@@ -303,6 +320,7 @@
       "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
     "src/app/actions/communications.actions.ts#sendCustomerMailAction": [
+      "src/test/acceptance/s20_mail_protocol.integration.test.ts",
       "src/test/acceptance/kv_v04_server.integration.test.ts",
       "src/test/acceptance/order_notification.integration.test.ts",
       "src/test/acceptance/dispatch_collective.integration.test.ts",
@@ -374,6 +392,7 @@
       "src/test/acceptance/s08_credit_queue.browser.integration.test.ts"
     ],
     "src/app/actions/offlineWorkshop.actions.ts#replayOfflineWorkshopAction": [
+      "src/test/acceptance/s20_offline_protocol.integration.test.ts",
       "src/test/acceptance/offline_workshop_replay.integration.test.ts",
       "src/test/acceptance/s08_credit_queue.browser.integration.test.ts",
       "src/test/acceptance/s09_reissue_without_shipping.integration.test.ts"
@@ -408,7 +427,6 @@
     "src/app/actions/company.actions.ts#updateCompanySettings": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#createCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#updateCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/domainAttachments.actions.ts#analyzeDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#attachIntakeDraftAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#reserveDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/inventory.actions.ts#createInventoryMovementAction": "H18.8 Bestand ohne Replay-Action-Test",

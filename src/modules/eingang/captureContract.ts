@@ -11,7 +11,7 @@ export function isIntakeOriginalTakeover(value:unknown):value is IntakeOriginalT
 }
 export type IntakeConcern = import("@/lib/domain/noteConcerns").NoteConcern;
 export type IntakeCapture = {
- takeovers?:Array<IntakeOriginalTakeover&{actorId:string;actorName:string}>;
+ takeovers?:Array<IntakeOriginalTakeover&{actorId:string;actorName:string;deviceCapturedAt:string|null;sourceCommandId:string|null}>;
  actorTrace?:CaseActorTrace;
   id: string; version: number; text: string | null; customerId: string | null;
   orderId: string | null; assignment: string; usage: string; concerns: string[];

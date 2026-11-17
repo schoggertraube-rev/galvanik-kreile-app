@@ -1,4 +1,6 @@
 "use client";
+import {reportProtocolClientError} from '@/modules/logging/public';
+
 
 import { useEffect, useState } from "react";
 import { CLIENT_ACTION_ERROR_CODE } from "@/lib/client/runServerAction";
@@ -8,8 +10,8 @@ export function ClientActionErrorBanner() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
-      console.error(`[${CLIENT_ACTION_ERROR_CODE}]`, event.reason);
+    const onUnhandledRejection = () => {
+      reportProtocolClientError('ACTION_REQUEST_FAILED');
       setVisible(true);
     };
     window.addEventListener("unhandledrejection", onUnhandledRejection);

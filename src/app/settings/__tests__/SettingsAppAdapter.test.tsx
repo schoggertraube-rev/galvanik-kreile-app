@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as protocol from '@/modules/logging/public';
 
 const ports = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock("@/app/actions/settings.actions", () => ({
   changeOwnPinAction: ports.changeOwnPin,
   readShippingSettingsAction: ports.readShipping,
   saveShippingSettingsAction: ports.saveShipping,
+  readEmailTemplatesAction: vi.fn().mockResolvedValue({code:'OK',templates:[]}),
 }));
 vi.mock("@/app/actions/orders.actions", () => ({ setExtraWorkHourlyRateAction: vi.fn() }));
 
@@ -186,6 +188,7 @@ describe("Gregor system administration composition", () => {
 
   it("shows a stable error code when changing the own code cannot reach the server action", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const diagnostic = vi.spyOn(protocol, 'reportProtocolClientError').mockImplementation(() => undefined);
     ports.changeOwnPin.mockRejectedValueOnce(new Error("Failed to find Server Action"));
     ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"",street:"",zip:"",city:"",country:"",taxId:"",iban:"",bic:"",bankName:"",paymentTermDays:0,logoUrl:""}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[{ id: "11111111-1111-4111-8111-111111111111", email: null, fullName: "Gregor", shortCode: "G", designation: "", role: "admin", active: true, areas: [], fixedAreas: [], isCurrent: true }], capabilities:{canManageCompany:true,canManageLogins:true,canManageSystem:true}, numberRanges:[], features:[] }, services:[] });
 
@@ -197,12 +200,16 @@ describe("Gregor system administration composition", () => {
     fireEvent.click(screen.getByRole("button", { name: "Code speichern" }));
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Fehlercode: ACTION_REQUEST_FAILED"));
-    expect(consoleError).toHaveBeenCalledWith("[ACTION_REQUEST_FAILED]", expect.any(Error));
+    expect(diagnostic).toHaveBeenCalledWith('ACTION_REQUEST_FAILED');
+    expect(diagnostic).toHaveBeenCalledTimes(1);
+    expect(consoleError.mock.calls.flat().some(value=>value instanceof Error)).toBe(false);
+    diagnostic.mockRestore();
     consoleError.mockRestore();
   });
 
   it("shows the same error path when a managed user code cannot be saved", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const diagnostic = vi.spyOn(protocol, 'reportProtocolClientError').mockImplementation(() => undefined);
     ports.saveManagedUser.mockRejectedValueOnce(new Error("Server Action request rejected"));
     ports.readSettings.mockResolvedValue({
       code: "OK",
@@ -224,7 +231,10 @@ describe("Gregor system administration composition", () => {
     fireEvent.click(screen.getByRole("button", { name: "Übernehmen" }));
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Fehlercode: ACTION_REQUEST_FAILED"));
-    expect(consoleError).toHaveBeenCalledWith("[ACTION_REQUEST_FAILED]", expect.any(Error));
+    expect(diagnostic).toHaveBeenCalledWith('ACTION_REQUEST_FAILED');
+    expect(diagnostic).toHaveBeenCalledTimes(1);
+    expect(consoleError.mock.calls.flat().some(value=>value instanceof Error)).toBe(false);
+    diagnostic.mockRestore();
     consoleError.mockRestore();
   });
 

@@ -1,4 +1,5 @@
 import {readIntakeMailOriginal,type IntakeMailOriginal} from './communicationOriginalPort';
+import {reportObservedTechnical} from './actionObservation';
 import {readCompletedComplaintMail} from './communicationComplaintPort';
 import {quoteCommandContext} from './quoteAuthorization';
 import {readIntakeConfirmationMailSource} from './intakeDraftEvents';
@@ -435,6 +436,9 @@ export async function sendCommunicationMail(
   }
   if(!pending.recovery||resendConfirmationId){
   const sent = await sendMicrosoftGraphMail({ to: target.email, subject: input.subject.trim(), body: input.body.trim(), attachment: input.attachment,additionalAttachments:input.additionalAttachments, replyToMessageId: input.document?.source?.graphMessageId,clientRequestId:input.clientRequestId });
+  // PREPARE has committed the exact content hash before Graph is called. A lost
+  // provider response is unknown, never a claim that the physical mail failed.
+  if(sent.code==='OK'||sent.code==='UNAVAILABLE')await reportObservedTechnical({type:'external',command:'sendCommunicationMail',subject:{type:target.orderId?'order':'customer',id:target.orderId??target.customerId},dienst:'microsoft365',ergebnis:sent.code==='OK'?'ok':'unklar',original:{ref:pending.threadId,sha256:contentSha256}});
   if (sent.code !== "OK") {
     await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
       UPDATE public.communication_threads SET status='failed', updated_at=statement_timestamp()

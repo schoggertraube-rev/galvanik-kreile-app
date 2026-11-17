@@ -55,7 +55,7 @@ describe("system settings port", () => {
       code: "OK",
       snapshot: {
         users: [
-          { fullName: "Gregor", areas: ["einstellungen", "logins", "wartung"], fixedAreas: ["einstellungen", "logins", "wartung"] },
+          { fullName: "Gregor", areas: ["einstellungen", "logins", "wartung"], fixedAreas: ["einstellungen", "logins", "wartung", "protokoll"] },
           { fullName: "Christian Dieter", active: false, areas: [], fixedAreas: [] },
         ],
       },

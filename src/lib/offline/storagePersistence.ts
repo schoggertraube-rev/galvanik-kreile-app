@@ -1,3 +1,5 @@
+
+import {reportProtocolClientError} from '@/modules/logging/public';
 /** PL13.11.17:50: capability of this browser, never identity or authority. */
 export type StoragePersistence='UNKNOWN'|'GRANTED'|'DENIED'|'UNAVAILABLE';
 let state:StoragePersistence='UNKNOWN';
@@ -12,7 +14,7 @@ export function requestStoragePersistence(){
  if(request)return request;
  request=(async()=>{
   try{state=typeof navigator.storage?.persist==='function'?(await navigator.storage.persist()?'GRANTED':'DENIED'):'UNAVAILABLE';}
-  catch(error){console.error('[OFFLINE_PERSISTENCE_UNCONFIRMED]',error instanceof Error?error.name:'UnknownError');state='UNAVAILABLE';}
+  catch{reportProtocolClientError('OFFLINE_PERSISTENCE_UNCONFIRMED');state='UNAVAILABLE';}
   listeners.forEach(listener=>listener());return state;
  })();
  return request;

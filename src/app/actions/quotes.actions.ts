@@ -1,4 +1,6 @@
 "use server";
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {openIntakePredicate} from '@/modules/eingang/server-public';
 
@@ -92,6 +94,7 @@ function authorizationFailure(result: Awaited<ReturnType<typeof resolveAuthoriza
 }
 
 export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,options?:{actualMail?:boolean;onsiteGoodsReceiptId?:string}) {
+ return observeAction('changeQuoteLifecycleAction',subjectForAction('changeQuoteLifecycleAction',input),async()=>{
   try {
     const auth=await resolveAuthorization();
     const failure=authorizationFailure(auth);
@@ -133,18 +136,24 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
     console.error('[QUOTE_LIFECYCLE_ACTION_FAILED]',error instanceof Error?error.name:'UnknownError');
     return {code:'UNAVAILABLE' as const,message:'KV-Entscheidung konnte nicht sicher bestätigt werden.'};
   }
+
+ },readLoggingSettings);
 }
 
 export async function readQuoteDefaultsAction() {
+ return observeAction('readQuoteDefaultsAction',subjectForAction('readQuoteDefaultsAction',undefined),async()=>{
   noStore();
   const auth=await resolveAuthorization();
   const failure=authorizationFailure(auth);
   if (failure||!auth.ok) return failure!;
   const {readQuoteSettings}=await import('@/modules/fundament/server-public');
   return readQuoteSettings({tenantId:auth.data.tenantId,actorId:auth.data.userId,canRead:quoteCommandContext(auth.data).capabilities.canReadQuote});
+
+ },readLoggingSettings);
 }
 
 export async function createQuoteAction(input: CreateQuoteInput) {
+ return observeAction('createQuoteAction',subjectForAction('createQuoteAction',input),async()=>{
   let authorization;
   try {
     authorization = await resolveAuthorization();
@@ -160,6 +169,8 @@ export async function createQuoteAction(input: CreateQuoteInput) {
     revalidatePath(`/customers/${result.quote.customerId}`);
   }
   return result;
+
+ },readLoggingSettings);
 }
 
 export async function readQuoteAction(input: { quoteId: string;receivedQuantities?:Array<{position:number;quantity:number}>;goodsReceiptId?:string;purpose?:'operations' }) {
@@ -224,6 +235,7 @@ export async function listOpenQuotesAction(input?:{purpose:'today'|'device'}) {
 }
 
 export async function updateQuoteAction(input: UpdateQuoteInput) {
+ return observeAction('updateQuoteAction',subjectForAction('updateQuoteAction',input),async()=>{
   let authorization;
   try {
     authorization = await resolveAuthorization();
@@ -238,6 +250,8 @@ export async function updateQuoteAction(input: UpdateQuoteInput) {
     revalidatePath(`/customers/${result.quote.customerId}`);
   }
   return result;
+
+ },readLoggingSettings);
 }
 
 /** Read-only recovery for an interrupted KV create; it never starts a command. */
@@ -294,7 +308,10 @@ export async function readQuoteConversionReceiptAction(input: { quoteId: string;
   }
 }
 
-export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown,telephoneAcceptance?:{clientEventId:string;edition:number;evidence:string}) {return convertQuoteToOrder(input,newGoodsInput,telephoneAcceptance);}
+export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown,telephoneAcceptance?:{clientEventId:string;edition:number;evidence:string}) {
+ return observeAction('convertQuoteToOrderAction',subjectForAction('convertQuoteToOrderAction',input),async()=>{return convertQuoteToOrder(input,newGoodsInput,telephoneAcceptance);
+ },readLoggingSettings);
+}
 
 async function convertQuoteToOrder(input:ConvertQuoteInput,newGoodsInput?:unknown,telephoneAcceptance?:{clientEventId:string;edition:number;evidence:string},pendingMail?:PendingMailAcceptance) {
   if(!input||typeof input!=='object')return {code:'VALIDATION_ERROR' as const,message:'KV und Buchungsdaten fehlen.'};
@@ -455,16 +472,20 @@ export async function readQuotePdfAction(input: { quoteId: string }) {
 
 
 export async function getQuoteFollowupsForTodayAction(){
+ return observeAction('getQuoteFollowupsForTodayAction',subjectForAction('getQuoteFollowupsForTodayAction',undefined),async()=>{
  noStore();
  try{const auth=await resolveAuthorization();const denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
   if(!canReadQuoteFollowups(auth.data))return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
   const tasks=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data));
   return {code:'OK' as const,tasks};
  }catch(error){console.error('[QUOTE_FOLLOWUP_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Nachfassaufgaben konnten nicht geladen werden.'};}
+
+ },readLoggingSettings);
 }
 
 /** Preparation reads the existing original and search ports; it never creates or assigns a customer. */
 export async function prepareQuoteFromIntakeAction(input:{sourceItemId:string;customerId?:string}){
+ return observeAction('prepareQuoteFromIntakeAction',subjectForAction('prepareQuoteFromIntakeAction',input),async()=>{
  noStore();
  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>!['sourceItemId','customerId'].includes(key))||typeof input.sourceItemId!=='string'||!input.sourceItemId||input.customerId!==undefined&&(typeof input.customerId!=='string'||!input.customerId||input.customerId.length>128))return {code:'VALIDATION_ERROR' as const,message:'Original oder gewählter Kunde fehlt.'};
  try{
@@ -489,10 +510,13 @@ export async function prepareQuoteFromIntakeAction(input:{sourceItemId:string;cu
   const specialRequests=[...hints,...(recognition.instructions??[]).map(value=>value.text)];
   return {code:'OK' as const,preparation:{source:{itemId:source.itemId,version:source.version,message:source.channel==='mail'},text,files:source.files,customer:customer?{id:customer.id,name:customer.name}:null,customerQuery:matches.query,proposals:matches.customers.map(value=>({id:value.id,name:value.name,reason:'Treffer im Original: '+matches.query})),recognition,confirmedCustomerHints:hints,specialRequests:specialRequests.length?[...new Set(specialRequests)].join('\n'):null}};
  }catch(error){console.error('[QUOTE_INTAKE_PREPARATION_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Vorbereitung konnte nicht sicher gelesen werden. Original bleibt erhalten.'};}
+
+ },readLoggingSettings);
 }
 
 /** Read-only copy preparation. Saving still uses createQuoteAction and its receipt. */
 export async function prepareQuoteCopyAction(input: { kind: 'quote' | 'order'; id: string; customerId: string }) {
+ return observeAction('prepareQuoteCopyAction',subjectForAction('prepareQuoteCopyAction',input),async()=>{
   noStore();
   if (!input || typeof input !== 'object' || Array.isArray(input)
     || Object.keys(input).some(key => !['kind', 'id', 'customerId'].includes(key))
@@ -560,9 +584,12 @@ export async function prepareQuoteCopyAction(input: { kind: 'quote' | 'order'; i
     console.error('[QUOTE_COPY_PREPARATION_FAILED]', error);
     return { code: 'UNAVAILABLE' as const, message: 'Kopiervorlage konnte nicht sicher gelesen werden. Es wurde kein KV angelegt.' };
   }
+
+ },readLoggingSettings);
 }
 
 export async function prepareQuoteTextChangeAction(input:{quoteId:string;text:string}){
+ return observeAction('prepareQuoteTextChangeAction',subjectForAction('prepareQuoteTextChangeAction',input),async()=>{
  noStore();
  if(!input||typeof input.quoteId!=='string'||typeof input.text!=='string'||!input.text.trim()||input.text.length>6000)return {code:'VALIDATION_ERROR' as const,message:'KV und Aenderungstext fehlen oder sind zu lang.'};
  try{const auth=await resolveAuthorization(),denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
@@ -570,10 +597,13 @@ export async function prepareQuoteTextChangeAction(input:{quoteId:string;text:st
   const {prepareQuoteTextChangeCommand}=await import('@/modules/quotes/server-public');
   return prepareQuoteTextChangeCommand(quoteCommandContext(auth.data),input.quoteId,recognizeIntakeText(input.text));
  }catch(error){console.error('[QUOTE_TEXT_PROPOSAL_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Aenderungsvorschlag konnte nicht sicher gelesen werden. Es wurde nichts geaendert.'};}
+
+ },readLoggingSettings);
 }
 
 /** Single copy command; preparation and persistence remain the existing quote ports. */
 export async function duplicateQuoteAction(input:{kind:'quote'|'order';id:string;customerId:string;expectedSourceVersion:number;clientEventId:string;dueDate:string}){
+ return observeAction('duplicateQuoteAction',subjectForAction('duplicateQuoteAction',input),async()=>{
  if(!input||!Number.isSafeInteger(input.expectedSourceVersion)||input.expectedSourceVersion<1)return {code:'VALIDATION_ERROR' as const,message:'Version der Kopiervorlage fehlt.'};
  const source=await prepareQuoteCopyAction({kind:input.kind,id:input.id,customerId:input.customerId});
  if(source.code!=='OK')return source;
@@ -582,9 +612,12 @@ export async function duplicateQuoteAction(input:{kind:'quote'|'order';id:string
  const positions=source.preparation.positions.map(position=>{if(position.unitPriceCents===null||position.lineTotalCents===null||position.lineTotalCents===undefined)throw Error('QUOTE_COPY_PRICE_MISSING');return {...position,unitPriceCents:position.unitPriceCents,lineTotalCents:position.lineTotalCents};});
  return createQuoteAction({clientEventId:input.clientEventId,customerId:input.customerId,dueDate:input.dueDate,note:'Kopie von '+source.preparation.source.number+' · Stand '+input.expectedSourceVersion,positions,specialRequests:source.preparation.specialRequests,...(input.kind==='quote'&&source.preparation.previousCalculation?{calculation:source.preparation.previousCalculation}:{})});
 
+
+ },readLoggingSettings);
 }
 /** Reread the one confirmed request and its actually booked phases, with the same write authorization. */
 export async function readOnsiteQuoteProgressAction(input:{requestId:string;request?:import('@/lib/onsiteQuoteContract').OnsiteQuoteInput}){
+ return observeAction('readOnsiteQuoteProgressAction',subjectForAction('readOnsiteQuoteProgressAction',input),async()=>{
  if(!input||typeof input!=='object'||Object.keys(input).some(key=>!['requestId','request'].includes(key))||typeof input.requestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId))return {code:'VALIDATION_ERROR' as const};
  try{const resolved=await resolveAuthorization();if(!resolved.ok)return {code:'UNAUTHENTICATED' as const};const auth=resolved.data;
   if(!quoteCommandContext(auth).capabilities.canCreateQuote||!hasAuthorizationArea(auth,'eingang'))return {code:'FORBIDDEN' as const};
@@ -598,9 +631,12 @@ export async function readOnsiteQuoteProgressAction(input:{requestId:string;requ
   if(quoteId){const read=await readQuoteCommand(quoteCommandContext(auth),{quoteId});if(read.code!=='OK')return read;progress={customerId:read.quote.customerId,quoteId:read.quote.quoteId,quoteNumber:read.quote.quoteNumber,customerName:read.quote.customerDisplayName,goodsBooked:phases.goods};}
   return {code:'OK' as const,phases,progress,facts};
  }catch(error){console.error('[ONSITE_PHASE_READ_FAILED]',{name:error instanceof Error?error.name:'unknown'});return {code:'UNAVAILABLE' as const};}
+
+ },readLoggingSettings);
 }
 /** One confirmed onsite request; every mutation delegates to its existing idempotent writer. */
 export async function receiveOnsiteQuoteAction(input:import("@/lib/onsiteQuoteContract").OnsiteQuoteInput){
+ return observeAction('receiveOnsiteQuoteAction',subjectForAction('receiveOnsiteQuoteAction',input),async()=>{
  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
  if(!input||!uuid.test(input.clientRequestId)||!input.customer||!['NEW','EXISTING'].includes(input.customer.mode)||!input.quote||Object.hasOwn(input.quote,'source')||typeof input.evidence!=='string'||input.evidence.trim().length<3||!Array.isArray(input.quantities)||!input.quantities.length||input.quantities.some(row=>!Number.isSafeInteger(row.position)||row.position<1||!Number.isSafeInteger(row.received)||row.received<0)||new Set(input.quantities.map(row=>row.position)).size!==input.quantities.length)return {code:'VALIDATION_ERROR' as const,message:'Kunde, KV, Zusage und tatsaechlich angenommene Mengen vollstaendig pruefen.'};
  const phase=(name:string)=>onsitePhaseKey(input.clientRequestId,name);
@@ -655,10 +691,13 @@ export async function receiveOnsiteQuoteAction(input:import("@/lib/onsiteQuoteCo
   if(result.code==='OK')await finishProof('order',progress);
   return {...result,progress,phase:result.code==='OK'?'complete':'order',quoteId,customerId,requestId:input.clientRequestId};
  }catch(error){console.error('[QUOTE_ONSITE_REQUEST_FAILED]',error);return {code:error instanceof Error&&error.message==='ONSITE_BOOKED_PHASE_CHANGED'?'CONFLICT' as const:'UNAVAILABLE' as const,message:'Ausgang nicht sicher bestaetigt. Eingaben und Erfassungskennung behalten; gespeicherte Zwischenschritte bleiben nachvollziehbar.',customerId,quoteId,requestId:input.clientRequestId};}
+
+ },readLoggingSettings);
 }
 
 /** Operational workshop projection: no prices/calculation/PDFs leave this purpose-bound reader. */
 export async function readWorkshopQuoteGoodsAction(){
+ return observeAction('readWorkshopQuoteGoodsAction',subjectForAction('readWorkshopQuoteGoodsAction',undefined),async()=>{
  noStore();
  try{const auth=await resolveAuthorization(),denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
   if(!auth.data.permissions.includes('perm_view_leitstand'))return {code:'FORBIDDEN' as const,message:'KV-Ware ist nicht freigegeben.'};
@@ -674,11 +713,14 @@ export async function readWorkshopQuoteGoodsAction(){
   });
   return {code:'OK' as const,quotes,limited:result.quotes.length===100};
  }catch(error){console.error('[WORKSHOP_QUOTE_GOODS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Ware konnte nicht sicher gelesen werden.'};}
+
+ },readLoggingSettings);
 }
 
 
 /** Operational targets are bounded by the real reply's assigned customer; no financial projection. */
 export async function readQuoteReplyTargetsAction(input:{sourceItemId:string;quoteId?:string}){
+ return observeAction('readQuoteReplyTargetsAction',subjectForAction('readQuoteReplyTargetsAction',input),async()=>{
  noStore();
  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>!['sourceItemId','quoteId'].includes(key))||typeof input.sourceItemId!=='string'||!uuid.test(input.sourceItemId)||input.quoteId!==undefined&&(typeof input.quoteId!=='string'||!uuid.test(input.quoteId)))return {code:'VALIDATION_ERROR' as const,message:'Originalantwort fehlt.'};
@@ -693,14 +735,19 @@ export async function readQuoteReplyTargetsAction(input:{sourceItemId:string;quo
   if(input.quoteId&&quotes[0].customerId!==source.customerId)return {code:'CONFLICT' as const,message:'Nachricht und KV gehören nicht zum selben Kunden.'};
   return {code:'OK' as const,source:{id:source.id,version:source.version,channel:source.channel,text:source.text,customer:source.customerName??'Name fehlt',openConcerns:source.openConcerns,files:source.files??[]},targets:quotes.filter(q=>q.customerId===source.customerId&&!q.linkedOrderId&&q.lifecycle?.stage!=='abgesagt').map(q=>({id:q.quoteId,number:q.quoteNumber,customer:q.customerDisplayName,parts:q.positions.map(row=>row.quantity+' × '+row.name).join(' / ')})),limited:!input.quoteId&&quotes.length===100};
  }catch(error){console.error('[QUOTE_REPLY_TARGETS_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const,message:'KVs zu dieser Antwort konnten nicht sicher gelesen werden.'};}
+
+ },readLoggingSettings);
 }
 
 
 export async function undoQuoteConversionAction(input:{quoteId:string;expectedVersion:number;clientEventId:string;reason:string}){
+ return observeAction('undoQuoteConversionAction',subjectForAction('undoQuoteConversionAction',input),async()=>{
  try{const authorized=await resolveAuthorization(),denied=authorizationFailure(authorized);if(denied||!authorized.ok)return denied!;
   const result=await reverseQuoteConversionCommand(quoteOperationContext(authorized.data),input);
   if(result.code!=='OK')return result;
   for(const route of ['/','/orders','/warendurchlauf','/nachrichten'])revalidatePath(route);
   return {...result,quote:quoteForUi(result.quote,quoteCommandContext(authorized.data).capabilities.canReadQuote)};
  }catch(error){console.error('[QUOTE_UNDO_ACTION_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:'Rücknahme ist ungeklärt. Mit derselben Kennung erneut prüfen.'};}
+
+ },readLoggingSettings);
 }

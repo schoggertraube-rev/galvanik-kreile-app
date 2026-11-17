@@ -1,3 +1,4 @@
+import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {mailImportFailureProjection} from './intakeMailFailureRead';
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
 import type {MailImportFailure} from '../mailSelectionContract';
@@ -76,8 +77,8 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
       capture.expectedOrders=await readExpectedPackageOrders(tx,auth,row.kunde_id);
     }
     if(contentAllowed){
-      const sources=await tx.execute<{takeover:unknown;actorId:string;actorName:string}>(sql`SELECT event.nachher->'takeover' AS takeover,event.von::text AS "actorId",event.nachher->>'takeoverLogin' AS "actorName" FROM public.intake_event event WHERE event.tenant_id=${auth.tenantId} AND event.item_id=${itemId}::uuid AND event.nachher ? 'takeover' AND (event.art='original_gespeichert' OR (event.art='einsatz' AND event.nachher->>'action'='offline_original_captured' AND EXISTS(SELECT 1 FROM public.intake_event secured JOIN public.intake_file file ON file.tenant_id=secured.tenant_id AND file.item_id=secured.item_id AND file.id::text=secured.nachher->>'fileId' WHERE secured.tenant_id=event.tenant_id AND secured.item_id=event.item_id AND secured.art='original_gespeichert' AND file.id::text=event.nachher->>'fileId' AND file.sha256=event.nachher->>'sha256'))) ORDER BY event.zeit,event.id`);
-      if(sources.length)capture.takeovers=sources.map(source=>{if(!validIntakeOriginalTakeover(source.takeover)||!UUID.test(source.actorId)||typeof source.actorName!=='string'||!source.actorName.trim())throw Error('INTAKE_TAKEOVER_SOURCE_INVALID');return {...source.takeover,actorId:source.actorId,actorName:source.actorName};});
+      const sources=await tx.execute<{takeover:unknown;actorId:string;actorName:string;deviceCapturedAt:string|null;sourceCommandId:string|null}>(sql`SELECT event.nachher->'takeover' AS takeover,event.von::text AS "actorId",event.nachher->>'takeoverLogin' AS "actorName",event.nachher->>'deviceCapturedAt' AS "deviceCapturedAt",event.befehl_id::text AS "sourceCommandId" FROM public.intake_event event WHERE event.tenant_id=${auth.tenantId} AND event.item_id=${itemId}::uuid AND event.nachher ? 'takeover' AND (event.art='original_gespeichert' OR (event.art='einsatz' AND event.nachher->>'action'='offline_original_captured' AND EXISTS(SELECT 1 FROM public.intake_event secured JOIN public.intake_file file ON file.tenant_id=secured.tenant_id AND file.item_id=secured.item_id AND file.id::text=secured.nachher->>'fileId' WHERE secured.tenant_id=event.tenant_id AND secured.item_id=event.item_id AND secured.art='original_gespeichert' AND file.id::text=event.nachher->>'fileId' AND file.sha256=event.nachher->>'sha256'))) ORDER BY event.zeit,event.id`);
+      if(sources.length)capture.takeovers=sources.map(source=>{if(!validIntakeOriginalTakeover(source.takeover)||!UUID.test(source.actorId)||typeof source.actorName!=='string'||!source.actorName.trim())throw Error('INTAKE_TAKEOVER_SOURCE_INVALID');return {...source.takeover,actorId:source.actorId,actorName:source.actorName,sourceCommandId:typeof source.sourceCommandId==='string'&&UUID.test(source.sourceCommandId)?source.sourceCommandId:null,deviceCapturedAt:typeof source.deviceCapturedAt==='string'&&Number.isFinite(Date.parse(source.deviceCapturedAt))?source.deviceCapturedAt:null};});
     }
     capture.actorTrace=(await readIntakeActorTraces(tx,auth,[itemId])).get(itemId);
     return { code: "OK", capture };
@@ -88,7 +89,7 @@ export async function readIntakeCapture(itemId: string, ctx?: IntakeContext): Pr
   const auth = await authorizedIntakeContext(ctx);
   if ("code" in auth) return auth;
   try { return await intakeCaptureSnapshot(auth, itemId, ctx); }
-  catch (error) { console.error("[INTAKE_CAPTURE_READ_FAILED]", error); return failure("UNAVAILABLE", "Eingang konnte nicht geladen werden. Fehlercode: INTAKE_CAPTURE_READ_FAILED."); }
+  catch{ recordObservedFailure('INTAKE_CAPTURE_READ_FAILED'); return failure("UNAVAILABLE", "Eingang konnte nicht geladen werden. Fehlercode: INTAKE_CAPTURE_READ_FAILED."); }
 }
 /** U-241: one explicit routing decision on the saved intake; the original never changes. */
 export async function chooseIntakeCaptureKind(input: unknown): Promise<IntakeCaptureResult> {
@@ -130,7 +131,7 @@ export async function chooseIntakeCaptureKind(input: unknown): Promise<IntakeCap
       return null;
     });
     return rejected ?? await intakeCaptureSnapshot(auth, value.itemId);
-  } catch (error) { console.error("[INTAKE_KIND_WRITE_FAILED]", error); return failure("UNAVAILABLE", "Die gewählte Art wurde nicht bestätigt. Original bleibt erhalten · Code: INTAKE_KIND_WRITE_FAILED."); }
+  } catch{ recordObservedFailure('INTAKE_KIND_WRITE_FAILED'); return failure("UNAVAILABLE", "Die gewählte Art wurde nicht bestätigt. Original bleibt erhalten · Code: INTAKE_KIND_WRITE_FAILED."); }
 }
 export async function discardIntakeCapture(input:unknown):Promise<IntakeCaptureResult>{
   if(!record(input)||Object.keys(input).sort().join(",")!=="clientEventId,itemId,version"
@@ -156,7 +157,7 @@ export async function discardIntakeCapture(input:unknown):Promise<IntakeCaptureR
       return null;
     });
     return result??await intakeCaptureSnapshot(auth,input.itemId);
-  }catch(error){console.error("[INTAKE_CAPTURE_DISCARD_FAILED]",error);return failure("UNAVAILABLE","Aufnahme konnte nicht gekennzeichnet werden · Original bleibt erhalten. Code: INTAKE_CAPTURE_DISCARD_FAILED.");}
+  }catch{recordObservedFailure('INTAKE_CAPTURE_DISCARD_FAILED');return failure("UNAVAILABLE","Aufnahme konnte nicht gekennzeichnet werden · Original bleibt erhalten. Code: INTAKE_CAPTURE_DISCARD_FAILED.");}
 }
 export async function readIntakePendingScope() {
   const auth = await authorizedIntakeContext();
@@ -183,8 +184,8 @@ export async function saveIntakeNote(input: unknown, readCustomer: (tx: Privileg
     const orderCustomerId = order?.code === "OK" ? order.data.customerId : null;
     const saved = await withPrivilegedTenantTransaction(auth, tx => writeIntakeNoteInTransaction(tx,auth,note,readCustomer,orderCustomerId,onConflict));
     return saved ?? await intakeCaptureSnapshot(auth, note.itemId);
-  } catch (error) {
-    console.error("[INTAKE_NOTE_WRITE_FAILED]", error);
+  } catch{
+    recordObservedFailure('INTAKE_NOTE_WRITE_FAILED');
     return failure("UNAVAILABLE", "Speichern fehlgeschlagen · alle Eingaben sind noch da. Fehlercode: INTAKE_NOTE_WRITE_FAILED.");
   }
 }

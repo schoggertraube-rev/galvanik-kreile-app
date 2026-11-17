@@ -1,4 +1,7 @@
 "use server";
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
+
 
 import {LEGACY_ACTION_ACCESS_COPY} from '@/ui/situationCatalog';
 import type { AccessArea } from "@/lib/auth/authorizationContract";
@@ -14,15 +17,19 @@ async function auth(requiredArea?: AccessArea) {
 
 /** S06 thin read facade: the same U3 loader as the actual home page. */
 export async function getTodayDeviceAction(){
+ return observeAction('getTodayDeviceAction',subjectForAction('getTodayDeviceAction',undefined),async()=>{
  const authorization=await auth();if(!authorization.ok)return authorization.result;
  const {loadOfficeHome}=await import('@/lib/server/officeHomeRead');
  const model=await loadOfficeHome(authorization.data);
  if(model.kind==='data'||model.kind==='empty')return {code:'OK' as const,dashboard:model.dashboard,serverReadAt:model.projection.loadedAt,cacheLoginScope:model.cacheLoginScope};
  if(model.kind==='error'||model.kind==='denied')return {code:'UNAVAILABLE' as const,message:model.message};
  return {code:'FORBIDDEN' as const,message:LEGACY_ACTION_ACCESS_COPY.forbidden};
+
+ },readLoggingSettings);
 }
 
 export async function saveTodayPreferencesAction(layout: TodayLayoutItem[]) {
+ return observeAction('saveTodayPreferencesAction',subjectForAction('saveTodayPreferencesAction',layout),async()=>{
   const authorization = await auth();
   if (!authorization.ok) return authorization.result;
   try { return await saveTodayPreferences(authorization.data, layout); }
@@ -32,9 +39,12 @@ export async function saveTodayPreferencesAction(layout: TodayLayoutItem[]) {
     });
     return { code: "UNAVAILABLE" as const, message: "Die Feldauswahl konnte nicht sicher gespeichert werden. Fehlercode: TODAY_PREFERENCES_SAVE_FAILED." };
   }
+
+ },readLoggingSettings);
 }
 
 export async function saveTodayReminderAction(input: { itemKey: string; mode: "afternoon" | "tomorrow" | "after_due"; dueDate?: string }) {
+ return observeAction('saveTodayReminderAction',subjectForAction('saveTodayReminderAction',input),async()=>{
   const authorization = await auth("auftraege");
   if (!authorization.ok) return authorization.result;
   try { return await saveTodayReminder(authorization.data, input); }
@@ -44,4 +54,6 @@ export async function saveTodayReminderAction(input: { itemKey: string; mode: "a
     });
     return { code: "UNAVAILABLE" as const, message: "Die Erinnerung konnte nicht sicher gespeichert werden. Fehlercode: TODAY_REMINDER_SAVE_FAILED." };
   }
+
+ },readLoggingSettings);
 }

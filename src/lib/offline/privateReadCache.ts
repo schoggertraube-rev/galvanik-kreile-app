@@ -1,3 +1,5 @@
+
+import {reportProtocolClientError} from '@/modules/logging/public';
 import {readCacheScopeMarker,removeCacheScopeMarker} from './cacheScopeMarker';
 import {readPendingShellMetadata,changePendingShellMetadata,revokeUnmarkedPendingDeviceReads} from './pendingStore';
 import {privateReadCachePrefix} from './logoutReadState';
@@ -23,8 +25,8 @@ export async function clearPrivateReadStateBeforeLogin():Promise<{code:'CLEARED'
   if(readCacheScopeMarker()!==null)throw Error('OFFLINE_CACHE_MARKER_REVOKE_NOT_CONFIRMED');
   await clearUnmarkedPrivateCaches();
   return {code:'CLEARED'};
- }catch(error){
-  console.error('[OFFLINE_LOGIN_CACHE_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');
+ }catch{
+  reportProtocolClientError('OFFLINE_LOGIN_CACHE_UNAVAILABLE');
   return {code:'UNAVAILABLE'};
  }
 }
@@ -35,7 +37,7 @@ export async function readScopedPrivateResponse(scope:string,loginScope:string,r
  try{url=new URL(input?input.url:String(request),window.location.origin);}catch{return null;}
  if(url.origin!==window.location.origin||input&&(input.method!=='GET'||input.headers.has('authorization')||input.headers.has('rsc')||input.headers.has('next-router-state-tree'))||/^\/(?:api|auth|start|login)(?:\/|$)/.test(url.pathname)||url.searchParams.has('_rsc'))return null;
  if(readCacheScopeMarker()!==loginScope){
-  try{await clearUnmarkedPrivateCaches();}catch{console.error('[OFFLINE_START_CACHE_DELETE_FAILED]');}
+  try{await clearUnmarkedPrivateCaches();}catch{reportProtocolClientError('OFFLINE_START_CACHE_DELETE_FAILED');}
   return null;
  }
  try{
@@ -50,7 +52,7 @@ export async function readScopedPrivateResponse(scope:string,loginScope:string,r
   const current=await readPendingShellMetadata(scope,loginScope);
   if(readCacheScopeMarker()!==loginScope||current.code!=='OK'||current.metadata.scope!==loginScope||current.metadata.cacheGeneration!==state.metadata.cacheGeneration)return null;
   return response??null;
- }catch{console.error('[OFFLINE_PRIVATE_CACHE_READ_BLOCKED]');return null;}
+ }catch{reportProtocolClientError('OFFLINE_PRIVATE_CACHE_READ_BLOCKED');return null;}
 }
 
 /** Store only actual authenticated HTML returned by the existing application route.
@@ -81,5 +83,5 @@ export async function warmScopedPrivateResponse(scope:string,loginScope:string,u
   const current=await readPendingShellMetadata(scope,loginScope);
   if(readCacheScopeMarker()!==loginScope||current.code!=='OK'||current.metadata.scope!==loginScope||current.metadata.cacheGeneration!==state.metadata.cacheGeneration){await caches.delete(name);return false;}
   return true;
- }catch{console.error('[OFFLINE_PRIVATE_CACHE_WARM_FAILED]');return false;}
+ }catch{reportProtocolClientError('OFFLINE_PRIVATE_CACHE_WARM_FAILED');return false;}
 }

@@ -1,3 +1,4 @@
+import {recordObservedFailure} from '@/lib/server/actionObservation';
 import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -74,8 +75,8 @@ export async function prepareIntakeFile(input: unknown, ensureOriginal=false): P
     const grant = await createAdminClient().storage.from(BUCKET).createSignedUploadUrl(pending.speicherpfad, { upsert: false });
     if (grant.error || !grant.data || grant.data.path !== pending.speicherpfad) throw new Error("INTAKE_FILE_UPLOAD_GRANT_UNAVAILABLE");
     return { code: "OK", upload: { bucket: BUCKET, path: grant.data.path, token: grant.data.token, url: grant.data.signedUrl } };
-  } catch (error) {
-    console.error("[INTAKE_FILE_PREPARE_FAILED]", { message: error instanceof Error ? error.message : "UnknownError" });
+  } catch{
+    recordObservedFailure('INTAKE_FILE_PREPARE_FAILED');
     return { code: "UNAVAILABLE", message: "Datei ist noch nicht vollständig gesichert. Eingaben bleiben erhalten. Fehlercode: INTAKE_FILE_PREPARE_FAILED." };
   }
 }
@@ -150,8 +151,8 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
     const canRead = isXml ? xmlResult?.code==='OK' : bytes.byteLength <= 20 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(file.mime);
     const deadline = AbortSignal.timeout(30_000);
     const recognized = !isXml && canRead ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
-      (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) })) : null;
-    if (recognized && recognized.code !== "OK") console.error("[INTAKE_FILE_RECOGNITION_UNAVAILABLE]", { fileId, code: recognized.code });
+      (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),undefined,{subject:{type:'intake',id:file.item_id},originalRef:file.id}) : null;
+    if (recognized && recognized.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
     const kind = xmlResult?.code === "OK" ? "rechnung" : recognized?.code === "OK" ? captureRecognition({ text: null, suggestions: recognized.data.suggestions }).kind : null;
     await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
@@ -177,8 +178,8 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
         WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='erkannt' AND befehl_id=${retryKey??fileId}::uuid)`);
     });
     return snapshot();
-  } catch (error) {
-    console.error("[INTAKE_FILE_FINISH_FAILED]", { message: error instanceof Error ? error.message : "UnknownError", fileId });
+  } catch{
+    recordObservedFailure('INTAKE_FILE_FINISH_FAILED');
     try {
       await withPrivilegedTenantTransaction(auth,async tx=>{
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
@@ -190,7 +191,7 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
           FROM public.intake_file WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid
           ON CONFLICT DO NOTHING`);
       });
-    } catch(recordError){console.error("[INTAKE_FILE_FAILURE_RECORD_FAILED]",recordError);}
+    } catch{recordObservedFailure('INTAKE_FILE_FAILURE_RECORD_FAILED');}
     return { code: "UNAVAILABLE", message: "Datei konnte nicht vollständig geprüft werden. Erneut versuchen; die Kennung bleibt gleich. Fehlercode: INTAKE_FILE_FINISH_FAILED." };
   }
 }

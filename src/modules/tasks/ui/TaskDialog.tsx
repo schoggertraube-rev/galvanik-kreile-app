@@ -1,13 +1,13 @@
 'use client';
 import{useCallback,useEffect,useRef,useState}from'react';
 import{Button,Dialog,Feld,Eingabe,Textfeld,Segment,FormRaster,Hinweis,Rueckfrage}from'@/ui/kr';
-import{ACCESS_AREAS,type AccessArea}from'@/lib/auth/authorizationContract';
+import{ACCESS_AREAS,ACCESS_AREA_LABELS,type AccessArea}from'@/lib/auth/authorizationContract';
 import{TASK_KINDS,TASK_KIND_LABELS,taskValidation,type TaskKind,type TaskOpenRequest,type TaskReadResult,type TaskResult,type TaskSaveInput,type TaskCompleteInput,type TaskReferenceRead,type TaskReferenceType}from'../contract';
 
 export type TaskPorts={read:(request:TaskOpenRequest)=>Promise<TaskReadResult>;save:(input:TaskSaveInput)=>Promise<TaskResult>;complete:(input:TaskCompleteInput)=>Promise<TaskResult>;canManageMoney:boolean;referenceTargets:readonly TaskReferenceType[];openReference:(reference:TaskReferenceRead)=>void;openInvoice?:(id:string)=>void};
 type Data=Extract<TaskReadResult,{code:'OK'}>;
 type Draft={kind:TaskKind;title:string;dueDate:string;time:string;recipient:string;note:string};
-const AREA_NAMES:Record<AccessArea,string>={auftraege:'Aufträge',eingang:'Eingang',kunden:'Kunden',geld:'Geld',kassieren:'Kassieren',mails:'Nachrichten',entscheiden:'Entscheiden',einstellungen:'Einstellungen',logins:'Logins',wartung:'Wartung',statistik_alle:'Statistik aller Personen'};
+const AREA_NAMES:Record<AccessArea,string>={auftraege:'Aufträge',eingang:'Eingang',kunden:'Kunden',geld:'Geld',kassieren:'Kassieren',mails:'Nachrichten',entscheiden:'Entscheiden',einstellungen:'Einstellungen',logins:'Logins',wartung:'Wartung',statistik_alle:'Statistik aller Personen',protokoll:ACCESS_AREA_LABELS.protokoll.text};
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const dateLabel=(date:string)=>new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',weekday:'short',day:'2-digit',month:'2-digit'}).format(new Date(date+'T12:00:00Z')).replace(/^(\p{L}+)\.,?\s/u,'$1 ');
 function initial(data:Data,request:TaskOpenRequest):Draft{

@@ -1,4 +1,7 @@
 import "server-only";
+import {createHash} from 'node:crypto';
+import {reportObservedTechnical} from './actionObservation';
+import type {LogSubject,TechnicalEvent} from '@/modules/logging/public';
 
 const API_VERSION = "2024-11-30";
 type Environment = Record<string, string | undefined>;
@@ -69,6 +72,7 @@ export async function analyzeWithAzureDocumentIntelligence(
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
   wait: (milliseconds: number) => Promise<void> = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  diagnostic?: {subject:LogSubject;originalRef:string},
 ): Promise<AzureResult> {
   const endpointValue = env.AZURE_DOCINTEL_ENDPOINT?.trim();
   const key = env.AZURE_DOCINTEL_KEY?.trim();
@@ -76,6 +80,8 @@ export async function analyzeWithAzureDocumentIntelligence(
   if (bytes.byteLength < 1 || bytes.byteLength > 20 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(mimeType)) {
     return { code: "UNAVAILABLE", message: "Das Dokumentformat kann nicht sicher analysiert werden." };
   }
+  let attempted=false;
+  let observedOutcome:Extract<TechnicalEvent,{type:'external'}>['ergebnis']='unklar';
   try {
     const endpoint = new URL(endpointValue);
     if (endpoint.protocol !== "https:") throw new Error("AZURE_ENDPOINT_INVALID");
@@ -83,13 +89,14 @@ export async function analyzeWithAzureDocumentIntelligence(
     analyzeUrl.searchParams.set("_overload", "analyzeDocument");
     analyzeUrl.searchParams.set("api-version", API_VERSION);
     analyzeUrl.searchParams.set("features", "keyValuePairs");
+    attempted=true;
     const response = await fetchPort(analyzeUrl, {
       method: "POST",
       headers: { "content-type": "application/json", "Ocp-Apim-Subscription-Key": key },
       body: JSON.stringify({ base64Source: Buffer.from(bytes).toString("base64") }),
       cache: "no-store",
     });
-    if (response.status !== 202) throw new Error(`AZURE_ANALYZE_${response.status}`);
+    if (response.status !== 202) {observedOutcome='fehler';throw new Error(`AZURE_ANALYZE_${response.status}`);}
     const operationHeader = response.headers.get("operation-location");
     if (!operationHeader) throw new Error("AZURE_OPERATION_MISSING");
     const operation = new URL(operationHeader);
@@ -97,15 +104,21 @@ export async function analyzeWithAzureDocumentIntelligence(
     for (let attempt = 0; attempt < 12; attempt += 1) {
       if (attempt > 0) await wait(500);
       const poll = await fetchPort(operation, { headers: { "Ocp-Apim-Subscription-Key": key }, cache: "no-store" });
-      if (!poll.ok) throw new Error(`AZURE_RESULT_${poll.status}`);
+      if (!poll.ok) {observedOutcome='fehler';throw new Error(`AZURE_RESULT_${poll.status}`);}
       const payload = await poll.json() as Record<string, unknown>;
-      if (payload.status === "succeeded") return { code: "OK", data: { suggestions: suggestions(payload) } };
-      if (payload.status === "failed") throw new Error("AZURE_ANALYZE_FAILED");
+      if (payload.status === "succeeded") {observedOutcome='ok';return { code: "OK", data: { suggestions: suggestions(payload) } };}
+      if (payload.status === "failed") {observedOutcome='fehler';throw new Error("AZURE_ANALYZE_FAILED");}
       if (payload.status !== "running" && payload.status !== "notStarted") throw new Error("AZURE_STATUS_INVALID");
     }
+    observedOutcome='zeitueberschreitung';
     return { code: "UNAVAILABLE", message: "Die Dokumentanalyse läuft länger als erwartet. Bitte später erneut prüfen." };
   } catch (error) {
+    if(error&&typeof error==='object'&&'name'in error&&(error.name==='TimeoutError'||error.name==='AbortError'))observedOutcome='zeitueberschreitung';
     console.error('[AZURE_DOCUMENT_INTELLIGENCE_FAILED]',{code:error instanceof Error&&/^AZURE_[A-Z0-9_]+$/.test(error.message)?error.message:'AZURE_DOCUMENT_INTELLIGENCE_FAILED'});
     return { code: "UNAVAILABLE", message: "Das Dokument konnte mit Azure nicht sicher analysiert werden." };
+  } finally {
+    // Only a real provider attempt, after the caller secured the original.
+    // The existing Action observer supplies identity; no payload/URL/key crosses it.
+    if(attempted&&diagnostic)await reportObservedTechnical({type:'external',command:'analyzeWithAzureDocumentIntelligence',subject:diagnostic.subject,dienst:'belegerkennung',ergebnis:observedOutcome,original:{ref:diagnostic.originalRef,sha256:createHash('sha256').update(bytes).digest('hex')}});
   }
 }

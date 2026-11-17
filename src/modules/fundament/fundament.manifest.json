@@ -3,12 +3,14 @@
   "version": "1.1.1",
   "owner": "Path-1 Fundament (authentifizierter Produkteinstieg)",
   "publicExports": [
+    "@/modules/fundament/server-public#readLoggingSettings",
     "@/modules/fundament/public#CompanyLetterSettings",
     "@/modules/fundament/server-public#readCompanyLetterSettings",
     "@/modules/fundament/public#ProductStartProfile",
     "@/modules/fundament/public#SystemAdminView",
     "@/modules/fundament/public#SystemAdminViewProps",
     "@/modules/fundament/public#CompanySettingsInput",
+    "@/modules/fundament/public#ProtocolSettings",
     "@/modules/fundament/public#CompanySettingsSnapshot",
     "@/modules/fundament/public#ManagedUser",
     "@/modules/fundament/public#UpdateManagedUserInput",
@@ -68,6 +70,7 @@
   ],
   "viewsFunctions": [],
   "ownsTables": [
+    "public.feature_flags",
     "public.app_user_rights",
     "public.app_users",
     "public.company_settings",

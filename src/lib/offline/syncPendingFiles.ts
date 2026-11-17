@@ -1,3 +1,5 @@
+
+import {reportProtocolClientError} from '@/modules/logging/public';
 import {readPendingEntries,retainQuarantinedPending,retainRejectedWorkshopOriginal,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal,claimPendingWorkshop,isPendingWorkshopAcknowledgement} from './pendingStore';
 import {isWorkshopRejectionReceipt} from './workshopRejectionContract';
 import type {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
@@ -56,7 +58,7 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
      outcome.secured++;
      if(ports.currentScope()!==scope)break;
      if(await acknowledgePendingWorkshopOriginal(scope,entry,result.offlineReceipt)){outcome.acknowledged++;if(ports.currentScope()===scope)ports.workshopAcknowledged?.({scope,entry,result});}
-    }catch(error){outcome.blocked++;blockedItems.add(entry.itemId);console.error('[OFFLINE_WORKSHOP_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
+    }catch{outcome.blocked++;blockedItems.add(entry.itemId);reportProtocolClientError('OFFLINE_WORKSHOP_SYNC_FAILED');}
     continue;
    }
    if(options.workshopOnly)continue;
@@ -72,7 +74,7 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
      outcome.secured++;
      if(ports.currentScope()!==scope)break;
      await acknowledgePendingOriginal(scope,entry.id,entry.textstand,saved.capture.takeovers);outcome.acknowledged++;
-    }catch(error){outcome.blocked++;blockedItems.add(entry.itemId);console.error('[OFFLINE_NOTE_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
+    }catch{outcome.blocked++;blockedItems.add(entry.itemId);reportProtocolClientError('OFFLINE_NOTE_SYNC_FAILED');}
     continue;
    }
    // Historical fingerprints are not guessed; the existing capture dialog can resume them.
@@ -93,8 +95,8 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
     // Goods photos need their real receipt association, not merely a stored blob.
     if(entry.context||entry.captureOrigin==='warenfoto'||ports.currentScope()!==scope)continue;
     await acknowledgePendingOriginal(scope,entry.id,undefined,finished.capture.takeovers);outcome.acknowledged++;
-   }catch(error){outcome.blocked++;blockedItems.add(entry.itemId);console.error('[OFFLINE_ORIGINAL_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');}
+   }catch{outcome.blocked++;blockedItems.add(entry.itemId);reportProtocolClientError('OFFLINE_ORIGINAL_SYNC_FAILED');}
   }
   return outcome;
- })();running.set(scope,work);void work.finally(()=>{if(running.get(scope)===work)running.delete(scope);}).catch(error=>{console.error('[OFFLINE_SYNC_FAILED]',error instanceof Error?error.name:'UnknownError');});return work;
+ })();running.set(scope,work);void work.finally(()=>{if(running.get(scope)===work)running.delete(scope);}).catch(()=>{reportProtocolClientError('OFFLINE_SYNC_FAILED');});return work;
 }

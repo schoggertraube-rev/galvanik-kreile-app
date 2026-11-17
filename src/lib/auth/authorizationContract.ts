@@ -50,6 +50,7 @@ export const ACCESS_AREAS = [
   "logins",
   "wartung",
   "statistik_alle",
+  "protokoll",
 ] as const;
 
 export type AccessArea = typeof ACCESS_AREAS[number];
@@ -66,10 +67,11 @@ export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string
   logins: { text: "Logins & Rechte verwalten" },
   statistik_alle: { text: "Statistik aller Personen" },
   wartung: { text: "Wartung, Stufen & Anbindungen" },
+  protokoll: { text: "Protokoll" },
 };
 
 export const ROLE_ACCESS_AREA_TEMPLATES: Record<AppRole, readonly AccessArea[]> = {
-  developer: ["einstellungen", "logins", "wartung"],
+  developer: ["einstellungen", "logins", "wartung", "protokoll"],
   admin: ACCESS_AREAS.filter((area) => area !== "wartung" && area !== "entscheiden"),
   meister: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen", "kassieren", "logins", "entscheiden"],
   buero: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen"],
@@ -128,6 +130,7 @@ export function getFixedAccessAreasForRole(role: AppRole): readonly AccessArea[]
 }
 
 const ACCESS_AREA_PERMISSIONS: Record<AccessArea, readonly PermissionKey[]> = {
+  protokoll: [],
   statistik_alle: [],
   auftraege: ["perm_op_status", "perm_op_risk", "perm_op_photos", "perm_op_qa", "perm_view_leitstand"],
   eingang: ["perm_data_orders"],

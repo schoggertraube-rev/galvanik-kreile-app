@@ -1,3 +1,5 @@
+
+import {reportProtocolClientError} from '@/modules/logging/public';
 import type {CustomerListResponse} from '@/app/actions/customers.actions';
 import type {ActionResult} from '@/lib/server/authHelper';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
@@ -573,7 +575,7 @@ export async function capturePendingItemFinished(scope:string,enabled:boolean,in
  const login=readCacheScopeMarker();if(!login)return {code:'NETWORK_REQUIRED' as const};
  let state:Awaited<ReturnType<typeof readPendingDeviceStand>>;
  try{state=await readPendingDeviceStand(scope,login);}
- catch(error){console.error('[OFFLINE_WORKSHOP_STAND_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');return {code:'NETWORK_REQUIRED' as const};}
+ catch{reportProtocolClientError('OFFLINE_WORKSHOP_STAND_UNAVAILABLE');return {code:'NETWORK_REQUIRED' as const};}
  const now=new Date();
  if(state.code!=='OK')return {code:'NETWORK_REQUIRED' as const};
  const age=now.getTime()-Date.parse(state.serverReadAt);

@@ -5,6 +5,8 @@ import {V45_RUNTIME} from "@/ui/v45.generated";
 import {DELIVERY_NOTE_COPY,SITUATION_COPY} from "@/ui/situationCatalog";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
+import {observeAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import type {
   ConfirmPaymentInput,
   ConfirmPaymentResult,
@@ -54,7 +56,7 @@ export async function confirmPaymentAction(
   input: ConfirmPaymentInput,
 ): Promise<ConfirmPaymentResult> {
   const { confirmPayment } = await import("@/lib/server/commands/confirmPaymentCommand");
-  const result = await confirmPayment(input);
+  const result = await observeAction('confirmPayment',{type:'invoice',id:input?.invoiceId},()=>confirmPayment(input),readLoggingSettings);
   if (result.code === "OK") revalidatePaymentConsumers();
   return result;
 }
@@ -63,7 +65,7 @@ export async function setPaymentModeAction(
   input: SetPaymentModeInput,
 ): Promise<SetPaymentModeResult> {
   const { setPaymentMode } = await import("@/lib/server/commands/setPaymentModeCommand");
-  const result = await setPaymentMode(input);
+  const result = await observeAction('setPaymentMode',{type:'order',id:input?.orderId},()=>setPaymentMode(input),readLoggingSettings);
   if (result.code === "OK") revalidatePaymentConsumers();
   return result;
 }

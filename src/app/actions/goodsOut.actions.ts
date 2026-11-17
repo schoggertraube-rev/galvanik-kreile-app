@@ -1,4 +1,6 @@
 "use server";
+import {observeAction,subjectForAction} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {isShipmentGroupInput,type ShipmentGroupInput,type ShipmentGroupResult} from '@/lib/domain/shipmentGroupContract';
 import {readManualShipmentGroup} from '@/modules/orders/server-public';
 import {readInvoiceVat} from "@/modules/accounting/server-public";
@@ -51,6 +53,7 @@ async function goodsOutComposition(input:RecordGoodsOutInput):Promise<GoodsOutCo
 export async function recordGoodsOutAction(input:RecordGoodsOutInput):Promise<RecordGoodsOutResult>;
 export async function recordGoodsOutAction(input:ShipmentGroupInput):Promise<ShipmentGroupResult>;
 export async function recordGoodsOutAction(input:RecordGoodsOutInput|ShipmentGroupInput):Promise<RecordGoodsOutResult|ShipmentGroupResult>{
+ return observeAction('recordGoodsOutAction',subjectForAction('recordGoodsOutAction',input),async()=>{
  const {authorizeGoodsOutInput,recordGoodsOut,recordShipmentGroupGoodsOut}=await import('@/lib/server/commands/recordGoodsOutCommand');
  let result:RecordGoodsOutResult|ShipmentGroupResult;
  if(isShipmentGroupInput(input))result=await recordShipmentGroupGoodsOut(input,goodsOutComposition,readManualShipmentGroup);
@@ -60,4 +63,6 @@ export async function recordGoodsOutAction(input:RecordGoodsOutInput|ShipmentGro
  }
  if(result.code==='OK'){revalidatePath('/');revalidatePath('/warendurchlauf');revalidatePath('/buchhaltung/rechnungen');}
  return result;
+
+ },readLoggingSettings);
 }
