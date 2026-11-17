@@ -1,3 +1,5 @@
+DO $financial_access_migration$
+BEGIN
 -- KORR-RECHTE-GELD A/D, Owner16.11 and PL17.11 13:01.
 -- One lossless conversion; user/tenant/actor, originals and task evidence stay intact.
 LOCK TABLE public.app_user_rights,public.tasks IN ACCESS EXCLUSIVE MODE;
@@ -317,3 +319,6 @@ BEGIN
     'success',p_actor_id,p_client_event_id,1,gen_random_uuid(),v_version,statement_timestamp() AT TIME ZONE 'UTC');
   RETURN QUERY SELECT 'OK'::text,false;
 END $$;
+
+END;
+$financial_access_migration$;
