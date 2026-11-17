@@ -1,4 +1,6 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import {PACKAGE_SWITCHES,mapPackageSwitchRows} from '@/modules/fundament/public';
+import type {PackageSwitchValues} from '@/modules/fundament/public';
 import {observeResolvedAuthorization,observeAuthorizationAttempt} from './actionObservation';
 import { readAppSession } from "@/lib/server/appSession";
 import { db } from "@/db";
@@ -19,6 +21,8 @@ import {
 export type AuthorizationSnapshot = {
   /** Existing DB feature filter, resolved alongside rights; never a permission. */
   offline24h?: boolean;
+  /** Visibility only; domain commands continue to use their existing rights. */
+  packageSwitches?: Readonly<PackageSwitchValues>;
   userId: string;
   tenantId: string;
   displayName: string;
@@ -141,10 +145,12 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
         fullName: appUsers.fullName,
         role: appUsers.role,
         active: appUsers.active,
-        // PL06:01: evaluate the existing role-filtered flag at the one rights resolver.
-        offline24h: sql<boolean>`EXISTS(SELECT 1 FROM public.feature_flags flag
-          WHERE flag.id='offline_24h' AND flag.enabled IS TRUE AND flag.roles_allowed IS NOT NULL
-          AND (cardinality(flag.roles_allowed)=0 OR ${appUsers.role}=ANY(flag.roles_allowed)))`,
+        // Same rights query and pure package catalogue; no server-action facade.
+        packageFlags: sql<unknown>`(SELECT jsonb_agg(jsonb_build_object('id',flag.id,'enabled',
+          CASE WHEN flag.id='offline_24h' THEN flag.enabled AND
+            (cardinality(flag.roles_allowed)=0 OR ${appUsers.role}=ANY(flag.roles_allowed))
+          ELSE flag.enabled END,'roles',flag.roles_allowed))
+          FROM public.feature_flags flag WHERE flag.id IN (${sql.join(PACKAGE_SWITCHES.map(({id})=>sql`${id}`),sql`,`)}))`,
         updatedAt: appUsers.updatedAt,
         areas: sql<string[]>`(
           SELECT COALESCE(array_agg(rights.bereich ORDER BY rights.bereich), ARRAY[]::text[])
@@ -224,6 +230,9 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
 
   // 6. Berechtigungen ableiten
   const permissions = getPermissionsForAreas(areas);
+  let visibility:PackageSwitchValues;
+  try{visibility=mapPackageSwitchRows(dbUser.packageFlags);}
+  catch(error){console.error('[PACKAGE_SWITCH_VISIBILITY_FAILED]',error);return {ok:false,reason:'AUTHORIZATION_UNAVAILABLE',message:'AUTH_DB_ERROR: Berechtigungen nicht verfügbar'};}
 
   const snapshot:AuthorizationSnapshot = {
       userId: dbUser.id,
@@ -233,7 +242,8 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
       areas,
       permissions,
       active: true,
-      offline24h: dbUser.offline24h === true,
+      offline24h: visibility.offline_24h,
+      packageSwitches: visibility,
   };
   observeResolvedAuthorization(snapshot);
   return {ok:true,data:snapshot};

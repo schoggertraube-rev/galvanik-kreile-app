@@ -1,4 +1,5 @@
 "use server";
+import type {PackageSwitchValues} from "@/modules/fundament/public";
 
 import bcrypt from "bcryptjs";
 import {PIN_LOGIN_COPY} from "@/ui/situationCatalog";
@@ -38,6 +39,7 @@ export type ClientAuthorizationResult =
         displayName: string;
         offlineScope?: string;
         offline24h?:boolean;
+        packageSwitches?:Readonly<PackageSwitchValues>;
         role: AppRole;
         areas: readonly AccessArea[];
         permissions: readonly PermissionKey[];
@@ -74,6 +76,7 @@ export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizat
       // Local partition only, never a credential; preserves existing intake originals.
       offlineScope: offlinePartition(result.data),
       offline24h: result.data.offline24h===true,
+      ...(result.data.packageSwitches?{packageSwitches:{...result.data.packageSwitches}}:{}),
       role: result.data.role,
       areas: result.data.areas ?? [],
       permissions: result.data.permissions,

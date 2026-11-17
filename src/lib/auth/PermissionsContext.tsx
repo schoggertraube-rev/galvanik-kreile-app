@@ -1,4 +1,5 @@
 "use client";
+import type {PackageSwitchValues} from "@/modules/fundament/public";
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -34,6 +35,7 @@ interface AuthState {
   role: string | null;
   offlineScope: string | null;
   offline24h: boolean;
+  packageSwitches: Readonly<PackageSwitchValues>|null;
   areas: AccessArea[];
   permissions: string[];
   actions: AuthorizationActionGrants;
@@ -62,6 +64,7 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
       role: initial.user.role,
       offlineScope: initial.user.offlineScope ?? null,
       offline24h: initial.user.offline24h===true,
+      packageSwitches: initial.user.packageSwitches?{...initial.user.packageSwitches}:null,
       areas: [...initial.user.areas],
       permissions: [...initial.user.permissions],
       actions: { ...DENIED_ACTIONS, ...initial.user.actions },
@@ -75,6 +78,7 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
     role: null,
     offlineScope: null,
     offline24h: false,
+    packageSwitches: null,
     areas: [],
     permissions: [],
     actions: { ...DENIED_ACTIONS },
@@ -89,6 +93,7 @@ const PermissionsContext = createContext<PermissionsContextType>({
   role: null,
     offlineScope: null,
     offline24h: false,
+    packageSwitches: null,
   areas: [],
   permissions: [],
   actions: { ...DENIED_ACTIONS },
@@ -144,6 +149,7 @@ export function PermissionsProvider({
           role: result.data.role,
           offlineScope: result.data.offlineScope ?? null,
           offline24h: result.data.offline24h===true,
+          packageSwitches: result.data.packageSwitches?{...result.data.packageSwitches}:null,
           areas: [...result.data.areas],
           permissions: [...result.data.permissions],
           actions: { ...result.data.actions },
@@ -157,6 +163,7 @@ export function PermissionsProvider({
           role: null,
     offlineScope: null,
     offline24h: false,
+    packageSwitches: null,
           areas: [],
           permissions: [],
           actions: { ...DENIED_ACTIONS },
@@ -173,6 +180,7 @@ export function PermissionsProvider({
           role: null,
     offlineScope: null,
     offline24h: false,
+    packageSwitches: null,
           areas: [],
           permissions: [],
           actions: { ...DENIED_ACTIONS },
@@ -194,6 +202,7 @@ export function PermissionsProvider({
         role: null,
     offlineScope: null,
     offline24h: false,
+    packageSwitches: null,
         areas: [],
         permissions: [],
         actions: { ...DENIED_ACTIONS },

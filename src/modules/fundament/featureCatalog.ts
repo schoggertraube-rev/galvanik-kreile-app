@@ -51,3 +51,92 @@ export type SalesStageFeature = { id: SalesStageFeatureId; enabled: boolean };
 export function isFeatureEnabled(id: SalesStageFeatureId, features: readonly SalesStageFeature[]): boolean {
   return features.find((feature) => feature.id === id)?.enabled === true;
 }
+
+/** PLAN S21 table6 + VORAB(c)V1/V4. Sales stages remain separate. */
+export const PACKAGE_SWITCHES = [
+  {
+    "id": "ui_v45",
+    "defaultEnabled": false
+  },
+  {
+    "id": "logging",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p2_eingang",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p2_nachrichten",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p2_kv",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p3_karten",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p3_werkstatt",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p4_ausgang",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p4_geld",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p4_reklamation",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p5_tag",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p5_suche",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p5_einstellungen",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p5_uebersetzen",
+    "defaultEnabled": false
+  },
+  {
+    "id": "offline_24h",
+    "defaultEnabled": false
+  },
+  {
+    "id": "tag_anordnen",
+    "defaultEnabled": false
+  },
+  {
+    "id": "tag_notizen",
+    "defaultEnabled": false
+  }
+] as const;
+export type PackageSwitchId = typeof PACKAGE_SWITCHES[number]["id"];
+export type PackageSwitchValues = Record<PackageSwitchId, boolean>;
+
+export type PackageSwitchRow={id:string;enabled:boolean;roles:string[]};
+const packageSwitchIds=new Set<string>(PACKAGE_SWITCHES.map(({id})=>id));
+export function validatePackageSwitchRow(value:unknown):asserts value is PackageSwitchRow{
+ if(!value||typeof value!=='object'||Array.isArray(value))throw Error('PACKAGE_SWITCH_SOURCE_INVALID');
+ const row=value as Record<string,unknown>;
+ if(typeof row.id!=='string'||!packageSwitchIds.has(row.id)||typeof row.enabled!=='boolean'||!Array.isArray(row.roles)||row.roles.some(role=>typeof role!=='string')||row.id!=='offline_24h'&&row.roles.length!==0)throw Error('PACKAGE_SWITCH_SOURCE_INVALID');
+}
+/** One pure projector for the existing rights SQL and settings flag source. */
+export function mapPackageSwitchRows(source:unknown):PackageSwitchValues{
+ if(!Array.isArray(source)||source.length!==PACKAGE_SWITCHES.length)throw Error('PACKAGE_SWITCH_SET_INCOMPLETE');
+ const found:PackageSwitchRow[]=source.map(row=>{validatePackageSwitchRow(row);return row;});
+ if(new Set(found.map(row=>row.id)).size!==PACKAGE_SWITCHES.length)throw Error('PACKAGE_SWITCH_SET_INCOMPLETE');
+ return Object.fromEntries(found.map(row=>[row.id,row.enabled])) as PackageSwitchValues;
+}

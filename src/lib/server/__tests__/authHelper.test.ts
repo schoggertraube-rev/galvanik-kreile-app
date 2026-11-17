@@ -6,6 +6,7 @@ process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
  * Unit-Tests für checkAppSession() und readAuthorizedArea("kunden").
  */
 
+import {PACKAGE_SWITCHES} from "@/modules/fundament/public";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { signAppSession, type AppSession } from "@/lib/server/appSession";
@@ -129,6 +130,8 @@ describe("checkAppSession() – typisierte Fehlergründe (A-11)", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-xyz",
+        // Synthetic rows for the same canonical authorization SQL source.
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Klaus Meister",
         role: "meister",
         active: true,
@@ -157,6 +160,8 @@ describe("readAuthorizedArea – kanonische Bereiche (A10)", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-xyz",
+        // Synthetic rows for the same canonical authorization SQL source.
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Klaus Meister",
         role: "meister",
         active: true,
@@ -174,6 +179,8 @@ describe("readAuthorizedArea – kanonische Bereiche (A10)", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-xyz",
+        // Synthetic rows for the same canonical authorization SQL source.
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Klaus Meister",
         role: "readonly",
         active: true,
@@ -199,6 +206,8 @@ describe("readAuthorizedArea – kanonische Bereiche (A10)", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-xyz",
+        // Synthetic rows for the same canonical authorization SQL source.
+        packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Klaus Meister",
         role: "admin",
         active: true,
