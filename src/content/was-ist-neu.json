@@ -1,5 +1,15 @@
 [
   {
+    "datum": "2026-11-18",
+    "pr": 237,
+    "seite": "auftraege",
+    "ziel": "/orders",
+    "punkte": [
+      "Du siehst einen konkreten Hinweis, wenn die KV-Erinnerungsaufgabe nicht angelegt werden konnte, und kannst sie erneut anlegen.",
+      "Eine um bis zu fünf Minuten abweichende Geräteuhr löst keinen falschen Uhrzeit-Hinweis mehr aus."
+    ]
+  },
+  {
     "datum": "2026-11-17",
     "pr": 235,
     "seite": "eingang",
