@@ -17,6 +17,18 @@ import {renderToBuffer} from '@react-pdf/renderer';
 import {createImmutableInvoicePdfDocument,type ImmutableInvoiceSnapshot,type ImmutableInvoiceSnapshotV3} from '@/lib/pdf/ImmutableInvoiceDocument';
 import {readInvoiceVat} from '@/modules/accounting/public';
 
+it('S54o PL19:01: a unitless fractional part is refused by the existing capture guard without an order, invoice or number',async()=>{
+ const customerId=await customerFixture('TEST S54o fractional unitless part');
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const before=await sql`SELECT invoice_year,last_number,updated_at::text FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
+ const key=randomUUID();
+ expect(await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:key,customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'rechnung',note:'TEST S54o fractional unitless refusal',items:[{catalogServiceId:null,name:'TEST S54o 2.5 parts',quantity:2.5,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:null,unitPriceCents:10000,vatRateBasisPoints:1900}]}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await sql`SELECT count(*)::int AS n FROM public.orders WHERE tenant_id=${tenant} AND customer_id=${customerId}`).toEqual([{n:0}]);
+ expect(await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${tenant} AND customer_id=${customerId}`).toEqual([{n:0}]);
+ expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${key}::uuid`).toEqual([{n:0}]);
+ expect(await sql`SELECT invoice_year,last_number,updated_at::text FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(before);
+});
+
 it('S54o C15 A15:27: authorized existing reopen preserves the old freeze and permits regular correction, finish and one invoice',async()=>{
  const customerId=await customerFixture('S54o valid correction customer');
  const order=await readyOrderForInvoice('TEST bad part \u{1D11E}','pickup',customerId);

@@ -35,6 +35,7 @@ export function assertInvoiceElectronicFields(input:Fields):InvoiceVatRead{
  if(!Number.isSafeInteger(input.paymentTermDays)||input.paymentTermDays<1||input.paymentTermDays>365)throw new InvoiceElectronicSourceError({kind:'settings',field:'paymentTermDays'});
  for(const line of input.lines){
   if(!line.unit)throw new InvoiceElectronicSourceError({kind:'order',objectId:input.order.orderId,field:'unit:'+(line.type==='EXTRA_WORK'?line.catalogPositionName:line.name)});
+  if(line.type==='BASE'&&line.unitSource!==undefined&&(line.unitSource!=='default_piece'||line.unit!=='C62'||typeof line.itemId!=='string'||!line.itemId.trim()||!Number.isSafeInteger(line.quantity)||line.quantity<1))throw new InvoiceElectronicSourceError({kind:'order',objectId:input.order.orderId,field:'unit:'+line.name});
   if(line.type==='BASE'&&BigInt(line.unitNetAmountCents)*BigInt(line.quantity)!==BigInt(line.lineNetAmountCents))throw new InvoiceElectronicSourceError({kind:'order',objectId:input.order.orderId,field:'rounding'});
  }
  try{return readInvoiceVat({...input,schemaVersion:3});}

@@ -411,10 +411,13 @@ function parseBaseLines(value: unknown, vat?:{reverseCharge:boolean;companyRate:
     if (lineNetAmountCents < 0 || unitNetAmountCents !== Number((BigInt(lineNetAmountCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity))) {
       throw new Error("INVOICE_BASE_LINE_INTEGRITY_INVALID");
     }
-    const unit=vat?.electronic?invoiceElectronicUnit(entry.unit):null;
+    // PL18Nov19:01: only an actual whole-count BASE part without a stored
+    // unit receives this source marker in the new snapshot, never in the KV.
+    const defaultPiece=vat?.electronic&&(entry.unit===null||entry.unit===undefined||typeof entry.unit==='string'&&!entry.unit.trim());
+    const unit=vat?.electronic?(defaultPiece?{code:'C62' as const}:invoiceElectronicUnit(entry.unit)):null;
     if(vat?.electronic&&!unit)throw new InvoiceElectronicSourceError({kind:'order',itemId,field:'unit:'+name});
     return { type: "BASE" as const, itemId, name, quantity, unitNetAmountCents, lineNetAmountCents,
-      ...(unit?{unit:unit.code,taxCategory:invoiceLineVat(entry.vat_rate_basis_points,name,vat!.reverseCharge,vat!.companyRate)===0?'AE' as const:'S' as const}:{}),
+      ...(unit?{unit:unit.code,...(defaultPiece?{unitSource:'default_piece' as const}:{}),taxCategory:invoiceLineVat(entry.vat_rate_basis_points,name,vat!.reverseCharge,vat!.companyRate)===0?'AE' as const:'S' as const}:{}),
       ...(vat ? {vat_rate_basis_points:invoiceLineVat(entry.vat_rate_basis_points,name,vat.reverseCharge,vat.companyRate)} : {}),
     };
   });
@@ -469,7 +472,9 @@ function parseStoredLine(value: unknown, schemaVersion: 1|2|3): ImmutableInvoice
       "itemId", "lineNetAmountCents", "name", "quantity", "type", "unitNetAmountCents",
       ...(schemaVersion !== 1 ? ["vat_rate_basis_points"] : []),
       ...(schemaVersion===3?["unit","taxCategory"]:[]),
+      ...(schemaVersion===3&&'unitSource'in value?["unitSource"]:[]),
     ])) throw new Error("INVOICE_SNAPSHOT_BASE_LINE_SHAPE_INVALID");
+    if('unitSource'in value&&(value.unitSource!=='default_piece'||value.unit!=='C62'||typeof value.quantity!=='number'||!Number.isSafeInteger(value.quantity)||value.quantity<1))throw Error('INVOICE_SNAPSHOT_BASE_UNIT_SOURCE_INVALID');
     const parsed = parseBaseLines([{
       itemId: value.itemId,
       lineNetAmountCents: value.lineNetAmountCents,

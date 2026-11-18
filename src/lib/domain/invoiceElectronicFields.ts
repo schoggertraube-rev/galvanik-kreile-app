@@ -3,7 +3,8 @@ import {normaliseOrderPositionUnit,orderPositionUnitLabel} from '@/lib/orderPosi
 /** S54o d: only original-bound S/AE sources, never a rate/country guess. */
 export type InvoiceElectronicTaxCategory='S'|'AE';
 export type InvoiceElectronicUnitCode='C62'|'KGM'|'GRM'|'MTR'|'MTK'|'HUR'|'DMK'|'SET';
-export function invoiceElectronicUnitLabel(code:InvoiceElectronicUnitCode):string{
+export function invoiceElectronicUnitLabel(code:InvoiceElectronicUnitCode,source?:'default_piece'):string{
+ if(source!==undefined){if(source!=='default_piece'||code!=='C62')throw Error('INVOICE_ELECTRONIC_UNIT_SOURCE_INVALID');return 'Stk';}
  const labels:Record<InvoiceElectronicUnitCode,string>={C62:'Stk.',KGM:'kg',GRM:'g',MTR:'m',MTK:'m²',HUR:'Std.',DMK:'dm²',SET:'Satz'};
  if(!Object.hasOwn(labels,code))throw Error('INVOICE_ELECTRONIC_UNIT_INVALID');
  return labels[code];

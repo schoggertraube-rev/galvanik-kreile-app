@@ -28,6 +28,7 @@ export type ImmutableInvoiceBaseLine = {
   lineNetAmountCents: number;
   vat_rate_basis_points?:0|700|1900;
   unit?:InvoiceElectronicUnitCode;
+  unitSource?:'default_piece';
   taxCategory?:InvoiceElectronicTaxCategory;
 };
 
@@ -418,7 +419,7 @@ function lineDescription(line: ImmutableInvoiceLine): string {
 }
 
 function lineQuantity(line: ImmutableInvoiceLine): string {
-  return line.type === 'SHIPPING'?'1':line.type === "BASE" ? `${line.quantity} ${line.unit?invoiceElectronicUnitLabel(line.unit):'Stk.'}` : line.unit==='HUR'?`${invoiceXmlWorkHours(line.minutes).replace('.',',')} ${invoiceElectronicUnitLabel(line.unit)}`:`${line.minutes} Min.`;
+  return line.type === 'SHIPPING'?'1':line.type === "BASE" ? `${line.quantity} ${line.unit?invoiceElectronicUnitLabel(line.unit,line.unitSource):'Stk.'}` : line.unit==='HUR'?`${invoiceXmlWorkHours(line.minutes).replace('.',',')} ${invoiceElectronicUnitLabel(line.unit)}`:`${line.minutes} Min.`;
 }
 
 function lineUnitAmount(line: ImmutableInvoiceLine): string {

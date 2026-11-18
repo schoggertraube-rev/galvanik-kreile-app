@@ -98,6 +98,8 @@ it.each([{mode:700,rounding:null},{mode:null,rounding:null},{mode:'changed',roun
  const frozen=await withSession(full,()=>freezeOrderAction({orderId,expectedVersion:version,freezeId:randomUUID(),clientEventId:randomUUID()}));if(frozen.code!=='OK')throw Error('H1_PARTIAL_FREEZE');
  const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
  const issue={orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()};
+ const quoteOriginals=await sql`SELECT id::text,revision,md5(to_jsonb(position)::text) AS hash FROM private.quote_positions position WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid ORDER BY revision,id`;
+ const freezeOriginals=await sql`SELECT id::text,md5(to_jsonb(original)::text) AS hash FROM private.order_freezes original WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} ORDER BY id`;
  if(initialRate===null){
   expect(await withSession(full,()=>issueInvoiceAction(issue))).toMatchObject({code:'VALIDATION_ERROR',message:'Für TEST Bearbeitung ohne Einheit fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.'});
   expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{n:0}]);
@@ -107,7 +109,15 @@ it.each([{mode:700,rounding:null},{mode:null,rounding:null},{mode:'changed',roun
  }
  const invoice=await withSession(full,()=>issueInvoiceAction(structuredClone(issue)));
  expect(invoice,JSON.stringify(invoice)).toMatchObject({code:'OK'});
- const [vatRow]=await sql`SELECT snapshot,net_amount_cents,vat_amount_cents,gross_amount_cents,vat_rate_basis_points FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;
+ const [vatRow]=await sql`SELECT snapshot,pdf_content,net_amount_cents,vat_amount_cents,gross_amount_cents,vat_rate_basis_points FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;
+ expect(vatRow.snapshot).toMatchObject({schemaVersion:3,lines:[{type:'BASE',unit:'C62',unitSource:'default_piece'}, {type:'BASE',unit:'C62'}]});
+ expect(await sql`SELECT id::text,revision,md5(to_jsonb(position)::text) AS hash FROM private.quote_positions position WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid ORDER BY revision,id`).toEqual(quoteOriginals);
+ expect(await sql`SELECT id::text,md5(to_jsonb(original)::text) AS hash FROM private.order_freezes original WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} ORDER BY id`).toEqual(freezeOriginals);
+ if(mode===700&&rounding===null){
+  const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const task=getDocument({data:Uint8Array.from(vatRow.pdf_content),verbosity:0});
+  try{const pdf=await task.promise;let text='';for(let page=1;page<=pdf.numPages;page++){const content=await (await pdf.getPage(page)).getTextContent();text+=content.items.flatMap(item=>'str'in item?[item.str]:[]).join(' ')+'\n';}expect(text).toMatch(new RegExp('\\b'+receivedQuantity+' Stk(?:\\s|$)'));}finally{await task.destroy();}
+ }
  const vat=readInvoiceVat(vatRow);expect(vat.headRate).toBeNull();expect(vat.groups).toEqual([{netCents:expectedNet,rateBp:mode==='changed'?1900:700,vatCents:expectedGross-expectedNet,grossCents:expectedGross}]);
  if(rounding){const [row]=await sql`SELECT snapshot FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;expect(row.snapshot.lines).toMatchObject([{quantity:receivedQuantity,unitNetAmountCents:rounding==='full'?2500:2501,lineNetAmountCents:rounding==='full'?7501:5001},{quantity:2,unitNetAmountCents:1250,lineNetAmountCents:2499}]);}
  if(initialRate===null)expect(await sql`SELECT user_id::text,payload->>'vatRateBasisPoints' AS rate FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND event_type='QUOTE_VAT_FROM_COMPANY_V1'`).toEqual([{user_id:full.actorId,rate:'700'}]);
