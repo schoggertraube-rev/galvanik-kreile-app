@@ -3,6 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/server/customerSummaryRead", () => ({ readCustomerProfile: vi.fn() }));
 
 import { customerWriteObject, parseCustomerFreeTextAgreements } from "../server/customerWriteContract";
+import {EMPTY_CUSTOMER_FORM,invoiceCustomerCorrectionFields} from '../customerFormContract';
+
+it('C15 finds the reported character in current composed customer fields and never treats navigation as replacement data',()=>{
+ const value={...EMPTY_CUSTOMER_FORM,customerType:'privat' as const,firstName:'TEST Ada',lastName:'TEST \u{1D11E}',street:'TEST Weg',houseNumber:'1\u{1D11E}'};
+ expect(invoiceCustomerCorrectionFields(value,{invoiceCorrection:{field:'name',codePoint:0x1D11E}})).toEqual(['lastName']);
+ expect(invoiceCustomerCorrectionFields(value,{invoiceCorrection:{field:'street',codePoint:0x1D11E}})).toEqual(['houseNumber']);
+ expect(invoiceCustomerCorrectionFields(value,{invoiceCorrection:{field:'street',codePoint:0x1F600}})).toEqual([]);
+ expect(invoiceCustomerCorrectionFields(value,{invoiceCorrection:{field:'__proto__',codePoint:0x1D11E}})).toEqual([]);
+ expect(invoiceCustomerCorrectionFields(value,{invoiceCorrection:{field:'street',codePoint:0x110000}})).toEqual([]);
+ expect(value.houseNumber).toBe('1\u{1D11E}');
+});
 
 const customerId = "4dd2a51d-8342-421d-9ae1-31a024f7d44c";
 const clientEventId = "ebcf6240-b16e-4a97-a799-b5a1d81e8791";

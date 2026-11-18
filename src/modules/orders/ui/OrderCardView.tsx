@@ -1,6 +1,6 @@
 "use client";
 import {formatEuro} from '@/lib/domain/formatEuro';
-import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY,CUSTOMER_CREDIT_COPY,E_INVOICE_COPY} from "@/ui/situationCatalog";
+import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY,CUSTOMER_CREDIT_COPY,E_INVOICE_COPY,E_INVOICE_CORRECTION_COPY} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import {
@@ -40,6 +40,14 @@ import {
   type SchnellAktion,
   type SchrittStatus,
 } from "@/ui/kr";
+
+export function InvoiceSourceCorrectionDialog({orderNumber,busy,error,onCancel,onConfirm}:{orderNumber:string;busy:boolean;error:string|null;onCancel:()=>void;onConfirm:()=>void}){
+  return <Dialog titel={E_INVOICE_CORRECTION_COPY.action(orderNumber)} icon="edit" groesse="schmal" onSchliessen={onCancel} vorSchliessen={()=>!busy}
+    meldung={error?{text:error,ton:'fehler'}:null}
+    fuss={<><Button text={E_INVOICE_CORRECTION_COPY.cancel} disabled={busy} onClick={onCancel}/><Button art="primaer" icon="edit" text={E_INVOICE_CORRECTION_COPY.action(orderNumber)} disabled={busy} onClick={onConfirm}/></>}>
+    <p>{E_INVOICE_CORRECTION_COPY.confirmation(orderNumber)}</p>
+  </Dialog>;
+}
 
 const STATIONS = ["angenommen", "galvanik", "fertig", "zahlung", "abgeholt"] as const;
 const SURFACE_OPTIONS = ["Verchromen", "Vernickeln", "Verzinken", "Entchromen / prüfen", "noch zu klären"] as const;

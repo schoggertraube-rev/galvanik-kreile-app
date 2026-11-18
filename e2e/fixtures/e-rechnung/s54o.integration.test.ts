@@ -10,17 +10,120 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../ablauf/replayHarness';
 import {readSettingsAction,saveCompanySettingsAction} from '@/app/actions/settings.actions';
 import {SALES_STAGE_FEATURES} from '@/modules/fundament/public';
-import {readyOrderForInvoice} from '../../ablauf/orderFixture';
+import {readyOrderForInvoice,readyInvoiceOrder,customerFixture} from '../../ablauf/orderFixture';
 import {issueInvoiceAction,cancelInvoiceAction,getInvoiceReceiptAction,getInvoiceCancellationReceiptAction} from '@/app/actions/invoices.actions';
 import {GET as invoicePdf} from '@/app/api/invoices/[invoiceId]/pdf/route';
 import {renderToBuffer} from '@react-pdf/renderer';
 import {createImmutableInvoicePdfDocument,type ImmutableInvoiceSnapshot,type ImmutableInvoiceSnapshotV3} from '@/lib/pdf/ImmutableInvoiceDocument';
 import {readInvoiceVat} from '@/modules/accounting/public';
 
+it('S54o C15 A15:27: authorized existing reopen preserves the old freeze and permits regular correction, finish and one invoice',async()=>{
+ const customerId=await customerFixture('S54o valid correction customer');
+ const order=await readyOrderForInvoice('TEST bad part \u{1D11E}','pickup',customerId);
+ const {reopenFrozenOrderAction,getLiveOrderCardAction,changeOrderContentAction,setOrderItemFinishedAction,freezeOrderAction}=await import('@/app/actions/orders.actions');
+ const before=await sql`SELECT invoice_year,last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
+ const failedKey=randomUUID();
+ expect(await withSession(full,()=>issueInvoiceAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:failedKey}))).toMatchObject({code:'VALIDATION_ERROR',source:{kind:'order',objectId:order.orderId,orderVersion:order.version,codePoint:0x1D11E}});
+ expect(await sql`SELECT invoice_year,last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(before);
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:failedKey}))).toMatchObject({code:'OK',data:null});
+ const original=await sql`SELECT id::text,md5(to_jsonb(frozen_original)::text) AS sha FROM private.order_freezes frozen_original WHERE tenant_id=${tenant} AND order_id=${order.orderId}`;
+ expect(original).toHaveLength(1);
+ const input={orderId:order.orderId,expectedVersion:order.version,reason:'Rechnungsfeld korrigieren',clientEventId:randomUUID()};
+ const restricted=await createFixture(['preise']);
+ expect(await withSession(restricted,()=>reopenFrozenOrderAction(input))).toMatchObject({code:'FORBIDDEN'});
+ const attempts=await Promise.all([withSession(full,()=>reopenFrozenOrderAction(input)),withSession(full,()=>reopenFrozenOrderAction(JSON.parse(JSON.stringify(input))))]);
+ expect(attempts.map(result=>result.code)).toEqual(['OK','OK']);
+ const opened=attempts[0];if(opened.code!=='OK')throw Error('TEST_REOPEN_REQUIRED');
+ expect(attempts.filter(result=>result.code==='OK'&&result.replayed)).toHaveLength(1);
+ expect(opened.receipt).toMatchObject({actorId:full.actorId,fromStation:'fertig',toStation:'galvanik',reason:input.reason,clientEventId:input.clientEventId});
+ const read=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));if(read.code!=='OK')throw Error('TEST_REOPEN_READ_REQUIRED');
+ expect(read.data.card.station).toBe('galvanik');expect(read.data.card.version).toBe(opened.receipt.aggregateVersion);
+ const changed=await withSession(full,()=>changeOrderContentAction({orderId:order.orderId,expectedVersion:read.data.card.version,clientEventId:randomUUID(),note:read.data.card.note,items:read.data.card.items.map(item=>({id:item.id,catalogServiceId:item.catalogServiceId??null,name:'TEST corrected invoice part',quantity:item.quantity,material:item.material,surface:item.surfaceRequested,unit:item.unit??null,unitPriceCents:item.unitPriceCents??null,vatRateBasisPoints:item.vatRateBasisPoints??null}))}));
+ expect(changed.code).toBe('OK');if(changed.code!=='OK')throw Error('TEST_REGULAR_CONTENT_CORRECTION_REQUIRED');
+ const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId:order.orderId,itemId:order.items[0].id,expectedVersion:changed.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));
+ expect(finished.code).toBe('OK');if(finished.code!=='OK')throw Error('TEST_REGULAR_FINISH_REQUIRED');
+ const frozen=await withSession(full,()=>freezeOrderAction({orderId:order.orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));
+ expect(frozen.code).toBe('OK');if(frozen.code!=='OK')throw Error('TEST_REGULAR_FREEZE_REQUIRED');
+ expect(await sql`SELECT invoice_year,last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(before);
+ const issue={orderId:order.orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()};
+ const issued=await withSession(full,()=>issueInvoiceAction(issue));if(issued.code!=='OK')throw Error('TEST_CORRECTED_INVOICE_REQUIRED:'+JSON.stringify(issued));expect(issued.code).toBe('OK');
+ expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(issue))))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:issued.receipt.invoiceId,pdfSha256:issued.receipt.pdfSha256}});
+ expect(await sql`SELECT id::text,md5(to_jsonb(frozen_original)::text) AS sha FROM private.order_freezes frozen_original WHERE tenant_id=${tenant} AND id=${original[0].id}::uuid`).toEqual(original);
+ expect(await sql`SELECT count(*)::int AS count FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${order.orderId}`).toEqual([{count:1}]);
+ writeEvidence('kreile-s54o-frozen-source-correction.json',JSON.stringify({at:new Date().toISOString(),orderId:order.orderId,oldFreezeUnchanged:true,oldFreezeId:original[0].id,actualReopen:opened.receipt,actualInvoice:issued.receipt,regularCommandsOnly:true,taskFallbackNotIncluded:true},null,2)+'\n');
+});
+
 function writeEvidence(name:string,data:string|Uint8Array){
  const output=process.env.S54O_EVIDENCE_DIR??'.git';mkdirSync(output,{recursive:true});
  writeFileSync(path.join(output,name),data);
 }
+
+it('S54o A7: the existing mail sender transports the real frozen hybrid bytes and a deserialized retry sends no second mail',async()=>{
+ const order=await readyInvoiceOrder('TEST S54o hybrid mail original');
+ const {requestMailStep}=await import('../../ablauf/requestMailStep');
+ await requestMailStep('S54o-hybrid-original');
+ const {sendCustomerMailAction}=await import('@/app/actions/communications.actions');
+ const input={targetType:'CUSTOMER' as const,targetId:order.customerId,clientRequestId:randomUUID(),subject:'TEST S54o Originalrechnung',body:'TEST gespeichertes Rechnungsoriginal',attachment:{kind:'INVOICE' as const,documentId:order.invoice.invoiceId},expectedInvoiceIds:[order.invoice.invoiceId]};
+ const sends=()=>vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&String(url).endsWith('/sendMail')&&init?.method==='POST');
+ const sent=await withSession(full,()=>sendCustomerMailAction(input));
+ if(sent.code!=='OK')throw Error('TEST_S54O_MAIL:'+JSON.stringify(sent));
+ expect(sends()).toHaveLength(1);
+ const payload=JSON.parse(String(sends()[0][1]?.body));
+ expect(payload.message.attachments).toHaveLength(1);
+ const bytes=Buffer.from(payload.message.attachments[0].contentBytes,'base64');
+ expect(createHash('sha256').update(bytes).digest('hex')).toBe(order.invoice.pdfSha256);
+ const [stored]=await sql`SELECT pdf_content,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${order.invoice.invoiceId}::uuid`;
+ expect(bytes).toEqual(Buffer.from(stored.pdf_content));
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
+ expect(sends()).toHaveLength(1);
+ writeEvidence('kreile-s54o-hybrid-mail-original.json',JSON.stringify({at:new Date().toISOString(),invoiceId:order.invoice.invoiceId,pdfSha256:stored.pdf_sha256,graphSha256:createHash('sha256').update(bytes).digest('hex'),graphBytes:bytes.length,sends:sends().length,threadId:sent.data.threadId,actualActionsAuthDbStorage:true,onlyExternalProviderDoubled:true},null,2)+'\n');
+});
+
+it('S54o C15 A15:27: customer field correction uses the existing customer writer and a fresh receipt without consuming a failed number',async()=>{
+ const order=await readyOrderForInvoice('TEST S54o customer street correction');
+ const {updateCustomerAction}=await import('@/app/actions/customers.actions');
+ const bad=await withSession(full,()=>updateCustomerAction({customerId:order.customerId,street:'TEST Weg \u{1D11E}',clientEventId:randomUUID()}));
+ expect(bad.code).toBe('OK');
+ const sequence=await sql`SELECT invoice_year,last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
+ const input={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()};
+ const refused=await withSession(full,()=>issueInvoiceAction(input));
+ expect(refused).toMatchObject({code:'VALIDATION_ERROR',source:{kind:'customer',field:'street',codePoint:0x1D11E}});
+ expect(await sql`SELECT invoice_year,last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(sequence);
+ const correction={customerId:order.customerId,street:'TEST corrected Weg',clientEventId:randomUUID()};
+ expect(await withSession(full,()=>updateCustomerAction(correction))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>updateCustomerAction(JSON.parse(JSON.stringify(correction))))).toMatchObject({code:'OK',replayed:true});
+ const issued=await withSession(full,()=>issueInvoiceAction(input));
+ if(issued.code!=='OK')throw Error('TEST_CUSTOMER_CORRECTION_INVOICE:'+JSON.stringify(issued));
+ expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:issued.receipt.invoiceId,pdfSha256:issued.receipt.pdfSha256}});
+ expect(await sql`SELECT count(*)::int AS count FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${order.orderId}`).toEqual([{count:1}]);
+ writeEvidence('kreile-s54o-customer-source-correction.json',JSON.stringify({at:new Date().toISOString(),orderId:order.orderId,customerId:order.customerId,source:refused,receipt:issued.receipt,failedNumberNotConsumed:true,realCustomerWriter:true},null,2)+'\n');
+});
+
+it('S54o C15 A16:11: prices-only refusal names actual authorized roles and creates no correction task or order effect',async()=>{
+ const customerId=await customerFixture('TEST S54o no correction right');
+ const order=await readyOrderForInvoice('TEST S54o restricted part \u{1D11E}','pickup',customerId);
+ const actor=await createFixture(['preise'],'buero');
+ await createFixture(['auftraege'],'werkstatt');
+ const {resolveAuthorization,readActiveAreaHolders}=await import('@/lib/server/authorization');
+ const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
+ const {getRoleLabel}=await import('@/lib/auth/authorizationContract');
+ const roles=await withSession(actor,async()=>{
+   const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_AUTH_REQUIRED');
+   return withPrivilegedTenantTransaction(auth.data,async tx=>[...new Set((await readActiveAreaHolders(tx,auth.data.tenantId,'auftraege')).map(holder=>getRoleLabel(holder.role)))]);
+ });
+ expect(roles).toContain('Meister');expect(roles).toContain('Werkstatt');expect(roles).not.toContain('Büro');
+ const before=await sql`SELECT md5(to_jsonb(o)::text) AS sha FROM public.orders o WHERE id=${order.orderId} AND tenant_id=${tenant}`;
+ const tasks=await sql`SELECT id::text FROM public.tasks WHERE tenant_id=${tenant} ORDER BY id`;
+ const numbers=await sql`SELECT invoice_year,last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
+ const refused=await withSession(actor,()=>issueInvoiceAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()}));
+ expect(refused).toMatchObject({code:'VALIDATION_ERROR',message:`Rechnung nicht ausgestellt: order.title enthaelt ein Zeichen, das die E-Rechnung nicht darstellen kann. Korrigieren kann das: ${roles.join(', ')}.`});
+ expect(refused).not.toHaveProperty('source');
+ expect(await sql`SELECT md5(to_jsonb(o)::text) AS sha FROM public.orders o WHERE id=${order.orderId} AND tenant_id=${tenant}`).toEqual(before);
+ expect(await sql`SELECT id::text FROM public.tasks WHERE tenant_id=${tenant} ORDER BY id`).toEqual(tasks);
+ expect(await sql`SELECT invoice_year,last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(numbers);
+ expect(await sql`SELECT count(*)::int AS count FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${order.orderId}`).toEqual([{count:0}]);
+ writeEvidence('kreile-s54o-no-correction-right.json',JSON.stringify({at:new Date().toISOString(),orderId:order.orderId,actorId:actor.actorId,roles,refused,noTask:true,noOrderEffect:true,noInvoiceNumber:true},null,2)+'\n');
+});
 
 it.each([1,2] as const)('S54o A16: synthetic historical schema%s original is refused by the real cancellation Action with an audit and no original/counter change',async(schemaVersion)=>{
  const order=await readyOrderForInvoice('TEST S54o legacy refusal '+schemaVersion);

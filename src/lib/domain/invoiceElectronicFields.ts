@@ -8,7 +8,7 @@ export function invoiceElectronicUnitLabel(code:InvoiceElectronicUnitCode):strin
  if(!Object.hasOwn(labels,code))throw Error('INVOICE_ELECTRONIC_UNIT_INVALID');
  return labels[code];
 }
-export type InvoiceElectronicSourceLocation={kind:'settings'|'customer'|'order';field:string;objectId?:string;itemId?:string};
+export type InvoiceElectronicSourceLocation={kind:'settings'|'customer'|'order';field:string;objectId?:string;itemId?:string;orderVersion?:number;codePoint?:number};
 export class InvoiceElectronicSourceError extends Error{
  constructor(readonly location:InvoiceElectronicSourceLocation){super('INVOICE_ELECTRONIC_SOURCE_REQUIRED');this.name='InvoiceElectronicSourceError';}
 }

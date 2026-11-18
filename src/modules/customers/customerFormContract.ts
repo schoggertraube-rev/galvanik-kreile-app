@@ -32,6 +32,24 @@ export function projectCustomerTransfer(input: unknown):Partial<CustomerFormValu
   }
   return value;
 }
+/** Existing-editor navigation only: find the reported original character in
+ * the current form, never replace values with the failed invoice snapshot. */
+export function invoiceCustomerCorrectionFields(value:CustomerFormValue,input:unknown):Array<keyof CustomerFormValue>{
+  if(!input||typeof input!=='object'||Array.isArray(input))return [];
+  const location=(input as {invoiceCorrection?:unknown}).invoiceCorrection;
+  if(!location||typeof location!=='object'||Array.isArray(location))return [];
+  const {field,codePoint}=location as {field?:unknown;codePoint?:unknown};
+  const fields:Record<string,Array<keyof CustomerFormValue>>={
+    name:value.customerType==='privat'?['firstName','lastName']:['companyName'],companyName:['companyName'],
+    contactPerson:['firstName','lastName','contactRole'],street:['street','houseNumber'],
+    zip:['zipCode'],city:['city'],country:['country'],vatId:['vatId'],
+  };
+  if(typeof field!=='string'||!Object.hasOwn(fields,field))return [];
+  if(codePoint===undefined)return fields[field].length===1?fields[field]:fields[field].filter(key=>value[key]==='');
+  if(typeof codePoint!=='number'||!Number.isSafeInteger(codePoint)||codePoint<0||codePoint>0x10ffff)return [];
+  const character=String.fromCodePoint(codePoint);
+  return fields[field].filter(key=>typeof value[key]==='string'&&String(value[key]).includes(character));
+}
 export function customerDisplayName(value: Pick<CustomerFormValue,"customerType"|"companyName"|"firstName"|"lastName">) {
   return value.customerType === "privat" ? [value.firstName,value.lastName].map(part=>part.trim()).filter(Boolean).join(" ") : value.companyName.trim();
 }

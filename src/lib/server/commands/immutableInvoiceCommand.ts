@@ -22,7 +22,8 @@ import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/serv
 import { createHash, randomUUID } from "node:crypto";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { sql } from "drizzle-orm";
-import { hasAuthorizationArea, resolveAuthorization,type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { hasAuthorizationArea, readActiveAreaHolders, resolveAuthorization,type AuthorizationSnapshot } from "@/lib/server/authorization";
+import {getRoleLabel} from '@/lib/auth/authorizationContract';
 import { readEffectiveCustomerAgreement } from "@/lib/server/effectiveCustomerAgreementRead";
 import {
   withPrivilegedTenantTransaction,
@@ -1410,8 +1411,22 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
     };
     return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
   } catch (error) {
-    if(error instanceof InvoiceElectronicSourceError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource(error.location.field),source:error.location.kind==='order'?{...error.location,objectId:input.orderId}:error.location};
-    if(error instanceof InvoiceGlyphError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingGlyph(error.field,error.codePoint),...(error.field.startsWith('seller.')?{source:{kind:'settings' as const,field:error.field.slice(7)}}:{})};
+    if(error instanceof InvoiceElectronicSourceError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource(error.location.field),source:error.location.kind==='order'?{...error.location,objectId:input.orderId,orderVersion:input.expectedVersion}:error.location};
+    if(error instanceof InvoiceGlyphError){
+      const source:import('@/lib/domain/invoiceElectronicFields').InvoiceElectronicSourceLocation=error.field.startsWith('seller.')?{kind:'settings',field:error.field.slice(7),codePoint:error.codePoint}:error.field.startsWith('customer.')?{kind:'customer',field:error.field.slice(9),codePoint:error.codePoint}:{kind:'order',objectId:input.orderId,orderVersion:input.expectedVersion,field:error.field,codePoint:error.codePoint};
+      const correctionArea=source.kind==='settings'?'einstellungen':source.kind==='customer'?'kunden':'auftraege';
+      if(!hasAuthorizationArea(authorization.data,correctionArea)){
+        try{
+          const read=async(tx:PrivilegedTenantTransaction)=>readActiveAreaHolders(tx,authorization.data.tenantId,correctionArea);
+          const holders=existingTransaction?await withTenantSavepoint(existingTransaction,read):await withPrivilegedTenantTransaction(authorization.data,read);
+          const roles=[...new Set(holders.map(holder=>getRoleLabel(holder.role)))];
+          return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.correctionWithoutRight(error.field,roles)};
+        }catch{
+          return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.correctionRolesUnavailable(error.field)};
+        }
+      }
+      return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingGlyph(error.field,error.codePoint),source};
+    }
     const cause = error && typeof error === "object" && "cause" in error
       ? (error as { cause?: { code?: unknown; constraint_name?: unknown } }).cause
       : undefined;

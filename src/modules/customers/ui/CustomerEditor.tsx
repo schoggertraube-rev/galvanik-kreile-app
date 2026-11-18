@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Checkbox, Dialog, Eingabe, Feld, FormRaster, Hinweis } from "@/ui/kr";
 import { Rueckfrage } from "@/ui/kr/Dialog";
 import { KundeFormular } from "./KundeFormular";
-import { CUSTOMER_FIELD_LABELS, EMPTY_CUSTOMER_FORM, kundeValidierung, projectCustomerTransfer, type CustomerFormValue } from "../customerFormContract";
+import { CUSTOMER_FIELD_LABELS, EMPTY_CUSTOMER_FORM, invoiceCustomerCorrectionFields, kundeValidierung, projectCustomerTransfer, type CustomerFormValue } from "../customerFormContract";
 import { kundeVollstaendigkeit } from "../orderReadiness";
 import type { CustomerCardModel, CustomerFreeTextAgreementInput, UpdateCustomerInput } from "../server/types";
 import type { CustomerAddressInput, CustomerAddressResult } from "../customerAddress";
@@ -65,6 +65,7 @@ export function CustomerEditor({card,takeover,canManageMoney,canManageSupplierBa
   checkAddress?:(input:CustomerAddressInput)=>Promise<{code:"OK";data:CustomerAddressResult}|{code:string;message:string}>;
 }) {
   const [initial]=useState(()=>({...transferState(card,takeover),agreements:initialAgreements(card,canManageMoney)}));
+  const [invoiceCorrectionFields]=useState(()=>invoiceCustomerCorrectionFields(initial.value,takeover));
   const baseline=initial.baseline;
   const baselineAgreements=initial.agreements;
   const [value,setValue]=useState(initial.value);
@@ -174,7 +175,7 @@ export function CustomerEditor({card,takeover,canManageMoney,canManageSupplierBa
         <div className="kr-stapel"><div className="ev-kf-diff"><strong>{card.customerNumber ?? "Kundennummer fehlt"}</strong> · {card.companyName || card.name}</div>
         <p className="ev-kf-adrz">Kundennummer <strong>{card.customerNumber ?? "fehlt"} · fest</strong></p>
         {missingFirst && readiness.fehlt.length?<div data-spec-id="kundebearbeiten.hinweis"><Hinweis ton="warn">Für Aufträge fehlt: {readiness.fehlt.join(", ")}</Hinweis></div>:null}
-        <KundeFormular prefix="kundebearbeiten" mode="edit" value={value} previous={baseline} priorityFields={priorityFields} errors={errors} onChange={changeValue} canManageMoney={canManageMoney} canManageSupplierBank={canManageSupplierBank&&card.type==="lieferant"} canDecide={canDecide}
+        <KundeFormular prefix="kundebearbeiten" mode="edit" value={value} previous={baseline} autofocusField={invoiceCorrectionFields[0]} priorityFields={priorityFields} errors={errors} onChange={changeValue} canManageMoney={canManageMoney} canManageSupplierBank={canManageSupplierBank&&card.type==="lieferant"} canDecide={canDecide}
           origins={initial.origins} proposals={proposals} onAcceptProposal={(field,next)=>{setValue(current=>({...current,[field]:next}));setProposals(current=>{const nextProposals={...current};delete nextProposals[field];return nextProposals})}}
           invoiceTermsEnabled={card.invoiceTermsEnabled} invoiceTermDays={card.invoiceTermDays} addressSuggestions={address?.suggestions} addressMessage={address?{tone:address.kind==="found"?"ok":address.kind==="not-checked"?"neutral":"warn",text:address.message}:null}/>
         <section className="kr-stapel" data-spec-id="kundebearbeiten.absprache" aria-label="Absprachen & Eigenheiten">

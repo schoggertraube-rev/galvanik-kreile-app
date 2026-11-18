@@ -13,7 +13,7 @@ export const EVIDENCE_VISIBILITY_COPY={
 } as const;
 export const INVOICE_VAT_COPY={missingCompanyRate:(part:string)=>`Für ${part} fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.`,missingRate:(part:string)=>`Für ${part} fehlt der Steuersatz (19 % oder 7 %).`,groupNet:(rate:string)=>"Netto ("+rate+")",groupVat:(rate:string)=>"zzgl. USt ("+rate+")",cancelNet:(rate:string)=>"Storno netto ("+rate+")",cancelVat:(rate:string)=>"Storno USt ("+rate+")",reverseCharge:"Steuerschuldnerschaft des Leistungsempfängers",vatId:"USt-IdNr.:"} as const;
 /** S54o C15/R8: provisional field wording, pending the PL text batch. */
-export const E_INVOICE_COPY={legacyCancellation:'Diese Rechnung stammt aus der Testphase und kann nicht als E-Rechnung storniert werden.',vatIdLabel:'USt-IdNr.',taxNumberLabel:'Steuernummer',printNotice:'Ausdruck ist für Firmenkunden keine gültige Rechnung · per Mail senden',missingTax:'Fehlt für die E-Rechnung: USt-IdNr. oder Steuernummer · in Einstellungen eintragen',paymentTerms:(days:number,due:string)=>`Zahlungsziel: ${days} Tage netto, fällig am ${due}.`,cancellationTitle:(number:string)=>`Stornorechnung zu ${number}`,missingSource:(field:string):string=>field==='taxId'?E_INVOICE_COPY.missingTax:field==='rounding'?'TODO_PL invoice.rounding: Rundung':field.startsWith('unit:')?`Fehlt für die E-Rechnung: Einheit bei ${field.slice(5)}`:`TODO_PL invoice.source_missing: ${field}`,missingGlyph:(field:string,codePoint:number)=>`Rechnung nicht ausgestellt: Das Zeichen U+${codePoint.toString(16).toUpperCase()} in ${field} passt nicht in die E-Rechnung. Ersetze es und stelle die Rechnung neu aus.`} as const;
+export const E_INVOICE_COPY={legacyCancellation:'Diese Rechnung stammt aus der Testphase und kann nicht als E-Rechnung storniert werden.',vatIdLabel:'USt-IdNr.',taxNumberLabel:'Steuernummer',printNotice:'Ausdruck ist für Firmenkunden keine gültige Rechnung · per Mail senden',missingTax:'Fehlt für die E-Rechnung: USt-IdNr. oder Steuernummer · in Einstellungen eintragen',paymentTerms:(days:number,due:string)=>`Zahlungsziel: ${days} Tage netto, fällig am ${due}.`,cancellationTitle:(number:string)=>`Stornorechnung zu ${number}`,missingSource:(field:string):string=>field==='taxId'?E_INVOICE_COPY.missingTax:field==='rounding'?'TODO_PL invoice.rounding: Rundung':field.startsWith('unit:')?`Fehlt für die E-Rechnung: Einheit bei ${field.slice(5)}`:`TODO_PL invoice.source_missing: ${field}`,correctionWithoutRight:(field:string,roles:string[])=>roles.length?`Rechnung nicht ausgestellt: ${field} enthaelt ein Zeichen, das die E-Rechnung nicht darstellen kann. Korrigieren kann das: ${roles.join(", ")}.`:E_INVOICE_COPY.correctionRolesUnavailable(field),correctionRolesUnavailable:(field:string)=>`TODO_PL invoice.correction_roles_unavailable: ${field} · Berechtigte noch nicht sicher gelesen.`,missingGlyph:(field:string,codePoint:number)=>`Rechnung nicht ausgestellt: Das Zeichen U+${codePoint.toString(16).toUpperCase()} in ${field} passt nicht in die E-Rechnung. Ersetze es und stelle die Rechnung neu aus.`} as const;
 /** S54e packet: existing supplier creation keeps the structured original's prefill. */
 export const INCOMING_INVOICE_COPY={addSupplier:'Lieferant ergänzen',taxRateMismatch:'Steuersätze passen nicht zur Gesamt-USt · prüf die Rechnung',supplierSearchUnavailable:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'} as const;
 /** PL13.11.00:14 deferred sales-stage sources. */
@@ -461,4 +461,14 @@ export {PACKAGE_SWITCH_COPY} from './packageSwitchCopy';
 export const E_INVOICE_SETTINGS_COPY={
  fieldLabels:{companyName:'Firmenname',street:'Straße',zip:'PLZ',city:'Ort',country:'Land',taxId:E_INVOICE_COPY.vatIdLabel,taxNumber:E_INVOICE_COPY.taxNumberLabel,iban:'IBAN',bic:'BIC',bankName:'Bank',paymentTermDays:'Zahlungsziel in Tagen',logoUrl:'Logo-Pfad'},
  action:(field:string)=>`TODO_PL invoice.source_action: ${field} in Einstellungen eintragen`,
+} as const;
+
+export const E_INVOICE_CORRECTION_COPY={
+ customerAction:(field:string)=>`TODO_PL invoice.customer_source_action: ${field} beim Kunden korrigieren`,
+ action:(nr:string)=>`Auftrag ${nr} zur Korrektur wieder oeffnen`,
+ confirmation:(nr:string)=>`Auftrag ${nr} wird wieder geoeffnet. Danach Feld korrigieren und erneut fertig melden.`,
+ reason:'Rechnungsfeld korrigieren',cancel:'Abbrechen',
+ busy:'TODO_PL invoice.correction_busy: Auftrag wird zur Korrektur wieder geöffnet.',
+ done:(nr:string)=>`TODO_PL invoice.correction_done: Auftrag ${nr} ist wieder geöffnet. Feld korrigieren und erneut fertig melden.`,
+ failed:'TODO_PL invoice.correction_failed: Wiederöffnung noch nicht sicher bestätigt · Erneut versuchen.',
 } as const;

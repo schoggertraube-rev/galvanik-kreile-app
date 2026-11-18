@@ -3,6 +3,7 @@ import {captureDeviceReadFence,retainDevicePortResponse} from '@/lib/offline/dev
 import {capturePendingItemFinished} from '@/lib/offline/pendingStore';
 import {readServerReachability} from '@/lib/offline/serverReachability';
 import {invoiceSettingsCorrection} from '@/lib/client/invoiceSourceCorrection';
+import {E_INVOICE_CORRECTION_COPY} from '@/ui/situationCatalog';
 import type {InvoiceElectronicSourceLocation} from '@/lib/domain/invoiceElectronicFields';
 import {releaseRejectedWorkshopRequest} from '@/lib/offline/workshopRejectionContract';
 import type {WorkshopAcknowledgement} from '@/lib/offline/syncPendingFiles';
@@ -22,6 +23,7 @@ import {
   changeOrderContentAction,
   changeOrderPromisedDueDateAction,
   freezeOrderAction,
+  reopenFrozenOrderAction,
   getExtraWorkMasterDataAction,
   getLiveOrderCardAction,
   getOrderFrozenReceiptAction,
@@ -63,6 +65,7 @@ import {
   CustomerAgreementDialog,
   goodsOutAgreementReceiptText,
   OrderCardView,
+  InvoiceSourceCorrectionDialog,
   OrderStationAttachmentPanel,
   type OrderCardActionFeedback,
   type OrderCardActionPorts,
@@ -313,6 +316,8 @@ export function OrderCardAppAdapter({
   } | null>(null);
   const [agreementMessage, setAgreementMessage] = useState<string | null>(null);
   const requests = useRef<Record<string, string>>({});
+  const [invoiceCorrectionDialog,setInvoiceCorrectionDialog]=useState<{orderId:string;expectedVersion:number;orderNumber:string}|null>(null);
+  const invoiceCorrectionInFlight=useRef(false);
   const labelPrintInFlight = useRef(false);
   const load = useCallback(
     async (preserve = false): Promise<Snapshot | null> => {
@@ -393,14 +398,14 @@ export function OrderCardAppAdapter({
         kind: result.code === "CONFLICT" ? "conflict" : "error",
         operation,
         code:result.code,
-        correction:result.code==='VALIDATION_ERROR'&&hasArea('einstellungen')?invoiceSettingsCorrection(result.source,orderId):undefined,
+        correction:result.code!=='VALIDATION_ERROR'?undefined:result.source?.kind==='settings'&&hasArea('einstellungen')?invoiceSettingsCorrection(result.source,orderId):result.source?.kind==='customer'&&hasArea('kunden')&&snapshot?.card.customerId?{label:E_INVOICE_CORRECTION_COPY.customerAction(result.source.field),customer:{id:snapshot.card.customerId,field:result.source.field,codePoint:result.source.codePoint}}:result.source?.kind==='order'&&result.source.objectId===orderId&&Number.isSafeInteger(result.source.orderVersion)&&hasPermission('perm_op_status')&&snapshot?.card.orderNumber?{label:E_INVOICE_CORRECTION_COPY.action(snapshot.card.orderNumber),reopen:{orderId,expectedVersion:result.source.orderVersion!,orderNumber:snapshot.card.orderNumber}}:undefined,
         message:
           operation === "responsibility" ? ACTOR_COPY.assignmentError(result.code) : result.code === "CONFLICT"
             ? `${result.message} Der Auftrag wurde neu geladen.`
             : result.message,
       });
     },
-    [load,hasArea,orderId],
+    [load,hasArea,hasPermission,orderId,snapshot],
   );
   const success = useCallback(
     (
@@ -420,6 +425,28 @@ export function OrderCardAppAdapter({
     [],
   );
   const takeInFlight=useRef(false);
+  const confirmInvoiceCorrection=async()=>{
+    const target=invoiceCorrectionDialog;if(!target||invoiceCorrectionInFlight.current)return;
+    invoiceCorrectionInFlight.current=true;
+    const key='invoice-correction:'+target.orderId+':'+target.expectedVersion;
+    const clientEventId=requests.current[key]??=crypto.randomUUID();
+    const correction={label:E_INVOICE_CORRECTION_COPY.action(target.orderNumber),reopen:target};
+    setFeedback({kind:'submitting',message:E_INVOICE_CORRECTION_COPY.busy});
+    try{
+      const result=await reopenFrozenOrderAction({orderId:target.orderId,expectedVersion:target.expectedVersion,clientEventId,reason:E_INVOICE_CORRECTION_COPY.reason});
+      if(result.code!=='OK'){setFeedback({kind:result.code==='CONFLICT'?'conflict':'error',code:result.code,message:result.message,correction});return;}
+      const fresh=await load(true),receipt=result.receipt;
+      if(receipt.orderId!==target.orderId||receipt.clientEventId!==clientEventId||receipt.toStation!=='galvanik'||!fresh||fresh.card.version<receipt.aggregateVersion||fresh.card.station!=='galvanik'){
+        setFeedback({kind:'error',message:E_INVOICE_CORRECTION_COPY.failed,correction});return;
+      }
+      delete requests.current[key];delete requests.current.invoice;
+      setFeedback({kind:'success',message:E_INVOICE_CORRECTION_COPY.done(target.orderNumber),receipt:{kind:'invoice-correction',actorId:receipt.actorId,occurredAt:receipt.occurredAt,eventId:receipt.eventId,receiptId:'freeze-correction://'+receipt.correctionId}});
+      setInvoiceCorrectionDialog(null);
+    }catch(error){
+      console.error('[INVOICE_SOURCE_CORRECTION_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});
+      setFeedback({kind:'error',message:E_INVOICE_CORRECTION_COPY.failed,correction});
+    }finally{invoiceCorrectionInFlight.current=false;}
+  };
   const onTakeResponsibility=useCallback(async()=>{
     if(takeInFlight.current||!snapshot?.card.actors)return;
     takeInFlight.current=true;setFeedback({kind:'submitting',message:ACTOR_COPY.saving,operation:'responsibility'});
@@ -1013,7 +1040,11 @@ export function OrderCardAppAdapter({
             : null,
       ),
       feedback,
-      onCorrectInvoiceSource:invoiceCorrection?()=>router.push(invoiceCorrection.href):undefined,
+      onCorrectInvoiceSource:invoiceCorrection?()=>{
+        if('href'in invoiceCorrection)router.push(invoiceCorrection.href);
+        else if('customer'in invoiceCorrection)storeCustomer(invoiceCorrection.customer.id+'#bearbeiten',{invoiceCorrection:{field:invoiceCorrection.customer.field,codePoint:invoiceCorrection.customer.codePoint}});
+        else setInvoiceCorrectionDialog(invoiceCorrection.reopen);
+      }:undefined,
       onSaveContent,
       onToggleItemFinished,
       onOpenStatusMail: () => document.getElementById(`order-communication-${orderId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
@@ -1054,6 +1085,7 @@ export function OrderCardAppAdapter({
     hasPermission,
     snapshot,
     router,
+    storeCustomer,
   ]);
   const close =
     onClose ?? (fallbackHref ? () => router.replace(fallbackHref) : storeClose);
@@ -1082,6 +1114,9 @@ export function OrderCardAppAdapter({
       onOpenCustomer={onOpenCustomer ?? storeCustomer}
       onClose={close}
     />
+    {invoiceCorrectionDialog?<InvoiceSourceCorrectionDialog orderNumber={invoiceCorrectionDialog.orderNumber} busy={feedback.kind==='submitting'}
+      error={feedback.kind==='error'||feedback.kind==='conflict'?feedback.message:null}
+      onCancel={()=>{if(!invoiceCorrectionInFlight.current)setInvoiceCorrectionDialog(null)}} onConfirm={()=>void confirmInvoiceCorrection()}/>:null}
     {agreementDialog && state.kind === "data" ? <CustomerAgreementDialog
       target={{
         customerId: state.card.customerId,
