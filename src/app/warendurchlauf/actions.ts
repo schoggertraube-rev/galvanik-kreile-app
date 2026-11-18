@@ -388,33 +388,6 @@ export async function getOrderIntakeAttachmentsAction(
   };
 }
 
-export async function reserveOrderIntakeAttachmentAction(
-  input: ReserveOrderStationAttachmentInput,
-) {
-  noStore();
-  const authorization = await authorizeOrderStationAttachment("perm_op_photos");
-  if (!authorization.ok) return authorization.result;
-  const domain = await import("@/lib/server/orderStationAttachment");
-  return domain.reserveOrderIntakeAttachment(authorization.data, input);
-}
-
-export async function finalizeOrderIntakeAttachmentAction(
-  input: FinalizeOrderStationAttachmentInput & {customerVisible?:boolean},
-) {
-  noStore();
-  const authorization = await authorizeOrderStationAttachment("perm_op_photos");
-  if (!authorization.ok) return authorization.result;
-  const option=splitUploadVisibility(input);
-  if(!option.valid)return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
-  const domain = await import("@/lib/server/orderStationAttachment");
-  const result=await domain.finalizeOrderIntakeAttachment(authorization.data,option.base as FinalizeOrderStationAttachmentInput);
-  if(result.code!=='OK')return result;
-  if(!result.data.receipt.receiptId)return {code:'UNAVAILABLE' as const,message:EVIDENCE_VISIBILITY_COPY.save};
-  const {setEvidenceVisibilityAction}=await import('@/app/actions/domainAttachments.actions');
-  const flag=await setEvidenceVisibilityAction({mode:'upload',evidenceKey:'order-intake-attachment:'+result.data.receipt.receiptId,...(option.requested===undefined?{}:{customerVisible:option.requested})});
-  return flag.code==='OK'?{...result,data:{...result.data,visibilityPending:flag.visibilityPending,...(flag.visibility?{visibility:flag.visibility}:{})}}:flag;
-}
-
 export async function getOrderIntakeAttachmentOriginalAction(
   input: GetOrderStationAttachmentOriginalInput,
 ) {

@@ -2,6 +2,7 @@
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
+import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {openIntakePredicate} from '@/modules/eingang/server-public';
 
 import type {ListOpenQuotesResult} from '@/modules/quotes/public';
@@ -400,7 +401,7 @@ async function convertQuoteToOrder(input:ConvertQuoteInput,newGoodsInput?:unknow
     if(boundFailure)return boundFailure;
     if(retainedGoodsQuoteNumber&&order.code==='UNAVAILABLE'){
       try{await withPrivilegedTenantTransaction(authorization.data,tx=>synchronizeQuoteOrderRetryTask(tx,authorization.data,input.goodsReceiptId!,retryTaskEffects));}
-      catch(error){console.error('[QUOTE_ORDER_RETRY_TASK_FAILED]',error instanceof Error?error.message:'UnknownError');}
+      catch{recordObservedFailure('QUOTE_ORDER_RETRY_TASK_FAILED');return {code:'UNAVAILABLE' as const,message:QUOTE_CYCLE_COPY.orderRetryTaskUnavailable};}
       return {code:'UNAVAILABLE' as const,message:QUOTE_CYCLE_COPY.orderRetry(retainedGoodsQuoteNumber)};
     }
     return order;

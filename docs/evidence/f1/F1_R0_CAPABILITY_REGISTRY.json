@@ -1017,8 +1017,6 @@
         "finalizeGalvanikHandoffAttachmentAction",
         "getGalvanikHandoffAttachmentOriginalAction",
         "getOrderIntakeAttachmentsAction",
-        "reserveOrderIntakeAttachmentAction",
-        "finalizeOrderIntakeAttachmentAction",
         "getOrderIntakeAttachmentOriginalAction",
         "startProcessingStation",
         "getWarendurchlaufKPIs"
@@ -1029,9 +1027,7 @@
         "verified_functions": [
           "createOrderIntakeAction",
           "searchOrderIntakeCustomersAction",
-          "getOrderIntakeReceiptAction",
-          "reserveOrderIntakeAttachmentAction",
-          "finalizeOrderIntakeAttachmentAction"
+          "getOrderIntakeReceiptAction"
         ],
         "pending_functions": [
           "getStationOrders",

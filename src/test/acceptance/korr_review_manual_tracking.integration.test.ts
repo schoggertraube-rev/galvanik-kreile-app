@@ -17,7 +17,7 @@ async function tracking(orderId:string){
  await sql`UPDATE public.company_settings SET versand_dienst='TEST KORR Parcel',versand_nummer_format='',versand_nummer_hinweis='' WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const operator=await createFixture(['auftraege'],'werkstatt');
  const read=await withSession(operator,()=>getManualShippingAction({orderId}));
- expect(read).toMatchObject({code:'OK',data:{releaseAllowed:true}});
+ expect(read).toMatchObject({code:'OK',data:{physicallyReady:true}});
  if(read.code!=='OK')throw Error('TEST_KORR_TRACKING_READ');
  const input={orderId,shipmentId:randomUUID(),expectedUpdatedAt:null,trackingNumber:'TEST-'+randomUUID(),allowFormatMismatch:false,reason:null,clientEventId:randomUUID()};
  const saved=await withSession(operator,()=>saveManualTrackingAction(input));
@@ -62,7 +62,7 @@ it('K1 an actual open complaint still blocks tracking without creating a shipmen
  await sql`INSERT INTO public.complaints(id,tenant_id,order_id,customer_id,item_id,reason,description,status,nummer,client_key,teile,mangel,fotos,ware_zurueck,stand,version,erstellt_von,erstellt_am)
  VALUES(${complaintId},${KREILE_TENANT_SLUG},${order.orderId},${order.customerId},${order.items[0].id},'TEST K1 Reklamation','TEST K1 offener Mangel','open',${'RK-TEST-'+complaintId.slice(0,8)},${randomUUID()}::uuid,${sql.json([{position_id:order.items[0].id,menge:1}])}::jsonb,'TEST K1 Mangel','[]'::jsonb,'ja','aufgenommen',1,${full.actorId}::uuid,statement_timestamp() AT TIME ZONE 'UTC')`;
  await sql`UPDATE public.company_settings SET versand_dienst='TEST KORR Parcel',versand_nummer_format='',versand_nummer_hinweis='' WHERE tenant_id=${KREILE_TENANT_SLUG}`;
- expect(await withSession(full,()=>getManualShippingAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{releaseAllowed:false}});
+ expect(await withSession(full,()=>getManualShippingAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{physicallyReady:false}});
  const input={orderId:order.orderId,shipmentId:randomUUID(),expectedUpdatedAt:null,trackingNumber:'TEST-'+randomUUID(),allowFormatMismatch:false,reason:null,clientEventId:randomUUID()};
  expect(await withSession(full,()=>saveManualTrackingAction(input))).toMatchObject({code:'CONFLICT',reason:'SHIPPING_RELEASE_BLOCKED'});
  expect(await sql`SELECT count(*)::int AS n FROM public.shipments WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.shipmentId}::uuid`).toEqual([{n:0}]);

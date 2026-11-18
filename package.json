@@ -51,7 +51,6 @@
     "quality:h16-eslint-contracts:selftest": "node scripts/quality/check-h16-eslint.mjs --selftest",
     "quality:h18-server-actions": "node scripts/quality/check-h18-server-actions.mjs",
     "quality:h18-server-actions:selftest": "node scripts/quality/check-h18-server-actions.mjs --selftest",
-    "db:seed": "tsx src/db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"

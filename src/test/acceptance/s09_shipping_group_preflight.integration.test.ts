@@ -23,8 +23,8 @@ it('A09 preflight preserves the existing tracking release guard before any invoi
  const before=await withSession(full,()=>getManualShippingAction({orderId}));if(before.code!=='OK')throw Error('TEST_ACTUAL_MANUAL_SHIPPING_READ_REQUIRED');
  const result=await withSession(full,()=>saveManualTrackingAction({orderId,shipmentId:randomUUID(),expectedUpdatedAt:null,trackingNumber:'12345678901234',allowFormatMismatch:false,reason:null,clientEventId:randomUUID()}));
  const invoices=await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;
- writeFileSync('.git/kreile-s09-group-preinvoice-actual.json',JSON.stringify({at:new Date().toISOString(),tenant:KREILE_TENANT_SLUG,orderId,releaseAllowed:before.data.releaseAllowed,result,invoiceCount:invoices[0].n},null,2));
+ writeFileSync('.git/kreile-s09-group-preinvoice-actual.json',JSON.stringify({at:new Date().toISOString(),tenant:KREILE_TENANT_SLUG,orderId,physicallyReady:before.data.physicallyReady,result,invoiceCount:invoices[0].n},null,2));
  expect(invoices).toEqual([{n:0}]);
- if(before.data.releaseAllowed)expect(result).toMatchObject({code:'OK'});
+ if(before.data.physicallyReady)expect(result).toMatchObject({code:'OK'});
  else expect(result).toMatchObject({code:'CONFLICT',reason:'SHIPPING_RELEASE_BLOCKED'});
 });

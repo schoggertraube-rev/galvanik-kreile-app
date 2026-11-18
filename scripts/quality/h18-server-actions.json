@@ -476,9 +476,7 @@
     "src/app/marketing/segmente/actions.ts#createSegment": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/marketing/segmente/actions.ts#deleteSegment": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/marketing/segmente/actions.ts#updateSegment": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/warendurchlauf/actions.ts#finalizeOrderIntakeAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/warendurchlauf/actions.ts#reserveGalvanikHandoffAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/warendurchlauf/actions.ts#reserveOrderIntakeAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/warendurchlauf/actions.ts#startProcessingStation": "H18.8 Bestand ohne Replay-Action-Test"
   }
 }
