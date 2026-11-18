@@ -1,6 +1,17 @@
 [
   {
     "datum": "2026-11-18",
+    "pr": 239,
+    "seite": "auftraege",
+    "ziel": "/orders",
+    "punkte": [
+      "Du stellst neue Rechnungen und Stornorechnungen als E-Rechnung im gewohnten PDF aus.",
+      "Du kannst USt-IdNr. und Steuernummer getrennt eintragen und fehlende Rechnungsfelder direkt korrigieren.",
+      "Du siehst beim Drucken den Hinweis, Rechnungen für Firmenkunden per Mail zu senden."
+    ]
+  },
+  {
+    "datum": "2026-11-18",
     "pr": 238,
     "seite": "eingang",
     "ziel": "rein",

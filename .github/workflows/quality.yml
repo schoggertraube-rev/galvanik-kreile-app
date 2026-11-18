@@ -824,6 +824,51 @@ jobs:
             test-results/path1-v5-shell-smoke/screens/*.txt
             test-results/path1-v5-shell-smoke/screens/a-browser-receipt.json
 
+      - name: S54o actual hybrid invoice originals on current replay
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          H18_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          S54O_EVIDENCE_DIR: test-results/s54o-originals
+        run: npx vitest run --config e2e/fixtures/e-rechnung/vitest.config.mts
+
+      - name: Upload S54o actual hybrid pairs
+        uses: actions/upload-artifact@v4
+        with:
+          name: s54o-actual-hybrids
+          if-no-files-found: error
+          path: test-results/s54o-originals/
+
       - name: Stop isolated local Supabase
         if: always()
         run: ./node_modules/.bin/supabase stop --no-backup
+
+  invoice-hybrid-validation:
+    name: S54o EN16931 CII and PDF-A individual rules
+    needs: fresh-supabase-replay
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup pinned Java validator runtime
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21.0.13+9'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download actual writer originals from this workflow run
+        uses: actions/download-artifact@v4
+        with:
+          name: s54o-actual-hybrids
+          path: test-results/s54o-originals
+      - name: KoSIT CII, veraPDF individual rules and Mustang third reader
+        run: python scripts/quality/validate-invoice-hybrids.py --evidence test-results/s54o-originals --tools .cache/s54o-validators --output test-results/s54o-validators
+      - name: Upload normative validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s54o-normative-validation
+          if-no-files-found: error
+          path: test-results/s54o-validators/

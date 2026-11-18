@@ -74,7 +74,7 @@ const WINTER_INVOICE_NUMBER = "R-2027-0001";
 const SELLER_COUNTRY = "Verkaeuferland Sellonia";
 const CUSTOMER_COUNTRY = "Kundenland Kundonia";
 
-const SELLER: ImmutableInvoiceSnapshot["seller"] = {
+const SELLER: Extract<ImmutableInvoiceSnapshot,{schemaVersion:1|2}>["seller"] = {
   companyName: "F14 Test Galvanik GmbH",
   street: "Galvanikweg 12",
   zip: "70173",
@@ -126,7 +126,7 @@ const LINES: ImmutableInvoiceLine[] = [
 
 const NET_AMOUNT_CENTS = 138000;
 
-function snapshotFor(vatRateBasisPoints: 700 | 1900): ImmutableInvoiceSnapshot {
+function snapshotFor(vatRateBasisPoints: 700 | 1900): Extract<ImmutableInvoiceSnapshot,{schemaVersion:1|2}> {
   const vatAmountCents = Math.round((NET_AMOUNT_CENTS * vatRateBasisPoints) / 10000);
   return {
     schemaVersion: 1,

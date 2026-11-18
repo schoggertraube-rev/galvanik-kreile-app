@@ -20,3 +20,18 @@ SELECT 'complaints_stand_null' AS pruefung,
        ) ORDER BY tenant_id, id), '[]'::jsonb) AS treffer
 FROM complaints
 WHERE stand IS NULL;
+
+-- S54o A16, PL18Nov14:03. Count only: no invoice contents leave this gate.
+-- A missing/invalid version is not silently treated as a current original.
+DO $s54o_live_gate$
+DECLARE old_count bigint;
+BEGIN
+  SELECT count(*) INTO old_count FROM invoices
+  WHERE CASE WHEN jsonb_typeof(snapshot->'schemaVersion')='number'
+    THEN (snapshot->>'schemaVersion')::numeric<3 ELSE true END;
+  RAISE NOTICE 'invoices_snapshot_before_v3: %',old_count;
+  IF old_count>0 THEN
+    RAISE EXCEPTION 'LIVEGANG_STOP_RECHNUNGEN_VOR_V3: %',old_count;
+  END IF;
+END
+$s54o_live_gate$;

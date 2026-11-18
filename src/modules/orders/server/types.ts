@@ -111,7 +111,7 @@ export type OrderCardPaymentContext =
   | { kind: "available"; value: OrderCardPayment }
   | { kind: "restricted" | "unavailable"; message: string };
 export type OrderCardActionReceipt = {
-  kind: "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate" | "label" | "responsibility";
+  kind: "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate" | "label" | "responsibility" | "invoice-correction";
   actorId: string;
   occurredAt: string;
   eventId: string;
@@ -120,7 +120,7 @@ export type OrderCardActionReceipt = {
 export type OrderCardActionFeedback =
   | { kind: "idle" | "submitting" | "pending"; message: string; operation?:"responsibility" }
   | { kind: "success"; message: string; receipt: OrderCardActionReceipt }
-  | { kind: "conflict" | "error"; message: string; code?:string; operation?:"responsibility" };
+  | { kind: "conflict" | "error"; message: string; code?:string; operation?:"responsibility";correction?:{label:string;href:string}|{label:string;customer:{id:string;field:string;codePoint?:number}}|{label:string;reopen:{orderId:string;expectedVersion:number;orderNumber:string}} };
 export type OrderCardActionAvailability = {
   visible: boolean;
   enabled: boolean;
@@ -176,6 +176,7 @@ export type OrderCardActionPorts = {
   onIssueInvoice: (
     prices?: Array<{ itemId: string; unitPriceCents: number }>,
   ) => void | Promise<void>;
+  onCorrectInvoiceSource?:()=>void;
   onConfirmPayment: (
     method: "bar" | "ueberweisung" | "karte",
   ) => Promise<boolean>;

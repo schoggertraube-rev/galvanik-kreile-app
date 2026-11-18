@@ -1,9 +1,16 @@
 import {customerCountryLabel} from '@/modules/customers/public';
 import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
+import {E_INVOICE_COPY} from '@/ui/situationCatalog';
+import {invoiceElectronicUnitLabel,invoiceXmlWorkHours,invoiceBaseUnitPrice,type InvoiceElectronicTaxCategory,type InvoiceElectronicUnitCode} from '@/lib/domain/invoiceElectronicFields';
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import React, { type ReactElement } from "react";
 import { Document, Page, StyleSheet, Text, View, type DocumentProps } from "@react-pdf/renderer";
+import {INVOICE_FONT_FAMILY,registerInvoiceFonts} from './invoiceFonts';
+
+// S54o C11: a private family keeps other document renderers unchanged. Both
+// invoice variants use these licensed, embedded fonts, never a base-14 alias.
+registerInvoiceFonts();
 
 /**
  * F1.4 — canonical shape of the immutable accounting snapshot stored on
@@ -17,9 +24,14 @@ export type ImmutableInvoiceBaseLine = {
   itemId: string;
   name: string;
   quantity: number;
+  // Original rounded average remains stored; v3 presents the frozen line
+  // total/quantity at bounded precision (PL18Nov19:22), without repricing.
   unitNetAmountCents: number;
   lineNetAmountCents: number;
   vat_rate_basis_points?:0|700|1900;
+  unit?:InvoiceElectronicUnitCode;
+  unitSource?:'default_piece';
+  taxCategory?:InvoiceElectronicTaxCategory;
 };
 
 export type ImmutableInvoiceExtraWorkLine = {
@@ -31,24 +43,24 @@ export type ImmutableInvoiceExtraWorkLine = {
   hourlyRateCents: number;
   amountCents: number;
   vat_rate_basis_points?:0|700|1900;
+  unit?:InvoiceElectronicUnitCode;
+  taxCategory?:InvoiceElectronicTaxCategory;
 };
 
-export type ImmutableInvoiceShippingLine={type:'SHIPPING';shippingKind?:'fee'|'reference';shipmentGroupId:string;name:string;amountCents:number;vat_rate_basis_points:0|700|1900};
+export type ImmutableInvoiceShippingLine={unit?:InvoiceElectronicUnitCode;taxCategory?:InvoiceElectronicTaxCategory;type:'SHIPPING';shippingKind?:'fee'|'reference';shipmentGroupId:string;name:string;amountCents:number;vat_rate_basis_points:0|700|1900};
 export type ImmutableInvoiceLine = ImmutableInvoiceBaseLine | ImmutableInvoiceExtraWorkLine | ImmutableInvoiceShippingLine;
 
-export type ImmutableInvoiceSnapshot = {
-  schemaVersion: 1|2;
-  seller: {
+type InvoiceSeller = {
     companyName: string;
     street: string;
     zip: string;
     city: string;
     country: string;
-    taxId: string;
     iban: string;
     bic: string;
     bankName: string;
-  };
+};
+type InvoiceSnapshotContent = {
   customer: {
     name: string;
     companyName: string | null;
@@ -79,6 +91,25 @@ export type ImmutableInvoiceSnapshot = {
   paymentTermDays: number;
 };
 
+export type ImmutableInvoiceSnapshot = InvoiceSnapshotContent & (
+ | {schemaVersion:1|2;seller:InvoiceSeller&{taxId:string}}
+ | {schemaVersion:3;seller:InvoiceSeller&{vatId:string|null;taxNumber:string|null}}
+);
+export type ImmutableInvoiceSnapshotV3=Extract<ImmutableInvoiceSnapshot,{schemaVersion:3}>;
+
+function sellerTaxIdentity(snapshot:ImmutableInvoiceSnapshot):string{
+ if(snapshot.schemaVersion!==3)return E_INVOICE_COPY.vatIdLabel+': '+snapshot.seller.taxId;
+ const values=[snapshot.seller.vatId?E_INVOICE_COPY.vatIdLabel+': '+snapshot.seller.vatId:null,snapshot.seller.taxNumber?E_INVOICE_COPY.taxNumberLabel+': '+snapshot.seller.taxNumber:null].filter((value):value is string=>value!==null);
+ if(values.length===0)throw Error('INVOICE_SELLER_TAX_ID_INVALID');
+ return values.join(' · ');
+}
+function sellerFooterTaxIdentity(snapshot:ImmutableInvoiceSnapshot):string{
+ // PL18.11.14:36: the domestic tax number appears once, in the issuer
+ // block. Historical rendering and the existing VAT footer stay unchanged.
+ if(snapshot.schemaVersion===3)return snapshot.seller.vatId?' · '+E_INVOICE_COPY.vatIdLabel+': '+snapshot.seller.vatId:'';
+ return ' · '+sellerTaxIdentity(snapshot);
+}
+
 export type ImmutableInvoiceDocumentProps = {
   originalInvoiceNumber?:string;
   vat:InvoiceVatRead;
@@ -90,6 +121,7 @@ export type ImmutableInvoiceDocumentProps = {
 export type ImmutableInvoiceCancellationDocumentProps = {
   vat:InvoiceVatRead;
   invoiceNumber: string;
+  cancellationNumber?: string;
   cancelledAt: string;
   cancelReason: string;
   snapshot: ImmutableInvoiceSnapshot;
@@ -103,7 +135,7 @@ const styles = StyleSheet.create({
     paddingTop: 38,
     paddingHorizontal: 42,
     paddingBottom: 54,
-    fontFamily: "Helvetica",
+    fontFamily: INVOICE_FONT_FAMILY,
     fontSize: 9,
   },
   header: {
@@ -390,12 +422,16 @@ function lineDescription(line: ImmutableInvoiceLine): string {
 }
 
 function lineQuantity(line: ImmutableInvoiceLine): string {
-  return line.type === 'SHIPPING'?'1':line.type === "BASE" ? `${line.quantity} Stk.` : `${line.minutes} Min.`;
+  return line.type === 'SHIPPING'?'1':line.type === "BASE" ? `${line.quantity} ${line.unit?invoiceElectronicUnitLabel(line.unit,line.unitSource):'Stk.'}` : line.unit==='HUR'?`${invoiceXmlWorkHours(line.minutes).replace('.',',')} ${invoiceElectronicUnitLabel(line.unit)}`:`${line.minutes} Min.`;
 }
 
-function lineUnitAmount(line: ImmutableInvoiceLine): string {
+function preciseBaseUnitAmount(line:ImmutableInvoiceBaseLine):string{
+ const [whole,fraction]=invoiceBaseUnitPrice(line.quantity,line.unitNetAmountCents,line.lineNetAmountCents).split('.');
+ return whole.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+fraction+'\u00a0€';
+}
+function lineUnitAmount(line: ImmutableInvoiceLine,schemaVersion:1|2|3): string {
   return line.type === 'SHIPPING'?formatCents(line.amountCents):line.type === "BASE"
-    ? formatCents(line.unitNetAmountCents)
+    ? schemaVersion===3?preciseBaseUnitAmount(line):formatCents(line.unitNetAmountCents)
     : `${formatCents(line.hourlyRateCents)}/Std.`;
 }
 
@@ -416,7 +452,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
             <Text>{seller.street}</Text>
             <Text>{seller.zip} {seller.city}</Text>
             <Text>{seller.country}</Text>
-            <Text>USt-IdNr.: {seller.taxId}</Text>
+            <Text>{sellerTaxIdentity(snapshot)}</Text>
           </View>
           <View style={styles.metaBlock}>
             <Text style={styles.documentTitle}>Rechnung</Text>
@@ -435,7 +471,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
             {customer.companyName && customer.contactPerson ? <Text>{customer.contactPerson}</Text> : null}
             <Text>{customer.street}</Text>
             <Text>{customer.zip} {customer.city}</Text>
-            <Text>{snapshot.schemaVersion===2?customerCountryLabel(customer.country):customer.country}</Text>
+            <Text>{snapshot.schemaVersion!==1?customerCountryLabel(customer.country):customer.country}</Text>
           </View>
           <View style={styles.serviceBlock}>
             <Text style={styles.sectionLabel}>Leistungsbezug</Text>
@@ -456,7 +492,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
               <View style={styles.colPos}><Text style={styles.cell}>{index + 1}</Text></View>
               <View style={styles.colDesc}><Text style={styles.cell}>{lineDescription(line)}</Text></View>
               <View style={styles.colQty}><Text style={styles.cell}>{lineQuantity(line)}</Text></View>
-              <View style={styles.colUnit}><Text style={styles.cell}>{lineUnitAmount(line)}</Text></View>
+              <View style={styles.colUnit}><Text style={styles.cell}>{lineUnitAmount(line,snapshot.schemaVersion)}</Text></View>
               <View style={styles.colTotal}><Text style={styles.cell}>{formatCents(lineTotalAmount(line))}</Text></View>
             </View>
           ))}
@@ -468,7 +504,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
             <Text style={styles.totalsValue}>{formatCents(totals.netAmountCents)}</Text>
           </View>
           {totals.groups.map(group=><View key={group.rateBp}>
-            {snapshot.schemaVersion===2&&<View style={styles.totalsRow}><Text style={styles.totalsLabel}>{INVOICE_VAT_COPY.groupNet(formatVatRate(group.rateBp))}</Text><Text style={styles.totalsValue}>{formatCents(group.netCents)}</Text></View>}
+            {snapshot.schemaVersion!==1&&<View style={styles.totalsRow}><Text style={styles.totalsLabel}>{INVOICE_VAT_COPY.groupNet(formatVatRate(group.rateBp))}</Text><Text style={styles.totalsValue}>{formatCents(group.netCents)}</Text></View>}
             <View style={styles.totalsRow}><Text style={styles.totalsLabel}>{INVOICE_VAT_COPY.groupVat(formatVatRate(group.rateBp))}</Text><Text style={styles.totalsValue}>{formatCents(group.vatCents)}</Text></View>
           </View>)}
           <View style={styles.totalsRowFinal}>
@@ -477,15 +513,15 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
           </View>
         </View>
 
-        {totals.reverseCharge&&<View><Text>{INVOICE_VAT_COPY.reverseCharge}</Text><Text>{INVOICE_VAT_COPY.vatId} {customer.vatId} · {seller.taxId}</Text></View>}
+        {totals.reverseCharge&&<View><Text>{INVOICE_VAT_COPY.reverseCharge}</Text><Text>{INVOICE_VAT_COPY.vatId} {customer.vatId} · {snapshot.schemaVersion===3?snapshot.seller.vatId:snapshot.seller.taxId}</Text></View>}
         <View style={styles.paymentBlock}>
-          <Text>Zahlungsziel: {snapshot.paymentTermDays} Tage netto, fällig am {formatCalendarDate(dueDate)}.</Text>
+          <Text>{E_INVOICE_COPY.paymentTerms(snapshot.paymentTermDays,formatCalendarDate(dueDate))}</Text>
           <Text>Bitte überweisen Sie den Rechnungsbetrag unter Angabe der Rechnungsnummer {invoiceNumber}.</Text>
         </View>
 
         <View style={styles.footer}>
           <Text>
-            {seller.companyName} · {seller.street} · {seller.zip} {seller.city} · USt-IdNr.: {seller.taxId}
+            {seller.companyName} · {seller.street} · {seller.zip} {seller.city}{sellerFooterTaxIdentity(snapshot)}
           </Text>
           <Text>
             {seller.bankName} · IBAN {seller.iban} · BIC {seller.bic}
@@ -503,6 +539,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
  */
 export function ImmutableInvoiceCancellationDocument({
   invoiceNumber,
+  cancellationNumber,
   cancelledAt,
   cancelReason,
   snapshot,
@@ -510,6 +547,11 @@ export function ImmutableInvoiceCancellationDocument({
 }: ImmutableInvoiceCancellationDocumentProps) {
   const { seller, customer, order, lines } = snapshot;
   const totals=vat;
+  let title='Stornobeleg';
+  if(snapshot.schemaVersion===3){
+    if(!cancellationNumber||!/^R-\d{4}-\d{4,}$/.test(cancellationNumber)||cancellationNumber===invoiceNumber)throw Error('INVOICE_ELECTRONIC_CANCELLATION_ID_INVALID');
+    title=E_INVOICE_COPY.cancellationTitle(cancellationNumber,invoiceNumber);
+  }
 
   return (
     <Document>
@@ -520,10 +562,10 @@ export function ImmutableInvoiceCancellationDocument({
             <Text>{seller.street}</Text>
             <Text>{seller.zip} {seller.city}</Text>
             <Text>{seller.country}</Text>
-            <Text>USt-IdNr.: {seller.taxId}</Text>
+            <Text>{sellerTaxIdentity(snapshot)}</Text>
           </View>
           <View style={styles.metaBlock}>
-            <Text style={styles.documentTitle}>Stornobeleg</Text>
+            <Text style={styles.documentTitle}>{title}</Text>
             <Text style={styles.metaLine}>Zu Rechnung: {invoiceNumber}</Text>
             <Text style={styles.metaLine}>Stornodatum: {formatBerlinInstant(cancelledAt)}</Text>
             <Text style={styles.metaLine}>Leistungsdatum: {formatCalendarDate(snapshot.serviceDate)}</Text>
@@ -544,7 +586,7 @@ export function ImmutableInvoiceCancellationDocument({
             {customer.companyName && customer.contactPerson ? <Text>{customer.contactPerson}</Text> : null}
             <Text>{customer.street}</Text>
             <Text>{customer.zip} {customer.city}</Text>
-            <Text>{snapshot.schemaVersion===2?customerCountryLabel(customer.country):customer.country}</Text>
+            <Text>{snapshot.schemaVersion!==1?customerCountryLabel(customer.country):customer.country}</Text>
           </View>
           <View style={styles.serviceBlock}>
             <Text style={styles.sectionLabel}>Leistungsbezug</Text>
@@ -564,8 +606,8 @@ export function ImmutableInvoiceCancellationDocument({
             <View style={styles.tableRow} key={`cancel-${line.type}-${line.type==='SHIPPING'?line.shipmentGroupId:line.itemId}-${index}`}>
               <View style={styles.colPos}><Text style={styles.cell}>{index + 1}</Text></View>
               <View style={styles.colDesc}><Text style={styles.cell}>{lineDescription(line)}</Text></View>
-              <View style={styles.colQty}><Text style={styles.cell}>{lineQuantity(line)}</Text></View>
-              <View style={styles.colUnit}><Text style={styles.cell}>{formatCents(-Math.abs(line.type==='SHIPPING'?line.amountCents:line.type === "BASE" ? line.unitNetAmountCents : line.hourlyRateCents))}</Text></View>
+              <View style={styles.colQty}><Text style={styles.cell}>{snapshot.schemaVersion===3?'-':''}{lineQuantity(line)}</Text></View>
+              <View style={styles.colUnit}><Text style={styles.cell}>{snapshot.schemaVersion===3&&line.type==='BASE'?preciseBaseUnitAmount(line):formatCents((snapshot.schemaVersion===3?1:-1)*Math.abs(line.type==='SHIPPING'?line.amountCents:line.type === "BASE" ? line.unitNetAmountCents : line.hourlyRateCents))}</Text></View>
               <View style={styles.colTotal}><Text style={styles.cell}>{formatCents(-Math.abs(lineTotalAmount(line)))}</Text></View>
             </View>
           ))}
@@ -577,7 +619,7 @@ export function ImmutableInvoiceCancellationDocument({
             <Text style={styles.totalsValue}>{formatCents(-Math.abs(totals.netAmountCents))}</Text>
           </View>
           {totals.groups.map(group=><View key={group.rateBp}>
-            {snapshot.schemaVersion===2&&<View style={styles.totalsRow}><Text style={styles.totalsLabel}>{INVOICE_VAT_COPY.cancelNet(formatVatRate(group.rateBp))}</Text><Text style={styles.totalsValue}>{formatCents(-group.netCents)}</Text></View>}
+            {snapshot.schemaVersion!==1&&<View style={styles.totalsRow}><Text style={styles.totalsLabel}>{INVOICE_VAT_COPY.cancelNet(formatVatRate(group.rateBp))}</Text><Text style={styles.totalsValue}>{formatCents(-group.netCents)}</Text></View>}
             <View style={styles.totalsRow}><Text style={styles.totalsLabel}>{INVOICE_VAT_COPY.cancelVat(formatVatRate(group.rateBp))}</Text><Text style={styles.totalsValue}>{formatCents(-group.vatCents)}</Text></View>
           </View>)}
           <View style={styles.totalsRowFinal}>
@@ -587,7 +629,7 @@ export function ImmutableInvoiceCancellationDocument({
         </View>
 
         <View style={styles.footer}>
-          <Text>{seller.companyName} · {seller.street} · {seller.zip} {seller.city} · USt-IdNr.: {seller.taxId}</Text>
+          <Text>{seller.companyName} · {seller.street} · {seller.zip} {seller.city}{sellerFooterTaxIdentity(snapshot)}</Text>
           <Text>{seller.bankName} · IBAN {seller.iban} · BIC {seller.bic}</Text>
         </View>
       </Page>

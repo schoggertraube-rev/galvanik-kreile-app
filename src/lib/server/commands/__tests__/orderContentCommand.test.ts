@@ -33,7 +33,7 @@ describe("order content command", () => {
     execute
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ id: "order-1", customer_id: "customer-1", version: 1, station: "angenommen", status: "in_progress" }])
+      .mockResolvedValueOnce([{ id: "order-1", customer_id: "customer-1", version: 1, station: "angenommen", status: "in_progress",title:'TEST Kunde · Alter Titel' }])
       .mockResolvedValueOnce([{ id: itemId, catalog_service_id: serviceId }])
       .mockResolvedValueOnce([{ id: serviceId, name: "Vernickeln", surface: "vernickeln", unit: "stueck", net_price_cents: 1250, vat_rate_basis_points: 1900, active: true }])
       .mockResolvedValueOnce([])
@@ -45,7 +45,7 @@ describe("order content command", () => {
     const result = await changeOrderContent({
       orderId: "order-1", expectedVersion: 1, clientEventId, note: "Sichtflächen schützen",
       items: [{ id: itemId, catalogServiceId: serviceId, name: "Clientwert", quantity: 2, material: "Stahl", surface: "Verchromen", unit: "kg", unitPriceCents: 1, vatRateBasisPoints: 0 }],
-    });
+    },async()=>({companyName:'TEST Kunde',name:'TEST Kunde'}));
 
     expect(result).toMatchObject({ code: "OK", replayed: false, receipt: { aggregateVersion: 2, actorId: actor } });
     expect(execute).toHaveBeenCalledTimes(10);

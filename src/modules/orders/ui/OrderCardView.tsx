@@ -1,6 +1,6 @@
 "use client";
 import {formatEuro} from '@/lib/domain/formatEuro';
-import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY,CUSTOMER_CREDIT_COPY} from "@/ui/situationCatalog";
+import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY,CUSTOMER_CREDIT_COPY,E_INVOICE_COPY,E_INVOICE_CORRECTION_COPY} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import {
@@ -40,6 +40,14 @@ import {
   type SchnellAktion,
   type SchrittStatus,
 } from "@/ui/kr";
+
+export function InvoiceSourceCorrectionDialog({orderNumber,busy,error,onCancel,onConfirm}:{orderNumber:string;busy:boolean;error:string|null;onCancel:()=>void;onConfirm:()=>void}){
+  return <Dialog titel={E_INVOICE_CORRECTION_COPY.action(orderNumber)} icon="edit" groesse="schmal" onSchliessen={onCancel} vorSchliessen={()=>!busy}
+    meldung={error?{text:error,ton:'fehler'}:null}
+    fuss={<><Button text={E_INVOICE_CORRECTION_COPY.cancel} disabled={busy} onClick={onCancel}/><Button art="primaer" icon="edit" text={E_INVOICE_CORRECTION_COPY.action(orderNumber)} disabled={busy} onClick={onConfirm}/></>}>
+    <p>{E_INVOICE_CORRECTION_COPY.confirmation(orderNumber)}</p>
+  </Dialog>;
+}
 
 const STATIONS = ["angenommen", "galvanik", "fertig", "zahlung", "abgeholt"] as const;
 const SURFACE_OPTIONS = ["Verchromen", "Vernickeln", "Verzinken", "Entchromen / prüfen", "noch zu klären"] as const;
@@ -351,9 +359,9 @@ export function OrderCardView({
       </div>
       {agreementMessage ? <Hinweis ton="ok">{agreementMessage}</Hinweis> : null}
     </KartenBlock> : null}
-    {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment ? paymentModeLabel(payment.mode) : "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.invoiceNumber ?? payment.status ?? "ausgestellt" : "noch nicht ausgestellt" }, { k: payment?.status === "bezahlt" ? "Bezahlt" : payment?.status === "teilbezahlt" ? "Noch offen" : "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} />{payment?.invoiceState === "issued" && payment.invoiceId ? <Button art="sekundaer" icon="file" text="Rechnungs-PDF öffnen" onClick={openInvoicePdf} /> : null}</KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
+    {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment ? paymentModeLabel(payment.mode) : "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.invoiceNumber ?? payment.status ?? "ausgestellt" : "noch nicht ausgestellt" }, { k: payment?.status === "bezahlt" ? "Bezahlt" : payment?.status === "teilbezahlt" ? "Noch offen" : "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} />{payment?.invoiceState === "issued" && payment.invoiceId ? <><Button art="sekundaer" icon="file" text="Rechnungs-PDF öffnen" onClick={openInvoicePdf} /><Hinweis ton="warn">{E_INVOICE_COPY.printNotice}</Hinweis></> : null}</KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
     {actions.freeze.visible && !actions.freeze.enabled && actions.freeze.reason?.includes("Stundensatz") ? <Hinweis ton="warn">{actions.freeze.reason} <a href={`/settings?returnTo=${encodeURIComponent(`/orders/${card.id}`)}#extra-work-rate`}>Stundensatz jetzt einrichten</a>.</Hinweis> : null}
-    {!responsibilityFeedback&&actions.feedback.kind !== "idle" ? (actions.feedback.kind === "submitting"||actions.feedback.kind === "pending") ? <Zustand art="laedt" text={actions.feedback.message} /> : <Hinweis ton={actions.feedback.kind === "success" ? "ok" : "warn"}>{actions.feedback.message}{actions.feedback.kind === "conflict" ? <Button art="sekundaer" icon="refresh" text="Neu laden" onClick={() => void actions.onReload()} /> : null}</Hinweis> : null}
+    {!responsibilityFeedback&&actions.feedback.kind !== "idle" ? (actions.feedback.kind === "submitting"||actions.feedback.kind === "pending") ? <Zustand art="laedt" text={actions.feedback.message} /> : <Hinweis ton={actions.feedback.kind === "success" ? "ok" : "warn"}>{actions.feedback.message}{(actions.feedback.kind === "error" || actions.feedback.kind === "conflict") && actions.feedback.correction && actions.onCorrectInvoiceSource ? <Button art="sekundaer" icon="edit" text={actions.feedback.correction.label} onClick={actions.onCorrectInvoiceSource} /> : null}{actions.feedback.kind === "conflict" ? <Button art="sekundaer" icon="refresh" text="Neu laden" onClick={() => void actions.onReload()} /> : null}</Hinweis> : null}
     {notice ? <Hinweis ton="warn">{notice}</Hinweis> : null}
   </>;
 

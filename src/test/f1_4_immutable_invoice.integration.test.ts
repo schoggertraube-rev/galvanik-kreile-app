@@ -1,3 +1,4 @@
+import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {readInvoiceVat} from '@/modules/accounting/server-public';
 // @vitest-environment node
 
@@ -202,7 +203,7 @@ async function insertPrerequisites() {
         ${SETTINGS_ID}, ${TENANT_ID}, 'F1.4 Synthetic Galvanik GmbH',
         'Testweg 1', '70173', 'Stuttgart', 'Deutschland',
         'DE02120300000000202051', 'BYLADEM1001', 'F1.4 Testbank',
-        'DE-SYNTHETIC-TAX', 1900, 14
+        'DE123456789', 1900, 14
       )
     `;
     await transaction`
@@ -247,19 +248,19 @@ async function insertPrerequisites() {
     await transaction`
       INSERT INTO public.items (
         id, tenant_id, order_id, customer_id, name, quantity,
-        current_station_id, preis_netto, created_at
+        current_station_id, preis_netto,unit, created_at
       ) VALUES (
         ${ITEM_ID}, ${TENANT_ID}, ${ORDER_ID}, ${CUSTOMER_ID},
-        'F1.4 Synthetic Position', 1, 'fertig', 100.00, now()
+        'F1.4 Synthetic Position', 1, 'fertig', 100.00,'stueck', now()
       )
     `;
     await transaction`
       INSERT INTO public.items (
         id, tenant_id, order_id, customer_id, name, quantity,
-        current_station_id, preis_netto, created_at
+        current_station_id, preis_netto,unit, created_at
       ) VALUES (
         ${RACE_ITEM_ID}, ${TENANT_ID}, ${RACE_ORDER_ID}, ${CUSTOMER_ID},
-        'F1.4 Synthetic Race Position', 1, 'fertig', 50.00, now()
+        'F1.4 Synthetic Race Position', 1, 'fertig', 50.00,'stueck', now()
       )
     `;
     await transaction`
@@ -370,7 +371,10 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     await insertPrerequisites();
     setSyntheticSession();
 
-    const { cancelInvoice, createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
+    const invoiceCommands = await import("@/lib/server/commands/immutableInvoiceCommand");
+    const {recognizeInvoicePdf}=await import('@/modules/eingang/server-public');
+    const createInvoice=(input:Parameters<typeof invoiceCommands.createInvoice>[0])=>invoiceCommands.createInvoice(input,undefined,readInvoiceVat,undefined,recognizeInvoicePdf);
+    const cancelInvoice=(input:Parameters<typeof invoiceCommands.cancelInvoice>[0])=>invoiceCommands.cancelInvoice(input,readInvoiceVat,undefined,recognizeInvoicePdf);
     const { confirmPayment } = await import("@/lib/server/commands/confirmPaymentCommand");
     const {
       readInvoiceCancellationReceipt,
@@ -414,7 +418,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
      */
     const expectNoWrite = async (
       label: string,
-      expected: { code: string; message: string },
+      expected: { code: string; message: string;source?:import('@/lib/domain/invoiceElectronicFields').InvoiceElectronicSourceLocation },
       run: () => Promise<{ code: string; message?: string }>,
     ): Promise<void> => {
       const before = await tenantState();
@@ -588,7 +592,14 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
                WHERE id = $2 AND tenant_id = $3`,
             [variant.value, field.id, TENANT_ID],
           );
-          await expectNoWrite(label, field.table === "company_settings" && field.column === "invoice_vat_rate_basis_points" ? {code:"VALIDATION_ERROR",message:"Für F1.4 Synthetic Position fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein."} : MASTER_DATA_REJECTION, () => createInvoice({
+          // C15 now reports the same rejected source explicitly. Keep the
+          // complete no-invoice/event/counter comparisons below unchanged.
+          const sellerFields:Record<string,string>={company_name:'companyName',street:'street',zip:'zip',city:'city',country:'country',iban:'iban',tax_id:'taxId'};
+          const buyerFields:Record<string,string>={name:'name',street:'street',zip_code:'zip',city:'city',country:'country'};
+          const sourceField=field.table==='company_settings'?sellerFields[field.column]:field.table==='customers'?buyerFields[field.column]:undefined;
+          const rejection=sourceField?{code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource(sourceField),source:{kind:field.table==='company_settings'?'settings' as const:'customer' as const,field:sourceField,...(field.table==='customers'?{objectId:CUSTOMER_ID}:{})}}
+            :field.table==='company_settings'&&field.column==='invoice_vat_rate_basis_points'?{code:'VALIDATION_ERROR',message:'Für F1.4 Synthetic Position fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.'}:MASTER_DATA_REJECTION;
+          await expectNoWrite(label,rejection, () => createInvoice({
             orderId: ORDER_ID,
             expectedVersion: ORDER_VERSION,
             clientEventId: randomUUID(),
@@ -832,6 +843,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     expect(cancelled.code).toBe("OK");
     if (cancelled.code !== "OK") throw new Error(`F1_4_CANCEL_FAILED:${cancelled.code}`);
     expect(cancelled.replayed).toBe(false);
+    expect(cancelled.receipt.cancellationNumber).toMatch(/^R-[0-9]{4}-0002$/);
     expect(cancelled.receipt).toMatchObject({
       invoiceId: issued.receipt.invoiceId,
       invoiceNumber: issued.receipt.invoiceNumber,
@@ -960,7 +972,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     if (reissued.code !== "OK") throw new Error(`F1_4_REISSUE_FAILED:${reissued.code}`);
     expect(reissued.replayed).toBe(false);
     expect(reissued.receipt.invoiceId).not.toBe(issued.receipt.invoiceId);
-    expect(reissued.receipt.invoiceNumber).toMatch(/^R-[0-9]{4}-0002$/);
+    expect(reissued.receipt.invoiceNumber).toMatch(/^R-[0-9]{4}-0003$/); // K2: original, separate cancellation, replacement share one circle.
     await expect(mutationCounts()).resolves.toEqual({
       invoice_count: 2,
       created_event_count: 2,
@@ -998,6 +1010,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     if (cancelledReissue.code !== "OK") {
       throw new Error(`F1_4_REISSUE_CANCEL_FAILED:${cancelledReissue.code}`);
     }
+    expect(cancelledReissue.receipt.cancellationNumber).toMatch(/^R-[0-9]{4}-0004$/);
     await expect(mutationCounts()).resolves.toEqual({
       invoice_count: 2,
       created_event_count: 2,
@@ -1019,7 +1032,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     if (sevenPercentInvoice.code !== "OK") {
       throw new Error(`F1_4_SEVEN_PERCENT_ISSUE_FAILED:${sevenPercentInvoice.code}`);
     }
-    expect(sevenPercentInvoice.receipt.invoiceNumber).toMatch(/^R-[0-9]{4}-0003$/);
+    expect(sevenPercentInvoice.receipt.invoiceNumber).toMatch(/^R-[0-9]{4}-0005$/);
     const [sevenPercentStored] = await sql<{
       snapshot:unknown;
       net_amount_cents: number;
@@ -1051,6 +1064,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     if (cancelledSevenPercent.code !== "OK") {
       throw new Error(`F1_4_SEVEN_PERCENT_CANCEL_FAILED:${cancelledSevenPercent.code}`);
     }
+    expect(cancelledSevenPercent.receipt.cancellationNumber).toMatch(/^R-[0-9]{4}-0006$/);
     await expect(mutationCounts()).resolves.toEqual({
       invoice_count: 3,
       created_event_count: 3,
@@ -1093,7 +1107,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
         FROM private.invoice_number_sequences
         WHERE tenant_id = ${TENANT_ID}
       `;
-      expect(sequence?.last_number).toBe(3);
+      expect(sequence?.last_number).toBe(6);
     } finally {
       // The fixture is restored even when an assertion above failed, so the
       // tenant is never left behind with a fail-closed payment term.

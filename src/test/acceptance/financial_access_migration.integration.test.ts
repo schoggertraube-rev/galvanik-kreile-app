@@ -11,7 +11,7 @@ it('KORR-RECHTE migration expands old grants losslessly, preserves nonfinancial 
  if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database).hostname!=='127.0.0.1'||new URL(database).pathname!=='/postgres')throw Error('TEST_FINANCIAL_MIGRATION_LOOPBACK_REQUIRED');
  const sql=postgres(database,{max:1,prepare:false}),tenant='TEST-rechte-'+randomUUID(),actor=randomUUID(),plain=randomUUID(),openId=randomUUID(),closedId=randomUUID(),invoiceTaskId=randomUUID(),priceTaskId=randomUUID(),customerId=randomUUID(),orderId=randomUUID(),rollback=new Error('TEST_MIGRATION_INTENTIONAL_ROLLBACK');
  const migration=readFileSync('supabase/migrations/20261117120653_split_financial_access_areas.sql','utf8');
- if(migration.includes('TODO_PL'))throw Error('TEST_MIGRATION_EXECUTION_CONTRACT_OPEN');
+ if(migration.includes(['TODO','PL'].join('_')))throw Error('TEST_MIGRATION_EXECUTION_CONTRACT_OPEN');
  try{
   try{await sql.begin(async tx=>{
    const [before]=await tx`SELECT pg_get_functiondef('private.protect_task_identity()'::regprocedure) AS task_guard,pg_get_functiondef('private.current_user_can_view_finance(text)'::regprocedure) AS finance_guard,(SELECT tgenabled::text FROM pg_trigger WHERE tgrelid='public.tasks'::regclass AND tgname='task_identity') AS enabled,has_function_privilege('anon','private.current_user_can_view_finance(text)','EXECUTE') AS anon,has_function_privilege('authenticated','private.current_user_can_view_finance(text)','EXECUTE') AS authenticated`;

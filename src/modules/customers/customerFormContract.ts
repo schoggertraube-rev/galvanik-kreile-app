@@ -1,3 +1,4 @@
+import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
 export const CUSTOMER_COUNTRIES = [
   { value: "DE", label: "Deutschland" }, { value: "AT", label: "Österreich" },
   { value: "CH", label: "Schweiz" }, { value: "andere", label: "anderes Land" },
@@ -31,6 +32,24 @@ export function projectCustomerTransfer(input: unknown):Partial<CustomerFormValu
     if(typeof source[key]===typeof EMPTY_CUSTOMER_FORM[key])Object.assign(value,{[key]:source[key]});
   }
   return value;
+}
+/** Existing-editor navigation only: find the reported original character in
+ * the current form, never replace values with the failed invoice snapshot. */
+export function invoiceCustomerCorrectionFields(value:CustomerFormValue,input:unknown):Array<keyof CustomerFormValue>{
+  if(!input||typeof input!=='object'||Array.isArray(input))return [];
+  const location=(input as {invoiceCorrection?:unknown}).invoiceCorrection;
+  if(!location||typeof location!=='object'||Array.isArray(location))return [];
+  const {field,codePoint}=location as {field?:unknown;codePoint?:unknown};
+  const fields:Record<string,Array<keyof CustomerFormValue>>={
+    name:value.customerType==='privat'?['firstName','lastName']:['companyName'],companyName:['companyName'],
+    contactPerson:['firstName','lastName','contactRole'],street:['street','houseNumber'],
+    zip:['zipCode'],city:['city'],country:['country'],vatId:['vatId'],
+  };
+  if(typeof field!=='string'||!Object.hasOwn(fields,field))return [];
+  if(codePoint===undefined)return fields[field].length===1?fields[field]:fields[field].filter(key=>value[key]==='');
+  if(typeof codePoint!=='number'||!Number.isSafeInteger(codePoint)||codePoint<0||codePoint>0x10ffff)return [];
+  const character=String.fromCodePoint(codePoint);
+  return fields[field].filter(key=>typeof value[key]==='string'&&String(value[key]).includes(character));
 }
 export function customerDisplayName(value: Pick<CustomerFormValue,"customerType"|"companyName"|"firstName"|"lastName">) {
   return value.customerType === "privat" ? [value.firstName,value.lastName].map(part=>part.trim()).filter(Boolean).join(" ") : value.companyName.trim();
@@ -70,7 +89,7 @@ export function customerFieldError(field: keyof CustomerFormValue,value: Custome
   }
   if(field==="city"&&text.length>100)return "Höchstens 100 Zeichen";
   if(field==="country"&&text&&!CUSTOMER_COUNTRIES.some(option=>option.value===text))return "Land prüfen";
-  if(field==="vatId"&&text&&!(value.country==="DE"?/^DE\d{9}$/.test(text):text.length>=4&&text.length<=20))return "USt-ID prüfen";
+  if(field==="vatId"&&text&&!isInvoiceVatId(text))return "USt-ID prüfen";
   if(field==="website"&&text&&(!/^[^\s.]+(?:\.[^\s.]+)+$/.test(text.replace(/^https?:\/\//i,""))||text.length>120))return "Website prüfen";
   if(field==="iban"&&text&&!validIban(text))return "IBAN ungültig";
   if(field==="paymentTermDays"&&text&&(!/^\d+$/.test(text)||Number(text)>120))return "Zahlungsziel prüfen";

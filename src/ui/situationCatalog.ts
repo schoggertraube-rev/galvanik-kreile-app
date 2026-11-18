@@ -12,6 +12,10 @@ export const EVIDENCE_VISIBILITY_COPY={
  retryTask:(name:string)=>`Sichtbarkeit von Foto ${name} erneut speichern`,
 } as const;
 export const INVOICE_VAT_COPY={missingCompanyRate:(part:string)=>`Für ${part} fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.`,missingRate:(part:string)=>`Für ${part} fehlt der Steuersatz (19 % oder 7 %).`,groupNet:(rate:string)=>"Netto ("+rate+")",groupVat:(rate:string)=>"zzgl. USt ("+rate+")",cancelNet:(rate:string)=>"Storno netto ("+rate+")",cancelVat:(rate:string)=>"Storno USt ("+rate+")",reverseCharge:"Steuerschuldnerschaft des Leistungsempfängers",vatId:"USt-IdNr.:"} as const;
+/** S54o C15/R8: provisional field wording, pending the PL text batch. */
+const E_INVOICE_FIELD_LABELS:Record<string,string>={country:'Land in der Anschrift',serviceDate:'Leistungsdatum',paymentTermDays:'Zahlungsziel',vatId:'USt-IdNr. (mit Ländercode, z. B. DE123456789)',taxId:'USt-IdNr. oder Steuernummer',street:'Straße',postalCode:'PLZ',zip:'PLZ',city:'Ort',companyName:'Firmenname'};
+const eInvoiceFieldLabel=(field:string):string=>Object.hasOwn(E_INVOICE_FIELD_LABELS,field)?E_INVOICE_FIELD_LABELS[field]:field;
+export const E_INVOICE_COPY={legacyCancellation:'Diese Rechnung stammt aus der Testphase und kann nicht als E-Rechnung storniert werden.',vatIdLabel:'USt-IdNr.',taxNumberLabel:'Steuernummer',printNotice:'Ausdruck ist für Firmenkunden keine gültige Rechnung · per Mail senden',missingTax:'Fehlt für die E-Rechnung: USt-IdNr. oder Steuernummer · in Einstellungen eintragen',paymentTerms:(days:number,due:string)=>`Zahlungsziel: ${days} Tage netto, fällig am ${due}.`,cancellationTitle:(number:string,original:string)=>`Stornorechnung ${number} zu ${original}`,missingSource:(field:string):string=>field==='taxId'?E_INVOICE_COPY.missingTax:field==='rounding'?'Rechnung nicht ausgestellt: Die Positionen ergeben nicht genau den Rechnungsbetrag. Öffne den Auftrag und korrigiere die Preise.':field.startsWith('unit:')?`Fehlt für die E-Rechnung: Einheit bei ${field.slice(5)}`:`Fehlt für die E-Rechnung: ${eInvoiceFieldLabel(field)}`,correctionWithoutRight:(field:string,roles:string[])=>roles.length?`Rechnung nicht ausgestellt: ${field} enthält ein Zeichen, das die E-Rechnung nicht darstellen kann. Korrigieren kann das: ${roles.join(", ")}.`:E_INVOICE_COPY.correctionRolesUnavailable(field),correctionRolesUnavailable:(field:string)=>`Rechnung nicht ausgestellt: ${field} enthält ein Zeichen, das die E-Rechnung nicht darstellen kann. Wende dich an jemanden mit Rechnungsrecht.`,missingGlyph:(field:string,codePoint:number)=>`Rechnung nicht ausgestellt: Das Zeichen U+${codePoint.toString(16).toUpperCase()} in ${field} passt nicht in die E-Rechnung. Ersetze es und stelle die Rechnung neu aus.`} as const;
 /** S54e packet: existing supplier creation keeps the structured original's prefill. */
 export const INCOMING_INVOICE_COPY={addSupplier:'Lieferant ergänzen',taxRateMismatch:'Steuersätze passen nicht zur Gesamt-USt · prüf die Rechnung',supplierSearchUnavailable:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'} as const;
 /** PL13.11.00:14 deferred sales-stage sources. */
@@ -455,3 +459,18 @@ export const SHIPMENT_GROUP_COPY={
 export {FINANCIAL_ACCESS_COPY} from './financialAccessCopy';
 
 export {PACKAGE_SWITCH_COPY} from './packageSwitchCopy';
+
+export const E_INVOICE_SETTINGS_COPY={
+ fieldLabels:{companyName:'Firmenname',street:'Straße',zip:'PLZ',city:'Ort',country:'Land',taxId:E_INVOICE_COPY.vatIdLabel,taxNumber:E_INVOICE_COPY.taxNumberLabel,iban:'IBAN',bic:'BIC',bankName:'Bank',paymentTermDays:'Zahlungsziel in Tagen',logoUrl:'Logo-Pfad'},
+ action:(field:string)=>`${eInvoiceFieldLabel(field)} in den Einstellungen eintragen`,
+} as const;
+
+export const E_INVOICE_CORRECTION_COPY={
+ customerAction:(field:string)=>`${eInvoiceFieldLabel(field)} beim Kunden eintragen`,
+ action:(nr:string)=>`Auftrag ${nr} zur Korrektur wieder öffnen`,
+ confirmation:(nr:string)=>`Auftrag ${nr} wird wieder geöffnet. Danach Feld korrigieren und erneut fertig melden.`,
+ reason:'Rechnungsfeld korrigieren',cancel:'Abbrechen',
+ busy:'Auftrag wird wieder geöffnet …',
+ done:(nr:string)=>`Auftrag ${nr} ist wieder offen. Korrigiere das Feld und melde ihn erneut fertig.`,
+ failed:'Auftrag konnte nicht wieder geöffnet werden. Versuch es gleich noch einmal.',
+} as const;

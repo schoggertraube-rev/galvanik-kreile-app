@@ -13,6 +13,7 @@ import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
 import {getInvoiceTruthAction,getInvoiceReceiptAction,getInvoiceSummariesAction,setInvoiceItemPricesAction,issueInvoiceAction,cancelInvoiceAction,getCustomerCreditAction} from '@/app/actions/invoices.actions';
 import {confirmPaymentAction} from '@/app/actions/payments.actions';
 import {readInvoiceVat} from '@/modules/accounting/server-public';
+import {recognizeInvoicePdf} from '@/modules/eingang/server-public';
 import {createInvoice} from '@/lib/server/commands/immutableInvoiceCommand';
 
 beforeAll(()=>{
@@ -70,7 +71,7 @@ it.each([
   if(priced.code!=='OK')throw Error('TEST_A4_FREE_TEXT_PRICE:'+priced.code);invoiceVersion=priced.receipt.aggregateVersion;
  }
  const input={orderId,expectedVersion:invoiceVersion,clientEventId:randomUUID()};
- const result=await withSession(full,()=>'directCommand' in scenario&&scenario.directCommand?createInvoice(input):issueInvoiceAction(input));
+ const result=await withSession(full,()=>'directCommand' in scenario&&scenario.directCommand?createInvoice(input,undefined,undefined,undefined,recognizeInvoicePdf):issueInvoiceAction(input));
  if(!scenario.valid){
   expect(result).toMatchObject({code:'VALIDATION_ERROR'});
   if(missingCompany)expect(result).toMatchObject({message:expect.stringContaining('Einstellungen unter Firmendaten')});
@@ -85,7 +86,8 @@ it.each([
  expect(baseLines.map(line=>line.itemId)).toEqual(created.receipt.items.map(item=>item.id).sort());
  const expectedByName=new Map(scenario.rates.map((_rate,index)=>['TEST A4 '+scenario.name+' '+index,expectedRates[index]]));
  for(const line of baseLines)expect(line.vat_rate_basis_points).toBe(expectedByName.get(line.name));
- expect(original.snapshot.schemaVersion).toBe(2);
+ // S54o d: new originals are v3; historical v1/v2 boundary fixtures remain unchanged.
+ expect(original.snapshot.schemaVersion).toBe(3);
  expect(original.snapshot.totals.vatRateBasisPoints).toBeNull();
  expect(original.snapshot.totals.vatBreakdown).toHaveLength(new Set(expectedRates).size);
  expect(original.pdf_sha256).toMatch(/^[0-9a-f]{64}$/);

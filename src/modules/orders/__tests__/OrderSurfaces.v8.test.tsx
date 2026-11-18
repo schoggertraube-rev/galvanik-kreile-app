@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor,within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { OrderCardView, type OrderCardActionPorts, type OrderCardModel } from "../public";
+import { OrderCardView,InvoiceSourceCorrectionDialog, type OrderCardActionPorts, type OrderCardModel } from "../public";
 
 const actions: OrderCardActionPorts = {
   dueDate: { visible: true, enabled: true, reason: null },
@@ -46,6 +46,30 @@ const card: OrderCardModel = {
 };
 
 describe("Orders V1.1 one-surface truth", () => {
+  it('S54o A15:27 asks before reopening and cancel has no correction effect',()=>{
+    const confirm=vi.fn(),cancel=vi.fn();
+    const view=render(<InvoiceSourceCorrectionDialog orderNumber="A-2026-0042" busy={false} error={null} onCancel={cancel} onConfirm={confirm}/>);
+    expect(screen.getByText('Auftrag A-2026-0042 wird wieder geöffnet. Danach Feld korrigieren und erneut fertig melden.')).toBeInTheDocument();expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'Abbrechen'}));expect(cancel).toHaveBeenCalledOnce();expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'Auftrag A-2026-0042 zur Korrektur wieder öffnen'}));expect(confirm).toHaveBeenCalledOnce();
+    view.rerender(<InvoiceSourceCorrectionDialog orderNumber="A-2026-0042" busy error={null} onCancel={cancel} onConfirm={confirm}/>);
+    expect(screen.getByRole('button',{name:'Auftrag A-2026-0042 zur Korrektur wieder öffnen'})).toBeDisabled();expect(screen.getByRole('button',{name:'Abbrechen'})).toBeDisabled();
+  });
+  it('S54o source feedback invokes the existing settings correction port and preserves the actual refusal',()=>{
+    const correct=vi.fn();
+    render(<OrderCardView actions={{...actions,onCorrectInvoiceSource:correct,feedback:{kind:'error',message:'TEST no invoice original created',correction:{label:'TEST correct issuer field',href:'/settings?returnTo=%2Forders%2Forder-1#company-taxNumber'}}}} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{kind:'data',card}}/>);
+    expect(screen.getByText('TEST no invoice original created')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'TEST correct issuer field'}));expect(correct).toHaveBeenCalledOnce();
+  });
+  it('S54o C12 keeps the real original PDF control and places the approved paper notice beside it',()=>{
+    const open=vi.spyOn(window,'open').mockImplementation(()=>null);
+    try{
+      render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{kind:'data',card:{...card,payment:{kind:'available',value:{mode:'rechnung',invoiceState:'issued',invoiceId:'TEST-hybrid-original',invoiceNumber:'R-2026-0001',status:'offen',openAmountCents:11900,goodsOutAllowed:false,paymentEvent:null,goodsOut:null}}}}}/>);
+      expect(screen.getByText('Ausdruck ist für Firmenkunden keine gültige Rechnung · per Mail senden')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button',{name:'Rechnungs-PDF öffnen'}));
+      expect(open).toHaveBeenCalledWith('/api/invoices/TEST-hybrid-original/pdf?disposition=inline','_blank','noopener,noreferrer');
+    }finally{open.mockRestore();}
+  });
   it('S09 a login-bound handover notice opens its real task without offering a fictitious original mail',()=>{
     render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{kind:'data',card:{...card,station:'fertig',handoverMode:'pickup',handoverNotice:{message:'TEST Manueller Übergabebeleg',taskId:'TEST-task',taskState:'offen',originalItemId:null}}}}/>);
     const panel=document.querySelector('[data-spec-id="auftrag.uebergabe"]')!;

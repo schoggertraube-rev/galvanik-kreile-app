@@ -4,6 +4,7 @@ import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {isShipmentGroupInput,type ShipmentGroupInput,type ShipmentGroupResult} from '@/lib/domain/shipmentGroupContract';
 import {readManualShipmentGroup} from '@/modules/orders/server-public';
 import {readInvoiceVat} from "@/modules/accounting/server-public";
+import {recognizeInvoicePdf} from '@/modules/eingang/server-public';
 
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
@@ -38,8 +39,8 @@ async function goodsOutComposition(input:RecordGoodsOutInput):Promise<GoodsOutCo
     beforeOrderLock:async(tx,auth)=>{if(invoiceInput&&invoicePort)await invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput);callTaskIds=await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);finalTasks=await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId);},
     ...(invoiceInput&&invoicePort?{beforeWrite:async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction)=>{
       const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
-      const invoice=await invoicePort.createInvoice(invoiceInput,tx,readInvoiceVat,readShippingSettingsInTransaction);
-      return invoice.code==='OK'?null:{code:invoice.code,message:invoice.message};
+      const invoice=await invoicePort.createInvoice(invoiceInput,tx,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf);
+      return invoice.code==='OK'?null:{code:invoice.code,message:invoice.message,...(invoice.code==='VALIDATION_ERROR'&&invoice.source?{source:invoice.source}:{})};
     }}:{}),
     afterWriteFailure:async(tx,auth,receipt)=>{await createGoodsOutClarificationTask(tx,auth,{orderId:receipt.orderId,eventId:receipt.eventId},{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});},
     afterWrite:async(tx,auth)=>{

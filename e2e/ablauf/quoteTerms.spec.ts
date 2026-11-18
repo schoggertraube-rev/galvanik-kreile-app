@@ -1,4 +1,6 @@
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import path from 'node:path';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
@@ -98,6 +100,8 @@ it.each([{mode:700,rounding:null},{mode:null,rounding:null},{mode:'changed',roun
  const frozen=await withSession(full,()=>freezeOrderAction({orderId,expectedVersion:version,freezeId:randomUUID(),clientEventId:randomUUID()}));if(frozen.code!=='OK')throw Error('H1_PARTIAL_FREEZE');
  const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
  const issue={orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()};
+ const quoteOriginals=await sql`SELECT id::text,revision,md5(to_jsonb(position)::text) AS hash FROM private.quote_positions position WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid ORDER BY revision,id`;
+ const freezeOriginals=await sql`SELECT id::text,md5(to_jsonb(original)::text) AS hash FROM private.order_freezes original WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} ORDER BY id`;
  if(initialRate===null){
   expect(await withSession(full,()=>issueInvoiceAction(issue))).toMatchObject({code:'VALIDATION_ERROR',message:'Für TEST Bearbeitung ohne Einheit fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.'});
   expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{n:0}]);
@@ -107,8 +111,55 @@ it.each([{mode:700,rounding:null},{mode:null,rounding:null},{mode:'changed',roun
  }
  const invoice=await withSession(full,()=>issueInvoiceAction(structuredClone(issue)));
  expect(invoice,JSON.stringify(invoice)).toMatchObject({code:'OK'});
- const [vatRow]=await sql`SELECT snapshot,net_amount_cents,vat_amount_cents,gross_amount_cents,vat_rate_basis_points FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;
+ const [vatRow]=await sql`SELECT id::text,pdf_sha256,snapshot,pdf_content,net_amount_cents,vat_amount_cents,gross_amount_cents,vat_rate_basis_points FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;
+ expect(vatRow.snapshot).toMatchObject({schemaVersion:3,lines:[{type:'BASE',unit:'C62',unitSource:'default_piece'}, {type:'BASE',unit:'C62'}]});
+ expect(await sql`SELECT id::text,revision,md5(to_jsonb(position)::text) AS hash FROM private.quote_positions position WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid ORDER BY revision,id`).toEqual(quoteOriginals);
+ expect(await sql`SELECT id::text,md5(to_jsonb(original)::text) AS hash FROM private.order_freezes original WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} ORDER BY id`).toEqual(freezeOriginals);
+ if(mode===700){
+  const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const bytes=Uint8Array.from(vatRow.pdf_content),task=getDocument({data:bytes.slice(),verbosity:0});
+  try{
+   const pdf=await task.promise;expect(pdf.numPages).toBe(1);
+   const rows:Array<{str:string;x:number;y:number;width:number}>=[];
+   for(let page=1;page<=pdf.numPages;page++){const content=await(await pdf.getPage(page)).getTextContent();rows.push(...content.items.flatMap(item=>'str'in item?[{str:item.str,x:item.transform[4],y:item.transform[5],width:item.width}]:[]));}
+   expect(rows.map(row=>row.str).join(' ')).toMatch(new RegExp('\\b'+receivedQuantity+' Stk(?:\\s|$)'));
+   const prices=rounding==='full'?['25,0033','12,495']:rounding==='partial'?['25,005','12,495']:['18,75','12,50'];
+   const priceRows=prices.map(price=>{const found=rows.filter(row=>row.str.replace(/\u00a0/g,' ')===price+' €');expect(found).toHaveLength(1);return found[0];});
+   // Entire price + currency in one text item, on the same fixed right edge.
+   expect(Math.abs(priceRows[0].x+priceRows[0].width-priceRows[1].x-priceRows[1].width)).toBeLessThan(0.5);
+   if(process.env.S54O_EVIDENCE_DIR){
+    const attachments=await pdf.getAttachments();expect(attachments?.size).toBe(1);if(!attachments)throw Error('ACTUAL_PARTIAL_XML_REQUIRED');
+    const [key]=[...attachments][0],xml=await pdf.getAttachmentContent(key);if(!xml)throw Error('ACTUAL_PARTIAL_XML_BYTES_REQUIRED');
+    for(const price of prices)expect(Buffer.from(xml).toString('utf8')).toContain('<ram:ChargeAmount>'+price.replace(',','.')+'</ram:ChargeAmount>');
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(vatRow.pdf_sha256);
+    const name=rounding?'a19-rounded-'+rounding:'a19-partial',stem=path.join(process.env.S54O_EVIDENCE_DIR,'kreile-s54o-'+name);mkdirSync(process.env.S54O_EVIDENCE_DIR,{recursive:true});
+    writeFileSync(stem+'.pdf',bytes);writeFileSync(stem+'.xml',xml);writeFileSync(stem+'.json',JSON.stringify({invoiceId:vatRow.id,pdfSha256:vatRow.pdf_sha256,source:'real original unitless KV partial-goods action flow',unitSource:'default_piece',pages:pdf.numPages,completePriceItems:priceRows},null,2)+'\n');
+   }
+  }finally{await task.destroy();}
+ }
  const vat=readInvoiceVat(vatRow);expect(vat.headRate).toBeNull();expect(vat.groups).toEqual([{netCents:expectedNet,rateBp:mode==='changed'?1900:700,vatCents:expectedGross-expectedNet,grossCents:expectedGross}]);
  if(rounding){const [row]=await sql`SELECT snapshot FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;expect(row.snapshot.lines).toMatchObject([{quantity:receivedQuantity,unitNetAmountCents:rounding==='full'?2500:2501,lineNetAmountCents:rounding==='full'?7501:5001},{quantity:2,unitNetAmountCents:1250,lineNetAmountCents:2499}]);}
  if(initialRate===null)expect(await sql`SELECT user_id::text,payload->>'vatRateBasisPoints' AS rate FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId} AND event_type='QUOTE_VAT_FROM_COMPANY_V1'`).toEqual([{user_id:full.actorId,rate:'700'}]);
+ if(mode===700&&rounding==='partial'){
+  const {cancelInvoiceAction,getInvoiceCancellationReceiptAction}=await import('@/app/actions/invoices.actions');
+  const input={invoiceId:vatRow.id,expectedVersion:1,clientEventId:randomUUID(),reason:'TEST original price precision cancellation'};
+  const cancelled=await withSession(full,()=>cancelInvoiceAction(input));expect(cancelled).toMatchObject({code:'OK'});if(cancelled.code!=='OK')throw Error('PRECISE_CANCELLATION_REQUIRED');
+  expect(await withSession(full,()=>getInvoiceCancellationReceiptAction({invoiceId:input.invoiceId,clientEventId:input.clientEventId}))).toMatchObject({code:'OK',data:{cancellationPdfSha256:cancelled.receipt.cancellationPdfSha256}});
+  const retryInput=JSON.parse(JSON.stringify(input));
+  expect(await withSession(full,()=>cancelInvoiceAction(retryInput))).toMatchObject({code:'OK',replayed:true,receipt:{cancellationPdfSha256:cancelled.receipt.cancellationPdfSha256}});
+  const [stored]=await sql`SELECT snapshot,pdf_content,cancellation_pdf_content FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${vatRow.id}::uuid`;
+  expect(stored.snapshot).toEqual(vatRow.snapshot);expect(Buffer.from(stored.pdf_content)).toEqual(Buffer.from(vatRow.pdf_content));
+  const bytes=Uint8Array.from(stored.cancellation_pdf_content);expect(createHash('sha256').update(bytes).digest('hex')).toBe(cancelled.receipt.cancellationPdfSha256);
+  const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs'),task=getDocument({data:bytes.slice(),verbosity:0});
+  try{
+   const pdf=await task.promise;expect(pdf.numPages).toBe(1);const content=await(await pdf.getPage(1)).getTextContent(),items=content.items.flatMap(item=>'str'in item?[item.str.replace(/\u00a0/g,' ')]:[]);
+   expect(items).toContain('25,005 €');expect(items).toContain('12,495 €');expect(items).toContain('-2 Stk');
+   if(process.env.S54O_EVIDENCE_DIR){
+    const attachments=await pdf.getAttachments();expect(attachments?.size).toBe(1);if(!attachments)throw Error('ACTUAL_PRECISE_CANCEL_XML_REQUIRED');
+    const [key]=[...attachments][0],xml=await pdf.getAttachmentContent(key);if(!xml)throw Error('ACTUAL_PRECISE_CANCEL_XML_BYTES_REQUIRED');
+    expect(Buffer.from(xml).toString('utf8')).toContain('<ram:TypeCode>384</ram:TypeCode>');
+    const stem=path.join(process.env.S54O_EVIDENCE_DIR,'kreile-s54o-a19-rounded-partial-cancel');writeFileSync(stem+'.pdf',bytes);writeFileSync(stem+'.xml',xml);writeFileSync(stem+'.json',JSON.stringify({invoiceId:vatRow.id,pdfSha256:cancelled.receipt.cancellationPdfSha256,source:'actual cancellation action and stored original with precise unit prices',originalBytesUnchanged:true,freshRetry:true},null,2)+'\n');
+   }
+  }finally{await task.destroy();}
+ }
 });

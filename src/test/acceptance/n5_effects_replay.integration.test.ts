@@ -31,7 +31,7 @@ it.each([false,true])('S02 A2 cancellation preserves mail and one money task (lo
  expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'UNAVAILABLE'});
  const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
  const [invoice]=await sql`SELECT aggregate_version FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${a.invoice.invoiceId}::uuid`;
- expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:a.invoice.invoiceId,expectedVersion:invoice.aggregate_version,reason:'TEST Storno vor Abgleich',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const cancellation=await withSession(full,()=>cancelInvoiceAction({invoiceId:a.invoice.invoiceId,expectedVersion:invoice.aggregate_version,reason:'TEST Storno vor Abgleich',clientEventId:randomUUID()}));expect(cancellation).toMatchObject({code:'OK'});if(cancellation.code!=='OK')throw Error('TEST_CANCELLATION_REQUIRED');
  const recovered=await withSession(full,()=>sendCustomerMailAction(fresh(input)));
  expect(recovered).toMatchObject({code:'OK',data:{replayed:true}});
  expect(await withSession(full,()=>sendCustomerMailAction(fresh(input)))).toMatchObject({code:'OK',data:{replayed:true}});
@@ -42,6 +42,7 @@ it.each([false,true])('S02 A2 cancellation preserves mail and one money task (lo
  const tasks=await sql`SELECT task.id::text,task.titel,task.fuer_bereich,task.notiz FROM public.tasks task JOIN public.events source ON source.tenant_id=task.tenant_id AND source.payload->>'taskId'=task.id::text AND source.event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' WHERE task.tenant_id=${KREILE_TENANT_SLUG} AND source.payload->>'invoiceId'=${a.invoice.invoiceId}`;
  expect(tasks).toEqual([{id:expect.any(String),titel:expect.stringMatching(/^Storno an .+ senden – Rechnung .+ kam trotz Storno an$/),fuer_bereich:'preise',notiz:expect.stringContaining('Kunde: '+customer.name+'\nRechnung: '+a.invoice.invoiceNumber+'\nSendezeit: ')}]);
  expect(Array.from(tasks[0].titel).length).toBeLessThanOrEqual(120);expect(tasks[0].titel).toContain(a.invoice.invoiceNumber);expect(tasks[0].notiz).not.toContain('nicht belegt');
+ expect(cancellation.receipt.cancellationNumber).toMatch(/^R-\d{4}-\d{4,}$/);expect(tasks[0].notiz).toContain('Stornorechnung '+cancellation.receipt.cancellationNumber+' zu '+a.invoice.invoiceNumber);
  const {getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
  const money=await createFixture(['preise'],'buero'),noMoney=await createFixture(['auftraege'],'werkstatt');
  const opened=await withSession(money,()=>getIntakeTaskAction({taskId:tasks[0].id}));

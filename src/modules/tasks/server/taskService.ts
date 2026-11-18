@@ -1,5 +1,6 @@
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
+import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {readEvidenceVisibilityRetrySource} from '@/lib/server/evidenceVisibilityUploadPort';
 import {EVIDENCE_VISIBILITY_COPY} from '@/ui/situationCatalog';
 import {canChangeOrderHandover} from '@/lib/auth/authorizationContract';
@@ -383,7 +384,7 @@ export async function createCanceledInvoiceMailTask(tx:PrivilegedTenantTransacti
  const title=MAIL_RESEND_COPY.canceledTask(source.invoice_number,source.customer_name);
  // PL02:01: only the customer may be shortened; full source facts stay in the note.
  // PL05:15: the normal completion records the operator's actual cancellation delivery.
- const saved=await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'preise',reference:{type:'auftrag',id:source.order_id},note:MAIL_RESEND_COPY.canceledTaskDescription(source.invoice_number,source.customer_name,source.sent_at)},deps,false);
+ const saved=await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'preise',reference:{type:'auftrag',id:source.order_id},note:MAIL_RESEND_COPY.canceledTaskDescription(source.invoice_number,source.customer_name,source.sent_at)+(source.cancellation_invoice_number?'\n'+E_INVOICE_COPY.cancellationTitle(source.cancellation_invoice_number,source.invoice_number):'')},deps,false);
  await bindCanceledInvoiceMailTask(tx,auth,{...input,taskId:saved.task.id,clientEventId:eventKey(source.invoice_id,0,'cancelled-invoice-task-source')});
  return saved.task.id;
 }

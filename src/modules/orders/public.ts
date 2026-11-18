@@ -1,4 +1,4 @@
-export { OrderCardView } from "./ui/OrderCardView";
+export { OrderCardView,InvoiceSourceCorrectionDialog } from "./ui/OrderCardView";
 export { CustomerAgreementDialog } from "@/modules/customers/public";
 export type { CustomerAgreementRecord } from "@/modules/customers/public";
 export { OrderQueueRow } from "./ui/OrderQueueRow";

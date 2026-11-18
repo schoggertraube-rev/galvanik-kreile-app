@@ -372,7 +372,7 @@ test.describe("F1.4 unveränderliche Rechnung – realer Abnahmepfad", () => {
             ${`f1-4-e2e-${suffix}`}, ${TENANT}, 'F1.4 Synthetische Galvanik GmbH',
             'Testweg 1', '70173', 'Stuttgart', 'Deutschland',
             'DE02120300000000202051', 'BYLADEM1001', 'F1.4 Testbank',
-            'DE-SYNTHETIC-TAX', 1900, 14
+            'DE123456789', 1900, 14
           )
         `;
         await transaction`

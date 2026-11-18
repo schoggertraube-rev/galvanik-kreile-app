@@ -12,6 +12,15 @@ const card: CustomerCardModel = {
 };
 
 describe("Customer card V2", () => {
+  it('C15 opens the existing customer editor at the reported original field without replacing any current value',async()=>{
+    const save=vi.fn(),current={...card,companyName:'TEST business',address:'TEST Weg \u{1D11E}'};
+    const {container}=render(<CustomerCardView state={{kind:'data',card:current}} initialEdit takeover={{invoiceCorrection:{field:'street',codePoint:0x1D11E}}} onClose={vi.fn()} onOpenOrder={vi.fn()} onSaveCustomer={save}/>);
+    const street=container.querySelector('[data-spec-id="kundebearbeiten.strasse"]');
+    await waitFor(()=>expect(street).toHaveFocus());
+    expect(street).toHaveValue(current.address);
+    expect(container.querySelector('[data-spec-id="kundebearbeiten.name"]')).toHaveValue(current.companyName);
+    expect(save).not.toHaveBeenCalled();
+  });
   it('K1 keeps a forbidden agreement draft and names the payment area',async()=>{
     // JSDOM has no scrolling engine; only this browser API is doubled.
     const originalScroll=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'scrollIntoView');

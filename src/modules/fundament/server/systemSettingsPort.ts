@@ -1,4 +1,6 @@
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
+import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
+import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
 import {SITUATION_COPY} from '@/ui/situationCatalog';
 import {V45_RUNTIME} from '@/ui/v45.generated';
@@ -47,12 +49,12 @@ export type SystemSettingsContext = {
   canManageStorageCharges?: boolean;
 };
 export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean;includeDeliveryNoteIdentity?:boolean };
-type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number };
+type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number };
 /** Letters need the real sender address, not invoice-only bank/tax configuration. */
 export async function readCompanyLetterSettings(context:CompanyDocumentContext){
  if(!context.canRead)return {code:'FORBIDDEN' as const};
  try{return await withPrivilegedTenantTransaction(context,async tx=>{
-  const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country${context.includeDeliveryNoteIdentity?sql`,phone,tax_id AS "taxId",logo_url AS "logoUrl"`:sql``} FROM public.company_settings WHERE tenant_id=${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+  const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country${context.includeDeliveryNoteIdentity?sql`,phone,COALESCE(NULLIF(tax_id,''),NULLIF(tax_number,'')) AS "taxId",logo_url AS "logoUrl"`:sql``} FROM public.company_settings WHERE tenant_id=${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
   if(!rows.length)return {code:'NOT_FOUND' as const};
   if(rows.length!==1)return {code:'UNAVAILABLE' as const};
   const missingFields=(['companyName','street','zip','city','country'] as const).filter(key=>typeof rows[0][key]!=='string'||!rows[0][key].trim());
@@ -131,7 +133,7 @@ type UserRow = {
 };
 
 const EMPTY_COMPANY: CompanySettingsSnapshot = {
-  companyName: null, street: null, zip: null, city: null, country: null, taxId: null,
+  companyName: null, street: null, zip: null, city: null, country: null, taxId: null, taxNumber: null,
   iban: null, bic: null, bankName: null, paymentTermDays: null, logoUrl: null,
 };
 
@@ -152,7 +154,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nicht erlaubt." };
   try {
     const snapshot = await withPrivilegedTenantTransaction(context, async (tx): Promise<Omit<SystemSettingsSnapshot, "extraWorkHourlyRate">> => {
-      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, tax_number, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
       if (companies.length > 1) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
       const users = await tx.execute<UserRow>(sql`
         SELECT users.id::text AS id,
@@ -176,7 +178,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
       return {
         company: company ? {
           companyName: company.company_name, street: company.street, zip: company.zip,
-          city: company.city, country: company.country, taxId: company.tax_id,
+          city: company.city, country: company.country, taxId: company.tax_id, taxNumber: company.tax_number ?? null,
           iban: company.iban, bic: company.bic, bankName: company.bank_name,
           paymentTermDays: company.invoice_payment_term_days, logoUrl: company.logo_url,
           protocol:parseProtocolSettings({retentionDays:company.protokoll_aufbewahrung_tage,slowMs:company.protokoll_langsam_ms,hangMs:company.protokoll_haenger_ms}),
@@ -225,7 +227,7 @@ export async function readCompanyDocumentSettings(context: CompanyDocumentContex
   if (!context.canRead) return { code: "FORBIDDEN" as const, message: "Firmendaten sind nicht erlaubt." };
   try {
     const company = await withPrivilegedTenantTransaction(context, async (tx) => {
-      const rows = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+      const rows = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, COALESCE(NULLIF(tax_id, ''),NULLIF(tax_number, '')) AS tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
       if (rows.length !== 1) throw new Error("COMPANY_DOCUMENT_SETTINGS_MISSING_OR_AMBIGUOUS");
       const row = rows[0];
       const mapped: CompanySettingsInput = {
@@ -258,25 +260,29 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind ungültig." };
   const value = input as Record<string, unknown>;
   const protocolRequested=Object.hasOwn(value,'protocol');
-  const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(protocolRequested?['protocol']:[])].sort().join(',');
+  const taxNumberRequested=Object.hasOwn(value,'taxNumber');
+  const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(taxNumberRequested?['taxNumber']:[]),...(protocolRequested?['protocol']:[])].sort().join(',');
   if (Object.keys(value).sort().join(",") !== expectedKeys) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind unvollständig." };
   const protocol=protocolRequested?parseProtocolSettings(value.protocol):null;
+  if(text(value.taxId,0,40)===null||(taxNumberRequested&&text(value.taxNumber,0,40)===null))return {code:'VALIDATION_ERROR' as const,message:'Firmendaten sind ungültig.'};
   if(protocolRequested&&!protocol)return {code:'VALIDATION_ERROR' as const,message:V45_RUNTIME.texte['error.save'].text.replace('{gegenstand}',ACCESS_AREA_LABELS.protokoll.text).replace('{ausweg}',SITUATION_COPY.retry)};
   const normalized: CompanySettingsInput = {
     companyName: text(value.companyName, 2, 160) ?? "", street: text(value.street, 2, 160) ?? "",
     zip: text(value.zip, 2, 20) ?? "", city: text(value.city, 1, 120) ?? "", country: text(value.country, 2, 120) ?? "",
-    taxId: text(value.taxId, 4, 40) ?? "", iban: text(value.iban, 8, 40) ?? "", bic: text(value.bic, 6, 20) ?? "",
+    taxId: text(value.taxId, 0, 40) ?? "", ...(taxNumberRequested?{taxNumber:text(value.taxNumber,0,40)??""}:{}), iban: text(value.iban, 8, 40) ?? "", bic: text(value.bic, 6, 20) ?? "",
     bankName: text(value.bankName, 2, 160) ?? "", logoUrl: text(value.logoUrl, 1, 500) ?? "",
     paymentTermDays: typeof value.paymentTermDays === "number" ? value.paymentTermDays : 0,
   };
-  if (Object.values(normalized).some((field) => field === "") || !Number.isSafeInteger(normalized.paymentTermDays) || normalized.paymentTermDays < 1 || normalized.paymentTermDays > 365) return { code: "VALIDATION_ERROR" as const, message: "Alle Firmendaten einschließlich Zahlungsziel sind erforderlich." };
+  if(normalized.taxId&&!isInvoiceVatId(normalized.taxId))return {code:'VALIDATION_ERROR' as const,message:E_INVOICE_COPY.missingSource('vatId'),field:'taxId' as const};
+  if (Object.entries(normalized).some(([key,field]) => key !== "taxId" && key !== "taxNumber" && field === "") || !Number.isSafeInteger(normalized.paymentTermDays) || normalized.paymentTermDays < 1 || normalized.paymentTermDays > 365) return { code: "VALIDATION_ERROR" as const, message: "Alle Firmendaten einschließlich Zahlungsziel sind erforderlich." };
   try {
     await withPrivilegedTenantTransaction(context, async (tx) => {
       const rows = await tx.execute<{ id: string }>(sql`
         WITH updated AS (
           UPDATE public.company_settings
           SET company_name=${normalized.companyName}, street=${normalized.street}, zip=${normalized.zip},
-              city=${normalized.city}, country=${normalized.country}, tax_id=${normalized.taxId},
+              city=${normalized.city}, country=${normalized.country}, tax_id=${normalized.taxId || null},
+              tax_number=${taxNumberRequested?sql`${normalized.taxNumber || null}`:sql`tax_number`},
               iban=${normalized.iban}, bic=${normalized.bic}, bank_name=${normalized.bankName},
               invoice_payment_term_days=${normalized.paymentTermDays}, logo_url=${normalized.logoUrl},
               updated_at=statement_timestamp()
@@ -284,12 +290,12 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
           RETURNING id
         ), inserted AS (
           INSERT INTO public.company_settings (
-            id, tenant_id, company_name, street, zip, city, country, tax_id,
+            id, tenant_id, company_name, street, zip, city, country, tax_id, tax_number,
             iban, bic, bank_name, invoice_payment_term_days, logo_url, updated_at
           )
           SELECT ${`company:${context.tenantId}`}, ${context.tenantId}, ${normalized.companyName},
             ${normalized.street}, ${normalized.zip}, ${normalized.city}, ${normalized.country},
-            ${normalized.taxId}, ${normalized.iban}, ${normalized.bic}, ${normalized.bankName},
+            ${normalized.taxId || null}, ${normalized.taxNumber || null}, ${normalized.iban}, ${normalized.bic}, ${normalized.bankName},
             ${normalized.paymentTermDays}, ${normalized.logoUrl}, statement_timestamp()
           WHERE NOT EXISTS (SELECT 1 FROM updated)
           RETURNING id
@@ -299,6 +305,10 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
         SELECT id FROM inserted
       `);
       if (rows.length !== 1) throw new Error("COMPANY_SETTINGS_WRITE_AMBIGUOUS");
+      if(taxNumberRequested){
+        const saved=await tx.execute<{tax_id:string|null;tax_number:string|null}>(sql`SELECT tax_id,tax_number FROM public.company_settings WHERE tenant_id=${context.tenantId} AND id=${rows[0]!.id}`);
+        if(saved.length!==1||saved[0].tax_id!==(normalized.taxId||null)||saved[0].tax_number!==(normalized.taxNumber||null))throw Error('COMPANY_TAX_SETTINGS_READBACK_MISSING');
+      }
       if(protocol){
         const saved=await tx.execute<{retentionDays:number|null;slowMs:number;hangMs:number}>(sql`UPDATE public.company_settings SET protokoll_aufbewahrung_tage=${protocol.retentionDays},protokoll_langsam_ms=${protocol.slowMs},protokoll_haenger_ms=${protocol.hangMs}
           WHERE tenant_id=${context.tenantId} AND id=${rows[0].id} RETURNING protokoll_aufbewahrung_tage AS "retentionDays",protokoll_langsam_ms AS "slowMs",protokoll_haenger_ms AS "hangMs"`);
@@ -314,7 +324,7 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
         )
         RETURNING id
       `);
-      if(protocol&&audit.length!==1)throw Error('PROTOCOL_SETTINGS_AUDIT_MISSING');
+      if((protocol||taxNumberRequested)&&audit.length!==1)throw Error('PROTOCOL_SETTINGS_AUDIT_MISSING');
     });
     return { code: "OK" as const };
   } catch (error) {

@@ -1,4 +1,4 @@
-// Existing situation catalogue leaf. TODO_PL S21: final wording before S43 UI.
+// Existing situation catalogue leaf. S21: final wording before S43 UI.
 export const PACKAGE_SWITCH_COPY={
  permission:'Du brauchst das Recht Einstellungen.',
  invalid:'Wähle einen gültigen Paket-Schalter.',

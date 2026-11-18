@@ -33,6 +33,13 @@ if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error("F1_5_LOCAL_DATABASE_REQUIRED: SUPABASE_SERVICE_ROLE_KEY must be unset");
 }
 
+// Initialize the existing real Next context above before loading its command
+// graph. Keep cold module compilation out of the unchanged roundtrip deadline.
+const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
+const { readInvoiceVat } = await import("@/modules/accounting/server-public");
+const { readShippingSettingsInTransaction } = await import("@/modules/fundament/server-public");
+const { recognizeInvoicePdf } = await import("@/modules/eingang/server-public");
+
 const sql = postgres(DATABASE_URL, { max: 2, prepare: false });
 const suffix = `${Date.now()}-${process.pid}`;
 const PAID_AT = "2026-09-05T10:00:00.000Z";
@@ -219,7 +226,7 @@ async function seedCommandPrerequisites() {
         ${`TEST-f15-settings-${suffix}`}, ${COMMAND_TENANT}, 'F1.5 Contract GmbH',
         'Testweg 1', '70173', 'Stuttgart', 'Deutschland',
         'DE02120300000000202051', 'BYLADEM1001', 'Testbank',
-        'DE-SYNTHETIC-TAX', 1900, 14
+        'DE123456789', 1900, 14
       ) ON CONFLICT (id) DO UPDATE SET
         invoice_vat_rate_basis_points = EXCLUDED.invoice_vat_rate_basis_points,
         invoice_payment_term_days = EXCLUDED.invoice_payment_term_days
@@ -291,7 +298,7 @@ async function createCommandReadyOrder(
       quantity: 1,
       material: "Stahl",
       surfaceRequested: "Verchromen",
-      unit: null,
+      unit: "stueck",
       unitPriceCents: null,
       vatRateBasisPoints: null,
     }],
@@ -355,10 +362,7 @@ async function createCommandReadyOrder(
 }
 
 async function createCommandInvoice(input: Parameters<typeof import("@/lib/server/commands/immutableInvoiceCommand").createInvoice>[0]) {
-  const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
-  const { readInvoiceVat } = await import("@/modules/accounting/server-public");
-  const { readShippingSettingsInTransaction } = await import("@/modules/fundament/server-public");
-  return createInvoice(input, undefined, readInvoiceVat, readShippingSettingsInTransaction);
+  return createInvoice(input, undefined, readInvoiceVat, readShippingSettingsInTransaction, recognizeInvoicePdf);
 }
 
 /** Synthetic carrier configuration only; tracking and its original use the real writer. */

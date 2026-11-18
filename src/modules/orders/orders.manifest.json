@@ -20,6 +20,7 @@
     "@/modules/orders/public#OrderCardPaymentContext",
     "@/modules/orders/public#OrderCardState",
     "@/modules/orders/public#OrderCardView",
+    "@/modules/orders/public#InvoiceSourceCorrectionDialog",
     "@/modules/orders/public#CustomerAgreementDialog",
     "@/modules/orders/public#CustomerAgreementRecord",
     "@/modules/orders/public#OrderLifecycleStatus",

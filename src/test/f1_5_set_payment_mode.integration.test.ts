@@ -147,7 +147,7 @@ async function seedPrerequisites() {
         ${SETTINGS}, ${TENANT}, 'F1.5 Synthetic Galvanik GmbH',
         'Testweg 1', '70173', 'Stuttgart', 'Deutschland',
         'DE02120300000000202051', 'BYLADEM1001', 'F1.5 Testbank',
-        'DE-SYNTHETIC-TAX', 1900, 14
+        'DE123456789', 1900, 14
       )
       ON CONFLICT (id) DO UPDATE
       SET invoice_vat_rate_basis_points = EXCLUDED.invoice_vat_rate_basis_points
@@ -255,7 +255,12 @@ async function prepareCommands() {
     import("@/lib/server/commands/immutableInvoiceCommand"),
     import("@/lib/server/commands/confirmPaymentCommand"),
   ]);
-  return Object.assign({}, ...modules);
+  const [{readInvoiceVat},{readShippingSettingsInTransaction},{recognizeInvoicePdf}]=await Promise.all([
+    import('@/modules/accounting/server-public'),
+    import('@/modules/fundament/server-public'),
+    import('@/modules/eingang/server-public'),
+  ]);
+  return {...Object.assign({}, ...modules),readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf};
 }
 let preparedCommands: Awaited<ReturnType<typeof prepareCommands>>;
 
@@ -293,7 +298,7 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
         quantity: 1,
         material: "Stahl",
         surfaceRequested: "Verchromen",
-        unit: null,
+        unit: "stueck",
         unitPriceCents: null,
         vatRateBasisPoints: null,
       }],
@@ -443,12 +448,12 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
     if (frozen.code !== "OK") throw new Error(`F1_5_B2_FREEZE_FAILED:${frozen.code}`);
 
     setSession(USERS.admin, "admin");
-    const { createInvoice } = preparedCommands;
+    const { createInvoice,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf } = preparedCommands;
     const issued = await createInvoice({
       orderId,
       expectedVersion: frozen.receipt.aggregateVersion,
       clientEventId: INVOICE_EVENT,
-    });
+    },undefined,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf);
     expect(issued.code, JSON.stringify(issued)).toBe("OK");
     if (issued.code !== "OK") throw new Error(`F1_5_B2_INVOICE_FAILED:${issued.code}`);
     const invoiceId = issued.receipt.invoiceId;

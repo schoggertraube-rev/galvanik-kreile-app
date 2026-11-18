@@ -30,7 +30,7 @@ it.each([{vat:1900,extra:false,outside:false,unpriced:false},{vat:700,extra:true
  const {createQuoteAction,readQuoteAction,readQuotePdfAction}=await import('@/app/actions/quotes.actions');
  // Synthetic H1 quote: shipment is included, so its unchanged amount assertions
  // continue to isolate accepted goods prices/extra work rather than S09's fee.
- const input={clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',note:'TEST H1 KV aus echtem Original',positions:[{name:'TEST Trompete',quantity:4,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:2500,lineTotalCents:10000}],shippingIncluded:true,source:{itemId,version:source.capture.version,message:true}};
+ const input={clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',note:'TEST H1 KV aus echtem Original',positions:[{name:'TEST Trompete',quantity:4,material:'Messing',surfaceRequested:'verchromen',unit:'stueck',unitPriceCents:2500,lineTotalCents:10000}],shippingIncluded:true,source:{itemId,version:source.capture.version,message:true}};
  const created=await withSession(full,()=>createQuoteAction(input));
  expect(created.code).toBe('OK');if(created.code!=='OK')throw Error('H1_KV:'+created.code);
  expect(created.quote.lifecycle).toMatchObject({edition:1,sourceItemId:itemId,acceptedEdition:null});
