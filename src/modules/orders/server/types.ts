@@ -120,7 +120,7 @@ export type OrderCardActionReceipt = {
 export type OrderCardActionFeedback =
   | { kind: "idle" | "submitting" | "pending"; message: string; operation?:"responsibility" }
   | { kind: "success"; message: string; receipt: OrderCardActionReceipt }
-  | { kind: "conflict" | "error"; message: string; code?:string; operation?:"responsibility" };
+  | { kind: "conflict" | "error"; message: string; code?:string; operation?:"responsibility";correction?:{label:string;href:string} };
 export type OrderCardActionAvailability = {
   visible: boolean;
   enabled: boolean;
@@ -176,6 +176,7 @@ export type OrderCardActionPorts = {
   onIssueInvoice: (
     prices?: Array<{ itemId: string; unitPriceCents: number }>,
   ) => void | Promise<void>;
+  onCorrectInvoiceSource?:()=>void;
   onConfirmPayment: (
     method: "bar" | "ueberweisung" | "karte",
   ) => Promise<boolean>;

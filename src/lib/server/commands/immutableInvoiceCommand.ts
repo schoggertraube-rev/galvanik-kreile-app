@@ -1411,13 +1411,12 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
     return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
   } catch (error) {
     if(error instanceof InvoiceElectronicSourceError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource(error.location.field),source:error.location.kind==='order'?{...error.location,objectId:input.orderId}:error.location};
-    if(error instanceof InvoiceGlyphError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingGlyph(error.field,error.codePoint)};
+    if(error instanceof InvoiceGlyphError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingGlyph(error.field,error.codePoint),...(error.field.startsWith('seller.')?{source:{kind:'settings' as const,field:error.field.slice(7)}}:{})};
     const cause = error && typeof error === "object" && "cause" in error
       ? (error as { cause?: { code?: unknown; constraint_name?: unknown } }).cause
       : undefined;
     console.error("INVOICE_CREATE_UNAVAILABLE", {
       errorName: error instanceof Error ? error.name : "UnknownError",
-      errorMessage:error instanceof Error?error.message:'UNKNOWN_INVOICE_ERROR',
       databaseCode: typeof cause?.code === "string" ? cause.code : null,
       constraint: typeof cause?.constraint_name === "string" ? cause.constraint_name : null,
     });

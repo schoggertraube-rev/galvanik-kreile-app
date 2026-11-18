@@ -108,6 +108,9 @@ it('S54o v3: absent seller identity refuses before allocation; actual settings c
  expect(await sql`SELECT * FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(before);
  expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:input.clientEventId}))).toMatchObject({code:'OK',data:null});
  const corrected={...company,taxNumber:'123/456/78901'};
+ expect(await withSession(full,()=>saveCompanySettingsAction({...corrected,companyName:'TEST invalid seller \u{1D11E}'}))).toEqual({code:'OK'});
+ expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'VALIDATION_ERROR',source:{kind:'settings',field:'companyName'},message:expect.stringContaining('U+1D11E')});
+ expect(await sql`SELECT invoice_year,last_number,updated_at::text FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(before);
  expect(await withSession(full,()=>saveCompanySettingsAction(corrected))).toEqual({code:'OK'});
  const result=await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))));
  expect(result.code).toBe('OK');if(result.code!=='OK')throw Error('TEST_V3_CORRECTED_ISSUE:'+result.code+':'+result.message);

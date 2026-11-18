@@ -2,6 +2,8 @@
 import {captureDeviceReadFence,retainDevicePortResponse} from '@/lib/offline/devicePortRead';
 import {capturePendingItemFinished} from '@/lib/offline/pendingStore';
 import {readServerReachability} from '@/lib/offline/serverReachability';
+import {invoiceSettingsCorrection} from '@/lib/client/invoiceSourceCorrection';
+import type {InvoiceElectronicSourceLocation} from '@/lib/domain/invoiceElectronicFields';
 import {releaseRejectedWorkshopRequest} from '@/lib/offline/workshopRejectionContract';
 import type {WorkshopAcknowledgement} from '@/lib/offline/syncPendingFiles';
 import {OFFLINE_ITEM_FINISHED_COPY,OFFLINE_RECONCILIATION_COPY,ACTOR_COPY} from "@/ui/situationCatalog";
@@ -385,19 +387,20 @@ export function OrderCardAppAdapter({
     return () => window.clearTimeout(timer);
   }, [load]);
   const fail = useCallback(
-    async (result: { code: string; message: string },operation?:"responsibility") => {
+    async (result: { code: string; message: string;source?:InvoiceElectronicSourceLocation },operation?:"responsibility") => {
       if (result.code === "CONFLICT") await load(true);
       setFeedback({
         kind: result.code === "CONFLICT" ? "conflict" : "error",
         operation,
         code:result.code,
+        correction:result.code==='VALIDATION_ERROR'&&hasArea('einstellungen')?invoiceSettingsCorrection(result.source,orderId):undefined,
         message:
           operation === "responsibility" ? ACTOR_COPY.assignmentError(result.code) : result.code === "CONFLICT"
             ? `${result.message} Der Auftrag wurde neu geladen.`
             : result.message,
       });
     },
-    [load],
+    [load,hasArea,orderId],
   );
   const success = useCallback(
     (
@@ -905,6 +908,7 @@ export function OrderCardAppAdapter({
   const attachmentVisible = snapshot?.card.station === "galvanik";
   const actions = useMemo<OrderCardActionPorts>(() => {
     const card = snapshot?.card;
+    const invoiceCorrection=feedback.kind==='error'||feedback.kind==='conflict'?feedback.correction:undefined;
     const payment = snapshot?.payment;
     const operate = hasPermission("perm_op_status");
     const finance = hasPermission("perm_view_prices");
@@ -1009,6 +1013,7 @@ export function OrderCardAppAdapter({
             : null,
       ),
       feedback,
+      onCorrectInvoiceSource:invoiceCorrection?()=>router.push(invoiceCorrection.href):undefined,
       onSaveContent,
       onToggleItemFinished,
       onOpenStatusMail: () => document.getElementById(`order-communication-${orderId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
@@ -1048,6 +1053,7 @@ export function OrderCardAppAdapter({
     hasArea,
     hasPermission,
     snapshot,
+    router,
   ]);
   const close =
     onClose ?? (fallbackHref ? () => router.replace(fallbackHref) : storeClose);

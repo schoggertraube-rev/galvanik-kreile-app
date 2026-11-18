@@ -457,3 +457,8 @@ export const SHIPMENT_GROUP_COPY={
 export {FINANCIAL_ACCESS_COPY} from './financialAccessCopy';
 
 export {PACKAGE_SWITCH_COPY} from './packageSwitchCopy';
+
+export const E_INVOICE_SETTINGS_COPY={
+ fieldLabels:{companyName:'Firmenname',street:'Straße',zip:'PLZ',city:'Ort',country:'Land',taxId:E_INVOICE_COPY.vatIdLabel,taxNumber:E_INVOICE_COPY.taxNumberLabel,iban:'IBAN',bic:'BIC',bankName:'Bank',paymentTermDays:'Zahlungsziel in Tagen',logoUrl:'Logo-Pfad'},
+ action:(field:string)=>`TODO_PL invoice.source_action: ${field} in Einstellungen eintragen`,
+} as const;

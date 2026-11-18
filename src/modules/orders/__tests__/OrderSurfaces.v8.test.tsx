@@ -46,6 +46,12 @@ const card: OrderCardModel = {
 };
 
 describe("Orders V1.1 one-surface truth", () => {
+  it('S54o source feedback invokes the existing settings correction port and preserves the actual refusal',()=>{
+    const correct=vi.fn();
+    render(<OrderCardView actions={{...actions,onCorrectInvoiceSource:correct,feedback:{kind:'error',message:'TEST no invoice original created',correction:{label:'TEST correct issuer field',href:'/settings?returnTo=%2Forders%2Forder-1#company-taxNumber'}}}} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{kind:'data',card}}/>);
+    expect(screen.getByText('TEST no invoice original created')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'TEST correct issuer field'}));expect(correct).toHaveBeenCalledOnce();
+  });
   it('S54o C12 keeps the real original PDF control and places the approved paper notice beside it',()=>{
     const open=vi.spyOn(window,'open').mockImplementation(()=>null);
     try{
