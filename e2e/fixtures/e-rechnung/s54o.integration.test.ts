@@ -6,10 +6,46 @@ import {expect,it,vi} from 'vitest';
 import {PDFDict,PDFDocument,PDFName,PDFRawStream} from 'pdf-lib';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession} from '../../ablauf/replayHarness';
+import {sql,full,withSession,createFixture} from '../../ablauf/replayHarness';
+import {readSettingsAction,saveCompanySettingsAction} from '@/app/actions/settings.actions';
+import {SALES_STAGE_FEATURES} from '@/modules/fundament/public';
 import {readyOrderForInvoice} from '../../ablauf/orderFixture';
 import {issueInvoiceAction,cancelInvoiceAction,getInvoiceReceiptAction,getInvoiceCancellationReceiptAction} from '@/app/actions/invoices.actions';
 import {GET as invoicePdf} from '@/app/api/invoices/[invoiceId]/pdf/route';
+
+it('S54o seller tax settings: actual separate fields, settings authority, reread and fresh legacy retry preserve the domestic number',async()=>{
+ for(const feature of SALES_STAGE_FEATURES)await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES(${tenant},${feature.id},${feature.defaultEnabled}) ON CONFLICT DO NOTHING`;
+ const input={companyName:'TEST Separate tax identifiers',street:'TEST Weg 1',zip:'70176',city:'Stuttgart',country:'Deutschland',taxId:'DE123456789',taxNumber:'123/456/78901',iban:'DE02120300000000202051',bic:'BYLADEM1001',bankName:'TEST Bank',paymentTermDays:14,logoUrl:'/TEST-logo.png'};
+ expect(await withSession(full,()=>saveCompanySettingsAction(input))).toEqual({code:'OK'});
+ const read=async()=>{const result=await withSession(full,()=>readSettingsAction());expect(result.code).toBe('OK');if(result.code!=='OK')throw Error('TEST_SETTINGS_SOURCE_MISSING');return result.snapshot.company;};
+ expect(await read()).toMatchObject({taxId:input.taxId,taxNumber:input.taxNumber});
+ const operator=await createFixture(['preise']);
+ expect(await withSession(operator,()=>saveCompanySettingsAction({...input,taxNumber:'TEST not allowed'}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await read()).toMatchObject({taxId:input.taxId,taxNumber:input.taxNumber});
+ expect(await withSession(full,()=>saveCompanySettingsAction(JSON.parse(JSON.stringify({...input,taxId:''}))))).toEqual({code:'OK'});
+ expect(await read()).toMatchObject({taxId:null,taxNumber:input.taxNumber});
+ const {taxNumber:omitted,...legacy}=input;expect(omitted).toBe(input.taxNumber);
+ expect(await withSession(full,()=>saveCompanySettingsAction(JSON.parse(JSON.stringify(legacy))))).toEqual({code:'OK'});
+ expect(await read()).toMatchObject({taxId:input.taxId,taxNumber:input.taxNumber});
+ expect(await withSession(full,()=>saveCompanySettingsAction({...input,taxNumber:42 as unknown as string}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await read()).toMatchObject({taxId:input.taxId,taxNumber:input.taxNumber});
+ const proof=await sql`SELECT payload FROM public.ui_events WHERE tenant_id=${tenant} AND event_type='company_settings_updated' ORDER BY created_at DESC LIMIT 1`;
+ expect(proof).toHaveLength(1);expect(proof[0].payload).toMatchObject({actorId:full.actorId});
+ const fault='test_s54o_tax_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.event_type='company_settings_updated' THEN RETURN NULL; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON public.ui_events FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
+ const corrected={...input,taxNumber:'123/456/99999'};
+ try{
+  expect(await withSession(full,()=>saveCompanySettingsAction(corrected))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await read()).toMatchObject({taxId:input.taxId,taxNumber:input.taxNumber});
+ }finally{
+  await sql.unsafe(`DROP TRIGGER ${fault} ON public.ui_events`);
+  await sql.unsafe(`DROP FUNCTION private.${fault}()`);
+ }
+ expect(await withSession(full,()=>saveCompanySettingsAction(JSON.parse(JSON.stringify(corrected))))).toEqual({code:'OK'});
+ expect(await read()).toMatchObject({taxId:input.taxId,taxNumber:corrected.taxNumber});
+ writeFileSync('.git/kreile-s54o-tax-settings-real.json',JSON.stringify({at:new Date().toISOString(),tenant,actor:full.actorId,separateSources:true,legacyPreserved:true,authorityUnchanged:true},null,2)+'\n');
+});
 
 it('S54o font preparation: real issue/read/retry embeds regular and bold invoice fonts and preserves original bytes',async()=>{
  const order=await readyOrderForInvoice('TEST S54o ÄÖÜ äöü ß · €');

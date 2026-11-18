@@ -84,6 +84,9 @@ describe("Gregor system administration composition", () => {
     expect(screen.getByTestId("gregor-system-admin")).toHaveTextContent("Firmendaten, Leistungen und bestehende Zugänge");
     expect(screen.getByRole("button", { name:"Firmendaten" })).toBeInTheDocument();
     expect(screen.getByLabelText("Stundensatz Mehrarbeit (€/h)")).toBeInTheDocument();
+    expect(screen.getByLabelText("USt-IdNr.")).toHaveValue("DE123456789");
+    expect(screen.getByLabelText("Steuernummer")).toHaveValue("");
+    expect(screen.queryByLabelText("USt-ID / Steuernummer")).not.toBeInTheDocument();
   });
 
   it.each(["meister", "developer"] as const)("renders settings for the %s role", async (role) => {

@@ -27,6 +27,7 @@ import { Dialog, DialogAktionsmeldung, type DialogMeldung } from "@/ui/kr/Dialog
 import { Toast } from "@/ui/kr/Toast";
 import styles from "./settings.module.css";
 import { ShippingSettingsEditor } from "./ShippingSettingsEditor";
+import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import { EmailTemplatesEditor } from './EmailTemplatesEditor';
 
 type Tab = "company" | "catalog" | "users";
@@ -91,6 +92,7 @@ export function SettingsAdminClient({
     city: initialSnapshot.company.city ?? "",
     country: initialSnapshot.company.country ?? "",
     taxId: initialSnapshot.company.taxId ?? "",
+    taxNumber: initialSnapshot.company.taxNumber ?? "",
     iban: initialSnapshot.company.iban ?? "",
     bic: initialSnapshot.company.bic ?? "",
     bankName: initialSnapshot.company.bankName ?? "",
@@ -367,7 +369,7 @@ export function SettingsAdminClient({
         {canManageFinancial ? <div><strong>Stundensatz</strong><span>{rateReady ? "gespeichert" : "noch offen"}</span></div> : null}
         {companyReady && (!canManageFinancial || catalogReady && rateReady) && returnTo ? <Link href={returnTo}>Zurück zum vorherigen Vorgang</Link> : null}
       </div>
-      <div id="company-data" className={styles.grid}>{field("companyName", "Firmenname")}{field("street", "Straße")}{field("zip", "PLZ")}{field("city", "Ort")}{field("country", "Land")}{field("taxId", "USt-ID / Steuernummer")}{field("iban", "IBAN")}{field("bic", "BIC")}{field("bankName", "Bank")}{field("paymentTermDays", "Zahlungsziel in Tagen", "number")}{field("logoUrl", "Logo-Pfad")}</div>
+      <div id="company-data" className={styles.grid}>{field("companyName", "Firmenname")}{field("street", "Straße")}{field("zip", "PLZ")}{field("city", "Ort")}{field("country", "Land")}{field("taxId", E_INVOICE_COPY.vatIdLabel)}{field("taxNumber", E_INVOICE_COPY.taxNumberLabel)}{field("iban", "IBAN")}{field("bic", "BIC")}{field("bankName", "Bank")}{field("paymentTermDays", "Zahlungsziel in Tagen", "number")}{field("logoUrl", "Logo-Pfad")}</div>
       <button disabled={pending} onClick={saveCompany}>Firmendaten speichern</button>
       <ShippingSettingsEditor />
       {canManageFinancial ? <div id="extra-work-rate"><h3>Mehrarbeit</h3><div className={styles.grid}><label>Stundensatz Mehrarbeit (€/h)<input inputMode="decimal" value={hourlyRateEuro} onChange={(event) => setHourlyRateEuro(event.target.value)} placeholder="z. B. 85,00" /></label></div><button disabled={pending} onClick={saveHourlyRate}>Stundensatz speichern</button></div> : null}

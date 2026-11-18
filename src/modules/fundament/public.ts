@@ -11,7 +11,7 @@ export type { AccessArea, AppRole } from "@/lib/auth/authorizationContract";
 
 export type CompanySettingsInput = {
   companyName: string; street: string; zip: string; city: string; country: string;
-  taxId: string; iban: string; bic: string; bankName: string; paymentTermDays: number; logoUrl: string;
+  taxId: string; taxNumber?: string; iban: string; bic: string; bankName: string; paymentTermDays: number; logoUrl: string;
 };
 export type ProtocolSettings={retentionDays:number|null;slowMs:number;hangMs:number};
 export type CompanySettingsSnapshot = {
