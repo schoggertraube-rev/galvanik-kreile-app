@@ -1,5 +1,6 @@
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {allocateOrderNumber} from '@/lib/server/orderNumberAllocation';
+import {orderTitleSource} from '@/lib/domain/orderTitle';
 import {hasReservedQuoteOrderIntent} from '@/lib/server/quoteGoodsContextPort';
 import "server-only";
 
@@ -615,16 +616,15 @@ export async function createOrderIntake(input: unknown,createCustomer?:CustomerW
       const eventId = randomUUID();
       const correlationId = randomUUID();
       const orderNumber = await allocateOrderNumber(tx, "ORDER_INTAKE_NUMBER_INVALID");
-      const customerDisplayName = normalizedText(customer.company_name, 2, 160)
-        ?? normalizedText(customer.name, 2, 160);
-      if (!customerDisplayName) {
+      const titleSource=orderTitleSource({companyName:customer.company_name,name:customer.name},normalized.items[0]?.name);
+      if (!titleSource) {
         if (normalized.customer.mode === "NEW") throw new Error("ORDER_INTAKE_NEW_CUSTOMER_DISPLAY_INVALID");
         return { code: "VALIDATION_ERROR", message: "Kundenzuordnung ist ungültig." };
       }
+      const {customerDisplayName,title}=titleSource;
       const items: OrderIntakeReceiptItem[] = normalized.items.map((item, index) => ({
         id: randomUUID(), position: index + 1, ...item,
       }));
-      const title = `${customerDisplayName} · ${items[0]?.name ?? "Wareneingang"}`.slice(0, 240);
       const task = items.map((item) => `${item.quantity}× ${item.name} · ${item.surfaceRequested}`).join("; ").slice(0, 2000);
 
       const insertedOrders = await tx.execute<{

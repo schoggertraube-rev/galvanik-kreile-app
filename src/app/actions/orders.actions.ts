@@ -202,7 +202,8 @@ export async function changeOrderContentAction(
 ): Promise<OrderContentResult> {
  return observeAction('changeOrderContentAction',subjectForAction('changeOrderContentAction',input),async()=>{
   const { changeOrderContent } = await import("@/lib/server/commands/orderContentCommand");
-  return changeOrderContent(input);
+  const {readCustomerProfile}=await import('@/modules/customers/server-public');
+  return changeOrderContent(input,readCustomerProfile);
 
  },readLoggingSettings);
 }

@@ -1,4 +1,5 @@
 import {isOrderCommandBase as validBase,isManualHandoverInput} from '@/lib/domain/orderHandoverContract';
+import {orderTitleSource} from '@/lib/domain/orderTitle';
 import "server-only";
 import {recordObservedFailure} from "@/lib/server/actionObservation";
 
@@ -53,7 +54,7 @@ export type OrderContentResult =
   | { code: "OK"; receipt: { eventId: string; aggregateVersion: number; actorId: string; occurredAt: string }; replayed: boolean }
   | { code: "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "VALIDATION_ERROR" | "UNAVAILABLE"; message: string };
 
-type OrderRow = { id: string; customer_id: string; version: number; station: string; status: string };
+type OrderRow = { id: string; customer_id: string; version: number; station: string; status: string;title:string };
 type ItemRow = { id: string; catalog_service_id: string | null };
 type CatalogRow = { id: string; name: string; surface: string; unit: string; net_price_cents: number; vat_rate_basis_points: number; active: boolean };
 type EventRow = { id: string; user_id: string; aggregate_version: number; created_at: Date | string; payload: unknown; event_type: string; order_id: string };
@@ -293,7 +294,7 @@ function receipt(row: EventRow) {
   return { eventId: row.id, aggregateVersion: row.aggregate_version, actorId: row.user_id, occurredAt: iso(row.created_at) };
 }
 
-export async function changeOrderContent(input: ChangeOrderContentInput): Promise<OrderContentResult> {
+export async function changeOrderContent(input: ChangeOrderContentInput,readCustomer?:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<{companyName:string|null;name:string}|null>): Promise<OrderContentResult> {
   if (!validBase(input)) return { code: "VALIDATION_ERROR", message: "Auftrag und Änderungsstand sind ungültig." };
   const note = optionalText(input.note, 2000);
   const items = normalizeItems(input.items);
@@ -315,7 +316,7 @@ export async function changeOrderContent(input: ChangeOrderContentInput): Promis
           : { code: "CONFLICT" as const, message: ORDER_REQUEST_COPY.intentConflict };
       }
 
-      const orders = await tx.execute<OrderRow>(sql`SELECT id, customer_id, version, station, status FROM public.orders WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} FOR UPDATE`);
+      const orders = await tx.execute<OrderRow>(sql`SELECT id, customer_id, version, station, status,title FROM public.orders WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} FOR UPDATE`);
       const order = orders[0];
       if (orders.length !== 1 || !order) return { code: "NOT_FOUND" as const, message: "Auftrag nicht verfügbar." };
       if (order.version !== input.expectedVersion) return { code: "CONFLICT" as const, message: "Auftrag wurde bereits geändert." };
@@ -333,6 +334,12 @@ export async function changeOrderContent(input: ChangeOrderContentInput): Promis
         return service ? { ...item, name: service.name, surface: service.surface, unit: service.unit, unitPriceCents: service.net_price_cents, vatRateBasisPoints: service.vat_rate_basis_points as 0 | 700 | 1900 } : item;
       });
 
+      if(!readCustomer)throw Error('ORDER_CONTENT_CUSTOMER_PORT_REQUIRED');
+      const customer=await readCustomer(tx,auth.data.tenantId,order.customer_id);
+      const titleSource=customer?orderTitleSource(customer,normalized[0]?.name):null;
+      if(!titleSource)throw Error('ORDER_CONTENT_TITLE_SOURCE_REQUIRED');
+      const titleChange=titleSource.title===order.title?null:{before:order.title,after:titleSource.title};
+
       for (const item of normalized) {
         if (existing.some((row) => row.id === item.id)) {
           await tx.execute(sql`UPDATE public.items SET name=${item.name}, quantity=${item.quantity}, material=${item.material}, surface_requested=${item.surface}, catalog_service_id=${item.catalogServiceId}::uuid, unit=${item.unit}, preis_netto=${item.unitPriceCents === null ? null : item.unitPriceCents / 100}, vat_rate_basis_points=${item.vatRateBasisPoints} WHERE tenant_id=${auth.data.tenantId} AND order_id=${input.orderId} AND id=${item.id}`);
@@ -340,10 +347,12 @@ export async function changeOrderContent(input: ChangeOrderContentInput): Promis
           await tx.execute(sql`INSERT INTO public.items (id, tenant_id, order_id, customer_id, name, quantity, material, surface_requested, catalog_service_id, unit, preis_netto, vat_rate_basis_points, current_station_id) VALUES (${item.id}, ${auth.data.tenantId}, ${input.orderId}, ${order.customer_id}, ${item.name}, ${item.quantity}, ${item.material}, ${item.surface}, ${item.catalogServiceId}::uuid, ${item.unit}, ${item.unitPriceCents === null ? null : item.unitPriceCents / 100}, ${item.vatRateBasisPoints}, ${order.station})`);
         }
       }
-      const updated = await tx.execute<{ version: number }>(sql`UPDATE public.orders SET task=${note}, version=version+1 WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} AND version=${input.expectedVersion} RETURNING version`);
+      const updated = await tx.execute<{ version: number }>(titleChange
+        ?sql`UPDATE public.orders SET task=${note},title=${titleChange.after},version=version+1 WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} AND version=${input.expectedVersion} RETURNING version`
+        :sql`UPDATE public.orders SET task=${note},version=version+1 WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} AND version=${input.expectedVersion} RETURNING version`);
       if (updated.length !== 1 || updated[0]?.version !== input.expectedVersion + 1) throw new Error("ORDER_CONTENT_VERSION_INVALID");
       const eventId = randomUUID();
-      const payload = JSON.stringify({ requestHash, note, items: normalized.map(({ surface, ...item }, index) => ({ ...item, surfaceRequested: surface, position: index + 1 })) });
+      const payload = JSON.stringify({ requestHash, note,...(titleChange?{titleChange}:{}), items: normalized.map(({ surface, ...item }, index) => ({ ...item, surfaceRequested: surface, position: index + 1 })) });
       const events = await tx.execute<EventRow>(sql`INSERT INTO public.events (id, tenant_id, order_id, event_type, description, payload, status, user_id, station, client_event_id, event_schema_version, aggregate_version) VALUES (${eventId}, ${auth.data.tenantId}, ${input.orderId}, 'ORDER_CONTENT_CHANGED_V1', 'Auftragsinhalt geändert', ${payload}::jsonb, 'success', ${auth.data.userId}::uuid, ${order.station}, ${input.clientEventId}::uuid, 1, ${updated[0]!.version}) RETURNING id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id`);
       if (events.length !== 1 || !events[0]) throw new Error("ORDER_CONTENT_EVENT_MISSING");
       await appendProductionPricing(tx,auth.data.tenantId,input.orderId,events[0].id);

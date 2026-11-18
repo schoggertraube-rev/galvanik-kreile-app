@@ -20,6 +20,8 @@ import {readInvoiceVat} from '@/modules/accounting/public';
 it('S54o C15 A15:27: authorized existing reopen preserves the old freeze and permits regular correction, finish and one invoice',async()=>{
  const customerId=await customerFixture('S54o valid correction customer');
  const order=await readyOrderForInvoice('TEST bad part \u{1D11E}','pickup',customerId);
+ const other=await readyOrderForInvoice('TEST unaffected order','pickup',customerId);
+ const otherBefore=await sql`SELECT md5(to_jsonb(o)::text) AS sha FROM public.orders o WHERE tenant_id=${tenant} AND id=${other.orderId}`;
  const {reopenFrozenOrderAction,getLiveOrderCardAction,changeOrderContentAction,setOrderItemFinishedAction,freezeOrderAction}=await import('@/app/actions/orders.actions');
  const before=await sql`SELECT invoice_year,last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
  const failedKey=randomUUID();
@@ -40,6 +42,10 @@ it('S54o C15 A15:27: authorized existing reopen preserves the old freeze and per
  expect(read.data.card.station).toBe('galvanik');expect(read.data.card.version).toBe(opened.receipt.aggregateVersion);
  const changed=await withSession(full,()=>changeOrderContentAction({orderId:order.orderId,expectedVersion:read.data.card.version,clientEventId:randomUUID(),note:read.data.card.note,items:read.data.card.items.map(item=>({id:item.id,catalogServiceId:item.catalogServiceId??null,name:'TEST corrected invoice part',quantity:item.quantity,material:item.material,surface:item.surfaceRequested,unit:item.unit??null,unitPriceCents:item.unitPriceCents??null,vatRateBasisPoints:item.vatRateBasisPoints??null}))}));
  expect(changed.code).toBe('OK');if(changed.code!=='OK')throw Error('TEST_REGULAR_CONTENT_CORRECTION_REQUIRED');
+ const correctedCard=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));
+ if(correctedCard.code!=='OK')throw Error('TEST_CORRECTED_CARD_REQUIRED');
+ expect(correctedCard.data.card.title).toBe('TEST S54o valid correction customer Firma GmbH · TEST corrected invoice part');
+ expect(await sql`SELECT payload->'titleChange' AS title_change,user_id::text AS actor FROM public.events WHERE tenant_id=${tenant} AND id=${changed.receipt.eventId}`).toEqual([{title_change:{before:read.data.card.title,after:correctedCard.data.card.title},actor:full.actorId}]);
  const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId:order.orderId,itemId:order.items[0].id,expectedVersion:changed.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));
  expect(finished.code).toBe('OK');if(finished.code!=='OK')throw Error('TEST_REGULAR_FINISH_REQUIRED');
  const frozen=await withSession(full,()=>freezeOrderAction({orderId:order.orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));
@@ -50,6 +56,17 @@ it('S54o C15 A15:27: authorized existing reopen preserves the old freeze and per
  expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(issue))))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:issued.receipt.invoiceId,pdfSha256:issued.receipt.pdfSha256}});
  expect(await sql`SELECT id::text,md5(to_jsonb(frozen_original)::text) AS sha FROM private.order_freezes frozen_original WHERE tenant_id=${tenant} AND id=${original[0].id}::uuid`).toEqual(original);
  expect(await sql`SELECT count(*)::int AS count FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${order.orderId}`).toEqual([{count:1}]);
+ expect(await sql`SELECT md5(to_jsonb(o)::text) AS sha FROM public.orders o WHERE tenant_id=${tenant} AND id=${other.orderId}`).toEqual(otherBefore);
+ const [stored]=await sql`SELECT pdf_content FROM public.invoices WHERE tenant_id=${tenant} AND id=${issued.receipt.invoiceId}::uuid`;
+ const bytes=new Uint8Array(stored.pdf_content);
+ expect(createHash('sha256').update(bytes).digest('hex')).toBe(issued.receipt.pdfSha256);
+ const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');const loading=getDocument({data:bytes.slice(),disableFontFace:true,verbosity:0});
+ try{
+  const pdf=await loading.promise,attachments=await pdf.getAttachments();expect(attachments?.size).toBe(1);if(!attachments)throw Error('TEST_CORRECTED_XML_MISSING');
+  const [key]=[...attachments][0],xml=await pdf.getAttachmentContent(key);if(!xml)throw Error('TEST_CORRECTED_XML_BYTES_MISSING');
+  writeEvidence('kreile-s54o-a15-corrected.pdf',bytes);writeEvidence('kreile-s54o-a15-corrected.xml',xml);
+ }finally{await loading.destroy();}
+ writeEvidence('kreile-s54o-a15-corrected.json',JSON.stringify({invoiceId:issued.receipt.invoiceId,pdfSha256:issued.receipt.pdfSha256,source:'real corrected title through ordinary commands',oldFreezeUnchanged:true,otherOrderUnchanged:true},null,2)+'\n');
  writeEvidence('kreile-s54o-frozen-source-correction.json',JSON.stringify({at:new Date().toISOString(),orderId:order.orderId,oldFreezeUnchanged:true,oldFreezeId:original[0].id,actualReopen:opened.receipt,actualInvoice:issued.receipt,regularCommandsOnly:true,taskFallbackNotIncluded:true},null,2)+'\n');
 });
 
