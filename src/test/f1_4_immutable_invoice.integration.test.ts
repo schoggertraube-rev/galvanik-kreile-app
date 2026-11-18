@@ -843,6 +843,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     expect(cancelled.code).toBe("OK");
     if (cancelled.code !== "OK") throw new Error(`F1_4_CANCEL_FAILED:${cancelled.code}`);
     expect(cancelled.replayed).toBe(false);
+    expect(cancelled.receipt.cancellationNumber).toMatch(/^R-[0-9]{4}-0002$/);
     expect(cancelled.receipt).toMatchObject({
       invoiceId: issued.receipt.invoiceId,
       invoiceNumber: issued.receipt.invoiceNumber,
@@ -1009,6 +1010,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     if (cancelledReissue.code !== "OK") {
       throw new Error(`F1_4_REISSUE_CANCEL_FAILED:${cancelledReissue.code}`);
     }
+    expect(cancelledReissue.receipt.cancellationNumber).toMatch(/^R-[0-9]{4}-0004$/);
     await expect(mutationCounts()).resolves.toEqual({
       invoice_count: 2,
       created_event_count: 2,
@@ -1030,7 +1032,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     if (sevenPercentInvoice.code !== "OK") {
       throw new Error(`F1_4_SEVEN_PERCENT_ISSUE_FAILED:${sevenPercentInvoice.code}`);
     }
-    expect(sevenPercentInvoice.receipt.invoiceNumber).toMatch(/^R-[0-9]{4}-0003$/);
+    expect(sevenPercentInvoice.receipt.invoiceNumber).toMatch(/^R-[0-9]{4}-0005$/);
     const [sevenPercentStored] = await sql<{
       snapshot:unknown;
       net_amount_cents: number;
@@ -1062,6 +1064,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     if (cancelledSevenPercent.code !== "OK") {
       throw new Error(`F1_4_SEVEN_PERCENT_CANCEL_FAILED:${cancelledSevenPercent.code}`);
     }
+    expect(cancelledSevenPercent.receipt.cancellationNumber).toMatch(/^R-[0-9]{4}-0006$/);
     await expect(mutationCounts()).resolves.toEqual({
       invoice_count: 3,
       created_event_count: 3,
@@ -1104,7 +1107,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
         FROM private.invoice_number_sequences
         WHERE tenant_id = ${TENANT_ID}
       `;
-      expect(sequence?.last_number).toBe(3);
+      expect(sequence?.last_number).toBe(6);
     } finally {
       // The fixture is restored even when an assertion above failed, so the
       // tenant is never left behind with a fail-closed payment term.

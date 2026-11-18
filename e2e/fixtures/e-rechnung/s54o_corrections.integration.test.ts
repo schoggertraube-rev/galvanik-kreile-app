@@ -50,6 +50,10 @@ it('KORR-S54o K2 abort does not consume a number, parallel cancellations allocat
  await expect(sql`UPDATE public.invoices SET cancellation_invoice_number='R-2026-999999' WHERE tenant_id=${tenant} AND id=${valid.invoiceId}::uuid`).rejects.toMatchObject({code:'23514'});
  const xml=await evidence('k2-cancel',after.cancellation_pdf_content,after.cancellation_pdf_sha256,valid.invoiceId,{number:number!,original:issued.receipt.invoiceNumber});
  expect(xml).toContain('<rsm:ExchangedDocument><ram:ID>'+number+'</ram:ID><ram:TypeCode>384</ram:TypeCode>');expect(xml).toContain('<ram:IssuerAssignedID>'+issued.receipt.invoiceNumber+'</ram:IssuerAssignedID>');
+ const replacement=await withSession(full,()=>issueInvoiceAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()}));expect(replacement.code).toBe('OK');if(replacement.code!=='OK')throw Error('REPLACEMENT_REQUIRED');
+ expect(replacement.receipt.invoiceNumber).toBe('R-'+originalCounter[0].invoice_year+'-'+String(originalCounter[0].last_number+2).padStart(4,'0'));
+ const nextCancel=await withSession(full,()=>cancelInvoiceAction({invoiceId:replacement.receipt.invoiceId,expectedVersion:1,clientEventId:randomUUID(),reason:'TEST next separate cancellation number'}));expect(nextCancel.code).toBe('OK');if(nextCancel.code!=='OK')throw Error('NEXT_CANCELLATION_REQUIRED');
+ expect(nextCancel.receipt.cancellationNumber).toBe('R-'+originalCounter[0].invoice_year+'-'+String(originalCounter[0].last_number+3).padStart(4,'0'));expect((await counter())[0].last_number).toBe(originalCounter[0].last_number+3);
 });
 
 async function evidence(name:string,content:Uint8Array,sha:string,invoiceId:string,cancellation?:{number:string;original:string}){
