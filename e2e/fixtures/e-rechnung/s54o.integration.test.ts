@@ -218,19 +218,23 @@ it('S54o seller tax settings: actual separate fields, settings authority, reread
 });
 
 it('S54o v3: absent seller identity refuses before allocation; actual settings correction and same-key retry freeze tax number and original unit',async()=>{
+ // A real earlier original makes this check exercise an existing counter,
+ // rather than accidentally comparing two empty query results in isolation.
+ await readyInvoiceOrder('TEST S54o prior counter original');
  const order=await readyOrderForInvoice('TEST S54o v3 required seller');
  const input={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()};
  const company={companyName:'TEST S54o v3 issuer',street:'TEST Weg 1',zip:'70176',city:'Stuttgart',country:'Deutschland',taxId:'',taxNumber:'',iban:'DE02120300000000202051',bic:'BYLADEM1001',bankName:'TEST Bank',paymentTermDays:14,logoUrl:'/TEST-logo.png'};
  expect(await withSession(full,()=>saveCompanySettingsAction(company))).toEqual({code:'OK'});
- const before=await sql`SELECT * FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
+ const before=await sql`SELECT tenant_id,invoice_year,last_number,updated_at::text FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
+ expect(before.length).toBeGreaterThan(0);
  const refused=await withSession(full,()=>issueInvoiceAction(input));
  expect(refused).toMatchObject({code:'VALIDATION_ERROR',message:'Fehlt für die E-Rechnung: USt-IdNr. oder Steuernummer · in Einstellungen eintragen',source:{kind:'settings',field:'taxId'}});
- expect(await sql`SELECT * FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(before);
+ expect(await sql`SELECT tenant_id,invoice_year,last_number,updated_at::text FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(before);
  expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:input.clientEventId}))).toMatchObject({code:'OK',data:null});
  const corrected={...company,taxNumber:'123/456/78901'};
  expect(await withSession(full,()=>saveCompanySettingsAction({...corrected,companyName:'TEST invalid seller \u{1D11E}'}))).toEqual({code:'OK'});
  expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'VALIDATION_ERROR',source:{kind:'settings',field:'companyName'},message:expect.stringContaining('U+1D11E')});
- expect(await sql`SELECT invoice_year,last_number,updated_at::text FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(before);
+ expect(await sql`SELECT tenant_id,invoice_year,last_number,updated_at::text FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(before);
  expect(await withSession(full,()=>saveCompanySettingsAction(corrected))).toEqual({code:'OK'});
  const result=await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))));
  expect(result.code).toBe('OK');if(result.code!=='OK')throw Error('TEST_V3_CORRECTED_ISSUE:'+result.code+':'+result.message);
