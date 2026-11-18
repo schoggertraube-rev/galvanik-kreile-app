@@ -130,10 +130,15 @@ export async function recognizeInvoicePdf(bytes:Uint8Array):Promise<ReturnType<t
   try{
    const document=await task.promise,attachments=await document.getAttachments();
    const allowed=attachments?[...attachments].filter(([,attachment])=>['factur-x.xml','zugferd-invoice.xml','xrechnung.xml'].includes(attachment.filename.toLowerCase())):[];
-   // TODO_PL F2026-11-18 08:58:09: selection policy for multiple allowed XML originals.
-   if(allowed.length!==1)return {code:'UNSUPPORTED'};
-   const embedded=await document.getAttachmentContent(allowed[0][0]);
-   return embedded?recognizeInvoiceXml(embedded):{code:'UNSUPPORTED'};
+   const valid:Array<{bytes:Uint8Array;result:Extract<ReturnType<typeof recognizeInvoiceXml>,{code:'OK'}>}>=[];
+   for(const [id] of allowed){
+    const embedded=await document.getAttachmentContent(id);if(!embedded)continue;
+    if(valid.some(value=>Buffer.from(value.bytes).equals(embedded)))continue;
+    const result=recognizeInvoiceXml(embedded);if(result.code==='OK')valid.push({bytes:embedded,result});
+    // PL09:21: different valid originals must never be selected arbitrarily.
+    if(valid.length>1)return {code:'UNSUPPORTED'};
+   }
+   return valid.length===1?valid[0].result:{code:'UNSUPPORTED'};
   }finally{await task.destroy();}
  }catch(error){console.error('[INVOICE_PDF_XML_READ_FAILED]',{errorName:error instanceof Error?error.name:'UnknownError'});return {code:'UNSUPPORTED'};}
 }

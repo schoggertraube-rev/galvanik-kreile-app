@@ -300,6 +300,15 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
+it('S54e keeps the structured supplier name in the existing creation flow without writing on open',async()=>{
+  const createCustomer=vi.fn<GlobalCreatePorts['createCustomer']>();
+  render(<GlobalCreateFlow ports={ports({createCustomer})} />);
+  await act(async()=>{window.dispatchEvent(new CustomEvent('path1:global-create-open',{detail:{intent:'CUSTOMER',prefill:{customerMode:'lieferant',sourceItemId:ORDER_ID,sourceVersion:1,name:'SYNTHETISCH XML Lieferant',vatId:'DE123456789'}}}));});
+  expect(await screen.findByRole('textbox',{name:'Firmenname'})).toHaveValue('SYNTHETISCH XML Lieferant');
+  expect(await screen.findByRole('textbox',{name:'USt-ID'})).toHaveValue('DE123456789');
+  expect(createCustomer).not.toHaveBeenCalled();
+});
+
 it('S47a E41 uses the canonical Berlin day when the UTC device is still on the previous day',async()=>{
   // Explicit synthetic clock/device timezone; the actual component and date input are rendered.
   vi.useFakeTimers({toFake:['Date']});

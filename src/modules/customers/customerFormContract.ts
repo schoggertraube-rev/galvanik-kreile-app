@@ -95,14 +95,14 @@ export function customerTypeChangeLosses(value: CustomerFormValue,target: Exclud
   if(!value.customerType||value.customerType===target)return [];
   const fields: Array<[keyof CustomerFormValue,string]>=target==="privat"
     ? [["companyName","Firmenname"],["contactRole","Funktion / Abteilung"],["vatId","USt-ID"],["website","Website"],["billingEmail","E-Mail für Rechnungen"],["iban","IBAN"],["paymentTermDays","Zahlungsziel"]]
-    : target==="lieferant"?[["paymentPreference","Zahlungsbedingung"],["vatId","USt-ID"],["billingEmail","E-Mail für Rechnungen"],["handoverPreference","Übergabe bevorzugt"]]
+    : target==="lieferant"?[["paymentPreference","Zahlungsbedingung"],["billingEmail","E-Mail für Rechnungen"],["handoverPreference","Übergabe bevorzugt"]]
       :[["iban","IBAN"],["paymentTermDays","Zahlungsziel"]];
   return fields.filter(([key])=>String(value[key]??"").trim()).map(([,label])=>label);
 }
 export function applyCustomerTypeChange(value:CustomerFormValue,target:Exclude<CustomerFormType,"">):CustomerFormValue {
   const next={...value,customerType:target};
   if(target==="privat")return {...next,companyName:"",contactRole:"",vatId:"",website:"",billingEmail:"",iban:"",paymentTermDays:""};
-  if(target==="lieferant")return {...next,paymentPreference:"",vatId:"",billingEmail:"",handoverPreference:""};
+  if(target==="lieferant")return {...next,paymentPreference:"",billingEmail:"",handoverPreference:""};
   return {...next,iban:"",paymentTermDays:""};
 }
 

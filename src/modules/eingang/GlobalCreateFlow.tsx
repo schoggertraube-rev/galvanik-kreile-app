@@ -1347,7 +1347,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if(prefill?.customerMode==="lieferant"&&!ports.canCreateCustomer){deny("customer");return;}
       setSupplierCustomerMode(prefill?.customerMode==="lieferant");
       const initialCustomer = prefill?.customerMode==="lieferant"
-        ? {...EMPTY_CUSTOMER,customerType:"lieferant" as const,paymentPreference:"",companyName:prefill.name?.trim()??'',email:prefill.email?.trim().toLowerCase()??''}
+        ? {...EMPTY_CUSTOMER,customerType:"lieferant" as const,paymentPreference:"",companyName:prefill.name?.trim()??'',vatId:prefill.vatId?.trim()??'',email:prefill.email?.trim().toLowerCase()??''}
         : prefill ? { ...customerDraftFromSearch(prefill.name ?? ""), email: prefill.email?.trim().toLowerCase() ?? "" } : EMPTY_CUSTOMER;
       setCustomerType("");
       setCustomerClosePrompt(false);

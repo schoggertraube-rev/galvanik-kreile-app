@@ -4,6 +4,7 @@ import type {IntakeFileInput,IntakeFileGrant,IntakeCaptureResult} from './captur
 
 export const INVOICE_STATUSES = ['offen', 'bezahlt', 'unklar', 'doppelt', 'ungueltig'] as const;
 export type IncomingInvoiceStatus = typeof INVOICE_STATUSES[number];
+export type InvoiceTaxRate={satz:string;netto:string;ust:string};
 export type InvoiceFields = {
   lieferantId: string; nummer: string; datum: string;
   netto: string; ust: string; brutto: string; faelligAm: string;
@@ -20,6 +21,7 @@ export type IncomingInvoice = {
   id: string; nummer_intern: string; item_id: string; file_id: string;
   lieferant_id: string | null; nummer: string | null; datum: string | null;
   netto: string | null; ust: string | null; brutto: string | null;
+  ust_saetze: InvoiceTaxRate[] | null;
   faellig_am: string | null; iban: string | null; iban_geprueft: boolean;
   zahlstatus: IncomingInvoiceStatus; bezahlt_am: string | null;
   nachweis_file_id: string | null; verweis_id: string | null;
@@ -34,6 +36,8 @@ export type InvoiceDuplicate = {
 };
 export type InvoiceView = {
  actorTrace?:CaseActorTrace;
+  supplierPrefill?: {name?:string;vatId?:string};
+  taxRateWarning?: string | null;
   item: { id: string; version: number; at: string; channel: string; sender: string | null };
   invoice: IncomingInvoice | null; supplier: InvoiceSupplier | null;
   originals: InvoiceOriginal[]; fileId: string | null; fields: InvoiceFields;
@@ -86,6 +90,25 @@ export function invoiceCents(raw: string): number | null {
 export function invoiceDecimal(cents: number): string {
   const magnitude = Math.abs(cents);
   return `${cents < 0 ? '-' : ''}${Math.trunc(magnitude / 100)}.${String(magnitude % 100).padStart(2, '0')}`;
+}
+/** PL18Nov09:21: retain only a proven breakdown that agrees with the leading total VAT. */
+export function invoiceTaxBreakdown(value:unknown,totalTax:string):{rates:InvoiceTaxRate[]|null;warning:boolean}{
+ if(value===null||value===undefined)return {rates:null,warning:false};
+ if(!Array.isArray(value)||value.length===0)return {rates:null,warning:true};
+ const rates:InvoiceTaxRate[]=[];let sum=0;
+ for(const row of value){
+  if(!row||typeof row!=='object'||Array.isArray(row)||Object.keys(row).sort().join(',')!=='netto,satz,ust')return {rates:null,warning:true};
+  const normalized:Partial<InvoiceTaxRate>={};
+  for(const key of ['satz','netto','ust'] as const){
+   const cents=typeof row[key]==='string'?invoiceCents(row[key]):null;
+   if(cents===null)return {rates:null,warning:true};
+   normalized[key]=invoiceDecimal(cents);
+  }
+  sum+=invoiceCents(normalized.ust!)!;if(!Number.isSafeInteger(sum))return {rates:null,warning:true};
+  rates.push(normalized as InvoiceTaxRate);
+ }
+ const total=invoiceCents(totalTax);
+ return total===null||Math.abs(sum-total)>1?{rates:null,warning:true}:{rates,warning:false};
 }
 export function invoiceDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;

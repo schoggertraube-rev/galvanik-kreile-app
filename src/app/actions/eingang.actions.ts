@@ -9,7 +9,7 @@ import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {repairEvidenceVisibilityTask} from '@/lib/server/evidenceVisibilityUploadPort';
 import {applyEvidenceUploadVisibility} from '@/lib/server/evidenceVisibilityUpload';
-import {EVIDENCE_VISIBILITY_COPY} from '@/ui/situationCatalog';
+import {EVIDENCE_VISIBILITY_COPY,INCOMING_INVOICE_COPY} from '@/ui/situationCatalog';
 import {repairProductionPricingTask} from '@/lib/server/productionSnapshotPort';
 import {repairCancellationCreditTask} from '@/lib/server/commands/customerCreditCommand';
 import {offlinePartition} from "@/lib/server/offlinePartition";
@@ -93,6 +93,7 @@ import {readIncomingInvoice,saveIncomingInvoice,changeIncomingInvoice,readInvoic
 import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
 const invoiceTaskEffects={...taskEffects,readInvoice:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string)=>readInvoiceTaskContext(tx,auth,id,readCustomerProfile)};
 const invoiceEffects={readCustomer:readCustomerProfile,updateCustomer:updateCustomerInTransaction,
+ findSuppliers:(auth:AuthorizationSnapshot,query:string,by:'vat'|'name')=>searchOrderIntakeCustomers(auth,{query},{exactSupplier:by}),
  createTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;clientKey:string;reason:string})=>createInvoiceClarificationTask(tx,auth,input,invoiceTaskEffects),
  resolveTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;taskId:string;note:string})=>resolveInvoiceClarificationTask(tx,auth,input,invoiceTaskEffects)};
 export async function getIncomingInvoiceAction(input:unknown){return readIncomingInvoice(input,invoiceEffects);}
@@ -119,7 +120,7 @@ export async function searchInvoiceSuppliersAction(query:string){
   const suppliers=await withPrivilegedTenantTransaction(auth.data,async tx=>{
    const values=[];for(const candidate of candidates){if(candidate.customerType!=='lieferant')continue;const value=await readCustomerProfile(tx,auth.data.tenantId,candidate.id);if(value)values.push({id:value.id,name:value.name,iban:value.iban,paymentTermDays:value.paymentTermDays});}return values;
   });return {code:'OK' as const,suppliers};
- }catch{recordObservedFailure('INVOICE_SUPPLIER_SEARCH_FAILED');return {code:'UNAVAILABLE' as const,message:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'};}
+ }catch{recordObservedFailure('INVOICE_SUPPLIER_SEARCH_FAILED');return {code:'UNAVAILABLE' as const,message:INCOMING_INVOICE_COPY.supplierSearchUnavailable};}
 
  },readLoggingSettings);
 }

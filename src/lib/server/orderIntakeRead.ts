@@ -267,10 +267,10 @@ function mapReceipt(
 
 export async function searchOrderIntakeCustomers(
   authorization: Pick<AuthorizationSnapshot,"tenantId"> & Partial<Pick<AuthorizationSnapshot,"areas">>,input:unknown,
-  options:{nameAlternatives?:boolean}={},
+  options:{nameAlternatives?:boolean;exactSupplier?:'vat'|'name'}={},
 ):Promise<OrderIntakeCustomerOption[]> {
   if(!validSearchInput(input))throw new Error("ORDER_INTAKE_CUSTOMER_SEARCH_INPUT_INVALID");
-  if(input.query.length<2)return [];
+  if(input.query.length<(options.exactSupplier?1:2))return [];
   const tokens=foldSearchText(normaliseCustomerName(input.query)).split(" ").filter(Boolean);
   const phone=normaliseCustomerPhone(input.query);
   const national=phone.startsWith("0")?phone.slice(1):phone;
@@ -284,13 +284,17 @@ export async function searchOrderIntakeCustomers(
     // pg_trgm already exists in the baseline. This only fetches candidates;
     // the shared phonetic/edit rule proves each returned name below.
     const alternativeSearch=alternative&&initialPattern?sql`(${nameText} ~ ${initialPattern} OR public.word_similarity(${alternative},${nameText})>=0.2)`:sql`false`;
+    const exactSupplier=options.exactSupplier?sql`customer.customer_type='lieferant' AND ${options.exactSupplier==='vat'
+      ?sql`upper(regexp_replace(coalesce(customer.vat_id,''),'[[:space:]]','','g'))=${input.query.replace(/\s/gu,'').toUpperCase()}`
+      :sql`lower(btrim(customer.name))=lower(${input.query.trim()})`}`:null;
     const rows=await tx.execute<CustomerRow>(sql`
       SELECT customer.* FROM private.v_order_intake_customers_v1 customer
-      WHERE (${textSearch} OR ${alternativeSearch} OR (${national.length>=2} AND regexp_replace(coalesce(customer.phone,''),'[^0-9]','','g') LIKE ${'%'+national+'%'}))
+      WHERE ${exactSupplier??sql`(${textSearch} OR ${alternativeSearch} OR (${national.length>=2} AND regexp_replace(coalesce(customer.phone,''),'[^0-9]','','g') LIKE ${'%'+national+'%'}))`}
     `);
     const mapped=rows.map(row=>{const value=mapCustomer(row,authorization.tenantId);if(!value)throw new Error("ORDER_INTAKE_CUSTOMER_READMODEL_INVALID");return value;});
     const query=foldSearchText(input.query);
     const values=mapped.map(customer=>({...customer,duplicateMatch:input.candidate?customerDuplicateMatch(customer,input.candidate):null})).filter(customer=>{
+      if(options.exactSupplier)return true; // The canonical SELECT already proves the exact supplier match.
       if(input.candidate)return customer.duplicateMatch!==null;
       const fields=[customer.name,customer.companyName,customer.firstName,customer.lastName,customerContactLabel(customer),customer.email,customer.city,customer.customerNumber];
       return fields.some(value=>value!==null&&value!==undefined&&foldSearchText(value).includes(query)) || national.length>=2&&normaliseCustomerPhone(customer.phone).includes(national)

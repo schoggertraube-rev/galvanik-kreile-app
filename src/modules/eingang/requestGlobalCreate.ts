@@ -14,6 +14,7 @@ export type GlobalCreateRequest = {
     customerId?: string;
     customerMode?:"lieferant";
     name?: string;
+    vatId?: string;
     email?: string;
     customerQuery?: string;
     note?: string;

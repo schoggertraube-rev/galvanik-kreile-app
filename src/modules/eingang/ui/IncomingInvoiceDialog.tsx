@@ -1,6 +1,6 @@
 'use client';
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
-import {ACTOR_COPY} from '@/ui/situationCatalog';
+import {ACTOR_COPY,INCOMING_INVOICE_COPY} from '@/ui/situationCatalog';
 import {useEffect,useRef,useState} from 'react';
 import {Button,Checkbox,Dialog,Eingabe,Feld,Hinweis,Kachel,Rueckfrage,Segment,Textfeld,Zustandskette} from '@/ui/kr';
 import {invoiceDate,invoiceFieldErrors,invoiceWarnings,type InvoiceFields,type InvoicePorts,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
@@ -90,7 +90,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
  };
  const missingSupplier=!!view.invoice&&!view.invoice.lieferant_id&&view.invoice.unklar_grund==='Lieferant fehlt';
  const readOnly=mode==='ansicht'||mode==='bezahlt_markieren'||mode==='klaeren'&&!correct&&!missingSupplier;
- const warnings=invoiceWarnings(fields,selected),due=dateLabel(fields.faelligAm),primaryLabel=uploading?'Nachweis wird gesichert …':busy?'Wird erfasst …':mode==='klaeren'?'Klärung speichern':mode==='bezahlt_markieren'?'Als bezahlt markieren':mode==='unklar'?'Als unklar erfassen':mode==='bezahlt'?'Erfassen · bezahlt':due?'Erfassen · fällig '+due:'Erfassen';
+ const warnings=[...invoiceWarnings(fields,selected),...(view.taxRateWarning?[view.taxRateWarning]:[])],due=dateLabel(fields.faelligAm),primaryLabel=uploading?'Nachweis wird gesichert …':busy?'Wird erfasst …':mode==='klaeren'?'Klärung speichern':mode==='bezahlt_markieren'?'Als bezahlt markieren':mode==='unklar'?'Als unklar erfassen':mode==='bezahlt'?'Erfassen · bezahlt':due?'Erfassen · fällig '+due:'Erfassen';
  const primaryId=mode==='klaeren'?'klaerung-speichern':mode==='bezahlt_markieren'?'als-bezahlt':mode==='unklar'?'unklar-speichern':mode==='bezahlt'?'bezahlt-speichern':'offen';
  const primary=()=>void save(mode==='klaeren'?(outcome===' '?'offen':outcome):mode==='bezahlt'||mode==='bezahlt_markieren'?'bezahlt':mode==='unklar'?'unklar':'offen');
  return <><Dialog titel="Rechnung prüfen" icon="file" groesse="breit" schliessenSpecId="rechnungein.schliessen" onSchliessen={close} vorSchliessen={()=>!working.current}
@@ -113,6 +113,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
    <Button art="leise" text="Positionen ins Lager übernehmen · Stufe 3" disabled/>
   </div>
   {missingSupplier?<Hinweis ton="warn">Lieferant fehlt · Rechnung kann erst nach Ergänzung bezahlt werden</Hinweis>:null}
+  {view.conflict?<Hinweis ton="warn">{view.conflict}</Hinweis>:null}
   {uncertain>0?<div data-spec-id="rechnungein.zustand.teilweise"><Hinweis ton="warn">{uncertain} Felder unsicher · mit dem Original vergleichen</Hinweis><Button data-spec-id="rechnungein.geprueft" text="Geprüft" onClick={()=>setUncertain(0)}/></div>:null}
   {view.duplicate&&!duplicate?<div data-spec-id="rechnungein.dublette-hinweis"><Hinweis ton="warn">Rechnung {fields.nummer} von {selected?.name??'Lieferant fehlt'} gibt es schon ({view.duplicate.internalNumber})</Hinweis></div>:null}
   {duplicate?<div data-spec-id="rechnungein.zustand.dublette"><Hinweis ton="warn">Rechnung {duplicate.number} von {selected?.name??'Lieferant fehlt'} gibt es schon ({duplicate.internalNumber})</Hinweis>
@@ -123,7 +124,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
     <Feld label="Lieferant" voll fehler={errors.lieferantId}><Eingabe data-invoice-field="lieferantId" data-spec-id="rechnungein.lieferant" required value={supplierQuery} disabled={busy} readOnly={readOnly||!!view.invoice&&!missingSupplier} onChange={event=>{setSupplierQuery(event.target.value);setSelected(null);update('lieferantId','');}}/>
      {searching?<span role="status">Lieferant wird gesucht …</span>:null}
     </Feld>
-    {!readOnly&&!selected&&(!view.invoice||missingSupplier)?<div className="kr-voll">{suppliers.map(value=><Button key={value.id} text={value.name+' · übernehmen'} onClick={()=>chooseSupplier(value)}/>)}<Button data-spec-id="rechnungein.lieferant-anlegen" text="Lieferant anlegen" onClick={()=>{
+    {!readOnly&&!selected&&(!view.invoice||missingSupplier)?<div className="kr-voll">{suppliers.map(value=><Button key={value.id} text={value.name+' · übernehmen'} onClick={()=>chooseSupplier(value)}/>)}<Button data-spec-id="rechnungein.lieferant-anlegen" text={INCOMING_INVOICE_COPY.addSupplier} onClick={()=>{
      void ports.createSupplier(view.item.id).then(result=>{if(result.code!=='OK')setMessage(result.message);}).catch(error=>{console.error('[INVOICE_CREATE_SUPPLIER_OPEN_FAILED]',error);setMessage('Lieferant kann nicht geöffnet werden · Fehlercode: INVOICE_CREATE_SUPPLIER_OPEN_FAILED.');});
     }}/></div>:null}
     {fieldRows.map(([field,id,label,type])=><Feld key={field} label={label} className={errors[field]?'kr-feld--fehler':undefined}><Eingabe data-invoice-field={field} data-spec-id={'rechnungein.'+id} type={type} required={field!=='iban'&&!readOnly} readOnly={readOnly||field==='iban'&&!!view.invoice} disabled={busy} value={fields[field]} aria-invalid={!!errors[field]} aria-describedby={errors[field]?'invoice-error-'+id:undefined} inputMode={['netto','ust','brutto'].includes(field)?'decimal':undefined} onChange={event=>update(field,event.target.value)}/>{errors[field]?<span id={'invoice-error-'+id} className="kr-feld-fehler" data-spec-id={'rechnungein.'+id+'.fehler'}>{errors[field]}</span>:null}</Feld>)}

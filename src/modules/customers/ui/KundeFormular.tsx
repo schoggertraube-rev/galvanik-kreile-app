@@ -184,7 +184,7 @@ export function KundeFormular({
     {isSupplier && canManageMoney ? field("paymentTermDays", "Zahlungsziel (Tage)", { type: "number" }) : null}
   </> : null;
   const more = value.customerType ? <>
-    {isBusiness ? field("vatId", "USt-ID", { maxLength: 20 }) : null}
+    {(isBusiness || isSupplier) ? field("vatId", "USt-ID", { maxLength: 20 }) : null}
     {(isBusiness || isSupplier) ? field("website", "Website", { maxLength: 120 }) : null}
     {mode!=="inline"?<Feld label="Notiz / Telefonnotiz" voll><Textfeld data-spec-id={`${prefix}.notiz`} rows={3} maxLength={2000} value={value.notes} onChange={(event) => set("notes", event.target.value)} onBlur={() => blur("notes")} />{metadata("notes")}</Feld>:null}
   </> : null;
