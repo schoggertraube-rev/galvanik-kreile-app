@@ -100,6 +100,12 @@ function sellerTaxIdentity(snapshot:ImmutableInvoiceSnapshot):string{
  if(values.length===0)throw Error('INVOICE_SELLER_TAX_ID_INVALID');
  return values.join(' · ');
 }
+function sellerFooterTaxIdentity(snapshot:ImmutableInvoiceSnapshot):string{
+ // PL18.11.14:36: the domestic tax number appears once, in the issuer
+ // block. Historical rendering and the existing VAT footer stay unchanged.
+ if(snapshot.schemaVersion===3)return snapshot.seller.vatId?' · '+E_INVOICE_COPY.vatIdLabel+': '+snapshot.seller.vatId:'';
+ return ' · '+sellerTaxIdentity(snapshot);
+}
 
 export type ImmutableInvoiceDocumentProps = {
   originalInvoiceNumber?:string;
@@ -507,7 +513,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
 
         <View style={styles.footer}>
           <Text>
-            {seller.companyName} · {seller.street} · {seller.zip} {seller.city} · {sellerTaxIdentity(snapshot)}
+            {seller.companyName} · {seller.street} · {seller.zip} {seller.city}{sellerFooterTaxIdentity(snapshot)}
           </Text>
           <Text>
             {seller.bankName} · IBAN {seller.iban} · BIC {seller.bic}
@@ -609,7 +615,7 @@ export function ImmutableInvoiceCancellationDocument({
         </View>
 
         <View style={styles.footer}>
-          <Text>{seller.companyName} · {seller.street} · {seller.zip} {seller.city} · {sellerTaxIdentity(snapshot)}</Text>
+          <Text>{seller.companyName} · {seller.street} · {seller.zip} {seller.city}{sellerFooterTaxIdentity(snapshot)}</Text>
           <Text>{seller.bankName} · IBAN {seller.iban} · BIC {seller.bic}</Text>
         </View>
       </Page>

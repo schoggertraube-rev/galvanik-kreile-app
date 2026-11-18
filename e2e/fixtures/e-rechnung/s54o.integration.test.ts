@@ -1,7 +1,8 @@
 // @vitest-environment node
 // Real invoice action, cookie/Auth, Loopback DB and immutable original. TEST only.
 import {createHash,randomUUID} from 'node:crypto';
-import {writeFileSync} from 'node:fs';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import path from 'node:path';
 import {expect,it,vi} from 'vitest';
 import {PDFDict,PDFDocument,PDFName,PDFRawStream} from 'pdf-lib';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -15,6 +16,11 @@ import {GET as invoicePdf} from '@/app/api/invoices/[invoiceId]/pdf/route';
 import {renderToBuffer} from '@react-pdf/renderer';
 import {createImmutableInvoicePdfDocument,type ImmutableInvoiceSnapshot,type ImmutableInvoiceSnapshotV3} from '@/lib/pdf/ImmutableInvoiceDocument';
 import {readInvoiceVat} from '@/modules/accounting/public';
+
+function writeEvidence(name:string,data:string|Uint8Array){
+ const output=process.env.S54O_EVIDENCE_DIR??'.git';mkdirSync(output,{recursive:true});
+ writeFileSync(path.join(output,name),data);
+}
 
 it.each([1,2] as const)('S54o A16: synthetic historical schema%s original is refused by the real cancellation Action with an audit and no original/counter change',async(schemaVersion)=>{
  const order=await readyOrderForInvoice('TEST S54o legacy refusal '+schemaVersion);
@@ -54,7 +60,7 @@ it.each([1,2] as const)('S54o A16: synthetic historical schema%s original is ref
  expect(await sql`SELECT * FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(counters);
  const audit=await sql`SELECT user_id,reason FROM public.technical_protocol WHERE tenant_id=${tenant} AND subject_type='invoice' AND subject_id=${legacyId} AND command='cancelInvoiceAction' AND event_type='rejected'`;
  expect(audit).toHaveLength(2);for(const row of audit)expect(row).toMatchObject({user_id:full.actorId,reason:'VALIDATION'});
- writeFileSync('.git/kreile-s54o-legacy-'+schemaVersion+'-refusal.json',JSON.stringify({at:new Date().toISOString(),schemaVersion,syntheticLegacyFixture:true,allDbGuardsActive:true,actualRefusalAndAudit:true,originalAndCounterUnchanged:true,invoiceId:legacyId},null,2)+'\n');
+ writeEvidence('kreile-s54o-legacy-'+schemaVersion+'-refusal.json',JSON.stringify({at:new Date().toISOString(),schemaVersion,syntheticLegacyFixture:true,allDbGuardsActive:true,actualRefusalAndAudit:true,originalAndCounterUnchanged:true,invoiceId:legacyId},null,2)+'\n');
 });
 
 it('S54o seller tax settings: actual separate fields, settings authority, reread and fresh legacy retry preserve the domestic number',async()=>{
@@ -88,7 +94,7 @@ it('S54o seller tax settings: actual separate fields, settings authority, reread
  }
  expect(await withSession(full,()=>saveCompanySettingsAction(JSON.parse(JSON.stringify(corrected))))).toEqual({code:'OK'});
  expect(await read()).toMatchObject({taxId:input.taxId,taxNumber:corrected.taxNumber});
- writeFileSync('.git/kreile-s54o-tax-settings-real.json',JSON.stringify({at:new Date().toISOString(),tenant,actor:full.actorId,separateSources:true,legacyPreserved:true,authorityUnchanged:true},null,2)+'\n');
+ writeEvidence('kreile-s54o-tax-settings-real.json',JSON.stringify({at:new Date().toISOString(),tenant,actor:full.actorId,separateSources:true,legacyPreserved:true,authorityUnchanged:true},null,2)+'\n');
 });
 
 it('S54o v3: absent seller identity refuses before allocation; actual settings correction and same-key retry freeze tax number and original unit',async()=>{
@@ -117,6 +123,8 @@ it('S54o v3: absent seller identity refuses before allocation; actual settings c
  const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');const task=getDocument({data:bytes.slice(),verbosity:0});
  try{
   const document=await task.promise,attachments=await document.getAttachments();
+  let visible='';for(let page=1;page<=document.numPages;page++){const content=await(await document.getPage(page)).getTextContent();visible+=content.items.filter((row):row is Extract<typeof row,{str:string}>=>'str'in row).map(row=>row.str).join(' ');}
+  expect(visible.split(corrected.taxNumber).length-1).toBe(1);
   expect(attachments?.size).toBe(1);if(!attachments)throw Error('TEST_XML_ORIGINAL_MISSING');
   const [key,attachment]=[...attachments][0];expect(attachment.filename).toBe('factur-x.xml');
   const embedded=await document.getAttachmentContent(key);expect(embedded).not.toBeNull();if(!embedded)throw Error('TEST_XML_BYTES_MISSING');
@@ -124,14 +132,17 @@ it('S54o v3: absent seller identity refuses before allocation; actual settings c
   expect(xmlText).toContain('<ram:SellerTradeParty><ram:ID>123/456/78901</ram:ID>');
   expect(xmlText).toContain('<ram:ID schemeID="FC">123/456/78901</ram:ID>');
   expect(xmlText).not.toContain('schemeID="VA"');
-  writeFileSync('.git/kreile-s54o-a1.pdf',bytes);writeFileSync('.git/kreile-s54o-a1.xml',embedded);
+  writeEvidence('kreile-s54o-a1.pdf',bytes);writeEvidence('kreile-s54o-a1.xml',embedded);
  }finally{await task.destroy();}
  expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:result.receipt.invoiceId,pdfSha256:result.receipt.pdfSha256}});
- writeFileSync('.git/kreile-s54o-v3-actual.json',JSON.stringify({at:new Date().toISOString(),tenant,invoiceId:result.receipt.invoiceId,pdfSha256:result.receipt.pdfSha256,originalUnit:source[0].unit,snapshot:stored[0].snapshot,counterUnchangedOnRefusal:true,existingWriterAndFreshRetry:true,pairedPdf:'.git/kreile-s54o-a1.pdf',pairedXml:'.git/kreile-s54o-a1.xml'},null,2)+'\n');
+ writeEvidence('kreile-s54o-v3-actual.json',JSON.stringify({at:new Date().toISOString(),tenant,invoiceId:result.receipt.invoiceId,pdfSha256:result.receipt.pdfSha256,originalUnit:source[0].unit,snapshot:stored[0].snapshot,counterUnchangedOnRefusal:true,existingWriterAndFreshRetry:true,pairedPdf:'.git/kreile-s54o-a1.pdf',pairedXml:'.git/kreile-s54o-a1.xml'},null,2)+'\n');
 });
 
 it('S54o font preparation: real issue/read/retry embeds regular and bold invoice fonts and preserves original bytes',async()=>{
  const order=await readyOrderForInvoice('TEST S54o ÄÖÜ äöü ß · €');
+ // Explicit VAT case: the preceding independent tax-only scenario is not
+ // this scenario's issuer source. Use the same real settings writer.
+ expect(await withSession(full,()=>saveCompanySettingsAction({companyName:'TEST S54o font issuer',street:'TEST Weg 1',zip:'70176',city:'Stuttgart',country:'Deutschland',taxId:'DE123456789',taxNumber:'',iban:'DE02120300000000202051',bic:'BYLADEM1001',bankName:'TEST Bank',paymentTermDays:14,logoUrl:'/TEST-logo.png'}))).toEqual({code:'OK'});
  const input={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()};
  const issued=await withSession(full,()=>issueInvoiceAction(input));expect(issued.code).toBe('OK');if(issued.code!=='OK')throw Error('TEST_S54O_ISSUE:'+issued.code);
  const read=async()=>{
@@ -155,14 +166,14 @@ it('S54o font preparation: real issue/read/retry embeds regular and bold invoice
   const sellerXml=new TextDecoder().decode(xml).split('<ram:SellerTradeParty>')[1]?.split('</ram:SellerTradeParty>')[0];
   expect(sellerXml).toBeDefined();expect(sellerXml).toContain('schemeID="VA"');
   expect(sellerXml).not.toMatch(/<ram:ID>/);
-  writeFileSync('.git/kreile-s54o-a1-vat.pdf',bytes);writeFileSync('.git/kreile-s54o-a1-vat.xml',xml);
+  writeEvidence('kreile-s54o-a1-vat.pdf',bytes);writeEvidence('kreile-s54o-a1-vat.xml',xml);
  }finally{await loading.destroy();}
  expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:issued.receipt.invoiceId,pdfSha256:issued.receipt.pdfSha256}});
  expect(await read()).toEqual(bytes);
  const rows=await sql`SELECT pdf_sha256,octet_length(pdf_content) AS bytes FROM public.invoices WHERE tenant_id=${tenant} AND id=${issued.receipt.invoiceId}::uuid`;
  expect(rows).toHaveLength(1);expect(rows[0]).toMatchObject({pdf_sha256:issued.receipt.pdfSha256,bytes:bytes.length});
- writeFileSync('.git/kreile-s54o-font-original.pdf',bytes);
- writeFileSync('.git/kreile-s54o-font-roundtrip.json',JSON.stringify({at:new Date().toISOString(),invoiceId:issued.receipt.invoiceId,pdfSha256:issued.receipt.pdfSha256,embeddedFonts:descriptors.length,bytes:bytes.length,realAuthDbOriginalRetry:true,hybridComplete:false},null,2)+'\n');
+ writeEvidence('kreile-s54o-font-original.pdf',bytes);
+ writeEvidence('kreile-s54o-font-roundtrip.json',JSON.stringify({at:new Date().toISOString(),invoiceId:issued.receipt.invoiceId,pdfSha256:issued.receipt.pdfSha256,embeddedFonts:descriptors.length,bytes:bytes.length,realAuthDbOriginalRetry:true,hybridComplete:false},null,2)+'\n');
 });
 
 it('S54o C15 technical gate: missing glyph refuses before number allocation and a fresh retry cannot create an original',async()=>{
@@ -174,7 +185,7 @@ it('S54o C15 technical gate: missing glyph refuses before number allocation and 
  const after=await sql`SELECT invoice_year,last_number,updated_at::text FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;expect(after).toEqual(before);
  expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:input.clientEventId}))).toMatchObject({code:'OK',data:null});
  expect(await sql`SELECT id FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${order.orderId}`).toHaveLength(0);
- writeFileSync('.git/kreile-s54o-glyph-rejection.json',JSON.stringify({at:new Date().toISOString(),orderId:order.orderId,result,before,after,originalAbsent:true,freshRetry:true,fieldCopyPendingPL:true},null,2)+'\n');
+ writeEvidence('kreile-s54o-glyph-rejection.json',JSON.stringify({at:new Date().toISOString(),orderId:order.orderId,result,before,after,originalAbsent:true,freshRetry:true,fieldCopyPendingPL:true},null,2)+'\n');
 });
 
 it('S54o C15 cancellation: unsupported reason preserves original, corrected input uses the existing cancellation path',async()=>{
@@ -199,9 +210,9 @@ it('S54o C15 cancellation: unsupported reason preserves original, corrected inpu
   const text=new TextDecoder().decode(xml);
   expect(text).toContain('<ram:TypeCode>384</ram:TypeCode>');expect(text).toContain('<ram:IssuerAssignedID>'+issued.receipt.invoiceNumber+'</ram:IssuerAssignedID>');
   expect(text).toContain('<ram:BilledQuantity unitCode="C62">-1</ram:BilledQuantity>');expect(text).toContain('<ram:ChargeAmount>100.00</ram:ChargeAmount>');expect(text).toContain('<ram:GrandTotalAmount>-119.00</ram:GrandTotalAmount>');
-  writeFileSync('.git/kreile-s54o-a5.pdf',bytes);writeFileSync('.git/kreile-s54o-a5.xml',xml);
+  writeEvidence('kreile-s54o-a5.pdf',bytes);writeEvidence('kreile-s54o-a5.xml',xml);
  }finally{await loading.destroy();}
- writeFileSync('.git/kreile-s54o-cancel-glyph-rejection.json',JSON.stringify({at:new Date().toISOString(),invoiceId:input.invoiceId,rejected,originalPreserved:true,correctedCancellation:cancelled.receipt,freshRetry:true,fieldCopyPendingPL:true},null,2)+'\n');
+ writeEvidence('kreile-s54o-cancel-glyph-rejection.json',JSON.stringify({at:new Date().toISOString(),invoiceId:input.invoiceId,rejected,originalPreserved:true,correctedCancellation:cancelled.receipt,freshRetry:true,fieldCopyPendingPL:true},null,2)+'\n');
 });
 
 it('S54o C9 boundary: existing DB guards refuse service-role overwrite/delete of a real TEST invoice original',async()=>{
@@ -232,5 +243,5 @@ it('S54o C9 boundary: existing DB guards refuse service-role overwrite/delete of
  // Inspect the statement-level guard; never execute table-wide TRUNCATE.
  const triggers=await sql`SELECT tgname,tgenabled,pg_get_triggerdef(oid) AS definition FROM pg_trigger WHERE tgrelid='public.invoices'::regclass AND tgname='invoices_f14_truncate_guard'`;
  expect(triggers).toHaveLength(1);expect(triggers[0]).toMatchObject({tgenabled:'O',definition:expect.stringContaining('BEFORE TRUNCATE')});
- writeFileSync('.git/kreile-s54o-original-guard.json',JSON.stringify({at:new Date().toISOString(),invoiceId:issued.receipt.invoiceId,pdfSha256:issued.receipt.pdfSha256,refusals,originalPreserved:true,allWriteAttemptsRolledBack:true,truncateExecuted:false,truncateTrigger:triggers[0]},null,2)+'\n');
+ writeEvidence('kreile-s54o-original-guard.json',JSON.stringify({at:new Date().toISOString(),invoiceId:issued.receipt.invoiceId,pdfSha256:issued.receipt.pdfSha256,refusals,originalPreserved:true,allWriteAttemptsRolledBack:true,truncateExecuted:false,truncateTrigger:triggers[0]},null,2)+'\n');
 });
