@@ -6,7 +6,7 @@ import {readCustomerCredit,readCustomerCreditInTransaction} from "@/modules/acco
 import type {CustomerCreditResult,CustomerCreditApplyInput} from "@/modules/accounting/public";
 import {readCustomerProfile} from "@/modules/customers/server-public";
 import {synchronizeCancellationCreditRetryTask} from '@/modules/tasks/server-public';
-import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
+import {recordIntakeTaskEffect,recognizeInvoicePdf} from '@/modules/eingang/server-public';
 
 import { revalidatePath } from "next/cache";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -53,7 +53,7 @@ export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<Cre
  return observeAction('issueInvoiceAction',subjectForAction('issueInvoiceAction',input),async()=>{
   const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
   const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
-  const result = await createInvoice(input,undefined,readInvoiceVat,readShippingSettingsInTransaction);
+  const result = await createInvoice(input,undefined,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf);
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
     revalidatePath("/warendurchlauf");
@@ -84,7 +84,7 @@ export async function cancelInvoiceAction(input: CancelInvoiceInput): Promise<Ca
   const result = await cancelInvoice(input,readInvoiceVat,{
     failed:async(tx,auth,key)=>synchronizeCancellationCreditRetryTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},'ensure'),
     settled:async(tx,auth,key)=>synchronizeCancellationCreditRetryTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},'settle'),
-  });
+  },recognizeInvoicePdf);
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
     revalidatePath("/warendurchlauf");

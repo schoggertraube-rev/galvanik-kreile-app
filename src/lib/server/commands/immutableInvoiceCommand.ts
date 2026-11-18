@@ -8,6 +8,8 @@ import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {invoiceElectronicUnit,InvoiceElectronicSourceError} from '@/lib/domain/invoiceElectronicFields';
+import {assertInvoiceElectronicFields} from '@/lib/pdf/invoiceXml';
+import {createInvoiceElectronicOriginal,type InvoiceOriginalReader} from '@/lib/server/invoiceElectronicOriginal';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {assertInvoiceGlyphs,InvoiceGlyphError} from '@/lib/pdf/invoiceFonts';
 import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
@@ -1151,7 +1153,7 @@ export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantI
   return selected.length===1?selected[0].customer_id:null;
 }
 
-export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader,readShippingSettings?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>): Promise<CreateInvoiceResult> {
+export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader,readShippingSettings?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>,readOriginal?:InvoiceOriginalReader): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
     const zeroShippingFee=plainObject(input)&&plainObject(input.shippingCosts)&&input.shippingCosts.expectedFeeCents===0;
     return { code: "VALIDATION_ERROR", message: zeroShippingFee?SHIPPING_FEE_COPY.noAdditionalInvoiceNeeded:"Ungültige Rechnungsanfrage." };
@@ -1404,7 +1406,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         if(!unchanged)throw Error('QUOTE_COMMERCIAL_TERMS_CHANGED_DURING_INVOICE');
       }
 
-      return persistPreparedInvoice(tx,authorization.data,input,order,content,{paymentTermDays,serviceDate:source.service_date,freezeId:source.freeze_id,afterGoodsOut,originalInvoiceNumber},requireVatReader(readVat));
+      return persistPreparedInvoice(tx,authorization.data,input,order,content,{paymentTermDays,serviceDate:source.service_date,freezeId:source.freeze_id,afterGoodsOut,originalInvoiceNumber},requireVatReader(readVat),readOriginal);
     };
     return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
   } catch (error) {
@@ -1424,9 +1426,10 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
 }
 
 /** Single existing number/PDF/payment/event/receipt writer, shared by qualified preparations. */
-async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,content:PreparedInvoiceContent,terms:{paymentTermDays:number;serviceDate:Date|string;freezeId:string;afterGoodsOut:boolean;originalInvoiceNumber?:string;reissue?:NonNullable<ImmutableInvoiceReceiptBase['reissue']>},readVat:InvoiceVatReader):Promise<Extract<CreateInvoiceResult,{code:'OK'}>>{
+async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,content:PreparedInvoiceContent,terms:{paymentTermDays:number;serviceDate:Date|string;freezeId:string;afterGoodsOut:boolean;originalInvoiceNumber?:string;reissue?:NonNullable<ImmutableInvoiceReceiptBase['reissue']>},readVat:InvoiceVatReader,readOriginal?:InvoiceOriginalReader):Promise<Extract<CreateInvoiceResult,{code:'OK'}>>{
   if(!('vatId'in content.seller)||!('taxNumber'in content.seller))throw new InvoiceElectronicSourceError({kind:'settings',field:'taxId'});
   if(!content.seller.vatId&&!content.seller.taxNumber)throw new InvoiceElectronicSourceError({kind:'settings',field:'taxId'});
+  assertInvoiceElectronicFields({...content,seller:content.seller,serviceDate:toDateOnly(terms.serviceDate),paymentTermDays:terms.paymentTermDays});
   assertInvoiceContentGlyphs(content); // C15/C12: before the number and every original/PDF write.
   if(!isPaymentMode(order.payment_mode))throw Error('INVOICE_PAYMENT_MODE_INVALID');
   const {tenantId,userId:actorId}=auth;
@@ -1478,6 +1481,7 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
   } catch {
     throw new Error("INVOICE_PDF_RENDER_FAILED");
   }
+  pdfBuffer=await createInvoiceElectronicOriginal(pdfBuffer,{snapshot,invoiceNumber,dueDate},readOriginal);
   if (pdfBuffer.byteLength < 1 || pdfBuffer.byteLength > 20 * 1024 * 1024) {
     throw new Error("INVOICE_PDF_SIZE_INVALID");
   }
@@ -1585,7 +1589,7 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
 }
 
 export type CancellationCreditComposition={failed:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>;settled:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>};
-export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,creditComposition?:CancellationCreditComposition): Promise<CancelInvoiceResult> {
+export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,creditComposition?:CancellationCreditComposition,readOriginal?:InvoiceOriginalReader): Promise<CancelInvoiceResult> {
   if (!isValidCancelInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Stornoanfrage." };
   }
@@ -1631,7 +1635,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         const receipt = mapInvoiceCancellationReceipt(replayRows[0], tenantId, replayRows[0].actor_id);
         if((receipt.cancelledBy!==actorId&&receipt.reissueWithoutShipping===undefined)||!cancellationReceiptMatchesIntent(receipt,input))return {code:'CONFLICT',message:'Anfragekennung wurde bereits anders verwendet.'};
         if(receipt.reissueWithoutShipping)await lockInvoiceCreation(tx,tenantId,{orderId:receipt.orderId,clientEventId:receipt.reissueWithoutShipping.replacementClientEventId});
-        return completeCancellationCredit(tx,authorization.data,receipt,true,creditComposition,requireVatReader(readVat));
+        return completeCancellationCredit(tx,authorization.data,receipt,true,creditComposition,requireVatReader(readVat),readOriginal);
       }
 
       const reusedEvents = await tx.execute<{ id: string }>(sql`
@@ -1728,6 +1732,9 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         throw new Error("INVOICE_CANCEL_ORIGINAL_PDF_INVALID");
       }
       const snapshot = parseStoredSnapshot(invoice.snapshot, invoice, requireVatReader(readVat));
+      // PL14:03: pre-live originals are readable, never retrofitted. The
+      // existing Action observer records this refusal in technical_protocol.
+      if(snapshot.schemaVersion!==3)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.legacyCancellation};
       let reissue:InvoiceReissueIntent|undefined;
       if(input.reissueWithoutShipping){
         const manual=await readInvoiceHandoverSource(tx,tenantId,input.reissueWithoutShipping.handoverEventId);
@@ -1763,6 +1770,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
       } catch {
         throw new Error("INVOICE_CANCELLATION_PDF_RENDER_FAILED");
       }
+      cancellationPdfBuffer=await createInvoiceElectronicOriginal(cancellationPdfBuffer,{snapshot,invoiceNumber:invoice.invoice_number,dueDate:toDateOnly(invoice.due_date),cancellation:{at:cancelledAt,reason:input.reason}},readOriginal);
       if (cancellationPdfBuffer.byteLength < 1 || cancellationPdfBuffer.byteLength > 20 * 1024 * 1024) {
         throw new Error("INVOICE_CANCELLATION_PDF_SIZE_INVALID");
       }
@@ -1848,16 +1856,17 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         || receipt.cancelledAt !== cancelledAt
       ) throw new Error("INVOICE_CANCEL_RECEIPT_MISMATCH");
 
-      return completeCancellationCredit(tx,authorization.data,receipt,false,creditComposition,requireVatReader(readVat));
+      return completeCancellationCredit(tx,authorization.data,receipt,false,creditComposition,requireVatReader(readVat),readOriginal);
     });
   } catch(error) {
+    if(error instanceof InvoiceElectronicSourceError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource(error.location.field)};
     if(error instanceof InvoiceGlyphError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingGlyph(error.field,error.codePoint)};
     return { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher storniert werden." };
   }
 }
 
-async function completeCancellationCredit(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:ImmutableInvoiceCancellationReceipt,replayed:boolean,composition?:CancellationCreditComposition,readVat:InvoiceVatReader=readInvoiceVat):Promise<CancelInvoiceResult>{
-  if(receipt.reissueWithoutShipping)return completeInvoiceReissueFollowups(tx,auth,receipt,replayed,readVat,composition);
+async function completeCancellationCredit(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:ImmutableInvoiceCancellationReceipt,replayed:boolean,composition?:CancellationCreditComposition,readVat:InvoiceVatReader=readInvoiceVat,readOriginal?:InvoiceOriginalReader):Promise<CancelInvoiceResult>{
+  if(receipt.reissueWithoutShipping)return completeInvoiceReissueFollowups(tx,auth,receipt,replayed,readVat,composition,readOriginal);
   try{
     await withTenantSavepoint(tx,nested=>appendCancellationCredit(nested,auth.tenantId,receipt));
     if(composition)await withTenantSavepoint(tx,nested=>composition.settled(nested,auth,receipt.clientEventId));
@@ -1882,7 +1891,7 @@ export async function readPendingInvoiceReissue(tx:PrivilegedTenantTransaction,t
  return null;
 }
 
-async function issueInvoiceReplacement(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string,readVat:InvoiceVatReader){
+async function issueInvoiceReplacement(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string,readVat:InvoiceVatReader,readOriginal?:InvoiceOriginalReader){
  if(!hasAuthorizationArea(auth,'zahlungen'))throw Error('INVOICE_REISSUE_MONEY_REQUIRED');
  let source=await readInvoiceReissueSource(tx,auth.tenantId,key,readVat);
  if(!source)throw Error('INVOICE_REISSUE_SOURCE_MISSING');
@@ -1903,20 +1912,20 @@ async function issueInvoiceReplacement(tx:PrivilegedTenantTransaction,auth:Autho
  const content:PreparedInvoiceContent={seller:snapshot.seller,customer:snapshot.customer,order:{...snapshot.order,orderVersion:order.version},lines:source.goods,
   totals:{netAmountCents:sums.netAmountCents,vatAmountCents:sums.vatAmountCents,grossAmountCents:sums.grossAmountCents,vatRateBasisPoints:null,vatBreakdown:sums.vatBreakdown}};
  await persistPreparedInvoice(tx,auth,{...input,expectedVersion:order.version},order,content,{paymentTermDays:snapshot.paymentTermDays,serviceDate:snapshot.serviceDate,freezeId:source.original.freeze_id,afterGoodsOut:false,
-  reissue:{cancellationEventId:source.receipt.eventId,confirmedBy:source.receipt.cancelledBy,repairActorId:auth.userId}},readVat);
+  reissue:{cancellationEventId:source.receipt.eventId,confirmedBy:source.receipt.cancelledBy,repairActorId:auth.userId}},readVat,readOriginal);
  const proof=await readInvoiceReissueSource(tx,auth.tenantId,key,readVat);
  if(!proof?.replacement)throw Error('INVOICE_REISSUE_RECEIPT_MISSING');
  return proof.replacement;
 }
 
-async function completeInvoiceReissueFollowups(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:ImmutableInvoiceCancellationReceipt,replayed:boolean,readVat:InvoiceVatReader,composition?:CancellationCreditComposition):Promise<CancelInvoiceResult>{
+async function completeInvoiceReissueFollowups(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:ImmutableInvoiceCancellationReceipt,replayed:boolean,readVat:InvoiceVatReader,composition?:CancellationCreditComposition,readOriginal?:InvoiceOriginalReader):Promise<CancelInvoiceResult>{
  let creditAmount:number|null=null,replacementReady=false,taskReady=false;
  try{
   await withTenantSavepoint(tx,nested=>appendCancellationCredit(nested,auth.tenantId,receipt));
   const credit=await withTenantSavepoint(tx,nested=>readCancellationCreditSource(nested,auth.tenantId,receipt.clientEventId));
   if(!credit||credit.pending)throw Error('INVOICE_REISSUE_CREDIT_NOT_PROVEN');
   creditAmount=credit.paidAmountCents;
-  const replacementReceipt=await withTenantSavepoint(tx,nested=>issueInvoiceReplacement(nested,auth,receipt.clientEventId,readVat));
+  const replacementReceipt=await withTenantSavepoint(tx,nested=>issueInvoiceReplacement(nested,auth,receipt.clientEventId,readVat,readOriginal));
   replacementReady=true;
   if(composition)await withTenantSavepoint(tx,nested=>composition.settled(nested,auth,receipt.clientEventId));
   return {code:'OK',receipt,replacementReceipt,replayed};
@@ -1930,13 +1939,13 @@ async function completeInvoiceReissueFollowups(tx:PrivilegedTenantTransaction,au
 }
 
 /** Existing normal TaskWriter completion composes this exact financial repair. */
-export async function repairInvoiceReissueTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:{id:string;client_key:string;art:string;bezug_typ:string;bezug_id:string|null}){
+export async function repairInvoiceReissueTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:{id:string;client_key:string;art:string;bezug_typ:string;bezug_id:string|null},readOriginal?:InvoiceOriginalReader){
  const source=await readInvoiceReissueSource(tx,auth.tenantId,task.client_key);
  if(!source)return false;
  if(!hasAuthorizationArea(auth,'zahlungen')||task.id!==source.receipt.eventId||task.art!=='aufgabe'||task.bezug_typ!=='auftrag'||task.bezug_id!==source.receipt.orderId)throw Error('INVOICE_REISSUE_TASK_NOT_AUTHORIZED');
  await lockInvoiceCreation(tx,auth.tenantId,{orderId:source.receipt.orderId,clientEventId:source.intent.replacementClientEventId});
  await appendCancellationCredit(tx,auth.tenantId,source.receipt);
- await issueInvoiceReplacement(tx,auth,source.receipt.clientEventId,readInvoiceVat);
+ await issueInvoiceReplacement(tx,auth,source.receipt.clientEventId,readInvoiceVat,readOriginal);
  const proof=await readInvoiceReissueSource(tx,auth.tenantId,task.client_key);
  if(!proof?.replacement)throw Error('INVOICE_REISSUE_TASK_NOT_REPAIRED');
  return true;

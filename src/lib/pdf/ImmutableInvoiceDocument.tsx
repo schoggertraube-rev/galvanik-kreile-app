@@ -1,7 +1,7 @@
 import {customerCountryLabel} from '@/modules/customers/public';
 import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
-import {invoiceElectronicUnitLabel,type InvoiceElectronicTaxCategory,type InvoiceElectronicUnitCode} from '@/lib/domain/invoiceElectronicFields';
+import {invoiceElectronicUnitLabel,invoiceXmlWorkHours,type InvoiceElectronicTaxCategory,type InvoiceElectronicUnitCode} from '@/lib/domain/invoiceElectronicFields';
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import React, { type ReactElement } from "react";
@@ -412,7 +412,7 @@ function lineDescription(line: ImmutableInvoiceLine): string {
 }
 
 function lineQuantity(line: ImmutableInvoiceLine): string {
-  return line.type === 'SHIPPING'?'1':line.type === "BASE" ? `${line.quantity} ${line.unit?invoiceElectronicUnitLabel(line.unit):'Stk.'}` : `${line.minutes} Min.`;
+  return line.type === 'SHIPPING'?'1':line.type === "BASE" ? `${line.quantity} ${line.unit?invoiceElectronicUnitLabel(line.unit):'Stk.'}` : line.unit==='HUR'?`${invoiceXmlWorkHours(line.minutes).replace('.',',')} ${invoiceElectronicUnitLabel(line.unit)}`:`${line.minutes} Min.`;
 }
 
 function lineUnitAmount(line: ImmutableInvoiceLine): string {
@@ -501,7 +501,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
 
         {totals.reverseCharge&&<View><Text>{INVOICE_VAT_COPY.reverseCharge}</Text><Text>{INVOICE_VAT_COPY.vatId} {customer.vatId} · {snapshot.schemaVersion===3?snapshot.seller.vatId:snapshot.seller.taxId}</Text></View>}
         <View style={styles.paymentBlock}>
-          <Text>Zahlungsziel: {snapshot.paymentTermDays} Tage netto, fällig am {formatCalendarDate(dueDate)}.</Text>
+          <Text>{E_INVOICE_COPY.paymentTerms(snapshot.paymentTermDays,formatCalendarDate(dueDate))}</Text>
           <Text>Bitte überweisen Sie den Rechnungsbetrag unter Angabe der Rechnungsnummer {invoiceNumber}.</Text>
         </View>
 
@@ -545,7 +545,7 @@ export function ImmutableInvoiceCancellationDocument({
             <Text>{sellerTaxIdentity(snapshot)}</Text>
           </View>
           <View style={styles.metaBlock}>
-            <Text style={styles.documentTitle}>Stornobeleg</Text>
+            <Text style={styles.documentTitle}>{snapshot.schemaVersion===3?E_INVOICE_COPY.cancellationTitle(invoiceNumber):'Stornobeleg'}</Text>
             <Text style={styles.metaLine}>Zu Rechnung: {invoiceNumber}</Text>
             <Text style={styles.metaLine}>Stornodatum: {formatBerlinInstant(cancelledAt)}</Text>
             <Text style={styles.metaLine}>Leistungsdatum: {formatCalendarDate(snapshot.serviceDate)}</Text>
