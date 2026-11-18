@@ -1,0 +1,29 @@
+{
+  "liberation": {
+    "version": "2.1.5",
+    "url": "https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz",
+    "archiveSha256": "7191c669bf38899f73a2094ed00f7b800553364f90e2637010a69c0e268f25d0",
+    "license": "SIL OFL1.1"
+  },
+  "icc": {
+    "source": "org/apache/fop/pdf/sRGB.icc inside official Mustang2.26.0",
+    "license": "ZLIB"
+  },
+  "files": {
+    "LIBERATION-OFL.txt": "a0c060f758d33ee59a674cd7b45914a560d0a5935968af5e87b0c6981fd89ddc",
+    "LiberationSans-Bold.ttf": "788abee4c806d660e8aee46689dd8540cd4bb98da03dcc9d171ce3efd99a9173",
+    "LiberationSans-Regular.ttf": "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+    "SRGB-LICENSE-ZLIB.txt": "2e9842a0d476912d5880996247b0b31cf230ab8166b254a029da5556fa525a8b",
+    "sRGB.icc": "bfb1c597bf5bf922bca57de556b972695e2ff60de305b43dc98c91f4d4154497"
+  },
+  "licenseWhitespaceNormalization": {
+    "LIBERATION-OFL.txt": {
+      "sourceSha256": "93fed46019c38bbe566b479d22148e2e8a1e85ada614accb0211c37b2c61c19b",
+      "change": "trailing whitespace/blank EOF only; all license words unchanged"
+    },
+    "SRGB-LICENSE-ZLIB.txt": {
+      "sourceSha256": "9539c8c9d7cfef5c7bb002da86301150831dcb76e8357f0a1799812f5e783c22",
+      "change": "trailing whitespace/blank EOF only; all license words unchanged"
+    }
+  }
+}
