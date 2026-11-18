@@ -7,6 +7,8 @@ import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public
 import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
+import {E_INVOICE_COPY} from '@/ui/situationCatalog';
+import {assertInvoiceGlyphs,InvoiceGlyphError} from '@/lib/pdf/invoiceFonts';
 import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
 import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import {appendCancellationCredit,readCancellationCreditSource} from './customerCreditCommand';
@@ -300,6 +302,14 @@ type LockedCancellationOrder = {
  * VALIDATION_ERROR result *before* an invoice number is allocated.
  */
 class InvoiceMasterDataError extends Error {}
+function assertInvoiceContentGlyphs(content:Pick<ImmutableInvoiceSnapshot,'seller'|'customer'|'order'|'lines'>){
+ const texts:Array<{field:string;text:string}>=[];
+ for(const [section,source] of [['seller',content.seller],['customer',content.customer],['order',content.order]] as const){
+  for(const [field,value] of Object.entries(source))if(typeof value==='string')texts.push({field:section+'.'+field,text:value});
+ }
+ for(const [index,line] of content.lines.entries())texts.push({field:'lines.'+index+'.name',text:line.type==='EXTRA_WORK'?line.catalogPositionName:line.name});
+ assertInvoiceGlyphs(texts);
+}
 class InvoiceVatRateError extends InvoiceMasterDataError {
   constructor(readonly part:string,readonly missingCompany=false){super("INVOICE_LINE_VAT_RATE_MISSING");}
 }
@@ -1377,6 +1387,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
     };
     return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
   } catch (error) {
+    if(error instanceof InvoiceGlyphError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingGlyph(error.field,error.codePoint)};
     const cause = error && typeof error === "object" && "cause" in error
       ? (error as { cause?: { code?: unknown; constraint_name?: unknown } }).cause
       : undefined;
@@ -1392,6 +1403,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
 
 /** Single existing number/PDF/payment/event/receipt writer, shared by qualified preparations. */
 async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,content:PreparedInvoiceContent,terms:{paymentTermDays:number;serviceDate:Date|string;freezeId:string;afterGoodsOut:boolean;originalInvoiceNumber?:string;reissue?:NonNullable<ImmutableInvoiceReceiptBase['reissue']>},readVat:InvoiceVatReader):Promise<Extract<CreateInvoiceResult,{code:'OK'}>>{
+  assertInvoiceContentGlyphs(content); // C15/C12: before the number and every original/PDF write.
   if(!isPaymentMode(order.payment_mode))throw Error('INVOICE_PAYMENT_MODE_INVALID');
   const {tenantId,userId:actorId}=auth;
   const {paymentTermDays,afterGoodsOut,originalInvoiceNumber}=terms;
@@ -1699,6 +1711,8 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         reissue={...input.reissueWithoutShipping,originalPdfSha256:invoice.pdf_sha256,orderVersion:manual.order_version,confirmedBy:actorId};
       }
 
+      assertInvoiceContentGlyphs(snapshot);
+      assertInvoiceGlyphs([{field:'cancellation.reason',text:input.reason},{field:'invoice.number',text:invoice.invoice_number}]);
       // Exactly one cancellation instant, reused for invoice, lifecycle event,
       // cancellation document and receipt.
       const timeRows = await tx.execute<{ cancelled_at_iso: string }>(sql`
@@ -1812,7 +1826,8 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
 
       return completeCancellationCredit(tx,authorization.data,receipt,false,creditComposition,requireVatReader(readVat));
     });
-  } catch {
+  } catch(error) {
+    if(error instanceof InvoiceGlyphError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingGlyph(error.field,error.codePoint)};
     return { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher storniert werden." };
   }
 }

@@ -3,19 +3,12 @@ import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import React, { type ReactElement } from "react";
-import path from "node:path";
-import { Document, Font, Page, StyleSheet, Text, View, type DocumentProps } from "@react-pdf/renderer";
+import { Document, Page, StyleSheet, Text, View, type DocumentProps } from "@react-pdf/renderer";
+import {INVOICE_FONT_FAMILY,registerInvoiceFonts} from './invoiceFonts';
 
 // S54o C11: a private family keeps other document renderers unchanged. Both
 // invoice variants use these licensed, embedded fonts, never a base-14 alias.
-const INVOICE_FONT_FAMILY = "KreileInvoiceLiberationSans";
-Font.register({
-  family: INVOICE_FONT_FAMILY,
-  fonts: [
-    { src: path.join(process.cwd(), "public/pdf/invoice/LiberationSans-Regular.ttf"), fontWeight: 400 },
-    { src: path.join(process.cwd(), "public/pdf/invoice/LiberationSans-Bold.ttf"), fontWeight: 700 },
-  ],
-});
+registerInvoiceFonts();
 
 /**
  * F1.4 — canonical shape of the immutable accounting snapshot stored on

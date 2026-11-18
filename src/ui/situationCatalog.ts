@@ -12,6 +12,8 @@ export const EVIDENCE_VISIBILITY_COPY={
  retryTask:(name:string)=>`Sichtbarkeit von Foto ${name} erneut speichern`,
 } as const;
 export const INVOICE_VAT_COPY={missingCompanyRate:(part:string)=>`Für ${part} fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.`,missingRate:(part:string)=>`Für ${part} fehlt der Steuersatz (19 % oder 7 %).`,groupNet:(rate:string)=>"Netto ("+rate+")",groupVat:(rate:string)=>"zzgl. USt ("+rate+")",cancelNet:(rate:string)=>"Storno netto ("+rate+")",cancelVat:(rate:string)=>"Storno USt ("+rate+")",reverseCharge:"Steuerschuldnerschaft des Leistungsempfängers",vatId:"USt-IdNr.:"} as const;
+/** S54o C15/R8: provisional field wording, pending the PL text batch. */
+export const E_INVOICE_COPY={missingGlyph:(field:string,codePoint:number)=>`TODO_PL invoice.glyph_missing: ${field} (U+${codePoint.toString(16).toUpperCase()})`} as const;
 /** S54e packet: existing supplier creation keeps the structured original's prefill. */
 export const INCOMING_INVOICE_COPY={addSupplier:'Lieferant ergänzen',taxRateMismatch:'Steuersätze passen nicht zur Gesamt-USt · prüf die Rechnung',supplierSearchUnavailable:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'} as const;
 /** PL13.11.00:14 deferred sales-stage sources. */
