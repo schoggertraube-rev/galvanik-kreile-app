@@ -7,7 +7,7 @@ import {randomUUID} from 'node:crypto';
 import {build} from 'esbuild';
 
 it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('retains actual native-IDB workshop originals with the existing queue sequence and immutable N5 intent',async()=>{
- const compiled=await build({stdin:{contents:`export * from './src/lib/offline/pendingStore.ts';`,resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser'});
+ const compiled=await build({stdin:{contents:`export * from './src/lib/offline/pendingStore.ts'; export {deviceStandNotice} from './src/lib/offline/deviceStandNotice.ts';`,resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser'});
  const server=createServer((req,res)=>{res.setHeader('Content-Type',req.url==='/queue.mjs'?'text/javascript':'text/html');res.end(req.url==='/queue.mjs'?compiled.outputFiles[0].text:'<!doctype html><title>TEST workshop queue</title>');});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();if(!address||typeof address==='string')throw Error('TEST_LOOPBACK');
  const execute=promisify(execFile),session='TEST-workshop-queue-'+randomUUID();
@@ -64,6 +64,8 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('retains actual native-IDB work
    // KORR_REVIEW K3 explicitly permits a device stand up to five minutes ahead
    // of the local clock; the old blanket backwards-clock rejection is replaced.
    try{window.Date=class extends SavedDate{constructor(...args){super(...(args.length?args:[Date.parse(serverReadAt)-4*60*1000]));}static now(){return Date.parse(serverReadAt)-4*60*1000;}};
+    const notice=p.deviceStandNotice({stand:{code:'COMPLETE',serverReadAt},storageUnavailable:false,online:true,pending:0,quarantined:0,now:Date.now()});
+    if(notice.text!==null||notice.warning)throw Error('TEST_FOUR_MINUTE_FALSE_CLOCK_BANNER');
     if((await p.capturePendingItemFinished(producerScope,true,{...original.input,clientEventId:ids.invalid})).code!=='QUEUED')throw Error('TEST_FOUR_MINUTE_CLOCK_TOLERANCE');
     const behind=(await p.readPendingEntries(producerScope)).find(row=>row.id===ids.invalid);
     if(behind?.deviceCapturedAt!==new Date().toISOString())throw Error('TEST_CLOCK_ORIGINAL_TIME_LOST');

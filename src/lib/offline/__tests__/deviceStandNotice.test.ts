@@ -5,10 +5,12 @@ const source={stand:{code:'COMPLETE' as const,serverReadAt},storageUnavailable:f
 it('shows the actual Berlin server time and separates quarantined originals from pending work',()=>{
  expect(deviceStandNotice(source)).toEqual({text:'Offline – Stand 10:30, 2 Änderungen warten',warning:true,quarantine:'1 Eingaben zurückgehalten - tippe zum Zuordnen'});
 });
-it('expires at exactly24h and rejects a clock before the confirmed server stamp',()=>{
+it('expires at exactly24h and uses the queue clock tolerance before the confirmed server stamp',()=>{
  expect(deviceStandNotice({...source,now:stamp+24*3600_000-1}).text).toContain('Stand 10:30');
  expect(deviceStandNotice({...source,now:stamp+24*3600_000}).text).toBe('Seit über 24 Stunden kein Netz – neue Eingaben erst wieder mit Verbindung');
- expect(deviceStandNotice({...source,now:stamp-1}).text).toBe('Die Geräteuhr passt nicht zum letzten Stand - neue Eingaben erst wieder mit Verbindung.');
+ expect(deviceStandNotice({...source,now:stamp-4*60_000}).text).toContain('Stand 10:30');
+ expect(deviceStandNotice({...source,now:stamp-5*60_000}).text).toContain('Stand 10:30');
+ expect(deviceStandNotice({...source,now:stamp-5*60_000-1}).text).toBe('Die Geräteuhr passt nicht zum letzten Stand - neue Eingaben erst wieder mit Verbindung.');
 });
 it('never calls missing or unreadable storage a completed empty stand',()=>{
  expect(deviceStandNotice({...source,stand:{code:'INCOMPLETE'}}).warning).toBe(true);

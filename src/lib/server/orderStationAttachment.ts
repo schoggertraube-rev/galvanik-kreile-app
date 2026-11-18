@@ -1334,25 +1334,11 @@ export function reserveOrderStationAttachment(
   return reserveAttachmentForWorkflow(HANDOFF_WORKFLOW, authorization, input);
 }
 
-export function reserveOrderIntakeAttachment(
-  authorization: AuthorizationSnapshot,
-  input: ReserveOrderStationAttachmentInput,
-): Promise<OrderStationAttachmentResult<ReserveAttachmentData>> {
-  return reserveAttachmentForWorkflow(INTAKE_WORKFLOW, authorization, input);
-}
-
 export function finalizeOrderStationAttachment(
   authorization: AuthorizationSnapshot,
   input: FinalizeOrderStationAttachmentInput,
 ): Promise<OrderStationAttachmentResult<FinalizeAttachmentData>> {
   return finalizeAttachmentForWorkflow(HANDOFF_WORKFLOW, authorization, input);
-}
-
-export function finalizeOrderIntakeAttachment(
-  authorization: AuthorizationSnapshot,
-  input: FinalizeOrderStationAttachmentInput,
-): Promise<OrderStationAttachmentResult<FinalizeAttachmentData>> {
-  return finalizeAttachmentForWorkflow(INTAKE_WORKFLOW, authorization, input);
 }
 
 export function getOrderStationAttachmentOriginal(

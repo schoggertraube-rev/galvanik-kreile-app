@@ -96,13 +96,13 @@ it('V13–V16 actual manual tracking keeps shipment, actor and history across re
  const {getManualShippingAction,saveManualTrackingAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
  const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const read=await withSession(full,()=>getManualShippingAction({orderId:order.orderId}));
- expect(read).toMatchObject({code:'OK',data:{fields:{zipCode:'70176',city:'Stuttgart'},missing:[],releaseAllowed:true,shipments:[]}});
+ expect(read).toMatchObject({code:'OK',data:{fields:{zipCode:'70176',city:'Stuttgart'},missing:[],physicallyReady:true,shipments:[]}});
  if(read.code!=='OK')throw Error('SHIPPING_READ:'+read.code);
  expect(read.data.copyText).toContain('PLZ: 70176');
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
  const operational=await createFixture(['auftraege'],'werkstatt');
  const operationalRead=await withSession(operational,()=>getManualShippingAction({orderId:order.orderId}));
- expect(operationalRead).toMatchObject({code:'OK',data:{releaseAllowed:true}});
+ expect(operationalRead).toMatchObject({code:'OK',data:{physicallyReady:true}});
  expect(JSON.stringify(operationalRead)).not.toMatch(/Amount|Cents|invoiceNumber|paymentStatus/);
  const input={orderId:order.orderId,shipmentId:randomUUID(),expectedUpdatedAt:null,trackingNumber:'TEST-0001',allowFormatMismatch:false,reason:null,clientEventId:randomUUID()};
  const saved=await withSession(full,()=>saveManualTrackingAction(input));

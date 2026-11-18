@@ -11,9 +11,7 @@ const ports = vi.hoisted(() => ({
   readEvidence: vi.fn(),
   readEvidenceByTarget: vi.fn(),
   reserve: vi.fn(),
-  reserveIntake: vi.fn(),
   finalize: vi.fn(),
-  finalizeIntake: vi.fn(),
   original: vi.fn(),
   originalIntake: vi.fn(),
   noStore: vi.fn(),
@@ -38,9 +36,7 @@ vi.mock("@/lib/server/orderStationAttachment", () => {
     readOrderStationAttachments: ports.read,
     readOrderIntakeAttachments: ports.readIntake,
     reserveOrderStationAttachment: ports.reserve,
-    reserveOrderIntakeAttachment: ports.reserveIntake,
     finalizeOrderStationAttachment: ports.finalize,
-    finalizeOrderIntakeAttachment: ports.finalizeIntake,
     getOrderStationAttachmentOriginal: ports.original,
     getOrderIntakeAttachmentOriginal: ports.originalIntake,
   };
@@ -83,9 +79,7 @@ beforeEach(() => {
   ports.readEvidence.mockResolvedValue({ code: "OK", data: [] });
   ports.readEvidenceByTarget.mockResolvedValue({ code: "OK", data: [] });
   ports.reserve.mockResolvedValue({ code: "OK", data: { receipt: {}, upload: {}, replayed: false } });
-  ports.reserveIntake.mockResolvedValue({ code: "OK", data: { receipt: {}, upload: {}, replayed: false } });
   ports.finalize.mockResolvedValue({ code: "OK", data: { receipt: {receiptId:'55555555-5555-4555-8555-555555555555'}, replayed: false } });
-  ports.finalizeIntake.mockResolvedValue({ code: "OK", data: { receipt: {receiptId:'66666666-6666-4666-8666-666666666666'}, replayed: false } });
   ports.original.mockResolvedValue({ code: "OK", data: { downloadUrl: "https://local.invalid", expiresInSeconds: 60 } });
   ports.originalIntake.mockResolvedValue({ code: "OK", data: { downloadUrl: "https://local.invalid", expiresInSeconds: 60 } });
 });

@@ -83,7 +83,7 @@ export async function readManualShipping(auth:AuthorizationSnapshot,orderId:unkn
   const missing=Object.entries(fields).filter(([key,value])=>['name','street','houseNumber','zipCode','city','country'].includes(key)&&!value?.trim()).map(([key])=>key);
   const copyText=Object.entries(fields).map(([key,value])=>`${MANUAL_SHIPPING_FIELDS[key as keyof typeof MANUAL_SHIPPING_FIELDS]}: ${value??''}`).join('\n');
   return {code:'OK' as const,data:{orderId,orderVersion:order.version,fields,copyText,missing,
-   releaseAllowed:order.allowed,service:settings?.service??null,numberHint:settings?.numberHint??null,
+   physicallyReady:order.allowed,service:settings?.service??null,numberHint:settings?.numberHint??null,
    shipmentGroups:shipmentGroups(shipments),
    shipments:shipments.filter(shipment=>shipment.order_id===orderId).map(shipment=>({id:shipment.id,sendungId:shipment.sendungId,carrier:shipment.carrier,trackingNumber:shipment.trackingNumber,updatedAt:shipment.updatedAt,status:shipment.status,weightKg:shipment.weightKg,labelUrl:shipment.labelUrl,trackingUrl:settings&&shipment.carrier===settings.service?trackingLink(settings,shipment.trackingNumber):null})),
    gaps:[...(!settings?['SHIPPING_SETTINGS_MISSING']:[]),'SERVICE_BROWSER_URL_NOT_CONFIGURED','DIMENSIONS_NOT_RECORDED']}};
