@@ -166,7 +166,7 @@ it('S54o C15 A16:11: prices-only refusal names actual authorized roles and creat
  const tasks=await sql`SELECT id::text FROM public.tasks WHERE tenant_id=${tenant} ORDER BY id`;
  const numbers=await sql`SELECT invoice_year,last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
  const refused=await withSession(actor,()=>issueInvoiceAction({orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()}));
- expect(refused).toMatchObject({code:'VALIDATION_ERROR',message:`Rechnung nicht ausgestellt: order.title enthaelt ein Zeichen, das die E-Rechnung nicht darstellen kann. Korrigieren kann das: ${roles.join(', ')}.`});
+ expect(refused).toMatchObject({code:'VALIDATION_ERROR',message:`Rechnung nicht ausgestellt: order.title enthält ein Zeichen, das die E-Rechnung nicht darstellen kann. Korrigieren kann das: ${roles.join(', ')}.`});
  expect(refused).not.toHaveProperty('source');
  expect(await sql`SELECT md5(to_jsonb(o)::text) AS sha FROM public.orders o WHERE id=${order.orderId} AND tenant_id=${tenant}`).toEqual(before);
  expect(await sql`SELECT id::text FROM public.tasks WHERE tenant_id=${tenant} ORDER BY id`).toEqual(tasks);
