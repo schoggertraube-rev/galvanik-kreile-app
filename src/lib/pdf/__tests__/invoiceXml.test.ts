@@ -27,9 +27,17 @@ describe('S54o C6/A14 source consistency before existing number allocation',()=>
   expect(refusal(snapshot).location).toEqual({kind:'order',objectId:'TEST-order',field:'rounding'});
   expect(snapshot).toEqual(original);
  });
- it('refuses a rounded average price whose product loses a cent instead of repricing',()=>{
+ it('PL19:22 preserves a rounded-average source by presenting the precise frozen ratio without changing cents',()=>{
   const snapshot=source();const line=snapshot.lines[0];if(line.type!=='BASE')throw Error('SYNTHETIC_BASE_REQUIRED');
   line.quantity=3;line.unitNetAmountCents=3333;const original=structuredClone(snapshot);
+  expect(assertInvoiceElectronicFields(snapshot)).toMatchObject({netAmountCents:10000,vatAmountCents:1900,grossAmountCents:11900});
+  expect(snapshot).toEqual(original);
+ });
+ it('still refuses an original allocation that four-place precision cannot represent to the exact line cent',()=>{
+  const snapshot=source();const line=snapshot.lines[0];if(line.type!=='BASE')throw Error('SYNTHETIC_BASE_REQUIRED');
+  line.quantity=99999;line.unitNetAmountCents=1;line.lineNetAmountCents=100000;
+  snapshot.totals={netAmountCents:100000,vatRateBasisPoints:null,vatBreakdown:[{rateBp:1900,netCents:100000,vatCents:19000,grossCents:119000}],vatAmountCents:19000,grossAmountCents:119000};
+  const original=structuredClone(snapshot);
   expect(refusal(snapshot).location).toEqual({kind:'order',objectId:'TEST-order',field:'rounding'});
   expect(snapshot).toEqual(original);
  });

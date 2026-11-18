@@ -97,7 +97,7 @@ def main():
     args = parser.parse_args()
     config = download_tools(args.tools)
     args.output.mkdir(parents=True, exist_ok=True)
-    proofs = [validate(args.java, args.tools, config, args.evidence, args.output, name) for name in ['a1', 'a1-vat', 'a2', 'a4', 'a5', 'a15-corrected']]
+    proofs = [validate(args.java, args.tools, config, args.evidence, args.output, name) for name in ['a1', 'a1-vat', 'a2', 'a4', 'a5', 'a15-corrected', 'a19-partial', 'a19-rounded-full', 'a19-rounded-partial', 'a19-rounded-partial-cancel']]
     (args.output / 'proof.json').write_text(json.dumps(proofs, indent=2) + '\n', encoding='utf-8')
 
 if __name__ == '__main__':

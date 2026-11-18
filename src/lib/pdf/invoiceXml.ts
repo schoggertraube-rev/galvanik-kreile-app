@@ -2,7 +2,7 @@ import {CUSTOMER_COUNTRIES} from '@/modules/customers/public';
 import {invoiceDate} from '@/modules/eingang/public';
 import {readInvoiceVat,type InvoiceVatRead} from '@/modules/accounting/public';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
-import {InvoiceElectronicSourceError,invoiceXmlAmount,invoiceXmlWorkHours} from '@/lib/domain/invoiceElectronicFields';
+import {InvoiceElectronicSourceError,invoiceXmlAmount,invoiceXmlWorkHours,invoiceBaseUnitPrice} from '@/lib/domain/invoiceElectronicFields';
 import type {ImmutableInvoiceSnapshotV3} from './ImmutableInvoiceDocument';
 import {E_INVOICE_COPY,INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 
@@ -36,7 +36,7 @@ export function assertInvoiceElectronicFields(input:Fields):InvoiceVatRead{
  for(const line of input.lines){
   if(!line.unit)throw new InvoiceElectronicSourceError({kind:'order',objectId:input.order.orderId,field:'unit:'+(line.type==='EXTRA_WORK'?line.catalogPositionName:line.name)});
   if(line.type==='BASE'&&line.unitSource!==undefined&&(line.unitSource!=='default_piece'||line.unit!=='C62'||typeof line.itemId!=='string'||!line.itemId.trim()||!Number.isSafeInteger(line.quantity)||line.quantity<1))throw new InvoiceElectronicSourceError({kind:'order',objectId:input.order.orderId,field:'unit:'+line.name});
-  if(line.type==='BASE'&&BigInt(line.unitNetAmountCents)*BigInt(line.quantity)!==BigInt(line.lineNetAmountCents))throw new InvoiceElectronicSourceError({kind:'order',objectId:input.order.orderId,field:'rounding'});
+  if(line.type==='BASE')try{invoiceBaseUnitPrice(line.quantity,line.unitNetAmountCents,line.lineNetAmountCents);}catch{throw new InvoiceElectronicSourceError({kind:'order',objectId:input.order.orderId,field:'rounding'});}
  }
  try{return readInvoiceVat({...input,schemaVersion:3});}
  catch(error){
@@ -71,10 +71,10 @@ export function createInvoiceXml(input:InvoiceXmlInput):Uint8Array{
  const lines=snapshot.lines.filter(line=>!(line.type==='SHIPPING'&&line.shippingKind==='reference')).map((line,index)=>{
   const name=line.type==='EXTRA_WORK'?line.catalogPositionName:line.name;
   const quantity=line.type==='BASE'?String(line.quantity):line.type==='EXTRA_WORK'?invoiceXmlWorkHours(line.minutes):'1';
-  const price=line.type==='BASE'?line.unitNetAmountCents:line.type==='EXTRA_WORK'?line.hourlyRateCents:line.amountCents;
+  const price=line.type==='BASE'?invoiceBaseUnitPrice(line.quantity,line.unitNetAmountCents,line.lineNetAmountCents):invoiceXmlAmount(line.type==='EXTRA_WORK'?line.hourlyRateCents:line.amountCents);
   const amount=line.type==='BASE'?line.lineNetAmountCents:line.amountCents;
   if(!line.unit||!line.taxCategory||line.vat_rate_basis_points===undefined)throw Error('INVOICE_ELECTRONIC_LINE_SOURCE_REQUIRED');
-  return '<ram:IncludedSupplyChainTradeLineItem><ram:AssociatedDocumentLineDocument>'+node('ram:LineID',String(index+1))+'</ram:AssociatedDocumentLineDocument><ram:SpecifiedTradeProduct>'+node('ram:Name',name)+'</ram:SpecifiedTradeProduct><ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice>'+node('ram:ChargeAmount',invoiceXmlAmount(price))+'</ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement><ram:SpecifiedLineTradeDelivery>'+node('ram:BilledQuantity',(direction===-1?'-':'')+quantity,{unitCode:line.unit})+'</ram:SpecifiedLineTradeDelivery><ram:SpecifiedLineTradeSettlement><ram:ApplicableTradeTax>'+node('ram:TypeCode','VAT')+node('ram:CategoryCode',line.taxCategory)+node('ram:RateApplicablePercent',(line.vat_rate_basis_points/100).toFixed(2))+'</ram:ApplicableTradeTax><ram:SpecifiedTradeSettlementLineMonetarySummation>'+node('ram:LineTotalAmount',invoiceXmlAmount(direction*amount))+'</ram:SpecifiedTradeSettlementLineMonetarySummation></ram:SpecifiedLineTradeSettlement></ram:IncludedSupplyChainTradeLineItem>';
+  return '<ram:IncludedSupplyChainTradeLineItem><ram:AssociatedDocumentLineDocument>'+node('ram:LineID',String(index+1))+'</ram:AssociatedDocumentLineDocument><ram:SpecifiedTradeProduct>'+node('ram:Name',name)+'</ram:SpecifiedTradeProduct><ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice>'+node('ram:ChargeAmount',price)+'</ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement><ram:SpecifiedLineTradeDelivery>'+node('ram:BilledQuantity',(direction===-1?'-':'')+quantity,{unitCode:line.unit})+'</ram:SpecifiedLineTradeDelivery><ram:SpecifiedLineTradeSettlement><ram:ApplicableTradeTax>'+node('ram:TypeCode','VAT')+node('ram:CategoryCode',line.taxCategory)+node('ram:RateApplicablePercent',(line.vat_rate_basis_points/100).toFixed(2))+'</ram:ApplicableTradeTax><ram:SpecifiedTradeSettlementLineMonetarySummation>'+node('ram:LineTotalAmount',invoiceXmlAmount(direction*amount))+'</ram:SpecifiedTradeSettlementLineMonetarySummation></ram:SpecifiedLineTradeSettlement></ram:IncludedSupplyChainTradeLineItem>';
  }).join('');
  // PL18.11.14:36: BT-32 alone does not satisfy BR-CO-26. Reuse the
  // frozen domestic tax number as BT-29 only when BT-31 is absent.

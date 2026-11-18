@@ -1,7 +1,7 @@
 import {customerCountryLabel} from '@/modules/customers/public';
 import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
-import {invoiceElectronicUnitLabel,invoiceXmlWorkHours,type InvoiceElectronicTaxCategory,type InvoiceElectronicUnitCode} from '@/lib/domain/invoiceElectronicFields';
+import {invoiceElectronicUnitLabel,invoiceXmlWorkHours,invoiceBaseUnitPrice,type InvoiceElectronicTaxCategory,type InvoiceElectronicUnitCode} from '@/lib/domain/invoiceElectronicFields';
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import React, { type ReactElement } from "react";
@@ -24,6 +24,8 @@ export type ImmutableInvoiceBaseLine = {
   itemId: string;
   name: string;
   quantity: number;
+  // Original rounded average remains stored; v3 presents the frozen line
+  // total/quantity at bounded precision (PL18Nov19:22), without repricing.
   unitNetAmountCents: number;
   lineNetAmountCents: number;
   vat_rate_basis_points?:0|700|1900;
@@ -422,9 +424,13 @@ function lineQuantity(line: ImmutableInvoiceLine): string {
   return line.type === 'SHIPPING'?'1':line.type === "BASE" ? `${line.quantity} ${line.unit?invoiceElectronicUnitLabel(line.unit,line.unitSource):'Stk.'}` : line.unit==='HUR'?`${invoiceXmlWorkHours(line.minutes).replace('.',',')} ${invoiceElectronicUnitLabel(line.unit)}`:`${line.minutes} Min.`;
 }
 
-function lineUnitAmount(line: ImmutableInvoiceLine): string {
+function preciseBaseUnitAmount(line:ImmutableInvoiceBaseLine):string{
+ const [whole,fraction]=invoiceBaseUnitPrice(line.quantity,line.unitNetAmountCents,line.lineNetAmountCents).split('.');
+ return whole.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+fraction+'\u00a0€';
+}
+function lineUnitAmount(line: ImmutableInvoiceLine,schemaVersion:1|2|3): string {
   return line.type === 'SHIPPING'?formatCents(line.amountCents):line.type === "BASE"
-    ? formatCents(line.unitNetAmountCents)
+    ? schemaVersion===3?preciseBaseUnitAmount(line):formatCents(line.unitNetAmountCents)
     : `${formatCents(line.hourlyRateCents)}/Std.`;
 }
 
@@ -485,7 +491,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
               <View style={styles.colPos}><Text style={styles.cell}>{index + 1}</Text></View>
               <View style={styles.colDesc}><Text style={styles.cell}>{lineDescription(line)}</Text></View>
               <View style={styles.colQty}><Text style={styles.cell}>{lineQuantity(line)}</Text></View>
-              <View style={styles.colUnit}><Text style={styles.cell}>{lineUnitAmount(line)}</Text></View>
+              <View style={styles.colUnit}><Text style={styles.cell}>{lineUnitAmount(line,snapshot.schemaVersion)}</Text></View>
               <View style={styles.colTotal}><Text style={styles.cell}>{formatCents(lineTotalAmount(line))}</Text></View>
             </View>
           ))}
@@ -594,7 +600,7 @@ export function ImmutableInvoiceCancellationDocument({
               <View style={styles.colPos}><Text style={styles.cell}>{index + 1}</Text></View>
               <View style={styles.colDesc}><Text style={styles.cell}>{lineDescription(line)}</Text></View>
               <View style={styles.colQty}><Text style={styles.cell}>{snapshot.schemaVersion===3?'-':''}{lineQuantity(line)}</Text></View>
-              <View style={styles.colUnit}><Text style={styles.cell}>{formatCents((snapshot.schemaVersion===3?1:-1)*Math.abs(line.type==='SHIPPING'?line.amountCents:line.type === "BASE" ? line.unitNetAmountCents : line.hourlyRateCents))}</Text></View>
+              <View style={styles.colUnit}><Text style={styles.cell}>{snapshot.schemaVersion===3&&line.type==='BASE'?preciseBaseUnitAmount(line):formatCents((snapshot.schemaVersion===3?1:-1)*Math.abs(line.type==='SHIPPING'?line.amountCents:line.type === "BASE" ? line.unitNetAmountCents : line.hourlyRateCents))}</Text></View>
               <View style={styles.colTotal}><Text style={styles.cell}>{formatCents(-Math.abs(lineTotalAmount(line)))}</Text></View>
             </View>
           ))}

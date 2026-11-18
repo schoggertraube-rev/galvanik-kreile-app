@@ -42,6 +42,16 @@ export function invoiceXmlAmount(cents:number):string{
  const magnitude=BigInt(cents<0?-cents:cents);
  return `${cents<0?'-':''}${magnitude/BigInt(100)}.${String(magnitude%BigInt(100)).padStart(2,'0')}`;
 }
+/** PL18Nov19:22: exact presentation of the original line allocation only. */
+export function invoiceBaseUnitPrice(quantity:number,roundedUnitCents:number,lineNetCents:number):string{
+ if(!Number.isSafeInteger(quantity)||quantity<1||!Number.isSafeInteger(roundedUnitCents)||roundedUnitCents<0||!Number.isSafeInteger(lineNetCents)||lineNetCents<0)throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_INVALID');
+ const count=BigInt(quantity),total=BigInt(lineNetCents);
+ if((total+count/BigInt(2))/count!==BigInt(roundedUnitCents))throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_SOURCE_INVALID');
+ const precise=(total*BigInt(100)+count/BigInt(2))/count;
+ if((precise*count+BigInt(50))/BigInt(100)!==total)throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_ROUNDING_INVALID');
+ const fraction=String(precise%BigInt(10000)).padStart(4,'0').replace(/0+$/,'').padEnd(2,'0');
+ return `${precise/BigInt(10000)}.${fraction}`;
+}
 export function invoiceXmlWorkHours(minutes:number):string{
  if(!Number.isSafeInteger(minutes)||minutes<1)throw Error('INVOICE_ELECTRONIC_MINUTES_INVALID');
  const scaled=(BigInt(minutes)*BigInt(10000)+BigInt(30))/BigInt(60);
