@@ -1,18 +1,21 @@
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
+import {INCOMING_INVOICE_COPY} from '@/ui/situationCatalog';
+import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {readIntakeActorTraces} from './actorRead';
 import 'server-only';
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {sql} from 'drizzle-orm';
 import {resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
-import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {normaliseIban,type CustomerStoredProfile} from '@/modules/customers/public';
 import {writeIntakeNoteInTransaction} from './intakeCapture';
-import {EMPTY_INVOICE_FIELDS,invoiceCents,invoiceDecimal,invoiceDate,invoiceFieldErrors,invoiceFieldShape,
+import {EMPTY_INVOICE_FIELDS,invoiceCents,invoiceDecimal,invoiceDate,invoiceFieldErrors,invoiceFieldShape,invoiceTaxBreakdown,
  type IncomingInvoice,type InvoiceChangeInput,type InvoiceDuplicate,type InvoiceFailure,type InvoiceFields,
  type InvoiceReadResult,type InvoiceResult,type InvoiceSaveInput,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
 
 export type InvoiceDependencies={
+ findSuppliers:(auth:AuthorizationSnapshot,query:string,by:'vat'|'name')=>Promise<{id:string}[]>;
  readCustomer:(tx:PrivilegedTenantTransaction,tenantId:string,id:string,lock?:boolean)=>Promise<CustomerStoredProfile|null>;
  updateCustomer:(tx:PrivilegedTenantTransaction,context:{tenantId:string;userId:string;capabilities:{canCreateCustomer:boolean;canEditCustomer:boolean;canManageMoney:boolean;canDecide:boolean}},input:unknown)=>Promise<{code:'OK';customer:CustomerStoredProfile;replayed:boolean}|InvoiceFailure>;
  createTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;clientKey:string;reason:string})=>Promise<string>;
@@ -24,7 +27,7 @@ const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&
 const optionalText=(v:unknown,max:number)=>v===null||typeof v==='string'&&v.length<=max;
 const keys=(v:object,names:string[])=>Object.keys(v).sort().join(',')===[...names].sort().join(',');
 const columns=sql`id::text,nummer_intern,item_id::text,file_id::text,lieferant_id,nummer,datum::text,netto::text,ust::text,brutto::text,faellig_am::text,
- iban,iban_geprueft,zahlstatus,bezahlt_am::text,nachweis_file_id::text,verweis_id::text,dublette_grund,unklar_grund,aufgabe_id::text,ungueltig_grund,erfasst_von::text,erfasst_am::text,version`;
+ iban,iban_geprueft,ust_saetze,zahlstatus,bezahlt_am::text,nachweis_file_id::text,verweis_id::text,dublette_grund,unklar_grund,aufgabe_id::text,ungueltig_grund,erfasst_von::text,erfasst_am::text,version`;
 class Rejected extends Error{constructor(readonly result:InvoiceFailure|Extract<InvoiceResult,{code:'DUPLICATE'}>){super(result.code);}}
 function reject(code:InvoiceFailure['code'],message:string,fields?:Record<string,string>):never{throw new Rejected({code,message,...(fields?{fields}:{})});}
 function failure(error:unknown):InvoiceFailure|Extract<InvoiceResult,{code:'DUPLICATE'}>{
@@ -73,6 +76,16 @@ async function duplicate(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapsh
  return rows.length?{...rows[0],exact:rows[0].exact===true}:null;
 }
 /** One read model for a fresh source and every stored invoice/status. */
+async function invoiceSuggestions(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,fileId:string|null){
+ return tx.execute<{feld:string;wert:unknown;sicherheit:string;verified:boolean}>(sql`SELECT feld,wert,sicherheit,geprueft_am IS NOT NULL AS verified FROM public.intake_suggestion
+  WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid AND (file_id=${fileId}::uuid OR file_id IS NULL)
+  AND feld IN ('rechnung.nummer','rechnung.datum','rechnung.betrag','rechnung.faellig','rechnung.iban','rechnung.absender','rechnung.steuersaetze')
+  AND status<>'verworfen' ORDER BY id`);
+}
+function taxRates(suggestions:readonly {feld:string;wert:unknown}[],totalTax:string,stored:IncomingInvoice|null){
+ const original=suggestions.filter(value=>value.feld==='rechnung.steuersaetze').at(-1);
+ return invoiceTaxBreakdown(original?original.wert:stored?.ust_saetze,totalTax);
+}
 export async function readIncomingInvoice(input:unknown,deps:InvoiceDependencies):Promise<InvoiceReadResult>{
  if(!object(input)||!keys(input,['id'])||!uuid(input.id))return {code:'VALIDATION_ERROR',message:'Rechnungsaufruf ist ungültig.'};
  try{const auth=await authorization();return await withPrivilegedTenantTransaction(auth,async tx=>{
@@ -81,11 +94,9 @@ export async function readIncomingInvoice(input:unknown,deps:InvoiceDependencies
   const originals=await tx.execute<{id:string;name:string;mime:string;sha256:string}>(sql`SELECT file.id::text,file.dateiname AS name,file.mime,file.sha256 FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml'
    AND EXISTS(SELECT 1 FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id AND event.art='original_gespeichert' AND event.nachher->>'fileId'=file.id::text) ORDER BY file.reihenfolge,file.id`);
   const primaryFileId=invoice?.file_id??originals[0]?.id??null;
-  const selected=await supplier(tx,auth,invoice?(invoice.lieferant_id??''):(row.kunde_id??''),deps);
+  let selected=await supplier(tx,auth,invoice?(invoice.lieferant_id??''):(row.kunde_id??''),deps);
   const fields=invoice?fieldsFrom(invoice):{...EMPTY_INVOICE_FIELDS,lieferantId:selected?.id??''};
-  const suggestions=await tx.execute<{feld:string;wert:unknown;sicherheit:string;verified:boolean}>(sql`SELECT feld,wert,sicherheit,geprueft_am IS NOT NULL AS verified FROM public.intake_suggestion
-   WHERE tenant_id=${auth.tenantId} AND item_id=${row.id}::uuid AND (file_id=${primaryFileId}::uuid OR file_id IS NULL) AND feld IN ('rechnung.nummer','rechnung.datum','rechnung.betrag','rechnung.faellig','rechnung.iban')
-   AND status<>'verworfen' ORDER BY id`);
+  const suggestions=await invoiceSuggestions(tx,auth,row.id,primaryFileId);
   if(!invoice)for(const suggestion of suggestions){
    const value=suggestion.wert;
    if(suggestion.feld==='rechnung.betrag'&&object(value))for(const key of ['netto','ust','brutto'] as const){if(typeof value[key]==='number'||typeof value[key]==='string')fields[key]=String(value[key]);}
@@ -94,12 +105,28 @@ export async function readIncomingInvoice(input:unknown,deps:InvoiceDependencies
     if(key)Object.assign(fields,{[key]:value});
    }
   }
+  const sender=suggestions.filter(value=>value.feld==='rechnung.absender').at(-1)?.wert;
+  const supplierPrefill:NonNullable<InvoiceView['supplierPrefill']>={};
+  if(object(sender)){
+   if(typeof sender.name==='string'&&sender.name.trim())supplierPrefill.name=sender.name.trim();
+   if(typeof sender.ustId==='string'&&sender.ustId.trim())supplierPrefill.vatId=sender.ustId.replace(/\s/gu,'').toUpperCase();
+  }
+  let supplierConflict:string|null=null;
+  if(!selected)try{
+   let matches:{id:string}[]=[];
+   if(supplierPrefill.vatId&&supplierPrefill.vatId.length<=40)matches=await deps.findSuppliers(auth,supplierPrefill.vatId,'vat');
+   if(matches.length===0&&supplierPrefill.name&&supplierPrefill.name.length<=254)matches=await deps.findSuppliers(auth,supplierPrefill.name,'name');
+   if(matches.length===1){selected=await withTenantSavepoint(tx,nested=>supplier(nested,auth,matches[0].id,deps));fields.lieferantId=selected?.id??'';}
+  }catch{
+   supplierConflict=INCOMING_INVOICE_COPY.supplierSearchUnavailable;
+   recordObservedFailure('INVOICE_SUPPLIER_SEARCH_FAILED');
+  }
   if(!invoice&&!fields.faelligAm&&invoiceDate(fields.datum)&&selected?.paymentTermDays!==null&&selected?.paymentTermDays!==undefined){
    const [date]=await tx.execute<{due:string}>(sql`SELECT (${fields.datum}::date+${selected.paymentTermDays}::integer)::text AS due`);fields.faelligAm=date.due;
   }
   const actorTrace=(await readIntakeActorTraces(tx,auth,[row.id],invoice?.id)).get(row.id);
-  const view:InvoiceView={actorTrace,item:{id:row.id,version:row.version,at:row.at,channel:row.channel,sender:row.sender},invoice,supplier:selected,originals:[...originals],fileId:primaryFileId,
-   fields,uncertain:invoice?0:suggestions.filter(value=>value.sicherheit!=='sicher'&&!value.verified).length,conflict:null,duplicate:await duplicate(tx,auth,fields,invoice?.id)};
+  const view:InvoiceView={actorTrace,supplierPrefill,taxRateWarning:taxRates(suggestions,fields.ust,invoice).warning?INCOMING_INVOICE_COPY.taxRateMismatch:null,item:{id:row.id,version:row.version,at:row.at,channel:row.channel,sender:row.sender},invoice,supplier:selected,originals:[...originals],fileId:primaryFileId,
+   fields,uncertain:invoice?0:suggestions.filter(value=>value.sicherheit!=='sicher'&&!value.verified).length,conflict:supplierConflict,duplicate:await duplicate(tx,auth,fields,invoice?.id)};
   return {code:'OK' as const,view};
  });}catch(error){const result=failure(error);return result.code==='DUPLICATE'?{code:'CONFLICT',message:result.message}:result;}
 }
@@ -176,9 +203,10 @@ export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies
    SELECT (coalesce(max(substring(nummer_intern from '[0-9]+$')::bigint),0)+1)::text AS next_value FROM public.supplier_invoice
    WHERE tenant_id=${auth.tenantId} AND nummer_intern LIKE 'ER-'||to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY')||'-%') next_number`);
   const id=randomUUID(),f=input.fields,money=(raw:string)=>raw.trim()?invoiceDecimal(invoiceCents(raw)!):null;
-  await tx.execute(sql`INSERT INTO public.supplier_invoice(id,tenant_id,nummer_intern,item_id,file_id,lieferant_id,nummer,datum,netto,ust,brutto,faellig_am,iban,iban_geprueft,zahlstatus,bezahlt_am,nachweis_file_id,verweis_id,dublette_grund,unklar_grund,erfasst_von)
+  const breakdown=taxRates(await invoiceSuggestions(tx,auth,row.id,input.fileId),f.ust,null);
+  await tx.execute(sql`INSERT INTO public.supplier_invoice(id,tenant_id,nummer_intern,item_id,file_id,lieferant_id,nummer,datum,netto,ust,brutto,faellig_am,iban,iban_geprueft,ust_saetze,zahlstatus,bezahlt_am,nachweis_file_id,verweis_id,dublette_grund,unklar_grund,erfasst_von)
    VALUES(${id}::uuid,${auth.tenantId},${number.value},${row.id}::uuid,${input.fileId}::uuid,${selected?.id??null},${f.nummer.trim()||null},${f.datum||null}::date,${money(f.netto)}::numeric,${money(f.ust)}::numeric,${money(f.brutto)}::numeric,
-    ${f.faelligAm||null}::date,${normaliseIban(f.iban)||null},${f.ibanGeprueft},${savedStatus},${input.status==='bezahlt'?input.paidDate:null}::date,${input.proofFileId}::uuid,${input.status==='doppelt'?input.duplicateId:null}::uuid,${input.duplicateReason?.trim()||null},${savedStatus==='unklar'?unclearReason!.trim():null},${auth.userId}::uuid)`);
+    ${f.faelligAm||null}::date,${normaliseIban(f.iban)||null},${f.ibanGeprueft},${breakdown.rates===null?null:JSON.stringify(breakdown.rates)}::jsonb,${savedStatus},${input.status==='bezahlt'?input.paidDate:null}::date,${input.proofFileId}::uuid,${input.status==='doppelt'?input.duplicateId:null}::uuid,${input.duplicateReason?.trim()||null},${savedStatus==='unklar'?unclearReason!.trim():null},${auth.userId}::uuid)`);
   if(selected&&!selected.iban&&f.iban.trim()){
    const updated=await deps.updateCustomer(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:false,canEditCustomer:true,canManageMoney:true,canDecide:hasAuthorizationArea(auth,'entscheiden')}},
     {customerId:selected.id,clientEventId:input.clientKey,iban:normaliseIban(f.iban)});
@@ -193,7 +221,9 @@ export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies
    einsatz=${usage},anliegen_offen=ARRAY[${sql.join(concerns.map(value=>sql`${value}`),sql`, `)}]::text[],einsatz_aktion=${command},einsatz_am=statement_timestamp(),einsatz_von=${auth.userId}::uuid,
    geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp(),version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid AND version=${row.version}`);
   const after=await findInvoice(tx,auth,id);if(!after)throw Error('INVOICE_READBACK_FAILED');
-  await record(tx,auth,row,input.clientKey,command,input,null,after,deps);return {code:'OK' as const,invoice:after,replayed:false};
+  await record(tx,auth,row,input.clientKey,command,input,null,after,deps);
+  if(breakdown.warning)recordObservedFailure('INCOMING_INVOICE_TAX_BREAKDOWN_MISMATCH');
+  return {code:'OK' as const,invoice:after,replayed:false};
  });}catch(error){return failure(error);}
 }
 export async function changeIncomingInvoice(input:unknown,deps:InvoiceDependencies,clarify=false):Promise<InvoiceResult>{
@@ -215,13 +245,16 @@ export async function changeIncomingInvoice(input:unknown,deps:InvoiceDependenci
   await validate(tx,auth,fields,input.result,input.paidDate,input.proofFileId,row.id,deps);
   await verifyDuplicate(tx,auth,fields,input.result,input.duplicateId,before.dublette_grund,before.id);
   const money=(raw:string)=>raw.trim()?invoiceDecimal(invoiceCents(raw)!):null;
+  const breakdown=taxRates(await invoiceSuggestions(tx,auth,row.id,before.file_id),fields.ust,before);
   await tx.execute(sql`UPDATE public.supplier_invoice SET lieferant_id=${fields.lieferantId||null},nummer=${fields.nummer.trim()||null},datum=${fields.datum||null}::date,
-   netto=${money(fields.netto)}::numeric,ust=${money(fields.ust)}::numeric,brutto=${money(fields.brutto)}::numeric,faellig_am=${fields.faelligAm||null}::date,iban=${normaliseIban(fields.iban)||null},iban_geprueft=${fields.ibanGeprueft},
+   netto=${money(fields.netto)}::numeric,ust=${money(fields.ust)}::numeric,brutto=${money(fields.brutto)}::numeric,ust_saetze=${breakdown.rates===null?null:JSON.stringify(breakdown.rates)}::jsonb,faellig_am=${fields.faelligAm||null}::date,iban=${normaliseIban(fields.iban)||null},iban_geprueft=${fields.ibanGeprueft},
    zahlstatus=${input.result},bezahlt_am=${input.result==='bezahlt'?input.paidDate:null}::date,nachweis_file_id=${input.proofFileId}::uuid,verweis_id=${input.result==='doppelt'?input.duplicateId:null}::uuid,
    ungueltig_grund=${input.result==='ungueltig'?input.reason!.trim():null},version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${before.id}::uuid AND version=${before.version}`);
   if(addingSupplier)await tx.execute(sql`UPDATE public.intake_item SET kunde_id=${fields.lieferantId},zuordnung='hand',version=version+1,geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid`);
   if(clarify){if(!before.aufgabe_id)reject('CONFLICT','Rechnungsaufgabe fehlt.');await deps.resolveTask(tx,auth,{invoiceId:before.id,taskId:before.aufgabe_id,note:'Rechnung geklärt · '+input.result+(input.reason?' · '+input.reason.trim():'')});}
   const after=await findInvoice(tx,auth,before.id);if(!after||after.version!==before.version+1)throw Error('INVOICE_STATUS_READBACK_FAILED');
-  await record(tx,auth,row,input.clientKey,command,input,before,after,deps);return {code:'OK' as const,invoice:after,replayed:false};
+  await record(tx,auth,row,input.clientKey,command,input,before,after,deps);
+  if(breakdown.warning)recordObservedFailure('INCOMING_INVOICE_TAX_BREAKDOWN_MISMATCH');
+  return {code:'OK' as const,invoice:after,replayed:false};
  });}catch(error){return failure(error);}
 }

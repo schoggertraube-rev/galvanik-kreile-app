@@ -8,7 +8,7 @@ import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {hasAuthorizationArea,resolveAuthorization} from "@/lib/server/authorization";
 import { analyzeWithAzureDocumentIntelligence } from "@/lib/server/azureDocumentIntelligence";
-import {recognizeInvoiceFields,recognizeInvoiceXml} from './invoiceRecognition';
+import {recognizeInvoiceFields,recognizeInvoiceXml,recognizeInvoicePdf} from './invoiceRecognition';
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
 import { intakeCaptureSnapshot,validIntakeOriginalTakeover } from "./intakeCapture";
 import { captureRecognition } from "../captureRecognition";
@@ -146,13 +146,13 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
       return snapshot();
     }
     claimOwned=true;
-// Structured XML uses the existing parser; images and PDF use the existing OCR adapter.
+// Structured originals use the same XML parser; unstructured documents retain the OCR path.
     const prefix=Buffer.from(bytes.subarray(0,512)).toString('utf8').replace(/^\uFEFF/u,'').trimStart();
     const isXml=/xml(?:$|[;+])/iu.test(file.mime)||/\.xml$/iu.test(file.dateiname)||prefix.startsWith('<');
-    const xmlResult=isXml?recognizeInvoiceXml(bytes):null;
+    const xmlResult=isXml?recognizeInvoiceXml(bytes):file.mime==='application/pdf'?await recognizeInvoicePdf(bytes):null;
     const canRead = isXml ? xmlResult?.code==='OK' : bytes.byteLength <= 20 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(file.mime);
     const deadline = AbortSignal.timeout(30_000);
-    const recognized = !isXml && canRead ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
+    const recognized = !isXml && xmlResult?.code!=='OK' && canRead ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
       (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),undefined,{subject:{type:'intake',id:file.item_id},originalRef:file.id}) : null;
     if (recognized && recognized.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
     const kind = xmlResult?.code === "OK" ? "rechnung" : recognized?.code === "OK" ? captureRecognition({ text: null, suggestions: recognized.data.suggestions }).kind : null;
@@ -168,7 +168,7 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
       const suggestions=xmlResult?.code==='OK'?xmlResult.suggestions:recognized?.code==='OK'?[...recognized.data.suggestions,...recognizeInvoiceFields(recognized.data.suggestions)]:[];
       for (const suggestion of suggestions) {
         await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,regel,grund,fundstelle,status)
-            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${JSON.stringify(suggestion.value)}::jsonb,${suggestion.field.startsWith('rechnung.')?(suggestion.confidence>=0.9?'sicher':'unsicher'):'vorschlag'},'datei',${isXml?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(suggestion.source)}::jsonb,'offen'
+            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${JSON.stringify(suggestion.value)}::jsonb,${suggestion.field.startsWith('rechnung.')?(suggestion.confidence>=0.9?'sicher':'unsicher'):'vorschlag'},'datei',${xmlResult?.code==='OK'?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(suggestion.source)}::jsonb,'offen'
           WHERE NOT EXISTS(SELECT 1 FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND feld=${suggestion.field} AND geprueft_am IS NOT NULL AND status<>'verworfen')`);
       }
       if (kind === "rechnung") await tx.execute(sql`UPDATE public.intake_item

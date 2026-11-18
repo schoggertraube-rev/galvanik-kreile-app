@@ -41,10 +41,26 @@ function xmlChild(value:unknown,name:string):unknown{
  if(matches.length!==1)return undefined;
  const found=matches[0][1];return Array.isArray(found)?found.length===1?found[0]:undefined:found;
 }
+function xmlChildren(value:unknown,name:string):unknown[]{
+ if(!xmlObject(value))return [];
+ const matches=Object.entries(value).filter(([key])=>!key.startsWith('@_')&&key.split(':').at(-1)===name);
+ if(matches.length!==1)return [];
+ return Array.isArray(matches[0][1])?matches[0][1]:[matches[0][1]];
+}
 function xmlPath(root:unknown,...names:string[]):unknown{return names.reduce<unknown>((value,name)=>xmlChild(value,name),root);}
 function xmlText(value:unknown):string|null{
  const text=typeof value==='string'?value:xmlObject(value)&&typeof value['#text']==='string'?value['#text']:null;
- return text?.trim()||null;
+ // Decode only XML's predefined/character text references, once. DTD/entity
+ // expansion remains disabled in the sole parser and declarations stay rejected.
+ const decoded=text?.replace(/&(amp|lt|gt|apos|quot|#\d+|#x[0-9a-f]+);/giu,(reference,entity:string)=>{
+  const predefined:Record<string,string>={amp:'&',lt:'<',gt:'>',apos:"'",quot:'"'};
+  if(Object.hasOwn(predefined,entity))return predefined[entity];
+  if(!entity.startsWith('#'))return reference;
+  const point=entity[1].toLowerCase()==='x'?parseInt(entity.slice(2),16):Number(entity.slice(1));
+  const valid=point===9||point===10||point===13||point>=0x20&&point<=0xD7FF||point>=0xE000&&point<=0xFFFD||point>=0x10000&&point<=0x10FFFF;
+  return valid?String.fromCodePoint(point):reference;
+ });
+ return decoded?.trim()||null;
 }
 function xmlDate(value:unknown):string|null{
  const raw=xmlText(value);if(!raw)return null;
@@ -76,6 +92,32 @@ export function recognizeInvoiceXml(bytes:Uint8Array):{code:'OK';suggestions:Xml
   add('rechnung.datum',xmlDate(format==='UBL'?xmlChild(root,'IssueDate'):xmlPath(root,'ExchangedDocument','IssueDateTime','DateTimeString')),'invoice.date');
   add('rechnung.faellig',xmlDate(format==='UBL'?xmlChild(root,'DueDate'):xmlPath(settlement,'SpecifiedTradePaymentTerms','DueDateDateTime','DateTimeString')),'payment.due');
   add('rechnung.iban',xmlText(format==='UBL'?xmlPath(root,'PaymentMeans','PayeeFinancialAccount','ID'):xmlPath(settlement,'SpecifiedTradeSettlementPaymentMeans','PayeePartyCreditorFinancialAccount','IBANID')),'payment.iban');
+  const seller=format==='UBL'?xmlPath(root,'AccountingSupplierParty','Party'):xmlPath(root,'SupplyChainTradeTransaction','ApplicableHeaderTradeAgreement','SellerTradeParty');
+  const sender:Record<string,string>={};
+  const name=format==='UBL'?xmlText(xmlPath(seller,'PartyLegalEntity','RegistrationName'))??xmlText(xmlPath(seller,'PartyName','Name')):xmlText(xmlChild(seller,'Name'));
+  if(name)sender.name=name;
+  const registrations=format==='UBL'?xmlChildren(seller,'PartyTaxScheme').map(value=>({kind:xmlText(xmlPath(value,'TaxScheme','ID')),id:xmlText(xmlChild(value,'CompanyID'))}))
+   :xmlChildren(seller,'SpecifiedTaxRegistration').map(value=>{const id=xmlChild(value,'ID');return {kind:xmlObject(id)?id['@_schemeID']:undefined,id:xmlText(id)};});
+  for(const [field,scheme] of [['ustId',format==='UBL'?'VAT':'VA'],['steuernummer','FC']] as const){
+   const ids=[...new Set(registrations.filter(value=>value.kind===scheme&&value.id).map(value=>value.id!))];
+   if(ids.length===1)sender[field]=ids[0];
+  }
+  if(Object.keys(sender).length)add('rechnung.absender',sender,'invoice.supplier');
+  const taxNodes=format==='UBL'?xmlChildren(root,'TaxTotal').flatMap(value=>xmlChildren(value,'TaxSubtotal')):xmlChildren(settlement,'ApplicableTradeTax');
+  const rates:Record<string,string>[]=[];
+  for(const node of taxNodes){
+   const fields={satz:format==='UBL'?xmlPath(node,'TaxCategory','Percent'):xmlChild(node,'RateApplicablePercent'),
+    netto:xmlChild(node,format==='UBL'?'TaxableAmount':'BasisAmount'),ust:xmlChild(node,format==='UBL'?'TaxAmount':'CalculatedAmount')};
+   const rate:Record<string,string>={};
+   for(const [field,value] of Object.entries(fields)){
+    const nodeCurrency=xmlObject(value)?value['@_currencyID']:undefined;
+    if(nodeCurrency!==undefined&&nodeCurrency!=='EUR')continue;
+    const text=xmlText(value),cents=text===null?null:invoiceCents(text);
+    if(cents!==null)rate[field]=invoiceDecimal(cents);
+   }
+   if(Object.keys(rate).length===3)rates.push(rate);
+  }
+  if(rates.length)add('rechnung.steuersaetze',rates,'invoice.taxSubtotals');
   const amountValues={netto:format==='UBL'?xmlChild(totals,'TaxExclusiveAmount'):xmlChild(totals,'TaxBasisTotalAmount'),
    ust:format==='UBL'?xmlPath(root,'TaxTotal','TaxAmount'):xmlChild(totals,'TaxTotalAmount'),brutto:format==='UBL'?xmlChild(totals,'TaxInclusiveAmount'):xmlChild(totals,'GrandTotalAmount')};
   const amounts:Record<string,string>={};
@@ -87,4 +129,26 @@ export function recognizeInvoiceXml(bytes:Uint8Array):{code:'OK';suggestions:Xml
   if(!result.some(value=>value.field==='rechnung.nummer')||!result.some(value=>value.field==='rechnung.datum'))return {code:'UNSUPPORTED'};
   return {code:'OK',suggestions:result};
  }catch(error){console.error('[INVOICE_XML_PARSE_FAILED]',{errorName:error instanceof Error?error.name:'UnknownError'});return {code:'UNSUPPORTED'};}
+}
+
+/** Read the original PDF container before OCR, feeding its XML into the same recognizer. */
+export async function recognizeInvoicePdf(bytes:Uint8Array):Promise<ReturnType<typeof recognizeInvoiceXml>>{
+ if(bytes.byteLength>20*1024*1024)return {code:'UNSUPPORTED'};
+ try{
+  const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const task=getDocument({data:new Uint8Array(bytes),verbosity:0});
+  try{
+   const document=await task.promise,attachments=await document.getAttachments();
+   const allowed=attachments?[...attachments].filter(([,attachment])=>['factur-x.xml','zugferd-invoice.xml','xrechnung.xml'].includes(attachment.filename.toLowerCase())):[];
+   const valid:Array<{bytes:Uint8Array;result:Extract<ReturnType<typeof recognizeInvoiceXml>,{code:'OK'}>}>=[];
+   for(const [id] of allowed){
+    const embedded=await document.getAttachmentContent(id);if(!embedded)continue;
+    if(valid.some(value=>Buffer.from(value.bytes).equals(embedded)))continue;
+    const result=recognizeInvoiceXml(embedded);if(result.code==='OK')valid.push({bytes:embedded,result});
+    // PL09:21: different valid originals must never be selected arbitrarily.
+    if(valid.length>1)return {code:'UNSUPPORTED'};
+   }
+   return valid.length===1?valid[0].result:{code:'UNSUPPORTED'};
+  }finally{await task.destroy();}
+ }catch(error){console.error('[INVOICE_PDF_XML_READ_FAILED]',{errorName:error instanceof Error?error.name:'UnknownError'});return {code:'UNSUPPORTED'};}
 }

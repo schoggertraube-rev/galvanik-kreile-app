@@ -1,6 +1,17 @@
 [
   {
     "datum": "2026-11-18",
+    "pr": 238,
+    "seite": "eingang",
+    "ziel": "rein",
+    "punkte": [
+      "Du bekommst aus strukturierten Eingangsrechnungen Vorschläge für den Lieferanten – auch aus PDF-Dateien mit eingebetteten Rechnungsdaten.",
+      "Du siehst einen Hinweis, wenn Steuersätze und Gesamt-USt nicht zusammenpassen. Die geprüfte Gesamt-USt bleibt erhalten.",
+      "Du kannst die USt-ID auch für Lieferanten übernehmen."
+    ]
+  },
+  {
+    "datum": "2026-11-18",
     "pr": 237,
     "seite": "auftraege",
     "ziel": "/orders",
