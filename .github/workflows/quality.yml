@@ -180,7 +180,7 @@ jobs:
         run: |
           set -euo pipefail
           # Use the same Ubuntu archive publisher without changing trust or versions.
-          for apt_source in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+          for apt_source in /etc/apt/sources.list /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
             if [ -f "$apt_source" ]; then
               sudo sed -E -i 's#(https?://)([[:alnum:]-]+\.)+archive\.ubuntu\.com(/ubuntu([/[:space:]]|$))#\1archive.ubuntu.com\3#g' "$apt_source"
             fi
