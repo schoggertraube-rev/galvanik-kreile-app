@@ -30,7 +30,8 @@ export function readInvoiceVat(beleg:unknown):InvoiceVatRead{
   const rate=persistedCents(totals.vatRateBasisPoints);
   if(gross!==net+vat)throw Error('INVOICE_VAT_LEGACY_INVALID');
   groups=[{rateBp:rate,netCents:net,vatCents:vat,grossCents:gross}];headRate=rate;
- }else if(beleg.schemaVersion===2){
+ }else if(beleg.schemaVersion===2||beleg.schemaVersion===3){
+  if(beleg.schemaVersion===3&&(!object(beleg.seller)||Object.hasOwn(beleg.seller,'taxId')||!['string','null'].includes(beleg.seller.vatId===null?'null':typeof beleg.seller.vatId)||!['string','null'].includes(beleg.seller.taxNumber===null?'null':typeof beleg.seller.taxNumber)||!(typeof beleg.seller.vatId==='string'&&beleg.seller.vatId.trim()||typeof beleg.seller.taxNumber==='string'&&beleg.seller.taxNumber.trim())))throw Error('INVOICE_SELLER_TAX_SOURCE_INVALID');
   if(totals.vatRateBasisPoints!==null||!Array.isArray(totals.vatBreakdown)||!totals.vatBreakdown.length||!Array.isArray(beleg.lines)||!beleg.lines.length)throw Error('INVOICE_VAT_GROUPS_REQUIRED');
   const lineGroups=new Map<number,number>();
   for(const line of beleg.lines){
@@ -39,6 +40,7 @@ export function readInvoiceVat(beleg:unknown):InvoiceVatRead{
    if(line.type==='SHIPPING'&&'shippingKind'in line&&(line.shippingKind!=='fee'&&line.shippingKind!=='reference'||line.shippingKind==='reference'&&line.amountCents!==0))throw Error('INVOICE_VAT_SHIPPING_KIND_INVALID');
    const rate=line.vat_rate_basis_points;
    if(rate!==0&&rate!==700&&rate!==1900)throw Error('INVOICE_VAT_LINE_RATE_INVALID');
+   if(beleg.schemaVersion===3&&(line.taxCategory!==(rate===0?'AE':'S')||typeof line.unit!=='string'||!['C62','KGM','GRM','MTR','MTK','HUR','DMK','SET'].includes(line.unit)||line.type==='EXTRA_WORK'&&line.unit!=='HUR'||line.type==='SHIPPING'&&line.unit!=='C62'))throw Error('INVOICE_VAT_ELECTRONIC_LINE_INVALID');
    const amount=cents(line.type==='BASE'?line.lineNetAmountCents:line.amountCents);
    lineGroups.set(rate,cents((lineGroups.get(rate)??0)+amount));
   }
@@ -53,7 +55,7 @@ export function readInvoiceVat(beleg:unknown):InvoiceVatRead{
   });
   if(seen.size!==lineGroups.size||total(groups,'netCents')!==net||total(groups,'vatCents')!==vat||total(groups,'grossCents')!==gross)throw Error('INVOICE_VAT_TOTALS_INVALID');
   if(seen.has(0)){
-   if(seen.size!==1||!object(beleg.customer)||!object(beleg.seller)||typeof beleg.customer.country!=='string'||!EU_OUTSIDE_DE.has(beleg.customer.country)||typeof beleg.customer.vatId!=='string'||!beleg.customer.vatId.trim()||typeof beleg.seller.taxId!=='string'||!beleg.seller.taxId.trim())throw Error('INVOICE_REVERSE_CHARGE_SOURCE_INVALID');
+   if(seen.size!==1||!object(beleg.customer)||!object(beleg.seller)||typeof beleg.customer.country!=='string'||!EU_OUTSIDE_DE.has(beleg.customer.country)||typeof beleg.customer.vatId!=='string'||!beleg.customer.vatId.trim()||typeof (beleg.schemaVersion===3?beleg.seller.vatId:beleg.seller.taxId)!=='string'||!(beleg.schemaVersion===3?beleg.seller.vatId as string:beleg.seller.taxId as string).trim())throw Error('INVOICE_REVERSE_CHARGE_SOURCE_INVALID');
   }
   headRate=null;
  }else throw Error('INVOICE_VAT_SCHEMA_INVALID');
@@ -63,5 +65,5 @@ export function readInvoiceVat(beleg:unknown):InvoiceVatRead{
     ||persistedCents(stored.gross_amount_cents)!==gross
     ||(headRate===null?stored.vat_rate_basis_points!==null:persistedCents(stored.vat_rate_basis_points)!==headRate))throw Error('INVOICE_VAT_PERSISTED_TOTALS_INVALID');
  }
- return {groups,netAmountCents:net,vatAmountCents:vat,grossAmountCents:gross,headRate,reverseCharge:beleg.schemaVersion===2&&groups.every(row=>row.rateBp===0)};
+ return {groups,netAmountCents:net,vatAmountCents:vat,grossAmountCents:gross,headRate,reverseCharge:(beleg.schemaVersion===2||beleg.schemaVersion===3)&&groups.every(row=>row.rateBp===0)};
 }

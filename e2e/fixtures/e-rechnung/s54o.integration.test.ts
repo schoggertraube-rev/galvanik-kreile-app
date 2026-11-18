@@ -47,6 +47,30 @@ it('S54o seller tax settings: actual separate fields, settings authority, reread
  writeFileSync('.git/kreile-s54o-tax-settings-real.json',JSON.stringify({at:new Date().toISOString(),tenant,actor:full.actorId,separateSources:true,legacyPreserved:true,authorityUnchanged:true},null,2)+'\n');
 });
 
+it('S54o v3: absent seller identity refuses before allocation; actual settings correction and same-key retry freeze tax number and original unit',async()=>{
+ const order=await readyOrderForInvoice('TEST S54o v3 required seller');
+ const input={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()};
+ const company={companyName:'TEST S54o v3 issuer',street:'TEST Weg 1',zip:'70176',city:'Stuttgart',country:'Deutschland',taxId:'',taxNumber:'',iban:'DE02120300000000202051',bic:'BYLADEM1001',bankName:'TEST Bank',paymentTermDays:14,logoUrl:'/TEST-logo.png'};
+ expect(await withSession(full,()=>saveCompanySettingsAction(company))).toEqual({code:'OK'});
+ const before=await sql`SELECT * FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
+ const refused=await withSession(full,()=>issueInvoiceAction(input));
+ expect(refused).toMatchObject({code:'VALIDATION_ERROR',message:'Fehlt für die E-Rechnung: USt-IdNr. oder Steuernummer · in Einstellungen eintragen',source:{kind:'settings',field:'taxId'}});
+ expect(await sql`SELECT * FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(before);
+ expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:input.clientEventId}))).toMatchObject({code:'OK',data:null});
+ const corrected={...company,taxNumber:'123/456/78901'};
+ expect(await withSession(full,()=>saveCompanySettingsAction(corrected))).toEqual({code:'OK'});
+ const result=await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))));
+ expect(result.code).toBe('OK');if(result.code!=='OK')throw Error('TEST_V3_CORRECTED_ISSUE:'+result.code+':'+result.message);
+ const stored=await sql`SELECT snapshot,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${result.receipt.invoiceId}::uuid`;
+ const source=await sql`SELECT unit FROM public.items WHERE tenant_id=${tenant} AND order_id=${order.orderId}`;
+ // Existing intake stores the canonical identity, not its displayed label.
+ expect(source).toHaveLength(1);expect(source[0].unit).toBe('stueck');
+ expect(stored).toHaveLength(1);expect(stored[0].snapshot).toMatchObject({schemaVersion:3,seller:{vatId:null,taxNumber:corrected.taxNumber},lines:[{type:'BASE',unit:'C62',taxCategory:'S',vat_rate_basis_points:1900}]});
+ expect(stored[0].snapshot.seller).not.toHaveProperty('taxId');
+ expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:result.receipt.invoiceId,pdfSha256:result.receipt.pdfSha256}});
+ writeFileSync('.git/kreile-s54o-v3-actual.json',JSON.stringify({at:new Date().toISOString(),tenant,invoiceId:result.receipt.invoiceId,pdfSha256:result.receipt.pdfSha256,originalUnit:source[0].unit,snapshot:stored[0].snapshot,counterUnchangedOnRefusal:true,existingWriterAndFreshRetry:true,hybridNotYetBound:true},null,2)+'\n');
+});
+
 it('S54o font preparation: real issue/read/retry embeds regular and bold invoice fonts and preserves original bytes',async()=>{
  const order=await readyOrderForInvoice('TEST S54o ÄÖÜ äöü ß · €');
  const input={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()};
