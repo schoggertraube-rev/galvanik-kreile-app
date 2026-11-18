@@ -75,6 +75,27 @@ function writeEvidence(name:string,data:string|Uint8Array){
  writeFileSync(path.join(output,name),data);
 }
 
+it('S54o C15: agreement goods-out preserves the invoice correction source and writes no physical handover or number on refusal',async()=>{
+ const customerId=await customerFixture('TEST S54o goods-out correction');
+ const order=await readyOrderForInvoice('TEST S54o bad handover part \u{1D11E}','pickup',customerId);
+ const {saveCustomerAgreementAction}=await import('@/app/actions/customers.actions');
+ const agreement=await withSession(full,()=>saveCustomerAgreementAction({customerId,orderId:order.orderId,clientKey:randomUUID(),type:'zahlungsziel',targetDays:14,reason:'TEST S54o regular agreement'}));
+ if(agreement.code!=='OK')throw Error('TEST_CORRECTION_AGREEMENT:'+JSON.stringify(agreement));
+ const operator=await createFixture(['auftraege']);
+ const {getLiveOrderCardAction,reopenFrozenOrderAction}=await import('@/app/actions/orders.actions');
+ const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
+ const read=await withSession(operator,()=>getLiveOrderCardAction({orderId:order.orderId}));if(read.code!=='OK')throw Error('TEST_CORRECTION_ORDER_REQUIRED');
+ const before=await sql`SELECT tenant_id,invoice_year,last_number,updated_at::text FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
+ const input={orderId:order.orderId,mode:'abholung' as const,expectedVersion:read.data.card.version,clientEventId:randomUUID(),agreement:{id:agreement.agreement.id,version:agreement.agreement.version,type:'zahlungsziel' as const}};
+ const refused=await withSession(operator,()=>recordGoodsOutAction(input));
+ expect(refused).toMatchObject({code:'VALIDATION_ERROR',source:{kind:'order',field:'order.title',objectId:order.orderId,orderVersion:read.data.card.version,codePoint:0x1D11E}});
+ expect(await sql`SELECT tenant_id,invoice_year,last_number,updated_at::text FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(before);
+ expect(await sql`SELECT count(*)::int AS count FROM public.events WHERE tenant_id=${tenant} AND order_id=${order.orderId} AND event_type LIKE 'ORDER_PICKED_UP%'`).toEqual([{count:0}]);
+ expect(await sql`SELECT station,version FROM public.orders WHERE tenant_id=${tenant} AND id=${order.orderId}`).toEqual([{station:'fertig',version:read.data.card.version}]);
+ expect(await withSession(operator,()=>reopenFrozenOrderAction({orderId:order.orderId,expectedVersion:read.data.card.version,clientEventId:randomUUID(),reason:'Rechnungsfeld korrigieren'}))).toMatchObject({code:'OK'});
+ writeEvidence('kreile-s54o-goodsout-correction-source.json',JSON.stringify({at:new Date().toISOString(),orderId:order.orderId,actor:operator.actorId,pricesRight:false,refused,noPhysicalHandover:true,noNumberConsumed:true,existingReopenAccepted:true},null,2)+'\n');
+});
+
 it('S54o A7: the existing mail sender transports the real frozen hybrid bytes and a deserialized retry sends no second mail',async()=>{
  const order=await readyInvoiceOrder('TEST S54o hybrid mail original');
  const {requestMailStep}=await import('../../ablauf/requestMailStep');

@@ -120,7 +120,7 @@ export type RecordGoodsOutResult =
   | { code: "FORBIDDEN"; message: string }
   | { code: "NOT_FOUND"; message: string }
   | { code: "CONFLICT"; message: string; creditApplication?:CustomerCreditApplicationRead }
-  | { code: "VALIDATION_ERROR"; message: string }
+  | { code: "VALIDATION_ERROR"; message: string;source?:import('@/lib/domain/invoiceElectronicFields').InvoiceElectronicSourceLocation }
   | { code: "UNAVAILABLE"; message: string };
 
 type LockedOrder = {

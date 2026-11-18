@@ -40,7 +40,7 @@ async function goodsOutComposition(input:RecordGoodsOutInput):Promise<GoodsOutCo
     ...(invoiceInput&&invoicePort?{beforeWrite:async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction)=>{
       const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
       const invoice=await invoicePort.createInvoice(invoiceInput,tx,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf);
-      return invoice.code==='OK'?null:{code:invoice.code,message:invoice.message};
+      return invoice.code==='OK'?null:{code:invoice.code,message:invoice.message,...(invoice.code==='VALIDATION_ERROR'&&invoice.source?{source:invoice.source}:{})};
     }}:{}),
     afterWriteFailure:async(tx,auth,receipt)=>{await createGoodsOutClarificationTask(tx,auth,{orderId:receipt.orderId,eventId:receipt.eventId},{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});},
     afterWrite:async(tx,auth)=>{

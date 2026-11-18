@@ -247,19 +247,19 @@ async function insertPrerequisites() {
     await transaction`
       INSERT INTO public.items (
         id, tenant_id, order_id, customer_id, name, quantity,
-        current_station_id, preis_netto, created_at
+        current_station_id, preis_netto,unit, created_at
       ) VALUES (
         ${ITEM_ID}, ${TENANT_ID}, ${ORDER_ID}, ${CUSTOMER_ID},
-        'F1.4 Synthetic Position', 1, 'fertig', 100.00, now()
+        'F1.4 Synthetic Position', 1, 'fertig', 100.00,'stueck', now()
       )
     `;
     await transaction`
       INSERT INTO public.items (
         id, tenant_id, order_id, customer_id, name, quantity,
-        current_station_id, preis_netto, created_at
+        current_station_id, preis_netto,unit, created_at
       ) VALUES (
         ${RACE_ITEM_ID}, ${TENANT_ID}, ${RACE_ORDER_ID}, ${CUSTOMER_ID},
-        'F1.4 Synthetic Race Position', 1, 'fertig', 50.00, now()
+        'F1.4 Synthetic Race Position', 1, 'fertig', 50.00,'stueck', now()
       )
     `;
     await transaction`
@@ -370,7 +370,10 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     await insertPrerequisites();
     setSyntheticSession();
 
-    const { cancelInvoice, createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
+    const invoiceCommands = await import("@/lib/server/commands/immutableInvoiceCommand");
+    const {recognizeInvoicePdf}=await import('@/modules/eingang/server-public');
+    const createInvoice=(input:Parameters<typeof invoiceCommands.createInvoice>[0])=>invoiceCommands.createInvoice(input,undefined,readInvoiceVat,undefined,recognizeInvoicePdf);
+    const cancelInvoice=(input:Parameters<typeof invoiceCommands.cancelInvoice>[0])=>invoiceCommands.cancelInvoice(input,readInvoiceVat,undefined,recognizeInvoicePdf);
     const { confirmPayment } = await import("@/lib/server/commands/confirmPaymentCommand");
     const {
       readInvoiceCancellationReceipt,
@@ -414,7 +417,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
      */
     const expectNoWrite = async (
       label: string,
-      expected: { code: string; message: string },
+      expected: { code: string; message: string;source?:import('@/lib/domain/invoiceElectronicFields').InvoiceElectronicSourceLocation },
       run: () => Promise<{ code: string; message?: string }>,
     ): Promise<void> => {
       const before = await tenantState();
@@ -588,7 +591,14 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
                WHERE id = $2 AND tenant_id = $3`,
             [variant.value, field.id, TENANT_ID],
           );
-          await expectNoWrite(label, field.table === "company_settings" && field.column === "invoice_vat_rate_basis_points" ? {code:"VALIDATION_ERROR",message:"Für F1.4 Synthetic Position fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein."} : MASTER_DATA_REJECTION, () => createInvoice({
+          // C15 now reports the same rejected source explicitly. Keep the
+          // complete no-invoice/event/counter comparisons below unchanged.
+          const sellerFields:Record<string,string>={company_name:'companyName',street:'street',zip:'zip',city:'city',country:'country',iban:'iban',tax_id:'taxId'};
+          const buyerFields:Record<string,string>={name:'name',street:'street',zip_code:'zip',city:'city',country:'country'};
+          const sourceField=field.table==='company_settings'?sellerFields[field.column]:field.table==='customers'?buyerFields[field.column]:undefined;
+          const rejection=sourceField?{code:'VALIDATION_ERROR',message:sourceField==='taxId'?'Fehlt für die E-Rechnung: USt-IdNr. oder Steuernummer · in Einstellungen eintragen':'TODO_PL invoice.source_missing: '+sourceField,source:{kind:field.table==='company_settings'?'settings' as const:'customer' as const,field:sourceField,...(field.table==='customers'?{objectId:CUSTOMER_ID}:{})}}
+            :field.table==='company_settings'&&field.column==='invoice_vat_rate_basis_points'?{code:'VALIDATION_ERROR',message:'Für F1.4 Synthetic Position fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.'}:MASTER_DATA_REJECTION;
+          await expectNoWrite(label,rejection, () => createInvoice({
             orderId: ORDER_ID,
             expectedVersion: ORDER_VERSION,
             clientEventId: randomUUID(),

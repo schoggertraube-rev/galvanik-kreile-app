@@ -327,7 +327,7 @@ describe("H18 invoice Server Actions against the real replay database", () => {
         material: "Stahl",
         surfaceRequested: "Verchromen",
         executionRequested: "offen",
-        unit: null,
+        unit: "stueck",
         unitPriceCents: null,
         vatRateBasisPoints: null,
       }],
