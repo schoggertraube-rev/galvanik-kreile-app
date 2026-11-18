@@ -138,7 +138,7 @@ it('E6 inconsistent TEST subtotals are visible, retain the checked total and wri
 });
 
 it('E5 zero, one and multiple exact supplier names preserve the actual prefill and never choose an arbitrary supplier',async()=>{
- const name='TEST S54e name '+randomUUID(),xml=readFileSync(root+'TEST_xrechnung_ubl.xml','utf8').replace('[Seller name]',name).replace(/<cac:PartyTaxScheme>[\s\S]*?<\/cac:PartyTaxScheme>/gu,'');
+ const name='TEST S54e A & B '+randomUUID(),xml=readFileSync(root+'TEST_xrechnung_ubl.xml','utf8').replace('[Seller name]',name.replace(/&/gu,'&amp;')).replace(/<cac:PartyTaxScheme>[\s\S]*?<\/cac:PartyTaxScheme>/gu,'');
  const input=await receive('TEST_synthetic_supplier_name.xml','application/xml',new TextEncoder().encode(xml));
  const reader=()=>withSession(full,()=>getIncomingInvoiceAction({id:input.itemId}));
  expect(await reader()).toMatchObject({code:'OK',view:{invoice:null,supplier:null,fields:{lieferantId:''},supplierPrefill:{name}}});

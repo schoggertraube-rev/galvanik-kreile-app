@@ -39,4 +39,9 @@ describe('S54e the existing structured invoice recognizer',()=>{
   expect(recognizeInvoiceXml(new TextEncoder().encode('<!DOCTYPE Invoice [<!ENTITY x SYSTEM "file:///TEST">]><Invoice>&x;</Invoice>')).code).toBe('UNSUPPORTED');
   expect(recognizeInvoiceXml(new TextEncoder().encode('<Invoice>')).code).toBe('UNSUPPORTED');
  });
+ it('reads predefined and numeric XML text escapes as the actual supplier name, without interpreting custom entities',()=>{
+  const original=fixture('TEST_xrechnung_ubl.xml').toString('utf8');
+  const synthetic=original.replace('[Seller name]','TEST A &amp; B &#38; Co &#xDC;');
+  expect(fields(new TextEncoder().encode(synthetic))['rechnung.absender']).toEqual({name:'TEST A & B & Co Ü',ustId:'DE 123456789'});
+ });
 });

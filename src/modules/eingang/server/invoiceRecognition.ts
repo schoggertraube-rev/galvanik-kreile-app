@@ -50,7 +50,17 @@ function xmlChildren(value:unknown,name:string):unknown[]{
 function xmlPath(root:unknown,...names:string[]):unknown{return names.reduce<unknown>((value,name)=>xmlChild(value,name),root);}
 function xmlText(value:unknown):string|null{
  const text=typeof value==='string'?value:xmlObject(value)&&typeof value['#text']==='string'?value['#text']:null;
- return text?.trim()||null;
+ // Decode only XML's predefined/character text references, once. DTD/entity
+ // expansion remains disabled in the sole parser and declarations stay rejected.
+ const decoded=text?.replace(/&(amp|lt|gt|apos|quot|#\d+|#x[0-9a-f]+);/giu,(reference,entity:string)=>{
+  const predefined:Record<string,string>={amp:'&',lt:'<',gt:'>',apos:"'",quot:'"'};
+  if(Object.hasOwn(predefined,entity))return predefined[entity];
+  if(!entity.startsWith('#'))return reference;
+  const point=entity[1].toLowerCase()==='x'?parseInt(entity.slice(2),16):Number(entity.slice(1));
+  const valid=point===9||point===10||point===13||point>=0x20&&point<=0xD7FF||point>=0xE000&&point<=0xFFFD||point>=0x10000&&point<=0x10FFFF;
+  return valid?String.fromCodePoint(point):reference;
+ });
+ return decoded?.trim()||null;
 }
 function xmlDate(value:unknown):string|null{
  const raw=xmlText(value);if(!raw)return null;
