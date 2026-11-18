@@ -83,7 +83,7 @@ async function seedPrerequisites() {
         'f14-command-settings', ${TENANT}, 'F1.5 Synthetic Galvanik GmbH',
         'Testweg 1', '70173', 'Stuttgart', 'Deutschland',
         'DE02120300000000202051', 'BYLADEM1001', 'F1.5 Testbank',
-        'DE-SYNTHETIC-TAX', 1900, 14
+        'DE123456789', 1900, 14
       ) ON CONFLICT (id) DO UPDATE SET
         invoice_vat_rate_basis_points = EXCLUDED.invoice_vat_rate_basis_points
     `;

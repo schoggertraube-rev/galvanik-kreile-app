@@ -1,5 +1,10 @@
 import {expect,it} from 'vitest';
-import {invoiceElectronicUnit,invoiceXmlAmount,invoiceXmlWorkHours,invoiceBaseUnitPrice} from '../invoiceElectronicFields';
+import {invoiceElectronicUnit,invoiceXmlAmount,invoiceXmlWorkHours,invoiceBaseUnitPrice,isInvoiceVatId} from '../invoiceElectronicFields';
+
+it('K1 VAT format removes whitespace and requires the approved country-prefix and bounded identifier',()=>{
+ for(const value of ['DE123456789','ATU12345678','DE 123 456 789','FRab12'])expect(isInvoiceVatId(value)).toBe(true);
+ for(const value of ['123/456/789','123456789','DE-H18-INVOICE','de123456789','D123456789','DE1','DE1234567890123'])expect(isInvoiceVatId(value)).toBe(false);
+});
 
 it('S54o unit serialization preserves each existing order unit instead of treating every position as pieces',()=>{
  for(const [source,code] of [['Stück','C62'],['stueck','C62'],['kg','KGM'],['dm²','DMK'],['dm2','DMK'],['Satz','SET'],['stunde','HUR'],['Std.','HUR'],['g','GRM'],['m','MTR'],['m²','MTK'],['pauschal','C62']])expect(invoiceElectronicUnit(source)?.code).toBe(code);

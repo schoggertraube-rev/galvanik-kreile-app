@@ -2,7 +2,7 @@ import {CUSTOMER_COUNTRIES} from '@/modules/customers/public';
 import {invoiceDate} from '@/modules/eingang/public';
 import {readInvoiceVat,type InvoiceVatRead} from '@/modules/accounting/public';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
-import {InvoiceElectronicSourceError,invoiceXmlAmount,invoiceXmlWorkHours,invoiceBaseUnitPrice} from '@/lib/domain/invoiceElectronicFields';
+import {InvoiceElectronicSourceError,invoiceXmlAmount,invoiceXmlWorkHours,invoiceBaseUnitPrice,isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
 import type {ImmutableInvoiceSnapshotV3} from './ImmutableInvoiceDocument';
 import {E_INVOICE_COPY,INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 
@@ -11,7 +11,7 @@ import {E_INVOICE_COPY,INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 // KoSIT release2026-08-31; validator resource SHA256 0911e927f13f9ae2cdc7f973643f27bf0ad3c5da02483c04a5b8a47eb4822199.
 const COUNTRY_CODES=new Set('1A AD AE AF AG AI AL AM AN AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BL BJ BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH EL ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XI YE YT ZA ZM ZW'.split(' '));
 type Fields=Pick<ImmutableInvoiceSnapshotV3,'seller'|'customer'|'order'|'lines'|'totals'|'serviceDate'|'paymentTermDays'>;
-export type InvoiceXmlInput={snapshot:ImmutableInvoiceSnapshotV3;invoiceNumber:string;dueDate:string;cancellation?:{at:string;reason:string}};
+export type InvoiceXmlInput={snapshot:ImmutableInvoiceSnapshotV3;invoiceNumber:string;dueDate:string;cancellation?:{number:string;at:string;reason:string}};
 
 function countryCode(value:string,kind:'settings'|'customer',objectId?:string):string{
  const match=CUSTOMER_COUNTRIES.find(country=>country.value===value||country.label===value);
@@ -29,6 +29,8 @@ function text(value:unknown,kind:'settings'|'customer'|'order',field:string,obje
 export function assertInvoiceElectronicFields(input:Fields):InvoiceVatRead{
  for(const field of ['companyName','street','zip','city','country','iban'] as const)text(input.seller[field],'settings',field);
  if(!input.seller.vatId&&!input.seller.taxNumber)throw new InvoiceElectronicSourceError({kind:'settings',field:'taxId'});
+ if(input.seller.vatId&&!isInvoiceVatId(input.seller.vatId))throw new InvoiceElectronicSourceError({kind:'settings',field:'vatId'});
+ if(input.customer.vatId&&!isInvoiceVatId(input.customer.vatId))throw new InvoiceElectronicSourceError({kind:'customer',field:'vatId'});
  for(const field of ['name','street','zip','city','country'] as const)text(input.customer[field],'customer',field);
  countryCode(input.seller.country,'settings');countryCode(input.customer.country,'customer');
  if(!invoiceDate(input.serviceDate))throw new InvoiceElectronicSourceError({kind:'order',objectId:input.order.orderId,field:'serviceDate'});
@@ -54,7 +56,7 @@ function day(instant:string):string{
 function address(party:Fields['seller']|Fields['customer'],kind:'settings'|'customer'):string{
  return '<ram:PostalTradeAddress>'+node('ram:PostcodeCode',party.zip)+node('ram:LineOne',party.street)+node('ram:CityName',party.city)+node('ram:CountryID',countryCode(party.country,kind))+'</ram:PostalTradeAddress>';
 }
-const taxRegistration=(id:string,scheme:'VA'|'FC')=>'<ram:SpecifiedTaxRegistration>'+node('ram:ID',id,{schemeID:scheme})+'</ram:SpecifiedTaxRegistration>';
+const taxRegistration=(id:string,scheme:'VA'|'FC')=>'<ram:SpecifiedTaxRegistration>'+node('ram:ID',scheme==='VA'?id.replace(/\s/g,''):id,{schemeID:scheme})+'</ram:SpecifiedTaxRegistration>';
 const reason=node('ram:ExemptionReason',INVOICE_VAT_COPY.reverseCharge);
 /** Only the frozen snapshot and existing document/cancellation identity enter
  * the CII. Resend must use the stored PDF, never call this function again.
@@ -63,6 +65,7 @@ export function createInvoiceXml(input:InvoiceXmlInput):Uint8Array{
  const {snapshot,invoiceNumber,dueDate,cancellation}=input;
  const vat=assertInvoiceElectronicFields(snapshot);
  if(!/^R-\d{4}-\d{4,}$/.test(invoiceNumber)||!invoiceDate(dueDate))throw Error('INVOICE_ELECTRONIC_DOCUMENT_ID_INVALID');
+ if(cancellation&&(!/^R-\d{4}-\d{4,}$/.test(cancellation.number)||cancellation.number===invoiceNumber))throw Error('INVOICE_ELECTRONIC_CANCELLATION_ID_INVALID');
  const direction=cancellation?-1:1;
  const invoiceDay=day(cancellation?cancellation.at:snapshot.issuedAt);
  const noteTexts=snapshot.lines.flatMap(line=>line.type==='SHIPPING'&&line.shippingKind==='reference'?[line.name]:[]);
@@ -87,7 +90,7 @@ export function createInvoiceXml(input:InvoiceXmlInput):Uint8Array{
  const xml='<?xml version="1.0" encoding="UTF-8"?>'+
  '<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100" xmlns:qdt="urn:un:unece:uncefact:data:standard:QualifiedDataType:100">'+
  '<rsm:ExchangedDocumentContext><ram:GuidelineSpecifiedDocumentContextParameter>'+node('ram:ID','urn:cen.eu:en16931:2017')+'</ram:GuidelineSpecifiedDocumentContextParameter></rsm:ExchangedDocumentContext>'+
- '<rsm:ExchangedDocument>'+node('ram:ID',invoiceNumber)+node('ram:TypeCode',cancellation?'384':'380')+'<ram:IssueDateTime>'+date(invoiceDay)+'</ram:IssueDateTime>'+notes+'</rsm:ExchangedDocument>'+
+ '<rsm:ExchangedDocument>'+node('ram:ID',cancellation?cancellation.number:invoiceNumber)+node('ram:TypeCode',cancellation?'384':'380')+'<ram:IssueDateTime>'+date(invoiceDay)+'</ram:IssueDateTime>'+notes+'</rsm:ExchangedDocument>'+
  '<rsm:SupplyChainTradeTransaction>'+lines+'<ram:ApplicableHeaderTradeAgreement>'+seller+buyer+'</ram:ApplicableHeaderTradeAgreement><ram:ApplicableHeaderTradeDelivery><ram:ActualDeliverySupplyChainEvent><ram:OccurrenceDateTime>'+date(snapshot.serviceDate)+'</ram:OccurrenceDateTime></ram:ActualDeliverySupplyChainEvent></ram:ApplicableHeaderTradeDelivery><ram:ApplicableHeaderTradeSettlement>'+
  node('ram:InvoiceCurrencyCode','EUR')+'<ram:SpecifiedTradeSettlementPaymentMeans>'+node('ram:TypeCode','58')+'<ram:PayeePartyCreditorFinancialAccount>'+node('ram:IBANID',snapshot.seller.iban)+'</ram:PayeePartyCreditorFinancialAccount></ram:SpecifiedTradeSettlementPaymentMeans>'+taxes+
  '<ram:SpecifiedTradePaymentTerms>'+node('ram:Description',E_INVOICE_COPY.paymentTerms(snapshot.paymentTermDays,dueLabel))+'<ram:DueDateDateTime>'+date(dueDate)+'</ram:DueDateDateTime></ram:SpecifiedTradePaymentTerms>'+amounts+parent+'</ram:ApplicableHeaderTradeSettlement></rsm:SupplyChainTradeTransaction></rsm:CrossIndustryInvoice>';

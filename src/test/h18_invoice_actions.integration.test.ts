@@ -110,7 +110,7 @@ async function createFixture(): Promise<Fixture> {
         ${settingsId}, ${KREILE_TENANT_SLUG}, 'H18 Galvanik Kreile',
         'Pruefstrasse 18', '70173', 'Stuttgart', 'Deutschland',
         'DE02120300000000202051', 'BYLADEM1001', 'H18 Testbank',
-        'DE-H18-INVOICE', 1900, 14
+        'DE123456789', 1900, 14
       WHERE NOT EXISTS (
         SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}
       )
@@ -119,7 +119,7 @@ async function createFixture(): Promise<Fixture> {
       UPDATE public.company_settings
       SET company_name='H18 Galvanik Kreile', street='Pruefstrasse 18', zip='70173',
         city='Stuttgart', country='Deutschland', iban='DE02120300000000202051',
-        bic='BYLADEM1001', bank_name='H18 Testbank', tax_id='DE-H18-INVOICE',
+        bic='BYLADEM1001', bank_name='H18 Testbank', tax_id='DE123456789',
         invoice_vat_rate_basis_points=1900, invoice_payment_term_days=14
       WHERE tenant_id=${KREILE_TENANT_SLUG}
     `;

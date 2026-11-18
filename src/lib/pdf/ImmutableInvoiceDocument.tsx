@@ -121,6 +121,7 @@ export type ImmutableInvoiceDocumentProps = {
 export type ImmutableInvoiceCancellationDocumentProps = {
   vat:InvoiceVatRead;
   invoiceNumber: string;
+  cancellationNumber?: string;
   cancelledAt: string;
   cancelReason: string;
   snapshot: ImmutableInvoiceSnapshot;
@@ -538,6 +539,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
  */
 export function ImmutableInvoiceCancellationDocument({
   invoiceNumber,
+  cancellationNumber,
   cancelledAt,
   cancelReason,
   snapshot,
@@ -545,6 +547,11 @@ export function ImmutableInvoiceCancellationDocument({
 }: ImmutableInvoiceCancellationDocumentProps) {
   const { seller, customer, order, lines } = snapshot;
   const totals=vat;
+  let title='Stornobeleg';
+  if(snapshot.schemaVersion===3){
+    if(!cancellationNumber||!/^R-\d{4}-\d{4,}$/.test(cancellationNumber)||cancellationNumber===invoiceNumber)throw Error('INVOICE_ELECTRONIC_CANCELLATION_ID_INVALID');
+    title=E_INVOICE_COPY.cancellationTitle(cancellationNumber,invoiceNumber);
+  }
 
   return (
     <Document>
@@ -558,7 +565,7 @@ export function ImmutableInvoiceCancellationDocument({
             <Text>{sellerTaxIdentity(snapshot)}</Text>
           </View>
           <View style={styles.metaBlock}>
-            <Text style={styles.documentTitle}>{snapshot.schemaVersion===3?E_INVOICE_COPY.cancellationTitle(invoiceNumber):'Stornobeleg'}</Text>
+            <Text style={styles.documentTitle}>{title}</Text>
             <Text style={styles.metaLine}>Zu Rechnung: {invoiceNumber}</Text>
             <Text style={styles.metaLine}>Stornodatum: {formatBerlinInstant(cancelledAt)}</Text>
             <Text style={styles.metaLine}>Leistungsdatum: {formatCalendarDate(snapshot.serviceDate)}</Text>

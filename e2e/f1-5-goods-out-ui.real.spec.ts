@@ -278,7 +278,7 @@ test.describe("F1.5-D schmale echte Zahlungs-/Warenausgangsoberfläche", () => {
         ) VALUES (
           ${`f1-5-d-${suffix}`}, ${TENANT}, 'F1.5-D Synthetische Galvanik GmbH', 'Testweg 1',
           '70173', 'Stuttgart', 'Deutschland', 'DE02120300000000202051', 'BYLADEM1001',
-          'F1.5 Testbank', 'DE-SYNTHETIC-TAX', 1900, 14
+          'F1.5 Testbank', 'DE123456789', 1900, 14
         )
       `;
       await sql`

@@ -1,7 +1,7 @@
 // Synthetic validation-boundary inputs only. Genuine writer/number/retry
 // evidence lives in e2e/fixtures/e-rechnung; these are not writer proofs.
 import {describe,expect,it} from 'vitest';
-import {assertInvoiceElectronicFields} from '../invoiceXml';
+import {assertInvoiceElectronicFields,createInvoiceXml} from '../invoiceXml';
 import {InvoiceElectronicSourceError} from '@/lib/domain/invoiceElectronicFields';
 import type {ImmutableInvoiceSnapshotV3} from '../ImmutableInvoiceDocument';
 
@@ -19,6 +19,21 @@ function refusal(snapshot:ImmutableInvoiceSnapshotV3){
  try{assertInvoiceElectronicFields(snapshot);}catch(error){expect(error).toBeInstanceOf(InvoiceElectronicSourceError);return error as InvoiceElectronicSourceError;}
  throw Error('SYNTHETIC_INVALID_SOURCE_ACCEPTED');
 }
+
+it('KORR-S54o K5 binds BT29 only to tax-only seller and distinct cancellation identity to the untouched original',()=>{
+ const snapshot=source(),original=structuredClone(snapshot);
+ const input={snapshot,invoiceNumber:'R-2026-0001',dueDate:'2026-12-02'};
+ const ordinary=new TextDecoder().decode(createInvoiceXml(input));
+ expect(ordinary).not.toMatch(/<ram:SellerTradeParty><ram:ID>/);
+ snapshot.seller.vatId=null;snapshot.seller.taxNumber='123/456/789';
+ expect(new TextDecoder().decode(createInvoiceXml(input))).toContain('<ram:SellerTradeParty><ram:ID>123/456/789</ram:ID>');
+ const xml=new TextDecoder().decode(createInvoiceXml({...input,cancellation:{number:'R-2026-0002',at:'2026-11-19T12:00:00.000Z',reason:'TEST cancellation'}}));
+ expect(xml).toContain('<rsm:ExchangedDocument><ram:ID>R-2026-0002</ram:ID><ram:TypeCode>384</ram:TypeCode>');
+ expect(xml).toContain('<ram:InvoiceReferencedDocument><ram:IssuerAssignedID>R-2026-0001</ram:IssuerAssignedID><ram:FormattedIssueDateTime><qdt:DateTimeString format="102">20261118</qdt:DateTimeString>');
+ for(const match of xml.matchAll(/<ram:BilledQuantity[^>]*>([^<]+)</g))expect(Number(match[1])).toBeLessThan(0);
+ for(const match of xml.matchAll(/<ram:ChargeAmount>([^<]+)</g))expect(Number(match[1])).toBeGreaterThan(0);
+ expect(snapshot).toEqual({...original,seller:{...original.seller,vatId:null,taxNumber:'123/456/789'}});
+});
 
 describe('S54o C6/A14 source consistency before existing number allocation',()=>{
  it('refuses a one-cent tax discrepancy without repairing the frozen financial values',()=>{

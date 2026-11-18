@@ -49,11 +49,11 @@ describe("Orders V1.1 one-surface truth", () => {
   it('S54o A15:27 asks before reopening and cancel has no correction effect',()=>{
     const confirm=vi.fn(),cancel=vi.fn();
     const view=render(<InvoiceSourceCorrectionDialog orderNumber="A-2026-0042" busy={false} error={null} onCancel={cancel} onConfirm={confirm}/>);
-    expect(screen.getByText('Auftrag A-2026-0042 wird wieder geoeffnet. Danach Feld korrigieren und erneut fertig melden.')).toBeInTheDocument();expect(confirm).not.toHaveBeenCalled();
+    expect(screen.getByText('Auftrag A-2026-0042 wird wieder geöffnet. Danach Feld korrigieren und erneut fertig melden.')).toBeInTheDocument();expect(confirm).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button',{name:'Abbrechen'}));expect(cancel).toHaveBeenCalledOnce();expect(confirm).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button',{name:'Auftrag A-2026-0042 zur Korrektur wieder oeffnen'}));expect(confirm).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button',{name:'Auftrag A-2026-0042 zur Korrektur wieder öffnen'}));expect(confirm).toHaveBeenCalledOnce();
     view.rerender(<InvoiceSourceCorrectionDialog orderNumber="A-2026-0042" busy error={null} onCancel={cancel} onConfirm={confirm}/>);
-    expect(screen.getByRole('button',{name:'Auftrag A-2026-0042 zur Korrektur wieder oeffnen'})).toBeDisabled();expect(screen.getByRole('button',{name:'Abbrechen'})).toBeDisabled();
+    expect(screen.getByRole('button',{name:'Auftrag A-2026-0042 zur Korrektur wieder öffnen'})).toBeDisabled();expect(screen.getByRole('button',{name:'Abbrechen'})).toBeDisabled();
   });
   it('S54o source feedback invokes the existing settings correction port and preserves the actual refusal',()=>{
     const correct=vi.fn();

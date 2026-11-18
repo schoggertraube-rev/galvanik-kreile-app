@@ -1,4 +1,6 @@
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
+import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
+import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
 import {SITUATION_COPY} from '@/ui/situationCatalog';
 import {V45_RUNTIME} from '@/ui/v45.generated';
@@ -271,6 +273,7 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
     bankName: text(value.bankName, 2, 160) ?? "", logoUrl: text(value.logoUrl, 1, 500) ?? "",
     paymentTermDays: typeof value.paymentTermDays === "number" ? value.paymentTermDays : 0,
   };
+  if(normalized.taxId&&!isInvoiceVatId(normalized.taxId))return {code:'VALIDATION_ERROR' as const,message:E_INVOICE_COPY.missingSource('vatId'),field:'taxId' as const};
   if (Object.entries(normalized).some(([key,field]) => key !== "taxId" && key !== "taxNumber" && field === "") || !Number.isSafeInteger(normalized.paymentTermDays) || normalized.paymentTermDays < 1 || normalized.paymentTermDays > 365) return { code: "VALIDATION_ERROR" as const, message: "Alle Firmendaten einschließlich Zahlungsziel sind erforderlich." };
   try {
     await withPrivilegedTenantTransaction(context, async (tx) => {

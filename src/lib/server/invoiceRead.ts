@@ -356,7 +356,7 @@ export async function readInvoicePdf(
             SELECT
               invoice.id,
               invoice.tenant_id,
-              invoice.invoice_number,
+              coalesce(invoice.cancellation_invoice_number,invoice.invoice_number) AS invoice_number,
               invoice.status,
               invoice.cancellation_pdf_sha256 AS pdf_sha256,
               invoice.cancellation_pdf_content AS pdf_content,

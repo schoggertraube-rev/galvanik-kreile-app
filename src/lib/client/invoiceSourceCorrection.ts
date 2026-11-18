@@ -7,6 +7,5 @@ export function invoiceSettingsCorrection(source:InvoiceElectronicSourceLocation
  if(source?.kind!=='settings')return undefined;
  const field=source.field==='vatId'?'taxId':source.field;
  if(!Object.hasOwn(E_INVOICE_SETTINGS_COPY.fieldLabels,field))return undefined;
- const label=E_INVOICE_SETTINGS_COPY.fieldLabels[field as keyof typeof E_INVOICE_SETTINGS_COPY.fieldLabels];
- return {label:E_INVOICE_SETTINGS_COPY.action(label),href:'/settings?returnTo='+encodeURIComponent('/orders/'+encodeURIComponent(orderId))+'#company-'+field};
+ return {label:E_INVOICE_SETTINGS_COPY.action(source.field),href:'/settings?returnTo='+encodeURIComponent('/orders/'+encodeURIComponent(orderId))+'#company-'+field};
 }

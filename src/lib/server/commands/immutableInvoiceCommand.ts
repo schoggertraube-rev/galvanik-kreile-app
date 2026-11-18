@@ -123,6 +123,7 @@ export type CreateInvoiceResult =
 
 
 export type ImmutableInvoiceCancellationReceipt = {
+  cancellationNumber?:string;
   reissueWithoutShipping?:InvoiceReissueIntent;
   invoiceId: string;
   invoiceNumber: string;
@@ -249,6 +250,7 @@ type ReceiptRow = {
   order_version: number | string;
   intent_expected_version: number | string;
   current_status: string;
+  cancellation_invoice_number?:string|null;
   current_version: number;
   net_amount_cents: number | string;
   vat_rate_basis_points: number|null;
@@ -805,6 +807,7 @@ export function mapInvoiceCancellationReceipt(
     "INVOICE_CANCEL_RECEIPT_SCHEMA_INVALID",
   );
   const reason = requiredText(row.cancel_reason, "INVOICE_CANCEL_RECEIPT_REASON_INVALID");
+  if(row.cancellation_invoice_number!=null&&(!INVOICE_NUMBER_PATTERN.test(row.cancellation_invoice_number)||row.cancellation_invoice_number===row.invoice_number))throw Error('INVOICE_CANCEL_RECEIPT_NUMBER_INVALID');
   if (
     row.integrity_ok !== true
     || row.tenant_id !== tenantId
@@ -838,6 +841,7 @@ export function mapInvoiceCancellationReceipt(
     status: "cancelled",
     reason,
     cancelledAt: toIso(row.occurred_at),
+    ...(row.cancellation_invoice_number?{cancellationNumber:row.cancellation_invoice_number}:{}),
     cancelledBy: row.actor_id,
     originalPdfSha256: row.original_pdf_sha256,
     cancellationPdfRef: row.pdf_ref,
@@ -889,8 +893,9 @@ export async function readCreateInvoiceReceipts(
 
 /** The same canonical cancellation query serves command, reader and repair. */
 export async function readCancellationInvoiceReceipts(tx:PrivilegedTenantTransaction,clientEventId:string,invoiceId?:string):Promise<ReceiptRow[]>{
- return tx.execute<ReceiptRow>(sql`SELECT receipt.*,event.payload->'reissue' AS reissue_intent
+ return tx.execute<ReceiptRow>(sql`SELECT receipt.*,invoice.cancellation_invoice_number,event.payload->'reissue' AS reissue_intent
   FROM private.v_invoice_receipt_v1 receipt JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id
+  JOIN public.invoices invoice ON invoice.tenant_id=receipt.tenant_id AND invoice.id=receipt.invoice_id
   WHERE receipt.client_event_id=${clientEventId}::uuid AND receipt.event_type=${CANCEL_EVENT_TYPE}
    ${invoiceId!==undefined?sql`AND receipt.invoice_id=${invoiceId}::uuid`:sql``} LIMIT 2`);
 }
@@ -1437,6 +1442,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       : undefined;
     console.error("INVOICE_CREATE_UNAVAILABLE", {
       errorName: error instanceof Error ? error.name : "UnknownError",
+      electronicCode:error instanceof Error&&/^INVOICE_ELECTRONIC_[A-Z0-9_]+$/.test(error.message)?error.message:null,
       databaseCode: typeof cause?.code === "string" ? cause.code : null,
       constraint: typeof cause?.constraint_name === "string" ? cause.constraint_name : null,
     });
@@ -1754,6 +1760,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
       // PL14:03: pre-live originals are readable, never retrofitted. The
       // existing Action observer records this refusal in technical_protocol.
       if(snapshot.schemaVersion!==3)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.legacyCancellation};
+      assertInvoiceElectronicFields(snapshot);
       let reissue:InvoiceReissueIntent|undefined;
       if(input.reissueWithoutShipping){
         const manual=await readInvoiceHandoverSource(tx,tenantId,input.reissueWithoutShipping.handoverEventId);
@@ -1774,12 +1781,16 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         timeRows[0]?.cancelled_at_iso,
         "INVOICE_CANCEL_TIME_INVALID",
       );
+      const numberRows=await tx.execute<{invoice_number:string}>(sql`SELECT private.allocate_invoice_number(${tenantId},extract(year FROM ${cancelledAt}::timestamptz AT TIME ZONE 'Europe/Berlin')::integer) AS invoice_number`);
+      const cancellationNumber=numberRows[0]?.invoice_number;
+      if(numberRows.length!==1||!cancellationNumber||!INVOICE_NUMBER_PATTERN.test(cancellationNumber)||cancellationNumber===invoice.invoice_number)throw Error('INVOICE_CANCEL_NUMBER_ALLOCATION_FAILED');
 
       let cancellationPdfBuffer: Buffer;
       try {
         cancellationPdfBuffer = await renderToBuffer(
           createImmutableInvoiceCancellationPdfDocument({
             invoiceNumber: invoice.invoice_number,
+            cancellationNumber,
             cancelledAt,
             cancelReason: input.reason,
             snapshot,
@@ -1789,7 +1800,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
       } catch {
         throw new Error("INVOICE_CANCELLATION_PDF_RENDER_FAILED");
       }
-      cancellationPdfBuffer=await createInvoiceElectronicOriginal(cancellationPdfBuffer,{snapshot,invoiceNumber:invoice.invoice_number,dueDate:toDateOnly(invoice.due_date),cancellation:{at:cancelledAt,reason:input.reason}},readOriginal);
+      cancellationPdfBuffer=await createInvoiceElectronicOriginal(cancellationPdfBuffer,{snapshot,invoiceNumber:invoice.invoice_number,dueDate:toDateOnly(invoice.due_date),cancellation:{number:cancellationNumber,at:cancelledAt,reason:input.reason}},readOriginal);
       if (cancellationPdfBuffer.byteLength < 1 || cancellationPdfBuffer.byteLength > 20 * 1024 * 1024) {
         throw new Error("INVOICE_CANCELLATION_PDF_SIZE_INVALID");
       }
@@ -1842,6 +1853,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
           cancellation_pdf_ref = ${cancellationPdfRef},
           cancellation_pdf_sha256 = ${cancellationPdfSha256},
           cancellation_pdf_content = ${cancellationPdfBuffer}
+          ,cancellation_invoice_number = ${cancellationNumber}
         WHERE id = ${invoice.id}::uuid
           AND tenant_id = ${tenantId}
           AND contract_version = 1
@@ -1872,6 +1884,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         || receipt.originalPdfSha256 !== invoice.pdf_sha256
         || receipt.cancellationPdfSha256 !== cancellationPdfSha256
         || receipt.cancellationPdfRef !== cancellationPdfRef
+        || receipt.cancellationNumber !== cancellationNumber
         || receipt.cancelledAt !== cancelledAt
       ) throw new Error("INVOICE_CANCEL_RECEIPT_MISMATCH");
 

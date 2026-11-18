@@ -1,3 +1,4 @@
+import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {readInvoiceVat} from '@/modules/accounting/server-public';
 // @vitest-environment node
 
@@ -202,7 +203,7 @@ async function insertPrerequisites() {
         ${SETTINGS_ID}, ${TENANT_ID}, 'F1.4 Synthetic Galvanik GmbH',
         'Testweg 1', '70173', 'Stuttgart', 'Deutschland',
         'DE02120300000000202051', 'BYLADEM1001', 'F1.4 Testbank',
-        'DE-SYNTHETIC-TAX', 1900, 14
+        'DE123456789', 1900, 14
       )
     `;
     await transaction`
@@ -596,7 +597,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
           const sellerFields:Record<string,string>={company_name:'companyName',street:'street',zip:'zip',city:'city',country:'country',iban:'iban',tax_id:'taxId'};
           const buyerFields:Record<string,string>={name:'name',street:'street',zip_code:'zip',city:'city',country:'country'};
           const sourceField=field.table==='company_settings'?sellerFields[field.column]:field.table==='customers'?buyerFields[field.column]:undefined;
-          const rejection=sourceField?{code:'VALIDATION_ERROR',message:sourceField==='taxId'?'Fehlt für die E-Rechnung: USt-IdNr. oder Steuernummer · in Einstellungen eintragen':'TODO_PL invoice.source_missing: '+sourceField,source:{kind:field.table==='company_settings'?'settings' as const:'customer' as const,field:sourceField,...(field.table==='customers'?{objectId:CUSTOMER_ID}:{})}}
+          const rejection=sourceField?{code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource(sourceField),source:{kind:field.table==='company_settings'?'settings' as const:'customer' as const,field:sourceField,...(field.table==='customers'?{objectId:CUSTOMER_ID}:{})}}
             :field.table==='company_settings'&&field.column==='invoice_vat_rate_basis_points'?{code:'VALIDATION_ERROR',message:'Für F1.4 Synthetic Position fehlt der Steuersatz. Trag ihn in den Einstellungen unter Firmendaten ein.'}:MASTER_DATA_REJECTION;
           await expectNoWrite(label,rejection, () => createInvoice({
             orderId: ORDER_ID,
@@ -970,7 +971,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     if (reissued.code !== "OK") throw new Error(`F1_4_REISSUE_FAILED:${reissued.code}`);
     expect(reissued.replayed).toBe(false);
     expect(reissued.receipt.invoiceId).not.toBe(issued.receipt.invoiceId);
-    expect(reissued.receipt.invoiceNumber).toMatch(/^R-[0-9]{4}-0002$/);
+    expect(reissued.receipt.invoiceNumber).toMatch(/^R-[0-9]{4}-0003$/); // K2: original, separate cancellation, replacement share one circle.
     await expect(mutationCounts()).resolves.toEqual({
       invoice_count: 2,
       created_event_count: 2,

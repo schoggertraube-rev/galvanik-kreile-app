@@ -14,7 +14,7 @@ export type InvoiceOriginalReader=(bytes:Uint8Array)=>Promise<{code:string;sugge
 export async function createInvoiceElectronicOriginal(pdf:Uint8Array,input:InvoiceXmlInput,readOriginal:InvoiceOriginalReader|undefined):Promise<Buffer>{
  const xml=createInvoiceXml(input),{snapshot,cancellation}=input;
  const date=cancellation?cancellation.at:snapshot.issuedAt;
- const title=cancellation?E_INVOICE_COPY.cancellationTitle(input.invoiceNumber):input.invoiceNumber;
+ const title=cancellation?E_INVOICE_COPY.cancellationTitle(cancellation.number,input.invoiceNumber):input.invoiceNumber;
  const bytes=await attachInvoiceXml({pdf,xml,issuedAt:date,title});
  if(!readOriginal)throw Error('INVOICE_ELECTRONIC_READER_PORT_MISSING');
  const parsed=await readOriginal(bytes);
@@ -22,10 +22,10 @@ export async function createInvoiceElectronicOriginal(pdf:Uint8Array,input:Invoi
  const fields=new Map(parsed.suggestions.map(value=>[value.field,value.value]));
  if(fields.size!==parsed.suggestions.length)throw Error('INVOICE_ELECTRONIC_READER_AMBIGUOUS');
  const direction=cancellation?-1:1,vat=readInvoiceVat(snapshot);
- const expectedSender={name:snapshot.seller.companyName,...(snapshot.seller.vatId?{ustId:snapshot.seller.vatId}:{}),...(snapshot.seller.taxNumber?{steuernummer:snapshot.seller.taxNumber}:{})};
+ const expectedSender={name:snapshot.seller.companyName,...(snapshot.seller.vatId?{ustId:snapshot.seller.vatId.replace(/\s/g,'')}:{}),...(snapshot.seller.taxNumber?{steuernummer:snapshot.seller.taxNumber}:{})};
  const expectedAmounts={netto:invoiceXmlAmount(direction*vat.netAmountCents),ust:invoiceXmlAmount(direction*vat.vatAmountCents),brutto:invoiceXmlAmount(direction*vat.grossAmountCents)};
  const expectedRates=vat.groups.map(group=>({satz:invoiceXmlAmount(group.rateBp),netto:invoiceXmlAmount(direction*group.netCents),ust:invoiceXmlAmount(direction*group.vatCents)}));
- if(fields.get('rechnung.nummer')!==input.invoiceNumber||fields.get('rechnung.datum')!==berlinCalendarDay(new Date(date))
+ if(fields.get('rechnung.nummer')!==(cancellation?cancellation.number:input.invoiceNumber)||fields.get('rechnung.datum')!==berlinCalendarDay(new Date(date))
   ||fields.get('rechnung.faellig')!==input.dueDate||fields.get('rechnung.iban')!==snapshot.seller.iban
   ||!isDeepStrictEqual(fields.get('rechnung.absender'),expectedSender)
   ||!isDeepStrictEqual(fields.get('rechnung.betrag'),expectedAmounts)

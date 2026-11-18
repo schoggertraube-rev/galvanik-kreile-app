@@ -226,7 +226,7 @@ async function seedCommandPrerequisites() {
         ${`TEST-f15-settings-${suffix}`}, ${COMMAND_TENANT}, 'F1.5 Contract GmbH',
         'Testweg 1', '70173', 'Stuttgart', 'Deutschland',
         'DE02120300000000202051', 'BYLADEM1001', 'Testbank',
-        'DE-SYNTHETIC-TAX', 1900, 14
+        'DE123456789', 1900, 14
       ) ON CONFLICT (id) DO UPDATE SET
         invoice_vat_rate_basis_points = EXCLUDED.invoice_vat_rate_basis_points,
         invoice_payment_term_days = EXCLUDED.invoice_payment_term_days

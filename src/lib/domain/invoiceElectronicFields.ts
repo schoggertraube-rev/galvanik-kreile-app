@@ -37,6 +37,7 @@ export function invoiceElectronicUnit(value:unknown):{source:string;code:Invoice
 }
 
 /** Formatting only: cents and the original minute quantity are never repriced. */
+export function isInvoiceVatId(value:string):boolean{return /^[A-Z]{2}[A-Za-z0-9]{2,12}$/.test(value.replace(/\s/g,''));}
 export function invoiceXmlAmount(cents:number):string{
  if(!Number.isSafeInteger(cents))throw Error('INVOICE_ELECTRONIC_AMOUNT_INVALID');
  const magnitude=BigInt(cents<0?-cents:cents);

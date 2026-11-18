@@ -1,3 +1,4 @@
+import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
 export const CUSTOMER_COUNTRIES = [
   { value: "DE", label: "Deutschland" }, { value: "AT", label: "Österreich" },
   { value: "CH", label: "Schweiz" }, { value: "andere", label: "anderes Land" },
@@ -88,7 +89,7 @@ export function customerFieldError(field: keyof CustomerFormValue,value: Custome
   }
   if(field==="city"&&text.length>100)return "Höchstens 100 Zeichen";
   if(field==="country"&&text&&!CUSTOMER_COUNTRIES.some(option=>option.value===text))return "Land prüfen";
-  if(field==="vatId"&&text&&!(value.country==="DE"?/^DE\d{9}$/.test(text):text.length>=4&&text.length<=20))return "USt-ID prüfen";
+  if(field==="vatId"&&text&&!isInvoiceVatId(text))return "USt-ID prüfen";
   if(field==="website"&&text&&(!/^[^\s.]+(?:\.[^\s.]+)+$/.test(text.replace(/^https?:\/\//i,""))||text.length>120))return "Website prüfen";
   if(field==="iban"&&text&&!validIban(text))return "IBAN ungültig";
   if(field==="paymentTermDays"&&text&&(!/^\d+$/.test(text)||Number(text)>120))return "Zahlungsziel prüfen";
