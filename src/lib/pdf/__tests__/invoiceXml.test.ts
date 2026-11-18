@@ -1,0 +1,41 @@
+// Synthetic validation-boundary inputs only. Genuine writer/number/retry
+// evidence lives in e2e/fixtures/e-rechnung; these are not writer proofs.
+import {describe,expect,it} from 'vitest';
+import {assertInvoiceElectronicFields} from '../invoiceXml';
+import {InvoiceElectronicSourceError} from '@/lib/domain/invoiceElectronicFields';
+import type {ImmutableInvoiceSnapshotV3} from '../ImmutableInvoiceDocument';
+
+function source():ImmutableInvoiceSnapshotV3{return {
+ schemaVersion:3,
+ seller:{companyName:'TEST synthetic seller',street:'TEST Weg 1',zip:'70176',city:'Stuttgart',country:'DE',vatId:'DE123456789',taxNumber:null,iban:'DE02120300000000202051',bic:'BYLADEM1001',bankName:'TEST Bank'},
+ customer:{name:'TEST synthetic buyer',companyName:null,contactPerson:null,street:'TEST Weg 2',zip:'70176',city:'Stuttgart',country:'DE',vatId:null},
+ order:{orderId:'TEST-order',orderVersion:1,orderNumber:'A-2026-0001',title:'TEST synthetic order',freezeId:'TEST-freeze'},
+ lines:[{type:'BASE',itemId:'TEST-item',name:'TEST synthetic part',quantity:1,unitNetAmountCents:10000,lineNetAmountCents:10000,unit:'C62',taxCategory:'S',vat_rate_basis_points:1900}],
+ totals:{netAmountCents:10000,vatRateBasisPoints:null,vatBreakdown:[{rateBp:1900,netCents:10000,vatCents:1900,grossCents:11900}],vatAmountCents:1900,grossAmountCents:11900},
+ serviceDate:'2026-11-18',issuedAt:'2026-11-18T12:00:00.000Z',paymentTermDays:14,
+};}
+
+function refusal(snapshot:ImmutableInvoiceSnapshotV3){
+ try{assertInvoiceElectronicFields(snapshot);}catch(error){expect(error).toBeInstanceOf(InvoiceElectronicSourceError);return error as InvoiceElectronicSourceError;}
+ throw Error('SYNTHETIC_INVALID_SOURCE_ACCEPTED');
+}
+
+describe('S54o C6/A14 source consistency before existing number allocation',()=>{
+ it('refuses a one-cent tax discrepancy without repairing the frozen financial values',()=>{
+  const snapshot=source();snapshot.totals.vatAmountCents++;snapshot.totals.grossAmountCents++;
+  const original=structuredClone(snapshot);
+  expect(refusal(snapshot).location).toEqual({kind:'order',objectId:'TEST-order',field:'rounding'});
+  expect(snapshot).toEqual(original);
+ });
+ it('refuses a rounded average price whose product loses a cent instead of repricing',()=>{
+  const snapshot=source();const line=snapshot.lines[0];if(line.type!=='BASE')throw Error('SYNTHETIC_BASE_REQUIRED');
+  line.quantity=3;line.unitNetAmountCents=3333;const original=structuredClone(snapshot);
+  expect(refusal(snapshot).location).toEqual({kind:'order',objectId:'TEST-order',field:'rounding'});
+  expect(snapshot).toEqual(original);
+ });
+ it('does not replace an absent original unit with pieces',()=>{
+  const snapshot=source();delete snapshot.lines[0].unit;
+  expect(refusal(snapshot).location).toEqual({kind:'order',objectId:'TEST-order',field:'unit:TEST synthetic part'});
+  expect(snapshot.lines[0]).not.toHaveProperty('unit');
+ });
+});

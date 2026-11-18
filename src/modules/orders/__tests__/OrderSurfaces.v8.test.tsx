@@ -46,6 +46,15 @@ const card: OrderCardModel = {
 };
 
 describe("Orders V1.1 one-surface truth", () => {
+  it('S54o C12 keeps the real original PDF control and places the approved paper notice beside it',()=>{
+    const open=vi.spyOn(window,'open').mockImplementation(()=>null);
+    try{
+      render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{kind:'data',card:{...card,payment:{kind:'available',value:{mode:'rechnung',invoiceState:'issued',invoiceId:'TEST-hybrid-original',invoiceNumber:'R-2026-0001',status:'offen',openAmountCents:11900,goodsOutAllowed:false,paymentEvent:null,goodsOut:null}}}}}/>);
+      expect(screen.getByText('Ausdruck ist für Firmenkunden keine gültige Rechnung · per Mail senden')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button',{name:'Rechnungs-PDF öffnen'}));
+      expect(open).toHaveBeenCalledWith('/api/invoices/TEST-hybrid-original/pdf?disposition=inline','_blank','noopener,noreferrer');
+    }finally{open.mockRestore();}
+  });
   it('S09 a login-bound handover notice opens its real task without offering a fictitious original mail',()=>{
     render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{kind:'data',card:{...card,station:'fertig',handoverMode:'pickup',handoverNotice:{message:'TEST Manueller Übergabebeleg',taskId:'TEST-task',taskState:'offen',originalItemId:null}}}}/>);
     const panel=document.querySelector('[data-spec-id="auftrag.uebergabe"]')!;

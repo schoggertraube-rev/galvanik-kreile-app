@@ -1,6 +1,6 @@
 "use client";
 import {formatEuro} from '@/lib/domain/formatEuro';
-import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY,CUSTOMER_CREDIT_COPY} from "@/ui/situationCatalog";
+import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY,CUSTOMER_CREDIT_COPY,E_INVOICE_COPY} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import {
@@ -351,7 +351,7 @@ export function OrderCardView({
       </div>
       {agreementMessage ? <Hinweis ton="ok">{agreementMessage}</Hinweis> : null}
     </KartenBlock> : null}
-    {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment ? paymentModeLabel(payment.mode) : "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.invoiceNumber ?? payment.status ?? "ausgestellt" : "noch nicht ausgestellt" }, { k: payment?.status === "bezahlt" ? "Bezahlt" : payment?.status === "teilbezahlt" ? "Noch offen" : "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} />{payment?.invoiceState === "issued" && payment.invoiceId ? <Button art="sekundaer" icon="file" text="Rechnungs-PDF öffnen" onClick={openInvoicePdf} /> : null}</KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
+    {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment ? paymentModeLabel(payment.mode) : "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.invoiceNumber ?? payment.status ?? "ausgestellt" : "noch nicht ausgestellt" }, { k: payment?.status === "bezahlt" ? "Bezahlt" : payment?.status === "teilbezahlt" ? "Noch offen" : "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} />{payment?.invoiceState === "issued" && payment.invoiceId ? <><Button art="sekundaer" icon="file" text="Rechnungs-PDF öffnen" onClick={openInvoicePdf} /><Hinweis ton="warn">{E_INVOICE_COPY.printNotice}</Hinweis></> : null}</KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
     {actions.freeze.visible && !actions.freeze.enabled && actions.freeze.reason?.includes("Stundensatz") ? <Hinweis ton="warn">{actions.freeze.reason} <a href={`/settings?returnTo=${encodeURIComponent(`/orders/${card.id}`)}#extra-work-rate`}>Stundensatz jetzt einrichten</a>.</Hinweis> : null}
     {!responsibilityFeedback&&actions.feedback.kind !== "idle" ? (actions.feedback.kind === "submitting"||actions.feedback.kind === "pending") ? <Zustand art="laedt" text={actions.feedback.message} /> : <Hinweis ton={actions.feedback.kind === "success" ? "ok" : "warn"}>{actions.feedback.message}{actions.feedback.kind === "conflict" ? <Button art="sekundaer" icon="refresh" text="Neu laden" onClick={() => void actions.onReload()} /> : null}</Hinweis> : null}
     {notice ? <Hinweis ton="warn">{notice}</Hinweis> : null}
