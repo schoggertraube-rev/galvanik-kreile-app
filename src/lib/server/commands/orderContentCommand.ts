@@ -1,5 +1,6 @@
 import {isOrderCommandBase as validBase,isManualHandoverInput} from '@/lib/domain/orderHandoverContract';
 import "server-only";
+import {recordObservedFailure} from "@/lib/server/actionObservation";
 
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -371,10 +372,10 @@ export async function setOrderItemFinished(input: SetOrderItemFinishedInput,comp
     const markerId=await recordProductionPricingRetry(tx,auth.data,error.source);
     const source=await readProductionPricingRetrySource(tx,auth.data,markerId);
     try{if(!composition)throw Error('PRODUCTION_PRICING_TASK_PORT_MISSING');await withTenantSavepoint(tx,nested=>composition.failed(nested,auth.data,markerId));}
-    catch{followupMessage=source?.title??PRODUCTION_PRICING_RETRY_COPY.taskPending;}
+    catch{recordObservedFailure('ORDER_CONTENT_SIDE_EFFECT_FAILED');followupMessage=source?.title??PRODUCTION_PRICING_RETRY_COPY.taskPending;}
     return;
    }
-   if(composition){try{await withTenantSavepoint(tx,nested=>composition.settled(nested,auth.data,eventId));}catch{followupMessage=PRODUCTION_PRICING_RETRY_COPY.taskPending;}}
+   if(composition){try{await withTenantSavepoint(tx,nested=>composition.settled(nested,auth.data,eventId));}catch{recordObservedFailure('ORDER_CONTENT_SIDE_EFFECT_FAILED');followupMessage=PRODUCTION_PRICING_RETRY_COPY.taskPending;}}
   };
   try {
     const result=await withPrivilegedTenantTransaction(auth.data, async (tx) => {

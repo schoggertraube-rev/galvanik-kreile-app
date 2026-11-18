@@ -32,3 +32,12 @@ it('disabled or incomplete device storage is explicit and never falls back to a 
  ports.stand.mockResolvedValue({code:'EMPTY',reason:'NO_COMPLETION'});
  expect(await searchDeviceStand('b'.repeat(64),true,'Müler')).toMatchObject({code:'UNAVAILABLE'});expect(ports.read).not.toHaveBeenCalled();
 });
+
+it('S47a uses the shared online search permission for a Leitstand-only login, without requiring Kunden',async()=>{
+ const {canSearchTenant}=await import('@/lib/auth/authorizationContract');
+ const fs=await import('node:fs');
+ const client=fs.readFileSync('src/components/layout/GlobalSearch.tsx','utf8'),server=fs.readFileSync('src/app/actions/search.actions.ts','utf8');
+ expect(client).toContain('canSearchTenant({permissions:grants})');expect(server).toContain('canSearchTenant(authorization.data)');
+ expect(canSearchTenant({permissions:['perm_view_leitstand']})).toBe(true);expect(canSearchTenant({permissions:['perm_data_customers']})).toBe(false);
+ source();expect(await searchDeviceStand('b'.repeat(64),true,'Müler')).toMatchObject({code:'OK',hits:[{id:'TEST-customer'}]});
+});

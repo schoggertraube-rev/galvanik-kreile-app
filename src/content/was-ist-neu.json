@@ -1,6 +1,16 @@
 [
   {
     "datum": "2026-11-17",
+    "pr": 235,
+    "seite": "eingang",
+    "ziel": "rein",
+    "punkte": [
+      "Wenn deine Notiz inzwischen geändert wurde, zeigt dir der Hinweis den nächsten Schritt: neuen Stand laden und erneut speichern.",
+      "Deine Terminprüfung verwendet den Berliner Kalendertag auch dann, wenn dein Gerät eine andere Zeitzone nutzt."
+    ]
+  },
+  {
+    "datum": "2026-11-17",
     "pr": 232,
     "seite": "einstellungen",
     "punkte": [
