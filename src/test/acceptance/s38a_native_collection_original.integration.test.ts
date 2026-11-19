@@ -9,13 +9,14 @@ import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {issueCollectionInvoiceAction,getInvoiceReceiptAction} from '@/app/actions/invoices.actions';
+import {issueCollectionInvoiceAction,getInvoiceReceiptAction,cancelInvoiceAction,getInvoiceCancellationReceiptAction} from '@/app/actions/invoices.actions';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {sql as statement} from 'drizzle-orm';
 import {confirmPaymentAction} from '@/app/actions/payments.actions';
 import {readPaymentSummary,getPaymentState} from '@/lib/server/paymentSummaryRead';
+import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingang.actions';
 
 async function historicalCollection(rates:readonly number[]){
  if(!tenant.startsWith('TEST-ablauf-')||rates.length!==3)throw Error('TEST_HISTORICAL_SOURCE_REQUIRED');
@@ -172,4 +173,67 @@ it('native payment uses the existing payment command once and the global reader 
   const state=await getPaymentState(auth.data,member.orderId);
   expect(state,JSON.stringify(state)).toMatchObject({code:'OK',data:{orderId:member.orderId,invoiceState:'issued',paymentActorId:payer.actorId,payment:{invoiceId:issue.receipt.invoiceId,orderId:null,paidAmountCents:4000,openAmountCents:7900,collection:{collectionId:source.collectionId}}}});
  }
+});
+
+
+it('A15 native collection cancellation keeps its original, releases all real members once and credits only its received payment',async()=>{
+ const source=await historicalCollection([1900,1900,1900]);
+ const issue=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(issue.code!=='OK')throw Error('TEST_NATIVE_CANCEL_ORIGINAL_REQUIRED:'+JSON.stringify(issue));
+ const [before]=await sql`SELECT snapshot,pdf_content,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${issue.receipt.invoiceId}::uuid`;
+ const paid=await withSession(full,()=>confirmPaymentAction({invoiceId:issue.receipt.invoiceId,amount:4000,method:'ueberweisung',expectedVersion:0,expectedOpenAmountCents:11900,clientEventId:randomUUID()}));
+ expect(paid).toMatchObject({code:'OK'});
+ const input={invoiceId:issue.receipt.invoiceId,expectedVersion:1 as const,reason:'TEST native collection cancellation',clientEventId:randomUUID()};
+ const cancelled=await withSession(full,()=>cancelInvoiceAction(input));
+ expect(cancelled,JSON.stringify(cancelled)).toMatchObject({code:'OK',receipt:{invoiceId:issue.receipt.invoiceId,orderId:null,orderVersion:null,status:'cancelled',collection:{collectionId:source.collectionId},originalPdfSha256:issue.receipt.pdfSha256}});
+ if(cancelled.code!=='OK')throw Error('TEST_NATIVE_CANCEL_REQUIRED');
+ expect(cancelled.receipt.cancellationNumber).not.toBe(issue.receipt.invoiceNumber);
+ expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toEqual({...cancelled,replayed:true});
+ expect(await withSession(full,()=>getInvoiceCancellationReceiptAction({invoiceId:issue.receipt.invoiceId,clientEventId:input.clientEventId}))).toEqual({code:'OK',data:cancelled.receipt});
+ const other=await createFixture(['zahlungen']);
+ expect(await withSession(other,()=>cancelInvoiceAction(input))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT order_id FROM public.invoice_collection_orders WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid`).toHaveLength(0);
+ const [after]=await sql`SELECT snapshot,pdf_content,pdf_sha256,cancellation_pdf_content,cancellation_pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${issue.receipt.invoiceId}::uuid`;
+ expect({snapshot:after.snapshot,pdf_content:after.pdf_content,pdf_sha256:after.pdf_sha256}).toEqual(before);
+ expect(createHash('sha256').update(after.cancellation_pdf_content).digest('hex')).toBe(after.cancellation_pdf_sha256);
+ const cancellationXml=await inspectOriginal(new Uint8Array(after.cancellation_pdf_content),source.members,'a15-cancel',issue.receipt.invoiceId);
+ expect(cancellationXml).toContain('-119.00');
+ expect(await sql`SELECT kind,amount_cents::text,actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${issue.receipt.invoiceId}::uuid`).toEqual([{kind:'storno_gutschrift',amount_cents:'4000',actor_user_id:full.actorId}]);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND event_type='INVOICE_CANCELLED_V1' AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(1);
+ const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_NATIVE_CANCEL_READ_AUTH');
+ expect((await readPaymentSummary(auth.data))).toMatchObject({code:'OK'});
+});
+
+
+it('native cancellation R2 retains all member releases and one customer-bound normal retry task until the real credit is repaired',async()=>{
+ const source=await historicalCollection([1900,1900,1900]);
+ const issue=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(issue.code!=='OK')throw Error('TEST_NATIVE_CREDIT_ORIGINAL_REQUIRED');
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:issue.receipt.invoiceId,amount:4000,method:'ueberweisung',expectedVersion:0,expectedOpenAmountCents:11900,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const input={invoiceId:issue.receipt.invoiceId,expectedVersion:1 as const,reason:'TEST native credit SQL follow-up',clientEventId:randomUUID()};
+ const fault='test_s38_credit_'+randomUUID().replaceAll('-','');
+ if(!/^TEST-ablauf-[a-f0-9-]+$/.test(tenant))throw Error('TEST_FAULT_SCOPE_REQUIRED');
+ await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.invoice_id='${issue.receipt.invoiceId}'::uuid AND NEW.kind='storno_gutschrift' THEN RAISE EXCEPTION 'TEST_S38_CREDIT_SQL_FAILURE' USING ERRCODE='23514'; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON public.customer_credit_entries FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
+ let pending:{taskId:string;version:number}|undefined;
+ try{
+  expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT status FROM public.invoices WHERE tenant_id=${tenant} AND id=${issue.receipt.invoiceId}::uuid`).toEqual([{status:'cancelled'}]);
+  expect(await sql`SELECT order_id FROM public.invoice_collection_orders WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid`).toHaveLength(0);
+  const tasks=await sql`SELECT id::text,version,bezug_typ,bezug_id,status,erstellt_von::text FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`;
+  expect(tasks).toHaveLength(1);expect(tasks[0]).toMatchObject({bezug_typ:'kunde',bezug_id:source.customerId,status:'offen',erstellt_von:full.actorId});
+  pending={taskId:tasks[0].id,version:tasks[0].version};
+  expect(await withSession(full,()=>getIntakeTaskAction({taskId:pending!.taskId}))).toMatchObject({code:'OK',creditSource:'KNOWN',canComplete:true,reference:{type:'kunde',id:source.customerId}});
+  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`).toHaveLength(1);
+ }finally{
+  await sql.unsafe(`DROP TRIGGER ${fault} ON public.customer_credit_entries`);
+  await sql.unsafe(`DROP FUNCTION private.${fault}()`);
+ }
+ if(!pending)throw Error('TEST_NATIVE_CREDIT_TASK_REQUIRED');
+ const resolver=await createFixture(['zahlungen','kunden','eingang'],'buero');
+ const complete={...pending,note:null};
+ expect(await withSession(resolver,()=>completeIntakeTaskAction(complete))).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:resolver.actorId}});
+ expect(await withSession(resolver,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(complete))))).toMatchObject({code:'OK',task:{status:'erledigt'}});
+ expect(await sql`SELECT amount_cents::text,actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${issue.receipt.invoiceId}::uuid`).toEqual([{amount_cents:'4000',actor_user_id:full.actorId}]);
 });

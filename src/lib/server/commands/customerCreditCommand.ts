@@ -1,4 +1,5 @@
 import 'server-only';
+import {parseInvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -18,8 +19,8 @@ type CancellationIdentity=Pick<ImmutableInvoiceCancellationReceipt,'invoiceId'|'
 /** The original cancellation and its retained payment are the retry source.
  * A normal task key without a cancellation is unrelated, not a failed credit. */
 export async function readCancellationCreditSource(tx:PrivilegedTenantTransaction,tenantId:string,key:string){
- const rows=await tx.execute<{invoice_id:string;invoice_number:string;order_id:string;customer_id:string;event_id:string;actor_id:string;paid_cents:string;entry_id:string|null;entry_amount:string|null;entry_actor:string|null;entry_key:string|null}>(sql`
-  SELECT invoice.id::text AS invoice_id,invoice.invoice_number,invoice.order_id,invoice.customer_id,
+ const rows=await tx.execute<{invoice_id:string;invoice_number:string;order_id:string|null;snapshot:unknown;customer_id:string;event_id:string;actor_id:string;paid_cents:string;entry_id:string|null;entry_amount:string|null;entry_actor:string|null;entry_key:string|null}>(sql`
+  SELECT invoice.id::text AS invoice_id,invoice.invoice_number,invoice.order_id,invoice.snapshot,invoice.customer_id,
    receipt.event_id,receipt.actor_id::text,invoice.payment_paid_amount_cents::text AS paid_cents,
    entry.id::text AS entry_id,entry.amount_cents::text AS entry_amount,
    entry.actor_user_id::text AS entry_actor,entry.idempotency_key AS entry_key
@@ -38,9 +39,11 @@ export async function readCancellationCreditSource(tx:PrivilegedTenantTransactio
  }
  const row=rows[0];
  if(rows.length!==1||!row.customer_id||row.paid_cents===null||!/^\d+$/.test(row.paid_cents)||!Number.isSafeInteger(Number(row.paid_cents)))throw Error('CUSTOMER_CREDIT_RETRY_SOURCE_INVALID');
+ const collection=row.order_id===null?parseInvoiceCollectionOriginal((row.snapshot as {collection:unknown}).collection):undefined;
+ const reference=collection?{type:'kunde' as const,id:row.customer_id}:{type:'auftrag' as const,id:row.order_id as string};
  const amount=Number(row.paid_cents);
  if(row.entry_id&&(amount===0||row.entry_amount!==row.paid_cents||row.entry_actor!==row.actor_id||row.entry_key!==key))throw Error('CUSTOMER_CREDIT_RETRY_RECEIPT_CHANGED');
- return {invoiceId:row.invoice_id,invoiceNumber:row.invoice_number,orderId:row.order_id,customerId:row.customer_id,eventId:row.event_id,clientEventId:key,cancelledBy:row.actor_id,paidAmountCents:amount,pending:amount>0&&!row.entry_id};
+ return {invoiceId:row.invoice_id,invoiceNumber:row.invoice_number,orderId:row.order_id,reference,customerId:row.customer_id,eventId:row.event_id,clientEventId:key,cancelledBy:row.actor_id,paidAmountCents:amount,pending:amount>0&&!row.entry_id};
 }
 
 /** Source is the immutable cancellation receipt; no caller-supplied credit amount. */
@@ -70,7 +73,7 @@ export async function appendCancellationCredit(tx:PrivilegedTenantTransaction,te
 /** Called after the ordinary TaskWriter has checked this task's authority. */
 export async function repairCancellationCreditTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:{client_key:string;bezug_typ:string;bezug_id:string|null;erstellt_von:string}){
  const source=await readCancellationCreditSource(tx,auth.tenantId,task.client_key);if(!source)return;
- if(task.bezug_typ!=='auftrag'||task.bezug_id!==source.orderId||task.erstellt_von!==source.cancelledBy)throw Error('CUSTOMER_CREDIT_TASK_SOURCE_CHANGED');
+ if(task.bezug_typ!==source.reference.type||task.bezug_id!==source.reference.id||task.erstellt_von!==source.cancelledBy)throw Error('CUSTOMER_CREDIT_TASK_SOURCE_CHANGED');
  if(source.pending){
   if(!hasAuthorizationArea(auth,'zahlungen'))return {code:'FORBIDDEN' as const,message:LEGACY_ACTION_ACCESS_COPY.forbidden};
   await appendCancellationCredit(tx,auth.tenantId,source);

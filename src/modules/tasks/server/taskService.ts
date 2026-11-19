@@ -439,7 +439,7 @@ export async function synchronizeCancellationCreditRetryTask(tx:PrivilegedTenant
   await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:source.orderId},note:fullTitle},deps,false,false,false,reissue.receipt.eventId);
   return;
  }
- if(!source||source.cancelledBy!==auth.userId||prior.length>1||prior.some(task=>task.bezug_typ!=='auftrag'||task.bezug_id!==source.orderId||task.art!=='aufgabe'||task.erstellt_von!==source.cancelledBy))throw Error('CUSTOMER_CREDIT_TASK_SOURCE_INVALID');
+ if(!source||source.cancelledBy!==auth.userId||prior.length>1||prior.some(task=>task.bezug_typ!==source.reference.type||task.bezug_id!==source.reference.id||task.art!=='aufgabe'||task.erstellt_von!==source.cancelledBy))throw Error('CUSTOMER_CREDIT_TASK_SOURCE_INVALID');
  if(mode==='settle'){
   if(source.pending)throw Error('CUSTOMER_CREDIT_TASK_NOT_REPAIRED');
   if(prior[0]?.status==='offen')await finishTask(tx,auth,{taskId:prior[0].id,version:prior[0].version,note:null},deps);
@@ -450,7 +450,7 @@ export async function synchronizeCancellationCreditRetryTask(tx:PrivilegedTenant
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  const fullTitle=CUSTOMER_CREDIT_COPY.retryTask(source.invoiceNumber),budget=120-CUSTOMER_CREDIT_COPY.retryTask('').length;
  const title=CUSTOMER_CREDIT_COPY.retryTask(source.invoiceNumber.length>budget?source.invoiceNumber.slice(0,budget-1)+'…':source.invoiceNumber);
- const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'zahlungen',reference:{type:'auftrag',id:source.orderId},note:fullTitle};
+ const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'zahlungen',reference:source.reference,note:fullTitle};
  await persistTask(tx,auth,value,deps,false);
 }
 

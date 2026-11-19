@@ -134,7 +134,7 @@ export type CreateInvoiceResult =
 
 
 
-export type ImmutableInvoiceCancellationReceipt = {
+type ImmutableInvoiceSingleCancellationReceipt = {
   cancellationNumber?:string;
   reissueWithoutShipping?:InvoiceReissueIntent;
   invoiceId: string;
@@ -155,6 +155,9 @@ export type ImmutableInvoiceCancellationReceipt = {
   aggregateVersion: 2;
   eventSchemaVersion: 1;
 };
+
+export type ImmutableInvoiceCollectionCancellationReceipt=Omit<ImmutableInvoiceSingleCancellationReceipt,'orderId'|'orderVersion'|'reissueWithoutShipping'>&{orderId:null;orderVersion:null;collection:InvoiceCollectionOriginal;reissueWithoutShipping?:never};
+export type ImmutableInvoiceCancellationReceipt=ImmutableInvoiceSingleCancellationReceipt|ImmutableInvoiceCollectionCancellationReceipt;
 
 export type CancelInvoiceResult =
   | { code: "OK"; receipt: ImmutableInvoiceCancellationReceipt; replayed: boolean;replacementReceipt?:ImmutableInvoiceReceipt }
@@ -826,11 +829,13 @@ export function mapInvoiceIssueReceipt(row:ReceiptRow|CollectionReceiptRow,tenan
 }
 
 export function mapInvoiceCancellationReceipt(
-  row: ReceiptRow,
+  row: ReceiptRow|CollectionReceiptRow,
   tenantId: string,
   actorId: string,
 ): ImmutableInvoiceCancellationReceipt {
-  const orderVersion = toSafeInteger(row.order_version, "INVOICE_CANCEL_RECEIPT_ORDER_VERSION_INVALID");
+  const collection=row.order_id===null?parseInvoiceCollectionOriginal((row.snapshot as {collection:unknown}).collection):undefined;
+  if(collection&&(row.order_version!==null||row.service_date!==null||row.reissue_intent!=null))throw Error("INVOICE_CANCEL_COLLECTION_IDENTITY_INVALID");
+  const orderVersion = collection?null:toSafeInteger(row.order_version, "INVOICE_CANCEL_RECEIPT_ORDER_VERSION_INVALID");
   const expectedVersion = toSafeInteger(
     row.intent_expected_version,
     "INVOICE_CANCEL_RECEIPT_EXPECTED_VERSION_INVALID",
@@ -852,7 +857,7 @@ export function mapInvoiceCancellationReceipt(
     || aggregateVersion !== 2
     || row.current_version !== 2
     || row.current_status !== "cancelled"
-    || orderVersion < 1
+    || (orderVersion!==null&&orderVersion < 1)
     || reason !== row.cancel_reason
     || reason.length < 5
     || reason.length > 500
@@ -866,12 +871,9 @@ export function mapInvoiceCancellationReceipt(
     || !HEX64_PATTERN.test(row.original_pdf_sha256)
   ) throw new Error("INVOICE_CANCEL_RECEIPT_INVALID");
 
-  return {
-    ...(row.reissue_intent!==undefined&&row.reissue_intent!==null?{reissueWithoutShipping:readStoredReissueIntent(row.reissue_intent,row)}:{}),
+  const common:Omit<ImmutableInvoiceSingleCancellationReceipt,'orderId'|'orderVersion'|'reissueWithoutShipping'> = {
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
-    orderId: row.order_id,
-    orderVersion,
     status: "cancelled",
     reason,
     cancelledAt: toIso(row.occurred_at),
@@ -887,6 +889,9 @@ export function mapInvoiceCancellationReceipt(
     aggregateVersion: 2,
     eventSchemaVersion: 1,
   };
+  if(collection)return {...common,orderId:null,orderVersion:null,collection};
+  if(row.order_id===null||orderVersion===null)throw Error('INVOICE_CANCEL_SINGLE_IDENTITY_INVALID');
+  return {...common,orderId:row.order_id,orderVersion,...(row.reissue_intent!=null?{reissueWithoutShipping:readStoredReissueIntent(row.reissue_intent,row)}:{})};
 }
 
 function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInvoiceInput, row:ReceiptRow): boolean {
@@ -919,8 +924,8 @@ export async function readCreateInvoiceReceipts(tx:PrivilegedTenantTransaction,s
 }
 
 /** The same canonical cancellation query serves command, reader and repair. */
-export async function readCancellationInvoiceReceipts(tx:PrivilegedTenantTransaction,clientEventId:string,invoiceId?:string):Promise<ReceiptRow[]>{
- return tx.execute<ReceiptRow>(sql`SELECT receipt.*,invoice.cancellation_invoice_number,event.payload->'reissue' AS reissue_intent
+export async function readCancellationInvoiceReceipts(tx:PrivilegedTenantTransaction,clientEventId:string,invoiceId?:string):Promise<Array<ReceiptRow|CollectionReceiptRow>>{
+ return tx.execute<ReceiptRow|CollectionReceiptRow>(sql`SELECT receipt.*,invoice.cancellation_invoice_number,event.payload->'reissue' AS reissue_intent
   FROM private.v_invoice_receipt_v1 receipt JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id
   JOIN public.invoices invoice ON invoice.tenant_id=receipt.tenant_id AND invoice.id=receipt.invoice_id
   WHERE receipt.client_event_id=${clientEventId}::uuid AND receipt.event_type=${CANCEL_EVENT_TYPE}
@@ -935,6 +940,7 @@ export async function readInvoiceReissueSource(tx:PrivilegedTenantTransaction,te
  if(rows.length!==1)throw Error('INVOICE_REISSUE_CANCELLATION_AMBIGUOUS');
  const receipt=mapInvoiceCancellationReceipt(rows[0],tenantId,rows[0].actor_id),intent=receipt.reissueWithoutShipping;
  if(!intent)return null;
+ if(receipt.orderId===null)throw Error('INVOICE_REISSUE_COLLECTION_FORBIDDEN');
  const originals=await tx.execute<LockedInvoice&{customer_id:string;freeze_id:string;belegart:string}>(sql`SELECT * FROM public.invoices WHERE tenant_id=${tenantId} AND id=${receipt.invoiceId}::uuid`);
  const original=originals[0];
  if(originals.length!==1||!original||original.belegart!=='auftrag'||original.status!=='cancelled'||original.order_id!==receipt.orderId
@@ -1833,15 +1839,18 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
       // Payment confirmation locks the order before the invoice. Cancellation
       // uses the same order to avoid an invoice->order / order->invoice
       // deadlock through the cancellation event's order foreign key.
-      const customerRows=await tx.execute<{customer_id:string|null;order_id:string}>(sql`
-        SELECT customer_id,order_id FROM public.invoices
+      const customerRows=await tx.execute<{customer_id:string|null;order_id:string|null;snapshot:unknown}>(sql`
+        SELECT customer_id,order_id,snapshot FROM public.invoices
         WHERE tenant_id=${tenantId} AND id=${input.invoiceId}::uuid LIMIT 2
       `);
       if(customerRows.length!==1||!customerRows[0]?.customer_id)return {code:'NOT_FOUND',message:CUSTOMER_CREDIT_COPY.notFound};
+      const originalIdentity=customerRows[0];
+      const collection=originalIdentity.order_id===null?parseInvoiceCollectionOriginal((originalIdentity.snapshot as {collection:unknown}).collection):undefined;
+      if(collection&&input.reissueWithoutShipping)return {code:'VALIDATION_ERROR',message:SHIPPING_FEE_COPY.changed};
       // All credit commands acquire the same customer lock before order/invoice locks.
-      if(input.reissueWithoutShipping)await lockInvoiceCreation(tx,tenantId,{orderId:customerRows[0].order_id,clientEventId:input.reissueWithoutShipping.replacementClientEventId});
+      if(input.reissueWithoutShipping&&originalIdentity.order_id!==null)await lockInvoiceCreation(tx,tenantId,{orderId:originalIdentity.order_id,clientEventId:input.reissueWithoutShipping.replacementClientEventId});
       await tx.execute(sql`SELECT private.lock_customer_credit_v1(${tenantId},${customerRows[0].customer_id})`);
-      const orderRows = await tx.execute<LockedCancellationOrder>(sql`
+      const orderRows = collection?await tx.execute<LockedCancellationOrder>(sql`SELECT id,tenant_id FROM public.orders WHERE tenant_id=${tenantId} AND id IN (${sql.join(collection.members.map(member=>sql`${member.orderId}`),sql`, `)}) ORDER BY id FOR UPDATE`):await tx.execute<LockedCancellationOrder>(sql`
         SELECT orders.id, orders.tenant_id
         FROM public.invoices invoice
         JOIN public.orders orders
@@ -1854,14 +1863,15 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         FOR UPDATE OF orders
       `);
       if (
-        orderRows.length !== 1
+        orderRows.length !== (collection?collection.members.length:1)
         || !orderRows[0]
-        || orderRows[0].tenant_id !== tenantId
+        || orderRows.some(order=>order.tenant_id!==tenantId)
+        || (collection!==undefined&&collection.members.some(member=>!orderRows.some(order=>order.id===member.orderId)))
       ) {
         return { code: "NOT_FOUND", message: "Rechnung nicht verfügbar." };
       }
 
-      const invoiceRows = await tx.execute<LockedInvoice>(sql`
+      const invoiceRows = await tx.execute<Omit<LockedInvoice,'order_id'>&{order_id:string|null}>(sql`
         SELECT
           id, tenant_id, order_id, invoice_number, status, aggregate_version,
           snapshot, due_date, pdf_ref, pdf_sha256, pdf_content,
@@ -1881,7 +1891,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
       if (invoiceRows.length !== 1 || !invoice) {
         return { code: "NOT_FOUND", message: "Rechnung nicht verfügbar." };
       }
-      if (invoice.order_id !== orderRows[0].id) {
+      if (invoice.order_id !== originalIdentity.order_id || (collection===undefined&&invoice.order_id !== orderRows[0].id)) {
         throw new Error("INVOICE_CANCEL_ORDER_INTEGRITY_INVALID");
       }
       if (invoice.status !== "issued" || invoice.aggregate_version !== input.expectedVersion) {
@@ -1916,9 +1926,10 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
       // PL14:03: pre-live originals are readable, never retrofitted. The
       // existing Action observer records this refusal in technical_protocol.
       if(snapshot.schemaVersion!==3)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.legacyCancellation};
+      if(collection&&(!('collection' in snapshot)||canonicalJson(snapshot.collection)!==canonicalJson(collection)))throw Error('INVOICE_CANCEL_COLLECTION_CHANGED');
       assertInvoiceElectronicFields(snapshot);
       let reissue:InvoiceReissueIntent|undefined;
-      if(input.reissueWithoutShipping){
+      if(input.reissueWithoutShipping&&invoice.order_id!==null){
         const manual=await readInvoiceHandoverSource(tx,tenantId,input.reissueWithoutShipping.handoverEventId);
         if(!manualHandoverAllowsReissue(manual,invoice.order_id,snapshot))return {code:'CONFLICT',message:SHIPPING_FEE_COPY.changed};
         reissue={...input.reissueWithoutShipping,originalPdfSha256:invoice.pdf_sha256,orderVersion:manual.order_version,confirmedBy:actorId};
@@ -1982,6 +1993,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
             cancellationPdfSha256,
             invoiceVersion: 2,
             ...(reissue?{reissue}:{}),
+            ...(collection?{collection}:{}),
           })}::jsonb,
           'success', ${STATION}, ${input.clientEventId}::uuid, ${EVENT_SCHEMA_VERSION},
           ${correlationId}::uuid, 2, ${STATION},
@@ -2026,6 +2038,13 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
       `);
       if (updatedRows.length !== 1 || updatedRows[0]?.id !== invoice.id) {
         throw new Error("INVOICE_CANCEL_UPDATE_FAILED");
+      }
+
+      if(collection){
+        const released=await tx.execute<{order_id:string}>(sql`DELETE FROM public.invoice_collection_orders WHERE tenant_id=${tenantId} AND collection_id=${collection.collectionId}::uuid RETURNING order_id`);
+        if(released.length!==collection.members.length||collection.members.some(member=>!released.some(row=>row.order_id===member.orderId)))throw Error('INVOICE_CANCEL_COLLECTION_RELEASE_INCOMPLETE');
+        await tx.execute(sql`SET CONSTRAINTS invoice_collection_original_complete,invoice_collection_original_members IMMEDIATE`);
+        await tx.execute(sql`SET CONSTRAINTS invoice_collection_original_complete,invoice_collection_original_members DEFERRED`);
       }
 
       const receiptRows = await readCancellationInvoiceReceipts(tx,input.clientEventId);
