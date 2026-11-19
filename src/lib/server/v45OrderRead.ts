@@ -48,7 +48,8 @@ const ORDER_U2_BINDINGS={
   'order.notify':({card,invoiceMailOriginals}:OrderContext):OrderCommand|null=>{const original=invoiceMailOriginals?.find(row=>row.orderId===card.id);return original?{datei:'src/app/actions/communications.actions.ts',funktion:'sendCustomerMailAction' satisfies keyof typeof import('@/app/actions/communications.actions'),argumente:{targetType:'ORDER',targetId:card.id,attachment:{kind:'INVOICE',documentId:original.id},expectedInvoiceIds:invoiceMailOriginals!.map(row=>row.id)}}:null;},
   'work.remaining_return':({card}:OrderContext):OrderCommand|null=>card.operationalFacts?.rework===true&&card.operationalFacts.reworkComplaintId?{datei:'src/app/actions/complaints.actions.ts',funktion:'getComplaintDialogAction' satisfies keyof typeof import('@/app/actions/complaints.actions'),argumente:{complaintId:card.operationalFacts.reworkComplaintId}}:null,
   'order.followup_settings':():OrderCommand=>({datei:'src/app/actions/settings.actions.ts',funktion:'readSettingsAction' satisfies keyof typeof import('@/app/actions/settings.actions'),argumente:{}}),
-  'shipping.return_receive':null,'work.resolve':null,'order.delivery':null,'order.term_notify':null,'work.update_customer':null,'order.extra_request':null,'order.collect':null,'shipping.cost':null,'order.remind':null,'order.dunning':null,'order.ship_photo':null,
+  'order.collect':({card}:OrderContext)=>invoiceCommand('addOrderToCollectionAction',{orderId:card.id,expectedVersion:card.version}),
+  'shipping.return_receive':null,'work.resolve':null,'order.delivery':null,'order.term_notify':null,'work.update_customer':null,'order.extra_request':null,'shipping.cost':null,'order.remind':null,'order.dunning':null,'order.ship_photo':null,
  } satisfies Record<string,((context:OrderContext)=>OrderCommand|null)|null>
 };
 
@@ -72,6 +73,11 @@ type ReleaseSource={orderId:string;value:Awaited<ReturnType<typeof readOrderInfo
 export function v45OrderReleaseFacts(card:{id:string;version:number},source?:ReleaseSource):Readonly<Record<string,unknown>>{
  if(!source||source.orderId!==card.id||source.value.code!=='OK'||source.value.orderVersion!==card.version)return {};
  const value=source.value,facts:Record<string,unknown>={};
+ const collection=value.collectionState;
+ if(collection?.orderId===card.id&&collection.orderVersion===card.version
+  &&typeof collection.collectionPlanned==='boolean'&&typeof collection.collectionPrepared==='boolean'){
+  facts.collectionPlanned=collection.collectionPlanned;facts.collectionPrepared=collection.collectionPrepared;
+ }
  if(value.invoiceState==='issued'||value.invoiceState==='not_issued')facts.invoiceIssued=value.invoiceState==='issued';
  if(typeof value.paymentReady==='boolean')facts.paymentReady=value.paymentReady;
  if(value.informed===null)facts.noticeSent=false;
@@ -102,9 +108,13 @@ export function v45OrderSourceFacts(card:{id:string;version:number;handoverMode:
 function readV45OrderRuleRaw(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'customerId'|'title'|'dueAt'|'station'|'handoverMode'|'items'|'operationalFacts'>&Partial<Pick<LiveOrderCard,'customerName'>>,release?:ReleaseSource,evidence?:{orderId:string;records:readonly EvidenceReadRecord[]},sources?:OrderSources){
  const source={kind:'order' as const,id:card.id,version:card.version};
  const missingPhotoItems=evidence?.orderId===card.id?card.items.filter(item=>!evidence.records.some(record=>record.source==='ORDER_STATION_ATTACHMENT'&&record.original.state==='VERIFIED'&&['image/jpeg','image/png','image/webp'].includes(record.original.mimeType??'')&&record.targets.some(target=>target.targetType==='ORDER'&&target.targetId===card.id)&&record.targets.some(target=>target.targetType==='ORDER_ITEM'&&target.targetId===item.id))):null;
- // KORR-S13-1 / PL15.11.15:07: no collection capture path until S38a.
+ // S38a / PL19.11.22:11: captured collection facts now require their qualified source (R1).
  // PL15.11.16:43: packPhoto has no capture path until S37. R15 skips absent facts; malformed supplied facts still stop at R1.
- const rule=readAuthorizedV45Rule(auth,'auftrag',{...v45OrderFacts(card),...v45OrderReleaseFacts(card,release),...v45OrderSourceFacts(card,sources),...(missingPhotoItems!==null?{photosMissing:missingPhotoItems.length>0}:{})},undefined,['workProblem','deliveryRequest','termUpdatePending','workUpdatePending','extraPending','collectionPlanned','collectionPrepared','debtAction','packPhoto']);
+ const facts={...v45OrderFacts(card),...v45OrderReleaseFacts(card,release),...v45OrderSourceFacts(card,sources),...(missingPhotoItems!==null?{photosMissing:missingPhotoItems.length>0}:{})};
+ const evaluated=readAuthorizedV45Rule(auth,'auftrag',facts,undefined,['workProblem','deliveryRequest','termUpdatePending','workUpdatePending','extraPending','debtAction','packPhoto']);
+ // Retain other known source gaps when an earlier bound fact stops the rule chain.
+ const boundGaps=card.station==='fertig'?['collectionPlanned','collectionPrepared','shippingCostMissing','creditApplicable','labelReady'].filter(key=>!Object.hasOwn(facts,key)):[];
+ const rule={...evaluated,datenluecken:[...new Set([...('datenluecken'in evaluated&&Array.isArray(evaluated.datenluecken)?evaluated.datenluecken:[]),...boundGaps])]};
  const first=readV45FirstLook('auftrag',{
   'auftrag.lage':{nummer:card.orderNumber,station:card.station},
   'auftrag.termin':{datum:card.dueAt},
@@ -117,12 +127,12 @@ function readV45OrderRuleRaw(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,
  if(rule.code!=='OK'){
   // A denied financial/evidence source is not a negative fact. Expose only the
   // existing action permission result, never a balance or inferred calm state.
-  const factActions:Readonly<Record<string,string>>={shippingCostMissing:'shipping.cost',creditApplicable:'order.apply_credit',overdue:'order.customer_debt',labelReady:'order.ship_prepare',packPhoto:'order.ship_photo'};
-  const gesperrt='missing'in rule&&Array.isArray(rule.missing)?rule.missing.flatMap(key=>{
-   const action=factActions[key];if(!action)return [];
+  const factActions:Readonly<Record<string,string>>={collectionPlanned:'order.collect',collectionPrepared:'order.collect',shippingCostMissing:'shipping.cost',creditApplicable:'order.apply_credit',overdue:'order.customer_debt',labelReady:'order.ship_prepare',packPhoto:'order.ship_photo'};
+  const missing='missing'in rule&&Array.isArray(rule.missing)?[...rule.missing,...boundGaps]:boundGaps;
+  const gesperrt=[...new Set(missing.map(key=>factActions[key]).filter((action):action is string=>typeof action==='string'))].flatMap(action=>{
    const access=readAuthorizedV45Action(auth,action);
    return access.code==='OK'?access.gesperrt:[];
-  }):[];
+  });
   return {...rule,source,gesperrt,erstblick:first.erstblick,datenluecken:[...first.datenluecken,...('datenluecken'in rule&&Array.isArray(rule.datenluecken)?rule.datenluecken:[])]};
  }
  const actions=readV45ObjectActionAbsence('auftrag',rule.zustand);

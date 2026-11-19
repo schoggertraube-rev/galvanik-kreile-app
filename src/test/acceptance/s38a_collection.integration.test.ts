@@ -10,6 +10,7 @@ import {customerFixture,readyOrderForInvoice} from '../../../e2e/ablauf/orderFix
 import {saveCustomerAgreementAction} from '@/app/actions/customers.actions';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
 import {issueInvoiceAction,addOrderToCollectionAction} from '@/app/actions/invoices.actions';
+import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 
 beforeAll(()=>{
  const url=process.env.DATABASE_URL;
@@ -23,7 +24,20 @@ it('A38a A5/A6 joins two actual handovers to one open monthly collection and rej
  if(saved.code!=='OK')throw Error('TEST_S38A_COLLECTION_AGREEMENT:'+saved.code);
  const agreement={id:saved.agreement.id,version:saved.agreement.version,type:'sammelrechnung' as const};
  const [ready]=await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${orders[0].orderId}`;
- const planInput={orderId:orders[0].orderId,expectedVersion:ready.version,clientEventId:randomUUID()};
+ const other=await createFixture(['preise']),denied=await createFixture(['auftraege']);
+ const deniedCard=await withSession(denied,()=>getLiveOrderCardAction({orderId:orders[0].orderId}));
+ expect(deniedCard,JSON.stringify(deniedCard)).toMatchObject({code:'OK',data:{customerInformed:{code:'OK',collectionState:{collectionPlanned:true,collectionPrepared:false}},nextActionRule:{hauptaktion:null}}});
+ if(deniedCard.code!=='OK')throw Error('TEST_COLLECTION_READ_RIGHT_REQUIRED');
+ expect(deniedCard.data.nextActionRule?.gesperrt).toContainEqual({elementId:'order.collect',grundKey:'error.permission'});
+ if(deniedCard.data.customerInformed?.code==='OK')expect(deniedCard.data.customerInformed.collectionState).not.toHaveProperty('targetDays');
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:orders[0].orderId}));
+ expect(card,JSON.stringify(card)).toMatchObject({code:'OK',data:{customerInformed:{code:'OK',collectionState:{collectionPlanned:true,collectionPrepared:false}}}});
+ if(card.code!=='OK')throw Error('TEST_COLLECTION_PLAN_CARD_REQUIRED');
+ const primary=card.data.nextActionRule?.hauptaktion;
+ expect(primary,JSON.stringify(card.data.nextActionRule)).toMatchObject({befehl:{funktion:'addOrderToCollectionAction',argumente:{orderId:orders[0].orderId,expectedVersion:ready.version}}});
+ if(!primary)throw Error('TEST_COLLECTION_PLAN_COMMAND_REQUIRED');
+ const bound=JSON.parse(JSON.stringify(primary.befehl.argumente)) as Pick<Parameters<typeof addOrderToCollectionAction>[0],'orderId'|'expectedVersion'>;
+ const planInput={...bound,clientEventId:randomUUID()};
  const planned=await Promise.all([withSession(full,()=>addOrderToCollectionAction(planInput)),withSession(full,()=>addOrderToCollectionAction(JSON.parse(JSON.stringify(planInput))))]);
  expect(planned.filter(row=>row.code==='OK'&&!row.replayed)).toHaveLength(1);
  expect(planned.filter(row=>row.code==='OK'&&row.replayed)).toHaveLength(1);
@@ -34,7 +48,6 @@ it('A38a A5/A6 joins two actual handovers to one open monthly collection and rej
  expect(await withSession(full,()=>addOrderToCollectionAction(JSON.parse(JSON.stringify(planInput))))).toEqual({...plan,replayed:true});
  expect(await withSession(full,()=>addOrderToCollectionAction({...planInput,clientEventId:randomUUID()}))).toEqual({...plan,replayed:true});
  expect(await withSession(full,()=>addOrderToCollectionAction({...planInput,expectedVersion:ready.version+1,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
- const other=await createFixture(['preise']),denied=await createFixture(['auftraege']);
  expect(await withSession(other,()=>addOrderToCollectionAction(planInput))).toMatchObject({code:'CONFLICT'});
  expect(await withSession(denied,()=>addOrderToCollectionAction(planInput))).toMatchObject({code:'FORBIDDEN'});
  expect(await sql`SELECT id FROM public.invoice_collections WHERE tenant_id=${tenant} AND customer_id=${customerId}`).toHaveLength(0);
@@ -49,6 +62,10 @@ it('A38a A5/A6 joins two actual handovers to one open monthly collection and rej
   throw Error('TEST_ABORT_UNEXPECTED_PLAN_MUTATION');
  })).rejects.toThrow('GoBD: Audit-Log ist append-only');
  expect(await sql`SELECT row_to_json(e)::jsonb AS original FROM public.events e WHERE tenant_id=${tenant} AND id=${plan.receipt.eventId}`).toEqual([originalPlan]);
+ const afterPlan=await withSession(full,()=>getLiveOrderCardAction({orderId:orders[0].orderId}));
+ expect(afterPlan,JSON.stringify(afterPlan)).toMatchObject({code:'OK',data:{customerInformed:{code:'OK',collectionState:{collectionPlanned:true,collectionPrepared:true,preparationEventId:plan.receipt.eventId,collectionId:null}}}});
+ if(afterPlan.code!=='OK')throw Error('TEST_COLLECTION_PREPARED_READ_REQUIRED');
+ expect(afterPlan.data.nextActionRule?.hauptaktion?.elementId).not.toBe('order.collect');
  for(const order of orders){
   const [source]=await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${order.orderId}`;
   const input={orderId:order.orderId,mode:'abholung' as const,expectedVersion:source.version,clientEventId:randomUUID(),agreement};

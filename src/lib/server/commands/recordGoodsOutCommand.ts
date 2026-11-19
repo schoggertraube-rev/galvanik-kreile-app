@@ -271,18 +271,17 @@ function logDatabaseFailure(error: unknown): void {
   });
 }
 
+const GOODS_OUT_EVENT_COLUMNS=sql`id AS event_id, tenant_id, order_id, client_event_id::text,
+ correlation_id::text, event_schema_version, aggregate_version, user_id::text AS actor_id,
+ to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
+ status, station, from_station, event_type, payload`;
 async function readEventsByClientId(
   tx: PrivilegedTenantTransaction,
   tenantId: string,
   clientEventId: string,
 ): Promise<GoodsOutEventRow[]> {
   return tx.execute<GoodsOutEventRow>(sql`
-    SELECT
-      id AS event_id, tenant_id, order_id, client_event_id::text,
-      correlation_id::text, event_schema_version, aggregate_version,
-      user_id::text AS actor_id,
-      to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
-      status, station, from_station, event_type, payload
+    SELECT ${GOODS_OUT_EVENT_COLUMNS}
     FROM public.events
     WHERE tenant_id = ${tenantId}
       AND client_event_id = ${clientEventId}::uuid
@@ -560,6 +559,32 @@ function collectionPlanReceipt(row:GoodsOutEventRow,tenantId:string):InvoiceColl
   ||payload.receiptSha256!==collectionPlanDigest(receipt)
   ||payload.intent!==collectionPlanDigest({orderId:receipt.orderId,expectedVersion:receipt.orderVersion,clientEventId:receipt.clientEventId}))throw Error('COLLECTION_PLAN_RECEIPT_INVALID');
  return receipt;
+}
+
+/** Read-only projection of the same immutable preparation and actual membership.
+ * PL22:11 / N-Fakt-01: agreement plans; only a real receipt/member prepares. */
+export async function readOrderCollectionStateInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;orderVersion:number;customerId:string;freezeId:string|null;goodsOutEventId:string|null}){
+ const agreement=await readEffectiveCustomerAgreement(tx,{tenantId:auth.tenantId,customerId:input.customerId,orderId:input.orderId});
+ const rows=await tx.execute<GoodsOutEventRow>(sql`SELECT ${GOODS_OUT_EVENT_COLUMNS} FROM public.events
+  WHERE tenant_id=${auth.tenantId} AND order_id=${input.orderId} AND event_type=${COLLECTION_PLAN_EVENT}
+  ORDER BY created_at,id LIMIT 1001`);
+ if(rows.length>1000)throw Error('COLLECTION_PLAN_READ_LIMIT');
+ const plans=rows.map(row=>collectionPlanReceipt(row,auth.tenantId));
+ if(plans.some(plan=>plan.orderId!==input.orderId||plan.orderVersion>input.orderVersion))throw Error('COLLECTION_PLAN_ORDER_VERSION_INVALID');
+ const active=plans.filter(plan=>plan.freezeId===input.freezeId);
+ if(active.length>1||active.some(plan=>plan.customerId!==input.customerId))throw Error('COLLECTION_PLAN_ACTIVE_SOURCE_INVALID');
+ const members=await tx.execute<{collection_id:string;customer_id:string;source_valid:boolean}>(sql`
+  SELECT member.collection_id::text,collection.customer_id,
+   EXISTS(SELECT 1 FROM public.events physical WHERE physical.tenant_id=member.tenant_id AND physical.order_id=member.order_id
+    AND physical.id=${input.goodsOutEventId} AND physical.event_type='ORDER_PICKED_UP_V3' AND physical.event_schema_version=3
+    AND physical.status='success' AND physical.payload->>'settlement'='collection'
+    AND to_char(physical.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin','YYYY-MM-01')=to_char(collection.monat,'YYYY-MM-01')) AS source_valid
+  FROM public.invoice_collection_orders member JOIN public.invoice_collections collection ON collection.tenant_id=member.tenant_id AND collection.id=member.collection_id
+  WHERE member.tenant_id=${auth.tenantId} AND member.order_id=${input.orderId} LIMIT 2`);
+ if(members.length>1||members.some(member=>member.customer_id!==input.customerId||member.source_valid!==true))throw Error('COLLECTION_MEMBER_READ_SOURCE_INVALID');
+ const prepared=active.length===1||members.length===1;
+ return {orderId:input.orderId,orderVersion:input.orderVersion,collectionPlanned:agreement?.type==='sammelrechnung'||prepared,
+  collectionPrepared:prepared,preparationEventId:active[0]?.eventId??null,collectionId:members[0]?.collection_id??null};
 }
 
 /** Same collection writer, preparation phase only; actual attachment stays in physical completion. */
