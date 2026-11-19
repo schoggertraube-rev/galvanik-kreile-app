@@ -108,6 +108,7 @@ export type OrderPaymentState = {
 };
 
 export type OrderPaymentStateRow = {
+  payment_collection_source?:unknown;
   order_id: string;
   tenant_id: string;
   order_number: string;
@@ -376,8 +377,9 @@ export function mapOrderPaymentStateRow(
     payment = mapPaymentSummaryRow({
       invoice_id: row.invoice_id,
       tenant_id: row.tenant_id,
-      order_id: row.order_id,
-      order_number: row.order_number,
+      order_id: row.payment_collection_source == null ? row.order_id : null,
+      order_number: row.payment_collection_source == null ? row.order_number : null,
+      collection_source: row.payment_collection_source,
       invoice_number: row.invoice_number,
       total_amount_cents: row.total_amount_cents as number | string,
       payment_contract_version: row.payment_contract_version,
@@ -391,7 +393,7 @@ export function mapOrderPaymentStateRow(
       payment_receipt_id: row.payment_receipt_id,
       payment_event_id: row.payment_event_id,
       payment_correlation_id: row.payment_correlation_id,
-      payment_mode_version: row.payment_mode_version,
+      payment_mode_version: row.payment_collection_source == null ? row.payment_mode_version : null,
       payment_version: row.payment_version,
       goods_out_allowed: row.payment_goods_out_allowed,
       integrity_ok: row.payment_integrity_ok,

@@ -15,7 +15,7 @@ import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {sql as statement} from 'drizzle-orm';
 import {confirmPaymentAction} from '@/app/actions/payments.actions';
-import {readPaymentSummary} from '@/lib/server/paymentSummaryRead';
+import {readPaymentSummary,getPaymentState} from '@/lib/server/paymentSummaryRead';
 
 async function historicalCollection(rates:readonly number[]){
  if(!tenant.startsWith('TEST-ablauf-')||rates.length!==3)throw Error('TEST_HISTORICAL_SOURCE_REQUIRED');
@@ -168,4 +168,8 @@ it('native payment uses the existing payment command once and the global reader 
  const summary=await readPaymentSummary(auth.data);expect(summary.code).toBe('OK');if(summary.code!=='OK')throw Error('TEST_NATIVE_PAYMENT_READ_REQUIRED');
  expect(summary.data.filter(row=>row.invoiceId===issue.receipt.invoiceId)).toMatchObject([{invoiceId:issue.receipt.invoiceId,orderId:null,totalAmountCents:11900,paidAmountCents:4000,openAmountCents:7900}]);
  expect(await sql`SELECT order_id,amount_eur::text FROM public.payments WHERE tenant_id=${tenant} AND invoice_id=${issue.receipt.invoiceId}::uuid`).toEqual([{order_id:null,amount_eur:'40.00'}]);
+ for(const member of source.members){
+  const state=await getPaymentState(auth.data,member.orderId);
+  expect(state,JSON.stringify(state)).toMatchObject({code:'OK',data:{orderId:member.orderId,invoiceState:'issued',paymentActorId:payer.actorId,payment:{invoiceId:issue.receipt.invoiceId,orderId:null,paidAmountCents:4000,openAmountCents:7900,collection:{collectionId:source.collectionId}}}});
+ }
 });
