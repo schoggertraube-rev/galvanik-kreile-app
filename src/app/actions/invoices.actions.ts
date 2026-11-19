@@ -1,4 +1,5 @@
 "use server";
+import {readCustomerInvoiceTerms} from '@/modules/customers/server-public';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {readInvoiceVat} from "@/modules/accounting/server-public";
@@ -53,7 +54,7 @@ export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<Cre
  return observeAction('issueInvoiceAction',subjectForAction('issueInvoiceAction',input),async()=>{
   const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
   const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
-  const result = await createInvoice(input,undefined,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf);
+  const result = await createInvoice(input,undefined,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms);
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
     revalidatePath("/warendurchlauf");

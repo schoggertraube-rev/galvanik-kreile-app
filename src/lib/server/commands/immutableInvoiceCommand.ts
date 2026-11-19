@@ -1,3 +1,4 @@
+import {resolveInvoicePaymentTerms,parseInvoicePaymentTerms,type InvoicePaymentTerms} from '@/lib/domain/invoicePaymentTerms';
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {isCancelInvoiceInput as isValidCancelInput,type CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 export type {CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
@@ -514,6 +515,7 @@ function parseStoredSnapshot(value: unknown, invoice: {order_id:string}, readVat
   if (!plainObject(value) || !exactKeys(value, [
     "customer", "issuedAt", "lines", "order", "paymentTermDays", "schemaVersion",
     "seller", "serviceDate", "totals",
+    ...(Object.hasOwn(value,"terms")?["terms"]:[]),
   ])) throw new Error("INVOICE_SNAPSHOT_SHAPE_INVALID");
   if ((value.schemaVersion !== 1 && value.schemaVersion !== 2 && value.schemaVersion !== 3) || !plainObject(value.seller) || !plainObject(value.customer)
     || !plainObject(value.order) || !plainObject(value.totals) || !Array.isArray(value.lines)) {
@@ -594,6 +596,7 @@ function parseStoredSnapshot(value: unknown, invoice: {order_id:string}, readVat
     serviceDate,
     issuedAt,
     paymentTermDays,
+    ...(Object.hasOwn(value,"terms")?{terms:parseInvoicePaymentTerms(value.terms,paymentTermDays)}:{}),
   } as ImmutableInvoiceSnapshot;
 }
 
@@ -1164,7 +1167,7 @@ export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantI
   return selected.length===1?selected[0].customer_id:null;
 }
 
-export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader,readShippingSettings?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>,readOriginal?:InvoiceOriginalReader): Promise<CreateInvoiceResult> {
+export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader,readShippingSettings?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>,readOriginal?:InvoiceOriginalReader,readCustomerTerms?:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<Parameters<typeof resolveInvoicePaymentTerms>[1]>): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
     const zeroShippingFee=plainObject(input)&&plainObject(input.shippingCosts)&&input.shippingCosts.expectedFeeCents===0;
     return { code: "VALIDATION_ERROR", message: zeroShippingFee?SHIPPING_FEE_COPY.noAdditionalInvoiceNeeded:"Ungültige Rechnungsanfrage." };
@@ -1242,9 +1245,11 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       ) {
         return { code: "VALIDATION_ERROR", message: "Zahlungsmodus des Auftrags ist nicht verfügbar." };
       }
-      const agreement = input.agreement === undefined
-        ? null
-        : await readEffectiveCustomerAgreement(tx, {
+      // Keep customer master data stable before reading the agreement and
+      // invoice source; do not mix two customer versions in one original.
+      if(!readCustomerTerms)throw Error('INVOICE_CUSTOMER_TERMS_PORT_MISSING');
+      const customerInvoiceTerms=await readCustomerTerms(tx,tenantId,order.customer_id);
+      const agreement = await readEffectiveCustomerAgreement(tx, {
             tenantId,
             customerId: order.customer_id,
             orderId: order.id,
@@ -1362,19 +1367,9 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
 
-      const sourcePaymentTermDays = toSafeInteger(source.invoice_payment_term_days, "INVOICE_PAYMENT_TERM_INVALID");
-      const requestedPaymentTermDays = agreement?.type === "zahlungsziel"
-        ? agreement.targetDays
-        : sourcePaymentTermDays;
-      if (
-        typeof requestedPaymentTermDays !== "number"
-        || !Number.isSafeInteger(requestedPaymentTermDays)
-        || requestedPaymentTermDays < 1
-        || requestedPaymentTermDays > 365
-      ) {
-        return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
-      }
-      const paymentTermDays = requestedPaymentTermDays;
+      const frozenInvoiceTerms=resolveInvoicePaymentTerms(source.invoice_payment_term_days,
+        customerInvoiceTerms,agreement);
+      const paymentTermDays=frozenInvoiceTerms.ziel_tage;
 
       // Every master-data dependent value is built before a number exists, so
       // an incomplete tenant, customer, order or position cannot consume one.
@@ -1417,7 +1412,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         if(!unchanged)throw Error('QUOTE_COMMERCIAL_TERMS_CHANGED_DURING_INVOICE');
       }
 
-      return persistPreparedInvoice(tx,authorization.data,input,order,content,{paymentTermDays,serviceDate:source.service_date,freezeId:source.freeze_id,afterGoodsOut,originalInvoiceNumber},requireVatReader(readVat),readOriginal);
+      return persistPreparedInvoice(tx,authorization.data,input,order,content,{paymentTermDays,frozenInvoiceTerms,serviceDate:source.service_date,freezeId:source.freeze_id,afterGoodsOut,originalInvoiceNumber},requireVatReader(readVat),readOriginal);
     };
     return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
   } catch (error) {
@@ -1451,7 +1446,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
 }
 
 /** Single existing number/PDF/payment/event/receipt writer, shared by qualified preparations. */
-async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,content:PreparedInvoiceContent,terms:{paymentTermDays:number;serviceDate:Date|string;freezeId:string;afterGoodsOut:boolean;originalInvoiceNumber?:string;reissue?:NonNullable<ImmutableInvoiceReceiptBase['reissue']>},readVat:InvoiceVatReader,readOriginal?:InvoiceOriginalReader):Promise<Extract<CreateInvoiceResult,{code:'OK'}>>{
+async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,content:PreparedInvoiceContent,terms:{paymentTermDays:number;frozenInvoiceTerms?:InvoicePaymentTerms;serviceDate:Date|string;freezeId:string;afterGoodsOut:boolean;originalInvoiceNumber?:string;reissue?:NonNullable<ImmutableInvoiceReceiptBase['reissue']>},readVat:InvoiceVatReader,readOriginal?:InvoiceOriginalReader):Promise<Extract<CreateInvoiceResult,{code:'OK'}>>{
   if(!('vatId'in content.seller)||!('taxNumber'in content.seller))throw new InvoiceElectronicSourceError({kind:'settings',field:'taxId'});
   if(!content.seller.vatId&&!content.seller.taxNumber)throw new InvoiceElectronicSourceError({kind:'settings',field:'taxId'});
   assertInvoiceElectronicFields({...content,seller:content.seller,serviceDate:toDateOnly(terms.serviceDate),paymentTermDays:terms.paymentTermDays});
@@ -1496,6 +1491,7 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
     serviceDate,
     issuedAt: issuedAtIso,
     paymentTermDays,
+    ...(terms.frozenInvoiceTerms?{terms:terms.frozenInvoiceTerms}:{}),
   };
 
   let pdfBuffer: Buffer;
@@ -1943,7 +1939,7 @@ async function issueInvoiceReplacement(tx:PrivilegedTenantTransaction,auth:Autho
  const sums=invoiceLineTotals(source.goods),snapshot=source.snapshot;
  const content:PreparedInvoiceContent={seller:snapshot.seller,customer:snapshot.customer,order:{...snapshot.order,orderVersion:order.version},lines:source.goods,
   totals:{netAmountCents:sums.netAmountCents,vatAmountCents:sums.vatAmountCents,grossAmountCents:sums.grossAmountCents,vatRateBasisPoints:null,vatBreakdown:sums.vatBreakdown}};
- await persistPreparedInvoice(tx,auth,{...input,expectedVersion:order.version},order,content,{paymentTermDays:snapshot.paymentTermDays,serviceDate:snapshot.serviceDate,freezeId:source.original.freeze_id,afterGoodsOut:false,
+ await persistPreparedInvoice(tx,auth,{...input,expectedVersion:order.version},order,content,{paymentTermDays:snapshot.paymentTermDays,frozenInvoiceTerms:snapshot.terms,serviceDate:snapshot.serviceDate,freezeId:source.original.freeze_id,afterGoodsOut:false,
   reissue:{cancellationEventId:source.receipt.eventId,confirmedBy:source.receipt.cancelledBy,repairActorId:auth.userId}},readVat,readOriginal);
  const proof=await readInvoiceReissueSource(tx,auth.tenantId,key,readVat);
  if(!proof?.replacement)throw Error('INVOICE_REISSUE_RECEIPT_MISSING');

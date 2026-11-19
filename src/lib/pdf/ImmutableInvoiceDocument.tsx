@@ -1,3 +1,4 @@
+import type {InvoicePaymentTerms} from '@/lib/domain/invoicePaymentTerms';
 import {customerCountryLabel} from '@/modules/customers/public';
 import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
@@ -89,6 +90,8 @@ type InvoiceSnapshotContent = {
   serviceDate: string;
   issuedAt: string;
   paymentTermDays: number;
+  /** Absent only on historical originals; never inferred while reading. */
+  terms?:InvoicePaymentTerms;
 };
 
 export type ImmutableInvoiceSnapshot = InvoiceSnapshotContent & (

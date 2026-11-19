@@ -57,6 +57,7 @@
     "@/modules/customers/server-public#updateCustomerCommand",
     "@/modules/customers/server-public#readCustomerAddress",
     "@/modules/customers/server-public#readCustomerProfile",
+    "@/modules/customers/server-public#readCustomerInvoiceTerms",
     "@/modules/customers/server-public#enableCustomerInvoiceTermsCommand",
     "@/modules/customers/server-public#saveCustomerAgreementCommand",
     "@/modules/customers/server-public#revokeCustomerAgreementCommand",
