@@ -1,4 +1,6 @@
+'use client';
 import type { ButtonHTMLAttributes } from 'react';
+import {useVorfinalStyle} from '@/ui/useVorfinalStyle';
 import { Icon, type IconName } from './Icon';
 import { cx } from './typen';
 import { tippen } from './haptik';
@@ -8,7 +10,17 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 }
 /** Touch-Ziel ≥ 48px. primär = Navy · erledigen = Grün · gefährlich = RAL-Rot · Marke = Verlauf */
 export function Button({ art = 'standard', icon, text, label, block, className, type = 'button', onClick, ...rest }: ButtonProps) {
+  const vorfinal=useVorfinalStyle();
   const haptisch = art === 'primaer' || art === 'erledigen' || art === 'marke';
+  // v10 act(label, attrs): unchanged default arrow, nub and completion SVG.
+  // Existing flow text, disabled state and callback remain the actual command.
+  if(vorfinal && text && (art==='primaer'||art==='erledigen'))return (
+    <button type={type} className={cx('act',className)} data-glass="act" data-tint="go"
+      onClick={event=>{if(haptisch)tippen();onClick?.(event);}} {...rest}>
+      <span className="lbl">{text}</span><span className="nub"><Icon variant="vorfinal" name="arrow"/></span>
+      <svg className="okmark" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+    </button>
+  );
   return (
     <button type={type} aria-label={text ? undefined : label} title={text ? undefined : label}
       className={cx('kr-btn', art !== 'standard' && 'kr-btn--' + art, !text && 'kr-btn--icon', block && 'kr-btn--block', className)}

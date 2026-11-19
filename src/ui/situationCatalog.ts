@@ -477,3 +477,8 @@ export const E_INVOICE_CORRECTION_COPY={
  done:(nr:string)=>`Auftrag ${nr} ist wieder offen. Korrigiere das Feld und melde ihn erneut fertig.`,
  failed:'Auftrag konnte nicht wieder geöffnet werden. Versuch es gleich noch einmal.',
 } as const;
+
+/** Owner 19.11.: literal vorfinal source copy, separate from frozen V45 flows. */
+export const VORFINAL_COPY = {
+  "vorfinal.kopf.plus.label": "Neuer Eingang",
+} as const;

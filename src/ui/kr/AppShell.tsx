@@ -79,13 +79,16 @@ export function SeitenKopf({ titel, werkzeug }: SeitenKopfProps) {
   return <div className="kr-seite-kopf"><h1 className="kr-seite-titel">{titel}</h1>{werkzeug && <div className="kr-seite-werkzeug">{werkzeug}</div>}</div>;
 }
 /** Runde 52: ein Größenkontext für Seite und alle darüber geöffneten Ebenen. */
-export function KrApp({ geraet, children, portal = false }: { geraet: Geraet; children: ReactNode; portal?: boolean }) {
+export function KrApp({ geraet, children, portal = false, vorfinal }: { geraet: Geraet; children: ReactNode; portal?: boolean; vorfinal?:boolean }) {
+  const parent=useContext(GeraetContext);
   const groesse = geraet === 'desktop' ? 'v11' : geraet === 'tablet' ? 'dicht' : 'v8';
-  return <GeraetContext.Provider value={geraet}><div className="kr-app" data-geraet={geraet} data-groesse={groesse} onKeyDown={weiterMitEnter} style={portal ? { position: 'fixed', inset: 0, height: '100dvh', zIndex: 50, background: 'transparent', pointerEvents:'none' } : undefined}>{children}</div></GeraetContext.Provider>;
+  return <GeraetContext.Provider value={{geraet,vorfinal:vorfinal??parent.vorfinal}}><div className="kr-app" data-geraet={geraet} data-groesse={groesse} onKeyDown={weiterMitEnter} style={portal ? { position: 'fixed', inset: 0, height: '100dvh', zIndex: 50, background: 'transparent', pointerEvents:'none' } : undefined}>{children}</div></GeraetContext.Provider>;
 }
 
-const GeraetContext = createContext<Geraet>('desktop');
-export const useKrGeraet = () => useContext(GeraetContext);
+const GeraetContext = createContext<{geraet:Geraet;vorfinal:boolean}>({geraet:'desktop',vorfinal:false});
+export const useKrGeraet = () => useContext(GeraetContext).geraet;
+/** Existing presentation context only; this Boolean never grants a command. */
+export const useKrVorfinalStyle = () => useContext(GeraetContext).vorfinal;
 
 /** Runde 52: dieselben tatsächlichen Hinweise auf Tablet oberhalb einklappbar. */
 export function PruefRail({ children, offeneAngaben }: { children: ReactNode; offeneAngaben: number }) {

@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Suspense, type CSSProperties } from "react";
 import { fraunces, geistMono, inter } from "./fonts/localFonts";
 import "./globals.css";
-import "../../docs/project/endversion/ui/endversion_design.css";
+import {readRootStyle} from '@/ui/vorfinalStyle';
 
 export const viewport: Viewport = {
   themeColor: "#091223",
@@ -45,6 +45,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const authState = await getAuthBootstrapAction();
+  const rootStyle=readRootStyle(authState.status,authState.status==='authenticated'?authState.user.packageSwitches:undefined);
   const isAdmin =
     authState.status === "authenticated" &&
     authState.user.permissions.includes("perm_sys_diag");
@@ -52,6 +53,7 @@ export default async function RootLayout({
   return (
     <html
       lang="de"
+      data-ui={rootStyle.dataUi}
       data-auth-status={authState.status}
       data-offline-scope={authState.status==='authenticated'?authState.user.offlineScope:undefined}
       data-offline-login-scope={authState.status==='authenticated'?authState.user.offlineLoginScope:undefined}
@@ -59,6 +61,7 @@ export default async function RootLayout({
       className={`${fraunces.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
       style={{ "--sans": inter.style.fontFamily, "--serif": fraunces.style.fontFamily } as CSSProperties}
     >
+      <head><style data-kreile-style={rootStyle.enabled?'vorfinal-v10':'legacy'} dangerouslySetInnerHTML={{__html:rootStyle.css}} /></head>
       <body className="h-full">
         <ServiceWorkerRegister />
         <OfflineLogoutNotice />
@@ -69,7 +72,7 @@ export default async function RootLayout({
               <ProtocolClickCapture />
               <DiagnosticsProvider>
                 <FeatureFlagProvider offline24hEnabled={authState.status === 'authenticated' && authState.user.offline24h === true}>
-                  <KreileAppShell loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>
+                  <KreileAppShell vorfinalStyle={rootStyle.enabled} loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>
                     {children}
                   </KreileAppShell>
                 </FeatureFlagProvider>

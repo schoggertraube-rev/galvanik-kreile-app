@@ -64,7 +64,7 @@ function berlinDate() {
   }).format(new Date());
 }
 
-export function KreileAppShell({ children, globalCreate,loginHandle }: { children: React.ReactNode; globalCreate?: React.ReactNode;loginHandle?:string }) {
+export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyle=false }: { children: React.ReactNode; globalCreate?: React.ReactNode;loginHandle?:string;vorfinalStyle?:boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const permissions = usePermissions();
@@ -115,7 +115,7 @@ export function KreileAppShell({ children, globalCreate,loginHandle }: { childre
     <>
       <SessionWarningBanner show={sessionInvalid} />
       <div style={{ height: "100dvh" }}>
-        <KrApp geraet={device}>
+        <KrApp geraet={device} vorfinal={vorfinalStyle}>
           <AppShell
           geraet={device}
           zustand={permissions.offline24h?<DeviceStandStatus/>:null}

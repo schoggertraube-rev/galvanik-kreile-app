@@ -66,6 +66,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `SHIPPING_FEE_COPY.line`: "Versand" → `order.shipping`, `settings.group.versand`, `ws.shipped`
 - `E_INVOICE_SETTINGS_COPY.fieldLabels.paymentTermDays`: "Zahlungsziel in Tagen" → `customer.terms_days`
 - `E_INVOICE_CORRECTION_COPY.cancel`: "Abbrechen" → `common.cancel`
+- `VORFINAL_COPY.vorfinal.kopf.plus.label`: "Neuer Eingang" → `intake.title`, `nav.eingang`, `nav.entry`
 
 ## Ähnlicher Wortlaut (98)
 
