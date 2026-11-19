@@ -66,7 +66,9 @@ it('search preserves proven order hits when a separate customer source cannot re
  const customerId=await customerFixture('PARTIAL');
  const order=await searchOrderFixture(needle,customerId);
  // Explicit malformed historical TEST data, not a DB/auth mock or production mutation.
- await sql`INSERT INTO public.customers(id,tenant_id,name,company_name,type,phone,source) VALUES(${'TEST-unreadable-'+randomUUID()},${KREILE_TENANT_SLUG},'',NULL,'business',${'+'+needle},'manual')`;
+ const legacyCustomerId='TEST-unreadable-'+randomUUID();
+ await sql`INSERT INTO public.customers(id,tenant_id,name,company_name,type,phone,source) VALUES(${legacyCustomerId},${KREILE_TENANT_SLUG},'',NULL,'business',${'+'+needle},'manual')`;
+ try {
  const {searchTenantAction}=await import('@/app/actions/search.actions');
  const found=await withSession(full,()=>searchTenantAction(needle));
  expect(found).toMatchObject({code:'OK',hits:expect.arrayContaining([expect.objectContaining({type:'ORDER',id:order.receipt.orderId})]),failedSources:['Kundenstamm'],coverage:{truncated:true}});
@@ -74,6 +76,9 @@ it('search preserves proven order hits when a separate customer source cannot re
  expect(found.checkedSources).toContain('Auftragsbestand');
  expect(found.checkedSources).not.toContain('Kundenstamm');
  expect(found.hits.some(hit=>hit.type==='CUSTOMER')).toBe(false);
+ } finally {
+  await sql`UPDATE public.customers SET name='TEST wieder lesbare Altkundenquelle' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${legacyCustomerId}`;
+ }
 });
 
 it('search preserves the customer hit and reports incomplete coverage when an actual legacy order cannot be read',async()=>{
