@@ -84,6 +84,15 @@ export async function issueCollectionInvoiceAction(input:import('@/lib/domain/in
  },readLoggingSettings);
 }
 
+export async function removeOrderFromCollectionAction(input:import('@/lib/domain/invoiceCollectionContract').InvoiceCollectionRemoveInput){
+ return observeAction('removeOrderFromCollectionAction',subjectForAction('removeOrderFromCollectionAction',input),async()=>{
+  const {removeOrderFromCollection}=await import('@/lib/server/commands/recordGoodsOutCommand');
+  const result=await removeOrderFromCollection(input);
+  if(result.code==='OK'){revalidatePath('/orders');revalidatePath('/buchhaltung/rechnungen');}
+  return result;
+ },readLoggingSettings);
+}
+
 export async function setInvoiceItemPricesAction(
   input: SetInvoiceItemPricesInput,
 ): Promise<SetInvoiceItemPricesResult> {

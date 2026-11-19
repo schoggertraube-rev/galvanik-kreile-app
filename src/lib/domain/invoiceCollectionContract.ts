@@ -11,6 +11,8 @@ export type InvoiceCollectionOriginal={
 /** PL19.11.16:22: preparation has no planned month and no billable membership. */
 export type InvoiceCollectionPlanInput={orderId:string;expectedVersion:number;clientEventId:string};
 export type InvoiceCollectionPlanReceipt={eventId:string;orderId:string;orderVersion:number;customerId:string;freezeId:string;agreementId:string;agreementVersion:number;actorId:string;clientEventId:string;recordedAt:string;collectionPlanned:true};
+export type InvoiceCollectionRemoveInput={collectionId:string;orderId:string;expectedVersion:number;clientEventId:string};
+export type InvoiceCollectionRemoveReceipt={eventId:string;orderId:string;orderVersion:number;customerId:string;collectionId:string;collectionVersion:number;collectionVersionAfter:number;goodsOutEventId:string;memberCreatedAt:string;actorId:string;clientEventId:string;recordedAt:string};
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 function object(value:unknown):value is Record<string,unknown>{return value!==null&&typeof value==='object'&&!Array.isArray(value);}
 function keys(value:Record<string,unknown>,expected:string){return Object.keys(value).sort().join(',')===expected;}

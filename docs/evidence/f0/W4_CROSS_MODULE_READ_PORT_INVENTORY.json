@@ -31,7 +31,7 @@
       "private.v_extra_work_rate_receipts_v1"
     ],
     "src/lib/server/commands/immutableInvoiceCommand.ts": [
-      "private.v_goods_out_receipt_v2",
+      "private.v_goods_out_ui_state_v1",
       "private.v_invoice_created_receipt_v2",
       "private.v_invoice_issue_source_v2",
       "private.v_invoice_receipt_v1",
@@ -165,6 +165,7 @@
       "private.v_order_task_assignment_v1"
     ],
     "src/lib/server/paymentContract.ts": [
+      "private.v_invoice_order_members_v1",
       "private.v_payment_summary_v1"
     ],
     "src/lib/server/paymentSummaryRead.ts": [

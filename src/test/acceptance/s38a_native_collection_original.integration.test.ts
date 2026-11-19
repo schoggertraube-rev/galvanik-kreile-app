@@ -9,7 +9,7 @@ import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {issueCollectionInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction,cancelInvoiceAction,getInvoiceCancellationReceiptAction,applyCustomerCreditAction,getCustomerCreditAction,getInvoiceSummariesAction,getInvoiceTruthAction} from '@/app/actions/invoices.actions';
+import {issueCollectionInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction,cancelInvoiceAction,getInvoiceCancellationReceiptAction,applyCustomerCreditAction,getCustomerCreditAction,getInvoiceSummariesAction,getInvoiceTruthAction,removeOrderFromCollectionAction} from '@/app/actions/invoices.actions';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -90,6 +90,33 @@ async function inspectOriginal(bytes:Uint8Array,members:Array<{number:string}>,l
   writeFileSync(path.join(dir,label+'.pdf'),bytes);writeFileSync(path.join(dir,label+'.xml'),xml);
   writeFileSync(path.join(dir,label+'.json'),JSON.stringify({invoiceId,tenant,pdfSha256:createHash('sha256').update(bytes).digest('hex'),source:'Actual native issue Action/Auth/DB original; initial historic TEST sources explicitly synthetic'},null,2));
   return decoded;
+ }finally{await task.destroy();}
+}
+
+/** A14 creates one ordinary original and a two-member original. The existing
+ * three-member checks above stay unchanged; these new sizes have their own proof. */
+async function inspectRemovalOriginal(bytes:Uint8Array,members:Array<{number:string}>,label:string,invoiceId:string,invoiceNumber:string,kind:'single'|'collection'){
+ const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');
+ const task=getDocument({data:bytes.slice(),verbosity:0});
+ try{
+  const document=await task.promise,attachments=await document.getAttachments();
+  expect(attachments?.size).toBe(1);if(!attachments)throw Error('TEST_A14_EMBEDDED_ORIGINAL_REQUIRED');
+  const [id,attachment]=[...attachments][0];expect(attachment.filename).toBe('factur-x.xml');
+  const xml=await document.getAttachmentContent(id);if(!xml)throw Error('TEST_A14_XML_REQUIRED');
+  let text='';for(let page=1;page<=document.numPages;page++){
+   const content=await(await document.getPage(page)).getTextContent();
+   text+=content.items.filter((row):row is Extract<typeof row,{str:string}>=>'str'in row).map(row=>row.str).join(' ');
+  }
+  const decoded=new TextDecoder().decode(xml);
+  expect(decoded).toContain('<ram:ID>'+invoiceNumber+'</ram:ID>');
+  for(const member of members){
+   expect(text).toContain(member.number);
+   if(kind==='collection')expect(decoded).toContain(member.number);
+  }
+  expect((text.match(/Leistungsdatum/gu)??[]).length).toBeGreaterThanOrEqual(members.length);
+  const dir=path.resolve('.git/kreile-s38a-native-collection-evidence');mkdirSync(dir,{recursive:true});
+  writeFileSync(path.join(dir,label+'.pdf'),bytes);writeFileSync(path.join(dir,label+'.xml'),xml);
+  writeFileSync(path.join(dir,label+'.json'),JSON.stringify({invoiceId,tenant,pdfSha256:createHash('sha256').update(bytes).digest('hex'),source:'Actual invoice Action/Auth/DB original; initial historic TEST sources explicitly synthetic'},null,2));
  }finally{await task.destroy();}
 }
 
@@ -370,4 +397,69 @@ it('native fiscal mail preserves a real Graph acceptance across cancellation and
  const resolver=await createFixture(['preise'],'buero');
  expect(await withSession(resolver,()=>getIntakeTaskAction({taskId:tasks[0].id}))).toMatchObject({code:'OK',canComplete:true,canOpenReference:false});
  expect(await withSession(resolver,()=>completeIntakeTaskAction({taskId:tasks[0].id,version:tasks[0].version,note:'TEST cancellation delivered to actual customer'}))).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:resolver.actorId}});
+});
+
+it('A14 removes one real member only before issuance, preserves physical history and allows its existing individual invoice path',async()=>{
+ const source=await historicalCollection([1900,1900,1900]);
+ const member=source.members[0];
+ const before=await sql`SELECT row_to_json(m)::jsonb AS original FROM public.invoice_collection_orders m WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid ORDER BY order_id`;
+ const originalGoods=await sql`SELECT row_to_json(e)::jsonb AS original FROM public.events e WHERE tenant_id=${tenant} AND order_id=${member.orderId} AND event_type='ORDER_PICKED_UP_V3'`;
+ mkdirSync('.git/kreile-r24-collection-removal-originals',{recursive:true});
+ writeFileSync('.git/kreile-r24-collection-removal-originals/'+source.collectionId+'.json',JSON.stringify({members:before,goods:originalGoods}));
+ await expect(sql.begin(async tx=>{
+  await tx`SELECT set_config('app.tenant_id',${tenant},true)`;
+  await tx`DELETE FROM public.invoice_collection_orders WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid AND order_id=${member.orderId}`;
+  throw Error('TEST_ABORT_UNEXPECTED_UNQUALIFIED_REMOVAL');
+ })).rejects.toThrow('INVOICE_COLLECTION_MEMBERS_CHANGED');
+ expect(await sql`SELECT row_to_json(m)::jsonb AS original FROM public.invoice_collection_orders m WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid ORDER BY order_id`).toEqual(before);
+ const input={collectionId:source.collectionId,orderId:member.orderId,expectedVersion:1,clientEventId:randomUUID()};
+ const results=await Promise.all([withSession(full,()=>removeOrderFromCollectionAction(input)),withSession(full,()=>removeOrderFromCollectionAction(JSON.parse(JSON.stringify(input))))]);
+ expect(results.filter(row=>row.code==='OK'&&!row.replayed)).toHaveLength(1);
+ expect(results.filter(row=>row.code==='OK'&&row.replayed)).toHaveLength(1);
+ const removed=results.find(row=>row.code==='OK'&&!row.replayed);
+ if(!removed||removed.code!=='OK')throw Error('TEST_COLLECTION_REMOVAL_REQUIRED:'+JSON.stringify(results));
+ expect(removed.receipt).toMatchObject({orderId:member.orderId,orderVersion:3,collectionId:source.collectionId,collectionVersion:1,collectionVersionAfter:2,actorId:full.actorId,goodsOutEventId:originalGoods[0].original.id});
+ expect(await withSession(full,()=>removeOrderFromCollectionAction(JSON.parse(JSON.stringify(input))))).toEqual({...removed,replayed:true});
+ const another=await createFixture(['preise']),denied=await createFixture(['auftraege']);
+ expect(await withSession(another,()=>removeOrderFromCollectionAction(input))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(denied,()=>removeOrderFromCollectionAction(input))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(full,()=>removeOrderFromCollectionAction({...input,orderId:source.members[1].orderId,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT row_to_json(e)::jsonb AS original FROM public.events e WHERE tenant_id=${tenant} AND order_id=${member.orderId} AND event_type='ORDER_PICKED_UP_V3'`).toEqual(originalGoods);
+ expect(await sql`SELECT order_id FROM public.invoice_collection_orders WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid ORDER BY order_id`).toEqual(source.members.slice(1).map(row=>({order_id:row.orderId})).sort((a,b)=>a.order_id.localeCompare(b.order_id)));
+ const individual=await withSession(full,()=>issueInvoiceAction({orderId:member.orderId,expectedVersion:3,clientEventId:randomUUID()}));
+ expect(individual,JSON.stringify(individual)).toMatchObject({code:'OK',receipt:{orderId:member.orderId}});
+ if(individual.code!=='OK')throw Error('TEST_REMOVED_MEMBER_INVOICE_REQUIRED');
+ const [individualOriginal]=await sql`SELECT pdf_content FROM public.invoices WHERE tenant_id=${tenant} AND id=${individual.receipt.invoiceId}::uuid`;
+ await inspectRemovalOriginal(new Uint8Array(individualOriginal.pdf_content),[member],'a14-single',individual.receipt.invoiceId,individual.receipt.invoiceNumber,'single');
+ const collective=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:2,clientEventId:randomUUID()}));
+ expect(collective,JSON.stringify(collective)).toMatchObject({code:'OK'});
+ if(collective.code!=='OK')throw Error('TEST_REMAINING_COLLECTION_REQUIRED');
+ expect(collective.receipt.collection.members.map(row=>row.orderId).sort()).toEqual(source.members.slice(1).map(row=>row.orderId).sort());
+ const [collectiveOriginal]=await sql`SELECT pdf_content FROM public.invoices WHERE tenant_id=${tenant} AND id=${collective.receipt.invoiceId}::uuid`;
+ await inspectRemovalOriginal(new Uint8Array(collectiveOriginal.pdf_content),source.members.slice(1),'a14-collection',collective.receipt.invoiceId,collective.receipt.invoiceNumber,'collection');
+ const originalIssued=await sql`SELECT row_to_json(i)::jsonb AS original FROM public.invoices i WHERE tenant_id=${tenant} AND id=${collective.receipt.invoiceId}::uuid`;
+ expect(await withSession(full,()=>removeOrderFromCollectionAction({...input,orderId:source.members[1].orderId,expectedVersion:3,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT row_to_json(i)::jsonb AS original FROM public.invoices i WHERE tenant_id=${tenant} AND id=${collective.receipt.invoiceId}::uuid`).toEqual(originalIssued);
+});
+
+it('A14 missing removal evidence rolls back the collection and leaves the real physical source readable for the same retry',async()=>{
+ const source=await historicalCollection([1900,1900,1900]),member=source.members[0];
+ const input={collectionId:source.collectionId,orderId:member.orderId,expectedVersion:1,clientEventId:randomUUID()};
+ const capture=async()=>({collection:await sql`SELECT row_to_json(c)::jsonb AS original FROM public.invoice_collections c WHERE tenant_id=${tenant} AND id=${source.collectionId}::uuid`,members:await sql`SELECT row_to_json(m)::jsonb AS original FROM public.invoice_collection_orders m WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid ORDER BY order_id`,physical:await sql`SELECT row_to_json(e)::jsonb AS original FROM public.events e WHERE tenant_id=${tenant} AND order_id=${member.orderId} AND event_type='ORDER_PICKED_UP_V3'`});
+ const before=await capture();mkdirSync('.git/kreile-r24-collection-removal-originals',{recursive:true});
+ writeFileSync('.git/kreile-r24-collection-removal-originals/'+source.collectionId+'.json',JSON.stringify(before));
+ if(!/^TEST-ablauf-[a-f0-9-]+$/.test(tenant))throw Error('TEST_ISOLATED_TENANT_REQUIRED');
+ const probe='test_s38_remove_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION public.${probe}() RETURNS trigger LANGUAGE plpgsql AS $probe$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.event_type='ORDER_COLLECTION_MEMBER_REMOVED_V1' THEN RETURN NULL; END IF; RETURN NEW; END; $probe$; CREATE TRIGGER ${probe} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION public.${probe}();`);
+ try{
+  expect(await withSession(full,()=>removeOrderFromCollectionAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await capture()).toEqual(before);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(0);
+ }finally{
+  await sql.unsafe(`DROP TRIGGER ${probe} ON public.events; DROP FUNCTION public.${probe}();`);
+ }
+ const repaired=await withSession(full,()=>removeOrderFromCollectionAction(JSON.parse(JSON.stringify(input))));
+ expect(repaired,JSON.stringify(repaired)).toMatchObject({code:'OK',replayed:false});
+ expect(await withSession(full,()=>removeOrderFromCollectionAction(JSON.parse(JSON.stringify(input))))).toEqual({...repaired,replayed:true});
+ expect((await capture()).physical).toEqual(before.physical);
 });

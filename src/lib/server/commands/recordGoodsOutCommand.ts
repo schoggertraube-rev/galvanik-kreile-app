@@ -1,7 +1,7 @@
 import "server-only";
 import {normalizeOfflineOriginal,offlineOccurrenceTime} from '@/lib/domain/offlineOriginal';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
-import type {InvoiceCollectionPlanInput,InvoiceCollectionPlanReceipt} from '@/lib/domain/invoiceCollectionContract';
+import type {InvoiceCollectionPlanInput,InvoiceCollectionPlanReceipt,InvoiceCollectionRemoveInput,InvoiceCollectionRemoveReceipt} from '@/lib/domain/invoiceCollectionContract';
 import {readReadyNotificationContext} from '@/lib/server/orderReleaseRead';
 import {E_INVOICE_COPY,FINANCIAL_ACCESS_COPY,V45_TEXT} from '@/ui/situationCatalog';
 import {isShipmentGroupInput,isShipmentGroupReceipt,type ShipmentGroupInput,type ShipmentGroupResult,type ShipmentGroupReceipt} from '@/lib/domain/shipmentGroupContract';
@@ -566,7 +566,7 @@ function collectionPlanReceipt(row:GoodsOutEventRow,tenantId:string):InvoiceColl
 export async function addOrderToCollection(input:unknown){
  if(!collectionPlanInput(input))return {code:'VALIDATION_ERROR' as const,message:E_INVOICE_COPY.collectionInvalid};
  const authorization=await resolveAuthorization();
- if(!authorization.ok)return {code:authorization.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE' as const:'UNAUTHENTICATED' as const,message:E_INVOICE_COPY.collectionUnavailable};
+ if(!authorization.ok)return {code:authorization.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE' as const:'UNAUTHENTICATED' as const,message:E_INVOICE_COPY.collectionChangeUnavailable};
  const auth=authorization.data;
  if(!hasAuthorizationArea(auth,'preise'))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.pricesMissing};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
@@ -596,7 +596,80 @@ export async function addOrderToCollection(input:unknown){
   const rows=await readEventsByClientId(tx,auth.tenantId,input.clientEventId);
   if(rows.length!==1||canonicalJson(collectionPlanReceipt(rows[0],auth.tenantId))!==canonicalJson(receipt))throw Error('COLLECTION_PLAN_PROOF_MISSING');
   return {code:'OK' as const,receipt,replayed:false};
- });}catch(error){console.error('[COLLECTION_PLAN_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:E_INVOICE_COPY.collectionUnavailable};}
+ });}catch(error){console.error('[COLLECTION_PLAN_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:E_INVOICE_COPY.collectionChangeUnavailable};}
+}
+
+const COLLECTION_REMOVED_EVENT='ORDER_COLLECTION_MEMBER_REMOVED_V1';
+function collectionRemoveInput(value:unknown):value is InvoiceCollectionRemoveInput{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const input=value as InvoiceCollectionRemoveInput;
+ return Object.keys(input).sort().join(',')==='clientEventId,collectionId,expectedVersion,orderId'
+  &&isCanonicalTextId(input.orderId)&&typeof input.collectionId==='string'&&UUID_PATTERN.test(input.collectionId)
+  &&typeof input.clientEventId==='string'&&UUID_PATTERN.test(input.clientEventId)&&Number.isSafeInteger(input.expectedVersion)&&input.expectedVersion>0;
+}
+function collectionRemovalReceipt(row:GoodsOutEventRow,tenantId:string):InvoiceCollectionRemoveReceipt{
+ const payload=row.payload as {receipt?:InvoiceCollectionRemoveReceipt;receiptSha256?:unknown;intent?:unknown},r=payload?.receipt;
+ if(!r||row.event_type!==COLLECTION_REMOVED_EVENT||row.tenant_id!==tenantId||row.status!=='success'
+  ||row.event_schema_version!==1||r.eventId!==row.event_id||r.orderId!==row.order_id||r.actorId!==row.actor_id
+  ||r.clientEventId!==row.client_event_id||row.correlation_id!==r.clientEventId||row.aggregate_version!==r.orderVersion
+  ||!Number.isSafeInteger(r.orderVersion)||r.orderVersion<1||!isCanonicalTextId(r.customerId)||!UUID_PATTERN.test(r.goodsOutEventId)
+  ||r.collectionVersionAfter!==r.collectionVersion+1||!Number.isFinite(Date.parse(r.memberCreatedAt))
+  ||toIso(r.recordedAt)!==r.recordedAt||toIso(row.occurred_at)!==r.recordedAt
+  ||!collectionRemoveInput({collectionId:r.collectionId,orderId:r.orderId,expectedVersion:r.collectionVersion,clientEventId:r.clientEventId})
+  ||payload.receiptSha256!==collectionPlanDigest(r)
+  ||payload.intent!==collectionPlanDigest({collectionId:r.collectionId,orderId:r.orderId,expectedVersion:r.collectionVersion,clientEventId:r.clientEventId}))throw Error('COLLECTION_REMOVAL_RECEIPT_INVALID');
+ return r;
+}
+
+/** A14/E14: remove only from an open collection; preserve the real physical source and full relation history. */
+export async function removeOrderFromCollection(input:unknown){
+ if(!collectionRemoveInput(input))return {code:'VALIDATION_ERROR' as const,message:E_INVOICE_COPY.collectionInvalid};
+ const authorization=await resolveAuthorization();
+ if(!authorization.ok)return {code:authorization.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE' as const:'UNAUTHENTICATED' as const,message:E_INVOICE_COPY.collectionChangeUnavailable};
+ const auth=authorization.data;
+ if(!hasAuthorizationArea(auth,'preise'))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.pricesMissing};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:goods-out:client-event:'||${auth.tenantId}||':'||${input.clientEventId},0))`);
+  const prior=await readEventsByClientId(tx,auth.tenantId,input.clientEventId);
+  if(prior.length){
+   if(prior.length!==1||prior[0].event_type!==COLLECTION_REMOVED_EVENT)return {code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionConflict};
+   const receipt=collectionRemovalReceipt(prior[0],auth.tenantId);
+   if(receipt.actorId!==auth.userId||collectionPlanDigest(input)!==(prior[0].payload as {intent:string}).intent)return {code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionConflict};
+   return {code:'OK' as const,receipt,replayed:true};
+  }
+  const selected=await tx.execute<{customer_id:string}>(sql`SELECT customer_id FROM public.invoice_collections WHERE tenant_id=${auth.tenantId} AND id=${input.collectionId}::uuid LIMIT 2`);
+  if(selected.length!==1)return {code:'NOT_FOUND' as const,message:E_INVOICE_COPY.collectionInvalid};
+  const customerId=selected[0].customer_id;
+  // Same customer -> order -> collection order as native issuance.
+  await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${auth.tenantId},${customerId})`);
+  const orders=await readOrder(tx,auth.tenantId,input.orderId,true),order=orders[0];
+  if(orders.length!==1||!order||order.customer_id!==customerId||order.station!==TARGET_STATION||order.current_station!==TARGET_STATION||order.current_station_id!==TARGET_STATION||order.status!==TARGET_STATION||order.payment_mode!=='rechnung')return {code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionConflict};
+  const collections=await tx.execute<{customer_id:string;version:number;status:string;invoice_id:string|null}>(sql`SELECT customer_id,version,status,invoice_id::text FROM public.invoice_collections WHERE tenant_id=${auth.tenantId} AND id=${input.collectionId}::uuid FOR UPDATE`),collection=collections[0];
+  if(collections.length!==1||!collection||collection.customer_id!==customerId||collection.version!==input.expectedVersion)return {code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionConflict};
+  if(collection.status!=='offen'||collection.invoice_id!==null)return {code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionNotDue};
+  const member=await tx.execute<{created_at:string}>(sql`SELECT created_at::text FROM public.invoice_collection_orders WHERE tenant_id=${auth.tenantId} AND collection_id=${input.collectionId}::uuid AND order_id=${order.id} FOR UPDATE`);
+  if(member.length!==1)return {code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionConflict};
+  const physical=await tx.execute<{client_event_id:string}>(sql`SELECT client_event_id::text FROM public.events WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} AND event_type='ORDER_PICKED_UP_V3' AND aggregate_version=${order.version} LIMIT 2`);
+  if(physical.length!==1)throw Error('COLLECTION_REMOVAL_PHYSICAL_SOURCE_MISSING');
+  const physicalRows=await readEventsByClientId(tx,auth.tenantId,physical[0].client_event_id);
+  if(physicalRows.length!==1)throw Error('COLLECTION_REMOVAL_PHYSICAL_SOURCE_AMBIGUOUS');
+  const goods=parseEvent(physicalRows[0],auth.tenantId);
+  if(goods.eventSchemaVersion!==3||goods.settlement!=='collection'||goods.orderId!==order.id||goods.orderVersion!==order.version)throw Error('COLLECTION_REMOVAL_PHYSICAL_SOURCE_INVALID');
+  const [clock]=await tx.execute<{recorded_at:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS recorded_at`);
+  if(!clock||toIso(clock.recorded_at)!==clock.recorded_at)throw Error('COLLECTION_REMOVAL_CLOCK_INVALID');
+  const receipt:InvoiceCollectionRemoveReceipt={eventId:randomUUID(),orderId:order.id,orderVersion:goods.orderVersion,customerId,collectionId:input.collectionId,collectionVersion:collection.version,collectionVersionAfter:collection.version+1,goodsOutEventId:goods.eventId,memberCreatedAt:member[0].created_at,actorId:auth.userId,clientEventId:input.clientEventId,recordedAt:clock.recorded_at};
+  const saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,client_event_id,correlation_id,event_schema_version,status,aggregate_version,payload,created_at)
+   VALUES(${receipt.eventId},${auth.tenantId},${order.id},${COLLECTION_REMOVED_EVENT},${E_INVOICE_COPY.collectionRemoved},${auth.userId}::uuid,${input.clientEventId}::uuid,${input.clientEventId}::uuid,1,'success',${order.version},${JSON.stringify({intent:collectionPlanDigest(input),receipt,receiptSha256:collectionPlanDigest(receipt)})}::jsonb,${receipt.recordedAt}::timestamptz) RETURNING id`);
+  if(saved.length!==1||saved[0].id!==receipt.eventId)throw Error('COLLECTION_REMOVAL_NOT_SAVED');
+  await tx.execute(sql`SELECT set_config('app.collection_member_command','remove-v1',true)`);
+  const removed=await tx.execute<{order_id:string}>(sql`DELETE FROM public.invoice_collection_orders WHERE tenant_id=${auth.tenantId} AND collection_id=${input.collectionId}::uuid AND order_id=${order.id} RETURNING order_id`);
+  if(removed.length!==1||removed[0].order_id!==order.id)throw Error('COLLECTION_REMOVAL_MEMBER_NOT_SAVED');
+  const updated=await tx.execute<{version:number}>(sql`UPDATE public.invoice_collections SET version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${input.collectionId}::uuid AND version=${input.expectedVersion} AND status='offen' AND invoice_id IS NULL RETURNING version`);
+  if(updated.length!==1||updated[0].version!==receipt.collectionVersionAfter)throw Error('COLLECTION_REMOVAL_VERSION_NOT_SAVED');
+  const rows=await readEventsByClientId(tx,auth.tenantId,input.clientEventId);
+  if(rows.length!==1||canonicalJson(collectionRemovalReceipt(rows[0],auth.tenantId))!==canonicalJson(receipt))throw Error('COLLECTION_REMOVAL_PROOF_MISSING');
+  return {code:'OK' as const,receipt,replayed:false};
+ });}catch(error){console.error('[COLLECTION_REMOVAL_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:E_INVOICE_COPY.collectionChangeUnavailable};}
 }
 
 async function attachOpenInvoiceCollection(
