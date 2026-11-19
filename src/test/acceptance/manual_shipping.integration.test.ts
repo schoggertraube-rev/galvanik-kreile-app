@@ -1,6 +1,7 @@
 // @vitest-environment node
 import {vi,it,expect} from 'vitest';
 import {randomUUID} from 'node:crypto';
+import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
@@ -130,11 +131,15 @@ it('V13–V16 actual manual tracking keeps shipment, actor and history across re
  for(const key of [duplicate.clientEventId,denied.clientEventId])expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${key}::uuid`).toEqual([{n:0}]);
  expect(await sql`SELECT payload->>'before' AS before,payload->>'reason' AS reason FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${changed.receipt.eventId}`).toEqual([{before:'TEST-0001',reason:'TEST Nummer vertippt'}]);
  // Isolated mutable TEST master-data damage: no production or immutable history is changed.
+ await withRestoredTestSource({label:'TEST fehlende Versandadresse',read:async()=>{
+  const [source]=await sql<{street:string|null}[]>`SELECT street FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+  if(!source)throw Error('TEST_CUSTOMER_SOURCE_REQUIRED');return source.street;
+ },restore:async street=>{await sql`UPDATE public.customers SET street=${street} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;}},async()=>{
  await sql`UPDATE public.customers SET street=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
  const missingAddress={...input,shipmentId:randomUUID(),trackingNumber:'TEST-0003',clientEventId:randomUUID()};
  expect(await withSession(full,()=>saveManualTrackingAction(missingAddress))).toMatchObject({code:'VALIDATION_ERROR',reason:'SHIPPING_ADDRESS_INCOMPLETE'});
  expect(await sql`SELECT count(*)::integer AS n FROM public.shipments WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${missingAddress.shipmentId}::uuid`).toEqual([{n:0}]);
- await sql`UPDATE public.customers SET street='TEST Weg' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+ });
  const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
  const handover={orderId:order.orderId,mode:'versand' as const,expectedVersion:order.version,clientEventId:randomUUID()};
  // S10: the separately confirmed format-override parcel above is a second

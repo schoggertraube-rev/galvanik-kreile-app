@@ -1,3 +1,4 @@
+import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {readInvoiceVat} from '@/modules/accounting/server-public';
 // @vitest-environment node
@@ -1177,6 +1178,13 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       return state;
     };
 
+ const paymentGuardInvoiceId=paymentGuardInvoice.receipt.invoiceId;
+ await withRestoredTestSource({label:'TEST legacy payment marker',read:()=>sql`SELECT payment_contract_version FROM public.invoices WHERE id=${paymentGuardInvoiceId}::uuid AND tenant_id=${TENANT_ID}`,restore:async rows=>{if(rows.length!==1)throw Error('TEST_INVOICE_SOURCE_REQUIRED');
+    await sql.unsafe("ALTER TABLE public.invoices DISABLE TRIGGER invoices_f14_update_guard");
+    try{await sql`UPDATE public.invoices SET payment_contract_version=${rows[0].payment_contract_version} WHERE id=${paymentGuardInvoiceId}::uuid AND tenant_id=${TENANT_ID}`;}
+    finally{await sql.unsafe("ALTER TABLE public.invoices ENABLE TRIGGER invoices_f14_update_guard");}
+   }
+ },async()=>{
     // Deliberately inject a local-only damaged legacy payment marker. The
     // immutable trigger is disabled only for this fixture write and restored
     // in the same finally block; production code and migrations are untouched.
@@ -1185,33 +1193,23 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       await sql`
         UPDATE public.invoices
         SET payment_contract_version = NULL
-        WHERE id = ${paymentGuardInvoice.receipt.invoiceId}::uuid
+        WHERE id = ${paymentGuardInvoiceId}::uuid
           AND tenant_id = ${TENANT_ID}
       `;
     } finally {
       await sql.unsafe("ALTER TABLE public.invoices ENABLE TRIGGER invoices_f14_update_guard");
     }
-    const corruptState = await readGuardState(paymentGuardInvoice.receipt.invoiceId);
+    const corruptState = await readGuardState(paymentGuardInvoiceId);
     setSyntheticSession();
     await expect(cancelInvoice({
-      invoiceId: paymentGuardInvoice.receipt.invoiceId,
+      invoiceId: paymentGuardInvoiceId,
       expectedVersion: 1,
       reason: "Beschädigter Zahlungsstand darf nicht storniert werden",
       clientEventId: CANCEL_CORRUPT_CLIENT_EVENT_ID,
     })).resolves.toMatchObject({ code: "CONFLICT" });
-    expect(await readGuardState(paymentGuardInvoice.receipt.invoiceId)).toEqual(corruptState);
+    expect(await readGuardState(paymentGuardInvoiceId)).toEqual(corruptState);
+ });
 
-    await sql.unsafe("ALTER TABLE public.invoices DISABLE TRIGGER invoices_f14_update_guard");
-    try {
-      await sql`
-        UPDATE public.invoices
-        SET payment_contract_version = 1
-        WHERE id = ${paymentGuardInvoice.receipt.invoiceId}::uuid
-          AND tenant_id = ${TENANT_ID}
-      `;
-    } finally {
-      await sql.unsafe("ALTER TABLE public.invoices ENABLE TRIGGER invoices_f14_update_guard");
-    }
 
     setSyntheticSession();
     const oneCentPayment = await confirmPayment({

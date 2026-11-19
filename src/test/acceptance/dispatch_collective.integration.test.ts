@@ -1,4 +1,5 @@
 // @vitest-environment node
+import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 // Ausgangsfakt synthetisch, Writer-Nachweis in collection_reminder.integration.test.ts
 // und dispatch_call.integration.test.ts; Outlook-Ablage und Versand danach echt.
 import {vi,it,expect} from 'vitest';
@@ -173,10 +174,15 @@ it('E06 one actual invoice mail includes the ready cohort and original PDFs, pre
   await expect(qualifyStorageOrigin(tx,auth.data,{...origin,callTaskId:randomUUID()})).rejects.toThrow('STORAGE_ORIGIN_NOT_UNIQUE');
   await expect(qualifyStorageOrigin(tx,auth.data,{...origin,freezes:[{orderId:first.orderId,freezeId:randomUUID()}]})).rejects.toThrow('STORAGE_REPLY_FREEZE_INVALID');
  });});
- await sql`UPDATE public.events SET payload=jsonb_set(payload,'{receipt,actorId}',to_jsonb(${randomUUID()}::text)) WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1'`;
- const corrupted=await withSession(operational,()=>getOrdersDb());if(!corrupted.ok)throw Error('COHORT_CORRUPTED_RECEIPT_READ');
- expect(corrupted.data.find(row=>row.id===first.orderId)?.finishedDispatch).toMatchObject({unavailable:true,gaps:expect.arrayContaining(['COLLECTION_PROOF_UNAVAILABLE'])});
- expect(lookups).toBe(beforeLookup);
+ await withRestoredTestSource({label:'TEST collective reply actor',
+  read:()=>sql`SELECT id,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1' ORDER BY id`,
+  restore:async rows=>{for(const row of rows)await sql`UPDATE public.events SET payload=${sql.json(row.payload)} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${row.id}`;},
+ },async()=>{
+  await sql`UPDATE public.events SET payload=jsonb_set(payload,'{receipt,actorId}',to_jsonb(${randomUUID()}::text)) WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1'`;
+  const corrupted=await withSession(operational,()=>getOrdersDb());if(!corrupted.ok)throw Error('COHORT_CORRUPTED_RECEIPT_READ');
+  expect(corrupted.data.find(row=>row.id===first.orderId)?.finishedDispatch).toMatchObject({unavailable:true,gaps:expect.arrayContaining(['COLLECTION_PROOF_UNAVAILABLE'])});
+  expect(lookups).toBe(beforeLookup);
+ });
 });
 
 it('K1 a later invoice mail excludes an already sent original and a fresh retry sends nothing twice',async()=>{

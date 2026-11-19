@@ -1,4 +1,5 @@
 import {randomUUID,createHash} from 'node:crypto';
+import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
@@ -87,6 +88,10 @@ it('incomplete seller data consumes no invoice number and the same request succe
  const {cancelInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction}=await import('@/app/actions/invoices.actions');
  expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'TEST Ersatzrechnung vorbereiten',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  // Only this isolated TEST tenant's fixture is made incomplete; the invoice action is never mocked.
+ const request=await withRestoredTestSource({label:'TEST fehlende Firmenstrasse',read:async()=>{
+  const [source]=await sql<{street:string|null}[]>`SELECT street FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+  if(!source)throw Error('TEST_COMPANY_SOURCE_REQUIRED');return source.street;
+ },restore:async street=>{await sql`UPDATE public.company_settings SET street=${street} WHERE tenant_id=${KREILE_TENANT_SLUG}`;}},async()=>{
  await sql`UPDATE public.company_settings SET street='' WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
  const card=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));if(card.code!=='OK')throw Error('MASTER_DATA_CARD:'+card.code);
@@ -97,7 +102,8 @@ it('incomplete seller data consumes no invoice number and the same request succe
  expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:1}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${request.clientEventId}::uuid`).toEqual([{n:0}]);
  expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:request.clientEventId}))).toMatchObject({code:'OK',data:null});
- await sql`UPDATE public.company_settings SET street='TEST Weg 1' WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ return request;
+ });
  const issued=await withSession(full,()=>issueInvoiceAction(structuredClone(request)));
  expect(issued).toMatchObject({code:'OK'});if(issued.code!=='OK')throw Error('MASTER_DATA_RETRY:'+issued.code);
  expect(await withSession(full,()=>getInvoiceReceiptAction({orderId:order.orderId,clientEventId:request.clientEventId}))).toMatchObject({code:'OK',data:{invoiceId:issued.receipt.invoiceId}});

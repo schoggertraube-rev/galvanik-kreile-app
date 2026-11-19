@@ -1,4 +1,5 @@
 // @vitest-environment node
+import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 import {vi,it,expect} from 'vitest';
 import {createHash,randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -63,8 +64,13 @@ it.each([false,true])('E03 imports one secured original, binds the actual failed
  const [correction]=await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='CUSTOMER_UPDATED_V1' AND client_event_id=${correctionKey}::uuid`;
  expect(resend.document).toMatchObject({sha256:firstOriginal.sha,resend:{bounceItemId:imported.itemId,bouncedThreadId:sent.data.threadId,correctionEventId:correction.id,recipient:'test-corrected@example.invalid'}});expect(resend.document.resend.originals).toEqual([firstOriginal.document,...firstOriginal.document.bundle??[]].map((row:{id:string;sha256:string})=>({id:row.id,sha256:row.sha256})));
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{customerInformed:{informed:{threadId:corrected.data.threadId},failedDelivery:null}}});
- await sql`UPDATE public.intake_event SET nachher=jsonb_set(nachher,'{deliveryReport,originalSha256}',to_jsonb(repeat('0',64))) WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND art='angelegt'`;
- const broken=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));expect(broken.code==='OK'&&broken.data.customerInformed?.code).toBe('UNAVAILABLE');
+ await withRestoredTestSource({label:'TEST DSN original hash',
+  read:()=>sql`SELECT id,nachher FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND art='angelegt' ORDER BY id`,
+  restore:async rows=>{for(const row of rows)await sql`UPDATE public.intake_event SET nachher=${sql.json(row.nachher)} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${row.id}`;},
+ },async()=>{
+  await sql`UPDATE public.intake_event SET nachher=jsonb_set(nachher,'{deliveryReport,originalSha256}',to_jsonb(repeat('0',64))) WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND art='angelegt'`;
+  const broken=await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}));expect(broken.code==='OK'&&broken.data.customerInformed?.code).toBe('UNAVAILABLE');
+ });
 });
 
 it('human subjects, delayed reports and the wrong failed recipient do not become a failed-delivery fact or a customer reply',async()=>{

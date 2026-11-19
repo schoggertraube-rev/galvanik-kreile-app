@@ -1,4 +1,5 @@
 // @vitest-environment node
+import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 import {vi,it,expect} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -83,11 +84,16 @@ it('a corrupted sheet original blocks intake replay rather than replacing or dup
  const customerId=await customerFixture('Druck-Original'),input=request(customerId),created=await withSession(full,()=>createOrderIntakeAction(input));if(created.code!=='OK')throw Error('PRINT_ORIGINAL_FIXTURE');
  const [source]=await sql`SELECT payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId} AND event_type='ORDER_PRINT_JOBS_QUEUED_V1'`;
  const [job]=await sql`SELECT id::text FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId} ORDER BY id LIMIT 1`;
+ await withRestoredTestSource({label:'TEST print original snapshot',
+  read:()=>sql`SELECT snapshot FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${job.id}::uuid`,
+  restore:async rows=>{if(rows.length!==1)throw Error('TEST_PRINT_SOURCE_REQUIRED');await sql`UPDATE public.print_jobs SET snapshot=${sql.json(rows[0].snapshot)} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${job.id}::uuid`;},
+ },async()=>{
  await sql`UPDATE public.print_jobs SET snapshot=jsonb_set(snapshot,'{customerName}',to_jsonb(${'TEST manipulierter Name'}::text)) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${job.id}::uuid`;
  expect(await withSession(full,()=>createOrderIntakeAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
  expect(await sql`SELECT payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId} AND event_type='ORDER_PRINT_JOBS_QUEUED_V1'`).toEqual([source]);
  expect(await sql`SELECT count(*)::int AS n FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${created.receipt.orderId}`).toEqual([{n:3}]);
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:created.receipt.orderId}))).toMatchObject({code:'OK',data:{card:{id:created.receipt.orderId},printQueue:{code:'UNAVAILABLE'}}});
+ });
 });
 
 it('a sheet bound to a foreign position is rejected by the shared original reader without hiding the order',async()=>{
@@ -95,8 +101,13 @@ it('a sheet bound to a foreign position is rejected by the shared original reade
  const first=await withSession(full,()=>createOrderIntakeAction(input)),second=await withSession(full,()=>createOrderIntakeAction(request(customerId)));
  if(first.code!=='OK'||second.code!=='OK')throw Error('PRINT_FOREIGN_FIXTURE');
  const [job]=await sql`SELECT id::text FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${first.receipt.orderId} AND sheet_kind='position' ORDER BY id LIMIT 1`;
+ await withRestoredTestSource({label:'TEST print foreign position',
+  read:()=>sql`SELECT item_id FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${job.id}::uuid`,
+  restore:async rows=>{if(rows.length!==1)throw Error('TEST_PRINT_SOURCE_REQUIRED');await sql`UPDATE public.print_jobs SET item_id=${rows[0].item_id} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${job.id}::uuid`;},
+ },async()=>{
  await sql`UPDATE public.print_jobs SET item_id=${second.receipt.items[0].id} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${job.id}::uuid`;
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:first.receipt.orderId}))).toMatchObject({code:'OK',data:{card:{id:first.receipt.orderId},printQueue:{code:'UNAVAILABLE'}}});
  expect(await withSession(full,()=>createOrderIntakeAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:second.receipt.orderId}))).toMatchObject({code:'OK',data:{printQueue:{code:'OK',state:'WAITING'}}});
+ });
 });

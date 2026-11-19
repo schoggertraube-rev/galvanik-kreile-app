@@ -1,3 +1,4 @@
+import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 // @vitest-environment node
 // Genuine Actions/Auth/DB/originals; legacy invalid values are explicit TEST setup.
 import {randomUUID,createHash} from 'node:crypto';
@@ -15,14 +16,20 @@ it('KORR-S54o K1 rejects both legacy malformed VAT identities before number and 
  const order=await readyOrderForInvoice('TEST correction VAT identity'),input={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()};
  const counter=()=>sql`SELECT invoice_year,last_number,updated_at::text FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
  const before=await counter();
+ await withRestoredTestSource({label:'TEST seller legacy VAT',read:()=>sql`SELECT tax_id,tax_number FROM public.company_settings WHERE tenant_id=${tenant}`,restore:async rows=>{if(rows.length!==1)throw Error('TEST_SELLER_REQUIRED');await sql`UPDATE public.company_settings SET tax_id=${rows[0].tax_id},tax_number=${rows[0].tax_number} WHERE tenant_id=${tenant}`;}
+ },async()=>{
  await sql`UPDATE public.company_settings SET tax_id='123/456/789',tax_number='123/456/789' WHERE tenant_id=${tenant}`;
  expect(await withSession(full,()=>issueInvoiceAction(input))).toMatchObject({code:'VALIDATION_ERROR',source:{kind:'settings',field:'vatId'},message:E_INVOICE_COPY.missingSource('vatId')});expect(await counter()).toEqual(before);
+ });
  const company={companyName:'TEST KORR issuer',street:'TEST Weg 1',zip:'70176',city:'Stuttgart',country:'Deutschland',taxId:'123/456/789',taxNumber:'123/456/789',iban:'DE02120300000000202051',bic:'BYLADEM1001',bankName:'TEST Bank',paymentTermDays:14,logoUrl:'/TEST-logo.png'};
  expect(await withSession(full,()=>saveCompanySettingsAction(company))).toMatchObject({code:'VALIDATION_ERROR',field:'taxId'});
  expect(await withSession(full,()=>saveCompanySettingsAction({...company,taxId:'DE123456789'}))).toMatchObject({code:'OK'});
+ await withRestoredTestSource({label:'TEST customer legacy VAT',read:()=>sql`SELECT vat_id FROM public.customers WHERE tenant_id=${tenant} AND id=${order.customerId}`,restore:async rows=>{if(rows.length!==1)throw Error('TEST_CUSTOMER_REQUIRED');await sql`UPDATE public.customers SET vat_id=${rows[0].vat_id} WHERE tenant_id=${tenant} AND id=${order.customerId}`;}
+ },async()=>{
  await sql`UPDATE public.customers SET vat_id='123456789' WHERE tenant_id=${tenant} AND id=${order.customerId}`;
  expect(await withSession(full,()=>issueInvoiceAction(input))).toMatchObject({code:'VALIDATION_ERROR',source:{kind:'customer',field:'vatId'}});expect(await counter()).toEqual(before);
  expect(await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${order.orderId}`).toEqual([{n:0}]);
+ });
  await sql`UPDATE public.customers SET vat_id='ATU12345678' WHERE tenant_id=${tenant} AND id=${order.customerId}`;
  const issued=await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))));expect(issued.code).toBe('OK');if(issued.code!=='OK')throw Error('CORRECTION_VALID_VAT_REQUIRED');
  const [stored]=await sql`SELECT pdf_content,pdf_sha256,snapshot FROM public.invoices WHERE tenant_id=${tenant} AND id=${issued.receipt.invoiceId}::uuid`;

@@ -3,7 +3,10 @@ import {resolve} from 'node:path';
 
 // PL04:01: immutable worker/tenant per bounded group, unchanged scenarios and timeouts.
 const cli=resolve('node_modules/vitest/vitest.mjs');
-const isolated=['src/test/acceptance/storage_letter.integration.test.ts','src/test/acceptance/dispatch_call.integration.test.ts'];
+const isolated=['src/test/acceptance/storage_letter.integration.test.ts','src/test/acceptance/dispatch_call.integration.test.ts',
+ 'src/test/acceptance/order_notification.integration.test.ts',
+ 'src/test/acceptance/s08b_customer_credit_payout.integration.test.ts',
+ 'src/test/acceptance/s08_pl2305_quote_followup.integration.test.ts'];
 const flags=['--maxWorkers=1','--no-file-parallelism'];
 const started=Date.now();
 let failed=false;
@@ -24,7 +27,9 @@ for(const file of isolated){
  if(new Set(names).size!==names.length)throw Error('ACCEPTANCE_CASE_NAMES_AMBIGUOUS');
  // Deliberately damaged call evidence must not burden a later case in the
  // same tenant. Each call case owns a fixed worker/tenant; limits stay intact.
- const groupSize=file.endsWith('dispatch_call.integration.test.ts')?1:6;
+ // R24: newly inserted immutable malformed originals cannot be restored by
+ // deleting them. Their cases each retain their own fixed worker/TEST tenant.
+ const groupSize=file.endsWith('storage_letter.integration.test.ts')?6:1;
  for(let offset=0;offset<names.length;offset+=groupSize){
   const selected=names.slice(offset,offset+groupSize);
   const pattern='^(?:'+selected.map(escape).join('|')+')$';

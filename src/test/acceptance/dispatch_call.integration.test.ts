@@ -1,3 +1,4 @@
+import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 // @vitest-environment node
 // Ausgangsfakt synthetisch (Informiert/E1/E2), Writer-Nachweis in
 // v45_order_release_source.integration.test.ts und collection_reminder.integration.test.ts.
@@ -150,11 +151,14 @@ it('E5 expired original preserves task ownership, fresh retries and later-ware p
  const secondFinal=await withSession(full,()=>createStorageFinalTaskAction(secondFinalRequest));if(secondFinal.code!=='OK')throw Error('E5_SECOND_FINAL');
  const operator=await createFixture(['auftraege','preise','zahlungen','buchhaltung'],'buero');
  const goodsOut={orderId:later.orderId,mode:'abholung' as const,expectedVersion:secondOrder.version,clientEventId:randomUUID()};
+ await withRestoredTestSource({label:'TEST final task receipt status',read:()=>sql`SELECT id,status FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${secondFinal.taskId} ORDER BY id`,restore:async rows=>{for(const row of rows)await sql`UPDATE public.events SET status=${row.status} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${row.id}`;}
+ },async()=>{
  await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${secondFinal.taskId}`;
  expect(await withSession(operator,()=>recordGoodsOutAction(goodsOut))).toMatchObject({code:'OK'});
  expect(await sql`SELECT station FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${later.orderId}`).toEqual([{station:'abgeholt'}]);
  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${secondFinal.taskId}::uuid`).toEqual([{status:'offen'}]);
- await sql`UPDATE public.events SET status='success' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${secondFinal.taskId}`;
+
+ });
  expect(await withSession(operator,()=>recordGoodsOutAction(structuredClone(goodsOut)))).toMatchObject({code:'OK'});
  expect(await sql`SELECT status,erledigt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${secondFinal.taskId}::uuid`).toEqual([{status:'erledigt',erledigt_von:operator.actorId}]);
  const closed=await sql`SELECT payload->'goodsOutProofs' AS proofs,user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CLOSED_V1' AND payload->>'taskId'=${secondFinal.taskId}`;
@@ -162,15 +166,21 @@ it('E5 expired original preserves task ownership, fresh retries and later-ware p
  const readPhysicalProof=()=>sql.begin(async tx=>{await tx`SELECT set_config('app.tenant_id',${KREILE_TENANT_SLUG},true)`;return tx`SELECT integrity_ok,goods_out_complete FROM private.v_storage_final_task_context_v1 WHERE tenant_id=${KREILE_TENANT_SLUG} AND task_id=${secondFinal.taskId}`;});
  expect(await readPhysicalProof()).toEqual([{integrity_ok:true,goods_out_complete:true}]);
  const [source]=await sql`SELECT id,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${secondFinal.taskId}`;
+ await withRestoredTestSource({label:'TEST final task receipt scope',read:()=>sql`SELECT id,payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${source.id} ORDER BY id`,restore:async rows=>{for(const row of rows)await sql`UPDATE public.events SET payload=${sql.json(row.payload)} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${row.id}`;}
+ },async()=>{
  await sql`UPDATE public.events SET payload=jsonb_set(payload,'{meta,orders}',(payload->'meta'->'orders')||${sql.json([{id:'TEST-fehlender-Auftrag'}])}::jsonb) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${source.id}`;
  expect(await readPhysicalProof()).toEqual([{integrity_ok:true,goods_out_complete:false}]);
- await sql`UPDATE public.events SET payload=${sql.json(source.payload)}::jsonb WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${source.id}`;
+
+ });
  expect(await withSession(operator,()=>recordGoodsOutAction(structuredClone(goodsOut)))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>createStorageFinalTaskAction(structuredClone(secondFinalRequest)))).toMatchObject({code:'OK',taskId:secondFinal.taskId,replayed:true});
+ await withRestoredTestSource({label:'TEST reminder receipt status',read:()=>sql`SELECT id,status FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'threadId'=${original.threadId} ORDER BY id`,restore:async rows=>{for(const row of rows)await sql`UPDATE public.events SET status=${row.status} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${row.id}`;}
+ },async()=>{
  await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'threadId'=${original.threadId}`;
  const damaged=await withSession(full,()=>getOrdersDb());expect(damaged.ok&&damaged.data.find(row=>row.id===first.orderId)?.finishedDispatch?.state).toBe('unavailable');
  expect(await withSession(full,()=>createStorageFinalTaskAction(structuredClone(finalRequest)))).toMatchObject({code:'UNAVAILABLE'});
  expect(await sql`SELECT count(*)::integer AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${first.orderId}`).toEqual([{n:1}]);
+ });
 });
 it('E3 creates one real visible callback for the collective cohort; mandatory reached result stops the ladder with actor, fresh retry and original history',async()=>{
  const {first,second,request}=await prepare('E3-Erreicht');
@@ -227,11 +237,14 @@ it('not reached remains explicit without inventing a storage deadline; generic t
  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:generic.task.id,version:generic.task.version,note:null,callResult:'reached'}))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:generic.task.id,version:generic.task.version,note:null}))).toMatchObject({code:'OK'});
  const stranger=await createFixture(['auftraege'],'buero');
+ await withRestoredTestSource({label:'TEST call result actor/status',read:()=>sql`SELECT id,payload,user_id,status FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${created.taskId} ORDER BY id`,restore:async rows=>{for(const row of rows)await sql`UPDATE public.events SET payload=${sql.json(row.payload)},user_id=${row.user_id},status=${row.status} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${row.id}`;}
+ },async()=>{
  await sql`UPDATE public.events SET payload=jsonb_set(payload,'{result}','"reached"'::jsonb),user_id=${stranger.actorId}::uuid WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${created.taskId}`;
  queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.state).toBe('unavailable');
  await sql`UPDATE public.events SET payload=jsonb_set(payload,'{result}','"notReached"'::jsonb),user_id=${full.actorId}::uuid,status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${created.taskId}`;
  queue=await withSession(full,()=>getOrdersDb());expect(queue.ok&&queue.data.find(order=>order.id===first.orderId)?.finishedDispatch?.state).toBe('unavailable');
  expect(await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}))).toMatchObject({code:'UNAVAILABLE'});
+ });
 });
 it('a later ready order refreshes the same open task through its owner writer before an outcome can cover the enlarged cohort',async()=>{
  const {first,request}=await prepare('E3-Gruppe');const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('CALL_GROUP_CREATE');
@@ -284,13 +297,17 @@ it('handing over the remaining goods completes the existing callback atomically 
  expect(await withSession(full,()=>createDispatchCallTaskAction(structuredClone(request)))).toMatchObject({code:'OK',taskId:created.taskId});
  const task=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));expect(task).toMatchObject({code:'OK',task:{status:'offen'},dispatchCall:{orderIds:[second.orderId]}});
  const release={orderId:second.orderId,expectedVersion:second.version,mode:'abholung' as const,clientEventId:randomUUID()};
+ const warnings=await withRestoredTestSource({label:'TEST call creation receipt status',read:()=>sql`SELECT id,status FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${created.taskId} ORDER BY id`,restore:async rows=>{for(const row of rows)await sql`UPDATE public.events SET status=${row.status} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${row.id}`;}
+ },async()=>{
  await sql`UPDATE public.events SET status='error' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${created.taskId}`;
  expect(await withSession(full,()=>recordGoodsOutAction(release))).toMatchObject({code:'OK'});
  expect(await sql`SELECT station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${second.orderId}`).toEqual([{station:'abgeholt',version:second.version+1}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${release.clientEventId}::uuid`).toEqual([{n:1}]);
  const warnings=await sql`SELECT id::text,fuer_bereich,erstellt_von::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${second.orderId} AND titel LIKE 'Erinnerungsbeleg zu %'`;
  expect(warnings).toEqual([{id:expect.any(String),fuer_bereich:'zahlungen',erstellt_von:full.actorId}]);
- await sql`UPDATE public.events SET status='success' WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${created.taskId}`;
+ return warnings;
+
+ });
  // Live area policy changes do not duplicate or silently reassign the original warning.
  await createFixture(['entscheiden'],'meister');
  const {resolveAuthorization,readClarificationArea}=await import('@/lib/server/authorization');
