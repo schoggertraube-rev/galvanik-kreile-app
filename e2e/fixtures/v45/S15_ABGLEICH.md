@@ -3,8 +3,9 @@
 Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 Ähnlich = NFC/Kleinschreibung/Interpunktion/Platzhalternamen mechanisch normalisiert. Bestand bleibt unverändert.
 
-## Gleicher Wortlaut (60)
+## Gleicher Wortlaut (61)
 
+- `E_INVOICE_COPY.collectionNotDue`: "Die Sammlung ist noch nicht fällig oder wurde inzwischen abgerechnet." → `collection.not_due`
 - `DELIVERY_NOTE_COPY.title`: "Lieferschein" → `document.delivery_kind`, `intake.fact.delivery_number`, `ws.slip`
 - `DELIVERY_NOTE_COPY.order`: "Auftrag" → `customer.order_singular`
 - `DELIVERY_NOTE_COPY.unavailable`: "Geht nur mit Netz" → `offline.only`
@@ -66,7 +67,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `E_INVOICE_SETTINGS_COPY.fieldLabels.paymentTermDays`: "Zahlungsziel in Tagen" → `customer.terms_days`
 - `E_INVOICE_CORRECTION_COPY.cancel`: "Abbrechen" → `common.cancel`
 
-## Ähnlicher Wortlaut (97)
+## Ähnlicher Wortlaut (98)
 
 - `INVOICE_VAT_COPY.groupNet`: "Netto (" → `collection.net`, `quote.net_short`, `ws.net`
 - `INVOICE_VAT_COPY.groupNet`: ")" → `work.sign_missing`
@@ -117,6 +118,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `PACKAGE_ONSITE_COPY.blocked`: "." → `work.sign_missing`
 - `QUOTE_POSITION_COPY.position`: "Position " → `document.item`, `werkzeit.part`
 - `QUOTE_POSITION_COPY.remove`: "Position " → `document.item`, `werkzeit.part`
+- `DISPATCH_NOTICE_COPY.nativeCollective`: ", " → `work.sign_missing`
 - `DISPATCH_NOTICE_COPY.legacyCollective`: ", " → `work.sign_missing`
 - `DISPATCH_NOTICE_COPY.collective`: ", " → `work.sign_missing`
 - `PICKUP_APPOINTMENT_COPY.recorded`: "Abholtermin vereinbart " → `escalation.appointment`
@@ -166,7 +168,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 
-## Nur im Bestand (705)
+## Nur im Bestand (711)
 
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
 - `EVIDENCE_VISIBILITY_COPY.invalid`: "Wähle das Foto erneut."
@@ -181,6 +183,11 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `INVOICE_VAT_COPY.cancelVat`: "Storno USt ("
 - `INVOICE_VAT_COPY.reverseCharge`: "Steuerschuldnerschaft des Leistungsempfängers"
 - `INVOICE_VAT_COPY.vatId`: "USt-IdNr.:"
+- `E_INVOICE_COPY.collectionOpenCustomer`: "Kunde öffnen"
+- `E_INVOICE_COPY.collectionEmpty`: "In dieser Sammlung ist noch kein ausgegebener Auftrag."
+- `E_INVOICE_COPY.collectionInvalid`: "Diese Sammlung gibt es nicht mehr. Waehle sie neu."
+- `E_INVOICE_COPY.collectionUnavailable`: "Sammelrechnung noch nicht ausgestellt. Versuch es gleich noch einmal."
+- `E_INVOICE_COPY.collectionConflict`: "Die Sammlung hat sich gerade geaendert. Neu geladen – bestaetige noch einmal."
 - `E_INVOICE_COPY.legacyCancellation`: "Diese Rechnung stammt aus der Testphase und kann nicht als E-Rechnung storniert werden."
 - `E_INVOICE_COPY.vatIdLabel`: "USt-IdNr."
 - `E_INVOICE_COPY.taxNumberLabel`: "Steuernummer"
@@ -669,6 +676,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `MANUAL_SHIPPING_COPY.SHIPPING_ADDRESS_INCOMPLETE`: "Ergänze die fehlende Lieferanschrift in der Kundenkarte. Die Sendungsnummer bleibt ungebucht."
 - `MANUAL_SHIPPING_COPY.SHIPMENT_PROVIDER_LABEL_EXISTS`: "Das Paket hat schon ein Etikett vom Versanddienst. Storniere es über den bestehenden Etikettweg, bevor du die Nummer ersetzt."
 - `MANUAL_SHIPPING_COPY.SHIPMENT_CARRIER_CHANGED`: "Der Versanddienst des Pakets weicht von den Einstellungen ab. Öffne das Paket und kläre den Versanddienst vor der Änderung."
+- `DISPATCH_NOTICE_COPY.nativeCollective`: "Sammelrechnungen zu Ihren Aufträgen: "
 - `DISPATCH_NOTICE_COPY.legacyCollective`: "Deine fertigen Aufträge: "
 - `DISPATCH_NOTICE_COPY.collective`: "Ihre fertigen Aufträge: "
 - `DELIVERY_FAILURE_COPY.recorded`: "Unzustellbarkeit aus gesichertem Mail-Original belegt"

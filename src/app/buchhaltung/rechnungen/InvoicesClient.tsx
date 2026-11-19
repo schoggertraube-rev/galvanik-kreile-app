@@ -235,7 +235,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
                       </div>
                       {row.collection===undefined?<p className="mt-1 text-sm text-text-muted">{row.customerName} · Auftrag {row.orderNumber}</p>:<><p className="mt-1 text-sm text-text-muted">{row.customerName}</p>{row.collection.members.map(member=><p key={member.orderId} className="mt-1 text-sm text-text-muted">{E_INVOICE_COPY.collectionMember(member.orderNumber,formatDate(member.serviceDate))}</p>)}</>}
                       <p className="mt-1 text-xs text-text-muted">
-                        {row.serviceDate!==null?<>Leistung {formatDate(row.serviceDate)} · </>:null}Ausgabe {formatDate(row.issuedAt)} · Version {row.aggregateVersion}
+                        {E_INVOICE_COPY.invoiceTimeline(row.serviceDate===null?null:formatDate(row.serviceDate),formatDate(row.issuedAt),row.aggregateVersion)}
                       </p>
                     </div>
                     <div className="text-left lg:text-right">
