@@ -65,6 +65,15 @@ export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<Cre
 }
 
 /** Native collection branch of the existing number/original writer. */
+export async function addOrderToCollectionAction(input:import('@/lib/domain/invoiceCollectionContract').InvoiceCollectionPlanInput){
+ return observeAction('addOrderToCollectionAction',subjectForAction('addOrderToCollectionAction',input),async()=>{
+  const {addOrderToCollection}=await import('@/lib/server/commands/recordGoodsOutCommand');
+  const result=await addOrderToCollection(input);
+  if(result.code==='OK')revalidatePath('/orders');
+  return result;
+ },readLoggingSettings);
+}
+
 export async function issueCollectionInvoiceAction(input:import('@/lib/domain/invoiceIntentContract').IssueCollectionInvoiceInput):Promise<import('@/lib/server/commands/immutableInvoiceCommand').CreateCollectionInvoiceResult>{
  return observeAction('issueCollectionInvoiceAction',subjectForAction('issueCollectionInvoiceAction',input),async()=>{
   const {createCollectionInvoice}=await import('@/lib/server/commands/immutableInvoiceCommand');

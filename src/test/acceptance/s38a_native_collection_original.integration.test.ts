@@ -5,7 +5,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {expect,it,vi} from 'vitest';
+import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
@@ -20,6 +20,11 @@ import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingan
 import {searchTenantAction} from '@/app/actions/search.actions';
 import {requestMailStep} from '../../../e2e/ablauf/requestMailStep';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
+
+beforeAll(()=>{
+ const url=process.env.DATABASE_URL;
+ if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).port!=='54342')throw Error('TEST_S38_NATIVE_LOOPBACK_REQUIRED');
+});
 
 async function historicalCollection(rates:readonly number[],existing?:{customerId:string;agreementId:string}){
  if(!tenant.startsWith('TEST-ablauf-')||rates.length!==3)throw Error('TEST_HISTORICAL_SOURCE_REQUIRED');

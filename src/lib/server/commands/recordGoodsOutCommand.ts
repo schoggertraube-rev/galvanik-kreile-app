@@ -1,6 +1,9 @@
 import "server-only";
 import {normalizeOfflineOriginal,offlineOccurrenceTime} from '@/lib/domain/offlineOriginal';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
+import type {InvoiceCollectionPlanInput,InvoiceCollectionPlanReceipt} from '@/lib/domain/invoiceCollectionContract';
+import {readReadyNotificationContext} from '@/lib/server/orderReleaseRead';
+import {E_INVOICE_COPY,FINANCIAL_ACCESS_COPY,V45_TEXT} from '@/ui/situationCatalog';
 import {isShipmentGroupInput,isShipmentGroupReceipt,type ShipmentGroupInput,type ShipmentGroupResult,type ShipmentGroupReceipt} from '@/lib/domain/shipmentGroupContract';
 import type {ManualShipmentGroupState} from '@/modules/orders/public';
 import type {CustomerCreditResult,CustomerCreditApplicationRead} from '@/modules/accounting/public';
@@ -534,6 +537,67 @@ function paymentAuthorization(authorization: AuthorizationSnapshot): Authorizati
 
 type BerlinMonthRow = { monat: string };
 type CollectionLinkRow = { collection_id: string };
+const COLLECTION_PLAN_EVENT='ORDER_COLLECTION_PLANNED_V1';
+const collectionPlanDigest=(value:unknown)=>createHash('sha256').update(canonicalJson(value)).digest('hex');
+function collectionPlanInput(value:unknown):value is InvoiceCollectionPlanInput{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const input=value as InvoiceCollectionPlanInput;
+ return Object.keys(input).sort().join(',')==='clientEventId,expectedVersion,orderId'
+  &&isCanonicalTextId(input.orderId)&&typeof input.clientEventId==='string'&&UUID_PATTERN.test(input.clientEventId)
+  &&Number.isSafeInteger(input.expectedVersion)&&input.expectedVersion>0;
+}
+function collectionPlanReceipt(row:GoodsOutEventRow,tenantId:string):InvoiceCollectionPlanReceipt{
+ const payload=row.payload as {receipt?:InvoiceCollectionPlanReceipt;receiptSha256?:unknown;intent?:unknown};
+ const receipt=payload?.receipt;
+ if(!receipt||row.event_type!==COLLECTION_PLAN_EVENT||row.tenant_id!==tenantId||row.status!=='success'
+  ||row.event_schema_version!==1||receipt.collectionPlanned!==true||receipt.eventId!==row.event_id
+  ||receipt.orderId!==row.order_id||receipt.actorId!==row.actor_id||receipt.clientEventId!==row.client_event_id
+  ||row.correlation_id!==receipt.clientEventId||row.aggregate_version!==receipt.orderVersion
+  ||!isCanonicalTextId(receipt.customerId)||!UUID_PATTERN.test(receipt.freezeId)||!UUID_PATTERN.test(receipt.agreementId)
+  ||!Number.isSafeInteger(receipt.agreementVersion)||receipt.agreementVersion<1
+  ||toIso(receipt.recordedAt)!==receipt.recordedAt||toIso(row.occurred_at)!==receipt.recordedAt
+  ||!collectionPlanInput({orderId:receipt.orderId,expectedVersion:receipt.orderVersion,clientEventId:receipt.clientEventId})
+  ||payload.receiptSha256!==collectionPlanDigest(receipt)
+  ||payload.intent!==collectionPlanDigest({orderId:receipt.orderId,expectedVersion:receipt.orderVersion,clientEventId:receipt.clientEventId}))throw Error('COLLECTION_PLAN_RECEIPT_INVALID');
+ return receipt;
+}
+
+/** Same collection writer, preparation phase only; actual attachment stays in physical completion. */
+export async function addOrderToCollection(input:unknown){
+ if(!collectionPlanInput(input))return {code:'VALIDATION_ERROR' as const,message:E_INVOICE_COPY.collectionInvalid};
+ const authorization=await resolveAuthorization();
+ if(!authorization.ok)return {code:authorization.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE' as const:'UNAUTHENTICATED' as const,message:E_INVOICE_COPY.collectionUnavailable};
+ const auth=authorization.data;
+ if(!hasAuthorizationArea(auth,'preise'))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.pricesMissing};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:goods-out:client-event:'||${auth.tenantId}||':'||${input.clientEventId},0))`);
+  const prior=await readEventsByClientId(tx,auth.tenantId,input.clientEventId);
+  if(prior.length){
+   if(prior.length!==1||prior[0].event_type!==COLLECTION_PLAN_EVENT)return {code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionConflict};
+   const receipt=collectionPlanReceipt(prior[0],auth.tenantId);
+   if(receipt.actorId!==auth.userId||collectionPlanDigest(input)!==(prior[0].payload as {intent:string}).intent)return {code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionConflict};
+   return {code:'OK' as const,receipt,replayed:true};
+  }
+  const orders=await readOrder(tx,auth.tenantId,input.orderId,true),order=orders[0];
+  if(orders.length!==1||!order||order.tenant_id!==auth.tenantId||!order.customer_id||order.nacharbeit_zu!==null)return {code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionConflict};
+  const context=await readReadyNotificationContext(tx,auth.tenantId,input.orderId);
+  if(!context||context.version!==input.expectedVersion)return {code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionConflict};
+  const agreement=await readEffectiveCustomerAgreement(tx,{tenantId:auth.tenantId,customerId:order.customer_id,orderId:order.id,lock:true});
+  if(agreement?.type!=='sammelrechnung'||agreement.targetDays===null)return {code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionConflict};
+  const existing=await tx.execute<{client_event_id:string}>(sql`SELECT client_event_id::text FROM public.events WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} AND event_type=${COLLECTION_PLAN_EVENT} AND payload#>>'{receipt,freezeId}'=${context.freeze_id} ORDER BY created_at,id LIMIT 2`);
+  if(existing.length){
+   if(existing.length!==1)throw Error('COLLECTION_PLAN_AMBIGUOUS');
+   const rows=await readEventsByClientId(tx,auth.tenantId,existing[0].client_event_id);
+   if(rows.length!==1)throw Error('COLLECTION_PLAN_SOURCE_MISSING');
+   return {code:'OK' as const,receipt:collectionPlanReceipt(rows[0],auth.tenantId),replayed:true};
+  }
+  const receipt=await attachOpenInvoiceCollection(tx,{tenantId:auth.tenantId,customerId:order.customer_id,orderId:order.id,actorId:auth.userId,targetDays:agreement.targetDays,plan:{input,freezeId:context.freeze_id,agreementId:agreement.id,agreementVersion:agreement.version}});
+  if(!receipt)throw Error('COLLECTION_PLAN_NOT_SAVED');
+  const rows=await readEventsByClientId(tx,auth.tenantId,input.clientEventId);
+  if(rows.length!==1||canonicalJson(collectionPlanReceipt(rows[0],auth.tenantId))!==canonicalJson(receipt))throw Error('COLLECTION_PLAN_PROOF_MISSING');
+  return {code:'OK' as const,receipt,replayed:false};
+ });}catch(error){console.error('[COLLECTION_PLAN_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:E_INVOICE_COPY.collectionUnavailable};}
+}
 
 async function attachOpenInvoiceCollection(
   tx: PrivilegedTenantTransaction,
@@ -543,8 +607,19 @@ async function attachOpenInvoiceCollection(
     orderId: string;
     actorId: string;
     targetDays: number;
+    plan?:{input:InvoiceCollectionPlanInput;freezeId:string;agreementId:string;agreementVersion:number};
   },
-): Promise<void> {
+): Promise<InvoiceCollectionPlanReceipt|undefined> {
+  if(input.plan){
+    const plan=input.plan;
+    const [clock]=await tx.execute<{recorded_at:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS recorded_at`);
+    if(!clock||toIso(clock.recorded_at)!==clock.recorded_at)throw Error('COLLECTION_PLAN_CLOCK_INVALID');
+    const receipt:InvoiceCollectionPlanReceipt={eventId:randomUUID(),orderId:input.orderId,orderVersion:plan.input.expectedVersion,customerId:input.customerId,freezeId:plan.freezeId,agreementId:plan.agreementId,agreementVersion:plan.agreementVersion,actorId:input.actorId,clientEventId:plan.input.clientEventId,recordedAt:clock.recorded_at,collectionPlanned:true};
+    const saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,client_event_id,correlation_id,event_schema_version,status,aggregate_version,payload,created_at)
+      VALUES(${receipt.eventId},${input.tenantId},${input.orderId},${COLLECTION_PLAN_EVENT},${V45_TEXT.collection$prepared},${input.actorId}::uuid,${receipt.clientEventId}::uuid,${receipt.clientEventId}::uuid,1,'success',${receipt.orderVersion},${JSON.stringify({intent:collectionPlanDigest(plan.input),receipt,receiptSha256:collectionPlanDigest(receipt)})}::jsonb,${receipt.recordedAt}::timestamptz) RETURNING id`);
+    if(saved.length!==1||saved[0].id!==receipt.eventId)throw Error('COLLECTION_PLAN_WRITE_FAILED');
+    return receipt;
+  }
   const monthRows = await tx.execute<BerlinMonthRow>(sql`
     SELECT to_char(
       date_trunc('month', timezone('Europe/Berlin', clock_timestamp())),
