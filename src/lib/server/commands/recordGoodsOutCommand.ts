@@ -119,6 +119,7 @@ export type RecordGoodsOutResult =
   | { code: "UNAUTHENTICATED"; message: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "NOT_FOUND"; message: string }
+  | { code: "ORDER_IN_COLLECTION"; message: string }
   | { code: "CONFLICT"; message: string; creditApplication?:CustomerCreditApplicationRead }
   | { code: "VALIDATION_ERROR"; message: string;source?:import('@/lib/domain/invoiceElectronicFields').InvoiceElectronicSourceLocation }
   | { code: "UNAVAILABLE"; message: string };
@@ -568,6 +569,7 @@ async function attachOpenInvoiceCollection(
     WHERE tenant_id = ${input.tenantId}
       AND customer_id = ${input.customerId}
       AND monat = ${month}::date
+      AND status = 'offen'
     FOR UPDATE
   `);
   if (collections.length === 0) {

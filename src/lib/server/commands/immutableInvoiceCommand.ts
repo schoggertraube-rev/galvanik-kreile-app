@@ -117,6 +117,7 @@ export type CreateInvoiceResult =
   | { code: "UNAUTHENTICATED"; message: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "NOT_FOUND"; message: string }
+  | { code: "ORDER_IN_COLLECTION"; message: string }
   | { code: "CONFLICT"; message: string }
   | { code: "VALIDATION_ERROR"; message: string;source?:import("@/lib/domain/invoiceElectronicFields").InvoiceElectronicSourceLocation }
   | { code: "UNAVAILABLE"; message: string };
@@ -1244,6 +1245,18 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         order.payment_mode_version < 0
       ) {
         return { code: "VALIDATION_ERROR", message: "Zahlungsmodus des Auftrags ist nicht verfügbar." };
+      }
+      // S38a E3/A6: the already locked order serializes membership with the
+      // existing collection writer. A collection is never a single invoice.
+      const membership=await tx.execute<{id:string;status:string}>(sql`
+        SELECT collection.id::text,collection.status FROM public.invoice_collection_orders member
+        JOIN public.invoice_collections collection ON collection.tenant_id=member.tenant_id AND collection.id=member.collection_id
+        WHERE member.tenant_id=${tenantId} AND member.order_id=${order.id}
+        FOR SHARE OF collection,member`);
+      if(membership.length>1)throw Error('INVOICE_COLLECTION_MEMBERSHIP_INVALID');
+      if(membership.length===1){
+        if(!['offen','abgerechnet'].includes(membership[0].status))throw Error('INVOICE_COLLECTION_SOURCE_INVALID');
+        return {code:'ORDER_IN_COLLECTION',message:E_INVOICE_COPY.orderInCollection};
       }
       // Keep customer master data stable before reading the agreement and
       // invoice source; do not mix two customer versions in one original.
