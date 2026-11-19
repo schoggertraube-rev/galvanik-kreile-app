@@ -1,104 +1,8 @@
 import 'server-only';
-import {hasAuthorizationArea,isAccessArea,QUOTE_OPERATION_ACTION_IDS,type AccessArea} from '@/lib/auth/authorizationContract';
+import {hasAuthorizationArea,isAccessArea,QUOTE_OPERATION_ACTION_IDS} from '@/lib/auth/authorizationContract';
 import {getAuthorizationActionGrants} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from './authorization';
 import {V45_RULES,V45_SOURCE_HASHES,V45_PREVIEW_SHA,V45_ELEMENTS} from '@/ui/v45.generated';
-
-// PL17.11 13:34, KORR-RECHTE C: one temporary rights seam for the frozen projection.
-// Delete in S14b after the bound projection carries the new rights; never regenerate V45 here.
-export const LEGACY_V45_GELD_RECHT:Readonly<Record<string,AccessArea>>=Object.freeze({
-  "customer.invoice": "preise",
-  "customer.quote_followup": "preise",
-  "order.issue": "preise",
-  "order.notify": "preise",
-  "order.extra_request": "preise",
-  "order.prices": "preise",
-  "prices.save": "preise",
-  "order.collect": "preise",
-  "collection.add": "preise",
-  "collection.close": "preise",
-  "collection.issue": "preise",
-  "invoice.issue": "preise",
-  "invoice.document": "preise",
-  "invoice.print": "preise",
-  "invoice.send": "preise",
-  "quote.send": "preise",
-  "quote.followup": "preise",
-  "quote.revise": "preise",
-  "quote.accept": "preise",
-  "quote.extend": "preise",
-  "quote.reject": "preise",
-  "quote.convert": "preise",
-  "quote.prepare": "preise",
-  "quote.save": "preise",
-  "quote.accept_save": "preise",
-  "quote.extend_save": "preise",
-  "quote.reject_save": "preise",
-  "quote.weeks": "preise",
-  "quote.save_send": "preise",
-  "extra.decide": "preise",
-  "extra.decide_save": "preise",
-  "extra.next": "preise",
-  "extra.price": "preise",
-  "extra.price_save": "preise",
-  "shipping.cost": "preise",
-  "shipping.cost_save": "preise",
-  "shipping.refresh_price": "preise",
-  "complaint.return_invoice": "preise",
-  "kunde.feld.approval_profile": "preise",
-  "out.followup": "zahlungen",
-  "out.focus_payments": "zahlungen",
-  "customer.remind": "zahlungen",
-  "customer.money": "zahlungen",
-  "customer.dunning": "zahlungen",
-  "order.payment": "zahlungen",
-  "order.customer_debt": "zahlungen",
-  "order.remind": "zahlungen",
-  "order.dunning": "zahlungen",
-  "order.apply_credit": "zahlungen",
-  "payment.open": "zahlungen",
-  "payment.bank": "zahlungen",
-  "payment.cash": "zahlungen",
-  "payment.partial": "zahlungen",
-  "payment.save_partial": "zahlungen",
-  "payment.correct": "zahlungen",
-  "payment.correct_save": "zahlungen",
-  "payment.refresh": "zahlungen",
-  "invoice.cancel": "zahlungen",
-  "invoice.cancel_save": "zahlungen",
-  "credit.refund": "zahlungen",
-  "credit.refund_save": "zahlungen",
-  "credit.refund_refresh": "zahlungen",
-  "escalation.prepare": "zahlungen",
-  "escalation.send": "zahlungen",
-  "escalation.recall": "zahlungen",
-  "escalation.call": "zahlungen",
-  "escalation.call_save": "zahlungen",
-  "escalation.storage": "zahlungen",
-  "escalation.storage_save": "zahlungen",
-  "balance.apply": "zahlungen",
-  "balance.apply_save": "zahlungen",
-  "balance.undo": "zahlungen",
-  "balance.undo_save": "zahlungen",
-  "balance.refresh": "zahlungen",
-  "kunde.feld.payment_preference": "zahlungen",
-  "document.save": "eingang",
-  "document.review": "eingang",
-  "document.related": "eingang",
-  "document.attach_duplicate": "eingang",
-  "complaint.rejected_return": "entscheiden",
-  "complaint.rejected_return_save": "entscheiden",
-  "ausgang.mahnwesen": "zahlungen",
-  "kunde.kachel.debt": "zahlungen",
-  "tag.money": "zahlungen",
-  "kv.details": "preise",
-  "order.duplicate": "preise",
-  "document.inquiry": "buchhaltung",
-  "shipping.sim_create": "auftraege",
-  "shipping.sim_reconcile": "auftraege",
-  "shipping.sim_unknown": "auftraege",
-  "shipping.sim_fail": "auftraege"
-});
 
 /** Pure reading projection. Facts must come from the existing domain read ports.
  * Unknown is never false: stop at the first still-possible higher-priority rule.
@@ -143,8 +47,7 @@ export function readAuthorizedV45Action(auth:AuthorizationSnapshot,elementId:str
  const metadata=V45_ELEMENTS.filter(row=>row.id===elementId);
  if(metadata.length!==1||!Object.hasOwn(metadata[0],'recht')||typeof metadata[0].text!=='string')return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_METADATA']};
  const action=metadata[0];
- const right=action.recht==='geld'?(Object.hasOwn(LEGACY_V45_GELD_RECHT,elementId)?LEGACY_V45_GELD_RECHT[elementId]:undefined):action.recht;
- if(action.recht==='geld'&&right===undefined)return {code:'OK' as const,hauptaktion:null,gesperrt:[{elementId:action.id,grundKey:'error.permission'}],diagnosticCode:'V45_LEGACY_RIGHT_UNMAPPED' as const};
+ const right=action.recht;
  // V45 status names the existing perm_op_status capability; no role inference.
  if(right!==null&&right!=='status'&&!isAccessArea(right))return {code:'SOURCE_INCOMPLETE' as const,missing:['ACTION_RIGHT']};
  // PL15.11.11:58 / U-249: these operational quote decisions use the
