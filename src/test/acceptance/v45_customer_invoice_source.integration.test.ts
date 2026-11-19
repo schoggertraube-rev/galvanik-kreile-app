@@ -11,6 +11,31 @@ import {cancelInvoiceAction} from '@/app/actions/invoices.actions';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 import {getCustomerSummaryAction} from '@/app/actions/customers.actions';
 
+it('keeps the actual prepared original reachable from a fresh customer read after an unclear Graph attempt without permitting a second physical attempt',async()=>{
+ const order=await readyInvoiceOrder('TEST U2 prepared fiscal recovery');
+ let attempts=0;
+ const provider=vi.spyOn(globalThis,'fetch').mockImplementation(async(request,init)=>{
+  const url=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-U2-unclear-provider-token'.repeat(4),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){attempts++;throw new TypeError('TEST external reply lost');}
+  if(url.hostname==='graph.microsoft.com')return Response.json({value:[]});
+  return nativeFetch(request,init);
+ });
+ try{
+  const before=await withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}));
+  if(before.code!=='OK'||!before.data.nextActionRule?.hauptaktion||!('befehl'in before.data.nextActionRule.hauptaktion))throw Error('TEST_ACTUAL_FIRST_INVOICE_COMMAND_REQUIRED');
+  const args=JSON.parse(JSON.stringify(before.data.nextActionRule.hauptaktion.befehl.argumente)) as Pick<Parameters<typeof sendCustomerMailAction>[0],'targetType'|'targetId'|'attachment'|'expectedInvoiceIds'>;
+  const input={...args,clientRequestId:randomUUID(),subject:'TEST stored fiscal recovery',body:'TEST unveraendertes Original'};
+  expect((await withSession(full,()=>sendCustomerMailAction(input))).code).not.toBe('OK');
+  const reread=await withSession(full,()=>getCustomerSummaryAction({customerId:order.customerId}));
+  expect(reread).toMatchObject({code:'OK',data:{invoiceUnsentCount:1,invoiceSendGroupIds:[order.invoice.invoiceId],nextActionRule:{code:'OK',hauptaktion:{befehl:{argumente:{attachment:{kind:'INVOICE',documentId:order.invoice.invoiceId},expectedInvoiceIds:[order.invoice.invoiceId]}}}}}});
+  if(reread.code!=='OK'||!reread.data.nextActionRule?.hauptaktion||!('befehl'in reread.data.nextActionRule.hauptaktion))throw Error('TEST_PREPARED_RECOVERY_COMMAND_REQUIRED');
+  const freshArgs=JSON.parse(JSON.stringify(reread.data.nextActionRule.hauptaktion.befehl.argumente)) as typeof args;
+  expect((await withSession(full,()=>sendCustomerMailAction({...input,...freshArgs,clientRequestId:randomUUID()}))).code).not.toBe('OK');
+  expect(attempts).toBe(1);
+ }finally{provider.mockRestore();}
+});
+
 it('reads current unsent invoice originals from the customer port and never discloses the financial count without geld',async()=>{
  const customerId=await customerFixture('V45 offene Originale'),auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_AUTH');
  expect(await readCustomerSummary(auth.data,{customerId},(await import('@/modules/eingang/server-public')).openIntakePredicate())).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});

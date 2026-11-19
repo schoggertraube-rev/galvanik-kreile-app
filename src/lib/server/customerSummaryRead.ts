@@ -5,10 +5,10 @@ import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import { classifyOverdue } from "@/lib/server/paymentContract";
 import {CUSTOMER_METRICS_COPY} from '@/ui/situationCatalog';
-import {invoiceAlreadySent} from './communicationDocumentPort';
+import {invoiceAlreadySent,readInvoiceMailCohort} from './communicationDocumentPort';
 import {evaluateOrderPriority} from '@/lib/priority';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction,withTenantSavepoint } from "@/lib/server/privilegedDb";
 
 import {
   CUSTOMER_AGREEMENT_TYPES,
@@ -107,6 +107,8 @@ export type CustomerSummary = CustomerStoredProfile & {
   /** All current issued originals, using the actual dispatch membership proof. */
   invoiceUnsentCount?:number;
   invoiceUnsentOriginals?:Array<{id:string;number:string;version:number;orderId:string|null}>;
+  /** The existing sender's first actual cohort; all originals above remain visible. */
+  invoiceSendGroupIds?:string[];
   agreements: CustomerAgreementSummary[];
   agreementSlotsAvailable: number;
   orders: CustomerSummaryOrder[];
@@ -507,14 +509,28 @@ export async function readCustomerSummary(
        const kennzahlen=await readCustomerKennzahlen(tx,authorization,input.customerId);
        const summary=mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable,kennzahlen);
        if(hasAuthorizationArea(authorization,'preise')){
-        const [pending]=await tx.execute<{count:number;originals:Array<{id:string;number:string;version:number;orderId:string|null}>}>(sql`SELECT count(*)::integer AS count,coalesce(jsonb_agg(jsonb_build_object('id',invoice.id::text,'number',invoice.invoice_number,'version',invoice.aggregate_version,'orderId',invoice.order_id) ORDER BY invoice.issued_at,invoice.id),'[]'::jsonb) AS originals FROM public.invoices invoice
+        const [pending]=await tx.execute<{count:number;originals:Array<{id:string;number:string;version:number;orderId:string|null;handover:string|null}>}>(sql`SELECT count(*)::integer AS count,coalesce(jsonb_agg(jsonb_build_object('id',invoice.id::text,'number',invoice.invoice_number,'version',invoice.aggregate_version,'orderId',invoice.order_id,'handover',orders.handover_mode) ORDER BY invoice.issued_at,invoice.id),'[]'::jsonb) AS originals FROM public.invoices invoice
+         LEFT JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
          WHERE invoice.tenant_id=${authorization.tenantId} AND invoice.customer_id=${input.customerId}
           AND invoice.status='issued' AND invoice.contract_version=1
           AND NOT ${invoiceAlreadySent(authorization.tenantId,sql`invoice.id`)}`);
         if(!pending||!Number.isSafeInteger(pending.count)||pending.count<0)throw Error('CUSTOMER_UNSENT_INVOICE_COUNT_INVALID');
         if(!Array.isArray(pending.originals)||pending.originals.length!==pending.count)throw Error('CUSTOMER_UNSENT_ORIGINALS_INVALID');
         summary.invoiceUnsentCount=pending.count;
-        summary.invoiceUnsentOriginals=pending.originals;
+        summary.invoiceUnsentOriginals=pending.originals.map(({handover,...original})=>{void handover;return original;});
+        if(pending.count===0)summary.invoiceSendGroupIds=[];
+        else{
+          const first=pending.originals[0];
+          if(first.orderId===null||first.handover==='pickup'||first.handover==='shipping'){
+            try{
+              // The same reader retains prepared originals here so the existing
+              // N5/Sent-Items recovery button cannot disappear from the overview.
+              const cohort=await withTenantSavepoint(tx,nested=>readInvoiceMailCohort(nested,authorization.tenantId,input.customerId,first.handover,[],first.orderId===null,'overview'));
+              const ids=new Set(cohort.map(row=>row.id));
+              if(ids.has(first.id)&&cohort.length===ids.size&&cohort.every(row=>pending.originals.some(original=>original.id===row.id)))summary.invoiceSendGroupIds=pending.originals.filter(original=>ids.has(original.id)).map(original=>original.id);
+            }catch(error){console.error('[CUSTOMER_INVOICE_GROUP_SOURCE_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});}
+          }
+        }
        }
        return summary;
     });
