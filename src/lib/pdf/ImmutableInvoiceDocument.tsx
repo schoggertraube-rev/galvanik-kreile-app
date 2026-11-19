@@ -1,3 +1,4 @@
+import {invoiceOriginalLineMembers,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import {invoiceCashDiscountDate,type InvoicePaymentTerms} from '@/lib/domain/invoicePaymentTerms';
 import {customerCountryLabel} from '@/modules/customers/public';
 import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
@@ -21,6 +22,7 @@ registerInvoiceFonts();
  * types instead of redefining them, to avoid a second silent schema.
  */
 export type ImmutableInvoiceBaseLine = {
+  sourceOrderId?:string;
   type: "BASE";
   itemId: string;
   name: string;
@@ -36,6 +38,7 @@ export type ImmutableInvoiceBaseLine = {
 };
 
 export type ImmutableInvoiceExtraWorkLine = {
+  sourceOrderId?:string;
   type: "EXTRA_WORK";
   itemId: string;
   catalogPositionId: string;
@@ -48,7 +51,7 @@ export type ImmutableInvoiceExtraWorkLine = {
   taxCategory?:InvoiceElectronicTaxCategory;
 };
 
-export type ImmutableInvoiceShippingLine={unit?:InvoiceElectronicUnitCode;taxCategory?:InvoiceElectronicTaxCategory;type:'SHIPPING';shippingKind?:'fee'|'reference';shipmentGroupId:string;name:string;amountCents:number;vat_rate_basis_points:0|700|1900};
+export type ImmutableInvoiceShippingLine={sourceOrderIds?:string[];unit?:InvoiceElectronicUnitCode;taxCategory?:InvoiceElectronicTaxCategory;type:'SHIPPING';shippingKind?:'fee'|'reference';shipmentGroupId:string;name:string;amountCents:number;vat_rate_basis_points:0|700|1900};
 export type ImmutableInvoiceLine = ImmutableInvoiceBaseLine | ImmutableInvoiceExtraWorkLine | ImmutableInvoiceShippingLine;
 
 type InvoiceSeller = {
@@ -72,13 +75,6 @@ type InvoiceSnapshotContent = {
     country: string;
     vatId?:string|null;
   };
-  order: {
-    orderId: string;
-    orderVersion: number;
-    orderNumber: string;
-    title: string;
-    freezeId: string;
-  };
   lines: ImmutableInvoiceLine[];
   totals: {
     netAmountCents: number;
@@ -87,17 +83,28 @@ type InvoiceSnapshotContent = {
     vatAmountCents: number;
     grossAmountCents: number;
   };
-  serviceDate: string;
   issuedAt: string;
   paymentTermDays: number;
   /** Absent only on historical originals; never inferred while reading. */
   terms?:InvoicePaymentTerms;
 };
 
-export type ImmutableInvoiceSnapshot = InvoiceSnapshotContent & (
+export type InvoiceOriginalOrder = {
+    orderId: string;
+    orderVersion: number;
+    orderNumber: string;
+    title: string;
+    freezeId: string;
+};
+
+export type InvoiceSingleOrderSource={order:InvoiceOriginalOrder;serviceDate:string;collection?:never};
+export type InvoiceCollectionSource={order:null;serviceDate:null;collection:InvoiceCollectionOriginal};
+export type ImmutableInvoiceSingleSnapshot=InvoiceSnapshotContent & InvoiceSingleOrderSource & (
  | {schemaVersion:1|2;seller:InvoiceSeller&{taxId:string}}
  | {schemaVersion:3;seller:InvoiceSeller&{vatId:string|null;taxNumber:string|null}}
 );
+export type ImmutableInvoiceCollectionSnapshot=InvoiceSnapshotContent & InvoiceCollectionSource & {schemaVersion:3;seller:InvoiceSeller&{vatId:string|null;taxNumber:string|null}};
+export type ImmutableInvoiceSnapshot=ImmutableInvoiceSingleSnapshot|ImmutableInvoiceCollectionSnapshot;
 export type ImmutableInvoiceSnapshotV3=Extract<ImmutableInvoiceSnapshot,{schemaVersion:3}>;
 
 function sellerTaxIdentity(snapshot:ImmutableInvoiceSnapshot):string{
@@ -443,7 +450,7 @@ function lineTotalAmount(line: ImmutableInvoiceLine): number {
 }
 
 export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat,originalInvoiceNumber }: ImmutableInvoiceDocumentProps) {
-  const { seller, customer, order, lines } = snapshot;
+  const { seller, customer, lines } = snapshot;
   const totals=vat;
 
   return (
@@ -462,8 +469,10 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
             {originalInvoiceNumber&&<Text style={styles.metaLine}>{SHIPPING_FEE_COPY.relatedInvoice(originalInvoiceNumber)}</Text>}
             <Text style={styles.metaLine}>Rechnungsnummer: {invoiceNumber}</Text>
             <Text style={styles.metaLine}>Rechnungsdatum: {formatBerlinInstant(snapshot.issuedAt)}</Text>
-            <Text style={styles.metaLine}>Leistungsdatum: {formatCalendarDate(snapshot.serviceDate)}</Text>
-            <Text style={styles.metaLine}>Auftragsnummer: {order.orderNumber}</Text>
+            {snapshot.collection===undefined?<>
+              <Text style={styles.metaLine}>Leistungsdatum: {formatCalendarDate(snapshot.serviceDate)}</Text>
+              <Text style={styles.metaLine}>Auftragsnummer: {snapshot.order.orderNumber}</Text>
+            </>:snapshot.collection.members.map(member=><Text key={member.orderId} style={styles.metaLine}>{E_INVOICE_COPY.collectionMember(member.orderNumber,formatCalendarDate(member.serviceDate))}</Text>)}
           </View>
         </View>
 
@@ -478,7 +487,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
           </View>
           <View style={styles.serviceBlock}>
             <Text style={styles.sectionLabel}>Leistungsbezug</Text>
-            <Text>Auftrag: {order.title}</Text>
+            {snapshot.collection===undefined?<Text>Auftrag: {snapshot.order.title}</Text>:snapshot.collection.members.map(member=><Text key={member.orderId}>{member.orderNumber}: {member.title}</Text>)}
           </View>
         </View>
 
@@ -493,7 +502,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
           {lines.map((line, index) => (
             <View style={styles.tableRow} key={`${line.type}-${line.type==='SHIPPING'?line.shipmentGroupId:line.itemId}-${index}`}>
               <View style={styles.colPos}><Text style={styles.cell}>{index + 1}</Text></View>
-              <View style={styles.colDesc}><Text style={styles.cell}>{lineDescription(line)}</Text></View>
+              <View style={styles.colDesc}><Text style={styles.cell}>{snapshot.collection===undefined?lineDescription(line):invoiceOriginalLineMembers(snapshot,line).map(member=>E_INVOICE_COPY.collectionMember(member.orderNumber,formatCalendarDate(member.serviceDate))).join(' · ')+'\n'+lineDescription(line)}</Text></View>
               <View style={styles.colQty}><Text style={styles.cell}>{lineQuantity(line)}</Text></View>
               <View style={styles.colUnit}><Text style={styles.cell}>{lineUnitAmount(line,snapshot.schemaVersion)}</Text></View>
               <View style={styles.colTotal}><Text style={styles.cell}>{formatCents(lineTotalAmount(line))}</Text></View>
@@ -549,7 +558,7 @@ export function ImmutableInvoiceCancellationDocument({
   snapshot,
   vat,
 }: ImmutableInvoiceCancellationDocumentProps) {
-  const { seller, customer, order, lines } = snapshot;
+  const { seller, customer, lines } = snapshot;
   const totals=vat;
   let title='Stornobeleg';
   if(snapshot.schemaVersion===3){
@@ -572,8 +581,10 @@ export function ImmutableInvoiceCancellationDocument({
             <Text style={styles.documentTitle}>{title}</Text>
             <Text style={styles.metaLine}>Zu Rechnung: {invoiceNumber}</Text>
             <Text style={styles.metaLine}>Stornodatum: {formatBerlinInstant(cancelledAt)}</Text>
-            <Text style={styles.metaLine}>Leistungsdatum: {formatCalendarDate(snapshot.serviceDate)}</Text>
-            <Text style={styles.metaLine}>Auftragsnummer: {order.orderNumber}</Text>
+            {snapshot.collection===undefined?<>
+              <Text style={styles.metaLine}>Leistungsdatum: {formatCalendarDate(snapshot.serviceDate)}</Text>
+              <Text style={styles.metaLine}>Auftragsnummer: {snapshot.order.orderNumber}</Text>
+            </>:snapshot.collection.members.map(member=><Text key={member.orderId} style={styles.metaLine}>{E_INVOICE_COPY.collectionMember(member.orderNumber,formatCalendarDate(member.serviceDate))}</Text>)}
           </View>
         </View>
 
@@ -594,7 +605,7 @@ export function ImmutableInvoiceCancellationDocument({
           </View>
           <View style={styles.serviceBlock}>
             <Text style={styles.sectionLabel}>Leistungsbezug</Text>
-            <Text>Auftrag: {order.title}</Text>
+            {snapshot.collection===undefined?<Text>Auftrag: {snapshot.order.title}</Text>:snapshot.collection.members.map(member=><Text key={member.orderId}>{member.orderNumber}: {member.title}</Text>)}
           </View>
         </View>
 
@@ -609,7 +620,7 @@ export function ImmutableInvoiceCancellationDocument({
           {lines.map((line, index) => (
             <View style={styles.tableRow} key={`cancel-${line.type}-${line.type==='SHIPPING'?line.shipmentGroupId:line.itemId}-${index}`}>
               <View style={styles.colPos}><Text style={styles.cell}>{index + 1}</Text></View>
-              <View style={styles.colDesc}><Text style={styles.cell}>{lineDescription(line)}</Text></View>
+              <View style={styles.colDesc}><Text style={styles.cell}>{snapshot.collection===undefined?lineDescription(line):invoiceOriginalLineMembers(snapshot,line).map(member=>E_INVOICE_COPY.collectionMember(member.orderNumber,formatCalendarDate(member.serviceDate))).join(' · ')+'\n'+lineDescription(line)}</Text></View>
               <View style={styles.colQty}><Text style={styles.cell}>{snapshot.schemaVersion===3?'-':''}{lineQuantity(line)}</Text></View>
               <View style={styles.colUnit}><Text style={styles.cell}>{snapshot.schemaVersion===3&&line.type==='BASE'?preciseBaseUnitAmount(line):formatCents((snapshot.schemaVersion===3?1:-1)*Math.abs(line.type==='SHIPPING'?line.amountCents:line.type === "BASE" ? line.unitNetAmountCents : line.hourlyRateCents))}</Text></View>
               <View style={styles.colTotal}><Text style={styles.cell}>{formatCents(-Math.abs(lineTotalAmount(line)))}</Text></View>

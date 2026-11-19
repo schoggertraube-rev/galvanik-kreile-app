@@ -1,3 +1,4 @@
+import {parseInvoiceCollectionOriginal,assertInvoiceOriginalLineSources} from '@/lib/domain/invoiceCollectionContract';
 import {resolveInvoicePaymentTerms,parseInvoicePaymentTerms,type InvoicePaymentTerms} from '@/lib/domain/invoicePaymentTerms';
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {isCancelInvoiceInput as isValidCancelInput,type CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
@@ -43,6 +44,7 @@ import {
   createImmutableInvoiceCancellationPdfDocument,
   createImmutableInvoicePdfDocument,
   type ImmutableInvoiceBaseLine,
+  type ImmutableInvoiceSingleSnapshot,
   type ImmutableInvoiceExtraWorkLine,
   type ImmutableInvoiceShippingLine,
   type ImmutableInvoiceLine,
@@ -312,11 +314,12 @@ type LockedCancellationOrder = {
  * VALIDATION_ERROR result *before* an invoice number is allocated.
  */
 class InvoiceMasterDataError extends Error {}
-function assertInvoiceContentGlyphs(content:Pick<ImmutableInvoiceSnapshot,'seller'|'customer'|'order'|'lines'>){
+function assertInvoiceContentGlyphs(content:Pick<ImmutableInvoiceSnapshot,'seller'|'customer'|'order'|'lines'|'collection'>){
  const texts:Array<{field:string;text:string}>=[];
- for(const [section,source] of [['seller',content.seller],['customer',content.customer],['order',content.order]] as const){
+ for(const [section,source] of [['seller',content.seller],['customer',content.customer],['order',content.order===null?{}:content.order]] as const){
   for(const [field,value] of Object.entries(source))if(typeof value==='string')texts.push({field:section+'.'+field,text:value});
  }
+ for(const member of content.collection?.members??[])for(const [field,value]of Object.entries(member))if(typeof value==='string')texts.push({field:'collection.'+member.orderId+'.'+field,text:value});
  for(const [index,line] of content.lines.entries())texts.push({field:'lines.'+index+'.name',text:line.type==='EXTRA_WORK'?line.catalogPositionName:line.name});
  assertInvoiceGlyphs(texts);
 }
@@ -465,17 +468,18 @@ function parseStoredLine(value: unknown, schemaVersion: 1|2|3): ImmutableInvoice
     throw new Error("INVOICE_SNAPSHOT_LINE_INVALID");
   }
   if(value.type==='SHIPPING'){
-    if(schemaVersion===1||!exactKeys(value,['type','shipmentGroupId','name','amountCents','vat_rate_basis_points',...('shippingKind'in value?['shippingKind']:[]),...(schemaVersion===3?['unit','taxCategory']:[])]))throw Error('INVOICE_SNAPSHOT_SHIPPING_SHAPE_INVALID');
+    if(schemaVersion===1||!exactKeys(value,['type','shipmentGroupId','name','amountCents','vat_rate_basis_points',...('shippingKind'in value?['shippingKind']:[]),...(schemaVersion===3?['unit','taxCategory']:[]),...(schemaVersion===3&&'sourceOrderIds'in value?['sourceOrderIds']:[])]))throw Error('INVOICE_SNAPSHOT_SHIPPING_SHAPE_INVALID');
     const rate=value.vat_rate_basis_points;
     if(rate!==0&&rate!==700&&rate!==1900)throw Error('INVOICE_SNAPSHOT_SHIPPING_RATE_INVALID');
     if('shippingKind'in value&&(value.shippingKind!=='fee'&&value.shippingKind!=='reference'||value.shippingKind==='reference'&&value.amountCents!==0))throw Error('INVOICE_SNAPSHOT_SHIPPING_KIND_INVALID');
-    return {type:'SHIPPING',...(schemaVersion===3?{unit:value.unit as import('@/lib/domain/invoiceElectronicFields').InvoiceElectronicUnitCode,taxCategory:value.taxCategory as import('@/lib/domain/invoiceElectronicFields').InvoiceElectronicTaxCategory}:{}),...('shippingKind'in value?{shippingKind:value.shippingKind as 'fee'|'reference'}:{}),shipmentGroupId:requiredText(value.shipmentGroupId,'INVOICE_SNAPSHOT_SHIPPING_SOURCE_INVALID'),name:requiredText(value.name,'INVOICE_SNAPSHOT_SHIPPING_NAME_INVALID'),amountCents:toSafeInteger(value.amountCents,'INVOICE_SNAPSHOT_SHIPPING_AMOUNT_INVALID'),vat_rate_basis_points:rate};
+    return {type:'SHIPPING',...('sourceOrderIds'in value?{sourceOrderIds:value.sourceOrderIds as string[]}:{}),...(schemaVersion===3?{unit:value.unit as import('@/lib/domain/invoiceElectronicFields').InvoiceElectronicUnitCode,taxCategory:value.taxCategory as import('@/lib/domain/invoiceElectronicFields').InvoiceElectronicTaxCategory}:{}),...('shippingKind'in value?{shippingKind:value.shippingKind as 'fee'|'reference'}:{}),shipmentGroupId:requiredText(value.shipmentGroupId,'INVOICE_SNAPSHOT_SHIPPING_SOURCE_INVALID'),name:requiredText(value.name,'INVOICE_SNAPSHOT_SHIPPING_NAME_INVALID'),amountCents:toSafeInteger(value.amountCents,'INVOICE_SNAPSHOT_SHIPPING_AMOUNT_INVALID'),vat_rate_basis_points:rate};
   }
   if (value.type === "BASE") {
     if (!exactKeys(value, [
       "itemId", "lineNetAmountCents", "name", "quantity", "type", "unitNetAmountCents",
       ...(schemaVersion !== 1 ? ["vat_rate_basis_points"] : []),
       ...(schemaVersion===3?["unit","taxCategory"]:[]),
+      ...(schemaVersion===3&&'sourceOrderId'in value?["sourceOrderId"]:[]),
       ...(schemaVersion===3&&'unitSource'in value?["unitSource"]:[]),
     ])) throw new Error("INVOICE_SNAPSHOT_BASE_LINE_SHAPE_INVALID");
     if('unitSource'in value&&(value.unitSource!=='default_piece'||value.unit!=='C62'||typeof value.quantity!=='number'||!Number.isSafeInteger(value.quantity)||value.quantity<1))throw Error('INVOICE_SNAPSHOT_BASE_UNIT_SOURCE_INVALID');
@@ -496,6 +500,7 @@ function parseStoredLine(value: unknown, schemaVersion: 1|2|3): ImmutableInvoice
       "itemId", "minutes", "type",
       ...(schemaVersion !== 1 ? ["vat_rate_basis_points"] : []),
       ...(schemaVersion===3?["unit","taxCategory"]:[]),
+      ...(schemaVersion===3&&'sourceOrderId'in value?["sourceOrderId"]:[]),
     ])) throw new Error("INVOICE_SNAPSHOT_EXTRA_WORK_LINE_SHAPE_INVALID");
     const parsed = parseExtraWorkLines([{
       amountCents: value.amountCents,
@@ -512,14 +517,17 @@ function parseStoredLine(value: unknown, schemaVersion: 1|2|3): ImmutableInvoice
   throw new Error("INVOICE_SNAPSHOT_LINE_TYPE_INVALID");
 }
 
-function parseStoredSnapshot(value: unknown, invoice: {order_id:string}, readVat: InvoiceVatReader): ImmutableInvoiceSnapshot {
+function parseStoredSnapshot(value:unknown,invoice:{order_id:string},readVat:InvoiceVatReader):ImmutableInvoiceSingleSnapshot;
+function parseStoredSnapshot(value:unknown,invoice:{order_id:string|null},readVat:InvoiceVatReader):ImmutableInvoiceSnapshot;
+function parseStoredSnapshot(value: unknown, invoice: {order_id:string|null}, readVat: InvoiceVatReader): ImmutableInvoiceSnapshot {
   if (!plainObject(value) || !exactKeys(value, [
     "customer", "issuedAt", "lines", "order", "paymentTermDays", "schemaVersion",
     "seller", "serviceDate", "totals",
     ...(Object.hasOwn(value,"terms")?["terms"]:[]),
+    ...(Object.hasOwn(value,"collection")?["collection"]:[]),
   ])) throw new Error("INVOICE_SNAPSHOT_SHAPE_INVALID");
   if ((value.schemaVersion !== 1 && value.schemaVersion !== 2 && value.schemaVersion !== 3) || !plainObject(value.seller) || !plainObject(value.customer)
-    || !plainObject(value.order) || !plainObject(value.totals) || !Array.isArray(value.lines)) {
+    || !(plainObject(value.order)||(value.schemaVersion===3&&value.order===null&&Object.hasOwn(value,"collection"))) || !plainObject(value.totals) || !Array.isArray(value.lines)) {
     throw new Error("INVOICE_SNAPSHOT_TYPE_INVALID");
   }
   if (!exactKeys(value.seller, [
@@ -530,7 +538,9 @@ function parseStoredSnapshot(value: unknown, invoice: {order_id:string}, readVat
     "city", "companyName", "contactPerson", "country", "name", "street", "zip",
     ...(value.schemaVersion !== 1 ? ["vatId"] : []),
   ])) throw new Error("INVOICE_SNAPSHOT_CUSTOMER_SHAPE_INVALID");
-  if (!exactKeys(value.order, ["freezeId", "orderId", "orderNumber", "orderVersion", "title"])) {
+  const collection=Object.hasOwn(value,"collection")?parseInvoiceCollectionOriginal(value.collection):undefined;
+  if(collection&&(value.schemaVersion!==3||value.order!==null||value.serviceDate!==null||invoice.order_id!==null))throw Error("INVOICE_COLLECTION_ORIGINAL_SOURCE_INVALID");
+  if (!collection&&(!plainObject(value.order)||!exactKeys(value.order, ["freezeId", "orderId", "orderNumber", "orderVersion", "title"]))) {
     throw new Error("INVOICE_SNAPSHOT_ORDER_SHAPE_INVALID");
   }
   if (!exactKeys(value.totals, [
@@ -538,23 +548,25 @@ function parseStoredSnapshot(value: unknown, invoice: {order_id:string}, readVat
     ...(value.schemaVersion !== 1 ? ["vatBreakdown"] : []),
   ])) throw new Error("INVOICE_SNAPSHOT_TOTALS_SHAPE_INVALID");
 
-  const orderVersion = toSafeInteger(value.order.orderVersion, "INVOICE_SNAPSHOT_ORDER_VERSION_INVALID");
+  const order=plainObject(value.order)?value.order:null;
+  const orderVersion = order?toSafeInteger(order.orderVersion, "INVOICE_SNAPSHOT_ORDER_VERSION_INVALID"):null;
   const vat = readVat(invoice);
   const {netAmountCents,vatAmountCents,grossAmountCents,headRate:vatRateBasisPoints} = vat;
   const paymentTermDays = toSafeInteger(value.paymentTermDays, "INVOICE_SNAPSHOT_PAYMENT_TERM_INVALID");
   const issuedAt = toIso(value.issuedAt);
-  const serviceDate = toDateOnly(value.serviceDate);
+  const serviceDate = collection?null:toDateOnly(value.serviceDate);
   const schemaVersion = value.schemaVersion;
   const lines = value.lines.map(line => parseStoredLine(line, schemaVersion));
   if (
-    value.order.orderId !== invoice.order_id
-    || orderVersion < 1
+    (!collection&&(order?.orderId!==invoice.order_id||orderVersion===null||orderVersion<1))
     || lines.length < 1
     || netAmountCents < 0
     || paymentTermDays < 1
     || paymentTermDays > 365
   ) throw new Error("INVOICE_SNAPSHOT_INTEGRITY_INVALID");
 
+  const originalSource=collection?{order:null,serviceDate:null,collection}:{order,serviceDate};
+  assertInvoiceOriginalLineSources(originalSource,lines);
   const optionalSnapshotText = (input: unknown, error: string): string | null => {
     if (input === null) return null;
     return requiredText(input, error);
@@ -583,13 +595,13 @@ function parseStoredSnapshot(value: unknown, invoice: {order_id:string}, readVat
       country: requiredText(value.customer.country, "INVOICE_SNAPSHOT_CUSTOMER_COUNTRY_INVALID"),
       ...(schemaVersion !== 1 ? {vatId:optionalSnapshotText(value.customer.vatId,"INVOICE_SNAPSHOT_CUSTOMER_VAT_ID_INVALID")} : {}),
     },
-    order: {
-      orderId: requiredText(value.order.orderId, "INVOICE_SNAPSHOT_ORDER_ID_INVALID"),
+    ...(collection?{order:null,collection}:{order:{
+      orderId: requiredText(order?.orderId, "INVOICE_SNAPSHOT_ORDER_ID_INVALID"),
       orderVersion,
-      orderNumber: requiredText(value.order.orderNumber, "INVOICE_SNAPSHOT_ORDER_NUMBER_INVALID"),
-      title: requiredText(value.order.title, "INVOICE_SNAPSHOT_ORDER_TITLE_INVALID"),
-      freezeId: requiredText(value.order.freezeId, "INVOICE_SNAPSHOT_FREEZE_ID_INVALID"),
-    },
+      orderNumber: requiredText(order?.orderNumber, "INVOICE_SNAPSHOT_ORDER_NUMBER_INVALID"),
+      title: requiredText(order?.title, "INVOICE_SNAPSHOT_ORDER_TITLE_INVALID"),
+      freezeId: requiredText(order?.freezeId, "INVOICE_SNAPSHOT_FREEZE_ID_INVALID"),
+    }}),
     lines,
     totals: { netAmountCents, vatRateBasisPoints, vatAmountCents, grossAmountCents,
       ...(schemaVersion !== 1 ? {vatBreakdown:vat.groups} : {}),
@@ -604,7 +616,7 @@ function parseStoredSnapshot(value: unknown, invoice: {order_id:string}, readVat
 type PreparedInvoiceContent = {
   seller: ImmutableInvoiceSnapshot["seller"];
   customer: ImmutableInvoiceSnapshot["customer"];
-  order: ImmutableInvoiceSnapshot["order"];
+  order: NonNullable<ImmutableInvoiceSnapshot["order"]>;
   lines: ImmutableInvoiceLine[];
   totals: ImmutableInvoiceSnapshot["totals"];
 };
@@ -1494,7 +1506,7 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
     throw new Error("INVOICE_NUMBER_ALLOCATION_FAILED");
   }
 
-  const snapshot: ImmutableInvoiceSnapshot = {
+  const snapshot: Extract<ImmutableInvoiceSingleSnapshot,{schemaVersion:3}> = {
     schemaVersion: 3,
     seller: content.seller,
     customer: content.customer,

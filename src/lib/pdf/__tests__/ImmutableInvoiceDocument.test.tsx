@@ -96,7 +96,7 @@ const CUSTOMER: ImmutableInvoiceSnapshot["customer"] = {
   country: CUSTOMER_COUNTRY,
 };
 
-const ORDER: ImmutableInvoiceSnapshot["order"] = {
+const ORDER: NonNullable<ImmutableInvoiceSnapshot["order"]> = {
   orderId: "f14-pdf-order",
   orderVersion: 4,
   orderNumber: "A-2026-0815",

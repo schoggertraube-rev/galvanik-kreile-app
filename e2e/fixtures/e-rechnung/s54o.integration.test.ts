@@ -185,6 +185,7 @@ it.each([1,2] as const)('S54o A16: synthetic historical schema%s original is ref
  expect(issued.code).toBe('OK');if(issued.code!=='OK')throw Error('TEST_CURRENT_SOURCE_REQUIRED');
  const actual=await sql<{record:Record<string,unknown>}[]>`SELECT to_jsonb(invoice) AS record FROM public.invoices invoice WHERE tenant_id=${tenant} AND id=${issued.receipt.invoiceId}::uuid`;
  expect(actual).toHaveLength(1);const record=actual[0].record,snapshot=record.snapshot as ImmutableInvoiceSnapshotV3;
+ if(snapshot.collection!==undefined)throw Error("SYNTHETIC_LEGACY_REQUIRES_SINGLE_ORDER_ORIGINAL");
  expect(snapshot.schemaVersion).toBe(3);const {vatId,taxNumber,...seller}=snapshot.seller;expect(vatId).toBe(company.taxId);expect(taxNumber).toBeNull();
  const {vatId:buyerVat,...oldCustomer}=snapshot.customer;expect(buyerVat).toBeNull();
  const lines=snapshot.lines.map(line=>{if(line.type!=='BASE')throw Error('TEST_BASE_FIXTURE_REQUIRED');const {unit,taxCategory,vat_rate_basis_points,...oldLine}=line;expect(unit).toBe('C62');expect(taxCategory).toBe('S');expect(vat_rate_basis_points).toBe(1900);return schemaVersion===1?oldLine:{...oldLine,vat_rate_basis_points};});
