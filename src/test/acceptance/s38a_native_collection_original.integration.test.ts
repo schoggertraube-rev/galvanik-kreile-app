@@ -9,32 +9,36 @@ import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {issueCollectionInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction,cancelInvoiceAction,getInvoiceCancellationReceiptAction} from '@/app/actions/invoices.actions';
+import {issueCollectionInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction,cancelInvoiceAction,getInvoiceCancellationReceiptAction,applyCustomerCreditAction,getCustomerCreditAction} from '@/app/actions/invoices.actions';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {sql as statement} from 'drizzle-orm';
-import {confirmPaymentAction} from '@/app/actions/payments.actions';
+import {confirmPaymentAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
 import {readPaymentSummary,getPaymentState} from '@/lib/server/paymentSummaryRead';
 import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingang.actions';
 
-async function historicalCollection(rates:readonly number[]){
+async function historicalCollection(rates:readonly number[],existing?:{customerId:string;agreementId:string}){
  if(!tenant.startsWith('TEST-ablauf-')||rates.length!==3)throw Error('TEST_HISTORICAL_SOURCE_REQUIRED');
  const [clock]=await sql`SELECT to_char(date_trunc('month',statement_timestamp() AT TIME ZONE 'Europe/Berlin')-interval '1 month','YYYY-MM-DD') AS month`;
  const month=String(clock.month),frozenAt=month.slice(0,8)+'10T12:00:00.000Z',handoverAt=month.slice(0,8)+'12T12:00:00.000Z',start=month+'T08:00:00.000Z';
- const customerId=randomUUID(),historicalActor=randomUUID(),rateId=randomUUID(),agreementId=randomUUID(),collectionId=randomUUID();
+ const customerId=existing?existing.customerId:randomUUID(),historicalActor=randomUUID(),rateId=randomUUID(),agreementId=existing?existing.agreementId:randomUUID(),collectionId=randomUUID();
  const members:Array<{orderId:string;number:string;freezeId:string}> = [];
  try{await sql.begin(async tx=>{
+  if(existing){
+   const known=await tx`SELECT agreement.id FROM public.customer_agreements agreement JOIN public.customers customer ON customer.tenant_id=agreement.tenant_id AND customer.id=agreement.customer_id WHERE agreement.tenant_id=${tenant} AND agreement.id=${agreementId}::uuid AND agreement.customer_id=${customerId} AND agreement.typ='sammelrechnung'`;
+   if(known.length!==1)throw Error('TEST_EXISTING_COLLECTION_CUSTOMER_REQUIRED');
+  }
   await tx`INSERT INTO public.app_users(id,tenant_id,email,full_name,role,active,created_at,updated_at)
    VALUES(${historicalActor}::uuid,${tenant},${'TEST-old-'+historicalActor+'@example.invalid'},'TEST Historical Source','meister',false,${start}::timestamptz,${start}::timestamptz)`;
-  await tx`INSERT INTO public.customers(id,tenant_id,customer_number,name,company_name,type,contact_person,email,phone,street,house_number,zip_code,city,country,payment_preference,ziel_freigeschaltet,ziel_tage,source,first_name,last_name,salutation,created_at,updated_at)
+  if(!existing)await tx`INSERT INTO public.customers(id,tenant_id,customer_number,name,company_name,type,contact_person,email,phone,street,house_number,zip_code,city,country,payment_preference,ziel_freigeschaltet,ziel_tage,source,first_name,last_name,salutation,created_at,updated_at)
    VALUES(${customerId},${tenant},${'TEST-'+customerId},'TEST Collection Customer','TEST Collection Customer GmbH','business','TEST Person',${'TEST-'+customerId+'@example.invalid'},'+49 711 5550189','TEST Weg','1','70176','Stuttgart','DE','rechnung',true,14,'manual','TEST','Person','ohne',${start}::timestamptz,${start}::timestamptz)`;
   await tx`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,iban,bic,bank_name,tax_id,invoice_vat_rate_basis_points,invoice_payment_term_days,versand_pauschale_netto_cents)
    SELECT ${randomUUID()},${tenant},'TEST Collection Seller','TEST Seller 1','70176','Stuttgart','DE','DE02120300000000202051','BYLADEM1001','TEST Bank','DE123456789',1900,14,1000 WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${tenant})`;
   await tx`INSERT INTO private.extra_work_hourly_rates(id,tenant_id,hourly_rate_cents,version,created_by,effective_at)
    SELECT ${rateId}::uuid,${tenant},14000,1,${historicalActor}::uuid,${start}::timestamptz WHERE NOT EXISTS(SELECT 1 FROM private.extra_work_hourly_rates WHERE tenant_id=${tenant})`;
   const [existingRate]=await tx`SELECT id::text FROM private.extra_work_hourly_rates WHERE tenant_id=${tenant} ORDER BY version DESC LIMIT 1`;
-  await tx`INSERT INTO public.customer_agreements(id,tenant_id,customer_id,position,bezeichnung,typ,ziel_tage,geld,hinweis,grund,version,client_key,created_at,created_by)
+  if(!existing)await tx`INSERT INTO public.customer_agreements(id,tenant_id,customer_id,position,bezeichnung,typ,ziel_tage,geld,hinweis,grund,version,client_key,created_at,created_by)
    VALUES(${agreementId}::uuid,${tenant},${customerId},1,'TEST Monthly Collection','sammelrechnung',30,true,false,'TEST agreed monthly invoice',1,${randomUUID()}::uuid,${start}::timestamptz,${historicalActor}::uuid)`;
   await tx`INSERT INTO public.invoice_collections(id,tenant_id,customer_id,monat,ziel_tage,status,version,created_at,created_by)
    VALUES(${collectionId}::uuid,${tenant},${customerId},${month}::date,30,'offen',1,${start}::timestamptz,${historicalActor}::uuid)`;
@@ -56,7 +60,7 @@ async function historicalCollection(rates:readonly number[]){
    members.push({orderId,number,freezeId});
   }
  });}catch(error){console.error('[TEST_HISTORICAL_SOURCE_CONSTRAINT]',(error as {detail?:string}).detail);throw error;}
- return {collectionId,customerId,month,members};
+ return {collectionId,customerId,agreementId,month,members};
 }
 
 async function inspectOriginal(bytes:Uint8Array,members:Array<{number:string}>,label:string,invoiceId:string){
@@ -245,4 +249,29 @@ it('native cancellation R2 retains all member releases and one customer-bound no
  expect(await withSession(resolver,()=>completeIntakeTaskAction(complete))).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:resolver.actorId}});
  expect(await withSession(resolver,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(complete))))).toMatchObject({code:'OK',task:{status:'erledigt'}});
  expect(await sql`SELECT amount_cents::text,actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${issue.receipt.invoiceId}::uuid`).toEqual([{amount_cents:'4000',actor_user_id:full.actorId}]);
+});
+
+
+it('native collection credit uses the existing real customer balance and payment command once, without any member price right',async()=>{
+ const source=await historicalCollection([1900,1900,1900]);
+ const first=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(first.code!=='OK')throw Error('TEST_NATIVE_CREDIT_INITIAL_ORIGINAL_REQUIRED');
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:first.receipt.invoiceId,amount:4000,method:'ueberweisung',expectedVersion:0,expectedOpenAmountCents:11900,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:first.receipt.invoiceId,expectedVersion:1,reason:'TEST native credit source',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const targetSource=await historicalCollection([1900,1900,1900],{customerId:source.customerId,agreementId:source.agreementId});
+ const target=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:targetSource.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(target.code!=='OK')throw Error('TEST_NATIVE_CREDIT_TARGET_REQUIRED:'+JSON.stringify(target));
+ const payer=await createFixture(['zahlungen','kunden'],'buero');
+ const read=await withSession(payer,()=>getOrderPaymentStateAction({orderId:targetSource.members[1].orderId}));
+ expect(read,JSON.stringify(read)).toMatchObject({code:'OK',data:{payment:{orderId:null,invoiceId:target.receipt.invoiceId},creditApplication:{code:'OK',proposal:{command:'credit.apply',input:{invoiceId:target.receipt.invoiceId,amount:4000,expectedOpenAmountCents:11900}}}}});
+ if(read.code!=='OK'||read.data.creditApplication?.code!=='OK'||!read.data.creditApplication.proposal)throw Error('TEST_NATIVE_CREDIT_PROPOSAL_REQUIRED');
+ const input={...JSON.parse(JSON.stringify(read.data.creditApplication.proposal.input)),clientEventId:randomUUID()};
+ const applied=await withSession(payer,()=>applyCustomerCreditAction(input));
+ expect(applied,JSON.stringify(applied)).toMatchObject({code:'OK',receipt:{invoiceId:target.receipt.invoiceId,orderId:null,collectionId:targetSource.collectionId,method:'guthaben',amountCents:4000,paidAmountCents:4000,openAmountCents:7900,confirmedBy:payer.actorId}});
+ if(applied.code!=='OK')throw Error('TEST_NATIVE_CREDIT_APPLICATION_REQUIRED');
+ expect(await withSession(payer,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(input))))).toEqual({...applied,replayed:true});
+ expect(await withSession(payer,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:0}});
+ expect(await sql`SELECT amount_cents::text FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${target.receipt.invoiceId}::uuid AND kind='verrechnung'`).toEqual([{amount_cents:'-4000'}]);
+ // Existing S08 contract: credit is an internal transfer, never a second external cash receipt.
+ expect(await sql`SELECT order_id,amount_eur::text FROM public.payments WHERE tenant_id=${tenant} AND invoice_id=${target.receipt.invoiceId}::uuid`).toEqual([]);
 });
