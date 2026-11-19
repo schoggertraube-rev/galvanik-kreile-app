@@ -374,7 +374,8 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
 
     const invoiceCommands = await import("@/lib/server/commands/immutableInvoiceCommand");
     const {recognizeInvoicePdf}=await import('@/modules/eingang/server-public');
-    const createInvoice=(input:Parameters<typeof invoiceCommands.createInvoice>[0])=>invoiceCommands.createInvoice(input,undefined,readInvoiceVat,undefined,recognizeInvoicePdf);
+    const {readCustomerInvoiceTerms}=await import('@/modules/customers/server-public');
+    const createInvoice=(input:Parameters<typeof invoiceCommands.createInvoice>[0])=>invoiceCommands.createInvoice(input,undefined,readInvoiceVat,undefined,recognizeInvoicePdf,readCustomerInvoiceTerms);
     const cancelInvoice=(input:Parameters<typeof invoiceCommands.cancelInvoice>[0])=>invoiceCommands.cancelInvoice(input,readInvoiceVat,undefined,recognizeInvoicePdf);
     const { confirmPayment } = await import("@/lib/server/commands/confirmPaymentCommand");
     const {

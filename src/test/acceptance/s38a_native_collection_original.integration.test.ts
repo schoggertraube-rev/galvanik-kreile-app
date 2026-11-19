@@ -9,7 +9,7 @@ import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {issueCollectionInvoiceAction,getInvoiceReceiptAction,cancelInvoiceAction,getInvoiceCancellationReceiptAction} from '@/app/actions/invoices.actions';
+import {issueCollectionInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction,cancelInvoiceAction,getInvoiceCancellationReceiptAction} from '@/app/actions/invoices.actions';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -202,6 +202,15 @@ it('A15 native collection cancellation keeps its original, releases all real mem
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND event_type='INVOICE_CANCELLED_V1' AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(1);
  const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_NATIVE_CANCEL_READ_AUTH');
  expect((await readPaymentSummary(auth.data))).toMatchObject({code:'OK'});
+ for(const member of source.members){
+  const singleInput={orderId:member.orderId,expectedVersion:3,clientEventId:randomUUID()};
+  const single=await withSession(full,()=>issueInvoiceAction(singleInput));
+  expect(single,JSON.stringify(single)).toMatchObject({code:'OK',receipt:{orderId:member.orderId,eventSchemaVersion:2,invoiceSourceState:'after_goods_out'}});
+  if(single.code!=='OK')throw Error('TEST_RELEASED_MEMBER_INVOICE_REQUIRED');
+  expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(singleInput))))).toEqual({...single,replayed:true});
+  expect(single.receipt.invoiceId).not.toBe(issue.receipt.invoiceId);
+ }
+ expect(await sql`SELECT id FROM public.invoices WHERE tenant_id=${tenant} AND customer_id=${source.customerId} AND status='issued'`).toHaveLength(3);
 });
 
 

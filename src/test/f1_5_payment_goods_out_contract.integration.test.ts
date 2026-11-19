@@ -39,6 +39,7 @@ const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCo
 const { readInvoiceVat } = await import("@/modules/accounting/server-public");
 const { readShippingSettingsInTransaction } = await import("@/modules/fundament/server-public");
 const { recognizeInvoicePdf } = await import("@/modules/eingang/server-public");
+const { readCustomerInvoiceTerms } = await import("@/modules/customers/server-public");
 
 const sql = postgres(DATABASE_URL, { max: 2, prepare: false });
 const suffix = `${Date.now()}-${process.pid}`;
@@ -362,7 +363,7 @@ async function createCommandReadyOrder(
 }
 
 async function createCommandInvoice(input: Parameters<typeof import("@/lib/server/commands/immutableInvoiceCommand").createInvoice>[0]) {
-  return createInvoice(input, undefined, readInvoiceVat, readShippingSettingsInTransaction, recognizeInvoicePdf);
+  return createInvoice(input, undefined, readInvoiceVat, readShippingSettingsInTransaction, recognizeInvoicePdf, readCustomerInvoiceTerms);
 }
 
 /** Synthetic carrier configuration only; tracking and its original use the real writer. */
