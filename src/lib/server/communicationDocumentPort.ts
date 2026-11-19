@@ -213,20 +213,24 @@ export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenan
  if(native){const rows=await tx.execute<InvoiceMailNativeRow>(sql`SELECT invoice.id::text,invoice.order_id,NULL::text AS order_number,invoice.snapshot->'collection' AS collection_source,invoice.invoice_number,invoice.aggregate_version,private.invoice_original_source_valid(invoice.tenant_id,invoice.customer_id,invoice.order_id,invoice.order_version,invoice.freeze_id,invoice.service_date,invoice.snapshot,invoice.issued_at) AS source_integrity_ok FROM public.invoices invoice
   WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId} AND invoice.order_id IS NULL AND invoice.status='issued' AND invoice.contract_version=1
    AND (${mode==='overview'} OR NOT ${invoiceMailUnresolved(tenantId,sql`invoice.id`)})
-   AND (NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} OR invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[]))
+   AND (${resendIds.length>0?sql`invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[])`:sql`NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)}`})
   ORDER BY invoice.issued_at,invoice.id LIMIT 102`);
-  if(rows.some(row=>row.source_integrity_ok!==true))throw Error('INVOICE_MAIL_COLLECTION_SOURCE_INCOMPLETE');
-  return rows;
+  // PL20.11.00:32: the unchanged 101-original transport limit binds one
+  // deterministic oldest group. The sentinel/rest remain in the overview.
+  const group=rows.slice(0,101);
+  if(group.some(row=>row.source_integrity_ok!==true))throw Error('INVOICE_MAIL_COLLECTION_SOURCE_INCOMPLETE');
+  return group;
  }
 
- return tx.execute<{id:string;order_id:string;order_number:string;invoice_number:string;aggregate_version:number}>(sql`SELECT invoice.id::text,invoice.order_id,orders.order_number,invoice.invoice_number,invoice.aggregate_version FROM public.invoices invoice
+ const rows=await tx.execute<{id:string;order_id:string;order_number:string;invoice_number:string;aggregate_version:number}>(sql`SELECT invoice.id::text,invoice.order_id,orders.order_number,invoice.invoice_number,invoice.aggregate_version FROM public.invoices invoice
   JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
   JOIN private.v_order_freeze_state_v1 frozen ON frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active AND frozen.integrity_ok
   WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId} AND invoice.status='issued' AND invoice.contract_version=1
    AND (${mode==='overview'} OR NOT ${invoiceMailUnresolved(tenantId,sql`invoice.id`)})
-   AND (NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} OR invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[]))
+   AND (${resendIds.length>0?sql`invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[])`:sql`NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)}`})
    AND ((orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig') OR ${handedInvoiceOrder(tenantId)}) AND orders.handover_mode=${handover}
-  ORDER BY orders.order_number,invoice.id LIMIT 102`);
+  ORDER BY invoice.issued_at,invoice.id LIMIT 102`);
+ return rows.slice(0,101);
 }
 export class InvoiceMailListChanged extends Error{
  constructor(readonly number:string,readonly added:boolean){super('INVOICE_MAIL_LIST_CHANGED');}
