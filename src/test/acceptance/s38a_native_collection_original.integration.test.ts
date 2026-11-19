@@ -20,6 +20,7 @@ import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingan
 import {searchTenantAction} from '@/app/actions/search.actions';
 import {requestMailStep} from '../../../e2e/ablauf/requestMailStep';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
+import {getCustomerSummaryAction} from '@/app/actions/customers.actions';
 
 beforeAll(()=>{
  const url=process.env.DATABASE_URL;
@@ -345,12 +346,26 @@ it('native collection originals form one customer fiscal mail group with their s
  const b=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:second.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
  if(b.code!=='OK')throw Error('TEST_NATIVE_MAIL_SECOND_ORIGINAL');
  const originals=await sql`SELECT id::text,invoice_number,pdf_content,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=ANY(${[a.receipt.invoiceId,b.receipt.invoiceId]}::uuid[]) ORDER BY invoice_number`;
- const input={targetType:'CUSTOMER' as const,targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST native fiscal originals',body:'TEST unveraenderte Nachricht mit gespeicherten Originalen',attachment:{kind:'INVOICE' as const,documentId:a.receipt.invoiceId},expectedInvoiceIds:originals.map(row=>row.id)};
+ const card=await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}));
+ expect(card,JSON.stringify(card)).toMatchObject({code:'OK'});if(card.code!=='OK')throw Error('TEST_NATIVE_CUSTOMER_CARD_REQUIRED');
+ expect(card.data.invoiceUnsentCount).toBe(2);
+ expect(card.data.invoiceUnsentOriginals?.map(row=>({id:row.id,orderId:row.orderId}))).toEqual(originals.map(row=>({id:row.id,orderId:null})));
+ expect(card.data).toMatchObject({invoiceRevenueCents:20000,invoiceOpenCents:23400});
+ const primary=card.data.nextActionRule?.hauptaktion;
+ expect(primary).toMatchObject({befehl:{funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:first.customerId,attachment:{kind:'INVOICE',documentId:a.receipt.invoiceId},expectedInvoiceIds:originals.map(row=>row.id)}}});
+ if(!primary||!('befehl'in primary))throw Error('TEST_NATIVE_CUSTOMER_COMMAND_REQUIRED');
+ const bound=JSON.parse(JSON.stringify(primary.befehl.argumente)) as Pick<Parameters<typeof sendCustomerMailAction>[0],'targetType'|'targetId'|'attachment'|'expectedInvoiceIds'>;
+ const input={...bound,clientRequestId:randomUUID(),subject:'TEST native fiscal originals',body:'TEST unveraenderte Nachricht mit gespeicherten Originalen'};
  const noPrice=await createFixture(['kunden','mails'],'buero');
  expect(await withSession(noPrice,()=>sendCustomerMailAction(input))).toMatchObject({code:'FORBIDDEN'});
  const sent=await withSession(full,()=>sendCustomerMailAction(input));
  expect(sent,JSON.stringify(sent)).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('TEST_NATIVE_FISCAL_MAIL_REQUIRED');
  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
+ const reread=await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}));
+ expect(reread).toMatchObject({code:'OK',data:{invoiceUnsentCount:0,invoiceUnsentOriginals:[],invoiceRevenueCents:20000,invoiceOpenCents:23400}});
+ const hidden=await withSession(noPrice,()=>getCustomerSummaryAction({customerId:first.customerId}));
+ expect(hidden).toMatchObject({code:'OK'});if(hidden.code!=='OK')throw Error('TEST_NATIVE_CUSTOMER_HIDDEN_REQUIRED');
+ expect(hidden.data).not.toHaveProperty('invoiceUnsentOriginals');expect(hidden.data).not.toHaveProperty('invoiceOpenCents');
  const sends=vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&String(url).endsWith('/sendMail')&&init?.method==='POST');
  expect(sends).toHaveLength(1);
  const message=JSON.parse(String(sends[0][1]?.body)).message;

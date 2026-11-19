@@ -106,7 +106,7 @@ export type CustomerSummary = CustomerStoredProfile & {
   invoiceOpenCents?: number;
   /** All current issued originals, using the actual dispatch membership proof. */
   invoiceUnsentCount?:number;
-  invoiceUnsentOriginals?:Array<{id:string;number:string;version:number;orderId:string}>;
+  invoiceUnsentOriginals?:Array<{id:string;number:string;version:number;orderId:string|null}>;
   agreements: CustomerAgreementSummary[];
   agreementSlotsAvailable: number;
   orders: CustomerSummaryOrder[];
@@ -507,7 +507,7 @@ export async function readCustomerSummary(
        const kennzahlen=await readCustomerKennzahlen(tx,authorization,input.customerId);
        const summary=mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable,kennzahlen);
        if(hasAuthorizationArea(authorization,'preise')){
-        const [pending]=await tx.execute<{count:number;originals:Array<{id:string;number:string;version:number;orderId:string}>}>(sql`SELECT count(*)::integer AS count,coalesce(jsonb_agg(jsonb_build_object('id',invoice.id::text,'number',invoice.invoice_number,'version',invoice.aggregate_version,'orderId',invoice.order_id) ORDER BY invoice.issued_at,invoice.id),'[]'::jsonb) AS originals FROM public.invoices invoice
+        const [pending]=await tx.execute<{count:number;originals:Array<{id:string;number:string;version:number;orderId:string|null}>}>(sql`SELECT count(*)::integer AS count,coalesce(jsonb_agg(jsonb_build_object('id',invoice.id::text,'number',invoice.invoice_number,'version',invoice.aggregate_version,'orderId',invoice.order_id) ORDER BY invoice.issued_at,invoice.id),'[]'::jsonb) AS originals FROM public.invoices invoice
          WHERE invoice.tenant_id=${authorization.tenantId} AND invoice.customer_id=${input.customerId}
           AND invoice.status='issued' AND invoice.contract_version=1
           AND NOT ${invoiceAlreadySent(authorization.tenantId,sql`invoice.id`)}`);
