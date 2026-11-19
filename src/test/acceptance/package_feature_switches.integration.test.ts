@@ -9,6 +9,7 @@ import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarn
 import {readPackageSwitchesAction,setPackageSwitchAction} from '@/app/actions/settings.actions';
 import {getAuthorizationSnapshotAction,getAuthBootstrapAction} from '@/app/actions/auth.actions';
 import {saveIntakeNoteAction} from '@/app/actions/eingang.actions';
+import {readRootStyle} from '@/ui/vorfinalStyle';
 
 const replayUrl=process.env.DATABASE_URL;
 if(!replayUrl||replayUrl!==process.env.H18_EXPECTED_DATABASE_URL||new URL(replayUrl).hostname!=='127.0.0.1')throw Error('TEST_S21_FINANCIAL_DEDICATED_LOOPBACK_REQUIRED');
@@ -24,6 +25,19 @@ async function restoreFlag(original:OriginalFlag){
   ON CONFLICT(id) DO UPDATE SET enabled=EXCLUDED.enabled,roles_allowed=EXCLUDED.roles_allowed,updated_at=EXCLUDED.updated_at`;
  expect(await originalFlag(String(original.id))).toEqual(original);
 }
+
+it('S18 uses the real root bootstrap switch, rereads both styles and restores the TEST setting exactly',async()=>{
+ const original=await originalFlag('ui_v45');
+ try{
+  for(const enabled of [false,true,false]){
+   expect(await withSession(full,()=>setPackageSwitchAction({id:'ui_v45',enabled,clientKey:randomUUID()}))).toMatchObject({code:'OK'});
+   const bootstrap=await withSession(full,()=>getAuthBootstrapAction());
+   expect(bootstrap.status).toBe('authenticated');
+   if(bootstrap.status!=='authenticated')throw Error('TEST_S18_BOOTSTRAP_REQUIRED');
+   expect(readRootStyle(bootstrap.status,bootstrap.user.packageSwitches)).toEqual({enabled,dataUi:enabled?'v45':undefined,href:enabled?'/styles/vorfinal-v10.css':'/styles/endversion-legacy.css'});
+  }
+ }finally{await restoreFlag(original);}
+});
 
 it('KORR-233 K1: missing visibility source keeps the real login and records one content-free diagnostic',async()=>{
  const original=await originalFlag('p2_kv');
