@@ -7,24 +7,39 @@ const source=resolve('_review/quellen/endversion_V45');
 const output=resolve('src/ui/v45.generated.ts');
 const files={regeln:'regeln.json',texte:'texte.json',bausteine:'bausteine.json',bedienung:'bedienung.json',tokens:'tokens.css',elemente:'elemente.json',erwartung:'ERWARTUNG.json',klickfolge:'KLICKFOLGE.jsonl'};
 const digest=value=>createHash('sha256').update(value).digest('hex');
+/** Check every frozen file, including reference assets, before binding runtime data. */
+export function verifySourceManifest(text,readSource){
+ const hashes=new Map();
+ for(const line of text.split(/\r?\n/).filter(Boolean)){
+  const match=line.match(/^([a-f0-9]{64})  (.+)$/);
+  if(!match)throw Error('V45_HASH_MANIFEST_INVALID');
+  const [,hash,name]=match;
+  if(name.startsWith('/')||name.includes('\\')||name.split('/').some(part=>part==='..'||part==='.'||part==='')||hashes.has(name))throw Error('V45_HASH_MANIFEST_PATH_INVALID:'+name);
+  if(digest(readSource(name))!==hash)throw Error('V45_SOURCE_HASH_MISMATCH:'+name);
+  hashes.set(name,hash);
+ }
+ if(!hashes.size)throw Error('V45_HASH_MANIFEST_EMPTY');
+ return hashes;
+}
 // Git stores LF while Windows may check out CRLF. Source authority hashes stay raw.
 export const generatorSourceDigest=value=>digest(value.toString().replace(/\r\n/g,'\n'));
 const generatorSha=generatorSourceDigest(readFileSync(fileURLToPath(import.meta.url)));
 const names=/\b(?:Rolf|Philipp|Phillip|Gregor)\b/gu;
 // Integrity metadata only: no parallel text/rule copy. Current PL-approved V45 import.
 const SOURCE_BINDING={
-  "preview": "2f15957a77ce7998d4ea7f16a67cf5e2435f8f1d24b6d4ec786e51fe4d1a352d",
+  "preview": "73be3e04df183ecd4ec0680c761572b1599661f81ff54e49cfd6b2766e03f735",
   "sources": {
-    "regeln.json": "ca7bd55a3b1ed8decfbef7e3b6760340a68e21a9f66b1a5a6ee856dbf289d053",
-    "texte.json": "a103a730cc5fae2fbb95c8ff415edd48eeea95ad500d8aa2a1745f7ba2dc7d41",
+    "regeln.json": "f12839d00a9b7a2ff0497048cb8576e3ba9853d1b20420c5e0bc18bfc31026ab",
+    "texte.json": "a1b24fbc51af7fc0be907eada4bf4113d89b4c58523cd6a7317f741424ee7316",
     "bausteine.json": "aebad3e3410f1b25f498e3f37300b650198c86784298d2be32e0b78dda183c40",
     "bedienung.json": "cc6cf08c6172e1e939c8bc11b86930192ed648237e9499bee652d763a7aacdd9",
     "tokens.css": "fe9fbcd67c5cf8745311bfb101ae66a754f99ed954ffb5495ff0885814efadd9",
-    "elemente.json": "9477cc234feb9a0a32563e5fb58216018e2067d7ed9e42c9c9822121fcd4c80e",
-    "ERWARTUNG.json": "5419b88e2334fd2ea321673f622d9b0923a8d5474e29e8141fef07dd040cf3a2",
+    "elemente.json": "d242d6137448967ef5ad9112fd876a55335a46553177ea88bfc904aa156540ed",
+    "ERWARTUNG.json": "db30743aad4d79c4494b99a6a150b2deef4c9794a447402edcad880b22b6ac11",
     "KLICKFOLGE.jsonl": "074de7db0d6040cc5e3fa9811100e57c25c4008715b30b8a5c546314cf57886a"
   },
-  "projection": "1f2525eab0d7373877b9ec6d2ddb2695073cade8b091dfdc9655a9c065daa842"
+  "projection": "00b4c240879ca1cd770f6ee5b22c6f10f90aebe213fa8629fcbaec5480123172",
+  "manifest": "88c7e1610d1831aa8148798866c27521ad9dd940751888da74c34f798bf5ca4f"
 };
 export function assertProjectionBinding(projected,hashes,previewSha){
  if(previewSha!==SOURCE_BINDING.preview||Object.keys(SOURCE_BINDING.sources).some(name=>hashes[name]!==SOURCE_BINDING.sources[name])||Object.keys(hashes).length!==Object.keys(SOURCE_BINDING.sources).length)throw Error('V45_SOURCE_BINDING_CHANGED');
@@ -118,6 +133,7 @@ function render(projected,hashes,previewSha){
  if(!/^[a-f0-9]{64}$/.test(previewSha)||Object.keys(hashes).sort().join()!==Object.values(files).sort().join()||Object.values(hashes).some(hash=>!/^[a-f0-9]{64}$/.test(hash)))throw Error('V45_RUNTIME_HASH_INVALID');
  return '// erzeugt â€“ nie von Hand Ã¤ndern; Quelle V45, Quell-SHA-256 siehe V45_SOURCE_HASHES.\n'
   +'// Generator-SHA-256: '+generatorSha+'\n'
+  +'export const V45_MANIFEST_SHA = '+JSON.stringify(SOURCE_BINDING.manifest)+';\n'
   +'export const V45_PREVIEW_SHA = '+JSON.stringify(previewSha)+';\n'
   +'export const V45_SOURCE_HASHES = '+JSON.stringify(hashes,null,2)+' as const;\n'
   +'export const V45_PROJECTION_SHA = '+JSON.stringify(digest(JSON.stringify(projected)))+';\n'
@@ -144,7 +160,10 @@ function main(){
   // Normalization must be idempotent; no unapproved raw name enters runtime.
   if(JSON.stringify(projectRuntime(projected).projected)!==JSON.stringify(projected))throw Error('V45_RUNTIME_IMPORT_CONTRACT_INVALID');
  }else{
-  const manifest=new Map(readFileSync(resolve(source,'HASHES.txt'),'utf8').split(/\r?\n/).filter(Boolean).map(line=>{const match=line.match(/^([a-f0-9]{64})  (.+)$/);if(!match)throw Error('V45_HASH_MANIFEST_INVALID');return [match[2],match[1]];}));
+  const manifestBytes=readFileSync(resolve(source,'HASHES.txt'));
+  if(digest(manifestBytes)!==SOURCE_BINDING.manifest)throw Error('V45_FROZEN_MANIFEST_CHANGED');
+  const manifest=verifySourceManifest(manifestBytes.toString('utf8'),name=>readFileSync(resolve(source,name)));
+  console.log('V45_FROZEN_FILES_VERIFIED '+manifest.size);
   const read=name=>{const bytes=readFileSync(resolve(source,name));if(digest(bytes)!==manifest.get(name))throw Error('V45_SOURCE_HASH_MISMATCH:'+name);return bytes.toString('utf8');};
   const texts=Object.fromEntries(Object.entries(files).map(([key,name])=>[key,read(name)]));
   const result=projectRuntime(texts);projected=result.projected;
