@@ -1,7 +1,24 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {projectRuntime,assertProjectionBinding,generatorSourceDigest,projectElementMetadata,projectExpectedStates,projectClickTransitions,readProjectedTransition} from './generate-v45-runtime.mjs';
+import {projectRuntime,assertProjectionBinding,generatorSourceDigest,projectElementMetadata,projectExpectedStates,projectClickTransitions,readProjectedTransition,verifySourceManifest} from './generate-v45-runtime.mjs';
+
+test('S14b verifies all 942 frozen source files, including assets outside runtime imports',()=>{
+ const root='_review/quellen/endversion_V45/';
+ const manifest=readFileSync(root+'HASHES.txt','utf8');
+ assert.equal(verifySourceManifest(manifest,name=>readFileSync(root+name)).size,942);
+ const name='ABDECKUNG.md';
+ assert.throws(()=>verifySourceManifest(manifest,file=>file===name?Buffer.from('SYNTHETIC damaged source'):readFileSync(root+file)),/V45_SOURCE_HASH_MISMATCH:ABDECKUNG.md/);
+});
+
+test('S14b rejects an empty or malformed manifest and duplicate source entries',()=>{
+ const line=readFileSync('_review/quellen/endversion_V45/HASHES.txt','utf8').split(/\r?\n/)[0];
+ const read=name=>readFileSync('_review/quellen/endversion_V45/'+name);
+ assert.throws(()=>verifySourceManifest('',read),/V45_HASH_MANIFEST_EMPTY/);
+ assert.throws(()=>verifySourceManifest('invalid',read),/V45_HASH_MANIFEST_INVALID/);
+ assert.throws(()=>verifySourceManifest(line+'\n'+line,read),/V45_HASH_MANIFEST_PATH_INVALID/);
+ assert.throws(()=>verifySourceManifest('0'.repeat(64)+'  ../outside',read),/V45_HASH_MANIFEST_PATH_INVALID/);
+});
 
 test('approved runtime replacements are reported and descriptive rights never enter the projection',()=>{
  const texts={texte:JSON.stringify({example:{text:'Rolf, Philipp, Phillip und Gregor'}}),bedienung:JSON.stringify({tag_direkt:{rechte:'Philipp sieht keine Geldkachel',karten:'bleibt'}})};
@@ -46,7 +63,7 @@ test('PL07:01 element metadata preserves only the approved fields and never defa
 test('actual element metadata keeps its source identity without importing unfinished effects or targets',()=>{
  const original=JSON.parse(readFileSync('_review/quellen/endversion_V45/elemente.json','utf8'));
  const projected=projectElementMetadata(original).elemente;
- assert.equal(projected.length,399);assert.equal(new Set(projected.map(row=>row.id)).size,399);
+ assert.equal(projected.length,412);assert.equal(new Set(projected.map(row=>row.id)).size,412);
  for(let i=0;i<projected.length;i++)for(const [key,value] of Object.entries(projected[i]))assert.deepEqual(value,original.elemente[i][key]);
  assert.ok(projected.every(row=>!Object.hasOwn(row,'ziel')&&!Object.hasOwn(row,'status')&&!Object.hasOwn(row,'folge')&&!Object.hasOwn(row,'sperrt')));
 });
