@@ -9,7 +9,7 @@ import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {issueCollectionInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction,cancelInvoiceAction,getInvoiceCancellationReceiptAction,applyCustomerCreditAction,getCustomerCreditAction} from '@/app/actions/invoices.actions';
+import {issueCollectionInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction,cancelInvoiceAction,getInvoiceCancellationReceiptAction,applyCustomerCreditAction,getCustomerCreditAction,getInvoiceSummariesAction} from '@/app/actions/invoices.actions';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -17,6 +17,7 @@ import {sql as statement} from 'drizzle-orm';
 import {confirmPaymentAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
 import {readPaymentSummary,getPaymentState} from '@/lib/server/paymentSummaryRead';
 import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingang.actions';
+import {searchTenantAction} from '@/app/actions/search.actions';
 
 async function historicalCollection(rates:readonly number[],existing?:{customerId:string;agreementId:string}){
  if(!tenant.startsWith('TEST-ablauf-')||rates.length!==3)throw Error('TEST_HISTORICAL_SOURCE_REQUIRED');
@@ -136,6 +137,18 @@ it('A7/A8 real native two-rate invoice is once-only under parallel sessions and 
  const pdf=await readInvoicePdf(auth.data,issued.receipt.invoiceId);
  expect(pdf.code).toBe('OK');if(pdf.code!=='OK')throw Error('TEST_NATIVE_ORIGINAL_READ_REQUIRED');
  expect(pdf.data.pdf).toEqual(stored.pdf_content);expect(pdf.data.pdfSha256).toBe(stored.pdf_sha256);
+ const summaries=await withSession(full,()=>getInvoiceSummariesAction());
+ expect(summaries,JSON.stringify(summaries)).toMatchObject({code:'OK'});
+ if(summaries.code!=='OK')throw Error('TEST_NATIVE_INVOICE_SUMMARY_REQUIRED');
+ const nativeRows=summaries.data.filter(row=>row.invoiceId===issued.receipt.invoiceId);
+ expect(nativeRows).toHaveLength(1);expect(nativeRows[0]).toMatchObject({orderId:null,orderNumber:null,orderVersion:null,serviceDate:null,collection:issued.receipt.collection});
+ expect(await withSession(noPrice,()=>getInvoiceSummariesAction())).toMatchObject({code:'FORBIDDEN'});
+ for(const member of source.members){
+  const found=await withSession(full,()=>searchTenantAction(member.number));
+  expect(found,JSON.stringify(found)).toMatchObject({code:'OK'});if(found.code!=='OK')throw Error('TEST_NATIVE_INVOICE_SEARCH_REQUIRED');
+  const hits=found.hits.filter(hit=>hit.type==='INVOICE'&&hit.id===issued.receipt.invoiceId);
+  expect(hits).toHaveLength(1);for(const originalMember of source.members)expect(hits[0].context).toContain(originalMember.number);
+ }
  const mapped=await withPrivilegedTenantTransaction(auth.data,tx=>tx.execute<{order_id:string;invoice_id:string;collection_id:string}>(statement`SELECT order_id,invoice_id::text,collection_id::text FROM private.v_invoice_order_members_v1 WHERE tenant_id=${tenant} AND invoice_id=${issued.receipt.invoiceId}::uuid`));
  expect(mapped.map(row=>row.order_id).sort()).toEqual(source.members.map(row=>row.orderId).sort());
  expect(mapped.every(row=>row.invoice_id===issued.receipt.invoiceId&&row.collection_id===source.collectionId)).toBe(true);
