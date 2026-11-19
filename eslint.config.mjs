@@ -3,6 +3,7 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import unusedImports from "eslint-plugin-unused-imports";
 import h16Plugin from "./scripts/quality/eslint-h16-plugin.mjs";
+import uiCopyPlugin from "./scripts/quality/eslint-ui-copy-plugin.mjs";
 
 // ── Module-boundary import rules (APP-STRUCTURE-001) ──────────────
 // These rules enforce zero-violation boundaries from OWNERSHIP_MAP.md.
@@ -117,6 +118,11 @@ function boundaryRule(forbidden, message) {
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    files: ["src/**/*.tsx", "src/**/*.jsx"],
+    plugins: { "ui-copy": uiCopyPlugin },
+    rules: { "ui-copy/no-inline-copy": "error" },
+  },
   {
     plugins: {
       "unused-imports": unusedImports,
