@@ -9,6 +9,7 @@ import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type {
   ImmutableInvoiceCancellationReceipt,
   ImmutableInvoiceReceipt,
+  ImmutableInvoiceCollectionReceipt,
 } from "@/lib/server/commands/immutableInvoiceCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
@@ -19,7 +20,7 @@ const HEX64_PATTERN = /^[a-f0-9]{64}$/;
 export type ReadInvoiceReceiptInput = {
   orderId: string;
   clientEventId: string;
-};
+}|{collectionId:string;clientEventId:string};
 
 export type ReadInvoiceCancellationReceiptInput = {
   invoiceId: string;
@@ -27,7 +28,7 @@ export type ReadInvoiceCancellationReceiptInput = {
 };
 
 export type ReadInvoiceReceiptResult =
-  | { code: "OK"; data: ImmutableInvoiceReceipt | null }
+  | { code: "OK"; data: ImmutableInvoiceReceipt | ImmutableInvoiceCollectionReceipt | null }
   | { code: "FORBIDDEN"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
@@ -130,6 +131,7 @@ function isReceiptInput(value: unknown): value is ReadInvoiceReceiptInput {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const input = value as Record<string, unknown>;
   const keys = Object.keys(input).sort();
+  if(keys.length===2&&keys[0]==='clientEventId'&&keys[1]==='collectionId')return typeof input.collectionId==='string'&&UUID_PATTERN.test(input.collectionId)&&typeof input.clientEventId==='string'&&UUID_PATTERN.test(input.clientEventId);
   return keys.length === 2
     && keys[0] === "clientEventId"
     && keys[1] === "orderId"
@@ -265,6 +267,13 @@ export async function readInvoiceReceipt(
   }
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      if('collectionId'in input){
+        const rows=await readCreateInvoiceReceipts(tx,{collectionId:input.collectionId,clientEventId:input.clientEventId});
+        if(rows.length>1)throw Error('INVOICE_COLLECTION_READ_AMBIGUOUS');
+        const receipt=rows[0]?mapInvoiceIssueReceipt(rows[0],authorization.tenantId,rows[0].actor_id,requireVat(readVat)):null;
+        if(receipt&&receipt.collection.collectionId!==input.collectionId)throw Error('INVOICE_READ_COLLECTION_MISMATCH');
+        return receipt;
+      }
       const rows = await readCreateInvoiceReceipts(tx,input.clientEventId);
       if (rows.length > 1) throw new Error("INVOICE_READ_AMBIGUOUS");
       if(rows[0]&&rows[0].order_id!==input.orderId)throw Error('INVOICE_READ_ORDER_MISMATCH');
