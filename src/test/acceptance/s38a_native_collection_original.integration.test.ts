@@ -446,6 +446,13 @@ it('A14 removes one real member only before issuance, preserves physical history
  if(individual.code!=='OK')throw Error('TEST_REMOVED_MEMBER_INVOICE_REQUIRED');
  const [individualOriginal]=await sql`SELECT pdf_content FROM public.invoices WHERE tenant_id=${tenant} AND id=${individual.receipt.invoiceId}::uuid`;
  await inspectRemovalOriginal(new Uint8Array(individualOriginal.pdf_content),[member],'a14-single',individual.receipt.invoiceId,individual.receipt.invoiceNumber,'single');
+ await requestMailStep('S38-A14-post-handover-fiscal');
+ const mailInput={targetType:'CUSTOMER' as const,targetId:source.customerId,clientRequestId:randomUUID(),subject:'TEST Rechnung zu ausgegebener Ware',body:'TEST gespeichertes Original nach belegter Ausgabe',attachment:{kind:'INVOICE' as const,documentId:individual.receipt.invoiceId},expectedInvoiceIds:[individual.receipt.invoiceId]};
+ const delivered=await withSession(full,()=>sendCustomerMailAction(mailInput));
+ expect(delivered,JSON.stringify(delivered)).toMatchObject({code:'OK'});
+ if(delivered.code!=='OK')throw Error('TEST_A14_FISCAL_DELIVERY_REQUIRED');
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(mailInput))))).toMatchObject({code:'OK',data:{threadId:delivered.data.threadId,replayed:true}});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND order_id=${member.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toHaveLength(0);
  const collective=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:2,clientEventId:randomUUID()}));
  expect(collective,JSON.stringify(collective)).toMatchObject({code:'OK'});
  if(collective.code!=='OK')throw Error('TEST_REMAINING_COLLECTION_REQUIRED');

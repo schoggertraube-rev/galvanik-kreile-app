@@ -75,6 +75,7 @@
       "private.v_intake_delivery_evidence_v1"
     ],
     "src/lib/server/communicationDocumentPort.ts": [
+      "private.v_goods_out_ui_state_v1",
       "private.v_order_freeze_state_v1"
     ],
     "src/lib/server/communicationPort.ts": [

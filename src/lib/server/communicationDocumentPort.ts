@@ -30,18 +30,30 @@ export function invoiceMailDocumentFromSource(row:{id:string;order_id:string|nul
  return {...common,orderId:row.order_id,orderNumber:row.order_number};
 }
 
+/** Fiscal mail after handover uses the existing qualified physical source. */
+function handedInvoiceOrder(tenantId:string){return sql`EXISTS(SELECT 1 FROM private.v_goods_out_ui_state_v1 physical
+ WHERE physical.tenant_id=${tenantId} AND physical.order_id=orders.id AND physical.order_version=orders.version
+  AND physical.integrity_ok AND physical.goods_out_event_count=1 AND physical.goods_out_event_id IS NOT NULL
+  AND orders.station='abgeholt' AND orders.current_station='abgeholt' AND orders.current_station_id='abgeholt' AND orders.status='abgeholt')`;}
+async function readInvoiceOrderMailPhase(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){
+ if(await readReadyNotificationContext(tx,tenantId,orderId))return 'ready' as const;
+ const physical=await tx.execute(sql`SELECT orders.id FROM public.orders orders WHERE orders.tenant_id=${tenantId} AND orders.id=${orderId} AND ${handedInvoiceOrder(tenantId)} FOR UPDATE OF orders`);
+ return physical.length===1?'handed_over' as const:null;
+}
+async function lockInvoiceMailOrders(tx:PrivilegedTenantTransaction,tenantId:string,documents:readonly InvoiceMailDocument[]){
+ const orderIds=[...new Set(documents.flatMap(document=>invoiceMailMembers(document).map(member=>member.orderId)))].sort();
+ if(!orderIds.length)throw Error('INVOICE_MAIL_ORIGINALS_EMPTY');
+ const locked=await tx.execute<{id:string}>(sql`SELECT id FROM public.orders WHERE tenant_id=${tenantId} AND id IN (${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}) ORDER BY id FOR UPDATE`);
+ return locked.length===orderIds.length&&orderIds.every(id=>locked.some(order=>order.id===id));
+}
 /** Same pre-send recheck for initial preparation and frozen-original retry. */
 export async function lockInvoiceMailDocuments(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,documents:readonly InvoiceMailDocument[]){
  if(!documents.length)throw Error('INVOICE_MAIL_ORIGINALS_EMPTY');
  const native=documents[0].orderId===null;
  if(documents.some(document=>(document.orderId===null)!==native))throw Error('INVOICE_MAIL_MIXED_GROUP_FORBIDDEN');
- if(native){
-  const orderIds=[...new Set(documents.flatMap(document=>invoiceMailMembers(document).map(member=>member.orderId)))].sort();
-  const locked=await tx.execute<{id:string}>(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id IN (${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}) ORDER BY id FOR UPDATE`);
-  if(locked.length!==orderIds.length||orderIds.some(id=>!locked.some(order=>order.id===id)))return false;
- }
+ if(!await lockInvoiceMailOrders(tx,auth.tenantId,documents))return false;
  for(const document of documents.slice().sort((a,b)=>(a.orderId===null?a.id:a.orderId).localeCompare(b.orderId===null?b.id:b.orderId))){
-  if(document.orderId!==null&&!await readReadyNotificationContext(tx,auth.tenantId,document.orderId))return false;
+  if(document.orderId!==null&&!await readInvoiceOrderMailPhase(tx,auth.tenantId,document.orderId))return false;
   const locked=await tx.execute(sql`SELECT invoice.id FROM public.invoices invoice WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${document.id}::uuid AND ${invoiceMailSourceMatches(document)} AND invoice.status='issued' AND invoice.aggregate_version=${document.version} AND invoice.pdf_sha256=${document.sha256} FOR UPDATE`);
   if(locked.length!==1)return false;
  }
@@ -95,12 +107,15 @@ export async function appendCommunicationDocument(tx:PrivilegedTenantTransaction
     AND invoice.status='issued' AND invoice.aggregate_version=${invoiceDocument.version} AND invoice.pdf_sha256=${invoiceDocument.sha256}
     AND thread.status='sent' AND thread.customer_id=invoice.customer_id AND (thread.order_id=${input.targetType==='ORDER'?input.targetId:null} OR thread.order_id IS NULL)`);
   if(proof.length!==1)throw Error('INVOICE_NOTIFICATION_PROOF_INVALID');
-  // Native invoices describe already handed-over goods. Their actual fiscal
-  // mail receipt is not a fabricated ready-for-pickup notification.
+  // Fiscal mail for handed-over goods never fabricates a ready notification.
   if(invoiceDocument.orderId!==null){
+  const mailPhase=await readInvoiceOrderMailPhase(tx,auth.tenantId,invoiceDocument.orderId);
+  if(!mailPhase)throw Error('INVOICE_NOTIFICATION_ORDER_SOURCE_INVALID');
+  if(mailPhase==='ready'){
   const bytes=createHash('sha256').update('order-informed:'+auth.tenantId+':'+input.clientRequestId+':'+invoiceDocument.orderId).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
   const h=bytes.subarray(0,16).toString('hex'),key=`${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
   await appendOrderInformed(tx,auth,{orderId:invoiceDocument.orderId,clientEventId:key,channel:'mail',threadId,intent:payload.intent});
+  }
   }
   }
  }
@@ -207,7 +222,8 @@ export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenan
   JOIN private.v_order_freeze_state_v1 frozen ON frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active AND frozen.integrity_ok
   WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId} AND invoice.status='issued' AND invoice.contract_version=1
    AND NOT ${invoiceMailUnresolved(tenantId,sql`invoice.id`)}
-   AND (NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} OR invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[])) AND orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig' AND orders.handover_mode=${handover}
+   AND (NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} OR invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[]))
+   AND ((orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig') OR ${handedInvoiceOrder(tenantId)}) AND orders.handover_mode=${handover}
   ORDER BY orders.order_number,invoice.id LIMIT 102`);
 }
 export class InvoiceMailListChanged extends Error{
@@ -298,6 +314,7 @@ export async function applyRecoveredInvoiceMailEffects(auth:AuthorizationSnapsho
   const prior=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_DOCUMENT_EFFECTS_APPLIED_V1' AND payload->>'threadId'=${threadId}`);
   if(prior.length)return;
   try{await withTenantSavepoint(tx,async tx=>{
+   if(!await lockInvoiceMailOrders(tx,auth.tenantId,[row.original,...row.original.bundle??[]]))throw Error('COMMUNICATION_RECONCILIATION_ORDER_SOURCE_MISSING');
    for(const id of [row.original.id,...row.original.bundle?.map(invoice=>invoice.id)??[]].sort())await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${id}::uuid FOR UPDATE`);
    const obsolete=await obsoleteInvoiceMailMembers(tx,auth,row.original),tasks:string[]=[];
    const all=[row.original,...row.original.bundle??[]],active=all.filter(invoice=>!obsolete.includes(invoice.id));
