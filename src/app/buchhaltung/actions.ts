@@ -1,5 +1,5 @@
 'use server'
-import {berlinCalendarDay} from '@/lib/domain/workingDays';
+
 
 import { createClient } from '@/lib/supabase/server'
 import type { Beleg, BelegDetail, BelegFilter, Ausgangsrechnung, RechnungFilter, AusgangsrechnungPosition , Kostenposten, KostenpostenFilter } from '@/lib/buchhaltung/types'
@@ -142,7 +142,7 @@ export async function exportBelegeAction(format: "DATEV" | "Lexware" | "CSV"): P
 
 export async function listRechnungenAction(filter?: RechnungFilter): Promise<Ausgangsrechnung[]> {
   const rows = await canonicalInvoices(filter?.zeitraum?.von, filter?.zeitraum?.bis, filter?.kundeId);
-  const today = berlinCalendarDay();
+
   return rows
     .filter((invoice) => {
       if (filter?.status === 'storniert') return invoice.status === 'cancelled';
@@ -150,8 +150,8 @@ export async function listRechnungenAction(filter?: RechnungFilter): Promise<Aus
       if (filter?.status === 'bezahlt') return invoice.paymentStatus === 'bezahlt';
       if (filter?.status === 'teilbezahlt') return invoice.paymentStatus === 'teilbezahlt';
       if (filter?.status === 'offen') return invoice.openAmountCents > 0;
-      if (filter?.status === 'ueberfaellig') return invoice.openAmountCents > 0 && invoice.dueDate < today;
-      return !filter?.ueberfaellig || (invoice.openAmountCents > 0 && invoice.dueDate < today);
+      if (filter?.status === 'ueberfaellig') return invoice.overdue;
+      return !filter?.ueberfaellig || (invoice.overdue);
     })
     .map(mapInvoiceTruthToClient);
 }
@@ -171,18 +171,19 @@ async function canonicalInvoices(from?: string, to?: string, customerId?: string
 }
 
 function mapInvoiceTruthToClient(invoice: InvoiceTruthRow): Ausgangsrechnung {
-  const today = berlinCalendarDay();
+
   const status: Ausgangsrechnung['status'] = invoice.status === 'cancelled'
     ? 'storniert'
     : invoice.paymentStatus === 'bezahlt'
       ? 'bezahlt'
-      : invoice.paymentStatus === 'teilbezahlt'
-        ? 'teilbezahlt'
-        : invoice.openAmountCents > 0 && invoice.dueDate < today ? 'ueberfaellig' : 'offen';
+      : invoice.overdue ? 'ueberfaellig'
+        : invoice.paymentStatus === 'teilbezahlt' ? 'teilbezahlt' : 'offen';
   return {
     id: invoice.invoiceId,
     nummer: invoice.invoiceNumber,
     kundeId: invoice.customerId,
+    ...(invoice.customerName===null?{}:{kundeName:invoice.customerName}),
+    openAmountCents:invoice.openAmountCents,
     datum: invoice.issuedAt.slice(0, 10),
     faelligAm: invoice.dueDate,
     brutto: invoice.grossAmountCents / 100,
@@ -190,7 +191,7 @@ function mapInvoiceTruthToClient(invoice: InvoiceTruthRow): Ausgangsrechnung {
     ...(invoice.vatRateBasisPoints===null?{}:{ustSatz:invoice.vatRateBasisPoints/100}),
     ustBetrag: invoice.vatAmountCents / 100,
     status,
-    mahnstufe: 0,
+    mahnstufe: null,
   };
 }
 

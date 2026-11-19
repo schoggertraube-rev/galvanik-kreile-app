@@ -1,4 +1,6 @@
 "use server";
+import type {InvoiceTruthRow} from "@/lib/server/invoiceTruthRead";
+import {invoiceAgingBucket} from "@/lib/domain/invoiceAgingContract";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import {
@@ -132,6 +134,7 @@ export interface KundenDetailAuftrag {
 
 export async function getCockpitKpis() {
   await requireCockpitRead();
+  const openInvoices=await canonicalOpenInvoices();
   const supabase = await createClient();
   
   // v_monatsergebnis for current month
@@ -141,19 +144,10 @@ export async function getCockpitKpis() {
     .limit(1)
     .maybeSingle();
 
-  // v_aging for offene Forderungen
-  const { data: agingData } = await supabase
-    .from('v_aging')
-    .select('netto, tage_ueberfaellig')
-    .neq('aging_bucket', 'bezahlt');
-
-  let offeneForderungen = 0;
-  let ueberfaelligCount = 0;
-  
-  if (agingData) {
-    offeneForderungen = agingData.reduce((acc, row) => acc + (row.netto || 0), 0);
-    ueberfaelligCount = agingData.filter(row => (row.tage_ueberfaellig || 0) > 0).length;
-  }
+  const openCents=openInvoices.reduce((sum,row)=>sum+row.openAmountCents,0);
+  if(!Number.isSafeInteger(openCents))throw Error('INVOICE_OPEN_TOTAL_RANGE_INVALID');
+  const offeneForderungen=openCents/100;
+  const ueberfaelligCount=openInvoices.filter(row=>row.overdue).length;
 
   const umsatz = monatsergebnis?.erloes_netto || 0;
   const db = monatsergebnis?.ergebnis || 0;
@@ -247,43 +241,22 @@ export async function getEngpassDaten(): Promise<EngpassStation[]> {
   return data || [];
 }
 
+async function canonicalOpenInvoices():Promise<InvoiceTruthRow[]>{
+ const {getInvoiceTruthAction}=await import('@/app/actions/invoices.actions');
+ const result=await getInvoiceTruthAction();
+ if(result.code!=='OK')throw Error(result.message);
+ return result.data.filter(row=>row.status==='issued'&&row.openAmountCents>0);
+}
 export async function getAgingDaten(): Promise<AgingData[]> {
-  await requireCockpitRead();
-  const supabase = await createClient();
-  
-  const { data, error } = await supabase
-    .from('v_aging')
-    .select('aging_bucket, netto')
-    .neq('aging_bucket', 'bezahlt');
-
-  if (error) {
-    console.error("Error getAgingDaten:", error.message, error.details, error.hint);
-    return [];
-  }
-
-  const buckets: Record<string, { anzahl: number, summe: number }> = {
-    'nicht_faellig': { anzahl: 0, summe: 0 },
-    'ohne_faelligkeit': { anzahl: 0, summe: 0 },
-    '1-14': { anzahl: 0, summe: 0 },
-    '15-30': { anzahl: 0, summe: 0 },
-    '31-60': { anzahl: 0, summe: 0 },
-    '61-90': { anzahl: 0, summe: 0 },
-    '>90': { anzahl: 0, summe: 0 }
-  };
-
-  (data || []).forEach(row => {
-    const b = row.aging_bucket as string;
-    if (buckets[b]) {
-      buckets[b].anzahl += 1;
-      buckets[b].summe += (row.netto || 0);
-    }
-  });
-
-  return Object.entries(buckets).map(([bucket, vals]) => ({
-    aging_bucket: bucket,
-    anzahl: vals.anzahl,
-    summe: vals.summe
-  }));
+ await requireCockpitRead();
+ const rows=await canonicalOpenInvoices();
+ const buckets=new Map<string,{aging_bucket:string;anzahl:number;cents:number}>(['nicht_faellig','ohne_faelligkeit','1-14','15-30','31-60','61-90','>90'].map(aging_bucket=>[aging_bucket,{aging_bucket,anzahl:0,cents:0}]));
+ for(const row of rows){
+  const bucket=buckets.get(invoiceAgingBucket(row));if(!bucket)throw Error('INVOICE_AGING_BUCKET_INVALID');
+  bucket.anzahl+=1;bucket.cents+=row.openAmountCents;
+  if(!Number.isSafeInteger(bucket.cents))throw Error('INVOICE_AGING_TOTAL_RANGE_INVALID');
+ }
+ return [...buckets.values()].map(row=>({aging_bucket:row.aging_bucket,anzahl:row.anzahl,summe:row.cents/100}));
 }
 
 export async function getAuftragDbRanking(limit = 10): Promise<AuftragDbRankingRow[]> {
@@ -480,19 +453,11 @@ export async function getKundenDetails(customerId: string): Promise<{ clv: Kunde
 
 
 export async function getAgingRechnungen(bucket: string): Promise<AgingInvoiceRow[]> {
-  await requireCockpitRead();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('v_aging')
-    .select('id, rechnungsnummer, customer_id, kunde_name, netto, faellig_am, tage_ueberfaellig, mahnstufe')
-    .eq('aging_bucket', bucket)
-    .order('tage_ueberfaellig', { ascending: false });
-
-  if (error) {
-    console.error("Error getAgingRechnungen:", error);
-    return [];
-  }
-  return data || [];
+ await requireCockpitRead();
+ return (await canonicalOpenInvoices()).filter(row=>invoiceAgingBucket(row)===bucket)
+  .sort((a,b)=>b.overdueDays-a.overdueDays||a.invoiceNumber.localeCompare(b.invoiceNumber))
+  .map(row=>({id:row.invoiceId,rechnungsnummer:row.invoiceNumber,customer_id:row.customerId,kunde_name:row.customerName,
+   netto:row.netAmountCents/100,faellig_am:row.dueDate,tage_ueberfaellig:row.overdueDays,mahnstufe:null}));
 }
 
 export async function getAktiveWarnungen(): Promise<ActiveWarning[]> {

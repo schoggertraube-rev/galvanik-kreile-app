@@ -298,7 +298,10 @@ async function assembleOffenePosten(): Promise<DataResult<KpiSnapshot>> {
   if (res.status !== "ok" || !res.data) return { status: res.status, data: null, message: res.message };
 
   const posten = res.data;
-  const total = posten.reduce((s, p) => s + p.brutto, 0);
+  if(posten.some(p=>!Number.isSafeInteger(p.openAmountCents)||p.openAmountCents!<0))return {status:'missing',data:null};
+  const totalCents = posten.reduce((s, p) => s + p.openAmountCents!, 0);
+  if(!Number.isSafeInteger(totalCents))return {status:'missing',data:null};
+  const total=totalCents/100;
   const ueberfaellig = posten.filter((p) => p.status === "ueberfaellig");
 
   return {
@@ -323,8 +326,8 @@ async function assembleOffenePosten(): Promise<DataResult<KpiSnapshot>> {
         id: p.id,
         date: p.datum,
         label: p.kundeName || p.nummer,
-        sublabel: `${p.nummer} \u00B7 F\u00E4llig: ${p.faelligAm || "\u2013"} \u00B7 Mahnstufe ${p.mahnstufe}`,
-        amount: p.brutto,
+        sublabel: `${p.nummer} \u00B7 F\u00E4llig: ${p.faelligAm || "\u2013"}`,
+        amount: p.openAmountCents!/100,
         href: `/buchhaltung/rechnungen?id=${p.id}`,
         avatarInitial: (p.kundeName || "?").charAt(0),
         avatarColor: p.status === "ueberfaellig" ? "#D14F3D" : "#E8943C",

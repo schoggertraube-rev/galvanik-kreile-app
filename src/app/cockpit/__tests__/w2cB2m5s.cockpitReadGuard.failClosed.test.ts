@@ -122,7 +122,26 @@ describe("W2C-B2M5S Cockpit Read Guard", () => {
       const guard = body.indexOf("await requireCockpitRead();");
       expect(guard, `${name} must guard before all execution`).toBeGreaterThan(-1);
       expect(body.slice(body.indexOf(" {\n") + 3).trimStart(), `${name} must call the guard first`).toMatch(/^await requireCockpitRead\(\);/);
-      const dataPort = body.search(/\b(createClient|createAuthorizedDataClient)\s*\(/);
+      const directPort = body.search(/\b(createClient|createAuthorizedDataClient)\s*\(/);
+      const delegatedPort = body.search(/\bcanonicalOpenInvoices\s*\(/);
+      if(delegatedPort>=0){
+        // PL19.11.15:28: trace this one real canonical port, never a name-only exemption.
+        const helper=text.slice(text.indexOf('async function canonicalOpenInvoices('),text.indexOf('export async function getAgingDaten('));
+        expect(helper).toContain("await import('@/app/actions/invoices.actions')");
+        expect(helper).toContain('await getInvoiceTruthAction()');
+        expect(helper).toContain("if(result.code!=='OK')throw Error(result.message)");
+        expect(helper).not.toMatch(/\b(createClient|createAuthorizedDataClient)\s*\(/);
+        const root=readFileSync(resolve(process.cwd(),'src/app/actions/invoices.actions.ts'),'utf8').split('export async function getInvoiceTruthAction(')[1];
+        expect(root.indexOf('await resolveActionAuthorization()')).toBeLessThan(root.indexOf('return readInvoiceTruth('));
+        const reader=readFileSync(resolve(process.cwd(),'src/lib/server/invoiceTruthRead.ts'),'utf8');
+        const financial=exportedFunctionBody(reader,'readInvoiceTruth');
+        const permission=financial.indexOf('authorization.permissions.includes("perm_view_prices")');
+        expect(permission).toBeGreaterThan(-1);
+        expect(financial.indexOf('code: "FORBIDDEN"')).toBeGreaterThan(permission);
+        expect(financial.indexOf('await withPrivilegedTenantTransaction')).toBeGreaterThan(financial.indexOf('code: "FORBIDDEN"'));
+      }
+      const dataPort=Math.min(...[directPort,delegatedPort].filter(index=>index>=0));
+      expect(Number.isFinite(dataPort), `${name} must retain an actual data port`).toBe(true);
       expect(dataPort, `${name} must retain a data port after its guard`).toBeGreaterThan(guard);
     }
   });

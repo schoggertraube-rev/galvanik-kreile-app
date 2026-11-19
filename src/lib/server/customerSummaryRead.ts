@@ -3,7 +3,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
-import { overdueInvoiceCondition } from "@/lib/server/paymentContract";
+import { classifyOverdue } from "@/lib/server/paymentContract";
 import {CUSTOMER_METRICS_COPY} from '@/ui/situationCatalog';
 import {invoiceAlreadySent} from './communicationDocumentPort';
 import {evaluateOrderPriority} from '@/lib/priority';
@@ -34,7 +34,7 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
         AND queue.station NOT IN ('abgeholt','versendet','raus','storniert') AND order_source.ware<>'storniert') AS active_orders,
       (SELECT count(*)::integer FROM private.v_open_quotes_v1 quote WHERE quote.tenant_id=customer.tenant_id AND quote.customer_id=customer.id) AS active_quotes,
       (SELECT count(*)::integer FROM public.invoices invoice WHERE ${money} AND invoice.tenant_id=customer.tenant_id AND invoice.customer_id=customer.id
-        AND ${overdueInvoiceCondition()}) AS overdue,
+        AND ${classifyOverdue()}) AS overdue,
       (SELECT count(*)::integer FROM public.intake_item source WHERE source.tenant_id=customer.tenant_id AND source.richtung IN ('rein','intern') AND ${openCondition} AND source.zuordnung='offen'
         AND (${mails} OR source.kanal<>'mail' AND ${intake} AND source.erstellt_von=${auth.userId}::uuid)
         AND (source.kunde_id=customer.id OR source.kunde_id IS NULL AND customer.email IS NOT NULL AND lower(btrim(source.absender_adresse))=lower(btrim(customer.email)))) AS unassigned,
@@ -124,7 +124,7 @@ export type CustomerKennzahlen={
 };
 
 /** The customer picture's single metrics port. No search-answer or persisted rollup. */
-async function readCustomerKennzahlen(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string):Promise<CustomerKennzahlen>{
+export async function readCustomerKennzahlen(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string,readDay?:string):Promise<CustomerKennzahlen>{
  const money=hasAuthorizationArea(auth,'zahlungen');
  const rows=await tx.execute<{from_date:string;to_date:string;as_of:Date|string;paid_count:number;payment_days:string|number|null;overdue_count:number;overdue_open:string|number;net_revenue:string|number;open_total:string|number;released_count:number;complaint_count:number;release_integrity:boolean}>(sql`
   WITH calendar AS (
@@ -160,7 +160,7 @@ async function readCustomerKennzahlen(tx:PrivilegedTenantTransaction,auth:Author
   CROSS JOIN LATERAL (
    SELECT count(*)::integer AS invoice_count,coalesce(sum(invoice.payment_open_amount_cents),0)::bigint AS open_amount
    FROM public.invoices invoice
-   WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId} AND ${overdueInvoiceCondition()} AND ${money}
+   WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId} AND ${classifyOverdue(readDay)} AND ${money}
   ) overdue
   CROSS JOIN LATERAL (
    SELECT coalesce(sum(invoice.net_amount_cents) FILTER(WHERE (invoice.issued_at AT TIME ZONE 'Europe/Berlin')::date BETWEEN calendar.from_date AND calendar.to_date),0)

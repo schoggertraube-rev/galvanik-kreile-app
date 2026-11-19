@@ -31,7 +31,9 @@ it('A38a A5/A6 joins two actual handovers to one open monthly collection and rej
  const counters=await sql`SELECT invoice_year,last_number,updated_at FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`;
  const [source]=await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${orders[0].orderId}`;
  const rejected=await withSession(full,()=>issueInvoiceAction({orderId:orders[0].orderId,expectedVersion:source.version,clientEventId:randomUUID()}));
- expect(rejected,JSON.stringify(rejected)).toMatchObject({code:'ORDER_IN_COLLECTION'});
+ const [customer]=await sql`SELECT name FROM public.customers WHERE tenant_id=${tenant} AND id=${customerId}`;
+ const month=new Intl.DateTimeFormat('de-DE',{month:'long',year:'numeric',timeZone:'Europe/Berlin'}).format(new Date(collections[0].monat+'T12:00:00Z'));
+ expect(rejected,JSON.stringify(rejected)).toMatchObject({code:'ORDER_IN_COLLECTION',message:'Gehoert zur Sammelrechnung '+month+' fuer '+customer.name+' – wird dort abgerechnet.'});
  expect(await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${tenant}`).toEqual(before);
  expect(await sql`SELECT invoice_year,last_number,updated_at FROM private.invoice_number_sequences WHERE tenant_id=${tenant} ORDER BY invoice_year`).toEqual(counters);
 });

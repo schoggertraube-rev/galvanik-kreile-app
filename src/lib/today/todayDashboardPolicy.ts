@@ -160,6 +160,7 @@ type TodayOrder = {
 };
 
 type TodayMoneyCandidate = {
+  overdue?:boolean;overdueAsOf?:string;
   customerCountry: string | null;
   dueDate: string | null;
   goodsOutRecorded: boolean;
@@ -229,10 +230,9 @@ export function classifyMoneyForToday(candidate: TodayMoneyCandidate, today: str
     return !foreignCustomer && station === "fertig" && paymentStatus !== "bezahlt" ? "open_prepayment" : null;
   }
 
-  const dueDate = candidate.dueDate?.slice(0, 10) ?? "";
-  return dueDate !== "" && dueDate < today && (paymentStatus === "offen" || paymentStatus === "teilbezahlt")
-    ? "overdue_invoice"
-    : null;
+  // Invoice urgency is projected from the one SQL classifier, not recomputed
+  // from dates in a second browser/server implementation.
+  return candidate.overdueAsOf===today&&candidate.overdue===true ? "overdue_invoice" : null;
 }
 
 /** Personal ownership is only a tie breaker after actual urgency and deadline. */
@@ -320,11 +320,10 @@ export function projectOrderSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:
 
 /** Financial slice uses the same persisted open-invoice rows, never the visible
  * twenty-row list. An unreadable amount/date is a gap, not a zero balance. */
-export type TodayInvoiceMoneyRow={id:string;payment_version:number;due_date:Date|string|null;open_amount_cents:number|string|null;customer_country:string|null;payment_mode:string;payment_status:string|null;station:string};
+export type TodayInvoiceMoneyRow={overdue:boolean;overdue_as_of:string;id:string;payment_version:number;due_date:Date|string|null;open_amount_cents:number|string|null;customer_country:string|null;payment_mode:string;payment_status:string|null;station:string};
 /** Same canonical classification for the metric, complete list, amounts and challenges. */
 export function isOverdueInvoiceForToday(row:TodayInvoiceMoneyRow,today:string){
- const raw=row.due_date instanceof Date?row.due_date.toISOString():row.due_date;
- return classifyMoneyForToday({customerCountry:row.customer_country,dueDate:raw===null?null:raw.slice(0,10),goodsOutRecorded:false,paymentMode:row.payment_mode,paymentStatus:row.payment_status,station:row.station},today)==='overdue_invoice';
+ return typeof row.overdue==='boolean'&&row.overdue_as_of===today?row.overdue:null;
 }
 export function projectTodayInvoiceMoney(source:{code:'OK';data:ReadonlyArray<TodayInvoiceMoneyRow>}|{code:'SOURCE_INCOMPLETE'},calendar:ReturnType<typeof readTodayCalendar>){
  const missing:string[]=[],sources:Array<{id:string;version:number;dueDate:string;amountCents:number}>=[];
@@ -340,7 +339,8 @@ export function projectTodayInvoiceMoney(source:{code:'OK';data:ReadonlyArray<To
   }
   const overdue=isOverdueInvoiceForToday(row,calendar.today);
   if(!Number.isSafeInteger(openCents+amount)||!Number.isSafeInteger(overdueCents+(overdue?amount:0))){missing.push('INVOICE_MONEY_RANGE:'+row.id);continue;}
-  openCents+=amount;if(overdue){overdueCents+=amount;overdueIds.add(row.id);}
+  openCents+=amount;if(overdue===null)missing.push('INVOICE_OVERDUE_SOURCE:'+row.id);
+  if(overdue===true){overdueCents+=amount;overdueIds.add(row.id);}
   sources.push({id:row.id,version:row.payment_version,dueDate,amountCents:amount});
  }
  const totals={openCount:sources.length,openCents,overdueCount:overdueIds.size,overdueCents,

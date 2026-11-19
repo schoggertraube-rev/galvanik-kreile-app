@@ -20,7 +20,7 @@ import {
   isPaymentMode,
   mapPaymentSummaryRow,
   readOrderPaymentSummaries,
-  overdueInvoiceCondition,
+  classifyOverdue,
   type OrderPaymentMode,
   type PaymentStatus,
 } from "@/lib/server/paymentContract";
@@ -745,7 +745,7 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
         FROM public.invoices invoice
         WHERE invoice.tenant_id = ${tenantId}
           AND invoice.customer_id = ${order.customer_id}
-          AND ${overdueInvoiceCondition()}
+          AND ${classifyOverdue()}
         ORDER BY invoice.due_date, invoice.id
         LIMIT 1
         FOR SHARE

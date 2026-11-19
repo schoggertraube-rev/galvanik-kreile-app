@@ -1168,7 +1168,7 @@ export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantI
   return selected.length===1?selected[0].customer_id:null;
 }
 
-export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader,readShippingSettings?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>,readOriginal?:InvoiceOriginalReader,readCustomerTerms?:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<Parameters<typeof resolveInvoicePaymentTerms>[1]>): Promise<CreateInvoiceResult> {
+export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader,readShippingSettings?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>,readOriginal?:InvoiceOriginalReader,readCustomerTerms?:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<Parameters<typeof resolveInvoicePaymentTerms>[1]&{customerShortName:string}>): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
     const zeroShippingFee=plainObject(input)&&plainObject(input.shippingCosts)&&input.shippingCosts.expectedFeeCents===0;
     return { code: "VALIDATION_ERROR", message: zeroShippingFee?SHIPPING_FEE_COPY.noAdditionalInvoiceNeeded:"Ungültige Rechnungsanfrage." };
@@ -1246,22 +1246,22 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       ) {
         return { code: "VALIDATION_ERROR", message: "Zahlungsmodus des Auftrags ist nicht verfügbar." };
       }
+      if(!readCustomerTerms)throw Error('INVOICE_CUSTOMER_TERMS_PORT_MISSING');
+      const customerInvoiceTerms=await readCustomerTerms(tx,tenantId,order.customer_id);
       // S38a E3/A6: the already locked order serializes membership with the
       // existing collection writer. A collection is never a single invoice.
-      const membership=await tx.execute<{id:string;status:string}>(sql`
-        SELECT collection.id::text,collection.status FROM public.invoice_collection_orders member
+      const membership=await tx.execute<{id:string;status:string;month:string}>(sql`
+        SELECT collection.id::text,collection.status,to_char(collection.monat,'YYYY-MM-DD') AS month FROM public.invoice_collection_orders member
         JOIN public.invoice_collections collection ON collection.tenant_id=member.tenant_id AND collection.id=member.collection_id
         WHERE member.tenant_id=${tenantId} AND member.order_id=${order.id}
         FOR SHARE OF collection,member`);
       if(membership.length>1)throw Error('INVOICE_COLLECTION_MEMBERSHIP_INVALID');
       if(membership.length===1){
         if(!['offen','abgerechnet'].includes(membership[0].status))throw Error('INVOICE_COLLECTION_SOURCE_INVALID');
-        return {code:'ORDER_IN_COLLECTION',message:E_INVOICE_COPY.orderInCollection};
+        const month=new Intl.DateTimeFormat('de-DE',{month:'long',year:'numeric',timeZone:'Europe/Berlin'}).format(new Date(toDateOnly(membership[0].month)+'T12:00:00Z'));
+        return {code:'ORDER_IN_COLLECTION',message:E_INVOICE_COPY.orderInCollection(month,customerInvoiceTerms.customerShortName)};
       }
-      // Keep customer master data stable before reading the agreement and
-      // invoice source; do not mix two customer versions in one original.
-      if(!readCustomerTerms)throw Error('INVOICE_CUSTOMER_TERMS_PORT_MISSING');
-      const customerInvoiceTerms=await readCustomerTerms(tx,tenantId,order.customer_id);
+      // Customer master data above is stable before agreement/source reads.
       const agreement = await readEffectiveCustomerAgreement(tx, {
             tenantId,
             customerId: order.customer_id,

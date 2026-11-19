@@ -7,10 +7,11 @@ import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 export const PAYMENT_CONTRACT_VERSION = 1 as const;
 
 /** Shared invoice fact for customer hints and the release gate; alias is invoice. */
-export function overdueInvoiceCondition() {
+export function classifyOverdue(today?:string) {
+  const day=today===undefined?sql`(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date`:sql`${today}::date`;
   return sql`private.invoice_is_overdue_v1(invoice.status::text,invoice.payment_status::text,
     invoice.payment_open_amount_cents,invoice.due_date,
-    (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date)`;
+    ${day})`;
 }
 export const PAYMENT_MODES = ["vorkasse", "abholung", "rechnung"] as const;
 export const ORDER_PAYMENT_MODES = ["vorkasse", "abholung", "rechnung", "keiner"] as const;
