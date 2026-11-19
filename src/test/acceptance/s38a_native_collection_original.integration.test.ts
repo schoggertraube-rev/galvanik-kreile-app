@@ -14,6 +14,8 @@ import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {sql as statement} from 'drizzle-orm';
+import {confirmPaymentAction} from '@/app/actions/payments.actions';
+import {readPaymentSummary} from '@/lib/server/paymentSummaryRead';
 
 async function historicalCollection(rates:readonly number[]){
  if(!tenant.startsWith('TEST-ablauf-')||rates.length!==3)throw Error('TEST_HISTORICAL_SOURCE_REQUIRED');
@@ -36,7 +38,7 @@ async function historicalCollection(rates:readonly number[]){
   await tx`INSERT INTO public.invoice_collections(id,tenant_id,customer_id,monat,ziel_tage,status,version,created_at,created_by)
    VALUES(${collectionId}::uuid,${tenant},${customerId},${month}::date,30,'offen',1,${start}::timestamptz,${historicalActor}::uuid)`;
   for(let i=0;i<3;i++){
-   const orderId=randomUUID(),freezeId=randomUUID(),freezeEvent=randomUUID(),number='TEST-COL-'+randomUUID();
+   const orderId=randomUUID(),freezeId=randomUUID(),freezeEvent=randomUUID(),number='TEST-COL-'+randomUUID().slice(0,8);
    await tx`INSERT INTO public.orders(id,tenant_id,order_number,customer_id,title,station,current_station,current_station_id,status,version,payment_mode,payment_mode_version,handover_mode,source,created_at,due_date,geprueft)
     VALUES(${orderId},${tenant},${number},${customerId},${'TEST Historical Member '+i},'abgeholt','abgeholt','abgeholt','abgeholt',3,'rechnung',0,'pickup','F1_ORDER_INTAKE',${start}::timestamptz,${frozenAt}::timestamptz,true)`;
    await tx`INSERT INTO public.items(id,tenant_id,order_id,customer_id,name,quantity,current_station_id,preis_netto,unit,vat_rate_basis_points,material,surface_requested,created_at)
@@ -144,4 +146,26 @@ it('A7/A8 real native two-rate invoice is once-only under parallel sessions and 
  expect(after).toEqual(stored);
  const [number]=await sql`SELECT last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant}`;
  expect(number.last_number).toBe(initialNumber+1);
+});
+
+it('native payment uses the existing payment command once and the global reader counts one fiscal invoice, not its three members',async()=>{
+ const source=await historicalCollection([1900,1900,1900]);
+ const issue=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(issue.code!=='OK')throw Error('TEST_NATIVE_PAYMENT_ORIGINAL_REQUIRED:'+JSON.stringify(issue));
+ const payer=await createFixture(['zahlungen'],'buero');
+ const input={invoiceId:issue.receipt.invoiceId,amount:4000,method:'ueberweisung' as const,expectedVersion:0,expectedOpenAmountCents:11900,clientEventId:randomUUID()};
+ const paid=await withSession(payer,()=>confirmPaymentAction(input));
+ expect(paid,JSON.stringify(paid)).toMatchObject({code:'OK',receipt:{invoiceId:issue.receipt.invoiceId,orderId:null,collectionId:source.collectionId,amountCents:4000,paidAmountCents:4000,openAmountCents:7900,confirmedBy:payer.actorId}});
+ if(paid.code!=='OK')throw Error('TEST_NATIVE_PAYMENT_REQUIRED');
+ expect(await withSession(payer,()=>confirmPaymentAction(JSON.parse(JSON.stringify(input))))).toEqual({...paid,replayed:true});
+ expect(await withSession(full,()=>confirmPaymentAction(input))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(payer,()=>confirmPaymentAction({...input,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT',currentOpenAmountCents:7900});
+ expect(await withSession(payer,()=>confirmPaymentAction({...input,expectedVersion:1,expectedOpenAmountCents:7900,amount:7901,clientEventId:randomUUID()}))).toMatchObject({code:'VALIDATION_ERROR'});
+ const cashOnly=await createFixture(['kassieren','auftraege'],'werkstatt');
+ expect(await withSession(cashOnly,()=>confirmPaymentAction({...input,method:'bar',clientEventId:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
+ const auth=await withSession(payer,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_PAYMENT_READ_AUTH_REQUIRED');
+ expect(auth.data.permissions).not.toContain('perm_view_prices');
+ const summary=await readPaymentSummary(auth.data);expect(summary.code).toBe('OK');if(summary.code!=='OK')throw Error('TEST_NATIVE_PAYMENT_READ_REQUIRED');
+ expect(summary.data.filter(row=>row.invoiceId===issue.receipt.invoiceId)).toMatchObject([{invoiceId:issue.receipt.invoiceId,orderId:null,totalAmountCents:11900,paidAmountCents:4000,openAmountCents:7900}]);
+ expect(await sql`SELECT order_id,amount_eur::text FROM public.payments WHERE tenant_id=${tenant} AND invoice_id=${issue.receipt.invoiceId}::uuid`).toEqual([{order_id:null,amount_eur:'40.00'}]);
 });
