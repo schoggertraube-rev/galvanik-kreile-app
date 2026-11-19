@@ -22,6 +22,10 @@ export type EffectiveCustomerAgreementReadInput = {
   lock?: boolean;
 };
 
+export type CollectionAgreementReadInput={tenantId:string;customerId:string;orderId:null;memberOrderIds:readonly string[];lock?:boolean};
+export type IgnoredCollectionAgreement={id:string;orderId:string|null;type:CustomerAgreementType;version:number};
+export type CollectionAgreementResolution={agreement:CustomerAgreementRecord|null;ignored:IgnoredCollectionAgreement[]};
+
 export type InactiveCustomerAgreementHint = {
   label: string;
   type: CustomerAgreementType;
@@ -92,7 +96,7 @@ function personName(value: unknown): string | null {
 
 function mapAgreement(
   row: AgreementRow,
-  input: EffectiveCustomerAgreementReadInput,
+  input: EffectiveCustomerAgreementReadInput|CollectionAgreementReadInput,
 ): CustomerAgreementRecord {
   const type = TYPES.has(row.typ as CustomerAgreementType) ? row.typ as CustomerAgreementType : null;
   const position = integer(row.position, "CUSTOMER_AGREEMENT_POSITION_INVALID");
@@ -103,7 +107,7 @@ function mapAgreement(
     !UUID.test(row.id)
     || row.tenant_id !== input.tenantId
     || row.customer_id !== input.customerId
-    || (row.order_id !== null && row.order_id !== input.orderId)
+    || (row.order_id !== null && (input.orderId===null?!input.memberOrderIds.includes(row.order_id):row.order_id!==input.orderId))
     || position < 1
     || position > 20
     || typeof row.bezeichnung !== "string"
@@ -153,23 +157,24 @@ function mapAgreement(
  * The view is the one database truth for current typed payment agreements.
  * An order agreement has precedence over a customer agreement.
  */
-export async function readEffectiveCustomerAgreement(
-  tx: PrivilegedTenantTransaction,
-  input: EffectiveCustomerAgreementReadInput,
-): Promise<CustomerAgreementRecord | null> {
-  if (!textId(input.tenantId) || !textId(input.customerId) || !textId(input.orderId)) {
+export function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:CollectionAgreementReadInput):Promise<CollectionAgreementResolution>;
+export function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:EffectiveCustomerAgreementReadInput):Promise<CustomerAgreementRecord|null>;
+export async function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:EffectiveCustomerAgreementReadInput|CollectionAgreementReadInput):Promise<CustomerAgreementRecord|null|CollectionAgreementResolution>{
+  const collectionScope=input.orderId===null;
+  if (!textId(input.tenantId) || !textId(input.customerId) || (collectionScope?(input.memberOrderIds.length===0||!input.memberOrderIds.every(textId)||new Set(input.memberOrderIds).size!==input.memberOrderIds.length):!textId(input.orderId))) {
     throw new Error("CUSTOMER_AGREEMENT_EFFECTIVE_INPUT_INVALID");
   }
+  const scopeIds=collectionScope?input.memberOrderIds:[input.orderId];
   const base = sql`
     SELECT id::text, tenant_id, customer_id, order_id, position, bezeichnung, wert, typ,
       ziel_tage, geld, hinweis, gueltig_bis, grund, version, created_at, created_by_name
     FROM private.v_customer_effective_agreement_v1
     WHERE tenant_id = ${input.tenantId}
       AND customer_id = ${input.customerId}
-      AND (order_id IS NULL OR order_id = ${input.orderId})
+      AND (order_id IS NULL OR order_id IN (${sql.join(scopeIds.map(id=>sql`${id}`),sql`, `)}))
     ORDER BY CASE WHEN order_id = ${input.orderId} THEN 0 ELSE 1 END,
       created_at DESC, id
-    LIMIT 3
+    ${collectionScope?sql``:sql`LIMIT 3`}
   `;
   // PostgreSQL cannot safely lock through the display view's optional creator
   // join. The locked form therefore reads the same current-row predicate from
@@ -184,7 +189,7 @@ export async function readEffectiveCustomerAgreement(
     FROM public.customer_agreements agreement
     WHERE agreement.tenant_id = ${input.tenantId}
       AND agreement.customer_id = ${input.customerId}
-      AND (agreement.order_id IS NULL OR agreement.order_id = ${input.orderId})
+      AND (agreement.order_id IS NULL OR agreement.order_id IN (${sql.join(scopeIds.map(id=>sql`${id}`),sql`, `)}))
       AND agreement.typ IS NOT NULL
       AND agreement.geld = true
       AND agreement.widerrufen_am IS NULL
@@ -194,10 +199,22 @@ export async function readEffectiveCustomerAgreement(
       )
     ORDER BY CASE WHEN agreement.order_id = ${input.orderId} THEN 0 ELSE 1 END,
       agreement.created_at DESC, agreement.id
-    LIMIT 3
+    ${collectionScope?sql``:sql`LIMIT 3`}
     FOR UPDATE
   `;
   const rows = await tx.execute<AgreementRow>(input.lock ? locked : base);
+  if(collectionScope){
+    // The invoice belongs to the customer collection, never one member's
+    // payment agreement. Keep ignored source identities in the business event.
+    const applicable=rows.filter(row=>row.order_id===null&&row.typ==='sammelrechnung');
+    if(applicable.length>1)throw Error('CUSTOMER_COLLECTION_AGREEMENT_AMBIGUOUS');
+    const ignored=rows.filter(row=>!applicable.includes(row)).map(row=>{
+      const version=integer(row.version,'CUSTOMER_COLLECTION_IGNORED_VERSION_INVALID');
+      if(!UUID.test(row.id)||row.tenant_id!==input.tenantId||row.customer_id!==input.customerId||!TYPES.has(row.typ as CustomerAgreementType)||version<1||(row.order_id!==null&&!input.memberOrderIds.includes(row.order_id)))throw Error('CUSTOMER_COLLECTION_IGNORED_SOURCE_INVALID');
+      return {id:row.id,orderId:row.order_id,type:row.typ as CustomerAgreementType,version};
+    });
+    return {agreement:applicable.length===1?mapAgreement(applicable[0],input):null,ignored};
+  }
   const agreements = rows.map((row) => mapAgreement(row, input));
   const orderAgreements = agreements.filter((agreement) => agreement.orderId === input.orderId);
   const customerAgreements = agreements.filter((agreement) => agreement.orderId === null);

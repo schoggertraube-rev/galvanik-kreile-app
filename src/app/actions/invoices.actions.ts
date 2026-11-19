@@ -64,6 +64,17 @@ export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<Cre
  },readLoggingSettings);
 }
 
+/** Native collection branch of the existing number/original writer. */
+export async function issueCollectionInvoiceAction(input:import('@/lib/domain/invoiceIntentContract').IssueCollectionInvoiceInput):Promise<import('@/lib/server/commands/immutableInvoiceCommand').CreateCollectionInvoiceResult>{
+ return observeAction('issueCollectionInvoiceAction',subjectForAction('issueCollectionInvoiceAction',input),async()=>{
+  const {createCollectionInvoice}=await import('@/lib/server/commands/immutableInvoiceCommand');
+  const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
+  const result=await createCollectionInvoice(input,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms);
+  if(result.code==='OK'){revalidatePath('/buchhaltung/rechnungen');revalidatePath('/warendurchlauf');}
+  return result;
+ },readLoggingSettings);
+}
+
 export async function setInvoiceItemPricesAction(
   input: SetInvoiceItemPricesInput,
 ): Promise<SetInvoiceItemPricesResult> {

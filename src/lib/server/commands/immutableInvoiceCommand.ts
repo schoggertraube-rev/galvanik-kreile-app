@@ -1,4 +1,6 @@
-import {parseInvoiceCollectionOriginal,assertInvoiceOriginalLineSources} from '@/lib/domain/invoiceCollectionContract';
+import {isIssueCollectionInvoiceInput,type IssueCollectionInvoiceInput} from '@/lib/domain/invoiceIntentContract';
+export type {IssueCollectionInvoiceInput} from '@/lib/domain/invoiceIntentContract';
+import {parseInvoiceCollectionOriginal,assertInvoiceOriginalLineSources,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import {resolveInvoicePaymentTerms,parseInvoicePaymentTerms,type InvoicePaymentTerms} from '@/lib/domain/invoicePaymentTerms';
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {isCancelInvoiceInput as isValidCancelInput,type CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
@@ -61,6 +63,7 @@ const EVENT_TYPE = "INVOICE_CREATED_V1";
 const EVENT_TYPE_V2 = "INVOICE_CREATED_V2";
 const CANCEL_EVENT_TYPE = "INVOICE_CANCELLED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
+const COLLECTION_EVENT_TYPE="INVOICE_CREATED_V3" as const;
 const STATION = "fertig" as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
@@ -113,6 +116,11 @@ export type ImmutableInvoiceReceipt = ImmutableInvoiceReceiptBase & (
   | { eventSchemaVersion: 1 }
   | { eventSchemaVersion: 2; invoiceSourceState: "after_goods_out" }
 );
+
+export type ImmutableInvoiceCollectionReceipt=Omit<ImmutableInvoiceReceiptBase,'orderId'|'orderVersion'|'serviceDate'|'reissue'|'belegart'|'ursprungRechnungId'>&{
+ orderId:null;orderVersion:null;serviceDate:null;collection:InvoiceCollectionOriginal;eventSchemaVersion:3;
+};
+export type CreateCollectionInvoiceResult=Exclude<CreateInvoiceResult,{code:'OK'}>|{code:'OK';receipt:ImmutableInvoiceCollectionReceipt;replayed:boolean};
 
 export type CreateInvoiceResult =
   | { code: "OK"; receipt: ImmutableInvoiceReceipt; replayed: boolean }
@@ -172,7 +180,7 @@ type LockedOrder = {
 type InvoicePaymentInitializationRow = {
   id: string;
   tenant_id: string;
-  order_id: string;
+  order_id: string|null;
   gross_amount_cents: number | string | null;
   payment_contract_version: number | string | null;
   payment_mode: string | null;
@@ -270,6 +278,8 @@ type ReceiptRow = {
   integrity_ok: boolean;
 };
 
+type CollectionReceiptRow=Omit<ReceiptRow,'order_id'|'order_version'|'service_date'>&{order_id:null;order_version:null;service_date:null};
+
 type LockedInvoice = {
   id: string;
   tenant_id: string;
@@ -314,6 +324,7 @@ type LockedCancellationOrder = {
  * VALIDATION_ERROR result *before* an invoice number is allocated.
  */
 class InvoiceMasterDataError extends Error {}
+class InvoiceCollectionNotDueError extends Error {}
 function assertInvoiceContentGlyphs(content:Pick<ImmutableInvoiceSnapshot,'seller'|'customer'|'order'|'lines'|'collection'>){
  const texts:Array<{field:string;text:string}>=[];
  for(const [section,source] of [['seller',content.seller],['customer',content.customer],['order',content.order===null?{}:content.order]] as const){
@@ -621,6 +632,9 @@ type PreparedInvoiceContent = {
   totals: ImmutableInvoiceSnapshot["totals"];
 };
 
+type PreparedCollectionInvoiceContent=Omit<PreparedInvoiceContent,'order'>&{order:null;collection:InvoiceCollectionOriginal};
+type PreparedInvoiceTerms={paymentTermDays:number;frozenInvoiceTerms?:InvoicePaymentTerms;serviceDate:Date|string|null;freezeId:string|null;afterGoodsOut:boolean;originalInvoiceNumber?:string;reissue?:NonNullable<ImmutableInvoiceReceiptBase['reissue']>;collectionCustomerId?:string;ignoredAgreements?:import("@/lib/server/effectiveCustomerAgreementRead").IgnoredCollectionAgreement[]};
+
 /**
  * Builds every snapshot part that depends on live master data and frozen
  * lines. It runs *before* the number allocation so an incomplete tenant,
@@ -722,18 +736,22 @@ function prepareInvoiceContent(
   };
 }
 
-export function mapInvoiceIssueReceipt(row: ReceiptRow, tenantId: string, actorId: string,readVat:InvoiceVatReader): ImmutableInvoiceReceipt {
+export function mapInvoiceIssueReceipt(row:ReceiptRow,tenantId:string,actorId:string,readVat:InvoiceVatReader):ImmutableInvoiceReceipt;
+export function mapInvoiceIssueReceipt(row:CollectionReceiptRow,tenantId:string,actorId:string,readVat:InvoiceVatReader):ImmutableInvoiceCollectionReceipt;
+export function mapInvoiceIssueReceipt(row:ReceiptRow|CollectionReceiptRow,tenantId:string,actorId:string,readVat:InvoiceVatReader):ImmutableInvoiceReceipt|ImmutableInvoiceCollectionReceipt {
+  const collection=row.order_id===null?parseStoredSnapshot(row.snapshot,row,readVat).collection:undefined;
+  if(row.order_id===null&&collection===undefined)throw Error('INVOICE_COLLECTION_RECEIPT_SOURCE_INVALID');
   const reissue=readIssuedReissueIntent(row.reissue_intent,actorId);
   const kindValid=row.belegart==='auftrag'
     ?row.ursprung_rechnung_id===null&&row.shipping_costs_intent===null
     :row.belegart==='versandkosten'&&typeof row.ursprung_rechnung_id==='string'&&UUID_PATTERN.test(row.ursprung_rechnung_id)
-      &&validShippingCosts(row.shipping_costs_intent,row.order_id,true)
+      &&row.order_id!==null&&validShippingCosts(row.shipping_costs_intent,row.order_id,true)
       &&row.shipping_costs_intent.invoiceId===row.ursprung_rechnung_id
       &&plainObject(row.snapshot)&&Array.isArray(row.snapshot.lines)&&row.snapshot.lines.length>0
       &&row.snapshot.lines.every(line=>plainObject(line)&&line.type==='SHIPPING')
       &&row.shipping_costs_intent.expectedFeeCents===toSafeInteger(row.net_amount_cents,'INVOICE_SHIPPING_NET_INVALID');
   if(!kindValid)throw Error('INVOICE_RECEIPT_KIND_INVALID');
-  const orderVersion = toSafeInteger(row.order_version, "INVOICE_RECEIPT_ORDER_VERSION_INVALID");
+  const orderVersion = collection?null:toSafeInteger(row.order_version, "INVOICE_RECEIPT_ORDER_VERSION_INVALID");
   const intentExpectedVersion = toSafeInteger(
     row.intent_expected_version,
     "INVOICE_RECEIPT_INTENT_VERSION_INVALID",
@@ -741,7 +759,7 @@ export function mapInvoiceIssueReceipt(row: ReceiptRow, tenantId: string, actorI
   const {netAmountCents,vatAmountCents,grossAmountCents,headRate:vatRateBasisPoints}=readVat(row);
   const aggregateVersion = toSafeInteger(row.aggregate_version, "INVOICE_RECEIPT_VERSION_INVALID");
   const eventSchemaVersion = toSafeInteger(row.event_schema_version, "INVOICE_RECEIPT_SCHEMA_INVALID");
-  const serviceDate = toDateOnly(row.service_date);
+  const serviceDate = collection?null:toDateOnly(row.service_date);
   const dueDate = toDateOnly(row.due_date);
   const currentLifecycleValid = (
     row.current_status === "issued"
@@ -760,12 +778,11 @@ export function mapInvoiceIssueReceipt(row: ReceiptRow, tenantId: string, actorI
     || row.tenant_id !== tenantId
     || row.actor_id !== actorId
     || !UUID_PATTERN.test(row.actor_id)
-    || (row.event_type !== EVENT_TYPE && row.event_type !== EVENT_TYPE_V2)
-    || (row.event_type === EVENT_TYPE ? eventSchemaVersion !== EVENT_SCHEMA_VERSION : eventSchemaVersion !== 2)
+    || (collection?row.event_type!==COLLECTION_EVENT_TYPE:(row.event_type !== EVENT_TYPE && row.event_type !== EVENT_TYPE_V2))
+    || (collection?eventSchemaVersion!==3:(row.event_type === EVENT_TYPE ? eventSchemaVersion !== EVENT_SCHEMA_VERSION : eventSchemaVersion !== 2))
     || aggregateVersion !== 1
     || !currentLifecycleValid
-    || orderVersion < 1
-    || intentExpectedVersion !== orderVersion
+    || (collection?intentExpectedVersion!==collection.version:(orderVersion===null||orderVersion<1||intentExpectedVersion!==orderVersion))
     || !UUID_PATTERN.test(row.event_id)
     || !UUID_PATTERN.test(row.client_event_id)
     || !UUID_PATTERN.test(row.correlation_id)
@@ -779,18 +796,15 @@ export function mapInvoiceIssueReceipt(row: ReceiptRow, tenantId: string, actorI
     || grossAmountCents !== netAmountCents + vatAmountCents
   ) throw new Error("INVOICE_RECEIPT_INVALID");
 
-  const receipt: ImmutableInvoiceReceiptBase = {
+  const common = {
     ...(reissue?{reissue}:{}),
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
-    orderId: row.order_id,
-    orderVersion,
-    status: "issued",
+    status: "issued" as const,
     netAmountCents,
     vatRateBasisPoints,
     vatAmountCents,
     grossAmountCents,
-    serviceDate,
     dueDate,
     issuedAt: toIso(row.occurred_at),
     issuedBy: row.actor_id,
@@ -799,12 +813,16 @@ export function mapInvoiceIssueReceipt(row: ReceiptRow, tenantId: string, actorI
     eventId: row.event_id,
     clientEventId: row.client_event_id,
     correlationId: row.correlation_id,
-    aggregateVersion: 1,
+    aggregateVersion: 1 as const,
     ...(row.belegart==='versandkosten'?{belegart:'versandkosten' as const,ursprungRechnungId:requiredText(row.ursprung_rechnung_id,'INVOICE_SHIPPING_ORIGIN_MISSING')} : {}),
   };
-  return row.event_type === EVENT_TYPE_V2
-    ? { ...receipt, eventSchemaVersion: 2, invoiceSourceState: "after_goods_out" }
-    : { ...receipt, eventSchemaVersion: 1 };
+  if(collection){
+    if(reissue!==undefined||row.belegart!=='auftrag'||row.order_id!==null||row.order_version!==null||row.service_date!==null)throw Error('INVOICE_COLLECTION_RECEIPT_INVALID');
+    return {...common,orderId:null,orderVersion:null,serviceDate:null,collection,eventSchemaVersion:3};
+  }
+  if(row.order_id===null||orderVersion===null||serviceDate===null)throw Error('INVOICE_RECEIPT_SOURCE_INVALID');
+  const receipt:ImmutableInvoiceReceiptBase={...common,orderId:row.order_id,orderVersion,serviceDate};
+  return row.event_type===EVENT_TYPE_V2?{...receipt,eventSchemaVersion:2,invoiceSourceState:'after_goods_out'}:{...receipt,eventSchemaVersion:1};
 }
 
 export function mapInvoiceCancellationReceipt(
@@ -884,27 +902,20 @@ function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInv
         &&row.shipping_costs_intent.expectedFeeCents===input.shippingCosts.expectedFeeCents);
 }
 
-export async function readCreateInvoiceReceipts(
-  tx: PrivilegedTenantTransaction,
-  clientEventId: string|{orderId:string},
-): Promise<ReceiptRow[]> {
-  const byKey=typeof clientEventId==='string';
-  return tx.execute<ReceiptRow>(sql`
-    WITH receipt AS (SELECT *
-    FROM private.v_invoice_receipt_v1
-    WHERE ${byKey?sql`client_event_id = ${clientEventId}`:sql`order_id = ${clientEventId.orderId}`}
-      AND event_type = ${EVENT_TYPE}
-    UNION ALL
-    SELECT *
-    FROM private.v_invoice_created_receipt_v2
-    WHERE ${byKey?sql`client_event_id = ${clientEventId}`:sql`order_id = ${clientEventId.orderId}`}
-      AND event_type = ${EVENT_TYPE_V2}
-    ) SELECT receipt.*,invoice.belegart,invoice.ursprung_rechnung_id::text,
-      event.payload->'shippingCosts' AS shipping_costs_intent,event.payload->'reissue' AS reissue_intent
-    FROM receipt JOIN public.invoices invoice ON invoice.tenant_id=receipt.tenant_id AND invoice.id=receipt.invoice_id
-    JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id
-    ${byKey?sql`LIMIT 2`:sql``}
-  `);
+type NativeCollectionReceiptRead={collectionId:string;clientEventId?:string};
+export function readCreateInvoiceReceipts(tx:PrivilegedTenantTransaction,source:string|{orderId:string}):Promise<ReceiptRow[]>;
+export function readCreateInvoiceReceipts(tx:PrivilegedTenantTransaction,source:NativeCollectionReceiptRead):Promise<CollectionReceiptRow[]>;
+export async function readCreateInvoiceReceipts(tx:PrivilegedTenantTransaction,source:string|{orderId:string}|NativeCollectionReceiptRead):Promise<Array<ReceiptRow|CollectionReceiptRow>>{
+ const native=typeof source==='object'&&'collectionId'in source,byKey=typeof source==='string';
+ const predicate=native?sql`(snapshot#>>'{collection,collectionId}')=${source.collectionId} ${source.clientEventId===undefined?sql``:sql`AND client_event_id=${source.clientEventId}::uuid`}`:byKey?sql`client_event_id=${source}::uuid`:sql`order_id=${source.orderId}`;
+ return tx.execute<ReceiptRow|CollectionReceiptRow>(sql`
+  WITH receipt AS(
+   SELECT * FROM private.v_invoice_receipt_v1 WHERE ${predicate} AND event_type=${native?COLLECTION_EVENT_TYPE:EVENT_TYPE}
+   UNION ALL SELECT * FROM private.v_invoice_created_receipt_v2 WHERE ${predicate} AND event_type=${EVENT_TYPE_V2} AND ${!native}
+  ) SELECT receipt.*,invoice.belegart,invoice.ursprung_rechnung_id::text,event.payload->'shippingCosts' AS shipping_costs_intent,event.payload->'reissue' AS reissue_intent
+  FROM receipt JOIN public.invoices invoice ON invoice.tenant_id=receipt.tenant_id AND invoice.id=receipt.invoice_id
+   JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id
+  ${byKey||native?sql`LIMIT 2`:sql``}`);
 }
 
 /** The same canonical cancellation query serves command, reader and repair. */
@@ -972,7 +983,7 @@ async function readInitialPaymentState(
   expected: {
     tenantId: string;
     invoiceId: string;
-    orderId: string;
+    orderId: string|null;
     grossAmountCents: number;
     paymentMode: PaymentMode;
   },
@@ -998,7 +1009,7 @@ async function readInitialPaymentState(
     FROM public.invoices
     WHERE id = ${expected.invoiceId}::uuid
       AND tenant_id = ${expected.tenantId}
-      AND order_id = ${expected.orderId}
+      AND order_id IS NOT DISTINCT FROM ${expected.orderId}
     LIMIT 2
   `);
   const row = rows[0];
@@ -1336,6 +1347,48 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         if(originalReceipt.invoiceId!==original.id)throw Error('INVOICE_SHIPPING_ORIGIN_RECEIPT_INVALID');
         originalInvoiceNumber=originalReceipt.invoiceNumber;
       }
+      const prepared=await prepareQualifiedInvoiceContent(tx,authorization.data,input,order,source,afterGoodsOut,agreement,customerInvoiceTerms,requireVatReader(readVat),readShippingSettings);
+      if(prepared.code!=='PREPARED')return prepared;
+      const {content,frozenInvoiceTerms,paymentTermDays}=prepared;
+      return persistPreparedInvoice(tx,authorization.data,input,order,content,{paymentTermDays,frozenInvoiceTerms,serviceDate:source.service_date,freezeId:source.freeze_id,afterGoodsOut,originalInvoiceNumber},requireVatReader(readVat),readOriginal);
+    };
+    return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
+  } catch (error) {
+    if(error instanceof InvoiceElectronicSourceError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource(error.location.field),source:error.location.kind==='order'?{...error.location,objectId:input.orderId,orderVersion:input.expectedVersion}:error.location};
+    if(error instanceof InvoiceGlyphError){
+      const source:import('@/lib/domain/invoiceElectronicFields').InvoiceElectronicSourceLocation=error.field.startsWith('seller.')?{kind:'settings',field:error.field.slice(7),codePoint:error.codePoint}:error.field.startsWith('customer.')?{kind:'customer',field:error.field.slice(9),codePoint:error.codePoint}:{kind:'order',objectId:input.orderId,orderVersion:input.expectedVersion,field:error.field,codePoint:error.codePoint};
+      const correctionArea=source.kind==='settings'?'einstellungen':source.kind==='customer'?'kunden':'auftraege';
+      if(!hasAuthorizationArea(authorization.data,correctionArea)){
+        try{
+          const read=async(tx:PrivilegedTenantTransaction)=>readActiveAreaHolders(tx,authorization.data.tenantId,correctionArea);
+          const holders=existingTransaction?await withTenantSavepoint(existingTransaction,read):await withPrivilegedTenantTransaction(authorization.data,read);
+          const roles=[...new Set(holders.map(holder=>getRoleLabel(holder.role)))];
+          return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.correctionWithoutRight(error.field,roles)};
+        }catch{
+          return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.correctionRolesUnavailable(error.field)};
+        }
+      }
+      return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingGlyph(error.field,error.codePoint),source};
+    }
+    const cause = error && typeof error === "object" && "cause" in error
+      ? (error as { cause?: { code?: unknown; constraint_name?: unknown } }).cause
+      : undefined;
+    console.error("INVOICE_CREATE_UNAVAILABLE", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      electronicCode:error instanceof Error&&/^INVOICE_ELECTRONIC_[A-Z0-9_]+$/.test(error.message)?error.message:null,
+      databaseCode: typeof cause?.code === "string" ? cause.code : null,
+      constraint: typeof cause?.constraint_name === "string" ? cause.constraint_name : null,
+    });
+    return { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher ausgestellt werden." };
+  }
+}
+
+type InvoiceCustomerTermsReader=(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<Parameters<typeof resolveInvoicePaymentTerms>[1]&{customerShortName:string}>;
+type InvoiceShippingSettingsReader=(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>;
+/** One existing per-order commercial preparation for individual and collection originals.
+ * No item repricing, duplicated tax calculation, sender or number allocation. */
+async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,source:SourceRow,afterGoodsOut:boolean,agreement:Awaited<ReturnType<typeof readEffectiveCustomerAgreement>>,customerInvoiceTerms:Parameters<typeof resolveInvoicePaymentTerms>[1],readVat:InvoiceVatReader,readShippingSettings:InvoiceShippingSettingsReader|undefined,collectionSource=false):Promise<Exclude<CreateInvoiceResult,{code:'OK'}>|{code:'PREPARED';content:PreparedInvoiceContent;frozenInvoiceTerms:InvoicePaymentTerms;paymentTermDays:number}>{
+ const tenantId=auth.tenantId;
       const commercial=source.has_quote&&input.shippingCosts===undefined?await readOrderCommercialQuote(tx,tenantId,order.id):null;
       if(commercial){
         if(!Array.isArray(source.base_lines)||source.base_lines.some(line=>!plainObject(line)||typeof line.itemId!=='string'))throw Error('INVOICE_QUOTE_BASE_SOURCE_INVALID');
@@ -1359,13 +1412,13 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         if(checkedAdditional!==null)source.base_net_amount_cents=commercial.totalNetCents+checkedAdditional.reduce((sum,line)=>sum+line.lineNetAmountCents,0);
         source.base_prices_complete=checkedAdditional!==null&&source.base_line_count>0&&commercial.positions.every(row=>Number.isSafeInteger(row.lineTotalCents)&&row.lineTotalCents>=0);
       }
-      if(commercial||input.shippingCosts){
+      if(commercial||input.shippingCosts||collectionSource){
         // Recompose the existing structural guards with the canonical quote price proof.
         // The legacy SQL projection includes item prices in integrity_ok, which are
         // deliberately absent for a quote-backed intake. No structural guard is waived.
         const proofs=await tx.execute<{frozen:boolean;handed_over:boolean}>(sql`
           SELECT count(*)=1 AND bool_and(frozen_state.active AND frozen_state.integrity_ok AND frozen_state.freeze_id=${source.freeze_id}::uuid) AS frozen,
-            (SELECT count(*)=1 AND bool_and(receipt.integrity_ok) FROM private.v_goods_out_receipt_v2 receipt WHERE receipt.tenant_id=${tenantId} AND receipt.order_id=${order.id} AND receipt.order_version=${order.version}) AS handed_over
+            (SELECT count(*)=1 AND bool_and(receipt.integrity_ok AND receipt.goods_out_event_id IS NOT NULL) FROM private.v_goods_out_ui_state_v1 receipt WHERE receipt.tenant_id=${tenantId} AND receipt.order_id=${order.id} AND receipt.order_version=${order.version}) AS handed_over
           FROM private.v_order_freeze_state_v1 frozen_state WHERE frozen_state.tenant_id=${tenantId} AND frozen_state.order_id=${order.id}
         `);
         const structural=proofs.length===1&&proofs[0].frozen===true&&source.seller_config_complete&&source.customer_config_complete
@@ -1424,7 +1477,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         throw error;
       }
       if(commercial){
-        const bound=await bindOrderQuoteCommercialTerms(tx,authorization.data,order.id);
+        const bound=await bindOrderQuoteCommercialTerms(tx,auth,order.id);
         const unchanged=bound.shippingIncluded===commercial.shippingIncluded&&bound.quoteId===commercial.quoteId&&bound.edition===commercial.edition
           &&bound.totalNetCents===commercial.totalNetCents&&bound.positions.length===commercial.positions.length
           &&new Set(bound.positions.map(position=>position.itemId)).size===bound.positions.length
@@ -1437,57 +1490,123 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         if(!unchanged)throw Error('QUOTE_COMMERCIAL_TERMS_CHANGED_DURING_INVOICE');
       }
 
-      return persistPreparedInvoice(tx,authorization.data,input,order,content,{paymentTermDays,frozenInvoiceTerms,serviceDate:source.service_date,freezeId:source.freeze_id,afterGoodsOut,originalInvoiceNumber},requireVatReader(readVat),readOriginal);
-    };
-    return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
-  } catch (error) {
-    if(error instanceof InvoiceElectronicSourceError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource(error.location.field),source:error.location.kind==='order'?{...error.location,objectId:input.orderId,orderVersion:input.expectedVersion}:error.location};
-    if(error instanceof InvoiceGlyphError){
-      const source:import('@/lib/domain/invoiceElectronicFields').InvoiceElectronicSourceLocation=error.field.startsWith('seller.')?{kind:'settings',field:error.field.slice(7),codePoint:error.codePoint}:error.field.startsWith('customer.')?{kind:'customer',field:error.field.slice(9),codePoint:error.codePoint}:{kind:'order',objectId:input.orderId,orderVersion:input.expectedVersion,field:error.field,codePoint:error.codePoint};
-      const correctionArea=source.kind==='settings'?'einstellungen':source.kind==='customer'?'kunden':'auftraege';
-      if(!hasAuthorizationArea(authorization.data,correctionArea)){
-        try{
-          const read=async(tx:PrivilegedTenantTransaction)=>readActiveAreaHolders(tx,authorization.data.tenantId,correctionArea);
-          const holders=existingTransaction?await withTenantSavepoint(existingTransaction,read):await withPrivilegedTenantTransaction(authorization.data,read);
-          const roles=[...new Set(holders.map(holder=>getRoleLabel(holder.role)))];
-          return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.correctionWithoutRight(error.field,roles)};
-        }catch{
-          return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.correctionRolesUnavailable(error.field)};
-        }
-      }
-      return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingGlyph(error.field,error.codePoint),source};
-    }
-    const cause = error && typeof error === "object" && "cause" in error
-      ? (error as { cause?: { code?: unknown; constraint_name?: unknown } }).cause
-      : undefined;
-    console.error("INVOICE_CREATE_UNAVAILABLE", {
-      errorName: error instanceof Error ? error.name : "UnknownError",
-      electronicCode:error instanceof Error&&/^INVOICE_ELECTRONIC_[A-Z0-9_]+$/.test(error.message)?error.message:null,
-      databaseCode: typeof cause?.code === "string" ? cause.code : null,
-      constraint: typeof cause?.constraint_name === "string" ? cause.constraint_name : null,
-    });
-    return { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher ausgestellt werden." };
+      return {code:"PREPARED",content,frozenInvoiceTerms,paymentTermDays};
+}
+
+/** S38a E3/E14: one native collection source, same preparation and fiscal writer.
+ * A representative order is never persisted, returned or used as a header. */
+export async function createCollectionInvoice(input:unknown,readVat?:InvoiceVatReader,readShippingSettings?:InvoiceShippingSettingsReader,readOriginal?:InvoiceOriginalReader,readCustomerTerms?:InvoiceCustomerTermsReader):Promise<CreateCollectionInvoiceResult>{
+ if(!isIssueCollectionInvoiceInput(input))return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.collectionInvalid};
+ let authorization;
+ try{authorization=await resolveAuthorization();}catch{return {code:'UNAVAILABLE',message:E_INVOICE_COPY.collectionUnavailable};}
+ if(!authorization.ok)return {code:authorization.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED',message:E_INVOICE_COPY.collectionUnavailable};
+ if(!hasAuthorizationArea(authorization.data,'preise'))return {code:'FORBIDDEN',message:FINANCIAL_ACCESS_COPY.pricesMissing};
+ const auth=authorization.data,tenantId=auth.tenantId;
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('f1:invoice:client-event:'||${tenantId}||':'||${input.clientEventId},0))`);
+  const previous=await readCreateInvoiceReceipts(tx,{collectionId:input.collectionId,clientEventId:input.clientEventId});
+  if(previous.length){
+   if(previous.length!==1)throw Error('INVOICE_COLLECTION_REPLAY_AMBIGUOUS');
+   const receipt=mapInvoiceIssueReceipt(previous[0],tenantId,previous[0].actor_id,requireVatReader(readVat));
+   return receipt.issuedBy===auth.userId&&receipt.collection.version===input.expectedVersion?{code:'OK' as const,receipt,replayed:true}:{code:'CONFLICT' as const,message:E_INVOICE_COPY.collectionConflict};
   }
+  const reused=await tx.execute<{id:string}>(sql`SELECT id FROM public.events WHERE tenant_id=${tenantId} AND client_event_id=${input.clientEventId}::uuid LIMIT 1`);
+  if(reused.length)return {code:'CONFLICT',message:E_INVOICE_COPY.collectionConflict};
+  type CollectionSource={id:string;customer_id:string;month:string;version:number;status:string;invoice_id:string|null};
+  const readCollection=()=>tx.execute<CollectionSource>(sql`SELECT id::text,customer_id,to_char(monat,'YYYY-MM-DD') AS month,version,status,invoice_id::text FROM public.invoice_collections WHERE tenant_id=${tenantId} AND id=${input.collectionId}::uuid LIMIT 2`);
+  const selected=await readCollection();
+  if(selected.length!==1)return {code:'NOT_FOUND',message:E_INVOICE_COPY.collectionInvalid};
+  const customerId=selected[0].customer_id;
+  await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${tenantId},${customerId})`);
+  const readMembers=()=>tx.execute<{order_id:string}>(sql`SELECT order_id FROM public.invoice_collection_orders WHERE tenant_id=${tenantId} AND collection_id=${input.collectionId}::uuid ORDER BY order_id`);
+  const initialMembers=await readMembers();
+  if(initialMembers.length===0)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.collectionEmpty};
+  for(const member of initialMembers)if(await lockInvoiceCreation(tx,tenantId,{orderId:member.order_id,clientEventId:input.clientEventId})!==customerId)throw Error('INVOICE_COLLECTION_CUSTOMER_CHANGED');
+  const orders=await tx.execute<LockedOrder&{order_number:string}>(sql`SELECT * FROM public.orders WHERE tenant_id=${tenantId} AND id IN (${sql.join(initialMembers.map(member=>sql`${member.order_id}`),sql`,`)}) ORDER BY id FOR UPDATE`);
+  const locked=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.invoice_collections WHERE tenant_id=${tenantId} AND id=${input.collectionId}::uuid FOR UPDATE`);
+  const sources=await readCollection(),members=await readMembers(),source=sources[0];
+  if(locked.length!==1||sources.length!==1||!source||source.customer_id!==customerId||source.version!==input.expectedVersion||canonicalJson(members)!==canonicalJson(initialMembers))return {code:'CONFLICT',message:E_INVOICE_COPY.collectionConflict};
+  if(source.status!=='offen'||source.invoice_id!==null)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.collectionNotDue};
+  if(orders.length!==members.length||orders.some((order,index)=>order.id!==members[index].order_id||order.customer_id!==customerId||order.tenant_id!==tenantId||order.station!=='abgeholt'||order.status!=='abgeholt'||order.payment_mode!=='rechnung'))return {code:'CONFLICT',message:E_INVOICE_COPY.collectionConflict};
+  if(!readCustomerTerms)throw Error('INVOICE_CUSTOMER_TERMS_PORT_MISSING');
+  const customerTerms=await readCustomerTerms(tx,tenantId,customerId);
+  const collectionAgreement=await readEffectiveCustomerAgreement(tx,{tenantId,customerId,orderId:null,memberOrderIds:members.map(member=>member.order_id),lock:true});
+  await tx.execute(sql`SELECT id FROM public.company_settings WHERE tenant_id=${tenantId} FOR SHARE`);
+  const prepared:Array<{order:LockedOrder;source:SourceRow;content:PreparedInvoiceContent;terms:InvoicePaymentTerms}>=[];
+  for(const order of orders){
+   const rows=await readInvoiceIssueSource(tx,order.id),original=rows[0];
+   if(rows.length===0)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.collectionSourceIncomplete(order.order_number,'ein Beleg')};
+   if(rows.length!==1||!original||original.tenant_id!==tenantId||original.order_id!==order.id||original.customer_id!==customerId||original.current_order_version!==order.version)throw Error('INVOICE_COLLECTION_MEMBER_SOURCE_INVALID');
+   if(!original.no_active_invoice)return {code:'CONFLICT',message:E_INVOICE_COPY.collectionConflict};
+   const agreement=collectionAgreement.agreement;
+   const value=await prepareQualifiedInvoiceContent(tx,auth,{orderId:order.id,expectedVersion:order.version,clientEventId:input.clientEventId},order,original,true,agreement,customerTerms,requireVatReader(readVat),readShippingSettings,true);
+   if(value.code!=='PREPARED')return value;
+   prepared.push({order,source:original,content:value.content,terms:value.frozenInvoiceTerms});
+  }
+  const common=prepared[0];
+  if(!common)throw Error('INVOICE_COLLECTION_EMPTY');
+  // Common party/terms values are accepted only when proven equal for EVERY
+  // member. This reduction never creates a representative fiscal order.
+  if(prepared.some(row=>canonicalJson(row.content.seller)!==canonicalJson(common.content.seller)||canonicalJson(row.content.customer)!==canonicalJson(common.content.customer)||canonicalJson(row.terms)!==canonicalJson(common.terms)))return {code:'CONFLICT',message:E_INVOICE_COPY.collectionConflict};
+  const lines:ImmutableInvoiceLine[]=[],shipping=new Map<string,ImmutableInvoiceShippingLine>();
+  for(const row of prepared)for(const line of row.content.lines){
+   if(line.type!=='SHIPPING'){lines.push({...line,sourceOrderId:row.order.id});continue;}
+   const previous=shipping.get(line.shipmentGroupId);
+   if(previous){
+    const {sourceOrderIds:priorOrigins,...prior}=previous;void priorOrigins;
+    if(canonicalJson(prior)!==canonicalJson(line))throw Error('INVOICE_COLLECTION_SHIPMENT_SOURCE_CONFLICT');
+    if(!previous.sourceOrderIds)throw Error('INVOICE_COLLECTION_SHIPMENT_ORIGINS_MISSING');
+    if(!previous.sourceOrderIds.includes(row.order.id))previous.sourceOrderIds.push(row.order.id);
+   }else shipping.set(line.shipmentGroupId,{...line,sourceOrderIds:[row.order.id]});
+  }
+  lines.push(...shipping.values());
+  const sums=invoiceLineTotals(lines);
+  const collection=parseInvoiceCollectionOriginal({collectionId:source.id,version:source.version,month:source.month,members:prepared.map(row=>({orderId:row.order.id,orderVersion:row.order.version,orderNumber:row.content.order.orderNumber,title:row.content.order.title,freezeId:row.source.freeze_id,serviceDate:toDateOnly(row.source.service_date)}))});
+  const content:PreparedCollectionInvoiceContent={seller:common.content.seller,customer:common.content.customer,order:null,collection,lines,totals:{netAmountCents:sums.netAmountCents,vatRateBasisPoints:null,vatAmountCents:sums.vatAmountCents,grossAmountCents:sums.grossAmountCents,vatBreakdown:sums.vatBreakdown}};
+  return persistPreparedInvoice(tx,auth,input,null,content,{paymentTermDays:common.terms.ziel_tage,frozenInvoiceTerms:common.terms,serviceDate:null,freezeId:null,afterGoodsOut:true,collectionCustomerId:customerId,ignoredAgreements:collectionAgreement.ignored},requireVatReader(readVat),readOriginal);
+ });}catch(error){
+  if(error instanceof InvoiceCollectionNotDueError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.collectionNotDue};
+  if(error instanceof InvoiceElectronicSourceError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource(error.location.field),source:error.location};
+  if(error instanceof InvoiceGlyphError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingGlyph(error.field,error.codePoint)};
+  console.error('[INVOICE_COLLECTION_ISSUE_FAILED]',error instanceof Error?error.message:'UnknownError');
+  return {code:'UNAVAILABLE',message:E_INVOICE_COPY.collectionUnavailable};
+ }
 }
 
 /** Single existing number/PDF/payment/event/receipt writer, shared by qualified preparations. */
-async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,content:PreparedInvoiceContent,terms:{paymentTermDays:number;frozenInvoiceTerms?:InvoicePaymentTerms;serviceDate:Date|string;freezeId:string;afterGoodsOut:boolean;originalInvoiceNumber?:string;reissue?:NonNullable<ImmutableInvoiceReceiptBase['reissue']>},readVat:InvoiceVatReader,readOriginal?:InvoiceOriginalReader):Promise<Extract<CreateInvoiceResult,{code:'OK'}>>{
+async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,content:PreparedInvoiceContent,terms:PreparedInvoiceTerms,readVat:InvoiceVatReader,readOriginal?:InvoiceOriginalReader):Promise<Extract<CreateInvoiceResult,{code:'OK'}>>;
+async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:IssueCollectionInvoiceInput,order:null,content:PreparedCollectionInvoiceContent,terms:PreparedInvoiceTerms,readVat:InvoiceVatReader,readOriginal?:InvoiceOriginalReader):Promise<Extract<CreateCollectionInvoiceResult,{code:'OK'}>>;
+async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput|IssueCollectionInvoiceInput,order:LockedOrder|null,content:PreparedInvoiceContent|PreparedCollectionInvoiceContent,terms:PreparedInvoiceTerms,readVat:InvoiceVatReader,readOriginal?:InvoiceOriginalReader):Promise<Extract<CreateInvoiceResult|CreateCollectionInvoiceResult,{code:'OK'}>>{
   if(!('vatId'in content.seller)||!('taxNumber'in content.seller))throw new InvoiceElectronicSourceError({kind:'settings',field:'taxId'});
   if(!content.seller.vatId&&!content.seller.taxNumber)throw new InvoiceElectronicSourceError({kind:'settings',field:'taxId'});
-  assertInvoiceElectronicFields({...content,seller:content.seller,serviceDate:toDateOnly(terms.serviceDate),paymentTermDays:terms.paymentTermDays});
+  const native=order===null;
+  let customerId:string,paymentMode:PaymentMode,collection:InvoiceCollectionOriginal|undefined;
+  let originalSource:import('@/lib/pdf/ImmutableInvoiceDocument').InvoiceSingleOrderSource|import('@/lib/pdf/ImmutableInvoiceDocument').InvoiceCollectionSource;
+  if(native){
+    if(!Array.isArray(terms.ignoredAgreements)||!('collection'in content)||!('collectionId'in input)||content.order!==null||content.collection.collectionId!==input.collectionId||content.collection.version!==input.expectedVersion||terms.serviceDate!==null||terms.freezeId!==null||terms.reissue!==undefined||typeof terms.collectionCustomerId!=='string'||!terms.collectionCustomerId)throw Error('INVOICE_COLLECTION_PREPARATION_INVALID');
+    collection=parseInvoiceCollectionOriginal(content.collection);customerId=terms.collectionCustomerId;paymentMode='rechnung';
+    originalSource={order:null,serviceDate:null,collection};
+  }else{
+    if('collectionId'in input||content.order===null||terms.serviceDate===null||terms.freezeId===null||!isPaymentMode(order.payment_mode))throw Error('INVOICE_PREPARATION_SOURCE_INVALID');
+    customerId=order.customer_id;paymentMode=order.payment_mode;
+    originalSource={order:content.order,serviceDate:toDateOnly(terms.serviceDate)};
+  }
+  const invoiceOrderId=order===null?null:order.id,invoiceOrderVersion=order===null?null:order.version;
+  const shippingCosts='shippingCosts'in input?input.shippingCosts:undefined;
+  assertInvoiceElectronicFields({...content,...originalSource,seller:content.seller,paymentTermDays:terms.paymentTermDays});
   assertInvoiceContentGlyphs(content); // C15/C12: before the number and every original/PDF write.
-  if(!isPaymentMode(order.payment_mode))throw Error('INVOICE_PAYMENT_MODE_INVALID');
   const {tenantId,userId:actorId}=auth;
   const {paymentTermDays,afterGoodsOut,originalInvoiceNumber}=terms;
   const {netAmountCents,vatRateBasisPoints,vatAmountCents,grossAmountCents}=content.totals;
   // Exactly one issue instant per invoice. Berlin is the only legal
   // calendar truth for the invoice year and the due date; the same instant
   // is reused for invoice, lifecycle event, snapshot and receipt.
-  const timeRows = await tx.execute<{ issued_at_iso: string; invoice_year: number; due_date: Date | string }>(sql`
+  const timeRows = await tx.execute<{ issued_at_iso: string; invoice_year: number; due_date: Date | string; issue_month:string }>(sql`
     WITH issue_instant AS (SELECT clock_timestamp() AS ts)
     SELECT
       to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS issued_at_iso,
       extract(year FROM (ts AT TIME ZONE 'Europe/Berlin'))::integer AS invoice_year,
+      to_char(date_trunc('month',ts AT TIME ZONE 'Europe/Berlin'),'YYYY-MM-DD') AS issue_month,
       ((ts AT TIME ZONE 'Europe/Berlin')::date + ${paymentTermDays}::integer) AS due_date
     FROM issue_instant
   `);
@@ -1496,7 +1615,11 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
   const issuedAtIso = requireIsoInstant(timeRow.issued_at_iso, "INVOICE_TIME_INVALID");
   const invoiceYear = toSafeInteger(timeRow.invoice_year, "INVOICE_YEAR_INVALID");
   const dueDate = toDateOnly(timeRow.due_date);
-  const serviceDate = toDateOnly(terms.serviceDate);
+  const serviceDate = originalSource.serviceDate;
+  if(collection){
+    if(!/^\d{4}-\d{2}-01$/.test(timeRow.issue_month))throw Error('INVOICE_COLLECTION_MONTH_SOURCE_INVALID');
+    if(collection.month>=timeRow.issue_month)throw new InvoiceCollectionNotDueError('INVOICE_COLLECTION_NOT_DUE');
+  }
 
   const numberRows = await tx.execute<{ invoice_number: string }>(sql`
     SELECT private.allocate_invoice_number(${tenantId}, ${invoiceYear}) AS invoice_number
@@ -1506,14 +1629,13 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
     throw new Error("INVOICE_NUMBER_ALLOCATION_FAILED");
   }
 
-  const snapshot: Extract<ImmutableInvoiceSingleSnapshot,{schemaVersion:3}> = {
+  const snapshot: Extract<ImmutableInvoiceSnapshot,{schemaVersion:3}> = {
     schemaVersion: 3,
     seller: content.seller,
     customer: content.customer,
-    order: content.order,
+    ...originalSource,
     lines: content.lines,
     totals: content.totals,
-    serviceDate,
     issuedAt: issuedAtIso,
     paymentTermDays,
     ...(terms.frozenInvoiceTerms?{terms:terms.frozenInvoiceTerms}:{}),
@@ -1536,23 +1658,22 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
   const invoiceId = randomUUID();
   const correlationId = randomUUID();
   const pdfRef = `invoice://${invoiceId}/original`;
-  const invoiceEventType = afterGoodsOut ? EVENT_TYPE_V2 : EVENT_TYPE;
-  const invoiceEventSchemaVersion = afterGoodsOut ? 2 : EVENT_SCHEMA_VERSION;
+  const invoiceEventType = native?COLLECTION_EVENT_TYPE:afterGoodsOut ? EVENT_TYPE_V2 : EVENT_TYPE;
+  const invoiceEventSchemaVersion = native?3:afterGoodsOut ? 2 : EVENT_SCHEMA_VERSION;
   const invoiceEventStation = afterGoodsOut ? "abgeholt" : STATION;
   const eventPayload = {
     invoiceId,
-    freezeId: terms.freezeId,
+    ...(collection?{collection,collectionVersion:input.expectedVersion,ignoredAgreements:terms.ignoredAgreements}:{freezeId:terms.freezeId,orderVersion:invoiceOrderVersion}),
     invoiceNumber,
-    orderVersion: order.version,
     netAmountCents,
     vatRateBasisPoints,
     vatAmountCents,
     grossAmountCents,
     pdfSha256,
     invoiceVersion: 1,
-    ...(input.shippingCosts?{shippingCosts:input.shippingCosts}:{}),
+    ...(shippingCosts?{shippingCosts}:{}),
     ...(terms.reissue?{reissue:terms.reissue}:{}),
-    ...(afterGoodsOut ? { invoiceSourceState: "after_goods_out" as const } : {}),
+    ...(!native&&afterGoodsOut ? { invoiceSourceState: "after_goods_out" as const } : {}),
   };
 
   const eventRows = await tx.execute<{ event_id: string }>(sql`
@@ -1561,7 +1682,7 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
       payload, status, station, client_event_id, event_schema_version,
       correlation_id, aggregate_version, from_station, created_at
     ) VALUES (
-      gen_random_uuid()::text, ${tenantId}, ${order.id}, NULL,
+      gen_random_uuid()::text, ${tenantId}, ${invoiceOrderId}, NULL,
       ${invoiceEventType}, 'Unveränderliche Rechnung erstellt', ${actorId}::uuid,
       ${JSON.stringify(eventPayload)}::jsonb,
       'success', ${invoiceEventStation}, ${input.clientEventId}::uuid, ${invoiceEventSchemaVersion},
@@ -1587,17 +1708,17 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
       payment_method, payment_paid_at, payment_receipt_id, payment_event_id,
       payment_correlation_id, payment_version,belegart,ursprung_rechnung_id
     ) VALUES (
-      ${invoiceId}::uuid, ${tenantId}, ${order.customer_id}, ${order.id},
+      ${invoiceId}::uuid, ${tenantId}, ${customerId}, ${invoiceOrderId},
       ${invoiceNumber}, (${grossAmountCents}::numeric / 100), 'issued', ${dueDate}::date,
       1, ${terms.freezeId}::uuid, ${JSON.stringify(snapshot)}::jsonb,
       ${netAmountCents}, ${vatRateBasisPoints}, ${vatAmountCents}, ${grossAmountCents},
-      ${serviceDate}::date, ${paymentTermDays}, ${order.version}, 1,
+      ${serviceDate}::date, ${paymentTermDays}, ${invoiceOrderVersion}, 1,
       ${input.clientEventId}::uuid, ${correlationId}::uuid,
       ${event.event_id}, ${issuedAtIso}::timestamptz, ${actorId}::uuid,
       ${pdfRef}, ${pdfSha256}, ${pdfBuffer},
-      ${PAYMENT_CONTRACT_VERSION}, ${order.payment_mode}, 'offen',
+      ${PAYMENT_CONTRACT_VERSION}, ${paymentMode}, 'offen',
       ${grossAmountCents}, 0, 'EUR', NULL, NULL, NULL, NULL, NULL, 0,
-      ${input.shippingCosts?'versandkosten':'auftrag'},${input.shippingCosts?.invoiceId??null}::uuid
+      ${shippingCosts?'versandkosten':'auftrag'},${shippingCosts?.invoiceId??null}::uuid
     )
     RETURNING id
   `);
@@ -1606,20 +1727,33 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
     throw new Error("INVOICE_INSERT_FAILED");
   }
 
+  if(collection){
+    const marked=await tx.execute<{id:string}>(sql`UPDATE public.invoice_collections SET status='abgerechnet',invoice_id=${invoiceId}::uuid,version=version+1
+      WHERE tenant_id=${tenantId} AND id=${collection.collectionId}::uuid AND customer_id=${customerId} AND status='offen' AND invoice_id IS NULL AND version=${collection.version} RETURNING id::text`);
+    if(marked.length!==1||marked[0].id!==collection.collectionId)throw Error('INVOICE_COLLECTION_MARK_FAILED');
+  }
   await readInitialPaymentState(tx, {
     tenantId,
     invoiceId,
-    orderId: order.id,
+    orderId: invoiceOrderId,
     grossAmountCents,
-    paymentMode: order.payment_mode,
+    paymentMode,
   });
 
-  const receiptRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
-  if (receiptRows.length !== 1 || !receiptRows[0]) throw new Error("INVOICE_RECEIPT_MISSING");
-  const receipt = mapInvoiceIssueReceipt(receiptRows[0], tenantId, actorId,requireVatReader(readVat));
+  let receipt:ImmutableInvoiceReceipt|ImmutableInvoiceCollectionReceipt;
+  if(collection){
+    const rows=await readCreateInvoiceReceipts(tx,{collectionId:collection.collectionId,clientEventId:input.clientEventId});
+    if(rows.length!==1||!rows[0])throw Error('INVOICE_COLLECTION_RECEIPT_MISSING');
+    receipt=mapInvoiceIssueReceipt(rows[0],tenantId,actorId,readVat);
+    if(receipt.collection.collectionId!==collection.collectionId||receipt.collection.version!==input.expectedVersion||canonicalJson(receipt.collection)!==canonicalJson(collection))throw Error('INVOICE_COLLECTION_RECEIPT_MISMATCH');
+  }else{
+    const receiptRows=await readCreateInvoiceReceipts(tx,input.clientEventId);
+    if(receiptRows.length!==1||!receiptRows[0]||!('orderId'in input))throw Error('INVOICE_RECEIPT_MISSING');
+    receipt=mapInvoiceIssueReceipt(receiptRows[0],tenantId,actorId,readVat);
+    if(!receiptMatchesIntent(receipt,input,receiptRows[0]))throw Error('INVOICE_RECEIPT_INTENT_MISMATCH');
+  }
   if (
-    !receiptMatchesIntent(receipt, input,receiptRows[0])
-    || receipt.invoiceId !== invoiceId
+    receipt.invoiceId !== invoiceId
     || receipt.invoiceNumber !== invoiceNumber
     || receipt.netAmountCents !== netAmountCents
     || receipt.vatAmountCents !== vatAmountCents
@@ -1631,6 +1765,7 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
     || receipt.issuedAt !== issuedAtIso
   ) throw new Error("INVOICE_RECEIPT_MISMATCH");
 
+  if(receipt.eventSchemaVersion===3)return {code:"OK",receipt,replayed:false};
   return { code: "OK", receipt, replayed: false };
 }
 
