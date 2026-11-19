@@ -1,4 +1,5 @@
 // @vitest-environment node
+import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 
 import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -296,13 +297,17 @@ it.each([false,true])('KV-07 goods lock and real onsite acceptance without ficti
  expect(await sql`SELECT quote_id FROM private.quote_conversion_requests WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid`).toHaveLength(0);
  expect(await withSession(fixture,()=>convertQuoteToOrderAction({...award,goodsReceiptId:undefined}))).toMatchObject({code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${created.quote.quoteNumber} annehmen`});
  // Zero is not arrived goods. Positive deviation is separately covered by U246 cases.
+ await withRestoredTestSource({label:'TEST quote goods quantity',
+  read:()=>sql`SELECT mengen FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`,
+  restore:async rows=>{if(rows.length!==1)throw Error('TEST_GOODS_SOURCE_REQUIRED');await sql`UPDATE public.goods_receipt SET mengen=${sql.json(rows[0].mengen)} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`;},
+ },async()=>{
  await sql`UPDATE public.goods_receipt SET mengen=jsonb_set(mengen,'{0,bestaetigt}','0'::jsonb) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`;
  const mismatch=await withSession(fixture,()=>convertQuoteToOrderAction(award));
  expect(mismatch).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Angenommene Menge')});
  expect((await sql`SELECT count(*)::int AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(0);
  expect((await sql`SELECT count(*)::int AS n FROM private.quote_conversion_requests WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid`)[0].n).toBe(0);
  expect((await sql`SELECT linked_order_id,version FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0]).toMatchObject({linked_order_id:null,version:onsite?2:3});
- await sql`UPDATE public.goods_receipt SET mengen=jsonb_set(mengen,'{0,bestaetigt}','4'::jsonb) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`;
+ });
  const converted=await withSession(fixture,()=>convertQuoteToOrderAction(award));
  expect(converted).toMatchObject({code:'OK',quote:{status:'converted',lifecycle:{stage:'umgewandelt'}},goodsReceipt:{receipt:{id:input.id,kv_id:quoteId}}});
  if(converted.code!=='OK')throw Error('TEST_GOODS_CONVERSION:'+converted.code+':'+converted.message);
@@ -681,14 +686,18 @@ it.each([false,true])('KV-04 sends the real current PDF through the existing mai
    expect(await withSession(fixture,()=>changeQuoteLifecycleAction(accept))).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Kundenkarte ergänzen')});
    expect((await sql`SELECT version,zugesagt_fassung FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${createdQuoteId}::uuid`)[0]).toMatchObject({version:4,zugesagt_fassung:null});
    // Isolated configuration/readiness fixtures; no production data or status is changed.
-   await sql`UPDATE public.customers SET handover_preference='pickup',zip_code=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+   await sql`UPDATE public.customers SET handover_preference='pickup' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+ await withRestoredTestSource({label:'TEST quote customer ZIP',read:()=>sql`SELECT zip_code FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`,restore:async rows=>{if(rows.length!==1)throw Error('TEST_CUSTOMER_SOURCE_REQUIRED');await sql`UPDATE public.customers SET zip_code=${rows[0].zip_code} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;}
+ },async()=>{
+   await sql`UPDATE public.customers SET zip_code=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
    expect(await withSession(fixture,()=>changeQuoteLifecycleAction(accept))).toMatchObject({code:'VALIDATION_ERROR'});
    expect((await sql`SELECT version,zugesagt_fassung FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${createdQuoteId}::uuid`)[0]).toMatchObject({version:4,zugesagt_fassung:null});
    expect((await sql`SELECT version,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${currentReply.id}::uuid`)[0]).toMatchObject({version:1,anliegen_offen:['kv_annahme']});
    expect(await sql`SELECT id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`).toHaveLength(0);
    expect(await sql`SELECT quote_id FROM private.quote_conversion_requests WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${createdQuoteId}::uuid`).toHaveLength(0);
    expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${accept.clientEventId}::uuid`).toHaveLength(0);
-   await sql`UPDATE public.customers SET zip_code='70175' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+
+ });
   }
   const acceptedResult=await withSession(fixture,()=>changeQuoteLifecycleAction(accept));
   expect(acceptedResult).toMatchObject({code:'OK',quote:{version:automatic?6:5,lifecycle:{acceptedEdition:2}}});
@@ -1152,9 +1161,13 @@ it.each([false,true,'operational'] as const)('AF-8/17 telephone acceptance and g
   const auth=await withSession(operator,()=>resolveAuthorization());expect(auth.ok).toBe(true);if(auth.ok){expect(auth.data.areas).not.toContain('zahlungen');expect(auth.data.areas).not.toContain('eingang');}
   expect(await withSession(operator,()=>createOrderIntake({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:fixture.customerId},dueDate:'2027-04-20',handoverMode:'pickup',items:[{catalogServiceId:null,name:'TEST Direktversuch',quantity:1,material:null,surfaceRequested:'verchromen',unit:null,unitPriceCents:null,vatRateBasisPoints:null}],note:null}))).toMatchObject({code:'FORBIDDEN'});
   const {undoQuoteConversionAction,readQuoteConversionReceiptAction}=await import('@/app/actions/quotes.actions');
-  await sql`UPDATE public.print_jobs SET attempts=1 WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${result.orderReceipt.orderId}`;
-  expect(await withSession(operator,()=>readQuoteAction({quoteId,purpose:'operations'}))).toMatchObject({code:'OK',undo:{ready:true,canUndo:false}});
-  await sql`UPDATE public.print_jobs SET attempts=0 WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${result.orderReceipt.orderId}`;
+  await withRestoredTestSource({label:'TEST quote print attempts',
+   read:()=>sql`SELECT id::text,attempts FROM public.print_jobs WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${result.orderReceipt.orderId} ORDER BY id`,
+   restore:async rows=>{for(const row of rows)await sql`UPDATE public.print_jobs SET attempts=${row.attempts} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${row.id}::uuid`;},
+  },async()=>{
+   await sql`UPDATE public.print_jobs SET attempts=1 WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${result.orderReceipt.orderId}`;
+   expect(await withSession(operator,()=>readQuoteAction({quoteId,purpose:'operations'}))).toMatchObject({code:'OK',undo:{ready:true,canUndo:false}});
+  });
   const beforeUndo=await withSession(operator,()=>readQuoteAction({quoteId,purpose:'operations'}));expect(beforeUndo.code==='OK'?beforeUndo.undo:null).toMatchObject({ready:true,reason:null,canUndo:true});
   if(beforeUndo.code!=='OK')throw Error('TEST_UNDO_READ');
   const undo={quoteId,expectedVersion:beforeUndo.quote.version,clientEventId:randomUUID(),reason:'TEST falsche Zuordnung unmittelbar zurückgenommen'};

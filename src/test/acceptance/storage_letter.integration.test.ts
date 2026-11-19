@@ -1,4 +1,5 @@
 // @vitest-environment node
+import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 // Ausgangsfakt synthetisch, Writer-Nachweis in collection_reminder.integration.test.ts
 // und dispatch_call.integration.test.ts; Brief/Post/Task danach echte Writer.
 import {vi,it,expect} from 'vitest';
@@ -213,8 +214,13 @@ it('E4 preview renders a real customer/sender PDF without invoice-only settings,
  expect((await plan())?.storage?.letter).toMatchObject({state:'DUE',sentAt:null,finalStage:{due:null}});
  expect(await withSession(full,()=>previewStorageLetterAction(structuredClone(request)))).toMatchObject({code:'OK',data:{snapshot:result.data.snapshot,sent:false}});
  const denied=await createFixture(['auftraege'],'werkstatt');expect(await withSession(denied,()=>previewStorageLetterAction(request))).toMatchObject({code:'FORBIDDEN'});
- await sql`UPDATE public.customers SET zip_code=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
- expect(await withSession(full,()=>previewStorageLetterAction(request))).toMatchObject({code:'VALIDATION_ERROR'});
+ await withRestoredTestSource({label:'TEST storage letter address',
+  read:()=>sql`SELECT zip_code FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`,
+  restore:async rows=>{if(rows.length!==1)throw Error('TEST_CUSTOMER_SOURCE_REQUIRED');await sql`UPDATE public.customers SET zip_code=${rows[0].zip_code} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;},
+ },async()=>{
+  await sql`UPDATE public.customers SET zip_code=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.customerId}`;
+  expect(await withSession(full,()=>previewStorageLetterAction(request))).toMatchObject({code:'VALIDATION_ERROR'});
+ });
  } finally {
   await sql`UPDATE public.company_settings SET tax_id=${originalSettings.tax_id},iban=${originalSettings.iban},bic=${originalSettings.bic},bank_name=${originalSettings.bank_name},invoice_payment_term_days=${originalSettings.invoice_payment_term_days},logo_url=${originalSettings.logo_url} WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  }
@@ -371,9 +377,14 @@ it('postal E4 secures one original and one task; only the explicit posting date 
  expect(await withSession(full,()=>prepareStoragePostalLetterAction(structuredClone(request)))).toMatchObject({code:'OK',taskId:prepared.taskId,document:{sha256:prepared.document.sha256},replayed:true});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND payload->>'documentId'=${prepared.document.id}`).toEqual([{n:1}]);
  expect(graphCalls()).toBe(before);
+ await withRestoredTestSource({label:'TEST storage postal original hash',
+  read:()=>sql`SELECT payload FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.document.id}`,
+  restore:async rows=>{if(rows.length!==1)throw Error('TEST_POSTAL_SOURCE_REQUIRED');await sql`UPDATE public.events SET payload=${sql.json(rows[0].payload)} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.document.id}`;},
+ },async()=>{
  await sql`UPDATE public.events SET payload=jsonb_set(payload,'{document,sha256}',to_jsonb(${'0'.repeat(64)}::text)) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.document.id}`;
  expect(await withSession(full,()=>getIntakeTaskAction({taskId:prepared.taskId}))).toMatchObject({code:'UNAVAILABLE'});
  expect(await withSession(full,()=>prepareStoragePostalLetterAction(structuredClone(request)))).toMatchObject({code:'UNAVAILABLE'});
+ });
 });
 it('PL09:01 without an initial mail proceeds from failed call to original PDF, explicit post date and one E5 task',async()=>{
  const {order,request,plan,clock}=await prepareWithoutMail('Post-ohne-erste-Mail');
