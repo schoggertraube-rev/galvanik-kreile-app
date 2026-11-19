@@ -1,4 +1,5 @@
 import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
+import {parseInvoiceCollectionOriginal,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import "server-only";
 import {classifyOverdue} from "./paymentContract";
 import {berlinCalendarDay} from "@/lib/domain/workingDays";
@@ -7,12 +8,12 @@ import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
-export type InvoiceTruthRow = {
+type InvoiceTruthSource={orderId:string;collection?:never}|{orderId:null;collection:InvoiceCollectionOriginal};
+export type InvoiceTruthRow = InvoiceTruthSource & {
   invoiceId: string;
   invoiceNumber: string;
   customerId: string;
   customerName:string|null;
-  orderId: string;
   status: "issued" | "cancelled";
   netAmountCents: number;
   vatRateBasisPoints: number|null;
@@ -37,7 +38,7 @@ type InvoiceTruthDbRow = {
   id: string;
   invoice_number: string;
   customer_id: string;
-  order_id: string;
+  order_id: string|null;
   status: string;
   net_amount_cents: number | string;
   vat_rate_basis_points: number | string | null;
@@ -75,8 +76,12 @@ function instant(value: Date | string): string {
 function mapRow(row: InvoiceTruthDbRow,readVat:InvoiceVatReader): InvoiceTruthRow {
   if(typeof row.overdue!=="boolean"||!validDate(row.overdue_as_of))throw Error("INVOICE_TRUTH_OVERDUE_SOURCE_INVALID");
   if(!Number.isSafeInteger(row.overdue_days)||row.overdue_days<0||(row.overdue?row.overdue_days<1:row.overdue_days!==0))throw Error("INVOICE_TRUTH_OVERDUE_DAY_INVALID");
-  const snapshot=row.snapshot as {customer?:{name?:unknown}};
+  const snapshot=row.snapshot as {customer?:{name?:unknown};collection?:unknown};
   const name=snapshot?.customer?.name;
+  // One fiscal row; native collections expose all frozen members, never a representative order.
+  const source:InvoiceTruthSource=row.order_id===null
+    ?{orderId:null,collection:parseInvoiceCollectionOriginal(snapshot?.collection)}
+    :{orderId:row.order_id};
   const vat=readVat(row);
   if (
     (row.status !== "issued" && row.status !== "cancelled")
@@ -87,7 +92,7 @@ function mapRow(row: InvoiceTruthDbRow,readVat:InvoiceVatReader): InvoiceTruthRo
     invoiceNumber: row.invoice_number,
     customerId: row.customer_id,
     customerName:typeof name==='string'&&name.trim()?name:null,
-    orderId: row.order_id,
+    ...source,
     status: row.status,
     netAmountCents:vat.netAmountCents,
     vatRateBasisPoints:vat.headRate,
