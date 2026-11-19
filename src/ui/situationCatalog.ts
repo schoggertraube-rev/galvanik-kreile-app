@@ -1,3 +1,6 @@
+// S15: generated V45 text access for new components; existing constants stay unchanged.
+export {V45_TEXT,V45_TEXT_TEMPLATES} from './generated/v45Texte.generated';
+export type {V45TextKey} from './generated/v45Texte.generated';
 /** PL13.11.00:14 immutable invoice VAT display. */
 /** Existing evidence-read wording, shared by the original and visibility read. */
 export const EVIDENCE_READ_COPY={unavailable:'Nachweise konnten nicht sicher geladen werden.'} as const;
