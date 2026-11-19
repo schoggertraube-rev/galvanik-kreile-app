@@ -126,6 +126,9 @@ jobs:
       - name: Production migration ledger contract
         run: node scripts/check-migration-ledger.mjs --base "${{ steps.diff.outputs.base }}"
 
+      - name: S15 inline text baseline may only shrink
+        run: node scripts/ui/check-copy-baseline.mjs --base "${{ steps.diff.outputs.base }}"
+
       - name: Active package path and commit-role separation
         run: >-
           node scripts/quality/check-live-package-scope.mjs
@@ -145,7 +148,9 @@ jobs:
         run: npx tsc --noEmit --incremental false
 
       - name: V45 generated runtime projection
-        run: node scripts/generate-v45-runtime.mjs --check-generated
+        run: |
+          node scripts/generate-v45-runtime.mjs --check-generated
+          node scripts/ui/import-v45-texte.mjs --check-generated
 
       - name: Full ESLint (lint:full, BF-013)
         run: npm run lint:full
