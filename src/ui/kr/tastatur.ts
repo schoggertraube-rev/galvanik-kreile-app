@@ -3,6 +3,29 @@ import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'r
 
 /** U-240: Lesereihenfolge; die letzte Pflichtangabe nutzt dieselbe gegatete Hauptaktion wie der Klick. */
 export function weiterMitEnter(event: ReactKeyboardEvent<HTMLDivElement>) {
+  // Owner vorfinal: its two original input selectors share this existing entry.
+  // No document listener or second keyboard pipeline is installed.
+  if (document.documentElement.dataset.ui === 'v45' && event.key === 'Enter'
+      && !event.defaultPrevented && event.target instanceof HTMLInputElement) {
+    const target = event.target;
+    let handled = false;
+    if (target.matches('#ovBody input:not([type=range])')) {
+      event.preventDefault(); handled = true;
+      const fields = [...document.querySelectorAll<HTMLElement>('#ovBody input, #ovBody textarea, #ovBody .act:not(:disabled)')].filter(node => node.offsetParent);
+      const index = fields.indexOf(target);
+      (fields[index + 1] || fields[fields.length - 1])?.focus();
+    }
+    if (target.matches('.fgrid input')) {
+      event.preventDefault(); handled = true;
+      const fields = [...document.querySelectorAll<HTMLInputElement>('.fgrid input:not([disabled])')], index = fields.indexOf(target);
+      if (index < fields.length - 1) fields[index + 1].focus();
+      else {
+        const primary = document.querySelector<HTMLButtonElement>('#kfGo') || document.querySelector<HTMLButtonElement>('#waGo');
+        if (primary && !primary.disabled) primary.click();
+      }
+    }
+    if (handled) return;
+  }
   if (event.key !== 'Enter' || event.defaultPrevented || event.nativeEvent.isComposing
       || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
   const target = event.target;
