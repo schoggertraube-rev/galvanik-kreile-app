@@ -3,7 +3,7 @@
 Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 Ähnlich = NFC/Kleinschreibung/Interpunktion/Platzhalternamen mechanisch normalisiert. Bestand bleibt unverändert.
 
-## Gleicher Wortlaut (60)
+## Gleicher Wortlaut (61)
 
 - `DELIVERY_NOTE_COPY.title`: "Lieferschein" → `document.delivery_kind`, `intake.fact.delivery_number`, `ws.slip`
 - `DELIVERY_NOTE_COPY.order`: "Auftrag" → `customer.order_singular`
@@ -65,6 +65,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `SHIPPING_FEE_COPY.line`: "Versand" → `order.shipping`, `settings.group.versand`, `ws.shipped`
 - `E_INVOICE_SETTINGS_COPY.fieldLabels.paymentTermDays`: "Zahlungsziel in Tagen" → `customer.terms_days`
 - `E_INVOICE_CORRECTION_COPY.cancel`: "Abbrechen" → `common.cancel`
+- `VORFINAL_COPY.vorfinal.kopf.plus.label`: "Neuer Eingang" → `intake.title`, `nav.eingang`, `nav.entry`
 
 ## Ähnlicher Wortlaut (97)
 
