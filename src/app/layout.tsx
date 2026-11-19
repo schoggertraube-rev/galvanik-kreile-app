@@ -61,7 +61,7 @@ export default async function RootLayout({
       className={`${fraunces.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
       style={{ "--sans": inter.style.fontFamily, "--serif": fraunces.style.fontFamily } as CSSProperties}
     >
-      <head><link rel="stylesheet" href={rootStyle.href} /></head>
+      <head><style data-kreile-style={rootStyle.enabled?'vorfinal-v10':'legacy'} dangerouslySetInnerHTML={{__html:rootStyle.css}} /></head>
       <body className="h-full">
         <ServiceWorkerRegister />
         <OfflineLogoutNotice />
@@ -72,7 +72,7 @@ export default async function RootLayout({
               <ProtocolClickCapture />
               <DiagnosticsProvider>
                 <FeatureFlagProvider offline24hEnabled={authState.status === 'authenticated' && authState.user.offline24h === true}>
-                  <KreileAppShell loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>
+                  <KreileAppShell vorfinalStyle={rootStyle.enabled} loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>
                     {children}
                   </KreileAppShell>
                 </FeatureFlagProvider>

@@ -1,3 +1,4 @@
+import vorfinalIcons from '@/ui/generated/vorfinalIcons.json';
 /** Icons aus den Seitenreferenzen (Büro · Werkstatt · Auftragskarte · Kundenkarte), Strich 2px */
 const ICONS = {
   'chevron-down':'<path d="m6 9 6 6 6-6"/>',
@@ -48,8 +49,11 @@ const ICONS = {
   refresh:'<path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/>'
 } as const;
 export type IconName = keyof typeof ICONS;
-export interface IconProps { name: IconName; className?: string; }
-export function Icon({ name, className }: IconProps) {
+export type VorfinalIconName=keyof typeof vorfinalIcons;
+export type IconProps = {name:IconName;variant?:'legacy';className?:string}|{name:VorfinalIconName;variant:'vorfinal';className?:string};
+export function Icon(props: IconProps) {
+  if(props.variant==='vorfinal')return <svg className={props.className?'ic '+props.className:'ic'} viewBox="0 0 24 24" aria-hidden="true" dangerouslySetInnerHTML={{__html:vorfinalIcons[props.name]}}/>;
+  const {name,className}=props;
   // Pfaddaten sind konstante Quelltexte dieses Moduls, keine Nutzereingaben.
   return <svg className={className ? 'kr-i ' + className : 'kr-i'} viewBox="0 0 24 24" aria-hidden="true" dangerouslySetInnerHTML={{ __html: ICONS[name] }} />;
 }

@@ -1,6 +1,7 @@
 // @vitest-environment node
 // S21: real signed requests, authorization, config rows and mandatory ui_events.
 import {randomUUID} from 'node:crypto';
+import {mkdirSync,writeFileSync} from 'node:fs';
 import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -18,6 +19,9 @@ type OriginalFlag={id:string;name:string;description:string|null;enabled:boolean
 async function originalFlag(id:string):Promise<OriginalFlag>{
  const rows=await sql<{original:OriginalFlag}[]>`SELECT to_jsonb(flag) AS original FROM public.feature_flags flag WHERE id=${id}`;
  if(rows.length!==1)throw Error('TEST_KORR233_FLAG_SOURCE_MISSING');
+ // PL19.11 R24b: non-secret full source survives a failed process, at exact precision.
+ const directory='.git/kreile-r24-flag-originals';mkdirSync(directory,{recursive:true});
+ writeFileSync(directory+'/'+id.replace(/[^a-z0-9_-]/giu,'_')+'-'+randomUUID()+'.json',JSON.stringify({at:new Date().toISOString(),source:'public.feature_flags',original:rows[0].original},null,2));
  return rows[0].original;
 }
 async function restoreFlag(original:OriginalFlag){
@@ -34,7 +38,9 @@ it('S18 uses the real root bootstrap switch, rereads both styles and restores th
    const bootstrap=await withSession(full,()=>getAuthBootstrapAction());
    expect(bootstrap.status).toBe('authenticated');
    if(bootstrap.status!=='authenticated')throw Error('TEST_S18_BOOTSTRAP_REQUIRED');
-   expect(readRootStyle(bootstrap.status,bootstrap.user.packageSwitches)).toEqual({enabled,dataUi:enabled?'v45':undefined,href:enabled?'/styles/vorfinal-v10.css':'/styles/endversion-legacy.css'});
+   const style=readRootStyle(bootstrap.status,bootstrap.user.packageSwitches);
+   expect(style).toMatchObject({enabled,dataUi:enabled?'v45':undefined});
+   expect(style.css).toContain(enabled?'--ground:#f3f6f5':'--ground:#EFE6D6');
   }
  }finally{await restoreFlag(original);}
 });
@@ -85,6 +91,7 @@ it('S21 F1/F3/F5-F8: existing rights, one N5 audit, fresh reread and real domain
  expect(initial.code).toBe('OK');if(initial.code!=='OK')throw Error('TEST_S21_INITIAL');
  expect(Object.keys(initial.switches)).toHaveLength(17);
  expect(initial.switches).toMatchObject({tag_anordnen:false,tag_notizen:false});
+ const original=await originalFlag('p2_eingang');
  const denied=await createFixture(['auftraege']),other=await createFixture(['einstellungen']);
  const input={id:'p2_eingang',enabled:true,clientKey:randomUUID()};
  expect(await withSession(denied,()=>setPackageSwitchAction(input))).toMatchObject({code:'FORBIDDEN'});
@@ -114,13 +121,12 @@ it('S21 F1/F3/F5-F8: existing rights, one N5 audit, fresh reread and real domain
   expect(await withSession(full,()=>saveIntakeNoteAction(JSON.parse(JSON.stringify(note))))).toMatchObject({code:'OK'});
   expect(await sql`SELECT text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual([{text:note.text}]);
  }finally{
-  expect(await withSession(full,()=>setPackageSwitchAction({id:'p2_eingang',enabled:initial.switches.p2_eingang,clientKey:randomUUID()}))).toMatchObject({code:'OK'});
+  await restoreFlag(original);
  }
 });
 
 it('S21 keeps the existing offline pilot filter in the real rights query only',async()=>{
- const [initial]=await sql`SELECT enabled,roles_allowed FROM public.feature_flags WHERE id='offline_24h'`;
- if(!initial)throw Error('TEST_S21_OFFLINE_SOURCE_MISSING');
+ const initial=await originalFlag('offline_24h');
  const excluded=await createFixture(['einstellungen'],'admin');
  try{
   // Explicit TEST-only pilot configuration, restored below; no new role rule.
@@ -130,14 +136,14 @@ it('S21 keeps the existing offline pilot filter in the real rights query only',a
   expect(await withSession(excluded,()=>getAuthorizationSnapshotAction())).toMatchObject({ok:true,data:{offline24h:false,packageSwitches:{offline_24h:false}}});
   expect(await withSession(excluded,()=>readPackageSwitchesAction())).toMatchObject({code:'OK',switches:{offline_24h:true}});
  }finally{
-  await sql`UPDATE public.feature_flags SET roles_allowed=${initial.roles_allowed}::text[] WHERE id='offline_24h'`;
-  expect(await withSession(full,()=>setPackageSwitchAction({id:'offline_24h',enabled:initial.enabled,clientKey:randomUUID()}))).toMatchObject({code:'OK'});
+  await restoreFlag(initial);
  }
 });
 
 it('S21 F9: a genuinely suppressed audit rolls the config back; the same key succeeds after repair',async()=>{
  const initial=await withSession(full,()=>readPackageSwitchesAction());
  if(initial.code!=='OK')throw Error('TEST_S21_INITIAL_AUDIT');
+ const original=await originalFlag('p2_kv');
  const input={id:'p2_kv',enabled:!initial.switches.p2_kv,clientKey:randomUUID()};
  const name='test_s21_audit_'+randomUUID().replaceAll('-','');
  // Synthetic local TEST fault only: no product policy/trigger is removed or disabled.
@@ -155,6 +161,6 @@ it('S21 F9: a genuinely suppressed audit rolls the config back; the same key suc
   expect(await sql`SELECT id FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND payload->>'clientKey'=${input.clientKey}`).toHaveLength(1);
  }finally{
   await sql.unsafe(`DROP FUNCTION private.${name}()`);
-  expect(await withSession(full,()=>setPackageSwitchAction({id:'p2_kv',enabled:initial.switches.p2_kv,clientKey:randomUUID()}))).toMatchObject({code:'OK'});
+  await restoreFlag(original);
  }
 });

@@ -1,14 +1,14 @@
 'use client';
 import { Icon } from './Icon';
-import {usePermissions} from '@/lib/auth/PermissionsContext';
+import {useVorfinalStyle} from '@/ui/useVorfinalStyle';
 import {VORFINAL_COPY} from '@/ui/situationCatalog';
 export interface GlobalesPlusProps { onOeffnen: () => void; }
 /** Ein kanonischer Einstieg in „Neu erfassen“; Folgeentscheidungen liegen im Eingang. */
 export function GlobalesPlus({ onOeffnen }: GlobalesPlusProps) {
-  const {packageSwitches}=usePermissions();
-  if(packageSwitches?.ui_v45===true)return (
+  const vorfinal=useVorfinalStyle();
+  if(vorfinal)return (
     <button type="button" className="plus" data-glass="act" data-tint="plus" data-open="plus" aria-label={VORFINAL_COPY['vorfinal.kopf.plus.label']} data-spec-id="kopf.plus" onClick={onOeffnen}>
-      <svg className="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+      <Icon variant="vorfinal" name="plus"/>
     </button>
   );
   return (

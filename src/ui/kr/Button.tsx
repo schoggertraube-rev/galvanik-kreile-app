@@ -1,6 +1,6 @@
 'use client';
 import type { ButtonHTMLAttributes } from 'react';
-import {usePermissions} from '@/lib/auth/PermissionsContext';
+import {useVorfinalStyle} from '@/ui/useVorfinalStyle';
 import { Icon, type IconName } from './Icon';
 import { cx } from './typen';
 import { tippen } from './haptik';
@@ -10,14 +10,14 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 }
 /** Touch-Ziel ≥ 48px. primär = Navy · erledigen = Grün · gefährlich = RAL-Rot · Marke = Verlauf */
 export function Button({ art = 'standard', icon, text, label, block, className, type = 'button', onClick, ...rest }: ButtonProps) {
-  const {packageSwitches}=usePermissions();
+  const vorfinal=useVorfinalStyle();
   const haptisch = art === 'primaer' || art === 'erledigen' || art === 'marke';
   // v10 act(label, attrs): unchanged default arrow, nub and completion SVG.
   // Existing flow text, disabled state and callback remain the actual command.
-  if(packageSwitches?.ui_v45===true && text && (art==='primaer'||art==='erledigen'))return (
+  if(vorfinal && text && (art==='primaer'||art==='erledigen'))return (
     <button type={type} className={cx('act',className)} data-glass="act" data-tint="go"
       onClick={event=>{if(haptisch)tippen();onClick?.(event);}} {...rest}>
-      <span className="lbl">{text}</span><span className="nub"><svg className="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      <span className="lbl">{text}</span><span className="nub"><Icon variant="vorfinal" name="arrow"/></span>
       <svg className="okmark" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
     </button>
   );
