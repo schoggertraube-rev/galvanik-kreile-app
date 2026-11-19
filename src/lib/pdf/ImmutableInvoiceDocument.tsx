@@ -1,4 +1,4 @@
-import type {InvoicePaymentTerms} from '@/lib/domain/invoicePaymentTerms';
+import {invoiceCashDiscountDate,type InvoicePaymentTerms} from '@/lib/domain/invoicePaymentTerms';
 import {customerCountryLabel} from '@/modules/customers/public';
 import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
@@ -519,6 +519,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
         {totals.reverseCharge&&<View><Text>{INVOICE_VAT_COPY.reverseCharge}</Text><Text>{INVOICE_VAT_COPY.vatId} {customer.vatId} · {snapshot.schemaVersion===3?snapshot.seller.vatId:snapshot.seller.taxId}</Text></View>}
         <View style={styles.paymentBlock}>
           <Text>{E_INVOICE_COPY.paymentTerms(snapshot.paymentTermDays,formatCalendarDate(dueDate))}</Text>
+          {snapshot.terms?.skonto_prozent!==null&&snapshot.terms?.skonto_prozent!==undefined&&<Text>{E_INVOICE_COPY.cashDiscount(snapshot.terms.skonto_prozent.toLocaleString('de-DE'),String(snapshot.terms.skonto_tage),formatCalendarDate(invoiceCashDiscountDate(snapshot.issuedAt,snapshot.terms)!))}</Text>}
           <Text>Bitte überweisen Sie den Rechnungsbetrag unter Angabe der Rechnungsnummer {invoiceNumber}.</Text>
         </View>
 

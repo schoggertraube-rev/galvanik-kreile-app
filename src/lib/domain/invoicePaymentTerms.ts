@@ -1,3 +1,6 @@
+import {invoiceXmlAmount} from './invoiceElectronicFields';
+import {berlinCalendarDay} from './workingDays';
+
 /** S38a E1: immutable invoice terms; values come from the existing customer,
  * agreement and company sources inside the issuing transaction. */
 export type InvoicePaymentTerms={
@@ -6,6 +9,38 @@ export type InvoicePaymentTerms={
  skonto_prozent:number|null;
  skonto_tage:number|null;
 };
+
+function discountBasisPoints(value:unknown):number{
+ if(typeof value!=='number'&&typeof value!=='string')throw Error('INVOICE_CASH_DISCOUNT_INVALID');
+ const raw=String(value);
+ if(!/^\d{1,3}(?:\.\d{1,2})?$/.test(raw))throw Error('INVOICE_CASH_DISCOUNT_INVALID');
+ const [whole,fraction='']=raw.split('.');
+ const result=Number(whole)*100+Number(fraction.padEnd(2,'0'));
+ if(result>10000)throw Error('INVOICE_CASH_DISCOUNT_INVALID');
+ return result;
+}
+
+/** BT-20/BR-DE-18 from the pinned KoSIT CII rules: exact decimal percent,
+ * whole invoice as basis, and the required terminating XML newline. */
+export function invoiceDiscountXmlLine(terms:InvoicePaymentTerms|undefined):string|null{
+ if(terms===undefined)return null;
+ const frozen=parseInvoicePaymentTerms(terms,terms.ziel_tage);
+ if(frozen.skonto_prozent===null)return null;
+ return `#SKONTO#TAGE=${frozen.skonto_tage}#PROZENT=${invoiceXmlAmount(discountBasisPoints(frozen.skonto_prozent))}#\n`;
+}
+
+/** PL19.11.14:22: calendar days from the original Berlin invoice day.
+ * No current clock, customer value, or working-day calendar participates. */
+export function invoiceCashDiscountDate(issuedAt:string,terms:InvoicePaymentTerms|undefined):string|null{
+ if(terms===undefined)return null;
+ const frozen=parseInvoicePaymentTerms(terms,terms.ziel_tage);
+ if(frozen.skonto_prozent===null)return null;
+ const instant=new Date(issuedAt);
+ if(!Number.isFinite(instant.getTime())||instant.toISOString()!==issuedAt)throw Error('INVOICE_DISCOUNT_DATE_INVALID');
+ const day=new Date(berlinCalendarDay(instant)+'T12:00:00.000Z');
+ day.setUTCDate(day.getUTCDate()+frozen.skonto_tage!);
+ return day.toISOString().slice(0,10);
+}
 
 /** Read the already frozen terms. Historical absence is handled by the caller;
  * a present but damaged record never falls back to today's customer settings. */
@@ -34,11 +69,8 @@ export function resolveInvoicePaymentTerms(
  const terms:InvoicePaymentTerms={quelle:agreementApplies?'absprache':customer.enabled?'kunde':'firma',ziel_tage:days,skonto_prozent:null,skonto_tage:null};
  if(!customer.enabled)return terms;
  if(customer.discountPercent===null&&customer.discountDays===null)return terms;
- const raw=String(customer.discountPercent);
- if(!/^\d{1,3}(?:\.\d{1,2})?$/.test(raw))throw Error('INVOICE_CASH_DISCOUNT_INVALID');
- const [whole,fraction='']=raw.split('.');
- const percentBasisPoints=Number(whole)*100+Number(fraction.padEnd(2,'0'));
- if(percentBasisPoints>10000||customer.discountDays===null||!Number.isSafeInteger(customer.discountDays)
+ const percentBasisPoints=discountBasisPoints(customer.discountPercent);
+ if(customer.discountDays===null||!Number.isSafeInteger(customer.discountDays)
    ||customer.discountDays<0||customer.targetDays===null||customer.discountDays>customer.targetDays)throw Error('INVOICE_CASH_DISCOUNT_INVALID');
  if(percentBasisPoints===0)return terms;
  return {...terms,skonto_prozent:percentBasisPoints/100,skonto_tage:customer.discountDays};

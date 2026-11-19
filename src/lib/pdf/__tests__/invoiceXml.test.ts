@@ -20,6 +20,14 @@ function refusal(snapshot:ImmutableInvoiceSnapshotV3){
  throw Error('SYNTHETIC_INVALID_SOURCE_ACCEPTED');
 }
 
+it('S38a A2b writes the frozen discount as structured BT-20 without changing invoice cents',()=>{
+ const snapshot=source();snapshot.terms={quelle:'kunde',ziel_tage:14,skonto_prozent:2,skonto_tage:8};
+ const before=structuredClone(snapshot);
+ const xml=new TextDecoder().decode(createInvoiceXml({snapshot,invoiceNumber:'R-2026-0001',dueDate:'2026-12-02'}));
+ expect(xml).toContain('#SKONTO#TAGE=8#PROZENT=2.00#\n</ram:Description>');
+ expect(snapshot).toEqual(before);
+});
+
 it('KORR-S54o K5 binds BT29 only to tax-only seller and distinct cancellation identity to the untouched original',()=>{
  const snapshot=source(),original=structuredClone(snapshot);
  const input={snapshot,invoiceNumber:'R-2026-0001',dueDate:'2026-12-02'};

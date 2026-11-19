@@ -1,4 +1,5 @@
 import {CUSTOMER_COUNTRIES} from '@/modules/customers/public';
+import {invoiceDiscountXmlLine} from '@/lib/domain/invoicePaymentTerms';
 import {invoiceDate} from '@/modules/eingang/public';
 import {readInvoiceVat,type InvoiceVatRead} from '@/modules/accounting/public';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
@@ -87,12 +88,14 @@ export function createInvoiceXml(input:InvoiceXmlInput):Uint8Array{
  const parent=cancellation?'<ram:InvoiceReferencedDocument>'+node('ram:IssuerAssignedID',invoiceNumber)+'<ram:FormattedIssueDateTime>'+node('qdt:DateTimeString',day(snapshot.issuedAt).replaceAll('-',''),{format:'102'})+'</ram:FormattedIssueDateTime></ram:InvoiceReferencedDocument>':'';
  const amounts='<ram:SpecifiedTradeSettlementHeaderMonetarySummation>'+node('ram:LineTotalAmount',invoiceXmlAmount(direction*vat.netAmountCents))+node('ram:TaxBasisTotalAmount',invoiceXmlAmount(direction*vat.netAmountCents))+node('ram:TaxTotalAmount',invoiceXmlAmount(direction*vat.vatAmountCents),{currencyID:'EUR'})+node('ram:GrandTotalAmount',invoiceXmlAmount(direction*vat.grossAmountCents))+node('ram:TotalPrepaidAmount','0.00')+node('ram:DuePayableAmount',invoiceXmlAmount(direction*vat.grossAmountCents))+'</ram:SpecifiedTradeSettlementHeaderMonetarySummation>';
  const dueLabel=dueDate.slice(8,10)+'.'+dueDate.slice(5,7)+'.'+dueDate.slice(0,4);
+ const discount=invoiceDiscountXmlLine(snapshot.terms);
+ const paymentDescription=E_INVOICE_COPY.paymentTerms(snapshot.paymentTermDays,dueLabel)+(discount===null?'':'\n'+discount);
  const xml='<?xml version="1.0" encoding="UTF-8"?>'+
  '<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100" xmlns:qdt="urn:un:unece:uncefact:data:standard:QualifiedDataType:100">'+
  '<rsm:ExchangedDocumentContext><ram:GuidelineSpecifiedDocumentContextParameter>'+node('ram:ID','urn:cen.eu:en16931:2017')+'</ram:GuidelineSpecifiedDocumentContextParameter></rsm:ExchangedDocumentContext>'+
  '<rsm:ExchangedDocument>'+node('ram:ID',cancellation?cancellation.number:invoiceNumber)+node('ram:TypeCode',cancellation?'384':'380')+'<ram:IssueDateTime>'+date(invoiceDay)+'</ram:IssueDateTime>'+notes+'</rsm:ExchangedDocument>'+
  '<rsm:SupplyChainTradeTransaction>'+lines+'<ram:ApplicableHeaderTradeAgreement>'+seller+buyer+'</ram:ApplicableHeaderTradeAgreement><ram:ApplicableHeaderTradeDelivery><ram:ActualDeliverySupplyChainEvent><ram:OccurrenceDateTime>'+date(snapshot.serviceDate)+'</ram:OccurrenceDateTime></ram:ActualDeliverySupplyChainEvent></ram:ApplicableHeaderTradeDelivery><ram:ApplicableHeaderTradeSettlement>'+
  node('ram:InvoiceCurrencyCode','EUR')+'<ram:SpecifiedTradeSettlementPaymentMeans>'+node('ram:TypeCode','58')+'<ram:PayeePartyCreditorFinancialAccount>'+node('ram:IBANID',snapshot.seller.iban)+'</ram:PayeePartyCreditorFinancialAccount></ram:SpecifiedTradeSettlementPaymentMeans>'+taxes+
- '<ram:SpecifiedTradePaymentTerms>'+node('ram:Description',E_INVOICE_COPY.paymentTerms(snapshot.paymentTermDays,dueLabel))+'<ram:DueDateDateTime>'+date(dueDate)+'</ram:DueDateDateTime></ram:SpecifiedTradePaymentTerms>'+amounts+parent+'</ram:ApplicableHeaderTradeSettlement></rsm:SupplyChainTradeTransaction></rsm:CrossIndustryInvoice>';
+ '<ram:SpecifiedTradePaymentTerms>'+node('ram:Description',paymentDescription)+'<ram:DueDateDateTime>'+date(dueDate)+'</ram:DueDateDateTime></ram:SpecifiedTradePaymentTerms>'+amounts+parent+'</ram:ApplicableHeaderTradeSettlement></rsm:SupplyChainTradeTransaction></rsm:CrossIndustryInvoice>';
  return new TextEncoder().encode(xml);
 }
