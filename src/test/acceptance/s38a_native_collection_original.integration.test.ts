@@ -18,6 +18,8 @@ import {confirmPaymentAction,getOrderPaymentStateAction} from '@/app/actions/pay
 import {readPaymentSummary,getPaymentState} from '@/lib/server/paymentSummaryRead';
 import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingang.actions';
 import {searchTenantAction} from '@/app/actions/search.actions';
+import {requestMailStep} from '../../../e2e/ablauf/requestMailStep';
+import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 
 async function historicalCollection(rates:readonly number[],existing?:{customerId:string;agreementId:string}){
  if(!tenant.startsWith('TEST-ablauf-')||rates.length!==3)throw Error('TEST_HISTORICAL_SOURCE_REQUIRED');
@@ -287,4 +289,68 @@ it('native collection credit uses the existing real customer balance and payment
  expect(await sql`SELECT amount_cents::text FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${target.receipt.invoiceId}::uuid AND kind='verrechnung'`).toEqual([{amount_cents:'-4000'}]);
  // Existing S08 contract: credit is an internal transfer, never a second external cash receipt.
  expect(await sql`SELECT order_id,amount_eur::text FROM public.payments WHERE tenant_id=${tenant} AND invoice_id=${target.receipt.invoiceId}::uuid`).toEqual([]);
+});
+
+
+it('native collection originals form one customer fiscal mail group with their stored PDFs and no fabricated ready notification',async()=>{
+ await requestMailStep('S38-native-fiscal');
+ const first=await historicalCollection([1900,1900,1900]);
+ const a=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:first.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(a.code!=='OK')throw Error('TEST_NATIVE_MAIL_FIRST_ORIGINAL');
+ const second=await historicalCollection([1900,700,1900],{customerId:first.customerId,agreementId:first.agreementId});
+ const b=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:second.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(b.code!=='OK')throw Error('TEST_NATIVE_MAIL_SECOND_ORIGINAL');
+ const originals=await sql`SELECT id::text,invoice_number,pdf_content,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=ANY(${[a.receipt.invoiceId,b.receipt.invoiceId]}::uuid[]) ORDER BY invoice_number`;
+ const input={targetType:'CUSTOMER' as const,targetId:first.customerId,clientRequestId:randomUUID(),subject:'TEST native fiscal originals',body:'TEST unveraenderte Nachricht mit gespeicherten Originalen',attachment:{kind:'INVOICE' as const,documentId:a.receipt.invoiceId},expectedInvoiceIds:originals.map(row=>row.id)};
+ const noPrice=await createFixture(['kunden','mails'],'buero');
+ expect(await withSession(noPrice,()=>sendCustomerMailAction(input))).toMatchObject({code:'FORBIDDEN'});
+ const sent=await withSession(full,()=>sendCustomerMailAction(input));
+ expect(sent,JSON.stringify(sent)).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('TEST_NATIVE_FISCAL_MAIL_REQUIRED');
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
+ const sends=vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&String(url).endsWith('/sendMail')&&init?.method==='POST');
+ expect(sends).toHaveLength(1);
+ const message=JSON.parse(String(sends[0][1]?.body)).message;
+ expect(message.attachments).toHaveLength(2);
+ for(const original of originals){
+  const attachment=message.attachments.filter((row:{name:string})=>row.name===original.invoice_number+'.pdf');
+  expect(attachment).toHaveLength(1);expect(createHash('sha256').update(Buffer.from(attachment[0].contentBytes,'base64')).digest('hex')).toBe(original.pdf_sha256);
+ }
+ const [proof]=await sql`SELECT payload FROM public.events WHERE tenant_id=${tenant} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`;
+ expect(proof.payload.document).toMatchObject({kind:'INVOICE',orderId:null,collection:{collectionId:first.collectionId}});
+ expect(proof.payload.document.bundle).toHaveLength(1);expect(proof.payload.document.bundle[0]).toMatchObject({orderId:null,collection:{collectionId:second.collectionId}});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND order_id=ANY(${[...first.members,...second.members].map(member=>member.orderId)}::text[])`).toHaveLength(0);
+ expect(await sql`SELECT direction,channel FROM public.communication_messages WHERE tenant_id=${tenant} AND thread_id=${sent.data.threadId}::uuid`).toEqual([{direction:'outgoing',channel:'email'}]);
+ const again=await withSession(full,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}));
+ expect(again.code).not.toBe('OK');
+ expect(vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&String(url).endsWith('/sendMail')&&init?.method==='POST')).toHaveLength(1);
+});
+
+
+it('native fiscal mail preserves a real Graph acceptance across cancellation and uses one normal customer clarification task',async()=>{
+ await requestMailStep('S38-native-cancel-mail');
+ const source=await historicalCollection([1900,1900,1900]);
+ const issue=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(issue.code!=='OK')throw Error('TEST_NATIVE_MAIL_RACE_ORIGINAL');
+ const prior=vi.mocked(globalThis.fetch).getMockImplementation();if(!prior)throw Error('TEST_EXTERNAL_GRAPH_BOUNDARY_REQUIRED');
+ let sends=0;
+ vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>{
+  if(String(input).includes('graph.microsoft.com')&&String(input).endsWith('/sendMail')&&init?.method==='POST'){
+   sends++;
+   expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:issue.receipt.invoiceId,expectedVersion:1,reason:'TEST cancellation after original transport',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+   return new Response(null,{status:202});
+  }
+  return prior(input,init);
+ });
+ const input={targetType:'CUSTOMER' as const,targetId:source.customerId,clientRequestId:randomUUID(),subject:'TEST actual original transport before cancellation',body:'TEST saved native fiscal original',attachment:{kind:'INVOICE' as const,documentId:issue.receipt.invoiceId},expectedInvoiceIds:[issue.receipt.invoiceId]};
+ const sent=await withSession(full,()=>sendCustomerMailAction(input));
+ expect(sent,JSON.stringify(sent)).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('TEST_NATIVE_MAIL_RACE_ACCEPTANCE');
+ const tasks=await sql`SELECT task.id::text,task.version,task.bezug_typ,task.bezug_id,task.fuer_bereich,task.status FROM public.tasks task JOIN public.events source ON source.tenant_id=task.tenant_id AND source.payload->>'taskId'=task.id::text AND source.event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' WHERE task.tenant_id=${tenant} AND source.payload->>'invoiceId'=${issue.receipt.invoiceId}`;
+ expect(tasks).toHaveLength(1);expect(tasks[0]).toMatchObject({bezug_typ:'kunde',bezug_id:source.customerId,fuer_bereich:'preise',status:'offen'});
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:tasks[0].id}))).toMatchObject({code:'OK',canComplete:true,reference:{type:'kunde',id:source.customerId}});
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
+ expect(sends).toBe(1);
+ expect(await sql`SELECT id FROM public.communication_messages WHERE tenant_id=${tenant} AND thread_id=${sent.data.threadId}::uuid AND direction='outgoing'`).toHaveLength(1);
+ const resolver=await createFixture(['preise'],'buero');
+ expect(await withSession(resolver,()=>getIntakeTaskAction({taskId:tasks[0].id}))).toMatchObject({code:'OK',canComplete:true,canOpenReference:false});
+ expect(await withSession(resolver,()=>completeIntakeTaskAction({taskId:tasks[0].id,version:tasks[0].version,note:'TEST cancellation delivered to actual customer'}))).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:resolver.actorId}});
 });

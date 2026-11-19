@@ -8,7 +8,7 @@ import {readQuoteCommand} from '@/modules/quotes/server-public';
 import {lockQuoteDeliverySnapshot} from "@/modules/quotes/server-public";
 import {freezeStorageDeadline} from '@/lib/server/storageDeadline';
 import {createHash,randomUUID} from "node:crypto";
-import {readCommunicationDocumentReceipt,readLegacyQuoteReplacement,type LegacyQuoteReplacement,applyRecoveredInvoiceMailEffects,readPreparedInvoiceTransportOriginal,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
+import {readCommunicationDocumentReceipt,readLegacyQuoteReplacement,type LegacyQuoteReplacement,applyRecoveredInvoiceMailEffects,readPreparedInvoiceTransportOriginal,readInvoiceMailCohort,assertInvoiceMailCohort,qualifyInvoiceResend,assertInvoiceNotSent,invoiceMailDocumentFromSource,invoiceMailMembers,lockInvoiceMailDocuments,type CommunicationDocument} from "@/lib/server/communicationDocumentPort";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
@@ -26,7 +26,6 @@ import {readCustomerProfile} from '@/modules/customers/server-public';
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
-import {readReadyNotificationContext} from '@/lib/server/orderReleaseRead';
 import {readCollectionReminderReceipt,applyCollectionReminderMailEffects,assertCollectionReminderCurrent,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
 import {INVOICE_DELIVERY_COPY,COLLECTION_REMINDER_COPY,CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
 
@@ -144,7 +143,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
  }
  let attachment,document:CommunicationDocument|undefined;
  let legacyReplaces:LegacyQuoteReplacement|undefined;
- let invoiceGroup:{customerId:string;handover:string|null}|undefined;
+ let invoiceGroup:{customerId:string;handover:string|null;native:boolean}|undefined;
  if(input.attachment?.kind==='INVOICE'&&(!Array.isArray(input.expectedInvoiceIds)||!input.expectedInvoiceIds.length||input.expectedInvoiceIds.length>101||new Set(input.expectedInvoiceIds).size!==input.expectedInvoiceIds.length||input.expectedInvoiceIds.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))||!input.expectedInvoiceIds.includes(input.attachment.documentId))){const original=await readInvoicePdf(auth,input.attachment.documentId,'original');if(original.code!=='OK')return original;return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.data.invoiceNumber)};}
  const reconcileInvoice=(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,threadId:string)=>applyRecoveredInvoiceMailEffects(auth,threadId,(writeTx,value)=>createCanceledInvoiceMailTask(writeTx,auth,value,{effect:(effectTx,actor,effect)=>recordIntakeTaskEffect(effectTx,actor,effect,readCustomerProfile)}),tx);
  const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
@@ -173,12 +172,7 @@ export async function sendCustomerMailAction(input: TargetInput & {
     originals.push({filename:invoice.number+'.pdf',contentType:'application/pdf',bytes:new Uint8Array(pdf)});
    }
    return sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:prior.originalRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,reconcileInvoice,document:original,attachment:originals[0],additionalAttachments:originals.slice(1),beforePrepare:async tx=>{
-    for(const invoice of invoices.slice().sort((a,b)=>a.orderId.localeCompare(b.orderId))){
-     if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;
-     const locked=await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid AND status='issued' AND aggregate_version=${invoice.version} AND pdf_sha256=${invoice.sha256} FOR UPDATE`);
-     if(locked.length!==1)return false;
-    }
-    return true;
+    return lockInvoiceMailDocuments(tx,auth,invoices);
    }});
    }
   }
@@ -192,19 +186,21 @@ export async function sendCustomerMailAction(input: TargetInput & {
   if(prior.code!=='NOT_FOUND'&&prior.code!=='PENDING')return prior;
   if(input.attachment.kind==='INVOICE'){
    const pdf=await readInvoicePdf(auth,input.attachment.documentId,'original');if(pdf.code!=='OK')return pdf;
-   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;order_id:string;customer_id:string;aggregate_version:number;order_number:string;handover_mode:string|null}>(sql`SELECT invoice.id::text,invoice.order_id,invoice.customer_id,invoice.aggregate_version,orders.order_number,orders.handover_mode FROM public.invoices invoice JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${input.attachment!.documentId}::uuid AND invoice.status='issued' AND invoice.contract_version=1 AND invoice.pdf_sha256=${pdf.data.pdfSha256}`));
+   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;order_id:string|null;customer_id:string;aggregate_version:number;order_number:string|null;collection_source:unknown;handover_mode:string|null}>(sql`SELECT invoice.id::text,invoice.order_id,invoice.customer_id,invoice.aggregate_version,orders.order_number,invoice.snapshot->'collection' AS collection_source,orders.handover_mode FROM public.invoices invoice LEFT JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${input.attachment!.documentId}::uuid AND invoice.status='issued' AND invoice.contract_version=1 AND invoice.pdf_sha256=${pdf.data.pdfSha256}`));
    const invoice=rows[0];
-   if(rows.length!==1||!(input.targetType==='ORDER'?invoice.order_id===input.targetId:invoice.customer_id===input.targetId))return {code:'FORBIDDEN' as const,message:'Die Rechnung gehört nicht zu diesem Kunden oder Auftrag.'};
+   if(rows.length!==1)return {code:'FORBIDDEN' as const,message:'Die Rechnung gehört nicht zu diesem Kunden oder Auftrag.'};
+   const selectedDocument=invoiceMailDocumentFromSource({...invoice,invoice_number:pdf.data.invoiceNumber},pdf.data.pdfSha256);
+   if(!(input.targetType==='ORDER'?invoiceMailMembers(selectedDocument).some(member=>member.orderId===input.targetId):invoice.customer_id===input.targetId))return {code:'FORBIDDEN' as const,message:'Die Rechnung gehört nicht zu diesem Kunden oder Auftrag.'};
    attachment={filename:pdf.data.invoiceNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.data.pdf)};
-   document={kind:'INVOICE',id:invoice.id,orderId:invoice.order_id,orderNumber:invoice.order_number,number:pdf.data.invoiceNumber,version:invoice.aggregate_version,sha256:pdf.data.pdfSha256,bundle:[]};
-   invoiceGroup={customerId:invoice.customer_id,handover:invoice.handover_mode};
+   document={...selectedDocument,kind:'INVOICE',bundle:[]};
+   invoiceGroup={customerId:invoice.customer_id,handover:invoice.handover_mode,native:invoice.order_id===null};
    const resend=await withPrivilegedTenantTransaction(auth,tx=>qualifyInvoiceResend(tx,auth,invoice.id,invoice.customer_id));if(resend)document.resend=resend;
-   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id)))).filter(row=>row.id!==invoice.id);
+   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id),invoice.order_id===null))).filter(row=>row.id!==invoice.id);
    if(others.length>100)return {code:'VALIDATION_ERROR' as const,message:'Zu viele offene Belege für eine einzelne Sammel-Mail. Es wurde nichts gesendet.'};
    for(const other of others){
     const original=await readInvoicePdf(auth,other.id,'original');if(original.code!=='OK')return original;
     additionalAttachments.push({filename:original.data.invoiceNumber+'.pdf',contentType:'application/pdf',bytes:new Uint8Array(original.data.pdf)});
-    (document.bundle??=[]).push({id:other.id,orderId:other.order_id,orderNumber:other.order_number,number:original.data.invoiceNumber,version:other.aggregate_version,sha256:original.data.pdfSha256});
+    (document.bundle??=[]).push(invoiceMailDocumentFromSource({...other,invoice_number:original.data.invoiceNumber},original.data.pdfSha256));
    }
   }else{
   const pdf=await readQuotePdfAction({quoteId:input.attachment.documentId});
@@ -225,10 +221,9 @@ export async function sendCustomerMailAction(input: TargetInput & {
  const snapshot=document;
  const sent=await sendCommunicationMail(auth,{targetType:input.targetType,targetId:input.targetId,clientRequestId:input.clientRequestId,subject:input.subject,body:input.body,confirmedResend:input.confirmedResend,attachment,additionalAttachments,document,reconcileInvoice,legacyReplaces,beforePrepare:snapshot?async (tx,recipient)=>{
   if(snapshot.kind==='QUOTE')return lockQuoteDeliverySnapshot(tx,auth.tenantId,snapshot);
-  for(const invoice of [snapshot,...snapshot.bundle??[]].sort((a,b)=>a.orderId.localeCompare(b.orderId))){
-   if(!await readReadyNotificationContext(tx,auth.tenantId,invoice.orderId))return false;
-   const rows=await tx.execute(sql`SELECT id FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid AND order_id=${invoice.orderId} AND status='issued' AND aggregate_version=${invoice.version} AND pdf_sha256=${invoice.sha256} FOR UPDATE`);
-   if(rows.length!==1)return false;
+  const originals=[snapshot,...snapshot.bundle??[]];
+  if(!await lockInvoiceMailDocuments(tx,auth,originals))return false;
+  for(const invoice of originals){
    if(!snapshot.resend?.originals.some(original=>original.id===invoice.id&&original.sha256===invoice.sha256))await assertInvoiceNotSent(tx,auth.tenantId,invoice);
   }
   if(!invoiceGroup)throw Error('INVOICE_GROUP_MISSING');

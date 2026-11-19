@@ -1,3 +1,4 @@
+import {parseInvoiceCollectionOriginal,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import 'server-only';
 import type {CommunicationOriginal} from './communicationOriginalPort';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
@@ -7,11 +8,46 @@ import type {AuthorizationSnapshot} from './authorization';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from './privilegedDb';
 import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
-import {appendOrderInformed} from './orderReleaseRead';
+import {appendOrderInformed,readReadyNotificationContext} from './orderReleaseRead';
 import {DISPATCH_NOTICE_COPY} from '@/ui/situationCatalog';
 
 export type InvoiceResendEvidence={bounceEventId:string;bounceItemId:string;bouncedThreadId:string;correctionEventId:string;recipient:string;originals:Array<{id:string;sha256:string}>};
-export type InvoiceMailDocument={resend?:InvoiceResendEvidence;id:string;number:string;version:number;sha256:string;orderId:string;orderNumber?:string};
+type InvoiceMailDocumentBase={resend?:InvoiceResendEvidence;id:string;number:string;version:number;sha256:string};
+export type InvoiceMailDocument=InvoiceMailDocumentBase&({orderId:string;orderNumber?:string;collection?:never}|{orderId:null;orderNumber?:never;collection:InvoiceCollectionOriginal});
+export function invoiceMailMembers(document:InvoiceMailDocument):Array<{orderId:string;orderNumber?:string}>{
+ if(document.orderId===null)return parseInvoiceCollectionOriginal(document.collection).members;
+ if(typeof document.orderId!=='string'||!document.orderId.trim()||document.orderId.length>128||document.collection!==undefined)throw Error('INVOICE_MAIL_ORIGINAL_IDENTITY_INVALID');
+ return [{orderId:document.orderId,...(document.orderNumber!==undefined?{orderNumber:document.orderNumber}:{})}];
+}
+export function invoiceMailSourceMatches(document:InvoiceMailDocument){
+ const collection=document.orderId===null?parseInvoiceCollectionOriginal(document.collection):undefined;
+ return sql`invoice.order_id IS NOT DISTINCT FROM ${document.orderId} AND ${collection?sql`invoice.snapshot->'collection'=${JSON.stringify(collection)}::jsonb AND private.invoice_original_source_valid(invoice.tenant_id,invoice.customer_id,invoice.order_id,invoice.order_version,invoice.freeze_id,invoice.service_date,invoice.snapshot,invoice.issued_at)`:sql`NOT(invoice.snapshot ? 'collection')`}`;
+}
+export function invoiceMailDocumentFromSource(row:{id:string;order_id:string|null;order_number:string|null;collection_source?:unknown;invoice_number:string;aggregate_version:number},sha256:string):InvoiceMailDocument{
+ const common={id:row.id,number:row.invoice_number,version:row.aggregate_version,sha256};
+ if(row.order_id===null){if(row.order_number!==null)throw Error('INVOICE_MAIL_NATIVE_ORDER_NUMBER_FORBIDDEN');return {...common,orderId:null,collection:parseInvoiceCollectionOriginal(row.collection_source)};}
+ if(!row.order_number||row.collection_source!=null)throw Error('INVOICE_MAIL_ORDER_SOURCE_INVALID');
+ return {...common,orderId:row.order_id,orderNumber:row.order_number};
+}
+
+/** Same pre-send recheck for initial preparation and frozen-original retry. */
+export async function lockInvoiceMailDocuments(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,documents:readonly InvoiceMailDocument[]){
+ if(!documents.length)throw Error('INVOICE_MAIL_ORIGINALS_EMPTY');
+ const native=documents[0].orderId===null;
+ if(documents.some(document=>(document.orderId===null)!==native))throw Error('INVOICE_MAIL_MIXED_GROUP_FORBIDDEN');
+ if(native){
+  const orderIds=[...new Set(documents.flatMap(document=>invoiceMailMembers(document).map(member=>member.orderId)))].sort();
+  const locked=await tx.execute<{id:string}>(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id IN (${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}) ORDER BY id FOR UPDATE`);
+  if(locked.length!==orderIds.length||orderIds.some(id=>!locked.some(order=>order.id===id)))return false;
+ }
+ for(const document of documents.slice().sort((a,b)=>(a.orderId===null?a.id:a.orderId).localeCompare(b.orderId===null?b.id:b.orderId))){
+  if(document.orderId!==null&&!await readReadyNotificationContext(tx,auth.tenantId,document.orderId))return false;
+  const locked=await tx.execute(sql`SELECT invoice.id FROM public.invoices invoice WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${document.id}::uuid AND ${invoiceMailSourceMatches(document)} AND invoice.status='issued' AND invoice.aggregate_version=${document.version} AND invoice.pdf_sha256=${document.sha256} FOR UPDATE`);
+  if(locked.length!==1)return false;
+ }
+ return true;
+}
+
 export type CommunicationDocument={kind:'QUOTE';original?:CommunicationOriginal;id:string;number:string;version:number;edition:number;sha256:string;source?:{itemId:string;graphMessageId:string}}|InvoiceMailDocument&{kind:'INVOICE';bundle?:InvoiceMailDocument[];source?:never};
 type Intent={targetType:'CUSTOMER'|'ORDER';targetId:string;clientRequestId:string;subject:string;body:string};
 export type LegacyQuoteReplacement={requestId:string;checkedAt:string};
@@ -37,29 +73,35 @@ export async function assertLegacyQuoteReplacement(tx:PrivilegedTenantTransactio
  if(rows.length!==1)throw Error('LEGACY_QUOTE_REPLACEMENT_CHANGED');
 }
 export function communicationDocumentBody(body:string,document:CommunicationDocument,legacy=false){
- if(document.kind!=='INVOICE'||!document.bundle?.length)return body.trim();
- const orders=[document,...document.bundle].map(doc=>doc.orderNumber);if(orders.some(number=>!number))throw Error('INVOICE_BUNDLE_ORDER_NUMBER_MISSING');
- const prefix=(legacy?DISPATCH_NOTICE_COPY.legacyCollective(orders as string[]):DISPATCH_NOTICE_COPY.collective(orders as string[]))+'\n\n';
+ if(document.kind!=='INVOICE'||document.orderId!==null&&!document.bundle?.length)return body.trim();
+ const originals=[document,...document.bundle??[]];
+ if(originals.some(doc=>(doc.orderId===null)!==(document.orderId===null)))throw Error('INVOICE_MAIL_MIXED_GROUP_FORBIDDEN');
+ const orders=originals.flatMap(doc=>invoiceMailMembers(doc).map(member=>member.orderNumber));if(orders.some(number=>!number))throw Error('INVOICE_BUNDLE_ORDER_NUMBER_MISSING');
+ const prefix=(document.orderId===null?DISPATCH_NOTICE_COPY.nativeCollective(orders as string[]):legacy?DISPATCH_NOTICE_COPY.legacyCollective(orders as string[]):DISPATCH_NOTICE_COPY.collective(orders as string[]))+'\n\n';
  return body.trim().startsWith(prefix)?body.trim():prefix+body.trim();
 }
-export function communicationDocumentIntent(input:Intent,document:CommunicationDocument,legacy=false){return createHash('sha256').update(JSON.stringify({targetType:input.targetType,targetId:input.targetId,subject:input.subject.trim(),body:communicationDocumentBody(input.body,document,legacy),document:{kind:document.kind,id:document.id,number:document.number,version:document.version,...(document.kind==='QUOTE'?{edition:document.edition}:{orderId:document.orderId,...(document.resend?{resend:JSON.parse(canonicalJson(document.resend))}:{}),...(document.bundle?.length?{orderNumber:document.orderNumber,bundle:document.bundle.map(doc=>({id:doc.id,orderId:doc.orderId,orderNumber:doc.orderNumber,number:doc.number,version:doc.version,sha256:doc.sha256}))}:{})}),sha256:document.sha256,...(document.source?{source:{itemId:document.source.itemId,graphMessageId:document.source.graphMessageId}}:{})}})).digest('hex');}
+export function communicationDocumentIntent(input:Intent,document:CommunicationDocument,legacy=false){return createHash('sha256').update(JSON.stringify({targetType:input.targetType,targetId:input.targetId,subject:input.subject.trim(),body:communicationDocumentBody(input.body,document,legacy),document:{kind:document.kind,id:document.id,number:document.number,version:document.version,...(document.kind==='QUOTE'?{edition:document.edition}:{orderId:document.orderId,...(document.orderId===null?{collection:parseInvoiceCollectionOriginal(document.collection)}:{}),...(document.resend?{resend:JSON.parse(canonicalJson(document.resend))}:{}),...(document.bundle?.length?{orderNumber:document.orderNumber,bundle:document.bundle.map(doc=>({id:doc.id,orderId:doc.orderId,...(doc.orderId===null?{collection:parseInvoiceCollectionOriginal(doc.collection)}:{}),orderNumber:doc.orderNumber,number:doc.number,version:doc.version,sha256:doc.sha256}))}:{})}),sha256:document.sha256,...(document.source?{source:{itemId:document.source.itemId,graphMessageId:document.source.graphMessageId}}:{})}})).digest('hex');}
 export async function appendCommunicationDocument(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:Intent,document:CommunicationDocument,threadId:string,phase:'prepared'|'sent',sourceDocument?:CommunicationDocument,prepareActorId=auth.userId){
  if(document.kind==='INVOICE')document={...document,bundle:document.bundle??[]};
  const payload={threadId,document,prepareActorId,clickedBy:auth.userId,...(sourceDocument?{sourceDocumentIntent:communicationDocumentIntent(input,sourceDocument)}:{}),intent:communicationDocumentIntent(input,document),targetType:input.targetType,targetId:input.targetId,subject:input.subject.trim(),bodySha256:createHash('sha256').update(input.body.trim()).digest('hex')};
  await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,correlation_id,created_at)
  VALUES(${randomUUID()},${auth.tenantId},${input.targetType==='ORDER'?input.targetId:null},${phase==='sent'?'COMMUNICATION_DOCUMENT_SENT_V1':'COMMUNICATION_DOCUMENT_PREPARED_V1'},${document.number+(document.kind==='QUOTE'?' · Fassung '+document.edition:'')+(phase==='sent'?' gesendet':' zum Versand vorbereitet')},${JSON.stringify(payload)}::jsonb,'success',${prepareActorId}::uuid,${phase==='prepared'?threadId:randomUUID()}::uuid,1,${input.clientRequestId}::uuid,statement_timestamp())`);
  if(phase==='sent'&&document.kind==='INVOICE'){
-  for(const invoiceDocument of [document,...document.bundle??[]].sort((a,b)=>a.orderId.localeCompare(b.orderId))){
+  for(const invoiceDocument of [document,...document.bundle??[]].sort((a,b)=>(a.orderId===null?a.id:a.orderId).localeCompare(b.orderId===null?b.id:b.orderId))){
   // Same transaction as the confirmed local outgoing message, never on preparation/failure.
   const proof=await tx.execute(sql`SELECT invoice.id FROM public.invoices invoice JOIN public.communication_threads thread ON thread.tenant_id=invoice.tenant_id AND thread.id=${threadId}::uuid
    JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email'
-   WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${invoiceDocument.id}::uuid AND invoice.order_id=${invoiceDocument.orderId}
+   WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${invoiceDocument.id}::uuid AND ${invoiceMailSourceMatches(invoiceDocument)}
     AND invoice.status='issued' AND invoice.aggregate_version=${invoiceDocument.version} AND invoice.pdf_sha256=${invoiceDocument.sha256}
-    AND thread.status='sent' AND thread.customer_id=invoice.customer_id AND (thread.order_id=${sourceDocument?.kind==='INVOICE'?sourceDocument.orderId:document.orderId} OR thread.order_id IS NULL)`);
+    AND thread.status='sent' AND thread.customer_id=invoice.customer_id AND (thread.order_id=${input.targetType==='ORDER'?input.targetId:null} OR thread.order_id IS NULL)`);
   if(proof.length!==1)throw Error('INVOICE_NOTIFICATION_PROOF_INVALID');
+  // Native invoices describe already handed-over goods. Their actual fiscal
+  // mail receipt is not a fabricated ready-for-pickup notification.
+  if(invoiceDocument.orderId!==null){
   const bytes=createHash('sha256').update('order-informed:'+auth.tenantId+':'+input.clientRequestId+':'+invoiceDocument.orderId).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
   const h=bytes.subarray(0,16).toString('hex'),key=`${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
   await appendOrderInformed(tx,auth,{orderId:invoiceDocument.orderId,clientEventId:key,channel:'mail',threadId,intent:payload.intent});
+  }
   }
  }
 }
@@ -101,7 +143,7 @@ export async function readPreparedInvoiceTransportOriginal(auth:AuthorizationSna
  if(!hasAuthorizationArea(auth,'preise'))return null;
  return withPrivilegedTenantTransaction(auth,async tx=>{
   const rows=await tx.execute<{pdf_content:Buffer|Uint8Array;integrity_ok:boolean}>(sql`SELECT invoice.pdf_content,encode(sha256(invoice.pdf_content),'hex')=invoice.pdf_sha256 AS integrity_ok
-   FROM public.invoices invoice WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${invoice.id}::uuid AND invoice.order_id=${invoice.orderId} AND invoice.pdf_sha256=${invoice.sha256}
+   FROM public.invoices invoice WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${invoice.id}::uuid AND ${invoiceMailSourceMatches(invoice)} AND invoice.pdf_sha256=${invoice.sha256}
     AND EXISTS(SELECT 1 FROM public.events prepared JOIN public.communication_threads thread ON thread.tenant_id=prepared.tenant_id AND thread.id::text=prepared.payload->>'threadId'
      WHERE prepared.tenant_id=invoice.tenant_id AND prepared.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1' AND prepared.user_id=thread.created_by
       AND thread.source=${'MS_GRAPH_OUT:'+input.clientRequestId} AND prepared.payload->'document'=${JSON.stringify(document)}::jsonb AND prepared.payload->>'intent'=${communicationDocumentIntent(input,document)})`);
@@ -145,7 +187,21 @@ export async function assertInvoiceNotSent(tx:PrivilegedTenantTransaction,tenant
  if(pending.length!==1||pending[0].blocked)throw Error('COMMUNICATION_OUTCOME_UNCLEAR');
 }
 
-export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]=[]){
+type InvoiceMailLegacyRow={id:string;order_id:string;order_number:string;invoice_number:string;aggregate_version:number};
+type InvoiceMailNativeRow={id:string;order_id:null;order_number:null;collection_source:unknown;invoice_number:string;aggregate_version:number;source_integrity_ok:boolean};
+export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds?:readonly string[],native?:false):Promise<InvoiceMailLegacyRow[]>;
+export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]|undefined,native:true):Promise<InvoiceMailNativeRow[]>;
+export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]|undefined,native:boolean|undefined):Promise<Array<InvoiceMailLegacyRow|InvoiceMailNativeRow>>;
+export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]=[],native:boolean=false):Promise<Array<InvoiceMailLegacyRow|InvoiceMailNativeRow>>{
+ if(native){const rows=await tx.execute<InvoiceMailNativeRow>(sql`SELECT invoice.id::text,invoice.order_id,NULL::text AS order_number,invoice.snapshot->'collection' AS collection_source,invoice.invoice_number,invoice.aggregate_version,private.invoice_original_source_valid(invoice.tenant_id,invoice.customer_id,invoice.order_id,invoice.order_version,invoice.freeze_id,invoice.service_date,invoice.snapshot,invoice.issued_at) AS source_integrity_ok FROM public.invoices invoice
+  WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId} AND invoice.order_id IS NULL AND invoice.status='issued' AND invoice.contract_version=1
+   AND NOT ${invoiceMailUnresolved(tenantId,sql`invoice.id`)}
+   AND (NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} OR invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[]))
+  ORDER BY invoice.issued_at,invoice.id LIMIT 102`);
+  if(rows.some(row=>row.source_integrity_ok!==true))throw Error('INVOICE_MAIL_COLLECTION_SOURCE_INCOMPLETE');
+  return rows;
+ }
+
  return tx.execute<{id:string;order_id:string;order_number:string;invoice_number:string;aggregate_version:number}>(sql`SELECT invoice.id::text,invoice.order_id,orders.order_number,invoice.invoice_number,invoice.aggregate_version FROM public.invoices invoice
   JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
   JOIN private.v_order_freeze_state_v1 frozen ON frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active AND frozen.integrity_ok
@@ -157,8 +213,8 @@ export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenan
 export class InvoiceMailListChanged extends Error{
  constructor(readonly number:string,readonly added:boolean){super('INVOICE_MAIL_LIST_CHANGED');}
 }
-export async function assertInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,group:{customerId:string;handover:string|null},expected:readonly string[],prepared:readonly string[],resendIds:readonly string[]=[]){
- const current=await readInvoiceMailCohort(tx,tenantId,group.customerId,group.handover,resendIds);
+export async function assertInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,group:{customerId:string;handover:string|null;native?:boolean},expected:readonly string[],prepared:readonly string[],resendIds:readonly string[]=[]){
+ const current=await readInvoiceMailCohort(tx,tenantId,group.customerId,group.handover,resendIds,group.native);
  const added=current.find(row=>!expected.includes(row.id)),removed=expected.find(id=>!current.some(row=>row.id===id));
  const unprepared=current.find(row=>expected.includes(row.id)&&!prepared.includes(row.id));
  if(added||unprepared)throw new InvoiceMailListChanged((added??unprepared)!.invoice_number,true);
@@ -193,7 +249,7 @@ export async function qualifyInvoiceResend(tx:PrivilegedTenantTransaction,auth:A
 export async function obsoleteInvoiceMailMembers(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,document:Extract<CommunicationDocument,{kind:'INVOICE'}>){
  const obsolete:string[]=[];
  for(const invoice of [document,...document.bundle??[]]){
-  const rows=await tx.execute<{status:string;version:number;sha256:string}>(sql`SELECT status,aggregate_version AS version,pdf_sha256 AS sha256 FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid AND order_id=${invoice.orderId}`);
+  const rows=await tx.execute<{status:string;version:number;sha256:string}>(sql`SELECT status,aggregate_version AS version,pdf_sha256 AS sha256 FROM public.invoices invoice WHERE tenant_id=${auth.tenantId} AND id=${invoice.id}::uuid AND ${invoiceMailSourceMatches(invoice)}`);
   if(rows.length!==1||rows[0].status!=='issued'||rows[0].version!==invoice.version||rows[0].sha256!==invoice.sha256)obsolete.push(invoice.id);
  }
  return obsolete;
@@ -202,7 +258,7 @@ export async function obsoleteInvoiceMailMembers(tx:PrivilegedTenantTransaction,
 /** The existing task writer accepts only this real, actor-bound mail source. */
 export async function readCanceledInvoiceMailTaskSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{threadId:string;invoiceId:string}){
  if(!hasAuthorizationArea(auth,'preise'))return null;
- const rows=await tx.execute<{mail_event_id:string;invoice_id:string;invoice_number:string;cancellation_invoice_number:string|null;order_id:string;customer_name:string;sent_at:string|null}>(sql`SELECT mail.payload->'sentItemsEvidence'->>'sentAt' AS sent_at,mail.id AS mail_event_id,invoice.id::text AS invoice_id,invoice.invoice_number,invoice.cancellation_invoice_number,invoice.order_id,customer.name AS customer_name
+ const rows=await tx.execute<{mail_event_id:string;invoice_id:string;invoice_number:string;cancellation_invoice_number:string|null;order_id:string|null;customer_id:string;customer_name:string;sent_at:string|null}>(sql`SELECT mail.payload->'sentItemsEvidence'->>'sentAt' AS sent_at,mail.id AS mail_event_id,invoice.id::text AS invoice_id,invoice.invoice_number,invoice.cancellation_invoice_number,invoice.order_id,invoice.customer_id,customer.name AS customer_name
   FROM public.events mail JOIN public.communication_threads thread ON thread.tenant_id=mail.tenant_id AND thread.id::text=mail.payload->>'threadId' AND thread.status='sent'
   JOIN public.communication_messages message ON message.tenant_id=mail.tenant_id AND message.thread_id=thread.id AND message.id::text=mail.payload->>'messageId' AND message.direction='outgoing'
   JOIN public.invoices invoice ON invoice.tenant_id=mail.tenant_id AND invoice.id=${input.invoiceId}::uuid AND invoice.customer_id=thread.customer_id AND invoice.status='cancelled'
@@ -215,7 +271,8 @@ export async function readCanceledInvoiceMailTaskSource(tx:PrivilegedTenantTrans
     AND NOT(outcome.payload->'obsoleteInvoiceIds' @> jsonb_build_array(invoice.id::text)))
    AND EXISTS(SELECT 1 FROM public.events prepared WHERE prepared.tenant_id=mail.tenant_id AND prepared.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1'
     AND prepared.correlation_id=mail.correlation_id AND prepared.user_id=mail.user_id AND prepared.payload->'document'=mail.payload->'documentReconciliation'->'originalDocument')`);
- return rows.length===1?rows[0]:null;
+ if(rows.length!==1)return null;
+ const row=rows[0];return {...row,reference:row.order_id===null?{type:'kunde' as const,id:row.customer_id}:{type:'auftrag' as const,id:row.order_id}};
 }
 
 /** Follow-up failure may not undo the already qualified outgoing mail. */

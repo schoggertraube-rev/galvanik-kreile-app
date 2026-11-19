@@ -217,7 +217,7 @@ export const MANUAL_SHIPPING_COPY={
  SHIPMENT_PROVIDER_LABEL_EXISTS:'Das Paket hat schon ein Etikett vom Versanddienst. Storniere es über den bestehenden Etikettweg, bevor du die Nummer ersetzt.',
  SHIPMENT_CARRIER_CHANGED:'Der Versanddienst des Pakets weicht von den Einstellungen ab. Öffne das Paket und kläre den Versanddienst vor der Änderung.'
 } as const;
-export const DISPATCH_NOTICE_COPY={legacyCollective:(orders:readonly string[])=>'Deine fertigen Aufträge: '+orders.join(', '),collective:(orders:readonly string[])=>'Ihre fertigen Aufträge: '+orders.join(', ')};
+export const DISPATCH_NOTICE_COPY={nativeCollective:(orders:readonly string[])=>'Sammelrechnungen zu Ihren Aufträgen: '+orders.join(', '),legacyCollective:(orders:readonly string[])=>'Deine fertigen Aufträge: '+orders.join(', '),collective:(orders:readonly string[])=>'Ihre fertigen Aufträge: '+orders.join(', ')};
 export const DELIVERY_FAILURE_COPY={
  recorded:'Unzustellbarkeit aus gesichertem Mail-Original belegt',
  forbidden:'Für dieses Mail-Original brauchst Du die Freigabe für Eingang und Mails.',

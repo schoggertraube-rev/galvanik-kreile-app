@@ -379,12 +379,12 @@ export async function createCanceledInvoiceMailTask(tx:PrivilegedTenantTransacti
  const key=eventKey(source.invoice_id,0,'cancelled-invoice-arrived');
  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${key},0))`);
  const prior=await tx.execute<{id:string;bezug_id:string;fuer_bereich:string}>(sql`SELECT id::text,bezug_id,fuer_bereich FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid FOR UPDATE`);
- if(prior.length){if(prior.length!==1||prior[0].bezug_id!==source.order_id||prior[0].fuer_bereich!=='preise'||!await isCanceledInvoiceMailTask(tx,auth,prior[0].id))reject('CONFLICT','Aufgabenkennung gehört zu einem anderen Vorgang.');return prior[0].id;}
+ if(prior.length){if(prior.length!==1||prior[0].bezug_id!==source.reference.id||prior[0].fuer_bereich!=='preise'||!await isCanceledInvoiceMailTask(tx,auth,prior[0].id))reject('CONFLICT','Aufgabenkennung gehört zu einem anderen Vorgang.');return prior[0].id;}
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  const title=MAIL_RESEND_COPY.canceledTask(source.invoice_number,source.customer_name);
  // PL02:01: only the customer may be shortened; full source facts stay in the note.
  // PL05:15: the normal completion records the operator's actual cancellation delivery.
- const saved=await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'preise',reference:{type:'auftrag',id:source.order_id},note:MAIL_RESEND_COPY.canceledTaskDescription(source.invoice_number,source.customer_name,source.sent_at)+(source.cancellation_invoice_number?'\n'+E_INVOICE_COPY.cancellationTitle(source.cancellation_invoice_number,source.invoice_number):'')},deps,false);
+ const saved=await persistTask(tx,auth,{clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'preise',reference:source.reference,note:MAIL_RESEND_COPY.canceledTaskDescription(source.invoice_number,source.customer_name,source.sent_at)+(source.cancellation_invoice_number?'\n'+E_INVOICE_COPY.cancellationTitle(source.cancellation_invoice_number,source.invoice_number):'')},deps,false);
  await bindCanceledInvoiceMailTask(tx,auth,{...input,taskId:saved.task.id,clientEventId:eventKey(source.invoice_id,0,'cancelled-invoice-task-source')});
  return saved.task.id;
 }
