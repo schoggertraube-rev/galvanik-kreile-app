@@ -11,10 +11,34 @@ import {saveCustomerAgreementAction} from '@/app/actions/customers.actions';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
 import {issueInvoiceAction,addOrderToCollectionAction} from '@/app/actions/invoices.actions';
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
+import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 
 beforeAll(()=>{
  const url=process.env.DATABASE_URL;
  if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).pathname!=='/postgres')throw Error('TEST_S38_COLLECTION_LOOPBACK_REQUIRED');
+});
+
+it('S38 canonical customer terms preserve the concrete E-invoice name correction before any number or write, then the same original request succeeds',async()=>{
+ const customerId=await customerFixture('TEST S38 terms field validation');
+ const order=await readyOrderForInvoice('TEST S38 name correction','pickup',customerId);
+ const input={orderId:order.orderId,expectedVersion:order.version,clientEventId:randomUUID()};
+ const read=async()=>{const rows=await sql`SELECT row_to_json(customer)::jsonb AS original FROM public.customers customer WHERE tenant_id=${tenant} AND id=${customerId}`;if(rows.length!==1)throw Error('TEST_CUSTOMER_ORIGINAL_REQUIRED');return rows[0].original;};
+ const columns=await sql`SELECT attname AS name FROM pg_attribute WHERE attrelid='public.customers'::regclass AND attnum>0 AND NOT attisdropped AND attgenerated='' AND attidentity='' ORDER BY attnum`;
+ if(!columns.length||columns.some(column=>typeof column.name!=='string'||!/^[a-z_][a-z0-9_]*$/.test(column.name)))throw Error('TEST_CUSTOMER_COLUMN_CONTRACT_REQUIRED');
+ const names=columns.map(column=>'"'+column.name+'"').join(',');
+ mkdirSync('.git/kreile-r24-customer-validation-originals',{recursive:true});writeFileSync('.git/kreile-r24-customer-validation-originals/'+customerId+'.json',JSON.stringify(await read()));
+ await withRestoredTestSource({label:'TEST S38 customer name before canonical terms',read,restore:async original=>{
+  await sql.unsafe(`UPDATE public.customers SET (${names})=(SELECT ${names} FROM jsonb_populate_record(NULL::public.customers,$1::text::jsonb)) WHERE tenant_id=$2 AND id=$3`,[JSON.stringify(original),tenant,customerId]);
+ }},async()=>{
+  await sql`UPDATE public.customers SET name='' WHERE tenant_id=${tenant} AND id=${customerId}`;
+  expect(await withSession(full,()=>issueInvoiceAction(input))).toMatchObject({code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource('name'),source:{kind:'customer',objectId:customerId,field:'name'}});
+  expect(await sql`SELECT id FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${order.orderId}`).toHaveLength(0);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND event_type='INVOICE_CREATED_V1' AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(0);
+ });
+ const created=await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))));
+ expect(created).toMatchObject({code:'OK'});if(created.code!=='OK')throw Error('TEST_CUSTOMER_CORRECTION_ORIGINAL_REQUIRED');
+ expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:{invoiceId:created.receipt.invoiceId}});
 });
 
 it('A38a A5/A6 joins two actual handovers to one open monthly collection and rejects a single invoice before numbering',async()=>{

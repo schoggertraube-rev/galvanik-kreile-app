@@ -3,7 +3,7 @@
 Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 Ähnlich = NFC/Kleinschreibung/Interpunktion/Platzhalternamen mechanisch normalisiert. Bestand bleibt unverändert.
 
-## Gleicher Wortlaut (61)
+## Gleicher Wortlaut (62)
 
 - `E_INVOICE_COPY.collectionNotDue`: "Die Sammlung ist noch nicht fällig oder wurde inzwischen abgerechnet." → `collection.not_due`
 - `DELIVERY_NOTE_COPY.title`: "Lieferschein" → `document.delivery_kind`, `intake.fact.delivery_number`, `ws.slip`
@@ -169,7 +169,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 
-## Nur im Bestand (711)
+## Nur im Bestand (715)
 
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
 - `EVIDENCE_VISIBILITY_COPY.invalid`: "Wähle das Foto erneut."
@@ -184,6 +184,8 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `INVOICE_VAT_COPY.cancelVat`: "Storno USt ("
 - `INVOICE_VAT_COPY.reverseCharge`: "Steuerschuldnerschaft des Leistungsempfängers"
 - `INVOICE_VAT_COPY.vatId`: "USt-IdNr.:"
+- `E_INVOICE_COPY.collectionChangeUnavailable`: "Sammlung konnte nicht geändert werden. Lade den Auftrag neu."
+- `E_INVOICE_COPY.collectionRemoved`: "Auftrag aus der offenen Sammlung entfernt."
 - `E_INVOICE_COPY.collectionOpenCustomer`: "Kunde öffnen"
 - `E_INVOICE_COPY.collectionEmpty`: "In dieser Sammlung ist noch kein ausgegebener Auftrag."
 - `E_INVOICE_COPY.collectionInvalid`: "Diese Sammlung gibt es nicht mehr. Waehle sie neu."
@@ -742,6 +744,8 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `ORDER_ITEM_COMPLETION_COPY.alreadyChanged`: "Der Teilstatus hat sich bereits geändert. Öffne den Auftrag erneut."
 - `INVOICE_DELIVERY_COPY.listChanged`: "dazugekommen"
 - `INVOICE_DELIVERY_COPY.listChanged`: "weggefallen"
+- `COLLECTION_FOLLOWUP_COPY.retry`: "Sammelzuordnung nachholen"
+- `COLLECTION_FOLLOWUP_COPY.editBlocked`: "Sammelzuordnung wird über den ursprünglichen Übergabebeleg nachgeholt."
 - `CUSTOMER_COLLECTION_COPY.kunde.abholung.e1.subject`: "Abholbereit: "
 - `CUSTOMER_COLLECTION_COPY.kunde.abholung.e2.subject`: "Erinnerung: Aufträge "
 - `CUSTOMER_COLLECTION_COPY.kunde.abholung.e2.subject`: " warten auf Abholung"

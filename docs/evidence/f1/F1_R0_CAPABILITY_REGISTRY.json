@@ -594,6 +594,9 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/invoices.actions.ts",
       "exported_functions": [
+          "addOrderToCollectionAction",
+          "issueCollectionInvoiceAction",
+          "removeOrderFromCollectionAction",
         "issueInvoiceAction",
         "setInvoiceItemPricesAction",
         "cancelInvoiceAction",

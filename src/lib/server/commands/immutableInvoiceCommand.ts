@@ -1276,7 +1276,9 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         return { code: "VALIDATION_ERROR", message: "Zahlungsmodus des Auftrags ist nicht verfügbar." };
       }
       if(!readCustomerTerms)throw Error('INVOICE_CUSTOMER_TERMS_PORT_MISSING');
-      const customerInvoiceTerms=await readCustomerTerms(tx,tenantId,order.customer_id);
+      // A malformed buyer field must keep its original actionable E-invoice
+      // error. Resolve the same locked terms only after that shared validator.
+      const customerInvoiceTerms=()=>readCustomerTerms(tx,tenantId,order.customer_id);
       // S38a E3/A6: the already locked order serializes membership with the
       // existing collection writer. A collection is never a single invoice.
       const membership=await tx.execute<{id:string;status:string;month:string}>(sql`
@@ -1288,7 +1290,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
       if(membership.length===1){
         if(!['offen','abgerechnet'].includes(membership[0].status))throw Error('INVOICE_COLLECTION_SOURCE_INVALID');
         const month=new Intl.DateTimeFormat('de-DE',{month:'long',year:'numeric',timeZone:'Europe/Berlin'}).format(new Date(toDateOnly(membership[0].month)+'T12:00:00Z'));
-        return {code:'ORDER_IN_COLLECTION',message:E_INVOICE_COPY.orderInCollection(month,customerInvoiceTerms.customerShortName)};
+        return {code:'ORDER_IN_COLLECTION',message:E_INVOICE_COPY.orderInCollection(month,(await customerInvoiceTerms()).customerShortName)};
       }
       // Customer master data above is stable before agreement/source reads.
       const agreement = await readEffectiveCustomerAgreement(tx, {
@@ -1393,7 +1395,7 @@ type InvoiceCustomerTermsReader=(tx:PrivilegedTenantTransaction,tenantId:string,
 type InvoiceShippingSettingsReader=(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>;
 /** One existing per-order commercial preparation for individual and collection originals.
  * No item repricing, duplicated tax calculation, sender or number allocation. */
-async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,source:SourceRow,afterGoodsOut:boolean,agreement:Awaited<ReturnType<typeof readEffectiveCustomerAgreement>>,customerInvoiceTerms:Parameters<typeof resolveInvoicePaymentTerms>[1],readVat:InvoiceVatReader,readShippingSettings:InvoiceShippingSettingsReader|undefined,collectionSource=false):Promise<Exclude<CreateInvoiceResult,{code:'OK'}>|{code:'PREPARED';content:PreparedInvoiceContent;frozenInvoiceTerms:InvoicePaymentTerms;paymentTermDays:number}>{
+async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,source:SourceRow,afterGoodsOut:boolean,agreement:Awaited<ReturnType<typeof readEffectiveCustomerAgreement>>,customerInvoiceTerms:Parameters<typeof resolveInvoicePaymentTerms>[1]|(()=>Promise<Parameters<typeof resolveInvoicePaymentTerms>[1]>),readVat:InvoiceVatReader,readShippingSettings:InvoiceShippingSettingsReader|undefined,collectionSource=false):Promise<Exclude<CreateInvoiceResult,{code:'OK'}>|{code:'PREPARED';content:PreparedInvoiceContent;frozenInvoiceTerms:InvoicePaymentTerms;paymentTermDays:number}>{
  const tenantId=auth.tenantId;
       const commercial=source.has_quote&&input.shippingCosts===undefined?await readOrderCommercialQuote(tx,tenantId,order.id):null;
       if(commercial){
@@ -1452,7 +1454,7 @@ async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,aut
       }
 
       const frozenInvoiceTerms=resolveInvoicePaymentTerms(source.invoice_payment_term_days,
-        customerInvoiceTerms,agreement);
+        typeof customerInvoiceTerms==='function'?await customerInvoiceTerms():customerInvoiceTerms,agreement);
       const paymentTermDays=frozenInvoiceTerms.ziel_tage;
 
       // Every master-data dependent value is built before a number exists, so
@@ -1535,7 +1537,8 @@ export async function createCollectionInvoice(input:unknown,readVat?:InvoiceVatR
   if(source.status!=='offen'||source.invoice_id!==null)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.collectionNotDue};
   if(orders.length!==members.length||orders.some((order,index)=>order.id!==members[index].order_id||order.customer_id!==customerId||order.tenant_id!==tenantId||order.station!=='abgeholt'||order.status!=='abgeholt'||order.payment_mode!=='rechnung'))return {code:'CONFLICT',message:E_INVOICE_COPY.collectionConflict};
   if(!readCustomerTerms)throw Error('INVOICE_CUSTOMER_TERMS_PORT_MISSING');
-  const customerTerms=await readCustomerTerms(tx,tenantId,customerId);
+  let customerTerms:ReturnType<InvoiceCustomerTermsReader>|undefined;
+  const getCustomerTerms=()=>customerTerms??=readCustomerTerms(tx,tenantId,customerId);
   const collectionAgreement=await readEffectiveCustomerAgreement(tx,{tenantId,customerId,orderId:null,memberOrderIds:members.map(member=>member.order_id),lock:true});
   await tx.execute(sql`SELECT id FROM public.company_settings WHERE tenant_id=${tenantId} FOR SHARE`);
   const prepared:Array<{order:LockedOrder;source:SourceRow;content:PreparedInvoiceContent;terms:InvoicePaymentTerms}>=[];
@@ -1545,7 +1548,7 @@ export async function createCollectionInvoice(input:unknown,readVat?:InvoiceVatR
    if(rows.length!==1||!original||original.tenant_id!==tenantId||original.order_id!==order.id||original.customer_id!==customerId||original.current_order_version!==order.version)throw Error('INVOICE_COLLECTION_MEMBER_SOURCE_INVALID');
    if(!original.no_active_invoice)return {code:'CONFLICT',message:E_INVOICE_COPY.collectionConflict};
    const agreement=collectionAgreement.agreement;
-   const value=await prepareQualifiedInvoiceContent(tx,auth,{orderId:order.id,expectedVersion:order.version,clientEventId:input.clientEventId},order,original,true,agreement,customerTerms,requireVatReader(readVat),readShippingSettings,true);
+   const value=await prepareQualifiedInvoiceContent(tx,auth,{orderId:order.id,expectedVersion:order.version,clientEventId:input.clientEventId},order,original,true,agreement,getCustomerTerms,requireVatReader(readVat),readShippingSettings,true);
    if(value.code!=='PREPARED')return value;
    prepared.push({order,source:original,content:value.content,terms:value.frozenInvoiceTerms});
   }
