@@ -1,5 +1,4 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
-import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { randomUUID } from "node:crypto";
@@ -191,21 +190,13 @@ describe("F1.3 DB-/Command-Vertragsintegration (Session-Port isoliert; kein Real
     });
     await expect(getPaymentState(foreignAuthorization, orderId)).resolves.toMatchObject({ code: "FORBIDDEN" });
 
-    await withRestoredTestSource({label:'TEST Auftragsnummerndrift',read:async()=>{
-      const [row]=await sql<{order_number:string}[]>`SELECT order_number FROM public.orders WHERE id=${orderId}`;
-      if(!row)throw Error('TEST_ORDER_SOURCE_REQUIRED');return row.order_number;
-    },restore:async number=>{await sql`UPDATE public.orders SET order_number=${number} WHERE id=${orderId}`;}},async()=>{
     await sql`UPDATE public.orders SET order_number = order_number || '-DRIFT' WHERE id = ${orderId}`;
     await expect(readLiveOrderCard(adminAuthorization, { orderId })).resolves.toMatchObject({ code: "UNAVAILABLE" });
-    });
+    await sql`UPDATE public.orders SET order_number = ${intake.receipt.orderNumber} WHERE id = ${orderId}`;
 
-    await withRestoredTestSource({label:'TEST Stationsdrift',read:async()=>{
-      const [row]=await sql<{current_station:string}[]>`SELECT current_station FROM public.orders WHERE id=${orderId}`;
-      if(!row)throw Error('TEST_ORDER_SOURCE_REQUIRED');return row.current_station;
-    },restore:async station=>{await sql`UPDATE public.orders SET current_station=${station} WHERE id=${orderId}`;}},async()=>{
     await sql`UPDATE public.orders SET current_station = 'galvanik' WHERE id = ${orderId}`;
     await expect(readLiveOrderCard(adminAuthorization, { orderId })).resolves.toMatchObject({ code: "UNAVAILABLE" });
-    });
+    await sql`UPDATE public.orders SET current_station = station WHERE id = ${orderId}`;
 
     const { transitionWareneingangToGalvanik } = await import("@/lib/server/commands/orderStationCommand");
     const transition = await transitionWareneingangToGalvanik({
