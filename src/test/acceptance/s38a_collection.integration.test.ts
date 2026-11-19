@@ -13,7 +13,7 @@ import {issueInvoiceAction,addOrderToCollectionAction} from '@/app/actions/invoi
 
 beforeAll(()=>{
  const url=process.env.DATABASE_URL;
- if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).port!=='54342')throw Error('TEST_S38_COLLECTION_LOOPBACK_REQUIRED');
+ if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).pathname!=='/postgres')throw Error('TEST_S38_COLLECTION_LOOPBACK_REQUIRED');
 });
 
 it('A38a A5/A6 joins two actual handovers to one open monthly collection and rejects a single invoice before numbering',async()=>{

@@ -23,7 +23,7 @@ import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 
 beforeAll(()=>{
  const url=process.env.DATABASE_URL;
- if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).port!=='54342')throw Error('TEST_S38_NATIVE_LOOPBACK_REQUIRED');
+ if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).pathname!=='/postgres')throw Error('TEST_S38_NATIVE_LOOPBACK_REQUIRED');
 });
 
 async function historicalCollection(rates:readonly number[],existing?:{customerId:string;agreementId:string}){
