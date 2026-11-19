@@ -28,7 +28,7 @@ async function goodsOutComposition(input:RecordGoodsOutInput):Promise<GoodsOutCo
     clientEventId:invoiceClientEventId(input.clientEventId),agreement:input.agreement,
   }:null;
   const invoicePort=invoiceInput?await import("@/lib/server/commands/immutableInvoiceCommand"):null;
-  const [{lockDispatchCallsForGoodsOut,finishDispatchCallsAfterGoodsOut,recordDispatchCallResult},{completeOrderCallbackTask,createGoodsOutClarificationTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/lib/server/dispatchCallPort'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+  const [{lockDispatchCallsForGoodsOut,finishDispatchCallsAfterGoodsOut,recordDispatchCallResult},{completeOrderCallbackTask,createGoodsOutClarificationTask,synchronizeCollectionFollowupTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/lib/server/dispatchCallPort'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
   const [{lockStorageFinalTasksForGoodsOut,finishStorageFinalTasksAfterGoodsOut},{completeStorageTaskAfterGoodsOut}]=await Promise.all([import('@/lib/server/storageFinalStagePort'),import('@/modules/tasks/server-public')]);
   const {recordStoragePostalResult}=await import('@/lib/server/storagePostalPort');
   const {retireOrderPrintJobsAfterGoodsOut}=await import('@/modules/orders/server-public');
@@ -36,6 +36,7 @@ async function goodsOutComposition(input:RecordGoodsOutInput):Promise<GoodsOutCo
   let callTaskIds:string[]|null=null;
   let finalTasks:Awaited<ReturnType<typeof lockStorageFinalTasksForGoodsOut>>|null=null;
   return {
+    synchronizeCollectionFollowup:(tx,auth,markerId)=>synchronizeCollectionFollowupTask(tx,auth,markerId,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}),
     readCredit:(tx,auth,customerId)=>readCustomerCreditInTransaction(tx,auth.tenantId,customerId,readCustomerProfile),
     beforeOrderLock:async(tx,auth)=>{if(invoiceInput&&invoicePort)await invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput);callTaskIds=await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);finalTasks=await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId);},
     ...(invoiceInput&&invoicePort?{beforeWrite:async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction)=>{

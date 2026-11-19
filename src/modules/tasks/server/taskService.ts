@@ -19,6 +19,8 @@ import {readCanceledInvoiceMailTaskSource,isCanceledInvoiceMailTask,bindCanceled
 import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
 import {handedOverProofs} from '@/lib/server/dispatchCallPort';
 import {GOODS_OUT_FOLLOWUP_COPY} from '@/ui/situationCatalog';
+import {COLLECTION_FOLLOWUP_COPY} from '@/ui/situationCatalog';
+import {readCollectionFollowup} from '@/lib/server/invoiceCollectionFollowupRead';
 import {readOfflineNoteConflictSource} from '@/lib/server/offlineNoteConflictPort';
 import {readOfflineWorkshopConflictSource} from '@/lib/server/offlineWorkshopConflictPort';
 import {readQuoteFollowupFacts,readQuoteGoodsOrderRetrySource} from '@/lib/server/quoteGoodsContextPort';
@@ -94,6 +96,7 @@ async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnap
   const candidates=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${value.clientKey}::uuid FOR UPDATE`);
   if(candidates.length>1)throw Error('TASK_CLIENT_KEY_AMBIGUOUS');
   const before=value.taskId?await find(tx,auth,value.taskId,true):candidates[0]?await find(tx,auth,candidates[0].id,true):null;
+  if(before&&await readCollectionFollowup(tx,auth.tenantId,{markerId:before.client_key}))reject('FORBIDDEN',COLLECTION_FOLLOWUP_COPY.editBlocked);
   if(before&&await reissueTaskSource(tx,auth,before))reject('FORBIDDEN',SHIPPING_FEE_COPY.reissueForbidden);
   if(qualifiedCreateId&&before&&before.id!==qualifiedCreateId)reject('CONFLICT',ORDER_HANDOVER_COPY.conflict);
   if(value.taskId&&!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
@@ -195,6 +198,8 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   if(before.art==='rechnung'&&(!invoiceId||before.bezug_typ!=='eingangsrechnung'||before.bezug_id!==invoiceId||!canCompleteTaskArea(auth,'buchhaltung')))reject('FORBIDDEN','Rechnung klären wird ausschließlich in der Eingangsrechnung erledigt.');
   const note=value.note?.trim()||null;
   const completion=await deps.beforeComplete?.(tx,auth,before,value);if(completion)throw new Rejected(completion);
+  const collection=await readCollectionFollowup(tx,auth.tenantId,{markerId:before.client_key});
+  if(collection&&(collection.pending||before.bezug_typ!=='auftrag'||before.bezug_id!==collection.orderId||before.erstellt_von!==collection.actorId))throw Error('COLLECTION_FOLLOWUP_COMPLETION_NOT_PROVEN');
   if(reissue){const repaired=await reissueTaskSource(tx,auth,before),credit=await readCancellationCreditSource(tx,auth.tenantId,before.client_key);if(!repaired||repaired.pending||!credit||credit.pending)reject('CONFLICT',SHIPPING_FEE_COPY.reissuePending);}
   if(before.status==='erledigt'){
    if(before.version===value.version+1&&before.erledigt_von===auth.userId&&before.erledigt_notiz===note)return {code:'OK',task:before,replayed:true};
@@ -291,7 +296,7 @@ export async function readTask(request:TaskOpenRequest|{calendar:true}):Promise<
      const read=await withTenantSavepoint(tx,nested=>readTaskInTransaction(nested,auth,{taskId:ref.id}));
      if(read.code!=='OK'||!read.task||read.task.version!==ref.version||read.task.status!=='offen'||!read.task.item_id){missingTaskIds.push(ref.id);continue;}
      rows.push({id:read.task.id,version:read.task.version,itemId:read.task.item_id,dueDate:read.task.faellig_am,canComplete:read.canComplete,canOpenReference:read.canOpenReference});
-     if(read.pricingSource==='SOURCE_INCOMPLETE')missingTaskIds.push(ref.id);
+     if(read.pricingSource==='SOURCE_INCOMPLETE'||read.collectionSource==='SOURCE_INCOMPLETE')missingTaskIds.push(ref.id);
     }catch{missingTaskIds.push(ref.id);}
    }
    return {code:missingTaskIds.length?'SOURCE_INCOMPLETE' as const:'OK' as const,rows,missingTaskIds};
@@ -314,6 +319,8 @@ async function readTaskInTransaction(tx:PrivilegedTenantTransaction,auth:Authori
   const canEdit=task?task.status==='offen'&&allowed(auth,task)&&!await isCanceledInvoiceMailTask(tx,auth,task.id):true;
   const canceledCustomer=task?await readCanceledInvoiceTaskCompletion(tx,auth,task.id):null;
   let pricing:Awaited<ReturnType<typeof readProductionPricingRetrySource>>=null;
+  let collection:Awaited<ReturnType<typeof readCollectionFollowup>>=null,collectionSource:'KNOWN'|'SOURCE_INCOMPLETE'='KNOWN';
+  if(task){try{collection=await withTenantSavepoint(tx,nested=>readCollectionFollowup(nested,auth.tenantId,{markerId:task.client_key}));if(collection&&(task.bezug_typ!=='auftrag'||task.bezug_id!==collection.orderId||task.erstellt_von!==collection.actorId))throw Error('COLLECTION_FOLLOWUP_TASK_SOURCE_CHANGED');}catch{collectionSource='SOURCE_INCOMPLETE';}}
   let pricingSource:'KNOWN'|'SOURCE_INCOMPLETE'='KNOWN';
   if(task){try{pricing=await withTenantSavepoint(tx,nested=>readProductionPricingRetrySource(nested,auth,task.client_key));}catch{pricingSource='SOURCE_INCOMPLETE';}}
   let credit:Awaited<ReturnType<typeof readCancellationCreditSource>>=null;
@@ -321,7 +328,7 @@ async function readTaskInTransaction(tx:PrivilegedTenantTransaction,auth:Authori
   if(task){try{credit=await withTenantSavepoint(tx,nested=>readCancellationCreditSource(nested,auth.tenantId,task.client_key));}catch{creditSource='SOURCE_INCOMPLETE';}}
   let reissue:Awaited<ReturnType<typeof reissueTaskSource>>=null,reissueSource:'KNOWN'|'SOURCE_INCOMPLETE'='KNOWN';
   if(task){try{reissue=await withTenantSavepoint(tx,nested=>reissueTaskSource(nested,auth,task));}catch{reissueSource='SOURCE_INCOMPLETE';}}
-  return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,creditSource,...(reissue||reissueSource==="SOURCE_INCOMPLETE"?{reissueSource}:{}),canEdit:canEdit&&reissueSource==='KNOWN'&&!reissue,canComplete:!!task&&task.status==='offen'&&reissueSource==='KNOWN'&&(reissue?hasAuthorizationArea(auth,'zahlungen'):(canEdit||canceledCustomer!==null))&&task.art!=='rechnung'&&(!credit?.pending||hasAuthorizationArea(auth,'zahlungen')),...(reissue||credit?{completeLabel:SITUATION_COPY.retry}:pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
+  return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,creditSource,...(collection||collectionSource==='SOURCE_INCOMPLETE'?{collectionSource}:{}),...(reissue||reissueSource==="SOURCE_INCOMPLETE"?{reissueSource}:{}),canEdit:canEdit&&collectionSource==='KNOWN'&&!collection&&reissueSource==='KNOWN'&&!reissue,canComplete:!!task&&task.status==='offen'&&collectionSource==='KNOWN'&&reissueSource==='KNOWN'&&(reissue?hasAuthorizationArea(auth,'zahlungen'):(canEdit||canceledCustomer!==null))&&task.art!=='rechnung'&&(!credit?.pending||hasAuthorizationArea(auth,'zahlungen')),...(collection?{completeLabel:COLLECTION_FOLLOWUP_COPY.retry}:reissue||credit?{completeLabel:SITUATION_COPY.retry}:pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
 }
 
 
@@ -371,6 +378,24 @@ export async function createGoodsOutClarificationTask(tx:PrivilegedTenantTransac
  const title=GOODS_OUT_FOLLOWUP_COPY.incomplete(reference.label);
  const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:input.orderId},note:title};
  return (await persistTask(tx,auth,value,deps)).task.id;
+}
+
+/** Exact pending physical source, one ordinary task; never a system actor. */
+export async function synchronizeCollectionFollowupTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string,deps:Dependencies){
+ const source=await readCollectionFollowup(tx,auth.tenantId,{markerId});
+ if(!source||source.actorId!==auth.userId)throw Error('COLLECTION_FOLLOWUP_TASK_ORIGINAL_ACTOR');
+ const rows=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${markerId}::uuid FOR UPDATE`);
+ let task=rows[0];
+ if(rows.length>1||task&&(task.erstellt_von!==source.actorId||task.art!=='aufgabe'||task.bezug_typ!=='auftrag'||task.bezug_id!==source.orderId))throw Error('COLLECTION_FOLLOWUP_TASK_CHANGED');
+ if(!task){
+  const reference=await context(tx,auth,{type:'auftrag',id:source.orderId});if(!reference.label)throw Error('COLLECTION_FOLLOWUP_ORDER_LABEL_MISSING');
+  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+  const full=COLLECTION_FOLLOWUP_COPY.task(reference.label),budget=120-COLLECTION_FOLLOWUP_COPY.task('').length;
+  const label=reference.label.length>budget?reference.label.slice(0,budget-1)+'…':reference.label;
+  task=(await persistTask(tx,auth,{clientKey:markerId,version:0,kind:'aufgabe',title:COLLECTION_FOLLOWUP_COPY.task(label),dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:source.orderId},note:full},deps)).task;
+ }
+ if(source.pending&&task.status!=='offen')throw Error('COLLECTION_FOLLOWUP_PENDING_TASK_CLOSED');
+ if(!source.pending&&task.status==='offen')await finishTask(tx,auth,{taskId:task.id,version:task.version,note:null},deps);
 }
 
 /** PL00:40: source-bound money task; same persistTask writer, no system actor. */

@@ -292,6 +292,7 @@ export const INVOICE_DELIVERY_COPY={
 };
 
 export const GOODS_OUT_FOLLOWUP_COPY={incomplete:(order:string)=>`Erinnerungsbeleg zu ${order} unvollständig – Übergabe ist gespeichert`};
+export const COLLECTION_FOLLOWUP_COPY={task:(order:string)=>`Sammelzuordnung für ${order} nachholen – Übergabe gespeichert`,retry:'Sammelzuordnung nachholen',editBlocked:'Sammelzuordnung wird über den ursprünglichen Übergabebeleg nachgeholt.'};
 
 /** PL K8: customer-facing originals use Sie; absent facts remove the whole sentence. */
 export type CollectionCustomerFacts={name?:string|null;company?:string|null;members:Array<{number:string;quantity?:number|null;finishedDate?:string|null;e1Date?:string|null;e2Date?:string|null;callDate?:string|null}>;deadline?:string|null;storageAmount?:string|null;storageUnit?:string|null;openAmount?:string|null};

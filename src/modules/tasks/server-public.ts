@@ -11,6 +11,7 @@ export {completeCollectionTaskForReply} from './server/taskService';
 export {restrictCollectionTaskForReply} from './server/taskService';
 
 export {createGoodsOutClarificationTask} from './server/taskService';
+export {synchronizeCollectionFollowupTask} from './server/taskService';
 
 export {restrictCollectionTaskForAppointment} from './server/taskService';
 
