@@ -1,4 +1,3 @@
-import {readCancellationInvoiceReceipts,mapInvoiceCancellationReceipt} from './commands/immutableInvoiceCommand';
 import {parseInvoiceCollectionOriginal,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import 'server-only';
 import type {CommunicationOriginal} from './communicationOriginalPort';
@@ -326,6 +325,8 @@ export async function readInvoiceMailOpenRemainder(tx:PrivilegedTenantTransactio
  for(const row of rows){
   if(row.acknowledged||row.status==='issued')continue;
   if(!row.cancel_key)throw Error('INVOICE_MAIL_CANCELLATION_SOURCE_INCOMPLETE');
+  // Read-only importers must not load the invoice PDF renderer before their auth gate.
+  const {readCancellationInvoiceReceipts,mapInvoiceCancellationReceipt}=await import('./commands/immutableInvoiceCommand');
   const sources=await readCancellationInvoiceReceipts(tx,row.cancel_key,row.id);
   if(sources.length!==1)throw Error('INVOICE_MAIL_CANCELLATION_SOURCE_INCOMPLETE');
   const receipt=mapInvoiceCancellationReceipt(sources[0],tenantId,sources[0].actor_id);

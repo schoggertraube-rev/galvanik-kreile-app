@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createElement } from "react";
 import ts from "typescript";
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CompanySettingsForm } from "@/components/admin/CompanySettingsForm";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
@@ -143,6 +143,16 @@ const authorized = {
 } as const;
 
 describe("W2C company settings read containment", () => {
+  beforeAll(async () => {
+    // Resolve the cold module graph outside each unchanged five-second auth probe.
+    // Import itself must still touch none of the protected data/PDF ports.
+    await import("@/app/actions/pdf.actions");
+    expect(mockWithPrivilegedTenantTransaction).not.toHaveBeenCalled();
+    expect(mockExecute).not.toHaveBeenCalled();
+    expect(mockQrToDataUrl).not.toHaveBeenCalled();
+    expect(mockCreateOrderLabelPdfDocument).not.toHaveBeenCalled();
+    expect(mockRenderToBuffer).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAdminOrDeveloper.mockResolvedValue(undefined);
