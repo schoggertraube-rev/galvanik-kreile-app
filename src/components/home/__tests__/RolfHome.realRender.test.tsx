@@ -299,13 +299,17 @@ it('opens a persisted KV follow-up through the existing task receiver instead of
  }finally{window.removeEventListener('kreile:oeffne',opened);}
 });
 
-it.each([1,2])('KORR S38a-2 opens the existing composer for %i actual projected originals instead of the unsupported invoice overlay',async count=>{
- const original={customerId:'TEST-customer',documentId:'TEST-replacement',number:'R-2026-1234',expectedInvoiceIds:count===1?['TEST-replacement']:['TEST-replacement','TEST-second-original'],count};
- const item={key:'invoice-mail:'+original.documentId,field:'action' as const,kind:'invoice' as const,invoiceId:original.documentId,title:original.number,meta:'TEST customer',urgency:'warning' as const,primaryActionLabel:count===1?'Rechnung R-2026-1234 senden' as const:`${count} Rechnungen senden` as const,invoiceMail:original};
- const model={kind:'data' as const,projection,role:'meister' as const,canCreateOrder:false,canWorkOrders:false,canDelegate:false,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items:[item]}};
+it.each([1,2])('H2 opens the existing composer from each of %i separate original rows',async count=>{
+ const items=Array.from({length:count},(_,index)=>{
+  const id='TEST-replacement-'+index,number='R-2026-'+index;
+  const original={customerId:'TEST-customer',customerName:'TEST customer',documentId:id,number,expectedInvoiceIds:[id],count:1,singleInvoice:true as const};
+  return {key:'invoice-mail:'+id,field:'action' as const,kind:'invoice' as const,invoiceId:id,title:number,meta:'TEST customer',urgency:'warning' as const,primaryActionLabel:`Rechnung ${number} an TEST customer senden`,invoiceMail:original};
+ });
+ const model={kind:'data' as const,projection,role:'meister' as const,canCreateOrder:false,canWorkOrders:false,canDelegate:false,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items}};
  render(<RolfHomeClient model={model} ports={actionPorts}/>);
- fireEvent.click(screen.getByRole('button',{name:count===1?'Rechnung R-2026-1234 senden':`${count} Rechnungen senden`}));
+ for(const item of items)expect(screen.getByRole('button',{name:item.primaryActionLabel})).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:items[0].primaryActionLabel}));
  const composer=await screen.findByTestId('TEST-canonical-composer');
- expect(composer).toHaveAttribute('data-customer',original.customerId);expect(composer).toHaveAttribute('data-original',original.documentId);
+ expect(composer).toHaveAttribute('data-customer',items[0].invoiceMail.customerId);expect(composer).toHaveAttribute('data-original',items[0].invoiceMail.documentId);
  expect(ports.openInvoice).not.toHaveBeenCalled();
 });

@@ -85,11 +85,11 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Extr
 }
 
 type CustomerMailInput=TargetInput & {
- clientRequestId:string;subject:string;body:string;confirmedResend?:true;expectedInvoiceIds?:string[];attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string};
+ clientRequestId:string;subject:string;body:string;confirmedResend?:true;singleInvoice?:true;expectedInvoiceIds?:string[];attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string};
 };
 type CustomerMailResult=Awaited<ReturnType<typeof sendCommunicationMail>>|Awaited<ReturnType<typeof confirmQuoteDelivery>>|{code:'UNAUTHENTICATED';message:string};
 function validExpectedInvoiceIds(input:CustomerMailInput){
- return Array.isArray(input.expectedInvoiceIds)&&input.expectedInvoiceIds.length>0&&input.expectedInvoiceIds.length<=101&&new Set(input.expectedInvoiceIds).size===input.expectedInvoiceIds.length&&input.expectedInvoiceIds.every(id=>typeof id==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))&&input.attachment!==undefined&&input.expectedInvoiceIds.includes(input.attachment.documentId);
+ return (input.singleInvoice===undefined||(input.singleInvoice===true&&input.expectedInvoiceIds?.length===1))&&Array.isArray(input.expectedInvoiceIds)&&input.expectedInvoiceIds.length>0&&input.expectedInvoiceIds.length<=101&&new Set(input.expectedInvoiceIds).size===input.expectedInvoiceIds.length&&input.expectedInvoiceIds.every(id=>typeof id==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))&&input.attachment!==undefined&&input.expectedInvoiceIds.includes(input.attachment.documentId);
 }
 function invoiceRemainderKey(tenantId:string,requestId:string,anchor:string){
  const bytes=createHash('sha256').update('invoice-mail-remainder:'+tenantId+':'+requestId.toLowerCase()+':'+anchor).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
@@ -246,12 +246,13 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
    if(!(input.targetType==='ORDER'?invoiceMailMembers(selectedDocument).some(member=>member.orderId===input.targetId):invoice.customer_id===input.targetId))return {code:'FORBIDDEN' as const,message:'Die Rechnung gehört nicht zu diesem Kunden oder Auftrag.'};
    attachment={filename:pdf.data.invoiceNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.data.pdf)};
    document={...selectedDocument,kind:'INVOICE',bundle:[]};
-   invoiceGroup={customerId:invoice.customer_id,handover:invoice.handover_mode,native:invoice.order_id===null,...(snapshotIds?{snapshotIds}:{})};
+   const selectedIds=input.singleInvoice?[invoice.id]:snapshotIds;
+   invoiceGroup={customerId:invoice.customer_id,handover:invoice.handover_mode,native:invoice.order_id===null,...(selectedIds?{snapshotIds:selectedIds}:{})};
    const resend=await withPrivilegedTenantTransaction(auth,tx=>qualifyInvoiceResend(tx,auth,invoice.id,invoice.customer_id));if(resend)document.resend=resend;
    // An explicit other order can send its own new originals. The customer
    // command still resumes the frozen group exposed by its canonical reader.
    invoiceGroup.unreservedOnly=input.targetType==='ORDER'&&!resend;
-   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id),invoice.order_id===null,invoiceGroup!.unreservedOnly,{snapshotIds}))).filter(row=>row.id!==invoice.id);
+   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id),invoice.order_id===null,invoiceGroup!.unreservedOnly,{snapshotIds:selectedIds}))).filter(row=>row.id!==invoice.id);
    if(others.length>100)return {code:'VALIDATION_ERROR' as const,message:'Zu viele offene Belege für eine einzelne Sammel-Mail. Es wurde nichts gesendet.'};
    for(const other of others){
     const original=await readInvoicePdf(auth,other.id,'original');if(original.code!=='OK')return original;

@@ -1,6 +1,6 @@
 "use client";
 import {CommunicationPanel} from '@/components/communication/CommunicationPanel';
-import {E_INVOICE_COPY} from '@/ui/situationCatalog';
+import {V45_TEXT} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore } from "react";
@@ -177,7 +177,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
       {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neu erfassen" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
     </div>}
     {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel">{deriveTodayReminder("afternoon", later.dueDate) ? <Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /> : null}{deriveTodayReminder("tomorrow", later.dueDate) ? <Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /> : null}{deriveTodayReminder("after_due", later.dueDate) ? <Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy} onClick={() => void saveReminder("after_due")} /> : null}<Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
-    {invoiceMail?<Dialog titel={E_INVOICE_COPY.sendInvoice(invoiceMail.number,invoiceMail.count)} icon="mail" groesse="breit" onSchliessen={()=>setInvoiceMail(null)}><CommunicationPanel key={invoiceMail.documentId} targetType="CUSTOMER" targetId={invoiceMail.customerId} invoiceOriginal={invoiceMail}/></Dialog>:null}
+    {invoiceMail?<Dialog titel={V45_TEXT.out$action$unsent({invoice:invoiceMail.number,name:invoiceMail.customerName})} icon="mail" groesse="breit" onSchliessen={()=>setInvoiceMail(null)}><CommunicationPanel key={invoiceMail.documentId} targetType="CUSTOMER" targetId={invoiceMail.customerId} invoiceOriginal={invoiceMail}/></Dialog>:null}
     {mailId ? <Dialog titel="Mail" icon="mail" groesse="breit" onSchliessen={() => setMailId(null)}><div className="kr-stapel">
       {!mailPreview && !mailMessage ? <Hinweis>Mail wird gelesen …</Hinweis> : null}
       {mailMessage ? <Hinweis ton="warn">{mailMessage}</Hinweis> : null}

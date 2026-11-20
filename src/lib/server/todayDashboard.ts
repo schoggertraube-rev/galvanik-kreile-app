@@ -1,6 +1,6 @@
 import {readUnsentInvoiceMailGroups} from './communicationDocumentPort';
 import {canTransportInvoiceDocument} from './authorization';
-import {E_INVOICE_COPY} from '@/ui/situationCatalog';
+import {V45_TEXT} from '@/ui/situationCatalog';
 import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
 import {v45QuoteFacts} from '@/lib/server/v45QuoteRead';
 import type {U2Read} from '@/lib/domain/u2ReadContract';
@@ -31,7 +31,7 @@ export type TodayItem = {
   orderId?: string;
   orderVersion?: number;
   invoiceId?: string;
-  invoiceMail?:{customerId:string;documentId:string;expectedInvoiceIds:string[];number:string;count:number};
+  invoiceMail?:{customerId:string;documentId:string;expectedInvoiceIds:string[];number:string;count:number;customerName:string;singleInvoice:true};
   graphMessageId?: string;
   target?:{screen:'reklamation'|'mail'|'aufgabe'|'kv';arg:string};
   bundleSurface?: string;
@@ -39,7 +39,7 @@ export type TodayItem = {
   snoozedUntil?: string;
   assignedToName?: string;
   assignmentVersion?: number;
-  primaryActionLabel?: ReturnType<typeof E_INVOICE_COPY.sendInvoice> | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
+  primaryActionLabel?: ReturnType<typeof V45_TEXT.out$action$unsent> | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
 };
 
 export type TodayCollectionNotice = {
@@ -317,7 +317,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   if(assignmentMessages)for(const mail of assignmentMessages.filter(row=>row.graphMessageId).slice(0,5))add({key:`mail:${mail.id}`,field:'assign',kind:'mail',title:mail.subject||'Mail ohne Betreff',meta:`${mail.senderName} · ${new Intl.DateTimeFormat('de-DE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Berlin'}).format(new Date(mail.at))}`,urgency:'decision',graphMessageId:mail.graphMessageId!});
 
   if(support.invoiceMailSource.code==='OK')for(const original of support.invoiceMailSource.data.groups){
-   add({key:'invoice-mail:'+original.id,field:'action',kind:'invoice',invoiceId:original.id,...(original.orderId?{orderId:original.orderId}:{}),title:original.number,meta:original.customerName,urgency:'warning',primaryActionLabel:E_INVOICE_COPY.sendInvoice(original.number,original.count),invoiceMail:{customerId:original.customerId,documentId:original.id,expectedInvoiceIds:original.ids,number:original.number,count:original.count}});
+   add({key:'invoice-mail:'+original.id,field:'action',kind:'invoice',invoiceId:original.id,...(original.orderId?{orderId:original.orderId}:{}),title:original.number,meta:original.customerName,urgency:'warning',primaryActionLabel:V45_TEXT.out$action$unsent({invoice:original.number,name:original.customerName}),invoiceMail:{customerId:original.customerId,documentId:original.id,expectedInvoiceIds:original.ids,number:original.number,count:original.count,customerName:original.customerName,singleInvoice:true}});
   }
 
   const invoiceMoney=projectTodayInvoiceMoney(support.invoiceSource,calendar);

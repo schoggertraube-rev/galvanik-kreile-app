@@ -80,8 +80,8 @@ export async function readUnsentInvoiceMailGroups(tx:PrivilegedTenantTransaction
   if(source.some(row=>typeof row.eligible!=='boolean'||(!native&&row.handover!=='pickup'&&row.handover!=='shipping'))||(native&&source.some(row=>row.eligible!==true))){missing.push('TODAY_UNSENT_INVOICE_GROUP:'+key);continue;}
   const eligible=source.filter(row=>row.eligible===true);
   if(!eligible.length){missing.push('TODAY_UNSENT_INVOICE_GROUP:'+key);continue;}
-  const selected=eligible.slice(0,101),first=selected[0];
-  groups.push({customerId:first.customerId,customerName:first.customerName,id:first.id,number:first.number,orderId:first.orderId,ids:selected.map(row=>row.id),count:eligible.length});
+  // PL20.11.11:56: each original has its own Today row, including large cohorts.
+  for(const original of eligible)groups.push({customerId:original.customerId,customerName:original.customerName,id:original.id,number:original.number,orderId:original.orderId,ids:[original.id],count:1});
  }
  return {groups,missing};
 }
