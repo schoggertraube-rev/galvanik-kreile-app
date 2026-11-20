@@ -395,7 +395,7 @@ export async function sendCommunicationMail(
     logCommunicationFailure("COMMUNICATION_SEND_PREPARE_FAILED", error);
     if(error instanceof Error&&error.message==='INVOICE_EXPECTED_LIST_INVALID'&&input.document?.kind==='INVOICE')return {code:'VALIDATION_ERROR',message:INVOICE_DELIVERY_COPY.expectedListMissing(input.document.number)};
     if(error instanceof InvoiceMailListChanged)return {code:'VALIDATION_ERROR',message:INVOICE_DELIVERY_COPY.listChanged(error.number,error.added)};
-    if(error instanceof InvoiceAlreadySent)return {code:'CONFLICT',message:INVOICE_DELIVERY_COPY.alreadySent(error.number,error.sentOn)};
+    if(error instanceof InvoiceAlreadySent)return {code:'CONFLICT',message:error.delivery==='manual_handover'?INVOICE_DELIVERY_COPY.alreadyHandedOver(error.number,error.sentOn):INVOICE_DELIVERY_COPY.alreadySent(error.number,error.sentOn)};
     if(error instanceof Error&&error.message==='COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED')return {code:'VALIDATION_ERROR',message:'Beleg oder Auftragsstand wurde seit der PDF-Erstellung geändert. Es wurde nichts gesendet. Aktuellen Beleg erneut wählen.'};
     if(error instanceof Error&&error.message==='COMMUNICATION_NOT_CONFIGURED')return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
     if(error instanceof Error&&error.message==='COMMUNICATION_REPLAY_INTENT_MISMATCH')return {code:'CONFLICT',message:MAIL_REQUEST_CONFLICT_COPY};

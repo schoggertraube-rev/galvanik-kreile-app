@@ -14,12 +14,12 @@ import {DISPATCH_NOTICE_COPY,INVOICE_DELIVERY_COPY} from '@/ui/situationCatalog'
 export type UnsentInvoiceOriginal={id:string;number:string;version:number;orderId:string|null;handover:string|null;customerId:string;customerName:string};
 /** One unsent-original query shared by customer summary and Today. */
 export async function readUnsentInvoiceOriginals(tx:PrivilegedTenantTransaction,tenantId:string,customerId?:string):Promise<UnsentInvoiceOriginal[]>{
- const rows=await tx.execute<UnsentInvoiceOriginal>(sql`SELECT invoice.id::text,invoice.invoice_number AS number,invoice.aggregate_version AS version,invoice.order_id AS "orderId",orders.handover_mode AS handover,invoice.customer_id AS "customerId",customer.name AS "customerName"
+ const rows=await tx.execute<(UnsentInvoiceOriginal&{paper_handover:boolean|null})>(sql`SELECT ${invoiceManualHandoverState(tenantId,sql`invoice.id`)} AS paper_handover,invoice.id::text,invoice.invoice_number AS number,invoice.aggregate_version AS version,invoice.order_id AS "orderId",orders.handover_mode AS handover,invoice.customer_id AS "customerId",customer.name AS "customerName"
   FROM public.invoices invoice LEFT JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
   JOIN public.customers customer ON customer.tenant_id=invoice.tenant_id AND customer.id=invoice.customer_id
   WHERE invoice.tenant_id=${tenantId} ${customerId!==undefined?sql`AND invoice.customer_id=${customerId}`:sql``}
-   AND invoice.status='issued' AND invoice.contract_version=1 AND NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} ORDER BY invoice.issued_at,invoice.id`);
- if(rows.some(row=>typeof row.id!=='string'||typeof row.number!=='string'||typeof row.customerId!=='string'||typeof row.customerName!=='string'||!Number.isSafeInteger(row.version)))throw Error('INVOICE_UNSENT_ORIGINAL_SOURCE_INVALID');
+   AND invoice.status='issued' AND invoice.contract_version=1 AND NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} AND ${invoiceManualHandoverState(tenantId,sql`invoice.id`)} IS DISTINCT FROM true ORDER BY invoice.issued_at,invoice.id`);
+ if(rows.some(row=>typeof row.paper_handover!=='boolean'||typeof row.id!=='string'||typeof row.number!=='string'||typeof row.customerId!=='string'||typeof row.customerName!=='string'||!Number.isSafeInteger(row.version)))throw Error('INVOICE_UNSENT_ORIGINAL_SOURCE_INVALID');
  return rows;
 }
 
@@ -55,11 +55,11 @@ function invoiceOrderReadyForMail(tenantId:string){return sql`((orders.station='
 export type UnsentInvoiceMailGroup={customerId:string;customerName:string;id:string;number:string;orderId:string|null;ids:string[];count:number};
 /** Same original/physical eligibility as the sender, in one query for all customers. */
 export async function readUnsentInvoiceMailGroups(tx:PrivilegedTenantTransaction,tenantId:string):Promise<{groups:UnsentInvoiceMailGroup[];missing:string[]}>{
- type Row=UnsentInvoiceOriginal&{eligible:boolean|null};
+ type Row=UnsentInvoiceOriginal&{eligible:boolean|null;paper_handover:boolean|null};
  const rows=await tx.execute<Row>(sql`WITH invoice_candidates AS MATERIALIZED (
   SELECT invoice.id,invoice.tenant_id,invoice.customer_id,invoice.order_id,invoice.invoice_number,invoice.aggregate_version,invoice.issued_at,invoice.order_version,invoice.freeze_id,invoice.service_date,invoice.snapshot
-  FROM public.invoices invoice WHERE invoice.tenant_id=${tenantId} AND invoice.status='issued' AND invoice.contract_version=1 AND NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)}
- ) SELECT invoice.id::text,invoice.invoice_number AS number,invoice.aggregate_version AS version,invoice.order_id AS "orderId",orders.handover_mode AS handover,invoice.customer_id AS "customerId",customer.name AS "customerName",
+  FROM public.invoices invoice WHERE invoice.tenant_id=${tenantId} AND invoice.status='issued' AND invoice.contract_version=1 AND NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} AND ${invoiceManualHandoverState(tenantId,sql`invoice.id`)} IS DISTINCT FROM true
+ ) SELECT ${invoiceManualHandoverState(tenantId,sql`invoice.id`)} AS paper_handover, invoice.id::text,invoice.invoice_number AS number,invoice.aggregate_version AS version,invoice.order_id AS "orderId",orders.handover_mode AS handover,invoice.customer_id AS "customerId",customer.name AS "customerName",
   CASE WHEN invoice.order_id IS NULL THEN private.invoice_original_source_valid(invoice.tenant_id,invoice.customer_id,invoice.order_id,invoice.order_version,invoice.freeze_id,invoice.service_date,invoice.snapshot,invoice.issued_at)
    WHEN frozen.order_id IS NULL THEN false ELSE ${invoiceOrderReadyForMail(tenantId)} END AS eligible
   FROM invoice_candidates invoice JOIN public.customers customer ON customer.tenant_id=invoice.tenant_id AND customer.id=invoice.customer_id
@@ -77,7 +77,7 @@ export async function readUnsentInvoiceMailGroups(tx:PrivilegedTenantTransaction
   const native=source[0].orderId===null;
   // A damaged native collection blocks its group; an ineligible ordinary order
   // is excluded just as by the sender's existing freeze/physical joins.
-  if(source.some(row=>typeof row.eligible!=='boolean'||(!native&&row.handover!=='pickup'&&row.handover!=='shipping'))||(native&&source.some(row=>row.eligible!==true))){missing.push('TODAY_UNSENT_INVOICE_GROUP:'+key);continue;}
+  if(source.some(row=>typeof row.paper_handover!=='boolean'||typeof row.eligible!=='boolean'||(!native&&row.handover!=='pickup'&&row.handover!=='shipping'))||(native&&source.some(row=>row.eligible!==true))){missing.push('TODAY_UNSENT_INVOICE_GROUP:'+key);continue;}
   const eligible=source.filter(row=>row.eligible===true);
   if(!eligible.length){missing.push('TODAY_UNSENT_INVOICE_GROUP:'+key);continue;}
   // PL20.11.11:56: each original has its own Today row, including large cohorts.
@@ -106,6 +106,7 @@ export async function lockInvoiceMailDocuments(tx:PrivilegedTenantTransaction,au
   if(document.orderId!==null&&!await readInvoiceOrderMailPhase(tx,auth.tenantId,document.orderId))return false;
   const locked=await tx.execute(sql`SELECT invoice.id FROM public.invoices invoice WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${document.id}::uuid AND ${invoiceMailOriginalMatches(document)} FOR UPDATE`);
   if(locked.length!==1)return false;
+  await assertInvoiceNotHandedOver(tx,auth.tenantId,document);
  }
  return true;
 }
@@ -244,9 +245,16 @@ function invoiceMailUnresolved(tenantId:string,invoiceId:SQL){
    AND ${unresolvedInvoiceMailReceipt()})`;
 }
 export class InvoiceAlreadySent extends Error{
- constructor(readonly number:string,readonly sentOn:string){super('INVOICE_ALREADY_SENT');}
+ constructor(readonly number:string,readonly sentOn:string,readonly delivery:'mail'|'manual_handover'='mail'){super('INVOICE_ALREADY_SENT');}
+}
+async function assertInvoiceNotHandedOver(tx:PrivilegedTenantTransaction,tenantId:string,invoice:{id:string;number:string}){
+ const [paper]=await tx.execute<{state:boolean|null;handed_on:string|null}>(sql`SELECT ${invoiceManualHandoverState(tenantId,sql`${invoice.id}::uuid`)} AS state,
+  (SELECT to_char(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin','DD.MM.YYYY') FROM public.events WHERE tenant_id=${tenantId} AND event_type='COMMUNICATION_INVOICE_HANDED_OVER_V1' AND payload->>'invoiceId'=${invoice.id}) AS handed_on`);
+ if(!paper||typeof paper.state!=='boolean')throw Error('INVOICE_MANUAL_HANDOVER_SOURCE_INCOMPLETE');
+ if(paper.state){if(!paper.handed_on)throw Error('INVOICE_MANUAL_HANDOVER_TIME_MISSING');throw new InvoiceAlreadySent(invoice.number,paper.handed_on,'manual_handover');}
 }
 export async function assertInvoiceNotSent(tx:PrivilegedTenantTransaction,tenantId:string,invoice:{id:string;number:string}){
+ await assertInvoiceNotHandedOver(tx,tenantId,invoice);
  const rows=await tx.execute<{sent_on:string}>(sql`SELECT to_char(sent.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin','DD.MM.YYYY') AS sent_on FROM public.events sent
   WHERE sent.tenant_id=${tenantId} AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.status='success'
   AND ${invoiceSentMembership(sql`${invoice.id}`)} ORDER BY sent.created_at,sent.id LIMIT 1`);
@@ -255,8 +263,8 @@ export async function assertInvoiceNotSent(tx:PrivilegedTenantTransaction,tenant
  if(pending.length!==1||pending[0].blocked)throw Error('COMMUNICATION_OUTCOME_UNCLEAR');
 }
 
-type InvoiceMailLegacyRow={id:string;order_id:string;order_number:string;invoice_number:string;aggregate_version:number;mail_pending:boolean};
-type InvoiceMailNativeRow={id:string;order_id:null;order_number:null;collection_source:unknown;invoice_number:string;aggregate_version:number;source_integrity_ok:boolean;mail_pending:boolean};
+type InvoiceMailLegacyRow={id:string;order_id:string;order_number:string;invoice_number:string;aggregate_version:number;mail_pending:boolean;paper_handover:boolean|null};
+type InvoiceMailNativeRow={id:string;order_id:null;order_number:null;collection_source:unknown;invoice_number:string;aggregate_version:number;source_integrity_ok:boolean;mail_pending:boolean;paper_handover:boolean|null};
 /** Read the existing immutable PREPARE, not a new group assembled around it. */
 async function bindInvoiceMailGroup<Row extends InvoiceMailLegacyRow|InvoiceMailNativeRow>(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,rows:Row[]){
  const pending=rows.find(row=>row.mail_pending);
@@ -307,24 +315,26 @@ export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenan
   WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId} AND invoice.status='issued' AND invoice.contract_version=1
    AND (${native?sql`invoice.order_id IS NULL`:sql`true`})
    AND (${resendIds.length>0?sql`invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[])`:sql`NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)}`})
+   AND ${invoiceManualHandoverState(tenantId,sql`invoice.id`)} IS DISTINCT FROM true
    AND (${unreservedOnly?sql`NOT ${invoiceMailUnresolved(tenantId,sql`invoice.id`)}`:sql`true`})
    AND (${scope?.snapshotIds?sql`invoice.id::text=ANY(ARRAY[${sql.join(scope.snapshotIds.map(id=>sql`${id}`),sql`, `)}]::text[])`:sql`true`})`;
  if(native){const rows=await tx.execute<InvoiceMailNativeRow>(sql`WITH invoice_candidates AS MATERIALIZED (${candidates})
-  SELECT invoice.id::text,invoice.order_id,NULL::text AS order_number,invoice.snapshot->'collection' AS collection_source,invoice.invoice_number,invoice.aggregate_version,${invoiceMailUnresolved(tenantId,sql`invoice.id`)} AS mail_pending,private.invoice_original_source_valid(invoice.tenant_id,invoice.customer_id,invoice.order_id,invoice.order_version,invoice.freeze_id,invoice.service_date,invoice.snapshot,invoice.issued_at) AS source_integrity_ok FROM invoice_candidates invoice
+  SELECT ${invoiceManualHandoverState(tenantId,sql`invoice.id`)} AS paper_handover,invoice.id::text,invoice.order_id,NULL::text AS order_number,invoice.snapshot->'collection' AS collection_source,invoice.invoice_number,invoice.aggregate_version,${invoiceMailUnresolved(tenantId,sql`invoice.id`)} AS mail_pending,private.invoice_original_source_valid(invoice.tenant_id,invoice.customer_id,invoice.order_id,invoice.order_version,invoice.freeze_id,invoice.service_date,invoice.snapshot,invoice.issued_at) AS source_integrity_ok FROM invoice_candidates invoice
   ORDER BY invoice.issued_at,invoice.id ${scope?.all?sql``:sql`LIMIT 102`}`);
   // PL20.11.00:32: the unchanged 101-original transport limit binds one
   // deterministic oldest group. The sentinel/rest remain in the overview.
   const group=scope?.all?rows:await bindInvoiceMailGroup(tx,tenantId,customerId,rows);
-  if(group.some(row=>row.source_integrity_ok!==true))throw Error('INVOICE_MAIL_COLLECTION_SOURCE_INCOMPLETE');
+  if(group.some(row=>typeof row.paper_handover!=='boolean'||row.source_integrity_ok!==true))throw Error('INVOICE_MAIL_COLLECTION_SOURCE_INCOMPLETE');
   return group;
  }
 
  const rows=await tx.execute<InvoiceMailLegacyRow>(sql`WITH invoice_candidates AS MATERIALIZED (${candidates})
-  SELECT invoice.id::text,invoice.order_id,orders.order_number,invoice.invoice_number,invoice.aggregate_version,${invoiceMailUnresolved(tenantId,sql`invoice.id`)} AS mail_pending FROM invoice_candidates invoice
+  SELECT ${invoiceManualHandoverState(tenantId,sql`invoice.id`)} AS paper_handover,invoice.id::text,invoice.order_id,orders.order_number,invoice.invoice_number,invoice.aggregate_version,${invoiceMailUnresolved(tenantId,sql`invoice.id`)} AS mail_pending FROM invoice_candidates invoice
   JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
   JOIN private.v_order_freeze_state_v1 frozen ON frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active AND frozen.integrity_ok
   WHERE ${invoiceOrderReadyForMail(tenantId)} AND orders.handover_mode=${handover}
   ORDER BY invoice.issued_at,invoice.id ${scope?.all?sql``:sql`LIMIT 102`}`);
+ if(rows.some(row=>typeof row.paper_handover!=='boolean'))throw Error('INVOICE_MANUAL_HANDOVER_SOURCE_INCOMPLETE');
  return scope?.all?rows:bindInvoiceMailGroup(tx,tenantId,customerId,rows);
 }
 export class InvoiceMailListChanged extends Error{
@@ -352,11 +362,11 @@ export async function readInvoiceMailUnacknowledged(tx:PrivilegedTenantTransacti
  * delivery ACK. Keep the independent unacknowledged reader unchanged. */
 export async function readInvoiceMailOpenRemainder(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,invoiceIds:readonly string[]){
  if(!invoiceIds.length||new Set(invoiceIds).size!==invoiceIds.length)throw Error('INVOICE_MAIL_REQUEST_IDS_INVALID');
- const rows=await tx.execute<{id:string;status:string;acknowledged:boolean;cancel_key:string|null}>(sql`SELECT invoice.id::text,invoice.status,${invoiceAlreadySent(tenantId,sql`invoice.id`)} AS acknowledged,
+ const rows=await tx.execute<{id:string;status:string;acknowledged:boolean;paper_handover:boolean|null;cancel_key:string|null}>(sql`SELECT invoice.id::text,invoice.status,${invoiceAlreadySent(tenantId,sql`invoice.id`)} AS acknowledged,${invoiceManualHandoverState(tenantId,sql`invoice.id`)} AS paper_handover,
   (SELECT event.client_event_id::text FROM public.events event WHERE event.tenant_id=invoice.tenant_id AND event.event_type='INVOICE_CANCELLED_V1' AND event.status='success' AND event.payload->>'invoiceId'=invoice.id::text) AS cancel_key
   FROM public.invoices invoice WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId}
    AND invoice.id::text=ANY(ARRAY[${sql.join(invoiceIds.map(id=>sql`${id}`),sql`, `)}]::text[])`);
- if(rows.length!==invoiceIds.length||rows.some(row=>typeof row.acknowledged!=='boolean'||!['issued','cancelled'].includes(row.status)))throw Error('INVOICE_MAIL_REQUEST_ORIGINAL_SOURCE_INCOMPLETE');
+ if(rows.length!==invoiceIds.length||rows.some(row=>typeof row.acknowledged!=='boolean'||typeof row.paper_handover!=='boolean'||!['issued','cancelled'].includes(row.status)))throw Error('INVOICE_MAIL_REQUEST_ORIGINAL_SOURCE_INCOMPLETE');
  for(const row of rows){
   if(row.acknowledged||row.status==='issued')continue;
   if(!row.cancel_key)throw Error('INVOICE_MAIL_CANCELLATION_SOURCE_INCOMPLETE');
@@ -367,7 +377,7 @@ export async function readInvoiceMailOpenRemainder(tx:PrivilegedTenantTransactio
   const receipt=mapInvoiceCancellationReceipt(sources[0],tenantId,sources[0].actor_id);
   if(receipt.invoiceId!==row.id)throw Error('INVOICE_MAIL_CANCELLATION_SOURCE_CHANGED');
  }
- return invoiceIds.filter(id=>rows.some(row=>row.id===id&&row.status==='issued'&&!row.acknowledged));
+ return invoiceIds.filter(id=>rows.some(row=>row.id===id&&row.status==='issued'&&!row.acknowledged&&!row.paper_handover));
 }
 
 function invoiceMailSnapshotKey(markerId:string){
@@ -539,4 +549,25 @@ export async function bindCanceledInvoiceMailTask(tx:PrivilegedTenantTransaction
  const bound=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version)
   VALUES(${randomUUID()},${auth.tenantId},${source.order_id},'COMMUNICATION_INVOICE_TASK_CREATED_V1','COMMUNICATION_INVOICE_TASK_CREATED_V1',${JSON.stringify({taskId:input.taskId,invoiceId:source.invoice_id,mailEventId:source.mail_event_id})}::jsonb,'success',${auth.userId}::uuid,${input.clientEventId}::uuid,${source.mail_event_id}::uuid,1) RETURNING id`);
  if(bound.length!==1)throw Error('COMMUNICATION_INVOICE_TASK_SOURCE_NOT_SAVED');
+}
+
+
+/** One qualification of the actual paper receipt for every delivery consumer. */
+function invoiceManualHandoverState(tenantId:string,invoiceId:SQL){return sql`private.invoice_manual_handover_state(${tenantId},${invoiceId})`;}
+export class InvoiceManualHandoverConflict extends Error{}
+export async function recordInvoiceManualHandover(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;clientRequestId:string;originalSha256:string}){
+ const [invoice]=await tx.execute<{id:string;customer_id:string;order_id:string|null;pdf_sha256:string;status:string;contract_version:number}>(sql`SELECT id::text,customer_id,order_id,pdf_sha256,status,contract_version FROM public.invoices WHERE tenant_id=${auth.tenantId} AND id=${input.invoiceId}::uuid FOR UPDATE`);
+ if(!invoice||invoice.pdf_sha256!==input.originalSha256)throw new InvoiceManualHandoverConflict('INVOICE_MANUAL_HANDOVER_ORIGINAL_CHANGED');
+ const prior=await tx.execute<{invoice_id:string;actor_id:string}>(sql`SELECT payload->>'invoiceId' AS invoice_id,user_id::text AS actor_id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_INVOICE_HANDED_OVER_V1' AND client_event_id=${input.clientRequestId}::uuid`);
+ if(prior.length&&(prior.length!==1||prior[0].invoice_id!==invoice.id||prior[0].actor_id!==auth.userId))throw new InvoiceManualHandoverConflict('INVOICE_MANUAL_HANDOVER_REQUEST_CHANGED');
+ const read=()=>tx.execute<{state:boolean|null;receipt:{invoiceId:string;customerId:string;originalSha256:string;actorId:string;handedAt:string;source:'manual_handover'}}>(sql`SELECT ${invoiceManualHandoverState(auth.tenantId,sql`${invoice.id}::uuid`)} AS state,(SELECT payload FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_INVOICE_HANDED_OVER_V1' AND payload->>'invoiceId'=${invoice.id}) AS receipt`);
+ const [before]=await read();if(!before||typeof before.state!=='boolean')throw Error('INVOICE_MANUAL_HANDOVER_SOURCE_INCOMPLETE');
+ if(before.state)return {receipt:before.receipt,replayed:true};
+ if(prior.length||invoice.status!=='issued'||invoice.contract_version!==1)throw new InvoiceManualHandoverConflict('INVOICE_MANUAL_HANDOVER_INVOICE_CHANGED');
+ const inserted=await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
+  VALUES(${randomUUID()},${auth.tenantId},${invoice.order_id},'COMMUNICATION_INVOICE_HANDED_OVER_V1',${INVOICE_DELIVERY_COPY.manualHandoverSaved},
+   jsonb_build_object('invoiceId',${invoice.id}::text,'customerId',${invoice.customer_id}::text,'originalSha256',${invoice.pdf_sha256}::text,'actorId',${auth.userId}::text,'handedAt',to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'source','manual_handover'),
+   'success',${auth.userId}::uuid,${input.clientRequestId}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
+ const [saved]=await read();if(inserted.length!==1||!saved||saved.state!==true||saved.receipt.actorId!==auth.userId)throw Error('INVOICE_MANUAL_HANDOVER_RECEIPT_MISSING');
+ return {receipt:saved.receipt,replayed:false};
 }

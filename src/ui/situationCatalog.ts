@@ -287,7 +287,7 @@ export const ORDER_ITEM_COMPLETION_COPY = {
   alreadyChanged: 'Der Teilstatus hat sich bereits geändert. Öffne den Auftrag erneut.',
 };
 
-export const INVOICE_DELIVERY_COPY={followupEditBlocked:'Diese Aufgabe folgt dem gespeicherten Rechnungsauftrag.',
+export const INVOICE_DELIVERY_COPY={manualHandover:'Schon übergeben',alreadyHandedOver:(number:string,date:string)=>`Rechnung ${number} wurde am ${date} übergeben.`,manualHandoverSaved:'Rechnung übergeben – Beleg gespeichert.',manualHandoverFailed:'Übergabe noch nicht gespeichert. Versuch es erneut.',manualHandoverConflict:'Rechnung oder Kennung geändert. Lade die Rechnung neu.',manualHandoverForbidden:'Die Rechnungsübergabe ist für Deinen Login nicht freigegeben.',followupEditBlocked:'Diese Aufgabe folgt dem gespeicherten Rechnungsauftrag.',
  queued:(customer:string)=>`Geht mit der nächsten Rechnungsmail an ${customer} raus`,
  remainderPending:'Weitere Rechnungen senden – Versand noch nicht bestätigt',
  remainderTask:'Weitere Rechnungen senden – Versandbeleg fehlt',

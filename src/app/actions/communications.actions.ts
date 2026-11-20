@@ -28,7 +28,7 @@ import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {readCollectionReminderReceipt,applyCollectionReminderMailEffects,assertCollectionReminderCurrent,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
 import {INVOICE_DELIVERY_COPY,COLLECTION_REMINDER_COPY,CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
-import {recordInvoiceMailRemainderFailure,freezeInvoiceMailRequest,readInvoiceMailOpenRemainder} from '@/lib/server/communicationDocumentPort';
+import {recordInvoiceManualHandover,InvoiceManualHandoverConflict,recordInvoiceMailRemainderFailure,freezeInvoiceMailRequest,readInvoiceMailOpenRemainder} from '@/lib/server/communicationDocumentPort';
 import {synchronizeInvoiceMailRemainderTask} from '@/modules/tasks/server-public';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
@@ -356,5 +356,25 @@ export async function importOutlookMailAction(graphMessageId:string,options?:{de
  if(mail.code!=='OK')return mail;
  return withDeliveryFailure(authorization.data,await importIntakeMessage(authorization.data,mail.data),options?.deferDispatchReply===true);
 
+ },readLoggingSettings);
+}
+
+
+/** PL20.11.10:10: paper delivery is an actual receipt, never a simulated mail. */
+export async function confirmInvoiceHandoverAction(input:{invoiceId:string;clientRequestId:string}){
+ return observeAction('confirmInvoiceHandoverAction',subjectForAction('confirmInvoiceHandoverAction',input),async()=>{
+  const authorizationResult=await authorization();if(!authorizationResult.ok)return {code:'UNAUTHENTICATED' as const,message:authorizationResult.message};
+  const auth=authorizationResult.data;
+  if(!canTransportInvoiceDocument(auth))return {code:'FORBIDDEN' as const,message:INVOICE_DELIVERY_COPY.manualHandoverForbidden};
+  if(!input||!['invoiceId','clientRequestId'].every(key=>typeof input[key as keyof typeof input]==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input[key as keyof typeof input])))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.manualHandoverConflict};
+  try{
+   const original=await readInvoicePdf(auth,input.invoiceId,'original');if(original.code!=='OK')return original;
+   const result=await withPrivilegedTenantTransaction(auth,tx=>recordInvoiceManualHandover(tx,auth,{invoiceId:input.invoiceId.toLowerCase(),clientRequestId:input.clientRequestId.toLowerCase(),originalSha256:original.data.pdfSha256}));
+   return {code:'OK' as const,...result,message:INVOICE_DELIVERY_COPY.manualHandoverSaved};
+  }catch(error){
+   if(error instanceof InvoiceManualHandoverConflict)return {code:'CONFLICT' as const,message:INVOICE_DELIVERY_COPY.manualHandoverConflict};
+   console.error('[INVOICE_MANUAL_HANDOVER_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});
+   return {code:'UNAVAILABLE' as const,message:INVOICE_DELIVERY_COPY.manualHandoverFailed};
+  }
  },readLoggingSettings);
 }

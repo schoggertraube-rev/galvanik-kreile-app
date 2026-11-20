@@ -7,6 +7,7 @@ const ports = vi.hoisted(() => ({
   openInvoice: vi.fn(),
   requestCreate: vi.fn(),
   listInbox: vi.fn(),
+  confirmHandover:vi.fn(),
   push: vi.fn(),
   refresh: vi.fn(),
   permissions: { loading: false, canCreateOrder: true, canWorkOrders: true },
@@ -14,7 +15,7 @@ const ports = vi.hoisted(() => ({
 vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openInvoice: ports.openInvoice }) }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestCreate }));
 vi.mock('@/components/communication/CommunicationPanel',()=>({CommunicationPanel:({targetId,invoiceOriginal}:{targetId:string;invoiceOriginal?:{documentId:string}})=><div data-testid="TEST-canonical-composer" data-customer={targetId} data-original={invoiceOriginal?.documentId}/> }));
-vi.mock("@/app/actions/communications.actions", () => ({ listOutlookInboxAction: ports.listInbox }));
+vi.mock("@/app/actions/communications.actions", () => ({ listOutlookInboxAction: ports.listInbox,confirmInvoiceHandoverAction:ports.confirmHandover }));
 vi.mock("@/app/actions/eingang.actions",()=>({getIntakeDraftsAction:vi.fn(async()=>({code:"OK",drafts:[]})),discardIntakeDraftAction:vi.fn(async()=>({code:"OK",drafts:[]}))}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push, refresh: ports.refresh }) }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
@@ -312,4 +313,23 @@ it.each([1,2])('H2 opens the existing composer from each of %i separate original
  const composer=await screen.findByTestId('TEST-canonical-composer');
  expect(composer).toHaveAttribute('data-customer',items[0].invoiceMail.customerId);expect(composer).toHaveAttribute('data-original',items[0].invoiceMail.documentId);
  expect(ports.openInvoice).not.toHaveBeenCalled();
+});
+
+
+it('H4 offers the real handover command beside each original and preserves its request after an unconfirmed reply',async()=>{
+ const original={customerId:'TEST-handover-customer',customerName:'TEST H4 Kunde',documentId:'TEST-paper-original',number:'TEST-R-H4',expectedInvoiceIds:['TEST-paper-original'],count:1,singleInvoice:true as const};
+ const item={key:'invoice-mail:'+original.documentId,field:'action' as const,kind:'invoice' as const,invoiceId:original.documentId,title:original.number,meta:original.customerName,urgency:'warning' as const,primaryActionLabel:'Rechnung TEST-R-H4 an TEST H4 Kunde senden',invoiceMail:original};
+ ports.confirmHandover.mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST H4 noch nicht bestätigt'}).mockResolvedValueOnce({code:'OK',message:'TEST H4 Beleg gespeichert'});
+ render(<RolfHomeClient ports={actionPorts} model={{kind:'data',projection,role:'meister',canCreateOrder:false,canWorkOrders:false,canDelegate:false,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items:[item]}}}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Weitere Aktionen'}));
+ const button=screen.getByRole('button',{name:'Schon übergeben'});
+ fireEvent.click(button);fireEvent.click(button);
+ await screen.findByText('TEST H4 noch nicht bestätigt');
+ expect(ports.confirmHandover).toHaveBeenCalledTimes(1);expect(ports.refresh).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Weitere Aktionen'}));
+ fireEvent.click(screen.getByRole('button',{name:'Schon übergeben'}));await screen.findByText('TEST H4 Beleg gespeichert');
+ expect(ports.confirmHandover).toHaveBeenCalledTimes(2);
+ expect(ports.confirmHandover.mock.calls[0][0]).toEqual(ports.confirmHandover.mock.calls[1][0]);
+ expect(ports.confirmHandover.mock.calls[0][0]).toMatchObject({invoiceId:original.documentId});
+ expect(ports.refresh).toHaveBeenCalledTimes(1);expect(ports.openInvoice).not.toHaveBeenCalled();
 });

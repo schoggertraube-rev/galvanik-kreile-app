@@ -1,11 +1,11 @@
 "use client";
 import {CommunicationPanel} from '@/components/communication/CommunicationPanel';
-import {V45_TEXT} from '@/ui/situationCatalog';
+import {V45_TEXT,INVOICE_DELIVERY_COPY} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 
-import { useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { listOutlookInboxAction } from "@/app/actions/communications.actions";
+import { confirmInvoiceHandoverAction,listOutlookInboxAction } from "@/app/actions/communications.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
@@ -65,6 +65,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
   const [message, setMessage] = useState("");
   const [delegated, setDelegated] = useState<Record<string, { name: string; version: number; dueDate?: string }>>({});
   const [invoiceMail,setInvoiceMail]=useState<NonNullable<TodayItem['invoiceMail']>|null>(null);
+  const invoiceHandoverRequests=useRef(new Map<string,{key:string;busy:boolean}>());
   const [mailId, setMailId] = useState<string | null>(null);
   const [mailPreview, setMailPreview] = useState<MailPreview | null>(null);
   const [mailMessage, setMailMessage] = useState("");
@@ -111,9 +112,18 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
   const counts = model.dashboard.items.filter((item) => item.field === "action" && !item.assignedToName && !delegated[item.key]).reduce<Record<HandlungsArt, number>>((sum, item) => { sum[actionType(item)] += 1; return sum; }, { konflikt: 0, entscheidung: 0, warnung: 0 });
   const primaryLabel = (item: TodayItem) => item.primaryActionLabel ?? (item.kind === "order" && item.field === "today" ? "Ware raus" : item.kind === "order" ? "Auftrag öffnen" : item.kind === "mail" ? "Mail ansehen" : item.kind === "invoice" ? "Geld einfordern" : "Bündel öffnen");
   const undoDelegation = async (item: TodayItem, version: number) => { if (!item.orderId) return; setBusy(true); const result = await ports.handBackOrder({ orderId: item.orderId, expectedVersion: version, clientEventId: crypto.randomUUID() }); setBusy(false); if (result.code === "OK") { setDelegated((current) => { const next = { ...current }; delete next[item.key]; return next; }); setMessage("Zurückgeholt"); router.refresh(); } else setMessage(result.message ?? "Weitergabe nicht zurückgeholt."); };
+  const confirmInvoiceHandover=async(item:TodayItem)=>{
+    if(!item.invoiceMail)return;
+    const id=item.invoiceMail.documentId,prior=invoiceHandoverRequests.current.get(id);
+    if(prior?.busy)return;
+    const request={key:prior?.key??crypto.randomUUID(),busy:true};invoiceHandoverRequests.current.set(id,request);
+    try{const result=await confirmInvoiceHandoverAction({invoiceId:id,clientRequestId:request.key});setMessage(result.message);if(result.code==='OK')router.refresh();}
+    catch{setMessage(INVOICE_DELIVERY_COPY.manualHandoverFailed);}
+    finally{request.busy=false;}
+  };
   const entries = (field: TodayItem["field"]) => filtered.filter((item) => item.field === field).map((item) => { const assignment = delegated[item.key] ?? (item.assignedToName ? { name: item.assignedToName, version: item.assignmentVersion ?? item.orderVersion ?? 1, dueDate: item.dueDate } : null); return ({
     key: item.key, art: actionType(item), id: item.kind === "order" ? item.title.split(" · ")[0] : undefined, titel: item.title, meta: item.snoozedUntil ? `${item.meta} · ${reminderLabel(item.snoozedUntil)}` : item.meta, gedimmt: Boolean(item.snoozedUntil || assignment), termin: item.dueDate, status: assignment ? { text: `bei ${assignment.name} · ${assignmentDeadline(assignment.dueDate)}`, ton: "info" as const, icon: "handoff" as const, aktion: { text: "Rückgängig", specId: "hbmehr.zuruckholen", onClick: () => void undoDelegation(item, assignment.version) } } : undefined,
-    aktionen: [{ text: primaryLabel(item), kurz: "Öffnen", icon: "open" as const, art: "primaer" as const, specId: item.kind === "order" ? "hbmehr.auftrag-offnen" : undefined, onClick: () => primary(item) }, { text: "Später", icon: "clock" as const, spaeter: true, onClick: () => setLater(item) }, ...(canDelegate && item.kind === "order" && model.dashboard.delegationTargets.length > 0 ? [{ text: "Weitere", icon: "more" as const, onClick: () => setMore(item) }] : [])],
+    aktionen: [{ text: primaryLabel(item), kurz: "Öffnen", icon: "open" as const, art: "primaer" as const, specId: item.kind === "order" ? "hbmehr.auftrag-offnen" : undefined, onClick: () => primary(item) }, ...(item.invoiceMail?[{text:INVOICE_DELIVERY_COPY.manualHandover,icon:"check" as const,onClick:()=>void confirmInvoiceHandover(item)}]:[]), { text: "Später", icon: "clock" as const, spaeter: true, onClick: () => setLater(item) }, ...(canDelegate && item.kind === "order" && model.dashboard.delegationTargets.length > 0 ? [{ text: "Weitere", icon: "more" as const, onClick: () => setMore(item) }] : [])],
     onOeffnen: () => primary(item), onWeitere: () => setMore(item),
   }); });
   const saveReminder = async (mode: TodayReminderMode) => { if (!later) return; setBusy(true); const result = await ports.saveReminder({ itemKey: later.key, mode, dueDate: later.dueDate }); setBusy(false); if (result.code === "OK") { setMessage(result.message ?? "Erinnerung gespeichert"); setLater(null); router.refresh(); } else setMessage(result.message ?? "Erinnerung nicht gespeichert."); };
@@ -183,6 +193,6 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
       {mailMessage ? <Hinweis ton="warn">{mailMessage}</Hinweis> : null}
       {mailPreview ? <><Fakten zeilen={[{ k: "Von", v: `${mailPreview.senderName} · ${mailPreview.senderAddress??INTAKE_MAIL_ADDRESS_MISSING_COPY}` }, { k: "Eingegangen", v: mailPreview.receivedAt===null?MAIL_IMPORT_COPY.timeUnknown:new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(mailPreview.receivedAt)) }]} /><h3>{mailPreview.subject || "Mail ohne Betreff"}</h3><p>{mailPreview.body || mailPreview.preview || "Keine lesbare Nachricht vorhanden."}</p></> : null}
     </div></Dialog> : null}
-    {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel">{model.dashboard.delegationTargets.map((target) => <Button key={target.userId} data-spec-id="hbmehr.weitergeben" text={`an ${target.displayName} geben`} icon="handoff" disabled={busy} onClick={() => void delegate(target)} />)}<Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
+    {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel">{more.invoiceMail?<Button text={INVOICE_DELIVERY_COPY.manualHandover} icon="check" onClick={()=>{setMore(null);void confirmInvoiceHandover(more);}}/>:model.dashboard.delegationTargets.map((target) => <Button key={target.userId} data-spec-id="hbmehr.weitergeben" text={`an ${target.displayName} geben`} icon="handoff" disabled={busy} onClick={() => void delegate(target)} />)}<Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
   </section>;
 }
