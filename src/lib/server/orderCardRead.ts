@@ -1,6 +1,5 @@
 import type {OrderActorSummary} from "@/modules/orders/public";
 import "server-only";
-import {db} from "@/db";
 import {readManualHandoverReceipt,readInvoiceHandoverSource} from './orderHandoverSourcePort';
 
 import { sql } from "drizzle-orm";
@@ -752,6 +751,7 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
  }
  if(orderIds.length===0)return results;
  try{
+  const {db}=await import('@/db');
   const readRows=(nested:import('./privilegedDb').PrivilegedTenantTransaction,selectedIds:readonly string[])=>{
    const ids=sql`ARRAY[${sql.join(selectedIds.map(id=>sql`${id}`),sql`, `)}]::text[]`;
    return nested.execute<TodayCardRow>(sql`
