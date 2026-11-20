@@ -1,15 +1,14 @@
 'use client';
 import type { ButtonHTMLAttributes } from 'react';
 import {useVorfinalStyle} from '@/ui/useVorfinalStyle';
-import { Icon, type IconName } from './Icon';
+import { Icon, type IconName, type VorfinalIconName } from './Icon';
 import { cx } from './typen';
 import { tippen } from './haptik';
 export type ButtonArt = 'standard' | 'primaer' | 'sekundaer' | 'gefaehrlich' | 'erledigen' | 'marke' | 'leise';
-export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
-  art?: ButtonArt; icon?: IconName; text?: string; /** Pflicht bei Icon-only */ label?: string; block?: boolean;
+export type ButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'>&{
+  art?: ButtonArt; text?: string; /** Pflicht bei Icon-only */ label?: string; block?: boolean;
   /** S19 opts into original btn2 markup; existing area callers stay unchanged. */
-  vorfinalForm?: 'pill';
-}
+}&({vorfinalForm?:'pill';icon?:IconName}|{vorfinalForm:'icon';icon?:IconName&VorfinalIconName});
 /** Touch-Ziel ≥ 48px. primär = Navy · erledigen = Grün · gefährlich = RAL-Rot · Marke = Verlauf */
 export function Button({ art = 'standard', icon, text, label, block, className, type = 'button', onClick, vorfinalForm, ...rest }: ButtonProps) {
   const vorfinal=useVorfinalStyle();
@@ -24,12 +23,13 @@ export function Button({ art = 'standard', icon, text, label, block, className, 
     </button>
   );
   const pill=vorfinal&&vorfinalForm==='pill';
+  const iconForm=vorfinal&&vorfinalForm==='icon';
   return (
     <button type={type} aria-label={text ? undefined : label} title={text ? undefined : label}
       data-glass={pill?'pill':undefined}
-      className={pill?cx('btn2',className):cx('kr-btn', art !== 'standard' && 'kr-btn--' + art, !text && 'kr-btn--icon', block && 'kr-btn--block', className)}
+      className={iconForm?cx('ib',className):pill?cx('btn2',className):cx('kr-btn', art !== 'standard' && 'kr-btn--' + art, !text && 'kr-btn--icon', block && 'kr-btn--block', className)}
       onClick={e => { if (haptisch) tippen(); onClick?.(e); }} {...rest}>
-      {icon && <Icon name={icon} />}{text}
+      {icon && (vorfinal&&vorfinalForm==='icon'?<Icon name={icon} variant="vorfinal"/>:<Icon name={icon}/>)}{text}
     </button>
   );
 }
