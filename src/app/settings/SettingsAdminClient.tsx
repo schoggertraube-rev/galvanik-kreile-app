@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import {PAGE_READ_COPY} from "@/ui/situationCatalog";
+import {DEFAULT_PAGE_READ_SETTINGS} from "@/lib/domain/pageReadSettings";
 import { useEffect, useState, useTransition } from "react";
 import {
   changeOwnPinAction,
@@ -98,6 +100,7 @@ export function SettingsAdminClient({
     bankName: initialSnapshot.company.bankName ?? "",
     paymentTermDays: initialSnapshot.company.paymentTermDays ?? 0,
     logoUrl: initialSnapshot.company.logoUrl ?? "",
+    pageReads:initialSnapshot.company.pageReads??{...DEFAULT_PAGE_READ_SETTINGS},
   });
   const [services, setServices] = useState(initialServices);
   const [draft, setDraft] = useState(emptyService());
@@ -370,6 +373,10 @@ export function SettingsAdminClient({
         {companyReady && (!canManageFinancial || catalogReady && rateReady) && returnTo ? <Link href={returnTo}>Zurück zum vorherigen Vorgang</Link> : null}
       </div>
       <div id="company-data" className={styles.grid}>{field("companyName", E_INVOICE_SETTINGS_COPY.fieldLabels.companyName)}{field("street", E_INVOICE_SETTINGS_COPY.fieldLabels.street)}{field("zip", E_INVOICE_SETTINGS_COPY.fieldLabels.zip)}{field("city", E_INVOICE_SETTINGS_COPY.fieldLabels.city)}{field("country", E_INVOICE_SETTINGS_COPY.fieldLabels.country)}{field("taxId", E_INVOICE_SETTINGS_COPY.fieldLabels.taxId)}{field("taxNumber", E_INVOICE_SETTINGS_COPY.fieldLabels.taxNumber)}{field("iban", E_INVOICE_SETTINGS_COPY.fieldLabels.iban)}{field("bic", E_INVOICE_SETTINGS_COPY.fieldLabels.bic)}{field("bankName", E_INVOICE_SETTINGS_COPY.fieldLabels.bankName)}{field("paymentTermDays", E_INVOICE_SETTINGS_COPY.fieldLabels.paymentTermDays, "number")}{field("logoUrl", E_INVOICE_SETTINGS_COPY.fieldLabels.logoUrl)}</div>
+      <div className={styles.grid}>
+        <label>{PAGE_READ_COPY.timeout}<input type="number" min="1" value={company.pageReads?.queryTimeoutMs??''} onChange={event=>setCompany(current=>({...current,pageReads:{...(current.pageReads??DEFAULT_PAGE_READ_SETTINGS),queryTimeoutMs:Number(event.target.value)}}))}/></label>
+        <label>{PAGE_READ_COPY.mailBatch}<input type="number" min="1" value={company.pageReads?.invoiceMailBatchLimit??''} onChange={event=>setCompany(current=>({...current,pageReads:{...(current.pageReads??DEFAULT_PAGE_READ_SETTINGS),invoiceMailBatchLimit:Number(event.target.value)}}))}/></label>
+      </div>
       <button disabled={pending} onClick={saveCompany}>Firmendaten speichern</button>
       <ShippingSettingsEditor />
       {canManageFinancial ? <div id="extra-work-rate"><h3>Mehrarbeit</h3><div className={styles.grid}><label>Stundensatz Mehrarbeit (€/h)<input inputMode="decimal" value={hourlyRateEuro} onChange={(event) => setHourlyRateEuro(event.target.value)} placeholder="z. B. 85,00" /></label></div><button disabled={pending} onClick={saveHourlyRate}>Stundensatz speichern</button></div> : null}

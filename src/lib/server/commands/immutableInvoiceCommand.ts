@@ -1143,21 +1143,40 @@ type InvoiceReissueProposal={originalInvoiceNumber:string;label:string;befehl:{d
  * as issuance. No number, reservation, new click key or financial effect on read. */
 export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:{orderId:string;expectedVersion:number;manualHandoverEventId?:string},readVat:InvoiceVatReader,readSettings:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>){
  if(!hasAuthorizationArea(auth,'preise'))return undefined;
+ const identity:{orderNumber?:string;invoiceNumber?:string}={};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const rows=await tx.execute<Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'version'>>(sql`SELECT id,customer_id,handover_mode,version FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId}`);
+  const rows=await tx.execute<Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'version'>&{order_number:string;station:string;current_station:string;current_station_id:string;status:string;invoice_exists:boolean;freeze_active:boolean;freeze_invalid:boolean}>(sql`
+   SELECT orders.id,orders.customer_id,orders.handover_mode,orders.version,orders.order_number,
+    orders.station,orders.current_station,orders.current_station_id,orders.status,
+    EXISTS(SELECT 1 FROM private.v_invoice_order_members_v1 member JOIN public.invoices invoice ON invoice.tenant_id=member.tenant_id AND invoice.id=member.invoice_id
+     WHERE member.tenant_id=orders.tenant_id AND member.order_id=orders.id AND invoice.status='issued') AS invoice_exists,
+    EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active) AS freeze_active,
+    (EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.integrity_ok IS NOT TRUE)
+     OR EXISTS(SELECT 1 FROM public.events event WHERE event.tenant_id=orders.tenant_id AND event.order_id=orders.id AND event.event_type='ORDER_FROZEN_V1'
+      AND NOT EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=event.tenant_id AND frozen.order_id=event.order_id AND frozen.event_id=event.id))) AS freeze_invalid
+   FROM public.orders orders WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${input.orderId}`);
   const order=rows[0];
   if(rows.length!==1||!order||order.version!==input.expectedVersion||!['pickup','shipping'].includes(order.handover_mode??''))throw Error('SHIPPING_PROPOSAL_ORDER_SOURCE_INVALID');
+  identity.orderNumber=order.order_number;
+  if(order.station!==order.current_station||order.station!==order.current_station_id||typeof order.invoice_exists!=='boolean'||typeof order.freeze_active!=='boolean'||typeof order.freeze_invalid!=='boolean')throw Error('SHIPPING_PROPOSAL_ORDER_SOURCE_INVALID');
+  if(order.freeze_invalid)throw Error('SHIPPING_PROPOSAL_FREEZE_SOURCE_INVALID');
+  // PL20.11.13:42: a proved unfinished order has no invoice follow-up yet.
+  // Its absence is a named state, never an invented zero/empty proposal.
+  if(['angenommen','galvanik'].includes(order.station)&&order.status===order.station&&!order.invoice_exists&&!order.freeze_active)
+   return {code:'NOT_APPLICABLE' as const,orderId:order.id,orderVersion:order.version};
   const settings=await readSettings(tx,auth.tenantId);
   if(!settings||settings.shippingFeeCents===undefined)throw Error('SHIPPING_PROPOSAL_SETTINGS_SOURCE_MISSING');
   const allocation=order.handover_mode==='shipping'?await readShippingInvoiceLines(tx,auth.tenantId,order,settings.shippingFeeCents,readVat):{lines:[],missingFee:false};
   const lines=allocation.lines;
   const originals=await readCreateInvoiceReceipts(tx,{orderId:order.id});
-  const sourceRows=await readInvoiceIssueSource(tx,order.id),source=sourceRows[0];
-  if(sourceRows.length!==1||!source||source.tenant_id!==auth.tenantId||source.order_id!==order.id||source.customer_id!==order.customer_id||source.current_order_version!==order.version||typeof source.no_active_invoice!=='boolean')throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_INVALID');
   // Validate historical originals as well; a broken receipt is never silently
   // treated as absence of an issued invoice.
   const active=originals.map(row=>({row,receipt:mapInvoiceIssueReceipt(row,auth.tenantId,row.actor_id,readVat)})).filter(value=>value.row.current_status==='issued');
   const main=active.filter(value=>value.row.belegart==='auftrag');
+  if(main.length===1)identity.invoiceNumber=main[0].receipt.invoiceNumber;
+  const sourceRows=await readInvoiceIssueSource(tx,order.id),source=sourceRows[0];
+  if(sourceRows.length===0)throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_MISSING');
+  if(sourceRows.length!==1||!source||source.tenant_id!==auth.tenantId||source.order_id!==order.id||source.customer_id!==order.customer_id||source.current_order_version!==order.version||typeof source.no_active_invoice!=='boolean')throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_INVALID');
   if(main.length>1||active.length>0&&main.length!==1||source.no_active_invoice!==(main.length===0))throw Error('SHIPPING_PROPOSAL_ORIGINAL_AMBIGUOUS');
   const additionalInvoices:Array<{originalInvoiceNumber:string;label:string;befehl:{datei:'src/app/actions/invoices.actions.ts';funktion:'issueInvoiceAction';argumente:Omit<CreateInvoiceInput,'clientEventId'>}}>=[];
   let reissueWithoutShipping:InvoiceReissueProposal|null=null;
@@ -1186,7 +1205,11 @@ export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot
    }
   }
   return {code:'OK' as const,orderId:order.id,orderVersion:order.version,shippingCostMissing:allocation.missingFee,feeCents:settings.shippingFeeCents,lines,additionalInvoices,reissueWithoutShipping,...(datenluecken.length?{datenluecken}:{}),...(settings.shippingFeeCents===null?{hintKey:'versand.pauschale_fehlt' as const}: {})};
- });}catch(error){console.error('[INVOICE_SHIPPING_PROPOSAL_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'SOURCE_INCOMPLETE' as const,orderId:input.orderId,orderVersion:input.expectedVersion,datenluecken:['SHIPPING_INVOICE_SOURCE']};}
+ });}catch(error){
+  const reason=error instanceof Error?error.message:'UnknownError';
+  console.error('[INVOICE_SHIPPING_PROPOSAL_FAILED]',reason);
+  return {code:'SOURCE_INCOMPLETE' as const,orderId:input.orderId,orderVersion:input.expectedVersion,datenluecken:['SHIPPING_INVOICE_SOURCE'],...(identity.orderNumber?{message:SHIPPING_FEE_COPY.proposalMissing(identity.invoiceNumber??identity.orderNumber,identity.invoiceNumber!==undefined,reason==='SHIPPING_PROPOSAL_INVOICE_SOURCE_MISSING'?'freigabe':reason==='SHIPPING_PROPOSAL_SETTINGS_SOURCE_MISSING'?'einstellungen':reason==='SHIPPING_PROPOSAL_ORIGINAL_AMBIGUOUS'?'original':'quelle')}:{})};
+ }
 }
 function formatShippingFee(cents:number){return new Intl.NumberFormat('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(cents/100)+' €';}
 

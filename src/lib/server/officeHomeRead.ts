@@ -11,6 +11,9 @@ import {
   type OrdersHomeSource,
 } from "@/modules/orders/public";
 import type {OfficeHomeModel} from '@/components/home/OfficeHomeClient';
+import {withPageReadBudget,configurePageReadBudget} from '@/db/readBudget';
+import {readPageReadSettingsAction} from '@/app/actions/settings.actions';
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/lib/domain/pageReadSettings';
 
 function toHomeSource(order: OperationalOrder): OrdersHomeSource {
   return {
@@ -31,10 +34,20 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
 }
 
 export async function loadOfficeHome(authorization: AuthorizationSnapshot): Promise<OfficeHomeModel> {
+  return withPageReadBudget(()=>loadOfficeHomeWithinBudget(authorization),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
+}
+async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot): Promise<OfficeHomeModel> {
   if (!hasAnyAuthorizationArea(authorization)) return { kind: "no_areas" };
 
   try {
-    const [orders, dashboard] = await Promise.all([getOperationalOrders(authorization), readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction)]);
+    let settingsIncomplete=false;
+    try{const source=await readPageReadSettingsAction();if(source.code==='OK')configurePageReadBudget(source.settings.queryTimeoutMs);else settingsIncomplete=true;}
+    catch{settingsIncomplete=true;}
+    // One request, one operational source; the Today composition consumes this
+    // exact promise rather than issuing the same full-list query a second time.
+    const ordersRead=getOperationalOrders(authorization);
+    const [orderSource, dashboard] = await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})), readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,new Date(),ordersRead)]);
+    if(settingsIncomplete)dashboard.datenluecken=[...(dashboard.datenluecken??[]),'PAGE_READ_SETTINGS_SOURCE'];
     const common = {
       cacheLoginScope:await readCacheLoginScope(),
       role: authorization.role,
@@ -43,8 +56,9 @@ export async function loadOfficeHome(authorization: AuthorizationSnapshot): Prom
       canDelegate: hasAuthorizationArea(authorization, "auftraege"),
       dashboard,
     } as const;
-    const projection = buildOrdersHomeProjection(orders.map(toHomeSource), new Date().toISOString());
-    return orders.length === 0
+    if(orderSource.code!=='OK')return {kind:'partial',projection:null,...common};
+    const projection = buildOrdersHomeProjection(orderSource.orders.map(toHomeSource), new Date().toISOString());
+    return orderSource.orders.length === 0
       ? { kind: "empty", ...common, projection }
       : { kind: "data", ...common, projection };
   } catch {

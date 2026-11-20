@@ -1,4 +1,6 @@
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
+import {PAGE_READ_COPY} from '@/ui/situationCatalog';
+import {parsePageReadSettings} from '@/lib/domain/pageReadSettings';
 import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
@@ -49,7 +51,16 @@ export type SystemSettingsContext = {
   canManageStorageCharges?: boolean;
 };
 export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean;includeDeliveryNoteIdentity?:boolean };
-type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number };
+export async function readPageReadSettings(context:{tenantId:string}){
+ const rows=await withPrivilegedTenantTransaction(context,tx=>tx.execute<{queryTimeoutMs:number;invoiceMailBatchLimit:number}>(sql`
+  SELECT seiten_abfrage_ms AS "queryTimeoutMs",rechnung_mail_grenze AS "invoiceMailBatchLimit"
+  FROM public.company_settings WHERE tenant_id=${context.tenantId} ORDER BY id LIMIT 2`));
+ if(rows.length!==1)throw Error('PAGE_READ_SETTINGS_SOURCE_INCOMPLETE');
+ const settings=parsePageReadSettings(rows[0]);
+ if(!settings)throw Error('PAGE_READ_SETTINGS_SOURCE_INVALID');
+ return settings;
+}
+type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;seiten_abfrage_ms?:number;rechnung_mail_grenze?:number };
 /** Letters need the real sender address, not invoice-only bank/tax configuration. */
 export async function readCompanyLetterSettings(context:CompanyDocumentContext){
  if(!context.canRead)return {code:'FORBIDDEN' as const};
@@ -154,7 +165,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nicht erlaubt." };
   try {
     const snapshot = await withPrivilegedTenantTransaction(context, async (tx): Promise<Omit<SystemSettingsSnapshot, "extraWorkHourlyRate">> => {
-      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, tax_number, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, tax_number, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms,seiten_abfrage_ms,rechnung_mail_grenze FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
       if (companies.length > 1) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
       const users = await tx.execute<UserRow>(sql`
         SELECT users.id::text AS id,
@@ -181,6 +192,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
           city: company.city, country: company.country, taxId: company.tax_id, taxNumber: company.tax_number ?? null,
           iban: company.iban, bic: company.bic, bankName: company.bank_name,
           paymentTermDays: company.invoice_payment_term_days, logoUrl: company.logo_url,
+          pageReads:parsePageReadSettings({queryTimeoutMs:company.seiten_abfrage_ms,invoiceMailBatchLimit:company.rechnung_mail_grenze}),
           protocol:parseProtocolSettings({retentionDays:company.protokoll_aufbewahrung_tage,slowMs:company.protokoll_langsam_ms,hangMs:company.protokoll_haenger_ms}),
         } : EMPTY_COMPANY,
         users: users.map((user): ManagedUser => {
@@ -260,8 +272,11 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind ungültig." };
   const value = input as Record<string, unknown>;
   const protocolRequested=Object.hasOwn(value,'protocol');
+  const pageReadsRequested=Object.hasOwn(value,'pageReads');
+  const pageReads=pageReadsRequested?parsePageReadSettings(value.pageReads):null;
+  if(pageReadsRequested&&!pageReads)return {code:'VALIDATION_ERROR' as const,message:PAGE_READ_COPY.invalid};
   const taxNumberRequested=Object.hasOwn(value,'taxNumber');
-  const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(taxNumberRequested?['taxNumber']:[]),...(protocolRequested?['protocol']:[])].sort().join(',');
+  const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(taxNumberRequested?['taxNumber']:[]),...(protocolRequested?['protocol']:[]),...(pageReadsRequested?['pageReads']:[])].sort().join(',');
   if (Object.keys(value).sort().join(",") !== expectedKeys) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind unvollständig." };
   const protocol=protocolRequested?parseProtocolSettings(value.protocol):null;
   if(text(value.taxId,0,40)===null||(taxNumberRequested&&text(value.taxNumber,0,40)===null))return {code:'VALIDATION_ERROR' as const,message:'Firmendaten sind ungültig.'};
@@ -314,6 +329,11 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
           WHERE tenant_id=${context.tenantId} AND id=${rows[0].id} RETURNING protokoll_aufbewahrung_tage AS "retentionDays",protokoll_langsam_ms AS "slowMs",protokoll_haenger_ms AS "hangMs"`);
         if(saved.length!==1||!isDeepStrictEqual(parseProtocolSettings(saved[0]),protocol))throw Error('PROTOCOL_SETTINGS_READBACK_MISSING');
       }
+      if(pageReads){
+        const saved=await tx.execute<{queryTimeoutMs:number;invoiceMailBatchLimit:number}>(sql`UPDATE public.company_settings SET seiten_abfrage_ms=${pageReads.queryTimeoutMs},rechnung_mail_grenze=${pageReads.invoiceMailBatchLimit}
+          WHERE tenant_id=${context.tenantId} AND id=${rows[0].id} RETURNING seiten_abfrage_ms AS "queryTimeoutMs",rechnung_mail_grenze AS "invoiceMailBatchLimit"`);
+        if(saved.length!==1||!isDeepStrictEqual(parsePageReadSettings(saved[0]),pageReads))throw Error('PAGE_READ_SETTINGS_READBACK_MISSING');
+      }
       const audit=await tx.execute(sql`
         INSERT INTO public.ui_events (tenant_id, event_type, payload)
         VALUES (
@@ -321,10 +341,11 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
           'company_settings_updated',
           jsonb_build_object('actorId', ${context.actorId}::text, 'settingsId', ${rows[0]!.id}::text)
           ${protocol?sql`||jsonb_build_object('protocol',${JSON.stringify(protocol)}::jsonb)`:sql``}
+          ${pageReads?sql`||jsonb_build_object('pageReads',${JSON.stringify(pageReads)}::jsonb)`:sql``}
         )
         RETURNING id
       `);
-      if((protocol||taxNumberRequested)&&audit.length!==1)throw Error('PROTOCOL_SETTINGS_AUDIT_MISSING');
+      if((protocol||taxNumberRequested||pageReadsRequested)&&audit.length!==1)throw Error('PROTOCOL_SETTINGS_AUDIT_MISSING');
     });
     return { code: "OK" as const };
   } catch (error) {

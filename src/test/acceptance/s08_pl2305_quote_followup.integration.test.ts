@@ -8,6 +8,10 @@ import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
 import {runQuoteQuantityCase} from '../../../e2e/ablauf/quoteQuantityCase';
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {resolveAuthorization} from '@/lib/server/authorization';
+import {readTodayDashboard} from '@/lib/server/todayDashboard';
+import {getComplaints} from '@/app/actions/complaints.actions';
+import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 
 it('CB23:05 stored damaged goods keep one physical receipt and the catalog exit on fresh retry',async()=>{
  await runQuoteQuantityCase({name:'CB23:05 blocked goods',quantity:10,received:10,total:4000,expected:4000,hours:'0.5000',operational:true,fixed:0,blocked:true});
@@ -26,6 +30,10 @@ it('CB23:05 actual commercial-quote SQL failure preserves the operational card w
    expect(result.data.card.commercialQuote).toBeUndefined();
    expect(log).toHaveBeenCalledWith('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',expect.objectContaining({orderId}));
    expect(await withSession(actor,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{id:orderId,version:result.data.card.version}}});
+   const today=(login:typeof full)=>withSession(login,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_LIVE_SOURCE_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+   const visible=await today(full),notice=visible.items.find(item=>item.key==='source-quote:'+orderId);
+   expect(notice).toMatchObject({orderId,orderVersion:result.data.card.version,field:'action',title:'Preisbeleg zu Auftrag '+result.data.card.orderNumber+' ist nicht lesbar.',primaryActionLabel:'Auftrag öffnen'});
+   expect((await today(actor)).items.some(item=>item.key==='source-quote:'+orderId)).toBe(false);
   }finally{log.mockRestore();}
  }});
 });

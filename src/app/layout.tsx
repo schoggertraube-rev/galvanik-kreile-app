@@ -38,13 +38,15 @@ import {ProtocolClickCapture} from '@/components/ProtocolClickCapture';
 
 import { getAuthBootstrapAction } from "@/app/actions/auth.actions";
 import { GlobalCreateAppAdapter } from "./GlobalCreateAppAdapter";
+import {withPageReadBudget} from '@/db/readBudget';
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/lib/domain/pageReadSettings';
 
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const authState = await getAuthBootstrapAction();
+  const authState = await withPageReadBudget(getAuthBootstrapAction,DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
   const rootStyle=readRootStyle(authState.status,authState.status==='authenticated'?authState.user.packageSwitches:undefined);
   const isAdmin =
     authState.status === "authenticated" &&

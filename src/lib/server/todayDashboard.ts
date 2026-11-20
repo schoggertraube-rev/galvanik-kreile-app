@@ -1,6 +1,6 @@
 import {readUnsentInvoiceOriginals,readInvoiceMailCohort} from './communicationDocumentPort';
 import {canTransportInvoiceDocument} from './authorization';
-import {E_INVOICE_COPY} from '@/ui/situationCatalog';
+import {E_INVOICE_COPY,SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
 import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
 import {v45QuoteFacts} from '@/lib/server/v45QuoteRead';
 import type {U2Read} from '@/lib/domain/u2ReadContract';
@@ -39,7 +39,7 @@ export type TodayItem = {
   snoozedUntil?: string;
   assignedToName?: string;
   assignmentVersion?: number;
-  primaryActionLabel?: ReturnType<typeof E_INVOICE_COPY.sendInvoice> | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
+  primaryActionLabel?: ReturnType<typeof E_INVOICE_COPY.sendInvoice> | typeof SITUATION_COPY.quote.openOrder | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
 };
 
 export type TodayCollectionNotice = {
@@ -134,14 +134,14 @@ export async function readTodaySource<T>(tx:PrivilegedTenantTransaction,read:(ne
 }
 
 export type TodayQuoteFollowup={isMine?:boolean;id:string;title:string;dueDate:string;quoteId:string;quoteNumber:string;customerName:string};
-export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date()): Promise<TodayDashboard> {
+export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>): Promise<TodayDashboard> {
   const calendar=readTodayCalendar(readNow),today=calendar.today;
   const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
   const graphAllowed = hasAuthorizationArea(auth, "mails");
   const moneyAllowed = hasAuthorizationArea(auth, "zahlungen");
   const [orderSource, graph, support, complaints,quoteFollowups] = await Promise.all([
-    ordersAllowed ? getOperationalOrders(auth).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]}),
-    graphAllowed ? getIntakeMessagesAction('offen') : Promise.resolve({ code: "FORBIDDEN" as const, message: "" }),
+    ordersAllowed ? (operationalSource??getOperationalOrders(auth)).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]}),
+    graphAllowed ? getIntakeMessagesAction('offen').catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:PAGE_READ_COPY.sourceIncomplete})) : Promise.resolve({ code: "FORBIDDEN" as const, message: "" }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
       const invoiceSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<InvoiceRow>(sql`
           SELECT invoice.id, invoice.payment_version, invoice.invoice_number, invoice.order_id, customer.name AS customer_name,
@@ -229,17 +229,33 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
       }):{code:'OK' as const,data:{groups:[],missing:[]}};
       const supportMissing=[...(invoiceMailSource.code!=='OK'?['TODAY_UNSENT_INVOICE_SOURCE']:invoiceMailSource.data.missing),...(preferencesSource.code!=='OK'?['TODAY_PREFERENCES_SOURCE']:[]),...(remindersSource.code!=='OK'?['TODAY_REMINDERS_SOURCE']:[]),...(delegationSource.code!=='OK'?['TODAY_DELEGATION_SOURCE']:[])];
       return { supportMissing,invoiceMailSource,preferences:preferencesSource.code==='OK'?preferencesSource.data:[],reminders:remindersSource.code==='OK'?remindersSource.data:[],invoiceSource,invoices:invoiceSource.code==='OK'?invoiceSource.data:[], prepaymentSource,prepayments:prepaymentSource.code==='OK'?prepaymentSource.data:[],collectionSource,collections:collectionSource.code==='OK'?collectionSource.data:[],delegationTargets:delegationSource.code==='OK'?delegationSource.data:[],assignmentSourceIncomplete:assignmentSource.code!=='OK'||assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
+    }).catch(error=>{
+      console.error('[TODAY_SOURCE_FAILED]',{quelle:'support',name:error instanceof Error?error.name:'UnknownError'});
+      // Absent source data is explicitly incomplete, never a zero balance or
+      // an empty successful list. Other independent sources remain intact.
+      return {supportMissing:['TODAY_SUPPORT_SOURCE'],invoiceMailSource:{code:'SOURCE_INCOMPLETE' as const},
+        preferences:[] as PreferenceRow[],reminders:[] as ReminderRow[],invoiceSource:{code:'SOURCE_INCOMPLETE' as const},invoices:[] as InvoiceRow[],
+        prepaymentSource:{code:'SOURCE_INCOMPLETE' as const},prepayments:[] as PrepaymentRow[],collectionSource:{code:'SOURCE_INCOMPLETE' as const},collections:[] as CollectionRow[],
+        delegationTargets:[] as UserRow[],assignmentSourceIncomplete:true,assignments:[] as AssignmentRow[]};
     }),
     ['auftraege','entscheiden','zahlungen','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'zahlungen'|'kunden'))?readComplaints().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'complaints',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'};}):Promise.resolve({code:'OK' as const,complaints:[]}),
     graphAllowed?readQuoteFollowups().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'quote-followups',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'};}):Promise.resolve({code:'OK' as const,tasks:[]}),
   ]);
 
   const orders=orderSource.code==='OK'?orderSource.data:[];
+  const sourceNotices:TodayItem[]=[];
   // U3 reuses the complete U2 response, qualified by the same order version.
   // A changed/unreadable card cannot silently supply a command for an older row.
   const orderActionReads=ordersAllowed?await Promise.all(orders.map(async order=>{
     try{
       const card=await getLiveOrderCardAction({orderId:order.id});
+      if(card.code==='OK'&&card.data.card.version===order.version){
+        const shipping=card.data.handoverConsequences;
+        if(shipping?.code==='SOURCE_INCOMPLETE')
+          sourceNotices.push({key:'source-shipping:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:shipping.orderId===order.id&&shipping.orderVersion===order.version&&shipping.message?shipping.message:SHIPPING_FEE_COPY.proposalMissing(order.orderNumber,false,'quelle'),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
+        if(hasAuthorizationArea(auth,'preise')&&card.data.card.operationalFacts?.pricesMissing===null)
+          sourceNotices.push({key:'source-quote:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:SHIPPING_FEE_COPY.orderQuoteMissing(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
+      }
       if(card.code==='OK'&&card.data.card.version===order.version&&card.data.nextActionRule){
         const row:TodayOrderScheduleRow={orderId:order.id,version:order.version,read:card.data.nextActionRule};
         if(card.data.card.station==='fertig'&&card.data.card.handoverMode==='pickup'){
@@ -263,7 +279,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const orderSchedule=projectOrderSchedule(orderActions,calendar);
   // The canonical list and operational U2 card are the only quote sources.
   // Raw financial list objects never escape this server composition.
-  const quoteList=graphAllowed?await listOpenQuotesAction({purpose:'today'}):{code:'OK' as const,quotes:[]};
+  const quoteList=graphAllowed?await listOpenQuotesAction({purpose:'today'}).catch(()=>({code:'SOURCE_INCOMPLETE' as const})):{code:'OK' as const,quotes:[]};
   const quoteReads=quoteList.code==='OK'?await Promise.all(quoteList.quotes.map(async quote=>{
     try{
       const card=await readQuoteAction({quoteId:quote.quoteId,purpose:'operations'});
@@ -278,7 +294,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const quoteActions={code:quoteList.code==='OK'&&quoteReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
     rows:quoteReads.flatMap(row=>row.read?[row as TodayQuoteActionRow]:[]),missingQuoteIds:quoteReads.filter(row=>row.read===null).map(row=>row.quoteId)};
 
-  const taskRead=graphAllowed?await getIntakeTaskAction({calendar:true}):null;
+  const taskRead=graphAllowed?await getIntakeTaskAction({calendar:true}).catch(()=>({code:'SOURCE_INCOMPLETE' as const,rows:[],missingTaskIds:[]})):null;
   const taskKnown=taskRead?.code==='OK';
   const taskSchedule=projectIntakeTaskSchedule(taskRead&&'rows'in taskRead?taskRead:{code:'SOURCE_INCOMPLETE',rows:[],missingTaskIds:[]},calendar);
 
@@ -301,6 +317,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const items: TodayItem[] = [];
   const assignments = new Map(support.assignments.map((row) => [row.order_id, row]));
   const add = (item: TodayItem) => items.push({ ...item, field: item.field === "action" || selectedSet.has(item.field as TodayVisibleField) ? item.field : "action", snoozedUntil: reminders.get(item.key) });
+  for(const notice of sourceNotices)add(notice);
   const followupsKnown=quoteFollowups.code==='OK'&&'tasks'in quoteFollowups;
   // V45 hides ordinary quote concerns without money access. The explicit S05
   // followup-mail permission still exposes its real due quote through mails.

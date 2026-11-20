@@ -1,5 +1,6 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import {withPageReadQueryLimits} from './readBudget';
 import * as baseSchema from './schema';
 import * as buchhaltungSchema from './schema_buchhaltung';
 import * as marketingSchema from './schema_marketing';
@@ -20,4 +21,4 @@ const globalForDb = globalThis as unknown as {
 const client = globalForDb.conn ?? postgres(connectionString, { prepare: false });
 if (process.env.NODE_ENV !== "production") globalForDb.conn = client;
 
-export const db = drizzle(client, { schema });
+export const db = drizzle(withPageReadQueryLimits(client), { schema });

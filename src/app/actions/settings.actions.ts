@@ -11,6 +11,7 @@ import {
   changeOwnPin,
   createManagedUser,
   readSystemSettings,
+  readPageReadSettings,
   readTenantFeatures,
   readPackageSwitches,
   setPackageSwitch,
@@ -19,6 +20,14 @@ import {
   updateCompanySettings,
   updateManagedUser,
 } from "@/modules/fundament/server-public";
+
+/** Operational query/batch limits disclose no company, login or financial data. */
+export async function readPageReadSettingsAction(){
+ const authorization=await resolveAuthorization();
+ if(!authorization.ok)return {code:'FORBIDDEN' as const};
+ try{return {code:'OK' as const,settings:await readPageReadSettings(authorization.data)};}
+ catch{return {code:'SOURCE_INCOMPLETE' as const};}
+}
 import { listCatalogServices, saveCatalogService } from "@/modules/katalog/server-public";
 import type { CompanySettingsInput, ProtocolSettings, CreateManagedUserInput, SetUserAreaInput, UpdateManagedUserInput } from "@/modules/fundament/public";
 import type { SalesStageFeatureId } from "@/modules/fundament/public";
