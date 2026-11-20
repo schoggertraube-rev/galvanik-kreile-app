@@ -30,7 +30,7 @@ export const DELIVERY_NOTE_SOURCE_COPY={companyMissing:'Firmendaten fehlen. Trag
 export const LEGACY_ACTION_ACCESS_COPY={forbidden:"Keine Berechtigung für diese Aktion."} as const;
 export const MAIL_IMPORT_COPY={timeUnknown:'Eingangszeit fehlt',failed:'Import fehlgeschlagen',detail:(failure:{reason:string|null;graphMessageId:string|null})=>['Import fehlgeschlagen',failure.reason??MAILBOX_SYNC_COPY.unavailable,failure.graphMessageId??MAILBOX_SYNC_COPY.unavailable].join(' · '),task:(id:string)=>`Mail ${id} importieren – Import fehlgeschlagen`} as const;
 export const MAILBOX_SYNC_COPY={retryTask:'Mailabruf fortsetzen – Fortschritt konnte nicht gesichert werden',unavailable:'Neue Mails momentan nicht abrufbar · bereits gesicherte Eingänge bleiben verfügbar.',pending:(count:number)=>`Mailabruf: noch ${count} Mails offen, der nächste Abruf holt sie`} as const;
-export const PIN_LOGIN_COPY={incomplete:'Anmeldung konnte nicht sicher abgeschlossen werden.',blocked:(time:string)=>`Zu viele Versuche. Versuch es um ${time} wieder.`} as const;
+export const PIN_LOGIN_COPY={unavailable:'Anmeldung gerade nicht möglich – wir sind dran.',incomplete:'Anmeldung konnte nicht sicher abgeschlossen werden.',blocked:(time:string)=>`Zu viele Versuche. Versuch es um ${time} wieder.`} as const;
 /** PL12.11.00:11: a missing historical time stays explicit, never today. */
 export const OFFLINE_NOTE_QUARANTINE_COPY={notice:(time:string|null)=>time?`Notiz von ${time} zurückgehalten - tippe zum Zuordnen`:'Notiz zurückgehalten - tippe zum Zuordnen'} as const;
 /** PL13.11.09:23: photographs are present; choose the actual order. */

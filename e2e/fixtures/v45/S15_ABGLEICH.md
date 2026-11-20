@@ -169,7 +169,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 
-## Nur im Bestand (730)
+## Nur im Bestand (731)
 
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
 - `EVIDENCE_VISIBILITY_COPY.invalid`: "Wähle das Foto erneut."
@@ -230,6 +230,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `MAIL_IMPORT_COPY.detail`: "Import fehlgeschlagen"
 - `MAILBOX_SYNC_COPY.retryTask`: "Mailabruf fortsetzen – Fortschritt konnte nicht gesichert werden"
 - `MAILBOX_SYNC_COPY.unavailable`: "Neue Mails momentan nicht abrufbar · bereits gesicherte Eingänge bleiben verfügbar."
+- `PIN_LOGIN_COPY.unavailable`: "Anmeldung gerade nicht möglich – wir sind dran."
 - `PIN_LOGIN_COPY.incomplete`: "Anmeldung konnte nicht sicher abgeschlossen werden."
 - `OFFLINE_NOTE_QUARANTINE_COPY.notice`: "Notiz zurückgehalten - tippe zum Zuordnen"
 - `MESSAGE_COMPLAINT_ACTION_COPY.key`: "messages.complaint_customer"
