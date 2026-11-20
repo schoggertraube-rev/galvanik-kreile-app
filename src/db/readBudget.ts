@@ -112,3 +112,19 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
 function isQuery(value:unknown):value is QueryLike{
   return value!==null&&typeof value==='object'&&'then'in value&&'cancel'in value&&typeof value.cancel==='function';
 }
+
+/** Keep the same request deadline at the existing provider boundary. The native
+ * signal also aborts a slow body after headers arrive; no eager buffering and
+ * no change to unscoped sends or caller cancellation. */
+export function pageReadFetchPort(fetchPort:typeof fetch):typeof fetch{
+ return (input,init)=>{
+  const budget=budgets.getStore();
+  if(!budget)return fetchPort(input,init);
+  const remaining=budget.deadline-Date.now();
+  if(remaining<=0)return Promise.reject(new PageReadTimeout());
+  const original=init?.signal??(input instanceof Request?input.signal:undefined);
+  const deadline=AbortSignal.timeout(remaining);
+  const signal=original?AbortSignal.any([original,deadline]):deadline;
+  return withinBudget(()=>fetchPort(input,{...init,signal}));
+ };
+}

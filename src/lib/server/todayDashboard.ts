@@ -140,7 +140,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const graphAllowed = hasAuthorizationArea(auth, "mails");
   const moneyAllowed = hasAuthorizationArea(auth, "zahlungen");
   const [orderSource, graph, support, complaints,quoteFollowups] = await Promise.all([
-    ordersAllowed ? (operationalSource??getOperationalOrders(auth)).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]}),
+    ordersAllowed ? (operationalSource??getOperationalOrders(auth,{purpose:'today'})).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]}),
     graphAllowed ? getIntakeMessagesAction('offen').catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:PAGE_READ_COPY.sourceIncomplete})) : Promise.resolve({ code: "FORBIDDEN" as const, message: "" }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
       const invoiceSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<InvoiceRow>(sql`

@@ -45,7 +45,7 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot):
     catch{settingsIncomplete=true;}
     // One request, one operational source; the Today composition consumes this
     // exact promise rather than issuing the same full-list query a second time.
-    const ordersRead=getOperationalOrders(authorization);
+    const ordersRead=getOperationalOrders(authorization,{purpose:'today'});
     const [orderSource, dashboard] = await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})), readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,new Date(),ordersRead)]);
     if(settingsIncomplete)dashboard.datenluecken=[...(dashboard.datenluecken??[]),'PAGE_READ_SETTINGS_SOURCE'];
     const common = {

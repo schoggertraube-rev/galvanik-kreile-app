@@ -1,4 +1,5 @@
 import "server-only";
+import {pageReadFetchPort} from '@/db/readBudget';
 import {createHash} from "node:crypto";
 
 const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
@@ -113,7 +114,7 @@ function readConfig(env: Environment): GraphConfig | null {
 }
 
 async function accessToken(config: GraphConfig, fetchPort: FetchPort): Promise<string> {
-  const response = await fetchPort(
+  const response = await pageReadFetchPort(fetchPort)(
     `https://login.microsoftonline.com/${encodeURIComponent(config.tenantId)}/oauth2/v2.0/token`,
     {
       method: "POST",
@@ -174,7 +175,7 @@ async function graphGetMessage(
   path: string,
   fetchPort: FetchPort,
 ): Promise<Response> {
-  return fetchPort(`${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/${path}`, {
+  return pageReadFetchPort(fetchPort)(`${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/${path}`, {
     headers: {
       authorization: `Bearer ${token}`,
       prefer: 'outlook.body-content-type="text"',
@@ -285,7 +286,7 @@ export async function sendMicrosoftGraphMail(
     const endpoint = input.replyToMessageId
       ? `${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/messages/${encodeURIComponent(input.replyToMessageId)}/reply`
       : `${GRAPH_ROOT}/users/${encodeURIComponent(config.mailbox)}/sendMail`;
-    const response = await fetchPort(endpoint, {
+    const response = await pageReadFetchPort(fetchPort)(endpoint, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({

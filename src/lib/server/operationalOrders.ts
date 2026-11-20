@@ -11,8 +11,9 @@ export type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operati
 
 export async function getOperationalOrders(
   authorization: AuthorizationSnapshot,
+  projection?:{purpose:'today'},
 ): Promise<OperationalOrder[]> {
-  return readTenantOperationalOrders(authorization);
+  return readTenantOperationalOrders(authorization,projection);
 }
 
 export async function getOperationalOrderCount(
