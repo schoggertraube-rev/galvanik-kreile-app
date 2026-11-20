@@ -169,7 +169,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 
-## Nur im Bestand (715)
+## Nur im Bestand (718)
 
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
 - `EVIDENCE_VISIBILITY_COPY.invalid`: "Wähle das Foto erneut."
@@ -742,6 +742,9 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `COLLECTION_REMINDER_COPY.proofUnavailable`: "Der Original-Versandbeleg konnte nicht sicher gelesen werden."
 - `COLLECTION_REMINDER_COPY.preparedConflict`: "Die Sammelerinnerung wurde bereits vorbereitet oder der Auftrag hat sich geändert. Lies den aktuellen Ausgang neu."
 - `ORDER_ITEM_COMPLETION_COPY.alreadyChanged`: "Der Teilstatus hat sich bereits geändert. Öffne den Auftrag erneut."
+- `INVOICE_DELIVERY_COPY.remainderPending`: "Weitere Rechnungen senden – Versand noch nicht bestätigt"
+- `INVOICE_DELIVERY_COPY.remainderTask`: "Weitere Rechnungen senden – Versandbeleg fehlt"
+- `INVOICE_DELIVERY_COPY.remainderDone`: "Weitere Rechnungen gesendet – Versand bestätigt"
 - `INVOICE_DELIVERY_COPY.listChanged`: "dazugekommen"
 - `INVOICE_DELIVERY_COPY.listChanged`: "weggefallen"
 - `COLLECTION_FOLLOWUP_COPY.retry`: "Sammelzuordnung nachholen"
