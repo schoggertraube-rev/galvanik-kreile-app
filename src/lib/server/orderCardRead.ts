@@ -752,8 +752,7 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
  }
  if(orderIds.length===0)return results;
  try{
-  return await withPrivilegedTenantTransaction(authorization,async tx=>{
-   const readRows=(nested:typeof tx,selectedIds:readonly string[])=>{
+  const readRows=(nested:import('./privilegedDb').PrivilegedTenantTransaction,selectedIds:readonly string[])=>{
    const ids=sql`ARRAY[${sql.join(selectedIds.map(id=>sql`${id}`),sql`, `)}]::text[]`;
    return nested.execute<TodayCardRow>(sql`
     WITH selected AS MATERIALIZED (
@@ -799,11 +798,12 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
     ORDER BY kind,order_id,position`);
    };
    let rows:TodayCardRow[];
-   try{rows=Array.from(await withTenantSavepoint(tx,nested=>readRows(nested,orderIds)));}
+   try{rows=Array.from(await withPrivilegedTenantTransaction(authorization,tx=>withTenantSavepoint(tx,nested=>readRows(nested,orderIds))));}
    catch{
     rows=[];
-    // A source SQL exception rolls back before isolating the same query per
-    // order. A damaged original must never poison healthy orders or the tx.
+    // The parent transaction has finished before acquiring child connections.
+    // Even one available pool slot must suffice; never hold it while awaiting
+    // another transaction. The same SQL still has an order-local savepoint.
     let next=0;
     const readIsolated=async()=>{
      while(next<orderIds.length){
@@ -860,7 +860,6 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
    };
    await Promise.all(Array.from({length:Math.min(orderIds.length,db.$client.options.max)},()=>qualifyIsolated()));
    return results;
-  });
  }catch(error){
   console.error('[TODAY_ORDER_BATCH_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});
   for(const id of orderIds)results.set(id,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});

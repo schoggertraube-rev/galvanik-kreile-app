@@ -469,6 +469,17 @@ it('B1 isolates a genuine unknown-surface SQL exception from two healthy Today o
  const cards=await readTodayOrderCards(authorization.data,ids);
  expect(cards.get(bad)?.code).toBe('UNAVAILABLE');
  for(const id of ids.slice(1))expect(cards.get(id)?.code).toBe('OK');
+ // Real capacity pressure: reserve all but one existing data connection.
+ // No pool setting, provider, SQL guard or authorization is replaced.
+ const count=db.$client.options.max-1;let release=()=>{};const gate=new Promise<void>(resolve=>{release=resolve;});
+ const entered:Array<()=>void>=[],ready=Array.from({length:count},()=>new Promise<void>(resolve=>entered.push(resolve)));
+ const held=Array.from({length:count},(_,index)=>db.transaction(async tx=>{await tx.execute(drizzleSql`SELECT 1`);entered[index]();await gate;}));
+ try{
+  await Promise.all(ready);
+  const constrained=await withPageReadBudget(()=>readTodayOrderCards(authorization.data,ids),3000);
+  expect(constrained.get(bad)?.code).toBe('UNAVAILABLE');
+  for(const id of ids.slice(1))expect(constrained.get(id)?.code).toBe('OK');
+ }finally{release();await Promise.all(held);}
  const started=Date.now(),home=await withSession(full,()=>loadOfficeHome(authorization.data));
  expect(Date.now()-started).toBeLessThan(3000);expect(home.kind).toBe('data');if(home.kind!=='data')throw Error('TEST_B1_HOME');
  expect(home.dashboard.items.filter(item=>item.key==='source-order:'+bad)).toHaveLength(1);
