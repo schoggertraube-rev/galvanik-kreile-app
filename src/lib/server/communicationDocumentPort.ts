@@ -245,13 +245,17 @@ async function bindInvoiceMailGroup<Row extends InvoiceMailLegacyRow|InvoiceMail
 }
 // Every consumer sees the same frozen group. The existing assertNotSent/lock
 // boundary still forbids any new physical attempt while its outcome is unclear.
-export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds?:readonly string[],native?:false):Promise<InvoiceMailLegacyRow[]>;
-export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]|undefined,native:true):Promise<InvoiceMailNativeRow[]>;
-export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]|undefined,native:boolean|undefined):Promise<Array<InvoiceMailLegacyRow|InvoiceMailNativeRow>>;
-export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]=[],native:boolean=false):Promise<Array<InvoiceMailLegacyRow|InvoiceMailNativeRow>>{
+export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds?:readonly string[],native?:false,unreservedOnly?:boolean):Promise<InvoiceMailLegacyRow[]>;
+export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]|undefined,native:true,unreservedOnly?:boolean):Promise<InvoiceMailNativeRow[]>;
+export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]|undefined,native:boolean|undefined,unreservedOnly?:boolean):Promise<Array<InvoiceMailLegacyRow|InvoiceMailNativeRow>>;
+export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]=[],native:boolean=false,unreservedOnly=false):Promise<Array<InvoiceMailLegacyRow|InvoiceMailNativeRow>>{
+ // Fresh sends exclude reserved originals before the transport limit. Read-only
+ // projections/reconciliation retain their exact qualified immutable PREPARE group.
+ // The existing lock + assertNotSent still rejects a selected pending original.
  if(native){const rows=await tx.execute<InvoiceMailNativeRow>(sql`SELECT invoice.id::text,invoice.order_id,NULL::text AS order_number,invoice.snapshot->'collection' AS collection_source,invoice.invoice_number,invoice.aggregate_version,${invoiceMailUnresolved(tenantId,sql`invoice.id`)} AS mail_pending,private.invoice_original_source_valid(invoice.tenant_id,invoice.customer_id,invoice.order_id,invoice.order_version,invoice.freeze_id,invoice.service_date,invoice.snapshot,invoice.issued_at) AS source_integrity_ok FROM public.invoices invoice
   WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId} AND invoice.order_id IS NULL AND invoice.status='issued' AND invoice.contract_version=1
    AND (${resendIds.length>0?sql`invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[])`:sql`NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)}`})
+   AND (${unreservedOnly?sql`NOT ${invoiceMailUnresolved(tenantId,sql`invoice.id`)}`:sql`true`})
   ORDER BY invoice.issued_at,invoice.id LIMIT 102`);
   // PL20.11.00:32: the unchanged 101-original transport limit binds one
   // deterministic oldest group. The sentinel/rest remain in the overview.
@@ -265,6 +269,7 @@ export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenan
   JOIN private.v_order_freeze_state_v1 frozen ON frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active AND frozen.integrity_ok
   WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId} AND invoice.status='issued' AND invoice.contract_version=1
    AND (${resendIds.length>0?sql`invoice.id::text=ANY(ARRAY[${sql.join(resendIds.map(id=>sql`${id}`),sql`, `)}]::text[])`:sql`NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)}`})
+   AND (${unreservedOnly?sql`NOT ${invoiceMailUnresolved(tenantId,sql`invoice.id`)}`:sql`true`})
    AND ((orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig') OR ${handedInvoiceOrder(tenantId)}) AND orders.handover_mode=${handover}
   ORDER BY invoice.issued_at,invoice.id LIMIT 102`);
  return bindInvoiceMailGroup(tx,tenantId,customerId,rows);
@@ -272,8 +277,8 @@ export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenan
 export class InvoiceMailListChanged extends Error{
  constructor(readonly number:string,readonly added:boolean){super('INVOICE_MAIL_LIST_CHANGED');}
 }
-export async function assertInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,group:{customerId:string;handover:string|null;native?:boolean},expected:readonly string[],prepared:readonly string[],resendIds:readonly string[]=[]){
- const current=await readInvoiceMailCohort(tx,tenantId,group.customerId,group.handover,resendIds,group.native);
+export async function assertInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,group:{customerId:string;handover:string|null;native?:boolean;unreservedOnly?:boolean},expected:readonly string[],prepared:readonly string[],resendIds:readonly string[]=[]){
+ const current=await readInvoiceMailCohort(tx,tenantId,group.customerId,group.handover,resendIds,group.native,group.unreservedOnly);
  const added=current.find(row=>!expected.includes(row.id)),removed=expected.find(id=>!current.some(row=>row.id===id));
  const unprepared=current.find(row=>expected.includes(row.id)&&!prepared.includes(row.id));
  if(added||unprepared)throw new InvoiceMailListChanged((added??unprepared)!.invoice_number,true);
