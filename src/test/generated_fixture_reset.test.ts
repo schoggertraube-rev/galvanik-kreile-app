@@ -1,7 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets } from "../../e2e/generated/_fixtureReset";
+import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets,settleFixtureReads } from "../../e2e/generated/_fixtureReset";
 
 describe("isolated replay fixture cleanup", () => {
+  it('awaits the existing browser request drain before completing cleanup',async()=>{
+    let release!:()=>void,done=false;
+    const waitForLoadState=vi.fn(()=>new Promise<void>(resolve=>{release=resolve;}));
+    const pending=settleFixtureReads({isClosed:()=>false,waitForLoadState}).then(()=>{done=true;});
+    await Promise.resolve();expect(done).toBe(false);expect(waitForLoadState).toHaveBeenCalledExactlyOnceWith('networkidle');
+    release();await pending;expect(done).toBe(true);
+  });
+  it('does not hide a browser drain failure or invent requests for a closed page',async()=>{
+    const waitForLoadState=vi.fn().mockRejectedValue(Error('TEST actual browser drain failed'));
+    await expect(settleFixtureReads({isClosed:()=>false,waitForLoadState})).rejects.toThrow('TEST actual browser drain failed');
+    waitForLoadState.mockClear();await settleFixtureReads({isClosed:()=>true,waitForLoadState});expect(waitForLoadState).not.toHaveBeenCalled();
+  });
   it("retries one aborted deadlock transaction and reports it", async () => {
     const reset = vi.fn().mockRejectedValueOnce({ code: "40P01" }).mockResolvedValueOnce("clean");
     const warn = vi.fn();
