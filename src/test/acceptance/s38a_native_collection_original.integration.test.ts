@@ -14,6 +14,7 @@ import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {sql as statement} from 'drizzle-orm';
+import {revokeCustomerAgreementAction} from '@/app/actions/customers.actions';
 import {confirmPaymentAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
 import {readPaymentSummary,getPaymentState} from '@/lib/server/paymentSummaryRead';
 import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingang.actions';
@@ -155,7 +156,7 @@ it('A7/A8 real native two-rate invoice is once-only under parallel sessions and 
  const mapped=await withPrivilegedTenantTransaction(auth.data,tx=>tx.execute<{order_id:string;invoice_id:string;collection_id:string}>(statement`SELECT order_id,invoice_id::text,collection_id::text FROM private.v_invoice_order_members_v1 WHERE tenant_id=${tenant} AND invoice_id=${issued.receipt.invoiceId}::uuid`));
  expect(mapped.map(row=>row.order_id).sort()).toEqual(source.members.map(row=>row.orderId).sort());
  expect(mapped.every(row=>row.invoice_id===issued.receipt.invoiceId&&row.collection_id===source.collectionId)).toBe(true);
- await expect(sql.begin(async tx=>{await tx`UPDATE public.invoice_collections SET ziel_tage=45 WHERE tenant_id=${tenant} AND id=${source.collectionId}::uuid`;})).rejects.toThrow('append-only');
+ await expect(sql.begin(async tx=>{await tx`UPDATE public.invoice_collections SET version=version+1 WHERE tenant_id=${tenant} AND id=${source.collectionId}::uuid`;})).rejects.toThrow('append-only');
  await expect(sql.begin(async tx=>{
   // Raw schema-boundary attempt, not a product authorization proof. Give the
   // source validator its actual isolated tenant, so the member guard is reached.
@@ -203,6 +204,7 @@ it('A15 native collection cancellation keeps its original, releases all real mem
  const [before]=await sql`SELECT snapshot,pdf_content,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${issue.receipt.invoiceId}::uuid`;
  const paid=await withSession(full,()=>confirmPaymentAction({invoiceId:issue.receipt.invoiceId,amount:4000,method:'ueberweisung',expectedVersion:0,expectedOpenAmountCents:11900,clientEventId:randomUUID()}));
  expect(paid).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>revokeCustomerAgreementAction({agreementId:source.agreementId,version:1,clientKey:randomUUID(),reason:'TEST K4 individual reissue after revoked collection'}))).toMatchObject({code:'OK'});
  const input={invoiceId:issue.receipt.invoiceId,expectedVersion:1 as const,reason:'TEST native collection cancellation',clientEventId:randomUUID()};
  const cancelled=await withSession(full,()=>cancelInvoiceAction(input));
  expect(cancelled,JSON.stringify(cancelled)).toMatchObject({code:'OK',receipt:{invoiceId:issue.receipt.invoiceId,orderId:null,orderVersion:null,status:'cancelled',collection:{collectionId:source.collectionId},originalPdfSha256:issue.receipt.pdfSha256}});

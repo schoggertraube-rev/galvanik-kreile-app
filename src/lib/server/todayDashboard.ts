@@ -79,7 +79,7 @@ export type TodayDashboard = {
 
 type PreferenceRow = { visible_fields: string[]; layout: unknown | null };
 type ReminderRow = { item_key: string; reminder_until: Date | string };
-type InvoiceRow = { overdue:boolean;overdue_as_of:string;payment_version:number;id: string; invoice_number: string; order_id: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string };
+type InvoiceRow = { overdue:boolean;overdue_as_of:string;payment_version:number;id: string; invoice_number: string; order_id: string | null; customer_name: string; customer_country: string | null; due_date: Date | string | null; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string | null };
 type PrepaymentRow = { order_id: string; order_number: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; invoice_id: string | null; open_amount_cents: number | string | null; payment_status: string | null; station: string; goods_out_event_count: number | string };
 type UserRow = { id: string; full_name: string };
 type AssignmentRow = { integrity_ok:boolean;order_id: string; assigned_to_name: string; current_order_version: number };
@@ -144,9 +144,9 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
                  customer.country AS customer_country, invoice.due_date,
                  ${classifyOverdue(today)} AS overdue,${today}::text AS overdue_as_of,
                  invoice.payment_open_amount_cents AS open_amount_cents,
-                 orders.payment_mode, invoice.payment_status, orders.station
+                 COALESCE(orders.payment_mode, invoice.payment_mode) AS payment_mode, invoice.payment_status, orders.station
           FROM public.invoices invoice
-          JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
+          LEFT JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
           JOIN public.customers customer ON customer.tenant_id=invoice.tenant_id AND customer.id=invoice.customer_id
           WHERE invoice.tenant_id=${auth.tenantId} AND invoice.status='issued'
             AND invoice.payment_status IN ('offen', 'teilbezahlt')
@@ -315,7 +315,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const overdueInvoices=support.invoices.filter(invoice=>isOverdueInvoiceForToday(invoice,today)===true);
   for (const invoice of overdueInvoices.slice(0,20)) {
     const dueDate = dateOnly(invoice.due_date!);
-    add({ key: `invoice:${invoice.id}`, field: "money", kind: "invoice", title: `${invoice.invoice_number} · ${invoice.customer_name}`, meta: `${euro(invoice.open_amount_cents)} · fällig ${dueDate}`, urgency: "conflict", invoiceId: invoice.id, orderId: invoice.order_id, dueDate, primaryActionLabel: "Erinnern" });
+    add({ key: `invoice:${invoice.id}`, field: "money", kind: "invoice", title: `${invoice.invoice_number} · ${invoice.customer_name}`, meta: `${euro(invoice.open_amount_cents)} · fällig ${dueDate}`, urgency: "conflict", invoiceId: invoice.id, ...(invoice.order_id ? {orderId: invoice.order_id} : {}), dueDate, primaryActionLabel: "Erinnern" });
   }
 
   const eligiblePrepayments=support.prepayments.filter(prepayment=>classifyMoneyForToday({customerCountry:prepayment.customer_country,dueDate:prepayment.due_date?dateOnly(prepayment.due_date):null,goodsOutRecorded:Number(prepayment.goods_out_event_count)>0,paymentMode:'vorkasse',paymentStatus:prepayment.payment_status,station:prepayment.station},today)==='open_prepayment');

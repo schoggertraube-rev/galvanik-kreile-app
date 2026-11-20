@@ -244,7 +244,7 @@ export type TodayChallengeReason={textKey:'day.challenge_late'|'day.challenge_de
 export type TodayChallenge={key:string;orderId:string|null;orderNumber:string|null;quoteId?:string;quoteNumber?:string|null;rank:number;dueDate:string|null;reasons:TodayChallengeReason[];action:U2Action|null};
 /** S05: only evidenced lateness/debt here, never a guessed capacity conflict.
  * Inputs are the same qualified U2 cards and already rights-filtered invoices. */
-export function projectTodayChallenges(orderRows:ReadonlyArray<{orderId:string;version:number;read:U2Read}>,invoices:ReadonlyArray<{id:string;orderId:string;number:string;dueDate:string;amountCents:number|string|null;amount:string|null}>,today:string,quotes:ReadonlyArray<{quoteId:string;version:number;read:U2Read;facts:Readonly<Record<string,unknown>>;validUntil:string|null}>=[]){
+export function projectTodayChallenges(orderRows:ReadonlyArray<{orderId:string;version:number;read:U2Read}>,invoices:ReadonlyArray<{id:string;orderId:string|null;number:string;dueDate:string;amountCents:number|string|null;amount:string|null}>,today:string,quotes:ReadonlyArray<{quoteId:string;version:number;read:U2Read;facts:Readonly<Record<string,unknown>>;validUntil:string|null}>=[]){
  const groups=new Map<string,TodayChallenge>(),missing:string[]=[];
  const cards=new Map(orderRows.map(row=>[row.orderId,row]));
  const add=(input:{orderId:string|null;orderNumber:string|null;rank:number;dueDate:string;action:U2Action|null;reason:TodayChallengeReason})=>{
@@ -268,7 +268,7 @@ export function projectTodayChallenges(orderRows:ReadonlyArray<{orderId:string;v
  }
  for(const invoice of invoices){
   if(!Number.isSafeInteger(Number(invoice.amountCents))||Number(invoice.amountCents)<=0||typeof invoice.amount!=='string'||!invoice.amount||!parseDateKey(invoice.dueDate)||invoice.dueDate>=today){missing.push('CHALLENGE_INVOICE_FACTS:'+invoice.id);continue;}
-  const card=cards.get(invoice.orderId),number=card?.read.erstblick.find(value=>value.key==='auftrag.lage')?.werte.nummer;
+  const card=invoice.orderId===null?undefined:cards.get(invoice.orderId),number=card?.read.erstblick.find(value=>value.key==='auftrag.lage')?.werte.nummer;
   add({orderId:invoice.orderId||null,orderNumber:typeof number==='string'?number:null,rank:10,dueDate:invoice.dueDate,action:null,reason:{textKey:'day.challenge_debt',werte:{amount:invoice.amount,date:invoice.dueDate,number:invoice.number},sourceId:invoice.id}});
   // The financial U2 command/step is explicitly incomplete until S08b.
   missing.push('CHALLENGE_PAYMENT_ACTION:'+invoice.id);
@@ -320,7 +320,7 @@ export function projectOrderSchedule(source:{code:'OK'|'SOURCE_INCOMPLETE';rows:
 
 /** Financial slice uses the same persisted open-invoice rows, never the visible
  * twenty-row list. An unreadable amount/date is a gap, not a zero balance. */
-export type TodayInvoiceMoneyRow={overdue:boolean;overdue_as_of:string;id:string;payment_version:number;due_date:Date|string|null;open_amount_cents:number|string|null;customer_country:string|null;payment_mode:string;payment_status:string|null;station:string};
+export type TodayInvoiceMoneyRow={overdue:boolean;overdue_as_of:string;id:string;order_id?:string|null;payment_version:number;due_date:Date|string|null;open_amount_cents:number|string|null;customer_country:string|null;payment_mode:string;payment_status:string|null;station:string|null};
 /** Same canonical classification for the metric, complete list, amounts and challenges. */
 export function isOverdueInvoiceForToday(row:TodayInvoiceMoneyRow,today:string){
  return typeof row.overdue==='boolean'&&row.overdue_as_of===today?row.overdue:null;
@@ -334,7 +334,7 @@ export function projectTodayInvoiceMoney(source:{code:'OK';data:ReadonlyArray<To
   const amount=row.open_amount_cents===null?NaN:Number(row.open_amount_cents);
   const raw=row.due_date instanceof Date?(Number.isFinite(row.due_date.getTime())?row.due_date.toISOString():null):row.due_date;
   const dueDate=typeof raw==='string'?raw.slice(0,10):null;
-  if(typeof row.payment_mode!=='string'||typeof row.station!=='string'||!row.id||!Number.isSafeInteger(row.payment_version)||!Number.isSafeInteger(amount)||amount<=0||!dueDate||!parseDateKey(dueDate)){
+  if(typeof row.payment_mode!=='string'||(typeof row.station!=='string'&&!(row.order_id===null&&row.station===null))||!row.id||!Number.isSafeInteger(row.payment_version)||!Number.isSafeInteger(amount)||amount<=0||!dueDate||!parseDateKey(dueDate)){
    missing.push('INVOICE_MONEY_FACTS:'+row.id);continue;
   }
   const overdue=isOverdueInvoiceForToday(row,calendar.today);

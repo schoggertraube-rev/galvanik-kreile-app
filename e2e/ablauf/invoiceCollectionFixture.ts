@@ -3,14 +3,25 @@
 import {randomUUID} from 'node:crypto';
 import {KREILE_TENANT_SLUG as tenant} from '@/lib/tenant';
 import {sql} from './replayHarness';
+import {collectionFollowupDigest} from '@/lib/server/invoiceCollectionFollowupRead';
 
 export async function historicalCollection(rates:readonly number[],existing?:{customerId:string;agreementId:string}){
+ return historicalCollectionSource(rates,existing,false);
+}
+/** Explicitly synthetic historical pending originals/tasks; only their repair is a current real Action. */
+export async function historicalPendingCollection(rates:readonly number[],existing:{customerId:string;agreementId:string}){
+ const source=await historicalCollectionSource(rates,existing,true);
+ return {customerId:source.customerId,agreementId:source.agreementId,month:source.month,pending:source.pending};
+}
+async function historicalCollectionSource(rates:readonly number[],existing:{customerId:string;agreementId:string}|undefined,pendingOnly:boolean){
  if(!tenant.startsWith('TEST-ablauf-')||rates.length!==3)throw Error('TEST_HISTORICAL_SOURCE_REQUIRED');
  const [clock]=await sql`SELECT to_char(date_trunc('month',statement_timestamp() AT TIME ZONE 'Europe/Berlin')-interval '1 month','YYYY-MM-DD') AS month`;
  const month=String(clock.month),frozenAt=month.slice(0,8)+'10T12:00:00.000Z',handoverAt=month.slice(0,8)+'12T12:00:00.000Z',start=month+'T08:00:00.000Z';
  const customerId=existing?existing.customerId:randomUUID(),historicalActor=randomUUID(),rateId=randomUUID(),agreementId=existing?existing.agreementId:randomUUID(),collectionId=randomUUID();
  const members:Array<{orderId:string;number:string;freezeId:string}> = [];
+ const pending:Array<{markerId:string;taskId:string;orderId:string}> = [];
  try{await sql.begin(async tx=>{
+  await tx`SELECT set_config('app.tenant_id',${tenant},true)`;
   if(existing){
    const known=await tx`SELECT agreement.id FROM public.customer_agreements agreement JOIN public.customers customer ON customer.tenant_id=agreement.tenant_id AND customer.id=agreement.customer_id WHERE agreement.tenant_id=${tenant} AND agreement.id=${agreementId}::uuid AND agreement.customer_id=${customerId} AND agreement.typ='sammelrechnung'`;
    if(known.length!==1)throw Error('TEST_EXISTING_COLLECTION_CUSTOMER_REQUIRED');
@@ -26,8 +37,8 @@ export async function historicalCollection(rates:readonly number[],existing?:{cu
   const [existingRate]=await tx`SELECT id::text FROM private.extra_work_hourly_rates WHERE tenant_id=${tenant} ORDER BY version DESC LIMIT 1`;
   if(!existing)await tx`INSERT INTO public.customer_agreements(id,tenant_id,customer_id,position,bezeichnung,typ,ziel_tage,geld,hinweis,grund,version,client_key,created_at,created_by)
    VALUES(${agreementId}::uuid,${tenant},${customerId},1,'TEST Monthly Collection','sammelrechnung',30,true,false,'TEST agreed monthly invoice',1,${randomUUID()}::uuid,${start}::timestamptz,${historicalActor}::uuid)`;
-  await tx`INSERT INTO public.invoice_collections(id,tenant_id,customer_id,monat,ziel_tage,status,version,created_at,created_by)
-   VALUES(${collectionId}::uuid,${tenant},${customerId},${month}::date,30,'offen',1,${start}::timestamptz,${historicalActor}::uuid)`;
+  if(!pendingOnly)await tx`INSERT INTO public.invoice_collections(id,tenant_id,customer_id,monat,status,version,created_at,created_by)
+   VALUES(${collectionId}::uuid,${tenant},${customerId},${month}::date,'offen',1,${start}::timestamptz,${historicalActor}::uuid)`;
   for(let i=0;i<3;i++){
    const orderId=randomUUID(),freezeId=randomUUID(),freezeEvent=randomUUID(),number='TEST-COL-'+randomUUID().slice(0,8);
    await tx`INSERT INTO public.orders(id,tenant_id,order_number,customer_id,title,station,current_station,current_station_id,status,version,payment_mode,payment_mode_version,handover_mode,source,created_at,due_date,geprueft)
@@ -39,12 +50,22 @@ export async function historicalCollection(rates:readonly number[],existing?:{cu
     VALUES(${freezeEvent},${tenant},${orderId},'ORDER_FROZEN_V1','TEST SYNTHETIC initial historical freeze',${historicalActor}::uuid,${frozenAt}::timestamptz AT TIME ZONE 'UTC',${tx.json(payload)}::jsonb,'success','fertig','galvanik',${randomUUID()}::uuid,1,${randomUUID()}::uuid,2)`;
    await tx`INSERT INTO private.order_freezes(id,tenant_id,order_id,event_id,hourly_rate_id,hourly_rate_cents,total_amount_cents,line_count,order_version,frozen_by,frozen_at)
     VALUES(${freezeId}::uuid,${tenant},${orderId},${freezeEvent},${existingRate.id}::uuid,14000,0,0,2,${historicalActor}::uuid,${frozenAt}::timestamptz)`;
-   await tx`INSERT INTO public.invoice_collection_orders(collection_id,tenant_id,order_id,created_at) VALUES(${collectionId}::uuid,${tenant},${orderId},${handoverAt}::timestamptz)`;
+   if(!pendingOnly)await tx`INSERT INTO public.invoice_collection_orders(collection_id,tenant_id,order_id,created_at) VALUES(${collectionId}::uuid,${tenant},${orderId},${handoverAt}::timestamptz)`;
    const out={orderId,orderVersion:3,paymentMode:'rechnung',mode:'abholung',gateAllowed:true,settlement:'collection',agreementId,agreementType:'sammelrechnung',agreementVersion:1};
+   const goodsOutId=randomUUID(),goodsClientId=randomUUID(),correlationId=randomUUID();
+   if(pendingOnly){
+    const markerId=randomUUID(),taskId=randomUUID();
+    const receipt={eventId:markerId,goodsOutEventId:goodsOutId,orderId,customerId,actorId:historicalActor,clientEventId:goodsClientId,correlationId,expectedVersion:2,orderVersion:3,freezeId,agreementId,agreementVersion:1,targetDays:30,month,occurredAt:handoverAt};
+    await tx`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,client_event_id,correlation_id,event_schema_version,status,aggregate_version,payload,created_at)
+     VALUES(${markerId},${tenant},${orderId},'ORDER_COLLECTION_ATTACH_PENDING_V1','TEST SYNTHETIC historical pending original',${historicalActor}::uuid,${markerId}::uuid,${correlationId}::uuid,1,'success',3,${tx.json({receipt,receiptSha256:collectionFollowupDigest(receipt)})}::jsonb,${handoverAt}::timestamptz AT TIME ZONE 'UTC')`;
+    await tx`INSERT INTO public.tasks(id,tenant_id,client_key,art,titel,faellig_am,vorlauf_tage,fuer_bereich,bezug_typ,bezug_id,status,erstellt_von,erstellt_am,version)
+     VALUES(${taskId}::uuid,${tenant},${markerId}::uuid,'aufgabe','TEST SYNTHETIC historical collection retry',${handoverAt.slice(0,10)}::date,0,'entscheiden','auftrag',${orderId},'offen',${historicalActor}::uuid,${handoverAt}::timestamptz,1)`;
+    pending.push({markerId,taskId,orderId});
+   }
    await tx`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,created_at,payload,status,station,from_station,client_event_id,event_schema_version,correlation_id,aggregate_version)
-    VALUES(${randomUUID()},${tenant},${orderId},'ORDER_PICKED_UP_V3','TEST SYNTHETIC initial historical handover',${historicalActor}::uuid,${handoverAt}::timestamptz AT TIME ZONE 'UTC',${tx.json(out)}::jsonb,'success','abgeholt','fertig',${randomUUID()}::uuid,3,${randomUUID()}::uuid,3)`;
+    VALUES(${goodsOutId},${tenant},${orderId},'ORDER_PICKED_UP_V3','TEST SYNTHETIC initial historical handover',${historicalActor}::uuid,${handoverAt}::timestamptz AT TIME ZONE 'UTC',${tx.json(out)}::jsonb,'success','abgeholt','fertig',${goodsClientId}::uuid,3,${correlationId}::uuid,3)`;
    members.push({orderId,number,freezeId});
   }
  });}catch(error){console.error('[TEST_HISTORICAL_SOURCE_CONSTRAINT]',(error as {detail?:string}).detail);throw error;}
- return {collectionId,customerId,agreementId,month,members};
+ return {collectionId,customerId,agreementId,month,members,pending};
 }

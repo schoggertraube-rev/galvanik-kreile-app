@@ -4,7 +4,7 @@ import {canonicalJson} from '@/lib/domain/canonicalJson';
 import type {InvoiceCollectionPlanInput,InvoiceCollectionPlanReceipt,InvoiceCollectionRemoveInput,InvoiceCollectionRemoveReceipt} from '@/lib/domain/invoiceCollectionContract';
 import {readReadyNotificationContext} from '@/lib/server/orderReleaseRead';
 import {COLLECTION_PENDING_EVENT,COLLECTION_REPAIRED_EVENT,readCollectionFollowup,collectionFollowupDigest,type CollectionFollowupReceipt} from '@/lib/server/invoiceCollectionFollowupRead';
-import {E_INVOICE_COPY,FINANCIAL_ACCESS_COPY,V45_TEXT} from '@/ui/situationCatalog';
+import {E_INVOICE_COPY,FINANCIAL_ACCESS_COPY,V45_TEXT,COLLECTION_FOLLOWUP_COPY} from '@/ui/situationCatalog';
 import {isShipmentGroupInput,isShipmentGroupReceipt,type ShipmentGroupInput,type ShipmentGroupResult,type ShipmentGroupReceipt} from '@/lib/domain/shipmentGroupContract';
 import type {ManualShipmentGroupState} from '@/modules/orders/public';
 import type {CustomerCreditResult,CustomerCreditApplicationRead} from '@/modules/accounting/public';
@@ -170,7 +170,6 @@ type InvoiceCollectionRow = {
   id: string;
   tenant_id: string;
   customer_id: string;
-  ziel_tage: number | string;
   status: string;
 };
 
@@ -698,7 +697,7 @@ export async function removeOrderFromCollection(input:unknown){
  });}catch(error){console.error('[COLLECTION_REMOVAL_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:E_INVOICE_COPY.collectionChangeUnavailable};}
 }
 
-async function attachOpenInvoiceCollection(
+export async function attachOpenInvoiceCollection(
   tx: PrivilegedTenantTransaction,
   input: {
     tenantId: string;
@@ -739,7 +738,7 @@ async function attachOpenInvoiceCollection(
     )
   `);
   let collections = await tx.execute<InvoiceCollectionRow>(sql`
-    SELECT id::text, tenant_id, customer_id, ziel_tage, status
+    SELECT id::text, tenant_id, customer_id, status
     FROM public.invoice_collections
     WHERE tenant_id = ${input.tenantId}
       AND customer_id = ${input.customerId}
@@ -750,11 +749,11 @@ async function attachOpenInvoiceCollection(
   if (collections.length === 0) {
     collections = await tx.execute<InvoiceCollectionRow>(sql`
       INSERT INTO public.invoice_collections (
-        tenant_id, customer_id, monat, ziel_tage, status, created_by
+        tenant_id, customer_id, monat, status, created_by
       ) VALUES (
-        ${input.tenantId}, ${input.customerId}, ${month}::date, ${input.targetDays}, 'offen', ${input.actorId}::uuid
+        ${input.tenantId}, ${input.customerId}, ${month}::date, 'offen', ${input.actorId}::uuid
       )
-      RETURNING id::text, tenant_id, customer_id, ziel_tage, status
+      RETURNING id::text, tenant_id, customer_id, status
     `);
   }
   const collection = collections[0];
@@ -763,7 +762,6 @@ async function attachOpenInvoiceCollection(
     || !collection
     || collection.tenant_id !== input.tenantId
     || collection.customer_id !== input.customerId
-    || toNonNegativeInteger(collection.ziel_tage) !== input.targetDays
     || collection.status !== "offen"
     || !UUID_PATTERN.test(collection.id)
   ) {
@@ -808,11 +806,11 @@ async function repairCollectionFollowup(tx:PrivilegedTenantTransaction,auth:Auth
  if(!source.pending)return;
  await attachOpenInvoiceCollection(tx,{tenantId:auth.tenantId,customerId:source.customerId,orderId:source.orderId,actorId:source.actorId,targetDays:source.targetDays,physicalMonth:source.month});
  const members=await tx.execute<{id:string;version:number}>(sql`SELECT collection.id::text,collection.version FROM public.invoice_collection_orders member JOIN public.invoice_collections collection ON collection.tenant_id=member.tenant_id AND collection.id=member.collection_id
- WHERE member.tenant_id=${auth.tenantId} AND member.order_id=${source.orderId} AND collection.customer_id=${source.customerId} AND collection.monat=${source.month}::date AND collection.ziel_tage=${source.targetDays} AND collection.status='offen'`);
+ WHERE member.tenant_id=${auth.tenantId} AND member.order_id=${source.orderId} AND collection.customer_id=${source.customerId} AND collection.monat=${source.month}::date AND collection.status='offen'`);
  if(members.length!==1)throw Error('COLLECTION_FOLLOWUP_REPAIR_MEMBERSHIP_MISSING');
  const id=randomUUID(),payload={markerId,goodsOutEventId:source.goodsOutEventId,collectionId:members[0].id,collectionVersion:members[0].version,originalActorId:source.actorId,actorId:auth.userId};
  const saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,client_event_id,correlation_id,event_schema_version,status,aggregate_version,payload,created_at)
-  VALUES(${id},${auth.tenantId},${source.orderId},${COLLECTION_REPAIRED_EVENT},${COLLECTION_REPAIRED_EVENT},${auth.userId}::uuid,${id}::uuid,${source.correlationId}::uuid,1,'success',${source.orderVersion},${JSON.stringify(payload)}::jsonb,clock_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
+  VALUES(${id},${auth.tenantId},${source.orderId},${COLLECTION_REPAIRED_EVENT},${COLLECTION_FOLLOWUP_COPY.repairedHistory},${auth.userId}::uuid,${id}::uuid,${source.correlationId}::uuid,1,'success',${source.orderVersion},${JSON.stringify(payload)}::jsonb,clock_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
  const proof=await readCollectionFollowup(tx,auth.tenantId,{markerId});
  if(saved.length!==1||saved[0].id!==id||!proof||proof.pending)throw Error('COLLECTION_FOLLOWUP_REPAIR_RECEIPT_MISSING');
 }
@@ -1188,7 +1186,7 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
 
       if(pending){
         const saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,client_event_id,correlation_id,event_schema_version,status,aggregate_version,payload,created_at)
-          VALUES(${pending.eventId},${tenantId},${order.id},${COLLECTION_PENDING_EVENT},${COLLECTION_PENDING_EVENT},${actorId}::uuid,${pending.eventId}::uuid,${correlationId}::uuid,1,'success',${nextVersion},${JSON.stringify({receipt:pending,receiptSha256:collectionFollowupDigest(pending)})}::jsonb,${pending.occurredAt}::timestamptz AT TIME ZONE 'UTC') RETURNING id`);
+          VALUES(${pending.eventId},${tenantId},${order.id},${COLLECTION_PENDING_EVENT},${COLLECTION_FOLLOWUP_COPY.pendingHistory},${actorId}::uuid,${pending.eventId}::uuid,${correlationId}::uuid,1,'success',${nextVersion},${JSON.stringify({receipt:pending,receiptSha256:collectionFollowupDigest(pending)})}::jsonb,${pending.occurredAt}::timestamptz AT TIME ZONE 'UTC') RETURNING id`);
         if(saved.length!==1||saved[0].id!==pending.eventId)throw Error('GOODS_OUT_COLLECTION_PENDING_RECEIPT_MISSING');
       }
       const eventType = isRework ? EVENT_TYPE_V4 : agreement === null

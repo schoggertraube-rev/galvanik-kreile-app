@@ -25,6 +25,8 @@ export type EffectiveCustomerAgreementReadInput = {
 export type CollectionAgreementReadInput={tenantId:string;customerId:string;orderId:null;memberOrderIds:readonly string[];lock?:boolean};
 export type IgnoredCollectionAgreement={id:string;orderId:string|null;type:CustomerAgreementType;version:number};
 export type CollectionAgreementResolution={agreement:CustomerAgreementRecord|null;ignored:IgnoredCollectionAgreement[]};
+export type InvoiceAgreementResolution={order:CustomerAgreementRecord|null;customer:CustomerAgreementRecord|null};
+type InvoiceAgreementReadInput=EffectiveCustomerAgreementReadInput&{invoiceTerms:true};
 
 export type InactiveCustomerAgreementHint = {
   label: string;
@@ -158,8 +160,9 @@ function mapAgreement(
  * An order agreement has precedence over a customer agreement.
  */
 export function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:CollectionAgreementReadInput):Promise<CollectionAgreementResolution>;
+export function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:InvoiceAgreementReadInput):Promise<InvoiceAgreementResolution>;
 export function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:EffectiveCustomerAgreementReadInput):Promise<CustomerAgreementRecord|null>;
-export async function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:EffectiveCustomerAgreementReadInput|CollectionAgreementReadInput):Promise<CustomerAgreementRecord|null|CollectionAgreementResolution>{
+export async function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:EffectiveCustomerAgreementReadInput|CollectionAgreementReadInput|InvoiceAgreementReadInput):Promise<CustomerAgreementRecord|null|CollectionAgreementResolution|InvoiceAgreementResolution>{
   const collectionScope=input.orderId===null;
   if (!textId(input.tenantId) || !textId(input.customerId) || (collectionScope?(input.memberOrderIds.length===0||!input.memberOrderIds.every(textId)||new Set(input.memberOrderIds).size!==input.memberOrderIds.length):!textId(input.orderId))) {
     throw new Error("CUSTOMER_AGREEMENT_EFFECTIVE_INPUT_INVALID");
@@ -224,6 +227,7 @@ export async function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransact
     || customerAgreements.length > 1
     || agreements.length !== orderAgreements.length + customerAgreements.length
   ) throw new Error("CUSTOMER_AGREEMENT_EFFECTIVE_AMBIGUOUS");
+  if('invoiceTerms' in input&&input.invoiceTerms)return {order:orderAgreements[0]??null,customer:customerAgreements[0]??null};
   return orderAgreements[0] ?? customerAgreements[0] ?? null;
 }
 

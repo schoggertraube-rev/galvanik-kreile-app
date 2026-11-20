@@ -5,9 +5,9 @@
     "seite": "auftraege",
     "ziel": "/orders",
     "punkte": [
-      "Deine Rechnungen übernehmen Zahlungsziel und Skonto aus den gespeicherten Kundenregeln; eine passende Absprache geht vor.",
-      "Bei Sammelrechnungen bleiben alle enthaltenen Aufträge und Leistungsdaten in einem Rechnungsoriginal erhalten.",
-      "Du versendest offene Rechnungsoriginale gemeinsam; bei großen Gruppen sendet die App nach bestätigtem Versand automatisch weiter."
+      "Deine Rechnung übernimmt Zahlungsziel und Skonto aus den passenden Kundenregeln.",
+      "Heute zeigt Sammelrechnungen; nach Storno gilt erneut deine aktuelle Sammelabsprache.",
+      "Dein Versandauftrag behält seinen Rechnungsbestand; spätere Rechnungen bleiben für den nächsten."
     ]
   },
   {
