@@ -3,6 +3,7 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 /** Request-local only. Commands outside a page read retain their transaction contract. */
 type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>};
 const budgets=new AsyncLocalStorage<ReadBudget>();
+export const hasPageReadBudget=():boolean=>budgets.getStore()!==undefined;
 export class PageReadTimeout extends Error {
   constructor(){super('PAGE_READ_TIMEOUT');this.name='PageReadTimeout';}
 }
