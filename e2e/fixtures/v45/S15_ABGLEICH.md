@@ -3,7 +3,7 @@
 Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 Ähnlich = NFC/Kleinschreibung/Interpunktion/Platzhalternamen mechanisch normalisiert. Bestand bleibt unverändert.
 
-## Gleicher Wortlaut (62)
+## Gleicher Wortlaut (67)
 
 - `E_INVOICE_COPY.collectionNotDue`: "Die Sammlung ist noch nicht fällig oder wurde inzwischen abgerechnet." → `collection.not_due`
 - `DELIVERY_NOTE_COPY.title`: "Lieferschein" → `document.delivery_kind`, `intake.fact.delivery_number`, `ws.slip`
@@ -67,6 +67,11 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `E_INVOICE_SETTINGS_COPY.fieldLabels.paymentTermDays`: "Zahlungsziel in Tagen" → `customer.terms_days`
 - `E_INVOICE_CORRECTION_COPY.cancel`: "Abbrechen" → `common.cancel`
 - `VORFINAL_COPY.vorfinal.kopf.plus.label`: "Neuer Eingang" → `intake.title`, `nav.eingang`, `nav.entry`
+- `COMPONENT_PREVIEW_COPY.source`: "Auftrag" → `customer.order_singular`
+- `COMPONENT_PREVIEW_COPY.names.verlauf`: "Verlauf" → `customer.tab.history`, `order.tab.history`
+- `COMPONENT_PREVIEW_COPY.names.zeit`: "Arbeitszeit" → `werkzeit.short`
+- `COMPONENT_PREVIEW_COPY.names.mehrarbeit`: "Mehrarbeit" → `bundle.book_extra`, `work.extra_short`
+- `COMPONENT_PREVIEW_COPY.names.kundenbild`: "Kundenbild" → `customer.tab.insights`, `settings.group.bewertung`
 
 ## Ähnlicher Wortlaut (98)
 
@@ -169,7 +174,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 
-## Nur im Bestand (718)
+## Nur im Bestand (755)
 
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
 - `EVIDENCE_VISIBILITY_COPY.invalid`: "Wähle das Foto erneut."
@@ -889,3 +894,40 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `E_INVOICE_CORRECTION_COPY.reason`: "Rechnungsfeld korrigieren"
 - `E_INVOICE_CORRECTION_COPY.busy`: "Auftrag wird wieder geöffnet …"
 - `E_INVOICE_CORRECTION_COPY.failed`: "Auftrag konnte nicht wieder geöffnet werden. Versuch es gleich noch einmal."
+- `COMPONENT_PREVIEW_COPY.title`: "Bausteine · TEST"
+- `COMPONENT_PREVIEW_COPY.notice`: "TEST-Vorschau: Hier wird nichts gespeichert oder verschickt."
+- `COMPONENT_PREVIEW_COPY.component`: "Baustein"
+- `COMPONENT_PREVIEW_COPY.state`: "Darstellung"
+- `COMPONENT_PREVIEW_COPY.normal`: "Normal"
+- `COMPONENT_PREVIEW_COPY.loading`: "Laden"
+- `COMPONENT_PREVIEW_COPY.disabled`: "Deaktiviert"
+- `COMPONENT_PREVIEW_COPY.open`: "Auftrag öffnen"
+- `COMPONENT_PREVIEW_COPY.refresh`: "Neu laden"
+- `COMPONENT_PREVIEW_COPY.missing`: "Wähle einen TEST-Auftrag aus der Auftragsliste."
+- `COMPONENT_PREVIEW_COPY.unavailable`: "Die Quelle ist nicht lesbar. Lade sie erneut."
+- `COMPONENT_PREVIEW_COPY.unbound`: "Der Fachbefehl wird im zugehörigen Bereich verbunden."
+- `COMPONENT_PREVIEW_COPY.noFact`: "Diese Angabe ist nicht belegt."
+- `COMPONENT_PREVIEW_COPY.draft`: "Deine Eingabe bleibt nur in dieser Vorschau."
+- `COMPONENT_PREVIEW_COPY.overlay`: "Dialog öffnen"
+- `COMPONENT_PREVIEW_COPY.field`: "Deine Eingabe"
+- `COMPONENT_PREVIEW_COPY.history`: "Belegter Verlauf"
+- `COMPONENT_PREVIEW_COPY.errors.offline`: "Kein Netz"
+- `COMPONENT_PREVIEW_COPY.errors.server`: "Server nicht erreichbar"
+- `COMPONENT_PREVIEW_COPY.errors.conflict`: "Stand geändert"
+- `COMPONENT_PREVIEW_COPY.errors.permission`: "Recht fehlt"
+- `COMPONENT_PREVIEW_COPY.errors.empty`: "Keine Daten"
+- `COMPONENT_PREVIEW_COPY.errors.mailbox`: "Postfach nicht erreichbar"
+- `COMPONENT_PREVIEW_COPY.errors.send_unknown`: "Versand noch unklar"
+- `COMPONENT_PREVIEW_COPY.errors.save`: "Speichern fehlgeschlagen"
+- `COMPONENT_PREVIEW_COPY.names.hauptaktion`: "Hauptaktion"
+- `COMPONENT_PREVIEW_COPY.names.vertiefung`: "Vertiefung"
+- `COMPONENT_PREVIEW_COPY.names.formularfeld`: "Formularfeld"
+- `COMPONENT_PREVIEW_COPY.names.lage`: "Lage"
+- `COMPONENT_PREVIEW_COPY.names.suchtreffer`: "Suchtreffer"
+- `COMPONENT_PREVIEW_COPY.names.fehler`: "Fehler"
+- `COMPONENT_PREVIEW_COPY.names.werkstattkachel`: "Werkstattkachel"
+- `COMPONENT_PREVIEW_COPY.names.teilchip`: "Teilchip"
+- `COMPONENT_PREVIEW_COPY.names.overlay`: "Dialog"
+- `COMPONENT_PREVIEW_COPY.names.kv_dokument`: "KV-Dokument"
+- `COMPONENT_PREVIEW_COPY.names.kv_verlauf`: "KV-Verlauf"
+- `COMPONENT_PREVIEW_COPY.names.eingang`: "Eingang"
