@@ -4,7 +4,7 @@ import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
+import {customerFixture,intakeOrderFixture,readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {saveCompanySettingsAction,readSettingsAction,readPageReadSettingsAction} from '@/app/actions/settings.actions';
 import {readPageReadSettings} from '@/modules/fundament/server-public';
 import {resolveAuthorization} from '@/lib/server/authorization';
@@ -13,8 +13,14 @@ import {db} from '@/db';
 import {pageReadSettingsFromCompany,DEFAULT_PAGE_READ_SETTINGS} from '@/lib/domain/pageReadSettings';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
 import {SALES_STAGE_FEATURES} from '@/modules/fundament/public';
-import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {getLiveOrderCardAction,changeOrderContentAction,getTodayOrderReadAction} from '@/app/actions/orders.actions';
+import {randomUUID} from 'node:crypto';
+import {readTodayDashboard} from '@/lib/server/todayDashboard';
+import {getComplaints} from '@/app/actions/complaints.actions';
+import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {getOperationalOrders} from '@/lib/server/operationalOrders';
+import {readTodayOrderCards} from '@/lib/server/orderCardRead';
+import {readOrderEvidenceBatch,readEvidenceRecordsByTarget} from '@/lib/server/evidenceRead';
 
 const DATABASE_URL=process.env.DATABASE_URL,EXPECTED_DATABASE_URL=process.env.H18_EXPECTED_DATABASE_URL;
 if(!DATABASE_URL||DATABASE_URL!==EXPECTED_DATABASE_URL||new URL(DATABASE_URL).hostname!=='127.0.0.1')throw Error('TEST_L1_LOOPBACK_REPLAY_REQUIRED');
@@ -126,4 +132,54 @@ it('qualifies real company JSON before and after the additive schema, rejecting 
  expect(project({...source,seiten_abfrage_ms:null})).toBeNull();
  expect(project({...source,rechnung_mail_grenze:0})).toBeNull();
  expect(await withSession(full,()=>readSettingsAction())).toMatchObject({code:'OK',snapshot:{company:{pageReadsSchemaReady:true,pageReads:companyInput.pageReads}}});
+});
+
+
+it('batches actual Today facts once and keeps the same qualified full-card values, version and evidence for zero, one and several orders',async()=>{
+ const customer=await customerFixture('TEST L1 batch customer');
+ const first=await intakeOrderFixture('TEST L1 batch intake',customer);
+ const ready=await readyInvoiceOrder('TEST L1 batch ready','pickup',false,customer);
+ const ids=[first.receipt.orderId,ready.orderId];
+ const authorization=await withSession(full,()=>resolveAuthorization());if(!authorization.ok)throw Error('TEST_L1_BATCH_AUTH');
+ expect(await readTodayOrderCards(authorization.data,[])).toEqual(new Map());
+ expect(await withSession(full,()=>getTodayOrderReadAction({orderIds:[]}))).toEqual({code:'OK',data:{rows:[]}});
+ const options=db.$client.options,previous=options.debug;let batchQueries=0;
+ options.debug=(_connection,statement)=>{if(statement.includes('WITH selected AS MATERIALIZED')&&statement.includes("'queue' AS kind"))batchQueries++;};
+ let cards:Awaited<ReturnType<typeof readTodayOrderCards>>;
+ try{cards=await readTodayOrderCards(authorization.data,ids);expect(batchQueries).toBe(1);}finally{options.debug=previous;}
+ const evidence=await readOrderEvidenceBatch(authorization.data,ids);
+ for(const id of ids){
+  const ordinary=await withSession(full,()=>getLiveOrderCardAction({orderId:id}));
+  const actual=cards.get(id);expect(ordinary.code).toBe('OK');expect(actual?.code).toBe('OK');
+  if(ordinary.code!=='OK'||actual?.code!=='OK')throw Error('TEST_L1_BATCH_SOURCE');
+  const keys=['id','version','orderNumber','customerId','customerName','title','station','dueAt','handoverMode','items','freeze','operationalFacts'] as const;
+  expect(Object.fromEntries(keys.map(key=>[key,actual.data[key]]))).toEqual(Object.fromEntries(keys.map(key=>[key,ordinary.data.card[key]])));
+  expect(evidence.get(id)).toEqual(await readEvidenceRecordsByTarget(authorization.data,{targetType:'ORDER',targetId:id}));
+ }
+ expect(await readTodayOrderCards(authorization.data,[ids[0]])).toEqual(new Map([[ids[0],cards.get(ids[0])]]));
+ const denied=await createFixture(['kunden'],'werkstatt');
+ const noOrders=await withSession(denied,()=>resolveAuthorization());if(!noOrders.ok)throw Error('TEST_L1_BATCH_DENIED');
+ expect([...await readTodayOrderCards(noOrders.data,ids)].every(([,result])=>result.code==='FORBIDDEN')).toBe(true);
+ const fresh=await withSession(full,async()=>loadOfficeHome(authorization.data));
+ expect(fresh.kind).toBe('data');
+ if(fresh.kind!=='data')throw Error('TEST_L1_BATCH_HOME');
+ for(const id of ids){const card=await withSession(full,()=>getLiveOrderCardAction({orderId:id}));if(card.code!=='OK')throw Error('TEST_L1_BATCH_CARD');expect(fresh.dashboard.orderActions?.rows.find(row=>row.orderId===id)?.read).toEqual(card.data.nextActionRule);}
+ const oldList=await getOperationalOrders(authorization.data,{purpose:'today'});
+ const changed=await withSession(full,()=>changeOrderContentAction({orderId:ids[0],expectedVersion:first.receipt.orderVersion,clientEventId:randomUUID(),note:'TEST L1 actual changed content',items:[{id:first.receipt.items[0].id,catalogServiceId:null,name:'TEST L1 updated item',quantity:1,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
+ expect(changed).toMatchObject({code:'OK'});
+ const stale=await withSession(full,()=>readTodayDashboard(authorization.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(),Promise.resolve(oldList)));
+ expect(stale.orderActions?.missingOrderIds).toContain(ids[0]);
+ const readRow=async()=>{const [row]=await sql`SELECT to_jsonb(orders) AS original FROM public.orders orders WHERE tenant_id=${tenant} AND id=${ids[0]}`;return row.original as Record<string,unknown>;};
+ await withRestoredTestSource({label:'TEST L1 qualified batch content row',read:readRow,restore:async original=>{
+  const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_L1_BATCH_COLUMNS');
+  const names=sql.unsafe(columns.map(column=>'"'+column+'"').join(','));
+  await sql`UPDATE public.orders SET (${names})=(SELECT ${names} FROM jsonb_populate_record(NULL::public.orders,${sql.json(original as never)}::jsonb)) WHERE tenant_id=${tenant} AND id=${ids[0]}`;
+ }},async()=>{
+  await sql`UPDATE public.orders SET task='TEST L1 deliberately corrupted current note' WHERE tenant_id=${tenant} AND id=${ids[0]}`;
+  const broken=await readTodayOrderCards(authorization.data,ids);
+  expect(broken.get(ids[0])?.code).toBe('UNAVAILABLE');
+  expect(broken.get(ids[1])?.code).toBe('OK');
+  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:ids[0]}))).toMatchObject({code:'UNAVAILABLE'});
+ });
+ expect((await readTodayOrderCards(authorization.data,ids)).get(ids[0])?.code).toBe('OK');
 });

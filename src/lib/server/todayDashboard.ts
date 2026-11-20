@@ -12,7 +12,7 @@ import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
-import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {getTodayOrderReadAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
@@ -233,34 +233,34 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
 
   const orders=orderSource.code==='OK'?orderSource.data:[];
   const sourceNotices:TodayItem[]=[];
-  // U3 reuses the complete U2 response, qualified by the same order version.
-  // A changed/unreadable card cannot silently supply a command for an older row.
-  const orderActionReads=ordersAllowed?await Promise.all(orders.map(async order=>{
+  // One existing App composition owns the narrow bulk U2 projection and
+  // its canonical rights/source ports, without complete cards or actor menus.
+  const batch=ordersAllowed?await getTodayOrderReadAction({orderIds:orders.map(order=>order.id)}):null;
+  const cardSources=new Map(batch?.code==='OK'?batch.data.rows.map(row=>[row.orderId,row.result]):[]);
+  const orderActionReads=orders.map(order=>{
+   const source=cardSources.get(order.id);
+   if(source?.code!=='OK'||source.data.card.version!==order.version)return {orderId:order.id,version:order.version,read:null};
+   const {card,handoverConsequences:shipping,pickupAppointment:appointment}=source.data;
+   if(shipping?.code==='SOURCE_INCOMPLETE')sourceNotices.push({key:'source-shipping:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:shipping.orderId===order.id&&shipping.orderVersion===order.version&&shipping.message?shipping.message:SHIPPING_FEE_COPY.proposalMissing(order.orderNumber,false,'quelle'),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
+   if(hasAuthorizationArea(auth,'preise')&&card.operationalFacts?.pricesMissing===null)sourceNotices.push({key:'source-quote:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:SHIPPING_FEE_COPY.orderQuoteMissing(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
+   const row:TodayOrderScheduleRow={orderId:order.id,version:order.version,read:source.data.nextActionRule};
+   if(card.station==='fertig'&&card.handoverMode==='pickup'){
+    row.pickupSchedule={code:'SOURCE_INCOMPLETE'};
+    if(appointment?.code==='OK'&&card.freeze){
+     if(appointment.appointment===null)row.pickupSchedule={code:'OK',date:null,eventId:null,freezeId:card.freeze.freezeId};
+     else if(appointment.appointment.orderId===card.id&&appointment.appointment.freezeId===card.freeze.freezeId)row.pickupSchedule={code:'OK',date:appointment.appointment.date,eventId:appointment.appointment.eventId,freezeId:card.freeze.freezeId};
+    }
+   }
+   return row;
+  });
+  // Detect a command that changed an order while independent qualified sources
+  // were being read. Never combine different versions into a clickable action.
+  if(orderActionReads.length){
     try{
-      const card=await getLiveOrderCardAction({orderId:order.id});
-      if(card.code==='OK'&&card.data.card.version===order.version){
-        const shipping=card.data.handoverConsequences;
-        if(shipping?.code==='SOURCE_INCOMPLETE')
-          sourceNotices.push({key:'source-shipping:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:shipping.orderId===order.id&&shipping.orderVersion===order.version&&shipping.message?shipping.message:SHIPPING_FEE_COPY.proposalMissing(order.orderNumber,false,'quelle'),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
-        if(hasAuthorizationArea(auth,'preise')&&card.data.card.operationalFacts?.pricesMissing===null)
-          sourceNotices.push({key:'source-quote:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:SHIPPING_FEE_COPY.orderQuoteMissing(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
-      }
-      if(card.code==='OK'&&card.data.card.version===order.version&&card.data.nextActionRule){
-        const row:TodayOrderScheduleRow={orderId:order.id,version:order.version,read:card.data.nextActionRule};
-        if(card.data.card.station==='fertig'&&card.data.card.handoverMode==='pickup'){
-          row.pickupSchedule={code:'SOURCE_INCOMPLETE'};
-          const appointment=card.data.pickupAppointment,freeze=card.data.card.freeze;
-          if(appointment?.code==='OK'&&freeze){
-            if(appointment.appointment===null)row.pickupSchedule={code:'OK',date:null,eventId:null,freezeId:freeze.freezeId};
-            else if(appointment.appointment.orderId===order.id&&appointment.appointment.freezeId===freeze.freezeId)
-              row.pickupSchedule={code:'OK',date:appointment.appointment.date,eventId:appointment.appointment.eventId,freezeId:freeze.freezeId};
-          }
-        }
-        return row;
-      }
-    }catch(error){console.error('[TODAY_SOURCE_FAILED]',{quelle:'order-card',name:error instanceof Error?error.name:'UnknownError'});return {orderId:order.id,version:order.version,read:null};}
-    return {orderId:order.id,version:order.version,read:null};
-  })):[];
+      const versions=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;version:number}>(sql`SELECT id,version FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(orderActionReads.map(row=>sql`${row.orderId}`),sql`, `)}]::text[])`));
+      for(const row of orderActionReads)if(!versions.some(current=>current.id===row.orderId&&current.version===row.version))row.read=null;
+    }catch{for(const row of orderActionReads)row.read=null;}
+  }
   const orderActions={code:orderSource.code==='OK'&&orderActionReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
     rows:orderActionReads.flatMap(row=>row.read?[{...row,read:row.read}]:[]),
     missingOrderIds:orderActionReads.filter(row=>row.read===null).map(row=>row.orderId)};
