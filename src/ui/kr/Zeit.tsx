@@ -4,11 +4,9 @@ import {useId,type ReactNode} from 'react';
 import {V45_TEXT} from '@/ui/situationCatalog';
 import {Button} from './Button';
 import {Formularfeld} from './Formularfeld';
-import {Hauptaktion} from './Hauptaktion';
+import {Hauptaktion,type Fachaktion} from './Hauptaktion';
 import {weiterMitEnter} from './tastatur';
 
-type ZeitAktion={text:string;onAusloesen:()=>void;gesperrt:boolean;grund?:string}
-  |{text:string;onAusloesen:null;gesperrt:true;grund:string};
 export interface ZeitProps {
   auftragId:string;
   version:number;
@@ -25,7 +23,7 @@ export interface ZeitProps {
   laden:boolean;
   deaktiviert:boolean;
   fehler:string|null;
-  aktion:ZeitAktion;
+  aktion:Fachaktion&{text:string};
   onDatum:(value:string)=>void;
   onMinuten:(value:string)=>void;
   onNotiz:(value:string)=>void;
@@ -54,9 +52,6 @@ export function Zeit(props:ZeitProps){
     <Formularfeld id={id+'-note'} art="mehrzeilig" label={V45_TEXT.work$time_note} wert={props.notiz}
       laden={props.laden} deaktiviert={props.deaktiviert} onWert={props.onNotiz}/>
     {props.fehler?<p className="warnline" role="status">{props.fehler}</p>:null}
-    {props.aktion.onAusloesen?<Hauptaktion elementId="work.time_save" text={props.aktion.text}
-      laden={props.laden} gesperrt={props.deaktiviert||props.aktion.gesperrt} grund={props.aktion.grund} onAusloesen={props.aktion.onAusloesen}/>
-      :<div className="lead-acts"><Button vorfinalForm="pill" art="primaer" text={props.aktion.text}
-        data-spec-id="work.time_save" disabled aria-describedby={id+'-source'}/><p id={id+'-source'} className="fact">{props.aktion.grund}</p></div>}
+    <Hauptaktion elementId="work.time_save" laden={props.laden} {...props.aktion} gesperrt={props.deaktiviert||props.aktion.gesperrt}/>
   </section>;
 }

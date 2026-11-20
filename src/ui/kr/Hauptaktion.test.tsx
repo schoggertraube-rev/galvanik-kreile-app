@@ -40,4 +40,11 @@ describe('S19 source-bound Hauptaktion',()=>{
     fireEvent.click(button);
     expect(command).not.toHaveBeenCalled();
   });
+
+  it('cannot turn a missing source binding into a fake command even when an independent block flag is false',()=>{
+    render(<Hauptaktion elementId="work.time_save" text="TEST Tageswert speichern" laden={false} gesperrt={false}
+      onAusloesen={null} grund="TEST Tageswert-Befehl fehlt"/>);
+    const button=screen.getByRole('button',{name:'TEST Tageswert speichern'});
+    expect(button).toBeDisabled();expect(button).toHaveAccessibleDescription('TEST Tageswert-Befehl fehlt');
+  });
 });

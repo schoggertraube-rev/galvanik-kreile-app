@@ -3,16 +3,17 @@
 import {useId} from 'react';
 import {Button} from './Button';
 
-export interface HauptaktionProps {
+/** A missing binding has an explicit source reason, never a no-op command. */
+export type Fachaktion={gesperrt:boolean}&(
+  |{onAusloesen:()=>void;grund?:string}
+  |{onAusloesen:null;grund:string}
+);
+export type HauptaktionProps = {
   /** Existing V45 command ID; the caller retains its real N5/rights boundary. */
   elementId: string;
   text: string;
   laden: boolean;
-  gesperrt: boolean;
-  /** The existing command's concrete reason, never a replacement error. */
-  grund?: string;
-  onAusloesen: () => void;
-}
+}&Fachaktion;
 
 /**
  * S19 baustein.hauptaktion. v10 leadHTML's lead-acts/fact, using the existing
@@ -21,13 +22,15 @@ export interface HauptaktionProps {
  */
 export function Hauptaktion({elementId,text,laden,gesperrt,grund,onAusloesen}:HauptaktionProps) {
   const reasonId=useId();
+  const blocked=laden||gesperrt||onAusloesen===null;
+  const reasonVisible=(gesperrt||onAusloesen===null)&&Boolean(grund);
   return <section data-spec-id="baustein.hauptaktion" aria-busy={laden}>
     <div className="lead-acts">
       <Button art="primaer" text={text} data-spec-id={elementId}
-        disabled={laden||gesperrt} aria-busy={laden}
-        aria-describedby={gesperrt&&grund?reasonId:undefined}
-        onClick={onAusloesen}/>
+        disabled={blocked} aria-busy={laden}
+        aria-describedby={reasonVisible?reasonId:undefined}
+        onClick={onAusloesen===null?undefined:onAusloesen}/>
     </div>
-    {gesperrt&&grund?<p id={reasonId} className="fact">{grund}</p>:null}
+    {reasonVisible?<p id={reasonId} className="fact">{grund}</p>:null}
   </section>;
 }
