@@ -12,7 +12,7 @@ import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
-import {getTodayOrderReadAction} from '@/app/actions/orders.actions';
+import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
@@ -31,7 +31,7 @@ export type TodayItem = {
   orderId?: string;
   orderVersion?: number;
   invoiceId?: string;
-  invoiceMail?:{customerId:string;documentId:string;expectedInvoiceIds:string[];number:string;count:number;customerName:string;singleInvoice:true};
+  invoiceMail?:{customerId:string;documentId:string;expectedInvoiceIds:string[];number:string;count:number;customerName:string;companyName?:string;singleInvoice:true};
   graphMessageId?: string;
   target?:{screen:'reklamation'|'mail'|'aufgabe'|'kv';arg:string};
   bundleSurface?: string;
@@ -139,7 +139,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
   const graphAllowed = hasAuthorizationArea(auth, "mails");
   const moneyAllowed = hasAuthorizationArea(auth, "zahlungen");
-  const [orderSource, graph, support, complaints,quoteFollowups] = await Promise.all([
+  const [orderSource, graph, support, complaints,quoteFollowups,companyLetter] = await Promise.all([
     ordersAllowed ? (operationalSource??getOperationalOrders(auth,{purpose:'today'})).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]}),
     graphAllowed ? getIntakeMessagesAction('offen').catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:PAGE_READ_COPY.sourceIncomplete})) : Promise.resolve({ code: "FORBIDDEN" as const, message: "" }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
@@ -229,6 +229,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     }),
     ['auftraege','entscheiden','zahlungen','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'zahlungen'|'kunden'))?readComplaints().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'complaints',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'};}):Promise.resolve({code:'OK' as const,complaints:[]}),
     graphAllowed?readQuoteFollowups().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'quote-followups',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'};}):Promise.resolve({code:'OK' as const,tasks:[]}),
+    canTransportInvoiceDocument(auth)?readPageReadSettingsAction({includeCompanyName:true}):Promise.resolve({code:'FORBIDDEN' as const}),
   ]);
 
   const orders=orderSource.code==='OK'?orderSource.data:[];
@@ -337,7 +338,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   if(assignmentMessages)for(const mail of assignmentMessages.filter(row=>row.graphMessageId).slice(0,5))add({key:`mail:${mail.id}`,field:'assign',kind:'mail',title:mail.subject||'Mail ohne Betreff',meta:`${mail.senderName} · ${new Intl.DateTimeFormat('de-DE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Berlin'}).format(new Date(mail.at))}`,urgency:'decision',graphMessageId:mail.graphMessageId!});
 
   if(support.invoiceMailSource.code==='OK')for(const original of support.invoiceMailSource.data.groups){
-   add({key:'invoice-mail:'+original.id,field:'action',kind:'invoice',invoiceId:original.id,...(original.orderId?{orderId:original.orderId}:{}),title:original.number,meta:original.customerName,urgency:'warning',primaryActionLabel:V45_TEXT.out$action$unsent({invoice:original.number,name:original.customerName}),invoiceMail:{customerId:original.customerId,documentId:original.id,expectedInvoiceIds:original.ids,number:original.number,count:original.count,customerName:original.customerName,singleInvoice:true}});
+   add({key:'invoice-mail:'+original.id,field:'action',kind:'invoice',invoiceId:original.id,...(original.orderId?{orderId:original.orderId}:{}),title:original.number,meta:original.customerName,urgency:'warning',primaryActionLabel:V45_TEXT.out$action$unsent({invoice:original.number,name:original.customerName}),invoiceMail:{customerId:original.customerId,documentId:original.id,expectedInvoiceIds:original.ids,number:original.number,count:original.count,customerName:original.customerName,...(companyLetter.code==='OK'&&companyLetter.companyName?{companyName:companyLetter.companyName}:{}),singleInvoice:true}});
   }
 
   const invoiceMoney=projectTodayInvoiceMoney(support.invoiceSource,calendar);
@@ -379,7 +380,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   if (STAGE2_TODAY_FEATURES.has("bundle") && bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
   const ownTaskKeys=new Set(followupsKnown?quoteFollowups.tasks.filter(task=>task.isMine===true).map(task=>'task:'+task.id):[]);
-  const responsibilitySource=await withPrivilegedTenantTransaction(auth,tx=>readTodaySource(tx,nested=>readOrderResponsibilityForToday(nested,auth,items.flatMap(item=>item.orderId?[item.orderId]:[]))));
+  const responsibilitySource=await withPrivilegedTenantTransaction(auth,tx=>readTodaySource(tx,nested=>readOrderResponsibilityForToday(nested,auth,items.flatMap(item=>item.orderId?[item.orderId]:[])))).catch(()=>({code:'SOURCE_INCOMPLETE' as const}));
   const mine=(item:TodayItem)=>ownTaskKeys.has(item.key)||item.kind!=='complaint'&&!!item.orderId&&responsibilitySource.code==='OK'&&responsibilitySource.data.get(item.orderId)===auth.userId;
   const sortedItems=sortTodayByResponsibility(items,mine);
   const challenges=projectTodayChallenges(orderActions.rows,overdueInvoices.map(row=>({id:row.id,orderId:row.order_id,number:row.invoice_number,dueDate:dateOnly(row.due_date!),amountCents:row.open_amount_cents,amount:Number.isSafeInteger(Number(row.open_amount_cents))&&Number(row.open_amount_cents)>0?euro(row.open_amount_cents):null})),today,moneyAllowed?quoteActions.rows:[]);

@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import {withPageReadQueryLimits,isAuthorizationRead,AUTHORIZATION_READ_TIMEOUT_MS} from './readBudget';
+import {withPageReadQueryLimits,isAuthorizationRead,AUTHORIZATION_READ_TIMEOUT_MS,DEFAULT_CONNECTION_READ_SETTINGS} from './readBudget';
 import * as baseSchema from './schema';
 import * as buchhaltungSchema from './schema_buchhaltung';
 import * as marketingSchema from './schema_marketing';
@@ -49,7 +49,7 @@ function authorizationDatabase():typeof primaryDb{
  if(authorizationDb)return authorizationDb;
  // Same configured database/provider, a maximum of two read connections.
  // No role, grant, credential, table or writer is introduced.
- const native=globalForDb.authorizationReadConn??postgres(connectionString,{prepare:false,max:2,connect_timeout:Math.ceil(AUTHORIZATION_READ_TIMEOUT_MS/1000),idle_timeout:20});
+ const native=globalForDb.authorizationReadConn??postgres(connectionString,{prepare:false,max:DEFAULT_CONNECTION_READ_SETTINGS.authorizationPoolSize,connect_timeout:Math.ceil(AUTHORIZATION_READ_TIMEOUT_MS/1000),idle_timeout:DEFAULT_CONNECTION_READ_SETTINGS.authorizationIdleTimeoutSeconds});
  if(process.env.NODE_ENV!=='production')globalForDb.authorizationReadConn=native;
  authorizationDb=drizzle(readOnlyQueries(withPageReadQueryLimits(native)),{schema});
  return authorizationDb;

@@ -1,5 +1,5 @@
 import "server-only";
-import {pageReadFetchPort} from '@/db/readBudget';
+import {pageReadFetchPort,DEFAULT_CONNECTION_READ_SETTINGS} from '@/db/readBudget';
 import {createHash} from "node:crypto";
 
 const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
@@ -17,7 +17,7 @@ type FetchPort = typeof fetch;
 function boundedGraphRead(fetchPort:FetchPort):FetchPort{
  return pageReadFetchPort((input,init)=>{
   const original=init?.signal??(input instanceof Request?input.signal:undefined);
-  const providerDeadline=AbortSignal.timeout(10000);
+  const providerDeadline=AbortSignal.timeout(DEFAULT_CONNECTION_READ_SETTINGS.graphTimeoutMs);
   return fetchPort(input,{...init,signal:original?AbortSignal.any([original,providerDeadline]):providerDeadline});
  });
 }

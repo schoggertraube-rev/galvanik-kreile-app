@@ -161,6 +161,8 @@ it('retains known Today sources when an unreadable TEST order makes the full ope
 it('qualifies real company JSON before and after the additive schema, rejecting partial or invalid settings',async()=>{
  const [row]=await sql`SELECT to_jsonb(company) AS source FROM public.company_settings company WHERE tenant_id=${tenant}`;
  expect(row?.source).toBeDefined();
+ const defaults=await sql`SELECT attribute.attname,pg_get_expr(def.adbin,def.adrelid) AS value FROM pg_attribute attribute JOIN pg_attrdef def ON def.adrelid=attribute.attrelid AND def.adnum=attribute.attnum WHERE attribute.attrelid='public.company_settings'::regclass AND attribute.attname IN('seiten_abfrage_ms','rechnung_mail_grenze')`;
+ expect(Object.fromEntries(defaults.map(value=>[value.attname,Number(value.value)]))).toEqual({seiten_abfrage_ms:DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs,rechnung_mail_grenze:DEFAULT_PAGE_READ_SETTINGS.invoiceMailBatchLimit});
  const source=row.source as Record<string,unknown>;
  const project=(value:Record<string,unknown>)=>pageReadSettingsFromCompany({hasQueryTimeout:Object.hasOwn(value,'seiten_abfrage_ms'),hasInvoiceBatchLimit:Object.hasOwn(value,'rechnung_mail_grenze'),queryTimeoutMs:value.seiten_abfrage_ms,invoiceMailBatchLimit:value.rechnung_mail_grenze},DEFAULT_PAGE_READ_SETTINGS);
  expect(project(source)).toEqual({settings:companyInput.pageReads,schemaReady:true});
@@ -238,8 +240,9 @@ it('PL15:43 sends the customer subject from the actual invoice/company source an
  expect(row).toBeDefined();if(!row)throw Error('TEST_L1_SUBJECT_ORIGINAL');
  const [customer]=await sql`SELECT name FROM public.customers WHERE tenant_id=${tenant} AND id=${customerId}`;
  expect(row.customerName).toBe(customer.name);expect(row.number).toBe(issued.invoice.invoiceNumber);
- const subject=INVOICE_MAIL_COMPOSER_COPY.subject(row.number,row.customerName);
- expect(subject).toBe('Rechnung '+issued.invoice.invoiceNumber+' · '+customer.name);
+ expect(row.companyName).toBe(companyInput.companyName);
+ const subject=INVOICE_MAIL_COMPOSER_COPY.subject(row.number,row.companyName!);
+ expect(subject).toBe('Rechnung '+issued.invoice.invoiceNumber+' · '+companyInput.companyName);
  await requestMailStep('L1-subject');
  const input={targetType:'CUSTOMER' as const,targetId:customerId,subject,body:INVOICE_MAIL_COMPOSER_COPY.body,clientRequestId:randomUUID(),attachment:{kind:'INVOICE' as const,documentId:row.documentId},expectedInvoiceIds:row.expectedInvoiceIds,singleInvoice:true as const};
  expect(await withSession(full,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK'});
@@ -442,5 +445,33 @@ it('retains a concrete warning for an explicitly synthetic orphan freeze receipt
  expect((await withSession(full,()=>getLiveOrderCardAction({orderId}))).code).toBe('OK');
 });
 
+});
+
+// The deliberately unreadable append-only initial TEST original is last so it
+// cannot pollute earlier independent scenarios; no guard/receipt is removed.
+it('B1 isolates a genuine unknown-surface SQL exception from two healthy Today orders',async()=>{
+ expect(await withSession(full,()=>saveCompanySettingsAction({...companyInput,pageReads:DEFAULT_PAGE_READ_SETTINGS}))).toMatchObject({code:'OK'});
+ const customer=await customerFixture('TEST B1 SQL damaged source');
+ const fixtures=await Promise.all(['damaged','healthy one','healthy two'].map(name=>intakeOrderFixture('TEST B1 '+name,customer)));
+ const sourceId=fixtures[0].receipt.orderId,bad=randomUUID(),newItem=randomUUID();
+ const ids=[bad,...fixtures.slice(1).map(value=>value.receipt.orderId)];
+ // An explicitly synthetic, append-only TEST original models the historical
+ // bad value. Existing immutable originals, triggers and grants stay intact.
+ const eventId=randomUUID(),requestId=randomUUID();
+ await sql.begin(async seed=>{
+  await seed`INSERT INTO public.orders SELECT (jsonb_populate_record(NULL::public.orders,to_jsonb(source.*)||jsonb_build_object('id',${bad}::text,'order_number',source.order_number||'9','print_symbol_slot',NULL,'print_symbol_generation',NULL,'print_symbol_active',false))).* FROM public.orders source WHERE tenant_id=${tenant} AND id=${sourceId}`;
+  await seed`INSERT INTO public.items SELECT (jsonb_populate_record(NULL::public.items,to_jsonb(source.*)||jsonb_build_object('id',${newItem}::text,'order_id',${bad}::text))).* FROM public.items source WHERE tenant_id=${tenant} AND order_id=${sourceId}`;
+  await seed`INSERT INTO public.events SELECT (jsonb_populate_record(NULL::public.events,replace(replace(to_jsonb(event)::text,${sourceId},${bad}),receipt.order_number,receipt.order_number||'9')::jsonb||jsonb_build_object('id',${eventId}::text,'client_event_id',${requestId}::text,'correlation_id',${requestId}::text))).* FROM public.events event JOIN private.order_intake_receipts receipt ON receipt.event_id=event.id WHERE receipt.tenant_id=${tenant} AND receipt.order_id=${sourceId}`;
+  await seed`INSERT INTO private.order_intake_receipts SELECT (jsonb_populate_record(NULL::private.order_intake_receipts,to_jsonb(receipt)||jsonb_build_object('id',${randomUUID()}::text,'order_id',${bad}::text,'order_number',receipt.order_number||'9','event_id',${eventId}::text,'client_event_id',${requestId}::text,'correlation_id',${requestId}::text,'items_snapshot',jsonb_set(jsonb_set(receipt.items_snapshot,'{0,id}',to_jsonb(${newItem}::text)),'{0,surfaceRequested}','"chrom"'::jsonb)))).* FROM private.order_intake_receipts receipt WHERE receipt.tenant_id=${tenant} AND receipt.order_id=${sourceId}`;
+ });
+ await expect(sql.begin(async probe=>{await probe`SELECT set_config('app.tenant_id',${tenant},true)`;return probe`SELECT integrity_ok FROM private.v_order_intake_receipts_v1 WHERE tenant_id=${tenant} AND order_id=${bad}`;})).rejects.toMatchObject({code:'22023'});
+ const authorization=await withSession(full,()=>resolveAuthorization());if(!authorization.ok)throw Error('TEST_B1_AUTH');
+ const cards=await readTodayOrderCards(authorization.data,ids);
+ expect(cards.get(bad)?.code).toBe('UNAVAILABLE');
+ for(const id of ids.slice(1))expect(cards.get(id)?.code).toBe('OK');
+ const started=Date.now(),home=await withSession(full,()=>loadOfficeHome(authorization.data));
+ expect(Date.now()-started).toBeLessThan(3000);expect(home.kind).toBe('data');if(home.kind!=='data')throw Error('TEST_B1_HOME');
+ expect(home.dashboard.items.filter(item=>item.key==='source-order:'+bad)).toHaveLength(1);
+ for(const id of ids.slice(1))expect(home.dashboard.orderActions?.rows.some(row=>row.orderId===id)).toBe(true);
 });
 });

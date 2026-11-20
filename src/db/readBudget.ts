@@ -1,13 +1,15 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
 
-/** PL-approved startup/old-schema defaults; qualified company values override them. */
+/** Canonical startup/old-schema defaults; qualified company values override them.
+ * The native settings contract checks the additive SQL defaults against these. */
 export const DEFAULT_PAGE_READ_SETTINGS={queryTimeoutMs:10_000,invoiceMailBatchLimit:101} as const;
 
 /** Request-local only. Commands outside a page read retain their transaction contract. */
 type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>)};
 const budgets=new AsyncLocalStorage<ReadBudget>();
 export const hasPageReadBudget=():boolean=>budgets.getStore()!==undefined;
-export const AUTHORIZATION_READ_TIMEOUT_MS=1000;
+export const DEFAULT_CONNECTION_READ_SETTINGS={authorizationTimeoutMs:1000,authorizationPoolSize:2,authorizationIdleTimeoutSeconds:20,graphTimeoutMs:DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs} as const;
+export const AUTHORIZATION_READ_TIMEOUT_MS=DEFAULT_CONNECTION_READ_SETTINGS.authorizationTimeoutMs;
 export const isAuthorizationRead=():boolean=>budgets.getStore()?.kind==='authorization';
 /** Separate short read scope; returning to a page restores its own deadline. */
 export function withAuthorizationReadBudget<T>(work:()=>Promise<T>):Promise<T>{
@@ -118,8 +120,13 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
             // separate native cancel connection fails, this read cannot run
             // indefinitely. Transaction-local state never leaks into the pool.
             const native=sql as {unsafe:(query:string,parameters:string[])=>QueryLike};
-            const setting=native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(remaining)]);
-            await withinBudget(()=>setting,()=>setting.cancel());
+            // A savepoint inherits its transaction's server timeout. Every
+            // actual nested query is prepared below with its remaining time;
+            // do not spend an extra roundtrip on an otherwise empty savepoint.
+            if(key==='begin'){
+              const setting=native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(remaining)]);
+              await withinBudget(()=>setting,()=>setting.cancel());
+            }
             const prepareStatement=async()=>{
               const left=budget.deadline-Date.now();if(left<=0)throw new PageReadTimeout();
               return withinBudget(()=>native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(left)]));

@@ -752,8 +752,9 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
  if(orderIds.length===0)return results;
  try{
   return await withPrivilegedTenantTransaction(authorization,async tx=>{
-   const ids=sql`ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[]`;
-   const rows=await tx.execute<TodayCardRow>(sql`
+   const readRows=(nested:typeof tx,selectedIds:readonly string[])=>{
+   const ids=sql`ARRAY[${sql.join(selectedIds.map(id=>sql`${id}`),sql`, `)}]::text[]`;
+   return nested.execute<TodayCardRow>(sql`
     WITH selected AS MATERIALIZED (
      SELECT queue.id,queue.tenant_id,queue.version,queue.order_number,queue.customer_id,queue.customer_name,
       queue.title,queue.task,queue.station,queue.current_station,queue.current_station_id,queue.status,
@@ -795,9 +796,25 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
      FROM private.v_order_frozen_receipts_v1 frozen WHERE frozen.tenant_id=${authorization.tenantId} AND frozen.order_id=ANY(${ids}) AND frozen.active=true
     UNION ALL SELECT 'handover',order_id,0,to_jsonb(latest_handover) FROM latest_handover
     ORDER BY kind,order_id,position`);
+   };
+   let rows:TodayCardRow[];
+   try{rows=Array.from(await withTenantSavepoint(tx,nested=>readRows(nested,orderIds)));}
+   catch{
+    rows=[];
+    // A source SQL exception rolls back before isolating the same query per
+    // order. A damaged original must never poison healthy orders or the tx.
+    for(const id of orderIds){
+     try{rows.push(...await withTenantSavepoint(tx,nested=>readRows(nested,[id])));}
+     catch(error){
+      console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId:id,name:error instanceof Error?error.name:'UnknownError'});
+      results.set(id,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
+     }
+    }
+   }
    const byOrder=new Map<string,TodayCardRow[]>();
    for(const row of rows){const group=byOrder.get(row.order_id);if(group)group.push(row);else byOrder.set(row.order_id,[row]);}
    for(const orderId of orderIds){
+    if(results.has(orderId))continue;
     try{
      const group=byOrder.get(orderId)??[];
      const records=<T>(kind:string)=>group.filter(row=>row.kind===kind).map(row=>row.data as T);
@@ -813,8 +830,10 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
       catch(error){awardedQuoteUnavailable=true;console.error('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});}
      }
      const handover=records<CardHandoverEvent>('handover');if(handover.length>1)throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');
-     const handoverNotice=await qualifyHandoverNotice(tx,authorization,queue,handover[0]);
-     const activeComplaint=queue.station!=='fertig'?await (await import('./orderReleaseRead')).readOpenOrderComplaint(tx,authorization.tenantId,orderId):undefined;
+     const {handoverNotice,activeComplaint}=await withTenantSavepoint(tx,async nested=>({
+      handoverNotice:await qualifyHandoverNotice(nested,authorization,queue,handover[0]),
+      activeComplaint:queue.station!=='fertig'?await (await import('./orderReleaseRead')).readOpenOrderComplaint(nested,authorization.tenantId,orderId):undefined,
+     }));
      const cardItems=qualifiedItemUnits(items,awardedQuote);
      const money=authorization.permissions.includes('perm_view_prices');
      results.set(orderId,{code:'OK',data:{id:queue.id,version:queue.version,orderNumber:queue.order_number,customerId:queue.customer_id,customerName:queue.customer_name,title:queue.title,station:queue.station,dueAt:toNullableIso(queue.due_date),handoverMode:queue.handover_mode,

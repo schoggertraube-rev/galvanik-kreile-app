@@ -61,7 +61,8 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot):
     return orderSource.orders.length === 0
       ? { kind: "empty", ...common, projection }
       : { kind: "data", ...common, projection };
-  } catch {
+  } catch(error) {
+    console.error('[OFFICE_HOME_READ_FAILED]',{name:error instanceof Error?error.name:'UnknownError',at:error instanceof Error?error.stack?.split('\n').slice(1,4):undefined});
     return { kind: "error", message: "Die aktuellen Auftragsdaten konnten nicht sicher geladen werden." };
   }
 }

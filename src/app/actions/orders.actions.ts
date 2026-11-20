@@ -2,15 +2,21 @@
 import {withPageReadBudget,hasPageReadBudget,configurePageReadBudget} from '@/db/readBudget';
 import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {readLoggingSettings,readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
+import {canTransportInvoiceDocument} from '@/lib/server/authorization';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 
-/** Operational query/batch limits disclose no company, login or financial data. */
-export async function readPageReadSettingsAction(){
+/** Existing settings read; invoice transport may also request its sender name. */
+export async function readPageReadSettingsAction(input?:{includeCompanyName:true}){
+ if(input!==undefined&&(!input||Object.keys(input).join(',')!=='includeCompanyName'||input.includeCompanyName!==true))return {code:'SOURCE_INCOMPLETE' as const};
  const authorization=await resolveAuthorization();
  if(!authorization.ok)return {code:'FORBIDDEN' as const};
- try{return {code:'OK' as const,settings:await readPageReadSettings(authorization.data)};}
+ try{
+  const settings=await readPageReadSettings(authorization.data);
+  const company=input?.includeCompanyName&&canTransportInvoiceDocument(authorization.data)?await readCompanyLetterSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true}):null;
+  return {code:'OK' as const,settings,...(company?.code==='OK'?{companyName:company.company.companyName}:{})};
+ }
  catch{return {code:'SOURCE_INCOMPLETE' as const};}
 }
 
