@@ -29,7 +29,8 @@ it('N4 rejects a changed displayed balance without booking, binds retries to the
  const part=await day();expect(part.invoiceMoney).toMatchObject({code:'OK',openCount:1,openCents:initial.amount-4000,sources:[{id:order.invoice.invoiceId,version:saved.receipt.paymentVersion}]});
  const remainder={invoiceId:order.invoice.invoiceId,amount:initial.amount-4000,method:'ueberweisung' as const,expectedVersion:saved.receipt.paymentVersion,expectedOpenAmountCents:initial.amount-4000,clientEventId:randomUUID()};
  const settled=await withSession(full,()=>confirmPaymentAction(remainder));expect(settled).toMatchObject({code:'OK',replayed:false,receipt:{openAmountCents:0}});if(settled.code!=='OK')throw Error('TEST S05 settlement');
- const zero=await day();expect(zero.invoiceMoney).toMatchObject({code:'OK',openCount:0,openCents:0,overdueCount:0,sources:[]});expect(zero.items.some(row=>row.invoiceId===order.invoice.invoiceId)).toBe(false);
+ const zero=await day();expect(zero.invoiceMoney).toMatchObject({code:'OK',openCount:0,openCents:0,overdueCount:0,sources:[]});expect(zero.items.some(row=>row.field==='money'&&row.invoiceId===order.invoice.invoiceId)).toBe(false);
+ expect(zero.items).toContainEqual(expect.objectContaining({field:'action',invoiceId:order.invoice.invoiceId,invoiceMail:expect.objectContaining({documentId:order.invoice.invoiceId,expectedInvoiceIds:[order.invoice.invoiceId]})}));
  expect(await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(remainder))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:settled.receipt.eventId}});
  expect((await day()).invoiceMoney).toEqual(zero.invoiceMoney);
  const denied=await createFixture(['auftraege'],'werkstatt');
