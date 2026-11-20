@@ -1145,10 +1145,25 @@ export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot
  if(!hasAuthorizationArea(auth,'preise'))return undefined;
  const identity:{orderNumber?:string;invoiceNumber?:string}={};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const rows=await tx.execute<Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'version'>&{order_number:string}>(sql`SELECT id,customer_id,handover_mode,version,order_number FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId}`);
+  const rows=await tx.execute<Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'version'>&{order_number:string;station:string;current_station:string;current_station_id:string;status:string;invoice_exists:boolean;freeze_active:boolean;freeze_invalid:boolean}>(sql`
+   SELECT orders.id,orders.customer_id,orders.handover_mode,orders.version,orders.order_number,
+    orders.station,orders.current_station,orders.current_station_id,orders.status,
+    EXISTS(SELECT 1 FROM private.v_invoice_order_members_v1 member JOIN public.invoices invoice ON invoice.tenant_id=member.tenant_id AND invoice.id=member.invoice_id
+     WHERE member.tenant_id=orders.tenant_id AND member.order_id=orders.id AND invoice.status='issued') AS invoice_exists,
+    EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active) AS freeze_active,
+    (EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.integrity_ok IS NOT TRUE)
+     OR EXISTS(SELECT 1 FROM public.events event WHERE event.tenant_id=orders.tenant_id AND event.order_id=orders.id AND event.event_type='ORDER_FROZEN_V1'
+      AND NOT EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=event.tenant_id AND frozen.order_id=event.order_id AND frozen.event_id=event.id))) AS freeze_invalid
+   FROM public.orders orders WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${input.orderId}`);
   const order=rows[0];
   if(rows.length!==1||!order||order.version!==input.expectedVersion||!['pickup','shipping'].includes(order.handover_mode??''))throw Error('SHIPPING_PROPOSAL_ORDER_SOURCE_INVALID');
   identity.orderNumber=order.order_number;
+  if(order.station!==order.current_station||order.station!==order.current_station_id||typeof order.invoice_exists!=='boolean'||typeof order.freeze_active!=='boolean'||typeof order.freeze_invalid!=='boolean')throw Error('SHIPPING_PROPOSAL_ORDER_SOURCE_INVALID');
+  if(order.freeze_invalid)throw Error('SHIPPING_PROPOSAL_FREEZE_SOURCE_INVALID');
+  // PL20.11.13:42: a proved unfinished order has no invoice follow-up yet.
+  // Its absence is a named state, never an invented zero/empty proposal.
+  if(['angenommen','galvanik'].includes(order.station)&&order.status===order.station&&!order.invoice_exists&&!order.freeze_active)
+   return {code:'NOT_APPLICABLE' as const,orderId:order.id,orderVersion:order.version};
   const settings=await readSettings(tx,auth.tenantId);
   if(!settings||settings.shippingFeeCents===undefined)throw Error('SHIPPING_PROPOSAL_SETTINGS_SOURCE_MISSING');
   const allocation=order.handover_mode==='shipping'?await readShippingInvoiceLines(tx,auth.tenantId,order,settings.shippingFeeCents,readVat):{lines:[],missingFee:false};
