@@ -67,7 +67,7 @@ it('K6 identifies the missing firm target before allocation and retains the same
   await sql`UPDATE public.company_settings SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::public.company_settings,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND id=${String(original.id)}`;
  }},async()=>{
   await sql`UPDATE public.company_settings SET invoice_payment_term_days=NULL WHERE tenant_id=${tenant}`;
-  expect(await withSession(full,()=>issueInvoiceAction(input))).toMatchObject({code:'VALIDATION_ERROR',source:{kind:'settings',field:'paymentTermDays'},message:'Zahlungsziel fehlt oder ist ungültig. Öffne die Firmeneinstellungen.'});
+  expect(await withSession(full,()=>issueInvoiceAction(input))).toMatchObject({code:'VALIDATION_ERROR',source:{kind:'settings',field:'paymentTermDays'},message:'Zahlungsziel fehlt oder ist ungültig – öffne die Firmeneinstellungen.'});
   expect(await sql`SELECT id FROM public.invoices WHERE tenant_id=${tenant} AND order_id=${order.orderId}`).toHaveLength(0);
  });
  expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK'});
