@@ -1141,11 +1141,12 @@ type InvoiceReissueProposal={originalInvoiceNumber:string;label:string;befehl:{d
 
 /** N2 read projection only: same fee allocator and qualified original receipts
  * as issuance. No number, reservation, new click key or financial effect on read. */
-export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:{orderId:string;expectedVersion:number;manualHandoverEventId?:string},readVat:InvoiceVatReader,readSettings:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>){
- if(!hasAuthorizationArea(auth,'preise'))return undefined;
- const identity:{orderNumber?:string;invoiceNumber?:string}={};
- try{return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const rows=await tx.execute<Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'version'>&{order_number:string;station:string;current_station:string;current_station_id:string;status:string;invoice_exists:boolean;freeze_active:boolean;freeze_invalid:boolean}>(sql`
+type ShippingProposalInput={orderId:string;expectedVersion:number;manualHandoverEventId?:string};
+type ShippingProposalSettingsReader=(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>;
+type ShippingProposalOrder=Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'version'>&{order_number:string;station:string;current_station:string;current_station_id:string;status:string;invoice_exists:boolean;freeze_active:boolean;freeze_invalid:boolean};
+type ShippingProposalHeader={code:'OK';rows:ShippingProposalOrder[]}|{code:'FAILED';cause:unknown};
+async function readInvoiceShippingHeaders(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderIds:readonly string[]){
+ return tx.execute<ShippingProposalOrder>(sql`
    SELECT orders.id,orders.customer_id,orders.handover_mode,orders.version,orders.order_number,
     orders.station,orders.current_station,orders.current_station_id,orders.status,
     EXISTS(SELECT 1 FROM private.v_invoice_order_members_v1 member JOIN public.invoices invoice ON invoice.tenant_id=member.tenant_id AND invoice.id=member.invoice_id
@@ -1154,7 +1155,37 @@ export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot
     (EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.integrity_ok IS NOT TRUE)
      OR EXISTS(SELECT 1 FROM public.events event WHERE event.tenant_id=orders.tenant_id AND event.order_id=orders.id AND event.event_type='ORDER_FROZEN_V1'
       AND NOT EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=event.tenant_id AND frozen.order_id=event.order_id AND frozen.event_id=event.id))) AS freeze_invalid
-   FROM public.orders orders WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${input.orderId}`);
+   FROM public.orders orders WHERE orders.tenant_id=${auth.tenantId} AND orders.id=ANY(ARRAY[${sql.join(orderIds.map(value=>sql`${value}`),sql`, `)}]::text[])`);
+}
+/** Same canonical proposal reader; batch only its repeated source header.
+ * Failed groups are isolated after their native transaction has rolled back. */
+export async function readInvoiceShippingConsequencesBatch(auth:AuthorizationSnapshot,inputs:readonly ShippingProposalInput[],readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader){
+ const headers=new Map<string,ShippingProposalHeader>();
+ if(hasAuthorizationArea(auth,'preise')){
+  const load=async(ids:readonly string[]):Promise<void>=>{
+   if(!ids.length)return;
+   try{
+    const rows=await withPrivilegedTenantTransaction(auth,tx=>withTenantSavepoint(tx,nested=>readInvoiceShippingHeaders(nested,auth,ids)));
+    for(const id of ids)headers.set(id,{code:'OK',rows:rows.filter(row=>row.id===id)});
+   }catch(cause){
+    if(ids.length===1){headers.set(ids[0],{code:'FAILED',cause});return;}
+    const middle=Math.ceil(ids.length/2);await Promise.all([load(ids.slice(0,middle)),load(ids.slice(middle))]);
+   }
+  };
+  await load([...new Set(inputs.map(input=>input.orderId))]);
+ }
+ const rows=await Promise.all(inputs.map(async input=>[input.orderId,await readInvoiceShippingConsequencesWithHeader(auth,input,readVat,readSettings,headers.get(input.orderId))] as const));
+ return new Map(rows);
+}
+export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader){
+ return readInvoiceShippingConsequencesWithHeader(auth,input,readVat,readSettings);
+}
+async function readInvoiceShippingConsequencesWithHeader(auth:AuthorizationSnapshot,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader,header?:ShippingProposalHeader){
+ if(!hasAuthorizationArea(auth,'preise'))return undefined;
+ const identity:{orderNumber?:string;invoiceNumber?:string}={};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  if(header?.code==='FAILED')throw header.cause;
+  const rows=header?.code==='OK'?header.rows:await readInvoiceShippingHeaders(tx,auth,[input.orderId]);
   const order=rows[0];
   if(rows.length!==1||!order||order.version!==input.expectedVersion||!['pickup','shipping'].includes(order.handover_mode??''))throw Error('SHIPPING_PROPOSAL_ORDER_SOURCE_INVALID');
   identity.orderNumber=order.order_number;
