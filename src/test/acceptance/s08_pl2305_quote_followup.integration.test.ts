@@ -9,7 +9,7 @@ import {changeOrderContentAction,getLiveOrderCardAction,getTodayOrderReadAction,
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {readSettingsAction,saveCompanySettingsAction} from '@/app/actions/settings.actions';
 import {db} from '@/db';
-import {DEFAULT_PAGE_READ_SETTINGS,PageReadTimeout,pageReadFetchPort,withPageReadBudget,withPageReadQueryLimits,withAuthorizationReadBudget} from '@/db/readBudget';
+import {DEFAULT_PAGE_READ_SETTINGS,logPageReadPhase,PageReadTimeout,pageReadFetchPort,withPageReadBudget,withPageReadQueryLimits,withAuthorizationReadBudget} from '@/db/readBudget';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readEvidenceRecordsByTarget,readOrderEvidenceBatch} from '@/lib/server/evidenceRead';
 import {readMicrosoftGraphSentDocumentEvidence,readMicrosoftGraphSentMailByRequest,readMicrosoftGraphSentMailReference} from '@/lib/server/microsoftGraph';
@@ -33,6 +33,22 @@ import {requestMailStep} from '../../../e2e/ablauf/requestMailStep';
 // This suite closes only its explicitly created native TEST client below.
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
+
+it('A09 request-phase diagnostics retain PG identifiers but never error bodies, SQL values or arbitrary labels',()=>{
+ const output=vi.spyOn(console,'info').mockImplementation(()=>undefined);
+ try{
+  const cause=Object.assign(new Error('ORDER_POSITION_SURFACE_KEY_UNKNOWN'),{name:'PostgresError',code:'22023'});
+  logPageReadPhase('home.total',Date.now()-5,{rows:2,body:'TEST_PRIVATE_MAIL_BODY' as unknown as number},new Error('TEST_PRIVATE_PASSWORD',{cause}));
+  logPageReadPhase('TEST_PRIVATE_LABEL',Date.now(),{rows:1});
+  expect(output).toHaveBeenCalledTimes(1);
+  const record=JSON.parse(String(output.mock.calls[0][1]));
+  expect(record).toMatchObject({phase:'home.total',counts:{rows:2},codes:['22023'],reasons:['ORDER_POSITION_SURFACE_KEY_UNKNOWN']});
+  expect(record.durationMs).toBeGreaterThanOrEqual(0);
+  expect(JSON.stringify(output.mock.calls)).not.toContain('TEST_PRIVATE_PASSWORD');
+  expect(JSON.stringify(output.mock.calls)).not.toContain('TEST_PRIVATE_MAIL_BODY');
+  expect(JSON.stringify(output.mock.calls)).not.toContain('TEST_PRIVATE_LABEL');
+ }finally{output.mockRestore();}
+});
 
 it('CB23:05 stored damaged goods keep one physical receipt and the catalog exit on fresh retry',async()=>{
  await runQuoteQuantityCase({name:'CB23:05 blocked goods',quantity:10,received:10,total:4000,expected:4000,hours:'0.5000',operational:true,fixed:0,blocked:true});

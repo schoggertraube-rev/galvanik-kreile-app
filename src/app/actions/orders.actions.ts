@@ -1,5 +1,5 @@
 "use server";
-import {withPageReadBudget,hasPageReadBudget,configurePageReadBudget} from '@/db/readBudget';
+import {withPageReadBudget,hasPageReadBudget,configurePageReadBudget,withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
 import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings,readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
@@ -13,8 +13,8 @@ export async function readPageReadSettingsAction(input?:{includeCompanyName:true
  const authorization=await resolveAuthorization();
  if(!authorization.ok)return {code:'FORBIDDEN' as const};
  try{
-  const settings=await readPageReadSettings(authorization.data);
-  const company=input?.includeCompanyName&&canTransportInvoiceDocument(authorization.data)?await readCompanyLetterSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true}):null;
+  const settings=await withPageReadPhase('action.settings',()=>readPageReadSettings(authorization.data));
+  const company=input?.includeCompanyName&&canTransportInvoiceDocument(authorization.data)?await withPageReadPhase('action.company',()=>readCompanyLetterSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true})):null;
   return {code:'OK' as const,settings,...(company?.code==='OK'?{companyName:company.company.companyName}:{})};
  }
  catch{return {code:'SOURCE_INCOMPLETE' as const};}
@@ -298,13 +298,14 @@ type TodayOrderReadData={card:import('@/lib/server/orderCardRead').TodayOrderCar
 export async function getTodayOrderReadAction(input:{orderIds:string[]}):Promise<OrderCardActionResult<{rows:Array<{orderId:string;result:OrderCardReadResult<TodayOrderReadData>}>}>>{
  const inherited=hasPageReadBudget();
  return withPageReadBudget(async()=>{
+  const diagnosticStarted=Date.now();
   noStore();
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).join(',')!=='orderIds'||!Array.isArray(input.orderIds))return {code:'VALIDATION_ERROR',message:'Ungültige Auftragskennung.'};
   if(!inherited){const settings=await readPageReadSettingsAction();if(settings.code==='OK')configurePageReadBudget(settings.settings.queryTimeoutMs);}
-  const authorization=await resolveOrderCardAuthorization();if(!authorization.ok)return authorization.result;
+  const authorization=await withPageReadPhase('action.auth',()=>resolveOrderCardAuthorization());if(!authorization.ok)return authorization.result;
   const auth=authorization.data;
   const [{readTodayOrderCards},{readOrderEvidenceBatch}]=await Promise.all([import('@/lib/server/orderCardRead'),import('@/lib/server/evidenceRead')]);
-  const [cards,evidence]=await Promise.all([readTodayOrderCards(auth,input.orderIds),readOrderEvidenceBatch(auth,input.orderIds)]);
+  const [cards,evidence]=await Promise.all([withPageReadPhase('action.cards',()=>readTodayOrderCards(auth,input.orderIds)),withPageReadPhase('action.evidence',()=>readOrderEvidenceBatch(auth,input.orderIds))]);
   const [{readInvoiceShippingConsequences},{readInvoiceVat},fundament,{readOrderInformed},{readOrderPickupAppointment},{readV45OrderRule},{getPaymentState}]=await Promise.all([
    import('@/lib/server/commands/immutableInvoiceCommand'),import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public'),import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/v45OrderRead'),import('@/lib/server/paymentSummaryRead')]);
   const readCredit=hasAuthorizationArea(auth,'zahlungen')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
@@ -318,16 +319,17 @@ export async function getTodayOrderReadAction(input:{orderIds:string[]}):Promise
    const card=source.data;
    try{
     const [shipping,informed,payment,shipment,appointment]=await Promise.all([
-     readInvoiceShippingConsequences(auth,{orderId:card.id,expectedVersion:card.version,manualHandoverEventId:card.handoverNotice?.manualEventId},readInvoiceVat,fundament.readShippingSettingsInTransaction),
-     card.station==='fertig'?readOrderInformed(auth,card.id):Promise.resolve(undefined),
-     card.station==='fertig'?getPaymentState(auth,card.id,readCredit):Promise.resolve(undefined),
-     card.handoverMode==='shipping'?readManualShippingForOrder(auth,card.id):Promise.resolve(undefined),
-     card.station==='fertig'&&card.handoverMode==='pickup'?readOrderPickupAppointment(auth,card.id):Promise.resolve(undefined),
+     withPageReadPhase('action.shipping',()=>readInvoiceShippingConsequences(auth,{orderId:card.id,expectedVersion:card.version,manualHandoverEventId:card.handoverNotice?.manualEventId},readInvoiceVat,fundament.readShippingSettingsInTransaction)),
+     card.station==='fertig'?withPageReadPhase('action.informed',()=>readOrderInformed(auth,card.id)):Promise.resolve(undefined),
+     card.station==='fertig'?withPageReadPhase('action.payment',()=>getPaymentState(auth,card.id,readCredit)):Promise.resolve(undefined),
+     card.handoverMode==='shipping'?withPageReadPhase('action.shipment',()=>readManualShippingForOrder(auth,card.id)):Promise.resolve(undefined),
+     card.station==='fertig'&&card.handoverMode==='pickup'?withPageReadPhase('action.appointment',()=>readOrderPickupAppointment(auth,card.id)):Promise.resolve(undefined),
     ]);
     if(informed?.code==='OK'&&informed.orderVersion!==card.version)return {orderId,result:{code:'UNAVAILABLE' as const,message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'}};
     return {orderId,result:{code:'OK' as const,data:{card,handoverConsequences:shipping,pickupAppointment:appointment,nextActionRule:readV45OrderRule(auth,card,informed?{orderId:card.id,value:informed}:undefined,{orderId:card.id,records:proof.data},{shipping,payment,shipment})}}};
    }catch(error){console.error('[TODAY_ORDER_RULE_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});return {orderId,result:{code:'UNAVAILABLE' as const,message:'Auftragskarte konnte nicht sicher geladen werden.'}};}
   }));
+  logPageReadPhase('action.model',diagnosticStarted,{requested:input.orderIds.length,ok:rows.filter(row=>row.result.code==='OK').length,failed:rows.filter(row=>row.result.code!=='OK').length});
   return {code:'OK',data:{rows}};
  },DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
 }

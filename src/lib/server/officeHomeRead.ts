@@ -11,7 +11,7 @@ import {
   type OrdersHomeSource,
 } from "@/modules/orders/public";
 import type {OfficeHomeModel} from '@/components/home/OfficeHomeClient';
-import {withPageReadBudget,configurePageReadBudget} from '@/db/readBudget';
+import {withPageReadBudget,configurePageReadBudget,withPageReadPhase} from '@/db/readBudget';
 import {readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 
@@ -34,19 +34,19 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
 }
 
 export async function loadOfficeHome(authorization: AuthorizationSnapshot): Promise<OfficeHomeModel> {
-  return withPageReadBudget(()=>loadOfficeHomeWithinBudget(authorization),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
+  return withPageReadBudget(()=>withPageReadPhase('home.total',()=>loadOfficeHomeWithinBudget(authorization)),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
 }
 async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot): Promise<OfficeHomeModel> {
   if (!hasAnyAuthorizationArea(authorization)) return { kind: "no_areas" };
 
   try {
     let settingsIncomplete=false;
-    try{const source=await readPageReadSettingsAction();if(source.code==='OK')configurePageReadBudget(source.settings.queryTimeoutMs);else settingsIncomplete=true;}
+    try{const source=await withPageReadPhase('home.settings',()=>readPageReadSettingsAction());if(source.code==='OK')configurePageReadBudget(source.settings.queryTimeoutMs);else settingsIncomplete=true;}
     catch{settingsIncomplete=true;}
     // One request, one operational source; the Today composition consumes this
     // exact promise rather than issuing the same full-list query a second time.
-    const ordersRead=getOperationalOrders(authorization,{purpose:'today'});
-    const [orderSource, dashboard] = await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})), readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,new Date(),ordersRead)]);
+    const ordersRead=withPageReadPhase('home.orders',()=>getOperationalOrders(authorization,{purpose:'today'}));
+    const [orderSource, dashboard] = await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})), withPageReadPhase('home.dashboard',()=>readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,new Date(),ordersRead))]);
     if(settingsIncomplete)dashboard.datenluecken=[...(dashboard.datenluecken??[]),'PAGE_READ_SETTINGS_SOURCE'];
     const common = {
       cacheLoginScope:await readCacheLoginScope(),

@@ -1,3 +1,4 @@
+import {withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
 import type {OrderActorSummary} from "@/modules/orders/public";
 import "server-only";
 import {readManualHandoverReceipt,readInvoiceHandoverSource} from './orderHandoverSourcePort';
@@ -744,14 +745,16 @@ type TodayCardRow={kind:string;order_id:string;position:number;data:unknown};
  * the same current-item, intake/content/price, freeze and handover validators.
  * No actor list, agreement hints, timeline, print queue or assignment menu. */
 export async function readTodayOrderCards(authorization:AuthorizationSnapshot,orderIds:readonly string[]):Promise<Map<string,OrderCardReadResult<TodayOrderCard>>>{
+ const diagnosticStarted=Date.now();
  const results=new Map<string,OrderCardReadResult<TodayOrderCard>>();
  if(!canView(authorization)||new Set(orderIds).size!==orderIds.length||orderIds.some(id=>!validId(id))){
+  logPageReadPhase('cards.denied',diagnosticStarted,{requested:orderIds.length,failed:1});
   for(const id of orderIds)results.set(id,{code:'FORBIDDEN',message:'Auftragskarte ist nicht erlaubt.'});
   return results;
  }
  if(orderIds.length===0)return results;
  try{
-  const {db}=await import('@/db');
+  const {db}=await withPageReadPhase('cards.import',()=>import('@/db'));
   const readRows=(nested:import('./privilegedDb').PrivilegedTenantTransaction,selectedIds:readonly string[])=>{
    const ids=sql`ARRAY[${sql.join(selectedIds.map(id=>sql`${id}`),sql`, `)}]::text[]`;
    return nested.execute<TodayCardRow>(sql`
@@ -798,7 +801,7 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
     ORDER BY kind,order_id,position`);
    };
    let rows:TodayCardRow[];
-   try{rows=Array.from(await withPrivilegedTenantTransaction(authorization,tx=>withTenantSavepoint(tx,nested=>readRows(nested,orderIds))));}
+   try{rows=Array.from(await withPageReadPhase('cards.snapshot',()=>withPrivilegedTenantTransaction(authorization,tx=>withTenantSavepoint(tx,nested=>readRows(nested,orderIds)))));}
    catch{
     rows=[];
     // The parent transaction has finished before acquiring child connections.
@@ -812,14 +815,14 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
        // Independent tenant transactions keep SQL failures isolated while the
        // existing data-pool size bounds parallel reads. Each order still uses
        // exactly the same snapshot SQL and its own native savepoint.
-       rows.push(...await withPrivilegedTenantTransaction(authorization,isolated=>withTenantSavepoint(isolated,nested=>readRows(nested,[id]))));
+       rows.push(...await withPageReadPhase('cards.one_snapshot',()=>withPrivilegedTenantTransaction(authorization,isolated=>withTenantSavepoint(isolated,nested=>readRows(nested,[id])))));
       }catch(error){
        console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId:id,name:error instanceof Error?error.name:'UnknownError'});
        results.set(id,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
       }
      }
     };
-    await Promise.all(Array.from({length:Math.min(orderIds.length,db.$client.options.max)},()=>readIsolated()));
+    await withPageReadPhase('cards.fallback',()=>Promise.all(Array.from({length:Math.min(orderIds.length,db.$client.options.max)},()=>readIsolated())));
    }
    const byOrder=new Map<string,TodayCardRow[]>();
    for(const row of rows){const group=byOrder.get(row.order_id);if(group)group.push(row);else byOrder.set(row.order_id,[row]);}
@@ -827,7 +830,7 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
    const qualifyIsolated=async()=>{
     while(nextCard<orderIds.length){
      const orderId=orderIds[nextCard++];if(results.has(orderId))continue;
-     try{await withPrivilegedTenantTransaction(authorization,async tx=>{
+     try{await withPageReadPhase('cards.qualify_one',()=>withPrivilegedTenantTransaction(authorization,async tx=>{
      const group=byOrder.get(orderId)??[];
      const records=<T>(kind:string)=>group.filter(row=>row.kind===kind).map(row=>row.data as T);
      const queues=records<QueueRow&OrderOriginRow>('queue');
@@ -852,15 +855,17 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
       items:money?cardItems:cardItems.map(item=>({...item,unitPriceCents:null,vatRateBasisPoints:null,extraWork:item.extraWork.map(line=>({...line,hourlyRateCents:null,amountCents:null}))})),
       freeze:money||!freeze?freeze:{...freeze,hourlyRateCents:null,totalAmountCents:null},...(handoverNotice?{handoverNotice}:{}),
       operationalFacts:qualifiedOperationalFacts(origin,items,awardedQuote,awardedQuoteUnavailable,activeComplaint)}});
-    });}catch(error){
+    }));}catch(error){
      console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});
      results.set(orderId,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
     }
     }
    };
    await Promise.all(Array.from({length:Math.min(orderIds.length,db.$client.options.max)},()=>qualifyIsolated()));
+   logPageReadPhase('cards.model',diagnosticStarted,{requested:orderIds.length,ok:[...results.values()].filter(value=>value.code==='OK').length,failed:[...results.values()].filter(value=>value.code!=='OK').length,pool_size:db.$client.options.max});
    return results;
  }catch(error){
+  logPageReadPhase('cards.outer_error',diagnosticStarted,{failed:1,requested:orderIds.length},error);
   console.error('[TODAY_ORDER_BATCH_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});
   for(const id of orderIds)results.set(id,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
   return results;
