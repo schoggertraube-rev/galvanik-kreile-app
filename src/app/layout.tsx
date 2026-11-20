@@ -76,7 +76,7 @@ export default async function RootLayout({
               <DiagnosticsProvider>
                 <FeatureFlagProvider offline24hEnabled={authState.status === 'authenticated' && authState.user.offline24h === true}>
                   <KreileAppShell vorfinalStyle={rootStyle.enabled} loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>
-                    <Suspense fallback={<p role="status">{PAGE_READ_COPY.loading}</p>}>{children}</Suspense>
+                    {authState.status==='authenticated'?<Suspense fallback={<p role="status">{PAGE_READ_COPY.loading}</p>}>{children}</Suspense>:children}
                   </KreileAppShell>
                 </FeatureFlagProvider>
                 {isAdmin && <DiagnosticsWidget />}
