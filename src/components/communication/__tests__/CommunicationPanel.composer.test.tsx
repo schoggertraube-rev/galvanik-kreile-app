@@ -45,19 +45,19 @@ it.each(['CUSTOMER','ORDER'] as const)('H1 prefills the same editable invoice dr
  vi.clearAllMocks();api.sendCustomerMailAction.mockResolvedValue({code:'OK',data:{threadId:'TEST-prefilled'}});
  const invoiceOriginal={documentId:'TEST-original-42',expectedInvoiceIds:['TEST-original-42'],number:'TEST-R-42',customerName:'TEST Kunde'};
  render(<CommunicationPanel targetType={targetType} targetId="TEST-target" invoiceOriginal={invoiceOriginal}/>);
- expect(screen.getByRole('textbox',{name:'Betreff'})).toHaveValue('Rechnung TEST-R-42 an TEST Kunde senden');
+ expect(screen.getByRole('textbox',{name:'Betreff'})).toHaveValue('Rechnung TEST-R-42 · TEST Kunde');
  expect(screen.getByRole('textbox',{name:'Nachricht'})).toHaveValue('Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen');
  fireEvent.submit(screen.getByRole('textbox',{name:'Betreff'}).closest('form')!);
  await waitFor(()=>expect(api.sendCustomerMailAction).toHaveBeenCalledTimes(1));
- expect(api.sendCustomerMailAction.mock.calls[0][0]).toMatchObject({targetType,targetId:'TEST-target',attachment:{kind:'INVOICE',documentId:invoiceOriginal.documentId},expectedInvoiceIds:invoiceOriginal.expectedInvoiceIds,subject:'Rechnung TEST-R-42 an TEST Kunde senden',body:'Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen'});
+ expect(api.sendCustomerMailAction.mock.calls[0][0]).toMatchObject({targetType,targetId:'TEST-target',attachment:{kind:'INVOICE',documentId:invoiceOriginal.documentId},expectedInvoiceIds:invoiceOriginal.expectedInvoiceIds,subject:'Rechnung TEST-R-42 · TEST Kunde',body:'Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen'});
  expect(api.getMicrosoftGraphStatusAction).not.toHaveBeenCalled();
 });
 
-it('H1 retains human edits across rereading and uses the immutable V45 subject for the known original',()=>{
+it('H1 retains human edits across rereading and uses the PL15:43 customer subject for the known original',()=>{
  vi.clearAllMocks();
  const invoiceOriginal={documentId:'TEST-original-42',expectedInvoiceIds:['TEST-original-42','TEST-original-43'],number:'TEST-R-42',customerName:'TEST Kunde'};
  const view=render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer" invoiceOriginal={invoiceOriginal}/>);
- expect(screen.getByRole('textbox',{name:'Betreff'})).toHaveValue('Rechnung TEST-R-42 an TEST Kunde senden');
+ expect(screen.getByRole('textbox',{name:'Betreff'})).toHaveValue('Rechnung TEST-R-42 · TEST Kunde');
  fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:'TEST persönliche Ergänzung'}});
  fireEvent.change(screen.getByRole('textbox',{name:'Nachricht'}),{target:{value:'TEST vollständiger Originaltext'}});
  view.rerender(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer" invoiceOriginal={{...invoiceOriginal}}/>);

@@ -1,5 +1,6 @@
 "use client";
-import {CommunicationPanel} from '@/components/communication/CommunicationPanel';
+import dynamic from 'next/dynamic';
+const CommunicationPanel=dynamic(()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel));
 import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 

@@ -40,6 +40,7 @@ import { getAuthBootstrapAction } from "@/app/actions/auth.actions";
 import { GlobalCreateAppAdapter } from "./GlobalCreateAppAdapter";
 import {withPageReadBudget} from '@/db/readBudget';
 import {DEFAULT_PAGE_READ_SETTINGS} from '@/modules/fundament/public';
+import {PAGE_READ_COPY} from '@/ui/situationCatalog';
 
 export default async function RootLayout({
   children,
@@ -75,7 +76,7 @@ export default async function RootLayout({
               <DiagnosticsProvider>
                 <FeatureFlagProvider offline24hEnabled={authState.status === 'authenticated' && authState.user.offline24h === true}>
                   <KreileAppShell vorfinalStyle={rootStyle.enabled} loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>
-                    {children}
+                    <Suspense fallback={<p role="status">{PAGE_READ_COPY.loading}</p>}>{children}</Suspense>
                   </KreileAppShell>
                 </FeatureFlagProvider>
                 {isAdmin && <DiagnosticsWidget />}

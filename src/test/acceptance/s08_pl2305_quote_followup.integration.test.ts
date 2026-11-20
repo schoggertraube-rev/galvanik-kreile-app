@@ -22,10 +22,13 @@ import {DEFAULT_PAGE_READ_SETTINGS,SALES_STAGE_FEATURES,pageReadSettingsFromComp
 import {readPageReadSettings} from '@/modules/fundament/server-public';
 import {sql as drizzleSql} from 'drizzle-orm';
 import {drizzle} from 'drizzle-orm/postgres-js';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import postgres from 'postgres';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
+import {INVOICE_MAIL_COMPOSER_COPY} from '@/ui/situationCatalog';
+import {sendCustomerMailAction} from '@/app/actions/communications.actions';
+import {requestMailStep} from '../../../e2e/ablauf/requestMailStep';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
@@ -215,6 +218,30 @@ it('batches actual Today facts once and keeps the same qualified full-card value
   expect(await withSession(full,()=>getLiveOrderCardAction({orderId:ids[0]}))).toMatchObject({code:'UNAVAILABLE'});
  });
  expect((await readTodayOrderCards(authorization.data,ids)).get(ids[0])?.code).toBe('OK');
+});
+
+it('PL15:43 sends the customer subject from the actual invoice/company source and retains original bytes on retry',async()=>{
+ const customerId=await customerFixture('TEST L1 friendly subject');
+ const issued=await readyInvoiceOrder('TEST L1 actual invoice mail','pickup',false,customerId);
+ const authorization=await withSession(full,()=>resolveAuthorization());if(!authorization.ok)throw Error('TEST_L1_SUBJECT_AUTH');
+ const today=await withSession(full,()=>readTodayDashboard(authorization.data,getComplaints,getQuoteFollowupsForTodayAction));
+ const row=today.items.find(item=>item.invoiceMail?.documentId===issued.invoice.invoiceId)?.invoiceMail;
+ expect(row).toBeDefined();if(!row)throw Error('TEST_L1_SUBJECT_ORIGINAL');
+ const [customer]=await sql`SELECT name FROM public.customers WHERE tenant_id=${tenant} AND id=${customerId}`;
+ expect(row.customerName).toBe(customer.name);expect(row.number).toBe(issued.invoice.invoiceNumber);
+ const subject=INVOICE_MAIL_COMPOSER_COPY.subject(row.number,row.customerName);
+ expect(subject).toBe('Rechnung '+issued.invoice.invoiceNumber+' · '+customer.name);
+ await requestMailStep('L1-subject');
+ const input={targetType:'CUSTOMER' as const,targetId:customerId,subject,body:INVOICE_MAIL_COMPOSER_COPY.body,clientRequestId:randomUUID(),attachment:{kind:'INVOICE' as const,documentId:row.documentId},expectedInvoiceIds:row.expectedInvoiceIds,singleInvoice:true as const};
+ expect(await withSession(full,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK'});
+ const posts=()=>vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).endsWith('/sendMail')&&init?.method==='POST');
+ expect(posts()).toHaveLength(1);
+ const message=JSON.parse(String(posts()[0][1]?.body)).message;
+ expect(message.subject).toBe(subject);expect(message.subject).not.toContain(' senden');
+ const [original]=await sql`SELECT pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${row.documentId}::uuid`;
+ expect(createHash('sha256').update(Buffer.from(message.attachments[0].contentBytes,'base64')).digest('hex')).toBe(original.pdf_sha256);
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
+ expect(posts()).toHaveLength(1);
 });
 
 describe('L1 native deadlines',()=>{

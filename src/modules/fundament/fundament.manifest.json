@@ -61,7 +61,11 @@
     "@/modules/fundament/public#PackageSwitchId",
     "@/modules/fundament/public#PackageSwitchValues",
     "@/modules/fundament/public#mapPackageSwitchRows",
-    "@/modules/fundament/server-public#readPageReadSettings"
+    "@/modules/fundament/server-public#readPageReadSettings",
+    "@/modules/fundament/public#DEFAULT_PAGE_READ_SETTINGS",
+    "@/modules/fundament/public#PageReadSettings",
+    "@/modules/fundament/public#pageReadSettingsFromCompany",
+    "@/modules/fundament/public#parsePageReadSettings"
   ],
   "capabilities": [
     "product-actors:fail-closed-status",

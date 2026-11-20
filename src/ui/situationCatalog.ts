@@ -3,6 +3,7 @@ export {V45_TEXT,V45_TEXT_TEMPLATES} from './generated/v45Texte.generated';
 export type {V45TextKey} from './generated/v45Texte.generated';
 /** One editable invoice-mail draft for the existing customer/order composer. */
 export const INVOICE_MAIL_COMPOSER_COPY={
+ subject:(number:string,companyName:string)=>`Rechnung ${number} · ${companyName}`,
  body:'Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen',
 } as const;
 /** PL13.11.00:14 immutable invoice VAT display. */
@@ -521,4 +522,4 @@ export const PENDING_UNDO_COPY={title:'Wartende Aktionen',undo:'Rückgängig',
 } as const;
 
 /** PL20.11 L1: operating limits in the existing company settings. */
-export const PAGE_READ_COPY={sourceIncomplete:"Diese Quelle ist gerade nicht erreichbar · Erneut laden.",partial:"Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar.",reload:"Erneut laden",settingsPending:"Die neuen Abfragewerte sind noch nicht verfügbar.",timeout:"Abfragezeit in Millisekunden",mailBatch:"Rechnungen je Versandtakt",invalid:"Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null."} as const;
+export const PAGE_READ_COPY={loading:"Deine Arbeitsfläche wird geladen.",sourceIncomplete:"Diese Quelle ist gerade nicht erreichbar · Erneut laden.",partial:"Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar.",reload:"Erneut laden",settingsPending:"Die neuen Abfragewerte sind noch nicht verfügbar.",timeout:"Abfragezeit in Millisekunden",mailBatch:"Rechnungen je Versandtakt",invalid:"Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null."} as const;
