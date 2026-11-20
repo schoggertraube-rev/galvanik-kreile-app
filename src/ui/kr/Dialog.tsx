@@ -1,26 +1,71 @@
 'use client';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties,type ReactNode } from 'react';
+import {useVorfinalStyle} from '@/ui/useVorfinalStyle';
+import {dialog as dialogMoment} from '@/ui/motion';
+import {V45_TEXT} from '@/ui/situationCatalog';
 import { Icon, type IconName } from './Icon';
 import { Button } from './Button';
 import { cx } from './typen';
 import { useKrGeraet } from './AppShell';
 export type DialogMeldung = { text: string; ton: 'fehler' | 'erfolg'; specId?:string };
-export interface DialogProps { titel: string; unterzeile?: ReactNode; icon?: IconName; groesse?: 'normal' | 'breit' | 'schmal' | 'karte' | 'werkbank'; onSchliessen: () => void; vorSchliessen?: () => boolean; onZurueck?: () => void; schliessenSpecId?: string; fuss?: ReactNode; meldung?: DialogMeldung | null; children: ReactNode; }
+export interface DialogProps { titel: string; unterzeile?: ReactNode; icon?: IconName; groesse?: 'normal' | 'breit' | 'schmal' | 'karte' | 'werkbank'; onSchliessen: () => void; vorSchliessen?: () => boolean; onZurueck?: () => void; schliessenSpecId?: string; fuss?: ReactNode; meldung?: DialogMeldung | null; children: ReactNode; vorfinalForm?:'overlay'; beschaeftigt?:boolean; dataSpecId?:string; oeffner?:HTMLElement|null; }
 export function isTopDialog(element: HTMLElement | null) {
   const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].filter(dialog => !dialog.closest('[hidden], [aria-hidden="true"]') && getComputedStyle(dialog).display !== 'none');
   return dialogs.at(-1) === element;
 }
 /** Der Seitenname bleibt die Überschrift; ein Modus steht als Unterzeile darunter. */
 /** Schließt mit umgekehrter Bewegung (180 ms), dann onSchliessen – kein hartes Verschwinden. */
-export function Dialog({ titel, unterzeile, icon = 'file', groesse = 'normal', onSchliessen: sofort, vorSchliessen, onZurueck, schliessenSpecId, fuss, meldung, children }: DialogProps) {
+export function Dialog({ titel, unterzeile, icon = 'file', groesse = 'normal', onSchliessen: sofort, vorSchliessen, onZurueck, schliessenSpecId, fuss, meldung, children,vorfinalForm,beschaeftigt=false,dataSpecId,oeffner }: DialogProps) {
   const [zu, setZu] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
-  const onSchliessen = () => { if (zu || vorSchliessen?.() === false) return; const still = matchMedia('(prefers-reduced-motion:reduce)').matches; if (still) return sofort(); setZu(true); setTimeout(sofort, 190); };
+  // Capture before child commit/autofocus or an immediate first edit can move
+  // focus inside this dialog; the passive effect is too late for that origin.
+  const openerRef=useRef<HTMLElement|null>(oeffner===undefined?(typeof document!=='undefined'&&document.activeElement instanceof HTMLElement?document.activeElement:null):oeffner),closingRef=useRef(false);
+  const vorfinal=useVorfinalStyle(),titelId=useId(),sourceOverlay=vorfinal&&vorfinalForm==='overlay';
+  // The existing dialog owns focus as well as Esc. Source v10 openOv's order:
+  // autofocus, main action, close. No second overlay stack/keyboard listener.
+  useEffect(()=>{
+    if(!sourceOverlay)return;
+    const previous=openerRef.current;
+    const dialog=dialogRef.current;
+    if(dialog)dialogMoment.oeffnen(dialog,previous!==document.body?previous:null);
+    (dialog?.querySelector<HTMLElement>('[autofocus]:not(:disabled)')??dialog?.querySelector<HTMLElement>('.act:not(:disabled)')??dialog?.querySelector<HTMLElement>('[data-overlay-close]:not(:disabled)')??dialog)?.focus();
+    return()=>{if(previous?.isConnected)previous.focus();};
+  },[sourceOverlay]);
+  const onSchliessen = () => {
+    if(zu||sourceOverlay&&closingRef.current||vorSchliessen?.()===false)return;
+    if(sourceOverlay)closingRef.current=true;
+    if(sourceOverlay&&dialogRef.current){
+      setZu(true);
+      dialogMoment.zurueck(dialogRef.current,openerRef.current,sofort);
+      return;
+    }
+    const still=matchMedia('(prefers-reduced-motion:reduce)').matches;if(still)return sofort();
+    setZu(true);
+    setTimeout(sofort,190);
+  };
   useEffect(() => { const h = (e: KeyboardEvent) => {
     if (e.key !== 'Escape') return;
     if (!isTopDialog(dialogRef.current)) return;
     e.preventDefault(); e.stopImmediatePropagation(); onSchliessen();
   }; addEventListener('keydown', h); return () => removeEventListener('keydown', h); });
+  if(sourceOverlay)return <div className="ov on" data-closing={zu} style={{pointerEvents:zu?'none':undefined}}
+    onClick={event=>{if(event.target===event.currentTarget)onSchliessen();}}>
+    <section ref={dialogRef} className="ov-box" role="dialog" aria-modal="true" aria-labelledby={titelId} tabIndex={-1}
+      aria-busy={beschaeftigt} data-spec-id={dataSpecId}
+      style={{'--ovw':groesse==='schmal'?'560px':'640px'} as CSSProperties}>
+      <div className="ov-in" data-glass="sheet"><div data-overlay-body style={{position:'relative'}}>
+        <header className="ov-head small">
+          {onZurueck?<Button vorfinalForm="icon" icon="back" label={V45_TEXT.common$back} disabled={beschaeftigt} onClick={onZurueck}/>:null}
+          <div><h2 id={titelId}>{titel}</h2>{unterzeile?<p>{unterzeile}</p>:null}</div>
+          <Button vorfinalForm="icon" icon="x" label={V45_TEXT.common$close} disabled={beschaeftigt}
+            data-overlay-close data-spec-id={schliessenSpecId} onClick={onSchliessen}/>
+        </header>
+        {meldung?<DialogAktionsmeldung meldung={meldung}/>:null}{children}
+        {fuss?<div className="lead-acts" inert={beschaeftigt}>{fuss}</div>:null}
+      </div></div>
+    </section>
+  </div>;
   if (groesse === 'karte') return <div className={zu ? 'kr-ebene kr-ebene--zu' : 'kr-ebene'} style={{pointerEvents:'auto'}} onClick={e => e.target === e.currentTarget && onSchliessen()}><section ref={dialogRef} className="kr-dialog kr-dialog--karte" role="dialog" aria-modal="true" aria-label={titel}><div className="kr-streifen" />{children}</section></div>;
   return (
     <div className={zu ? 'kr-ebene kr-ebene--zu' : 'kr-ebene'} style={{pointerEvents:'auto'}} onClick={e => e.target === e.currentTarget && onSchliessen()}>
