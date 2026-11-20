@@ -3,7 +3,7 @@
 Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 Ähnlich = NFC/Kleinschreibung/Interpunktion/Platzhalternamen mechanisch normalisiert. Bestand bleibt unverändert.
 
-## Gleicher Wortlaut (67)
+## Gleicher Wortlaut (68)
 
 - `E_INVOICE_COPY.collectionNotDue`: "Die Sammlung ist noch nicht fällig oder wurde inzwischen abgerechnet." → `collection.not_due`
 - `DELIVERY_NOTE_COPY.title`: "Lieferschein" → `document.delivery_kind`, `intake.fact.delivery_number`, `ws.slip`
@@ -72,6 +72,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `COMPONENT_PREVIEW_COPY.names.zeit`: "Arbeitszeit" → `werkzeit.short`
 - `COMPONENT_PREVIEW_COPY.names.mehrarbeit`: "Mehrarbeit" → `bundle.book_extra`, `work.extra_short`
 - `COMPONENT_PREVIEW_COPY.names.kundenbild`: "Kundenbild" → `customer.tab.insights`, `settings.group.bewertung`
+- `PENDING_UNDO_COPY.undo`: "Rückgängig" → `bundle.undo`, `undo.action`
 
 ## Ähnlicher Wortlaut (98)
 
@@ -174,7 +175,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 
-## Nur im Bestand (755)
+## Nur im Bestand (761)
 
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
 - `EVIDENCE_VISIBILITY_COPY.invalid`: "Wähle das Foto erneut."
@@ -931,3 +932,9 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `COMPONENT_PREVIEW_COPY.names.kv_dokument`: "KV-Dokument"
 - `COMPONENT_PREVIEW_COPY.names.kv_verlauf`: "KV-Verlauf"
 - `COMPONENT_PREVIEW_COPY.names.eingang`: "Eingang"
+- `PENDING_UNDO_COPY.title`: "Wartende Aktionen"
+- `PENDING_UNDO_COPY.remaining`: "Zeit für Rückgängig"
+- `PENDING_UNDO_COPY.pending`: "Wartet auf Übertragung"
+- `PENDING_UNDO_COPY.started`: "Übertragung gestartet"
+- `PENDING_UNDO_COPY.unknown`: "Deine wartenden Änderungen sind gerade nicht lesbar."
+- `PENDING_UNDO_COPY.unconfirmed`: "Rückgängig wurde nicht bestätigt. Lade den aktuellen Stand."

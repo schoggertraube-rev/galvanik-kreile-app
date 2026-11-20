@@ -505,3 +505,11 @@ export const COMPONENT_PREVIEW_COPY={
  zeit:'Arbeitszeit',overlay:'Dialog',mehrarbeit:'Mehrarbeit',kundenbild:'Kundenbild',
  kv_dokument:'KV-Dokument',kv_verlauf:'KV-Verlauf',eingang:'Eingang'},
 } as const;
+
+/** U-291: local cancellation is not a confirmed server reversal. */
+export const PENDING_UNDO_COPY={title:'Wartende Aktionen',undo:'Rückgängig',
+ count:(count:number)=>`${count} Aktionen warten`,
+ remaining:'Zeit für Rückgängig',pending:'Wartet auf Übertragung',started:'Übertragung gestartet',
+ unknown:'Deine wartenden Änderungen sind gerade nicht lesbar.',
+ unconfirmed:'Rückgängig wurde nicht bestätigt. Lade den aktuellen Stand.',
+} as const;
