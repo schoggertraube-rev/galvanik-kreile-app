@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import {PAGE_READ_COPY} from "@/ui/situationCatalog";
-import {DEFAULT_PAGE_READ_SETTINGS} from "@/lib/domain/pageReadSettings";
+import {DEFAULT_PAGE_READ_SETTINGS} from "@/modules/fundament/public";
 import { useEffect, useState, useTransition } from "react";
 import {
   changeOwnPinAction,

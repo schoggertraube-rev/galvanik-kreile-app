@@ -435,11 +435,11 @@
     "src/app/actions/invoices.actions.ts#removeOrderFromCollectionAction": [
       "src/test/acceptance/s38a_native_collection_original.integration.test.ts"
     ],
-    "src/app/actions/settings.actions.ts#readPageReadSettingsAction": [
-      "src/test/acceptance/l1_home_read.integration.test.ts"
-    ],
     "src/app/actions/orders.actions.ts#getTodayOrderReadAction": [
-      "src/test/acceptance/l1_home_read.integration.test.ts"
+      "src/test/acceptance/s08_pl2305_quote_followup.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#readPageReadSettingsAction": [
+      "src/test/acceptance/s08_pl2305_quote_followup.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

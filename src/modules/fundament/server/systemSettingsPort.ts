@@ -1,6 +1,6 @@
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
-import {parsePageReadSettings,pageReadSettingsFromCompany} from '@/lib/domain/pageReadSettings';
+import {parsePageReadSettings,pageReadSettingsFromCompany} from '@/modules/fundament/public';
 import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";

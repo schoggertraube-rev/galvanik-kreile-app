@@ -1,11 +1,18 @@
 "use server";
 import {withPageReadBudget,hasPageReadBudget,configurePageReadBudget} from '@/db/readBudget';
-import {DEFAULT_PAGE_READ_SETTINGS} from '@/lib/domain/pageReadSettings';
-import {readPageReadSettingsAction} from './settings.actions';
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/modules/fundament/public';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
+
+/** Operational query/batch limits disclose no company, login or financial data. */
+export async function readPageReadSettingsAction(){
+ const authorization=await resolveAuthorization();
+ if(!authorization.ok)return {code:'FORBIDDEN' as const};
+ try{return {code:'OK' as const,settings:await readPageReadSettings(authorization.data)};}
+ catch{return {code:'SOURCE_INCOMPLETE' as const};}
+}
 
 export async function getProductionWeekAction(input?:{onDate?:string}){
  return observeAction('getProductionWeekAction',subjectForAction('getProductionWeekAction',input),async()=>{
