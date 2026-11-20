@@ -1092,7 +1092,11 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       // master-data matrix above: invoice, event and counter state stay identical.
       await expectNoWrite(
         "company_settings.invoice_payment_term_days/null",
-        MASTER_DATA_REJECTION,
+        {
+          code: "VALIDATION_ERROR",
+          message: E_INVOICE_COPY.missingSource("paymentTermDays"),
+          source: { kind: "settings", field: "paymentTermDays" },
+        },
         () => createInvoice({
           orderId: ORDER_ID,
           expectedVersion: ORDER_VERSION,

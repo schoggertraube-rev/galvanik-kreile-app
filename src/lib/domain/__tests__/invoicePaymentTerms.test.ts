@@ -13,8 +13,19 @@ describe('S38a approved A1–A3 invoice term precedence (synthetic pure inputs)'
   expect(resolveInvoicePaymentTerms(14,customer,{type,targetDays:45})).toEqual({quelle:'absprache',ziel_tage:45,skonto_prozent:2,skonto_tage:8});
  });
  it('an unreadable target or incomplete discount never turns into a default',()=>{
-  expect(()=>resolveInvoicePaymentTerms(14,{...customer,targetDays:null},null)).toThrow('INVOICE_PAYMENT_TERM_INVALID');
+  expect(()=>resolveInvoicePaymentTerms(14,{...customer,targetDays:NaN},null)).toThrow('INVOICE_PAYMENT_TERM_INVALID');
   expect(()=>resolveInvoicePaymentTerms(14,{...customer,discountDays:null},null)).toThrow('INVOICE_CASH_DISCOUNT_INVALID');
+ });
+ it('K2 resolves each payment field through order, customer agreement, customer and company',()=>{
+  expect(resolveInvoicePaymentTerms(14,customer,[{type:'ausgabe_ohne_zahlung',targetDays:null},{type:'zahlungsziel',targetDays:45}])).toEqual({quelle:'absprache',ziel_tage:45,skonto_prozent:2,skonto_tage:8});
+  expect(resolveInvoicePaymentTerms(14,{...customer,targetDays:null,discountPercent:null,discountDays:null},[null,{type:'zahlungsziel',targetDays:null}])).toEqual({quelle:'firma',ziel_tage:14,skonto_prozent:null,skonto_tage:null});
+ });
+ it('K6 caps the discount at the effective target and retains the original configured duration',()=>{
+  const terms=resolveInvoicePaymentTerms(14,customer,{type:'zahlungsziel',targetDays:5});
+  expect(terms).toEqual({quelle:'absprache',ziel_tage:5,skonto_prozent:2,skonto_tage:5,skonto_begrenzt_von:8});
+  expect(parseInvoicePaymentTerms(terms,5)).toEqual(terms);
+  expect(invoiceDiscountXmlLine(terms)).toBe('#SKONTO#TAGE=5#PROZENT=2.00#\n');
+  expect(()=>parseInvoicePaymentTerms({...terms,skonto_begrenzt_von:4},5)).toThrow('INVOICE_PAYMENT_TERMS_SNAPSHOT_INVALID');
  });
  it('reads an exact frozen record and rejects changed targets or a partial discount',()=>{
   const original={quelle:'kunde',ziel_tage:30,skonto_prozent:2,skonto_tage:8};

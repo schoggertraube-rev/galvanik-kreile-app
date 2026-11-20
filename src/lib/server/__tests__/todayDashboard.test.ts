@@ -189,6 +189,13 @@ describe('S05 qualified order calendar slice',()=>{
 });
 
 // Explicit synthetic projection boundaries; real read/auth is covered separately.
+it('includes native collections without an order, but rejects a missing station on an order invoice',()=>{
+ const calendar=readTodayCalendar(new Date('2026-11-12T12:00:00Z'));
+ const row={id:'TEST-native-collection',order_id:null,payment_version:0,due_date:'2026-11-11',open_amount_cents:11900,overdue:true,overdue_as_of:calendar.today,customer_country:'DE',payment_mode:'rechnung',payment_status:'offen',station:null};
+ expect(projectTodayInvoiceMoney({code:'OK',data:[row]},calendar)).toMatchObject({code:'OK',openCount:1,openCents:11900,overdueCount:1,overdueCents:11900});
+ expect(projectTodayInvoiceMoney({code:'OK',data:[{...row,order_id:'TEST-order'}]},calendar)).toMatchObject({code:'SOURCE_INCOMPLETE',knownTotals:{openCount:0,openCents:0}});
+});
+
 it('keeps all open invoice amounts and separates overdue/today/upcoming without a list limit',()=>{
  const calendar=readTodayCalendar(new Date('2026-11-12T12:00:00Z'));
  const rows=[{id:'late',payment_version:2,due_date:'2026-11-11',open_amount_cents:1250},{id:'today',payment_version:1,due_date:'2026-11-12',open_amount_cents:'2500'},

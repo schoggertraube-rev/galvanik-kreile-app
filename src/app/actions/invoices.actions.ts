@@ -6,7 +6,7 @@ import {readInvoiceVat} from "@/modules/accounting/server-public";
 import {readCustomerCredit,readCustomerCreditInTransaction} from "@/modules/accounting/server-public";
 import type {CustomerCreditResult,CustomerCreditApplyInput} from "@/modules/accounting/public";
 import {readCustomerProfile} from "@/modules/customers/server-public";
-import {synchronizeCancellationCreditRetryTask} from '@/modules/tasks/server-public';
+import {synchronizeCancelledCollectionTask,synchronizeCancellationCreditRetryTask} from '@/modules/tasks/server-public';
 import {recordIntakeTaskEffect,recognizeInvoicePdf} from '@/modules/eingang/server-public';
 
 import { revalidatePath } from "next/cache";
@@ -112,6 +112,8 @@ export async function cancelInvoiceAction(input: CancelInvoiceInput): Promise<Ca
  return observeAction('cancelInvoiceAction',subjectForAction('cancelInvoiceAction',input),async()=>{
   const { cancelInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
   const result = await cancelInvoice(input,readInvoiceVat,{
+    collectionFailed:async(tx,auth,key)=>synchronizeCancelledCollectionTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},false),
+    collectionSettled:async(tx,auth,key)=>synchronizeCancelledCollectionTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},true),
     failed:async(tx,auth,key)=>synchronizeCancellationCreditRetryTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},'ensure'),
     settled:async(tx,auth,key)=>synchronizeCancellationCreditRetryTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},'settle'),
   },recognizeInvoicePdf);

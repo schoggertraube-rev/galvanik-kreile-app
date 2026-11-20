@@ -2,12 +2,13 @@
 // A38a A10: actual issue/payment/auth/DB readers. Only the calendar read day is
 // controlled; immutable originals and real issuer/auth/session time never change.
 import {randomUUID} from 'node:crypto';
-import {expect,it,vi} from 'vitest';
+import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,readyOrderForInvoice} from '../../../e2e/ablauf/orderFixture';
-import {issueInvoiceAction} from '@/app/actions/invoices.actions';
+import {issueInvoiceAction,issueCollectionInvoiceAction} from '@/app/actions/invoices.actions';
+import {historicalCollection} from '../../../e2e/ablauf/invoiceCollectionFixture';
 import {confirmPaymentAction} from '@/app/actions/payments.actions';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readInvoiceVat} from '@/modules/accounting/public';
@@ -20,6 +21,36 @@ import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {listOffenePostenAction} from '@/app/buchhaltung/actions';
 import {getAgingDaten} from '@/app/cockpit/actions';
+import {setExtraWorkHourlyRateAction} from '@/app/actions/orders.actions';
+
+beforeAll(async()=>{
+ // The following current order writers need a real audited current rate, not
+ // the synthetic legacy row otherwise introduced by the historical K1 setup.
+ expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+});
+
+it('K1 includes the real native collection original in Today reminders and both money totals',async()=>{
+ // Only historical initial records are synthetic; original issuance and every reader are real.
+ const source=await historicalCollection([1900,1900,1900]);
+ const [clock]=await sql`SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+agreement.ziel_tage+1)::text AS today FROM public.customer_agreements agreement WHERE agreement.tenant_id=${tenant} AND agreement.id=${source.agreementId}::uuid`;
+ const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_K1_AUTH');
+ const read=()=>withSession(full,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(clock.today+'T12:00:00Z')));
+ const before=await read();expect(before.invoiceMoney?.code).toBe('OK');
+ const issued=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ expect(issued.code).toBe('OK');if(issued.code!=='OK')throw Error('TEST_K1_COLLECTION_ISSUE:'+issued.code);
+ expect(issued.receipt.grossAmountCents).toBe(11900);
+ const after=await read();expect(after.invoiceMoney?.code).toBe('OK');
+ if(before.invoiceMoney?.code!=='OK'||after.invoiceMoney?.code!=='OK')throw Error('TEST_K1_TODAY_SOURCE');
+ expect(after.invoiceMoney.openCents-before.invoiceMoney.openCents).toBe(11900);
+ expect(after.invoiceMoney.overdueCents-before.invoiceMoney.overdueCents).toBe(11900);
+ const item=after.items.find(row=>row.invoiceId===issued.receipt.invoiceId);
+ expect(item).toMatchObject({primaryActionLabel:'Erinnern'});expect(item).not.toHaveProperty('orderId');
+ const list=await withSession(full,()=>readInvoiceTruth(auth.data,{customerId:source.customerId},readInvoiceVat,clock.today));
+ expect(list.code).toBe('OK');if(list.code!=='OK')throw Error('TEST_K1_LIST');
+ expect(list.data.find(row=>row.invoiceId===issued.receipt.invoiceId)).toMatchObject({overdue:true,openAmountCents:11900});
+ const sum=await withPrivilegedTenantTransaction(auth.data,tx=>readCustomerKennzahlen(tx,auth.data,source.customerId,clock.today));
+ expect(sum.overdue).toEqual({invoiceCount:1,openAmountCents:11900});
+});
 
 it('A38a A10 classifies yesterday-open/today-open/yesterday-paid identically in the real list, Today and customer sum',async()=>{
  const customerId=await customerFixture('TEST S38a overdue day');

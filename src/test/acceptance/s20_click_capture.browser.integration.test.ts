@@ -25,8 +25,8 @@ it('L8 native command hang/repeat/abort and offline diagnostics reach the actual
  const compiled=await build({stdin:{contents:"export {installProtocolClickCapture} from './src/modules/logging/public';export {runServerAction} from './src/lib/client/runServerAction';",resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,format:'esm',platform:'browser'});
  const bootstrap=`import * as client from '/capture.mjs';
  const state=await(await fetch('/TEST/state')).json();if(state.code!=='OK'||!state.enabled)throw Error('TEST_REAL_CAPTURE_STATE_REQUIRED');
- window.TESToverflowAck=0;
- client.installProtocolClickCapture(state.scope,async(entries,scope)=>{const result=await fetch('/TEST/clicks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({entries,scope})});const receipt=result.ok?await result.json():{code:'UNAVAILABLE'};window.TESToverflowAck+=entries.filter(entry=>entry.target?.startsWith('test.overflow.')&&receipt.accepted?.includes(entry.id)).length;return receipt;});
+ window.TESToverflowAck=0;window.TESTlocalAck=0;
+ client.installProtocolClickCapture(state.scope,async(entries,scope)=>{const result=await fetch('/TEST/clicks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({entries,scope})});const receipt=result.ok?await result.json():{code:'UNAVAILABLE'};window.TESToverflowAck+=entries.filter(entry=>entry.target?.startsWith('test.overflow.')&&receipt.accepted?.includes(entry.id)).length;window.TESTlocalAck+=entries.filter(entry=>entry.target==='test.local'&&receipt.accepted?.includes(entry.id)).length;return receipt;});
  window.TESTpending=[];
  document.querySelector('#command').addEventListener('click',()=>{window.TESTpending.push(client.runServerAction(async()=>{const result=await fetch('/TEST/command',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});return result.json();}));});
  document.querySelector('#abort').addEventListener('click',()=>{window.TESTpending.push(client.runServerAction(async()=>{const controller=new AbortController();controller.abort(new DOMException('TEST PRIVATE_BROWSER_FAULT Bearer x','AbortError'));return fetch('/TEST/command',{method:'POST',body:'{}',signal:controller.signal});}));});
@@ -80,6 +80,9 @@ it('L8 native command hang/repeat/abort and offline diagnostics reach the actual
   await expect.poll(()=>attempts.filter(batch=>batch.some(entry=>'target'in entry&&entry.target==='test.local')).length).toBe(2);
   expect(attempts.filter(batch=>batch.some(entry=>'target'in entry&&entry.target==='test.local'))[1]).toEqual(first);
   expect(await sql`SELECT outcome,duration_ms FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND target='test.local'`).toEqual([{outcome:null,duration_ms:null}]);
+  // A server-observed retry is not its browser-consumed ACK: finish that
+  // actual reply before taking the network down for the separate 600-click case.
+  await page.waitForFunction(()=>(window as unknown as {TESTlocalAck:number}).TESTlocalAck===1);
   // PL19:41 K1: actual browser buffer, same authenticated transport and DB.
   await context.setOffline(true);
   await page.evaluate(async()=>{

@@ -172,4 +172,45 @@ describe("loginWithPin() active app user security", () => {
       .resolves.toEqual({ ok: false, message: "Code falsch · bitte neu eingeben" });
     expect(ports.dbSelect).not.toHaveBeenCalled();
   });
+
+  it("reports a wrapped database identifier without logging SQL, values or PIN data", async () => {
+    // Synthetic diagnostic boundary only; this does not prove deployed login.
+    const failure = Object.assign(new Error("TEST_PRIVATE_SQL"), {
+      name: "DrizzleQueryError",
+      cause: { name: "PostgresError", code: "42P01", message: "TEST_PRIVATE_ROW", detail: "TEST_PRIVATE_PIN" },
+    });
+    ports.dbSelect.mockRejectedValue(failure);
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const { loginWithPin } = await import("@/app/actions/auth.actions");
+      await expect(loginWithPin(handleFor("synthetic-phillip-id"), "1234"))
+        .resolves.toEqual({ ok: false, message: "Anmeldung gerade nicht möglich – wir sind dran." });
+      expect(logged).toHaveBeenCalledExactlyOnceWith("PIN login failed.", { name: "DrizzleQueryError", code: "42P01" });
+      expect(JSON.stringify(logged.mock.calls)).not.toContain("TEST_PRIVATE");
+      expect(ports.setAppSession).not.toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it.each(["cycle", "getter", "proxy", "content"] as const)("keeps a %s diagnostic object inside the caught failure", async kind => {
+    const failure: Record<string, unknown> = {};
+    const getter = vi.fn(() => { throw new Error("TEST_PRIVATE_GETTER"); });
+    if (kind === "cycle") failure.cause = failure;
+    if (kind === "getter") Object.defineProperty(failure, "code", { get: getter });
+    if (kind === "content") Object.assign(failure, { name: "TEST_PRIVATE_NAME", code: "TEST_PRIVATE_CODE" });
+    ports.dbSelect.mockRejectedValue(kind === "proxy" ? new Proxy(failure, { getOwnPropertyDescriptor: getter }) : failure);
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const { loginWithPin } = await import("@/app/actions/auth.actions");
+      await expect(loginWithPin(handleFor("synthetic-phillip-id"), "1234"))
+        .resolves.toEqual({ ok: false, message: "Anmeldung gerade nicht möglich – wir sind dran." });
+      expect(logged).toHaveBeenCalledExactlyOnceWith("PIN login failed.", { name: "UnknownError", code: null });
+      expect(JSON.stringify(logged.mock.calls)).not.toContain("TEST_PRIVATE");
+      if (kind === "getter") expect(getter).not.toHaveBeenCalled();
+      expect(ports.setAppSession).not.toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
+  });
 });

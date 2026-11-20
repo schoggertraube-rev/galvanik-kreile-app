@@ -5,7 +5,7 @@ import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import { classifyOverdue } from "@/lib/server/paymentContract";
 import {CUSTOMER_METRICS_COPY} from '@/ui/situationCatalog';
-import {invoiceAlreadySent,readInvoiceMailCohort} from './communicationDocumentPort';
+import {readUnsentInvoiceOriginals,readInvoiceMailCohort} from './communicationDocumentPort';
 import {evaluateOrderPriority} from '@/lib/priority';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
 import { withPrivilegedTenantTransaction,withTenantSavepoint } from "@/lib/server/privilegedDb";
@@ -509,11 +509,8 @@ export async function readCustomerSummary(
        const kennzahlen=await readCustomerKennzahlen(tx,authorization,input.customerId);
        const summary=mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable,kennzahlen);
        if(hasAuthorizationArea(authorization,'preise')){
-        const [pending]=await tx.execute<{count:number;originals:Array<{id:string;number:string;version:number;orderId:string|null;handover:string|null}>}>(sql`SELECT count(*)::integer AS count,coalesce(jsonb_agg(jsonb_build_object('id',invoice.id::text,'number',invoice.invoice_number,'version',invoice.aggregate_version,'orderId',invoice.order_id,'handover',orders.handover_mode) ORDER BY invoice.issued_at,invoice.id),'[]'::jsonb) AS originals FROM public.invoices invoice
-         LEFT JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
-         WHERE invoice.tenant_id=${authorization.tenantId} AND invoice.customer_id=${input.customerId}
-          AND invoice.status='issued' AND invoice.contract_version=1
-          AND NOT ${invoiceAlreadySent(authorization.tenantId,sql`invoice.id`)}`);
+        const originals=await readUnsentInvoiceOriginals(tx,authorization.tenantId,input.customerId);
+        const pending={count:originals.length,originals:originals.map(({id,number,version,orderId,handover})=>({id,number,version,orderId,handover}))};
         if(!pending||!Number.isSafeInteger(pending.count)||pending.count<0)throw Error('CUSTOMER_UNSENT_INVOICE_COUNT_INVALID');
         if(!Array.isArray(pending.originals)||pending.originals.length!==pending.count)throw Error('CUSTOMER_UNSENT_ORIGINALS_INVALID');
         summary.invoiceUnsentCount=pending.count;

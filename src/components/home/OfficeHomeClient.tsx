@@ -1,4 +1,6 @@
 "use client";
+import {CommunicationPanel} from '@/components/communication/CommunicationPanel';
+import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore } from "react";
@@ -62,6 +64,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [delegated, setDelegated] = useState<Record<string, { name: string; version: number; dueDate?: string }>>({});
+  const [invoiceMail,setInvoiceMail]=useState<NonNullable<TodayItem['invoiceMail']>|null>(null);
   const [mailId, setMailId] = useState<string | null>(null);
   const [mailPreview, setMailPreview] = useState<MailPreview | null>(null);
   const [mailMessage, setMailMessage] = useState("");
@@ -86,7 +89,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
       setMailMessage("Die Mail konnte nicht sicher gelesen werden.");
     }
   };
-  const primary = (item: TodayItem) => { if((item.kind==='complaint'||item.kind==='task')&&item.target){const handled=!window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:item.target.screen,arg:item.target.arg}}));if(!handled)setMessage(item.kind==='task'?'Aufgabe konnte nicht geöffnet werden · sie bleibt gespeichert.':'Aktion konnte nicht geöffnet werden · Reklamation bleibt offen.');}else if (item.kind === "order" && item.orderId) openOrder(item.orderId); else if (item.kind === "mail" && item.graphMessageId) void openMail(item.graphMessageId); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
+  const primary = (item: TodayItem) => { if(item.invoiceMail){setInvoiceMail(item.invoiceMail);}else if((item.kind==='complaint'||item.kind==='task')&&item.target){const handled=!window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:item.target.screen,arg:item.target.arg}}));if(!handled)setMessage(item.kind==='task'?'Aufgabe konnte nicht geöffnet werden · sie bleibt gespeichert.':'Aktion konnte nicht geöffnet werden · Reklamation bleibt offen.');}else if (item.kind === "order" && item.orderId) openOrder(item.orderId); else if (item.kind === "mail" && item.graphMessageId) void openMail(item.graphMessageId); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
   const dashboardItems = model.kind === "data" || model.kind === "empty" ? model.dashboard.items : [];
   const keyboardItems = sortHandlungsEintraege(dashboardItems.filter((item) => item.field === "action" && !item.assignedToName && !delegated[item.key] && (filter === "alle" || actionType(item) === filter)).map((item) => ({ item, art: actionType(item), gedimmt: Boolean(item.snoozedUntil), termin: item.dueDate })));
   const keyboardSelection = useListenTastatur({
@@ -174,6 +177,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
       {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neu erfassen" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
     </div>}
     {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel">{deriveTodayReminder("afternoon", later.dueDate) ? <Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /> : null}{deriveTodayReminder("tomorrow", later.dueDate) ? <Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /> : null}{deriveTodayReminder("after_due", later.dueDate) ? <Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy} onClick={() => void saveReminder("after_due")} /> : null}<Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
+    {invoiceMail?<Dialog titel={E_INVOICE_COPY.sendInvoice(invoiceMail.number,invoiceMail.count)} icon="mail" groesse="breit" onSchliessen={()=>setInvoiceMail(null)}><CommunicationPanel key={invoiceMail.documentId} targetType="CUSTOMER" targetId={invoiceMail.customerId} invoiceOriginal={invoiceMail}/></Dialog>:null}
     {mailId ? <Dialog titel="Mail" icon="mail" groesse="breit" onSchliessen={() => setMailId(null)}><div className="kr-stapel">
       {!mailPreview && !mailMessage ? <Hinweis>Mail wird gelesen …</Hinweis> : null}
       {mailMessage ? <Hinweis ton="warn">{mailMessage}</Hinweis> : null}

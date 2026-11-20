@@ -10,7 +10,7 @@ import {customerFixture,readyInvoiceOrder} from '../../../e2e/ablauf/orderFixtur
 import {requestMailStep} from '../../../e2e/ablauf/requestMailStep';
 import {getCustomerSummaryAction,updateCustomerAction} from '@/app/actions/customers.actions';
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
-import {getIntakeTaskAction} from '@/app/actions/eingang.actions';
+import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingang.actions';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 
 let customerId:string;
@@ -20,6 +20,8 @@ type MailCommandArgs=Pick<Parameters<typeof sendCustomerMailAction>[0],'targetTy
 let firstInput:Parameters<typeof sendCustomerMailAction>[0]|undefined;
 const sentHashes:string[]=[];
 const sentSizes:number[]=[];
+let recoveryTaskId:string|undefined;
+let lateInvoiceId:string|undefined;
 beforeEach(()=>{
   // Read-only steps must not depend on a previous test's cached Graph token.
   // Sending steps install their existing requestMailStep provider boundary.
@@ -79,16 +81,47 @@ it('PL01:02 exposes the actual102nd order as waiting without a false missing inv
   expect(card.data.nextActionRule).toMatchObject({zustand:'invoice_mail_queued',hauptaktion:null,versandhinweis:`Geht mit der nächsten Rechnungsmail an ${card.data.card.customerName} raus`});
 });
 
-it('PL01:02 automatically sends101 and the remainder through one user request and preserves the saved retries',async()=>{
-  const input=firstInput;
-  if(!input)throw Error('TEST_OVERFLOW_FIRST_COMMAND_REQUIRED');
-  await requestMailStep('S38-overflow-first-group');
-  expect(await withSession(full,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK'});
-  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
-  retainActualBoundaryBytes([101,1]);
+it('K3/K6 freezes all102 before Graph, blocks early task completion and repairs only the frozen remainder',async()=>{
+ const input=firstInput;if(!input)throw Error('TEST_OVERFLOW_FIRST_COMMAND_REQUIRED');
+ const [profile]=await sql`SELECT email FROM public.customers WHERE tenant_id=${tenant} AND id=${customerId}`;
+ await requestMailStep('S38-overflow-first-group');
+ const provider=vi.mocked(globalThis.fetch).getMockImplementation();if(!provider)throw Error('TEST_PROVIDER_REQUIRED');
+ let firstAcknowledged=false;
+ vi.mocked(globalThis.fetch).mockImplementation(async(url,init)=>{
+  const response=await provider(url,init);
+  if(!firstAcknowledged&&String(url).endsWith('/sendMail')&&init?.method==='POST'){
+   firstAcknowledged=true;
+   expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),email:null}))).toMatchObject({code:'OK'});
+  }
+  return response;
+ });
+ let taskId:string|undefined;
+ try{
+  expect(await withSession(full,()=>sendCustomerMailAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  retainActualBoundaryBytes([101]);
+  const markers=await sql`SELECT task.id::text AS task_id,task.version FROM public.events marker JOIN public.tasks task ON task.tenant_id=marker.tenant_id AND task.client_key::text=marker.id WHERE marker.tenant_id=${tenant} AND marker.event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND marker.correlation_id=${input.clientRequestId}::uuid`;
+  expect(markers).toHaveLength(1);taskId=markers[0].task_id;
+  expect(await withSession(full,()=>getIntakeTaskAction({taskId:taskId!}))).toMatchObject({code:'OK',task:{status:'offen',bezug_typ:'kunde',bezug_id:customerId,erstellt_von:full.actorId}});
+  recoveryTaskId=taskId;
+ }finally{
+  expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),email:profile.email}))).toMatchObject({code:'OK'});
+ }
+ if(!taskId)throw Error('TEST_OVERFLOW_REMAINDER_TASK_REQUIRED');
 });
-
-it('reads the automatically sent remainder without a second user request',async()=>{
+it('K6 refuses completion of the real task while one frozen original remains unsent',async()=>{
+ if(!recoveryTaskId)throw Error('TEST_OVERFLOW_REMAINDER_TASK_REQUIRED');
+ const task=await withSession(full,()=>getIntakeTaskAction({taskId:recoveryTaskId!}));
+ if(task.code!=='OK'||!task.task)throw Error('TEST_OVERFLOW_TASK_READ_REQUIRED');
+ const version=task.task.version;
+ expect(await withSession(full,()=>completeIntakeTaskAction({taskId:recoveryTaskId,version,note:'TEST cannot hide unsent originals'}))).toMatchObject({code:'CONFLICT'});
+});
+it('K3 repairs the retained remainder with the same request and one physical mail',async()=>{
+ const input=firstInput;if(!input||!recoveryTaskId)throw Error('TEST_OVERFLOW_REMAINDER_SOURCE_REQUIRED');
+ await requestMailStep('S38-overflow-repair-followup');
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:recoveryTaskId!}))).toMatchObject({code:'OK',task:{status:'erledigt'}});
+ retainActualBoundaryBytes([1]);
+});it('reads the automatically sent remainder without a second user request',async()=>{
   const after=await withSession(full,()=>getCustomerSummaryAction({customerId}));
   if(after.code!=='OK')throw Error('TEST_OVERFLOW_REMAINING_REQUIRED');
   expect(after.data.invoiceUnsentCount).toBe(0);
@@ -102,34 +135,23 @@ it('reads no unsent remainder and verifies every actual transmitted PDF against 
   expect(sentHashes.slice().sort()).toEqual(hashes.map(row=>row.pdf_sha256).sort());
 });
 
-it('R2 retains the actual first acknowledgement and a normal readable task when a later automatic group has no valid recipient, then repairs on the same retry',async()=>{
+it('K3 never adds a later invoice to the saved request and sends nothing twice',async()=>{
  const input=firstInput;if(!input)throw Error('TEST_OVERFLOW_FIRST_COMMAND_REQUIRED');
- const later=await readyInvoiceOrder('TEST actual followup failure','pickup',false,customerId);
- const [profile]=await sql`SELECT email FROM public.customers WHERE tenant_id=${tenant} AND id=${customerId}`;
- expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),email:null}))).toMatchObject({code:'OK'});
- let taskId:string|undefined;
- try{
-  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
-  const marker=await sql`SELECT marker.id,task.id::text AS task_id,thread.status FROM public.events marker
-   JOIN public.communication_threads thread ON thread.tenant_id=marker.tenant_id AND thread.id::text=marker.payload->>'threadId'
-   JOIN public.tasks task ON task.tenant_id=marker.tenant_id AND task.client_key::text=marker.id
-   WHERE marker.tenant_id=${tenant} AND marker.event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND marker.correlation_id=${input.clientRequestId}::uuid`;
-  expect(marker).toHaveLength(1);expect(marker[0].status).toBe('sent');taskId=marker[0].task_id;
-  expect(await withSession(full,()=>getIntakeTaskAction({taskId:taskId!}))).toMatchObject({code:'OK',task:{status:'offen',bezug_typ:'kunde',bezug_id:customerId,erstellt_von:full.actorId}});
-  expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{invoiceUnsentOriginals:[{id:later.invoice.invoiceId}]}});
- }finally{
-  expect(await withSession(full,()=>updateCustomerAction({customerId,clientEventId:randomUUID(),email:profile.email}))).toMatchObject({code:'OK'});
- }
- if(!taskId)throw Error('TEST_OVERFLOW_REMAINDER_TASK_REQUIRED');
- await requestMailStep('S38-overflow-repair-followup');
+ const later=await readyInvoiceOrder('TEST later regular request only','pickup',false,customerId);lateInvoiceId=later.invoice.invoiceId;
+ await requestMailStep('S38-overflow-late-excluded');
  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
- expect(await withSession(full,()=>getIntakeTaskAction({taskId}))).toMatchObject({code:'OK',task:{status:'erledigt'}});
- expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{invoiceUnsentCount:0}});
- const repairMails=vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).endsWith('/sendMail')&&init?.method==='POST');
- expect(repairMails).toHaveLength(1);
- expect(JSON.parse(String(repairMails[0][1]?.body)).message.attachments).toHaveLength(1);
+ expect(vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).endsWith('/sendMail')&&init?.method==='POST')).toHaveLength(0);
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{invoiceUnsentCount:1,invoiceUnsentOriginals:[{id:later.invoice.invoiceId}]}});
+ const snapshots=await sql`SELECT payload FROM public.events WHERE tenant_id=${tenant} AND event_type='INVOICE_MAIL_REQUEST_SNAPSHOT_V1' AND correlation_id=${input.clientRequestId}::uuid`;
+ expect(snapshots).toHaveLength(1);expect(snapshots[0].payload.invoiceIds).toEqual(originals);expect(snapshots[0].payload.invoiceIds).not.toContain(later.invoice.invoiceId);
 });
-
+it('K3 another deserialized retry performs no Graph write and retains the later original',async()=>{
+ const input=firstInput;if(!input||!lateInvoiceId)throw Error('TEST_OVERFLOW_LATE_ORIGINAL_REQUIRED');
+ await requestMailStep('S38-overflow-second-late-excluded');
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
+ expect(vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).endsWith('/sendMail')&&init?.method==='POST')).toHaveLength(0);
+ expect(await withSession(full,()=>getCustomerSummaryAction({customerId}))).toMatchObject({code:'OK',data:{invoiceUnsentCount:1,invoiceUnsentOriginals:[{id:lateInvoiceId}]}});
+});
 it('keeps the actual remainder recovery original append-only after repair',async()=>{
  const input=firstInput;if(!input)throw Error('TEST_OVERFLOW_FIRST_COMMAND_REQUIRED');
  const before=await sql`SELECT id,to_jsonb(event) AS original FROM public.events event WHERE tenant_id=${tenant} AND event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND correlation_id=${input.clientRequestId}::uuid`;

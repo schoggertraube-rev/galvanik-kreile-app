@@ -1,7 +1,7 @@
 import {isIssueCollectionInvoiceInput,type IssueCollectionInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 export type {IssueCollectionInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 import {parseInvoiceCollectionOriginal,assertInvoiceOriginalLineSources,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
-import {resolveInvoicePaymentTerms,parseInvoicePaymentTerms,type InvoicePaymentTerms} from '@/lib/domain/invoicePaymentTerms';
+import {resolveInvoicePaymentTerms,parseInvoicePaymentTerms,InvoicePaymentTermsSourceError,type InvoicePaymentTerms} from '@/lib/domain/invoicePaymentTerms';
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {isCancelInvoiceInput as isValidCancelInput,type CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 export type {CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
@@ -1293,12 +1293,14 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         return {code:'ORDER_IN_COLLECTION',message:E_INVOICE_COPY.orderInCollection(month,(await customerInvoiceTerms()).customerShortName)};
       }
       // Customer master data above is stable before agreement/source reads.
-      const agreement = await readEffectiveCustomerAgreement(tx, {
+      const agreementLevels = await readEffectiveCustomerAgreement(tx, {
             tenantId,
             customerId: order.customer_id,
             orderId: order.id,
+            invoiceTerms: true,
             lock: true,
           });
+      const agreement = agreementLevels.order ?? agreementLevels.customer;
       if (
         input.agreement !== undefined
         && (
@@ -1355,7 +1357,7 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         if(originalReceipt.invoiceId!==original.id)throw Error('INVOICE_SHIPPING_ORIGIN_RECEIPT_INVALID');
         originalInvoiceNumber=originalReceipt.invoiceNumber;
       }
-      const prepared=await prepareQualifiedInvoiceContent(tx,authorization.data,input,order,source,afterGoodsOut,agreement,customerInvoiceTerms,requireVatReader(readVat),readShippingSettings);
+      const prepared=await prepareQualifiedInvoiceContent(tx,authorization.data,input,order,source,afterGoodsOut,agreement,customerInvoiceTerms,requireVatReader(readVat),readShippingSettings,false,[agreementLevels.order,agreementLevels.customer]);
       if(prepared.code!=='PREPARED')return prepared;
       const {content,frozenInvoiceTerms,paymentTermDays}=prepared;
       return persistPreparedInvoice(tx,authorization.data,input,order,content,{paymentTermDays,frozenInvoiceTerms,serviceDate:source.service_date,freezeId:source.freeze_id,afterGoodsOut,originalInvoiceNumber},requireVatReader(readVat),readOriginal);
@@ -1395,7 +1397,7 @@ type InvoiceCustomerTermsReader=(tx:PrivilegedTenantTransaction,tenantId:string,
 type InvoiceShippingSettingsReader=(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>;
 /** One existing per-order commercial preparation for individual and collection originals.
  * No item repricing, duplicated tax calculation, sender or number allocation. */
-async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,source:SourceRow,afterGoodsOut:boolean,agreement:Awaited<ReturnType<typeof readEffectiveCustomerAgreement>>,customerInvoiceTerms:Parameters<typeof resolveInvoicePaymentTerms>[1]|(()=>Promise<Parameters<typeof resolveInvoicePaymentTerms>[1]>),readVat:InvoiceVatReader,readShippingSettings:InvoiceShippingSettingsReader|undefined,collectionSource=false):Promise<Exclude<CreateInvoiceResult,{code:'OK'}>|{code:'PREPARED';content:PreparedInvoiceContent;frozenInvoiceTerms:InvoicePaymentTerms;paymentTermDays:number}>{
+async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,source:SourceRow,afterGoodsOut:boolean,agreement:Awaited<ReturnType<typeof readEffectiveCustomerAgreement>>,customerInvoiceTerms:Parameters<typeof resolveInvoicePaymentTerms>[1]|(()=>Promise<Parameters<typeof resolveInvoicePaymentTerms>[1]>),readVat:InvoiceVatReader,readShippingSettings:InvoiceShippingSettingsReader|undefined,collectionSource=false,paymentAgreements?:Parameters<typeof resolveInvoicePaymentTerms>[2]):Promise<Exclude<CreateInvoiceResult,{code:'OK'}>|{code:'PREPARED';content:PreparedInvoiceContent;frozenInvoiceTerms:InvoicePaymentTerms;paymentTermDays:number}>{
  const tenantId=auth.tenantId;
       const commercial=source.has_quote&&input.shippingCosts===undefined?await readOrderCommercialQuote(tx,tenantId,order.id):null;
       if(commercial){
@@ -1443,6 +1445,11 @@ async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,aut
       const buyerFields={name:source.customer_name,street:source.customer_street,zip:source.customer_zip,city:source.customer_city,country:source.customer_country};
       for(const [field,value] of Object.entries(buyerFields))if(optionalText(value)===null)throw new InvoiceElectronicSourceError({kind:'customer',objectId:order.customer_id,field});
       if(source.service_date===null||source.service_date===undefined)throw new InvoiceElectronicSourceError({kind:'order',objectId:order.id,field:'serviceDate'});
+      let frozenInvoiceTerms:InvoicePaymentTerms;
+      try{frozenInvoiceTerms=resolveInvoicePaymentTerms(source.invoice_payment_term_days,
+        typeof customerInvoiceTerms==='function'?await customerInvoiceTerms():customerInvoiceTerms,paymentAgreements===undefined?agreement:paymentAgreements);}
+      catch(error){if(!(error instanceof InvoicePaymentTermsSourceError))throw error;throw new InvoiceElectronicSourceError({kind:error.kind,field:error.field,...(error.kind==='customer'?{objectId:order.customer_id}:{})});}
+      const paymentTermDays=frozenInvoiceTerms.ziel_tage;
       if (
         !source.effective_integrity_ok
         || (afterGoodsOut && !source.post_goods_out_invoice_eligible)
@@ -1453,9 +1460,7 @@ async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,aut
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
 
-      const frozenInvoiceTerms=resolveInvoicePaymentTerms(source.invoice_payment_term_days,
-        typeof customerInvoiceTerms==='function'?await customerInvoiceTerms():customerInvoiceTerms,agreement);
-      const paymentTermDays=frozenInvoiceTerms.ziel_tage;
+
 
       // Every master-data dependent value is built before a number exists, so
       // an incomplete tenant, customer, order or position cannot consume one.
@@ -1778,7 +1783,7 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
   return { code: "OK", receipt, replayed: false };
 }
 
-export type CancellationCreditComposition={failed:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>;settled:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>};
+export type CancellationCreditComposition={failed:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>;settled:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>;collectionFailed?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>;collectionSettled?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string)=>Promise<void>};
 export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,creditComposition?:CancellationCreditComposition,readOriginal?:InvoiceOriginalReader): Promise<CancelInvoiceResult> {
   if (!isValidCancelInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Stornoanfrage." };
@@ -2048,6 +2053,7 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
         if(released.length!==collection.members.length||collection.members.some(member=>!released.some(row=>row.order_id===member.orderId)))throw Error('INVOICE_CANCEL_COLLECTION_RELEASE_INCOMPLETE');
         await tx.execute(sql`SET CONSTRAINTS invoice_collection_original_complete,invoice_collection_original_members IMMEDIATE`);
         await tx.execute(sql`SET CONSTRAINTS invoice_collection_original_complete,invoice_collection_original_members DEFERRED`);
+
       }
 
       const receiptRows = await readCancellationInvoiceReceipts(tx,input.clientEventId);
@@ -2075,12 +2081,61 @@ export async function cancelInvoice(input: unknown,readVat?:InvoiceVatReader,cre
   }
 }
 
+/** K4/R2 obligation is read from the real immutable cancellation, not another ledger. */
+export async function readCancelledCollectionRouting(tx:PrivilegedTenantTransaction,tenantId:string,key:string,lock=false){
+ const identities=await tx.execute<{client_event_id:string}>(sql`SELECT client_event_id::text FROM public.events WHERE tenant_id=${tenantId} AND event_type='INVOICE_CANCELLED_V1' AND id=${key}`);
+ if(!identities.length)return null;
+ if(identities.length!==1)throw Error('INVOICE_COLLECTION_ROUTING_IDENTITY_INVALID');
+ const rows=await readCancellationInvoiceReceipts(tx,identities[0].client_event_id);
+ if(rows.length!==1)throw Error('INVOICE_COLLECTION_ROUTING_RECEIPT_INVALID');
+ const receipt=mapInvoiceCancellationReceipt(rows[0],tenantId,rows[0].actor_id);
+ if(!('collection'in receipt))return null;
+ const [invoice]=await tx.execute<{customer_id:string}>(sql`SELECT customer_id FROM public.invoices WHERE tenant_id=${tenantId} AND id=${receipt.invoiceId}::uuid AND status='cancelled'`);
+ if(!invoice)throw Error('INVOICE_COLLECTION_ROUTING_ORIGINAL_INVALID');
+ const resolution=await readEffectiveCustomerAgreement(tx,{tenantId,customerId:invoice.customer_id,orderId:null,memberOrderIds:receipt.collection.members.map(member=>member.orderId),lock});
+ const agreement=resolution.agreement;
+ if(!agreement)return {receipt,customerId:invoice.customer_id,agreement:null,missing:[] as string[],pending:false};
+ const routed=await tx.execute<{order_id:string;integrity_ok:boolean}>(sql`SELECT member.order_id,(collection.invoice_id IS NULL) AS integrity_ok FROM public.invoice_collection_orders member JOIN public.invoice_collections collection ON collection.tenant_id=member.tenant_id AND collection.id=member.collection_id
+ WHERE member.tenant_id=${tenantId} AND collection.customer_id=${invoice.customer_id} AND collection.monat=${receipt.collection.month}::date AND collection.status='offen'
+ UNION SELECT member.order_id,private.invoice_original_source_valid(original.tenant_id,original.customer_id,original.order_id,original.order_version,original.freeze_id,original.service_date,original.snapshot,original.issued_at) FROM private.v_invoice_order_members_v1 member JOIN public.invoices original ON original.tenant_id=member.tenant_id AND original.id=member.invoice_id WHERE member.tenant_id=${tenantId} AND original.customer_id=${invoice.customer_id} AND original.status='issued'
+ UNION SELECT removal.order_id,true FROM public.events removal WHERE removal.tenant_id=${tenantId} AND removal.event_type='ORDER_COLLECTION_MEMBER_REMOVED_V1' AND removal.created_at AT TIME ZONE 'UTC'>=${receipt.cancelledAt}::timestamptz AND private.invoice_collection_removal_source_valid(removal,false)`);
+ const memberIds=receipt.collection.members.map(member=>member.orderId);
+ if(routed.some(row=>memberIds.includes(row.order_id)&&row.integrity_ok!==true))throw Error('INVOICE_COLLECTION_ROUTING_SOURCE_INCOMPLETE');
+ const missing=receipt.collection.members.filter(member=>!routed.some(row=>row.order_id===member.orderId)).map(member=>member.orderId);
+ return {receipt,customerId:invoice.customer_id,agreement,missing,pending:missing.length>0};
+}
+export async function repairCancelledCollectionRouting(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,key:string){
+ const source=await readCancelledCollectionRouting(tx,auth.tenantId,key,true);
+ if(!source?.pending)return;
+ if(!('collection'in source.receipt)||!source.agreement||source.agreement.targetDays===null)throw Error('INVOICE_COLLECTION_ROUTING_TERMS_MISSING');
+ const physical=await tx.execute<{id:string;version:number;freeze_id:string}>(sql`SELECT orders.id,orders.version,frozen.freeze_id::text FROM public.orders orders JOIN private.v_order_freeze_state_v1 frozen ON frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active AND frozen.integrity_ok
+ WHERE orders.tenant_id=${auth.tenantId} AND orders.customer_id=${source.customerId} AND orders.id=ANY(ARRAY[${sql.join(source.missing.map(id=>sql`${id}`),sql`, `)}]::text[])
+ AND orders.station='abgeholt' AND orders.current_station='abgeholt' AND orders.current_station_id='abgeholt' AND orders.status='abgeholt' AND orders.payment_mode='rechnung' ORDER BY orders.id FOR UPDATE OF orders`);
+ const members=source.receipt.collection.members;
+ if(physical.length!==source.missing.length||physical.some(row=>!members.some(member=>member.orderId===row.id&&member.orderVersion===row.version&&member.freezeId===row.freeze_id)))throw Error('INVOICE_COLLECTION_ROUTING_PHYSICAL_SOURCE_CHANGED');
+ const {attachOpenInvoiceCollection}=await import('./recordGoodsOutCommand');
+ for(const orderId of source.missing)await attachOpenInvoiceCollection(tx,{tenantId:auth.tenantId,customerId:source.customerId,orderId,actorId:auth.userId,targetDays:source.agreement.targetDays,physicalMonth:source.receipt.collection.month});
+ const after=await readCancelledCollectionRouting(tx,auth.tenantId,key);if(!after||after.pending)throw Error('INVOICE_COLLECTION_ROUTING_READBACK_FAILED');
+}
+
 async function completeCancellationCredit(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:ImmutableInvoiceCancellationReceipt,replayed:boolean,composition?:CancellationCreditComposition,readVat:InvoiceVatReader=readInvoiceVat,readOriginal?:InvoiceOriginalReader):Promise<CancelInvoiceResult>{
   if(receipt.reissueWithoutShipping)return completeInvoiceReissueFollowups(tx,auth,receipt,replayed,readVat,composition,readOriginal);
+  let collectionPending=false;
+  if('collection'in receipt){
+    try{
+      await withTenantSavepoint(tx,nested=>repairCancelledCollectionRouting(nested,auth,receipt.eventId));
+      if(composition?.collectionSettled)await withTenantSavepoint(tx,nested=>composition.collectionSettled!(nested,auth,receipt.eventId));
+    }catch(error){
+      console.error('[INVOICE_COLLECTION_ROUTING_PENDING]',{code:error instanceof Error&&/^[A-Z0-9_]+$/.test(error.message)?error.message:null});
+      try{if(!composition?.collectionFailed)throw Error('INVOICE_COLLECTION_ROUTING_TASK_PORT_MISSING');await withTenantSavepoint(tx,nested=>composition.collectionFailed!(nested,auth,receipt.eventId));}
+      catch(taskError){console.error('[INVOICE_COLLECTION_ROUTING_TASK_PENDING]',{name:taskError instanceof Error?taskError.name:'UnknownError'});}
+      collectionPending=true;
+    }
+  }
   try{
     await withTenantSavepoint(tx,nested=>appendCancellationCredit(nested,auth.tenantId,receipt));
     if(composition)await withTenantSavepoint(tx,nested=>composition.settled(nested,auth,receipt.clientEventId));
-    return {code:'OK',receipt,replayed};
+    return collectionPending?{code:'UNAVAILABLE',message:E_INVOICE_COPY.collectionRoutingPending}:{code:'OK',receipt,replayed};
   }catch(error){
     console.error('[CUSTOMER_CREDIT_FOLLOWUP_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});
     // Cancellation remains committed. Its original N5/actor/receipt is the

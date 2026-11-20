@@ -30,7 +30,7 @@ type InboxMessage = {
   hasAttachments: boolean | null;
 };
 
-export function CommunicationPanel({ targetType, targetId,composer }: Target & {composer?:Composer}) {
+export function CommunicationPanel({ targetType, targetId,composer,invoiceOriginal }: Target & {composer?:Composer;invoiceOriginal?:{documentId:string;expectedInvoiceIds:string[]}}) {
   const [state, setState] = useState<"loading" | "ready" | "in-klärung" | "error">("loading");
   const [message, setMessage] = useState("");
   const [inbox, setInbox] = useState<InboxMessage[]>([]);
@@ -44,7 +44,8 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
     : quote.linkedOrderId === targetId), [quotes, targetId, targetType]);
 
   useEffect(() => {
-    if(composer)return;
+    // Invoice transport uses the existing sender's prices gate, not mailbox-read rights.
+    if(composer||invoiceOriginal)return;
     let active = true;
     const load = async () => {
       const status = await getMicrosoftGraphStatusAction();
@@ -83,7 +84,7 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
       }
     });
     return () => { active = false; };
-  }, [targetId, targetType,composer]);
+  }, [targetId, targetType,composer,invoiceOriginal]);
 
   const attach = async (mail: InboxMessage) => {
     setBusyId(mail.id);
@@ -118,7 +119,7 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
         const formElement=event.currentTarget,form=new FormData(formElement);
         if(pendingSend.current&&(pendingSend.current.targetType!==targetType||pendingSend.current.targetId!==targetId)){setFeedback('Vorherigen Versand zuerst am ursprünglichen Vorgang prüfen.');return;}
         const quoteId=String(form.get('quoteId')??'');
-        const input=confirmedRetry&&pendingSend.current?{...pendingSend.current,clientRequestId:confirmedRetry.requestId,confirmedResend:true as const}:pendingSend.current??{targetType,targetId,clientRequestId:globalThis.crypto.randomUUID(),subject:String(form.get('subject')??''),body:String(form.get('body')??''),...(quoteId?{attachment:{kind:'QUOTE' as const,documentId:quoteId}}:{})};
+        const input=confirmedRetry&&pendingSend.current?{...pendingSend.current,clientRequestId:confirmedRetry.requestId,confirmedResend:true as const}:pendingSend.current??{targetType,targetId,clientRequestId:globalThis.crypto.randomUUID(),subject:String(form.get('subject')??''),body:String(form.get('body')??''),...(invoiceOriginal?{attachment:{kind:'INVOICE' as const,documentId:invoiceOriginal.documentId},expectedInvoiceIds:invoiceOriginal.expectedInvoiceIds}:quoteId?{attachment:{kind:'QUOTE' as const,documentId:quoteId}}:{})};
         pendingSend.current=input;sendLock.current=true;setSendBusy(true);setFeedback('');
         try{
           const result=await sendCustomerMailAction(input);
@@ -134,14 +135,16 @@ export function CommunicationPanel({ targetType, targetId,composer }: Target & {
       }}>
         <label>Betreff<input name="subject" required maxLength={500} value={composer?.subject} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onSubject(event.target.value):undefined} /></label>
         <label>Nachricht<textarea name="body" required maxLength={20_000} value={composer?.body} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onBody(event.target.value):undefined} /></label>
-        {!composer?<label>PDF-Anhang<select name="quoteId" defaultValue="" disabled={sendBusy||sendUnclear}><option value="">Ohne Anhang</option>{matchingQuotes.map((quote) => <option key={quote.quoteId} value={quote.quoteId}>KV {quote.quoteNumber}</option>)}</select></label>:null}
+        {!composer&&!invoiceOriginal?<label>PDF-Anhang<select name="quoteId" defaultValue="" disabled={sendBusy||sendUnclear}><option value="">Ohne Anhang</option>{matchingQuotes.map((quote) => <option key={quote.quoteId} value={quote.quoteId}>KV {quote.quoteNumber}</option>)}</select></label>:null}
         {!composer?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{confirmedRetry?.label??(newPrepareReady?"Versenden":sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden")}</button>:null}
       </form>
   );
   if(composer)return <section className={styles.panel}>{composeForm}</section>;
+  if(invoiceOriginal)return <section className={styles.panel}>{composeForm}{feedback?<p className={styles.feedback} role="status">{feedback}</p>:null}</section>;
 
   if (state === "loading") return <section className={styles.panel} aria-busy="true"><Loader2 className={styles.spin} /><span>E-Mail-Verbindung wird geprüft.</span></section>;
   if (state !== "ready") return <section className={styles.panel} role={state === "error" ? "alert" : "status"}><header><AtSign /><div><small>E-Mail</small><h3>{state === "in-klärung" ? "In Klärung" : "Nicht verfügbar"}</h3></div></header><p>{message}</p></section>;
+
 
   return (
     <section className={styles.panel}>
