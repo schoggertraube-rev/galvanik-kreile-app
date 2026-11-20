@@ -29,7 +29,8 @@ import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {INVOICE_MAIL_COMPOSER_COPY} from '@/ui/situationCatalog';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 import {requestMailStep} from '../../../e2e/ablauf/requestMailStep';
-afterAll(()=>withAuthorizationReadBudget(()=>db.$client.end({timeout:5})));
+// The shared application DB follows the existing worker/app lifetime.
+// This suite closes only its explicitly created native TEST client below.
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
