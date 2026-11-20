@@ -2,6 +2,7 @@
 // Actual canonical tenant, request/Auth, Actions and DB. Only initial TEST logins are synthetic.
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {randomUUID} from 'node:crypto';
+import {writeFileSync} from 'node:fs';
 import postgres from 'postgres';
 import {afterAll,beforeAll,expect,it,vi} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
@@ -11,7 +12,7 @@ import type {AppSession} from '@/lib/server/appSession';
 (globalThis as typeof globalThis&{AsyncLocalStorage:typeof AsyncLocalStorage}).AsyncLocalStorage=AsyncLocalStorage;
 vi.setConfig({testTimeout:60000,hookTimeout:60000});
 const database=process.env.DATABASE_URL;
-if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database).hostname!=='127.0.0.1'||new URL(database).port!=='54342'||new URL(database).pathname!=='/postgres')throw Error('S19_SOURCE_OWN_LOOPBACK_REQUIRED');
+if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database).hostname!=='127.0.0.1'||!['postgres:','postgresql:'].includes(new URL(database).protocol)||new URL(database).username!=='postgres'||new URL(database).pathname!=='/postgres')throw Error('S19_SOURCE_OWN_LOOPBACK_REQUIRED');
 if(process.env.SUPABASE_SERVICE_ROLE_KEY)throw Error('S19_SOURCE_NO_REMOTE_STORAGE_KEY');
 const sql=postgres(database,{max:2,prepare:false}),originalSecret=process.env.APP_SESSION_SECRET;
 process.env.APP_SESSION_SECRET='TEST-S19-source-'+randomUUID();
@@ -74,4 +75,5 @@ it('prepares actual TEST action originals for component inspection without a ten
  expect(await request(actors[0],()=>readQuoteAction({quoteId,purpose:'operations'}))).toMatchObject({code:'OK',quote:{quoteId,customerId}});
  expect(await request(actors[0],()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{id:itemId,text:'TEST S19 Originalnotiz zum Flansch'}});
  for(const actor of actors)expect(await request(actor,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{id:orderId}}});
+ writeFileSync('.git/kreile-s19-source-fixture-current.json',JSON.stringify({at:new Date().toISOString(),canonicalTenant:KREILE_TENANT_SLUG,customerId,orderId,quoteId,itemId,sourceVersion:card.data.card.version,actualActionsAuthDB:true,syntheticInitialLogins:true,browserDone:false},null,2));
 });
