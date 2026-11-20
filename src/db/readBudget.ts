@@ -121,7 +121,16 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
           const timer=setTimeout(()=>reject(new PageReadTimeout()),budget.deadline-Date.now());
           args[callbackIndex]=async(sql:object)=>{
             clearTimeout(timer);
-            if(key==='begin'&&Date.now()-acquiringAt>=250)logPageReadPhase('db.acquire',acquiringAt);
+            if(key==='begin'&&Date.now()-acquiringAt>=250){
+              // Only non-secret transport metadata from the actual driver.
+              // CLI env-run can prefer a local file; it cannot prove this port.
+              const options=Object.getOwnPropertyDescriptor(target,'options')?.value as {port?:unknown;host?:unknown}|undefined;
+              const ports=Array.isArray(options?.port)?options.port:[options?.port];
+              const hosts=Array.isArray(options?.host)?options.host:[options?.host];
+              const port=ports.length===1&&Number.isSafeInteger(ports[0])&&ports[0]>0&&ports[0]<=65535?ports[0]:undefined;
+              const pooler=hosts.length>0&&hosts.every(host=>typeof host==='string')?hosts.every(host=>(host as string).endsWith('.pooler.supabase.com')):undefined;
+              logPageReadPhase('db.acquire',acquiringAt,{...(port===undefined?{driver_port_unknown:1}:{driver_port:port}),...(pooler===undefined?{driver_host_unknown:1}:{driver_pooler:pooler?1:0})});
+            }
             const remaining=budget.deadline-Date.now();
             if(remaining<=0)throw new PageReadTimeout();
             // PostgreSQL is the second cancellation boundary: even if the
