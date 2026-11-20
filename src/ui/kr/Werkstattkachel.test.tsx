@@ -36,3 +36,11 @@ it('keeps source values and identity across loading and refuses another open, wi
  expect(view.container.querySelector('.stat')).toHaveAttribute('hidden');
  expect(view.container.querySelector('.oc-foot')).toHaveAttribute('inert');
 });
+
+it('keeps the permitted order target without inventing a customer exit or an empty more menu',()=>{
+ const data=fixture();render(<Werkstattkachel {...data} onKunde={null}/>);
+ expect(screen.queryByText(V45_TEXT.common$more)).toBeNull();
+ expect(screen.queryByRole('button',{name:V45_TEXT.work$card_customer({name:data.kunde})})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:V45_TEXT.work$card_order({number:data.nummer})}));
+ expect(data.onAuftrag).toHaveBeenCalledWith(data.auftragId);
+});

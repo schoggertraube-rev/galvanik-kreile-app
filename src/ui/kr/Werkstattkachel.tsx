@@ -1,6 +1,6 @@
 'use client';
 
-import type {CSSProperties,ReactNode} from 'react';
+import {Children,type CSSProperties,type ReactNode} from 'react';
 import {V45_TEXT} from '@/ui/situationCatalog';
 import {Button} from './Button';
 import {Icon} from './Icon';
@@ -26,7 +26,8 @@ export interface WerkstattkachelProps {
   kurzaktionen:ReactNode;
   weitere:ReactNode;
   onAuftrag:(id:string)=>void;
-  onKunde:(id:string)=>void;
+  /** Null comes from the existing source/rights projection, never a no-op exit. */
+  onKunde:((id:string)=>void)|null;
 }
 
 /** v10 cardHTML/syncCard (1948–1989), V45 baustein.werkstattkachel.
@@ -36,6 +37,7 @@ export function Werkstattkachel(props:WerkstattkachelProps) {
   const {auftragId,kundeId,kunde,nummer,nummerAnzeigen,zustand,bild,ware,termin,station,fortschritt,
     hinweis,laden,gesperrt,hauptaktion,kurzaktionen,weitere,onAuftrag,onKunde}=props;
   const blocked=laden||gesperrt,tone=vorfinalLageDarstellung(zustand).tone;
+  const hasWeitere=onKunde!==null||Children.toArray(weitere).some(child=>typeof child!=='string'||child.trim().length>0);
   return <article className={'oc glass'+(hinweis?' has-hint':'')} data-glass="card"
     data-id={auftragId} data-customer-id={kundeId} data-tone={tone} data-amt=".55"
     data-spec-id="werkstatt.zeile" aria-busy={laden}>
@@ -59,10 +61,10 @@ export function Werkstattkachel(props:WerkstattkachelProps) {
     </p>:null}
     <div className="oc-foot" data-b="foot" data-spec-id="werkstatt.naechster" inert={blocked}>
       {hauptaktion}
-      <details className="mehrx"><summary data-glass="pill">{V45_TEXT.common$more}</summary><div className="mehrin">
-        <Button vorfinalForm="pill" text={V45_TEXT.work$card_customer({name:kunde})}
-          disabled={blocked} onClick={()=>onKunde(kundeId)}/>{weitere}
-      </div></details>
+      {hasWeitere?<details className="mehrx"><summary data-glass="pill">{V45_TEXT.common$more}</summary><div className="mehrin">
+        {onKunde?<Button vorfinalForm="pill" text={V45_TEXT.work$card_customer({name:kunde})}
+          disabled={blocked} onClick={()=>onKunde(kundeId)}/>:null}{weitere}
+      </div></details>:null}
       {kurzaktionen}
     </div>
   </article>;
