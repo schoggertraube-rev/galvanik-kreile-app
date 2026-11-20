@@ -243,8 +243,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
       const card=await getLiveOrderCardAction({orderId:order.id});
       if(card.code==='OK'&&card.data.card.version===order.version){
         const shipping=card.data.handoverConsequences;
-        if(shipping?.code==='SOURCE_INCOMPLETE'&&shipping.orderId===order.id&&shipping.orderVersion===order.version&&shipping.message)
-          sourceNotices.push({key:'source-shipping:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:shipping.message,meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
+        if(shipping?.code==='SOURCE_INCOMPLETE')
+          sourceNotices.push({key:'source-shipping:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:shipping.orderId===order.id&&shipping.orderVersion===order.version&&shipping.message?shipping.message:SHIPPING_FEE_COPY.proposalMissing(order.orderNumber,false,'quelle'),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
         if(hasAuthorizationArea(auth,'preise')&&card.data.card.operationalFacts?.pricesMissing===null)
           sourceNotices.push({key:'source-quote:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:SHIPPING_FEE_COPY.orderQuoteMissing(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
       }

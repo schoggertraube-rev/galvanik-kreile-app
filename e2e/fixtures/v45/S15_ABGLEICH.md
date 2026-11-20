@@ -3,7 +3,7 @@
 Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 Ähnlich = NFC/Kleinschreibung/Interpunktion/Platzhalternamen mechanisch normalisiert. Bestand bleibt unverändert.
 
-## Gleicher Wortlaut (62)
+## Gleicher Wortlaut (64)
 
 - `E_INVOICE_COPY.collectionNotDue`: "Die Sammlung ist noch nicht fällig oder wurde inzwischen abgerechnet." → `collection.not_due`
 - `DELIVERY_NOTE_COPY.title`: "Lieferschein" → `document.delivery_kind`, `intake.fact.delivery_number`, `ws.slip`
@@ -63,12 +63,14 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `OFFLINE_ITEM_FINISHED_COPY.networkRequired`: "Geht nur mit Netz" → `offline.only`
 - `CUSTOMER_CREDIT_COPY.payoutChanged`: "Der Erstattungsbetrag oder sein Zahlungsbeleg hat sich geändert. Lade den aktuellen Stand; dein Nachweis bleibt erhalten." → `credit.refund_changed`
 - `CUSTOMER_CREDIT_COPY.changed`: "Das Guthaben oder der Rechnungsrest hat sich geändert. Lade die aktuelle Verrechnung; deine Angaben bleiben erhalten." → `balance.changed`
+- `SHIPPING_FEE_COPY.proposalMissing`: "Rechnung" → `document.invoice_kind`, `invoice.title`
+- `SHIPPING_FEE_COPY.proposalMissing`: "Auftrag" → `customer.order_singular`
 - `SHIPPING_FEE_COPY.line`: "Versand" → `order.shipping`, `settings.group.versand`, `ws.shipped`
 - `E_INVOICE_SETTINGS_COPY.fieldLabels.paymentTermDays`: "Zahlungsziel in Tagen" → `customer.terms_days`
 - `E_INVOICE_CORRECTION_COPY.cancel`: "Abbrechen" → `common.cancel`
 - `VORFINAL_COPY.vorfinal.kopf.plus.label`: "Neuer Eingang" → `intake.title`, `nav.eingang`, `nav.entry`
 
-## Ähnlicher Wortlaut (98)
+## Ähnlicher Wortlaut (101)
 
 - `INVOICE_VAT_COPY.groupNet`: "Netto (" → `collection.net`, `quote.net_short`, `ws.net`
 - `INVOICE_VAT_COPY.groupNet`: ")" → `work.sign_missing`
@@ -168,8 +170,11 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
+- `SHIPPING_FEE_COPY.proposalMissing`: "einstellungen" → `nav.einstellungen`, `settings.title`
+- `SHIPPING_FEE_COPY.proposalMissing`: "…" → `work.sign_missing`
+- `SHIPPING_FEE_COPY.orderQuoteMissing`: "…" → `work.sign_missing`
 
-## Nur im Bestand (731)
+## Nur im Bestand (738)
 
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
 - `EVIDENCE_VISIBILITY_COPY.invalid`: "Wähle das Foto erneut."
@@ -874,6 +879,13 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `CUSTOMER_CREDIT_COPY.notFound`: "Für diesen Kunden gibt es dieses Guthaben nicht mehr. Lade den aktuellen Stand."
 - `CUSTOMER_CREDIT_COPY.pending`: "Der Storno ist noch nicht übertragen. Er wird gesendet, sobald die Verbindung steht."
 - `CUSTOMER_CREDIT_COPY.paymentUnknown`: "Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Erfass zuerst Betrag und Datum der Zahlung, dann storniere die Rechnung erneut."
+- `SHIPPING_FEE_COPY.proposalMissing`: "freigabe"
+- `SHIPPING_FEE_COPY.proposalMissing`: "original"
+- `SHIPPING_FEE_COPY.proposalMissing`: "quelle"
+- `SHIPPING_FEE_COPY.proposalMissing.freigabe`: "Freigabebeleg fehlt"
+- `SHIPPING_FEE_COPY.proposalMissing.einstellungen`: "Versandangaben fehlen"
+- `SHIPPING_FEE_COPY.proposalMissing.original`: "Originalbeleg ist unklar"
+- `SHIPPING_FEE_COPY.proposalMissing.quelle`: "Quelle nicht lesbar"
 - `SHIPPING_FEE_COPY.noAdditionalInvoiceNeeded`: "Versandkosten sind 0 € – keine Zusatzrechnung nötig"
 - `SHIPPING_FEE_COPY.reissueReason`: "Übergabeart Versand → Abholung"
 - `SHIPPING_FEE_COPY.reissuePending`: "Der Storno ist gespeichert, das Guthaben steht. Die neue Rechnung ohne Versand fehlt noch – dafür liegt eine Aufgabe am Auftrag."
