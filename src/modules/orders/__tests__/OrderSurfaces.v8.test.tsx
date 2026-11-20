@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor,within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { OrderCardView,InvoiceSourceCorrectionDialog, type OrderCardActionPorts, type OrderCardModel } from "../public";
+import {INVOICE_DELIVERY_COPY} from '@/ui/situationCatalog';
 
 const actions: OrderCardActionPorts = {
   dueDate: { visible: true, enabled: true, reason: null },
@@ -46,6 +47,14 @@ const card: OrderCardModel = {
 };
 
 describe("Orders V1.1 one-surface truth", () => {
+  it('PL01:02 renders the catalogued invoice queue status without a second send button',()=>{
+    const text=INVOICE_DELIVERY_COPY.queued(card.customerName);
+    const view=render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{kind:'data',card:{...card,invoiceMailWaiting:text}}}/>);
+    expect(screen.getByText(text)).toHaveAttribute('role','status');
+    expect(screen.queryByRole('button',{name:text})).not.toBeInTheDocument();
+    view.rerender(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{kind:'data',card}}/>);
+    expect(screen.queryByText(text)).not.toBeInTheDocument();
+  });
   it('S54o A15:27 asks before reopening and cancel has no correction effect',()=>{
     const confirm=vi.fn(),cancel=vi.fn();
     const view=render(<InvoiceSourceCorrectionDialog orderNumber="A-2026-0042" busy={false} error={null} onCancel={cancel} onConfirm={confirm}/>);

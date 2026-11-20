@@ -525,7 +525,7 @@ export async function readCustomerSummary(
             try{
               // The same reader retains prepared originals here so the existing
               // N5/Sent-Items recovery button cannot disappear from the overview.
-              const cohort=await withTenantSavepoint(tx,nested=>readInvoiceMailCohort(nested,authorization.tenantId,input.customerId,first.handover,[],first.orderId===null,'overview'));
+              const cohort=await withTenantSavepoint(tx,nested=>readInvoiceMailCohort(nested,authorization.tenantId,input.customerId,first.handover,[],first.orderId===null));
               const ids=new Set(cohort.map(row=>row.id));
               if(ids.has(first.id)&&cohort.length===ids.size&&cohort.every(row=>pending.originals.some(original=>original.id===row.id)))summary.invoiceSendGroupIds=pending.originals.filter(original=>ids.has(original.id)).map(original=>original.id);
             }catch(error){console.error('[CUSTOMER_INVOICE_GROUP_SOURCE_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});}

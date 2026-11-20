@@ -35,11 +35,13 @@ it('W-TAG T05-3 counts all 25 historical invoice fixtures while limiting the lis
  const read=async(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
  const first=await read(full),again=await read(full);
  const [serverDay]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS today`;expect(first.calendar?.today).toBe(serverDay.today);expect(Number.isFinite(Date.parse(first.calendar?.readStartedAt??''))).toBe(true);
- expect(first.moneyMetric).toMatchObject({code:'OK',count:24});
- expect(first.invoiceMoney).toMatchObject({code:'OK',openCount:27,openCents:303500,overdueCount:24,overdueCents:285600,today:24,upcoming:1});
+ // S38 E2: issued + open > 0 + due before Berlin today is the one predicate,
+ // including the issued prepayment invoice; there is no second mode exception.
+ expect(first.moneyMetric).toMatchObject({code:'OK',count:25});
+ expect(first.invoiceMoney).toMatchObject({code:'OK',openCount:27,openCents:303500,overdueCount:25,overdueCents:297500,today:25,upcoming:1});
  expect(again.invoiceMoney).toEqual(first.invoiceMoney);
  expect(first.moneySources).toEqual({invoices:{code:'OK',count:27},prepayments:{code:'OK',count:0},collections:{code:'OK',count:0}});
- expect(first.moneyMetric?.code==='OK'?first.moneyMetric.sources.map(row=>row.id).sort():null).toEqual(ids.slice(0,24).sort());
+ expect(first.moneyMetric?.code==='OK'?first.moneyMetric.sources.map(row=>row.id).sort():null).toEqual(ids.slice().sort());
  expect(first.items.filter(row=>row.kind==='invoice')).toHaveLength(20);
  expect(again.moneyMetric).toEqual(first.moneyMetric);
  const restricted=await createFixture(['auftraege'],'werkstatt'),hidden=await read(restricted);
