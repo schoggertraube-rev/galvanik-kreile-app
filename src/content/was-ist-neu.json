@@ -1,6 +1,17 @@
 [
   {
     "datum": "2026-11-20",
+    "pr": 247,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Du sendest jede Rechnung direkt aus ihrer eigenen Heute-Zeile.",
+      "Deine Rechnungsmail ist mit Betreff und Nachricht vorbereitet.",
+      "Du bestätigst Papierübergaben; die Rechnung verschwindet aus dem Versandfeld."
+    ]
+  },
+  {
+    "datum": "2026-11-20",
     "pr": 246,
     "seite": "auftraege",
     "ziel": "/orders",
