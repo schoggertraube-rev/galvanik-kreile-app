@@ -16,7 +16,7 @@ export interface MehrarbeitProps {
   aktivitaeten:readonly {id:string;text:string;dauerText:string|null}[];
   minuten:string;
   dauerText:string;
-  grenzen:{min:number;max:number;schritt:number};
+  grenzen:{min:number;max:number;schritt:number}|null;
   grund:string;
   statusText:string;
   zusammenfassung:ReactNode;
@@ -49,12 +49,12 @@ export function Mehrarbeit(props:MehrarbeitProps){
         {activity.dauerText!==null?<>{' '}<small>{activity.dauerText}</small></>:null}</button>)}
     </div>
     <div className="rng"><label htmlFor={id+'-range'}><span>{V45_TEXT.werkzeit$extra}</span><b>{props.dauerText}</b></label>
-      {props.minuten!==''?<input id={id+'-range'} type="range" min={props.grenzen.min} max={props.grenzen.max}
+      {props.minuten!==''&&props.grenzen!==null?<input id={id+'-range'} type="range" min={props.grenzen.min} max={props.grenzen.max}
         step={props.grenzen.schritt} value={props.minuten} aria-valuetext={props.dauerText} disabled={blocked}
         onKeyDown={weiterMitEnter} onChange={event=>props.onMinuten(event.currentTarget.value)}/>:null}
     </div>
     <Formularfeld id={id+'-minutes'} art="zahl" label={V45_TEXT.work$minutes} wert={props.minuten}
-      grenzen={props.grenzen} laden={props.laden} deaktiviert={props.deaktiviert} onWert={props.onMinuten}/>
+      grenzen={props.grenzen??undefined} laden={props.laden} deaktiviert={props.deaktiviert} onWert={props.onMinuten}/>
     <Formularfeld id={id+'-part'} art="auswahl" label={V45_TEXT.werkzeit$location} wert={props.teilId}
       optionen={props.teile} laden={props.laden} deaktiviert={props.deaktiviert} onWert={props.onTeil}/>
     <Formularfeld id={id+'-reason'} art="mehrzeilig" label={V45_TEXT.werkzeit$optional} wert={props.grund}

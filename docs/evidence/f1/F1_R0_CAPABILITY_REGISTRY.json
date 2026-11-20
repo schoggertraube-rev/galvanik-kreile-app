@@ -6,13 +6,13 @@
   "tenant": "galvanik-kreile",
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
-    "page_routes": 15,
+    "page_routes": 16,
     "api_routes": 5,
     "server_action_groups": 47,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 93
+    "total": 94
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -30,6 +30,16 @@
     "LEGACY_REMOVE": "Known broken, fake, or demo-mode element. Scheduled for removal. Gate will detect as violation."
   },
   "capabilities": [
+    {
+      "stable_id": "page.vorschau.bausteine",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/vorschau/bausteine/page.tsx",
+      "route": "/vorschau/bausteine",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "S19 read-only component inspection, never a production journey. Exact route requires canonical authentication, ui_v45 and Preview or the approved local TEST database. Real source Actions only; full source/state/role/viewport/browser acceptance remains open. No verified business write or simulated success."
+    },
     {
       "stable_id": "page.root",
       "kind": "PAGE_ROUTE",

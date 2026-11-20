@@ -37,3 +37,9 @@ it('retains an empty/unknown duration without the native range inventing its mid
  fireEvent.change(screen.getByRole('slider'),{target:{value:'45'}});expect(data.onMinuten).toHaveBeenLastCalledWith('45');
  const note=screen.getByLabelText(V45_TEXT.work$time_note);note.focus();fireEvent.keyDown(note,{key:'Enter'});expect(note).toHaveFocus();
 });
+it('keeps a supplied duration editable without inventing missing range settings',()=>{
+ const data=source();render(<Zeit {...data} grenzen={null}/>);
+ expect(screen.queryByRole('slider')).toBeNull();expect(screen.getByRole('spinbutton')).toHaveValue(90);
+ expect(screen.getByRole('spinbutton')).not.toHaveAttribute('max');
+ fireEvent.change(screen.getByRole('spinbutton'),{target:{value:'77'}});expect(data.onMinuten).toHaveBeenCalledWith('77');
+});

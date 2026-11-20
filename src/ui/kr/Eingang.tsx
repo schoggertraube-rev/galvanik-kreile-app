@@ -8,7 +8,7 @@ import {Hauptaktion,type Fachaktion} from './Hauptaktion';
 type EingangZiel={id:string;elementId:string;text:string;onWaehlen:((id:string)=>void)|null;grund?:string};
 export interface EingangProps {
   originalId:string|null;
-  version:string|number;
+  version:string|number|null;
   variante:'leer'|'text'|'dateien'|'erkannt'|'unsicher'|'offline';
   label:string;
   text:string;

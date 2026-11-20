@@ -6,9 +6,9 @@ export type DokumentGeld=DokumentWert|{zustand:'verborgen'};
 export interface KVDokumentProps {
   quoteId:string;
   version:string|number;
-  fassung:string;
+  fassung:string|null;
   originalId:string|null;
-  variante:'entwurf'|'versendet'|'neue_fassung';
+  variante:'entwurf'|'versendet'|'neue_fassung'|null;
   titel:string;
   bezug:string;
   kunde:{id:string;name:string;anschrift:readonly string[]};

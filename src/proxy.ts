@@ -22,6 +22,9 @@ const SALES_STAGE_ONE_ROUTES = [
 
 export function isSalesStageOneRoute(pathname: string): boolean {
   if (pathname === '/' || pathname.startsWith('/_next/')) return true
+  // S19's exact planned page. Its server render additionally requires TEST/
+  // Preview + the canonical ui_v45 flag; other /vorschau paths stay closed.
+  if (pathname === '/vorschau/bausteine') return true
   return SALES_STAGE_ONE_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`),
   )

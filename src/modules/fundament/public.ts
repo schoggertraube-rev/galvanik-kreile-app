@@ -1,4 +1,5 @@
 /** Browser-safe product-profile contract for the App Router composition seam. */
+export {ComponentPreviewFrame} from './ui/ComponentPreviewFrame';
 export {emptyDispatchPolicy,dispatchPolicyValid,DISPATCH_DAY_FIELDS} from './dispatchPolicy';
 export type {DispatchPolicy} from './dispatchPolicy';
 export type { StartUserDto as ProductStartProfile } from "@/lib/auth/userDtos";

@@ -14,8 +14,8 @@ export type KundenbildAbschnitt<T>=
 export type KundenbildLink={id:string;elementId:string;text:string;onOeffnen:((id:string)=>void)|null;grund?:string};
 export interface KundenbildProps {
   kundeId:string;
-  version:string|number;
-  variante:'ruhig'|'ueberfaellig'|'vereinbarung'|'leer';
+  version:string|number|null;
+  variante:'ruhig'|'ueberfaellig'|'vereinbarung'|'leer'|null;
   name:string;
   kontaktText:string;
   lage:{ton:LageTon;text:string}|null;

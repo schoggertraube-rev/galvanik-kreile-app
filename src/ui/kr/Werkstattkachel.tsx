@@ -12,11 +12,11 @@ export interface WerkstattkachelProps {
   kunde:string;
   nummer:string;
   nummerAnzeigen:boolean;
-  zustand:LageTon;
+  zustand:LageTon|null;
   bild:ReactNode;
   ware:{lang:string;kurz:string};
   termin:{haupt:string;detail:string};
-  station:{text:string;schritt:0|1|2;sichtbar:boolean};
+  station:{text:string;schritt:0|1|2|null;sichtbar:boolean};
   fortschritt:{text:string;anteil:number|null};
   hinweis?:{text:string;zustand:LageTon};
   laden:boolean;
@@ -36,7 +36,7 @@ export interface WerkstattkachelProps {
 export function Werkstattkachel(props:WerkstattkachelProps) {
   const {auftragId,kundeId,kunde,nummer,nummerAnzeigen,zustand,bild,ware,termin,station,fortschritt,
     hinweis,laden,gesperrt,hauptaktion,kurzaktionen,weitere,onAuftrag,onKunde}=props;
-  const blocked=laden||gesperrt,tone=vorfinalLageDarstellung(zustand).tone;
+  const blocked=laden||gesperrt,tone=zustand===null?undefined:vorfinalLageDarstellung(zustand).tone;
   const hasWeitere=onKunde!==null||Children.toArray(weitere).some(child=>typeof child!=='string'||child.trim().length>0);
   return <article className={'oc glass'+(hinweis?' has-hint':'')} data-glass="card"
     data-id={auftragId} data-customer-id={kundeId} data-tone={tone} data-amt=".55"
@@ -50,7 +50,7 @@ export function Werkstattkachel(props:WerkstattkachelProps) {
       <span className="what" data-b="what"><span className="w-l">{ware.lang}</span><span className="w-k" aria-hidden="true">{ware.kurz}</span></span>
       <span className="meta" data-spec-id="werkstatt.fortschritt">
         <span className="stat" data-b="stat" data-spec-id="werkstatt.station" hidden={!station.sichtbar}
-          style={{'--s':station.schritt} as CSSProperties}><span className="trk3"><i/><i/><i/></span><span data-b="statn">{station.text}</span></span>
+          style={station.schritt===null?undefined:{'--s':station.schritt} as CSSProperties}><span className="trk3"><i/><i/><i/></span><span data-b="statn">{station.text}</span></span>
         <span className="prog"><i hidden={fortschritt.anteil===null}
           style={fortschritt.anteil===null?undefined:{'--p':fortschritt.anteil} as CSSProperties}/></span>
         <span data-b="prog">{fortschritt.text}</span>

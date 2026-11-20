@@ -35,3 +35,8 @@ it('preserves all source choices and their identities after a list is reordered'
  expect(values[1].onOeffnen).toHaveBeenCalledExactlyOnceWith({auftragId:values[1].auftragId,teilId:values[1].teilId});
  expect(values[0].onOeffnen).not.toHaveBeenCalled();expect(values[2].onOeffnen).not.toHaveBeenCalled();
 });
+it('shows an unknown finished quantity without inventing zero or a part state',()=>{
+ const data=source('unknown'),view=render(<Teilchip {...data} gut={null} zustand={null}/>);
+ expect(screen.getByRole('button')).toHaveTextContent(V45_TEXT.work$card_total({done:'—',total:'3'}));
+ expect(view.container.querySelector('[data-zustand]')).toBeNull();
+});

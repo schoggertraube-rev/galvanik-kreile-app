@@ -56,6 +56,13 @@ describe("proxy auth boundary", () => {
     const { proxy } = await import("@/proxy");
     expectRedirectToStart(await proxy(request("/")));
   });
+  it('registers only the exact S19 component page while retaining the canonical session gate',async()=>{
+    const {proxy,isSalesStageOneRoute}=await import('@/proxy');
+    expect(isSalesStageOneRoute('/vorschau/bausteine')).toBe(true);
+    expect(isSalesStageOneRoute('/vorschau/other')).toBe(false);
+    expect(isSalesStageOneRoute('/vorschau/bausteine/other')).toBe(false);
+    expectRedirectToStart(await proxy(request('/vorschau/bausteine')));
+  });
 
   it('lets only the data-free heartbeat bypass a failing session provider',async()=>{
     const {proxy}=await import('@/proxy');

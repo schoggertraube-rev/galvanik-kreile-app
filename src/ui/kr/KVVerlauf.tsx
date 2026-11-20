@@ -19,8 +19,8 @@ export interface KVVerlaufSchritt {
 export interface KVVerlaufProps {
   quoteId:string;
   version:string|number;
-  fassung:string;
-  variante:'entwurf'|'gesendet'|'alte_fassung'|'zugesagt'|'vorbehalt'|'ware'|'auftrag';
+  fassung:string|null;
+  variante:'entwurf'|'gesendet'|'alte_fassung'|'zugesagt'|'vorbehalt'|'ware'|'auftrag'|null;
   schritte:readonly KVVerlaufSchritt[];
   aktuell:string;
   danach:string|null;

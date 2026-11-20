@@ -7,9 +7,9 @@ export interface TeilchipProps {
   auftragId:string;
   teilId:string;
   name:string;
-  gut:number;
+  gut:number|null;
   menge:number;
-  zustand:'offen'|'teilfertig'|'fertig';
+  zustand:'offen'|'teilfertig'|'fertig'|null;
   laden:boolean;
   deaktiviert:boolean;
   grund?:string;
@@ -21,7 +21,7 @@ export interface TeilchipProps {
  * part done, invents a count or allocates another command key. */
 export function Teilchip({auftragId,teilId,name,gut,menge,zustand,laden,deaktiviert,grund,onOeffnen}:TeilchipProps){
   return <Button vorfinalForm="pill"
-    text={name+' · '+V45_TEXT.work$card_total({done:String(gut),total:String(menge)})}
+    text={name+' · '+V45_TEXT.work$card_total({done:gut===null?'—':String(gut),total:String(menge)})}
     aria-label={V45_TEXT.work$card_part({part:name})}
     data-spec-id="work.part" data-baustein="baustein.teilchip"
     data-order-id={auftragId} data-object-id={teilId} data-zustand={zustand}

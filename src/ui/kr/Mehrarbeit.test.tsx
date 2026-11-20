@@ -51,3 +51,8 @@ it('retains the draft and a concrete exit reason when the catalog/part command i
  expect(screen.getByRole('button',{name:data.aktion.text})).toBeDisabled();
  expect(screen.getByRole('button',{name:data.aktion.text})).toHaveAccessibleDescription('TEST Tätigkeitskatalog fehlt; vorhandenen Entwurf behalten');
 });
+it('does not create a range or clamp a known input when no operating limits are supplied',()=>{
+ const data=source();render(<Mehrarbeit {...data} grenzen={null}/>);
+ expect(screen.queryByRole('slider')).toBeNull();expect(screen.getByRole('spinbutton')).toHaveValue(15);
+ expect(screen.getByRole('spinbutton')).not.toHaveAttribute('min');expect(screen.getByRole('spinbutton')).not.toHaveAttribute('max');
+});
