@@ -9,7 +9,7 @@ beforeEach(()=>{
  vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:()=>{},removeEventListener:()=>{}})));
 });
 afterEach(()=>{cleanup();delete document.documentElement.dataset.ui;vi.unstubAllGlobals();});
-const source=():OverlayProps=>({variante:'auftrag',bezugId:'TEST-real-context-id',version:7,elternId:'TEST-parent-context',titel:'TEST geöffneter Auftrag',laden:false,
+const source=():OverlayProps=>({variante:'auftrag',bezugId:'TEST-real-context-id',version:7,elternId:'TEST-parent-context',oeffner:null,titel:'TEST geöffneter Auftrag',laden:false,
  fehler:null,vorSchliessen:vi.fn(()=>true),onSchliessen:vi.fn(),onZurueck:vi.fn(),fuss:<button>TEST gebundener Hauptbefehl</button>,children:<input aria-label="TEST ursprünglicher Entwurf" defaultValue="TEST ungesicherter Originalwert"/>});
 
 it.each(['eingang','formular','kunde','auftrag','kv'] as const)('%s uses the existing dialog/guard and retains its draft/version across loading',variante=>{
@@ -42,9 +42,9 @@ it('Escape closes only the top existing dialog and keeps the parent source visib
  expect(screen.getByText('TEST Elternoriginal')).toBeVisible();
 });
 
-it('returns focus to the still-mounted invoking control after actual close',async()=>{
+it.each([false,true])('returns focus to the still-mounted invoking control after actual close (child autofocus=%s)',async(autoFocus)=>{
  const data=source(),closed=vi.fn();
- function Scenario(){const [open,setOpen]=useState(false);return <><button onClick={()=>setOpen(true)}>TEST ursprünglicher Öffner</button>{open?<Overlay {...data} onSchliessen={()=>{closed();setOpen(false);}}/>:null}</>;}
+ function Scenario(){const [opener,setOpener]=useState<HTMLElement|null>(null);return <><button onClick={event=>setOpener(event.currentTarget)}>TEST ursprünglicher Öffner</button>{opener?<Overlay {...data} oeffner={opener} onSchliessen={()=>{closed();setOpener(null);}}><input aria-label="TEST ursprünglicher Entwurf" autoFocus={autoFocus} defaultValue="TEST unverändert"/></Overlay>:null}</>;}
  render(<Scenario/>);const trigger=screen.getByRole('button',{name:'TEST ursprünglicher Öffner'});
  trigger.focus();fireEvent.click(trigger);
  const close=screen.getByRole('button',{name:V45_TEXT.common$close});expect(close).toHaveClass('ib');expect(close).toHaveFocus();
@@ -60,7 +60,7 @@ it('copies v10 opening250/closing190 motion and closes once during an overlappin
  vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockReturnValue({x:20,y:20,left:20,top:20,right:100,bottom:60,width:80,height:40,toJSON:()=>({})});
  const trigger=document.createElement('button');trigger.textContent='TEST tatsächlicher Öffner';document.body.append(trigger);trigger.focus();
  try{
-  const data=source();render(<Overlay {...data}/>);
+  const data=source();render(<Overlay {...data} oeffner={trigger}/>);
   expect(animate.mock.calls.slice(0,2).map(call=>(call[1] as KeyframeAnimationOptions).duration)).toEqual([250,250]);
   const close=screen.getByRole('button',{name:V45_TEXT.common$close});fireEvent.click(close);fireEvent.click(close);
   await waitFor(()=>expect(data.onSchliessen).toHaveBeenCalledOnce());

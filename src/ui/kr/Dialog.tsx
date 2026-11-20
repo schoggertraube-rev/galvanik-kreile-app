@@ -1,52 +1,47 @@
 'use client';
 import { useEffect, useId, useRef, useState, type CSSProperties,type ReactNode } from 'react';
 import {useVorfinalStyle} from '@/ui/useVorfinalStyle';
+import {dialog as dialogMoment} from '@/ui/motion';
 import {V45_TEXT} from '@/ui/situationCatalog';
 import { Icon, type IconName } from './Icon';
 import { Button } from './Button';
 import { cx } from './typen';
 import { useKrGeraet } from './AppShell';
 export type DialogMeldung = { text: string; ton: 'fehler' | 'erfolg'; specId?:string };
-export interface DialogProps { titel: string; unterzeile?: ReactNode; icon?: IconName; groesse?: 'normal' | 'breit' | 'schmal' | 'karte' | 'werkbank'; onSchliessen: () => void; vorSchliessen?: () => boolean; onZurueck?: () => void; schliessenSpecId?: string; fuss?: ReactNode; meldung?: DialogMeldung | null; children: ReactNode; vorfinalForm?:'overlay'; beschaeftigt?:boolean; dataSpecId?:string; }
+export interface DialogProps { titel: string; unterzeile?: ReactNode; icon?: IconName; groesse?: 'normal' | 'breit' | 'schmal' | 'karte' | 'werkbank'; onSchliessen: () => void; vorSchliessen?: () => boolean; onZurueck?: () => void; schliessenSpecId?: string; fuss?: ReactNode; meldung?: DialogMeldung | null; children: ReactNode; vorfinalForm?:'overlay'; beschaeftigt?:boolean; dataSpecId?:string; oeffner?:HTMLElement|null; }
 export function isTopDialog(element: HTMLElement | null) {
   const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].filter(dialog => !dialog.closest('[hidden], [aria-hidden="true"]') && getComputedStyle(dialog).display !== 'none');
   return dialogs.at(-1) === element;
 }
 /** Der Seitenname bleibt die Überschrift; ein Modus steht als Unterzeile darunter. */
 /** Schließt mit umgekehrter Bewegung (180 ms), dann onSchliessen – kein hartes Verschwinden. */
-export function Dialog({ titel, unterzeile, icon = 'file', groesse = 'normal', onSchliessen: sofort, vorSchliessen, onZurueck, schliessenSpecId, fuss, meldung, children,vorfinalForm,beschaeftigt=false,dataSpecId }: DialogProps) {
+export function Dialog({ titel, unterzeile, icon = 'file', groesse = 'normal', onSchliessen: sofort, vorSchliessen, onZurueck, schliessenSpecId, fuss, meldung, children,vorfinalForm,beschaeftigt=false,dataSpecId,oeffner }: DialogProps) {
   const [zu, setZu] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
-  const openerRef=useRef<HTMLElement|null>(null),closingRef=useRef(false);
+  // Capture before child commit/autofocus or an immediate first edit can move
+  // focus inside this dialog; the passive effect is too late for that origin.
+  const openerRef=useRef<HTMLElement|null>(oeffner===undefined?(typeof document!=='undefined'&&document.activeElement instanceof HTMLElement?document.activeElement:null):oeffner),closingRef=useRef(false);
   const vorfinal=useVorfinalStyle(),titelId=useId(),sourceOverlay=vorfinal&&vorfinalForm==='overlay';
   // The existing dialog owns focus as well as Esc. Source v10 openOv's order:
   // autofocus, main action, close. No second overlay stack/keyboard listener.
   useEffect(()=>{
     if(!sourceOverlay)return;
-    const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;
-    openerRef.current=previous;
+    const previous=openerRef.current;
     const dialog=dialogRef.current;
-    const from=previous&&previous!==document.body?previous.getBoundingClientRect():null,to=dialog?.getBoundingClientRect();
-    if(dialog&&from?.width&&to?.width&&!matchMedia('(prefers-reduced-motion:reduce)').matches){
-      const r0=parseFloat(getComputedStyle(previous!).borderRadius)||24;
-      dialog.animate([{transform:`translate(${from.left-to.left}px,${from.top-to.top}px) scale(${from.width/to.width},${from.height/to.height})`,borderRadius:(r0*to.width/Math.max(from.width,1))+'px',opacity:.4},{transform:'none',borderRadius:'36px',opacity:1}],{duration:250,easing:'cubic-bezier(.34,1.56,.64,1)'});
-      dialog.querySelector<HTMLElement>('[data-overlay-body]')?.animate([{opacity:0},{opacity:0,offset:.4},{opacity:1}],{duration:250});
-    }
+    if(dialog)dialogMoment.oeffnen(dialog,previous!==document.body?previous:null);
     (dialog?.querySelector<HTMLElement>('[autofocus]:not(:disabled)')??dialog?.querySelector<HTMLElement>('.act:not(:disabled)')??dialog?.querySelector<HTMLElement>('[data-overlay-close]:not(:disabled)')??dialog)?.focus();
     return()=>{if(previous?.isConnected)previous.focus();};
   },[sourceOverlay]);
   const onSchliessen = () => {
     if(zu||sourceOverlay&&closingRef.current||vorSchliessen?.()===false)return;
     if(sourceOverlay)closingRef.current=true;
-    const still=matchMedia('(prefers-reduced-motion:reduce)').matches;if(still)return sofort();
-    setZu(true);
     if(sourceOverlay&&dialogRef.current){
-      const box=dialogRef.current,opener=openerRef.current;
-      const a=box.getBoundingClientRect(),b=opener?.isConnected&&opener.offsetParent?opener.getBoundingClientRect():null;
-      const transform=b&&a.width&&a.height?`translate(${b.left+b.width/2-a.left-a.width/2}px,${b.top+b.height/2-a.top-a.height/2}px) scale(${Math.max(.06,b.width/a.width)},${Math.max(.06,b.height/a.height)})`:'scale(.97)';
-      void box.animate([{opacity:1,transform:'none'},{opacity:0,transform}],{duration:190,easing:'cubic-bezier(.4,0,1,1)',fill:'forwards'}).finished.then(sofort,sofort);
+      setZu(true);
+      dialogMoment.zurueck(dialogRef.current,openerRef.current,sofort);
       return;
     }
+    const still=matchMedia('(prefers-reduced-motion:reduce)').matches;if(still)return sofort();
+    setZu(true);
     setTimeout(sofort,190);
   };
   useEffect(() => { const h = (e: KeyboardEvent) => {
@@ -54,11 +49,11 @@ export function Dialog({ titel, unterzeile, icon = 'file', groesse = 'normal', o
     if (!isTopDialog(dialogRef.current)) return;
     e.preventDefault(); e.stopImmediatePropagation(); onSchliessen();
   }; addEventListener('keydown', h); return () => removeEventListener('keydown', h); });
-  if(sourceOverlay)return <div className={zu?'ov on kr-ebene--zu':'ov on'}
+  if(sourceOverlay)return <div className="ov on" data-closing={zu} style={{pointerEvents:zu?'none':undefined}}
     onClick={event=>{if(event.target===event.currentTarget)onSchliessen();}}>
     <section ref={dialogRef} className="ov-box" role="dialog" aria-modal="true" aria-labelledby={titelId} tabIndex={-1}
       aria-busy={beschaeftigt} data-spec-id={dataSpecId}
-      style={{'--ovw':groesse==='breit'||groesse==='karte'||groesse==='werkbank'?'1080px':groesse==='schmal'?'560px':'640px'} as CSSProperties}>
+      style={{'--ovw':groesse==='schmal'?'560px':'640px'} as CSSProperties}>
       <div className="ov-in" data-glass="sheet"><div data-overlay-body style={{position:'relative'}}>
         <header className="ov-head small">
           {onZurueck?<Button vorfinalForm="icon" icon="back" label={V45_TEXT.common$back} disabled={beschaeftigt} onClick={onZurueck}/>:null}

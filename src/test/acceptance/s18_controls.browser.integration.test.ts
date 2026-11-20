@@ -12,11 +12,12 @@ const engines=process.env.GITHUB_ACTIONS==='true'?[chromium]:[chromium,webkit,fi
 it(`keeps owner control geometry, keyboard and reduced motion across ${engines.length} browsers and three widths`,async()=>{
  const result=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
   import React from 'react';import {createRoot} from 'react-dom/client';
-  import {GlobalesPlus} from './src/ui/kr/GlobalesPlus';import {Button} from './src/ui/kr/Button';import {Zeit} from './src/ui/kr/Zeit';
+  import {GlobalesPlus} from './src/ui/kr/GlobalesPlus';import {Button} from './src/ui/kr/Button';import {Zeit} from './src/ui/kr/Zeit';import {Overlay} from './src/ui/kr/Overlay';
   const counters={open:0,command:0};Object.assign(window,{TEST_s18:counters});
   function TimeFixture(){const [minutes,setMinutes]=React.useState(''),[date,setDate]=React.useState('2026-11-20'),[note,setNote]=React.useState('');
    return <form data-testid="TEST-time" onSubmit={event=>event.preventDefault()}><Zeit auftragId="TEST-order" version={7} variante="heute_offen" datum={date} heute="2026-11-20" minuten={minutes} dauerText="TEST Tageswert" enthaltenText="TEST Mehrarbeit enthalten" notiz={note} auswahl={[]} grenzen={{min:0,max:720,schritt:1}} verteilung={<p>TEST Teilzuordnung unverändert</p>} laden={false} deaktiviert={false} fehler={null} aktion={{text:'TEST Fachport fehlt',onAusloesen:null,gesperrt:true,grund:'TEST Präsentationsprobe ohne Schreibwirkung'}} onDatum={setDate} onMinuten={setMinutes} onNotiz={setNote}/></form>;}
-  createRoot(document.getElementById('root')).render(<><GlobalesPlus onOeffnen={()=>counters.open++}/><Button art="primaer" text="TEST Befehl" onClick={()=>counters.command++}/><TimeFixture/></>);
+  function DialogFixture(){const [opener,setOpener]=React.useState<HTMLElement|null>(null);return <><button onClick={event=>setOpener(event.currentTarget)}>TEST Dialog öffnen</button>{opener?<Overlay variante="formular" bezugId="TEST-order" version={7} elternId={null} oeffner={opener} titel="TEST gleiche Quelle 7" groesse="breit" laden={false} fehler={null} vorSchliessen={()=>true} onSchliessen={()=>setOpener(null)}><input aria-label="TEST Originaleingabe" defaultValue="TEST bleibt"/></Overlay>:null}</>;}
+  createRoot(document.getElementById('root')).render(<><GlobalesPlus onOeffnen={()=>counters.open++}/><Button art="primaer" text="TEST Befehl" onClick={()=>counters.command++}/><TimeFixture/><DialogFixture/></>);
  `},bundle:true,write:false,outfile:'TEST-s18.js',platform:'browser',jsx:'automatic',define:{'process.env.NODE_ENV':'"test"'}});
  const script=result.outputFiles.find(file=>file.path.endsWith('.js'))?.text;
  if(!script)throw Error('TEST_S18_BROWSER_BUNDLE_MISSING');
@@ -55,11 +56,35 @@ it(`keeps owner control geometry, keyboard and reduced motion across ${engines.l
       await date.press('Enter');expect(await note.evaluate(el=>el===document.activeElement)).toBe(true);
       await note.fill('TEST Notiz');await note.press('End');await note.press('Enter');
       expect(await note.inputValue()).toBe('TEST Notiz\n');expect(await note.evaluate(el=>el===document.activeElement)).toBe(true);
+      // Instrument the actual native animation, never replace its execution/completion.
+      await page.evaluate(()=>{
+        const durations:unknown[]=[],focus:string[]=[],native=Element.prototype.animate,nativeFocus=HTMLElement.prototype.focus,nativeRect=Element.prototype.getBoundingClientRect;Reflect.set(window,'TEST_dialog_motion',durations);Reflect.set(window,'TEST_dialog_focus',focus);
+        document.addEventListener('focusin',event=>{const element=event.target;if(element instanceof HTMLElement)focus.push(element.tagName+':'+(element.getAttribute('aria-label')??element.textContent??''));});
+        HTMLElement.prototype.focus=function(this:HTMLElement,options){focus.push('CALL:'+this.tagName+':'+(this.getAttribute('aria-label')??this.textContent?.slice(0,60))+':'+this.isConnected);return nativeFocus.call(this,options);};
+        Element.prototype.getBoundingClientRect=function(this:Element){const rect=nativeRect.call(this);if(this.classList.contains('ov-box')||this.textContent==='TEST Dialog öffnen')focus.push('RECT:'+this.tagName+':'+rect.width+':'+rect.height+':active='+document.activeElement?.tagName);return rect;};
+        Element.prototype.animate=function(this:Element,frames,options){durations.push(typeof options==='number'?options:options?.duration);return native.call(this,frames,options);};
+      });
+      const dialogTrigger=page.getByRole('button',{name:'TEST Dialog öffnen'}),dialog=page.getByRole('dialog',{name:'TEST gleiche Quelle 7'});
+      await dialogTrigger.focus();await dialogTrigger.click();await dialog.waitFor({state:'visible'});
+      await dialog.getByRole('textbox').fill('TEST Eingabe während Bewegung');expect(await dialog.getByRole('textbox').inputValue()).toBe('TEST Eingabe während Bewegung');
+      // Check the resting layout cap after the original spring settles; the
+      // preceding edit deliberately happens while that animation is running.
+      await dialog.evaluate(element=>Promise.all(element.getAnimations().map(animation=>animation.finished)));
+      expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(640);
+      await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
+      // React restores focus in its passive unmount cleanup after DOM removal.
+      await page.waitForFunction(()=>Array.from(document.querySelectorAll('button')).find(button=>button.textContent==='TEST Dialog öffnen')===document.activeElement).catch(async cause=>{
+        throw new Error('TEST_DIALOG_FOCUS:'+JSON.stringify(await page.evaluate(()=>({active:document.activeElement?.outerHTML.slice(0,400),focus:Reflect.get(window,'TEST_dialog_focus'),motion:Reflect.get(window,'TEST_dialog_motion')}))),{cause});
+      });
+      expect(await dialogTrigger.evaluate(el=>el===document.activeElement)).toBe(true);
+      expect(await page.evaluate(()=>Reflect.get(window,'TEST_dialog_motion'))).toEqual([250,250,190]);
       const durations=async()=>primary.evaluate(el=>getComputedStyle(el).transitionDuration.split(',').map(value=>Number.parseFloat(value)*1000));
       expect((await durations()).every(ms=>ms<=250)).toBe(true);
       await page.emulateMedia({reducedMotion:'reduce'});
       // Owner v10 uses .01ms, preserved verbatim; this does not assert the old plan's mathematical 0ms.
       expect((await durations()).every(ms=>ms<=0.01)).toBe(true);
+      await dialogTrigger.click();await dialog.waitFor({state:'visible'});await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
+      expect(await page.evaluate(()=>Reflect.get(window,'TEST_dialog_motion'))).toEqual([250,250,190]);
      }finally{await page.close();}
     }
    }finally{await browser.close();}

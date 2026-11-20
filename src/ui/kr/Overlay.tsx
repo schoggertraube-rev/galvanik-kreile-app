@@ -8,6 +8,9 @@ export interface OverlayProps {
   bezugId:string;
   version:number;
   elternId:string|null;
+  /** The actual invoking control from the existing click/navigation context.
+   * Pointer clicks need not focus buttons (e.g. WebKit); never infer from body. */
+  oeffner:HTMLElement|null;
   titel:string;
   laden:boolean;
   groesse?:DialogProps['groesse'];
@@ -21,9 +24,9 @@ export interface OverlayProps {
 
 /** V45 baustein.overlay, source v10 ov/ov-box/ov-in. The actual caller keeps
  * its existing stack, dirty draft and command version; this view creates none. */
-export function Overlay({variante,bezugId,version,elternId,titel,laden,groesse,fehler,vorSchliessen,onSchliessen,onZurueck,fuss,children}:OverlayProps){
+export function Overlay({variante,bezugId,version,elternId,oeffner,titel,laden,groesse,fehler,vorSchliessen,onSchliessen,onZurueck,fuss,children}:OverlayProps){
   const allowed=()=>!laden&&vorSchliessen();
-  return <Dialog titel={titel} groesse={groesse} vorfinalForm="overlay" beschaeftigt={laden}
+  return <Dialog titel={titel} groesse={groesse} vorfinalForm="overlay" beschaeftigt={laden} oeffner={oeffner}
     dataSpecId="baustein.overlay" schliessenSpecId="overlay.close" meldung={fehler} fuss={fuss}
     vorSchliessen={allowed} onSchliessen={onSchliessen}
     onZurueck={onZurueck?()=>{if(allowed())onZurueck();}:undefined}>
